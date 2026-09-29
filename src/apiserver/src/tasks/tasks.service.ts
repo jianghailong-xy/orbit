@@ -161,7 +161,7 @@ import {
   type AuthorityRefusalCode,
   type AuthorityRequiredAction,
 } from '../projects/coordinator-authority';
-import { criteriaFromDefinitions } from '../projects/project-acceptance';
+import { criteriaFromDefinitions, criterionKeyOf } from '../projects/project-acceptance';
 import {
   AUTO_RUN_RETRY_BACKOFF_MS,
   MAX_AUTO_RUN_FAILURES,
@@ -225,7 +225,8 @@ import { loadVerificationEpochGates } from './verification-epoch-read';
 import { readTaskProgress } from './task-progress.service';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
-import { runAccount } from '../providers/plan-usage-accounts';
+import { automaticCodexAccount, runAccount } from '../providers/plan-usage-accounts';
+import { accountEnvVar } from '../providers/account';
 import { readWaitingOwnerConfirmations } from './owner-confirmation-read';
 import { accountPoolRuntime } from '../providers/custom-provider';
 import {
@@ -253,6 +254,10 @@ import {
   taskCriterionChangeRefusalBody,
   taskSelfRewrittenStandardRefusalBody,
 } from './task-completion-criterion-change-guard';
+import {
+  criterionAsksForOwnerConfirmation,
+  ownerConfirmationNotDelegatedBody,
+} from './owner-confirmed-automatic-delegation';
 
 /** A polymorphic actor (user or workspace) that authored a task or comment. */
 export type Creator = { type: CreatorType; id: string };
@@ -3481,6 +3486,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const criterionDeclaration = (await this.resolveCriterionDeclarations(
       ownerId, [{ projectId: scopedProjectId, criterionKey: dto.criterionKey }],
     )).get(0) ?? null;
+    // Against the same project and the criterion that declaration resolved to, still before the
+    // transaction: an agent cannot hand this task to the owner in an Automatic project unless that
+    // criterion asks for them.
+    await this.assertOwnerConfirmationDelegated(ownerId, creatorSessionId, [{
+      itemIndex: null,
+      completionCriterion: dto.completionCriterion,
+      projectId: scopedProjectId,
+      criterionDefinitionId: criterionDeclaration?.criterionDefinitionId,
+    }]);
     // Validate prerequisites up front so we never create a task and then reject its deps.
     // No cycle check needed: a brand-new task has no dependents, so it can't close a loop.
     const dependsOnTaskIds = [...new Set(dto.dependsOnTaskIds ?? [])];
@@ -4078,7 +4092,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const assigneeIds = [...new Set(items.map((i) => i.assigneeId).filter((v): v is string => !!v))];
     const externalIds = [...new Set(items.flatMap((i) => i.dependsOnTaskIds ?? []))];
     const listIds = [...new Set(items.map((i) => i.listId).filter((v): v is string => !!v))];
-    const [assignees, prerequisites, lists] = await Promise.all([
+    const projectIds = [...new Set(items.map((i) => i.projectId).filter((v): v is string => !!v))];
+    const [assignees, prerequisites, lists, unstartedProjects] = await Promise.all([
       this.prisma.workspace.findMany({
         where: { id: { in: assigneeIds }, ownerId },
         select: { id: true, name: true, runnerId: true },
@@ -4091,7 +4106,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         where: { id: { in: listIds }, ownerId },
         select: { id: true, title: true, paused: true },
       }),
+      // The ones NOT started, so a project this read does not find counts as started: the error
+      // left is over-reporting, the direction this card is kept on (see below).
+      projectIds.length
+        ? this.prisma.project.findMany({
+            where: { id: { in: projectIds }, ownerId, startedAt: null },
+            select: { id: true },
+          })
+        : [],
     ]);
+    // Nothing in a project its owner has not started runs by itself: the start card is where
+    // its tasks are decided, and pressing it is what releases them — so an item that would start on
+    // its own, now or at its runAt, waits for that instead.
+    const unstarted = new Set(unstartedProjects.map((p) => p.id));
     // A paused list is out of the sweep entirely (AUTO_RUN_READY_SQL), so nothing landing in one
     // starts however runnable it looks. Without this the card announced runs for a campaign that
     // was explicitly stopped — and `paused` is precisely how someone builds a large campaign
@@ -4106,6 +4133,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     let needsManualStart = 0;
     let notDispatchable = 0;
     let scheduled = 0;
+    let awaitingProjectStart = 0;
     let internalEdges = 0;
     let externalEdges = 0;
     const now = Date.now();
@@ -4126,6 +4154,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         !!item.assigneeId &&
         !!runnerOf.get(item.assigneeId) &&
         !(item.listId && pausedLists.has(item.listId));
+      const awaitsStart = !!item.projectId && unstarted.has(item.projectId);
       // A scheduled item is classified by what is ACTUALLY standing between it and a run, in the
       // order the sweep would hit them — not by its schedule alone. The clock is the last of the
       // conditions to be checked, never the first, because `scheduled` is the strongest claim on
@@ -4138,6 +4167,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (runAt) {
         if (waitsOnBatch || waitsOnExisting) blocked += 1;
         else if (!runnable) notDispatchable += 1;
+        // In place, but the clock is not the last thing left: the owner has to start the project.
+        else if (awaitsStart) awaitingProjectStart += 1;
         // Everything is in place and the only thing left is the time.
         else if (runAt.getTime() > now) scheduled += 1;
         // Already due on arrival. Without this branch a batch scheduled for "now" reported fifty
@@ -4166,16 +4197,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const hasPrerequisites =
         (item.dependsOnRefs?.length ?? 0) + (item.dependsOnTaskIds?.length ?? 0) > 0;
       if (!hasPrerequisites) {
-        if (item.projectId && item.autoRunWhenReady !== false && runnable) startingNow += 1;
-        else needsManualStart += 1;
+        if (!(item.projectId && item.autoRunWhenReady !== false && runnable)) needsManualStart += 1;
+        else if (awaitsStart) awaitingProjectStart += 1;
+        else startingNow += 1;
         continue;
       }
       if (waitsOnBatch || waitsOnExisting) {
         blocked += 1;
         continue;
       }
-      if (item.autoRunWhenReady !== false && runnable) startingNow += 1;
-      else notDispatchable += 1;
+      if (!(item.autoRunWhenReady !== false && runnable)) notDispatchable += 1;
+      else if (awaitsStart) awaitingProjectStart += 1;
+      else startingNow += 1;
     }
     return {
       taskCount: items.length,
@@ -4196,6 +4229,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // of which would misdescribe it; a client that predates the field ignores it and simply
       // does not count these as starting now, which is the true statement.
       scheduled,
+      // Would start by themselves, now or at their runAt, but in a project its owner has not
+      // started: they start with the project. Named for the reason `scheduled` is — "needs a manual
+      // start" would say the start releases nothing — and ignored the same way by older clients.
+      awaitingProjectStart,
       internalEdges,
       externalEdges,
       lists: lists.map((l) => ({ id: l.id, title: l.title })),
@@ -4386,6 +4423,18 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // thing a preview must not do.
     const criterionDeclarations = await this.resolveCriterionDeclarations(
       ownerId, items.map((item, index) => (frozen.has(index) ? {} : item)),
+    );
+    // Item by item over the same projects and the criteria just resolved, and above the dry run
+    // for the reason the two checks above are. One item handed to the owner refuses the batch.
+    await this.assertOwnerConfirmationDelegated(
+      ownerId,
+      creatorSessionId,
+      items.flatMap((item, index) => (frozen.has(index) ? [] : [{
+        itemIndex: index,
+        completionCriterion: item.completionCriterion,
+        projectId: item.projectId,
+        criterionDefinitionId: criterionDeclarations.get(index)?.criterionDefinitionId,
+      }])),
     );
     // Unit L4: the plan, judged whole and before the transaction. Every dimension, every item, all
     // findings at once — and nothing written if any of them refuses (AC5).
@@ -5160,6 +5209,61 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       requiredAction: 'NAME_THE_CRITERION_THIS_SERVES',
       message: `criterionKey ${declared} cannot be recorded: ${why}`,
     };
+  }
+
+  /**
+   * `owner-confirmed-automatic-delegation.ts`, over the rows these writes would leave: a session
+   * does not declare OWNER_CONFIRMED on work in an Automatic project unless the criterion that work
+   * serves asks for the owner.
+   *
+   * Asked by all three write doors after every declaration check and before the transaction, so a
+   * refused write leaves no row and a refused batch none of its items. `criterionDefinitionId` is
+   * the criterion each item serves once written — what `resolveCriterionDeclarations` resolved, or
+   * on an update the one the row keeps — and a criterion of any other project than the one the
+   * item lands in is none of that project's. A write with no session, or with no OWNER_CONFIRMED
+   * item filed in a project, reads nothing.
+   */
+  private async assertOwnerConfirmationDelegated(
+    ownerId: string,
+    actingSessionId: string | undefined,
+    items: ReadonlyArray<{
+      itemIndex: number | null;
+      completionCriterion: TaskCompletionCriterionValue | null | undefined;
+      projectId: string | null | undefined;
+      criterionDefinitionId: string | null | undefined;
+    }>,
+  ): Promise<void> {
+    if (!actingSessionId) return;
+    const declared = items.filter((item) =>
+      item.completionCriterion === 'OWNER_CONFIRMED' && item.projectId);
+    if (declared.length === 0) return;
+    const automatic = await this.prisma.project.findMany({
+      where: {
+        id: { in: [...new Set(declared.map((item) => item.projectId!))] },
+        ownerId,
+        coordinatorEnabled: true,
+      },
+      select: { id: true },
+    });
+    const automaticIds = automatic.map((project) => project.id);
+    const governed = declared.filter((item) => automaticIds.includes(item.projectId!));
+    if (governed.length === 0) return;
+    const definitionIds = [...new Set(governed
+      .map((item) => item.criterionDefinitionId)
+      .filter((id): id is string => !!id))];
+    const served = definitionIds.length === 0 ? [] : await this.prisma
+      .projectAcceptanceCriterionDefinition.findMany({
+        where: { id: { in: definitionIds }, projectId: { in: automaticIds } },
+        select: { id: true, projectId: true, verificationMethod: true },
+      });
+    for (const item of governed) {
+      const criterion = served.find((definition) =>
+        definition.id === item.criterionDefinitionId && definition.projectId === item.projectId);
+      if (criterion && criterionAsksForOwnerConfirmation(criterion.verificationMethod)) continue;
+      throw new ConflictException(ownerConfirmationNotDelegatedBody(
+        criterion ? criterionKeyOf(criterion.id) : null, item.itemIndex,
+      ));
+    }
   }
 
   /**
@@ -8123,6 +8227,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ownerId, [{ projectId: boundProjectId, criterionKey: dto.criterionKey }],
       )).get(0) ?? null
       : null;
+    // The task as this write leaves it — the merged criterion, the project it is filed under and
+    // the criterion it serves — asked only when the write moves one of the three: a row that
+    // already stands is not re-judged by an edit that declares nothing new. Before the transaction,
+    // like every refusal on this path.
+    {
+      const projectId = dto.projectId === undefined ? before.projectId : (dto.projectId ?? null);
+      const criterionDefinitionId = dto.criterionKey === undefined
+        ? before.criterionDefinitionId
+        : (criterionDeclaration?.criterionDefinitionId ?? null);
+      if (completionCriterion !== before.completionCriterion
+        || projectId !== before.projectId
+        || criterionDefinitionId !== before.criterionDefinitionId) {
+        await this.assertOwnerConfirmationDelegated(ownerId, actingSessionId, [{
+          itemIndex: null, completionCriterion, projectId, criterionDefinitionId,
+        }]);
+      }
+    }
     // Whether this write can move the task within the project/subtask structure. It decides both
     // that the hierarchy rules are checked at all and that the write takes the owner lock: the
     // check and the update it authorises have to be one serialized step, not two.
@@ -10101,8 +10222,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    *
    * The quota is the one the task's run would spend: its runner's for its provider, because one
    * runner can host workspaces on several runtimes and only some of their quotas may be spent — and
-   * for Codex that runner's account its workspace runs on (runCodexAccount), because one runner can
-   * hold several accounts and only some of theirs may be spent. A task whose quota reports no
+   * for Codex or Claude that runner's account its workspace runs on (runAccount), because one runner
+   * can hold several accounts and only some of theirs may be spent. A task whose quota reports no
    * exhausted window, or an exhausted one with no reset time, is absent from `blocked`.
    *
    * An account pool's slug is in no runner's snapshot: its quota is its members', read the way the
@@ -10136,21 +10257,22 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       select: { id: true, planUsage: true, engines: true },
     });
     const runnerById = new Map(runners.map((r) => [r.id, r]));
-    // Which Codex account a run spends is its workspace's to say, so only Codex tasks' are read.
-    const codexWorkspaceIds = [
+    // Which Codex or Claude account a run spends is its workspace's to say, so only those tasks' are
+    // read.
+    const accountWorkspaceIds = [
       ...new Set(
         tasks.flatMap((t) =>
-          t.assignee?.runnerId && t.assignee.provider === 'codex' ? [t.assignee.workspaceId] : [],
+          t.assignee?.runnerId && accountEnvVar(t.assignee.provider) ? [t.assignee.workspaceId] : [],
         ),
       ),
     ];
     const workspaceById = new Map(
-      codexWorkspaceIds.length === 0
+      accountWorkspaceIds.length === 0
         ? []
         : (
             await this.prisma.workspace.findMany({
-              where: { id: { in: codexWorkspaceIds } },
-              select: { id: true, env: true, codexAccount: true },
+              where: { id: { in: accountWorkspaceIds } },
+              select: { id: true, env: true, codexAccount: true, claudeAccount: true },
             })
           ).map((w) => [w.id, w]),
     );
@@ -10172,10 +10294,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const runner = runnerById.get(assignee.runnerId);
       const usage = runner?.planUsage as unknown as PlanUsage | null | undefined;
       const workspace = workspaceById.get(assignee.workspaceId);
+      // A Codex task on a workspace that picked no account gets its session started on the runner's
+      // account with the most room (automaticCodexAccount), so that is the quota it waits on.
+      const automatic =
+        assignee.provider === 'codex' ? automaticCodexAccount(workspace, runner?.engines, usage, now) : null;
       const account = runAccount(
         assignee.provider,
         workspace?.env,
-        workspace,
+        workspace && { ...workspace, codexAccount: automatic ?? workspace.codexAccount },
         runner?.engines,
       );
       if (!planUsageReported(usage, assignee.provider, account)) blind.add(t.id);

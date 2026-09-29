@@ -314,8 +314,8 @@ export class QueueService {
         // The workspace's standing "always allow" grants ride along: they are what turns an
         // approval a human already answered into one this session never has to ask again.
         workspace: { include: { permissionRules: { orderBy: { createdAt: 'asc' } } } },
-        // `engines` carries the Codex accounts this runner has, which is where the workspace's
-        // chosen account resolves to a CODEX_HOME.
+        // `engines` carries the Codex and Claude accounts this runner has, which is where the chosen
+        // account resolves to a CODEX_HOME or a CLAUDE_CONFIG_DIR.
         assignedRunner: {
           select: { runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true, engines: true },
         },
@@ -436,7 +436,9 @@ export class QueueService {
         workspaceModel: workspace?.model,
         modelCatalog: session.assignedRunner?.modelCatalog,
         workspaceEnv: workspace?.env as Record<string, string> | null,
-        codexAccount: workspace?.codexAccount,
+        // The account picked for this session, else its workspace's.
+        codexAccount: session.codexAccount ?? workspace?.codexAccount,
+        claudeAccount: workspace?.claudeAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
     let exec = resolveExec(session.model);

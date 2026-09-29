@@ -5,6 +5,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Param,
   Patch,
   Post,
@@ -28,6 +29,7 @@ import {
   RecordTaskCheckpointDto,
   ResolveProjectBlockerDto,
   ResumeProjectFuseDto,
+  StartProjectDto,
   UpdateProjectDto,
   UpdateProjectIntegrationDto,
 } from './dto';
@@ -382,6 +384,25 @@ export class ProjectsController {
     @Body() dto: ConfirmAcceptanceCriteriaDto,
   ) {
     return this.acceptance.confirmStandardSet(user.userId, id, dto);
+  }
+
+  /**
+   * The account owner starts the project: the criteria the card showed, confirmed by their seal,
+   * and how it is to run — its integration line, Automatic, its concurrency limit and its merge
+   * check — in one write (`ProjectAcceptanceService.startProject`).
+   *
+   * The owner's alone, on the same rule as the confirmation above. That rule lives in the service;
+   * what this door adds is the header an agent's request carries, `X-Orbit-Session-Id`, handed on
+   * so a request made from a session is refused 403 whatever credential came with it.
+   */
+  @Post(':id/start')
+  start(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: StartProjectDto,
+    @Headers('x-orbit-session-id') actingSessionId: string | undefined,
+  ) {
+    return this.acceptance.startProject(user.userId, id, dto, actingSessionId);
   }
 
   /**

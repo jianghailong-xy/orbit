@@ -8,9 +8,9 @@ export const DEFAULT_ACCOUNT = 'default';
 /**
  * The account of `engine` a session dispatched to this runner runs on, when it is not Default.
  *
- * `account` is the slot id the session is to run on — today the workspace's choice
- * (Workspace.codexAccount / Workspace.claudeAccount); a per-session choice would be handed in here
- * instead. It is resolved against the accounts the assigned runner reported in its heartbeat
+ * `account` is the slot id the session is to run on — the one picked for the session
+ * (Session.codexAccount), else its workspace's choice (Workspace.codexAccount /
+ * Workspace.claudeAccount). It is resolved against the accounts the assigned runner reported in its heartbeat
  * (`Runner.engines`), which is where each slot's directory comes from: the control plane stores the
  * id, never a path.
  *

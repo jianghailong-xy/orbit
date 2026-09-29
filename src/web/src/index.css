@@ -4170,6 +4170,32 @@ html[data-theme='dark'] .session-tag-chip {
     box-shadow: 0 0 0 2px transparent;
   }
 }
+/* The record a link opened the session at (`?at=`, lib/transcriptDeepLink): tinted and outlined for
+   a moment — longer than a find hit's flash, since the page has only just opened on it. */
+.record-flash {
+  animation: record-flash 2.4s ease-out;
+}
+@keyframes record-flash {
+  0%,
+  40% {
+    background-color: var(--brand-tint);
+    box-shadow: 0 0 0 2px var(--brand-border);
+  }
+  to {
+    background-color: transparent;
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
+/* The newer page a window opened at a record is pulling in, over the bottom it arrives under. */
+.chat-newer-bottom {
+  position: absolute;
+  bottom: 60px;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  text-align: center;
+  pointer-events: none;
+}
 :root[data-theme='dark'] .find-bar {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
 }
@@ -5382,6 +5408,24 @@ html[data-theme='dark'] .session-tag-chip {
   margin-top: 6px;
   font-size: 12px;
   color: var(--text-4);
+}
+/* Whose quota the windows below are, ruled off from them. Account names are often emails: the name
+   gives way with an ellipsis, the label never does. */
+.cu-account {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.cu-account .cu-head {
+  margin-bottom: 0;
+}
+.cu-account-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-1);
 }
 /* The pill is a button now — it opens a popover that can hold an action — so it sheds the UA button
    chrome and keeps the look the span had, with a ring for keyboard focus only. */
@@ -13640,6 +13684,25 @@ button.chat-jump-start:hover {
 .np-pinned {
   padding-left: 14px;
 }
+/* An engine's own accounts on this runner, under its row: which one this session spends. The tick
+   takes the mark's column, so the account names line up with the engine's. */
+.np-account-tick {
+  flex: none;
+  width: 20px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--brand);
+}
+.np-account.picked {
+  color: var(--text-1);
+}
+.np-account .np-row-model.near-limit {
+  color: var(--warning);
+}
+/* Account names are often emails, so the list makes room for one beside its quota. */
+.np-list.with-accounts {
+  width: 280px;
+}
 /* The composer's account pill: which of a pool's accounts this session is spending. */
 .composer-account {
   padding-right: 6px;
@@ -15536,40 +15599,104 @@ button.chat-jump-start:hover {
   white-space: normal;
 }
 /* The turn the control plane opened for a background job's news, or for a wakeup coming due
-   (BackgroundWakeCard). Same shape and the same two tones as a watch's wake — brand for a job that
-   finished, warning for one that failed or was killed, as Watch triggered and Watch expired take
-   them — so the transcript reads one way whoever queued the turn. Each job gets a raised row of its
-   own: one wake can carry six. Its wrap carries its own margin for the same reason a watch's does:
-   two wakes in a row have no message bubble between them to lend one. */
-.bgwake-wrap {
-  display: flex;
-  justify-content: flex-end;
-  margin: 8px 0;
-}
+   (BackgroundWakeCard): one event line in the agent's stream, in the grammar `⊘ interrupted`
+   (.chat-note) already uses, rather than a card on the reader's side of the conversation — which is
+   where their own messages sit, in their tint, so a run of wakes read as somebody cutting in. A
+   job that failed or was killed takes the error tone and keeps its tail out of the fold. */
 .bgwake {
-  width: min(560px, 88%);
-  padding: 10px 12px;
-  border: 1px solid var(--brand-border);
-  border-radius: 12px;
-  background: var(--brand-tint);
-  color: var(--text-1);
+  margin: 6px 0;
+  font-size: 13px;
+  color: var(--text-3);
 }
-.bgwake.is-failed {
-  border-color: var(--warning-border);
-  background: var(--warning-bg);
+.bgwake-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 4px;
+  border-radius: 6px;
+  list-style: none;
+  cursor: pointer;
+}
+.bgwake-row::-webkit-details-marker {
+  display: none;
+}
+.bgwake-row:hover {
+  background: var(--bg-sunken);
+}
+.bgwake-mark {
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  color: var(--success-solid);
+}
+.bgwake.is-failed .bgwake-mark {
+  color: var(--error-solid);
+}
+.bgwake-mark.is-pending {
+  color: var(--text-3);
 }
 .bgwake-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--brand);
-  font-weight: 600;
+  flex: none;
 }
 .bgwake.is-failed .bgwake-title {
-  color: var(--warning);
+  color: var(--error);
 }
-.bgwake-why {
-  margin: 3px 0 8px;
+/* The one line gives way here: the title, how it came out and when stay whole, and all of the name
+   is in the fold. */
+.bgwake-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-2);
+}
+.bgwake-name.is-command {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+}
+/* A phone leaves the name a few letters beside the title, so there it takes a line of its own,
+   lined up under the title. */
+@media (max-width: 600px) {
+  .bgwake-row {
+    flex-wrap: wrap;
+  }
+  .bgwake-name {
+    order: 1;
+    flex-basis: 100%;
+    padding-left: 20px;
+  }
+}
+.bgwake-status {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+}
+.bgwake-time {
+  flex: none;
+  font-size: 12px;
+}
+.bgwake-caret {
+  flex: none;
+  align-self: center;
+  color: var(--text-4);
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+.bgwake-fold[open] > .bgwake-row .bgwake-caret {
+  transform: rotate(90deg);
+}
+/* What the line carried, opened: hung under its title, off a rule, like a tool card's detail. */
+.bgwake-body {
+  margin: 2px 0 6px 22px;
+  padding: 6px 10px;
+  border-left: 2px solid var(--border-subtle);
+  font-size: 12px;
 }
 .bgwake-jobs,
 .bgwake-wakeups {
@@ -15577,20 +15704,15 @@ button.chat-jump-start:hover {
   padding: 0;
   list-style: none;
 }
-.bgwake-job,
-.bgwake-wakeup {
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--bg-raised);
-}
 .bgwake-job + .bgwake-job,
 .bgwake-wakeup + .bgwake-wakeup {
-  margin-top: 6px;
+  margin-top: 8px;
 }
 .bgwake-job-head {
   display: flex;
   align-items: baseline;
   gap: 6px;
+  color: var(--text-2);
 }
 .bgwake-job-mark {
   flex: none;
@@ -15618,55 +15740,33 @@ button.chat-jump-start:hover {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px;
 }
-/* The command and the id line up under the description that named the row, not under its icon. */
 .bgwake-job-cmd,
 .bgwake-job-meta {
-  padding-left: 22px;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 .bgwake-job-cmd {
   margin-top: 2px;
   color: var(--text-2);
 }
 .bgwake-job-meta {
-  margin-top: 4px;
+  margin-top: 2px;
   color: var(--text-3);
-}
-.bgwake-job .chat-pre-wrap {
-  margin: 6px 0 0 22px;
 }
 .bgwake-wakeup-reason {
   margin-bottom: 2px;
-}
-.bgwake-wakeup-meta {
   color: var(--text-2);
-  font-size: 12px;
 }
 .bgwake-wakeup .chat-pre-wrap {
   margin-top: 6px;
 }
 .bgwake-meta {
-  color: var(--text-2);
-  font-size: 12px;
-}
-.bgwake-undelivered {
-  margin-top: 4px;
-  color: var(--warning);
-  font-size: 12px;
+  color: var(--text-3);
 }
 .bgwake-raw {
-  margin-top: 6px;
-  font-size: 12px;
-}
-/* Whatever else the same note carried, folded inside the card rather than in a bubble of its own. */
-.bgwake > .chat-injected {
-  margin-top: 8px;
-  border-top-color: var(--brand-border);
-}
-.bgwake.is-failed > .chat-injected {
-  border-top-color: var(--warning-border);
+  margin-top: 4px;
 }
 .bgwake-raw summary {
   color: var(--text-2);
@@ -15683,13 +15783,30 @@ button.chat-jump-start:hover {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* Whatever else the same note carried, folded in with the rest of what the line carried. */
+.bgwake-body > .chat-injected {
+  margin-top: 8px;
+}
+.bgwake-tail {
+  margin: 2px 0 6px 22px;
+}
+.bgwake-tail-name {
+  margin-bottom: 2px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.bgwake-undelivered {
+  margin: 2px 0 0 22px;
+  color: var(--warning);
+  font-size: 12px;
+}
 /* Still waiting behind the running turn (WorkspaceView's queued tail): dashed like a queued
-   message, with the queue's own status line at its foot. */
-.bgwake.is-queued {
-  border-style: dashed;
+   message, with the queue's own status line under it. */
+.bgwake.is-queued .bgwake-row {
+  border: 1px dashed var(--border);
 }
 .bgwake-queued {
-  margin-top: 6px;
+  margin: 4px 0 0 22px;
 }
 .bgwake-queued .chat-queued-meta {
   flex-wrap: wrap;
@@ -15697,7 +15814,7 @@ button.chat-jump-start:hover {
   row-gap: 2px;
 }
 /* An exception item's delivery to the coordinator (components/OpenItemDeliveryCard.tsx): the same
-   card shape as the wake above — right-aligned, control-plane-owned — with the item's own fields
+   card shape as a watch's wake — right-aligned, control-plane-owned — with the item's own fields
    drawn instead of the paragraph they were rendered into. Amber rather than brand: an exception
    item is something nobody's work is waiting behind, and every one of them is somebody's to decide. */
 .oic-wrap {

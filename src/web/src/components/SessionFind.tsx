@@ -5,6 +5,7 @@ import type { EventSearchHit } from '@orbit/shared';
 import { sessionEventSearchQuery } from '../lib/queries';
 import { splitHighlight } from '../lib/searchHighlight';
 import { findMatches, type FindSegment } from '../lib/findMatches';
+import { elementForSeq as elementForSeqIn } from '../lib/transcriptDeepLink';
 import { relTime } from './Transcript';
 
 /**
@@ -156,14 +157,7 @@ export function SessionFind({ sessionId, containerRef, loadOlder, hasOlder, olde
   const elementForSeq = useCallback(
     (seq: number): HTMLElement | null => {
       const root = containerRef.current;
-      if (!root) return null;
-      let best: HTMLElement | null = null;
-      for (const el of root.querySelectorAll<HTMLElement>('[data-seq]')) {
-        const s = Number(el.dataset.seq);
-        if (Number.isFinite(s) && s <= seq) best = el;
-        else if (s > seq) break; // document order is seq order
-      }
-      return best;
+      return root ? elementForSeqIn(root, seq) : null;
     },
     [containerRef],
   );

@@ -3,6 +3,8 @@ import { PushModule } from '../push/push.module';
 import { WikiController } from './wiki.controller';
 import { WikiArticles } from './wiki-articles';
 import { WikiArticlesController } from './wiki-articles.controller';
+import { WikiDocs } from './wiki-docs';
+import { WikiDocsController } from './wiki-docs.controller';
 import { WikiHealth } from './wiki-health';
 import { WikiHealthController } from './wiki-health.controller';
 import { WikiMaintenance } from './wiki-maintenance';
@@ -31,8 +33,8 @@ import { WikiService } from './wiki.service';
   imports: [PushModule],
   // The articles' reads (contract `articles`), one run's read (contract `reviewModes.run`) and a
   // space's health (contract `maintenance.health`) and the plan (contract `plan`) are controllers of their
-  // own, so WikiController's hand-built specs construct it as before.
-  controllers: [WikiController, WikiArticlesController, WikiRunsController, WikiHealthController, WikiPlanController],
+  // own, so WikiController's hand-built specs construct it as before — and so are the documents (contract `docs`).
+  controllers: [WikiController, WikiArticlesController, WikiRunsController, WikiHealthController, WikiPlanController, WikiDocsController],
   // WikiMaintenance serves the maintenance run's dossiers and cursor (contract `maintenance`) to
   // `RunnerWikiMaintenanceController`, and reads the Sessions' and Projects' rows the way the other two
   // do: through Prisma, with no service of theirs. WikiArticles serves the articles to both doors the
@@ -42,8 +44,8 @@ import { WikiService } from './wiki.service';
   // RealtimeService, and reads and writes rows through Prisma alone.
   // WikiRunReads answers one run's page from the same rows, through Prisma alone, and WikiHealth the
   // Wiki home's status line. WikiPlans keeps the plan and its gate (contract `plan`) for both doors, the
-  // same way.
-  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiMaintenanceTrigger, WikiRunReads, WikiHealth, WikiPlans],
-  exports: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiPlans],
+  // same way, and WikiDocs the documents written from it (contract `docs`).
+  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiMaintenanceTrigger, WikiRunReads, WikiHealth, WikiPlans, WikiDocs],
+  exports: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiPlans, WikiDocs],
 })
 export class WikiModule {}

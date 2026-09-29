@@ -60,9 +60,11 @@ export function codexAccountSnapshot(
 }
 
 /**
- * The snapshot of `provider`'s quota a run spends. For Codex that is one account's: `account` names
- * it (codexAccountOfEnv) and defaults to Default, the only account there was before accounts; null is
- * a run that spends no account's subscription, which no snapshot describes.
+ * The snapshot of `provider`'s quota a run spends. For an engine whose CLI keeps a login per
+ * directory — Codex, Claude — that is one account's: `account` names it (accountOfEnv) and defaults to
+ * Default, the only account there was before accounts; null is a run that spends no account's
+ * subscription, which no snapshot describes. Both engines' runners report their other accounts the
+ * same way, under the snapshot's `accounts` (codexAccountSnapshot).
  */
 function spentSnapshot(
   usage: PlanUsage,
@@ -70,7 +72,7 @@ function spentSnapshot(
   account: string | null | undefined,
 ): PlanUsageSnapshot | undefined {
   const snapshot = snapshotFor(usage, provider);
-  if (!snapshot || provider !== 'codex') return snapshot;
+  if (!snapshot || (provider !== 'codex' && provider !== 'claude')) return snapshot;
   return account === null ? undefined : codexAccountSnapshot(snapshot, account ?? CODEX_DEFAULT_ACCOUNT);
 }
 
@@ -162,9 +164,9 @@ export function codexAccountOfEnv(
  * should resume at once. With no snapshot the caller is blind, and resuming immediately is
  * what turns a multi-day quota outage into a once-a-minute respawn loop.
  *
- * For Codex the question is about one account, `account`: the one the run spends
- * (codexAccountOfEnv), Default when omitted, and null for a run spending no account's
- * subscription — about which this runner reports nothing.
+ * For Codex and Claude the question is about one account, `account`: the one the run spends
+ * (accountOfEnv), Default when omitted, and null for a run spending no account's subscription —
+ * about which this runner reports nothing.
  */
 export function planUsageReported(
   usage: PlanUsage | null | undefined,
@@ -190,8 +192,8 @@ export function planUsageReported(
  * The runner refreshes its snapshot shortly after a reset passes, so a stale-but-future
  * `resetsAt` is self-correcting; a past one is simply ignored here.
  *
- * A Codex runner can hold several accounts, each with its own quota, so what is judged is the
- * account the run will spend (`account`, as for {@link planUsageReported}): Default's exhausted
+ * A runner can hold several Codex or Claude accounts, each with its own quota, so what is judged is
+ * the account the run will spend (`account`, as for {@link planUsageReported}): Default's exhausted
  * windows hold back a run on Default, never one on another account.
  */
 export function planUsageBlockedUntil(
@@ -212,4 +214,91 @@ export function planUsageBlockedUntil(
     if (latest === null || resetsAt > latest) latest = resetsAt;
   }
   return latest === null ? null : new Date(latest);
+}
+
+/**
+ * Which of a runner's Codex accounts a new session starts on when neither it nor its workspace picked
+ * one: the one with the most room right now. The server makes this choice once, when the session is
+ * created, and stores it on the session, so the session stays on that account for its life (its
+ * thread lives in that account's CODEX_HOME); the New Session screen asks the same question to say
+ * where a session would start.
+ *
+ * - Only an account the CLI does not say is signed out is a candidate.
+ * - One with a spent window — at 100% and not past its reset, or with no reset time to go by — is
+ *   passed over while another can run.
+ * - Among the rest, the most room is the least used of each account's tightest window: accounts report
+ *   different windows (a Plus login a 5-hour and a weekly one, a Pro login only a weekly one), and the
+ *   one closest to its limit is the one that stops it. An account with nothing reported ranks after
+ *   every account with a reading, since unread is not the same as unused.
+ * - Every candidate spent: the one that frees up first, where the session's run then waits.
+ * - Ties go to Default, then to the lower id, so the answer never depends on the order of the report.
+ *
+ * Null when there is nothing to choose between — fewer than two accounts reported, or none signed in —
+ * and the session runs where it always did.
+ */
+export function roomiestCodexAccount(
+  accounts: readonly RunnerEngineAccount[] | null | undefined,
+  usage: PlanUsage | null | undefined,
+  now: Date,
+): string | null {
+  if (!accounts || accounts.length < 2) return null;
+  const candidates = rankCodexAccounts(accounts, usage, now);
+  const usable = candidates.filter((c) => c.spentUntil === null);
+  if (usable.length > 0) return usable[0].id;
+  const first = [...candidates].sort((a, b) => (a.spentUntil ?? 0) - (b.spentUntil ?? 0) || byAccountId(a, b))[0];
+  return first?.id ?? null;
+}
+
+/**
+ * Which of a runner's Codex accounts a session whose own account (`from`) just hit its usage limit
+ * can move to, between turns: another account that can run now — not signed out, no spent window —
+ * the one with the most room, ranked as {@link roomiestCodexAccount} ranks. Never a spent one: when no
+ * other account has room, moving gains nothing, and the session waits for its own account's reset.
+ * Null then, and for a runner with no second account.
+ */
+export function codexAccountToMoveTo(
+  accounts: readonly RunnerEngineAccount[] | null | undefined,
+  usage: PlanUsage | null | undefined,
+  now: Date,
+  from: string,
+): string | null {
+  if (!accounts || accounts.length < 2) return null;
+  return (
+    rankCodexAccounts(accounts, usage, now).find((c) => c.id !== from && c.spentUntil === null)?.id ?? null
+  );
+}
+
+/** Ties go to Default, then to the lower id, so no answer depends on the order of the report. */
+const byAccountId = (a: { id: string }, b: { id: string }) =>
+  Number(b.id === CODEX_DEFAULT_ACCOUNT) - Number(a.id === CODEX_DEFAULT_ACCOUNT) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/**
+ * The accounts that are candidates at all — the CLI does not say they are signed out — most room
+ * first: least-used tightest window, unread after read. `spentUntil` is set for one with a spent window
+ * (100% and not past its reset, or with no reset to go by): the latest of those resets, Infinity when
+ * one named none.
+ */
+function rankCodexAccounts(
+  accounts: readonly RunnerEngineAccount[],
+  usage: PlanUsage | null | undefined,
+  now: Date,
+): Array<{ id: string; tightest: number; spentUntil: number | null }> {
+  const codex = usage ? snapshotFor(usage, 'codex') : undefined;
+  return accounts
+    .filter((account) => account.auth !== 'no')
+    .map((account) => {
+      const snapshot = codex ? codexAccountSnapshot(codex, account.id) : undefined;
+      const windows = snapshot ? windowsOf(snapshot) : [];
+      const spent = windows.filter(
+        (w) => w.utilization >= EXHAUSTED_UTILIZATION && !(Date.parse(w.resetsAt ?? '') <= now.getTime()),
+      );
+      const resets = spent.map((w) => Date.parse(w.resetsAt ?? ''));
+      return {
+        id: account.id,
+        tightest: windows.length > 0 ? Math.max(...windows.map((w) => w.utilization)) : Number.POSITIVE_INFINITY,
+        spentUntil: spent.length === 0 ? null : resets.some(Number.isNaN) ? Number.POSITIVE_INFINITY : Math.max(...resets),
+      };
+    })
+    // Two accounts with no reading subtract to NaN, which falls through to the id like any other tie.
+    .sort((a, b) => a.tightest - b.tightest || byAccountId(a, b));
 }

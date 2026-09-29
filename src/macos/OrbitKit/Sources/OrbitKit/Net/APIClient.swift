@@ -167,6 +167,26 @@ public final class APIClient: @unchecked Sendable {
         return try await get("sessions/\(sessionID)/events/page", query: q)
     }
 
+    /// The page of a session's history around one record — a turn, an event or a tool call, by its
+    /// id in either spelling — for a link that opens the session at that record (`SessionRecordLink`).
+    /// The page names the `anchor` the record resolved to and carries a cursor each way. A record that
+    /// is not this session's is a 404. Web parity: `getSessionEventPageAround`.
+    public func eventPageAround(sessionID: String, record: String, limit: Int? = nil) async throws -> EventPage {
+        var q = [URLQueryItem(name: "around", value: record)]
+        if let limit { q.append(URLQueryItem(name: "limit", value: String(limit))) }
+        q.append(URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)))
+        return try await get("sessions/\(sessionID)/events/page", query: q)
+    }
+
+    /// The page just newer than a seq (`after=<seq>&limit=N`): how a window opened at a record pages
+    /// back down to the latest message, the mirror of `before=`. Web parity: `getSessionEventPageAfter`.
+    public func eventPageAfter(sessionID: String, after: Int, limit: Int? = nil) async throws -> EventPage {
+        var q = [URLQueryItem(name: "after", value: String(after))]
+        if let limit { q.append(URLQueryItem(name: "limit", value: String(limit))) }
+        q.append(URLQueryItem(name: "maxPayload", value: String(APIClient.maxEventPayload)))
+        return try await get("sessions/\(sessionID)/events/page", query: q)
+    }
+
     /// One event's untrimmed payload (GET /sessions/:id/events/:seq/full) — fetched when the user
     /// expands a card that arrived `truncated`, so a big Read output or Write body crosses the
     /// network only if someone actually opens it. Web parity: `getSessionEventFull`.

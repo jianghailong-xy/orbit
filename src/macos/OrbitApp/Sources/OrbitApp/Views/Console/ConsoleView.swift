@@ -412,7 +412,9 @@ struct TranscriptView: View {
                         // reliably (a chat flow, no hairlines).
                         .listRowInsets(rowInsets(row))
                         .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+                        // The record a link opened (`SessionRecordLink`), marked for a moment.
+                        .listRowBackground(row.id == console.highlightedRowID
+                                           ? Color.accentColor.opacity(0.14) : Color.clear)
                 }
             }
             .listStyle(.plain)
@@ -460,7 +462,9 @@ struct TranscriptView: View {
                 // bottom the follow below wins instead — a short transcript auto-fills upward and
                 // must not yank the user off the live tail.
                 let prependAnchor = console.takePrependAnchor()
-                if atBottom {
+                // A window opened at a record ends at a gap, so its bottom is never the live tail to
+                // follow — pinning there would only walk the window down page by page.
+                if atBottom && !console.detached {
                     proxy.scrollTo(bottomID, anchor: .bottom)
                 } else if let prependAnchor {
                     proxy.scrollTo(ruler.topAnchorID ?? prependAnchor, anchor: .top)
@@ -522,10 +526,28 @@ struct TranscriptView: View {
                 }
                 #endif
             }
+            // A link to one record (`SessionRecordLink`): scroll to its row. The reader is taken off
+            // the live tail first, said outright as the sticky header's jump says it — a programmatic
+            // jump is no drag the scroll tracker could read, and the next publish would pull them back.
+            // `initial: true` because the page can land before this transcript first appears; the
+            // console consumes the request once followed, so reappearing does not jump back to it.
+            .onChange(of: console.recordRequest, initial: true) { _, request in
+                guard let request else { return }
+                atBottom = false
+                console.recordRequestFollowed(request)
+                #if os(iOS)
+                transcriptScroll.halt()
+                #endif
+                DispatchQueue.main.async {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(request.rowID, anchor: .center)
+                    }
+                }
+            }
             .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
             // Floating jump-to-latest button, shown only while scrolled up (web's `.scroll-to-bottom`).
             .overlay(alignment: .bottom) {
-                if !atBottom {
+                if !atBottom || console.detached {
                     scrollToBottomButton(proxy: proxy)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
@@ -563,7 +585,9 @@ struct TranscriptView: View {
     // row) and the message list, so nothing here can be left stale by recycling. If no row has claimed the
     // top yet (freshly opened, before the first geometry callback) but we're scrolled below the top, fall
     // back to naming the last question so the header shows at once; at the very top / short transcripts it
-    // stays nil. Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet.
+    // stays nil. Queued turns are skipped (web's `:not(.chat-queued)`) — they haven't been asked yet — and
+    // so is a background job's news or a wakeup coming due, a line inside an answer rather than the head
+    // of one (`StickySummary.isAnchor`; web's line carries no `data-sticky-label`).
     private func recomputeStuck() {
         let items = console.state.items
         // Where the reader is, for the console: the needs-you bar's direction word points at a card
@@ -574,14 +598,20 @@ struct TranscriptView: View {
         if let anchor = ruler.topAnchorID {
             for item in items {
                 if item.id == anchor { break }                       // reached the top item; stop
-                if case .user(let b) = item, !b.queued { found = b.id }
+                if case .user(let b) = item, namesAQuestion(b) { found = b.id }
             }
         } else if ruler.contentOffset > 40 {
             for item in items.reversed() {
-                if case .user(let b) = item, !b.queued { found = b.id; break }
+                if case .user(let b) = item, namesAQuestion(b) { found = b.id; break }
             }
         }
         if found != stuckID { stuckID = found }
+    }
+
+    /// A turn the bar may point back at: asked already, and the head of a round rather than a line inside one.
+    private func namesAQuestion(_ b: UserBubble) -> Bool {
+        !b.queued && StickySummary.isAnchor(text: b.text, note: b.note, itemCard: b.itemCard,
+                                            taskStart: b.taskStart, startedCard: b.startedCard)
     }
 
     private var stuckBubble: UserBubble? {
@@ -687,7 +717,19 @@ struct TranscriptView: View {
                                onCancelQueued: { Task { await console.cancelQueued(bubble) } })
             }
         case .bottom:
-            Color.clear.frame(height: 1)
+            if console.detached {
+                // A window opened at a record ends at a gap: reaching its bottom pulls in the newer page.
+                HStack {
+                    Spacer()
+                    ProgressView().controlSize(.small)
+                    Spacer()
+                }
+                .padding(.vertical, 8)
+                .accessibilityLabel(SessionRecordLink.Copy.loadingNewer)
+                .onAppear { Task { await console.loadNewer() } }
+            } else {
+                Color.clear.frame(height: 1)
+            }
         }
     }
 
@@ -696,10 +738,10 @@ struct TranscriptView: View {
     // `anchor: .top` lands the bubble just under this header (it's a safe-area inset, so the scroll
     // region starts below it).
     private func stickyQuestion(_ bubble: UserBubble, proxy: ScrollViewProxy) -> some View {
-        // What this turn was and what it said. A wake — or an exception item's delivery — is still
-        // the turn the bar points back at, but it is not the person's question: it gets its card's
-        // own title and line (`StickySummary`), so the bar can't say "your question" above a card
-        // reading "not typed by you".
+        // What this turn was and what it said. A watch's wake — or an exception item's delivery — is
+        // still the turn the bar points back at, but it is not the person's question: it gets its
+        // card's own title and line (`StickySummary`), so the bar can't say "your question" above a
+        // card reading "not typed by you".
         let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
                                        taskStart: bubble.taskStart,
                                        startedCard: bubble.startedCard)
@@ -751,6 +793,13 @@ struct TranscriptView: View {
     // (near-filling it, with a hair of margin); bottom padding is 6, so it floats just above the composer.
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
         CoastingButton {
+            // A window opened at a record ends at a gap: the latest message is past it, so reaching it
+            // re-seeds the window from the tail (`jumpToLatest`), after which the follow pins the bottom.
+            if console.detached {
+                atBottom = true
+                Task { await console.jumpToLatest() }
+                return
+            }
             #if os(iOS)
             // Two steps, because neither alone reaches the true bottom while coasting: (1) cancel the
             // momentum in place via UIKit — otherwise `proxy.scrollTo` is swallowed by the deceleration —
@@ -790,8 +839,8 @@ struct TranscriptView: View {
                 .animation(.spring(response: 0.28, dampingFraction: 0.6), value: pressed)
         }
         .padding(.bottom, 6)
-        .accessibilityLabel("Scroll to latest")
-        .help("Scroll to latest")
+        .accessibilityLabel(console.detached ? SessionRecordLink.Copy.jumpToLatest : "Scroll to latest")
+        .help(console.detached ? SessionRecordLink.Copy.jumpToLatest : "Scroll to latest")
     }
 
     #if os(macOS)

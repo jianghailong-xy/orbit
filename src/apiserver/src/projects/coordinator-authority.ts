@@ -53,6 +53,13 @@
  * enforced inside the SERVICE — reached identically from the user door, the runner door and a
  * direct call — rather than at a controller, which would leave the service as a second, unguarded
  * way in.
+ *
+ * The same goes for the task-level half of owner review. With Automatic on, the opening tells the
+ * coordinator not to declare OWNER_CONFIRMED on a task unless the criterion it serves asks for the
+ * owner; `tasks/owner-confirmed-automatic-delegation.ts` is what makes that true, in the task
+ * service and for ANY acting session rather than only the judgment role §1 restricts. The owner's
+ * say over whether a task is done then enters where the two HUMAN_ONLY rows below put the rest of
+ * it — through the ruler: a criterion whose verificationMethod starts with OWNER_CONFIRMED.
  */
 
 /**

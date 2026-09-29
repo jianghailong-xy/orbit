@@ -1,5 +1,10 @@
 import { createHash } from 'node:crypto';
-import { uuidToBase62 } from '@orbit/shared';
+import {
+  type CriteriaChangesSinceConfirmed,
+  type CriteriaChangesSinceConfirmedAbsentReason,
+  uuidToBase62,
+} from '@orbit/shared';
+import { classifyCriteriaEdit } from './criteria-edit-classification';
 
 /**
  * Everything about a project's acceptance CRITERIA that is a pure function of what was authored:
@@ -214,4 +219,71 @@ export function standardSetConfirmationStanding(
     ? 'UNCONFIRMED'
     : confirmation.criteriaDigest === currentVersion.digest ? 'CONFIRMED' : 'STALE';
   return { state, confirmed: state === 'CONFIRMED', currentVersion, confirmation };
+}
+
+/**
+ * The standing as `GET /projects/:id/acceptance/confirmation` reports it, and as its `POST`
+ * answers: beside it, what changed since the confirmation it names — the "Confirm the new
+ * criteria?" card's "What changed". Null, with the reason beside it, when nothing was ever
+ * confirmed; all `unchanged` once the set that stands is confirmed.
+ */
+export interface StandardSetConfirmationView extends StandardSetConfirmationStanding {
+  changesSinceConfirmed: CriteriaChangesSinceConfirmed | null;
+  changesSinceConfirmedAbsentReason: CriteriaChangesSinceConfirmedAbsentReason | null;
+}
+
+/**
+ * What changed since a confirmation, criterion by criterion, off the material it stored.
+ *
+ * Every criterion that stands now is matched to the version confirmed by its definition id: with no
+ * match it is ADDED, and with the same `contentHash` it is unchanged. Both hashes are the
+ * database's own — one on the row, one stored on the confirmation — so they are compared here and
+ * never recomputed, which is the one thing this must not do: `project_acceptance_definition_content_hash`
+ * hashes the words and the method together, and a TypeScript recipe would call every criterion
+ * rewritten.
+ *
+ * A hash that moved is STRICTER when `classifyCriteriaEdit` calls going from the confirmed version
+ * to this one a tightening — the judgement every edit is routed by, so this card and the write path
+ * cannot disagree about which edits needed nobody. The confirmed version is in `confirmedMethods`:
+ * for a criterion whose words are the ones confirmed and whose confirmed method was a rung of the
+ * ladder, that rung, found by the database (`ProjectAcceptanceService`). That is the only shape a
+ * tightening that landed on its own can have. Anything else that moved is `revised`.
+ */
+export function criteriaChangesSinceConfirmed(
+  stated: StatedAcceptanceCriterion[],
+  confirmed: ConfirmedCriterionVersion[],
+  confirmedMethods: ReadonlyMap<string, string>,
+): CriteriaChangesSinceConfirmed {
+  const gone = new Map(confirmed.map((item) => [item.definitionId, item]));
+  const changes: CriteriaChangesSinceConfirmed = {
+    added: [], stricter: [], revised: [], removed: [], unchanged: [],
+  };
+  for (const criterion of stated) {
+    const was = gone.get(criterion.definitionId);
+    gone.delete(criterion.definitionId);
+    const { key, ordinal, text, verificationMethod } = criterion;
+    if (!was) {
+      changes.added.push({ key, ordinal, text });
+      continue;
+    }
+    if (was.contentHash === criterion.contentHash) {
+      changes.unchanged.push(ordinal);
+      continue;
+    }
+    const confirmedVerificationMethod = confirmedMethods.get(criterion.definitionId);
+    if (
+      confirmedVerificationMethod !== undefined
+      && verificationMethod !== null
+      && classifyCriteriaEdit(
+        [{ id: criterion.definitionId, text, verificationMethod: confirmedVerificationMethod }],
+        [{ id: criterion.definitionId, text, verificationMethod }],
+      ) === 'ADDITIVE'
+    ) {
+      changes.stricter.push({ key, ordinal, verificationMethod, confirmedVerificationMethod });
+      continue;
+    }
+    changes.revised.push({ key, ordinal, text });
+  }
+  changes.removed = [...gone.keys()].map(criterionKeyOf);
+  return changes;
 }
