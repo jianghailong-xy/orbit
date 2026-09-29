@@ -29,9 +29,10 @@ import { TasksService } from './tasks.service';
  * hand. On 2026-09-05 that was eight tasks pushed through one at a time by a person watching.
  *
  * `dispatchIndependentSiblingsOf` is the pass that starts the next one. What it must NOT do is
- * become a way around the three vetoes that already exist — a task's own `auto_run_when_ready`
- * opt-in, the `dispatch_hold` a paused list writes, and the project's `max_concurrent_tasks` — nor
- * change anything about the dependency dispatch it sits beside.
+ * become a way around the vetoes that already exist — a task's own `auto_run_when_ready` opt-in,
+ * the `dispatch_hold` a paused list writes, the project's `max_concurrent_tasks`, and whether the
+ * project moves at all (started, and not paused: `project-pause-dispatch.pg.spec.ts` holds every
+ * automatic door to that one) — nor change anything about the dependency dispatch it sits beside.
  *
  * Asserted against a real PostgreSQL and by COUNTING SESSIONS, never by observing a call: "was it
  * released" is the question, and the only honest evidence for it is the run that exists afterwards.
@@ -98,12 +99,15 @@ async function world(db: PrismaClient, label: string): Promise<World> {
   return ids;
 }
 
-/** A coordinated project with a real completion contract, and room for three tasks by default. */
+/**
+ * A coordinated project with a real completion contract, and room for three tasks by default —
+ * started by its owner, since only a started project moves by itself, and not paused unless asked.
+ */
 async function project(
   db: PrismaClient,
   ids: World,
   label: string,
-  opts: { coordinatorEnabled?: boolean; maxConcurrentTasks?: number } = {},
+  opts: { coordinatorEnabled?: boolean; maxConcurrentTasks?: number; paused?: boolean } = {},
 ): Promise<string> {
   const projectId = randomUUID();
   await db.project.create({
@@ -111,6 +115,8 @@ async function project(
       id: projectId, ownerId: ids.ownerId, title: label,
       coordinatorEnabled: opts.coordinatorEnabled ?? true,
       maxConcurrentTasks: opts.maxConcurrentTasks ?? 3,
+      startedAt: new Date(),
+      ...(opts.paused ? { pausedAt: new Date(), pausedReason: 'OWNER' } : {}),
     },
   });
   await establishProjectContractForPgTest(db, ids.ownerId, projectId, label);
@@ -459,32 +465,39 @@ test("the release does not exceed the project's concurrency budget",
   });
 
 // -------------------------------------------------------------------------------------------------
-// (6) The switch.
+// (6) The switch: whether the project moves — started and not paused. Automatic used to be it.
 // -------------------------------------------------------------------------------------------------
 
-test('a project whose coordinator is switched off releases nothing',
+test('a paused project releases nothing, and Automatic off no longer stops a started one',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
     const s = connect();
     try {
       const ids = await world(s.db, 'release-switch');
-      // Two projects of one owner, identical in every respect except the switch. Both completions
-      // are driven through the same edge in the same run, so the difference between the two counts
-      // below cannot be anything else.
+      // Three projects of one owner, identical in every respect except the one column each is
+      // named for. All three completions are driven through the same edge in the same run, so the
+      // difference between the counts below cannot be anything else.
       const on = await project(s.db, ids, 'release-switch-on', { coordinatorEnabled: true });
       const off = await project(s.db, ids, 'release-switch-off', { coordinatorEnabled: false });
+      const paused = await project(s.db, ids, 'release-switch-paused', { paused: true });
       const finishedOn = await seedTask(s.db, ids, on, 'finished', { status: TaskStatus.DONE });
       const finishedOff = await seedTask(s.db, ids, off, 'finished', { status: TaskStatus.DONE });
+      const finishedPaused = await seedTask(s.db, ids, paused, 'finished', { status: TaskStatus.DONE });
       const releasedOn = await seedTask(s.db, ids, on, 'released');
       const releasedOff = await seedTask(s.db, ids, off, 'released');
+      const releasedPaused = await seedTask(s.db, ids, paused, 'released');
 
       await completionEdge(s, ids.ownerId, finishedOn);
       await completionEdge(s, ids.ownerId, finishedOff);
+      await completionEdge(s, ids.ownerId, finishedPaused);
 
       assert.equal(await sessionCount(s.db, releasedOn), 1,
-        'the coordinated project released nothing — the control below proves nothing on its own');
-      assert.equal(await sessionCount(s.db, releasedOff), 0,
-        'a project with its coordinator switched off had the next task released on its behalf');
+        'the coordinated project released nothing — the controls below prove nothing on their own');
+      assert.equal(await sessionCount(s.db, releasedOff), 1,
+        'a started project with Automatic off released nothing — Automatic says who decides, not '
+          + 'whether the project moves');
+      assert.equal(await sessionCount(s.db, releasedPaused), 0,
+        'a paused project had the next task released on its behalf');
     } finally {
       await s.db.$disconnect();
     }
@@ -559,27 +572,31 @@ test('(8) the sweep does not start an independent task that opted out of auto-ru
     }
   });
 
-test('(9) the sweep does not start anything in a project whose coordinator is switched off',
+test('(9) the sweep does not start anything in a paused project, and does in one with Automatic off',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
     const s = connect();
     try {
       const ids = await world(s.db, 'sweep-switch');
-      // Two projects of one owner, identical but for the switch, swept in the same call. The
-      // switch is what says a coordinator may act for this project, and starting the next task is
-      // an action taken on the project's behalf.
+      // Three projects of one owner, identical but for one column each, swept in the same call.
+      // Whether the project moves is what says anything may be started on its behalf; Automatic
+      // only says who decides for the owner.
       const on = await project(s.db, ids, 'sweep-switch-on', { coordinatorEnabled: true });
       const off = await project(s.db, ids, 'sweep-switch-off', { coordinatorEnabled: false });
+      const paused = await project(s.db, ids, 'sweep-switch-paused', { paused: true });
       const releasedOn = await seedTask(s.db, ids, on, 'released');
       const releasedOff = await seedTask(s.db, ids, off, 'released');
+      const releasedPaused = await seedTask(s.db, ids, paused, 'released');
       await assertNothingFinished(s.db, ids);
 
       await readySweep(s);
 
-      assert.equal(await sessionCount(s.db, releasedOff), 0,
-        'a project with its coordinator switched off had a task started on its behalf by the clock');
+      assert.equal(await sessionCount(s.db, releasedPaused), 0,
+        'a paused project had a task started on its behalf by the clock');
       assert.equal(await sessionCount(s.db, releasedOn), 1,
         'the coordinated project started nothing either, so the control above proves nothing');
+      assert.equal(await sessionCount(s.db, releasedOff), 1,
+        'a started project with Automatic off started nothing on the clock');
     } finally {
       await s.db.$disconnect();
     }

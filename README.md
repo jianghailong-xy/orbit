@@ -14,14 +14,16 @@
 
 <p align="center">
   <a href="docs/product-intro.md">Product tour</a> ·
+  <a href="docs/messaging-brief.md">Launch messaging</a> ·
   <a href="docs/self-hosting.md">Self-hosting</a> ·
   <a href="docs/README.md">Documentation</a> ·
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
-Orbit is a self-hosted control plane for **Claude Code, Codex, Kimi, and OpenCode**. It combines live,
-multi-turn agent sessions with a durable task queue and dependency graph. The agents execute on machines
-you register as runners, close to the repositories, credentials, internal tools, and networks they need.
+Orbit is **self-hosted mission control for coding agents**. It coordinates **Claude Code, Codex, Kimi, and
+OpenCode** with live, multi-turn agent sessions, a durable task queue, and a dependency graph. The agents
+execute on machines you register as runners, close to the repositories, credentials, internal tools, and
+networks they need.
 
 The control plane never needs inbound access to a runner. Runners poll outward for work and stream the
 transcript, approvals, status, and usage back to Orbit. For repositories that need concurrent edits, you can
@@ -113,21 +115,24 @@ guide](docs/development.md) for tests, repository layout, and native-client setu
 
 ## Project status
 
-Orbit is under active development and should currently be treated as **pre-1.0**. Core functionality is in
-place: distributed runners, interactive sessions, project coordination, task graphs, approvals, worktree
-isolation, multi-runtime support, web and native clients, runner recovery, backups, and usage reporting.
+Orbit is a **pre-1.0 open-source project under active development**. Pin deployments to a tagged release and
+review upgrade notes before changing versions. The latest published release receives best-effort security
+fixes; `main` is a development branch and older releases are not supported.
 
-Before relying on Orbit for critical production work, review the [security policy](SECURITY.md), deployment
-hardening guidance, backup runbook, and release notes. Recurring schedules and inbound task sources are not
-yet built.
+Core functionality is in place: distributed runners, interactive sessions, project coordination, task graphs,
+approvals, worktree isolation, multi-runtime support, web and native clients, runner recovery, backups, and
+usage reporting. Before relying on Orbit for critical production work, review the [security policy](SECURITY.md),
+[self-hosting hardening guide](docs/self-hosting.md), backup runbook, and release notes. Recurring schedules
+and inbound task sources are not yet built.
 
 ## Community
 
-- Read the [documentation index](docs/README.md) or [support guide](SUPPORT.md).
-- Report bugs and request features with [GitHub Issues](https://github.com/jianghailong-xy/orbit/issues).
-- Read [CONTRIBUTING.md](CONTRIBUTING.md) before sending a pull request.
-- Project decisions and maintainer responsibilities are described in [GOVERNANCE.md](GOVERNANCE.md).
-- Security issues must follow [SECURITY.md](SECURITY.md), not a public issue.
+- Start with the [community guide](COMMUNITY.md), [public roadmap](ROADMAP.md), or [documentation index](docs/README.md).
+- Ask questions, share a deployment, or discuss direction in [GitHub Discussions](https://github.com/jianghailong-xy/orbit/discussions).
+- Report a reproducible bug or scoped proposal with [GitHub Issues](https://github.com/jianghailong-xy/orbit/issues); the repository's Issue Forms explain what to include.
+- Pick a small, independently scoped task from the [good first issue list](https://github.com/jianghailong-xy/orbit/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) before participating.
+- Project decisions and maintainer responsibilities are described in [GOVERNANCE.md](GOVERNANCE.md); security issues must follow [SECURITY.md](SECURITY.md), not a public issue.
 
 ## License
 

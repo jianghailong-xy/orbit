@@ -259,6 +259,8 @@ async function project(db: PrismaClient, ids: World, label: string): Promise<str
       title: `${label}-${RUN}`,
       coordinatorEnabled: true,
       maxConcurrentTasks: 8,
+      // Started: only a started, unpaused project moves by itself (project-pause-dispatch.ts).
+      startedAt: new Date(),
     },
   });
   await establishProjectContractForPgTest(db, ids.ownerId, id, `${label}-${RUN}`);

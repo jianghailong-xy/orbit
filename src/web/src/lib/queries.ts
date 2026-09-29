@@ -12,6 +12,7 @@ import type {
 import {
   ApiError,
   api,
+  fetchAvatarDataUrl,
   getSession,
   getSessionDiff,
   listShareLinks,
@@ -170,6 +171,8 @@ export interface Me {
   createdAt: string;
   preferences?: UserPreferences;
   role?: 'MEMBER' | 'ADMIN';
+  /** When the account's profile photo was set — the version it is fetched by. Null without one. */
+  avatarUpdatedAt?: string | null;
 }
 
 /** The signed-in user — backs the account page and the nav footer's avatar + name. */
@@ -177,6 +180,16 @@ export const meQuery = () =>
   queryOptions({
     queryKey: ['user', 'me'] as const,
     queryFn: () => api<Me>('/users/me'),
+  });
+
+/** The account's profile photo as a data URL, by the version `me` names — a new photo is a new
+ *  key, and nothing is fetched while there is none. */
+export const avatarQuery = (version: string | null | undefined) =>
+  queryOptions({
+    queryKey: ['user', 'me', 'avatar', version ?? null] as const,
+    queryFn: fetchAvatarDataUrl,
+    enabled: !!version,
+    staleTime: Infinity,
   });
 
 /**

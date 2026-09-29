@@ -123,6 +123,8 @@ async function project(
     data: {
       id: projectId, ownerId: ids.ownerId, title: label, coordinatorEnabled,
       maxConcurrentTasks: 3,
+      // Started: only a started, unpaused project moves by itself (project-pause-dispatch.ts).
+      startedAt: new Date(),
     },
   });
   await establishProjectContractForPgTest(db, ids.ownerId, projectId, label);

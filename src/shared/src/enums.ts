@@ -353,6 +353,10 @@ export enum RunEventType {
   // session's — and only a nudge: streamForUser maps it to
   // ControlEventType.PROJECT_CRITERIA_DECISIONS_CHANGED carrying the project id and nothing else.
   PROJECT_CRITERIA_DECISIONS_CHANGED = 'project_criteria_decisions_changed',
+  // Whether one of the owner's projects moves changed: it was paused or resumed. Owner-scoped like
+  // the criteria decisions above, and only a nudge: streamForUser maps it to
+  // ControlEventType.PROJECT_CHANGED carrying the project id and nothing else.
+  PROJECT_CHANGED = 'project_changed',
   // One of the owner's watches changed: it was made, edited, paused, resumed or stopped, it matched,
   // expired or ended unmatched, or one of its deliveries settled. Owner-scoped like the libraries
   // above, and only a nudge carrying the watch's id — never what the watch observed. Watch's
@@ -381,6 +385,7 @@ export function isLifecycleType(t: RunEventType): boolean {
     t === RunEventType.TAG_CHANGED ||
     t === RunEventType.PROVIDER_CHANGED ||
     t === RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED ||
+    t === RunEventType.PROJECT_CHANGED ||
     t === RunEventType.WATCH_CHANGED ||
     t === RunEventType.WIKI_CHANGED
   );

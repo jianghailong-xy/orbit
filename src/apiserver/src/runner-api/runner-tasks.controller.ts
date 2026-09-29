@@ -262,8 +262,9 @@ export class RunnerTasksController {
    * a call whose answer was lost is the same request rather than a second run. Optional, because a
    * runner predating the field sends no body.
    *
-   * Refused for a task whose project its owner has not started (`projectAwaitingStart`); the
-   * owner's own Run is `TasksController.execute`, which is not.
+   * Refused for a task whose project its owner has not started (`projectAwaitingStart`), or has
+   * paused (409 PROJECT_PAUSED, `pausedProjectOf`); the owner's own Run is `TasksController.execute`,
+   * which is not.
    */
   @Post('tasks/:id/execute')
   executeTask(
