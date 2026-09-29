@@ -9,7 +9,11 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | --- | --- |
 | Understand the product and its use cases | [Product introduction](product-intro.md) |
 | Watch or record the 90-second product walkthrough | [90-second demo storyboard](90-second-demo.md) |
+| Read the long-running-work article | [When a coding task outlives a context window](article-durable-agent-work.md) |
+| Read the private multi-runtime article | [A control plane for private, multi-runtime agent work](article-private-multi-runtime-control-plane.md) |
 | Reuse the approved public positioning and launch copy | [GitHub launch messaging brief](messaging-brief.md) |
+| Prepare a launch announcement | [First-launch copy pack](launch-copy.md) |
+| Collect a design-partner story | [Design partner case-study template](design-partner-case-study-template.md) |
 | Follow project direction | [Public roadmap](../ROADMAP.md) |
 | Run Orbit on your own server | [Self-hosting](self-hosting.md) |
 | Publish or upgrade a release | [Release process](release-process.md) |
@@ -27,6 +31,14 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
   current boundaries.
 - [90-second demo storyboard](90-second-demo.md) — timed shots, narration, evidence rules, and the canonical
   opening/close for a GitHub product demo.
+- [When a coding task outlives a context window](article-durable-agent-work.md) — a technical scenario for
+  durable task graphs, resumable sessions, handoffs, and human review.
+- [A control plane for private, multi-runtime agent work](article-private-multi-runtime-control-plane.md) — a
+  deployment scenario for private runners, approvals, worktrees, and several runtimes.
+- [First-launch copy pack](launch-copy.md) — release, Discussion, social, reply, and design-partner copy with
+  evidence and boundary checklists.
+- [Design partner case-study template](design-partner-case-study-template.md) — consent, evidence, quote, and
+  publication fields for a fact-checked partner story.
 - [Self-hosting](self-hosting.md) — Docker Compose, secrets, runners, TLS, upgrades, and production checks.
 - [Runner CLI and automation](runner-cli.md) — task/session commands, service tokens, and authorization
   boundaries.

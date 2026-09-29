@@ -9,6 +9,7 @@
 <p align="center">
   <a href="#quick-start">Quick Start</a> ·
   <a href="docs/90-second-demo.md">90-second demo</a> ·
+  <a href="docs/launch-copy.md">Launch kit</a> ·
   <a href="examples/demo-repo/">Demo repo</a> ·
   <a href="docs/self-hosting.md">Operations</a> ·
   <a href="SUPPORT.md">Support</a>
@@ -197,6 +198,14 @@ starter task prompt. It is committed here so the onboarding path is reviewable a
 directory into a standalone Git repository (or use this checkout as the workspace directory) before assigning it
 to a runner. It does not require production credentials and is not a substitute for testing your own network and
 permission policy.
+
+## Read, share, and collaborate
+
+The [long-running-work article](docs/article-durable-agent-work.md) explains how task graphs, handoff comments,
+and resumable sessions keep a migration legible across context windows. The [private multi-runtime article](docs/article-private-multi-runtime-control-plane.md)
+covers runner placement, approvals, worktrees, and runtime choice. For a first announcement, use the
+[launch copy pack](docs/launch-copy.md); for a fact-checked partner story, start with the
+[design-partner case-study template](docs/design-partner-case-study-template.md).
 
 ## FAQ
 
