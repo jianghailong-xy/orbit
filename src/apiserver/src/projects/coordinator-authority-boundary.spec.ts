@@ -592,19 +592,22 @@ test('a USER-origin session opens tasks with no criterion and no budget', async 
  * a reader is told is the rendered string.
  */
 test('the conversational opening no longer offers the criteria or DONE as its own tools', () => {
-  const opening = buildCoordinatorOpening('协调重做', randomUUID());
+  // With the project's Automatic switch either way: it changes who settles a TASK, not these two.
+  for (const coordinatorEnabled of [false, true]) {
+    const opening = buildCoordinatorOpening('协调重做', randomUUID(), coordinatorEnabled);
 
-  // It still says what project_update IS for.
-  assert.match(opening, /project_update/);
-  // And no longer sells it as the way to rewrite the exam or to record that the goal was met.
-  assert.doesNotMatch(opening, /project_update[^。]*验收标准/);
-  assert.doesNotMatch(opening, /status\s*记成\s*DONE/);
-  // Naming the two, and naming who decides them, rather than falling silent: a coordinator that
-  // is told nothing goes looking, which is the same wasted turn by another route.
-  assert.match(opening, /验收标准/);
-  assert.match(opening, /DONE/);
-  assert.match(opening, /账号所有者通道记录/);
-  assert.match(opening, /不是服务器对“真人在场”的密码学证明/);
+    // It still says what project_update IS for.
+    assert.match(opening, /project_update/);
+    // And no longer sells it as the way to rewrite the exam or to record that the goal was met.
+    assert.doesNotMatch(opening, /project_update[^。]*验收标准/);
+    assert.doesNotMatch(opening, /status\s*记成\s*DONE/);
+    // Naming the two, and naming who decides them, rather than falling silent: a coordinator that
+    // is told nothing goes looking, which is the same wasted turn by another route.
+    assert.match(opening, /验收标准/);
+    assert.match(opening, /DONE/);
+    assert.match(opening, /账号所有者通道记录/);
+    assert.match(opening, /不是服务器对“真人在场”的密码学证明/);
+  }
 });
 
 test('the judgment opening states the boundaries, and that nothing judges the criteria', () => {
