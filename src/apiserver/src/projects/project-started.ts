@@ -369,10 +369,12 @@ export function projectNotStartedRefusal(
     code: 'PROJECT_NOT_STARTED',
     message:
       `task ${uuidToBase62(taskId)}: its project “${project.title}” `
-      + `(${uuidToBase62(project.projectId)}) has not been started. Its owner has not pressed `
-      + '“Start the project” yet, and until they do, task_start starts none of its tasks. Do not '
-      + 'work around this: tell the owner the plan is ready and leave the start to them. The '
-      + 'project’s coordinator is told when it starts (“From Orbit · project started”); from then '
-      + 'on its auto-run tasks start by themselves, and task_start starts the rest.',
+      + `(${uuidToBase62(project.projectId)}) has not been started, and until its owner starts it, `
+      + 'task_start starts none of its tasks. Do not work around this: the project’s coordinator '
+      + 'asks for the start with project_request_start once the plan is written and every '
+      + 'acceptance criterion has a task serving it — Orbit checks the plan, says what is missing if '
+      + 'anything is, and puts the start in front of the owner. The coordinator is told when it '
+      + 'starts (“From Orbit · project started”); from then on its auto-run tasks start by '
+      + 'themselves, and task_start starts the rest.',
   };
 }

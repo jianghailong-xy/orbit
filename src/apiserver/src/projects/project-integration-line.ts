@@ -369,6 +369,23 @@ async function coordinationRepository(
 }
 
 /**
+ * The repository this project integrates into, canonical: its binding's, or — before it has one —
+ * the one its coordination workspace names. Null when neither names one, which is the project a
+ * start refuses a project branch and a merge check for (`startProjectLine`).
+ */
+export async function projectRepository(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  projectId: string,
+): Promise<string | null> {
+  const bound = await tx.projectCodebase.findFirst({
+    where: { projectId, slot: 'primary' },
+    select: { canonicalRepoUrl: true },
+  });
+  return bound?.canonicalRepoUrl ?? coordinationRepository(tx, ownerId, projectId);
+}
+
+/**
  * The account owner's integration settings, applied under the binding's lock (L-T1, L-T2, L-T5).
  *
  * A participant: the caller owns the transaction, has already established that the project is the

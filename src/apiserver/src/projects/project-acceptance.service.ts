@@ -10,6 +10,7 @@ import {
 import { Prisma, ProjectStatus } from '@prisma/client';
 import {
   type ProjectStartRecord,
+  type ProjectStartRequest,
   type ProjectStartSettings,
   type StartProjectRequestBody,
   type StartProjectResponse,
@@ -34,6 +35,7 @@ import { VERIFICATION_METHOD_RUNGS } from './criteria-edit-classification';
 import { storeDerivedProjectStatus } from './project-done-derived';
 import { defaultStartLine, startProjectLine } from './project-integration-line';
 import { tellCoordinatorProjectStarted } from './project-started';
+import { START_REQUEST_KIND, answerStartRequests } from './project-start-request';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 /** One stated criterion, as every read surface reports it. */
@@ -329,8 +331,11 @@ export class ProjectAcceptanceService {
    * nothing is written; so is a project that has been started already, which is what makes a second
    * press, or a re-sent request, a refusal instead of a second start.
    *
-   * `requestId` names the coordinator's start request the card was drawn from, when there was one.
-   * Nothing here reads it yet; what the start records as asked for is what the owner sent.
+   * `requestId` names the coordinator's start request the card was drawn from, when there was one
+   * (`project-start-request.ts`): the settings it suggested are then what the start records as asked
+   * for, so the receipt and the coordinator's "Project started" card mark every setting the owner
+   * changed on the card. Without one, what was asked for is what the owner sent. Either way the start
+   * answers whichever request is open — a started project has nothing left to ask.
    */
   async startProject(
     ownerId: string,
@@ -354,7 +359,13 @@ export class ProjectAcceptanceService {
       maxConcurrentTasks: input.maxConcurrentTasks,
       mergeCheckCommand: input.mergeCheckCommand ?? null,
     };
-    const started = await this.start(ownerId, projectId, input.criteriaDigest, async () => asked);
+    const started = await this.start(
+      ownerId,
+      projectId,
+      input.criteriaDigest,
+      async () => asked,
+      input.requestId ?? null,
+    );
     await this.afterStart(ownerId, projectId, started);
     return {
       projectId,
@@ -383,7 +394,10 @@ export class ProjectAcceptanceService {
    *      compare-and-set on its still being null.
    *   4. The confirmation (rank 60), naming the version confirmed and carrying what the start left
    *      the project with and which of that is not what it was asked for (`started_with`), at the
-   *      same instant as `started_at`.
+   *      same instant as `started_at`. What it was asked for is the coordinator's request when the
+   *      start names one (`requestId`), and otherwise the settings the start was given.
+   *   5. The open start request, if any (rank 60), resolved APPROVED at that instant
+   *      (`answerStartRequests`).
    *
    * Every refusal comes before the first write, so a refused start writes nothing, and a retried
    * attempt re-reads every one of those facts under its own locks.
@@ -396,6 +410,7 @@ export class ProjectAcceptanceService {
       tx: Prisma.TransactionClient,
       project: { maxConcurrentTasks: number },
     ) => Promise<ProjectStartSettings>,
+    requestId: string | null = null,
   ): Promise<ProjectStartOutcome> {
     return withTransactionRetry(this.prisma, async (tx) => {
       const [project] = await tx.$queryRaw<Array<{
@@ -414,6 +429,13 @@ export class ProjectAcceptanceService {
         await ProjectAcceptanceService.statedCriteria(tx, projectId),
       );
       if (criteriaDigest !== version.digest) throw criteriaVersionMoved(version.digest);
+      // The request the card was drawn from, whatever has become of it since: its settings are
+      // what the card showed as suggested, which is what the owner's changes are measured against.
+      const request = requestId === null ? null : await tx.projectOpenItem.findFirst({
+        where: { id: requestId, projectId, kind: START_REQUEST_KIND },
+        select: { payload: true },
+      });
+      if (requestId !== null && !request) throw new NotFoundException('start request not found');
 
       const asked = await settingsFor(tx, project);
       const line = await startProjectLine(tx, { ownerId, projectId, settings: asked });
@@ -444,9 +466,10 @@ export class ProjectAcceptanceService {
       });
       if (written.count !== 1) throw projectAlreadyStarted(null);
 
+      const suggested = (request?.payload as unknown as ProjectStartRequest | undefined)?.settings;
       const record: ProjectStartRecord = {
         settings,
-        differsFromRequest: differingStartSettings(asked, settings),
+        differsFromRequest: differingStartSettings(suggested ?? asked, settings),
       };
       const confirmation = await tx.projectStandardSetConfirmation.create({
         data: {
@@ -460,6 +483,7 @@ export class ProjectAcceptanceService {
         },
         select: { id: true },
       });
+      await answerStartRequests(tx, { ownerId, projectId, at });
       return { confirmationId: confirmation.id, at, version, record, lineLocked: line.locked };
     }, loggedRetry(this.logger, 'projectAcceptance.start'));
   }

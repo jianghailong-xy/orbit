@@ -12,7 +12,7 @@
  * lets both sides name the same interface instead of keeping two that drift.
  */
 import type { IntegrationCheckResult } from './dto';
-import type { ProjectStartSettingKey, ProjectStartSettings } from './project-start';
+import type { ProjectStartRequest, ProjectStartSettingKey, ProjectStartSettings } from './project-start';
 
 /** Where this project's finished tasks land: straight onto main, or onto a branch of its own. */
 export type IntegrationLine = 'MAIN' | 'PROJECT_BRANCH';
@@ -155,7 +155,11 @@ export interface ProjectIntegrationBuckets {
   waitingForLanding: number;
 }
 
-/** What opened an exception item, as §4.2's closed set spells it. */
+/**
+ * What opened an exception item, as §4.2's closed set spells it — and `START_REQUEST`, a
+ * coordinator asking its owner to start the project (`project_request_start`, `project-start.ts`).
+ * The set is closed in the database too (`project_open_item_kind_chk`): a new kind is a migration.
+ */
 export type OpenItemKind =
   | 'INTEGRATION_CONFLICT'
   | 'INTEGRATION_CHECK_FAILED'
@@ -163,16 +167,17 @@ export type OpenItemKind =
   | 'TASK_FAILED'
   | 'PROMOTION_APPROVAL'
   | 'COORDINATOR_QUESTION'
-  | 'FUSE_PAUSED';
+  | 'FUSE_PAUSED'
+  | 'START_REQUEST';
 
 /**
- * The kinds a project's coordinator can be handling (§7.1 V1/V2): `OpenItemKind` minus the three
+ * The kinds a project's coordinator can be handling (§7.1 V1/V2): `OpenItemKind` minus the four
  * that are the owner's from birth.
  *
- * A merge approval, a question to the owner and a pause are asked OF the owner and never worked BY
- * the coordinator, so an item whose assignee is the coordinator is one of these four — which is
- * what lets the list row's blue chip be a `Record` over this type rather than a switch with a
- * branch for a state that cannot happen. A kind that later becomes returnable to the coordinator
+ * A merge approval, a question to the owner, a pause and a request to start are asked OF the owner
+ * and never worked BY the coordinator, so an item whose assignee is the coordinator is one of these
+ * four — which is what lets the list row's blue chip be a `Record` over this type rather than a
+ * switch with a branch for a state that cannot happen. A kind that later becomes returnable to the coordinator
  * (the one §4.7 lists and has no door for yet) adds itself here, and every reader fails to compile
  * until it has a phrase.
  *
@@ -313,6 +318,9 @@ export interface ProjectOpenItemRow<Instant = string> {
   actions: OpenItemAction[];
   /** Present for a `COORDINATOR_QUESTION` and null for every other kind. */
   question: CoordinatorQuestion | null;
+  /** The request a `START_REQUEST` carries — what the "Start this project?" card is drawn from —
+   *  and null for every other kind. Absent from a server that predates start requests. */
+  startRequest?: ProjectStartRequest | null;
   /** What the item's payload holds, as the rows its card draws; null when the payload is not a
    *  shape this build reads — an item an older build opened, a pause, a question — and the card
    *  then draws what it drew before this existed. */
@@ -323,6 +331,13 @@ export interface ProjectOpenItemRow<Instant = string> {
 export interface ProjectOpenItemsView<Instant = string> {
   needsYou: Array<ProjectOpenItemRow<Instant>>;
   withCoordinator: Array<ProjectOpenItemRow<Instant>>;
+  /**
+   * The coordinator's open request to start the project (`START_REQUEST`), or null — a project holds
+   * at most one. Kept out of `needsYou` on purpose: a client that predates the kind draws every
+   * `needsYou` row it cannot name as an exception that escalated to the owner, with nothing to press.
+   * Absent from a server that predates start requests.
+   */
+  startRequest?: ProjectOpenItemRow<Instant> | null;
 }
 
 /**
