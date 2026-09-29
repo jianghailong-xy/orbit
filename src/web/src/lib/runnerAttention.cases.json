@@ -1,0 +1,2687 @@
+[
+  {
+    "name": "real wikova: Claude weekly 98% and a 95% full disk",
+    "input": {
+      "runner": {
+        "name": "wikova",
+        "displayName": null,
+        "hostname": "vmi3129740",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:52Z",
+        "maxConcurrent": 12,
+        "activeSessions": 4,
+        "runsAsRoot": true,
+        "minFreeDiskMb": null,
+        "reposRoot": "/root/orbit-repos",
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes",
+            "update": {
+              "status": "checked",
+              "at": "2026-09-29T00:08:00Z",
+              "okAt": "2026-09-29T00:08:00Z",
+              "latest": "2.1.284"
+            }
+          },
+          {
+            "engine": "codex",
+            "installed": true,
+            "version": "codex-cli 0.158.0",
+            "auth": "yes",
+            "accounts": [
+              { "id": "default", "home": "/root/.codex", "auth": "yes" },
+              { "id": "1fda3f43", "home": "/root/.orbit/codex-accounts/1fda3f43", "auth": "yes" }
+            ]
+          },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" },
+          { "engine": "opencode", "installed": true, "version": "1.18.33", "auth": "yes" }
+        ],
+        "planUsage": {
+          "provider": "claude",
+          "fiveHour": { "utilization": 14, "resetsAt": "2026-09-29T02:59:59Z" },
+          "sevenDay": { "utilization": 98, "resetsAt": "2026-10-02T03:59:59Z" }
+        }
+      },
+      "workspaces": [
+        {
+          "id": "ws-orbit",
+          "name": "orbit",
+          "lastProvider": "anthropic-2",
+          "workDir": "/root/orbit",
+          "workDirFreeBytes": "10087419904",
+          "workDirTotalBytes": "211157901312",
+          "repoHealth": { "root": "/root/orbit", "state": "clean", "agentIds": ["ws-orbit"] }
+        },
+        {
+          "id": "ws-wikova-develop",
+          "name": "wikova-develop",
+          "lastProvider": "claude",
+          "workDir": "~/wikova-develop",
+          "workDirFreeBytes": "10087419904",
+          "workDirTotalBytes": "211157901312",
+          "repoHealth": {
+            "root": "/root/wikova-develop",
+            "state": "clean",
+            "agentIds": ["ws-wikova-develop"]
+          }
+        },
+        {
+          "id": "ws-wikova-prod",
+          "name": "wikova-prod",
+          "lastProvider": "deepseek",
+          "workDir": "~/wikova",
+          "workDirFreeBytes": "10087419904",
+          "workDirTotalBytes": "211157901312",
+          "repoHealth": {
+            "root": "/root/wikova",
+            "state": "dirty",
+            "agentIds": ["ws-wikova-prod"]
+          }
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "quotaNearLimit",
+          "tone": "warn",
+          "short": "Claude weekly limit 98%",
+          "title": "Claude weekly limit at 98%",
+          "actionKind": null
+        },
+        {
+          "kind": "diskLow",
+          "tone": "warn",
+          "short": "Disk 95% full",
+          "title": "Disk 95% full",
+          "actionKind": "setReserve"
+        }
+      ],
+      "listLine": "Claude weekly limit 98% · Disk 95% full",
+      "subtitle": "vmi3129740 · v0.1.197",
+      "disk": { "freeBytes": 10087419904, "totalBytes": 211157901312, "usedPercent": 95 }
+    }
+  },
+  {
+    "name": "real workstation: Claude signed out, but no workspace runs on its Claude login",
+    "input": {
+      "runner": {
+        "name": "workstation",
+        "displayName": null,
+        "hostname": "gateway",
+        "version": "0.1.194",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:40Z",
+        "maxConcurrent": 6,
+        "activeSessions": 1,
+        "runsAsRoot": true,
+        "minFreeDiskMb": null,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "no"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": false, "auth": "unknown" },
+          { "engine": "opencode", "installed": false, "auth": "unknown" }
+        ],
+        "planUsage": {
+          "provider": "codex",
+          "primary": { "label": "5h limit", "utilization": 0, "windowDurationMins": 300 },
+          "secondary": { "label": "Weekly limit", "utilization": 2, "windowDurationMins": 10080 }
+        }
+      },
+      "workspaces": [
+        {
+          "id": "ws-lfs",
+          "name": "lfs",
+          "lastProvider": "anthropic",
+          "workDir": "~/lfs",
+          "workDirFreeBytes": "182359273472",
+          "workDirTotalBytes": "1005441241088",
+          "repoHealth": null
+        },
+        {
+          "id": "ws-wikova-data",
+          "name": "wikova-data",
+          "lastProvider": "deepseek",
+          "workDir": "~/wikova",
+          "workDirFreeBytes": "182359273472",
+          "workDirTotalBytes": "1005441241088",
+          "repoHealth": null
+        },
+        {
+          "id": "ws-wikids",
+          "name": "wikids",
+          "lastProvider": "codex",
+          "workDir": "~/wikids",
+          "workDirFreeBytes": "182359273472",
+          "workDirTotalBytes": "1005441241088",
+          "repoHealth": null
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "gateway · v0.1.194",
+      "disk": { "freeBytes": 182359273472, "totalBytes": 1005441241088, "usedPercent": 82 }
+    }
+  },
+  {
+    "name": "real longdeMac-mini.local: offline 14 days and can’t update itself; its failing Claude update is not raised while offline",
+    "input": {
+      "runner": {
+        "name": "longdeMac-mini.local",
+        "displayName": null,
+        "hostname": "longdeMac-mini.local",
+        "version": "0.1.155",
+        "online": false,
+        "lastHeartbeatAt": "2026-09-14T14:25:09Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "minFreeDiskMb": null,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.266 (Claude Code)",
+            "auth": "no",
+            "update": {
+              "status": "failed",
+              "at": "2026-09-13T16:54:10Z",
+              "okAt": "2026-09-09T14:38:06Z",
+              "latest": "2.1.270",
+              "behindSince": "2026-09-10T14:37:56Z"
+            }
+          },
+          { "engine": "codex", "installed": false, "auth": "unknown" },
+          { "engine": "kimi", "installed": false, "auth": "unknown" },
+          { "engine": "opencode", "installed": false, "auth": "unknown" }
+        ],
+        "planUsage": null
+      },
+      "workspaces": [
+        {
+          "id": "ws-mac-orbit",
+          "name": "orbit",
+          "lastProvider": "deepseek",
+          "workDir": "~/orbit",
+          "workDirFreeBytes": "54100582400",
+          "workDirTotalBytes": "245107195904",
+          "repoHealth": null
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "offline",
+          "tone": "idle",
+          "short": "Offline",
+          "title": "Offline for 14 days",
+          "actionKind": null
+        },
+        {
+          "kind": "cannotSelfUpdate",
+          "tone": "warn",
+          "short": "Can’t update itself",
+          "title": "Can’t update itself",
+          "actionKind": "copyCommand"
+        }
+      ],
+      "listLine": "Can’t update itself",
+      "subtitle": "Offline · last seen 14d ago · v0.1.155",
+      "disk": { "freeBytes": 54100582400, "totalBytes": 245107195904, "usedPercent": 78 }
+    }
+  },
+  {
+    "name": "real workstation-gpu: Claude signed out, but its only workspace runs on deepseek",
+    "input": {
+      "runner": {
+        "name": "workstation-gpu",
+        "displayName": null,
+        "hostname": "workstation",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:50Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "minFreeDiskMb": null,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "no"
+          },
+          { "engine": "codex", "installed": false, "auth": "unknown" },
+          { "engine": "kimi", "installed": false, "auth": "unknown" },
+          { "engine": "opencode", "installed": false, "auth": "unknown" }
+        ],
+        "planUsage": null
+      },
+      "workspaces": [
+        {
+          "id": "ws-hpc",
+          "name": "HPC",
+          "lastProvider": "deepseek",
+          "workDir": "~/develop/",
+          "workDirFreeBytes": "469218496512",
+          "workDirTotalBytes": "982292123648",
+          "repoHealth": null
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "workstation · v0.1.197",
+      "disk": { "freeBytes": 469218496512, "totalBytes": 982292123648, "usedPercent": 52 }
+    }
+  },
+  {
+    "name": "quota 89% on the engine a workspace runs on: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ],
+        "planUsage": {
+          "provider": "claude",
+          "fiveHour": { "utilization": 40, "resetsAt": "2026-09-29T02:59:59Z" },
+          "sevenDay": { "utilization": 89, "resetsAt": "2026-10-02T03:59:59Z" }
+        }
+      },
+      "workspaces": [
+        { "id": "ws-app", "name": "app", "lastProvider": "claude", "workDir": "~/app" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "quota 89.6% is still under 90 (the reading is compared, not its rounding)",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ],
+        "planUsage": {
+          "provider": "claude",
+          "fiveHour": { "utilization": 40, "resetsAt": "2026-09-29T02:59:59Z" },
+          "sevenDay": { "utilization": 89.6, "resetsAt": "2026-10-02T03:59:59Z" }
+        }
+      },
+      "workspaces": [
+        { "id": "ws-app", "name": "app", "lastProvider": "claude", "workDir": "~/app" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "quota 90% on the engine a workspace runs on: raised",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ],
+        "planUsage": {
+          "provider": "claude",
+          "fiveHour": { "utilization": 40, "resetsAt": "2026-09-29T02:59:59Z" },
+          "sevenDay": { "utilization": 90, "resetsAt": "2026-10-02T03:59:59Z" }
+        }
+      },
+      "workspaces": [
+        { "id": "ws-app", "name": "app", "lastProvider": "claude", "workDir": "~/app" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "quotaNearLimit",
+          "tone": "warn",
+          "short": "Claude weekly limit 90%",
+          "title": "Claude weekly limit at 90%",
+          "actionKind": null
+        }
+      ],
+      "listLine": "Claude weekly limit 90%",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "quota 95% but every workspace runs on a configured provider: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ],
+        "planUsage": {
+          "provider": "claude",
+          "fiveHour": { "utilization": 40, "resetsAt": "2026-09-29T02:59:59Z" },
+          "sevenDay": { "utilization": 95, "resetsAt": "2026-10-02T03:59:59Z" }
+        }
+      },
+      "workspaces": [
+        { "id": "ws-app", "name": "app", "lastProvider": "anthropic-2", "workDir": "~/app" },
+        { "id": "ws-docs", "name": "docs", "lastProvider": "deepseek", "workDir": "~/docs" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "two Claude windows past 90%: the fuller one is named",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ],
+        "planUsage": {
+          "provider": "claude",
+          "fiveHour": { "utilization": 97, "resetsAt": "2026-09-29T02:59:59Z" },
+          "sevenDay": { "utilization": 91, "resetsAt": "2026-10-02T03:59:59Z" }
+        }
+      },
+      "workspaces": [
+        { "id": "ws-app", "name": "app", "lastProvider": "claude", "workDir": "~/app" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "quotaNearLimit",
+          "tone": "warn",
+          "short": "Claude 5-hour limit 97%",
+          "title": "Claude 5-hour limit at 97%",
+          "actionKind": null
+        }
+      ],
+      "listLine": "Claude 5-hour limit 97%",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "Codex 5-hour window at 93%, a workspace runs on codex",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ],
+        "planUsage": {
+          "codex": {
+            "provider": "codex",
+            "primary": {
+              "utilization": 93,
+              "windowDurationMins": 300,
+              "resetsAt": "2026-09-29T03:00:00Z"
+            },
+            "secondary": {
+              "utilization": 40,
+              "windowDurationMins": 10080,
+              "resetsAt": "2026-10-03T00:00:00Z"
+            }
+          }
+        }
+      },
+      "workspaces": [
+        { "id": "ws-tools", "name": "tools", "lastProvider": "codex", "workDir": "~/tools" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "quotaNearLimit",
+          "tone": "warn",
+          "short": "Codex 5-hour limit 93%",
+          "title": "Codex 5-hour limit at 93%",
+          "actionKind": null
+        }
+      ],
+      "listLine": "Codex 5-hour limit 93%",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "no Keep Free, exactly 10% free: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "deepseek",
+          "workDir": "~/app",
+          "workDirFreeBytes": 10737418240,
+          "workDirTotalBytes": 107374182400
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "lab-host · v0.1.197",
+      "disk": { "freeBytes": 10737418240, "totalBytes": 107374182400, "usedPercent": 90 }
+    }
+  },
+  {
+    "name": "no Keep Free, one byte under 10% free: raised",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "deepseek",
+          "workDir": "~/app",
+          "workDirFreeBytes": 10737418239,
+          "workDirTotalBytes": 107374182400
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "diskLow",
+          "tone": "warn",
+          "short": "Disk 90% full",
+          "title": "Disk 90% full",
+          "actionKind": "setReserve"
+        }
+      ],
+      "listLine": "Disk 90% full",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": { "freeBytes": 10737418239, "totalBytes": 107374182400, "usedPercent": 90 }
+    }
+  },
+  {
+    "name": "Keep Free 50 GB and 40 GB free: raised, though 20% of the disk is free",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ],
+        "minFreeDiskMb": 51200
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "deepseek",
+          "workDir": "~/app",
+          "workDirFreeBytes": "42949672960",
+          "workDirTotalBytes": "214748364800"
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "diskLow",
+          "tone": "warn",
+          "short": "Disk 80% full",
+          "title": "Disk 80% full",
+          "actionKind": "setReserve"
+        }
+      ],
+      "listLine": "Disk 80% full",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": { "freeBytes": 42949672960, "totalBytes": 214748364800, "usedPercent": 80 }
+    }
+  },
+  {
+    "name": "Keep Free 10 GB and 50 GB free of 1 TB: nothing, though under 10% is free",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ],
+        "minFreeDiskMb": 10240
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "deepseek",
+          "workDir": "~/app",
+          "workDirFreeBytes": "53687091200",
+          "workDirTotalBytes": "1099511627776"
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "lab-host · v0.1.197",
+      "disk": { "freeBytes": 53687091200, "totalBytes": 1099511627776, "usedPercent": 95 }
+    }
+  },
+  {
+    "name": "Keep Free 20 GB and exactly 20 GB free: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ],
+        "minFreeDiskMb": 20480
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "deepseek",
+          "workDir": "~/app",
+          "workDirFreeBytes": 21474836480,
+          "workDirTotalBytes": 107374182400
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "lab-host · v0.1.197",
+      "disk": { "freeBytes": 21474836480, "totalBytes": 107374182400, "usedPercent": 80 }
+    }
+  },
+  {
+    "name": "Keep Free 20 GB and one byte less free: raised",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ],
+        "minFreeDiskMb": 20480
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "deepseek",
+          "workDir": "~/app",
+          "workDirFreeBytes": 21474836479,
+          "workDirTotalBytes": 107374182400
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "diskLow",
+          "tone": "warn",
+          "short": "Disk 80% full",
+          "title": "Disk 80% full",
+          "actionKind": "setReserve"
+        }
+      ],
+      "listLine": "Disk 80% full",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": { "freeBytes": 21474836479, "totalBytes": 107374182400, "usedPercent": 80 }
+    }
+  },
+  {
+    "name": "several workspaces: one reading per filesystem, the one with least free space wins",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        {
+          "id": "ws-a",
+          "name": "a",
+          "lastProvider": "deepseek",
+          "workDir": "~/a",
+          "workDirFreeBytes": "322122547200",
+          "workDirTotalBytes": "536870912000"
+        },
+        {
+          "id": "ws-b",
+          "name": "b",
+          "lastProvider": "deepseek",
+          "workDir": "~/b",
+          "workDirFreeBytes": 21474836480,
+          "workDirTotalBytes": 107374182400
+        },
+        {
+          "id": "ws-c",
+          "name": "c",
+          "lastProvider": "deepseek",
+          "workDir": "~/c",
+          "workDirFreeBytes": "322122547200",
+          "workDirTotalBytes": "536870912000"
+        },
+        { "id": "ws-d", "name": "d", "lastProvider": "deepseek", "workDir": "~/d" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "lab-host · v0.1.197",
+      "disk": { "freeBytes": 21474836480, "totalBytes": 107374182400, "usedPercent": 80 }
+    }
+  },
+  {
+    "name": "a free reading with no total is no reading",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "deepseek",
+          "workDir": "~/app",
+          "workDirFreeBytes": "1073741824"
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "Claude signed out and a workspace runs on claude: raised",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "no"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        { "id": "ws-app", "name": "app", "lastProvider": "claude", "workDir": "~/app" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "engineSignedOut",
+          "tone": "bad",
+          "short": "Claude signed out",
+          "title": "Claude is signed out",
+          "actionKind": "signIn"
+        }
+      ],
+      "listLine": "Claude signed out",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "Claude signed out and every workspace runs on a configured provider: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "no"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        { "id": "ws-app", "name": "app", "lastProvider": "anthropic", "workDir": "~/app" },
+        { "id": "ws-docs", "name": "docs", "lastProvider": "local-vllm", "workDir": "~/docs" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "Claude sign-in unknown: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "unknown"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        { "id": "ws-app", "name": "app", "lastProvider": "claude", "workDir": "~/app" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "Claude not installed: nothing, though a workspace last ran on it",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          { "engine": "claude", "installed": false, "auth": "no" },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        { "id": "ws-app", "name": "app", "lastProvider": "claude", "workDir": "~/app" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "no engines reported yet: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": null
+      },
+      "workspaces": [
+        { "id": "ws-app", "name": "app", "lastProvider": "claude", "workDir": "~/app" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "Codex signed out and a workspace runs on codex: raised",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "no" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        { "id": "ws-tools", "name": "tools", "lastProvider": "codex", "workDir": "~/tools" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "engineSignedOut",
+          "tone": "bad",
+          "short": "Codex signed out",
+          "title": "Codex is signed out",
+          "actionKind": "signIn"
+        }
+      ],
+      "listLine": "Codex signed out",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "Kimi signed out and a workspace runs on kimi: raised",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "no" }
+        ]
+      },
+      "workspaces": [
+        { "id": "ws-notes", "name": "notes", "lastProvider": "kimi", "workDir": "~/notes" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "engineSignedOut",
+          "tone": "bad",
+          "short": "Kimi signed out",
+          "title": "Kimi is signed out",
+          "actionKind": "signIn"
+        }
+      ],
+      "listLine": "Kimi signed out",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "heartbeat exactly 90s old: still online",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:13:30Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "heartbeat 91s old: offline, whatever the list said",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:13:29Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "offline",
+          "tone": "idle",
+          "short": "Offline",
+          "title": "Offline for 1 minute",
+          "actionKind": null
+        }
+      ],
+      "listLine": null,
+      "subtitle": "Offline · last seen 1m ago · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "online = false with a fresh heartbeat: offline",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": false,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "offline",
+          "tone": "idle",
+          "short": "Offline",
+          "title": "Offline for 1 minute",
+          "actionKind": null
+        }
+      ],
+      "listLine": null,
+      "subtitle": "Offline · last seen just now · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "offline for 5 hours",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": false,
+        "lastHeartbeatAt": "2026-09-28T19:10:00Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "offline",
+          "tone": "idle",
+          "short": "Offline",
+          "title": "Offline for 5 hours",
+          "actionKind": null
+        }
+      ],
+      "listLine": null,
+      "subtitle": "Offline · last seen 5h ago · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "offline for exactly one day",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": false,
+        "lastHeartbeatAt": "2026-09-28T00:15:00Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "offline",
+          "tone": "idle",
+          "short": "Offline",
+          "title": "Offline for 1 day",
+          "actionKind": null
+        }
+      ],
+      "listLine": null,
+      "subtitle": "Offline · last seen 1d ago · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "never checked in",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": null,
+        "version": null,
+        "online": false,
+        "lastHeartbeatAt": null,
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": null
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "offline",
+          "tone": "idle",
+          "short": "Offline",
+          "title": "Never checked in",
+          "actionKind": null
+        }
+      ],
+      "listLine": null,
+      "subtitle": "Offline",
+      "disk": null
+    }
+  },
+  {
+    "name": "offline keeps only offline: no sign-in, checkout, quota or disk items from stale readings",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": false,
+        "lastHeartbeatAt": "2026-09-27T00:15:00Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "no"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ],
+        "planUsage": {
+          "provider": "claude",
+          "fiveHour": { "utilization": 40, "resetsAt": "2026-09-29T02:59:59Z" },
+          "sevenDay": { "utilization": 99, "resetsAt": "2026-10-02T03:59:59Z" }
+        }
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "claude",
+          "workDir": "~/app",
+          "workDirFreeBytes": "1073741824",
+          "workDirTotalBytes": "107374182400",
+          "repoHealth": { "root": "/srv/app", "state": "merge", "agentIds": ["ws-app"] }
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "offline",
+          "tone": "idle",
+          "short": "Offline",
+          "title": "Offline for 2 days",
+          "actionKind": null
+        }
+      ],
+      "listLine": null,
+      "subtitle": "Offline · last seen 2d ago · v0.1.197",
+      "disk": { "freeBytes": 1073741824, "totalBytes": 107374182400, "usedPercent": 99 }
+    }
+  },
+  {
+    "name": "the Mac mini back online: its failing Claude update is raised after it can’t update itself",
+    "input": {
+      "runner": {
+        "name": "longdeMac-mini.local",
+        "displayName": null,
+        "hostname": "longdeMac-mini.local",
+        "version": "0.1.155",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 16,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "minFreeDiskMb": null,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.266 (Claude Code)",
+            "auth": "no",
+            "update": {
+              "status": "failed",
+              "at": "2026-09-13T16:54:10Z",
+              "okAt": "2026-09-09T14:38:06Z",
+              "latest": "2.1.270",
+              "behindSince": "2026-09-10T14:37:56Z"
+            }
+          },
+          { "engine": "codex", "installed": false, "auth": "unknown" },
+          { "engine": "kimi", "installed": false, "auth": "unknown" },
+          { "engine": "opencode", "installed": false, "auth": "unknown" }
+        ],
+        "planUsage": null
+      },
+      "workspaces": [
+        {
+          "id": "ws-mac-orbit",
+          "name": "orbit",
+          "lastProvider": "deepseek",
+          "workDir": "~/orbit",
+          "workDirFreeBytes": "54100582400",
+          "workDirTotalBytes": "245107195904",
+          "repoHealth": null
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "cannotSelfUpdate",
+          "tone": "warn",
+          "short": "Can’t update itself",
+          "title": "Can’t update itself",
+          "actionKind": "copyCommand"
+        },
+        {
+          "kind": "engineNotUpdating",
+          "tone": "warn",
+          "short": "Claude Code update failed",
+          "title": "Claude Code update failed",
+          "actionKind": "updateEngines"
+        }
+      ],
+      "listLine": "Can’t update itself · Claude Code update failed",
+      "subtitle": "v0.1.155",
+      "disk": { "freeBytes": 54100582400, "totalBytes": 245107195904, "usedPercent": 78 }
+    }
+  },
+  {
+    "name": "not root and behind: can’t update itself",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "cannotSelfUpdate",
+          "tone": "warn",
+          "short": "Can’t update itself",
+          "title": "Can’t update itself",
+          "actionKind": "copyCommand"
+        }
+      ],
+      "listLine": "Can’t update itself",
+      "subtitle": "lab-host · v0.1.190",
+      "disk": null
+    }
+  },
+  {
+    "name": "not root and on the latest: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "not root and ahead of the published release: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.198",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.198", "disk": null }
+  },
+  {
+    "name": "root and behind: it installs the release itself, nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.190", "disk": null }
+  },
+  {
+    "name": "runsAsRoot unknown (older runner) and behind: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": null,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.190", "disk": null }
+  },
+  {
+    "name": "not root and no latest release known: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": null
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.190", "disk": null }
+  },
+  {
+    "name": "versions compare as numbers: 0.1.99 is behind 0.1.100",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.99",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.100"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "cannotSelfUpdate",
+          "tone": "warn",
+          "short": "Can’t update itself",
+          "title": "Can’t update itself",
+          "actionKind": "copyCommand"
+        }
+      ],
+      "listLine": "Can’t update itself",
+      "subtitle": "lab-host · v0.1.99",
+      "disk": null
+    }
+  },
+  {
+    "name": "checkout unmerged: raised",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "deepseek",
+          "workDir": "~/app",
+          "repoHealth": { "root": "/srv/app", "state": "unmerged", "agentIds": ["ws-app"] }
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "checkoutStuck",
+          "tone": "bad",
+          "short": "app checkout stuck in a conflict",
+          "title": "app checkout stuck in a conflict",
+          "actionKind": "repair"
+        }
+      ],
+      "listLine": "app checkout stuck in a conflict",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "checkout merge: raised",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "deepseek",
+          "workDir": "~/app",
+          "repoHealth": { "root": "/srv/app", "state": "merge", "agentIds": ["ws-app"] }
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "checkoutStuck",
+          "tone": "bad",
+          "short": "app checkout stuck in a merge",
+          "title": "app checkout stuck in a merge",
+          "actionKind": "repair"
+        }
+      ],
+      "listLine": "app checkout stuck in a merge",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "checkout rebase: raised",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "deepseek",
+          "workDir": "~/app",
+          "repoHealth": { "root": "/srv/app", "state": "rebase", "agentIds": ["ws-app"] }
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "checkoutStuck",
+          "tone": "bad",
+          "short": "app checkout stuck in a rebase",
+          "title": "app checkout stuck in a rebase",
+          "actionKind": "repair"
+        }
+      ],
+      "listLine": "app checkout stuck in a rebase",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "checkout cherry-pick: raised",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "deepseek",
+          "workDir": "~/app",
+          "repoHealth": { "root": "/srv/app", "state": "cherry-pick", "agentIds": ["ws-app"] }
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "checkoutStuck",
+          "tone": "bad",
+          "short": "app checkout stuck in a cherry-pick",
+          "title": "app checkout stuck in a cherry-pick",
+          "actionKind": "repair"
+        }
+      ],
+      "listLine": "app checkout stuck in a cherry-pick",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "checkout revert: raised",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "deepseek",
+          "workDir": "~/app",
+          "repoHealth": { "root": "/srv/app", "state": "revert", "agentIds": ["ws-app"] }
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "checkoutStuck",
+          "tone": "bad",
+          "short": "app checkout stuck in a revert",
+          "title": "app checkout stuck in a revert",
+          "actionKind": "repair"
+        }
+      ],
+      "listLine": "app checkout stuck in a revert",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "dirty and clean checkouts: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "deepseek",
+          "workDir": "~/app",
+          "repoHealth": { "root": "/srv/app", "state": "dirty", "agentIds": ["ws-app"] }
+        },
+        {
+          "id": "ws-site",
+          "name": "site",
+          "lastProvider": "deepseek",
+          "workDir": "~/site",
+          "repoHealth": { "root": "/srv/site", "state": "clean", "agentIds": ["ws-site"] }
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "two workspaces in one stuck checkout are one item, named after the first",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        {
+          "id": "ws-orbit",
+          "name": "orbit",
+          "lastProvider": "deepseek",
+          "workDir": "~/orbit",
+          "repoHealth": {
+            "root": "/srv/orbit",
+            "state": "merge",
+            "agentIds": ["ws-orbit", "ws-orbit-docs"]
+          }
+        },
+        {
+          "id": "ws-orbit-docs",
+          "name": "orbit-docs",
+          "lastProvider": "deepseek",
+          "workDir": "~/orbit-docs",
+          "repoHealth": {
+            "root": "/srv/orbit",
+            "state": "merge",
+            "agentIds": ["ws-orbit", "ws-orbit-docs"]
+          }
+        },
+        {
+          "id": "ws-site",
+          "name": "site",
+          "lastProvider": "deepseek",
+          "workDir": "~/site",
+          "repoHealth": { "root": "/srv/site", "state": "rebase", "agentIds": ["ws-site"] }
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "checkoutStuck",
+          "tone": "bad",
+          "short": "orbit checkout stuck in a merge",
+          "title": "orbit checkout stuck in a merge",
+          "actionKind": "repair"
+        },
+        {
+          "kind": "checkoutStuck",
+          "tone": "bad",
+          "short": "site checkout stuck in a rebase",
+          "title": "site checkout stuck in a rebase",
+          "actionKind": "repair"
+        }
+      ],
+      "listLine": "orbit checkout stuck in a merge · site checkout stuck in a rebase",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "Claude Code 12 days behind: raised, whether or not a workspace runs on it",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes",
+            "update": {
+              "status": "failed",
+              "at": "2026-09-28T23:50:00Z",
+              "okAt": "2026-09-17T00:00:00Z",
+              "latest": "2.1.290",
+              "behindSince": "2026-09-17T00:10:00Z"
+            }
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        { "id": "ws-app", "name": "app", "lastProvider": "deepseek", "workDir": "~/app" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "engineNotUpdating",
+          "tone": "warn",
+          "short": "Claude Code update failed",
+          "title": "Claude Code update failed",
+          "actionKind": "updateEngines"
+        }
+      ],
+      "listLine": "Claude Code update failed",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "a failed update with a success inside the last week: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes",
+            "update": {
+              "status": "failed",
+              "at": "2026-09-28T23:50:00Z",
+              "okAt": "2026-09-26T00:00:00Z"
+            }
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        { "id": "ws-app", "name": "app", "lastProvider": "claude", "workDir": "~/app" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "behind for less than a week: nothing",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes",
+            "update": {
+              "status": "checked",
+              "at": "2026-09-29T00:00:00Z",
+              "okAt": "2026-09-29T00:00:00Z",
+              "latest": "2.1.290",
+              "behindSince": "2026-09-25T00:00:00Z"
+            }
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        { "id": "ws-app", "name": "app", "lastProvider": "claude", "workDir": "~/app" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "OpenCode never updated: raised under its own name",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" },
+          {
+            "engine": "opencode",
+            "installed": true,
+            "version": "1.18.33",
+            "auth": "yes",
+            "update": { "status": "failed", "at": "2026-09-28T23:50:00Z" }
+          }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "engineNotUpdating",
+          "tone": "warn",
+          "short": "OpenCode update failed",
+          "title": "OpenCode update failed",
+          "actionKind": "updateEngines"
+        }
+      ],
+      "listLine": "OpenCode update failed",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "everything at once: most severe first, and the list line shows the first two",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "no",
+            "update": {
+              "status": "failed",
+              "at": "2026-09-28T23:50:00Z",
+              "okAt": "2026-09-17T00:00:00Z",
+              "latest": "2.1.290",
+              "behindSince": "2026-09-17T00:10:00Z"
+            }
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ],
+        "planUsage": {
+          "claude": {
+            "provider": "claude",
+            "sevenDay": { "utilization": 99, "resetsAt": "2026-10-02T03:59:59Z" }
+          },
+          "codex": {
+            "provider": "codex",
+            "primary": { "utilization": 95, "windowDurationMins": 300 }
+          }
+        }
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "claude",
+          "workDir": "~/app",
+          "workDirFreeBytes": "5368709120",
+          "workDirTotalBytes": "107374182400",
+          "repoHealth": { "root": "/srv/app", "state": "rebase", "agentIds": ["ws-app"] }
+        },
+        {
+          "id": "ws-tools",
+          "name": "tools",
+          "lastProvider": "codex",
+          "workDir": "~/tools",
+          "workDirFreeBytes": "5368709120",
+          "workDirTotalBytes": "107374182400"
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "engineSignedOut",
+          "tone": "bad",
+          "short": "Claude signed out",
+          "title": "Claude is signed out",
+          "actionKind": "signIn"
+        },
+        {
+          "kind": "checkoutStuck",
+          "tone": "bad",
+          "short": "app checkout stuck in a rebase",
+          "title": "app checkout stuck in a rebase",
+          "actionKind": "repair"
+        },
+        {
+          "kind": "quotaNearLimit",
+          "tone": "warn",
+          "short": "Claude weekly limit 99%",
+          "title": "Claude weekly limit at 99%",
+          "actionKind": null
+        },
+        {
+          "kind": "quotaNearLimit",
+          "tone": "warn",
+          "short": "Codex 5-hour limit 95%",
+          "title": "Codex 5-hour limit at 95%",
+          "actionKind": null
+        },
+        {
+          "kind": "diskLow",
+          "tone": "warn",
+          "short": "Disk 95% full",
+          "title": "Disk 95% full",
+          "actionKind": "setReserve"
+        },
+        {
+          "kind": "cannotSelfUpdate",
+          "tone": "warn",
+          "short": "Can’t update itself",
+          "title": "Can’t update itself",
+          "actionKind": "copyCommand"
+        },
+        {
+          "kind": "engineNotUpdating",
+          "tone": "warn",
+          "short": "Claude Code update failed",
+          "title": "Claude Code update failed",
+          "actionKind": "updateEngines"
+        }
+      ],
+      "listLine": "Claude signed out · app checkout stuck in a rebase",
+      "subtitle": "lab-host · v0.1.190",
+      "disk": { "freeBytes": 5368709120, "totalBytes": 107374182400, "usedPercent": 95 }
+    }
+  },
+  {
+    "name": "two engines signed out: Claude before Codex",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "no" },
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "no"
+          },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        { "id": "ws-tools", "name": "tools", "lastProvider": "codex", "workDir": "~/tools" },
+        { "id": "ws-app", "name": "app", "lastProvider": "claude", "workDir": "~/app" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "engineSignedOut",
+          "tone": "bad",
+          "short": "Claude signed out",
+          "title": "Claude is signed out",
+          "actionKind": "signIn"
+        },
+        {
+          "kind": "engineSignedOut",
+          "tone": "bad",
+          "short": "Codex signed out",
+          "title": "Codex is signed out",
+          "actionKind": "signIn"
+        }
+      ],
+      "listLine": "Claude signed out · Codex signed out",
+      "subtitle": "lab-host · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "three warnings: the list line stops at two",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ],
+        "planUsage": {
+          "provider": "claude",
+          "fiveHour": { "utilization": 20, "resetsAt": "2026-09-29T02:59:59Z" },
+          "sevenDay": { "utilization": 92, "resetsAt": "2026-10-02T03:59:59Z" }
+        }
+      },
+      "workspaces": [
+        {
+          "id": "ws-app",
+          "name": "app",
+          "lastProvider": "claude",
+          "workDir": "~/app",
+          "workDirFreeBytes": 5368709120,
+          "workDirTotalBytes": 107374182400
+        }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "quotaNearLimit",
+          "tone": "warn",
+          "short": "Claude weekly limit 92%",
+          "title": "Claude weekly limit at 92%",
+          "actionKind": null
+        },
+        {
+          "kind": "diskLow",
+          "tone": "warn",
+          "short": "Disk 95% full",
+          "title": "Disk 95% full",
+          "actionKind": "setReserve"
+        },
+        {
+          "kind": "cannotSelfUpdate",
+          "tone": "warn",
+          "short": "Can’t update itself",
+          "title": "Can’t update itself",
+          "actionKind": "copyCommand"
+        }
+      ],
+      "listLine": "Claude weekly limit 92% · Disk 95% full",
+      "subtitle": "lab-host · v0.1.190",
+      "disk": { "freeBytes": 5368709120, "totalBytes": 107374182400, "usedPercent": 95 }
+    }
+  },
+  {
+    "name": "hostname the same as the name: left out",
+    "input": {
+      "runner": {
+        "name": "build-box",
+        "hostname": "build-box",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "v0.1.197", "disk": null }
+  },
+  {
+    "name": "no hostname: version only",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": null,
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "v0.1.197", "disk": null }
+  },
+  {
+    "name": "renamed runner: the hostname shows when it differs from the name on screen",
+    "input": {
+      "runner": {
+        "name": "longdeMac-mini.local",
+        "hostname": "longdeMac-mini.local",
+        "version": "0.1.197",
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ],
+        "displayName": "Mac mini"
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [],
+      "listLine": null,
+      "subtitle": "longdeMac-mini.local · v0.1.197",
+      "disk": null
+    }
+  },
+  {
+    "name": "no version reported: hostname only",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": null,
+        "online": true,
+        "lastHeartbeatAt": "2026-09-29T00:14:45Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": true,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "yes"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host", "disk": null }
+  }
+]
