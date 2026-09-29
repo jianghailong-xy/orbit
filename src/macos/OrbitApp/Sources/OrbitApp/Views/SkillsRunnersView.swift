@@ -307,6 +307,11 @@ struct RunnerRow: View {
     /// Whether the row draws the disclosure a pushing row needs; a selection row has none.
     var disclosure = false
     var now = Date()
+    #if os(iOS)
+    /// Edit puts the list's own delete and move controls on the row, and a disclosure has no place
+    /// beside them — the one a `NavigationLink` draws goes too.
+    @Environment(\.editMode) private var editMode
+    #endif
 
     var body: some View {
         let nowMs = RunnerPageFormat.nowMs(now)
@@ -336,22 +341,32 @@ struct RunnerRow: View {
                         .foregroundStyle(Color.secondary)
                         .lineLimit(1)
                     if let line = RunnerAttention.listAttentionLine(items) {
-                        Label {
-                            Text(line).lineLimit(2)
-                        } icon: {
+                        // Not a `Label`: a list gives a label's icon a column of its own, and the
+                        // mock's triangle sits right against its words.
+                        HStack(alignment: .firstTextBaseline, spacing: 5) {
                             Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.orbitLabel)
+                            Text(line)
+                                .lineLimit(2)
                         }
-                        .labelStyle(.titleAndIcon)
                         .font(.orbitListSubtitle)
                         .foregroundStyle(RunnerInk.attention(RunnerPageFormat.listTone(items) ?? .warn))
                     }
                 }
             }
-            if disclosure {
+            if showsDisclosure {
                 RunnerChevron()
             }
         }
         .padding(.vertical, 2)
+    }
+
+    private var showsDisclosure: Bool {
+        #if os(iOS)
+        disclosure && editMode?.wrappedValue.isEditing != true
+        #else
+        disclosure
+        #endif
     }
 }
 
