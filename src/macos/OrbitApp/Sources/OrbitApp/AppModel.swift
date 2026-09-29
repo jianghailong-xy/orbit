@@ -143,7 +143,9 @@ final class AppModel {
         get { nav.selectedRunnerID }
         set {
             // Selecting in a three-column shell replaces the page the detail pane shows; clearing
-            // pops the record that is there.
+            // pops the record that is there. Either way the record's own pages (an engine's, its
+            // name's) come off first, so a route still lands one page deep.
+            nav.popRunnerPages()
             if let id = newValue {
                 nav.replaceTop(with: .runnerDetail(runnerID: id))
             } else if case .runnerDetail = nav.path.last {
