@@ -68,3 +68,11 @@ End on the [Quick Start](../README.md#quick-start) link and leave the [Security]
   is annotated design evidence, not a claim that the public hosted service exists.
 - Link the [canonical messaging brief](messaging-brief.md) when publishing the recording so future edits preserve
   the category line, core promise, scenario order, and pre-1.0 boundary.
+
+## Launch package handoff
+
+Pair this storyboard with the [long-running-work article](article-durable-agent-work.md), the
+[private multi-runtime article](article-private-multi-runtime-control-plane.md), and the
+[first-launch copy pack](launch-copy.md). Use the [design-partner case-study template](design-partner-case-study-template.md)
+to collect any partner story shown in the recording, and link the [demo repo fixture](../examples/demo-repo/)
+for a reproducible first checkout.

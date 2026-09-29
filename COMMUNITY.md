@@ -13,6 +13,8 @@ brief](docs/messaging-brief.md) for the public promise and its boundaries.
 | Install or operate Orbit | [Documentation index](docs/README.md) and [self-hosting guide](docs/self-hosting.md) |
 | Contribute code or docs | [Contributing guide](CONTRIBUTING.md) |
 | Ask a question or share a use case | [GitHub Discussions](https://github.com/jianghailong-xy/orbit/discussions) |
+| Read or share a workflow story | [Long-running work article](docs/article-durable-agent-work.md) and [private multi-runtime article](docs/article-private-multi-runtime-control-plane.md) |
+| Explore a design partnership | [Case-study template](docs/design-partner-case-study-template.md) |
 | Report a reproducible problem | [New bug report](https://github.com/jianghailong-xy/orbit/issues/new?template=bug_report.yml) |
 | Propose a product change | [New feature request](https://github.com/jianghailong-xy/orbit/issues/new?template=feature_request.yml) |
 | Pick a small task | [Good first issues](https://github.com/jianghailong-xy/orbit/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) |
