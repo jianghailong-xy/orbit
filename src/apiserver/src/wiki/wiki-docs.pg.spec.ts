@@ -707,6 +707,15 @@ test('a record\'s quote is read again, redacted and checked word for word: a fab
   assert.equal(toUuid(onTurn.recordId as string), s.r.t1);
   assert.match(onTurn.location, new RegExp(`^turn:${s.r.t1}#c\\d+-\\d+$`, 'u'));
   assert.equal(onEvent.label, 'assistant');
+  // A turn, an event and a tool call are read back with their session beside their id: the pair the
+  // deep link needs (contract `docs.links.sessionRecord`), since a source keeps a record's id alone.
+  for (const [n, kind, record] of [[1, 'turn', s.r.t1], [2, 'event', s.r.e1], [7, 'tool_call', s.r.tc1]] as const) {
+    const footnote = page.body.footnotes.find((f: { n: number }) => f.n === n);
+    assert.equal(footnote.kind, kind);
+    assert.equal(toUuid(footnote.recordId as string), record, `${kind}: its record`);
+    assert.equal(toUuid(footnote.sessionId as string), s.ordinary, `${kind}: the session it is in`);
+    assert.ok(footnote.sessionPublicId || footnote.sessionId, `${kind}: a session id the client can put in a link`);
+  }
   const onComment = page.body.footnotes.find((footnote: { kind: string }) => footnote.kind === 'task_comment');
   assert.equal(onComment.taskTitle, TASK_TITLE);
   assert.equal(toUuid(onComment.taskId as string), s.r.taskId);

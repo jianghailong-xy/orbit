@@ -867,6 +867,11 @@ describe('wiki contract', () => {
     expect(WIKI_DOC_SCHEMA.recordFootnote).not.toContain('verified');
     expect(docs.verification.repository).toMatch(/sha/u);
     expect(docs.verification.records).toMatch(/runEventText/u);
+    // A session record's footnote is read back with its session beside its id: the deep link needs both.
+    expect(docs.links.sessionRecord).toMatch(/recordId/u);
+    expect(docs.links.sessionRecord).toMatch(/sessionId/u);
+    expect(docs.links.sessionRecord).toMatch(/around=<recordId>/u);
+    expect(docs.reads.doc).toMatch(/sessionId/u);
     // The withdrawal hangs on the entry's single state writer, not on a writer of its own.
     expect(docs.withdrawal).toMatch(/recomputeFlags/u);
     expect(docs.withdrawal).toMatch(/applyOp/u);

@@ -299,7 +299,10 @@ export interface WikiDocFootnoteView {
   section: string | null;
   symbol: string | null;
   excerpt: string | null;
-  // A record: where it is, and what the page links to.
+  // A record: where it is, and what the page links to (contract `docs.links`). A turn's, an event's or
+  // a tool call's footnote carries `recordId` AND `sessionId`: `wiki_source` keeps a record's id alone,
+  // and the deep link needs both — web `sessionRecordHref(sessionId, recordId)`, iOS
+  // `SessionRecordLink.url(session:record:)`, served by `GET /api/sessions/:id/events/page?around=<recordId>`.
   recordId: string | null;
   charStart: number | null;
   charEnd: number | null;
