@@ -7,12 +7,18 @@
 </p>
 
 <p align="center">
+  <a href="https://jianghailong-xy.github.io/orbit/?utm_source=github&utm_medium=readme&utm_campaign=launch&utm_content=top">Public website</a> ·
   <a href="#quick-start">Quick Start</a> ·
   <a href="docs/90-second-demo.md">90-second demo</a> ·
   <a href="examples/demo-repo/">Demo repo</a> ·
   <a href="docs/self-hosting.md">Operations</a> ·
   <a href="SUPPORT.md">Support</a>
 </p>
+
+The [public Orbit entrance](https://jianghailong-xy.github.io/orbit/?utm_source=github&utm_medium=readme&utm_campaign=launch&utm_content=intro)
+is a concise, mobile-friendly path through the product story, 90-second demo, Quick Start, architecture and
+security boundaries, FAQ, community links, and roadmap. It points back here for the complete operator docs and
+preserves the Sparkle update feed at [`appcast.xml`](https://jianghailong-xy.github.io/orbit/appcast.xml).
 
 <p align="center">
   <a href="https://github.com/jianghailong-xy/orbit/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/jianghailong-xy/orbit?include_prereleases&sort=semver"></a>
