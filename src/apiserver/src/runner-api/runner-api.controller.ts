@@ -4900,6 +4900,21 @@ export class RunnerApiController {
           if (!text) return acc;
           return !acc || e.seq > acc.seq ? { seq: e.seq, text, turnId: e.turnId ?? null } : acc;
         }, null);
+      // The same provider outage when a runtime reports it as the turn's error instead of as a reply
+      // — Codex's "Selected model is at capacity". Only an error the retry would re-send past counts:
+      // every other error line is the runtime narrating its own reconnects or a failure a re-send
+      // reproduces, and neither is an answer, which is what a reply here would clear the streak for.
+      const lastRetryableError = durable
+        .filter(
+          (e) =>
+            e.type === RunEventType.ERROR &&
+            !(e.payload as { parentToolUseId?: string } | null)?.parentToolUseId,
+        )
+        .reduce<{ seq: number; text: string; turnId: string | null } | null>((acc, e) => {
+          const text = (e.payload as { message?: string } | null)?.message?.trim();
+          if (!text || !isRetryableApiErrorText(text)) return acc;
+          return !acc || e.seq > acc.seq ? { seq: e.seq, text, turnId: e.turnId ?? null } : acc;
+        }, null);
       // Denormalize the "frontier" activity for the sidebar's live status line. The
       // highest-seq durable event is the workspace's latest known state: a tool_use means a
       // tool is in flight (its tool_result hasn't landed yet) → surface its name; any
@@ -4997,9 +5012,13 @@ export class RunnerApiController {
       // quota spent, or the API overloaded — is the failure that fixes itself: the same
       // message succeeds once the window rolls over or the far side recovers. Arm a retry for
       // that moment. Detected here rather than in the runner so it also covers runners too old
-      // to know about this — they self-update on their own schedule and outlive a release.
-      const retry = lastAssistant
-        ? await this.retryPlanFor(tx, sessionId, runner.id, lastAssistant.text, lastAssistant.turnId != null)
+      // to know about this — they self-update on their own schedule and outlive a release. The
+      // engine's last word decides: a reply after an outage error means the provider answered.
+      const lastWord = lastRetryableError && (!lastAssistant || lastRetryableError.seq > lastAssistant.seq)
+        ? lastRetryableError
+        : lastAssistant;
+      const retry = lastWord
+        ? await this.retryPlanFor(tx, sessionId, runner.id, lastWord.text, lastWord.turnId != null)
         : {};
       // Whether the engine is generating right now — see Session.engineTurnActive. Tracked
       // separately from the frontier above because it must survive a tool_result (a tool

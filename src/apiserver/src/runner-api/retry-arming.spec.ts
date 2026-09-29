@@ -147,6 +147,21 @@ test('leaves a task-bound session to the task scheduler', async () => {
   assert.deepEqual(plan, {}, 'nothing written — not even a cleared count');
 });
 
+test("arms Codex's model-at-capacity error like a 529", async () => {
+  const before = Date.now();
+  const plan = await planFor(
+    { provider: 'codex' },
+    'Selected model is at capacity. Please try a different model.',
+  );
+  const delay = plan.retryAt!.getTime() - before;
+
+  assert.ok(
+    delay >= API_ERROR_RETRY_BACKOFF_MS[0] && delay <= API_ERROR_RETRY_BACKOFF_MS[0] * 1.3,
+    `expected the first step (+jitter), got ${delay}ms`,
+  );
+  assert.equal(plan.retryAttempts, undefined, 'the sweeper owns the count; arming must not reset it');
+});
+
 test('does not arm an error that a re-send would reproduce', async () => {
   const plan = await planFor(
     {},

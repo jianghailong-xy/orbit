@@ -107,6 +107,22 @@ export const RETRYABLE_API_ERROR_MARKERS = [
 ];
 
 /**
+ * The same transient failure in a runtime's own words, with no `API Error` prefix to key on.
+ * Codex reports what it gives up on as the turn's error (an `error` event), not as a reply, and
+ * words it itself. Matched at the start of the text, like the quota sentences: the runtime's
+ * sentence is the whole message, and a reply that merely mentions one is not one.
+ *
+ * Plain lowercase prefixes, and only wording actually observed — the same rule as the lists above.
+ */
+export const RETRYABLE_ENGINE_ERROR_PREFIXES = [
+  // Codex's `serverOverloaded`: "Selected model is at capacity. Please try a different model."
+  // OpenAI shedding load on one model. Codex does not retry it, but the same model answers again
+  // minutes later: a task run it killed on 2026-09-29 went on, on the same model, when its owner
+  // sent "continue" seven minutes after. Switching models is the fallback once retries run out.
+  'selected model is at capacity',
+];
+
+/**
  * Is this API error the transient kind — the provider being briefly unable to answer, rather
  * than anything about the message? Such a failure carries no information about the work: the
  * same message sent a minute later usually succeeds, which is what makes it safe to re-send
@@ -117,6 +133,9 @@ export const RETRYABLE_API_ERROR_MARKERS = [
  * into a wall.
  */
 export function isRetryableApiErrorText(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const opening = text.trimStart().toLowerCase();
+  if (RETRYABLE_ENGINE_ERROR_PREFIXES.some((prefix) => opening.startsWith(prefix))) return true;
   if (!isApiErrorText(text)) return false;
   const lower = text!.toLowerCase();
   // The status, when there is one, is authoritative: a 400 whose message happens to contain
