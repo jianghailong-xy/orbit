@@ -243,7 +243,7 @@
           "actionKind": "copyCommand"
         }
       ],
-      "listLine": "Can’t update itself",
+      "listLine": null,
       "subtitle": "Offline · last seen 14d ago · v0.1.155",
       "disk": { "freeBytes": 54100582400, "totalBytes": 245107195904, "usedPercent": 78 }
     }
@@ -1473,6 +1473,57 @@
       "listLine": null,
       "subtitle": "Offline · last seen 2d ago · v0.1.197",
       "disk": { "freeBytes": 1073741824, "totalBytes": 107374182400, "usedPercent": 99 }
+    }
+  },
+  {
+    "name": "offline, not root and behind, and a workspace on its signed-out Claude: offline and can’t update itself, and no list line",
+    "input": {
+      "runner": {
+        "name": "lab",
+        "hostname": "lab-host",
+        "version": "0.1.190",
+        "online": false,
+        "lastHeartbeatAt": "2026-09-27T00:15:00Z",
+        "maxConcurrent": 4,
+        "activeSessions": 0,
+        "runsAsRoot": false,
+        "engines": [
+          {
+            "engine": "claude",
+            "installed": true,
+            "version": "2.1.284 (Claude Code)",
+            "auth": "no"
+          },
+          { "engine": "codex", "installed": true, "version": "codex-cli 0.158.0", "auth": "yes" },
+          { "engine": "kimi", "installed": true, "version": "2.1.1", "auth": "yes" }
+        ]
+      },
+      "workspaces": [
+        { "id": "ws-app", "name": "app", "lastProvider": "claude", "workDir": "~/app" }
+      ],
+      "nowMs": 1790640900000,
+      "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [
+        {
+          "kind": "offline",
+          "tone": "idle",
+          "short": "Offline",
+          "title": "Offline for 2 days",
+          "actionKind": null
+        },
+        {
+          "kind": "cannotSelfUpdate",
+          "tone": "warn",
+          "short": "Can’t update itself",
+          "title": "Can’t update itself",
+          "actionKind": "copyCommand"
+        }
+      ],
+      "listLine": null,
+      "subtitle": "Offline · last seen 2d ago · v0.1.190",
+      "disk": null
     }
   },
   {

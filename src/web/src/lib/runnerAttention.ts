@@ -63,7 +63,9 @@ import {
 
 /**
  * Does this machine need me? — the rule behind the Runners list's third line, a runner page's
- * Needs Attention cards and the web card, which all say the same sentence.
+ * Needs Attention cards and the web card, which all say the same sentence. An offline runner's row
+ * has no third line: its second line already says it is offline, and offline is a state, not a
+ * fault — what else it needs is on its page.
  *
  * This file and runnerAttention.cases.json are the one source of that rule: OrbitKit runs the same
  * case file against its Swift port, so a change to what is said, or when, starts in the case file.
@@ -555,13 +557,12 @@ export function runnerAttention(input: RunnerAttentionInput): AttentionItem[] {
 
 // MARK: the list row
 
-/** The list's third line: the first two items' short lines. Offline is not one — the second line
- *  already says it. Null when nothing needs anyone. */
+/** The list's third line: the first two items' short lines. Null for an offline runner, whatever
+ *  else it needs — the second line already says it is offline, and that is a state, not a fault —
+ *  and null when nothing needs anyone. */
 export function listAttentionLine(items: ReadonlyArray<AttentionItem>): string | null {
-  const shorts = items
-    .filter((item) => item.kind !== 'offline')
-    .slice(0, 2)
-    .map((item) => item.short);
+  if (items.some((item) => item.kind === 'offline')) return null;
+  const shorts = items.slice(0, 2).map((item) => item.short);
   return shorts.length ? shorts.join(RUNNER_LINE_SEPARATOR) : null;
 }
 

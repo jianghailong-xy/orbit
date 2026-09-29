@@ -97,15 +97,31 @@ describe('the four runners of 2026-09-29, as the project states them', () => {
     }
   });
 
-  it('longdeMac-mini.local: offline and can’t update itself, and its failing Claude update waits', () => {
+  it('longdeMac-mini.local: offline and can’t update itself, its row says only offline, and its failing Claude update waits', () => {
     const mac = real('longdeMac-mini.local');
     expect(kinds(mac)).toEqual(['offline', 'cannotSelfUpdate']);
+    expect(mac.expected.listLine).toBeNull();
+    expect(mac.expected.subtitle).toBe('Offline · last seen 14d ago · v0.1.155');
     expect(mac.input.runner.engines?.find((e) => e.engine === 'claude')?.update?.status).toBe('failed');
     // The same machine online raises that update, which is what makes "offline" the reason here.
     expect(kinds(caseNamed('the Mac mini back online: its failing Claude update is raised after it can’t update itself'))).toEqual([
       'cannotSelfUpdate',
       'engineNotUpdating',
     ]);
+  });
+});
+
+describe('listAttentionLine', () => {
+  it('writes no line for items that say the runner is offline, whatever else they hold', () => {
+    const [offline] = runnerAttention(caseNamed('offline for 5 hours').input);
+    const online = runnerAttention(
+      caseNamed('everything at once: most severe first, and the list line shows the first two').input,
+    );
+    expect(offline.kind).toBe('offline');
+    expect(listAttentionLine(online)).toBe('Claude signed out · app checkout stuck in a rebase');
+    expect(listAttentionLine([offline, ...online])).toBeNull();
+    expect(listAttentionLine([...online, offline])).toBeNull();
+    expect(listAttentionLine([offline])).toBeNull();
   });
 });
 
