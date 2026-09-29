@@ -137,7 +137,7 @@ async function seedTask(
   return id;
 }
 
-/** A coordinated project, OPEN, holding one task of every shape. */
+/** A coordinated project, OPEN and started, holding one task of every shape. */
 async function seedProject(db: PrismaClient, ids: World, label: string): Promise<ProjectTasks> {
   const projectId = randomUUID();
   await db.project.create({
@@ -147,6 +147,9 @@ async function seedProject(db: PrismaClient, ids: World, label: string): Promise
       title: `${label}-${RUN}`,
       coordinatorEnabled: true,
       maxConcurrentTasks: 8,
+      // Started and not paused, so the one column the two worlds differ in is `status`: a project
+      // that does not move holds its tasks back too (project-pause-dispatch.pg.spec.ts).
+      startedAt: new Date(),
     },
   });
   await establishProjectContractForPgTest(db, ids.ownerId, projectId, `${label}-${RUN}`);

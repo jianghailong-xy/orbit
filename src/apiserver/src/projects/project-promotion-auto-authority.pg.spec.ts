@@ -541,6 +541,7 @@ test('the rule: a project branch + Automatic + clean, and nothing less', () => {
     sourceKind: 'PROJECT_BRANCH',
     line: 'PROJECT_BRANCH',
     coordinatorEnabled: true,
+    projectPaused: false,
     conflicts: [],
     checks: [GREEN_CHECK],
     upstreamShaChecked: MAIN_CHECKED,
@@ -557,6 +558,8 @@ test('the rule: a project branch + Automatic + clean, and nothing less', () => {
     ['a project branch whose binding is now main', { line: 'MAIN' }],
     ['a project branch with no binding to read', { line: null }],
     ['Automatic off', { coordinatorEnabled: false }],
+    // Pause project stops merges into main (project-pause-dispatch.pg.spec.ts drives it end to end).
+    ['the project paused', { projectPaused: true }],
     ['a conflict', { conflicts: ['src/a.ts'] }],
     ['a red check', { checks: [GREEN_CHECK, { ...GREEN_CHECK, exitCode: 1 }] }],
     ['a check that timed out', { checks: [{ ...GREEN_CHECK, timedOut: true }] }],

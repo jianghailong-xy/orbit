@@ -406,6 +406,34 @@ export class ProjectsController {
   }
 
   /**
+   * Pause project, and Resume project: whether a started project moves by itself
+   * (`ProjectsService.pause` / `resume`). While it is paused nothing starts its tasks on its own,
+   * an agent's `task_start` is refused, and Automatic merges nothing into main; the owner's own Run
+   * still works, and runs already going finish.
+   *
+   * The owner's alone, on the start door's rule: the header an agent's request carries,
+   * `X-Orbit-Session-Id`, is handed on so a request made from a session is refused 403 whatever
+   * credential came with it. The runner door has no route to either.
+   */
+  @Post(':id/pause')
+  pause(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Headers('x-orbit-session-id') actingSessionId: string | undefined,
+  ) {
+    return this.projects.pause(user.userId, id, actingSessionId);
+  }
+
+  @Post(':id/resume')
+  resume(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Headers('x-orbit-session-id') actingSessionId: string | undefined,
+  ) {
+    return this.projects.resume(user.userId, id, actingSessionId);
+  }
+
+  /**
    * Which held criteria proposals this project's owner is being asked to decide — and, on each
    * row, the `commitToken` that answers it.
    *

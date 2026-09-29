@@ -299,15 +299,21 @@ export class UpdateProjectDto {
   integration?: UpdateProjectIntegrationDto;
 
   // ── What the project's coordinator is allowed to do ────────────────────────────────────────
-  // The three fields below are the authorization set: they are the only fields whose value decides
+  // The four fields below are the authorization set: they are the only fields whose value decides
   // whether an action the coordinator wants to take may happen. Writing any of them bumps
   // `configRevision` by one (see ProjectsService.update), which is what makes a revoke that races
   // an action readable afterwards. Everything else on this DTO is prose or filing.
 
-  /** Whether the coordinator may act at all. There is nothing else to name in the same request:
-   *  the level of automation it used to have to be given here is gone, so turning it on is the
-   *  whole write. */
+  /** Automatic, as a client that only has the one switch writes it — and means it: on those clients
+   *  the switch is also whether the project moves. Off turns Automatic off and pauses a started
+   *  project (`LEGACY_AUTOMATIC_OFF`); on turns it on and lifts that pause, never the owner's own
+   *  (`project-pause.ts`). A newer client writes `automatic` instead, and pauses with the pause door. */
   @IsSent() @IsBoolean() coordinatorEnabled?: boolean;
+  /** Automatic — the project's `coordinator_enabled` — and nothing else: whether its coordinator
+   *  decides for the owner (when a task is done, conflicts and failed checks, merging the branch into
+   *  main). It does not pause or resume the project; `POST /projects/:id/pause` and `/resume` do.
+   *  Not in the same request as `coordinatorEnabled`, which writes the same column. */
+  @IsSent() @IsBoolean() automatic?: boolean;
   /** How many of this project's tasks may be in flight at once. An admission limit: lowering it
    *  never stops anything already running. */
   @IsSent() @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks?: number;

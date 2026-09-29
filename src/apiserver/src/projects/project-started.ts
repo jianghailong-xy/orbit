@@ -25,9 +25,10 @@ import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
  * =============================
  * A start (`ProjectAcceptanceService.startProject`, and "Start the project" on the older card, which
  * starts it with the default settings) writes the project's `started_at` and the settings it runs
- * with, and the web project page's Automatic switch (`ProjectsService.update`) turns
- * `coordinator_enabled` on. Either press lets Orbit start this project's tasks — the ones opted into
- * auto-run, and no others. A coordinator that filed its tasks to be started by hand and then waited
+ * with, and an older client's Automatic switch (`ProjectsService.update`) turning `coordinator_enabled`
+ * back on lifts the pause its off wrote (`project-pause.ts`). Either press lets Orbit start this
+ * project's tasks — the ones opted into auto-run, and no others — and the switch is told only when
+ * the project then moves by itself (started, and not paused by its owner). A coordinator that filed its tasks to be started by hand and then waited
  * for the owner's go-ahead was never told the go-ahead came: the press spoke to the dispatcher, and
  * the one party holding the work was a conversation it never reached. On 2026-09-23 a project was
  * started with all eight of its tasks held that way, its coordinator parked on a question, and

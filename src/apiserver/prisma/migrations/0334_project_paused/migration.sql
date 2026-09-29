@@ -60,6 +60,7 @@ UPDATE "project"
    SET "paused_at" = now(),
        "paused_reason" = 'LEGACY_AUTOMATIC_OFF'
  WHERE "started_at" IS NOT NULL
-   AND "coordinator_enabled" = false;
+   AND "coordinator_enabled" = false
+   AND "paused_at" IS NULL;
 
 COMMIT;

@@ -20,6 +20,7 @@ import {
   type CoordinatorWakeups,
   deriveSessionLifecycleState,
   type ProjectListCoordinatorActivity,
+  type ProjectPauseState,
   RunEventType,
   SessionLifecycleState,
   type SessionFilingState,
@@ -157,6 +158,15 @@ import {
 } from './project-done-derived';
 import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run';
 import { tellCoordinatorProjectStarted } from './project-started';
+import {
+  type ProjectPauseRow,
+  legacySwitchPauseWrite,
+  ownerPauseWrite,
+  projectPauseSessionRefusal,
+  projectPauseState,
+  resumeWrite,
+} from './project-pause';
+import { projectMoves } from '../tasks/project-pause-dispatch';
 import { readProjectTaskWorkStates } from './project-task-work-state';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -840,10 +850,16 @@ export class ProjectsService {
    * being named. What is left decides whether there is a coordinator, how much of it runs at once,
    * and what it may spend — all of it a bound rather than a grant.
    *
+   * `automatic` is the same column as `coordinatorEnabled` — Automatic, as a newer client writes it,
+   * without the older switch's pause (`project-pause.ts`) — so it is in the set for the same reason.
+   *
    * `coordinatorAgentId` is deliberately NOT one: it says WHO decides, not what a decider may do.
+   * Nor is a pause: it has doors of its own (`pause`, `resume`), which the runner door does not
+   * carry, and it grants nothing — every automatic door re-reads it at the moment it would act.
    */
   static readonly AUTHORIZATION_FIELDS = [
     'coordinatorEnabled',
+    'automatic',
     'maxConcurrentTasks',
     'sessionBudgetPerDay',
   ] as const;
@@ -3190,6 +3206,13 @@ export class ProjectsService {
     });
     if (!current) throw new NotFoundException('project not found');
     ProjectsService.assertOneAcceptanceAuthoringShape(dto);
+    if (dto.coordinatorEnabled !== undefined && dto.automatic !== undefined) {
+      throw new BadRequestException(
+        'send Automatic as one of `automatic` or `coordinatorEnabled`, not both: they write the same '
+          + 'setting, and `coordinatorEnabled` also pauses or resumes the project the way the older '
+          + 'switch did',
+      );
+    }
     ProjectsService.assertStatusIsNotWrittenFromASession(dto, actingSessionId);
     ProjectsService.assertIntegrationIsNotWrittenFromASession(dto, actingSessionId);
     await this.assertHumanOnlyProjectWrites(ownerId, dto, actingSessionId);
@@ -3213,6 +3236,7 @@ export class ProjectsService {
       ...(dto.coordinatorEnabled !== undefined
         ? { coordinatorEnabled: dto.coordinatorEnabled }
         : {}),
+      ...(dto.automatic !== undefined ? { coordinatorEnabled: dto.automatic } : {}),
       ...(dto.maxConcurrentTasks !== undefined
         ? { maxConcurrentTasks: dto.maxConcurrentTasks }
         : {}),
@@ -3251,7 +3275,7 @@ export class ProjectsService {
         const select = Prisma.sql`
           SELECT "config_revision", "status"::text AS "status",
                  "coordinator_session_id" AS "coordinator_session_id",
-                 "coordinator_enabled"
+                 "coordinator_enabled", "started_at", "paused_at", "paused_reason"
             FROM "project"
            WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
         const [locked] = await tx.$queryRaw<Array<{
@@ -3259,6 +3283,9 @@ export class ProjectsService {
           status: string;
           coordinator_session_id: string | null;
           coordinator_enabled: boolean;
+          started_at: Date | null;
+          paused_at: Date | null;
+          paused_reason: string | null;
         }>>(Prisma.sql`${select} FOR NO KEY UPDATE`);
         if (!locked) throw new NotFoundException('project not found');
         if (
@@ -3310,9 +3337,18 @@ export class ProjectsService {
         if (agentId !== undefined) {
           await ProjectsService.writeCoordinatorAgent(tx, ownerId, id, agentId);
         }
+        // The older clients' Automatic switch, which on those clients is also whether the project
+        // moves: its off pauses a started project, its on lifts the pause its off wrote
+        // (`project-pause.ts`). Decided on the row this lock holds, so it cannot pause a project a
+        // start is committing underneath it, nor lift a pause the owner has just made their own.
+        const pause = legacySwitchPauseWrite(dto.coordinatorEnabled, {
+          startedAt: locked.started_at,
+          pausedAt: locked.paused_at,
+          pausedReason: locked.paused_reason,
+        }, new Date());
         const project = await tx.project.update({
           where: { id },
-          data,
+          data: pause ? { ...data, ...pause } : data,
           include: {
             ...COORDINATION_INCLUDE,
             acceptanceCriterionDefinitions: ACCEPTANCE_DEFINITIONS_INCLUDE,
@@ -3333,9 +3369,16 @@ export class ProjectsService {
           changedSessionId = locked.coordinator_session_id;
         }
         // Read under the lock, so "this write turned it on" is a fact about the row this write
-        // replaced rather than about one somebody else's write had already replaced.
-        const switchedOn = dto.coordinatorEnabled === true && locked.coordinator_enabled === false;
-        return { project, changedSessionId, held, switchedOn };
+        // replaced rather than about one somebody else's write had already replaced. The older
+        // switch turns a project on only where the project then moves by itself: switching it on
+        // for a project nobody has started, or one its owner paused, starts nothing — and a
+        // coordinator told "from now on Orbit starts this project's tasks" would wait for runs that
+        // do not come. Lifting the pause its own off wrote is turning it back on, whatever the
+        // setting already said.
+        const switchedOn = dto.coordinatorEnabled === true
+          && (locked.coordinator_enabled === false || pause?.pausedAt === null)
+          && projectMoves(project);
+        return { project, changedSessionId, held, switchedOn, pauseMoved: pause !== null };
       }, loggedRetry(this.logger, 'projects.update'));
     try {
       let projectResult: {
@@ -3343,6 +3386,7 @@ export class ProjectsService {
         changedSessionId: string | null;
         held: HeldCriteriaEdit | null;
         switchedOn: boolean;
+        pauseMoved: boolean;
       } | null = null;
       for (let bindingAttempt = 1; bindingAttempt <= 4; bindingAttempt += 1) {
         try {
@@ -3364,8 +3408,10 @@ export class ProjectsService {
         }
       }
       if (!projectResult) throw new CoordinatorBindingChanged();
-      const { project, changedSessionId, held, switchedOn } = projectResult;
+      const { project, changedSessionId, held, switchedOn, pauseMoved } = projectResult;
       if (changedSessionId) this.sessions?.announceProjectSessionChanged?.(changedSessionId);
+      // The older switch paused or resumed the project: every other client of the owner re-reads it.
+      if (pauseMoved) this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, id);
       // The Automatic switch is the other press that starts a project (`project-started.ts`), and
       // its coordinator is told the same way: only when this write turned it on, after the commit,
       // and never at the cost of a write that already happened.
@@ -3413,6 +3459,73 @@ export class ProjectsService {
       }
       throw e;
     }
+  }
+
+  /**
+   * `POST /projects/:id/pause` — Pause project: nothing starts the project's tasks by itself, an
+   * agent's `task_start` is refused, and Automatic merges nothing into main; runs already going
+   * finish, and the owner's own Run still starts a task (`project-pause.ts`,
+   * `tasks/project-pause-dispatch.ts`). Its coordinator is still woken the way Automatic says.
+   *
+   * The owner's alone: a request carrying an acting session is refused 403 before anything is read.
+   * A project nobody has started is refused 409 PROJECT_NOT_STARTED — it runs nothing by itself
+   * already, and a pause left on it would still stand after the owner pressed Start. Pausing a
+   * paused project changes nothing, except that a pause the older Automatic switch wrote becomes
+   * the owner's, which that switch can then no longer lift.
+   */
+  async pause(ownerId: string, id: string, actingSessionId?: string): Promise<ProjectPauseState> {
+    return this.writePause(ownerId, id, actingSessionId, 'PAUSE');
+  }
+
+  /**
+   * `POST /projects/:id/resume` — Resume project: the project moves by itself again, whichever way
+   * it was paused. The owner's alone, like the pause. Resuming a project that is not paused changes
+   * nothing and says so.
+   *
+   * What the pause held is not replayed here: the automatic doors re-read the project on their own
+   * next pass — the sweep within the minute, a prerequisite finishing at once — and start what is
+   * ready then.
+   */
+  async resume(ownerId: string, id: string, actingSessionId?: string): Promise<ProjectPauseState> {
+    return this.writePause(ownerId, id, actingSessionId, 'RESUME');
+  }
+
+  /**
+   * Both doors: decided under the project lock (rank 40, the lock `update` takes before it writes the
+   * same row), so a pause cannot interleave with the older switch's pause or with a start.
+   */
+  private async writePause(
+    ownerId: string,
+    id: string,
+    actingSessionId: string | undefined,
+    press: 'PAUSE' | 'RESUME',
+  ): Promise<ProjectPauseState> {
+    const refusal = projectPauseSessionRefusal(actingSessionId);
+    if (refusal) throw new ForbiddenException(refusal);
+    const { row, moved } = await withTransactionRetry(this.prisma, async (tx) => {
+      const [locked] = await tx.$queryRaw<ProjectPauseRow[]>(Prisma.sql`
+        SELECT "started_at" AS "startedAt", "paused_at" AS "pausedAt",
+               "paused_reason" AS "pausedReason"
+          FROM "project"
+         WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+           FOR NO KEY UPDATE`);
+      if (!locked) throw new NotFoundException('project not found');
+      const write = press === 'PAUSE' ? ownerPauseWrite(locked, new Date()) : resumeWrite(locked);
+      if (write === 'NOT_STARTED') {
+        throw new ConflictException({
+          code: 'PROJECT_NOT_STARTED',
+          message:
+            'This project has not been started, so there is nothing to pause: it runs nothing by '
+            + 'itself until its owner starts it. Nothing was written.',
+        });
+      }
+      if (!write) return { row: locked, moved: false };
+      await tx.project.update({ where: { id }, data: write });
+      return { row: { ...locked, ...write }, moved: true };
+    }, loggedRetry(this.logger, press === 'PAUSE' ? 'projects.pause' : 'projects.resume'));
+    // After the commit, and only when something changed: every client of the owner re-reads it.
+    if (moved) this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, id);
+    return projectPauseState(id, row);
   }
 
   /**

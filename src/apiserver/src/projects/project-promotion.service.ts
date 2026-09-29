@@ -664,7 +664,7 @@ async function automaticConfirmationRefusalIn(
 ): Promise<string | null> {
   const project = await tx.project.findUnique({
     where: { id: promotion.projectId },
-    select: { coordinatorEnabled: true },
+    select: { coordinatorEnabled: true, pausedAt: true },
   });
   const codebase = await tx.projectCodebase.findUnique({
     where: { id: promotion.codebaseId },
@@ -686,6 +686,7 @@ async function automaticConfirmationRefusalIn(
     sourceKind: promotion.sourceKind,
     line,
     coordinatorEnabled: project?.coordinatorEnabled === true,
+    projectPaused: project?.pausedAt != null,
     conflicts: report.conflicts,
     checks: report.checks,
     upstreamShaChecked: report.upstreamSha,
@@ -715,9 +716,9 @@ async function runnerHandsBackMovedUpstream(
  * go out; otherwise why it goes back to the owner as a card instead (M-T12).
  *
  * The authorization is the owner's to take back, and a queue stands between the check and the push.
- * A project whose Automatic was switched off in between — or whose line was moved to main, or which
- * has had an integration exception opened since — no longer has the yes this landing was queued
- * under, and it is not pushed on the strength of one that was withdrawn. The rule is the same one
+ * A project whose Automatic was switched off in between — or which was paused, or whose line was
+ * moved to main, or which has had an integration exception opened since — no longer has the yes this
+ * landing was queued under, and it is not pushed on the strength of one that was withdrawn. The rule is the same one
  * (`automaticConfirmationRefusal`), over the facts the check left on the promotion and the project as
  * it stands now: the check is not judged a second time, only what the owner and the line can change.
  * main moving since the check is still the runner's to see, at the push.
