@@ -189,6 +189,18 @@ describe("each engine's sign-in, quota and way to its sign-in", () => {
       ...over,
     });
 
+  it('writes each version as its number, whatever the CLI wraps it in', () => {
+    const html = render(wikova());
+    expect([...html.matchAll(/class="rd-engine-version"[^>]*>([^<]*)</g)].map(([, v]) => v)).toEqual([
+      '2.1.284',
+      '0.158.0',
+      '2.1.1',
+      '1.18.33',
+    ]);
+    expect(html).not.toContain('(Claude Code)');
+    expect(html).not.toContain('codex-cli');
+  });
+
   it('says who is signed in, counting the accounts when there are several', () => {
     expect(rowsOf(render(wikova())).map((row) => [row.name, ...(row.signIn ?? [])])).toEqual([
       ['Claude Code', 'ok', 'Signed in'],

@@ -272,7 +272,9 @@ describe('a runner’s page, laid out as web.png', () => {
     expect(phone).toHaveLength(1);
     const [block] = phone;
     expect(block).toMatch(/\.rd-col \{\s*display: contents;\s*\}/);
-    expect(block).toMatch(/\.rd-cols \{\s*display: flex;\s*flex-direction: column;\s*\}/);
+    // Every section the phone's full width — the desktop grid's `align-items: start` would size
+    // each one to its content instead.
+    expect(block).toMatch(/\.rd-cols \{\s*display: flex;\s*flex-direction: column;\s*align-items: stretch;\s*\}/);
     expect(block).toMatch(/\.rd-attention \{\s*grid-template-columns: minmax\(0, 1fr\);\s*\}/);
     const order = (section: string) => Number(new RegExp(`\\.${section} \\{\\s*order: (\\d+);`).exec(block)?.[1]);
     const sections = ['rd-about', 'rd-workspaces', 'rd-capacity', 'rd-engines'];

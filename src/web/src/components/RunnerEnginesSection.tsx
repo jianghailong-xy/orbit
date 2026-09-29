@@ -18,7 +18,7 @@ import {
   RUNNER_ENGINE_SIGNED_OUT,
   runnerEngineAccountsSignedIn,
 } from '../lib/runnerCopy';
-import { ENGINE_CLI_NAME, updateNoteOf } from '../lib/runnerEngines';
+import { ENGINE_CLI_NAME, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
 import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
@@ -209,7 +209,7 @@ function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHe
             has no version to show; its sign-in column says it is missing. */}
         {health.installed && (
           <div className="rd-engine-version" title={health.update?.message}>
-            {health.version || 'version not reported'}
+            {health.version ? engineVersionNumber(health.version) : 'version not reported'}
             {note && (
               <>
                 {' · '}
@@ -220,7 +220,7 @@ function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHe
         )}
       </div>
       <div className={`rd-engine-auth ${signIn.tone}`}>{signIn.text}</div>
-      <div className="rd-engine-quota">
+      <div className={`rd-engine-quota${quota.length === 0 && !signedIn ? ' empty' : ''}`}>
         {quota.length > 0 ? (
           quota.map((row) => (
             <div key={row.key} className={`rd-quota${row.nearLimit ? ' near' : ''}`}>

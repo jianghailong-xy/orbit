@@ -1725,9 +1725,11 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* The third line: what this machine needs a person for. When it wraps on a narrow screen, the
+   triangle stays with its first line. */
 .runner-attention {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   margin-top: 5px;
   font-size: 12px;
@@ -1742,6 +1744,7 @@ body {
 }
 .runner-attention .anticon {
   flex: none;
+  margin-top: 2.5px;
   font-size: 11px;
 }
 .runner-version {
@@ -2268,6 +2271,25 @@ body {
   font-size: 11px;
   color: var(--text-4);
 }
+/* An engine row needs about 560px for its five columns. Narrower — a phone, or the left column
+   beside Capacity on a tablet — its quota takes a line of its own, and a quota line that would only
+   hold "—" is left out. Measured on the section, not the viewport: the column it sits in is what
+   runs out of room. */
+.rd-engines {
+  container: rd-engines / inline-size;
+}
+@container rd-engines (max-width: 560px) {
+  .rd-engine-row {
+    grid-template-columns: 24px minmax(0, 1fr) auto 12px;
+    grid-template-areas:
+      'mark main auth chevron'
+      '. quota quota .';
+    row-gap: 8px;
+  }
+  .rd-engine-quota.empty {
+    display: none;
+  }
+}
 /* The run's report sits above the rows it summarizes, not inside any one of them. */
 .rd-engine-relay {
   margin-bottom: 12px;
@@ -2650,7 +2672,7 @@ body {
 }
 /* A phone's width: one column, in the order the iPhone's runner page reads — Needs Attention,
    Capacity, Engines, Workspaces, About. The two column boxes step aside (display: contents) so
-   their sections can be ordered as one list; an engine row puts its quota on a line of its own. */
+   their sections can be ordered as one list. */
 @media (max-width: 640px) {
   .rd-attention {
     grid-template-columns: minmax(0, 1fr);
@@ -2658,6 +2680,7 @@ body {
   .rd-cols {
     display: flex;
     flex-direction: column;
+    align-items: stretch;
   }
   .rd-col {
     display: contents;
@@ -2673,13 +2696,6 @@ body {
   }
   .rd-about {
     order: 4;
-  }
-  .rd-engine-row {
-    grid-template-columns: 24px minmax(0, 1fr) auto 12px;
-    grid-template-areas:
-      'mark main auth chevron'
-      '. quota quota .';
-    row-gap: 8px;
   }
 }
 /* Edit-in-place: the clicked row stays as a header and the editor expands below
