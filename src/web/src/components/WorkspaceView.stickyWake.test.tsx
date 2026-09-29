@@ -74,6 +74,19 @@ const WAKE = [
   '```',
 ].join('\n');
 
+/** A background job's news, built the way runner-api/background-job-wake.ts builds it. */
+const JOB_WAKE = [
+  '<background-job-wake>',
+  '  A background job you started with bg_run has news you were waiting for; the control plane opened this turn for it:',
+  '    bgj_13c53745a88a｜job｜bash scripts/deploy.sh｜deploy the new build',
+  '      ended｜completed｜exit code 0',
+  '      output /root/.orbit/runs/4f50733a/bgj_13c53745a88a.output｜this covers bytes 0–512',
+  '      output tail:',
+  '        deployed',
+  '  The control plane recorded this for you; the user did not say it. Read the full output with mcp__orbit__bg_output by id; pass sinceOffset to read only what is new.',
+  '</background-job-wake>',
+].join('\n');
+
 const RUNNER = {
   id: RUNNER_ID,
   name: 'mac-01',
@@ -100,6 +113,14 @@ const EVENTS = [
   { seq: 2, type: 'assistant', payload: { text: 'deploying' }, turnId: 'turn-typed', ts: '2026-09-17T05:00:10Z' },
   { seq: 3, type: 'user', payload: { text: WAKE }, turnId: 'turn-wake', ts: '2026-09-17T06:00:00Z' },
   { seq: 4, type: 'assistant', payload: { text: 'that task failed; reading the logs' }, turnId: 'turn-wake', ts: '2026-09-17T06:00:20Z' },
+];
+
+/** The person's question, the start of its answer, the job's news, and the rest of the same answer. */
+const JOB_EVENTS = [
+  ...EVENTS.slice(0, 2),
+  // Stored as ingest stores a wake turn: the echo, and the same block recorded as the note.
+  { seq: 3, type: 'user', payload: { text: JOB_WAKE, controlPlaneNote: JOB_WAKE }, turnId: 'turn-job', ts: '2026-09-17T06:00:00Z' },
+  { seq: 4, type: 'assistant', payload: { text: 'deployed; checking the health endpoint' }, turnId: 'turn-job', ts: '2026-09-17T06:00:20Z' },
 ];
 
 class FakeEventSource {
@@ -206,7 +227,7 @@ afterEach(async () => {
  * turn as the one it names. That is the wake here; before this fix the scanner could not see it and
  * named the question two turns earlier instead.
  */
-async function mountTranscript(hasWake = true): Promise<void> {
+async function mountTranscript(drawn: string | null = '.watch-wake'): Promise<void> {
   const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
   const nextContainer = document.createElement('div');
   const nextRoot = createRoot(nextContainer);
@@ -226,7 +247,7 @@ async function mountTranscript(hasWake = true): Promise<void> {
     );
   });
   await waitForUi(() => {
-    if (hasWake) expect(mounted().querySelector('.watch-wake'), 'the wake is drawn as its card').not.toBeNull();
+    if (drawn) expect(mounted().querySelector(drawn), 'the wake is drawn').not.toBeNull();
     expect(mounted().querySelector('.chat-sticky-question'), 'the bar names a turn').not.toBeNull();
   });
 }
@@ -266,9 +287,32 @@ describe('the sticky bar over a turn a watch queued', { timeout: 60_000 }, () =>
     // The same session with the wake taken out: the bar names the last thing they typed, in the
     // words they typed it, exactly as it always has.
     vi.mocked(getSessionEventPage).mockResolvedValue({ events: EVENTS.slice(0, 2), hasMore: false } as never);
-    await mountTranscript(false);
+    await mountTranscript(null);
 
     expect(text('.chat-sticky-label')).toBe('↑ Your question');
     expect(text('.chat-sticky-text')).toBe(TYPED);
+  });
+});
+
+describe('the sticky bar over a background job’s news', { timeout: 60_000 }, () => {
+  // The job's news is a line inside the answer the agent is still giving, not the head of a new
+  // round: the bar kept being taken by it — "Background job finished" over an answer to the
+  // person's question — and with a run of jobs the question was never on screen at all.
+  it('keeps naming the question the answer around it belongs to', async () => {
+    vi.mocked(getSessionEventPage).mockResolvedValue({ events: JOB_EVENTS, hasMore: false } as never);
+    await mountTranscript('.bgwake');
+
+    expect(text('.chat-sticky-label')).toBe('↑ Your question');
+    expect(text('.chat-sticky-text')).toBe(TYPED);
+
+    // And tapping it goes back to that question, not to the line in the middle of its answer.
+    const question = mounted().querySelector<HTMLElement>('.chat-user[data-seq="1"]')!;
+    expect(question, 'the question is drawn as the person’s bubble').not.toBeNull();
+    await act(async () => {
+      mounted()
+        .querySelector<HTMLElement>('.chat-sticky-question')!
+        .dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    expect(scrolledTo).toEqual([question]);
   });
 });

@@ -81,18 +81,34 @@ final class StickySummaryTests: XCTestCase {
 
     // MARK: the turns the control plane opens
 
-    /// A background job's wake is read off the recorded note, not the turn's text: the block IS the
-    /// turn, and the person's words are empty.
-    func testABackgroundJobIsLabelledAndReadAsItsCardReadsIt() {
-        let summary = StickySummary.of(text: "", note: Self.jobNote)
-        XCTAssertEqual(summary.label, "↑ Background job failed")
-        XCTAssertEqual(summary.text, "pg matrix exited 124.")
+    /// A background job's news is a line inside the answer the agent is still giving, not the head
+    /// of a round: the bar does not point at it, and keeps naming the question that answer belongs
+    /// to. Named in its own words it took the bar for the rest of the answer, and a run of jobs kept
+    /// the question off the screen altogether.
+    func testABackgroundJobIsNoTurnTheBarPointsAt() {
+        XCTAssertFalse(StickySummary.isAnchor(text: "", note: Self.jobNote))
     }
 
-    func testAScheduledWakeupIsLabelledAndReadAsItsCardReadsIt() {
-        let summary = StickySummary.of(text: "", note: Self.wakeupNote)
-        XCTAssertEqual(summary.label, "↑ Scheduled wakeup")
-        XCTAssertEqual(summary.text, "watching CI run")
+    func testAScheduledWakeupIsNoTurnTheBarPointsAt() {
+        XCTAssertFalse(StickySummary.isAnchor(text: "", note: Self.wakeupNote))
+    }
+
+    /// Words somebody typed on the same turn are a bubble under the line, and the bar names them as it
+    /// names any question.
+    func testWordsTypedOnAWakesTurnAreStillAQuestion() {
+        XCTAssertTrue(StickySummary.isAnchor(text: "and check the dark theme too", note: Self.jobNote))
+        let summary = StickySummary.of(text: "and check the dark theme too", note: Self.jobNote)
+        XCTAssertEqual(summary.label, StickySummary.yourQuestion)
+        XCTAssertEqual(summary.text, "and check the dark theme too")
+    }
+
+    /// Every other turn is still one the bar points at: a watch's wake, and a person's message —
+    /// including one the control plane appended a note to that is not a wake.
+    func testEveryOtherTurnIsStillOneTheBarPointsAt() {
+        XCTAssertTrue(StickySummary.isAnchor(text: F.matchWake()))
+        XCTAssertTrue(StickySummary.isAnchor(text: "部署"))
+        XCTAssertTrue(StickySummary.isAnchor(text: "check the dark theme too",
+                                             note: "Continue where the previous turn left off."))
     }
 
     // MARK: the turns somebody did type
