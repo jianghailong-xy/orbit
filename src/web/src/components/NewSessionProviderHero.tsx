@@ -171,7 +171,7 @@ export function NewSessionProviderHero({
           {picked ? '✓' : ''}
         </span>
         <span className="np-row-name">Automatic</span>
-        <span className="np-row-model">most room</span>
+        <span className="np-row-model">resets soonest</span>
       </button>
     );
   };

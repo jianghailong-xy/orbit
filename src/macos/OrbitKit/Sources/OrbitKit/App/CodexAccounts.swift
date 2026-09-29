@@ -2,7 +2,7 @@ import Foundation
 
 /// A runner's Codex accounts: which one a new session starts on, and whose quota a session spends.
 ///
-/// The native port of shared `roomiestCodexAccount` / `codexAccountSnapshot` and the server's
+/// The native port of shared `accountToStartOn` / `codexAccountSnapshot` and the server's
 /// `automaticCodexAccount`. The server makes the choice when it creates a session and stores it
 /// (`Session.codexAccount`); this asks the same question of the same numbers so the New Session
 /// screen can say where a session would start, and the composer whose quota to show.
@@ -69,26 +69,38 @@ public enum CodexAccounts {
         }
     }
 
-    /// Which account a new session with none picked starts on: the one with the most room right now.
+    /// Which account a new session with none picked starts on: the one whose quota would otherwise go
+    /// to waste first.
     ///
     /// - Only an account the CLI does not say is signed out is a candidate.
     /// - One with a spent window (100% and not past its reset, or with no reset to go by) is passed
     ///   over while another can run.
-    /// - The rest rank by their tightest window's use: accounts report different windows (a Plus login
-    ///   a 5-hour and a weekly one, a Pro login only a weekly one). Unread ranks after read.
+    /// - One with a window nearly spent (90%) comes after the rest: a run started there would soon meet
+    ///   its limit and have to move.
+    /// - Then soonest-expiring first: the reset of each account's longest window (`expiresAt`).
+    ///   Different plans hold very different amounts, so how much is left is not compared across
+    ///   accounts — only when it expires. An account with nothing reported comes after every one that has.
+    /// - Equal expiry: the one with more room, by its tightest window. Unread ranks after read.
     /// - Every candidate spent: the one that frees up first.
     /// - Ties go to Default, then to the lower id.
     ///
     /// Nil with fewer than two accounts, or none signed in: nothing to choose between.
-    public static func roomiest(_ accounts: [RunnerEngineAccount]?, usage: PlanUsageSnapshot?,
-                                now: Date = Date()) -> String? {
+    public static func toStartOn(_ accounts: [RunnerEngineAccount]?, usage: PlanUsageSnapshot?,
+                                 now: Date = Date()) -> String? {
         guard let accounts, accounts.count >= 2 else { return nil }
-        struct Candidate { let id: String; let tightest: Double; let spentUntil: Double? }
+        struct Candidate {
+            let id: String; let nearLimit: Bool; let expiresAt: Double; let tightest: Double; let spentUntil: Double?
+        }
         let candidates: [Candidate] = accounts.filter { $0.auth != "no" }.map { account in
-            let ws = snapshot(usage, account: account.id).map(windows) ?? []
-            let spent = ws.filter { $0.utilization >= 100 && !(resetTime($0).map { $0 <= now.timeIntervalSince1970 } ?? false) }
+            let own = snapshot(usage, account: account.id)
+            let ws = own.map(windows) ?? []
+            // Not past its reset — or with no reset to go by, which nothing says has come.
+            let open = ws.filter { !(resetTime($0).map { $0 <= now.timeIntervalSince1970 } ?? false) }
+            let spent = open.filter { $0.utilization >= 100 }
             let resets = spent.map { resetTime($0) ?? .infinity }
             return Candidate(id: account.id,
+                             nearLimit: open.contains { $0.utilization >= nearLimitUtilization },
+                             expiresAt: own.map { expiresAt($0, now: now) } ?? .infinity,
                              tightest: ws.map(\.utilization).max() ?? .infinity,
                              spentUntil: spent.isEmpty ? nil : resets.max())
         }
@@ -98,12 +110,40 @@ public enum CodexAccounts {
         }
         let usable = candidates.filter { $0.spentUntil == nil }
         if !usable.isEmpty {
-            return usable.sorted { a, b in a.tightest != b.tightest ? a.tightest < b.tightest : byID(a, b) }.first?.id
+            return usable.sorted { a, b in
+                if a.nearLimit != b.nearLimit { return !a.nearLimit }
+                if a.expiresAt != b.expiresAt { return a.expiresAt < b.expiresAt }
+                return a.tightest != b.tightest ? a.tightest < b.tightest : byID(a, b)
+            }.first?.id
         }
         return candidates.sorted { a, b in
             let x = a.spentUntil ?? 0, y = b.spentUntil ?? 0
             return x != y ? x < y : byID(a, b)
         }.first?.id
+    }
+
+    /// At or over this share consumed, a window is nearly spent (shared `NEAR_LIMIT_UTILIZATION`).
+    static let nearLimitUtilization = 90.0
+
+    /// When what an account has left of its quota goes to waste (shared `quotaExpiresAt`): the reset
+    /// of its longest window — a weekly one where it has one — which gives back a full window whatever
+    /// was left of the old one. When no window says how long it is, the latest reset. Infinity when no
+    /// window names a reset ahead of `now`: nothing is known to expire.
+    static func expiresAt(_ s: PlanUsageSnapshot, now: Date) -> Double {
+        let week = 7 * 24 * 60
+        let named: [(PlanUsageWindow?, Int)] = [(s.fiveHour, 5 * 60), (s.sevenDay, week), (s.sevenDayOpus, week),
+                                                (s.sevenDaySonnet, week)]
+        let reported = [s.primary, s.secondary] + (s.rateLimits ?? []).flatMap { [$0.primary, $0.secondary] }
+        let all: [(window: PlanUsageWindow, mins: Int?)] =
+            named.compactMap { window, mins in window.map { ($0, $0.windowDurationMins ?? mins) } }
+            + reported.compactMap { window in window.map { ($0, $0.windowDurationMins) } }
+        let ahead: [(mins: Int?, at: Double)] = all.compactMap { entry in
+            guard let at = resetTime(entry.window), at > now.timeIntervalSince1970 else { return nil }
+            return (entry.mins, at)
+        }
+        guard let longest = ahead.map({ $0.mins ?? -1 }).max() else { return .infinity }
+        let pick = longest >= 0 ? ahead.filter { ($0.mins ?? -1) == longest } : ahead
+        return pick.map(\.at).max() ?? .infinity
     }
 
     /// Every window one snapshot reports: Claude's named ones, Codex's primary/secondary pair, and the

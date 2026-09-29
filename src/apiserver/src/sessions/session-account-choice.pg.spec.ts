@@ -3,11 +3,11 @@
  *
  * A runner can hold several Codex accounts (one CODEX_HOME each) and several Claude Code accounts (one
  * CLAUDE_CONFIG_DIR each). A session picks one on the New Session screen or in the composer's Provider
- * menu — which pins it there — or leaves it to Orbit (Automatic): it starts on the account with the
- * most room and moves when that account's usage limit stops it. On real PostgreSQL:
+ * menu — which pins it there — or leaves it to Orbit (Automatic): it starts on the account whose
+ * quota resets soonest and moves when that account's usage limit stops it. On real PostgreSQL:
  *
- *   (1) A Claude session nothing picked an account for starts on the one with the most room; one
- *       picked by hand is pinned.
+ *   (1) A Claude session nothing picked an account for starts on the one Automatic picks; one picked
+ *       by hand is pinned.
  *   (2) Picking another account for a live session pins it there, owes the transcript a line, and
  *       queues the reload that re-spawns its engine with that account's directory.
  *   (3) Back on Automatic it is unpinned and stays where it is — while its account has room.
@@ -201,7 +201,7 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     });
   };
 
-  await t.test('(1) a Claude session starts on the account with the most room, and a picked one is pinned', async () => {
+  await t.test('(1) a Claude session starts on the account Automatic picks, and a picked one is pinned', async () => {
     const m = await machine('create');
     const automatic = await sessions.create(m.ownerId, { prompt: 'hi', workspaceId: m.workspaceId, provider: 'claude' });
     // Default's weekly window is spent — though its 5-hour one reads 0% — so Work is where it starts.

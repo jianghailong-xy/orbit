@@ -193,7 +193,7 @@ describe('which Codex account a workspace runs on', () => {
 
     const offered = await options();
     expect(offered.map((o) => o.text)).toEqual([
-      ['Automatic', 'each new session starts on the account with the most room'],
+      ['Automatic', 'each new session starts on the account whose quota resets soonest'],
       ['Default (~/.codex)', '5h limit 62% · signed in'],
       // Only Default has a quota reported: the usage probe reads Default.
       ['Work', 'signed in'],

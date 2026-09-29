@@ -268,9 +268,10 @@ suite('what the providers page reads about account pools, over HTTP on real Post
     assert.equal(byLabel.get('Home')!.resetsAt, null);
     assert.equal(served.resetsAt, null, 'a pool with room is not waiting on any reset');
 
-    // The member a session starting now runs on: Home, with the most room — not Work, which is busier,
-    // and not an average of the members, which no one account is at.
-    assert.deepEqual(served.members.filter((member) => member.next).map((member) => member.label), ['Home']);
+    // The member a session starting now runs on: Work, whose window resets an hour before Home's — what
+    // it has left then is lost, while Home keeps its room — and not an average of the members, which no
+    // one account is at.
+    assert.deepEqual(served.members.filter((member) => member.next).map((member) => member.label), ['Work']);
     assertKeyless(text, 'GET /providers/pools');
   });
 

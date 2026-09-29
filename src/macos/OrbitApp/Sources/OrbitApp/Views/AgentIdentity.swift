@@ -96,8 +96,8 @@ private struct PoolCountBadge: View {
 
 /// Provider picker opened from the new-session hero — who runs this session, as opposed to the
 /// agent switcher below (where it runs). Sectioned by whose money a row spends: an engine spends the
-/// subscription signed into on that machine, an account pool whichever of its subscriptions has the
-/// most room, a configured provider the API key you pasted. Each row previews the model it would
+/// subscription signed into on that machine, an account pool whichever of its subscriptions' quota
+/// resets soonest, a configured provider the API key you pasted. Each row previews the model it would
 /// switch to, so the consequence is visible before the tap. The order is web's one flat list —
 /// engines, pools, keys — and a pool's own accounts fold away at the end of the keys, behind "Pin a
 /// specific account", as web's `NewSessionProviderHero` folds them.
@@ -162,7 +162,7 @@ struct ProviderSwitchSheet: View {
                     Text("Engines")
                 } footer: {
                     Text(!automatic.isEmpty
-                         ? "Signed in on this runner. Automatic starts each new session on the account with the most room, and moves it when that account hits its limit."
+                         ? "Signed in on this runner. Automatic starts each new session on the account whose quota resets soonest, so none of it goes unused, and moves it when that account hits its limit."
                          : "Signed in on this runner.")
                 }
                 if !pools.isEmpty {
@@ -273,7 +273,7 @@ struct ProviderSwitchSheet: View {
             HStack(spacing: 12) {
                 Text("Automatic").foregroundStyle(.primary).lineLimit(1)
                 Spacer(minLength: 8)
-                Text("Most room").font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
+                Text("Resets soonest").font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
                 if picked {
                     Image(systemName: "checkmark")
                         .font(.body.weight(.semibold)).foregroundStyle(Color.accentColor)
@@ -283,7 +283,7 @@ struct ProviderSwitchSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Automatic: the \(choice.label) account with the most room")
+        .accessibilityLabel("Automatic: the \(choice.label) account whose quota resets soonest")
     }
 
     /// One of an engine's accounts: its name and its own quota — amber once a window is nearly spent.

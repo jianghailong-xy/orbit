@@ -473,7 +473,7 @@ test('a workspace that picked no account is judged by its env, as before account
   assert.ok(withinJitterOf(await retryAtFor({ CODEX_HOME: WORK_HOME }, WORK_SPENT, null), WORK_RESET));
 });
 
-test('a new session nothing picked an account for starts on the one with the most room, unless the workspace decides', () => {
+test('a new session nothing picked an account for starts on the one Automatic picks, unless the workspace decides', () => {
   const now = new Date();
   const defaultSpent = { codex: { provider: AgentProvider.CODEX, primary: window(100, DEFAULT_RESET), accounts: { [WORK]: work(8) } } };
   assert.equal(automaticCodexAccount({ env: null, codexAccount: null }, ENGINES, defaultSpent, now), WORK);

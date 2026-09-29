@@ -10295,7 +10295,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const usage = runner?.planUsage as unknown as PlanUsage | null | undefined;
       const workspace = workspaceById.get(assignee.workspaceId);
       // A Codex or Claude task on a workspace that leaves the account to Orbit gets its session started
-      // on the runner's account with the most room (automaticAccount), so that is the quota it waits on.
+      // on the runner's account whose quota resets soonest (automaticAccount), so that is the quota it
+      // waits on.
       const automatic =
         assignee.provider === 'codex' || assignee.provider === 'claude'
           ? automaticAccount(assignee.provider, workspace, runner?.engines, usage, now)

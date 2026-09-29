@@ -290,12 +290,12 @@ import type {
 } from '@orbit/shared';
 import {
   accountOfEnv,
+  accountToStartOn,
   AgentProvider,
   derivePermissionSemantics,
   fastModeAvailable,
   MAX_PROMPT_CHARS,
   permissionModeAvailableOnRunner,
-  roomiestAccount,
   TRASH_RETENTION_DAYS,
   type AccountEngine,
 } from '@orbit/shared';
@@ -6235,8 +6235,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     wanted && accountsOf(runner, engine).some((account) => account.id === wanted) ? wanted : 'default';
   // Automatic is on offer for an engine where the workspace leaves its account to Orbit: it picked none,
   // and its env selects no other config directory and no key of its own — with two accounts or more
-  // to choose between. A new session there starts on the runner's account with the most room: the
-  // choice the server makes when it creates the session (automaticAccount), asked of the same numbers.
+  // to choose between. A new session there starts on the runner's account whose quota resets soonest:
+  // the choice the server makes when it creates the session (automaticAccount), asked of the same numbers.
   const automaticOfferedOn = (
     engine: AccountEngine,
     workspace: { env?: Record<string, string> | null; codexAccount?: string | null; claudeAccount?: string | null } | null | undefined,
@@ -6247,9 +6247,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const codexAccountsHere = accountsOf(runner, 'codex');
   const codexAutoOffered = automaticOfferedOn('codex', pickedWorkspace);
   const claudeAutoOffered = automaticOfferedOn('claude', pickedWorkspace);
-  const codexAutoAccount = codexAutoOffered ? roomiestAccount('codex', codexAccountsHere, runner.planUsage, new Date()) : null;
+  const codexAutoAccount = codexAutoOffered ? accountToStartOn('codex', codexAccountsHere, runner.planUsage, new Date()) : null;
   const claudeAutoAccount = claudeAutoOffered
-    ? roomiestAccount('claude', accountsOf(runner, 'claude'), runner.planUsage, new Date())
+    ? accountToStartOn('claude', accountsOf(runner, 'claude'), runner.planUsage, new Date())
     : null;
   const shownCodexAccount = accountOnThisRunner(
     'codex',
@@ -6789,7 +6789,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         label: (
                           <span className="scope-menu-row">
                             <span className="composer-account-row-name">Automatic</span>
-                            {menuValue('Most room')}
+                            {menuValue('Resets soonest')}
                             {checkSlot(sessionAutomatic)}
                           </span>
                         ),
@@ -8801,8 +8801,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   shownPoolAccount.current
                     ? `${shownPool.label} is running this session on ${shownPoolAccount.member.label}`
                     : `A session on ${shownPool.label} starts on ${shownPoolAccount.member.label} — ${
-                        shownPool.shared ? 'the key it picks for you' : 'the account with the most room'
-                      } right now`
+                        shownPool.shared ? 'the key it picks for you right now' : 'the account whose quota resets soonest'
+                      }`
                 }
               >
                 <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>
@@ -8823,7 +8823,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         ...(!selectedId &&
                         !(shownAccountEngine === 'claude' ? draftClaudeAccount : draftCodexAccount) &&
                         automaticOfferedOn(shownAccountEngine, pickedWorkspace)
-                          ? { note: 'Automatic — the account with the most room right now' }
+                          ? { note: 'Automatic — the account whose quota resets soonest' }
                           : selectedId && sessionAutomatic && accountsOffered
                             ? { note: 'Automatic — moves to another account when this one hits its limit' }
                             : {}),

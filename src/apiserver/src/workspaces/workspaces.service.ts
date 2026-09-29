@@ -66,7 +66,7 @@ export class WorkspacesService {
         repoUrl: dto.repoUrl,
         env: (dto.env ?? Prisma.JsonNull) as Prisma.InputJsonValue,
         // Stored as stated, `default` included: NULL is Automatic — a new session starts on the runner's
-        // account with the most room (automaticAccount) — and `default` pins its sessions to Default.
+        // account whose quota resets soonest (automaticAccount) — and `default` pins its sessions to Default.
         codexAccount: dto.codexAccount ?? null,
         claudeAccount: dto.claudeAccount ?? null,
         enabled: dto.enabled ?? true,

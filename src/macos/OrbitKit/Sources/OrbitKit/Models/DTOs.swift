@@ -79,7 +79,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let enabled: Bool?
     public let autoInitGit: Bool?
     /// Which of its runner's Codex accounts a session here runs on: a slot id or `default`. Nil is
-    /// Automatic — a new session starts on the account with the most room (`CodexAccounts.roomiest`).
+    /// Automatic — a new session starts on the account whose quota resets soonest (`CodexAccounts.toStartOn`).
     public let codexAccount: String?
     /// The same for its Claude sessions: one of the runner's Claude accounts, or nil for Automatic.
     public var claudeAccount: String? = nil
@@ -212,7 +212,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// run) — the same read as above, in the shared pool's own field.
     public let poolKeyId: String?
     /// Which of the runner's Codex accounts this session runs on (`default` or a slot id): picked on
-    /// New Session, or the one with the most room when it was created. Nil follows its workspace's
+    /// New Session, or the one Automatic chose when it was created. Nil follows its workspace's
     /// (`Agent.codexAccount`). Carried by the detail payload, like the two above.
     public let codexAccount: String?
     /// That account was picked by hand, and the session stays on it: its usage limit waits for the

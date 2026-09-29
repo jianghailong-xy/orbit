@@ -7,7 +7,7 @@
  */
 import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
 import { ENGINE_ACCOUNTS_MAX, sanitizeRunnerEngines } from '../common/runner-engines';
-import { accountDir, accountOfEnv, accountToMoveTo, roomiestAccount, type AccountEngine } from '@orbit/shared';
+import { accountDir, accountOfEnv, accountToMoveTo, accountToStartOn, type AccountEngine } from '@orbit/shared';
 import { DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner } from './account';
 
 /** An account a runner added: 4 random bytes in lowercase hex (src/runner-go/account_slot.go).
@@ -96,7 +96,7 @@ export function workspaceLeavesAccountToOrbit(
 
 /**
  * The `engine` account a new session on this workspace and runner starts on when nothing picked one
- * for it: the runner's account with the most room right now (roomiestAccount) — when the workspace
+ * for it: the runner's account whose quota resets soonest (accountToStartOn) — when the workspace
  * leaves the account to Orbit. Null otherwise: the session then runs where the workspace's choice and
  * env say. SessionsService.create stores the answer on the session; the task quota gate asks the same
  * question of a task that is about to get one.
@@ -109,7 +109,8 @@ export function automaticAccount(
   now: Date,
 ): string | null {
   if (!workspaceLeavesAccountToOrbit(engine, workspace, runnerEngines)) return null;
-  return roomiestAccount(engine, accountsOf(engine, runnerEngines), isObject(planUsage) ? (planUsage as PlanUsage) : null, now);
+  const usage = isObject(planUsage) ? (planUsage as PlanUsage) : null;
+  return accountToStartOn(engine, accountsOf(engine, runnerEngines), usage, now);
 }
 
 /** {@link automaticAccount} for Codex. */

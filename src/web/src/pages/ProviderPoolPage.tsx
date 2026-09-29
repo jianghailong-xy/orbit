@@ -106,8 +106,8 @@ export function ProviderPoolPage() {
             {pool.label}
           </h1>
           <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-            Account pool · {availabilityOf(pool, refusals)} · each session starts on the account with
-            the most room in its 5-hour window, and stays on it until that one runs out.
+            Account pool · {availabilityOf(pool, refusals)} · each session starts on the account whose
+            quota resets soonest, so none of it goes unused, and stays on it until that one runs out.
           </div>
         </div>
         <Button type="primary" disabled={keys.isPending} onClick={() => setAdding(true)}>

@@ -48,7 +48,7 @@ export interface CreateSessionDto {
   codexAccount?: string;
   /** The Claude Code account, the sibling of `codexAccount` for a session on the built-in Claude engine:
    *  `default` or one of the runner's slots. Omitted is Automatic where the workspace leaves the account
-   *  to Orbit (the one with the most room), else the workspace's. */
+   *  to Orbit (the one whose quota resets soonest), else the workspace's. */
   claudeAccount?: string;
   /** Ids of pre-uploaded image attachments (`POST /api/attachments` with no sessionId) to
    *  send with the seeded first turn. Each must be the caller's and not yet scoped to a

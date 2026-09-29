@@ -57,8 +57,8 @@ export class CreateWorkspaceDto {
   @IsOptional() @IsObject() env?: Record<string, string>;
   // The Codex account this workspace's Codex sessions run on: the id of a slot its runner reports,
   // or `default`. A path is never accepted — dispatch resolves the id on the runner that runs the
-  // session. null is Automatic: each new session starts on the runner's account with the most room
-  // (automaticAccount), and moves off it when its usage limit stops the session.
+  // session. null is Automatic: each new session starts on the runner's account whose quota resets
+  // soonest (automaticAccount), and moves off it when its usage limit stops the session.
   @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) codexAccount?: string | null;
   /** The Claude account this workspace's Claude sessions run on. Same rules as codexAccount: null is
    *  Automatic, `default` pins them to Default. */

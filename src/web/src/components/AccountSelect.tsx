@@ -67,9 +67,9 @@ const ENGINE_COPY: Record<string, { label: string; envVar: string; sessions: str
  * this runner does not report runs on Default — which its option says.
  *
  * On a runner with more than one account of the engine `null` is Automatic: each new session starts on
- * the account with the most room, and moves when that account's usage limit stops it (automaticAccount
- * on the server), so Default is saved as `default` there, a choice of its own. With one account `null`
- * is Default.
+ * the account whose quota resets soonest, and moves when that account's usage limit stops it
+ * (automaticAccount on the server), so Default is saved as `default` there, a choice of its own. With
+ * one account `null` is Default.
  *
  * `envDir` is the engine's own config-directory variable typed into the same form's environment:
  * until an account is picked here that is where the sessions run, and a picked account replaces it.
@@ -120,7 +120,7 @@ export function AccountSelect({
     options.unshift({
       value: AUTOMATIC,
       label: 'Automatic',
-      status: 'each new session starts on the account with the most room',
+      status: 'each new session starts on the account whose quota resets soonest',
     });
   }
   const typedDir = envDir?.trim();
@@ -145,7 +145,8 @@ export function AccountSelect({
       <div className="rd-path-hint rd-path-muted">
         {automatic
           ? `Only applies to sessions that run ${copy.sessions} on this machine. Automatic starts each new ` +
-            'session on the account with the most room, and moves it when that account hits its limit.'
+            'session on the account whose quota resets soonest, so none of it goes unused, and moves it ' +
+            'when that account hits its limit.'
           : `Only applies to sessions that run ${copy.sessions} on this machine. Leave it on Default unless ` +
             'this repo needs the other account.'}
       </div>

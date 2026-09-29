@@ -16,6 +16,7 @@ const NOW = new Date('2026-09-14T12:00:00.000Z');
 const AN_HOUR_AGO = '2026-09-14T11:00:00.000Z';
 const IN_AN_HOUR = '2026-09-14T13:00:00.000Z';
 const IN_TWO_HOURS = '2026-09-14T14:00:00.000Z';
+const IN_A_DAY = '2026-09-15T12:00:00.000Z';
 const IN_THREE_DAYS = '2026-09-17T12:00:00.000Z';
 
 interface Row {
@@ -33,6 +34,14 @@ function reported(body: Record<string, { utilization: number; resets_at?: string
 /** The 5-hour window at `utilization`, resetting in two hours. */
 function fiveHour(utilization: number): PlanUsageSnapshot {
   return reported({ five_hour: { utilization, resets_at: IN_TWO_HOURS } });
+}
+
+/** The 5-hour window at `fiveHourUsed`, resetting in two hours, and a week 30% used that ends at `weekEnds`. */
+function withWeek(fiveHourUsed: number, weekEnds: string): PlanUsageSnapshot {
+  return reported({
+    five_hour: { utilization: fiveHourUsed, resets_at: IN_TWO_HOURS },
+    seven_day: { utilization: 30, resets_at: weekEnds },
+  });
 }
 
 function member(slug: string, usage: PlanUsageSnapshot | null, refused = false, usageUnreadable = false): PoolCandidate<Row> {
@@ -60,7 +69,20 @@ function chosen(selection: PoolSelection<Row>): string {
   return selection.row.slug;
 }
 
-test('every member reporting: the lowest 5-hour utilization is chosen, a tie going to the slug', () => {
+test('every member reporting: the quota that resets soonest goes first, so none of it goes unused', () => {
+  // More room elsewhere does not outweigh a week that ends sooner: what is left of it then is lost.
+  const endsTomorrow = member('anthropic', withWeek(60, IN_A_DAY));
+  const endsLater = member('anthropic-2', withWeek(10, IN_THREE_DAYS));
+  assert.equal(chosen(selectPoolMember([endsLater, endsTomorrow], null, NOW)), 'anthropic');
+
+  // Nearly spent (90%) goes last however soon it ends: a run started there would soon have to move.
+  const nearlySpent = member('anthropic', withWeek(95, IN_A_DAY));
+  assert.equal(chosen(selectPoolMember([nearlySpent, endsLater], null, NOW)), 'anthropic-2');
+  // Last is still a place: it takes the run over a member that cannot.
+  assert.equal(chosen(selectPoolMember([nearlySpent, member('anthropic-2', fiveHour(100))], null, NOW)), 'anthropic');
+});
+
+test('equal expiry: the lowest 5-hour utilization is chosen, a tie going to the slug', () => {
   const members = [
     member('anthropic', fiveHour(40)),
     member('anthropic-2', fiveHour(12.5)),
@@ -74,19 +96,22 @@ test('every member reporting: the lowest 5-hour utilization is chosen, a tie goi
   assert.equal(chosen(selectPoolMember([...tied].reverse(), null, NOW)), 'personal');
 });
 
-test('some members unreported: they rank after every member that reported, never as 0% used', () => {
+test('some members unreported: they rank after every member that reported room, never as 0% used', () => {
   const unreported = member('anthropic', null);
-  const almostSpent = member('anthropic-2', fiveHour(99));
-  assert.equal(chosen(selectPoolMember([unreported, almostSpent], null, NOW)), 'anthropic-2');
+  const busy = member('anthropic-2', fiveHour(80));
+  assert.equal(chosen(selectPoolMember([unreported, busy], null, NOW)), 'anthropic-2');
 
-  // A snapshot without a 5-hour window has nothing to rank by either.
+  // A week with a reset to go by is a reading like any other, 5-hour window or not.
   const weeklyOnly = member('anthropic-3', reported({ seven_day: { utilization: 1, resets_at: IN_THREE_DAYS } }));
-  assert.equal(chosen(selectPoolMember([weeklyOnly, almostSpent], null, NOW)), 'anthropic-2');
+  assert.equal(chosen(selectPoolMember([unreported, weeklyOnly], null, NOW)), 'anthropic-3');
 
-  // Last is still a place: once every reporting member is spent, the run goes to an unreported one
-  // rather than the pool reading as exhausted.
+  // Ahead of one nearly spent, though: nothing says the unreported member is, and the one at 99% soon will be.
+  assert.equal(chosen(selectPoolMember([member('anthropic-2', fiveHour(99)), unreported], null, NOW)), 'anthropic');
+
+  // Once every reporting member is spent, the run goes to an unreported one rather than the pool
+  // reading as exhausted.
   const spent = member('anthropic-2', fiveHour(100));
-  assert.equal(chosen(selectPoolMember([spent, weeklyOnly, unreported], null, NOW)), 'anthropic');
+  assert.equal(chosen(selectPoolMember([spent, unreported], null, NOW)), 'anthropic');
 });
 
 test('every member spent: EXHAUSTED until the earliest member frees up, each waiting for all its windows', () => {

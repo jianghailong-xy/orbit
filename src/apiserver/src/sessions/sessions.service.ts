@@ -948,8 +948,8 @@ export class SessionsService {
       select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, planUsage: true },
     });
     // The Codex or Claude account this session runs on: the one picked for it — which pins it there —
-    // else, when its workspace leaves the account to Orbit, the runner's account with the most room
-    // right now (automaticAccount), which Orbit may move it off when that account's usage limit stops
+    // else, when its workspace leaves the account to Orbit, the runner's account whose quota resets
+    // soonest (automaticAccount), which Orbit may move it off when that account's usage limit stops
     // it. Stored here; its conversation lives in that account's directory. Null runs on the
     // workspace's.
     const automatic = (engine: AccountEngine) =>

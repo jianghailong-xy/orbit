@@ -4,7 +4,7 @@ import Foundation
 /// this account's account pools, then its configured (BYOK) providers. Grouped, because they differ
 /// in the one way a user cares about — an engine spends the subscription signed into on that
 /// machine, a configured provider spends the API key you pasted, and a pool spends whichever of
-/// its accounts has the most room.
+/// its accounts' quota resets soonest.
 ///
 /// Mirrors web's `lib/sessionProviderChoices.ts`; keep the two in sync.
 public struct ProviderChoice: Equatable, Sendable, Identifiable {

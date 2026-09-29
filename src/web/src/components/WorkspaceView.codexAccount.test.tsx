@@ -287,15 +287,15 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
   const accountNamed = (name: string) =>
     [...document.querySelectorAll('.np-account')].find((row) => row.querySelector('.np-row-name')?.textContent === name);
 
-  it('with no account picked, a new session starts on the one with the most room, and says which', async () => {
+  it('with no account picked, a new session starts on the one Automatic picks, and says which', async () => {
     await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
     // Default's 5-hour window is spent, so Automatic would start it on Work, whose quota the gauge shows.
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 0%');
-    expect(await gaugeAccount()).toEqual({ name: 'Work', note: 'Automatic — the account with the most room right now' });
+    expect(await gaugeAccount()).toEqual({ name: 'Work', note: 'Automatic — the account whose quota resets soonest' });
     composerRowNamesNoAccount();
 
     await click(mounted().querySelector('.np-card'));
-    expect(accountRows()).toEqual(['Automatic most room', 'Default 5h 100%', 'Work Weekly 0%']);
+    expect(accountRows()).toEqual(['Automatic resets soonest', 'Default 5h 100%', 'Work Weekly 0%']);
     expect(pickedRow()).toBe('Automatic');
     await click(mounted().querySelector('.np-card'));
 
@@ -438,7 +438,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await settlesOn('Plan usage 100%');
     const rows = (await providerMenuRows())!;
     // Nothing picked it by hand, so the tick is on Automatic, not on the account it happens to be on.
-    expect(rows.map(rowText)).toEqual(['Codex', 'AutomaticMost room ✓', 'Default5h 100%', 'WorkWeekly 0%']);
+    expect(rows.map(rowText)).toEqual(['Codex', 'AutomaticResets soonest ✓', 'Default5h 100%', 'WorkWeekly 0%']);
     await click(rows.find((row) => row.textContent?.startsWith('Work')));
     expect(vi.mocked(switchSessionAccount)).toHaveBeenCalledWith(SESSION, WORK);
   });
@@ -450,7 +450,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await mount(`/sessions/${SESSION}`, '.composer-box textarea');
     await settlesOn('Plan usage 0%');
     const rows = (await providerMenuRows())!;
-    expect(rows.map(rowText)).toEqual(['Codex', 'AutomaticMost room', 'Default5h 100%', 'WorkWeekly 0% ✓']);
+    expect(rows.map(rowText)).toEqual(['Codex', 'AutomaticResets soonest', 'Default5h 100%', 'WorkWeekly 0% ✓']);
     await click(rows.find((row) => row.textContent?.startsWith('Automatic')));
     expect(vi.mocked(switchSessionAccount)).toHaveBeenCalledWith(SESSION, 'automatic');
   });
@@ -494,7 +494,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await settlesOn('Plan usage 0%');
     const rows = (await providerMenuRows())!;
     // The row reads the window that stops it: Default's weekly one, though its 5-hour one reads 0%.
-    expect(rows.map(rowText)).toEqual(['Claude', 'AutomaticMost room', 'DefaultWeekly 100% ✓', 'Work5h 30%']);
+    expect(rows.map(rowText)).toEqual(['Claude', 'AutomaticResets soonest', 'DefaultWeekly 100% ✓', 'Work5h 30%']);
     await click(rows.find((row) => row.textContent?.startsWith('Work')));
     expect(vi.mocked(switchSessionAccount)).toHaveBeenCalledWith(SESSION, WORK);
   });

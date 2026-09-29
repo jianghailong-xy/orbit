@@ -841,7 +841,7 @@ struct ComposerView: View {
             Button {
                 Task { await console.switchAccount(CodexAccounts.automaticID) }
             } label: {
-                menuItemLabel("Automatic · Most room", selected: console.sessionAutomatic)
+                menuItemLabel("Automatic · Resets soonest", selected: console.sessionAutomatic)
             }
         }
         ForEach(console.accountChoices) { account in

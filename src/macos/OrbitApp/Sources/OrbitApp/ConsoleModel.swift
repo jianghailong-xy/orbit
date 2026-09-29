@@ -301,7 +301,7 @@ final class ConsoleModel {
         if isDraft {
             wanted = draftAccount(engine) ?? (engine == "claude" ? draftAgent?.claudeAccount : draftAgent?.codexAccount)
                 ?? (draftAutomatic(engine)
-                    ? CodexAccounts.roomiest(engineAccounts(engine), usage: runnerPlanUsage?.snapshot(for: engine))
+                    ? CodexAccounts.toStartOn(engineAccounts(engine), usage: runnerPlanUsage?.snapshot(for: engine))
                     : nil)
         } else {
             wanted = engine == "claude"
@@ -322,7 +322,7 @@ final class ConsoleModel {
     /// on a session on Automatic whose runner can move it, that it moves.
     var accountNote: String? {
         guard accountLabel != nil, let engine = accountEngine else { return nil }
-        if isDraft { return draftAutomatic(engine) ? "Automatic — the account with the most room right now" : nil }
+        if isDraft { return draftAutomatic(engine) ? "Automatic — the account whose quota resets soonest" : nil }
         return sessionAutomatic && accountRowsOffered
             ? "Automatic — moves to another account when this one hits its limit" : nil
     }
