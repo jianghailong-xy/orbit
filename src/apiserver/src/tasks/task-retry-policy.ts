@@ -1,8 +1,11 @@
 import { RunStatus } from '@prisma/client';
 
-// One retry policy, shared by the legacy task sweep and Project authorization. Keeping the
-// numbers here prevents the Coordinator from growing a second retry ladder that only happens to
-// have the same values today.
+// One retry policy, for the task sweep and everything that schedules off it
+// (`TasksService.autoRunHoldOff`, `quotaGate` and the `rearmEndedAutoRuns` loop that drives them).
+// Keeping the numbers here prevents a second retry ladder from growing that only happens to have
+// the same values today. (It was once shared with project authorization too —
+// `project-authorization.service.ts` imported `retryBackoffUntil` — and that half went with the
+// coordinator loop in `6418a1e5`, 2026-08-23; the sweep is the only reader left.)
 export const AUTO_RUN_RETRY_BACKOFF_MS = [
   2 * 60_000,
   8 * 60_000,

@@ -11,10 +11,18 @@ import { historicalTouchSql } from './pre-0132-dispatch-touch';
  *
  * Written at the SQL level for the same reason the 40P01 fixtures are: the property under test is
  * which locks are taken and in what order, and that is not visible through a service call. The
- * statements here mirror `ProjectAuthorizationService.authorizeInTransaction`,
- * `ProjectTaskDispatcherService.dispatchInTransaction` and `TasksService.addDependency`;
- * `dependency-revision.pg.spec.ts` asserts each of those sources still contains its half, so the
- * fixture cannot quietly drift into replaying a dispatch this repo no longer performs.
+ * statements here replay the durable boundary 0132 installed — the rank-10 owner pre-lock and the
+ * rank-70 revision read its dispatch performed — beside `TasksService.addDependency`'s half, which
+ * is still live code.
+ *
+ * THE DISPATCH HALF IS HISTORY. `ProjectAuthorizationService.authorizeInTransaction` and
+ * `ProjectTaskDispatcherService.dispatchInTransaction` were both deleted with the coordinator loop
+ * (`6418a1e5`, 2026-08-23), and nothing under `src/apiserver/src` reads `task_dependency_revision`
+ * today. The pair is replayed anyway because what 0132 put in the DATABASE is still installed —
+ * the revision table, its three advance triggers and `session_dispatch_dependency_check` at COMMIT
+ * — and the 40P01 below is measured against that, not against a service this repo still has.
+ * `dependency-revision.pg.spec.ts` pins the migration's own sentence and these statements, so the
+ * historical replay cannot drift away from what 0132 declared.
  *
  * The Session insert goes through every guard still installed on `session`, because a fixture that
  * bypassed them would prove nothing about the one 0132 adds beside them.
@@ -139,9 +147,9 @@ export async function seedRevisionFixture(client: Client, ids: RevisionIds): Pro
 }
 
 /**
- * `ProjectTaskDispatcherService.dispatchInTransaction`, first statement: rank 10 and rank 50 in
- * one go. The owner row is taken at exactly the mode this transaction's Session insert will take
- * it at later (I2), so a dispatch is never caught holding rank 70 while it asks for rank 10.
+ * The dispatch's first statement as 0132 wrote it (HISTORICAL — see the header): rank 10 and rank
+ * 50 in one go. The owner row is taken at exactly the mode that transaction's Session insert took
+ * it at later (I2), so a dispatch was never caught holding rank 70 while it asked for rank 10.
  *
  * `dispatchSteps({ preLockOwner: false })` drops the owner half — which is how the spec shows
  * that without it the pair is a 40P01, rather than asserting it from the shape of the SQL.
@@ -152,7 +160,7 @@ export const LOCK_OWNER_AND_SUBJECT_TASK = `
 export const LOCK_SUBJECT_TASK =
   'SELECT t."id" FROM "task" t WHERE t."id" = $1::uuid FOR SHARE OF t';
 
-/** `ProjectAuthorizationService.authorizeInTransaction`, first statement: rank 40. */
+/** `ProjectAuthorizationService.authorizeInTransaction`, first statement (HISTORICAL): rank 40. */
 export const LOCK_PROJECT =
   'SELECT p."id" FROM "project" p WHERE p."id" = $1::uuid FOR NO KEY UPDATE OF p';
 

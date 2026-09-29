@@ -352,8 +352,12 @@ export class ProjectHandoffService {
       if (taskIds.length) {
         // FOR SHARE for the same reason as the session above: every question asked of these rows is
         // about `project_id`, a non-key column, and a concurrent move takes FOR NO KEY UPDATE. This
-        // is also the mode the Project authorization adapter already takes on `task` at this rank,
-        // so it introduces no new edge — only ordering the acquisition, sorted, in one statement.
+        // is also the mode every live reader of these rows takes on `task` at this rank —
+        // `SessionsService.resume`'s `FOR SHARE OF t NOWAIT`, `taskWorkRefusalFor`'s `FOR SHARE OF
+        // t`, and 0130's `session_admission_lock_order` from a Session write — so it introduces no
+        // new edge, only ordering the acquisition, sorted, in one statement. (The pre-lock that
+        // first declared this rank's order was `ProjectAuthorizationService`'s, deleted with the
+        // coordinator loop in `6418a1e5`, 2026-08-23.)
         await tx.$queryRaw`
           SELECT "id" FROM "task"
           WHERE "id" = ANY(${taskIds}::uuid[])

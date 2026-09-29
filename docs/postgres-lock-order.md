@@ -50,8 +50,8 @@ UPDATE "session" SET last_assistant_text = …          → 持有 session "user
 | 10 | `user` | `FOR UPDATE`（owner graph mutex）· `FOR KEY SHARE`（task/session 的 owner 外键） | 每个多行 Task 写入的第一把锁。见 I1。 |
 | 20 | `task_list` | `FOR UPDATE`（列表策略写）· `FOR KEY SHARE`（`task.list_id` 外键） | 暂停一个列表要先写列表行、再写列表里的每个 Task，所以列表在 Task 之前。 |
 | 30 | `session` | `FOR UPDATE`（runner lease fence / inbox / lifecycle）· `FOR KEY SHARE`（`task.creator_session_id` 外键） | 见 I2、I3。也是 runner events 事务的**全部**锁集合。 |
-| 40 | `project` | `FOR NO KEY UPDATE`（容量 fence、verdict 门、acceptance reopen、reconcile）· `FOR KEY SHARE`（外键、outbox） | 在 `session` 之下：`session_project_capacity_serialize` 是 Session 写入的 BEFORE 触发器，那时 Session 行已经在手。在 `task` 之上：Project 授权适配器本来就是这个顺序（project `FOR NO KEY UPDATE` → task `FOR SHARE`）。 |
-| 50 | `task` | `FOR UPDATE`（删除）· `FOR NO KEY UPDATE`（更新）· `FOR SHARE`（session 派发守卫、授权适配器）· `FOR KEY SHARE`（边、`session.task_id` 外键） | 多行一律 `ORDER BY id`。 |
+| 40 | `project` | `FOR NO KEY UPDATE`（容量 fence、verdict 门、acceptance reopen、reconcile）· `FOR KEY SHARE`（外键、outbox） | 在 `session` 之下：`session_project_capacity_serialize` 是 Session 写入的 BEFORE 触发器，那时 Session 行已经在手。在 `task` 之上：这是全系统那一个顺序（project → task）——`session_admission_lock_order`（0130）在**同一条 Session 写入**里先取 project、再取它的 task `FOR SHARE`，而现役取锁方也都取这个方向（`SessionsService.resume` 先取 project `FOR NO KEY UPDATE`、再用 `FOR SHARE OF t NOWAIT` 确认 scope；`ProjectHandoffService.declare` 先两个 project、再它声明的那些 task）。 |
+| 50 | `task` | `FOR UPDATE`（删除）· `FOR NO KEY UPDATE`（更新）· `FOR SHARE`（准入与权限复核：`SessionsService.resume`、`taskWorkRefusalFor`、`ProjectHandoffService.declare`、`TasksService.assertPlanAuthorityUnchanged`）· `FOR KEY SHARE`（边、`session.task_id` 外键） | 多行一律 `ORDER BY id`。 |
 | 60 | `task_dependency` / `task_comment` / `task_completion_evidence` / `task_completion_evidence_idempotency` / `conversation_turn` / `run_event` / `tool_call` / `attachment` / `project_event` / `project_acceptance_criterion_definition` | 只插入/更新/删除 | 子行：到这一步它们的外键父行都已经在手，不会引入新的等待边。完成证据先锁 `task`(50)，再追加 evidence 与幂等键子行；来源 Session/Attempt 是不取锁、无外键的审计快照。Acceptance definition 的整组替换先锁 `project`(40)，再移动/删除/写入这些子行。0179 的 conclusion 子行原本也在这一秩，0229 随项目验收判定一起删除。0210–0212 的失败 receipt/obligation/outbox/route/handoff 子行原本也在这一秩，0226 随失败路由一起删除，它们在等待图中不复存在。 |
 | 70 | `task_dependency_revision` | `FOR NO KEY UPDATE`（0132：边写之后推进）· `FOR SHARE`（dispatch 决策在它之下读边集） | 最后一把。在边（60）**之下**，因为写入方是"先改边再推进"，而决策也按同一方向取（前置 50 → 边 60 → revision 70），两边不可能反序。它让**空边集**可锁，这正是 0122 去 touch dependent Task 的全部理由。见 `docs/task-dependency-revision.md`。 |
 
@@ -78,9 +78,20 @@ Session 时的那把 `FOR UPDATE`。
 **I4 — dispatch 必须先拿到秩 10 的 owner 行，才能去要秩 70。**（0132 加）边写入方从第一条语句就持有
 `lockOwnerTaskGraph`（10，`FOR UPDATE`），到最后一条语句才推进 `task_dependency_revision`（70）；
 dispatch 天生是反的——它在决策期间就要 revision，而 owner 行要等到几条语句之后 Session INSERT 的
-`session_owner_id_fkey` 才**隐式**取到。所以 `ProjectTaskDispatcherService.dispatchInTransaction` 在
-**第一条**语句里就 `FOR KEY SHARE OF u`：同一行、同一模式、只是提前，和 I2 对 Task 写做的事一模一样。
-实测：`dependency-revision.pg.spec.ts` 把这一句删掉重跑同一对事务，拿到 `40P01`。
+`session_owner_id_fkey` 才**隐式**取到。0132 给这条不变量的解，是让 dispatch 的第一条语句就把 owner 行
+取到手：~~`ProjectTaskDispatcherService.dispatchInTransaction`~~ 在**第一条**语句里就
+`FOR KEY SHARE OF u`——同一行、同一模式、只是提前，和 I2 对 Task 写做的事一模一样。实测：
+`dependency-revision.pg.spec.ts` 把这一句删掉重跑同一对事务，拿到 `40P01`。
+
+**这一条今天在 dispatch 侧没有现役实现**——它的两半都随 coordinator 控制环删除了（`6418a1e5`，
+2026-08-23）：产生上面那个 `40P01` 的 `ProjectTaskDispatcherService`，与它秩 70 的对手
+`ProjectAuthorizationService`。所以今天 `src/apiserver/src` 里没有一处读 `task_dependency_revision`，
+只剩注释、夹具与 migration。留下的是库里那一半：表、三个推进触发器（`task_dependency_revision` 现在
+唯一的取锁方），以及 Session INSERT 的提交边界 `session_dispatch_dependency_check`（见 §4）。回归照旧跑，
+但它跑的是**历史锁回归**——重放的是 0132 装上的那套边界，不是今天谁会发出的语句；
+`dependency-revision.pg.spec.ts` 直接把夹具与 migration 的文本钉住，正是为了让这段历史不漂。今天启动一条
+run 的路径（`TasksService.execute` → `sessions.create` / `sessions.resume`）一条 revision 都不碰：它的
+Session INSERT 只按外键取 `user`(10)、`workspace`/`runner`/`task` 的 `FOR KEY SHARE`。
 
 **I3 — 一个事务对同一行 `session` 只写一次。** 理由见 §0。修复前 `POST /runner/sessions/:id/events`
 一个批次最多写八次同一行（telemetry 一次、runtime id 一次、预览反规范化一次、每个后台 shell / 子 Agent
@@ -121,7 +132,7 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 | `POST /runner/sessions/:id/inbox`（dequeue） | `session`(30) → conversation_turn(60) | 不写 `session` 行 |
 | `QueueService.trySessionClaim` | advisory → `session`(30) → `project`(40，容量 fence) | 顺序合规 |
 | `SessionsService` 生命周期（cancel/end/complete/delete） | `session`(30) → `project`(40，容量 fence) | 每条分支都只写一次 `session` 行（分支互斥） |
-| `ProjectTaskDispatcherService.dispatchInTransaction`（0132 起） | `project`(40，由 `applyDecisionAction` 取) → **`user`(10, `FOR KEY SHARE`) + `task`(50, `FOR SHARE`) 同一条语句** → 前置 `task`(50) / 边(60) → `task_dependency_revision`(70) → Session INSERT / `task` 状态写 | I4。`user` 那一半是 Session INSERT 本来就会取的锁，提前到第一条语句；它顺带也让本 owner 的边写入方与一次派发完全串行。这个适配器自身的 40→10 形状与 0178 删除的 task-acceptance 触发器无关。 |
+| ~~`ProjectTaskDispatcherService.dispatchInTransaction`（0132 起）~~ | 曾经是 `project`(40，由 `applyDecisionAction` 取) → **`user`(10, `FOR KEY SHARE`) + `task`(50, `FOR SHARE`) 同一条语句** → 前置 `task`(50) / 边(60) → `task_dependency_revision`(70) → Session INSERT / `task` 状态写 | **已删除（`6418a1e5`，2026-08-23）**。这就是 I4 的 dispatch 侧：`user` 那一半是 Session INSERT 本来就会取的锁，提前到第一条语句；它顺带也让本 owner 的边写入方与一次派发完全串行。秩 70 的另一半——读取方 `ProjectAuthorizationService`——同一次删除，所以今天应用侧对 `task_dependency_revision` 只有触发器在写、没有读者。今天启动一条 run 的路径见 §1 I4 末段。 |
 
 ## 4. 逐项审查：trigger / constraint trigger / fencing
 
@@ -132,11 +143,11 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 | ~~`task_dependency_dispatch_touch`~~ | — | **已删除（0132）** | 它一直是 dispatch 快照的版本边界，但起作用的是它那条 `UPDATE` 取的**行锁**而不是 `updated_at` 的值——仓库里没有一处读过那个值。0132 把这把锁挪到 `task_dependency_revision`（秩 70）上：同样的互斥、同样能锁住空边集，但不写 `task` 行，于是既不重查 `task_creator_session_id_fkey`、也不重跑 `task` 上的每个行级触发器。见 `docs/task-dependency-revision.md`。 |
 | `task_dependency_revision_insert/update/delete`（语句级 + transition table） | 相关 dependent 的 `task_dependency_revision` 行 `FOR NO KEY UPDATE`，**按 Task UUID 排序、每个 Task 一次** | **新增（0132）** | 秩 70，在边（60）之下。排序由显式 `ORDER BY … FOR NO KEY UPDATE` 保证（`LockRows` 在 `Sort` 之上），所以两个重叠批量不可能反序取同一对行。 |
 | `session_dispatch_dependency_check`（0132，DEFERRABLE INITIALLY DEFERRED，AFTER INSERT ON session） | 不取行锁，只在 COMMIT 重读 | **新增（0132）** | 提交边界那一半，也是滚动升级期间**旧副本**绕不过去的网：旧副本不知道要取 revision，它的错误 dispatch 会在 COMMIT 拿到 `DISPATCH_DEPENDENCY_CHANGED` 并整笔回滚。只对 `dispatch_origin = 'PROJECT_COORDINATOR'` 生效。 |
-| `session_project_capacity_serialize`（0122）→ `session_admission_lock_order`（main 的 0130 换掉了它） | 该 Session 的 Task 所属 `project` 行 `FOR NO KEY UPDATE`，**0130 起是 NOWAIT**：拿不到就抛 `SESSION_PROJECT_BUSY`(55P03)，什么都不写、让调用方重试 | **保留，不再收窄** | 它是 Project/Agent 准入线性化的那把锁：准入按 Session 行计数，进出"活跃认领集合"的变化必须和授权适配器取的 project 行锁排成序。它已经是**秩 30 → 秩 40**，即**顺序内**的一步，不是倒序；而且 0122 的 `UPDATE OF` + 函数开头的提前返回已经把 telemetry 写完全挡在外面（`lock-order.pg.spec.ts` 的 `a telemetry-only Session write takes no Project lock` 实测锁集合只有 `session`）。正反两个到达顺序都有回归（`capacityFenceScenario`）。 |
+| `session_project_capacity_serialize`（0122）→ `session_admission_lock_order`（main 的 0130 换掉了它） | 该 Session 的 Task 所属 `project` 行 `FOR NO KEY UPDATE`，**0130 起是 NOWAIT**：拿不到就抛 `SESSION_PROJECT_BUSY`(55P03)，什么都不写、让调用方重试 | **保留，不再收窄** | 它是 Project/Agent 准入线性化的那把锁：准入按 Session 行计数，进出"活跃认领集合"的变化必须和那些先取 project、再取它的 task 的路径排成序（`ProjectHandoffService.declare`、`SessionsService.resume`、`TasksService.refenceProjectScope` 都取这个方向）。它已经是**秩 30 → 秩 40**，即**顺序内**的一步，不是倒序；而且 0122 的 `UPDATE OF` + 函数开头的提前返回已经把 telemetry 写完全挡在外面（`lock-order.pg.spec.ts` 的 `a telemetry-only Session write takes no Project lock` 实测锁集合只有 `session`）。正反两个到达顺序都有回归（`capacityFenceScenario`）。 |
 | `project_session_event_source` / `_update`（0117/0130） | `task`/`project` 的 `AccessShareLock` + `project_event` 插入 | **已在 0130 收窄，保持** | 见 `docs/session-event-trigger-scope.md`。telemetry 写既不查 `task` 也不查 `project`。 |
 | `project_task_event_source` / `project_task_dependency_event_source`（outbox） | `project` 行 `FOR KEY SHARE`（`project_event` 的外键） | **保留** | `FOR KEY SHARE` 只与 `FOR UPDATE` 冲突，而 project 上唯一的 `FOR UPDATE` 持有者（`ProjectAcceptanceService.lockProject('FOR UPDATE')`、`ProjectsService`）在持有期间不会去等任何 `task`/`session` 行——所以这条 50 → 40 的倒序没有对手，见 `LOCK_ORDER_EXCEPTIONS`。 |
-| `session_dispatch_authority_guard`（0122，BEFORE INSERT ON session） | 被派发 `task` 行 `FOR SHARE` | **保留** | 它是派发权限的插入时门。Session INSERT 因此是 50 → 30 的形状；但一次 Session INSERT 持有的 Session 行同样是别人看不见的新行，与 §2 的 INSERT 论证同构。 |
-| ~~0207 的验证 subject 派发守卫（`session` 上两个、`task` 上一个）~~ | — | **已删除（0224_verification_subject_dispatch_guard_removal）** | 它守的规则本来就由服务门执行：`taskStartOwnedByCompletion` 在插入 Session 的同一个事务里以 `FOR SHARE OF t` 读 Task，`manualRunnableTaskSql` 把同一条子句带进每个 Ready 面。0207 自己的注释也这么说——它是"滚动升级期和裸写入者"的第二份副本。删掉后 Session 准入的锁形状回到 `session_dispatch_authority_guard` 的 50 → 30，与 §2 的 INSERT 论证同构，等待图没有新增边。 |
+| ~~`session_dispatch_authority_guard`（0122，BEFORE INSERT ON session）~~ | — | **已删除（0164_drop_project_event_outbox）** | 它当时是派发权限的插入时门，为 Session INSERT 定下 50 → 30 的锁形状：先取被派发 `task` 行的 `FOR SHARE`，再写秩 30 的 Session 行；而那个 Session 行同样是别人看不见的新行，与 §2 的 INSERT 论证同构。0164 把它和另外四个 `PROJECT_COORDINATOR` 守卫一起删掉（那批 session 那时已是封闭集合），它读 `project_action` 的 `EXISTS` 子句随函数一起消失；那张表本身到 0272_drop_project_action 才被删（`session.project_action_id` 列同去）。锁序里这条边不再存在。 |
+| ~~0207 的验证 subject 派发守卫（`session` 上两个、`task` 上一个）~~ | — | **已删除（0224_verification_subject_dispatch_guard_removal）** | 它守的规则本来就由服务门执行：`taskStartOwnedByCompletion` 在插入 Session 的同一个事务里以 `FOR SHARE OF t` 读 Task，`manualRunnableTaskSql` 把同一条子句带进每个 Ready 面。0207 自己的注释也这么说——它是"滚动升级期和裸写入者"的第二份副本。删掉后 Session 准入的锁形状回到 50 → 30，与 §2 的 INSERT 论证同构，等待图没有新增边——但这句话引的不是现役机制：当年在 Session INSERT 上取那把 `task` `FOR SHARE` 的 `session_dispatch_authority_guard` 已由 0164_drop_project_event_outbox 删除（见上一行）。 |
 | ~~`project_acceptance_task_fact` / `_update`（0127）~~ | — | **已删除（0178）** | 任务是手段，不是项目完成判据；同时移除了配套的两个 `task_acceptance_fact_lock_order` 预锁触发器。 |
 | ~~`project_acceptance_criteria_fact`（0172）~~ | — | **已删除（0229_project_acceptance_judgment_removal）** | 它把 `project.acceptance_criteria` 遗留文本同步成定义行，并维护 digest/format 两列。0229 连同这三列一起删除：逐条表是唯一的表示，`acceptanceCriteriaItems` 直接写它，等待图里不再有这条 project → definition/audit/run 的边。`project_acceptance_definition_normalize` 保留，它只改正在写入的同一行。 |
 | `task_judgment_delivery_file` / `_stop`（0182） | 已持有 `task`(50) 后插入 request，并由 trigger 写 inbox/push 子行(60)；request 终结只更新它自己的 push 子行 | **新增** | 收件项/outbox 与 request 同事务，且 recipient 由 request 的 `owner_id` 快照约束，不另建 `user` FK，因而不会在 50 之后倒取 owner(10)。worker 的 APNs 调用在事务外，靠 delivery 行 lease/CAS fencing。 |
@@ -147,7 +158,7 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
 | `project_action_intent_bind_full_revision`（0196，0222 收窄） | 无锁读取 completion contract，把 `contract_revision` 写入 `NEW` | **保留（不再取任何行锁）** | 0222 删掉了它的 binding/watermark 那一半，连同它对已删除 fact stream 表取的 `FOR UPDATE`。剩下的只有一次无锁 contract 读取与对 `NEW` 的赋值，因此它在等待图中已经没有边。 |
 | N8 legacy import / request backfill（0184） | import 先取 owner `FOR KEY SHARE`(10)，再锁单个 task(50)；backfill 的 batch owner FK 先取得同等锁，再按 UUID 以 `FOR UPDATE SKIP LOCKED` 锁有界 task 集(50)；两者最后写 evidence/request/inbox/delivery/audit 子行(60) | **新增** | import 的 reviewer FK 不会在 task 之后倒取 owner；backfill 在锁任何 task 前先创建审计 batch。schema migration 不扫描 task，批次默认把设备 ledger 终结为 `IN_APP_ONLY`，只有显式 allowlist 产生 due push。 |
 | ~~`project_acceptance_conclusion_validate` / `_reconcile`（0179）、`project_acceptance_done_gate` / `_advance_epoch` / `_epoch_audit`（0150）~~ | — | **已删除（0229_project_acceptance_judgment_removal）** | 项目验收判定整体移除：四张判定表、`project` 上的四个触发器与六个列一起消失。0179 的 conclusion → project 预锁边、0150 的 DONE 闸与 epoch 审计边在等待图中不复存在。`project.status = 'DONE'` 现在是普通列写入，没有任何数据库守卫。 |
-| ~~`project_dispatch_authority_fanout`（0122，AFTER UPDATE OF `coordinator_enabled` ON project）~~ | — | **已删除（0290_retire_dispatch_authority_fanout）** | 它在 `project` 行(40)上点火后一次改写该 project **全部** `task` 行(50)。锁序本身没错（40 → 50），错的是它**没有上界**：2026-09-19 01:36 UTC 生产库对 109,874 行的 project 翻一次开关，这条语句在 `wait_event=(none)` 下跑了 648 s，持着 project 行与 109,874 个 task 行锁，十条写排队在它后面，apiserver 的连接池被拖垮约 11 分钟。它维护的 `task.dispatch_authority` 此时已经**没有读者**——唯一的读者 `session_dispatch_authority_guard` 已在 0272 随 `project_action` 一起删除。0290 只删触发器与函数，不删列。 |
+| ~~`project_dispatch_authority_fanout`（0122，AFTER UPDATE OF `coordinator_enabled` ON project）~~ | — | **已删除（0290_retire_dispatch_authority_fanout）** | 它在 `project` 行(40)上点火后一次改写该 project **全部** `task` 行(50)。锁序本身没错（40 → 50），错的是它**没有上界**：2026-09-19 01:36 UTC 生产库对 109,874 行的 project 翻一次开关，这条语句在 `wait_event=(none)` 下跑了 648 s，持着 project 行与 109,874 个 task 行锁，十条写排队在它后面，apiserver 的连接池被拖垮约 11 分钟。它维护的 `task.dispatch_authority` 此时已经**没有读者**——唯一的读者 `session_dispatch_authority_guard` 已由 0164_drop_project_event_outbox 删除（它读的 `project_action` 表到 0272_drop_project_action 才被删）。0290 只删触发器与函数，不删列。 |
 | `task_list_task_count_insert` / `_delete` / `_relist`（0280，语句级 + transition table；0287 在同一函数里加维护 `task_done_count`） | 被计数的 `task_list` 行 `FOR NO KEY UPDATE`，每条语句每个列表一次 | **新增（0280）**，50 → 20，见 §5 第三条 | `GET /task-lists` 的 `_count` 原本编译成对整张 `task` 的无过滤聚合（占全库执行时间 22.1%），改成按写维护的列；0287 把 `completed` 需要的 DONE 数也放进同一列组，去掉同一个方法里第二条分组读（该读走 `task_status_idx`，代价是**全库 DONE 行数**，2026-09-19 实测 935 块/次、约 370 次/小时）。`_relist` 挂在**全部** UPDATE 上（PG 不允许带列清单的触发器用 transition table），但函数是把两张 transition table 按列表**净增量**相加，`model` / progress / `dispatch_hold` 这类两个增量都为 0 的写被 `HAVING` 丢掉，一行都不写也不锁。0287 之后 `HAVING` 的条件是「总数增量非 0 **或** DONE 增量非 0」：跨越 DONE 的 status 写（全库约 5 次/天，窗口内 160 次调用）现在会写并锁这一行，这是这条边上唯一的行为变化，锁本身仍是同一行的同一个秩。 |
 | `project_task_status_count_insert` / `_delete` / `_move`（0282，语句级 + transition table） | `project_task_status_count` 行 `FOR NO KEY UPDATE`，每条语句每个 (project, status) 一次 | **新增（0282）**，50 → 60，**顺序内**，不是例外 | `GET /projects/:id` 的 `tasksByStatus` 原本是 `task.groupBy`：谓词真有过滤、索引也对，但代价是**项目的行数**而非页面的行数——全表 111,738 行里有 109,872 行属于同一个 project，对它一次读就是 3,679 块（生产实测 76–124 ms）的整条覆盖索引遍历。改成按写维护的计数行。表放在秩 60 而不是 `project` 列上：`project` 是秩 40，从 `task` 写(50)去写它就是 40 ← 50 的倒序（正是 §6 记的那条 residual 的形状），而计数行自己的 FK 父行（`project`）在触发时已经由 `task_project_id_fkey` 以 `FOR KEY SHARE` 持有，所以这是 40 → 50 → 60 的正序一步步。行按 (project_id, status) 排序、一条语句取到；`_move` 挂在**全部** UPDATE 上，函数把两张 transition table 按 (project, status) 净增量相加，`HAVING` 丢掉零增量，于是 `dispatch_hold`、`title` 这类写一行都不锁。 |
 | `Task.updated_at` 作为版本边界 | — | **已取消（0132）** | 现在没有任何 fencing 依赖 `task.updated_at`；它退回成一个普通的实现时钟。 |
@@ -206,7 +217,7 @@ id 各一次），于是第二次之后的每一次都在**持有该 Session `FO
   没有 `session`，有 `task_dependency_revision`），只剩"两个写同一 Session 行"那一条等待边。
 ✔ the Project admission fence still serializes admission (task-first / runner-first)
   —— 后一个方向在 main 的 0130 之后不再是"等待"而是"拒绝"（`SESSION_PROJECT_BUSY`/55P03，什么都没写），
-  所以它由一条直接的两连接用例证明，不再是 barrier 剧本；前一个方向（适配器后到）仍然是等待。
+  所以它由一条直接的两连接用例证明，不再是 barrier 剧本；前一个方向（Session 写先到、project 那一方后到）仍然是等待——那个后到的取锁方是 `capacityFenceScenario` 对 0132 时代授权适配器的**历史重放**（~~`ProjectAuthorizationService`~~，**已删除（`6418a1e5`，2026-08-23）**），今天取这同一对行（project 40 → task 50）的现役路径是 `SessionsService.resume`——它那一把 task 是 NOWAIT，理由与 0130 相同：拒绝，而不是等待。
 ✔ a telemetry-only Session write takes no Project lock
 ✔ the owner graph mutex serializes two reverse edge writes
 ```
