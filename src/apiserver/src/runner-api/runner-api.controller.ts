@@ -4501,7 +4501,12 @@ export class RunnerApiController {
         });
       }
       let taskReclaimed = false;
-      if (failTask) {
+      // A run with a retry armed has not ended — the same session goes on in seconds or at the
+      // quota's reset — so the task is told nothing yet, as the coordinator is not
+      // (attempt-ended-unsettled). A failure comment here read as "re-run this task" beside a run
+      // already resuming. Once the retries are spent the failing turn comes back with none armed.
+      const retryPending = (retryArmAt ?? current.retryAt) != null;
+      if (failTask && !retryPending) {
         // Surface the abandoned task for a human, and open its project's exception item in this same
         // transaction (contract §4.3 B).
         taskReclaimed = await reclaimStalledTask(tx, current.taskId!, TaskStatus.FAILED, {
@@ -6308,9 +6313,11 @@ export class RunnerApiController {
    *  - an exhausted quota → arm for the moment it resets (below), leaving the attempt count
    *    alone: the sweeper counts against it while the snapshot keeps reporting the quota spent.
    *  - a transient provider error → arm for one backoff step out, or hand back once the steps
-   *    are spent. Task-bound sessions are excluded: such a turn also fails their task, which
-   *    has its own retry budget (tasks.service AUTO_RUN_RETRY_BACKOFF_MS), and two schedulers
-   *    reviving one task is how you get two runs of it.
+   *    are spent. A task's run is armed like any other. Resuming this session keeps its checkout
+   *    and its conversation, where the task's own retry starts a new session from nothing — and
+   *    left to that, a run started by hand was not retried at all: its owner had to send
+   *    "continue" themselves. The task's retry waits while this one is armed (tasks.service
+   *    RUN_RETRY_ARMED), and the attempt is not over until it is spent (attempt-ended-unsettled).
    *  - anything else, including an error a re-send would reproduce → the run of failures is
    *    over, so clear the count. This is the ONLY thing that clears it: doing it when a retry
    *    is dispatched instead would restart the backoff at every attempt, and a provider that
@@ -6348,10 +6355,7 @@ export class RunnerApiController {
       },
     });
     if (!session) return {};
-    if (!quotaSpent) {
-      if (session.taskId) return {};
-      return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
-    }
+    if (!quotaSpent) return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
     // A built-in Claude session on Automatic — nobody picked its account by hand, and its workspace
     // leaves the account to Orbit — moves to another of the runner's accounts with room and is re-sent
     // at once: the events path queues the reload that re-spawns its engine there, and the runner
