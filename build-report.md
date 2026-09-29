@@ -1,7 +1,7 @@
 # GitHub Pages build
 
 - source: site/
-- source_sha: 2ba3cce9be6491a44d0d4d168a35a48c93391ec3
+- source_sha: 97685d4532164e47bcc365b41fa4826496e87ac2
 - output: dist/pages
 - deployment_branch: gh-pages
 - preservation: peaceiris/actions-gh-pages keep_files=true (appcast.xml)
