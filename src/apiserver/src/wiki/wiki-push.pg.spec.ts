@@ -22,6 +22,11 @@
  *   6. A task run still gets its start card: the brief `tasks/task-start-card.ts` rebuilds and
  *      compares byte for byte is `turn.content`, which delivery never writes to.
  *
+ * And one the owner asked for on 2026-09-29: a project's coordinator session is handed nothing —
+ * neither its first engine nor the one a recycle replaces it with — while a task run of the same
+ * project, in the same workspace, is handed its notes as before, and the coordinator can still pull
+ * them with `wiki_search` and `wiki_get`.
+ *
  * FIXTURES COME THROUGH THE DOORS where a phase-1 door can produce them: the account, the runner,
  * the space and its workspace binding, the owner's own write, and an agent's proposal the owner
  * accepted in Review. The rest are columns only a writer this phase does not have yet fills in — a
@@ -352,14 +357,14 @@ test('the wiki context a session is handed when it starts', {
     return id;
   }
 
-  /** A queued message turn, as the composer leaves it. */
+  /** A queued message turn, as the composer leaves it: after every turn the session already has. */
   async function messageTurn(sessionId: string, content: string, clientTurnId?: string): Promise<string> {
     const id = randomUUID();
     await prisma.conversationTurn.create({
       data: {
         id,
         sessionId,
-        seq: 1,
+        seq: (await prisma.conversationTurn.count({ where: { sessionId } })) + 1,
         clientTurnId: clientTurnId ?? `turn-${randomUUID()}`,
         kind: 'message',
         content,
@@ -373,6 +378,7 @@ test('the wiki context a session is handed when it starts', {
     content: string;
     turnId: string;
     leaseOwner: string;
+    leaseGeneration: string;
   }
 
   /**
@@ -402,7 +408,7 @@ test('the wiki context a session is handed when it starts', {
     assert.equal(answer.status, 200, `the inbox answered ${answer.status}: ${answer.text}`);
     const turnId = String(answer.json.turnId ?? '');
     assert.ok(turnId, `the inbox handed out no turn: ${answer.text}`);
-    return { content: String(answer.json.content ?? ''), turnId, leaseOwner };
+    return { content: String(answer.json.content ?? ''), turnId, leaseOwner, leaseGeneration };
   }
 
   /** The block as delivery wrote it, or null when this turn was handed none. */
@@ -689,6 +695,88 @@ test('the wiki context a session is handed when it starts', {
     const delivered = await deliver(ordinary);
     assert.ok(blockOf(delivered.content), 'the control session was handed nothing, so nothing was proven');
     assert.equal((await exposureRows(ordinary)).length, 1);
+  });
+
+  // ── 4b. a project's coordinator (the owner, 2026-09-29) ─────────────────────────────────────────
+
+  await t.test('a project\'s coordinator is handed nothing, and its task runs still are', async () => {
+    const { spaceId, workspaceId } = await boundSpace();
+    const noteId = await entry(spaceId, {
+      title: 'A note the coordinator looks up for itself',
+      summary: 'Pushed to the runs that do the work, pulled by the one that hands it out.',
+    });
+    const coordinator = await session({ workspaceId, title: 'coordinate the project' });
+    const project = await prisma.project.create({
+      data: {
+        id: randomUUID(),
+        ownerId,
+        title: 'a project coordinated from this workspace',
+        coordinatorSessionId: coordinator,
+        coordinatorWorkspaceId: workspaceId,
+      },
+      select: { id: true },
+    });
+
+    // Its first engine, then the one that takes the next message after the first was evicted: each is
+    // a first delivery under its own lease generation, and the push is said once per generation.
+    await messageTurn(coordinator, 'what is next?');
+    const first = await deliver(coordinator);
+    await prisma.conversationTurn.update({
+      where: { id: first.turnId },
+      data: { status: 'ANSWERED', answeredAt: new Date() },
+    });
+    const released = await send('POST', `/runner/sessions/${uuidToBase62(coordinator)}/release-leases`, {
+      leaseOwner: first.leaseOwner,
+      leaseGeneration: first.leaseGeneration,
+    });
+    assert.equal(released.status, 200, `release-leases answered ${released.status}: ${released.text}`);
+    await messageTurn(coordinator, 'and now?');
+    const recycled = await deliver(coordinator);
+    assert.notEqual(recycled.turnId, first.turnId, 'the recycled engine was handed the answered turn again');
+
+    for (const [which, delivered] of [['its first engine', first], ['the engine after a recycle', recycled]] as const) {
+      // Told its standing role, from the same relation the wiki push is withheld on: so this is a
+      // coordinator's delivery, and not a session delivery failed to recognise.
+      assert.ok(
+        delivered.content.includes('<orbit_project_coordinator_context>'),
+        `${which} was not told it coordinates ${project.id}:\n${delivered.content}`,
+      );
+      assert.equal(blockOf(delivered.content), null, `${which} was handed the wiki context:\n${delivered.content}`);
+    }
+    assert.equal((await exposureRows(coordinator)).length, 0, 'the coordinator was recorded as having been sent notes');
+
+    // The push alone: the wiki tools answer the coordinator as they always have.
+    const asCoordinator = { 'x-orbit-session-id': uuidToBase62(coordinator) };
+    const found = await send(
+      'GET',
+      `/runner/wiki/search?q=${encodeURIComponent('looks up for itself')}`,
+      undefined,
+      'runner',
+      asCoordinator,
+    );
+    assert.equal(found.status, 200, `the coordinator's wiki_search was refused: ${found.text}`);
+    assert.ok(found.text.includes(uuidToBase62(noteId)), `the coordinator's search missed the note: ${found.text}`);
+    const got = await send('GET', `/runner/wiki/entries/${uuidToBase62(noteId)}`, undefined, 'runner', asCoordinator);
+    assert.equal(got.status, 200, `the coordinator's wiki_get was refused: ${got.text}`);
+
+    // The control: a task of the same project, run in the same workspace, is handed the note.
+    const task = await prisma.task.create({
+      data: {
+        id: randomUUID(),
+        title: 'a task the coordinator handed out',
+        ownerId,
+        projectId: project.id,
+        creatorType: 'USER',
+        creatorId: ownerId,
+        completionCriterion: 'EXECUTABLE',
+      },
+      select: { id: true },
+    });
+    const run = await session({ workspaceId, taskId: task.id });
+    await messageTurn(run, 'begin');
+    const block = blockOf((await deliver(run)).content);
+    assert.ok(block?.text.includes(uuidToBase62(noteId)), `the project's task run was not handed its note:\n${block?.text}`);
+    assert.deepEqual((await exposureRows(run)).map((row) => row.entryId), [noteId]);
   });
 
   // ── 5. the ceiling ─────────────────────────────────────────────────────────────────────────────
