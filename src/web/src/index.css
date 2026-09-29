@@ -981,13 +981,24 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   height: 44px;
   padding: 0 8px;
+  border: 0;
   border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
-.tp-user-trigger:hover {
+.tp-user-trigger:hover,
+.tp-user-trigger.open {
   background: var(--bg-hover);
+}
+.tp-user-trigger:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
 }
 .tp-user-name {
   flex: 1;
@@ -998,6 +1009,69 @@ body {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-1);
+}
+.ant-dropdown-menu.tp-account-menu {
+  width: 280px;
+  max-width: calc(100vw - 16px);
+}
+.tp-account-menu .ant-dropdown-menu-item,
+.tp-account-menu .ant-dropdown-menu-submenu-title {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+}
+.tp-account-menu .ant-dropdown-menu-title-content {
+  flex: 1;
+  min-width: 0;
+}
+.tp-account-menu .ant-dropdown-menu-item.tp-account-profile {
+  min-height: 64px;
+}
+.tp-account-profile-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.tp-account-identity {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.35;
+}
+.tp-account-name,
+.tp-account-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tp-account-name {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.tp-account-detail,
+.tp-account-profile-chevron,
+.tp-account-current-theme {
+  color: var(--text-2);
+  font-size: 12px;
+}
+.tp-account-profile-chevron {
+  flex: none;
+}
+.tp-account-appearance-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+}
+.tp-account-current-theme {
+  margin-left: auto;
+}
+.tp-account-menu .ant-dropdown-menu-item-danger,
+.tp-account-menu .ant-dropdown-menu-item-danger .ant-dropdown-menu-item-icon {
+  color: var(--error);
 }
 
 /* ---- Collapsible sidebar ---- */
