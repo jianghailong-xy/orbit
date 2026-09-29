@@ -1192,6 +1192,127 @@
     ]
   },
 
+  "plan": {
+    "phase": 2,
+    "doc": "docs/wiki-contract.md section 21; criterion 11",
+    "migration": "src/apiserver/prisma/migrations/0325_wiki_plan/migration.sql",
+    "tables": ["wiki_plan", "wiki_plan_doc", "wiki_plan_section", "wiki_plan_proposal"],
+    "means": "Before a space's documents are written, the local model drafts a plan: categories, the documents in each, every document's reader, scope, length and outline, and for every section the conditions its material is taken by. The server's gate checks each draft; the owner confirms one; documents are written only from the version the owner confirmed (guard). A plan is a record of what the owner agreed to, kept in versions, and not knowledge: it is never pushed, never a source, and never returned by wiki_search or wiki_get.",
+    "statuses": {
+      "draft": "stored after the gate passed it, waiting for the owner; a space has at most one, and a newer draft supersedes it",
+      "confirmed": "the version the owner confirmed and the documents are written from; a space has at most one, and confirming a draft supersedes it",
+      "superseded": "a version a newer draft or a confirmation replaced; kept, unchanged, as history"
+    },
+    "origins": {
+      "maintenance": "a whole draft a Wiki maintenance run's drafting job submitted through the runner door",
+      "owner": "the owner's edit of one document or section, or a proposal the owner accepted, through the user door"
+    },
+    "sectionKinds": {
+      "overview": "what the document covers, written last from what its other sections say",
+      "concepts": "a mechanism: what the things are; its material is the design documents, the code and the contracts",
+      "flow": "a mechanism: how it runs, step by step; its material is the design documents, the code and the contracts",
+      "interface": "a mechanism: the routes, tools, commands and their answers; its material is the contracts and the code",
+      "data": "a mechanism: the tables, fields and settings; its material is the migrations, the schema and the code",
+      "ops": "running it: deploying, operating, recovering; its material is the design documents and the scripts",
+      "pitfalls": "the known pitfalls; their material is what was said in sessions, found by the section's session condition",
+      "decisions": "the decisions and their reasons; their material is the owner's words and the records of decisions, found by the section's session condition",
+      "conventions": "the conventions to follow; their material is what was said in sessions, found by the section's session condition",
+      "other": "anything else"
+    },
+    "forAgents": "A category with forAgents true holds the agents' development conventions (how to test, commit, land and run commands here): criterion 11 lists them as a category of their own, apart from the product and its mechanisms.",
+    "rules": {
+      "docsMin": 20,
+      "docsMax": 35,
+      "docsCeiling": 200,
+      "categoriesMax": 30,
+      "sectionsMax": 20,
+      "titleMaxChars": 120,
+      "questionMaxChars": 1000,
+      "textMaxChars": 1000,
+      "coversMaxChars": 2000,
+      "listMaxItems": 40,
+      "lengthMaxChars": 100000,
+      "newFieldsMax": 20,
+      "reasonMaxChars": 2000,
+      "factsMax": 50,
+      "errorsMax": 200,
+      "repoMissingMax": 2000,
+      "extraMaxChars": 4000
+    },
+    "rulesNote": "docsMin and docsMax are the document count a draft is held to when its request names no target; a request may name its own (target: { min, max }, orbit wiki plan draft --target), up to docsCeiling. Lengths are counted in characters (Unicode code points). errorsMax is the most errors one refusal lists; its message counts them all.",
+    "schema": {
+      "draft": ["categories", "docs", "newFields"],
+      "category": ["key", "title", "question", "forAgents", "extra"],
+      "doc": ["category", "slug", "title", "question", "audience", "scopeIn", "scopeOut", "length", "protected", "sections", "extra"],
+      "scopeOut": ["text", "docs"],
+      "length": ["min", "max"],
+      "section": ["key", "title", "kind", "covers", "length", "sources", "extra"],
+      "sources": ["docs", "code", "contracts", "sessions"],
+      "docSource": ["path", "section"],
+      "codeSource": ["path", "symbols"],
+      "contractSource": ["path"],
+      "sessions": ["projects", "since", "until", "keywords", "anchorPaths", "entryKinds", "topics", "evidence"],
+      "newField": ["at", "name", "why"]
+    },
+    "schemaNote": "Every field a draft may carry, at each level, and no other. A draft's categories and docs are lists: a document names its category by key (a slug), and categories and documents are listed in the directory's order. A category needs key and title; a document every field but protected and extra, with audience, scopeIn and sections not empty; a section every field but key and extra. length is { min, max } for a document and one number for a section. A section's sources lists design-document sections ({ path, section }), code files with their symbols ({ path, symbols }) and contracts ({ path }); its session condition (sessions, or null) names projects (each by id or exact title), a time window (since and until, YYYY-MM-DD or null), keywords, anchor paths, entry kinds, topics (slugs of the space) and, in words, the original words to look for (evidence). A section's key is a slug, stable within its document from version to version: a section sent without one keeps the key its title had in the version revised, or is given the next s<n>.",
+    "newFields": {
+      "levels": ["category", "doc", "section"],
+      "rule": "A field the schema does not have is refused at the gate, unless the draft declares it in newFields ({ at, name, why }) as a field that needs adding, at category, doc or section; then its values go in that object's extra, by name, apart from the schema's own fields, and the version's gate report lists it (needsNewFields) for the owner to read. A declared name that is already a field of the schema is refused, and so is a name in extra that newFields does not declare. An owner's edit and a proposal may use the fields the version they change declared, and declare none."
+    },
+    "versions": "Every draft, edit and accepted proposal is a new version, numbered after every version the space has had and written in one transaction under the space row's lock (FOR NO KEY UPDATE); a version's documents and sections are only ever inserted, and the one row of a version ever updated is its own wiki_plan row, when it is confirmed or superseded. So a confirmed version never changes: what the owner confirmed is, byte for byte, what the documents are written from. Each version names the version it revises (baseVersion) and, for an accepted proposal, the proposal. A draft or an edit names the version it is built on (baseVersion; null for a space's first draft), which must be the space's newest version that is not superseded — its draft when it has one, else its confirmed version; one built on another is refused WIKI_PLAN_STALE and nothing is written. An acceptance is built on the newest version as it finds it, and is refused the same way when the plan moves while it is written.",
+    "gate": {
+      "checks": ["schema", "docCount", "protected", "references"],
+      "schema": "Every field is one the schema has at its level (schema), or one declared as needing adding (newFields), of the right type and within rules; a section's kind is one of sectionKinds; category keys, document slugs and a document's section keys are unique.",
+      "docCount": "The plan has target.min to target.max documents: rules.docsMin to rules.docsMax unless the request names its own target.",
+      "protected": "A document the revised version protects is in the new version exactly as it was: the same slug, category and fields, and the same sections in the same order (their keys aside). Only the owner protects a document, so a draft or a proposal that protects one is refused. The owner's own edit is not checked: protecting is theirs.",
+      "references": "Every project a session condition names is one of the owner's (by id, or by an exact title only one project has), every topic a topic of the space, every entry kind one of the entry kinds; every document's category is one of the plan's categories, and every document a scope leaves something to (scopeOut[].docs) one of the plan's documents. A proposal's facts are an entry of the space or a session of the owner.",
+      "repo": "Files, docs sections, symbols and contracts exist only in a checkout, which the server has none of: the drafting job checks them on the runner at a commit and reports repoCheck { sha, checked, missing: [{ kind, ref, at }] } with the draft (kind one of file, docSection, symbol, contract). The server keeps the report and its sha beside the version (repo_sha, repo_check) and does not judge it; a version the owner made carries none.",
+      "errors": "A request the gate refuses is WIKI_PLAN_GATE with errors[]: everything it found, each { check, path, message }, the path from the request's root (a draft's plan.docs[3].sections[2].sources.sessions.projects[0], an edit's doc. or section., a proposal's change.doc.) — and for what an edit or a proposal would make of the whole plan, from that plan's (plan.docs[20].protected) — the first rules.errorsMax listed. Nothing is stored, so the drafting job hands the list to the model and asks again.",
+      "report": "A version the gate let through keeps its report: { checkedAt, checks (each passed, or skipped for protected on an owner's edit), docs, target, needsNewFields: [{ at, name, why, values }] }."
+    },
+    "proposals": {
+      "means": "Knowledge a maintenance run found that fits no section of the confirmed plan is a proposed change to it: why (reason), the document as it should read — one of the plan's by its slug, or a new one, with the category it opens when it needs one the plan does not have (change: { doc, category }) — and the facts that led to it (facts: [{ kind, id }]). It is gated against the confirmed version, protection included, and stored pending. It changes no version until the owner accepts it.",
+      "statuses": {
+        "pending": "waiting for the owner",
+        "accepted": "the owner accepted it: its document was applied to the plan's newest version and made a new draft (resultVersion) for the owner to confirm",
+        "rejected": "the owner rejected it; the plan is as it was"
+      },
+      "actions": ["accept", "reject"],
+      "factKinds": ["entry", "session"],
+      "accept": "Applies the document to the plan's newest version — in place of the document of its slug, or after the last document of its category — and gates the result again, protection included, since the plan may have moved since it was proposed: a result the gate refuses is WIKI_PLAN_GATE and the proposal stays pending. Otherwise the new draft and the proposal's settling are one transaction.",
+      "reject": "Settles the proposal, with the owner's note if there is one; no version changes."
+    },
+    "guard": "requireConfirmedPlan(db, { ownerId, spaceId }) in src/apiserver/src/wiki/wiki-plan.ts: the space's confirmed version ({ id, version, confirmedAt }), or WIKI_PLAN_UNCONFIRMED. Every writer of a space's documents calls it before it writes one, so no document is written from a plan the owner did not confirm; a maintenance run's proposal needs it too.",
+    "who": {
+      "draft": "A Wiki maintenance run of the space (isWikiMaintenanceSession, maintenance.session), through the runner door: its drafting job's draft, its read of the plan, and its proposals. Any other session is refused WIKI_NOT_MAINTENANCE_SESSION, a headless call 400, and another owner's space is a plain 404.",
+      "owner": "The owner, through the user door and only there: every read of the plan, an edit, a confirmation, an acceptance or a rejection. A request with a session header is refused WIKI_OWNER_CHANNEL_ONLY before anything is read, whatever the session's role; the runner door has no route that confirms or decides anything. Another owner's space, version or proposal is a plain 404."
+    },
+    "routes": {
+      "state": "GET /api/wiki/spaces/:id/plan",
+      "versions": "GET /api/wiki/spaces/:id/plan/versions",
+      "version": "GET /api/wiki/spaces/:id/plan/versions/:version",
+      "edit": "POST /api/wiki/spaces/:id/plan/edits",
+      "confirm": "POST /api/wiki/spaces/:id/plan/versions/:version/confirm",
+      "decide": "POST /api/wiki/plan-proposals/:id/decide",
+      "runnerState": "GET /api/runner/wiki/spaces/:id/plan",
+      "draft": "POST /api/runner/wiki/spaces/:id/plan/drafts",
+      "propose": "POST /api/runner/wiki/spaces/:id/plan/proposals"
+    },
+    "reads": {
+      "state": "{ spaceId, confirmed, draft, proposals }: the version in force and the draft, each whole or null, and the pending proposals, oldest first.",
+      "versions": "Every version, newest first: { id, version, status, origin, baseVersion, proposalId, docCount, createdAt, confirmedAt, supersededAt }.",
+      "version": "One version whole: its status, origin, baseVersion, categories, newFields, target, gate report, repoCheck, model, who made and confirmed it and when, and its documents in order, each with its sections in order; a session condition's projects are { id, title } with the title as it stands now (null for a project since deleted)."
+    },
+    "requests": {
+      "draft": "{ baseVersion, target?, plan: { categories, docs, newFields? }, repoCheck, model? }",
+      "edit": "{ baseVersion, docSlug, doc } for a whole document (a new slug renames it), or { baseVersion, docSlug, sectionKey, section } for one of its sections",
+      "propose": "{ reason, change: { doc, category? }, facts: [{ kind, id }] }",
+      "decide": "{ action: accept | reject, note? }"
+    },
+    "view": "Not knowledge: no source kind names a plan, so citing one is WIKI_SOURCE_UNRESOLVED; the push and the agent's search and get read entries alone.",
+    "tool": "none: no MCP tool reads, confirms or decides anything of the plan (hard constraint 2). The drafting job's verbs are the CLI's."
+  },
+
   "refusals": [
     { "code": "WIKI_DISABLED", "httpStatus": 404, "scope": "request", "when": "The wiki is off for this account (ORBIT_WIKI rollout)." },
     { "code": "WIKI_SPACE_UNBOUND", "httpStatus": 409, "scope": "request", "when": "The calling session's workspace is bound to no space and could not be bound on first use. The message says in one sentence how the owner binds it." },
@@ -1203,13 +1324,16 @@
     { "code": "WIKI_QUOTA", "httpStatus": 429, "scope": "op", "when": "The op is past limits.opsPerChangeset in its request; or it would wait for the owner and pass limits.opsPerTurn for the request or limits.opsPerSession for the calling session (limitNotes.quota); or the review mode would apply it and the changeset would pass the circuit breaker (reviewModes.floors)." },
     { "code": "WIKI_REVIEW_QUEUE_FULL", "httpStatus": 429, "scope": "op", "when": "The op would wait for review and the space already has limits.pendingOpsPerSpace pending ops that wait on the owner's decision (spot checks and ops waiting for their verification not counted)." },
     { "code": "WIKI_PROBE_REFUSED", "httpStatus": 422, "scope": "op", "when": "The title or text reads as a tool probe (test, probe, TEST_WRITE_CHECK). The message says the tool works and not to retry." },
-    { "code": "WIKI_OWNER_CHANNEL_ONLY", "httpStatus": 403, "scope": "request", "when": "A decide, a revert, an entry's Reject or Confirm, a reopening of verifications, a change of the review mode or of automaticSpotChecks arrived with a session header, whatever the session's role: each is the owner's, on the user door, with no acting session." },
+    { "code": "WIKI_OWNER_CHANNEL_ONLY", "httpStatus": 403, "scope": "request", "when": "A decide, a revert, an entry's Reject or Confirm, a reopening of verifications, a change of the review mode or of automaticSpotChecks, or any request of the plan's on the user door (plan.who.owner) arrived with a session header, whatever the session's role: each is the owner's, on the user door, with no acting session." },
     { "code": "WIKI_NOT_MAINTENANCE_SESSION", "httpStatus": 403, "scope": "request", "phase": 2, "when": "A maintenance-only route was called by a session that is not a maintenance run of that space." },
     { "code": "WIKI_SESSION_EXCLUDED", "httpStatus": 403, "scope": "request", "addedByThisContract": true, "when": "The calling session verifies, forems or judges work (task.verifiesTaskId, task.isForeman, a judgment session). Knowledge is not evidence, so such a session neither reads nor proposes." },
     { "code": "WIKI_IDEMPOTENCY_KEY_REUSED", "httpStatus": 409, "scope": "request", "addedByThisContract": true, "when": "An idempotency key the owner already used arrived with a different request (its normalized digest differs). The same request under the same key is a replay and gets the recorded answer." },
     { "code": "WIKI_CURSOR_BEHIND", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A succeeded run asked to advance the cursor to a token behind the space's watermark: another run already went further, and the cursor only moves forward (maintenance.cursor.advance). The answer carries the cursor as it stands." },
     { "code": "WIKI_CURSOR_INVALID", "httpStatus": 400, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A cursor token that no dossier page of this space handed out: one that does not decode, one of another space, or a position past the furthest page the space's dossier route has issued." },
-    { "code": "WIKI_ARTICLE_STALE", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "An article write named an entry-set fingerprint that is not its topic's current one: the topic's entries changed while the articles were being written (articles.regeneration). Nothing is written; the next run writes them from the entries as they stand." }
+    { "code": "WIKI_ARTICLE_STALE", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "An article write named an entry-set fingerprint that is not its topic's current one: the topic's entries changed while the articles were being written (articles.regeneration). Nothing is written; the next run writes them from the entries as they stand." },
+    { "code": "WIKI_PLAN_GATE", "httpStatus": 422, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A plan draft, an owner's edit of the plan, a proposed change to it or the acceptance of one did not pass the plan's gate (plan.gate): errors[] lists everything it found, each with its check and where it is. Nothing is stored." },
+    { "code": "WIKI_PLAN_STALE", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A plan request was built on a version that is no longer the space's newest (plan.versions), confirmed a version that is no longer a draft, or answered a proposal already decided. Nothing is written; read the plan again." },
+    { "code": "WIKI_PLAN_UNCONFIRMED", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A space's documents were to be written, or a change proposed to its plan, and the space has no plan its owner confirmed (plan.guard)." }
   ],
   "refusalRules": {
     "order": ["changesetSize", "schema", "ownerOnlyKind", "sources", "redaction", "revision", "probe", "taint", "effect", "quota", "similar"],
@@ -1279,7 +1403,13 @@
           "GET /api/wiki/spaces/:id/articles/:slug",
           "GET /api/wiki/spaces/:id/articles/:slug/:part",
           "GET /api/wiki/spaces/:id/article-index",
-          "GET /api/wiki/spaces/:id/health"
+          "GET /api/wiki/spaces/:id/health",
+          "GET /api/wiki/spaces/:id/plan",
+          "GET /api/wiki/spaces/:id/plan/versions",
+          "GET /api/wiki/spaces/:id/plan/versions/:version",
+          "POST /api/wiki/spaces/:id/plan/edits",
+          "POST /api/wiki/spaces/:id/plan/versions/:version/confirm",
+          "POST /api/wiki/plan-proposals/:id/decide"
         ]
       },
       "runner": {
@@ -1302,7 +1432,10 @@
           "GET /api/runner/wiki/spaces/:id/maintenance/run",
           "POST /api/runner/wiki/spaces/:id/maintenance/changesets",
           "POST /api/runner/wiki/spaces/:id/maintenance/finish",
-          "GET /api/runner/wiki/spaces/:id/maintenance/check"
+          "GET /api/runner/wiki/spaces/:id/maintenance/check",
+          "GET /api/runner/wiki/spaces/:id/plan",
+          "POST /api/runner/wiki/spaces/:id/plan/drafts",
+          "POST /api/runner/wiki/spaces/:id/plan/proposals"
         ],
         "maintenanceNote": "phase 2; any other session is refused WIKI_NOT_MAINTENANCE_SESSION. The maintenance job's check (maintenance.job.check) also answers the space's owner's runner with no session, since a task's acceptance command runs with none.",
         "verificationRoutes": [
@@ -1351,7 +1484,7 @@
     "event": "wiki.changed",
     "scope": "the space's owner, on the user-scoped control-plane stream (GET /api/events). The envelope names no session.",
     "payload": ["id"],
-    "id": "the space whose entries, review queue, bindings, settings or articles changed",
+    "id": "the space whose entries, review queue, bindings, settings, articles or plan changed",
     "redaction": "The space's id and nothing else: no entry, title, status, op or count. A client re-reads what it shows, and that read decides what it may see.",
     "publishedWhen": [
       "a changeset recorded something, after its transaction commits",
@@ -1360,7 +1493,8 @@
       "the owner reverted a changeset or rejected an entry, after the transaction commits",
       "a verdict was recorded, after its transaction commits",
       "pending ops expired or were withdrawn",
-      "a topic's articles were written, or a space's topics seeded, after the transaction commits"
+      "a topic's articles were written, or a space's topics seeded, after the transaction commits",
+      "a version of a space's plan was stored or confirmed, or a change to it proposed or decided, after the transaction commits"
     ],
     "notPublishedWhen": ["an idempotent replay", "a dryRun", "a request that recorded nothing"],
     "correctness": "Nothing depends on it. Dropping every announcement changes only how long a client waits: clients re-read on focus and on reconnect.",

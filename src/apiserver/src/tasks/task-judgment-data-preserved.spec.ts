@@ -1397,7 +1397,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // object and none of the six preserved triggers/functions, creates no function, trigger, enum or
       // type — so it is not another writer of the DONE fence — and carries no `ALTER TYPE` and no `DROP
       // TYPE`. No INSERT, UPDATE or DELETE: both new tables start empty and nothing is backfilled.
-      '0324_pool_login_gateway'],
+      '0324_pool_login_gateway',
+      // The wiki's plan: four new tables — `wiki_plan` (a version of a space's plan), `wiki_plan_doc`,
+      // `wiki_plan_section` and `wiki_plan_proposal` — the first and the last reaching `wiki_space`
+      // through (space_id, owner_id), a document its version and a section its document the same way,
+      // each with its own CHECKs, unique indexes (two of them partial) and one plain index. Read against
+      // every claim above: no `task`, `session`, `project` or `project_acceptance_*` object is named, so
+      // the 0177 pair and every stored task and criterion row are out of its reach. No function, trigger
+      // or type is created, replaced or dropped — no `CREATE OR REPLACE FUNCTION`, so it is not another
+      // writer of the DONE fence and names none of the six preserved objects. No INSERT, UPDATE or
+      // DELETE: every new table starts empty.
+      '0325_wiki_plan'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

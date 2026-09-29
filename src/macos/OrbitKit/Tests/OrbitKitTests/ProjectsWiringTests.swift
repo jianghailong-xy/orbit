@@ -46,7 +46,8 @@ final class ProjectsWiringTests: XCTestCase {
         let projects = code(try slice(shell, from: "case .projects:", to: "case .runners:"))
         XCTAssertTrue(projects.contains("NavigationStack(path: $model.nav.path)"))
         XCTAssertTrue(projects.contains("ProjectsListView(rowNavigation: .push)"))
-        XCTAssertTrue(projects.contains("case .projectDetail(let projectID): ProjectDetailView(projectID: projectID)"))
+        XCTAssertTrue(projects.contains("case .projectDetail(let projectID, _):"))
+        XCTAssertTrue(projects.contains("ProjectDetailView(projectID: projectID)"))
         XCTAssertFalse(projects.contains("TaskDetailPage"),
                        "a project's task opens in Tasks, whose stack its detail store follows")
     }
@@ -75,7 +76,30 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertFalse(rail.contains("recentsRows"), "Recents is not in the drawer")
         XCTAssertFalse(rail.contains("taskRows"), "the task lists are not in the drawer")
         let row = code(try slice(shell, from: "private func projectRow(", to: ".drawerRow()"))
-        XCTAssertTrue(row.contains("model.openProject(project.id)"))
+        XCTAssertTrue(row.contains("model.openProject(project.id, origin: .drawer)"))
+    }
+
+    /// A project's page the drawer opened gives the left edge back to the drawer, as a Recents console
+    /// does (the owner's report, 2026-09-29: the swipe went back to the Projects list instead). The
+    /// edge strip is up while that page is on top, and the page turns the system back-swipe off; the
+    /// two read the same fact, so they cannot disagree about who has the edge.
+    func testADrawerOpenedProjectPageHandsTheLeftEdgeToTheDrawer() throws {
+        let shell = code(try appSource("Views/CompactShell.swift"))
+        XCTAssertTrue(shell.contains(
+            "if !drawerOpen && (isAtRoot || model.consoleFromRecents || model.projectFromDrawer) {"),
+                      "the drawer-open strip is up on that page")
+        let projects = try slice(shell, from: "case .projects:", to: "case .runners:")
+        XCTAssertTrue(projects.contains(".background { SwipeBackGestureToggle(enabled: !model.projectFromDrawer) }"),
+                      "and the system back-swipe is off there")
+        let toggle = try slice(shell, from: "private func setSwipeBacks(enabled: Bool) {", to: "\n        }")
+        XCTAssertTrue(toggle.contains("interactiveContentPopGestureRecognizer?.isEnabled = enabled"),
+                      "iOS 26's swipe-back from anywhere in the content included")
+
+        let app = code(try appSource("AppModel.swift"))
+        XCTAssertTrue(app.contains("var projectFromDrawer: Bool { nav.projectFromDrawer }"))
+        let open = try slice(app, from: "func openProject(_ id: String, origin: NavOrigin = .list) {", to: "\n    }")
+        XCTAssertTrue(open.contains("nav.path = [.projectDetail(projectID: id, origin: origin)]"),
+                      "the origin rides the frame the drawer's row puts up")
     }
 
     func testTheProjectPageDrawsTheWebsSectionsInTheWebsOrder() throws {

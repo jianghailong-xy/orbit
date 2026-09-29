@@ -367,6 +367,10 @@ test('the refusals, limits and effect policy this door answers with are the cont
       ['WIKI_KIND_OWNER_ONLY', 403],
       ['WIKI_NOT_MAINTENANCE_SESSION', 403],
       ['WIKI_OWNER_CHANNEL_ONLY', 403],
+      // The plan (migration 0325, contract `plan.gate`, `plan.versions`, `plan.guard`).
+      ['WIKI_PLAN_GATE', 422],
+      ['WIKI_PLAN_STALE', 409],
+      ['WIKI_PLAN_UNCONFIRMED', 409],
       ['WIKI_PROBE_REFUSED', 422],
       ['WIKI_QUOTA', 429],
       ['WIKI_QUOTE_NOT_FOUND', 422],

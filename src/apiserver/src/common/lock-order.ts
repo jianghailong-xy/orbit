@@ -28,15 +28,24 @@ import type { Prisma } from '@prisma/client';
  *  `task_dependency_revision` (rank 70) instead and takes no Session lock at all, so the pure
  *  edge paths take rank 10 and nothing else.
  *
- *  **I4 — a dispatch takes the owner row at rank 10 before it reaches rank 70.** An edge writer
+ *  **I4 — a dispatch took the owner row at rank 10 before it reached rank 70.** An edge writer
  *  holds `lockOwnerTaskGraph` (10, `FOR UPDATE`) from its first statement and advances
- *  `task_dependency_revision` (70) from its last. A dispatch does the reverse by nature: it wants
- *  the revision during its decision, and it takes the owner row only IMPLICITLY, several
- *  statements later, when `session_owner_id_fkey` fires on its Session insert. So
- *  `ProjectTaskDispatcherService.dispatchInTransaction` takes `FOR KEY SHARE` on the owner in its
- *  FIRST statement — the same mode and the same row that insert would have taken anyway, moved
- *  earlier, exactly as I2 does for a Task write. Measured, not assumed:
+ *  `task_dependency_revision` (70) from its last. A dispatch did the reverse by nature: it wanted
+ *  the revision during its decision, and it took the owner row only IMPLICITLY, several
+ *  statements later, when `session_owner_id_fkey` fired on its Session insert. So its first
+ *  statement took `FOR KEY SHARE` on the owner — the same mode and the same row that insert would
+ *  have taken anyway, moved earlier, exactly as I2 does for a Task write. Measured, not assumed:
  *  `dependency-revision.pg.spec.ts` runs the same pair with that clause removed and gets a 40P01.
+ *
+ *  THE DISPATCH HALF OF I4 IS HISTORY (`6418a1e5`, 2026-08-23). `ProjectTaskDispatcherService` and
+ *  `ProjectAuthorizationService` — the rank-10 pre-lock and the rank-70 read — were deleted with
+ *  the coordinator loop, and nothing in this tree reads `task_dependency_revision` now. What
+ *  remains is the database's half of 0132: the table, its three advance triggers (that table's
+ *  only taker now), and `session_dispatch_dependency_check` at COMMIT. The regression still runs
+ *  because it is a HISTORICAL lock regression — it replays the boundary 0132 installed, not a
+ *  statement any code issues today — and the spec pins it to the migration's own text so that
+ *  record cannot drift. The path that starts a run today (`TasksService.execute` →
+ *  `sessions.create` / `sessions.resume`) reaches rank 70 not at all.
  *
  *  **I3 — one write per Session row per transaction.** PostgreSQL skips a foreign key's re-check
  *  when no key column changed, *except* when the row being updated was written by the current
@@ -89,15 +98,20 @@ export const LOCK_ORDER = [
     relation: 'project',
     modes: 'FOR NO KEY UPDATE (session capacity fence, verdict gate, reconcile, unit L3 scope fence) · FOR KEY SHARE (task/session FK, project_event outbox)',
     why:
-      'Above `task` because that is the order the Project authorization adapter already declares ' +
-      '(project FOR NO KEY UPDATE, then task FOR SHARE), and below `session` because ' +
-      'session_project_capacity_serialize is a BEFORE trigger on a Session write that is already ' +
-      'holding its Session row.',
+      'Above `task` because that is the order every live taker of these two rows takes them in: ' +
+      'session_admission_lock_order (0130) reaches the project row FOR NO KEY UPDATE from the same ' +
+      'Session write whose task it then takes FOR SHARE, and this row\'s holders go on to reach for ' +
+      'Task rows (SessionsService.resume takes the project and only then confirms its scope with ' +
+      'FOR SHARE OF t NOWAIT; ProjectHandoffService.declare takes both project rows and then the ' +
+      'tasks the declaration names). Below `session` because session_project_capacity_serialize is ' +
+      'a BEFORE trigger on a Session write that is already holding its Session row. The pre-lock ' +
+      'that first declared this order was ProjectAuthorizationService\'s, deleted with the ' +
+      'coordinator loop in `6418a1e5` (2026-08-23).',
   },
   {
     rank: 50,
     relation: 'task',
-    modes: 'FOR UPDATE (delete) · FOR NO KEY UPDATE (update) · FOR SHARE (session dispatch guard, authorization) · FOR KEY SHARE (edge + session.task_id FK)',
+    modes: 'FOR UPDATE (delete) · FOR NO KEY UPDATE (update) · FOR SHARE (the admission and authority re-read: SessionsService.resume, taskWorkRefusalFor, ProjectHandoffService.declare, TasksService.assertPlanAuthorityUnchanged) · FOR KEY SHARE (edge + session.task_id FK)',
     why: 'Multi-row selections are always taken sorted by id (orderedIds).',
   },
   {

@@ -68,9 +68,14 @@ export const SCOPE_NEW_REFUSAL_CODES = [
  * than as a blocker. A write arriving from a scope that has been rotated away is the same fact
  * about the same counter, so it gets the same name.
  *
- * The four approval states are `ProjectAuthorizationReasonCode` members
- * (`project-authorization.service.ts`) and are already classified in `project-blocker.ts`. This
- * contract adds no fifth way to say "the approval is not a yes".
+ * The four approval states are `HandoffApprovalState` members (`project-scope-decision.ts`), which
+ * `dependencyCrossingRefusal` in `project-handoff.ts` already maps onto them, and each is already
+ * classified into its blocker kind by `SCOPE_REFUSAL_POLICY` below. This contract adds no fifth way
+ * to say "the approval is not a yes".
+ *
+ * (They were once spelled by `ProjectAuthorizationReasonCode` in
+ * `project-authorization.service.ts` and classified in `project-blocker.ts`; both files went with
+ * the coordinator loop in `6418a1e5`, 2026-08-23, and neither has a reader in this tree today.)
  */
 export const SCOPE_REUSED_REFUSAL_CODES = [
   'COORDINATOR_GENERATION_MOVED',

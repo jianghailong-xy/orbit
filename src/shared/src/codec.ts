@@ -486,6 +486,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'topicId',
   'parentId',
   'entryIds',
+  // The plan (migration 0325): a document's version, a section's document, and the proposal whose
+  // acceptance made a version. Addresses a reader follows; `proposalId` carries no foreign key
+  // (provenance that outlives its proposal), so it may 404 — never a fence. A version's compare-and-set
+  // is on its number, an integer.
+  'docId',
+  'proposalId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner
