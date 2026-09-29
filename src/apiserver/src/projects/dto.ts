@@ -21,7 +21,7 @@ import {
   ValidateIf,
   ValidateNested,
 } from 'class-validator';
-import { ProjectStatus } from '@orbit/shared';
+import { ProjectStatus, type StartProjectRequestBody } from '@orbit/shared';
 import { IsPublicId } from '../common/public-id';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterion-shape-advice';
 import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolution';
@@ -413,6 +413,34 @@ export class ConfirmAcceptanceCriteriaDto {
     message: 'criteriaDigest must be the 64-character sha256 digest of the criteria set being confirmed',
   })
   criteriaDigest!: string;
+}
+
+/**
+ * `POST /projects/:id/start` (`@orbit/shared` `StartProjectRequestBody`): the version of the
+ * criteria the owner read, and every setting the project is to run with — each one required,
+ * because a start writes the whole set and a field left out would be a setting nobody chose.
+ */
+export class StartProjectDto implements StartProjectRequestBody {
+  @Matches(SHA256_DIGEST_PATTERN, {
+    message: 'criteriaDigest must be the 64-character sha256 digest of the criteria set being confirmed',
+  })
+  criteriaDigest!: string;
+  /** Where finished tasks land: the project's own branch first, or directly into main. */
+  @IsIn(INTEGRATION_LINES) line!: IntegrationLine;
+  /** The project branch as a full ref, with `PROJECT_BRANCH` only; `refs/heads/project/<project
+   *  id>` unless named. */
+  @IsOptional()
+  @Matches(BRANCH_REF, {
+    message: 'CODEBASE_AUTHORITY_INVALID: projectBranchName must be a full branch ref such as refs/heads/project/next',
+  })
+  projectBranchName?: string;
+  /** Automatic: whether the coordinator runs the project for the owner. */
+  @IsBoolean() automatic!: boolean;
+  @IsInt() @Min(1) @Max(MAX_PROJECT_CONCURRENT_TASKS) maxConcurrentTasks!: number;
+  /** The check run on the combined tree before anything lands; null for none. Sent either way. */
+  @ValidateIf((_object, value) => value !== null) @IsString() mergeCheckCommand!: string | null;
+  /** The coordinator's start request this start answers, when the card was drawn from one. */
+  @IsOptional() @IsPublicId() requestId?: string | null;
 }
 
 /** The two spellings a criteria decision can have. `REJECT` settles the proposal and applies

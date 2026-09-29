@@ -2036,6 +2036,17 @@ model Project {
   /// `escalateAt` when it is created, so changing it moves only items created afterwards.
   exceptionEscalationSeconds Int @default(7200) @map("exception_escalation_seconds")
 
+  /// When the account owner started this project (migration 0331). Null: not started yet.
+  ///
+  /// Written once, by a start and by nothing else — `ProjectAcceptanceService.startProject`, in the
+  /// transaction that also confirms the criteria and writes the settings the owner chose, as a
+  /// compare-and-set on this column still being null. So a second press is refused rather than
+  /// counted, and "started" is a fact about the project rather than something read off
+  /// `coordinatorEnabled`, which is the Automatic switch and says how the project runs, not whether.
+  /// Projects started before the column existed carry the earliest of their first confirmation,
+  /// their first task-work session, or — switched on with neither — their creation.
+  startedAt DateTime? @map("started_at") @db.Timestamptz(3)
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -2677,6 +2688,12 @@ model ProjectStandardSetConfirmation {
   /// The credentialed actor. Audit provenance, and — as `docs/human-only-authority.md` says of
   /// every HUMAN_ONLY row — not proof that a person held the credential.
   confirmedById String @map("confirmed_by_id") @db.Uuid
+  /// On the confirmation a START wrote (migration 0331), what the start left the project running
+  /// with and which of those settings are not what it was asked for — `@orbit/shared`
+  /// `ProjectStartRecord`, written in the same insert and never afterwards. Null on a confirmation
+  /// that only confirmed. The "Project started" card is drawn from it, so the card shows the start
+  /// as it happened rather than whatever the settings say by the time somebody reads it.
+  startedWith Json? @map("started_with")
 
   @@index([projectId, confirmedAt(sort: Desc)], map: "project_standard_set_confirmation_recent_idx")
   @@map("project_standard_set_confirmation")
