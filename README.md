@@ -7,7 +7,8 @@
 </p>
 
 <p align="center">
-  <a href="https://jianghailong-xy.github.io/orbit/?utm_source=github&utm_medium=readme&utm_campaign=launch&utm_content=top">Public website</a> ·
+  <a href="https://jianghailong-xy.github.io/orbit/?utm_source=github&utm_medium=readme&utm_campaign=launch&utm_content=top-en">Public website</a> ·
+  <a href="https://jianghailong-xy.github.io/orbit/zh/?utm_source=github&utm_medium=readme&utm_campaign=launch&utm_content=top-zh">中文官网</a> ·
   <a href="#quick-start">Quick Start</a> ·
   <a href="docs/90-second-demo.md">90-second demo</a> ·
   <a href="docs/launch-copy.md">Launch kit</a> ·
@@ -16,10 +17,11 @@
   <a href="SUPPORT.md">Support</a>
 </p>
 
-The [public Orbit entrance](https://jianghailong-xy.github.io/orbit/?utm_source=github&utm_medium=readme&utm_campaign=launch&utm_content=intro)
+The [public Orbit entrance](https://jianghailong-xy.github.io/orbit/?utm_source=github&utm_medium=readme&utm_campaign=launch&utm_content=intro-en)
 is a concise, mobile-friendly path through the product story, 90-second demo, Quick Start, architecture and
-security boundaries, FAQ, community links, and roadmap. It points back here for the complete operator docs and
-preserves the Sparkle update feed at [`appcast.xml`](https://jianghailong-xy.github.io/orbit/appcast.xml).
+security boundaries, FAQ, community links, and roadmap. The [简体中文入口](https://jianghailong-xy.github.io/orbit/zh/?utm_source=github&utm_medium=readme&utm_campaign=launch&utm_content=intro-zh)
+contains the equivalent path; both pages offer an explicit 中文 / English switch. They point back here for the
+complete operator docs and preserve the Sparkle update feed at [`appcast.xml`](https://jianghailong-xy.github.io/orbit/appcast.xml).
 
 <p align="center">
   <a href="https://github.com/jianghailong-xy/orbit/releases"><img alt="GitHub release" src="https://img.shields.io/github/v/release/jianghailong-xy/orbit?include_prereleases&sort=semver"></a>
