@@ -59,8 +59,18 @@ import {
 import '@xyflow/react/dist/style.css';
 import { Alert, Button, Empty, Modal, Popover, Spin, Tooltip } from 'antd';
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import {
   expandRunMarks,
   foldSettledMarks,
@@ -81,6 +91,7 @@ import {
 } from '../lib/projectDependencyGraph';
 import type { ProjectDependencyGraphResponse, ProjectGraphOverview } from '../lib/projectDependencyGraph';
 import { PublicLinkResolverCtx, publicDestination } from '../lib/publicLinks';
+import { ProjectTaskLink } from './ProjectTaskLink';
 import { projectDependencyGraphQuery } from '../lib/queries';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import {
@@ -136,10 +147,15 @@ export type ProjectFlowNode = TaskFlowNode | GroupFlowNode | FoldFlowNode;
 /** React Flow disables pointer events on non-interactive node wrappers; these contain links. */
 const INTERACTIVE_NODE_STYLE = { pointerEvents: 'all' } as const;
 
+/** The project this graph draws: the page a task mark opens its task over (TaskLink). Exported for
+ *  tests: a node drawn on its own has no graph around it to provide one. */
+export const GraphProjectCtx = createContext<string | null>(null);
+
 /**
- * The way from a mark into one task's page. In the app that is the task's own route. On a public
- * project page (PublicLinkResolverCtx) it is wherever the link's scope sends it — the task's public
- * page when the link shares task pages — and otherwise nowhere: the same box, read but not opened.
+ * The way from a mark into one task's page. In the app that is the task opened over this project's
+ * page, as its row in the task list opens it (lib/projectTaskRoute). On a public project page
+ * (PublicLinkResolverCtx) it is wherever the link's scope sends it — the task's public page when the
+ * link shares task pages — and otherwise nowhere: the same box, read but not opened.
  */
 function TaskLink({
   taskId,
@@ -153,6 +169,14 @@ function TaskLink({
   'aria-label'?: string;
 }) {
   const resolve = useContext(PublicLinkResolverCtx);
+  const projectId = useContext(GraphProjectCtx);
+  if (!resolve && projectId) {
+    return (
+      <ProjectTaskLink className={className} projectId={projectId} taskId={taskId} {...rest}>
+        {children}
+      </ProjectTaskLink>
+    );
+  }
   const to = `/tasks/${taskId}`;
   const dest = resolve ? publicDestination(to, resolve) : to;
   if (dest == null) {
@@ -945,6 +969,10 @@ export function ProjectDependencyGraph({
   const [focusMarkId, setFocusMarkId] = useState<string | null>(null);
   // The mark under the pointer, if any. Kept out here so both canvases answer a hover the same way.
   const [hoverMarkId, setHoverMarkId] = useState<string | null>(null);
+  // A task opened from a mark opens over this page, which stays mounted — so a full-screen canvas
+  // has to get out of the way of the task it just opened.
+  const { pathname } = useLocation();
+  useEffect(() => setFullScreen(false), [pathname]);
   const query = useQuery({ ...projectDependencyGraphQuery(projectId), enabled: !data });
   const graph = data
     ? { data, isLoading: false, isError: false as const, error: null, refetch: query.refetch }
@@ -1044,7 +1072,7 @@ export function ProjectDependencyGraph({
   }
 
   return (
-    <>
+    <GraphProjectCtx.Provider value={projectId}>
       <div
         ref={stripRef}
         className={`tdg-canvas pdg-canvas${vertical ? ' is-vertical' : ''}`}
@@ -1105,6 +1133,6 @@ export function ProjectDependencyGraph({
           description="The task list below has all of them, in dependency order."
         />
       ) : null}
-    </>
+    </GraphProjectCtx.Provider>
   );
 }

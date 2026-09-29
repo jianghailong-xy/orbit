@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   SessionLifecycleState,
   type ProjectIntegrationSettings,
@@ -90,9 +90,19 @@ import {
 import { type TaskDependencyGraphResponse } from '../lib/taskDependencyGraph';
 import { scheduledStart } from '../lib/taskSchedule';
 import { ProjectTasksGraph } from '../components/ProjectTasksGraph';
+import { ProjectTaskLink } from '../components/ProjectTaskLink';
+import { useOpenProjectTask } from '../lib/projectTaskRoute';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { useToast } from '../lib/toast';
 import { useMediaQuery } from '../lib/useMediaQuery';
+
+// The panel a task opens in over this page — TaskDetailPanel, and the transcript and editors it
+// draws — is needed only once a task is open, so it is not on the page's own import path: the
+// arrangement the task graph already has (ProjectTasksGraph), for the same reason.
+const LazyProjectTaskPanel = lazy(async () => {
+  const module = await import('../components/ProjectTaskPanel');
+  return { default: module.ProjectTaskPanel };
+});
 
 // Re-exported, not re-implemented: reading a stored instant on the viewer's wall clock belongs to
 // lib/taskSchedule, shared with the task panel's own Start at editor. This page keeps the name it
@@ -990,6 +1000,8 @@ export function ProjectDetailPage() {
   // Stays nullable: an id we don't have is a different state from one we do, and collapsing it to
   // '' would send a request to `/projects/` — a URL for no project, answered by the list route.
   const id = routeId(params.id);
+  // One of this project's tasks open over the page (`/projects/:id/tasks/:taskId`), if any.
+  const openTaskId = routeId(params.taskId);
   const project = useQuery({
     queryKey: ['project', id],
     queryFn: () => api<ProjectDetail>(`/projects/${encodeURIComponent(id!)}`),
@@ -1234,6 +1246,11 @@ export function ProjectDetailPage() {
             <ProjectCrossingsCard projectId={id} />
           </ProjectPageBlock>
         </>
+      ) : null}
+      {id && openTaskId ? (
+        <Suspense fallback={null}>
+          <LazyProjectTaskPanel projectId={id} taskId={openTaskId} />
+        </Suspense>
       ) : null}
     </div>
   );
@@ -2219,8 +2236,8 @@ export function projectTaskGroups(items: ProjectTask[]): ProjectTaskGroup[] {
 }
 
 /**
- * The project's top-level tasks, read-only: the first page of them, each of which can be opened
- * onto its own direct children.
+ * The project's top-level tasks: the first page of them, each of which opens its task over this
+ * page and can be expanded onto its own direct children.
  *
  * Its own query rather than a field on the project, because the tree is paged and the project
  * document is not — folding one into the other would make every project read pay for a page of
@@ -2365,7 +2382,12 @@ export function ProjectTaskGroupsList({
 }
 
 /**
- * One read-only task row, plus — once the reader asks — the level directly beneath it.
+ * One task row, plus — once the reader asks — the level directly beneath it.
+ *
+ * The row opens its task over this page (lib/projectTaskRoute): the whole row, the way a row of the
+ * Tasks page opens its panel, since a phone has no hover to find a smaller target by. The title is
+ * also a real link, so ⌘/middle-click opens the task in a tab of its own. What sits inside the row
+ * keeps its own press — Show subtasks opens a level, not the task.
  *
  * `expanded` lives here, per row, rather than in a set held by the page: keeping it local is what
  * makes the child page lazy, because a closed row renders no level component at all, so no child
@@ -2387,15 +2409,26 @@ function ProjectTaskRow({
   const starts = scheduledStart(task.runAt);
   const workLabel = projectTaskWorkLabel(task);
   const integrationTag = projectTaskIntegrationTag(task, branches);
+  const openTask = useOpenProjectTask(projectId);
+  const { taskId: openTaskParam } = useParams();
+  // The task open over the page, drawn as the Tasks page draws its open row.
+  const isOpen = routeId(openTaskParam) === routeId(task.id);
 
   return (
     <List.Item
-      className="project-task-row"
+      className={`project-task-row is-openable${isOpen ? ' is-open' : ''}`}
       data-work-state={projectTaskWorkStateOf(task)}
       data-integration-state={task.integration?.state}
       // Work already on main recedes — it is the answer to "did that ship?" and to nothing a
       // reader has to act on. Work on the project branch does not: somebody still has to merge it.
       style={{ display: 'block', ...(task.integration?.state === 'ON_UPSTREAM' ? { opacity: 0.55 } : {}) }}
+      onClick={(e) => {
+        // A subtask's row sits inside the row that opened it: this press is its own, not its parent's.
+        e.stopPropagation();
+        // A press that ended a drag across the words selected them; opening would throw that away.
+        if (window.getSelection()?.toString()) return;
+        openTask(task.id);
+      }}
     >
       <div className="project-task-row-layout">
         {/* Own this flex item rather than asking AntD's Meta to negotiate directly with the two
@@ -2408,7 +2441,17 @@ function ProjectTaskRow({
             // different task. The long-form field underneath is what gets cut instead.
             title={
               <span className="project-task-row-title">
-                <TaskStatusMark status={task.status} /> {task.title}{' '}
+                <TaskStatusMark status={task.status} />{' '}
+                {/* Its own navigation, by the same rule as the row's; the row must not open it a
+                    second time, and a ⌘/middle-click is the browser's, for a tab of its own. */}
+                <ProjectTaskLink
+                  className="project-task-row-link"
+                  projectId={projectId}
+                  taskId={task.id}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {task.title}
+                </ProjectTaskLink>{' '}
                 <Tag color={TASK_STATUS_COLOR[task.status] ?? 'default'}>{task.status}</Tag>
                 {workLabel ? (
                   <Tag data-testid="project-task-work-state" color={workLabel.color}>
@@ -2475,7 +2518,11 @@ function ProjectTaskRow({
             aria-label={
               expanded ? `Hide subtasks for ${task.title}` : `Show subtasks for ${task.title}`
             }
-            onClick={() => setExpanded((open) => !open)}
+            onClick={(e) => {
+              // Opens a level, not the task: the row around it must not see this press.
+              e.stopPropagation();
+              setExpanded((open) => !open);
+            }}
           >
             {expanded ? 'Hide subtasks' : 'Show subtasks'}
           </Button>
