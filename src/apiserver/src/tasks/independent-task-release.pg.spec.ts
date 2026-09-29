@@ -747,3 +747,83 @@ test('(12) a release that would land past its list\'s ceiling is left to the swe
       await s.db.$disconnect();
     }
   });
+
+// -------------------------------------------------------------------------------------------------
+// (13) The project budget as the CLOCK spends it.
+//
+// (5) holds the completion edge to `max_concurrent_tasks`; the sweep's independent scan applies the
+// same budget inside its own statement (`rank <= free`), and nothing else on that path enforces it.
+// The count behind `free` is what this case pins: per project, over the tasks still OUTSTANDING that
+// a live or queued session occupies — so another project's runs do not spend this one's room, a
+// settled task's parked run does not either, and a run the sweep itself just queued does.
+//
+// Two projects of one owner, each with room for two. A holds one running task and one DONE task
+// whose run is parked at AWAITING_INPUT; B holds two running tasks. Counted per project and over
+// outstanding work, A has one slot and B none — and every wrong count gives a different answer:
+// across projects A has none, counting the parked run A has none, and handing B A's count B has one.
+// -------------------------------------------------------------------------------------------------
+
+/** A run of `status` on `taskId`, the way a dispatched task's session looks. */
+async function occupy(db: PrismaClient, ids: World, taskId: string, status: RunStatus): Promise<void> {
+  await db.session.create({
+    data: {
+      id: randomUUID(), ownerId: ids.ownerId, creatorId: ids.ownerId, taskId,
+      workspaceId: ids.agentId, assignedRunnerId: ids.runnerId,
+      title: `occupant-${RUN}`, prompt: 'do the work', provider: 'claude',
+      status, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+    },
+  });
+}
+
+test('(13) the sweep holds each project to its own budget, counted over its outstanding occupied work',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const s = connect();
+    try {
+      const ids = await world(s.db, 'sweep-budget');
+      const a = await project(s.db, ids, 'sweep-budget-a', { maxConcurrentTasks: 2 });
+      const b = await project(s.db, ids, 'sweep-budget-b', { maxConcurrentTasks: 2 });
+
+      await occupy(s.db, ids, await seedTask(s.db, ids, a, 'running',
+        { status: TaskStatus.IN_PROGRESS }), RunStatus.RUNNING);
+      // Settled work holding a live session: the run that derived DONE, parked where
+      // `statusAfterTurnCompleted` leaves it. The project's `max_concurrent_tasks` is about work
+      // still outstanding, so this must leave A's slot free.
+      await occupy(s.db, ids, await seedTask(s.db, ids, a, 'finished',
+        { status: TaskStatus.DONE }), RunStatus.AWAITING_INPUT);
+      for (const title of ['running-1', 'running-2']) {
+        await occupy(s.db, ids, await seedTask(s.db, ids, b, title,
+          { status: TaskStatus.IN_PROGRESS }), RunStatus.RUNNING);
+      }
+
+      const older = await seedTask(s.db, ids, a, 'older', {
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      });
+      const newer = await seedTask(s.db, ids, a, 'newer', {
+        createdAt: new Date('2026-01-02T00:00:00.000Z'),
+      });
+      const waiting = await seedTask(s.db, ids, b, 'waiting');
+
+      await readySweep(s);
+
+      assert.equal(await sessionCount(s.db, older), 1,
+        'A\'s one free slot went unused — its budget was spent by B\'s runs or by a settled task\'s '
+          + 'parked run');
+      assert.equal(await sessionCount(s.db, newer), 0,
+        'A started two tasks on one free slot — the budget was not applied per project');
+      assert.equal(await sessionCount(s.db, waiting), 0,
+        'B started a task with both of its slots occupied');
+
+      // The paired positive, one column away: B given a third slot. The run the first sweep queued
+      // for A's older task now holds A's last slot, so A still starts nothing.
+      await s.db.project.update({ where: { id: b }, data: { maxConcurrentTasks: 3 } });
+      await readySweep(s);
+
+      assert.equal(await sessionCount(s.db, waiting), 1,
+        'the widened budget released nothing — the cap was not what held B\'s task back');
+      assert.equal(await sessionCount(s.db, newer), 0,
+        'A\'s budget did not count the run the sweep itself had just queued');
+    } finally {
+      await s.db.$disconnect();
+    }
+  });
