@@ -190,6 +190,11 @@ struct OrbitLinkCardView: View {
         // nowhere to go and no store to ask.
         guard let app, let cards else { return }
         app.open(cards.destination(for: ref), overConsole: overConsole)
+        // A pasted session URL that named one record of it (`?at=`) opens at that record.
+        if case .session = cards.destination(for: ref), case .pageURL(let text) = ref.source,
+           let url = URL(string: text) {
+            app.followRecord(in: url)
+        }
     }
 
     @ViewBuilder private var menu: some View {

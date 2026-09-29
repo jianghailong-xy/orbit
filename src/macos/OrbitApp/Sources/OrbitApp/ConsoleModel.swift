@@ -514,7 +514,10 @@ final class ConsoleModel {
         // from its max seq. Cold open only: a restored reducer already carries its transcript and
         // maxSeq, so it skips straight to the SSE resume below (which streams seq > maxSeq).
         let coldOpen = reducer.state.maxSeq == 0
-        if coldOpen, !sessionID.isEmpty { await seedTailPage() }
+        // A link to one record opens on the page around it (`openRecord`) — in place of the tail seed,
+        // and of a restored window, which ends at the tail and may be nowhere near the record.
+        let openedAtRecord = await followPendingRecord()
+        if !openedAtRecord, coldOpen, !sessionID.isEmpty { await seedTailPage() }
         if Task.isCancelled { return }
         // Seed the "Background processes" tray with the server's authoritative, complete list — every
         // Bash(run_in_background) the session launched, not just the few whose launch sits in the loaded
@@ -526,6 +529,12 @@ final class ConsoleModel {
         reconnectPolicy = ReconnectPolicy()
         var isReconnect = false          // the first connect is seeded by `approvalsSeed` above
         while !Task.isCancelled {
+            // A window opened at a record stays off the stream until it is back at the tail
+            // (`newerCursor`): what the stream carries belongs past the gap, not at this window's end.
+            if detached {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                continue
+            }
             kickRequested = false
             // On a reconnect (foregrounded / network back / dropped stream), re-fetch the durable
             // approvals. A card resolved elsewhere — e.g. answered on the web client — while this
@@ -564,6 +573,9 @@ final class ConsoleModel {
                             // session list that kept advancing (it comes from the list query, not
                             // this stream).
                             if ev.type == .resync { return .resync }
+                            // The window was re-opened at a record while this read was in flight:
+                            // it feeds a window that is gone, and the loop holds off until the gap closes.
+                            if detached { return .kicked }
                             // A queued turn is durable in conversation_turn but intentionally absent
                             // from run_event until leased. The nudge carries no duplicate payload;
                             // reconcile the authoritative REST list without delaying this stream.
@@ -816,6 +828,121 @@ final class ConsoleModel {
         // Re-pin only when rows actually grew above the old first row (id unchanged ⇒ nothing
         // prepended — e.g. the cursor hit the start — and yanking the scroll would be wrong).
         if let anchor, reducer.state.items.first?.id != anchor { prependAnchorID = anchor }
+        publishStateNow()
+    }
+
+    // MARK: - a link to one record (`SessionRecordLink`; web parity: WorkspaceView's `?at=`)
+
+    /// The record a link asked this console to open at, not yet followed. `run()` opens on it in place
+    /// of the tail; a console already streaming follows it at once (`openRecord`).
+    private var pendingRecord: String?
+    /// Non-nil exactly while the loaded window stops short of the tail: the `after=` cursor of the page
+    /// newer than it. The live stream is held off meanwhile — what it streams belongs past the gap, not
+    /// at the bottom of this window — until paging down (`loadNewer`) or jumping (`jumpToLatest`)
+    /// brings the window back to the latest event.
+    private(set) var newerCursor: Int?
+    /// Whether the loaded window stops short of the tail (see `newerCursor`).
+    var detached: Bool { newerCursor != nil }
+    /// True while a newer page is in flight — the single-flight guard of `loadNewer`.
+    private(set) var loadingNewer = false
+    /// True while `jumpToLatest` re-seeds from the tail, so a newer page landing meanwhile is dropped.
+    private var jumpingToLatest = false
+    /// The record's row for the transcript to scroll to. Its own request, apart from `scrollRequest`:
+    /// reaching it means leaving the live tail, which the view says outright before it scrolls.
+    private(set) var recordRequest: ScrollRequest?
+    /// The row of the record a link opened, marked for a moment once the transcript has scrolled to it.
+    private(set) var highlightedRowID: String?
+    private var highlightGeneration = 0
+
+    /// Open this console at one record of its session — a link that named it. Held until the stream
+    /// starts when the console is not streaming yet; followed at once when it is.
+    func openRecord(_ record: String) {
+        guard !isDraft, !sessionID.isEmpty else { return }
+        pendingRecord = record
+        guard streamTask != nil else { return }
+        Task { [weak self] in await self?.followPendingRecord() }
+    }
+
+    /// Follow the pending record: read the page around it, then scroll to it where the window already
+    /// holds it, or make that page the window when it is elsewhere in the history. Answers whether the
+    /// window is placed at the record — false when nothing was pending, or when the record is not this
+    /// session's, in which case the console opens as it would have anyway, with a note saying so.
+    @discardableResult
+    private func followPendingRecord() async -> Bool {
+        guard let record = pendingRecord, !sessionID.isEmpty else { return false }
+        pendingRecord = nil
+        guard let page = try? await api.eventPageAround(sessionID: sessionID, record: record,
+                                                        limit: Self.tailPage),
+              let anchor = page.anchor else {
+            showTransientStatus(SessionRecordLink.Copy.notFound)
+            return false
+        }
+        let window = reducer.state
+        if let oldest = window.oldestSeq, anchor.seq >= oldest, anchor.seq <= window.maxSeq {
+            markRecord(anchor, page: page.events)
+            return true
+        }
+        // Elsewhere in the history: the page becomes the window. Held off the stream first, so a read
+        // still in flight cannot fold live events onto the end of a window they do not follow.
+        newerCursor = page.after
+        reconnectNow()
+        reducer.applyRecordPage(page)
+        publishStateNow()
+        markRecord(anchor, page: page.events)
+        return true
+    }
+
+    /// Ask the transcript to scroll to the record's row. The row is found as the transcript draws it
+    /// (`TranscriptRows.build`), so a tool call folded into a run is reached through the run's row.
+    private func markRecord(_ anchor: TranscriptAnchor, page: [RunEvent]) {
+        let state = reducer.state
+        guard let itemID = TranscriptRecordAnchor.itemID(for: anchor, page: page, in: state.items) else { return }
+        let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
+                                        showWorkingIndicator: false, decisionCards: decisionCards)
+        scrollTick += 1
+        recordRequest = ScrollRequest(rowID: TranscriptRecordAnchor.rowID(containing: itemID, in: rows) ?? itemID,
+                                      tick: scrollTick)
+    }
+
+    /// The transcript scrolled to the record's row: mark it for a moment, and consume the request so a
+    /// transcript appearing again later does not jump back to it.
+    func recordRequestFollowed(_ request: ScrollRequest) {
+        recordRequest = nil
+        highlightedRowID = request.rowID
+        highlightGeneration += 1
+        let generation = highlightGeneration
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 2_400_000_000)
+            guard let self, self.highlightGeneration == generation else { return }
+            self.highlightedRowID = nil
+        }
+    }
+
+    /// Pull the page just newer than a window opened at a record as the reader nears its bottom — the
+    /// mirror of `loadOlder`. The page that reaches the latest event closes the gap, and the stream loop,
+    /// holding off until then, resumes from it.
+    func loadNewer() async {
+        guard !loadingNewer, !jumpingToLatest, !sessionID.isEmpty, let after = newerCursor else { return }
+        loadingNewer = true
+        defer { loadingNewer = false }
+        guard let page = try? await api.eventPageAfter(sessionID: sessionID, after: after,
+                                                       limit: Self.olderPage),
+              !jumpingToLatest, newerCursor == after else { return }
+        reducer.appendNewer(page)
+        newerCursor = page.after
+        publishStateNow()
+    }
+
+    /// Trade a window opened at a record for the tail: the latest message is past the gap, so the window
+    /// is re-seeded from a tail page — still off the stream until that page has landed — and the stream
+    /// resumes from it.
+    func jumpToLatest() async {
+        guard detached, !jumpingToLatest else { return }
+        jumpingToLatest = true
+        defer { jumpingToLatest = false }
+        reducer.resetForResync()
+        await seedTailPage()
+        newerCursor = nil
         publishStateNow()
     }
 

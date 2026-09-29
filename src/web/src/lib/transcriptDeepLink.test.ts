@@ -6,6 +6,7 @@ import {
   RECORD_PARAM,
   recordAtOf,
   recordScrollDelta,
+  sessionCardHref,
   sessionRecordHref,
 } from './transcriptDeepLink';
 
@@ -29,6 +30,16 @@ describe('a link to one record of a session', () => {
     expect(recordAtOf(new URLSearchParams(''))).toBeNull();
     expect(recordAtOf(new URLSearchParams('at='))).toBeNull();
     expect(recordAtOf(new URLSearchParams('at=not-an-id!'))).toBeNull();
+  });
+});
+
+describe('a pasted session URL that names a record', () => {
+  it('keeps the record on the card that stands for it', () => {
+    const page = `/sessions/${encodeId(SESSION)}`;
+    expect(sessionCardHref(page, `https://orbitd.io${page}?at=${RECORD}`)).toBe(`${page}?at=${encodeId(RECORD)}`);
+    // No record, or not an id: the card leads to the session as it always has.
+    expect(sessionCardHref(page, `https://orbitd.io${page}`)).toBe(page);
+    expect(sessionCardHref(page, `https://orbitd.io${page}?at=nope!`)).toBe(page);
   });
 });
 

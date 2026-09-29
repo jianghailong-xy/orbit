@@ -39,6 +39,8 @@ struct OrbitiOSApp: App {
                 .dismissesKeyboardOnBackgroundTap()
                 .onOpenURL { url in
                     if let route = DeepLink.parse(url) { model.route(to: route) }
+                    // `orbit://session/<id>?at=<record>`: the session, at that record.
+                    model.followRecord(in: url)
                 }
                 // A `Text` link naming an Orbit object opens here — a table cell, say; transcript
                 // prose is a UITextView whose delegate does the same. The model decides, because a

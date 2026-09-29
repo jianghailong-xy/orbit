@@ -48,7 +48,10 @@ import {
 } from '../lib/tailPinning';
 import {
   elementForSeq,
+  JUMP_TO_LATEST,
+  LOADING_NEWER,
   RECORD_FLASH_MS,
+  RECORD_NOT_FOUND,
   RECORD_PARAM,
   recordAtOf,
   recordScrollDelta,
@@ -711,9 +714,6 @@ const JUMP_TO_START_PAGES = 30;
 // instead (`data-sticky-label`), since saying this above a card reading "not typed by you" is the
 // screen contradicting itself — which is what the account owner photographed on 2026-09-17.
 const STICKY_LABEL = 'Your question';
-// A link to a record (`?at=`) that is not in the session it names — a turn that never reached the
-// transcript, another session's record, one since deleted — opens the session as it would open anyway.
-const RECORD_NOT_FOUND = 'That message is not in this session';
 // How long a cached /background scan stays fresh. `/background` scans the session's whole
 // tool-event history, so re-opening a session (or scrubbing the list) within this window paints
 // the cached shells instead of re-running that scan — see bgCacheRef.
@@ -7943,13 +7943,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           )}
           {selectedId && detached && loadingNewer && (
             <div className="chat-newer-bottom">
-              <span className="chat-older-pill">Loading newer messages…</span>
+              <span className="chat-older-pill">{LOADING_NEWER}</span>
             </div>
           )}
           {selectedId && !atBottom && (
             <button
               className="scroll-to-bottom"
-              aria-label={detached ? 'Jump to latest' : 'Scroll to bottom'}
+              aria-label={detached ? JUMP_TO_LATEST : 'Scroll to bottom'}
               onClick={detached ? backToLatest : scrollToBottom}
             >
               <ArrowDownOutlined />

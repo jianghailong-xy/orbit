@@ -20,6 +20,17 @@ export const RECORD_PARAM = 'at';
 /** How long the record a link opened stays marked — long enough to find it after the jump. */
 export const RECORD_FLASH_MS = 2400;
 
+// The words the page says about a link to a record — the same sentences iOS says
+// (OrbitKit `SessionRecordLink.Copy`, which `TranscriptDeepLinkTests` compares with these).
+
+/** A link to a record that is not in the session it names: a turn that never reached the transcript,
+ *  another session's record, one since deleted. The session opens as it would open anyway. */
+export const RECORD_NOT_FOUND = 'That message is not in this session';
+/** The jump-to-latest control, while the window opened at a record stops short of the tail. */
+export const JUMP_TO_LATEST = 'Jump to latest';
+/** The newer page such a window is pulling in as the reader scrolls down. */
+export const LOADING_NEWER = 'Loading newer messages…';
+
 /** The page that opens a session at one record, both ids in their public spelling. */
 export function sessionRecordHref(sessionId: string, recordId: string): string {
   return `/sessions/${encodeURIComponent(encodeId(sessionId))}?${RECORD_PARAM}=${encodeURIComponent(encodeId(recordId))}`;
@@ -38,6 +49,21 @@ export function recordAtOf(search: URLSearchParams): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * The page a link card for a session leads to: the session's own page, keeping the record a pasted
+ * URL named (`https://<host>/sessions/<id>?at=<record>`) — the card stands for the link, and the link
+ * named a place in the conversation, not only the conversation.
+ */
+export function sessionCardHref(href: string, url: string): string {
+  let record: string | null = null;
+  try {
+    record = recordAtOf(new URL(url).searchParams);
+  } catch {
+    return href;
+  }
+  return record ? `${href}?${RECORD_PARAM}=${encodeURIComponent(record)}` : href;
 }
 
 /**
