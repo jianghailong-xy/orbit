@@ -105,7 +105,7 @@ function boot(): Promise<Harness> {
     const push = { notifyWikiReviewModeTripped: async () => undefined, notifyWikiVerificationTripped: async () => undefined } as unknown as PushService;
     const service = new WikiService(prisma as unknown as PrismaService, hub, push);
     const plans = new WikiPlans(prisma as unknown as PrismaService, hub);
-    const docs = new WikiDocs(prisma as unknown as PrismaService, recorder);
+    const docs = new WikiDocs(prisma as unknown as PrismaService, service, recorder);
 
     @Module({
       controllers: [WikiController, WikiPlanController, WikiDocsController, RunnerWikiController, RunnerWikiPlanController, RunnerWikiDocsController],

@@ -34,6 +34,7 @@ import {
   type WikiEntryStatus,
   type WikiFieldError,
   type WikiPlanSectionKind,
+  type WikiSourceKind,
   type WikiTrust,
 } from '@orbit/shared';
 import { redactSecrets } from '../common/secret-redaction';
@@ -42,11 +43,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { markersOf, splitSentences, wikiRepoPath, withoutMarkers } from './wiki-articles';
 import { docWithdrawReason } from './wiki-doc-withdrawal';
-import { mergeReceiptText, ownerEnvLiterals, ownerResolutionText } from './wiki-dossier';
+import { ownerEnvLiterals } from './wiki-dossier';
 import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
 import { requireConfirmedPlan } from './wiki-plan';
-import { approvalText, runEventText, taskText, toolCallText } from './wiki-verify-evidence';
-import { WikiRefusalError, type WikiPrincipal } from './wiki.service';
+import { WikiRefusalError, WikiService, type WikiPrincipal } from './wiki.service';
 
 /**
  * The documents (criterion 9, revised 2026-09-28; contracts/wiki.contract.json `docs`, migration 0326):
@@ -661,9 +661,9 @@ export function docStatusOf(counts: WikiDocSentenceCounts): WikiDocStatus {
   return (counts.unsourced + counts.unverified) * 100 > percent * counts.sentences ? 'needs_review' : 'ok';
 }
 
-// ── Records: read again, where they are ─────────────────────────────────────────────────────────
+// ── Records: where they are ─────────────────────────────────────────────────────────────────────
 
-/** What the page links a record's footnote to (`wiki_doc_footnote.locator`). */
+/** What the page links a record's footnote to (`wiki_doc_footnote.locator`, contract `docs.links`). */
 interface RecordLink {
   sessionId?: string;
   seq?: number;
@@ -680,94 +680,55 @@ type RecordReader = Pick<
 >;
 
 /**
- * One of the account's own records, and its text as a source's quote is read (`WikiService.sourceText`,
- * whose texts wiki-verify-evidence.ts defines), before redaction; null when the account has no such
- * record. `text` is null for a record that carries none.
+ * Where one of the account's records is, for the page's link (contract `docs.links`): the session a turn,
+ * an event, a tool call, an approval or a merge receipt is in — with the record's id, the pair a session's
+ * deep link needs — a turn's or an event's number in it, a comment's task, an owner decision's project, a
+ * note's path, and when and what it is. Its words are read through the one reader a record has
+ * (`WikiService.sourceText`), not here.
  */
-async function readRecord(db: RecordReader, ownerId: string, kind: WikiDocRecordKind, ref: string): Promise<{ text: string | null; link: RecordLink } | null> {
-  let id: string;
-  try {
-    id = toUuid(ref);
-  } catch {
-    return null;
-  }
+async function recordLink(db: RecordReader, ownerId: string, kind: WikiDocRecordKind, id: string): Promise<RecordLink> {
   const ownSession = { session: { ownerId } };
   switch (kind) {
     case 'turn': {
-      const turn = await db.conversationTurn.findFirst({
-        where: { id, ...ownSession },
-        select: { content: true, sessionId: true, seq: true, kind: true, createdAt: true },
-      });
-      return turn && { text: turn.content ?? '', link: { sessionId: turn.sessionId, seq: turn.seq, at: turn.createdAt.toISOString(), label: turn.kind } };
+      const turn = await db.conversationTurn.findFirst({ where: { id, ...ownSession }, select: { sessionId: true, seq: true, kind: true, createdAt: true } });
+      return turn ? { sessionId: turn.sessionId, seq: turn.seq, at: turn.createdAt.toISOString(), label: turn.kind } : {};
     }
     case 'event': {
-      const event = await db.runEvent.findFirst({
-        where: { id, ...ownSession },
-        select: { type: true, payload: true, sessionId: true, seq: true, createdAt: true },
-      });
-      return event && {
-        text: runEventText(event.type, event.payload),
-        link: { sessionId: event.sessionId, seq: event.seq, at: event.createdAt.toISOString(), label: event.type },
-      };
+      const event = await db.runEvent.findFirst({ where: { id, ...ownSession }, select: { sessionId: true, seq: true, type: true, createdAt: true } });
+      return event ? { sessionId: event.sessionId, seq: event.seq, at: event.createdAt.toISOString(), label: event.type } : {};
     }
     case 'tool_call': {
-      const call = await db.toolCall.findFirst({
-        where: { id, ...ownSession },
-        select: { output: true, sessionId: true, name: true, startedAt: true },
-      });
-      return call && {
-        text: toolCallText(call.output),
-        link: { sessionId: call.sessionId, label: call.name, ...(call.startedAt ? { at: call.startedAt.toISOString() } : {}) },
-      };
+      const call = await db.toolCall.findFirst({ where: { id, ...ownSession }, select: { sessionId: true, name: true, startedAt: true } });
+      return call ? { sessionId: call.sessionId, label: call.name, ...(call.startedAt ? { at: call.startedAt.toISOString() } : {}) } : {};
     }
     case 'task': {
-      const task = await db.task.findFirst({ where: { id, ownerId }, select: { id: true, title: true, description: true, createdAt: true } });
-      return task && { text: taskText(task), link: { taskId: task.id, at: task.createdAt.toISOString() } };
+      const task = await db.task.findFirst({ where: { id, ownerId }, select: { createdAt: true } });
+      return task ? { taskId: id, at: task.createdAt.toISOString() } : {};
     }
     case 'task_comment': {
-      const comment = await db.taskComment.findFirst({
-        where: { id, task: { ownerId } },
-        select: { body: true, taskId: true, authorType: true, createdAt: true },
-      });
-      return comment && { text: comment.body, link: { taskId: comment.taskId, at: comment.createdAt.toISOString(), label: comment.authorType } };
+      const comment = await db.taskComment.findFirst({ where: { id, task: { ownerId } }, select: { taskId: true, authorType: true, createdAt: true } });
+      return comment ? { taskId: comment.taskId, at: comment.createdAt.toISOString(), label: comment.authorType } : {};
     }
     case 'approval': {
-      const approval = await db.approval.findFirst({
-        where: { id, ...ownSession },
-        select: { answers: true, message: true, sessionId: true, toolName: true, createdAt: true },
-      });
-      return approval && {
-        text: approvalText(approval),
-        link: { sessionId: approval.sessionId, at: approval.createdAt.toISOString(), label: approval.toolName },
-      };
+      const approval = await db.approval.findFirst({ where: { id, ...ownSession }, select: { sessionId: true, toolName: true, createdAt: true } });
+      return approval ? { sessionId: approval.sessionId, at: approval.createdAt.toISOString(), label: approval.toolName } : {};
     }
     case 'merge_receipt': {
-      const receipt = await db.sessionMergeReceipt.findFirst({
-        where: { id, ownerId },
-        select: { result: true, sourceBranch: true, sourceSha: true, targetBranch: true, targetShaAfter: true, sessionId: true, taskId: true, createdAt: true },
-      });
-      return receipt && {
-        text: mergeReceiptText(receipt),
-        link: { sessionId: receipt.sessionId, at: receipt.createdAt.toISOString(), label: receipt.result, ...(receipt.taskId ? { taskId: receipt.taskId } : {}) },
-      };
+      const receipt = await db.sessionMergeReceipt.findFirst({ where: { id, ownerId }, select: { sessionId: true, taskId: true, result: true, createdAt: true } });
+      return receipt
+        ? { sessionId: receipt.sessionId, at: receipt.createdAt.toISOString(), label: receipt.result, ...(receipt.taskId ? { taskId: receipt.taskId } : {}) }
+        : {};
     }
     case 'owner_decision': {
-      const blocker = await db.projectBlocker.findFirst({
-        where: { id, project: { ownerId }, resolvedBy: 'USER', resolutionNote: { not: null } },
-        select: { requiredAction: true, resolutionNote: true, projectId: true, resolvedAt: true, kind: true },
-      });
-      if (!blocker || !blocker.resolutionNote) return null;
-      return {
-        text: ownerResolutionText({ requiredAction: blocker.requiredAction, resolutionNote: blocker.resolutionNote }),
-        link: { projectId: blocker.projectId, label: blocker.kind, ...(blocker.resolvedAt ? { at: blocker.resolvedAt.toISOString() } : {}) },
-      };
+      const blocker = await db.projectBlocker.findFirst({ where: { id, project: { ownerId } }, select: { projectId: true, kind: true, resolvedAt: true } });
+      return blocker ? { projectId: blocker.projectId, label: blocker.kind, ...(blocker.resolvedAt ? { at: blocker.resolvedAt.toISOString() } : {}) } : {};
     }
     case 'note': {
-      const note = await db.wikiNote.findFirst({ where: { id, ownerId }, select: { path: true, text: true, createdAt: true } });
-      return note && { text: note.text, link: { path: note.path, at: note.createdAt.toISOString() } };
+      const note = await db.wikiNote.findFirst({ where: { id, ownerId }, select: { path: true, createdAt: true } });
+      return note ? { path: note.path, at: note.createdAt.toISOString() } : {};
     }
     default:
-      return null;
+      return {};
   }
 }
 
@@ -866,6 +827,8 @@ export class WikiDocs {
 
   constructor(
     private readonly prisma: PrismaService,
+    // The one reader of a record's words (`sourceText`): what a footnote's quote is checked against.
+    private readonly wiki: WikiService,
     // `wiki.changed` after a write commits (contract `realtime.publishedWhen`): an accelerant, defaulted
     // so a spec that builds this by hand need not stub it. `RealtimeModule` is global.
     private readonly realtime: RealtimeService = undefined as unknown as RealtimeService,
@@ -1077,29 +1040,33 @@ export class WikiDocs {
         viaEntryId: footnote.viaEntryId,
       };
     }
-    const record = await readRecord(this.prisma, ownerId, footnote.kind, footnote.ref);
-    let ref = footnote.ref;
+    let ref: string | null = null;
     try {
       ref = toUuid(footnote.ref);
     } catch {
-      // Kept as it came: it names no record, and says so as unresolved.
+      // It names no record at all: unresolved, kept as it came.
     }
     const row: FootnoteRow = {
       kind: footnote.kind,
-      ref,
+      ref: ref ?? footnote.ref,
       sha: null,
       lineStart: null,
       lineEnd: null,
       charStart: null,
       charEnd: null,
-      locator: record ? { ...record.link } : {},
+      locator: {},
       quote,
       excerpt: null,
       verdict: 'unresolved',
       checkedBy: 'server',
       viaEntryId: footnote.viaEntryId,
     };
+    // The record's words as a source's quote reads them: one reader, so a document and an entry citing the
+    // same record check their quotes against the same text (wiki-verify-evidence.ts).
+    const reader: WikiPrincipal = { origin: 'maintenance', ownerId, userId: null, sessionId: null, toolCallId: null };
+    const record = ref === null ? null : await this.wiki.sourceText(this.prisma, reader, { kind: footnote.kind as WikiSourceKind, ref });
     if (!record) return row;
+    row.locator = { ...(await recordLink(this.prisma, ownerId, footnote.kind, record.ref)) };
     if (quote === null) return { ...row, verdict: 'no_quote' };
     const text = redacted(record.text, literals);
     const found = text === null ? null : findQuote(text, quote, footnote.chars);
