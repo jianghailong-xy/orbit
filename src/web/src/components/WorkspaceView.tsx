@@ -710,7 +710,7 @@ const LOAD_OLDER_AT = 400;
 // deepest session in this deployment, so it bounds a runaway without being a working limit. A
 // session deeper than that keeps the control, and a second press carries on from where it left.
 const JUMP_TO_START_PAGES = 30;
-// What the sticky bar calls a turn the person typed. A wake carries its own label on its card
+// What the sticky bar calls a turn the person typed. A watch's wake carries its own label on its card
 // instead (`data-sticky-label`), since saying this above a card reading "not typed by you" is the
 // screen contradicting itself — which is what the account owner photographed on 2026-09-17.
 const STICKY_LABEL = 'Your question';
@@ -1961,7 +1961,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // A turn a watch or the control plane queued is one of these too — it is where the answer under
     // it starts, so it is where the bar has to point — but it is no bubble and nobody typed it, so
     // its card hands over what to call it (`data-sticky-label` / `data-sticky-text`). Its queued
-    // twin in the tail is skipped like any queued turn: it hasn't been asked yet.
+    // twin in the tail is skipped like any queued turn: it hasn't been asked yet. A background
+    // job's news or a wakeup coming due is not one: it is a line inside the answer the agent is
+    // still giving (BackgroundWakeCard), so it carries no label and the bar keeps the question.
     const bubbles = Array.from(
       el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-sticky-label]:not(.is-queued)'),
     ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
@@ -7739,7 +7741,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 // its delivery stands is the queue's line to say, as for every queued row.
                 const wake = parseWatchWake(q.content);
                 // A wake the control plane queued for a background job's news, or for a wakeup coming
-                // due, is nobody's message either: it gets the card the transcript draws once a
+                // due, is nobody's message either: it gets the line the transcript draws once a
                 // runner takes it. Withdrawing it is an ordinary cancel — nothing re-sends it.
                 const background = wake ? null : parseBackgroundWake(q.content);
                 return wake ? (
