@@ -401,7 +401,7 @@ func wikiPlanDocSourcesOf(text string) []wikiPlanDocSource {
 		return []wikiPlanDocSource{{Path: paths[0]}}
 	}
 	var out []wikiPlanDocSource
-	for _, section := range regexp.MustCompile(`\s*[、,，;；]\s*§\s*`).Split(sections, -1) {
+	for _, section := range wikiPlanSectionNames(sections) {
 		s := wikiPlanUnwrap(section)
 		if wikiPlanWholeDoc[s] {
 			out = append(out, wikiPlanDocSource{Path: paths[0]})
@@ -410,6 +410,36 @@ func wikiPlanDocSourcesOf(text string) []wikiPlanDocSource {
 		out = append(out, wikiPlanDocSource{Path: paths[0], Section: &s})
 	}
 	return out
+}
+
+// wikiPlanSectionNames splits `a、§ b` into its sections: at a separator followed by `§`, and never inside
+// parentheses, where a heading's own text may name other sections — «2. 加固后的恢复策略（契约 §6.4、§6.5）» is one.
+func wikiPlanSectionNames(text string) []string {
+	runes := []rune(text)
+	var out []string
+	var name strings.Builder
+	depth := 0
+	for i := 0; i < len(runes); i++ {
+		switch r := runes[i]; {
+		case r == '（' || r == '(':
+			depth++
+		case (r == '）' || r == ')') && depth > 0:
+			depth--
+		case depth == 0 && strings.ContainsRune("、,，;；", r):
+			next := i + 1
+			for next < len(runes) && (runes[next] == ' ' || runes[next] == '\u3000' || runes[next] == '\t') {
+				next++
+			}
+			if next < len(runes) && runes[next] == '§' {
+				out = append(out, name.String())
+				name.Reset()
+				i = next
+				continue
+			}
+		}
+		name.WriteRune(runes[i])
+	}
+	return append(out, name.String())
 }
 
 // wikiPlanWholeDoc are the names a model gives the whole of a document after `§`: no section.

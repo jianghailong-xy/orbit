@@ -1186,16 +1186,19 @@ func TestWikiPlanReadsTheCompactLineFormat(t *testing.T) {
 	}
 
 	// As the real model wrote them: a heading that ends in its own parenthesis, one it wrapped in them, the
-	// whole of a document, two files' symbols on one line, and a project whose title has 「」 in it.
+	// whole of a document, a heading whose parenthesis names other sections, two files' symbols on one line,
+	// and a project whose title has 「」 in it.
 	_, sections, _ = parseWikiPlanDocBody("### 1.1 概览\n读者：甲：读完能改\n" +
 		"### 1. 模型 | concepts | 300\n讲什么：数据模型。\n- 文档：docs/a.md § 4. 数据模型（新表 `share_link`）、§ （5. 接口）\n- 文档：docs/b.md § 正文\n" +
+		"- 文档：docs/c.md § 2. 恢复策略（契约 §6.4、§6.5）、§ 3. 下一节\n" +
 		"- 代码：src/a.ts: x; src/b.ts: y, z；w\n- 会话：项目「把「什么算完成」从项目末尾搬到开工前」「甲」；要找：原话\n")
 	if len(sections) != 1 {
 		t.Fatalf("sections: %+v", sections)
 	}
 	s = sections[0]
-	if len(s.Docs) != 3 || s.Docs[0].Section == nil || *s.Docs[0].Section != "4. 数据模型（新表 `share_link`）" ||
-		s.Docs[1].Section == nil || *s.Docs[1].Section != "5. 接口" || s.Docs[2].Path != "docs/b.md" || s.Docs[2].Section != nil {
+	if len(s.Docs) != 5 || s.Docs[0].Section == nil || *s.Docs[0].Section != "4. 数据模型（新表 `share_link`）" ||
+		s.Docs[1].Section == nil || *s.Docs[1].Section != "5. 接口" || s.Docs[2].Path != "docs/b.md" || s.Docs[2].Section != nil ||
+		s.Docs[3].Section == nil || *s.Docs[3].Section != "2. 恢复策略（契约 §6.4、§6.5）" || s.Docs[4].Section == nil || *s.Docs[4].Section != "3. 下一节" {
 		t.Errorf("the documents' sections: %+v", s.Docs)
 	}
 	if !reflect.DeepEqual(s.Code, []wikiPlanCodeSource{{Path: "src/a.ts", Symbols: []string{"x"}}, {Path: "src/b.ts", Symbols: []string{"y", "z", "w"}}}) {
