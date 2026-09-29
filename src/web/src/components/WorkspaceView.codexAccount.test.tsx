@@ -10,9 +10,9 @@ import type { Runner } from './TasksSidePanel';
 /**
  * A runner with two Codex accounts signed in. The New Session hero lists them under Codex, each with
  * its own quota; the one picked travels with the new session (`codexAccount`), and the composer's
- * quota gauge is that account's — on a draft and on a session started on it. Without a pick nothing
- * travels, and the session runs on its workspace's account, as it always did. A Claude session runs on
- * its workspace's Claude account, and its gauge is that account's too.
+ * quota gauge is that account's, and its popover names it — on a draft and on a session started on it.
+ * Without a pick nothing travels, and the session runs on its workspace's account, as it always did. A
+ * Claude session runs on its workspace's Claude account, and its gauge is that account's too.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -164,8 +164,18 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
       [...row.querySelectorAll('.np-row-name, .np-row-model')].map((part) => part.textContent).join(' '),
     );
   const pickedRow = () => document.querySelector<HTMLElement>('.np-account.picked .np-row-name')?.textContent;
-  /** The composer's account pill: which Codex account this session spends. */
-  const accountPill = () => mounted().querySelector<HTMLElement>('.composer-account[data-codex-account]')?.textContent;
+  /** Which Codex account the quota gauge's popover names (portaled out of the mount), and the note
+   *  under it: opened by a press, as on a phone. */
+  const gaugeAccount = async () => {
+    if (!document.querySelector('.ant-popover:not(.ant-popover-hidden) .cu-pop')) await click(usage());
+    return {
+      name: document.querySelector('.cu-account-name')?.textContent ?? null,
+      note: document.querySelector('.cu-account .cu-reset')?.textContent ?? null,
+    };
+  };
+  /** Named in the composer's own row it crowds the model out on a phone: it lives in the popover. */
+  const composerRowNamesNoAccount = () =>
+    expect(mounted().querySelector('.composer-toolbar .composer-account')).toBeNull();
 
   const sendMessage = async (text: string) => {
     const box = mounted().querySelector<HTMLTextAreaElement>('.composer-box textarea')!;
@@ -272,8 +282,8 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
     // Default's 5-hour window is spent, so Automatic would start it on Work, whose quota the gauge shows.
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 0%');
-    expect(mounted().querySelector('.np-summary')?.textContent).toContain('Work (auto)');
-    expect(accountPill()).toBe('Work');
+    expect(await gaugeAccount()).toEqual({ name: 'Work', note: 'Automatic — the account with the most room right now' });
+    composerRowNamesNoAccount();
 
     await click(mounted().querySelector('.np-card'));
     expect(accountRows()).toEqual(['Automatic most room', 'Default 5h 100%', 'Work Weekly 0%']);
@@ -292,9 +302,9 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
     await click(mounted().querySelector('.np-card'));
     await click(accountNamed('Default'));
-    expect(mounted().querySelector('.np-summary')?.textContent).toContain('Default');
-    expect(mounted().querySelector('.np-summary')?.textContent).not.toContain('(auto)');
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 100%');
+    // Picked, so no note: it starts where the pick says.
+    expect(await gaugeAccount()).toEqual({ name: 'Default', note: null });
 
     await click(mounted().querySelector('.np-card'));
     expect(pickedRow()).toBe('Default');
@@ -332,15 +342,16 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     detail = session(WORK, null);
     await mount(`/sessions/${SESSION}`, '.composer-box textarea');
     await settlesOn('Plan usage 0%');
-    // Named beside the gauge, so whose quota it is can be read off the session.
-    expect(accountPill()).toBe('Work');
+    // Named in the gauge's popover, so whose quota it is can be read off the session.
+    expect(await gaugeAccount()).toEqual({ name: 'Work', note: null });
+    composerRowNamesNoAccount();
   });
 
   it('a session that picked Default shows Default’s quota on a workspace set to another account', async () => {
     detail = session('default', WORK);
     await mount(`/sessions/${SESSION}`, '.composer-box textarea');
     await settlesOn('Plan usage 100%');
-    expect(accountPill()).toBe('Default');
+    expect(await gaugeAccount()).toEqual({ name: 'Default', note: null });
   });
 
   it("a session with no pick of its own shows its workspace's account's quota", async () => {
@@ -372,7 +383,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     };
     await mount(`/sessions/${SESSION}`, '.composer-box textarea');
     await settlesOn('Plan usage 30%');
-    // The Codex account pill is Codex's: a Claude session names none.
-    expect(accountPill()).toBeUndefined();
+    // The account line is Codex's: a Claude session's popover names none.
+    expect(await gaugeAccount()).toEqual({ name: null, note: null });
   });
 });

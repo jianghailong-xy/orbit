@@ -1135,17 +1135,13 @@ struct NewSessionView: View {
     /// for a configured provider it's a constant the user already set and isn't actionable here, so
     /// the credential earns a line only when it's broken — matching web, where it surfaces solely as
     /// the provider's `unavailable` warning (not yet modelled on the native ProviderChoice).
+    /// No account either (web parity): the composer's quota gauge names it in its detail.
     private var heroSubtitle: String {
-        let model = draft.providerCapabilitiesResolved
+        draft.providerCapabilitiesResolved
             ? AgentDefaults.friendlyName(draft.modelID, for: draft.provider,
                                          catalog: draft.modelCatalog,
                                          configured: draft.configuredProviders)
             : "Runtime default"
-        // Which of the runner's accounts it would start on, when it has several — marked when that is
-        // Automatic's choice rather than a pick (web parity).
-        guard let account = currentProviderChoice.accounts?.first(where: { $0.id == draft.codexAccount })
-        else { return model }
-        return "\(model) · \(account.label)\(draft.codexAutomatic ? " (auto)" : "")"
     }
 }
 

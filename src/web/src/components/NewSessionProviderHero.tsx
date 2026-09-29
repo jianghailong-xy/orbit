@@ -213,9 +213,6 @@ export function NewSessionProviderHero({
       </button>
     );
   };
-  const currentAccountName = current.accounts?.find((account) => account.id === currentAccount)?.label;
-  const currentAccountLabel = currentAccountName && automatic ? `${currentAccountName} (auto)` : currentAccountName;
-
   // One flat list: whose subscription or key each row spends is already carried by its brand mark
   // and by the summary under the card, so section headers would only be chrome between the user
   // and the pick. Engines still come first (that's the order `choices` arrives in). The accounts
@@ -307,15 +304,11 @@ export function NewSessionProviderHero({
           <>
             {current.modelLabel}
             <span className="np-dot">·</span>
-            {currentAccountLabel && (
-              <>
-                {currentAccountLabel}
-                <span className="np-dot">·</span>
-              </>
-            )}
             {/* No funding label in the healthy state: for a configured provider it's a constant the
                 user already set, and it isn't actionable here. The credential earns a line only when
-                it's broken — the `unavailable` branch above ("… · Fix it"). */}
+                it's broken — the `unavailable` branch above ("… · Fix it"). No account either: an
+                email does not fit this line on a phone, and the composer's quota gauge names the
+                account in its popover. */}
             <Link to="/providers">Manage</Link>
           </>
         )}
