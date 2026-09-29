@@ -1,0 +1,44 @@
+name: Documentation improvement
+description: Report a missing, unclear, or outdated user or contributor guide.
+title: "[Docs]: "
+labels: ["documentation", "status:needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping keep Orbit's public guides accurate. For an early idea or question, use Discussions instead. Do not include credentials or private repository content.
+  - type: input
+    id: page
+    attributes:
+      label: Page or entry point
+      description: Link to the page, file, or missing entry point.
+      placeholder: docs/self-hosting.md or a GitHub URL
+    validations:
+      required: true
+  - type: textarea
+    id: gap
+    attributes:
+      label: What is missing or confusing?
+      description: Describe what a new operator or contributor cannot find or understand.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Suggested correction
+      description: A proposed wording, example, link, or structure is helpful but not required.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Include the release/tag when the documentation differs by version.
+      placeholder: v0.x.y or commit SHA
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and Discussions for the same gap.
+          required: true
+        - label: I removed credentials, private URLs, and private repository content.
+          required: true

@@ -1,5 +1,20 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Community guide
+    url: https://github.com/jianghailong-xy/orbit/blob/main/COMMUNITY.md
+    about: Choose the right channel, read response targets, and find the contributor entry points.
+  - name: Public roadmap
+    url: https://github.com/jianghailong-xy/orbit/blob/main/ROADMAP.md
+    about: See what is now, next, and later before opening a duplicate proposal.
+  - name: Questions and ideas (Discussions)
+    url: https://github.com/jianghailong-xy/orbit/discussions
+    about: Ask usage questions, explore ideas, share a deployment, or give release feedback.
+  - name: Good first issues
+    url: https://github.com/jianghailong-xy/orbit/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22
+    about: Pick a scoped task with acceptance checks before opening a new request.
+  - name: Documentation improvement form
+    url: https://github.com/jianghailong-xy/orbit/issues/new?template=documentation.yml
+    about: Report a missing, unclear, or outdated public guide.
   - name: Security vulnerability
     url: https://github.com/jianghailong-xy/orbit/blob/main/SECURITY.md
     about: Follow the private reporting instructions. Do not publish vulnerability details in an issue.
