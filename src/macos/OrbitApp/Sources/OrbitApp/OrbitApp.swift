@@ -23,6 +23,8 @@ struct OrbitApp: App {
                 .hidesTitlebarSeparator()   // seamless, ChatGPT-style floating top (no hard rule)
                 .onOpenURL { url in
                     if let route = DeepLink.parse(url) { model.route(to: route) }
+                    // `orbit://session/<id>?at=<record>`: the session, at that record.
+                    model.followRecord(in: url)
                 }
                 // A `Text` link naming an Orbit object opens here: nothing outside the app can open
                 // an `orbit-task:`-style scheme, and a page URL of this deployment is a page this app
