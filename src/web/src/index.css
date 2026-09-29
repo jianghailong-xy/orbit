@@ -1725,6 +1725,28 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* The third line: what this machine needs a person for. When it wraps on a narrow screen, the
+   triangle stays with its first line. */
+.runner-attention {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+.runner-attention.bad {
+  color: var(--error);
+}
+.runner-attention.warn {
+  color: var(--warning);
+}
+.runner-attention .anticon {
+  flex: none;
+  margin-top: 2.5px;
+  font-size: 11px;
+}
 .runner-version {
   font-size: 12px;
   color: var(--text-3);
@@ -1969,44 +1991,166 @@ body {
 .rd-meta-ok {
   color: var(--success);
 }
-.rd-details-toggle {
-  margin-left: 4px;
-  color: var(--brand);
-  cursor: pointer;
-  user-select: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.rd-details-toggle:hover {
-  color: var(--brand-strong);
-}
-.rd-details-caret {
-  font-size: 10px;
-  transition: transform 0.18s ease;
-}
-.rd-details-toggle.open .rd-details-caret {
-  transform: rotate(180deg);
-}
-.rd-overview {
-  margin: 14px 0 0 19px;
+/* Needs Attention: one card per item, under the title and across both columns — two abreast on a
+   desktop, one alone taking the row. Amber for a warning, red for what already stops sessions, grey
+   for an offline machine (a state, not a fault). */
+.rd-attention {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 14px 24px;
-  padding: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+.rd-attention-card {
+  display: flex;
+  gap: 11px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+}
+.rd-attention-card:only-child {
+  grid-column: 1 / -1;
+}
+.rd-attention-card.bad {
+  background: var(--error-bg);
+  border-color: var(--error-border);
+}
+.rd-attention-card.idle {
+  background: var(--bg-subtle);
+  border-color: var(--border-subtle);
+}
+.rd-attention-icon {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: rgba(250, 140, 22, 0.16);
+  color: var(--warning);
+  font-size: 14px;
+}
+.rd-attention-card.bad .rd-attention-icon {
+  background: rgba(245, 74, 69, 0.14);
+  color: var(--error);
+}
+.rd-attention-card.idle .rd-attention-icon {
+  background: var(--fill-muted);
+  color: var(--text-3);
+}
+.rd-attention-main {
+  min-width: 0;
+}
+.rd-attention-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.rd-attention-detail {
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.rd-attention-action {
+  margin-top: 9px;
+}
+/* The machine's contents on the left, its settings and facts in a narrower column on the right. */
+.rd-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  gap: 0 24px;
+  align-items: start;
+}
+.rd-col {
+  min-width: 0;
+}
+/* A settings panel: label left, value or control right, hairlines between rows — Capacity and
+   About. */
+.rd-box {
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   background: var(--bg-raised);
 }
-.rd-field-label {
+.rd-box > * + * {
+  border-top: 1px solid var(--border-subtle);
+}
+.rd-kv,
+.rd-kv-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+.rd-kv {
+  min-height: 42px;
+  padding: 7px 14px;
+}
+.rd-kv-label {
+  flex: none;
+  color: var(--text-2);
+}
+.rd-kv-value {
+  min-width: 0;
+  color: var(--text-1);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.rd-kv-value small {
+  margin-left: 5px;
   font-size: 12px;
   color: var(--text-3);
 }
-.rd-field-value {
-  font-size: 14px;
-  color: var(--text-1);
-  margin-top: 2px;
-  word-break: break-word;
+.rd-kv-value small.warn {
+  color: var(--warning);
+  font-weight: 500;
+}
+.rd-inline-link {
+  margin-left: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--brand);
+  cursor: pointer;
+}
+.rd-inline-link:hover {
+  color: var(--brand-strong);
+}
+.rd-max-concurrent {
+  width: 72px;
+}
+.rd-keep-free {
+  min-width: 96px;
+}
+.rd-disk {
+  padding: 11px 14px 12px;
+}
+.rd-disk-bar {
+  height: 6px;
+  margin-top: 8px;
+  border-radius: 3px;
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+.rd-disk-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--brand);
+}
+.rd-disk-bar.warn > span {
+  background: var(--warning-solid);
+}
+/* The footnote under a panel. */
+.rd-hint {
+  margin: 8px 2px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
 }
 .rd-empty {
   color: var(--text-3);
@@ -2031,10 +2175,24 @@ body {
 }
 .rd-engine-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1.3fr);
+  grid-template-columns: 24px minmax(0, 1.1fr) minmax(0, 1fr) 190px 12px;
+  grid-template-areas: 'mark main auth quota chevron';
   gap: 12px;
-  align-items: baseline;
-  padding: 12px 16px;
+  align-items: center;
+  padding: 11px 14px;
+  color: inherit;
+  transition: background 0.12s ease;
+}
+.rd-engine-row:hover {
+  color: inherit;
+  background: var(--bg-hover);
+}
+.rd-engine-row > .provider-tile {
+  grid-area: mark;
+}
+.rd-engine-main {
+  grid-area: main;
+  min-width: 0;
 }
 .rd-engine-name {
   font-size: 14px;
@@ -2042,6 +2200,7 @@ body {
   color: var(--text-1);
 }
 .rd-engine-version {
+  margin-top: 1px;
   font-size: 12.5px;
   color: var(--text-3);
   overflow: hidden;
@@ -2051,12 +2210,85 @@ body {
 /* Same amber as the Providers row's note, for the same reason: drift needs a person eventually,
    which is not the same as being down. */
 .rd-engine-note {
-  font-size: 12.5px;
   color: var(--text-4);
 }
 .rd-engine-note.warn {
   color: var(--warning);
   font-weight: 500;
+}
+.rd-engine-auth {
+  grid-area: auth;
+  font-size: 12.5px;
+}
+.rd-engine-auth.ok {
+  color: var(--success);
+}
+.rd-engine-auth.warn {
+  color: var(--warning);
+  font-weight: 500;
+}
+.rd-engine-auth.muted,
+.rd-engine-muted {
+  color: var(--text-3);
+}
+.rd-engine-quota {
+  grid-area: quota;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12.5px;
+}
+.rd-quota-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.rd-quota.near .rd-quota-pct {
+  color: var(--warning);
+  font-weight: 600;
+}
+.rd-quota-bar {
+  height: 4px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+.rd-quota-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--brand);
+}
+.rd-quota.near .rd-quota-bar > span {
+  background: var(--warning-solid);
+}
+.rd-engine-chevron {
+  grid-area: chevron;
+  font-size: 11px;
+  color: var(--text-4);
+}
+/* An engine row needs about 560px for its five columns. Narrower — a phone, or the left column
+   beside Capacity on a tablet — its quota takes a line of its own, and a quota line that would only
+   hold "—" is left out. Measured on the section, not the viewport: the column it sits in is what
+   runs out of room. */
+.rd-engines {
+  container: rd-engines / inline-size;
+}
+@container rd-engines (max-width: 560px) {
+  .rd-engine-row {
+    grid-template-columns: 24px minmax(0, 1fr) auto 12px;
+    grid-template-areas:
+      'mark main auth chevron'
+      '. quota quota .';
+    row-gap: 8px;
+  }
+  .rd-engine-quota.empty {
+    display: none;
+  }
 }
 /* The run's report sits above the rows it summarizes, not inside any one of them. */
 .rd-engine-relay {
@@ -2164,6 +2396,16 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Sessions of this workspace running right now — the sidebar's own count. */
+.rd-workspace-running {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--brand-tint);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 500;
 }
 .rd-form-field {
   margin-bottom: 14px;
@@ -2426,6 +2668,34 @@ body {
 @media (max-width: 600px) {
   .rd-form-grid {
     grid-template-columns: 1fr;
+  }
+}
+/* A phone's width: one column, in the order the iPhone's runner page reads — Needs Attention,
+   Capacity, Engines, Workspaces, About. The two column boxes step aside (display: contents) so
+   their sections can be ordered as one list. */
+@media (max-width: 640px) {
+  .rd-attention {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rd-cols {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .rd-col {
+    display: contents;
+  }
+  .rd-capacity {
+    order: 1;
+  }
+  .rd-engines {
+    order: 2;
+  }
+  .rd-workspaces {
+    order: 3;
+  }
+  .rd-about {
+    order: 4;
   }
 }
 /* Edit-in-place: the clicked row stays as a header and the editor expands below
