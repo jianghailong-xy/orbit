@@ -299,8 +299,9 @@ export class CoordinatorDeliveryService {
    * releases or binds it around this call.
    *
    * `send` is its one caller. Until 2026-09-10 the evidence ledger's door was a second, telling this
-   * conversation about every completion evidence revision; that door now tells nobody, and this
-   * stopped being public with it.
+   * conversation about every completion evidence revision; that door stopped telling anybody, and
+   * this stopped being public with it. Since 2026-09-29 it tells an Automatic project's coordinator
+   * again, to decide rather than to relay, and it does so through `queue`.
    */
   private async message(fact: WakeFact): Promise<CoordinatorMessageOutcome> {
     const project = await this.prisma.project.findUnique({
