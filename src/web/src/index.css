@@ -4170,6 +4170,32 @@ html[data-theme='dark'] .session-tag-chip {
     box-shadow: 0 0 0 2px transparent;
   }
 }
+/* The record a link opened the session at (`?at=`, lib/transcriptDeepLink): tinted and outlined for
+   a moment — longer than a find hit's flash, since the page has only just opened on it. */
+.record-flash {
+  animation: record-flash 2.4s ease-out;
+}
+@keyframes record-flash {
+  0%,
+  40% {
+    background-color: var(--brand-tint);
+    box-shadow: 0 0 0 2px var(--brand-border);
+  }
+  to {
+    background-color: transparent;
+    box-shadow: 0 0 0 2px transparent;
+  }
+}
+/* The newer page a window opened at a record is pulling in, over the bottom it arrives under. */
+.chat-newer-bottom {
+  position: absolute;
+  bottom: 60px;
+  left: 0;
+  right: 0;
+  z-index: 4;
+  text-align: center;
+  pointer-events: none;
+}
 :root[data-theme='dark'] .find-bar {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
 }
