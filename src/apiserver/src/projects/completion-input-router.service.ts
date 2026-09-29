@@ -6,6 +6,8 @@ import {
   type WakeAuthorizer,
 } from './coordinator-wake.service';
 import type { CompletionInputConsumer } from './completion-input';
+import { CompletionEvidenceProducer } from './completion-evidence.producer';
+import type { CoordinatorDeliveryOutcome } from './coordinator-delivery.service';
 import {
   CRITERION_READY_CONSUMER,
   CriterionReadyProducer,
@@ -64,11 +66,13 @@ export type CompletionInputRouteOutcome =
 /**
  * `route`'s default: a committed input may wake its coordinator.
  *
- * Right for the one fact that eats it — an evidence revision an agent chose to submit, which no
- * switch governs. Wrong for every fact DERIVED from the project's rows: those answer to the
- * project's coordinator switch and are recorded in its convergence ledger, which is why
- * `routeTaskExceptions`, `routeReadyCriteria` and `routeUnlandedCriteria` below all pass their
- * producer's authorizer rather than letting this stand in for one.
+ * Right for the one fact that eats it — an evidence revision an agent chose to submit, when it is
+ * only RECORDED (`routeCompletionEvidence`): nothing is delivered, so there is no switch to obey.
+ * Wrong for every fact DERIVED from the project's rows, and for an evidence revision that is
+ * delivered: those answer to the project's coordinator switch and are recorded in its convergence
+ * ledger, which is why `routeTaskExceptions`, `routeReadyCriteria` and `routeUnlandedCriteria`
+ * below, and `CompletionEvidenceProducer`, all pass their producer's authorizer rather than letting
+ * this stand in for one.
  */
 const ALLOW_COMMITTED_INPUT: WakeAuthorizer = async () => ({ allowed: true });
 
@@ -106,6 +110,12 @@ export class CompletionInputRouter {
      * this router by hand pass the six before it. CoordinatorJudgmentModule provides it.
      */
     private readonly unmerged?: ProjectSettledUnmergedProducer,
+    /**
+     * What the evidence door delivers through in an Automatic project. `@Optional()` and last, for
+     * the reason the seventh gives: a router built by hand without it records every revision, which
+     * is what the evidence door did for every project before it. The module provides it.
+     */
+    @Optional() private readonly evidence?: CompletionEvidenceProducer,
   ) {}
 
   /**
@@ -177,8 +187,9 @@ export class CompletionInputRouter {
   }
 
   /**
-   * The evidence ledger's own door: one committed completion-evidence revision, recorded against
-   * its named consumer and said to nobody.
+   * The evidence ledger's own door: one committed completion-evidence revision — delivered to the
+   * standing coordinator conversation to DECIDE when the project is Automatic and that conversation
+   * can decide it, and otherwise recorded against its named consumer and said to nobody.
    *
    * WHY THE CONSUMER IS STILL `JUDGMENT_REQUEST_DERIVER`
    * ===================================================
@@ -186,22 +197,36 @@ export class CompletionInputRouter {
    * always said and what the CHECK still accepts, and how a question reaches a person is not a
    * reason to rewrite the vocabulary of rows already written.
    *
-   * WHY NOTHING IS DELIVERED
-   * ========================
-   * Until 2026-09-10 this door also put the revision on the conversation coordinating the project,
-   * as a turn telling the model to ask the account owner through `AskUserQuestion` and record the
-   * answer. Only the owner's answer settles the question, so that turn could do nothing but relay
-   * it, and the relay was the slow part: measured that day, a median of 161s from submission to
-   * card and 15s from a click to the decision it stood for, and a card that died with its turn.
-   * The question is now drawn straight from the read that derives it from the rows —
+   * WHY A PROJECT THAT IS NOT AUTOMATIC IS TOLD NOTHING
+   * ==================================================
+   * Until 2026-09-10 this door also put every revision on the conversation coordinating the
+   * project, as a turn telling the model to ask the account owner through `AskUserQuestion` and
+   * record the answer. Only the owner's answer settled the question, so that turn could do nothing
+   * but relay it, and the relay was the slow part: measured that day, a median of 161s from
+   * submission to card and 15s from a click to the decision it stood for, and a card that died
+   * with its turn. The question is drawn straight from the read that derives it from the rows —
    * `readPendingEvidenceJudgments`, behind `GET /api/tasks/evidence-decisions/pending` — and
    * answered at `POST /tasks/:taskId/evidence/decision`, the same decision door the runner's tool
-   * reaches. A read recomputed from committed rows has no delivery to lose, so nothing is re-sent
-   * and no clock is added; `decision-facts-no-coordinator-turn.pg.spec.ts` holds that this door
-   * writes no turn.
+   * reaches. That is still the whole story for a project whose coordinator switch is off:
+   * `decision-facts-no-coordinator-turn.pg.spec.ts` holds that this door writes it no turn.
+   *
+   * WHY AN AUTOMATIC PROJECT'S COORDINATOR IS TOLD, AND TOLD TO DECIDE (2026-09-29)
+   * ==============================================================================
+   * The premise of 09-10 — only the owner can answer — is not the product's rule: concluding a
+   * verdict from evidence is COORDINATOR_BOUNDED in `coordinator-authority.ts`, and from 09-14 to
+   * 09-29 the owner pressed 96 of the 100 evidence cards in Automatic projects. So when the project
+   * is Automatic, `CompletionEvidenceProducer` queues the revision on the standing conversation for
+   * the coordinator itself to decide with `task_evidence_decide` — not to relay — and the owner's
+   * read holds that revision back for the project's `exceptionEscalationSeconds` after delivery.
+   * A revision it cannot deliver (switch, fuse, no conversation or an ended one) or one that
+   * conversation cannot decide is the owner's card at once, exactly as before;
+   * `automatic-evidence-to-coordinator.pg.spec.ts` holds both halves.
    */
-  async routeCompletionEvidence(fact: WakeFact): Promise<CompletionInputRouteOutcome> {
-    return this.route(fact, 'JUDGMENT_REQUEST_DERIVER');
+  async routeCompletionEvidence(
+    fact: WakeFact,
+  ): Promise<CompletionInputRouteOutcome | CoordinatorDeliveryOutcome> {
+    const delivered = await this.evidence?.deliver(fact);
+    return delivered ?? this.route(fact, 'JUDGMENT_REQUEST_DERIVER');
   }
 
   /**

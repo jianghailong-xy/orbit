@@ -398,8 +398,9 @@ export class TaskCompletionEvidenceService {
     // `coordinator-evidence-no-addressee.pg.spec.ts`, which covers the population that already
     // exists: the write doors no longer let one be declared.
     if (committed.projectId && this.completionInputs) {
-      // Recorded against the consumer these rows have always named, and told to nobody: the
-      // question is the derived read's to find, and why nothing is delivered is that door's to say.
+      // In an Automatic project, handed to its coordinator to decide; otherwise recorded against
+      // the consumer these rows have always named and told to nobody, the question being the
+      // derived read's to find. Which, and why, is that door's to say.
       await this.completionInputs.routeCompletionEvidence(
         completionEvidenceRevisedFact({
           projectId: committed.projectId,
