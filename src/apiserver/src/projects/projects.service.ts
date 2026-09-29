@@ -3474,7 +3474,13 @@ export class ProjectsService {
    * the owner's, which that switch can then no longer lift.
    */
   async pause(ownerId: string, id: string, actingSessionId?: string): Promise<ProjectPauseState> {
-    return this.writePause(ownerId, id, actingSessionId, 'PAUSE');
+    ProjectsService.refusePauseFromSession(actingSessionId);
+    const written = await withTransactionRetry(
+      this.prisma,
+      (tx) => ProjectsService.writePause(tx, ownerId, id, 'PAUSE'),
+      loggedRetry(this.logger, 'projects.pause'),
+    );
+    return this.afterPause(ownerId, id, written);
   }
 
   /**
@@ -3487,45 +3493,61 @@ export class ProjectsService {
    * ready then.
    */
   async resume(ownerId: string, id: string, actingSessionId?: string): Promise<ProjectPauseState> {
-    return this.writePause(ownerId, id, actingSessionId, 'RESUME');
+    ProjectsService.refusePauseFromSession(actingSessionId);
+    const written = await withTransactionRetry(
+      this.prisma,
+      (tx) => ProjectsService.writePause(tx, ownerId, id, 'RESUME'),
+      loggedRetry(this.logger, 'projects.resume'),
+    );
+    return this.afterPause(ownerId, id, written);
+  }
+
+  /** Refused whole before anything is read: a request from a session does not pause or resume. */
+  private static refusePauseFromSession(actingSessionId: string | undefined): void {
+    const refusal = projectPauseSessionRefusal(actingSessionId);
+    if (refusal) throw new ForbiddenException(refusal);
   }
 
   /**
-   * Both doors: decided under the project lock (rank 40, the lock `update` takes before it writes the
-   * same row), so a pause cannot interleave with the older switch's pause or with a start.
+   * Both doors' write, inside their transaction: decided under the project lock (rank 40, the lock
+   * `update` takes before it writes the same row), so a pause cannot interleave with the older
+   * switch's pause or with a start.
    */
-  private async writePause(
+  private static async writePause(
+    tx: Prisma.TransactionClient,
     ownerId: string,
     id: string,
-    actingSessionId: string | undefined,
     press: 'PAUSE' | 'RESUME',
-  ): Promise<ProjectPauseState> {
-    const refusal = projectPauseSessionRefusal(actingSessionId);
-    if (refusal) throw new ForbiddenException(refusal);
-    const { row, moved } = await withTransactionRetry(this.prisma, async (tx) => {
-      const [locked] = await tx.$queryRaw<ProjectPauseRow[]>(Prisma.sql`
-        SELECT "started_at" AS "startedAt", "paused_at" AS "pausedAt",
-               "paused_reason" AS "pausedReason"
-          FROM "project"
-         WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
-           FOR NO KEY UPDATE`);
-      if (!locked) throw new NotFoundException('project not found');
-      const write = press === 'PAUSE' ? ownerPauseWrite(locked, new Date()) : resumeWrite(locked);
-      if (write === 'NOT_STARTED') {
-        throw new ConflictException({
-          code: 'PROJECT_NOT_STARTED',
-          message:
-            'This project has not been started, so there is nothing to pause: it runs nothing by '
-            + 'itself until its owner starts it. Nothing was written.',
-        });
-      }
-      if (!write) return { row: locked, moved: false };
-      await tx.project.update({ where: { id }, data: write });
-      return { row: { ...locked, ...write }, moved: true };
-    }, loggedRetry(this.logger, press === 'PAUSE' ? 'projects.pause' : 'projects.resume'));
-    // After the commit, and only when something changed: every client of the owner re-reads it.
-    if (moved) this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, id);
-    return projectPauseState(id, row);
+  ): Promise<{ row: ProjectPauseRow; moved: boolean }> {
+    const [locked] = await tx.$queryRaw<ProjectPauseRow[]>(Prisma.sql`
+      SELECT "started_at" AS "startedAt", "paused_at" AS "pausedAt",
+             "paused_reason" AS "pausedReason"
+        FROM "project"
+       WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+         FOR NO KEY UPDATE`);
+    if (!locked) throw new NotFoundException('project not found');
+    const write = press === 'PAUSE' ? ownerPauseWrite(locked, new Date()) : resumeWrite(locked);
+    if (write === 'NOT_STARTED') {
+      throw new ConflictException({
+        code: 'PROJECT_NOT_STARTED',
+        message:
+          'This project has not been started, so there is nothing to pause: it runs nothing by '
+          + 'itself until its owner starts it. Nothing was written.',
+      });
+    }
+    if (!write) return { row: locked, moved: false };
+    await tx.project.update({ where: { id }, data: write });
+    return { row: { ...locked, ...write }, moved: true };
+  }
+
+  /** After the commit, and only when something changed: every client of the owner re-reads it. */
+  private afterPause(
+    ownerId: string,
+    id: string,
+    written: { row: ProjectPauseRow; moved: boolean },
+  ): ProjectPauseState {
+    if (written.moved) this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, id);
+    return projectPauseState(id, written.row);
   }
 
   /**
