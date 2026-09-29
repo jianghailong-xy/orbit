@@ -1696,6 +1696,8 @@ final class ConsoleModel {
         do {
             let accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
                                               text: text, shell: shell, attachmentIds: attachmentIds)
+            // An earlier send's "Couldn't send" is not true any more.
+            statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
             if resuming {
                 // The session is revived (back to PENDING/RUNNING); drop the stale terminal
                 // snapshot so the stream drives status again and a quick follow-up doesn't
@@ -2142,6 +2144,7 @@ final class ConsoleModel {
                 sessionID: sessionID,
                 SessionInterruptRequest(clientTurnId: clientTurnId, content: text,
                                         attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
+            statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
             if let tid = accepted.turnId {
                 reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid)
             }
