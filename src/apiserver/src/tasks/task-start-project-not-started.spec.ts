@@ -131,7 +131,8 @@ test('task_start is refused for a task whose project its owner has not started',
     (error: unknown) => {
       assert.ok(error instanceof ConflictException, 'a readable 409, not a dispatched Session');
       assert.equal((error.getResponse() as { code: string }).code, 'PROJECT_NOT_STARTED');
-      assert.match(error.message, /Start the project/);
+      assert.match(error.message, /project_request_start/,
+        'it names the tool that asks for the start, not a button the agent cannot press');
       assert.match(error.message, new RegExp(uuidToBase62(TASK)));
       assert.match(error.message, new RegExp(uuidToBase62(PROJECT)));
       return true;

@@ -85,6 +85,88 @@ export interface StartProjectResponse extends ProjectStartRecord {
   lineLocked: boolean;
 }
 
+/**
+ * What `project_request_start` sends (`POST /runner/projects/:id/start-requests`): the settings the
+ * coordinator suggests the project start with, and one sentence on why. The merge check may be left
+ * out, which suggests none.
+ */
+export type ProjectStartRequestBody = Omit<ProjectStartSettings, 'mergeCheckCommand'> & {
+  mergeCheckCommand?: string | null;
+  why: string;
+};
+
+/**
+ * The readiness check a start request goes through, in `task-plan-preflight`'s shape: `REFUSE`
+ * means the plan is not ready and nothing is filed, `WARN` is a fact about what will happen once it
+ * starts and is filed with the request. Every finding comes back at once.
+ *
+ * - `START_NO_CRITERIA` / `START_NO_TASKS` — nothing to judge done by, or nothing to run.
+ * - `START_CRITERION_UNSERVED` — a criterion no task declares it serves (`criterionKey`).
+ * - `START_TASK_HAS_NO_RUNNER` — tasks whose assignee is not a workspace bound to a runner.
+ * - `START_REPOSITORY_UNKNOWN` — a project branch (or a merge check) asked for, and the project's
+ *   coordination workspace names no repository.
+ * - `START_TASKS_START_BY_HAND` (warn) — tasks set `autoRunWhenReady=false`.
+ * - `START_NO_MERGE_CHECK` (warn) — Automatic on a project branch with no merge check: the branch
+ *   would merge into main with nothing run on the combined tree.
+ */
+export type ProjectStartCheckCode =
+  | 'START_NO_CRITERIA'
+  | 'START_NO_TASKS'
+  | 'START_CRITERION_UNSERVED'
+  | 'START_TASK_HAS_NO_RUNNER'
+  | 'START_REPOSITORY_UNKNOWN'
+  | 'START_TASKS_START_BY_HAND'
+  | 'START_NO_MERGE_CHECK';
+
+export interface ProjectStartFinding {
+  severity: 'REFUSE' | 'WARN';
+  code: ProjectStartCheckCode;
+  message: string;
+  /** One executable sentence, as a blocker's `requiredAction` is. */
+  requiredAction: string;
+  /** The criterion a finding is about, by the `key` `project_get` gives it; null for the others. */
+  criterion: { key: string; ordinal: number; text: string } | null;
+  /** The tasks a finding is about, oldest first; empty for the others. */
+  tasks: Array<{ taskId: string; title: string }>;
+}
+
+/**
+ * A coordinator's request to start its project, as it is filed: the `START_REQUEST` open item's
+ * payload, and what the owner's "Start this project?" card is drawn from.
+ *
+ * The two digests say which plan the request was made about. `criteriaDigest` is the seal of the
+ * criteria (the one `POST /projects/:id/start` confirms); `planDigest` is a hash of the project's
+ * tasks — each one's id and the criterion it serves — and of their dependency edges. A request whose
+ * plan has moved since is superseded and no longer drawn: the coordinator asks again.
+ */
+export interface ProjectStartRequest {
+  settings: ProjectStartSettings;
+  why: string;
+  criteriaDigest: string;
+  planDigest: string;
+  /** The repository the check found the project integrating into, or null for a project with none. */
+  repository: string | null;
+  /** The check's `WARN` findings: what the owner should know before pressing Start. */
+  warnings: ProjectStartFinding[];
+}
+
+/** What filing a start request answers: the request, the open item that holds it, and the one it
+ *  replaced. `alreadyOpen` is a re-send of the request already open, which writes nothing. */
+export interface ProjectStartRequestFiled extends ProjectStartRequest {
+  itemId: string;
+  state: 'OPEN';
+  alreadyOpen: boolean;
+  superseded: { itemId: string } | null;
+}
+
+/** The 409 a start request that is not ready gets: every finding, refusals first. */
+export interface ProjectStartNotReadyBody {
+  code: 'START_REQUEST_NOT_READY';
+  message: string;
+  written: 0;
+  findings: ProjectStartFinding[];
+}
+
 /** A merge check as it is stored: trimmed, and blank is none. */
 function storedMergeCheck(command: string | null | undefined): string | null {
   return command?.trim() || null;

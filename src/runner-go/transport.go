@@ -1371,6 +1371,24 @@ func (t *Transport) askOwner(sessionID, id string, body map[string]interface{}) 
 	return out, err
 }
 
+// requestProjectStart files a coordinator's request that the account owner start its project, and
+// returns at once: the owner answers on the start card, and the coordinator is told when the project
+// starts, as a turn of its own.
+//
+// The session header is the authority, as it is for askOwner — the server checks it against the
+// project's own coordinator pointer and refuses START_REQUEST_COORDINATOR_ONLY for anything else. A
+// plan that is not ready is a 409 START_REQUEST_NOT_READY carrying every finding, which travels as
+// the server raised it; `projectStartRequestRefusal` is what renders it.
+func (t *Transport) requestProjectStart(sessionID, id string, body map[string]interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST", "/runner/projects/"+url.PathEscape(id)+"/start-requests", body,
+		&out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // resolveOpenItem closes one of the project's exception items, with the reason the assignee gives
 // (contract §4.7's "标记已处理").
 //
