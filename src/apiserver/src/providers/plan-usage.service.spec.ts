@@ -119,6 +119,46 @@ test('a scope-less token keeps the gauge empty instead of surfacing as a broken 
   }
 });
 
+test('a quota the endpoint will not report stands apart from a key it refuses', async () => {
+  const { stub } = realtimeStub();
+  const { restore } = stubFetch([SCOPE_REFUSAL]);
+  try {
+    const svc = new ProviderPlanUsageService(stub);
+    await svc.refresh(row());
+    // The 403 is about the READ: a token without the profile scope still runs sessions, so an account
+    // pool must not take this for a refused key.
+    assert.equal(svc.usageStanding(row()), 'USAGE_UNKNOWN');
+  } finally {
+    restore();
+  }
+});
+
+test('a token the endpoint will not authenticate is a refused key', async () => {
+  const { stub } = realtimeStub();
+  const { restore } = stubFetch([{ status: 401, body: { error: { message: 'invalid x-api-key' } } }]);
+  try {
+    const svc = new ProviderPlanUsageService(stub);
+    await svc.refresh(row());
+    assert.equal(svc.usageStanding(row()), 'KEY_REFUSED');
+  } finally {
+    restore();
+  }
+});
+
+test('a read that succeeds, or fails outside the credential, leaves no standing behind', async () => {
+  const { stub } = realtimeStub();
+  const { restore } = stubFetch([{ status: 200, body: USAGE }, { status: 503 }]);
+  try {
+    const svc = new ProviderPlanUsageService(stub);
+    await svc.refresh(row());
+    assert.equal(svc.usageStanding(row()), null);
+    await svc.refresh(row());
+    assert.equal(svc.usageStanding(row()), null, 'a server error says nothing about the credential');
+  } finally {
+    restore();
+  }
+});
+
 test('a credential the endpoint refuses is asked exactly once', async () => {
   const { stub } = realtimeStub();
   const { calls, restore } = stubFetch([SCOPE_REFUSAL]);

@@ -27,6 +27,15 @@ public enum CoordinatorQuestionStanding: Equatable, Sendable {
     case gone
 }
 
+/// Which row the owner settled on: one of the coordinator's options, or this card's own Other row,
+/// where the words in the box are the answer rather than a note on one of them. Nothing chosen is
+/// `nil`, which only a question that recommended none of its options starts out as — the browser's
+/// `number | 'other' | null`, so the two cards can be read against each other.
+public enum CoordinatorQuestionChoice: Equatable, Sendable {
+    case option(Int)
+    case other
+}
+
 public enum CoordinatorQuestions {
     /// The heading, the provenance mark and the button, in the web card's own spelling.
     public static let heading = "The coordinator has a question"
@@ -42,8 +51,12 @@ public enum CoordinatorQuestions {
     /// What a card whose question the read no longer carries says about itself.
     public static let gone = "This question is no longer open."
     public static let unreadable = "Couldn’t read this question — pull to retry."
-    /// The placeholder on a question asked without options, matching the web's textarea.
+    /// The box beside the options, and the row after them, in the web's own words: the placeholder
+    /// says what the text will be, and the last row is the one that means it is the answer.
     public static let freeAnswerPrompt = "Your answer"
+    public static let notePrompt = "Add a note (optional)"
+    public static let ownAnswerPrompt = "Or type your own answer…"
+    public static let otherOption = "Other — say it in my own words"
 
     /// The questions on a project's open items: the owner's group only. A question is filed with
     /// the OWNER on it, so one in the coordinator's group would be a row this card cannot answer.
@@ -66,20 +79,42 @@ public enum CoordinatorQuestions {
         return false
     }
 
-    /// Whether the press may be made: a choice when the question offers options, and any non-empty
-    /// text when it does not. The door's own rule (`answerOpenItem`), so a button that is live is
-    /// a button whose press the server will take.
-    public static func sendable(question: CoordinatorQuestion, chosen: Int?, text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        return question.options.isEmpty ? !trimmed.isEmpty : chosen != nil
+    /// The option an answer names, or nil when the answer is words alone — the Other row, or a
+    /// question asked without any options at all.
+    public static func optionIndex(_ chosen: CoordinatorQuestionChoice?) -> Int? {
+        if case .option(let index) = chosen { return index }
+        return nil
     }
 
-    /// What to send: the option, the text, or both — the web card's own `send`.
-    public static func request(question: CoordinatorQuestion, chosen: Int?, text: String) -> OwnerAnswerRequest? {
+    /// Whether the words in the box are the answer rather than a note on a chosen option.
+    public static func isOther(_ chosen: CoordinatorQuestionChoice?) -> Bool {
+        chosen == .other
+    }
+
+    /// What the box takes, said by the box itself: the answer, where there are no options to note
+    /// on; a note, where an option is chosen; the words alone, otherwise.
+    public static func answerPrompt(question: CoordinatorQuestion,
+                                    chosen: CoordinatorQuestionChoice?) -> String {
+        if question.options.isEmpty { return freeAnswerPrompt }
+        return optionIndex(chosen) != nil ? notePrompt : ownAnswerPrompt
+    }
+
+    /// Whether the press may be made: an option chosen, or any non-empty text — the door's own rule
+    /// (`answerOpenItem`), so a button that is live is a button whose press the server will take.
+    public static func sendable(question: CoordinatorQuestion, chosen: CoordinatorQuestionChoice?,
+                                text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return optionIndex(chosen) != nil || !trimmed.isEmpty
+    }
+
+    /// What to send: the option, the text, or both — the web card's own `send`. The Other row sends
+    /// the words with no option in front of them, which is how the owner says none of them is
+    /// theirs.
+    public static func request(question: CoordinatorQuestion, chosen: CoordinatorQuestionChoice?,
+                               text: String) -> OwnerAnswerRequest? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard sendable(question: question, chosen: chosen, text: trimmed) else { return nil }
-        if question.options.isEmpty { return OwnerAnswerRequest(text: trimmed) }
-        return OwnerAnswerRequest(option: chosen, text: trimmed.isEmpty ? nil : trimmed)
+        return OwnerAnswerRequest(option: optionIndex(chosen), text: trimmed.isEmpty ? nil : trimmed)
     }
 
     /// What the owner chose, in the words the card showed it in — the receipt's own line.

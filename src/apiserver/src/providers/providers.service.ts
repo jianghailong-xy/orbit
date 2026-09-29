@@ -1,10 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AgentProvider, providerPreset, RunEventType, type ProviderPreset } from '@orbit/shared';
+import { AgentProvider, providerPreset, RunEventType, type PlanUsageSnapshot, type ProviderPreset } from '@orbit/shared';
 import { CLAUDE_EFFORT_ORDER } from '../common/runtime-provider';
 import { GENERATING_SESSION_FILTER } from '../common/session-generating';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { codexLoginUnavailableReason, codexLoginView } from './codex-login';
 import { CreateModelProviderDto, CreateProviderPoolDto, UpdateModelProviderDto } from './dto';
 import { decryptSecret, encryptSecret } from './provider-crypto';
 import { catalogDefaultModel, catalogModels, presetCatalog } from './model-catalog';
@@ -78,13 +79,31 @@ function assertReasoningLevels(runtime: string, models: unknown): void {
 type PoolEditRow = PoolAdmissionRow & { id: string; label: string };
 
 /** A pool as its owner reads it: the providers in it, keyless and endpointless, in the order the
- *  provider lists use. */
+ *  provider lists use — and, for a Codex pool of the caller's own, the ChatGPT account it runs on
+ *  (migration 0323). Only the columns `codexLoginView` reads are selected, and no token is among them:
+ *  the encrypted pair is never selected on any path that builds a response. */
 const POOL_SELECT = {
   id: true,
   slug: true,
   label: true,
   createdAt: true,
   updatedAt: true,
+  engine: true,
+  logins: {
+    orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
+    select: {
+      accountId: true,
+      email: true,
+      plan: true,
+      state: true,
+      lastError: true,
+      expiresAt: true,
+      createdAt: true,
+      // What the pool gateway last read off the backend's answers, and the reset it named (migration 0324).
+      usage: true,
+      spentUntil: true,
+    },
+  },
   members: {
     orderBy: [
       { provider: { position: { sort: 'asc', nulls: 'last' } } },
@@ -95,8 +114,17 @@ const POOL_SELECT = {
   },
 } satisfies Prisma.ProviderPoolSelect;
 
-function poolView({ members, ...pool }: Prisma.ProviderPoolGetPayload<{ select: typeof POOL_SELECT }>) {
-  return { ...pool, members: members.map((member) => member.provider) };
+function poolView({ members, logins, ...pool }: Prisma.ProviderPoolGetPayload<{ select: typeof POOL_SELECT }>) {
+  return { ...pool, members: members.map((member) => member.provider), login: loginOf(logins) };
+}
+
+/** A pool's account as every read of it carries it: the email and `…AB12` of the one login it holds
+ *  (a Codex pool of its owner's own), or null — which is every Claude pool, and a Codex one nobody has
+ *  signed into yet. Built by `codexLoginView`, which cannot see a token: none is selected. */
+function loginOf(logins: { accountId: string; email: string | null; plan: string | null; state: string;
+  lastError: string | null; expiresAt: Date; createdAt: Date; usage: Prisma.JsonValue; spentUntil: Date | null }[]) {
+  const login = logins[0] ?? null;
+  return codexLoginView(login, (login?.usage as PlanUsageSnapshot | null | undefined) ?? null);
 }
 
 /** The same pools, read with what asking each member's credential for its quota takes (poolViews). The key
@@ -125,11 +153,25 @@ const POOL_QUOTA_SELECT = {
 type PoolRow = Prisma.ProviderPoolGetPayload<{ select: typeof POOL_QUOTA_SELECT }>;
 
 /**
- * Where one member of a pool stands, in the order the claim reads a member: a refused key and a disabled
- * row are no candidates at all, a spent one waits for its reset, and of the rest one with no 5-hour
+ * Where one member of a pool stands, in the order the claim reads a member: a key the endpoint refused
+ * and a disabled row are no candidates at all, a spent one waits for its reset, one whose quota could
+ * not be read is a candidate only after every member with a reading, and of the rest one with no 5-hour
  * reading is last in line — not idle at 0%.
+ *
+ * REFUSED and USAGE_UNKNOWN are the two ways the usage endpoint turns a credential away, and they are
+ * not the same thing (plan-usage.ts usageFailureKind): REFUSED is the endpoint refusing to
+ * authenticate the token (401), while USAGE_UNKNOWN is it refusing to *report on* a token that works —
+ * a Claude Code setup token carrying no `user:profile` scope. A pool whose members are all
+ * USAGE_UNKNOWN still runs, on one of them.
  */
-export type PoolMemberState = 'REFUSED' | 'DISABLED' | 'SPENT' | 'RUNNING' | 'AVAILABLE' | 'NO_QUOTA';
+export type PoolMemberState =
+  | 'REFUSED'
+  | 'DISABLED'
+  | 'SPENT'
+  | 'RUNNING'
+  | 'AVAILABLE'
+  | 'NO_QUOTA'
+  | 'USAGE_UNKNOWN';
 
 @Injectable()
 export class ProvidersService {
@@ -217,7 +259,7 @@ export class ProvidersService {
     const pools = await this.prisma.providerPool.findMany({
       where: { OR: [{ ownerId, shared: false }, { shared: true, people: { some: { userId: ownerId } } }] },
       orderBy: { createdAt: 'asc' },
-      select: { slug: true, label: true, shared: true },
+      select: { slug: true, label: true, shared: true, engine: true },
     });
     return [
       // A built-in engine carries no label: the slug is the engine's name, and it runs on itself.
@@ -231,10 +273,12 @@ export class ProvidersService {
       }),
       // A pool runs on its members' Claude subscriptions, whose models are the Claude CLI's own —
       // so, like a built-in engine, it names no model list of its own. A shared pool runs Codex on
-      // OpenAI's own endpoint, whose models are the Codex CLI's.
-      ...pools.map(({ shared, ...pool }) => ({
+      // OpenAI's own endpoint, whose models are the Codex CLI's; so does a pool of one's own that holds
+      // a ChatGPT login the server signed in (migration 0323) — it is Codex throughout, and its account
+      // is what a session on it spends.
+      ...pools.map(({ shared, engine, ...pool }) => ({
         ...pool,
-        runtime: shared ? AgentProvider.CODEX : AgentProvider.CLAUDE,
+        runtime: shared || engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE,
         builtin: false,
       })),
     ];
@@ -415,9 +459,21 @@ export class ProvidersService {
   }
 
   /** An account pool of the caller's own providers: one more slug to dispatch with, taken from the
-   *  namespace the providers' slugs come from. Its members keep theirs. */
+   *  namespace the providers' slugs come from. Its members keep theirs.
+   *
+   *  A pool may instead be created on Codex (migration 0323): a pool of the caller's own that holds one
+   *  ChatGPT login this server signs in and keeps, and starts with no members at all — its account is
+   *  added by the sign-in (CodexLoginService), never as a provider, so one that names providers is
+   *  refused rather than quietly emptied of them. */
   async createPool(ownerId: string, dto: CreateProviderPoolDto) {
     const providerIds = [...new Set(dto.providerIds ?? [])];
+    const engine = dto.engine ?? AgentProvider.CLAUDE;
+    if (engine === AgentProvider.CODEX && providerIds.length) {
+      throw new BadRequestException({
+        code: 'POOL_ENGINE_MEMBERS',
+        message: 'a Codex pool of your own runs on a ChatGPT login, not on providers — leave providerIds empty',
+      });
+    }
     await this.assertPoolMembers(ownerId, providerIds);
     const pool = await this.withFreeSlug(slugBase(dto.label), (slug) =>
       this.prisma.providerPool.create({
@@ -425,6 +481,7 @@ export class ProvidersService {
           slug,
           label: dto.label,
           ownerId,
+          engine,
           members: { createMany: { data: providerIds.map((providerId) => ({ providerId })) } },
         },
         select: POOL_SELECT,
@@ -432,6 +489,18 @@ export class ProvidersService {
     );
     this.publishChanged(ownerId, pool.id);
     return poolView(pool);
+  }
+
+  /** One of the caller's pools, as its page reads it — the members it holds and where each of them
+   *  stands, or the ChatGPT account a Codex pool of theirs runs on. Another owner's is not found, and
+   *  neither is a shared pool's, which is read on its own page (SharedPoolsService). */
+  async getPool(ownerId: string, id: string) {
+    const pool = await this.prisma.providerPool.findFirst({
+      where: { id, ownerId, shared: false },
+      select: POOL_QUOTA_SELECT,
+    });
+    if (!pool) throw new NotFoundException('pool not found');
+    return (await this.poolViews(ownerId, [pool]))[0];
   }
 
   /** Put one of the caller's providers into one of their pools. Adding a member again changes nothing. */
@@ -579,7 +648,9 @@ export class ProvidersService {
    * that can run is spent, and is the EARLIEST of their resets: one account freeing up is enough for work
    * to continue. A spent member's own `resetsAt` is the latest of its windows, as for any single account.
    * `unavailable` is set only when no member can run at all, no reset included — the pool every door that
-   * takes a provider refuses (QueueService.accountPoolRefusal), in the words a picker has room for.
+   * takes a provider refuses (QueueService.accountPoolRefusal), in the words a picker has room for. A
+   * member whose quota the endpoint would not report is not one of those: it is state USAGE_UNKNOWN, it
+   * ranks behind every member with a reading, and a pool of nothing else runs on one of them.
    */
   private async poolViews(ownerId: string, pools: PoolRow[]) {
     const now = new Date();
@@ -587,12 +658,29 @@ export class ProvidersService {
       ownerId,
       pools.flatMap((pool) => pool.members.map((member) => member.provider)),
     );
-    return pools.map(({ members, ...pool }) => {
-      const quota = members.map(({ provider: row }) => ({
-        row,
-        usage: this.planUsage.snapshot(row),
-        refused: this.planUsage.refused(row),
-      }));
+    return pools.map(({ members, logins, ...pool }) => {
+      const login = loginOf(logins);
+      // A Codex pool of the owner's own runs on its ChatGPT account, not on member providers: it holds
+      // none, and what decides whether it can take a session is the account's state alone. A quota that
+      // has not been read does not decide it — that is `login.usage` being null, and the account runs.
+      if (pool.engine === AgentProvider.CODEX) {
+        return {
+          ...pool,
+          login,
+          resetsAt: null,
+          unavailable: codexLoginUnavailableReason(pool.label, login),
+          members: [],
+        };
+      }
+      const quota = members.map(({ provider: row }) => {
+        const standing = this.planUsage.usageStanding(row);
+        return {
+          row,
+          usage: this.planUsage.snapshot(row),
+          refused: standing === 'KEY_REFUSED',
+          usageUnreadable: standing === 'USAGE_UNKNOWN',
+        };
+      });
       const selection = selectPoolMember(
         quota.filter((member) => isPoolCandidate(member.row)),
         null,
@@ -600,10 +688,11 @@ export class ProvidersService {
       );
       return {
         ...pool,
+        login,
         resetsAt: selection.kind === 'EXHAUSTED' ? (selection.resetsAt?.toISOString() ?? null) : null,
         unavailable:
           selection.kind !== 'UNAVAILABLE' ? null : members.length > 0 ? 'No account can run' : 'No accounts',
-        members: quota.map(({ row, usage, refused }) => {
+        members: quota.map(({ row, usage, refused, usageUnreadable }) => {
           const spent = spentUntil(usage, now);
           const state: PoolMemberState = refused
             ? 'REFUSED'
@@ -611,11 +700,13 @@ export class ProvidersService {
               ? 'DISABLED'
               : spent !== undefined
                 ? 'SPENT'
-                : running.has(row.id)
-                  ? 'RUNNING'
-                  : usage?.fiveHour
-                    ? 'AVAILABLE'
-                    : 'NO_QUOTA';
+                : usageUnreadable
+                  ? 'USAGE_UNKNOWN'
+                  : running.has(row.id)
+                    ? 'RUNNING'
+                    : usage?.fiveHour
+                      ? 'AVAILABLE'
+                      : 'NO_QUOTA';
           // Named field by field: the row also holds the key and the endpoint, and neither leaves here.
           return {
             id: row.id,

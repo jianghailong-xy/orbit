@@ -22,8 +22,8 @@ import Foundation
 public enum NavOrigin: Hashable, Sendable {
     /// A row in the section's own list.
     case list
-    /// A Recents row in the compact shell's left drawer — the page that yields the screen edge back
-    /// to the drawer it came from.
+    /// A row in the compact shell's left drawer — a Recents row, or one of the open projects — the
+    /// page that yields the screen edge back to the drawer it came from.
     case drawer
     /// A URL or a notification tap.
     case deepLink
@@ -55,8 +55,9 @@ public enum NavNode: Hashable, Sendable {
     case accountPool(poolID: String)
     case sharedPool(poolID: String)
     case userDetail(userID: String)
-    /// One project's page, pushed from the Projects list or from the drawer's project rows.
-    case projectDetail(projectID: String)
+    /// One project's page, pushed from the Projects list or from the drawer's project rows — which
+    /// the page's origin tells apart, as a console's does.
+    case projectDetail(projectID: String, origin: NavOrigin = .list)
     /// Every task one session's agent created: its console's `View all in Tasks ›` on a phone, pushed
     /// over that console — with the card's task and project pages — so the back swipe returns to the
     /// conversation instead of to another section's list.
@@ -157,6 +158,13 @@ public struct NavState: Equatable, Sendable {
         return false
     }
 
+    /// `AppModel.projectFromDrawer` — the same for a project's page opened from the drawer's project
+    /// rows: the left edge returns you to the drawer, not to the Projects list under the page.
+    public var projectFromDrawer: Bool {
+        if case .projectDetail(_, .drawer) = path.last { return true }
+        return false
+    }
+
     // The three single-layer sections — Following, Runners, Admin — push exactly one kind of page,
     // so "which record is showing" is the id on top of their own stack. Each one is a total function
     // of that stack like every other fact here: the list's highlight and the detail pane are the
@@ -179,7 +187,7 @@ public struct NavState: Equatable, Sendable {
 
     /// `AppModel.selectedProjectID` — the project the Projects pane shows.
     public var selectedProjectID: String? {
-        guard case .projectDetail(let id) = path.last else { return nil }
+        guard case .projectDetail(let id, _) = path.last else { return nil }
         return id
     }
 

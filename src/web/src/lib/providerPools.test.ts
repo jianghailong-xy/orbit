@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { encodeId } from './idCodec';
 import {
   availableCount,
+  canTakeWork,
   formatResetTime,
   memberQuota,
   memberRefusal,
@@ -133,6 +134,16 @@ describe('an account the pool would no longer admit', () => {
     // Without the keys' verdicts every one of them reads as able to take work.
     expect(availableCount(claude, poolRefusals([]))).toBe(4);
   });
+
+  it('counts an account whose quota could not be read: the claim still starts a session on it', () => {
+    const claude = pool([
+      member(1, { state: 'USAGE_UNKNOWN' }),
+      member(5, { state: 'USAGE_UNKNOWN', next: true }),
+      member(6, { state: 'REFUSED' }),
+    ]);
+    expect(canTakeWork(claude.members[0])).toBe(true);
+    expect(availableCount(claude, refusals)).toBe(2);
+  });
 });
 
 describe("a member's status", () => {
@@ -140,6 +151,12 @@ describe("a member's status", () => {
     expect(memberStatus(member(1, { state: 'RUNNING' })).label).toBe('Running now');
     expect(memberStatus(member(1, { state: 'AVAILABLE' })).label).toBe('Available');
     expect(memberStatus(member(1, { state: 'REFUSED' })).label).toBe('Unavailable · key refused');
+    // Not the refused key's words, and not its colour: the endpoint would not report this credential's
+    // quota, which is not the same thing as refusing the credential, and the account still runs.
+    expect(memberStatus(member(1, { state: 'USAGE_UNKNOWN' }))).toEqual({
+      label: 'Unavailable · usage unreadable',
+      color: 'default',
+    });
     expect(memberStatus(member(1, { state: 'NO_QUOTA' })).label).toBe('No quota reported');
     expect(memberStatus(member(1, { state: 'SPENT', resetsAt: null })).label).toBe('Spent');
     const resets = at(90 * 60 * 1000);

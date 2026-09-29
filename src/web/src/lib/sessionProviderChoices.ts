@@ -35,6 +35,8 @@ export interface PoolChoiceSource {
   label: string;
   members: { slug: string }[];
   unavailable?: string | null;
+  /** `codex` for a pool of one's own ChatGPT account (migration 0323); absent or `claude` otherwise. */
+  engine?: string;
   shared?: object;
 }
 
@@ -191,9 +193,10 @@ export function providerChoices(
   // Like a configured provider, a pool needs the CLI it runs on and nothing signed in: each run
   // carries one of its accounts' keys. And it needs one of those accounts to be able to run at all,
   // which the server says (`unavailable`) and refuses the pool without. A shared pool's CLI is Codex,
-  // whose runs carry a session token for the pool's gateway.
+  // whose runs carry a session token for the pool's gateway — and so is a pool of one's own ChatGPT
+  // account's, whose account the server holds.
   const accountPools: ProviderChoice[] = pools.map((pool) => {
-    const runtime = pool.shared ? AgentProvider.CODEX : AgentProvider.CLAUDE;
+    const runtime = pool.shared || pool.engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
     const blocker = byokBlocker(engineHealth?.find((e) => e.engine === runtime));
     return {
       slug: pool.slug,

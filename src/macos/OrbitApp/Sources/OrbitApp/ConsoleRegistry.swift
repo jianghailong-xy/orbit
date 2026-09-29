@@ -77,6 +77,7 @@ final class ConsoleRegistry {
                     configuredProviders: [ConfiguredProvider] = [],
                     configuredProvidersLoaded: Bool = false,
                     providerPools: [ProviderPool] = [],
+                    sharedPools: [SharedPool] = [],
                     modelCatalog: RunnerModelCatalog? = nil,
                     accountDefaultEffort: String? = nil,
                     onCreated: @escaping (Session) -> Void) -> ConsoleModel {
@@ -84,6 +85,7 @@ final class ConsoleRegistry {
                                  configuredProviders: configuredProviders,
                                  configuredProvidersLoaded: configuredProvidersLoaded,
                                  providerPools: providerPools,
+                                 sharedPools: sharedPools,
                                  modelCatalog: modelCatalog, accountDefaultEffort: accountDefaultEffort,
                                  baseURL: baseURL, tokenStore: tokenStore, attachments: attachments)
         model.onSessionCreated = onCreated

@@ -1,5 +1,8 @@
 import SwiftUI
 import OrbitKit
+#if os(iOS)
+import UIKit
+#endif
 
 // Batch D + Agents-in-sidebar refinement: the Workspace list now lives in the sidebar source list
 // (see `SectionSidebar`), folding away the old middle column. iOS renders first-level Workspaces;
@@ -637,38 +640,45 @@ struct AgentPanes: View {
 
     /// One options menu serves both iOS shells. Compact includes lifecycle scope exactly as before;
     /// regular iPad omits that duplicate but retains tag filtering/grouping and Workspace settings.
+    /// Ticks and icons share the one leading column: a choice row shows a tick when it is the chosen
+    /// one, an action row its icon. Every row keeps an image there — an unchosen choice a transparent
+    /// tick — because iOS 27 starts a row without an image at the margin, even beside rows that have
+    /// one. (A Toggle's system tick would take a column of its own, beside the icons.)
     private func sessionOptionsMenu(includesScope: Bool) -> some View {
         Menu {
             if includesScope {
                 ForEach(SessionView.pickerCases) { v in
                     Button { view = v } label: {
-                        if v == view { Label(v.title, systemImage: "checkmark") }
-                        else { Text(v.title) }
+                        Label { Text(v.title) } icon: { tick(v == view) }
                     }
+                    .accessibilityAddTraits(v == view ? .isSelected : [])
                 }
             }
             if !app.sessionTags.isEmpty {
                 if includesScope { Divider() }
-                // Filter by tag stays in a submenu instead of adding a persistent chip row. A
-                // checkmark marks the active tag; choosing it again or choosing All clears it.
+                // Filter by tag stays in a submenu instead of adding a persistent chip row. A tick
+                // marks the active tag, which the row names underneath; choosing it again or
+                // choosing All clears it.
                 Menu {
-                    Button { tagFilter = nil } label: {
-                        if tagFilter == nil { Label("All", systemImage: "checkmark") }
-                        else { Text("All") }
+                    Toggle(isOn: Binding(get: { tagFilter == nil }, set: { if $0 { tagFilter = nil } })) {
+                        Text("All")
                     }
                     ForEach(app.sessionTags) { tag in
-                        Button { tagFilter = (tagFilter == tag.id ? nil : tag.id) } label: {
-                            if tagFilter == tag.id { Label(tag.name, systemImage: "checkmark") }
-                            else { Text(tag.name) }
+                        Toggle(isOn: Binding(get: { tagFilter == tag.id },
+                                             set: { tagFilter = $0 ? tag.id : nil })) {
+                            Text(tag.name)
                         }
                     }
                 } label: {
                     Label("Filter by Tag", systemImage: "tag")
+                    if let active = app.sessionTags.first(where: { $0.id == tagFilter }) {
+                        Text(active.name)
+                    }
                 }
                 Button { groupByTag.toggle() } label: {
-                    if groupByTag { Label("Group by Tag", systemImage: "checkmark") }
-                    else { Text("Group by Tag") }
+                    Label { Text("Group by Tag") } icon: { tick(groupByTag) }
                 }
+                .accessibilityAddTraits(groupByTag ? .isSelected : [])
             }
             if includesScope || !app.sessionTags.isEmpty { Divider() }
             Button { showSettings = true } label: {
@@ -684,6 +694,15 @@ struct AgentPanes: View {
                                  ? "Session scope, \(view.title)"
                                  : "Session filters and workspace settings"))
     }
+
+    /// The options menu's tick: the checkmark on the chosen row, the same glyph fully transparent on
+    /// the others, so an unchosen row still has an image and its title keeps the shared edge.
+    private func tick(_ on: Bool) -> Image {
+        on ? Image(systemName: "checkmark") : Image(uiImage: Self.clearTick)
+    }
+
+    private static let clearTick = UIImage(systemName: "checkmark")?
+        .withTintColor(.clear, renderingMode: .alwaysOriginal) ?? UIImage()
     #endif
 
     // The sessions to show: the agent list, narrowed to the tag filter chip when one is active.
@@ -835,6 +854,7 @@ struct AgentConsoleDetail: View {
                            configuredProviders: agents.configuredProviders,
                            configuredProvidersLoaded: agents.configuredProvidersLoaded,
                            providerPools: agents.providerPools,
+                           sharedPools: agents.sharedPools,
                            modelCatalog: agents.modelCatalog(for: agent.runnerId),
                            defaultEffort: app.user?.preferences?.defaultEffort) { session in
                 app.openCreatedAgentSession(session)
@@ -894,6 +914,8 @@ struct NewSessionView: View {
     let configuredProvidersLoaded: Bool
     /// The account pools the parent has loaded, so a workspace that runs on one opens on its tile.
     let providerPools: [ProviderPool]
+    /// The shared pools this account is in, which the draft offers beside its own (`draft.allPools`).
+    let sharedPools: [SharedPool]
     /// The owning runner's cached model catalogue — what `defaultModel` was resolved from, and what
     /// NAMES it. Passed in so the first frame reads the same label the picker will settle on.
     let modelCatalog: RunnerModelCatalog?
@@ -910,6 +932,7 @@ struct NewSessionView: View {
          configuredProviders: [ConfiguredProvider] = [],
          configuredProvidersLoaded: Bool = false,
          providerPools: [ProviderPool] = [],
+         sharedPools: [SharedPool] = [],
          modelCatalog: RunnerModelCatalog? = nil,
          defaultEffort: String? = nil,
          onCreated: @escaping (Session) -> Void) {
@@ -918,6 +941,7 @@ struct NewSessionView: View {
         self.configuredProviders = configuredProviders
         self.configuredProvidersLoaded = configuredProvidersLoaded
         self.providerPools = providerPools
+        self.sharedPools = sharedPools
         self.modelCatalog = modelCatalog
         self.defaultEffort = defaultEffort
         _draft = State(initialValue: registry.draftModel(
@@ -925,6 +949,7 @@ struct NewSessionView: View {
             configuredProviders: configuredProviders,
             configuredProvidersLoaded: configuredProvidersLoaded,
             providerPools: providerPools,
+            sharedPools: sharedPools,
             modelCatalog: modelCatalog, accountDefaultEffort: defaultEffort,
             onCreated: onCreated))
     }
@@ -942,7 +967,8 @@ struct NewSessionView: View {
                         ProviderMark(provider: draft.provider, size: 68,
                                      brandKey: currentProviderChoice.brandKey,
                                      label: currentProviderChoice.label,
-                                     poolSize: currentProviderChoice.poolSize)
+                                     poolSize: currentProviderChoice.poolSize,
+                                     poolUnit: currentProviderChoice.poolUnit)
                         Button { showProviderPicker = true } label: {
                             HStack(spacing: 7) {
                                 Text(currentProviderChoice.label)
@@ -1085,14 +1111,14 @@ struct NewSessionView: View {
         WorkspaceTitleSwitcher(name: agent.name) { showSwitcher = true }
     }
 
-    /// Engines first, then this account's pools, then its configured providers. Built from the
-    /// draft's own snapshot so the list matches the model space the pills are already resolving
-    /// against.
+    /// Engines first, then this account's pools — its own and the shared ones it is in — then its
+    /// configured providers. Built from the draft's own snapshot so the list matches the model space
+    /// the pills are already resolving against.
     private var providerChoices: [ProviderChoice] {
         SessionProviderChoices.choices(configured: draft.configuredProviders,
                                        catalog: draft.modelCatalog,
                                        engines: draft.runnerEngines,
-                                       pools: draft.providerPools)
+                                       pools: draft.allPools)
     }
 
     private var currentProviderChoice: ProviderChoice {

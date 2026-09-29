@@ -22,6 +22,8 @@ final class SharedPoolCopyParityTests: XCTestCase {
     private static let poolPage = "src/web/src/pages/ProviderPoolPage.tsx"
     private static let sharedPools = "src/web/src/lib/sharedPools.ts"
     private static let providerPools = "src/web/src/lib/providerPools.ts"
+    private static let sessionProviderChoices = "src/web/src/lib/sessionProviderChoices.ts"
+    private static let hero = "src/web/src/components/NewSessionProviderHero.tsx"
 
     private enum ParityError: Error, CustomStringConvertible {
         case missing(String)
@@ -104,7 +106,10 @@ final class SharedPoolCopyParityTests: XCTestCase {
         // "No keys yet — …", in the web's one sentence for both kinds of pool.
         assertSays(row, "No {shared ? 'keys' : 'accounts'}\(SharedPoolPage.noKeys.dropFirst("No keys".count))",
                    in: Self.accountPools)
-        assertSays(row, "pool.shared ? 'All at cap' : 'All spent'", in: Self.accountPools)
+        // The first run of a stopped shared pool's head: "All at cap", or "All out of budget" when that
+        // is what stopped them (`SharedPoolPage.keysHeadline` says the same over the keys).
+        assertSays(row, "!pool.shared ? 'All spent' : allOutOfBudget(pool.shared) ? '\(SharedPoolPage.allOutOfBudgetWords)' : '\(SharedPoolPage.allAtCapWords)'",
+                   in: Self.accountPools)
     }
 
     /// Each key's status tag, and what the Keys header says when no key is next.
@@ -124,6 +129,19 @@ final class SharedPoolCopyParityTests: XCTestCase {
         assertSays(tags, "label: '\(status(off))', color: 'default'", in: Self.providerPools)
         assertSays(tags, "`At cap · resets ${formatCapReset(member.resetsAt)}` : 'At cap'", in: Self.providerPools)
         assertSays(tags, "pool.shared ? 'No key can run' : 'No account can run'", in: Self.providerPools)
+
+        // A key OpenAI put out of budget (P2's `spentUntil`) says so, with the date its mark runs to, in
+        // the web's own sentence and colour — and out of budget outranks the cap.
+        let outOfBudget = SharedPoolKey(id: "k", label: "k", fingerprint: "f",
+                                        spentUntil: "2026-09-30T06:00:00.000Z", contributor: who)
+        XCTAssertEqual(status(outOfBudget), "Out of budget · resets Sep 30")
+        assertSays(tags, "label: `Out of budget · resets ${formatCapReset(member.key.spentUntil)}`, color: 'orange'",
+                   in: Self.providerPools)
+        // ...and the Keys header, when none of them can run, says which of the two stopped them, in the
+        // two words the web's pool head chooses between.
+        let gauge = try web(Self.accountPools)
+        assertSays(gauge, "allOutOfBudget(pool.shared) ? '\(SharedPoolPage.allOutOfBudgetWords)' : '\(SharedPoolPage.allAtCapWords)'",
+                   in: Self.accountPools)
 
         let lib = try web(Self.sharedPools)
         assertSays(lib, "pool.keys.length === 0 ? 'No keys' : 'No key can run'", in: Self.sharedPools)
@@ -213,6 +231,89 @@ final class SharedPoolCopyParityTests: XCTestCase {
                        "This key is already in Team Codex — Chen Yu added it.")
     }
 
+    /// The new-session picker and the composer take a shared pool as web takes it: drawn as an account
+    /// pool whose members are its keys (`sharedPoolAsProviderPool`), running Codex rather than Claude,
+    /// wearing its keys' count and the key's own words. Each line below is the web's own expression for
+    /// it, so a field or a sentence that moved at one end only fails here.
+    func testThePickerAndTheComposerDrawASharedPoolAsTheWebDoes() throws {
+        let lib = try web(Self.sharedPools)
+        let window = SharedPoolWindow(start: "2026-09-01T00:00:00.000Z",
+                                      end: "2026-10-01T00:00:00.000Z")
+        let capped = SharedPoolKey(id: "k", label: "orbit-org-1", fingerprint: "sk-…0000", shareCap: 50,
+                                   contributor: PoolKeyContributor(userId: "u", name: "Wikova"),
+                                   usage: PoolSpend(costUsd: 50, othersCostUsd: 50))
+        let mine = SharedPoolKey(id: "k2", label: "ios-build", fingerprint: "sk-…0000",
+                                 contributor: PoolKeyContributor(userId: "me", name: "Me", you: true))
+        func pool(_ keys: [SharedPoolKey]) -> SharedPool {
+            SharedPool(id: "p", slug: "team-codex", label: "Team Codex", window: window, keys: keys)
+        }
+        let drawn = SharedPools.asProviderPool(pool([capped]))
+
+        // The adapter, line for line: a key is the member, its state keyState's, its cap's gauge.
+        assertSays(lib, "presetSlug: 'openai',", in: Self.sharedPools)
+        assertSays(lib, "planUsage: keyWindow(key, pool),", in: Self.sharedPools)
+        // A stopped key's reset is its own mark when OpenAI set one, else the month's end; the pool's is
+        // the EARLIEST of those, both as this client reads them (`SharedPoolPage.firstReset`).
+        assertSays(lib, "resetsAt: state === 'SPENT' ? (key.spentUntil ?? pool.window.end) : null,",
+                   in: Self.sharedPools)
+        assertSays(lib, "next: key.next,", in: Self.sharedPools)
+        assertSays(lib, "resetsAt: !free && stops.length > 0 ? stops.reduce((a, b) => (Date.parse(a) <= Date.parse(b) ? a : b)) : null,",
+                   in: Self.sharedPools)
+        assertSays(lib, "unavailable: runnable ? null : pool.keys.length === 0 ? 'No keys' : 'No key can run',",
+                   in: Self.sharedPools)
+        assertSays(lib, "shared: pool,", in: Self.sharedPools)
+        XCTAssertEqual(drawn.members[0].presetSlug, "openai")
+        XCTAssertEqual(drawn.members[0].state, .spent)
+        XCTAssertEqual(drawn.members[0].resetsAt, window.end)
+        XCTAssertEqual(drawn.resetsAt, window.end)
+        XCTAssertEqual(SharedPools.asProviderPool(pool([])).unavailable, "No keys")
+        let refused = SharedPoolKey(id: "k3", label: "orbit-org-3", fingerprint: "sk-…0000", state: .invalid,
+                                    contributor: PoolKeyContributor(userId: "u", name: "Wikova"))
+        XCTAssertEqual(SharedPools.asProviderPool(pool([refused])).unavailable, "No key can run")
+        // A key the others have capped is not a pool that cannot run: the month brings it back, so
+        // the pool takes a session and waits (`spentNote`), exactly as web's `runnable` reads it.
+        XCTAssertNil(drawn.unavailable)
+        XCTAssertEqual(drawn.shared?.slug, "team-codex", "the whole view rides along, as web's `shared`")
+
+        // This pool's CLI is Codex, with Codex's own models and mark — the account pool's is Claude (and
+        // a pool of one's own ChatGPT account's is Codex too: CodexSignInCopyParityTests).
+        let providers = ProviderPools.asProviders([drawn])
+        let poolsLib = try web(Self.providerPools)
+        assertSays(poolsLib, "runtime: poolRunsCodex(pool) ? AgentProvider.CODEX : AgentProvider.CLAUDE,",
+                   in: Self.providerPools)
+        assertSays(poolsLib, "!!pool.shared || pool.engine === AgentProvider.CODEX;", in: Self.providerPools)
+        XCTAssertEqual(AgentDefaults.runtime(for: "team-codex", configured: providers), "codex")
+        XCTAssertEqual(providers.first?.presetSlug, "openai")
+        XCTAssertEqual(ProviderPools.asProviders([drawn]).first?.runtime, "codex")
+
+        // The picker's row: a choice on that CLI, wearing how many keys it holds.
+        let choices = SessionProviderChoices.choices(configured: providers, pools: [drawn])
+        let tile = try XCTUnwrap(choices.first { $0.slug == "team-codex" })
+        let choicesSource = try web(Self.sessionProviderChoices)
+        assertSays(choicesSource,
+                   "const runtime = pool.shared || pool.engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;",
+                   in: Self.sessionProviderChoices)
+        assertSays(choicesSource, "poolUnit: 'key' as const", in: Self.sessionProviderChoices)
+        assertSays(choicesSource, "poolUnit?: 'key';", in: Self.sessionProviderChoices)
+        assertSays(try web(Self.hero),
+                   "aria-label={`${choice.poolSize} ${choice.poolUnit ?? 'account'}${choice.poolSize === 1 ? '' : 's'}`}",
+                   in: Self.hero)
+        XCTAssertEqual(tile.brandKey, "openai")
+        XCTAssertEqual(tile.poolUnit, "key")
+        XCTAssertEqual(tile.poolSize, 1)
+        XCTAssertEqual(SessionProviderChoices.poolBadgeLabel(size: tile.poolSize ?? 0, unit: tile.poolUnit), "1 key")
+        XCTAssertEqual(SessionProviderChoices.poolBadgeLabel(size: 2, unit: nil), "2 accounts")
+
+        // The composer: the key beside the quota is the one the pool picks for the viewer.
+        let account = PoolAccount(member: drawn.members[0], current: false)
+        XCTAssertEqual(ProviderPools.accountHelp(pool: drawn, account: account),
+                       "A session on Team Codex starts on orbit-org-1 — the key it picks for you right now")
+        // A key with no cap has no gauge, and the others' cap is a month, not a window.
+        let uncapped = SharedPools.asProviderPool(pool([mine]))
+        XCTAssertNil(uncapped.members[0].planUsage)
+        XCTAssertEqual(drawn.members[0].planUsage?.rows.first?.window.windowDurationMins, 30 * 24 * 60)
+    }
+
     /// An account pool's page, read-only on a phone: its head, its accounts and their status tags.
     func testAnAccountPoolsPageSaysWhatTheWebPageSays() throws {
         let page = try web(Self.poolPage)
@@ -224,11 +325,16 @@ final class SharedPoolCopyParityTests: XCTestCase {
         func member(_ state: PoolMemberState) -> PoolMember { PoolMember(id: "m", slug: "m", label: "M", state: state) }
         assertSays(tags, "label: '\(ProviderPools.memberStatus(member(.running)).label)', color: 'processing'", in: Self.providerPools)
         assertSays(tags, "label: '\(ProviderPools.memberStatus(member(.refused)).label)', color: 'red'", in: Self.providerPools)
+        // The two ways the endpoint turns a credential away are two labels, word for word with the web's.
+        assertSays(tags, "label: '\(ProviderPools.memberStatus(member(.usageUnknown)).label)', color: 'default'",
+                   in: Self.providerPools)
+        XCTAssertEqual(ProviderPools.memberStatus(member(.usageUnknown)).label, "Unavailable · usage unreadable")
         assertSays(tags, "label: '\(ProviderPools.memberStatus(member(.noQuota)).label)', color: 'default'", in: Self.providerPools)
         assertSays(tags, "`Spent · resets ${formatResetTime(member.resetsAt, now)}` : 'Spent'", in: Self.providerPools)
 
         let card = try web(Self.accountPools)
-        assertSays(card, "Next: {member.label}", in: Self.accountPools)
+        // "Next: …" — but a pool of one's own ChatGPT account names its one account instead.
+        assertSays(card, "`Next: ${member.label}`", in: Self.accountPools)
         let three = ProviderPool(id: "p", slug: "p", label: "P",
                                  members: [member(.available), member(.spent), member(.disabled)])
         XCTAssertEqual(ProviderPools.pageSubtitle(three), "1 of 3 accounts available")

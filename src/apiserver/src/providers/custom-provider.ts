@@ -149,10 +149,11 @@ export async function sessionExecRuntime(
 
 /**
  * The runtime `slug` borrows when it names a pool `ownerId` may dispatch with, else null: one of their own
- * account pools, which runs on Claude — a pool runs on whichever member the claim picks
- * (QueueService.resolvePoolMember), and only a Claude subscription is admitted as one
- * (ProvidersService.assertPoolMembers) — or a shared pool they are a person of (migration 0321), which runs
- * on Codex through the pool gateway (QueueService.resolveSharedPool).
+ * account pools, which runs on the engine it was made on — `claude` runs on whichever member the claim
+ * picks (QueueService.resolvePoolMember), and only a Claude subscription is admitted as one
+ * (ProvidersService.assertPoolMembers), while `codex` (migration 0323) runs on the one ChatGPT login the
+ * server signed in and holds for it (CodexLoginService) — or a shared pool they are a person of
+ * (migration 0321), which runs on Codex through the pool gateway (QueueService.resolveSharedPool).
  *
  * Asked by the doors that accept a provider slug once no provider holds it. Somebody else's account pool,
  * and a shared pool `ownerId` is not in, is refused like a slug nothing holds, which is also how the claim
@@ -163,8 +164,8 @@ export async function accountPoolRuntime(
   ownerId: string,
   slug: string,
 ): Promise<AgentProvider | null> {
-  const own = await db.providerPool.findFirst({ where: { slug, ownerId }, select: { shared: true } });
-  if (own && !own.shared) return AgentProvider.CLAUDE;
+  const own = await db.providerPool.findFirst({ where: { slug, ownerId }, select: { shared: true, engine: true } });
+  if (own && !own.shared) return own.engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
   // A shared pool is reached by its people, whoever created it.
   const shared = await db.providerPool.findFirst({
     where: { slug, shared: true, people: { some: { userId: ownerId } } },

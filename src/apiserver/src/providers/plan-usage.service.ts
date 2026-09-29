@@ -7,6 +7,8 @@ import {
   parseSubscriptionUsage,
   probesSubscriptionUsage,
   usageErrorMessage,
+  usageFailureKind,
+  type UsageFailureKind,
 } from './plan-usage';
 import { decryptSecret } from './provider-crypto';
 
@@ -16,18 +18,20 @@ const FRESH_MS = 2 * 60 * 1000;
 /** A credential that failed for a reason outside itself (the endpoint was unreachable, or answered
  *  with a server error) is retried, just far more slowly. */
 const RETRY_MS = 10 * 60 * 1000;
-/** A credential the endpoint *refused* is never asked again. 401/403 is a property of the
- *  credential — the wrong kind of token, or one minted without the `user:profile` scope — so no
- *  number of retries can change the answer, and each one is a request to Anthropic on the user's
- *  behalf. Saving a new key re-enables it: the cache is keyed by the stored ciphertext. */
+/** A credential the endpoint turned away is never asked again, whichever way it turned it away
+ *  (usageFailureKind): both are a property of the credential — the wrong kind of token, or one minted
+ *  without the `user:profile` scope — so no number of retries can change the answer, and each one is a
+ *  request to Anthropic on the user's behalf. Saving a new key re-enables it: the cache is keyed by the
+ *  stored ciphertext. */
 const NEVER = Number.POSITIVE_INFINITY;
 const FETCH_TIMEOUT_MS = 8000;
 
 /** Why a fetch did not produce a snapshot, and whether asking again could ever help. */
 interface UsageFailure {
   message: string;
-  /** True when the endpoint refused the credential itself. */
-  refused: boolean;
+  /** What the endpoint said about the credential (usageFailureKind), or null when the failure was
+   *  outside it — the only kind asking again can change. */
+  kind: UsageFailureKind | null;
 }
 
 interface Entry {
@@ -38,6 +42,9 @@ interface Entry {
   refreshAt: number;
   /** Last failure reason, so a repeated one is logged only once. */
   failure: string;
+  /** What the last read ended in for this credential, null once one succeeds — refused by the
+   *  endpoint, or readable only by a request this token is not scoped for. */
+  standing: UsageFailureKind | null;
 }
 
 export interface UsageProviderRow {
@@ -78,12 +85,15 @@ export class ProviderPlanUsageService {
     return rotated ? null : (entry?.usage ?? null);
   }
 
-  /** Whether the endpoint refused this row's current key (401/403). An account pool takes that as
-   *  final, like the probe does: the member is unavailable, not idle. A replaced key is not refused
-   *  until the endpoint refuses it too. */
-  refused(row: UsageProviderRow): boolean {
+  /** What the last read of this row's quota ended in for the credential, or null when it produced one
+   *  (or has yet to be tried). The two refusals are the ones usageFailureKind tells apart, and an
+   *  account pool reads them differently: a key the endpoint refused is no member that can run, while a
+   *  token it will not report on — a setup token without the profile scope — is a member whose quota is
+   *  unknown, which the pool still runs on when nothing with a readable quota is left. A replaced key
+   *  carries neither until the endpoint says so about it. */
+  usageStanding(row: UsageProviderRow): UsageFailureKind | null {
     const entry = this.cache.get(row.id);
-    return entry?.keyEnc === row.apiKeyEnc && entry.refreshAt === NEVER;
+    return entry?.keyEnc === row.apiKeyEnc ? (entry.standing ?? null) : null;
   }
 
   /** Refresh this row's quota. Concurrent callers share the one request in flight — and get a
@@ -118,18 +128,19 @@ export class ProviderPlanUsageService {
     const result = await this.fetchUsage(apiKey);
     if (result && 'message' in result) {
       // Keep the last good numbers through a blip, exactly as the runner probe does; only the
-      // retry clock moves — or stops, when the credential itself was refused.
+      // retry clock moves — or stops, when the endpoint turned the credential away.
       if (previous?.failure !== result.message) {
         this.log.warn(
           `provider ${row.id} usage unavailable: ${result.message}` +
-            (result.refused ? ' — not asking again with this key' : ''),
+            (result.kind ? ' — not asking again with this key' : ''),
         );
       }
       this.cache.set(row.id, {
         usage: previous?.usage ?? null,
         keyEnc: row.apiKeyEnc,
-        refreshAt: result.refused ? NEVER : Date.now() + RETRY_MS,
+        refreshAt: result.kind ? NEVER : Date.now() + RETRY_MS,
         failure: result.message,
+        standing: result.kind,
       });
       return;
     }
@@ -139,6 +150,7 @@ export class ProviderPlanUsageService {
       keyEnc: row.apiKeyEnc,
       refreshAt: Date.now() + FRESH_MS,
       failure: '',
+      standing: null,
     });
     // First fetch included: before it the client had no gauge at all, so this is the push that
     // makes one appear.
@@ -160,7 +172,7 @@ export class ProviderPlanUsageService {
       });
     } catch (e) {
       const timedOut = (e as Error).name === 'TimeoutError';
-      return { message: timedOut ? 'timed out' : 'could not reach the endpoint', refused: false };
+      return { message: timedOut ? 'timed out' : 'could not reach the endpoint', kind: null };
     }
     if (!resp.ok) {
       // Carry the endpoint's own words: the usual refusal here is a scope problem, and reading
@@ -168,13 +180,13 @@ export class ProviderPlanUsageService {
       const detail = usageErrorMessage(await resp.text().catch(() => ''));
       return {
         message: `HTTP ${resp.status}${detail ? ` — ${detail}` : ''}`,
-        refused: resp.status === 401 || resp.status === 403,
+        kind: usageFailureKind(resp.status, detail),
       };
     }
     try {
       return parseSubscriptionUsage(await resp.json(), new Date().toISOString());
     } catch {
-      return { message: 'unreadable response', refused: false };
+      return { message: 'unreadable response', kind: null };
     }
   }
 

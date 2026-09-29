@@ -67,6 +67,16 @@ const NOT_RETURNED = new Set([
   'transfer-encoding', 'upgrade', 'set-cookie',
 ]);
 
+/**
+ * The error codes of a spent budget, as codex-api api_bridge.rs reads a 429: the API's `insufficient_quota`
+ * family, and a ChatGPT subscription's `usage_limit_reached` / `usage_not_included` (the Codex backend's,
+ * pool-login-gateway.service.ts). Asking again changes none of them, so none is waited out.
+ */
+export const SPENT_ERROR_CODES = new Set([
+  'insufficient_quota', 'credit_balance_exhausted', 'organization_spend_limit_exceeded',
+  'project_spend_limit_exceeded', 'organization_usage_limit_exceeded', 'usage_limit_reached', 'usage_not_included',
+]);
+
 /** Who is calling, established from their token, and the key their session runs on. */
 interface Caller {
   poolId: string;
@@ -90,7 +100,7 @@ interface GatewayKey {
 }
 
 /** The upstream's answer as far as it has been read. */
-interface Answer {
+export interface Answer {
   response: IncomingMessage;
   /** Read whole, for an error answer, which is small; undefined for one passed on as a stream. */
   body?: Buffer;
@@ -164,7 +174,7 @@ export class PoolGatewayService {
     const url = `${this.upstream}${target.path}${target.query}`;
     let answer: Answer;
     try {
-      answer = await this.send(req.method, url, headers, body, res);
+      answer = await sendUpstream(this.agent, req.method, url, headers, body, res);
     } catch (e) {
       if (!res.headersSent) {
         refuse(res, 502, 'orbit_gateway_upstream_unreachable', `The Orbit pool gateway could not reach OpenAI: ${(e as Error).message}`);
@@ -201,7 +211,7 @@ export class PoolGatewayService {
 
   /** The token's (pool, person, session), when it may still be used; null for every way it may not. */
   private async caller(authorization: string | undefined): Promise<Caller | null> {
-    const token = /^Bearer\s+(\S+)\s*$/i.exec(authorization ?? '')?.[1];
+    const token = bearerToken(authorization);
     if (!token || !token.startsWith('orbit-gw-')) return null;
     const row = await this.prisma.poolGatewayToken.findUnique({
       where: { tokenHash: sha256(token) },
@@ -286,117 +296,21 @@ export class PoolGatewayService {
     return key ? `${key.label} (${maskedKey(key.keyHint)}) ${why} — ${next}` : `There is no key for you in "${caller.poolLabel}" right now — ${next}`;
   }
 
-  /**
-   * Sends the request, waiting out a rate limit on the same key. An error answer (status 400 and up) is
-   * read whole before anything goes back — it is small, and whether it is a spent budget or a refused key
-   * decides what the gateway does; a success is handed back unread, to be streamed.
-   */
-  private async send(
-    method: string,
-    url: string,
-    headers: OutgoingHttpHeaders,
-    body: Buffer,
-    res: Response,
-  ): Promise<Answer> {
-    let waited = 0;
-    for (let attempt = 1; ; attempt += 1) {
-      const response = await this.exchange(method, url, headers, body, res);
-      if ((response.statusCode ?? 0) < 400) return { response };
-      const answer = { response, body: await readAll(response) };
-      if (response.statusCode !== 429) return answer;
-      const outcome: ResponsesOutcome = {};
-      readResponsesEvent(parseJson(answer.body), outcome);
-      if (outcome.errorCode === 'insufficient_quota') return answer;
-      const wait = rateLimitWait(response.headers, answer.body, attempt);
-      if (attempt >= RATE_LIMIT_ATTEMPTS || wait > RATE_LIMIT_MAX_WAIT_MS || waited + wait > RATE_LIMIT_BUDGET_MS) {
-        return answer;
-      }
-      if (res.destroyed) return answer;
-      await new Promise((resolve) => setTimeout(resolve, wait));
-      waited += wait;
-    }
-  }
-
-  /** One request to the upstream, resolved with its answer's head; aborted if codex goes away first. */
-  private exchange(
-    method: string,
-    url: string,
-    headers: OutgoingHttpHeaders,
-    body: Buffer,
-    res: Response,
-  ): Promise<IncomingMessage> {
-    return new Promise((resolve, reject) => {
-      const target = new URL(url);
-      const send = target.protocol === 'https:' ? httpsRequest : httpRequest;
-      const request = send(
-        target,
-        { method, headers, ...(target.protocol === 'https:' ? { agent: this.agent } : {}) },
-        resolve,
-      );
-      request.on('error', reject);
-      request.setTimeout(UPSTREAM_IDLE_MS, () => request.destroy(new Error('OpenAI went quiet')));
-      // Codex gone (an interrupt, a dead process): stop the answer being generated for nobody.
-      res.once('close', () => {
-        if (!res.writableFinished) request.destroy();
-      });
-      request.end(body);
-    });
-  }
-
   /** A successful answer, passed back byte for byte as it arrives, read along the way for what it used. */
   private stream(response: IncomingMessage, res: Response, caller: Caller, key: GatewayKey, now: Date): Promise<void> {
-    return new Promise((resolve) => {
-      const tap = new ResponsesStreamTap();
-      // A response codex asked for unstreamed is one JSON object, read whole at its end.
-      const whole = /application\/json/i.test(String(response.headers['content-type'] ?? '')) ? ([] as Buffer[]) : null;
-      let wholeBytes = 0;
-      relayHead(res, response);
-      res.flushHeaders();
-      let settled = false;
-      const done = (complete: boolean) => {
-        if (settled) return;
-        settled = true;
-        tap.end();
-        const outcome = tap.outcome;
-        if (whole && complete) readResponsesEvent(parseJson(Buffer.concat(whole)), outcome);
-        if (outcome.errorCode === 'insufficient_quota') {
-          // Said inside a stream that had already begun: marked all the same, off the stream's path.
-          void this.pools.markKeySpent(key.id, nextUsageWindowStart(now)).catch((e) =>
-            this.log.warn(`could not mark ${maskedKey(key.keyHint)} out of budget: ${(e as Error).message}`),
-          );
-        } else if (complete && key.spentUntil && (response.statusCode ?? 0) < 300) {
-          // OpenAI took it after all: the organization has budget again.
-          void this.pools.clearKeySpent(key.id).catch((e) =>
-            this.log.warn(`could not clear ${maskedKey(key.keyHint)}'s out-of-budget mark: ${(e as Error).message}`),
-          );
-        }
-        this.record(caller, key, outcome, now);
-        resolve();
-      };
-      response.on('data', (chunk: Buffer) => {
-        if (whole) {
-          wholeBytes += chunk.length;
-          if (wholeBytes <= MAX_BODY_BYTES) whole.push(chunk);
-        } else {
-          tap.push(chunk);
-        }
-        if (!res.write(chunk)) {
-          response.pause();
-          res.once('drain', () => response.resume());
-        }
-      });
-      response.on('end', () => {
-        res.end();
-        done(true);
-      });
-      response.on('error', () => {
-        res.destroy();
-        done(false);
-      });
-      res.once('close', () => {
-        if (!res.writableFinished) response.destroy();
-        done(false);
-      });
+    return relayStream(response, res, (outcome, complete) => {
+      if (outcome.errorCode === 'insufficient_quota') {
+        // Said inside a stream that had already begun: marked all the same, off the stream's path.
+        void this.pools.markKeySpent(key.id, nextUsageWindowStart(now)).catch((e) =>
+          this.log.warn(`could not mark ${maskedKey(key.keyHint)} out of budget: ${(e as Error).message}`),
+        );
+      } else if (complete && key.spentUntil && (response.statusCode ?? 0) < 300) {
+        // OpenAI took it after all: the organization has budget again.
+        void this.pools.clearKeySpent(key.id).catch((e) =>
+          this.log.warn(`could not clear ${maskedKey(key.keyHint)}'s out-of-budget mark: ${(e as Error).message}`),
+        );
+      }
+      this.record(caller, key, outcome, now);
     });
   }
 
@@ -435,8 +349,126 @@ export function forwardedHeaders(incoming: IncomingHttpHeaders, secret: string, 
   return headers;
 }
 
+/** The bearer credential of an `Authorization` header, or undefined. */
+export function bearerToken(authorization: string | undefined): string | undefined {
+  return /^Bearer\s+(\S+)\s*$/i.exec(authorization ?? '')?.[1];
+}
+
+/**
+ * Sends the request, waiting out a rate limit on the same credential. An error answer (status 400 and up)
+ * is read whole before anything goes back — it is small, and whether it is a spent budget or a refused
+ * credential decides what the gateway does; a success is handed back unread, to be streamed.
+ */
+export async function sendUpstream(
+  agent: HttpsAgent,
+  method: string,
+  url: string,
+  headers: OutgoingHttpHeaders,
+  body: Buffer,
+  res: Response,
+): Promise<Answer> {
+  let waited = 0;
+  for (let attempt = 1; ; attempt += 1) {
+    const response = await exchangeUpstream(agent, method, url, headers, body, res);
+    if ((response.statusCode ?? 0) < 400) return { response };
+    const answer = { response, body: await readAll(response) };
+    if (response.statusCode !== 429) return answer;
+    const outcome: ResponsesOutcome = {};
+    readResponsesEvent(parseJson(answer.body), outcome);
+    if (outcome.errorCode && SPENT_ERROR_CODES.has(outcome.errorCode)) return answer;
+    const wait = rateLimitWait(response.headers, answer.body, attempt);
+    if (attempt >= RATE_LIMIT_ATTEMPTS || wait > RATE_LIMIT_MAX_WAIT_MS || waited + wait > RATE_LIMIT_BUDGET_MS) {
+      return answer;
+    }
+    if (res.destroyed) return answer;
+    await new Promise((resolve) => setTimeout(resolve, wait));
+    waited += wait;
+  }
+}
+
+/** One request to the upstream, resolved with its answer's head; aborted if codex goes away first. */
+export function exchangeUpstream(
+  agent: HttpsAgent,
+  method: string,
+  url: string,
+  headers: OutgoingHttpHeaders,
+  body: Buffer,
+  res: Response,
+): Promise<IncomingMessage> {
+  return new Promise((resolve, reject) => {
+    const target = new URL(url);
+    const send = target.protocol === 'https:' ? httpsRequest : httpRequest;
+    const request = send(
+      target,
+      { method, headers, ...(target.protocol === 'https:' ? { agent } : {}) },
+      resolve,
+    );
+    request.on('error', reject);
+    request.setTimeout(UPSTREAM_IDLE_MS, () => request.destroy(new Error('OpenAI went quiet')));
+    // Codex gone (an interrupt, a dead process): stop the answer being generated for nobody.
+    res.once('close', () => {
+      if (!res.writableFinished) request.destroy();
+    });
+    request.end(body);
+  });
+}
+
+/**
+ * A successful answer, passed back byte for byte as it arrives and read along the way (a copy, never the
+ * bytes codex gets) for what it used; `done` is told what was read, once, when the stream ends — complete,
+ * or cut off by either side.
+ */
+export function relayStream(
+  response: IncomingMessage,
+  res: Response,
+  done: (outcome: ResponsesOutcome, complete: boolean) => void,
+): Promise<void> {
+  return new Promise((resolve) => {
+    const tap = new ResponsesStreamTap();
+    // A response codex asked for unstreamed is one JSON object, read whole at its end.
+    const whole = /application\/json/i.test(String(response.headers['content-type'] ?? '')) ? ([] as Buffer[]) : null;
+    let wholeBytes = 0;
+    relayHead(res, response);
+    res.flushHeaders();
+    let settled = false;
+    const end = (complete: boolean) => {
+      if (settled) return;
+      settled = true;
+      tap.end();
+      const outcome = tap.outcome;
+      if (whole && complete) readResponsesEvent(parseJson(Buffer.concat(whole)), outcome);
+      done(outcome, complete);
+      resolve();
+    };
+    response.on('data', (chunk: Buffer) => {
+      if (whole) {
+        wholeBytes += chunk.length;
+        if (wholeBytes <= MAX_BODY_BYTES) whole.push(chunk);
+      } else {
+        tap.push(chunk);
+      }
+      if (!res.write(chunk)) {
+        response.pause();
+        res.once('drain', () => response.resume());
+      }
+    });
+    response.on('end', () => {
+      res.end();
+      end(true);
+    });
+    response.on('error', () => {
+      res.destroy();
+      end(false);
+    });
+    res.once('close', () => {
+      if (!res.writableFinished) response.destroy();
+      end(false);
+    });
+  });
+}
+
 /** The answer's status and headers, minus NOT_RETURNED. */
-function relayHead(res: Response, response: IncomingMessage): void {
+export function relayHead(res: Response, response: IncomingMessage): void {
   res.status(response.statusCode ?? 502);
   for (const [name, value] of Object.entries(response.headers)) {
     if (value === undefined || NOT_RETURNED.has(name.toLowerCase())) continue;
@@ -445,11 +477,11 @@ function relayHead(res: Response, response: IncomingMessage): void {
 }
 
 /** A refusal in the shape OpenAI's own errors take, which is what codex reads a message out of. */
-function refuse(res: Response, status: number, code: string, message: string): void {
+export function refuse(res: Response, status: number, code: string, message: string): void {
   res.status(status).json({ error: { message, type: 'orbit_gateway', param: null, code } });
 }
 
-function readBody(req: Request): Promise<Buffer> {
+export function readBody(req: Request): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
@@ -467,7 +499,7 @@ function readBody(req: Request): Promise<Buffer> {
   });
 }
 
-function readAll(response: IncomingMessage): Promise<Buffer> {
+export function readAll(response: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     response.on('data', (chunk: Buffer) => chunks.push(chunk));
@@ -476,7 +508,7 @@ function readAll(response: IncomingMessage): Promise<Buffer> {
   });
 }
 
-function parseJson(body: Buffer): unknown {
+export function parseJson(body: Buffer): unknown {
   try {
     return JSON.parse(body.toString('utf8'));
   } catch {

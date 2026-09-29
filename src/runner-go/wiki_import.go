@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -1093,6 +1094,7 @@ type wikiImportExtraction struct {
 func (im *wikiImporter) extract(source wikiImportSource) wikiImportExtraction {
 	file := im.state.Files[source.rel]
 	note := wikiImportNote{id: file.NoteID, path: file.NotePath, date: source.date, text: im.texts[source.rel]}
+	note.lang = wikiImportNoteLanguage(note.text)
 	prompt := wikiImportPrompt(note)
 	var result wikiImportExtraction
 	answer, err := im.ask(prompt, &result)
@@ -1281,8 +1283,74 @@ func askWikiImportModel(ctx context.Context, claude string, cfg wikiVerifyConfig
 // ── The prompt, and what may come back ──────────────────────────────────────────────────────────
 
 // wikiImportNote is one note as the model is shown it: the text the server kept, and where it came from.
+// lang is the language its prose is written in when that is one an entry's title is held to
+// (wikiImportNoteLanguage), and "" otherwise.
 type wikiImportNote struct {
-	id, path, date, text string
+	id, path, date, text, lang string
+}
+
+// wikiImportChinese is the one language a note's entries are held to: the owner's memory is written in
+// it, and the model, shown an English example, titled its entries in English all the same (the trial
+// of 2026-09-28).
+const wikiImportChinese = "Chinese"
+
+var (
+	wikiImportFrontmatterBlock = regexp.MustCompile(`(?s)\A---\n.*?\n---\n`)
+	wikiImportCodeBlock        = regexp.MustCompile("(?s)```.*?```")
+	wikiImportCodeSpan         = regexp.MustCompile("`[^`\n]*`")
+	wikiImportURL              = regexp.MustCompile(`https?://\S+`)
+)
+
+// wikiImportNoteLanguage is "Chinese" when the note's prose — its text without frontmatter, code and
+// URLs — is mostly Han characters, counting a Latin word as five letters, and "" otherwise. Of the
+// owner's 1,135 memory files, 1,103 come out at 0.5 or more and 27 below 0.2: 0.3 splits them.
+func wikiImportNoteLanguage(text string) string {
+	prose := wikiImportFrontmatterBlock.ReplaceAllString(text, "")
+	for _, code := range []*regexp.Regexp{wikiImportCodeBlock, wikiImportCodeSpan, wikiImportURL} {
+		prose = code.ReplaceAllString(prose, " ")
+	}
+	han, latin := 0, 0
+	for _, r := range prose {
+		switch {
+		case unicode.Is(unicode.Han, r):
+			han++
+		case r < utf8.RuneSelf && unicode.IsLetter(r):
+			latin++
+		}
+	}
+	if han > 0 && float64(han)/(float64(han)+float64(latin)/5) >= 0.3 {
+		return wikiImportChinese
+	}
+	return ""
+}
+
+func wikiImportHasHan(text string) bool {
+	for _, r := range text {
+		if unicode.Is(unicode.Han, r) {
+			return true
+		}
+	}
+	return false
+}
+
+// wikiImportNoteGives is whether the note gives the command as it is written, in its code — a code
+// block or a `span`: a recipe's verify command is run as it stands, and neither a description of a
+// check («full-api on main») nor a link to another note («见 [[full-api-red-on-main]]») is one, though
+// the note's prose holds both.
+func wikiImportNoteGives(note, command string) bool {
+	collapse := func(text string) string { return strings.Join(strings.Fields(text), " ") }
+	command = collapse(strings.TrimPrefix(strings.TrimSpace(command), "$ "))
+	if command == "" {
+		return false
+	}
+	code := wikiImportCodeBlock.FindAllString(note, -1)
+	code = append(code, wikiImportCodeSpan.FindAllString(wikiImportCodeBlock.ReplaceAllString(note, " "), -1)...)
+	for _, piece := range code {
+		if strings.Contains(collapse(strings.Trim(piece, "`")), command) {
+			return true
+		}
+	}
+	return false
 }
 
 // wikiImportPrompt is the demo's extraction prompt (prompts.py) for one note instead of a case file:
@@ -1310,11 +1378,12 @@ The kind's own fields (all required; be terse: each text field one short sentenc
 - convention: "rule", "scope": ["where it applies"], "exceptions" ("" if none)
 - decision: "context", "decision", "alternatives": [{"option": "...", "whyRejected": "..."}], "consequences", "decidedAt": "YYYY-MM-DD"
 - pitfall: "trigger": {"paths": [...], "commands": [...], "errorSignature": "..."} (at least one non-empty; [] for an empty list), "symptom", "cause", "fix"
-- recipe: "steps": ["..."], "verify": {"command": "...", "expectedExit": 0}
+- recipe: "steps": ["..."], "verify": {"command": "<a command the note gives, copied as it is written>", "expectedExit": 0}
 - concept: "definition", "boundaries"
 RULES:
 - quote: copied exactly from the note, backticks and punctuation included — no "…", no paraphrase, no translation. Prefer a span without double quotes; if one is unavoidable, escape it as \".
 - Write titles and text fields in the language the note is written in; keep code, paths and commands verbatim.
+- verify.command is a command copied exactly from the note's code (a code block or a span in backticks), one that shows the procedure worked — never a description of a check or a link to another note. A procedure the note gives no such command for is not a recipe: write it as a convention, or leave it out.
 - Only put a path or a sha in anchors if it appears in the note; never invent one. decidedAt is the date the note gives the decision, or else the note's date.
 
 EXAMPLE (a fictional repository, for format only):
@@ -1335,7 +1404,17 @@ OUTPUT:
 ==== NOTE (` + note.path + `, ` + note.date + `) ====
 ` + note.text + `
 ==== END OF NOTE ====
-Output the JSON array now.`
+` + wikiImportLanguageLine(note) + `Output the JSON array now.`
+}
+
+// wikiImportLanguageLine names the note's language last, where the model reads it after the English
+// example: "" for a note whose language no title is held to.
+func wikiImportLanguageLine(note wikiImportNote) string {
+	if note.lang == "" {
+		return ""
+	}
+	return "This note is written in " + note.lang + ": write every title, summary and text field in " + note.lang +
+		", although the example above is in English; keep code, paths and commands verbatim.\n"
 }
 
 // wikiImportRetrySuffix asks once more, naming what did not hold up (prompts.py's retry_suffix).
@@ -1551,6 +1630,8 @@ func wikiImportOpFrom(entry map[string]interface{}, kind string, note wikiImport
 	summary := wikiImportText(entry["summary"], 280)
 	if title == "" {
 		problems = append(problems, "title is missing")
+	} else if note.lang == wikiImportChinese && !wikiImportHasHan(title) {
+		problems = append(problems, "title is not in the note's language: the note is written in Chinese, so write the title in Chinese")
 	}
 	if summary == "" {
 		problems = append(problems, "summary is missing")
@@ -1645,6 +1726,11 @@ func wikiImportField(name string, value interface{}, note wikiImportNote) (inter
 		command := wikiImportText(verify["command"], 4000)
 		if command == "" {
 			return nil, "verify needs a command"
+		}
+		if !wikiImportNoteGives(note.text, command) {
+			return nil, fmt.Sprintf("verify.command %q is not a command the note gives: copy one exactly from the note's "+
+				"code (a code block or a span in backticks), or, when the note gives none, write the procedure as a convention "+
+				"or leave it out", cutRunes(command, 80))
 		}
 		exit := 0
 		switch code := verify["expectedExit"].(type) {

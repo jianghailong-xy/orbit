@@ -38,6 +38,10 @@ public enum SharedPoolPage {
     // MARK: keys
 
     public static let keysHeader = "Keys"
+    /// What stopped the keys that cannot run, when none of them can: the month's caps, or OpenAI's own
+    /// out-of-budget mark (web's `PoolGauge` chooses between the same two).
+    public static let allAtCapWords = "All at cap"
+    public static let allOutOfBudgetWords = "All out of budget"
     /// The web's sentence under the pool's name; on a phone, the Keys section's footer.
     public static let keysFooter = "Each session starts on the key with the most room, and stays on it until that one runs out."
     public static let noKeys = "No keys yet — no session can start on this pool until one is added."
@@ -59,25 +63,31 @@ public enum SharedPoolPage {
     }
 
     /// Where a key stands for a session the caller starts now (web's `keyState`). Refused by OpenAI
-    /// outranks switched off: it is the one somebody has to act on.
+    /// outranks switched off: it is the one somebody has to act on. Out of budget outranks the cap: it
+    /// is OpenAI's own answer, and it holds for the key's contributor where the cap only holds for the
+    /// others.
     public enum KeyState: Equatable, Sendable {
-        case invalid, disabled, atCap, running, available
+        case invalid, disabled, spent, running, available
     }
 
     public static func keyState(_ key: SharedPoolKey) -> KeyState {
         if key.state == .invalid { return .invalid }
         if !key.enabled || key.state == .disabled { return .disabled }
-        if atCap(key) { return .atCap }
+        if key.spentUntil != nil || atCap(key) { return .spent }
         return key.running ? .running : .available
     }
 
     /// A key's status tag (web's `memberStatus` for a key): a capped key comes back on the first of the
-    /// next month, which is said as a date.
+    /// next month, and one OpenAI put out of budget at its own mark — both said as a date.
     public static func status(_ key: SharedPoolKey, in pool: SharedPool) -> PoolStatus {
         switch keyState(key) {
         case .invalid: return PoolStatus(label: "Invalid", tone: .danger)
         case .disabled: return PoolStatus(label: "Disabled", tone: .neutral)
-        case .atCap:
+        case .spent:
+            if let until = key.spentUntil {
+                guard let date = capReset(until) else { return PoolStatus(label: "Out of budget", tone: .warning) }
+                return PoolStatus(label: "Out of budget · resets \(date)", tone: .warning)
+            }
             guard let end = pool.window?.end, let date = capReset(end) else {
                 return PoolStatus(label: "At cap", tone: .warning)
             }
@@ -101,6 +111,32 @@ public enum SharedPoolPage {
     public static func atCap(_ key: SharedPoolKey) -> Bool {
         guard !key.contributor.you, let cap = key.shareCap else { return false }
         return (key.usage.othersCostUsd ?? 0) >= Double(cap)
+    }
+
+    /// Whether every key of `pool` that cannot run is out of budget rather than at its cap — which of
+    /// the two the Keys header names when none of them can run (web's `allOutOfBudget`).
+    public static func allOutOfBudget(_ pool: SharedPool) -> Bool {
+        let stopped = pool.keys.filter { keyState($0) == .spent }
+        return !stopped.isEmpty && stopped.allSatisfy { $0.spentUntil != nil }
+    }
+
+    /// When `key` can run again: OpenAI's own out-of-budget mark, else the first of the next month, when
+    /// a share cap counts from zero. Nil when the pool names no month to read it from.
+    static func reset(_ key: SharedPoolKey, in pool: SharedPool) -> String? {
+        key.spentUntil ?? pool.window?.end
+    }
+
+    /// The EARLIEST of some reset instants — one key free of its reason is enough for work to continue —
+    /// parsed rather than compared as text, so the answer does not ride on how the server spells a time.
+    static func earliest(_ resets: [String]) -> String? {
+        resets.min { (RelativeTime.parse($0) ?? .distantFuture) < (RelativeTime.parse($1) ?? .distantFuture) }
+    }
+
+    /// When the first key of a pool that cannot run comes back: the earliest of the stops' own resets,
+    /// which is what a pool's head names. Nil while one of its keys can run, or with none stopped.
+    static func firstReset(_ pool: SharedPool) -> String? {
+        let stopped = pool.keys.filter { keyState($0) == .spent }.compactMap { reset($0, in: pool) }
+        return stopped.isEmpty ? nil : earliest(stopped)
     }
 
     /// The "2" of "2 of 5 keys available": the keys a session of the caller's could start on now.
@@ -130,15 +166,17 @@ public enum SharedPoolPage {
     }
 
     /// The Keys header's trailing words (web's `PoolGauge`): the key the next session starts on; with
-    /// none, why — none in the pool, none that can run — or, when every one that can is capped, when
-    /// the month turns.
+    /// none, why — none in the pool, none that can run — or, when every one that can is stopped, what
+    /// stopped them and when the first of them comes back: the month turning, or OpenAI's own mark.
     public static func keysHeadline(_ pool: SharedPool) -> String {
         if let next = nextKey(pool) { return "Next: \(next.label)" }
         if pool.keys.isEmpty { return "No keys" }
         if !pool.keys.contains(where: { $0.enabled && $0.state == .active }) { return "No key can run" }
-        if pool.keys.contains(where: { keyState($0) == .atCap }) {
-            guard let end = pool.window?.end, let date = capReset(end) else { return "All at cap" }
-            return "All at cap · resets \(date)"
+        let stopped = pool.keys.filter { keyState($0) == .spent }
+        if !stopped.isEmpty {
+            let words = allOutOfBudget(pool) ? allOutOfBudgetWords : allAtCapWords
+            guard let at = firstReset(pool), let date = capReset(at) else { return words }
+            return "\(words) · resets \(date)"
         }
         return "No key can run"
     }
