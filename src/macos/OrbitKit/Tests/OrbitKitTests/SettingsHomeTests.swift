@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Foundation has them on Linux
+#endif
 import XCTest
 @testable import OrbitKit
 
