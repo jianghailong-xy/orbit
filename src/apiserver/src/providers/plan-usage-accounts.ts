@@ -7,7 +7,7 @@
  */
 import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
 import { ENGINE_ACCOUNTS_MAX, sanitizeRunnerEngines } from '../common/runner-engines';
-import { accountDir, accountOfEnv } from '@orbit/shared';
+import { accountDir, accountOfEnv, roomiestCodexAccount } from '@orbit/shared';
 import { DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner } from './account';
 
 /** An account a runner added: 4 random bytes in lowercase hex (src/runner-go/account_slot.go).
@@ -78,6 +78,26 @@ export function runAccount(
   const accounts = sanitizeRunnerEngines(runnerEngines)?.find((engine) => engine.engine === provider)?.accounts;
   const withChoice = picked ? { ...(env ?? {}), [dirVar]: accountDir(picked) } : env;
   return accountOfEnv(provider, withChoice, accounts);
+}
+
+/**
+ * The Codex account a new session on this workspace and runner starts on when nothing picked one for
+ * it: the runner's account with the most room right now (roomiestCodexAccount) — when the workspace
+ * picked none either, and its env selects no other CODEX_HOME and no key of its own. Null otherwise:
+ * the session then runs where the workspace's choice and env say. SessionsService.create stores the
+ * answer on the session, which keeps it for life; the task quota gate asks the same question of a task
+ * that is about to get one.
+ */
+export function automaticCodexAccount(
+  workspace: { env?: unknown; codexAccount?: string | null } | null | undefined,
+  runnerEngines: unknown,
+  planUsage: unknown,
+  now: Date,
+): string | null {
+  if (workspace?.codexAccount) return null;
+  if (runAccount('codex', workspace?.env, null, runnerEngines) !== DEFAULT_ACCOUNT) return null;
+  const accounts = sanitizeRunnerEngines(runnerEngines)?.find((engine) => engine.engine === 'codex')?.accounts;
+  return roomiestCodexAccount(accounts, isObject(planUsage) ? (planUsage as PlanUsage) : null, now);
 }
 
 /** The accounts a workspace pins its sessions to, one per engine that keeps accounts. */

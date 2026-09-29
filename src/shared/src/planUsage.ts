@@ -215,3 +215,56 @@ export function planUsageBlockedUntil(
   }
   return latest === null ? null : new Date(latest);
 }
+
+/**
+ * Which of a runner's Codex accounts a new session starts on when neither it nor its workspace picked
+ * one: the one with the most room right now. The server makes this choice once, when the session is
+ * created, and stores it on the session, so the session stays on that account for its life (its
+ * thread lives in that account's CODEX_HOME); the New Session screen asks the same question to say
+ * where a session would start.
+ *
+ * - Only an account the CLI does not say is signed out is a candidate.
+ * - One with a spent window — at 100% and not past its reset, or with no reset time to go by — is
+ *   passed over while another can run.
+ * - Among the rest, the most room is the least used of each account's tightest window: accounts report
+ *   different windows (a Plus login a 5-hour and a weekly one, a Pro login only a weekly one), and the
+ *   one closest to its limit is the one that stops it. An account with nothing reported ranks after
+ *   every account with a reading, since unread is not the same as unused.
+ * - Every candidate spent: the one that frees up first, where the session's run then waits.
+ * - Ties go to Default, then to the lower id, so the answer never depends on the order of the report.
+ *
+ * Null when there is nothing to choose between — fewer than two accounts reported, or none signed in —
+ * and the session runs where it always did.
+ */
+export function roomiestCodexAccount(
+  accounts: readonly RunnerEngineAccount[] | null | undefined,
+  usage: PlanUsage | null | undefined,
+  now: Date,
+): string | null {
+  if (!accounts || accounts.length < 2) return null;
+  const codex = usage ? snapshotFor(usage, 'codex') : undefined;
+  const candidates = accounts
+    .filter((account) => account.auth !== 'no')
+    .map((account) => {
+      const snapshot = codex ? codexAccountSnapshot(codex, account.id) : undefined;
+      const windows = snapshot ? windowsOf(snapshot) : [];
+      const spent = windows.filter(
+        (w) => w.utilization >= EXHAUSTED_UTILIZATION && !(Date.parse(w.resetsAt ?? '') <= now.getTime()),
+      );
+      const resets = spent.map((w) => Date.parse(w.resetsAt ?? ''));
+      return {
+        id: account.id,
+        tightest: windows.length > 0 ? Math.max(...windows.map((w) => w.utilization)) : Number.POSITIVE_INFINITY,
+        spentUntil: spent.length === 0 ? null : resets.some(Number.isNaN) ? Number.POSITIVE_INFINITY : Math.max(...resets),
+      };
+    });
+  const byId = (a: { id: string }, b: { id: string }) =>
+    Number(b.id === CODEX_DEFAULT_ACCOUNT) - Number(a.id === CODEX_DEFAULT_ACCOUNT) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const usable = candidates.filter((c) => c.spentUntil === null);
+  if (usable.length > 0) {
+    // Two accounts with no reading subtract to NaN, which falls through to the id like any other tie.
+    return [...usable].sort((a, b) => a.tightest - b.tightest || byId(a, b))[0].id;
+  }
+  const first = [...candidates].sort((a, b) => (a.spentUntil ?? 0) - (b.spentUntil ?? 0) || byId(a, b))[0];
+  return first?.id ?? null;
+}

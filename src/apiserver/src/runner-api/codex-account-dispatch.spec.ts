@@ -395,7 +395,7 @@ test('reset v1 reads Default only, so a workspace on another account is an accou
   assert.equal(await refusal(null), 'CAPABILITY_MISSING');
 });
 
-test('a workspace stores the slot id, never a path, and Default as no choice at all', async () => {
+test('a workspace stores the slot id or Default, never a path', async () => {
   // The pipe main.ts installs.
   const pipe = new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false });
   const body = async (metatype: typeof CreateWorkspaceDto | typeof UpdateWorkspaceDto, raw: object) =>
@@ -429,7 +429,9 @@ test('a workspace stores the slot id, never a path, and Default as no choice at 
     return written[0];
   };
   assert.equal((await update({ codexAccount: WORK })).codexAccount, WORK);
-  assert.equal((await update({ codexAccount: 'default' })).codexAccount, null);
+  // `default` pins the workspace to Default; null is Automatic (automaticCodexAccount), so the two are
+  // stored apart.
+  assert.equal((await update({ codexAccount: 'default' })).codexAccount, 'default');
   assert.equal((await update({ codexAccount: null })).codexAccount, null);
   // A PATCH that says nothing about the account leaves it as it stands.
   assert.equal((await update({ name: 'renamed' })).codexAccount, undefined);

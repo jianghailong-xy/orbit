@@ -263,30 +263,53 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     }
   });
 
-  it('lists the accounts under Codex, and starts the new session on the one picked', async () => {
+  const accountNamed = (name: string) =>
+    [...document.querySelectorAll('.np-account')].find((row) => row.querySelector('.np-row-name')?.textContent === name);
+
+  it('with no account picked, a new session starts on the one with the most room, and says which', async () => {
     await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
-    // Default is where it would run, and its spent window is what the gauge shows.
-    expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 100%');
+    // Default's 5-hour window is spent, so Automatic would start it on Work, whose quota the gauge shows.
+    expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 0%');
+    expect(mounted().querySelector('.np-summary')?.textContent).toContain('Work (auto)');
 
     await click(mounted().querySelector('.np-card'));
-    expect(accountRows()).toEqual(['Default 5h 100%', 'Work Weekly 0%']);
-    expect(pickedRow()).toBe('Default');
-
-    await click([...document.querySelectorAll('.np-account')].find((row) => row.textContent?.includes('Work')));
-    expect(mounted().querySelector('.np-summary')?.textContent).toContain('Work');
-    expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 0%');
+    expect(accountRows()).toEqual(['Automatic most room', 'Default 5h 100%', 'Work Weekly 0%']);
+    expect(pickedRow()).toBe('Automatic');
+    await click(mounted().querySelector('.np-card'));
 
     await sendMessage('fix the flaky test');
-    expect(creates[0]).toMatchObject({ prompt: 'fix the flaky test', codexAccount: WORK });
+    // Nothing is sent: the server makes the same choice when it creates the session, and stores it.
+    expect(creates[0]).toMatchObject({ prompt: 'fix the flaky test' });
+    expect('codexAccount' in creates[0]).toBe(false);
     // The provider was not changed, so it is not sent: the server starts where the project last ran.
     expect(creates[0].provider).toBeUndefined();
   });
 
-  it('without a pick, sends no account and shows the one the workspace runs on', async () => {
+  it('starts the new session on an account picked under Codex, and Automatic takes the pick back', async () => {
+    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
+    await click(mounted().querySelector('.np-card'));
+    await click(accountNamed('Default'));
+    expect(mounted().querySelector('.np-summary')?.textContent).toContain('Default');
+    expect(mounted().querySelector('.np-summary')?.textContent).not.toContain('(auto)');
+    expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 100%');
+
+    await click(mounted().querySelector('.np-card'));
+    expect(pickedRow()).toBe('Default');
+    await click(accountNamed('Automatic'));
+    expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 0%');
+
+    await click(mounted().querySelector('.np-card'));
+    await click(accountNamed('Default'));
+    await sendMessage('fix the flaky test');
+    expect(creates[0]).toMatchObject({ prompt: 'fix the flaky test', codexAccount: 'default' });
+  });
+
+  it("on a workspace that picked an account, offers no Automatic, starts there, and sends nothing", async () => {
     workspaceAccount = WORK;
     await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 0%');
     await click(mounted().querySelector('.np-card'));
+    expect(accountRows()).toEqual(['Default 5h 100%', 'Work Weekly 0%']);
     expect(pickedRow()).toBe('Work');
     await click(mounted().querySelector('.np-card'));
 

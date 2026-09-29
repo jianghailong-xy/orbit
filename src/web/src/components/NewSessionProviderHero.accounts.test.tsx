@@ -34,9 +34,9 @@ const choices: ProviderChoice[] = [
 describe('Codex accounts in the New Session picker', () => {
   let container: HTMLDivElement;
   let root: Root;
-  let picked: Array<[string, string?]>;
+  let picked: Array<[string, (string | null)?]>;
 
-  const mount = async (current: string, currentAccount?: string) => {
+  const mount = async (current: string, currentAccount?: string, automatic?: boolean) => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -48,6 +48,7 @@ describe('Codex accounts in the New Session picker', () => {
             choices={choices}
             onPick={(slug) => picked.push([slug])}
             currentAccount={currentAccount}
+            automatic={automatic}
             onPickAccount={(slug, account) => picked.push([slug, account])}
             runnerId={RUNNER_ID}
           />
@@ -110,6 +111,27 @@ describe('Codex accounts in the New Session picker', () => {
     expect(document.body.querySelector('.np-account.picked')).toBeNull();
     await click(accountNamed('Work'));
     expect(picked).toEqual([['codex', '3fa91c2e']]);
+  });
+
+  it('offers Automatic above the accounts when it is on offer, ticked — not the account — while it is the pick', async () => {
+    await mount('codex', '3fa91c2e', true);
+    // The account Automatic would start it on is named, and marked as its choice.
+    expect(container.querySelector('.np-summary')?.textContent).toBe('Codex·GPT-5.5·Work (auto)·Manage');
+    await click(container.querySelector('.np-card'));
+    const names = Array.from(document.body.querySelectorAll('.np-list .np-row-name')).map((el) => el.textContent);
+    expect(names.slice(0, 6)).toEqual(['Claude', 'Codex', 'Automatic', 'Default', 'Work', 'Old']);
+    expect(accountNamed('Automatic')?.classList.contains('picked')).toBe(true);
+    expect(accountNamed('Work')?.classList.contains('picked')).toBe(false);
+    await click(accountNamed('Default'));
+    expect(picked).toEqual([['codex', 'default']]);
+  });
+
+  it('hands back no account when Automatic is picked over an account', async () => {
+    await mount('codex', 'default', false);
+    await click(container.querySelector('.np-card'));
+    expect(accountNamed('Default')?.classList.contains('picked')).toBe(true);
+    await click(accountNamed('Automatic'));
+    expect(picked).toEqual([['codex', null]]);
   });
 
   it('sends a signed-out account to its sign-in on the Providers page instead of picking it', async () => {

@@ -715,10 +715,12 @@ model Workspace {
   // Custom environment variables injected into this workspace's runtime process (string map).
   env                 Json?     @map("env")
   // Which Codex account this workspace's Codex sessions run on: the id of a slot the runner added
-  // (8 lowercase hex, src/runner-go/codex_account_slot.go), never a path. NULL is Default, the
-  // CODEX_HOME the runner's own environment selects. Dispatch resolves the id to that slot's
-  // CODEX_HOME from the accounts the assigned runner reports (providers/codex-account.ts); an id
-  // that runner does not report runs on Default rather than failing.
+  // (8 lowercase hex, src/runner-go/codex_account_slot.go) or `default`, never a path. NULL is
+  // Automatic: a new session starts on the runner's account with the most room, stored on the session
+  // (Session.codexAccount, providers/plan-usage-accounts.ts automaticCodexAccount); a session that has
+  // none stored runs on Default, the CODEX_HOME the runner's own environment selects. Dispatch resolves
+  // the id to that slot's CODEX_HOME from the accounts the assigned runner reports (providers/account.ts);
+  // an id that runner does not report runs on Default rather than failing.
   codexAccount        String?   @map("codex_account")
   // Which Claude account this workspace's Claude sessions run on: the id of a slot the runner added
   // (8 lowercase hex), never a path. NULL is Default, the CLAUDE_CONFIG_DIR the runner's own
@@ -1006,10 +1008,11 @@ model Session {
   // OpenAI's own identifier, and no relation, for the reason poolKeyId has none. Never answered by a
   // route: a response names an account by its masked form only (SessionsService.get leaves it out).
   poolCodexAccountId   String?   @map("pool_codex_account_id")
-  // Which of its runner's Codex accounts this session was started on, when one was picked for it on
-  // the New Session screen (migration 0330): `default` or a slot id, the values Workspace.codexAccount
-  // takes. NULL follows the workspace's choice, as every session did before. Read wherever a session's
-  // run is dispatched or its quota asked about, ahead of the workspace's.
+  // Which of its runner's Codex accounts this session runs on (migration 0330): `default` or a slot id,
+  // the values Workspace.codexAccount takes — picked for it on the New Session screen, or, when neither
+  // it nor its workspace picked one, the account with the most room when it was created
+  // (automaticCodexAccount). NULL follows the workspace's choice, as every session did before. Read
+  // wherever a session's run is dispatched or its quota asked about, ahead of the workspace's.
   codexAccount         String?   @map("codex_account")
   // The only runner-engine generation allowed to dequeue this session's inbox. Retired values
   // remain here as tombstones until the next activation, so legacy NULL polls stay fenced.

@@ -288,11 +288,13 @@ import type {
   WatchView,
 } from '@orbit/shared';
 import {
+  accountOfEnv,
   AgentProvider,
   derivePermissionSemantics,
   fastModeAvailable,
   MAX_PROMPT_CHARS,
   permissionModeAvailableOnRunner,
+  roomiestCodexAccount,
   TRASH_RETENTION_DAYS,
 } from '@orbit/shared';
 import { lastTypedUserMessage } from '../lib/deliveredMessage';
@@ -2787,11 +2789,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current);
     providerNoteTimer.current = setTimeout(() => setProviderSwitchNote(null), 4000);
   };
-  // An account row under an engine: that engine, on that account. Like the provider, it binds the
-  // session being drafted and rewrites no workspace setting.
-  const pickDraftAccount = (slug: string, account: string): void => {
+  // An account row under an engine: that engine, on that account — or on Automatic (`null`). Like the
+  // provider, it binds the session being drafted and rewrites no workspace setting.
+  const pickDraftAccount = (slug: string, account: string | null): void => {
     if (slug !== pickedProvider) pickDraftProvider(slug);
-    setDraftAccountPick({ workspaceId, account });
+    setDraftAccountPick(account === null ? null : { workspaceId, account });
   };
 
   // The provider is part of the draft's seed context: picking a different one has to re-seed
@@ -6206,11 +6208,22 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // this runner does not report, as dispatch resolves it (providers/account.ts accountOnRunner).
   const accountOnThisRunner = (engine: 'codex' | 'claude', wanted: string | null | undefined): string =>
     wanted && accountsOf(runner, engine).some((account) => account.id === wanted) ? wanted : 'default';
+  // A new session on a workspace that picked no Codex account (and whose env selects no other CODEX_HOME
+  // or key of its own) starts on the runner's account with the most room: the choice the server makes
+  // when it creates the session (automaticCodexAccount), asked here of the same numbers to say which.
+  const codexAccountsHere = accountsOf(runner, 'codex');
+  const codexAutoOffered =
+    !pickedWorkspace?.codexAccount &&
+    codexAccountsHere.length >= 2 &&
+    accountOfEnv('codex', pickedWorkspace?.env ?? null, codexAccountsHere) === 'default';
+  const codexAutoAccount = codexAutoOffered
+    ? roomiestCodexAccount(codexAccountsHere, runner.planUsage, new Date())
+    : null;
   const shownCodexAccount = accountOnThisRunner(
     'codex',
     selectedId
       ? (detailForSelected?.codexAccount ?? detailForSelected?.workspace?.codexAccount)
-      : (draftCodexAccount ?? pickedWorkspace?.codexAccount),
+      : (draftCodexAccount ?? pickedWorkspace?.codexAccount ?? codexAutoAccount),
   );
   const shownClaudeAccount = accountOnThisRunner(
     'claude',
@@ -7961,6 +7974,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 choices={providerChoicesForRunner}
                 onPick={pickDraftProvider}
                 currentAccount={shownCodexAccount}
+                automatic={codexAutoOffered ? !draftCodexAccount : undefined}
                 onPickAccount={pickDraftAccount}
                 runnerId={runner.id}
                 // Nothing to choose until we know which workspace (and so which project) this runs in.

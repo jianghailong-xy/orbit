@@ -8,7 +8,9 @@ import { SessionsService } from './sessions.service';
  * A runner can hold several Codex accounts, and a workspace picks which one its sessions run on. The
  * New Session screen can also pick one for a single session (Session.codexAccount): stored as picked,
  * read ahead of the workspace's choice wherever the session's run is dispatched — and, at create,
- * by the sign-in preflight, which has to judge the account the session will actually run on.
+ * by the sign-in preflight, which has to judge the account the session will actually run on. When
+ * neither the session nor its workspace picked one, create picks the account with the most room and
+ * stores it, so the session stays there.
  */
 
 const WORK = '3fa91c2e';
@@ -29,7 +31,11 @@ const ENGINES: RunnerEngineHealth[] = [
   },
 ];
 
-function makeService(workspaceCodexAccount: string | null = null) {
+function makeService(
+  workspaceCodexAccount: string | null = null,
+  runner: { engines?: unknown; planUsage?: unknown } = {},
+  workspaceEnv: Record<string, string> | null = null,
+) {
   const creates: Array<Record<string, unknown>> = [];
   const prisma = {
     user: { findUnique: async () => ({ preferences: {} }) },
@@ -39,7 +45,7 @@ function makeService(workspaceCodexAccount: string | null = null) {
         runnerId: 'runner-1',
         enableWorktree: false,
         enabled: true,
-        env: null,
+        env: workspaceEnv,
         codexAccount: workspaceCodexAccount,
         claudeAccount: null,
       }),
@@ -52,7 +58,8 @@ function makeService(workspaceCodexAccount: string | null = null) {
         displayName: null,
         status: 'ONLINE',
         lastHeartbeatAt: new Date(),
-        engines: ENGINES,
+        engines: runner.engines ?? ENGINES,
+        planUsage: runner.planUsage ?? null,
       }),
     },
     modelProvider: { findFirst: async () => null },
@@ -74,17 +81,58 @@ function makeService(workspaceCodexAccount: string | null = null) {
 
 const CODEX = { prompt: 'Fix the flaky test', title: 'Fix', workspaceId: 'workspace-1', provider: 'codex' };
 
-test('the account picked for a session is stored as picked, Default included; none follows the workspace', async () => {
+test('the account picked for a session is stored as picked, Default included', async () => {
   const fixture = makeService();
   await fixture.service.create('owner-1', { ...CODEX, codexAccount: 'c0ffee42' });
   await fixture.service.create('owner-1', { ...CODEX, codexAccount: 'default' });
-  await fixture.service.create('owner-1', CODEX);
   // A slot this runner does not list is still stored: dispatch resolves it against whichever runner
   // runs the session, and one that reports no such account runs it on Default.
   assert.deepEqual(
     fixture.creates.map((data) => data.codexAccount),
-    ['c0ffee42', 'default', null],
+    ['c0ffee42', 'default'],
   );
+});
+
+/** Both accounts signed in: Default's 5-hour window spent, Work with room. */
+const BOTH_IN = [
+  ENGINES[0],
+  { ...ENGINES[1], accounts: ENGINES[1].accounts!.map((account) => ({ ...account, auth: 'yes' as const })) },
+];
+const reset = new Date(Date.now() + 2 * 3_600_000).toISOString();
+const DEFAULT_SPENT = {
+  codex: {
+    provider: 'codex',
+    primary: { utilization: 100, windowDurationMins: 300, resetsAt: reset },
+    accounts: { [WORK]: { provider: 'codex', primary: { utilization: 12, windowDurationMins: 10080, resetsAt: reset } } },
+  },
+};
+
+test('with no account picked for it or its workspace, a session starts on the one with the most room, and keeps it', async () => {
+  const fixture = makeService(null, { engines: BOTH_IN, planUsage: DEFAULT_SPENT });
+  await fixture.service.create('owner-1', CODEX);
+  // Stored on the session: every door after this reads it, so the session stays on Work.
+  assert.equal(fixture.creates[0].codexAccount, WORK);
+});
+
+test('the automatic choice is only made where nothing else decides the account', async () => {
+  const runner = { engines: BOTH_IN, planUsage: DEFAULT_SPENT };
+  const created = async (
+    fixture: ReturnType<typeof makeService>,
+    dto: Record<string, unknown> = {},
+  ): Promise<unknown> => {
+    await fixture.service.create('owner-1', { ...CODEX, ...dto });
+    return fixture.creates.at(-1)?.codexAccount;
+  };
+  // The session's own pick, and the workspace's, are left to decide it.
+  assert.equal(await created(makeService(null, runner), { codexAccount: 'default' }), 'default');
+  assert.equal(await created(makeService('default', runner)), null, 'a workspace pinned to Default');
+  // A CODEX_HOME typed into the workspace env, or a key of its own, already says where it runs.
+  assert.equal(await created(makeService(null, runner, { CODEX_HOME: '/srv/codex' })), null);
+  assert.equal(await created(makeService(null, runner, { OPENAI_API_KEY: 'sk-test' })), null);
+  // One account is nothing to choose between.
+  assert.equal(await created(makeService(null, { engines: [ENGINES[0], { ...ENGINES[1], accounts: [ENGINES[1].accounts![0]] }], planUsage: DEFAULT_SPENT })), null);
+  // Only the built-in Codex engine runs on the runner's Codex accounts.
+  assert.equal(await created(makeService(null, runner), { provider: 'claude' }), null);
 });
 
 test('a picked account is an account id, never a path', async () => {

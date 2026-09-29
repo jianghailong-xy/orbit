@@ -174,6 +174,7 @@ import {
 } from './transcript-around';
 import { EngineSignedOutConflict, signedOutEngineRefusal } from './engine-signin-preflight';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
+import { automaticCodexAccount } from '../providers/plan-usage-accounts';
 import {
   CURRENT_WORK_INTERRUPTED,
   CURRENT_WORK_SESSION_ENDED,
@@ -925,16 +926,30 @@ export class SessionsService {
     // everything this deliberately lets through.
     const targetRunner = await this.prisma.runner.findFirst({
       where: { id: assignedRunnerId, ownerId },
-      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true },
+      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, planUsage: true },
     });
+    // The Codex account this session runs on: the one picked for it — else, when its workspace picked
+    // none either, the runner's account with the most room right now (automaticCodexAccount). Chosen
+    // once, here, and stored, so the session stays on it for life: its thread lives in that account's
+    // CODEX_HOME. Null runs on the workspace's.
+    const codexAccount =
+      dto.codexAccount ??
+      (provider === AgentProvider.CODEX && providerBuiltin && targetRunner
+        ? automaticCodexAccount(
+            { env: workspaceEnv, codexAccount: accountChoices?.codexAccount },
+            targetRunner.engines,
+            targetRunner.planUsage,
+            new Date(),
+          )
+        : null);
     const refusal =
       targetRunner &&
       signedOutEngineRefusal({
         runtime,
         bringsOwnCredentials: borrowedRuntime != null,
         workspaceEnv,
-        // The account picked for this session is the one it runs on, whatever the workspace says.
-        accounts: dto.codexAccount ? { ...accountChoices, codexAccount: dto.codexAccount } : accountChoices,
+        // The account this session runs on is the one judged, whatever the workspace says.
+        accounts: codexAccount ? { ...accountChoices, codexAccount } : accountChoices,
         runner: targetRunner,
       });
     // Typed, not a bare 409: this is an availability condition — the engine is signed out on a
@@ -976,8 +991,9 @@ export class SessionsService {
         // whose effective model has no fast lane simply dispatches without one instead of being
         // refused at create.
         fastMode: dto.fastMode === true,
-        // As picked, `default` included: NULL is the one value that follows the workspace's choice.
-        codexAccount: dto.codexAccount ?? null,
+        // As picked or chosen above, `default` included: NULL is the one value that follows the
+        // workspace's choice.
+        codexAccount,
         workspaceId: dto.workspaceId,
         assignedRunnerId,
         taskId: dto.taskId,
