@@ -305,6 +305,20 @@ public struct NavState: Equatable, Sendable {
         }
     }
 
+    /// Down to the runner's record, off the pages it pushed over itself (an engine's, its name's).
+    /// Selecting a runner — or none — starts here: those pages were the old runner's, and replacing
+    /// only the top would leave its record under the new one.
+    public mutating func popRunnerPages() {
+        withPath { frames in
+            while let top = frames.last {
+                switch top {
+                case .runnerEngine, .runnerName: frames.removeLast()
+                default: return
+                }
+            }
+        }
+    }
+
     /// Back to `sessionID`'s console when it is the page directly under the one on top: the
     /// conversation a phone opened its project's page over. Going to that conversation again is a
     /// pop, so the stack reads conversation › project page instead of growing a second copy of the

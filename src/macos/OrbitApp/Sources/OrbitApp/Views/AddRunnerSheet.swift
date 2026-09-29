@@ -62,12 +62,16 @@ struct AddRunnerSheet: View {
 
     // MARK: sections
 
-    /// What to run on the new machine, for the platform it is.
+    /// What to run on the new machine, for the platform it is. The row is clear, but a list still
+    /// clips it to its own rounded corners, which are larger than anything drawn in it: the lead
+    /// stands in from the edge (flush, its first letter sat under the top corner and was cut), and
+    /// the command card stops short of the bottom so it keeps corners of its own.
     private var commandSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 16) {
                 Text(RunnerPageCopy.RUNNER_ADD_LEAD)
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 16)
                 Picker(RunnerPageCopy.RUNNER_ADD, selection: $platform) {
                     ForEach(RunnerPageFormat.Platform.allCases) { platform in
                         Text(platform.label).tag(platform)
@@ -77,7 +81,8 @@ struct AddRunnerSheet: View {
                 .labelsHidden()
                 commandBox
             }
-            .padding(.vertical, 4)
+            .padding(.top, 4)
+            .padding(.bottom, 10)
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         }

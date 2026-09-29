@@ -308,6 +308,13 @@ final class RunnersPageWiringTests: XCTestCase {
         XCTAssertTrue(pane.contains("case .runnerEngine(let id, let engine)?:"))
         XCTAssertTrue(pane.contains("case .runnerName(let id)?:"))
         XCTAssertTrue(pane.contains("Button { model.nav.pop() } label: {"), "with its own way back to the record")
+
+        // Selecting a runner — a three-column row, a deep link — takes the old record's own pages off
+        // before the record is replaced, so what lands is the new record alone.
+        let select = code(try slice(try appSource("AppModel.swift"), from: "var selectedRunnerID: String? {",
+                                    to: "var selectedWatchID: String? {"))
+        try assertInOrder(select, ["nav.popRunnerPages()", "nav.replaceTop(with: .runnerDetail(runnerID: id))"],
+                          "a new selection starts from the record")
     }
 
     /// The engine page: each account's own sign-in state and quota, signing in with `RunnerSignInView`
