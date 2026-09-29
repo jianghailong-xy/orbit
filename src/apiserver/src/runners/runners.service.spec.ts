@@ -120,6 +120,8 @@ test('reorderRunners handles workspaceless runners, filters invalid ids, and app
       enrolledAt: true,
       position: true,
       runsAsRoot: true,
+      minFreeDiskMb: true,
+      reposRoot: true,
       capabilities: true,
       heartbeatLeaseOwner: true,
       heartbeatDraining: true,

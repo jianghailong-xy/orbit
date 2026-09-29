@@ -217,6 +217,11 @@ export interface Runner {
   // Bypass under root and exits before its first message. undefined/null = a runner too old to
   // report it, which stays unrestricted.
   runsAsRoot?: boolean | null;
+  // Free-space floor in MB (PATCH minFreeDiskMb): below it this machine takes no new task runs.
+  // null = no floor.
+  minFreeDiskMb?: number | null;
+  // Where this machine clones repositories, as it reported. null = a runner too old to say.
+  reposRoot?: string | null;
   // Per-engine health this runner reported (installed / version / signed in). null when it has
   // never reported — which is not the same as "nothing installed", so the two stay distinct.
   engines?: RunnerEngineHealth[] | null;
