@@ -503,9 +503,20 @@ final class NavigationTests: XCTestCase {
         nav.push(.runnerName(runnerID: "r1"))
         XCTAssertEqual(nav.selectedRunnerID, "r1", "and so is its name's")
 
-        // Picking another runner replaces the page showing, as selecting always does.
+        // Picking another runner (`AppModel.selectedRunnerID`'s write) takes the old runner's pages
+        // off with its record: the new record is the one page showing, as a route lands.
+        nav.popRunnerPages()
         nav.replaceTop(with: .runnerDetail(runnerID: "r2"))
         XCTAssertEqual(nav.selectedRunnerID, "r2")
+        XCTAssertEqual(nav.path, [.runnerDetail(runnerID: "r2")], "not r1's record left under r2's")
+
+        // Down to the record and no further: the record is the selection's to clear, not this.
+        nav.push(.runnerEngine(runnerID: "r2", engine: "claude"))
+        nav.push(.runnerName(runnerID: "r2"))
+        nav.popRunnerPages()
+        XCTAssertEqual(nav.path, [.runnerDetail(runnerID: "r2")])
+        nav.popRunnerPages()
+        XCTAssertEqual(nav.path, [.runnerDetail(runnerID: "r2")])
     }
 
     /// From Settings (iOS) the same two pages ride Settings' own stack, one layer under the record.
