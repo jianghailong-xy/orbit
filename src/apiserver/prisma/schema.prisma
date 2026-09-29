@@ -5671,6 +5671,9 @@ model WikiSpace {
   dossiers   WikiDossier[]
   /// The maintenance runs its trigger made (0320).
   maintenanceRuns WikiMaintenanceRun[]
+  /// Its plan's versions and the changes proposed to it (0325).
+  plans           WikiPlan[]
+  planProposals   WikiPlanProposal[]
 
   /// The key every child's composite foreign key names.
   @@unique([id, ownerId], map: "wiki_space_id_owner_id_key")
@@ -6133,4 +6136,143 @@ model WikiDossier {
 
   @@unique([spaceId, sessionId], map: "wiki_dossier_space_id_session_id_key")
   @@map("wiki_dossier")
+}
+
+/// One version of a space's plan (migration 0325, contract `plan`): the documents its wiki is written
+/// as, drafted by a maintenance run's drafting job or edited by the owner, and confirmed by the owner
+/// before any document is written from it. A confirmed version is never changed: an edit, a redraft or
+/// an accepted proposal is a new version. At most one version of a space is a draft and one confirmed
+/// (partial unique indexes the migration creates).
+model WikiPlan {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  spaceId     String    @map("space_id") @db.Uuid
+  ownerId     String    @map("owner_id") @db.Uuid
+  space       WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_plan_space_fkey")
+  version     Int
+  /// `draft` | `confirmed` | `superseded`.
+  status      String
+  /// `maintenance` (a drafting job's) | `owner` (an edit, or an accepted proposal).
+  origin      String
+  /// The version this one revises; NULL for a space's first draft.
+  baseVersion Int?      @map("base_version")
+  /// The proposal whose acceptance made this version. No foreign key: provenance.
+  proposalId  String?   @map("proposal_id") @db.Uuid
+  /// `[{ key, title, question, forAgents }, …]`, in the directory's order.
+  categories  Json
+  /// `[{ at, name, why }, …]`: the fields the draft declared as needing adding to the schema.
+  newFields   Json      @default("[]") @map("new_fields")
+  /// The document count the gate held this version to.
+  docsMin     Int       @map("docs_min")
+  docsMax     Int       @map("docs_max")
+  /// What the gate checked and found (contract `plan.gate.report`).
+  gate        Json
+  /// The commit the runner checked the repository references at, and what it reported; NULL for a
+  /// version the owner made, which no runner checked.
+  repoSha     String?   @map("repo_sha")
+  repoCheck   Json?     @map("repo_check")
+  model       String?
+  /// History references with no foreign key: the maintenance run that drafted it, the owner who made it.
+  authorSessionId   String?   @map("author_session_id") @db.Uuid
+  authorUserId      String?   @map("author_user_id") @db.Uuid
+  confirmedByUserId String?   @map("confirmed_by_user_id") @db.Uuid
+  confirmedAt       DateTime? @map("confirmed_at") @db.Timestamptz(3)
+  supersededAt      DateTime? @map("superseded_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  docs WikiPlanDoc[]
+
+  @@unique([id, ownerId], map: "wiki_plan_id_owner_id_key")
+  @@unique([spaceId, version], map: "wiki_plan_space_id_version_key")
+  @@map("wiki_plan")
+}
+
+/// One document of a plan version. Only ever inserted.
+model WikiPlanDoc {
+  id        String   @id @default(uuid(7)) @db.Uuid
+  planId    String   @map("plan_id") @db.Uuid
+  ownerId   String   @map("owner_id") @db.Uuid
+  plan      WikiPlan @relation(fields: [planId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_plan_doc_plan_fkey")
+  /// Its place in the plan, from 0.
+  position  Int
+  /// The key of one of the version's categories.
+  category  String
+  slug      String
+  title     String
+  /// The question the reader comes with.
+  question  String
+  /// Who it is written for, and what each can do after reading it.
+  audience  String[] @default([])
+  scopeIn   String[] @default([]) @map("scope_in")
+  /// `[{ text, docs: [slug, …] }, …]`: what it leaves out, and which documents it leaves that to.
+  scopeOut  Json     @default("[]") @map("scope_out")
+  lengthMin Int      @map("length_min")
+  lengthMax Int      @map("length_max")
+  /// A protected document is carried into every later version as it is, unless the owner changes it.
+  protected Boolean  @default(false)
+  /// The values of fields the version declared as needing adding (`newFields` at `doc`).
+  extra     Json     @default("{}")
+
+  sections WikiPlanSection[]
+
+  @@unique([id, ownerId], map: "wiki_plan_doc_id_owner_id_key")
+  @@unique([planId, slug], map: "wiki_plan_doc_plan_id_slug_key")
+  @@unique([planId, position], map: "wiki_plan_doc_plan_id_position_key")
+  @@map("wiki_plan_doc")
+}
+
+/// One section of a plan document. Only ever inserted.
+model WikiPlanSection {
+  id       String      @id @default(uuid(7)) @db.Uuid
+  docId    String      @map("doc_id") @db.Uuid
+  ownerId  String      @map("owner_id") @db.Uuid
+  doc      WikiPlanDoc @relation(fields: [docId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_plan_section_doc_fkey")
+  position Int
+  /// Stable within its document from version to version.
+  key      String
+  title    String
+  /// `overview` | `concepts` | `flow` | `interface` | `data` | `ops` | `pitfalls` | `decisions` | `conventions` | `other`.
+  kind     String
+  /// What the section says.
+  covers   String
+  /// The characters it is written to.
+  length   Int
+  /// `{ docs, code, contracts, sessions }`: the conditions its material is taken by (contract `plan.schema`).
+  sources  Json
+  extra    Json        @default("{}")
+
+  @@unique([id, ownerId], map: "wiki_plan_section_id_owner_id_key")
+  @@unique([docId, key], map: "wiki_plan_section_doc_id_key_key")
+  @@unique([docId, position], map: "wiki_plan_section_doc_id_position_key")
+  @@map("wiki_plan_section")
+}
+
+/// A change to the plan a maintenance run proposed (contract `plan.proposals`). It changes nothing until
+/// the owner accepts it, and accepting it makes a new draft.
+model WikiPlanProposal {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  spaceId         String    @map("space_id") @db.Uuid
+  ownerId         String    @map("owner_id") @db.Uuid
+  space           WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_plan_proposal_space_fkey")
+  /// `pending` | `accepted` | `rejected`.
+  status          String    @default("pending")
+  /// The confirmed version it was written and gated against.
+  baseVersion     Int       @map("base_version")
+  reason          String
+  /// `{ doc, category? }`.
+  change          Json
+  /// `[{ kind, id }, …]`: the entries and sessions that led to it.
+  facts           Json
+  gate            Json
+  /// A history reference: the maintenance run that filed it.
+  authorSessionId String    @map("author_session_id") @db.Uuid
+  decidedByUserId String?   @map("decided_by_user_id") @db.Uuid
+  decidedAt       DateTime? @map("decided_at") @db.Timestamptz(3)
+  decisionNote    String?   @map("decision_note")
+  /// The draft version accepting it made.
+  resultVersion   Int?      @map("result_version")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([id, ownerId], map: "wiki_plan_proposal_id_owner_id_key")
+  @@index([spaceId, status, createdAt], map: "wiki_plan_proposal_space_id_status_idx")
+  @@map("wiki_plan_proposal")
 }
