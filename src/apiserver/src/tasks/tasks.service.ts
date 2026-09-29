@@ -9494,12 +9494,39 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // not have one taken on its behalf — and it is also the only SELECTIVE thing this scan has,
     // standing where AUTO_RUN_READY_SQL puts its dependency anchor: a candidate has to belong to
     // one of the few projects whose coordinator is on, rather than be any OPEN task in the
-    // deployment. Not measured the way that anchor was (264ms -> 32ms); if this scan ever turns up
-    // in a slow log, `task_project_id_idx` is the join to look at first.
+    // deployment. Selective only while those projects are small: on 2026-09-29 one of them held
+    // 109,878 of the deployment's 112k tasks, and this scan reads its ~82k OPEN auto-run tasks to
+    // find the ~55 with no edge (0.7–1.4s, through `task_project_id_idx`).
+    //
+    // The project's budget is counted ONCE per sweep, for every project together (`occupied`), and
+    // not per candidate row. As a correlated subquery beside `rank` it was evaluated once for each
+    // row the window emitted, re-counting the same project every time — measured 2026-09-29: 53
+    // candidates of that one project, 294ms a count, 15.6s of a 16.3s statement. Entered through
+    // the few sessions that occupy anything and grouped by project it is one pass of ~6ms, and it
+    // is MATERIALIZED so that "once" is the statement's shape rather than the planner's choice.
+    // The same count per project in the same snapshot, so the same rows; a project nothing occupies
+    // has no `occupied` row, which is the zero the subquery counted.
     //
     // `project.status` is read by both predicates rather than by this join — through
     // projectNotCancelledSql, the clause every door applies — so the two scans cannot fork on it.
     rows.push(...(await this.prisma.$queryRaw<typeof rows>`
+      WITH occupied AS MATERIALIZED (
+        -- Counted exactly as the completion edge counts it, down to the skipped statuses: a slot is
+        -- held by work that is still OUTSTANDING, so the parked AWAITING_INPUT run of a task that
+        -- has just finished does not fill the budget it was released into.
+        SELECT o.project_id, count(*)::int AS "tasks"
+          FROM task o
+         WHERE o.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)
+           AND EXISTS (
+             SELECT 1 FROM session s
+              WHERE s.task_id = o.id
+                AND s.status IN (${Prisma.join(
+                  TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
+                  ', ',
+                )})
+           )
+         GROUP BY o.project_id
+      )
       SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
              c.list_id AS "listId", e.epoch AS "dispatchEpoch", c.priority AS "priority"
@@ -9514,24 +9541,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                row_number() OVER (
                  PARTITION BY t.project_id ORDER BY t.priority DESC, t.created_at, t.id
                ) AS "rank",
-               -- Counted exactly as the completion edge counts it, down to the skipped statuses: a
-               -- slot is held by work that is still OUTSTANDING, so the parked AWAITING_INPUT run
-               -- of a task that has just finished does not fill the budget it was released into.
-               p.max_concurrent_tasks - (
-                 SELECT count(*)::int FROM task o
-                  WHERE o.project_id = p.id
-                    AND o.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)
-                    AND EXISTS (
-                      SELECT 1 FROM session s
-                       WHERE s.task_id = o.id
-                         AND s.status IN (${Prisma.join(
-                           TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-                           ', ',
-                         )})
-                    )
-               ) AS "free"
+               p.max_concurrent_tasks - COALESCE(occupied."tasks", 0) AS "free"
           FROM task t
           JOIN project p ON p.id = t.project_id AND p.coordinator_enabled = true
+          LEFT JOIN occupied ON occupied.project_id = p.id
          WHERE ${PROJECT_INDEPENDENT_READY_SQL}
       ) c
       LEFT JOIN workspace a ON a.id = c.assignee_id

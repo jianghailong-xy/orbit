@@ -14,6 +14,14 @@ responsible for TLS, host security, monitoring, and off-host backups.
 The server does not need the runtime credentials. Claude Code, Codex, Kimi, and OpenCode logins stay on the
 runner machines.
 
+The one exception is a Codex pool of one's own signed in with ChatGPT: the control plane runs the official codex
+CLI's device-code sign-in (`codex login --device-auth`) itself and keeps that login encrypted with
+`PROVIDER_SECRET_KEY`. The apiserver image ships the CLI, pinned in `src/apiserver/Dockerfile` to the version the
+runners use, together with the CA certificates it verifies `auth.openai.com` with. A control plane run outside that
+image needs the same: `codex` on its `PATH` (or its path in `CODEX_LOGIN_BIN`) and a system CA store. Point it at
+the native binary, as the standalone installer does, rather than npm's Node wrapper, which cannot pass on the
+SIGKILL that ends an abandoned sign-in.
+
 ## 1. Configure the deployment
 
 ```bash
