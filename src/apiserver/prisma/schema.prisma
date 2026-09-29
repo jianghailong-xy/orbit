@@ -1006,6 +1006,11 @@ model Session {
   // OpenAI's own identifier, and no relation, for the reason poolKeyId has none. Never answered by a
   // route: a response names an account by its masked form only (SessionsService.get leaves it out).
   poolCodexAccountId   String?   @map("pool_codex_account_id")
+  // Which of its runner's Codex accounts this session was started on, when one was picked for it on
+  // the New Session screen (migration 0330): `default` or a slot id, the values Workspace.codexAccount
+  // takes. NULL follows the workspace's choice, as every session did before. Read wherever a session's
+  // run is dispatched or its quota asked about, ahead of the workspace's.
+  codexAccount         String?   @map("codex_account")
   // The only runner-engine generation allowed to dequeue this session's inbox. Retired values
   // remain here as tombstones until the next activation, so legacy NULL polls stay fenced.
   inboxLeaseGeneration String?   @map("inbox_lease_generation") @db.Uuid

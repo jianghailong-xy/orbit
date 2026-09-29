@@ -2126,7 +2126,7 @@ export class RunnerApiController {
           workspaceModel: workspace?.model,
           modelCatalog: s.assignedRunner?.modelCatalog,
           workspaceEnv: workspace?.env as Record<string, string> | null,
-          codexAccount: workspace?.codexAccount,
+          codexAccount: s.codexAccount ?? workspace?.codexAccount,
           runnerEngines: s.assignedRunner?.engines,
         });
       let exec = resolveExec(s.model);
@@ -3310,6 +3310,7 @@ export class RunnerApiController {
         poolKeyId: true,
         poolCodexAccountId: true,
         usesRuntimeDefaultModel: true,
+        codexAccount: true,
         workspace: { select: { model: true, env: true, codexAccount: true } },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
       },
@@ -3336,7 +3337,7 @@ export class RunnerApiController {
       workspaceModel: session.workspace?.model,
       modelCatalog: session.assignedRunner?.modelCatalog,
       workspaceEnv: session.workspace?.env as Record<string, string> | null,
-      codexAccount: session.workspace?.codexAccount,
+      codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
       runnerEngines: session.assignedRunner?.engines,
     });
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
@@ -5368,8 +5369,8 @@ export class RunnerApiController {
       // an overwrite: an ingestion-armed retry already knows more than the terminal message does.
       const quotaSpent =
         effectiveStatus === RunStatus.FAILED && current.retryAt == null && isUsageLimitErrorText(dto.error);
-      // Which Codex account the run spent is its workspace's to say, and only that account's quota
-      // says when it frees up.
+      // Which Codex account the run spent is the session's pick or else its workspace's to say, and
+      // only that account's quota says when it frees up.
       const workspace =
         quotaSpent && current.provider === 'codex' && current.workspaceId
           ? await tx.workspace.findUnique({
@@ -6252,6 +6253,7 @@ export class RunnerApiController {
         provider: true,
         taskId: true,
         retryAttempts: true,
+        codexAccount: true,
         workspace: { select: { env: true, codexAccount: true } },
       },
     });
@@ -6285,14 +6287,14 @@ export class RunnerApiController {
    * the freshly reset window.
    *
    * `text` is whichever words carried the refusal — the assistant reply that ingestion saw, or the
-   * terminal `error` of a run that never got to speak. `workspace` is the session's workspace, whose
-   * picked Codex account and env say which of the runner's Codex accounts the run spent
-   * (runCodexAccount): the snapshot read is that account's, never another's.
+   * terminal `error` of a run that never got to speak. The Codex account picked for the session, else
+   * the one its workspace picked, and the workspace's env say which of the runner's Codex accounts the
+   * run spent (runCodexAccount): the snapshot read is that account's, never another's.
    */
   private async quotaRetryAt(
     tx: QuotaRetryTransaction,
     runnerId: string,
-    session: { ownerId: string; provider: string },
+    session: { ownerId: string; provider: string; codexAccount: string | null },
     text: string,
     workspace: { env: unknown; codexAccount: string | null } | null | undefined,
   ): Promise<Date | null> {
@@ -6312,7 +6314,12 @@ export class RunnerApiController {
         runner?.planUsage as PlanUsage | null,
         session.provider,
         now,
-        runAccount(session.provider, workspace?.env, workspace, runner?.engines),
+        runAccount(
+          session.provider,
+          workspace?.env,
+          { codexAccount: session.codexAccount ?? workspace?.codexAccount },
+          runner?.engines,
+        ),
       );
     return at ? new Date(at.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS)) : null;
   }

@@ -1,0 +1,21 @@
+-- ══════════════════════════════════════════════════════════════════════════════════════════════
+-- `session.codex_account`: which Codex account one session runs on, when it was picked for it.
+--
+-- A runner can hold more than one Codex account (0297): Default is the CODEX_HOME its own
+-- environment selects, every other account a slot it added and reports in `runner.engines`. Until
+-- now only a workspace could choose among them (`workspace.codex_account`), so every session of a
+-- workspace ran on one account. This column is the New Session screen's per-session pick: the same
+-- values, resolved the same way — against the accounts the assigned runner reports, into the
+-- CODEX_HOME injected into the session's environment — and read ahead of the workspace's choice.
+--
+--   codex_account   'default', or a slot id (8 lowercase hex). NULL follows the workspace.
+--
+-- Unlike the workspace's column, 'default' is stored as itself: a session that picked Default on a
+-- workspace set to another account has to stay on Default, and NULL already means "whatever the
+-- workspace says".
+--
+-- NULLABLE, and NULL is the old behaviour rather than a gap: every session written before this
+-- migration ran on its workspace's account. ADD COLUMN only — no default, no NOT NULL — so the ALTER
+-- is catalog-only and no stored row is rewritten.
+
+ALTER TABLE "session" ADD COLUMN "codex_account" TEXT;

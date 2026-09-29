@@ -173,6 +173,7 @@ import {
   type TranscriptRecordKind,
 } from './transcript-around';
 import { EngineSignedOutConflict, signedOutEngineRefusal } from './engine-signin-preflight';
+import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import {
   CURRENT_WORK_INTERRUPTED,
   CURRENT_WORK_SESSION_ENDED,
@@ -673,6 +674,14 @@ export class SessionsService {
       dto.prompt === '' && !dto.shell && (dto.attachmentIds?.length ?? 0) > 0;
     if (!dto.prompt && !attachmentsAlone) throw new BadRequestException('prompt is required');
     assertPromptSize(dto.prompt, 'prompt');
+    // An account id, never a path: which account is stored here, and where it lives is only ever
+    // what the runner reports. CreateSessionDto is an interface, so nothing upstream checked it.
+    if (
+      dto.codexAccount != null &&
+      (typeof dto.codexAccount !== 'string' || !ACCOUNT_ID_PATTERN.test(dto.codexAccount))
+    ) {
+      throw new BadRequestException('codexAccount must be "default" or the id of one of the runner\'s accounts');
+    }
     // The session runs on a runner. Prefer an explicit pin; otherwise derive it from
     // the chosen workspace's machine (workspaces belong to a runner) — picking a workspace is
     // enough to know which machine + project dir to run in.
@@ -924,7 +933,8 @@ export class SessionsService {
         runtime,
         bringsOwnCredentials: borrowedRuntime != null,
         workspaceEnv,
-        accounts: accountChoices,
+        // The account picked for this session is the one it runs on, whatever the workspace says.
+        accounts: dto.codexAccount ? { ...accountChoices, codexAccount: dto.codexAccount } : accountChoices,
         runner: targetRunner,
       });
     // Typed, not a bare 409: this is an availability condition — the engine is signed out on a
@@ -966,6 +976,8 @@ export class SessionsService {
         // whose effective model has no fast lane simply dispatches without one instead of being
         // refused at create.
         fastMode: dto.fastMode === true,
+        // As picked, `default` included: NULL is the one value that follows the workspace's choice.
+        codexAccount: dto.codexAccount ?? null,
         workspaceId: dto.workspaceId,
         assignedRunnerId,
         taskId: dto.taskId,
@@ -7098,7 +7110,7 @@ export class SessionsService {
         workspaceModel: session.workspace?.model,
         modelCatalog: session.assignedRunner?.modelCatalog,
         workspaceEnv: session.workspace?.env as Record<string, string> | null,
-        codexAccount: session.workspace?.codexAccount,
+        codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
       const requestedPermissionMode =

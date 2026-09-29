@@ -269,11 +269,13 @@ const ENGINES: RunnerEngineHealth[] = [
 const CODEX_LIMIT = "You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits.";
 
 /** retryPlanFor for a quota-killed Codex session in a workspace with env `env` and the Codex account
- *  `codexAccount` picked, on a runner reporting `planUsage`. */
+ *  `codexAccount` picked — and `sessionAccount` picked for the session itself — on a runner reporting
+ *  `planUsage`. */
 async function retryAtFor(
   env: Record<string, string> | null,
   planUsage: PlanUsage,
   codexAccount: string | null = null,
+  sessionAccount: string | null = null,
 ): Promise<Date | null | undefined> {
   const tx = transactionDouble<RetryPlanTransaction>({
     session: {
@@ -281,6 +283,7 @@ async function retryAtFor(
         provider: AgentProvider.CODEX,
         taskId: null,
         retryAttempts: 0,
+        codexAccount: sessionAccount,
         workspace: { env, codexAccount },
       }),
     },
@@ -315,6 +318,18 @@ test('a quota-killed run is armed by the quota of the account it spends, never b
   assert.equal(await retryAtFor({ CODEX_HOME: WORK_HOME }, defaultSpent), undefined);
   assert.ok(withinJitterOf(await retryAtFor({ CODEX_HOME: WORK_HOME }, workSpent), WORK_RESET), 'a run on Work waits for Work');
   assert.equal(await retryAtFor(null, workSpent), undefined, "Work's spent quota does not hold Default back");
+});
+
+test('a session that picked its own account is armed by that account\'s quota, not its workspace\'s', async () => {
+  const defaultSpent: PlanUsage = { provider: AgentProvider.CODEX, primary: window(100, DEFAULT_RESET), accounts: { [WORK]: work(8) } };
+  const workSpent: PlanUsage = { provider: AgentProvider.CODEX, primary: window(62, DEFAULT_RESET), accounts: { [WORK]: work(100) } };
+
+  // Work picked for the session, on a workspace that picked none.
+  assert.ok(withinJitterOf(await retryAtFor(null, workSpent, null, WORK), WORK_RESET), 'a run on Work waits for Work');
+  assert.equal(await retryAtFor(null, defaultSpent, null, WORK), undefined, "Default's spent quota says nothing about it");
+  // Default picked for the session, on a workspace set to Work.
+  assert.ok(withinJitterOf(await retryAtFor(null, defaultSpent, WORK, 'default'), DEFAULT_RESET), 'a run on Default waits for Default');
+  assert.equal(await retryAtFor(null, workSpent, WORK, 'default'), undefined, "Work's spent quota does not hold it back");
 });
 
 test("the gates' question — which account does this run spend — is its workspace's, on its runner", () => {

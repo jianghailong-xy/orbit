@@ -146,7 +146,7 @@ import {
   type ComposerSlashItem,
   type LocalStatusRow,
 } from '../lib/slashCommands';
-import { sessionPlanUsage } from '../lib/planUsage';
+import { codexAccountPlanUsage, sessionPlanUsage } from '../lib/planUsage';
 import { poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
 import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import {
@@ -277,6 +277,7 @@ import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
+import { accountsOf } from './AccountSelect';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
 import type {
   OpenItemDeliveryCard as OpenItemDelivery,
@@ -2564,6 +2565,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // deprecated alias of the same derived value, still served for older native builds.
   const pickedProvider: string =
     draftProvider ?? pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? 'claude';
+  // The Codex account picked for the draft on the New Session hero, scoped to its workspace like the
+  // provider pick. Without one a new session runs on its workspace's account (Workspace.codexAccount).
+  const [draftAccountPick, setDraftAccountPick] = useState<{
+    workspaceId?: string;
+    account: string;
+  } | null>(null);
+  const draftCodexAccount =
+    draftAccountPick && draftAccountPick.workspaceId === workspaceId ? draftAccountPick.account : null;
 
   // A provider switch made on an ENDED session, scoped to that session for the same reason the
   // draft pick is scoped to its workspace. There is nothing to PATCH while a session is ended, so
@@ -2705,6 +2714,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         runner.runtimeDefaultModels,
         runner.engines,
         accountPools,
+        runner.planUsage,
       ),
     [
       configuredProviders,
@@ -2712,6 +2722,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runner.runtimeDefaultModels,
       runner.engines,
       accountPools,
+      runner.planUsage,
     ],
   );
   const currentProviderChoiceForDraft = useMemo(
@@ -2774,6 +2785,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     setProviderSwitchNote(picked ? `Model → ${picked.modelLabel}` : null);
     if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current);
     providerNoteTimer.current = setTimeout(() => setProviderSwitchNote(null), 4000);
+  };
+  // An account row under an engine: that engine, on that account. Like the provider, it binds the
+  // session being drafted and rewrites no workspace setting.
+  const pickDraftAccount = (slug: string, account: string): void => {
+    if (slug !== pickedProvider) pickDraftProvider(slug);
+    setDraftAccountPick({ workspaceId, account });
   };
 
   // The provider is part of the draft's seed context: picking a different one has to re-seed
@@ -4591,6 +4608,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // Only when it is on. Off is the server's default and the engine's, so saying it is the
         // one way this could disagree with either of them later.
         ...(fastMode ? { fastMode: true } : {}),
+        // Only an explicit pick, as with the provider: none keeps the workspace's account.
+        ...(draftCodexAccount && pickedProvider === 'codex' ? { codexAccount: draftCodexAccount } : {}),
         attachmentIds,
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
@@ -6181,9 +6200,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     shownPool && (!selectedId || detailForSelected)
       ? sessionPoolAccount(shownPool, selectedId ? shownPoolMemberId : null)
       : null;
+  // Which of the runner's Codex accounts a built-in Codex session spends: the draft's pick, or the one
+  // picked for the session, else its workspace's — and Default for an id this runner does not report,
+  // as dispatch resolves it (providers/account.ts accountOnRunner).
+  const wantedCodexAccount = selectedId
+    ? (detailForSelected?.codexAccount ?? detailForSelected?.workspace?.codexAccount)
+    : (draftCodexAccount ?? pickedWorkspace?.codexAccount);
+  const shownCodexAccount =
+    wantedCodexAccount && accountsOf(runner, 'codex').some((account) => account.id === wantedCodexAccount)
+      ? wantedCodexAccount
+      : 'default';
   const shownPlanUsage = shownPool
     ? (shownPoolAccount?.member.planUsage ?? null)
-    : sessionPlanUsage(shownProvider, runner.planUsage, configuredProviders);
+    : shownProvider === 'codex' && shownCodexAccount !== 'default'
+      ? codexAccountPlanUsage(runner.planUsage, shownCodexAccount)
+      : sessionPlanUsage(shownProvider, runner.planUsage, configuredProviders);
   // Where this session could move without changing CLI. Offered on the two routes that actually
   // carry a provider: a live session's config PATCH, and the resume that revives an ended one. A
   // draft picks in the hero above instead (which offers every runtime, not one), and a terminal
@@ -7921,6 +7952,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 current={currentProviderChoiceForDraft}
                 choices={providerChoicesForRunner}
                 onPick={pickDraftProvider}
+                currentAccount={shownCodexAccount}
+                onPickAccount={pickDraftAccount}
                 runnerId={runner.id}
                 // Nothing to choose until we know which workspace (and so which project) this runs in.
                 disabled={!pickedWorkspace}
@@ -8638,8 +8671,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               <PlanUsageIndicator
                 usage={shownPlanUsage}
                 // Earned reset credits belong to the runner's own Codex sign-in, so only a session on
-                // the built-in Codex runtime is offered them; the create route judges the workspace.
-                reset={shownProvider === 'codex' ? { runner, workspaceId: shownWorkspaceId } : undefined}
+                // the built-in Codex runtime is offered them — on Default, whose quota this then is;
+                // the create route judges the workspace.
+                reset={
+                  shownProvider === 'codex' && shownCodexAccount === 'default'
+                    ? { runner, workspaceId: shownWorkspaceId }
+                    : undefined
+                }
               />
             )}
             {/* Context stays visible even before the first turn reports tokens — a New Session reads

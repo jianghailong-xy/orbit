@@ -61,6 +61,8 @@ const ENGINES: RunnerEngineHealth[] = [
 interface Scenario {
   /** The workspace's choice (Workspace.codexAccount). */
   codexAccount?: string | null;
+  /** The session's own pick on the New Session screen (Session.codexAccount). */
+  sessionAccount?: string | null;
   /** What the assigned runner reported (Runner.engines). */
   engines?: unknown;
   /** The session's provider identity; a configured slug also needs `customRow`. */
@@ -90,6 +92,7 @@ function sessionRow(s: Scenario) {
     prompt: 'hello',
     runtimeSessionId: 'thread-1',
     inboxLeaseOwner: LEASE_OWNER,
+    codexAccount: s.sessionAccount ?? null,
     branch: null,
     mergeTarget: null,
     workspaceId: WORKSPACE_ID,
@@ -216,6 +219,28 @@ test('a workspace that picked no account injects no CODEX_HOME: the runner resol
   // With no env of its own, still nothing: not even an empty CODEX_HOME for the runner to trip on.
   assert.equal((await claim({ codexAccount: null })).env, undefined);
   assert.equal((await reclaim({ codexAccount: null })).env, undefined);
+});
+
+test('an account picked for the session wins over its workspace\'s, through every door', async () => {
+  // Picked on the New Session screen, on a workspace that picked none.
+  const onWork: Scenario = { sessionAccount: WORK, codexAccount: null, env: { RUST_LOG: 'warn' } };
+  const claimed = await claim(onWork);
+  assert.deepEqual(claimed.env, { RUST_LOG: 'warn', CODEX_HOME: WORK_HOME });
+  assert.deepEqual((await reclaim(onWork)).env, claimed.env);
+  assert.deepEqual(await reload(onWork, AgentProvider.CODEX), claimed.env);
+
+  // Default picked on a workspace set to Work: Default is a pick of its own, not "no pick", so the
+  // session stays on the runner's own login rather than falling through to the workspace's account.
+  const onDefault: Scenario = { sessionAccount: 'default', codexAccount: WORK, env: { RUST_LOG: 'warn' } };
+  assert.deepEqual((await claim(onDefault)).env, { RUST_LOG: 'warn' });
+  assert.deepEqual((await reclaim(onDefault)).env, { RUST_LOG: 'warn' });
+  assert.deepEqual(await reload(onDefault, AgentProvider.CODEX), { RUST_LOG: 'warn' });
+
+  // A pick the runner does not report runs on Default, as the workspace's does — not on the
+  // workspace's account, which is not what anyone picked for this session.
+  const gone: Scenario = { sessionAccount: 'c0ffee42', codexAccount: WORK };
+  assert.equal((await claim(gone)).env, undefined);
+  assert.equal((await reclaim(gone)).env, undefined);
 });
 
 test('an account the assigned runner does not report runs on Default instead of failing', async () => {

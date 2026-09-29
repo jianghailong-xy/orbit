@@ -277,7 +277,7 @@ export function resolveProviderExec(args: {
    * the runtime CLI's own endpoint (see runtimeCatalogDefault). */
   modelCatalog?: unknown;
   workspaceEnv?: Record<string, string> | null;
-  /** The Codex account slot this session runs on (Workspace.codexAccount today). Only a built-in
+  /** The Codex account slot this session runs on (Session.codexAccount ?? Workspace.codexAccount). Only a built-in
    *  Codex session reads it: it is resolved against `runnerEngines` into the CODEX_HOME injected
    *  below, and a slot that runner does not report runs on Default (accountOnRunner). */
   codexAccount?: string | null;

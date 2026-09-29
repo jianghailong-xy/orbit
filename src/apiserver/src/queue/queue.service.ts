@@ -436,7 +436,8 @@ export class QueueService {
         workspaceModel: workspace?.model,
         modelCatalog: session.assignedRunner?.modelCatalog,
         workspaceEnv: workspace?.env as Record<string, string> | null,
-        codexAccount: workspace?.codexAccount,
+        // The account picked for this session, else its workspace's.
+        codexAccount: session.codexAccount ?? workspace?.codexAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
     let exec = resolveExec(session.model);

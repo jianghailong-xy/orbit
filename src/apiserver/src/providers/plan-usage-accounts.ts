@@ -57,7 +57,8 @@ function sanitizeAccountsOf(snapshot: PlanUsageSnapshot | undefined): PlanUsageS
  * The account a run on `provider` spends, which is the account dispatch runs it on — what
  * planUsageBlockedUntil and planUsageReported are asked about, so that one account's spent quota never
  * holds back a run on another. It is decided as dispatch decides it (resolveProviderExec): the account
- * the workspace picked (Workspace.codexAccount / Workspace.claudeAccount) when its runner reports it
+ * picked for the session or else its workspace (Session.codexAccount, Workspace.codexAccount /
+ * Workspace.claudeAccount — callers pass the one that applies) when its runner reports it
  * (accountOnRunner), in place of any config-directory variable in the workspace's env; otherwise the
  * account that env selects, or Default. The resulting env is read as the runner reads it
  * (accountOfEnv), so a run with a credential of its own spends no account. Undefined for an engine
