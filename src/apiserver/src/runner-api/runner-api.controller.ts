@@ -3066,7 +3066,8 @@ export class RunnerApiController {
             coordinatorForProject: { select: { id: true, coordinatorEnabled: true } },
             // What the wiki context below is decided from: which space this session's workspace is
             // bound to, and the three things about a run that take it out of the push entirely —
-            // a verifier, a foreman, or a judgment session (design §7.3).
+            // a verifier, a foreman, or a judgment session (design §7.3). The fourth, coordinating
+            // a project, is `coordinatorForProject` above.
             workspaceId: true,
             dispatchOrigin: true,
             task: { select: { verifiesTaskId: true, isForeman: true } },
@@ -3208,7 +3209,9 @@ export class RunnerApiController {
           // codebase it works in (design §7.1). Beside the coordinator block and on the same rule —
           // delivery-time context, appended to what the person wrote and never written over it, so
           // `turn.content` and the task start card built from it are untouched. Said once per engine
-          // process rather than once per turn, which is why it asks the lease generation.
+          // process rather than once per turn, which is why it asks the lease generation. A project's
+          // coordinator is handed none (the owner, 2026-09-29), decided from the same
+          // `coordinatorForProject` its standing role above is appended from.
           //
           // Best-effort, exactly like the list conditions and the background jobs above: a note
           // ABOUT the work must never be the reason the turn carrying it fails to be delivered.
@@ -3223,6 +3226,7 @@ export class RunnerApiController {
                 taskId: owned[0].taskId,
                 task: sessionContext.task,
                 dispatchOrigin: sessionContext.dispatchOrigin,
+                coordinatorForProject: sessionContext.coordinatorForProject,
                 content,
               })) ?? content;
             } catch (e) {
