@@ -206,9 +206,20 @@ public struct NavState: Equatable, Sendable {
         }
     }
 
-    /// `AppModel.selectedProjectID` — the project the Projects pane shows.
+    /// `AppModel.selectedProjectID` — the project the Projects pane shows. A task one of its rows
+    /// opened over it (``projectBeneathTask``) leaves it the project showing: the list keeps it
+    /// selected, and the pane draws the task over it.
     public var selectedProjectID: String? {
-        guard case .projectDetail(let id, _) = path.last else { return nil }
+        if case .projectDetail(let id, _) = path.last { return id }
+        return projectBeneathTask
+    }
+
+    /// The project whose page is directly under the task page on top — the pair a project's task
+    /// row pushes, on the phone's Projects stack and in the wide shells' pane alike.
+    public var projectBeneathTask: String? {
+        let frames = path
+        guard frames.count >= 2, case .taskDetail = frames[frames.count - 1],
+              case .projectDetail(let id, _) = frames[frames.count - 2] else { return nil }
         return id
     }
 
@@ -356,6 +367,18 @@ public struct NavState: Equatable, Sendable {
         guard !settingsPresented, frames.count >= 2,
               case .console(let beneath, _) = frames[frames.count - 2],
               PublicID.storageKey(beneath) == PublicID.storageKey(sessionID) else { return false }
+        pop()
+        return true
+    }
+
+    /// Back to `projectID`'s page when it is the page directly under the task page on top: the
+    /// project whose row opened the task. Going to that project again is a pop, so the stack reads
+    /// project › task instead of project › task › project on every press of the task's project
+    /// line. False, with nothing changed, when it is not there.
+    @discardableResult
+    public mutating func returnToProject(_ projectID: String) -> Bool {
+        guard !settingsPresented, let beneath = projectBeneathTask,
+              PublicID.storageKey(beneath) == PublicID.storageKey(projectID) else { return false }
         pop()
         return true
     }
