@@ -11,6 +11,10 @@ import { fakeReceiptStore } from './task-run-receipt-fake';
  * 2026-09-25: a coordinator filed nine tasks and started two of them itself sixteen seconds later,
  * while its owner was still being asked "Start the project". The runner's door — the MCP tool and
  * `orbit task start` — is refused until the owner has started it; the owner's own Run is not.
+ *
+ * Started is `project.started_at` (migration 0330), which only a start writes. Until then it was read
+ * off `coordinator_enabled` and whether a confirmation existed, so the Automatic switch started a
+ * project too; it says how a project runs now, not whether it has started.
  */
 
 const uuid = (tag: string): string => `00000000-0000-4000-8000-${tag.padStart(12, '0')}`;
@@ -24,8 +28,8 @@ interface ProjectRow {
   title: string;
   status: 'OPEN' | 'DONE' | 'CANCELLED';
   coordinatorEnabled: boolean;
+  startedAt: Date | null;
   criteria: number;
-  confirmations: number;
 }
 
 /** A project exactly as `project_create` leaves it: OPEN, criteria stated, nobody has pressed. */
@@ -36,11 +40,13 @@ function unstarted(overrides: Partial<ProjectRow> = {}): ProjectRow {
     title: '分享能力',
     status: 'OPEN',
     coordinatorEnabled: false,
+    startedAt: null,
     criteria: 9,
-    confirmations: 0,
     ...overrides,
   };
 }
+
+const STARTED_AT = new Date('2026-09-29T08:00:00.000Z');
 
 /** Every column a `where` names has to match, as it would in PostgreSQL: a double that ignored the
  *  filter would let the gate read "not started" off a project that is running. */
@@ -100,10 +106,6 @@ function serviceFor(project: ProjectRow | null, taskProjectId: string | null = P
       findFirst: async ({ where }: { where: { projectId: string } }) =>
         project?.id === where.projectId && project.criteria > 0 ? { id: uuid('c') } : null,
     },
-    projectStandardSetConfirmation: {
-      findFirst: async ({ where }: { where: { projectId: string } }) =>
-        project?.id === where.projectId && project.confirmations > 0 ? { id: uuid('f') } : null,
-    },
   } as never;
   const service = new TasksService(prisma, {} as never, {} as never);
   const stub = service as unknown as Record<string, unknown>;
@@ -144,11 +146,23 @@ test("the owner's own Run still starts it", async () => {
   assert.deepEqual(started, [TASK]);
 });
 
-test('task_start starts it once the project has been started, however that happened', async () => {
+test('the Automatic switch alone does not start it: task_start is still refused', async () => {
+  const { service, started } = serviceFor(unstarted({ coordinatorEnabled: true }));
+  await assert.rejects(
+    () => taskStart(service, 'trigger-1'),
+    (error: unknown) => {
+      assert.ok(error instanceof ConflictException);
+      assert.equal((error.getResponse() as { code: string }).code, 'PROJECT_NOT_STARTED');
+      return true;
+    },
+  );
+  assert.deepEqual(started, []);
+});
+
+test('task_start starts it once the project has been started, however it runs', async () => {
   const cases: Array<[string, ProjectRow | null, string | null]> = [
-    ['Start the project pressed', unstarted({ coordinatorEnabled: true, confirmations: 1 }), PROJECT],
-    ['switched on without confirming', unstarted({ coordinatorEnabled: true }), PROJECT],
-    ['confirmed once, switched off since', unstarted({ confirmations: 1 }), PROJECT],
+    ['started, Automatic on', unstarted({ startedAt: STARTED_AT, coordinatorEnabled: true }), PROJECT],
+    ['started, Automatic off', unstarted({ startedAt: STARTED_AT }), PROJECT],
     ['no criteria, so no card to press', unstarted({ criteria: 0 }), PROJECT],
     // Finished, so no card either. (A CANCELLED one is refused outright, by every door:
     // `project-cancelled-dispatch.spec.ts`.)
@@ -166,8 +180,7 @@ test('a refusal is not frozen: the same call starts the task after the owner pre
   const project = unstarted();
   const { service, started } = serviceFor(project);
   await assert.rejects(() => taskStart(service, 'trigger-1'), ConflictException);
-  project.coordinatorEnabled = true;
-  project.confirmations = 1;
+  project.startedAt = STARTED_AT;
   await taskStart(service, 'trigger-1');
   assert.deepEqual(started, [TASK]);
 });
