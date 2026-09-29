@@ -81,6 +81,66 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     /// Which of its runner's Codex accounts a session here runs on: a slot id or `default`. Nil is
     /// Automatic — a new session starts on the account with the most room (`CodexAccounts.roomiest`).
     public let codexAccount: String?
+    public let enableWorktree: Bool?
+    public let workDirExists: Bool?
+    public let workDirIsGit: Bool?
+    /// BIGINT columns are serialized as strings by the control plane; numeric fixtures and older
+    /// servers are accepted too.
+    public let workDirFreeBytes: Int64?
+    public let workDirTotalBytes: Int64?
+    public let repoHealth: RunnerRepoHealth?
+    public let repoCleanup: RunnerRepoCleanup?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, lastProvider, provider, model, permissionMode, effort, workDir
+        case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
+        case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
+        case autoInitGit, codexAccount, enableWorktree, workDirExists, workDirIsGit
+        case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        lastProvider = try c.decodeIfPresent(String.self, forKey: .lastProvider)
+        provider = try c.decodeIfPresent(String.self, forKey: .provider)
+        model = try c.decodeIfPresent(String.self, forKey: .model)
+        permissionMode = try c.decodeIfPresent(String.self, forKey: .permissionMode)
+        effort = try c.decodeIfPresent(String.self, forKey: .effort)
+        workDir = try c.decodeIfPresent(String.self, forKey: .workDir)
+        description = try c.decodeIfPresent(String.self, forKey: .description)
+        appendSystemPrompt = try c.decodeIfPresent(String.self, forKey: .appendSystemPrompt)
+        systemPrompt = try c.decodeIfPresent(String.self, forKey: .systemPrompt)
+        allowedTools = try c.decodeIfPresent([String].self, forKey: .allowedTools)
+        disallowedTools = try c.decodeIfPresent([String].self, forKey: .disallowedTools)
+        maxTurns = try c.decodeIfPresent(Int.self, forKey: .maxTurns)
+        maxBudgetUsd = try c.decodeIfPresent(Double.self, forKey: .maxBudgetUsd)
+        targetRunnerId = try c.decodeIfPresent(String.self, forKey: .targetRunnerId)
+        targetLabels = try c.decodeIfPresent([String].self, forKey: .targetLabels)
+        runnerId = try c.decodeIfPresent(String.self, forKey: .runnerId)
+        env = try c.decodeIfPresent([String: String].self, forKey: .env)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled)
+        autoInitGit = try c.decodeIfPresent(Bool.self, forKey: .autoInitGit)
+        codexAccount = try c.decodeIfPresent(String.self, forKey: .codexAccount)
+        enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
+        workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
+        workDirIsGit = try c.decodeIfPresent(Bool.self, forKey: .workDirIsGit)
+        workDirFreeBytes = c.flexibleInt64(forKey: .workDirFreeBytes)
+        workDirTotalBytes = c.flexibleInt64(forKey: .workDirTotalBytes)
+        repoHealth = try c.decodeIfPresent(RunnerRepoHealth.self, forKey: .repoHealth)
+        repoCleanup = try c.decodeIfPresent(RunnerRepoCleanup.self, forKey: .repoCleanup)
+    }
+}
+
+extension KeyedDecodingContainer {
+    /// A BIGINT column: the control plane sends it as a string (main.ts BigInt.toJSON), a number
+    /// is read too, and anything else is unknown rather than a failed row.
+    func flexibleInt64(forKey key: Key) -> Int64? {
+        if let value = try? decodeIfPresent(Int64.self, forKey: key) { return value }
+        guard let string = try? decodeIfPresent(String.self, forKey: key) else { return nil }
+        return Int64(string)
+    }
 }
 
 extension Agent {
@@ -96,6 +156,12 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     public let version: String?
     public let maxConcurrent: Int?
     public let displayName: String?
+    public let hostname: String?
+    public let labels: [String]?
+    public let enrolledAt: String?
+    public let minFreeDiskMb: Int?
+    public let reposRoot: String?
+    public let heartbeatDraining: Bool?
     // Reported on the GET /runners payload (renamed from availableSkills/availableCommands).
     public let skills: [SlashCommandInfo]?
     public let commands: [SlashCommandInfo]?
@@ -114,6 +180,10 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// runner too old to report it, which stays unrestricted — an unknown must not withdraw a mode
     /// that works (see `AgentDefaults.isRunnable`).
     public let runsAsRoot: Bool?
+    /// Engine install/update relay and account-removal relay. Their string-valued states stay raw
+    /// so a newer control plane cannot make the runner list undecodable.
+    public let install: RunnerInstallState?
+    public let accountRemove: RunnerAccountRemoveState?
 
     /// This runner's last probe of one engine, if it reported that engine at all.
     public func engineHealth(_ engine: LoginEngine) -> RunnerEngineHealth? {
