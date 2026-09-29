@@ -1155,7 +1155,7 @@ func TestWikiInstructionsLinkEntriesAndPreApproveTheCommands(t *testing.T) {
 		t.Errorf("the citation is not the link shape the clients draw: %q", instructions)
 	}
 	rules := strings.Join(orbitCLIAllowedTools(exe, false), "\n")
-	for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "anchors verify", "articles", "maintain", "check"} {
+	for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "anchors verify", "articles", "maintain", "check", "plan draft", "plan revise", "plan check"} {
 		if !strings.Contains(rules, "Bash("+exe+" wiki "+action+" *)") {
 			t.Errorf("orbit wiki %s is advertised and pre-approved for nobody: %q", action, rules)
 		}

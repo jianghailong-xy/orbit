@@ -235,6 +235,8 @@ var advertisedCapabilityFamilies = []struct {
 	// acts for the session it runs in, and needs no power over anybody else's session to do it.
 	{"wikiCLICapabilities", wikiCLICapabilities, false},
 	{"wikiImportCLICapabilities", wikiImportCLICapabilities, false},
+	// The plan job's verbs, beside the wiki's others: a plan job's run and its task's check.
+	{"wikiPlanCLICapabilities", wikiPlanCLICapabilities, false},
 	{"sessionCLICapabilities", sessionCLICapabilities, true},
 	{"agentCLICapabilities", agentCLICapabilities, true},
 }

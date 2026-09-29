@@ -856,6 +856,18 @@ func (r *wikiPlanRun) adoptCatalogue(catalogue *wikiPlanCatalogue, revision bool
 	for _, unit := range r.units {
 		previous[unit.Slug] = unit
 	}
+	// What each document takes in by moves, before and after: a document whose moved sections changed is
+	// written again, whatever else stayed.
+	incoming := func(moves []wikiPlanMove) map[string]string {
+		out := map[string]string{}
+		for _, move := range moves {
+			if move.Target != nil {
+				out[move.Target.Slug] += fmt.Sprintf("%s§%d,", move.From, move.Section)
+			}
+		}
+		return out
+	}
+	before, after := incoming(r.moves), incoming(catalogue.Moves)
 	r.cats = catalogue.Cats
 	r.moves = catalogue.Moves
 	for i := range r.cats {
@@ -867,14 +879,21 @@ func (r *wikiPlanRun) adoptCatalogue(catalogue *wikiPlanCatalogue, revision bool
 		}
 	}
 	var units []*wikiPlanUnit
+	kept := map[*wikiPlanUnit]*wikiPlanUnit{}
 	for _, card := range catalogue.Units {
 		unit := card
-		if old, ok := previous[card.Slug]; ok && sameSources(old.Sources, card.Sources) {
+		if old, ok := previous[card.Slug]; ok && sameSources(old.Sources, card.Sources) && before[card.Slug] == after[card.Slug] {
 			old.Cat, old.Title, old.Question, old.CardScope, old.Sources = card.Cat, card.Title, card.Question, card.CardScope, card.Sources
 			old.Stray = card.Stray
 			unit = old
+			kept[card] = old
 		}
 		units = append(units, unit)
+	}
+	for i := range r.moves {
+		if old, ok := kept[r.moves[i].Target]; ok {
+			r.moves[i].Target = old
+		}
 	}
 	r.units = units
 	r.number()
@@ -895,6 +914,7 @@ func (r *wikiPlanRun) adoptCatalogue(catalogue *wikiPlanCatalogue, revision bool
 		if !revision || unit.HasBody {
 			continue
 		}
+		unit.Kept, unit.KeptDrop = nil, nil
 		if len(unit.Sources) == 1 && !receives[unit] {
 			if slug, ok := r.baseIDs[unit.Sources[0]]; ok {
 				doc := r.baseDocs[slug]
@@ -1040,12 +1060,64 @@ func (r *wikiPlanRun) redo(attempt int, errs []wikiPlanGateError, last wikiPlanA
 			return r.unitFailure(err)
 		}
 		header, sections, stray := parseWikiPlanDocBody(answer)
-		if header.Title == "" {
-			header.Title = unit.Title
-		}
+		// A line the answer left out is the line as it stood: what was not wrong need not be written again.
+		header = wikiPlanMergeHeader(header, last.headerOf(unit))
 		unit.Header, unit.Sections, unit.Stray, unit.HasBody, unit.Refs, unit.Kept = header, sections, stray, true, refs, nil
 		return nil
 	})
+}
+
+// headerOf is a document's header as the last round assembled it, in the line format's terms, its
+// scope-out targets as the numbers they have now.
+func (a wikiPlanAssembled) headerOf(unit *wikiPlanUnit) wikiPlanHeader {
+	for i, u := range a.units {
+		if u != unit {
+			continue
+		}
+		doc := a.plan.Docs[i]
+		h := wikiPlanHeader{Title: doc.Title, Question: doc.Question, Audience: doc.Audience, ScopeIn: doc.ScopeIn}
+		for _, out := range doc.ScopeOut {
+			var ids []string
+			for _, slug := range out.Docs {
+				if id, ok := a.slugIDs[slug]; ok {
+					ids = append(ids, id)
+				}
+			}
+			text := out.Text
+			if len(ids) > 0 {
+				text += "（见 " + strings.Join(ids, "、") + "）"
+			}
+			h.ScopeOut = append(h.ScopeOut, text)
+		}
+		if doc.Length.Min > 0 {
+			h.Length = fmt.Sprintf("%d–%d 字", doc.Length.Min, doc.Length.Max)
+		}
+		return h
+	}
+	return wikiPlanHeader{Title: unit.Title, Question: unit.Question, ScopeIn: unit.CardScope}
+}
+
+// wikiPlanMergeHeader is a header written again, each field it left out taken from the one before.
+func wikiPlanMergeHeader(next, prev wikiPlanHeader) wikiPlanHeader {
+	if next.Title == "" {
+		next.Title = prev.Title
+	}
+	if next.Question == "" {
+		next.Question = prev.Question
+	}
+	if len(next.Audience) == 0 {
+		next.Audience = prev.Audience
+	}
+	if len(next.ScopeIn) == 0 {
+		next.ScopeIn = prev.ScopeIn
+	}
+	if len(next.ScopeOut) == 0 {
+		next.ScopeOut = prev.ScopeOut
+	}
+	if next.Length == "" {
+		next.Length = prev.Length
+	}
+	return next
 }
 
 // redoCatalogue writes the catalogue again with its errors.

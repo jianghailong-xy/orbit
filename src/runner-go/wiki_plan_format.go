@@ -121,7 +121,7 @@ func parseWikiPlanCatalogue(text string) *wikiPlanCatalogue {
 			if m := wikiPlanMoveLine.FindStringSubmatch(line); m != nil {
 				n, _ := strconv.Atoi(m[2])
 				out.Moves = append(out.Moves, wikiPlanMove{From: m[1], Section: n, To: m[3]})
-			} else if !strings.HasPrefix(line, "（") {
+			} else if none := strings.TrimSpace(strings.TrimLeft(line, "-*")); none != "无" && none != "（无）" && !strings.HasPrefix(line, "（") {
 				out.Stray = append(out.Stray, line)
 			}
 			continue
