@@ -61,6 +61,10 @@ import {
   supportsMidTurnSteer,
   supportsTargetBoundCurrentWorkSteer,
   uuidToBase62,
+  accountToMoveTo,
+  planUsageBlockedUntil,
+  type AccountEngine,
+  type PlanUsage,
 } from '@orbit/shared';
 import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
@@ -112,6 +116,7 @@ import { SESSION_TAG_PALETTE } from '../session-tags/session-tags.service';
 import {
   CreateSessionDto,
   SessionConfigDto,
+  AUTOMATIC_ACCOUNT,
   SessionInterruptDto,
   SessionResumeDto,
   SessionTurnDto,
@@ -174,7 +179,15 @@ import {
 } from './transcript-around';
 import { EngineSignedOutConflict, signedOutEngineRefusal } from './engine-signin-preflight';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
-import { automaticCodexAccount } from '../providers/plan-usage-accounts';
+import {
+  accountLabel,
+  accountSwitchNotice,
+  automaticAccount,
+  runAccount,
+  workspaceLeavesAccountToOrbit,
+} from '../providers/plan-usage-accounts';
+import { sanitizeRunnerEngines } from '../common/runner-engines';
+import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
 import {
   CURRENT_WORK_INTERRUPTED,
   CURRENT_WORK_SESSION_ENDED,
@@ -683,6 +696,12 @@ export class SessionsService {
     ) {
       throw new BadRequestException('codexAccount must be "default" or the id of one of the runner\'s accounts');
     }
+    if (
+      dto.claudeAccount != null &&
+      (typeof dto.claudeAccount !== 'string' || !ACCOUNT_ID_PATTERN.test(dto.claudeAccount))
+    ) {
+      throw new BadRequestException('claudeAccount must be "default" or the id of one of the runner\'s accounts');
+    }
     // The session runs on a runner. Prefer an explicit pin; otherwise derive it from
     // the chosen workspace's machine (workspaces belong to a runner) — picking a workspace is
     // enough to know which machine + project dir to run in.
@@ -928,20 +947,23 @@ export class SessionsService {
       where: { id: assignedRunnerId, ownerId },
       select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, planUsage: true },
     });
-    // The Codex account this session runs on: the one picked for it — else, when its workspace picked
-    // none either, the runner's account with the most room right now (automaticCodexAccount). Chosen
-    // once, here, and stored, so the session stays on it for life: its thread lives in that account's
-    // CODEX_HOME. Null runs on the workspace's.
-    const codexAccount =
-      dto.codexAccount ??
-      (provider === AgentProvider.CODEX && providerBuiltin && targetRunner
-        ? automaticCodexAccount(
-            { env: workspaceEnv, codexAccount: accountChoices?.codexAccount },
+    // The Codex or Claude account this session runs on: the one picked for it — which pins it there —
+    // else, when its workspace leaves the account to Orbit, the runner's account with the most room
+    // right now (automaticAccount), which Orbit may move it off when that account's usage limit stops
+    // it. Stored here; its conversation lives in that account's directory. Null runs on the
+    // workspace's.
+    const automatic = (engine: AccountEngine) =>
+      provider === engine && providerBuiltin && targetRunner
+        ? automaticAccount(
+            engine,
+            { env: workspaceEnv, codexAccount: accountChoices?.codexAccount, claudeAccount: accountChoices?.claudeAccount },
             targetRunner.engines,
             targetRunner.planUsage,
             new Date(),
           )
-        : null);
+        : null;
+    const codexAccount = dto.codexAccount ?? automatic(AgentProvider.CODEX);
+    const claudeAccount = dto.claudeAccount ?? automatic(AgentProvider.CLAUDE);
     const refusal =
       targetRunner &&
       signedOutEngineRefusal({
@@ -949,7 +971,11 @@ export class SessionsService {
         bringsOwnCredentials: borrowedRuntime != null,
         workspaceEnv,
         // The account this session runs on is the one judged, whatever the workspace says.
-        accounts: codexAccount ? { ...accountChoices, codexAccount } : accountChoices,
+        accounts: {
+          ...accountChoices,
+          ...(codexAccount ? { codexAccount } : {}),
+          ...(claudeAccount ? { claudeAccount } : {}),
+        },
         runner: targetRunner,
       });
     // Typed, not a bare 409: this is an availability condition — the engine is signed out on a
@@ -992,8 +1018,11 @@ export class SessionsService {
         // refused at create.
         fastMode: dto.fastMode === true,
         // As picked or chosen above, `default` included: NULL is the one value that follows the
-        // workspace's choice.
+        // workspace's choice. A pick by hand pins it.
         codexAccount,
+        codexAccountPinned: dto.codexAccount != null,
+        claudeAccount,
+        claudeAccountPinned: dto.claudeAccount != null,
         workspaceId: dto.workspaceId,
         assignedRunnerId,
         taskId: dto.taskId,
@@ -7127,7 +7156,7 @@ export class SessionsService {
         modelCatalog: session.assignedRunner?.modelCatalog,
         workspaceEnv: session.workspace?.env as Record<string, string> | null,
         codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
-        claudeAccount: session.workspace?.claudeAccount,
+        claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
       const requestedPermissionMode =
@@ -7294,6 +7323,112 @@ export class SessionsService {
       return true;
     }, loggedRetry(this.logger, 'sessions.updateConfig'));
     if (queuedControlTurn) this.realtime.notifyInbox(id);
+    return { ok: true };
+  }
+
+  /**
+   * Which of its runner's accounts a session on the built-in Codex or Claude engine runs on, picked in
+   * the composer's Provider menu. An account the runner reports pins the session to it — its usage
+   * limit then waits for the reset. `automatic` leaves it to Orbit: the session stays where it is until
+   * that account's limit stops it, and moves then — or at once, when the account it is on is spent
+   * already and another has room.
+   *
+   * A move is spawn-only, as a provider is: the account IS the engine's environment. On a live session
+   * a `reload` naming the engine re-spawns it on the new account once no turn is in flight, and the
+   * runner carries the conversation across (CODEX_ACCOUNT_MOVE_V1, CLAUDE_ACCOUNT_MOVE_V1); a runner
+   * that declares neither is refused the move, since it would resume where the conversation is. An
+   * ended or unclaimed one just stores it, for the claim that runs it next — at once, if it was waiting
+   * out the old account's reset. The next engine start says so in the transcript.
+   */
+  async switchAccount(ownerId: string, id: string, account: unknown) {
+    if (typeof account !== 'string' || (account !== AUTOMATIC_ACCOUNT && !ACCOUNT_ID_PATTERN.test(account))) {
+      throw new BadRequestException('account must be "automatic", "default" or the id of one of the runner\'s accounts');
+    }
+    const reload = await withTransactionRetry(this.prisma, async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      const session = await tx.session.findUniqueOrThrow({
+        where: { id },
+        select: {
+          status: true,
+          provider: true,
+          providerBuiltin: true,
+          retryAt: true,
+          codexAccount: true,
+          codexAccountPinned: true,
+          claudeAccount: true,
+          claudeAccountPinned: true,
+          workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
+          assignedRunner: { select: { engines: true, planUsage: true, capabilities: true } },
+        },
+      });
+      const engine: AccountEngine | null =
+        session.provider === AgentProvider.CODEX || session.provider === AgentProvider.CLAUDE
+          ? session.provider
+          : null;
+      if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin) || !session.assignedRunner) {
+        throw new BadRequestException("only a session on the built-in Codex or Claude engine runs on one of its runner's accounts");
+      }
+      const runner = session.assignedRunner;
+      const own = engine === AgentProvider.CODEX ? session.codexAccount : session.claudeAccount;
+      const workspacePick = engine === AgentProvider.CODEX ? session.workspace?.codexAccount : session.workspace?.claudeAccount;
+      const choice = engine === AgentProvider.CODEX ? { codexAccount: own ?? workspacePick } : { claudeAccount: own ?? workspacePick };
+      const current = runAccount(engine, session.workspace?.env, choice, runner.engines);
+      if (!current) throw new BadRequestException("this session spends a key of its own, not one of its runner's accounts");
+      const accounts = sanitizeRunnerEngines(runner.engines)?.find((entry) => entry.engine === engine)?.accounts;
+      const usage = runner.planUsage as PlanUsage | null;
+      const now = new Date();
+      let to = current;
+      let pinned = true;
+      let notice: string | null = null;
+      if (account === AUTOMATIC_ACCOUNT) {
+        if (!workspaceLeavesAccountToOrbit(engine, session.workspace, runner.engines)) {
+          throw new BadRequestException("this session's workspace decides its account");
+        }
+        pinned = false;
+        const spent = planUsageBlockedUntil(usage, engine, now, current) != null;
+        const roomier = spent ? accountToMoveTo(engine, accounts, usage, now, current) : null;
+        if (roomier) {
+          to = roomier;
+          notice = accountSwitchNotice(engine, { from: current, to }, runner.engines);
+        }
+      } else {
+        const row = accounts?.find((entry) => entry.id === account);
+        if (!row) throw new BadRequestException("that account is not one this session's runner reports");
+        if (row.auth === 'no') throw new ConflictException("that account is signed out on this session's runner");
+        to = account;
+        if (to !== current) notice = `Switched to ${accountLabel(engine, to, runner.engines)}`;
+      }
+      const moves = to !== current;
+      if (moves && !runner.capabilities.includes(engine === AgentProvider.CODEX ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1)) {
+        throw new ConflictException(
+          "this session's runner cannot move a conversation to another account yet — it updates itself when no turn is running",
+        );
+      }
+      const live = !SessionsService.TERMINAL.includes(session.status) && session.status !== RunStatus.PENDING;
+      await tx.session.update({
+        where: { id },
+        data: {
+          ...(engine === AgentProvider.CODEX
+            ? { codexAccount: to, codexAccountPinned: pinned }
+            : { claudeAccount: to, claudeAccountPinned: pinned }),
+          ...(notice ? { poolSwitchNotice: notice } : {}),
+          // A session waiting out the old account's reset goes now, on the one with room.
+          ...(moves && session.retryAt && session.retryAt > now ? { retryAt: now } : {}),
+        },
+      });
+      if (!moves || !live) return false;
+      await this.insertTurnLocked(tx, id, {
+        kind: 'reload',
+        content: JSON.stringify({ provider: engine }),
+        clientTurnId: randomUUID(),
+      });
+      return true;
+    }, loggedRetry(this.logger, 'sessions.switchAccount'));
+    if (reload) this.realtime.notifyInbox(id);
     return { ok: true };
   }
 

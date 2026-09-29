@@ -216,12 +216,15 @@ export function planUsageBlockedUntil(
   return latest === null ? null : new Date(latest);
 }
 
+/** The engines whose CLI keeps a login per directory — a CODEX_HOME, a CLAUDE_CONFIG_DIR — so that a
+ *  runner can hold several accounts of them, each with its own quota. */
+export type AccountEngine = 'codex' | 'claude';
+
 /**
- * Which of a runner's Codex accounts a new session starts on when neither it nor its workspace picked
- * one: the one with the most room right now. The server makes this choice once, when the session is
- * created, and stores it on the session, so the session stays on that account for its life (its
- * thread lives in that account's CODEX_HOME); the New Session screen asks the same question to say
- * where a session would start.
+ * Which of a runner's accounts of `engine` a new session starts on when neither it nor its workspace
+ * picked one: the one with the most room right now. The server makes this choice once, when the
+ * session is created, and stores it on the session; the New Session screen asks the same question to
+ * say where a session would start.
  *
  * - Only an account the CLI does not say is signed out is a candidate.
  * - One with a spent window — at 100% and not past its reset, or with no reset time to go by — is
@@ -236,27 +239,38 @@ export function planUsageBlockedUntil(
  * Null when there is nothing to choose between — fewer than two accounts reported, or none signed in —
  * and the session runs where it always did.
  */
-export function roomiestCodexAccount(
+export function roomiestAccount(
+  engine: AccountEngine,
   accounts: readonly RunnerEngineAccount[] | null | undefined,
   usage: PlanUsage | null | undefined,
   now: Date,
 ): string | null {
   if (!accounts || accounts.length < 2) return null;
-  const candidates = rankCodexAccounts(accounts, usage, now);
+  const candidates = rankAccounts(engine, accounts, usage, now);
   const usable = candidates.filter((c) => c.spentUntil === null);
   if (usable.length > 0) return usable[0].id;
   const first = [...candidates].sort((a, b) => (a.spentUntil ?? 0) - (b.spentUntil ?? 0) || byAccountId(a, b))[0];
   return first?.id ?? null;
 }
 
+/** {@link roomiestAccount} for Codex: its thread lives in the chosen account's CODEX_HOME. */
+export function roomiestCodexAccount(
+  accounts: readonly RunnerEngineAccount[] | null | undefined,
+  usage: PlanUsage | null | undefined,
+  now: Date,
+): string | null {
+  return roomiestAccount('codex', accounts, usage, now);
+}
+
 /**
- * Which of a runner's Codex accounts a session whose own account (`from`) just hit its usage limit
- * can move to, between turns: another account that can run now — not signed out, no spent window —
- * the one with the most room, ranked as {@link roomiestCodexAccount} ranks. Never a spent one: when no
- * other account has room, moving gains nothing, and the session waits for its own account's reset.
+ * Which of a runner's accounts of `engine` a session whose own account (`from`) just hit its usage
+ * limit can move to, between turns: another account that can run now — not signed out, no spent
+ * window — the one with the most room, ranked as {@link roomiestAccount} ranks. Never a spent one: when
+ * no other account has room, moving gains nothing, and the session waits for its own account's reset.
  * Null then, and for a runner with no second account.
  */
-export function codexAccountToMoveTo(
+export function accountToMoveTo(
+  engine: AccountEngine,
   accounts: readonly RunnerEngineAccount[] | null | undefined,
   usage: PlanUsage | null | undefined,
   now: Date,
@@ -264,8 +278,18 @@ export function codexAccountToMoveTo(
 ): string | null {
   if (!accounts || accounts.length < 2) return null;
   return (
-    rankCodexAccounts(accounts, usage, now).find((c) => c.id !== from && c.spentUntil === null)?.id ?? null
+    rankAccounts(engine, accounts, usage, now).find((c) => c.id !== from && c.spentUntil === null)?.id ?? null
   );
+}
+
+/** {@link accountToMoveTo} for Codex. */
+export function codexAccountToMoveTo(
+  accounts: readonly RunnerEngineAccount[] | null | undefined,
+  usage: PlanUsage | null | undefined,
+  now: Date,
+  from: string,
+): string | null {
+  return accountToMoveTo('codex', accounts, usage, now, from);
 }
 
 /** Ties go to Default, then to the lower id, so no answer depends on the order of the report. */
@@ -278,16 +302,17 @@ const byAccountId = (a: { id: string }, b: { id: string }) =>
  * (100% and not past its reset, or with no reset to go by): the latest of those resets, Infinity when
  * one named none.
  */
-function rankCodexAccounts(
+function rankAccounts(
+  engine: AccountEngine,
   accounts: readonly RunnerEngineAccount[],
   usage: PlanUsage | null | undefined,
   now: Date,
 ): Array<{ id: string; tightest: number; spentUntil: number | null }> {
-  const codex = usage ? snapshotFor(usage, 'codex') : undefined;
+  const reported = usage ? snapshotFor(usage, engine) : undefined;
   return accounts
     .filter((account) => account.auth !== 'no')
     .map((account) => {
-      const snapshot = codex ? codexAccountSnapshot(codex, account.id) : undefined;
+      const snapshot = reported ? codexAccountSnapshot(reported, account.id) : undefined;
       const windows = snapshot ? windowsOf(snapshot) : [];
       const spent = windows.filter(
         (w) => w.utilization >= EXHAUSTED_UTILIZATION && !(Date.parse(w.resetsAt ?? '') <= now.getTime()),

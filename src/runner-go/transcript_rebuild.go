@@ -92,6 +92,11 @@ func ensureClaudeTranscript(ctx context.Context, t *Transport, job *ClaimedSessi
 	if claudeTranscriptHasConversation(path) {
 		return true
 	}
+	// A session moved to another of this machine's Claude accounts left its conversation in the one it
+	// ran on: carry that across whole, where the rebuild below would shorten a long one.
+	if carryClaudeConversation(base, execDir, job.SessionUUID, path) {
+		return true
+	}
 	events, err := fetchStoredEvents(ctx, t, job.SessionID)
 	if err != nil {
 		logln("transcript rebuild: cannot fetch stored events:", err)

@@ -225,7 +225,7 @@ import { loadVerificationEpochGates } from './verification-epoch-read';
 import { readTaskProgress } from './task-progress.service';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
-import { automaticCodexAccount, runAccount } from '../providers/plan-usage-accounts';
+import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { accountEnvVar } from '../providers/account';
 import { readWaitingOwnerConfirmations } from './owner-confirmation-read';
 import { accountPoolRuntime } from '../providers/custom-provider';
@@ -10294,14 +10294,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const runner = runnerById.get(assignee.runnerId);
       const usage = runner?.planUsage as unknown as PlanUsage | null | undefined;
       const workspace = workspaceById.get(assignee.workspaceId);
-      // A Codex task on a workspace that picked no account gets its session started on the runner's
-      // account with the most room (automaticCodexAccount), so that is the quota it waits on.
+      // A Codex or Claude task on a workspace that leaves the account to Orbit gets its session started
+      // on the runner's account with the most room (automaticAccount), so that is the quota it waits on.
       const automatic =
-        assignee.provider === 'codex' ? automaticCodexAccount(workspace, runner?.engines, usage, now) : null;
+        assignee.provider === 'codex' || assignee.provider === 'claude'
+          ? automaticAccount(assignee.provider, workspace, runner?.engines, usage, now)
+          : null;
       const account = runAccount(
         assignee.provider,
         workspace?.env,
-        workspace && { ...workspace, codexAccount: automatic ?? workspace.codexAccount },
+        workspace &&
+          (assignee.provider === 'claude'
+            ? { ...workspace, claudeAccount: automatic ?? workspace.claudeAccount }
+            : { ...workspace, codexAccount: automatic ?? workspace.codexAccount }),
         runner?.engines,
       );
       if (!planUsageReported(usage, assignee.provider, account)) blind.add(t.id);
