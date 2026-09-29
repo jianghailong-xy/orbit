@@ -6,6 +6,7 @@ import {
   codexAccountSnapshot,
   planUsageBlockedUntil,
   planUsageReported,
+  codexAccountToMoveTo,
   roomiestCodexAccount,
 } from './planUsage';
 
@@ -298,5 +299,50 @@ describe('roomiestCodexAccount — where a session with no account picked starts
     expect(roomiestCodexAccount([account('default')], usage(100, 18, null), NOW)).toBeNull();
     expect(roomiestCodexAccount([], usage(100, 18, null), NOW)).toBeNull();
     expect(roomiestCodexAccount(undefined, null, NOW)).toBeNull();
+  });
+});
+
+describe('codexAccountToMoveTo — where a session whose account hit its limit goes, between turns', () => {
+  const PRO = '1fda3f43';
+  const WORK = '3fa91c2e';
+  const account = (id: string, auth: 'yes' | 'no' | 'unknown' = 'yes'): RunnerEngineAccount => ({
+    id,
+    home: id === 'default' ? '/root/.codex' : `/root/.orbit/codex-accounts/${id}`,
+    auth,
+  });
+  const three = [account('default'), account(PRO), account(WORK)];
+  const win = (utilization: number, resetsAt = LATER) => ({ utilization, windowDurationMins: 300, resetsAt });
+  const usage = (def: number, pro: number, work: number): PlanUsage => ({
+    codex: {
+      provider: 'codex',
+      primary: win(def),
+      accounts: {
+        [PRO]: { provider: 'codex', primary: win(pro) },
+        [WORK]: { provider: 'codex', primary: win(work) },
+      },
+    },
+  });
+
+  it('moves to the other account with the most room, never back onto the one it leaves', () => {
+    expect(codexAccountToMoveTo(three, usage(100, 40, 10), NOW, 'default')).toBe(WORK);
+    // The account being left ranks first on paper (its snapshot has not caught up with the limit yet),
+    // and is still passed over: the run just said it is spent.
+    expect(codexAccountToMoveTo(three, usage(5, 40, 10), NOW, 'default')).toBe(WORK);
+    expect(codexAccountToMoveTo(three, usage(100, 40, 10), NOW, WORK)).toBe(PRO);
+  });
+
+  it('never moves onto a spent or signed-out account: then the session waits for its own reset', () => {
+    expect(codexAccountToMoveTo(three, usage(100, 100, 100), NOW, 'default')).toBeNull();
+    expect(codexAccountToMoveTo([account('default'), account(PRO, 'no')], usage(100, 0, 0), NOW, 'default')).toBeNull();
+  });
+
+  it('takes an account nothing was read for, over none at all', () => {
+    const unread: PlanUsage = { codex: { provider: 'codex', primary: win(100) } };
+    expect(codexAccountToMoveTo([account('default'), account(PRO)], unread, NOW, 'default')).toBe(PRO);
+  });
+
+  it('has nowhere to go without a second account', () => {
+    expect(codexAccountToMoveTo([account('default')], usage(100, 0, 0), NOW, 'default')).toBeNull();
+    expect(codexAccountToMoveTo(undefined, null, NOW, 'default')).toBeNull();
   });
 });

@@ -74,6 +74,7 @@ func init() {
 		promotionAutomaticLandCapabilityV1,
 		codexAccountLoginCapabilityV1,
 		codexAccountRemoveCapabilityV1,
+		codexAccountMoveCapabilityV1,
 		claudeAccountLoginCapabilityV1,
 		claudeAccountRemoveCapabilityV1,
 		wikiMaintenanceRunV1,

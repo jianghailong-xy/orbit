@@ -1486,9 +1486,15 @@ func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Tran
 	// what it replaces.
 	//
 	// Asked of the account the engine will run on: a Codex session can be on one of the machine's
-	// other accounts, and one that has run keeps the account it started on.
+	// other accounts, and one that has run keeps the account it started on — unless the control plane
+	// moved it off an account whose usage limit stopped it, when its thread follows it first.
 	preflightEnv := job.Agent.Env
 	if provider == providerCodex {
+		if moved, err := moveCodexThreadToClaimedAccount(job, scratchDir, execDir); err != nil {
+			logln("codex session", job.SessionID, "stays on its account: moving its thread failed:", err)
+		} else if moved {
+			logln("codex session", job.SessionID, "moved to the account its claim names")
+		}
 		preflightEnv = codexSessionAccountEnv(job.Agent.Env, scratchDir)
 	}
 	if msg := engineAuthPreflight(provider, preflightEnv); msg != "" {

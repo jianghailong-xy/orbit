@@ -242,8 +242,49 @@ export function roomiestCodexAccount(
   now: Date,
 ): string | null {
   if (!accounts || accounts.length < 2) return null;
+  const candidates = rankCodexAccounts(accounts, usage, now);
+  const usable = candidates.filter((c) => c.spentUntil === null);
+  if (usable.length > 0) return usable[0].id;
+  const first = [...candidates].sort((a, b) => (a.spentUntil ?? 0) - (b.spentUntil ?? 0) || byAccountId(a, b))[0];
+  return first?.id ?? null;
+}
+
+/**
+ * Which of a runner's Codex accounts a session whose own account (`from`) just hit its usage limit
+ * can move to, between turns: another account that can run now — not signed out, no spent window —
+ * the one with the most room, ranked as {@link roomiestCodexAccount} ranks. Never a spent one: when no
+ * other account has room, moving gains nothing, and the session waits for its own account's reset.
+ * Null then, and for a runner with no second account.
+ */
+export function codexAccountToMoveTo(
+  accounts: readonly RunnerEngineAccount[] | null | undefined,
+  usage: PlanUsage | null | undefined,
+  now: Date,
+  from: string,
+): string | null {
+  if (!accounts || accounts.length < 2) return null;
+  return (
+    rankCodexAccounts(accounts, usage, now).find((c) => c.id !== from && c.spentUntil === null)?.id ?? null
+  );
+}
+
+/** Ties go to Default, then to the lower id, so no answer depends on the order of the report. */
+const byAccountId = (a: { id: string }, b: { id: string }) =>
+  Number(b.id === CODEX_DEFAULT_ACCOUNT) - Number(a.id === CODEX_DEFAULT_ACCOUNT) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/**
+ * The accounts that are candidates at all — the CLI does not say they are signed out — most room
+ * first: least-used tightest window, unread after read. `spentUntil` is set for one with a spent window
+ * (100% and not past its reset, or with no reset to go by): the latest of those resets, Infinity when
+ * one named none.
+ */
+function rankCodexAccounts(
+  accounts: readonly RunnerEngineAccount[],
+  usage: PlanUsage | null | undefined,
+  now: Date,
+): Array<{ id: string; tightest: number; spentUntil: number | null }> {
   const codex = usage ? snapshotFor(usage, 'codex') : undefined;
-  const candidates = accounts
+  return accounts
     .filter((account) => account.auth !== 'no')
     .map((account) => {
       const snapshot = codex ? codexAccountSnapshot(codex, account.id) : undefined;
@@ -257,14 +298,7 @@ export function roomiestCodexAccount(
         tightest: windows.length > 0 ? Math.max(...windows.map((w) => w.utilization)) : Number.POSITIVE_INFINITY,
         spentUntil: spent.length === 0 ? null : resets.some(Number.isNaN) ? Number.POSITIVE_INFINITY : Math.max(...resets),
       };
-    });
-  const byId = (a: { id: string }, b: { id: string }) =>
-    Number(b.id === CODEX_DEFAULT_ACCOUNT) - Number(a.id === CODEX_DEFAULT_ACCOUNT) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-  const usable = candidates.filter((c) => c.spentUntil === null);
-  if (usable.length > 0) {
+    })
     // Two accounts with no reading subtract to NaN, which falls through to the id like any other tie.
-    return [...usable].sort((a, b) => a.tightest - b.tightest || byId(a, b))[0].id;
-  }
-  const first = [...candidates].sort((a, b) => (a.spentUntil ?? 0) - (b.spentUntil ?? 0) || byId(a, b))[0];
-  return first?.id ?? null;
+    .sort((a, b) => a.tightest - b.tightest || byAccountId(a, b));
 }

@@ -20,7 +20,13 @@ import { storeRefreshedCodexResetBlock } from '../runner-api/codex-reset-plan-us
 import { RunnerApiController, type RetryPlanTransaction } from '../runner-api/runner-api.controller';
 import { transactionDouble } from '../test-support/prisma-transaction-double';
 import { resolveProviderExec } from './custom-provider';
-import { automaticCodexAccount, runAccount, sanitizePlanUsageAccounts } from './plan-usage-accounts';
+import {
+  automaticCodexAccount,
+  codexAccountAfterUsageLimit,
+  codexAccountSwitchNotice,
+  runAccount,
+  sanitizePlanUsageAccounts,
+} from './plan-usage-accounts';
 
 /**
  * Codex plan usage by account. A runner with more than one Codex account reports Default's quota as
@@ -478,4 +484,49 @@ test('a new session nothing picked an account for starts on the one with the mos
   assert.equal(automaticCodexAccount({ env: { CODEX_API_KEY: 'sk-test' }, codexAccount: null }, ENGINES, defaultSpent, now), null);
   // A runner that has reported nothing has nothing to choose between.
   assert.equal(automaticCodexAccount({ env: null, codexAccount: null }, null, null, now), null);
+});
+
+test("a Codex session its account's usage limit stopped moves to another account with room, unless its workspace decides", () => {
+  const now = new Date();
+  const defaultSpent = { codex: { provider: AgentProvider.CODEX, primary: window(100, DEFAULT_RESET), accounts: { [WORK]: work(8) } } };
+  const automatic = { env: null, codexAccount: null };
+  // Stopped on Default — picked for it, or the account of an older session that picked none — it moves
+  // to Work, which has room.
+  assert.deepEqual(codexAccountAfterUsageLimit({ codexAccount: 'default' }, automatic, ENGINES, defaultSpent, now), { from: 'default', to: WORK });
+  assert.deepEqual(codexAccountAfterUsageLimit({ codexAccount: null }, automatic, ENGINES, defaultSpent, now), { from: 'default', to: WORK });
+  assert.deepEqual(codexAccountAfterUsageLimit({ codexAccount: 'default' }, null, ENGINES, defaultSpent, now), { from: 'default', to: WORK });
+  // Stopped on Work before its snapshot caught up: never onto a spent account, so it stays and waits.
+  assert.equal(codexAccountAfterUsageLimit({ codexAccount: WORK }, automatic, ENGINES, defaultSpent, now), null);
+  const workSpent = { codex: { provider: AgentProvider.CODEX, primary: window(20, DEFAULT_RESET), accounts: { [WORK]: work(100) } } };
+  assert.deepEqual(codexAccountAfterUsageLimit({ codexAccount: WORK }, automatic, ENGINES, workSpent, now), { from: WORK, to: 'default' });
+  // A workspace that decides the account keeps the session where it is: its pick, Default included, or
+  // a CODEX_HOME or a key of its own in its env.
+  for (const workspace of [
+    { env: null, codexAccount: 'default' },
+    { env: null, codexAccount: WORK },
+    { env: { CODEX_HOME: WORK_HOME }, codexAccount: null },
+    { env: { CODEX_API_KEY: 'sk-test' }, codexAccount: null },
+  ]) {
+    assert.equal(codexAccountAfterUsageLimit({ codexAccount: 'default' }, workspace, ENGINES, defaultSpent, now), null, JSON.stringify(workspace));
+  }
+  // A signed-out account is nowhere to go, and a runner with one account has nowhere else.
+  const workSignedOut = ENGINES.map((engine) =>
+    engine.engine === 'codex'
+      ? { ...engine, accounts: engine.accounts!.map((account) => (account.id === WORK ? { ...account, auth: 'no' as const } : account)) }
+      : engine,
+  );
+  assert.equal(codexAccountAfterUsageLimit({ codexAccount: 'default' }, automatic, workSignedOut, defaultSpent, now), null);
+  assert.equal(
+    codexAccountAfterUsageLimit({ codexAccount: 'default' }, automatic, [{ engine: 'codex', installed: true, auth: 'yes' }], defaultSpent, now),
+    null,
+  );
+});
+
+test('the line a moved session carries names both accounts the way the picker names them', () => {
+  assert.equal(codexAccountSwitchNotice({ from: 'default', to: WORK }, ENGINES), 'Switched to Work — the usage limit on Default is reached');
+  assert.equal(codexAccountSwitchNotice({ from: WORK, to: 'default' }, ENGINES), 'Switched to Default — the usage limit on Work is reached');
+  assert.equal(
+    codexAccountSwitchNotice({ from: 'default', to: 'c0ffee42' }, ENGINES),
+    'Switched to Account c0ffee42 — the usage limit on Default is reached',
+  );
 });
