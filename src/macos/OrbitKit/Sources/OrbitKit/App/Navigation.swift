@@ -332,6 +332,20 @@ public struct NavState: Equatable, Sendable {
         return true
     }
 
+    /// A task a route opened in Tasks that turned out to be one of `projectID`'s: off the Tasks stack
+    /// it landed on, and over its project's page on the Projects stack — the pair the project's own
+    /// rows push. Tasks' every-task scope is the tasks outside projects, so left there it would sit
+    /// over a list it is not in. Switching to the Projects section is the caller's (`AppModel`'s
+    /// section setter keeps the detail store in step); only the two stacks are edited here.
+    public mutating func moveTaskOverProject(_ taskID: String, project projectID: String) {
+        var tasks = stacks[.tasks] ?? []
+        if case .taskDetail(let top) = tasks.last, PublicID.storageKey(top) == PublicID.storageKey(taskID) {
+            tasks.removeLast()
+        }
+        stacks[.tasks] = tasks.isEmpty ? nil : tasks
+        stacks[.projects] = [.projectDetail(projectID: projectID), .taskDetail(taskID: taskID)]
+    }
+
     /// The session's console is gone — completed, trashed or purged out from under it — so nothing
     /// is left on screen streaming a session the server no longer has. This is the one edit that
     /// replaced three hand-cleared optionals: the selection, the Recents marker and the compose
