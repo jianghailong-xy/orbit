@@ -104,6 +104,30 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(list.contains("model.push(.projectDetail(projectID: project.id))"))
     }
 
+    /// A task that arrives from outside — a notification, a link, ⌘K, a dependency jumped to from
+    /// another task — is routed into Tasks at once, as every route lands at once; when its row says
+    /// it is a project's, it moves over that project's page (the web's `/tasks/<id>` does the same).
+    /// Only while the reader is still on that task: a read that answers after they moved on moves
+    /// nothing.
+    func testARoutedProjectTaskMovesOverItsProjectsPage() throws {
+        let app = code(try appSource("AppModel.swift"))
+        let route = try slice(app, from: "case .task(let id):", to: "case .list(let id):")
+        let lands = try XCTUnwrap(route.range(of: "selectedTaskID = id"))
+        let moves = try XCTUnwrap(route.range(of: "rehomeProjectTask(id)"), "the route asks where the task lives")
+        XCTAssertTrue(lands.lowerBound < moves.lowerBound, "after landing, not instead of it")
+
+        let rehome = try slice(app, from: "private func rehomeProjectTask(_ id: String) {", to: "\n    }\n")
+        XCTAssertTrue(rehome.contains("guard let row = try? await api.taskRow(id), let project = row.projectId else { return }"),
+                      "the light row read, and a task in no project moves nowhere")
+        let still = try XCTUnwrap(rehome.range(of:
+            "guard let self, self.selectedSection == .tasks,\n                  self.selectedTaskID.map(PublicID.storageKey) == PublicID.storageKey(id) else { return }"),
+            "only while the reader is still on that task")
+        let move = try XCTUnwrap(rehome.range(of: "self.nav.moveTaskOverProject(id, project: PublicID.toPublic(project))"))
+        let section = try XCTUnwrap(rehome.range(of: "self.selectedSection = .projects"))
+        XCTAssertTrue(still.lowerBound < move.lowerBound && move.lowerBound < section.lowerBound,
+                      "check, move the frames, then switch — the switch re-points the detail store")
+    }
+
     func testTheDrawerLeadsWithTheWorkAndClosesWithTheOpenProjects() throws {
         let shell = try appSource("Views/CompactShell.swift")
         let rail = code(try slice(shell, from: "            List {", to: "            .listStyle(.plain)"))

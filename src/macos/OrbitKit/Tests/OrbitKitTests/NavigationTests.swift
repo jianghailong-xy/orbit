@@ -534,6 +534,37 @@ final class NavigationTests: XCTestCase {
         }
     }
 
+    /// A notification, a link or a dependency jump routes a task into Tasks; when its row says it is
+    /// a project's, it moves over that project's page. It comes off the Tasks stack (left there, the
+    /// Tasks section would reopen on a project's task over "Tasks outside projects"), and the
+    /// Projects stack becomes the pair the project's rows push — whatever that stack held before.
+    func testARoutedTaskMovesOverItsProjectsPage() {
+        var nav = NavState(section: .tasks, stacks: [
+            .tasks: [.taskListsDirectory, .taskDetail(taskID: "34DynS2HpGYT6T1Nf6h3U")],
+            .projects: [.projectDetail(projectID: "p-other")],
+        ])
+        // The route may name the task in either spelling.
+        nav.moveTaskOverProject("01a03f47-4af6-753d-9109-a4440b1a71c4", project: "p1")
+
+        XCTAssertEqual(nav.stacks[.tasks], [.taskListsDirectory], "only the task comes off the Tasks stack")
+        XCTAssertEqual(nav.stacks[.projects], [.projectDetail(projectID: "p1"),
+                                               .taskDetail(taskID: "01a03f47-4af6-753d-9109-a4440b1a71c4")])
+        XCTAssertEqual(nav.section, .tasks, "switching sections is the caller's, whose setter syncs the store")
+
+        nav.section = .projects
+        XCTAssertEqual(nav.selectedProjectID, "p1", "the project shows under the task")
+        XCTAssertEqual(nav.taskDetailOnTop, "01a03f47-4af6-753d-9109-a4440b1a71c4")
+
+        // A Tasks stack holding only that task is emptied, not left as an empty array.
+        var alone = NavState(section: .tasks, stacks: [.tasks: [.taskDetail(taskID: "t1")]])
+        alone.moveTaskOverProject("t1", project: "p1")
+        XCTAssertNil(alone.stacks[.tasks])
+        // A Tasks stack whose top is another page is left as it is.
+        var other = NavState(section: .tasks, stacks: [.tasks: [.taskDetail(taskID: "t2")]])
+        other.moveTaskOverProject("t1", project: "p1")
+        XCTAssertEqual(other.stacks[.tasks], [.taskDetail(taskID: "t2")])
+    }
+
     /// Leaving the section and coming back. The directory used to be the one push that did *not*
     /// survive this — `selectedSection`'s `didSet` dropped it by hand, because a boolean cannot ride
     /// a view being rebuilt the way a frame on a stack can. Now Tasks lands where you left it, like
