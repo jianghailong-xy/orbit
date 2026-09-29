@@ -114,8 +114,9 @@ final class SettingsStackWiringTests: XCTestCase {
     }
 
     /// The sheet moves a `NavigationStack` whose path IS Settings' stack in `NavState`, and registers
-    /// every frame that stack carries on its root — the runners list and a runner's record, the
-    /// `SettingsPage`s, and an account's record under Admin.
+    /// every frame that stack carries on its root — the runners list, a runner's record and the two
+    /// pages it pushes (an engine's, its name's), the `SettingsPage`s, and an account's record under
+    /// Admin.
     func testTheSheetsStackIsSettingsOwnStack() throws {
         let sheet = code(try slice(try appSource("Views/SettingsSheet.swift"),
                                    from: "struct SettingsSheet: View {", to: "/// The page a `SettingsPage` frame names."))
@@ -126,6 +127,8 @@ final class SettingsStackWiringTests: XCTestCase {
                                      to: "default:                          EmptyView()")
         for frame in ["case .settingsRunners:            RunnersSettingsList()",
                       "case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)",
+                      "case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)",
+                      "case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)",
                       "case .settingsPage(let page):     SettingsPageView(page: page)",
                       "case .userDetail(let userID):     AdminUserDetailView(userID: userID)"] {
             XCTAssertTrue(destinations.contains(frame), "the sheet renders \(frame)")
@@ -264,6 +267,7 @@ final class SettingsStackWiringTests: XCTestCase {
     /// The runners list the sheet pushes carries the same `runnerDetail` frame the Runners section's
     /// rows do, pushed by hand through `AppModel.push` — which lands on Settings' stack while the
     /// sheet is up. One frame type, two stacks: the stack on screen is what decides where it lands.
+    /// The same goes for the two pages a runner's record pushes, its engine's and its name's.
     func testTheRunnersListInsideSettingsPushesTheSameFrameTheRunnersSectionDoes() throws {
         let runners = try appSource("Views/SkillsRunnersView.swift")
         let settingsList = code(try slice(runners, from: "struct RunnersSettingsList: View {",
@@ -273,11 +277,16 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertFalse(settingsList.contains("NavigationLink"),
                        "and is not a link — a disclosure indicator here would be the odd one out "
                        + "against the section's identical list")
+        XCTAssertTrue(settingsList.contains(".foregroundStyle(Color.primary)"),
+                      "its label is the label colour: inside a button's label even `.primary` is the tint")
 
         let shell = code(try slice(try appSource("Views/CompactShell.swift"), from: "case .runners:",
                                    to: "// FOLLOWING"))
         XCTAssertTrue(shell.contains("case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)"),
                       "the Runners section renders that same frame — the reuse is the frame type")
+        XCTAssertTrue(shell.contains("RunnerEnginePage(runnerID: runnerID, engine: engine)")
+                        && shell.contains("RunnerNamePage(runnerID: runnerID)"),
+                      "and the pages a record pushes, on its own stack as on Settings'")
     }
 
     /// macOS keeps its one grouped form — in the Settings window and the main window's column — and
