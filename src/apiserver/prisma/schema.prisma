@@ -5674,6 +5674,8 @@ model WikiSpace {
   /// Its plan's versions and the changes proposed to it (0325).
   plans           WikiPlan[]
   planProposals   WikiPlanProposal[]
+  /// Its documents, written section by section from the confirmed plan (0326).
+  docs            WikiDoc[]
 
   /// The key every child's composite foreign key names.
   @@unique([id, ownerId], map: "wiki_space_id_owner_id_key")
@@ -6275,4 +6277,127 @@ model WikiPlanProposal {
   @@unique([id, ownerId], map: "wiki_plan_proposal_id_owner_id_key")
   @@index([spaceId, status, createdAt], map: "wiki_plan_proposal_space_id_status_idx")
   @@map("wiki_plan_proposal")
+}
+
+/// A document of a space (migration 0326, contract `docs`, criterion 9): written section by section from
+/// the plan its owner confirmed, every footnote pointing at a first-hand original with its verbatim quote.
+/// Named by the plan document's slug, stable from version to version. A view: never pushed, never a
+/// source, and nothing points at it.
+model WikiDoc {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  spaceId     String    @map("space_id") @db.Uuid
+  ownerId     String    @map("owner_id") @db.Uuid
+  space       WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_doc_space_fkey")
+  slug        String
+  /// The confirmed plan version it was last written from, and that version's document. History
+  /// references with no foreign key.
+  planId      String    @map("plan_id") @db.Uuid
+  planVersion Int       @map("plan_version")
+  planDocId   String    @map("plan_doc_id") @db.Uuid
+  /// `ok` | `needs_review`: more than 5% of its sentences state something no verified footnote backs.
+  status      String    @default("ok")
+  /// The origin/main commit its last write read the repository at.
+  repoSha     String    @map("repo_sha")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  sections WikiDocSection[]
+
+  @@unique([id, ownerId], map: "wiki_doc_id_owner_id_key")
+  @@unique([spaceId, slug], map: "wiki_doc_space_id_slug_key")
+  @@map("wiki_doc")
+}
+
+/// One written section of a document, named by the plan section's key. Rewritten whole, never edited:
+/// only when its material's fingerprint changed, or once `staleAt` says a sentence of it was withdrawn.
+model WikiDocSection {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  docId          String   @map("doc_id") @db.Uuid
+  ownerId        String   @map("owner_id") @db.Uuid
+  doc            WikiDoc  @relation(fields: [docId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_doc_section_doc_fkey")
+  key            String
+  /// The plan section it was written from. A history reference with no foreign key.
+  planSectionId  String   @map("plan_section_id") @db.Uuid
+  /// The runner's fingerprint of the section's plan definition and the material it gathered for it.
+  materialSha256 String   @map("material_sha256") @db.Char(64)
+  /// `[{ kind, text? }, …]`: paragraph and item blocks hold sentences; a heading or code block its text.
+  blocks         Json
+  /// The origin/main commit it was generated at: a maintenance run compares it with origin/main, and writes
+  /// again a section whose design documents, code or contracts changed since.
+  repoSha        String   @map("repo_sha")
+  model          String?
+  stats          Json     @default("{}")
+  generatedAt    DateTime @default(now()) @map("generated_at") @db.Timestamptz(3)
+  /// A sentence of it was withdrawn: the next maintenance run writes it again.
+  staleAt        DateTime? @map("stale_at") @db.Timestamptz(3)
+
+  sentences WikiDocSentence[]
+
+  @@unique([id, ownerId], map: "wiki_doc_section_id_owner_id_key")
+  @@unique([docId, key], map: "wiki_doc_section_doc_id_key_key")
+  @@map("wiki_doc_section")
+}
+
+/// One sentence of a written section, with its status (contract `docs.sentenceStatuses`).
+model WikiDocSentence {
+  id               String         @id @default(uuid(7)) @db.Uuid
+  sectionId        String         @map("section_id") @db.Uuid
+  ownerId          String         @map("owner_id") @db.Uuid
+  section          WikiDocSection @relation(fields: [sectionId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_doc_sentence_section_fkey")
+  /// Its place in the section, from 0, and the block it is in.
+  position         Int
+  block            Int
+  text             String
+  /// `sourced` | `transition` | `unsourced` | `unverified` | `withdrawn`.
+  status           String
+  /// For an unsourced sentence: the fact tokens no sourced sentence or heading of the document has.
+  newTokens        String[]       @default([]) @map("new_tokens")
+  withdrawnAt      DateTime?      @map("withdrawn_at") @db.Timestamptz(3)
+  /// The entry it came through, whose rejection, retirement or broken anchor withdrew it. No foreign key.
+  withdrawnEntryId String?        @map("withdrawn_entry_id") @db.Uuid
+  withdrawnReason  String?        @map("withdrawn_reason")
+
+  footnotes WikiDocFootnote[]
+
+  @@unique([id, ownerId], map: "wiki_doc_sentence_id_owner_id_key")
+  @@unique([sectionId, position], map: "wiki_doc_sentence_section_id_position_key")
+  @@map("wiki_doc_sentence")
+}
+
+/// One footnote of a sentence: a first-hand original, where in it, the verbatim quote, and how it was
+/// checked (contract `docs.footnotes`).
+model WikiDocFootnote {
+  id         String          @id @default(uuid(7)) @db.Uuid
+  sentenceId String          @map("sentence_id") @db.Uuid
+  ownerId    String          @map("owner_id") @db.Uuid
+  sentence   WikiDocSentence @relation(fields: [sentenceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_doc_footnote_sentence_fkey")
+  position   Int
+  /// `design_doc` | `code` | `contract`, or a record: `turn` | `event` | `tool_call` | `task` |
+  /// `task_comment` | `approval` | `owner_decision` | `merge_receipt` | `note`.
+  kind       String
+  /// A repository path, or the record's id. No foreign key.
+  ref        String
+  /// A repository original's commit and lines: path@sha#Lstart-end.
+  sha        String?
+  lineStart  Int?            @map("line_start")
+  lineEnd    Int?            @map("line_end")
+  /// Where a record's quote was found, in code points of its redacted text.
+  charStart  Int?            @map("char_start")
+  charEnd    Int?            @map("char_end")
+  /// A repository original's section and symbol; a record's session, number, time and label.
+  locator    Json            @default("{}")
+  /// The verbatim quote, redacted; NULL when none was given.
+  quote      String?
+  /// The lines a repository quote was taken from, as the runner read them.
+  excerpt    String?
+  /// `verified` | `not_found` | `no_quote` | `unresolved`.
+  verdict    String
+  /// `server` (a record, read again) | `runner` (a repository original, at `sha`).
+  checkedBy  String          @map("checked_by")
+  /// The entry the original was found through. A history reference with no foreign key.
+  viaEntryId String?         @map("via_entry_id") @db.Uuid
+
+  @@unique([id, ownerId], map: "wiki_doc_footnote_id_owner_id_key")
+  @@unique([sentenceId, position], map: "wiki_doc_footnote_sentence_id_position_key")
+  @@map("wiki_doc_footnote")
 }

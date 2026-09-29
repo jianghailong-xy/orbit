@@ -427,8 +427,8 @@ export function splitSentences(line: string): string[] {
   return out;
 }
 
-/** Footnote markers out of prose, and the space a marker leaves before punctuation. */
-function withoutMarkers(text: string): string {
+/** Footnote markers out of prose, and the space a marker leaves before punctuation. The documents cut theirs the same way (`wiki-docs.ts`). */
+export function withoutMarkers(text: string): string {
   return outsideCode(text)
     .map((segment) => (segment.code ? segment.text : segment.text.replace(/\s*\[\d{1,3}\]/gu, '')))
     .join('')
@@ -436,7 +436,8 @@ function withoutMarkers(text: string): string {
     .trim();
 }
 
-function markersOf(text: string): number[] {
+/** The footnote numbers a piece of prose carries, outside its code spans, in order. */
+export function markersOf(text: string): number[] {
   const out: number[] = [];
   for (const segment of outsideCode(text)) {
     if (segment.code) continue;
