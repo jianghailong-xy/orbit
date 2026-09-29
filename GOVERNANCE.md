@@ -36,6 +36,15 @@ useful.
 Maintainers choose release scope, confirm the required checks, write human-readable release notes, and publish
 artifacts through the repository's release workflow. A release must have one unambiguous version across its
 tag, application metadata, artifacts, and release notes.
+See the [release process](docs/release-process.md) for the public checklist and the [community guide](COMMUNITY.md)
+for response targets and channel ownership.
+
+## Community operations
+
+Questions, early ideas, release feedback, and showcases belong in [GitHub Discussions](https://github.com/jianghailong-xy/orbit/discussions);
+reproducible bugs and scoped work belong in Issues. Maintainers keep the [public roadmap](ROADMAP.md), labels,
+Issue Forms, and good-first-issue list current so that contributors can find an independently reviewable entry
+point. The response targets in the community guide are volunteer targets, not a support SLA.
 
 ## Maintainer responsibilities
 
