@@ -21,7 +21,22 @@ const LEASE_GENERATION = '55555555-5555-4555-8555-555555555555';
 const PROJECT = {
   id: '44444444-4444-4444-8444-444444444444',
   title: 'Crawl',
+  coordinatorEnabled: false,
 };
+
+/** The context key for PROJECT, under its fixture Automatic setting unless a test flips it. */
+function contextKeyFor(
+  leaseGeneration = LEASE_GENERATION,
+  contextEpoch = 0,
+  coordinatorEnabled = PROJECT.coordinatorEnabled,
+): string {
+  return buildCoordinatorDeliveryContextKey(
+    PROJECT.id,
+    leaseGeneration,
+    contextEpoch,
+    coordinatorEnabled,
+  );
+}
 
 type Dequeue = (
   sessionId: string,
@@ -143,13 +158,15 @@ for (const kind of ['message', 'steer'] as const) {
 
     assert.ok(turn?.content?.startsWith(original));
     assert.ok(
-      turn?.content?.includes(buildCoordinatorDeliveryInstructions(PROJECT.id)),
+      turn?.content?.includes(
+        buildCoordinatorDeliveryInstructions(PROJECT.id, PROJECT.coordinatorEnabled),
+      ),
     );
     assert.match(turn?.content ?? '', /<\/orbit_project_coordinator_context>$/);
     assert.deepEqual(
       (sessionReads[0] as { select: { coordinatorForProject: unknown } }).select
         .coordinatorForProject,
-      { select: { id: true } },
+      { select: { id: true, coordinatorEnabled: true } },
     );
     assert.equal(
       (sessionReads[0] as { select: { titleBeforeProjectManagement: unknown } }).select
@@ -170,18 +187,14 @@ test('a lifecycle-capable runner attaches and stamps a promoted coordinator once
   assert.deepEqual(turnUpdates, [{
     where: { id: 'turn-1', sessionId: SESSION_ID, status: 'IN_FLIGHT' },
     data: {
-      coordinatorContextKey: buildCoordinatorDeliveryContextKey(
-        PROJECT.id,
-        LEASE_GENERATION,
-        0,
-      ),
+      coordinatorContextKey: contextKeyFor(),
     },
   }]);
 });
 
 test('an acknowledged coordinator context is not repeated on the next warm turn', async () => {
   const content = 'What changed?';
-  const contextAckKey = buildCoordinatorDeliveryContextKey(PROJECT.id, LEASE_GENERATION, 0);
+  const contextAckKey = contextKeyFor();
   const { dequeue, turnUpdates } = harness({ content, contextAckKey });
 
   assert.equal((await sparseDequeue(dequeue))?.content, content);
@@ -190,7 +203,7 @@ test('an acknowledged coordinator context is not repeated on the next warm turn'
 
 test('Codex uses the same sparse lifecycle only with its provider-matched capability', async () => {
   const content = 'What changed?';
-  const contextAckKey = buildCoordinatorDeliveryContextKey(PROJECT.id, LEASE_GENERATION, 0);
+  const contextAckKey = contextKeyFor();
   const { dequeue, turnUpdates } = harness({
     content,
     contextAckKey,
@@ -205,7 +218,7 @@ test('Codex uses the same sparse lifecycle only with its provider-matched capabi
 });
 
 test('a lifecycle capability for another runtime cannot suppress legacy delivery', async () => {
-  const contextAckKey = buildCoordinatorDeliveryContextKey(PROJECT.id, LEASE_GENERATION, 0);
+  const contextAckKey = contextKeyFor();
   const { dequeue } = harness({ contextAckKey, provider: AgentProvider.CODEX });
 
   const turn = await sparseDequeue(dequeue, SESSION_CLAUDE_COORDINATOR_CONTEXT_V1);
@@ -215,7 +228,7 @@ test('a lifecycle capability for another runtime cannot suppress legacy delivery
 
 for (const provider of [AgentProvider.KIMI, AgentProvider.OPENCODE]) {
   test(`${provider} stays on correctness-first delivery without a compaction contract`, async () => {
-    const contextAckKey = buildCoordinatorDeliveryContextKey(PROJECT.id, LEASE_GENERATION, 0);
+    const contextAckKey = contextKeyFor();
     const { dequeue } = harness({ contextAckKey, provider });
 
     const turn = await dequeue(
@@ -235,25 +248,90 @@ for (const provider of [AgentProvider.KIMI, AgentProvider.OPENCODE]) {
 
 test('a new engine generation invalidates the previous acknowledgement', async () => {
   const oldLease = '66666666-6666-4666-8666-666666666666';
-  const contextAckKey = buildCoordinatorDeliveryContextKey(PROJECT.id, oldLease, 0);
+  const contextAckKey = contextKeyFor(oldLease);
   const { dequeue } = harness({ contextAckKey });
 
   assert.match((await sparseDequeue(dequeue))?.content ?? '', /<orbit_project_coordinator_context>/);
 });
 
 test('a compaction epoch invalidates the previous acknowledgement', async () => {
-  const contextAckKey = buildCoordinatorDeliveryContextKey(PROJECT.id, LEASE_GENERATION, 0);
+  const contextAckKey = contextKeyFor();
   const { dequeue, turnUpdates } = harness({ contextAckKey, contextEpoch: 42 });
 
   assert.match((await sparseDequeue(dequeue))?.content ?? '', /<orbit_project_coordinator_context>/);
   assert.equal(
     (turnUpdates[0] as { data: { coordinatorContextKey: string } }).data.coordinatorContextKey,
-    buildCoordinatorDeliveryContextKey(PROJECT.id, LEASE_GENERATION, 42),
+    contextKeyFor(LEASE_GENERATION, 42),
   );
 });
 
+// The project's Automatic switch picks which instruction text a coordinator is given, so what it
+// acknowledged under one setting is not what it needs under the other. The key binds the rendered
+// text, and that is the whole mechanism: flip the switch and the key changes, so the next top-level
+// turn carries the instructions again — in the words for the setting the project has now.
+for (const [before, after] of [[false, true], [true, false]] as const) {
+  test(`turning Automatic ${after ? 'on' : 'off'} changes the key and re-delivers the instructions`, async () => {
+    const acknowledged = contextKeyFor(LEASE_GENERATION, 0, before);
+    const flipped = contextKeyFor(LEASE_GENERATION, 0, after);
+    assert.notEqual(flipped, acknowledged);
+    const content = 'What changed?';
+
+    // Unflipped, the same acknowledgement keeps the next turn bare: it is the flip that re-delivers.
+    const unflipped = harness({
+      content,
+      contextAckKey: acknowledged,
+      project: { ...PROJECT, coordinatorEnabled: before },
+    });
+    assert.equal((await sparseDequeue(unflipped.dequeue))?.content, content);
+    assert.deepEqual(unflipped.turnUpdates, []);
+
+    const { dequeue, turnUpdates } = harness({
+      content,
+      contextAckKey: acknowledged,
+      project: { ...PROJECT, coordinatorEnabled: after },
+    });
+    const delivered = (await sparseDequeue(dequeue))?.content ?? '';
+
+    assert.ok(delivered.startsWith(content));
+    assert.ok(delivered.includes(buildCoordinatorDeliveryInstructions(PROJECT.id, after)));
+    assert.equal(delivered.includes(buildCoordinatorDeliveryInstructions(PROJECT.id, before)), false);
+    assert.deepEqual(turnUpdates, [{
+      where: { id: 'turn-1', sessionId: SESSION_ID, status: 'IN_FLIGHT' },
+      data: { coordinatorContextKey: flipped },
+    }]);
+  });
+}
+
+test('a project-page opening rendered before Automatic flipped does not stand in for the context', async () => {
+  const opening = buildCoordinatorOpening(PROJECT.title, PROJECT.id, false);
+  const { dequeue, turnUpdates } = harness({
+    content: opening,
+    prompt: opening,
+    titleBeforeProjectManagement: null,
+    clientTurnId: `initial-${SESSION_ID}`,
+    project: { ...PROJECT, coordinatorEnabled: true },
+  });
+
+  const delivered = (await sparseDequeue(dequeue))?.content ?? '';
+
+  assert.ok(delivered.startsWith(opening));
+  assert.ok(delivered.includes(buildCoordinatorDeliveryInstructions(PROJECT.id, true)));
+  assert.deepEqual(turnUpdates, [{
+    where: { id: 'turn-1', sessionId: SESSION_ID, status: 'IN_FLIGHT' },
+    data: { coordinatorContextKey: contextKeyFor(LEASE_GENERATION, 0, true) },
+  }]);
+});
+
+test('a legacy runner is given the text for the project’s Automatic setting as it is now', async () => {
+  const { dequeue } = harness({ project: { ...PROJECT, coordinatorEnabled: true } });
+
+  const turn = await dequeue(SESSION_ID, RUNNER_ID, LEASE_GENERATION);
+
+  assert.ok(turn?.content?.includes(buildCoordinatorDeliveryInstructions(PROJECT.id, true)));
+});
+
 test('a lost inbox response reattaches context when the same turn is leased again', async () => {
-  const contextKey = buildCoordinatorDeliveryContextKey(PROJECT.id, LEASE_GENERATION, 0);
+  const contextKey = contextKeyFor();
   const { dequeue, turnUpdates } = harness({ turnContextKey: contextKey });
 
   assert.match((await sparseDequeue(dequeue))?.content ?? '', /<orbit_project_coordinator_context>/);
@@ -269,23 +347,25 @@ test('a capable steer neither repeats nor consumes the top-level context marker'
 });
 
 test('delivery keeps the project-page coordinator boundaries without repeating its mutable title', () => {
-  const opening = buildCoordinatorOpening(PROJECT.title, PROJECT.id);
-  const delivered = buildCoordinatorDeliveryInstructions(PROJECT.id);
+  for (const coordinatorEnabled of [false, true]) {
+    const opening = buildCoordinatorOpening(PROJECT.title, PROJECT.id, coordinatorEnabled);
+    const delivered = buildCoordinatorDeliveryInstructions(PROJECT.id, coordinatorEnabled);
 
-  assert.equal(delivered.slice(delivered.indexOf('\n\n')), opening.slice(opening.indexOf('\n\n')));
-  assert.match(delivered, new RegExp(uuidToBase62(PROJECT.id)));
-  assert.doesNotMatch(delivered, new RegExp(PROJECT.title));
-  assert.match(delivered, /不是用来替它干活/);
-  assert.match(delivered, /先读再说/);
-  assert.match(delivered, /账号所有者通道记录/);
-  assert.match(delivered, /直接指挥 runner，都不在你手上/);
+    assert.equal(delivered.slice(delivered.indexOf('\n\n')), opening.slice(opening.indexOf('\n\n')));
+    assert.match(delivered, new RegExp(uuidToBase62(PROJECT.id)));
+    assert.doesNotMatch(delivered, new RegExp(PROJECT.title));
+    assert.match(delivered, /不是用来替它干活/);
+    assert.match(delivered, /先读再说/);
+    assert.match(delivered, /账号所有者通道记录/);
+    assert.match(delivered, /直接指挥 runner，都不在你手上/);
+  }
 });
 
 test('a project-page coordinator does not receive a duplicate of its opening', async () => {
   const content = 'What changed since yesterday?';
   const { dequeue } = harness({
     content,
-    prompt: buildCoordinatorOpening(PROJECT.title, PROJECT.id),
+    prompt: buildCoordinatorOpening(PROJECT.title, PROJECT.id, PROJECT.coordinatorEnabled),
     titleBeforeProjectManagement: null,
   });
 
@@ -293,7 +373,7 @@ test('a project-page coordinator does not receive a duplicate of its opening', a
 });
 
 test('a capable project-page opening is stamped without appending a duplicate', async () => {
-  const opening = buildCoordinatorOpening(PROJECT.title, PROJECT.id);
+  const opening = buildCoordinatorOpening(PROJECT.title, PROJECT.id, PROJECT.coordinatorEnabled);
   const { dequeue, turnUpdates } = harness({
     content: opening,
     prompt: opening,
@@ -306,7 +386,7 @@ test('a capable project-page opening is stamped without appending a duplicate', 
 });
 
 test('a dedicated coordinator is restored after its runtime context changes', async () => {
-  const opening = buildCoordinatorOpening(PROJECT.title, PROJECT.id);
+  const opening = buildCoordinatorOpening(PROJECT.title, PROJECT.id, PROJECT.coordinatorEnabled);
   const content = 'Continue after restart';
   const { dequeue } = harness({
     content,
@@ -328,7 +408,7 @@ test('promotion provenance wins even if the old prompt happened to contain the o
   const content = 'Please implement the crawler.';
   const { dequeue } = harness({
     content,
-    prompt: buildCoordinatorOpening(PROJECT.title, PROJECT.id),
+    prompt: buildCoordinatorOpening(PROJECT.title, PROJECT.id, PROJECT.coordinatorEnabled),
   });
 
   assert.match(

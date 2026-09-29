@@ -15,6 +15,7 @@ function makeController(
   coordinatorContextKey: string | null = null,
   turnLeaseGeneration = LEASE_GENERATION,
   coordinatorContextEpoch = 0,
+  coordinatorEnabled = false,
 ) {
   const sessionId = '11111111-1111-4111-8111-111111111111';
   const runnerId = '22222222-2222-4222-8222-222222222222';
@@ -73,7 +74,7 @@ function makeController(
         taskId: session.taskId,
         inboxLeaseGeneration: LEASE_GENERATION,
         coordinatorContextEpoch,
-        coordinatorForProject: coordinatorContextKey ? { id: PROJECT_ID } : null,
+        coordinatorForProject: coordinatorContextKey ? { id: PROJECT_ID, coordinatorEnabled } : null,
       }),
       findUnique: async () => ({ status: session.status }),
       updateMany: async ({ data }: { data: { status: RunStatus } }) => {
@@ -168,7 +169,7 @@ test('turn completion persists a healed base with the clean snapshot omitted by 
 });
 
 test('a successful stamped turn acknowledges coordinator context in the existing park write', async () => {
-  const contextKey = buildCoordinatorDeliveryContextKey(PROJECT_ID, LEASE_GENERATION, 0);
+  const contextKey = buildCoordinatorDeliveryContextKey(PROJECT_ID, LEASE_GENERATION, 0, false);
   const h = makeController(0, null, contextKey);
 
   await h.controller.turnComplete({ id: h.runnerId }, h.sessionId, {
@@ -181,7 +182,7 @@ test('a successful stamped turn acknowledges coordinator context in the existing
 });
 
 test('a stale generation cannot acknowledge coordinator context', async () => {
-  const currentKey = buildCoordinatorDeliveryContextKey(PROJECT_ID, LEASE_GENERATION, 0);
+  const currentKey = buildCoordinatorDeliveryContextKey(PROJECT_ID, LEASE_GENERATION, 0, false);
   const staleGeneration = '55555555-5555-4555-8555-555555555555';
   const h = makeController(0, null, currentKey, staleGeneration);
 
@@ -200,6 +201,7 @@ test('a pre-compaction turn cannot acknowledge the current coordinator context e
     PROJECT_ID,
     LEASE_GENERATION,
     staleEpoch,
+    false,
   );
   const h = makeController(0, null, staleKey, LEASE_GENERATION, currentEpoch);
 
@@ -211,9 +213,34 @@ test('a pre-compaction turn cannot acknowledge the current coordinator context e
   assert.equal('coordinatorContextAckKey' in h.sessionWrites[0], false);
 });
 
+// The dequeue stamped the text for the setting it read; completion recomputes the key from the
+// setting the project has now. A flip in between leaves the context unacknowledged, so the next
+// turn carries the instructions for the new setting.
+for (const [stampedUnder, projectNow] of [[false, true], [true, false], [true, true]] as const) {
+  const flipped = stampedUnder !== projectNow;
+  test(`a turn stamped with Automatic ${stampedUnder ? 'on' : 'off'} ${
+    flipped ? 'cannot acknowledge' : 'acknowledges'
+  } the context with it ${projectNow ? 'on' : 'off'}`, async () => {
+    const stamped = buildCoordinatorDeliveryContextKey(PROJECT_ID, LEASE_GENERATION, 0, stampedUnder);
+    const h = makeController(0, null, stamped, LEASE_GENERATION, 0, projectNow);
+
+    await h.controller.turnComplete({ id: h.runnerId }, h.sessionId, {
+      turnId: 'turn-1',
+      status: SharedRunStatus.SUCCEEDED,
+    });
+
+    assert.equal(h.sessionWrites.length, 1);
+    if (flipped) {
+      assert.equal('coordinatorContextAckKey' in h.sessionWrites[0], false);
+    } else {
+      assert.equal(h.sessionWrites[0].coordinatorContextAckKey, stamped);
+    }
+  });
+}
+
 for (const status of [SharedRunStatus.FAILED, SharedRunStatus.INTERRUPTED] as const) {
   test(`${status} does not acknowledge coordinator context`, async () => {
-    const contextKey = buildCoordinatorDeliveryContextKey(PROJECT_ID, LEASE_GENERATION, 0);
+    const contextKey = buildCoordinatorDeliveryContextKey(PROJECT_ID, LEASE_GENERATION, 0, false);
     const h = makeController(0, null, contextKey);
 
     await h.controller.turnComplete({ id: h.runnerId }, h.sessionId, {

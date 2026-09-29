@@ -351,10 +351,12 @@ test('a judgment session is filed under a different title from the conversation'
 /**
  * The other half of "keep the person's coordinator untouched": this unit did not edit that opening
  * to make one file serve both. If a later change makes the conversational opening say something a
- * judgment needs, the answer is a second sentence here, not a shared one there.
+ * judgment needs, the answer is a second sentence here, not a shared one there. (With the project's
+ * Automatic switch on it says what the switch automates instead, and `coordinator-opening.spec.ts`
+ * holds that text.)
  */
 test('the conversation a person opens still opens the way 60dece5e restored it', () => {
-  const conversational = buildCoordinatorOpening('协调重做', PROJECT);
+  const conversational = buildCoordinatorOpening('协调重做', PROJECT, false);
   assert.match(conversational, /没有任何自动的环会替你决定什么时候动/);
   assert.match(conversational, /推进靠的是跟人对话/);
   assert.match(conversational, /先读再说/);

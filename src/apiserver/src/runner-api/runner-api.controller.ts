@@ -146,7 +146,7 @@ import { ProjectAcceptanceService } from '../projects/project-acceptance.service
 import {
   appendCoordinatorDeliveryContext,
   buildCoordinatorDeliveryContextKey,
-  hasCoordinatorOpening,
+  coordinatorOpeningIsCurrent,
   wrapCoordinatorDeliveryContext,
 } from '../projects/coordinator-opening';
 import { appendWikiContext } from '../wiki/wiki-push';
@@ -3050,7 +3050,9 @@ export class RunnerApiController {
             titleBeforeProjectManagement: true,
             coordinatorContextEpoch: true,
             coordinatorContextAckKey: true,
-            coordinatorForProject: { select: { id: true } },
+            // The switch picks which instruction text is delivered, and so is part of the context
+            // key — read here and in turnComplete alike, so both sides compute the same key.
+            coordinatorForProject: { select: { id: true, coordinatorEnabled: true } },
             // What the wiki context below is decided from: which space this session's workspace is
             // bound to, and the three things about a run that take it out of the push entirely —
             // a verifier, a foreman, or a judgment session (design §7.3).
@@ -3162,24 +3164,26 @@ export class RunnerApiController {
               sessionContext.coordinatorForProject,
             );
           } else if (t.kind !== 'steer' && sessionContext.coordinatorForProject) {
-            const projectId = sessionContext.coordinatorForProject.id;
+            const { id: projectId, coordinatorEnabled } = sessionContext.coordinatorForProject;
             const contextKey = buildCoordinatorDeliveryContextKey(
               projectId,
               leaseGeneration!,
               sessionContext.coordinatorContextEpoch,
+              coordinatorEnabled,
             );
             if (sessionContext.coordinatorContextAckKey !== contextKey) {
               // A dedicated project-page coordinator's initial turn already IS the canonical
               // opening. Stamp it for acknowledgement without appending a second copy. A resumed
               // delivery is not treated as that opening: its content is a continuation nudge and
-              // the replacement engine must receive the standing context again.
+              // the replacement engine must receive the standing context again. Nor is an opening
+              // rendered before the Automatic switch flipped: it is not the text this key names.
               const openingAlreadyPresent =
                 !runtimeStarted
                 && t.clientTurnId === `initial-${sessionId}`
                 && sessionContext.titleBeforeProjectManagement == null
-                && hasCoordinatorOpening(sessionContext.prompt, projectId);
+                && coordinatorOpeningIsCurrent(sessionContext.prompt, projectId, coordinatorEnabled);
               if (!openingAlreadyPresent) {
-                content = wrapCoordinatorDeliveryContext(content, projectId);
+                content = wrapCoordinatorDeliveryContext(content, projectId, coordinatorEnabled);
               }
               if (t.coordinatorContextKey !== contextKey) {
                 await tx.conversationTurn.updateMany({
@@ -3673,7 +3677,7 @@ export class RunnerApiController {
           assignedRunnerId: true,
           inboxLeaseGeneration: true,
           coordinatorContextEpoch: true,
-          coordinatorForProject: { select: { id: true } },
+          coordinatorForProject: { select: { id: true, coordinatorEnabled: true } },
           mergeStatus: true,
           mergedSourceSha: true,
           // Armed by the event batch that carried this turn's error (the runner flushes events
@@ -3712,14 +3716,16 @@ export class RunnerApiController {
       });
       // A dequeue only proposes that context was delivered. The successful top-level turn is its
       // acknowledgement. Recompute from current state under the Session lock: a late completion
-      // from an old process, a pre-compaction turn, a re-bound project or an older instruction
-      // body cannot acknowledge the context needed now.
+      // from an old process, a pre-compaction turn, a re-bound project, an older instruction
+      // body or one rendered before the Automatic switch flipped cannot acknowledge the context
+      // needed now.
       const expectedCoordinatorContextKey =
         current.coordinatorForProject && current.inboxLeaseGeneration
           ? buildCoordinatorDeliveryContextKey(
               current.coordinatorForProject.id,
               current.inboxLeaseGeneration,
               current.coordinatorContextEpoch,
+              current.coordinatorForProject.coordinatorEnabled,
             )
           : null;
       const acknowledgedCoordinatorContextKey =
