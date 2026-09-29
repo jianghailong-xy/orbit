@@ -49,6 +49,8 @@ import { WikiController } from '../wiki/wiki.controller';
 import { WikiArticlesController } from '../wiki/wiki-articles.controller';
 import { WikiRunsController } from '../wiki/wiki-runs.controller';
 import { WikiHealthController } from '../wiki/wiki-health.controller';
+import { WikiPlanController } from '../wiki/wiki-plan.controller';
+import { RunnerWikiPlanController } from '../runner-api/runner-wiki-plan.controller';
 
 // Every id crossing the HTTP boundary arrives from a URL, a human, or a model — pasted out of a
 // client link, echoed from a previous tool result, or invented. The columns behind them are all
@@ -134,6 +136,10 @@ const CONTROLLERS = [
   WikiRunsController,
   // A space's health (contract `maintenance.health`): what the Wiki home's status line reads.
   WikiHealthController,
+  // The plan (migration 0325, contract `plan`): the owner's reads, edit, confirmation and decisions,
+  // and a maintenance run's read, draft and proposal. `version` is a plan version's number.
+  WikiPlanController,
+  RunnerWikiPlanController,
 ];
 
 // Nest records one entry per decorated argument under `__routeArguments__`, keyed

@@ -7,7 +7,7 @@ import { notNoiseSql } from './system-noise';
 /**
  * The noise predicate's third copy, and the only one nothing guarded.
  *
- * `isNoiseSystemEvent` and `notNoiseSql` are held in step by system-noise.spec.ts. The partial
+ * `isNoiseSystemEvent` and `notNoiseSql` are held in step by system-noise-sql-parity.spec.ts. The partial
  * index `run_event_renderable_idx` (migration 0069) is that same predicate materialised again, and
  * a drift there is invisible: Postgres uses a partial index only when it can prove the query's
  * predicate implies the index's, and the four read paths interpolate `notNoiseSql` verbatim

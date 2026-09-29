@@ -9,7 +9,7 @@ import { RunEventType } from '@orbit/shared';
  * `resumed`. `init`/`resumed` are the two with real consumers: runtimeInitSessionId reads the
  * runtime's own session id off them, and `resumed` clears the running background/sub-workspace sets.
  */
-const MEANINGFUL_SYSTEM_SUBTYPES = new Set(['init', 'resumed']);
+export const MEANINGFUL_SYSTEM_SUBTYPES: ReadonlySet<string> = new Set(['init', 'resumed']);
 
 /**
  * The three keys a bare progress ping carries — `{model, subtype, sessionId}`, and nothing else.
@@ -17,7 +17,7 @@ const MEANINGFUL_SYSTEM_SUBTYPES = new Set(['init', 'resumed']);
  * id already recorded on the session (from the init/resumed event), so an event holding just
  * these conveys nothing that isn't already known elsewhere.
  */
-const PING_KEYS = new Set(['model', 'subtype', 'sessionId']);
+export const PING_KEYS: ReadonlySet<string> = new Set(['model', 'subtype', 'sessionId']);
 
 /**
  * Is this a `system` event carrying nothing anyone could use? These are ~92% of all stored
@@ -57,8 +57,9 @@ export function isNoiseSystemEvent(e: { type: string; payload?: unknown }): bool
  * and make `hasMore` describe the wrong thing.
  *
  * `payload - 'model' - 'subtype' - 'sessionId' = '{}'` is the jsonb spelling of "holds nothing
- * but the ping keys". Kept literally in step with the function above; system-noise.spec.ts
- * checks both against the same payloads.
+ * but the ping keys". Kept literally in step with the function above by
+ * system-noise-sql-parity.spec.ts, which reads this text apart and holds its two slots to
+ * MEANINGFUL_SYSTEM_SUBTYPES and PING_KEYS — those two are exported for that spec and nothing else.
  */
 export const notNoiseSql = Prisma.sql`NOT (
   type = 'system'

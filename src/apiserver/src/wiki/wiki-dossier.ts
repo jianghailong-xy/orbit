@@ -4,11 +4,13 @@ import {
   wikiEstimateTokens,
   type WikiDossier,
   type WikiDossierSource,
+  type WikiDossierSpan,
   type WikiSourceKind,
 } from '@orbit/shared';
 import { sha256 } from '../common/crypto.util';
 import { redactSecrets } from '../common/secret-redaction';
 import { isOrbitAuthoredTurn } from '../sessions/orbit-authored-turn';
+import { approvalParts, hasText, partsText, runEventParts, toolCallParts, type RecordPart } from './wiki-verify-evidence';
 
 /**
  * One session's DOSSIER: what a Wiki maintenance run reads instead of the session itself (design §8.2
@@ -20,6 +22,15 @@ import { isOrbitAuthoredTurn } from '../sessions/orbit-authored-turn';
  * blockers the owner resolved — scored for signals and packed into at most 8,000 estimated tokens.
  * Each line starts with a short name (`L12`) and `sources` maps every name to the first-hand record it
  * came from, which is what a proposal made from the dossier cites.
+ *
+ * EVERY LINE SAYS WHERE ITS WORDS ARE (criterion 2, revision 2). Beside its record, each line carries
+ * spans: where in that record's text — the one text a quote of it is checked against
+ * (`wiki-verify-evidence.ts`), redacted — each piece of its words was copied from, in code points, with
+ * the words found there. A line copied whole is one span. A line the dossier compressed points at the
+ * pieces of the record it was cut from: a tool call at its command and at its result's first and last
+ * line, a message cut short at the part it kept, a thought at its signal sentences. A proposal then
+ * quotes the record's own words at a known place rather than the dossier's shorthand for them, and
+ * whatever reads the proposal can go back to the record and find them there, word for word.
  *
  * WHERE THE RULES COME FROM. This is the demo's deterministic half (task 34VS7P8eDpXiMzpLZ8PY4:
  * `prepare.py` for the timeline, `pack.py` packer v2 for the scoring and the packing), written again in
@@ -35,8 +46,8 @@ import { isOrbitAuthoredTurn } from '../sessions/orbit-authored-turn';
  * ordered by a total key (a sequence number, a time and an id), nothing reads the clock, and the only
  * inputs are the records and the literals.
  *
- * NEVER STORED. The text is handed to the maintenance run and forgotten; what is kept is the sources and
- * the hash (`wiki_dossier`, hard constraint 4).
+ * NEVER STORED. The text is handed to the maintenance run and forgotten; what is kept is the sources — each
+ * span's place, never its words — and the hash (`wiki_dossier`, hard constraint 4).
  */
 
 // ── The records one session's dossier is made from ──────────────────────────────────────────────
@@ -90,6 +101,8 @@ export interface DossierEventRow {
   toolName: string | null;
   command: string | null;
   filePath: string | null;
+  /** Which key of the input the path is: `file_path`, `path` or `notebook_path`. */
+  filePathKey: string | null;
   pattern: string | null;
   background: string | null;
   input: string | null;
@@ -146,7 +159,10 @@ export interface DossierRecords {
   turns: DossierTurnRow[];
   approvals: DossierApprovalRow[];
   events: DossierEventRow[];
-  /** tool_use id → tool_call id, for the tool lines to cite the row whose output is the result. */
+  /**
+   * tool_use id → tool_call id, for the tool lines to cite the row that holds the call and its result
+   * together — the record a quote of either is found in (`toolCallText`).
+   */
   toolCallIds: Map<string, string>;
   task: DossierTaskRow | null;
   comments: DossierCommentRow[];
@@ -164,10 +180,20 @@ const SKIPPED_TOOLS = new Set(['TodoWrite', 'TaskCreate', 'TaskUpdate', 'TaskLis
 const SETTLED_TASK_STATUSES = new Set(['DONE', 'CANCELLED', 'FAILED']);
 
 /**
+ * Every character but the ones JavaScript's `trim` takes off: the SQL half of `hasText`, so that a tool result
+ * is read here block for block as `toolOutputText` reads it.
+ */
+const TEXT_NOT_BLANK = '[^\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]';
+
+/**
  * Read one session's records for its dossier, or null when the owner has no such session.
  *
  * Long values are cut in SQL before they cross the wire — a tool result or a thought can run to
  * megabytes, and the dossier keeps a line of each — at lengths well above anything the packer keeps.
+ * What a line's position counts in is the record's whole text, so the fields a record's text is made of
+ * besides its prose — an approval's note and plan, a background task's command and summary, a blocker's
+ * question and answer — are read whole; they are short. A tool call's input and output are read whole only
+ * for the calls the packed dossier carries (`toolRecords`).
  */
 export async function loadDossierRecords(reader: DossierReader, ownerId: string, sessionId: string): Promise<DossierRecords | null> {
   const [session] = await reader.$queryRaw<DossierSessionRow[]>`
@@ -186,10 +212,10 @@ export async function loadDossierRecords(reader: DossierReader, ownerId: string,
      ORDER BY t."seq"`;
 
   const approvals = await reader.$queryRaw<DossierApprovalRow[]>`
-    SELECT a."id"::text AS "id", a."tool_name" AS "toolName", a."status", left(a."message", 3000) AS "message",
+    SELECT a."id"::text AS "id", a."tool_name" AS "toolName", a."status", a."message" AS "message",
            a."answers" AS "answers",
            CASE WHEN a."tool_name" = 'AskUserQuestion' THEN a."input"->'questions' END AS "questions",
-           CASE WHEN a."tool_name" = 'ExitPlanMode' THEN left(a."input"->>'plan', 5000) END AS "plan",
+           CASE WHEN a."tool_name" = 'ExitPlanMode' AND jsonb_typeof(a."input"->'plan') = 'string' THEN a."input"->>'plan' END AS "plan",
            CASE WHEN a."tool_name" NOT IN ('AskUserQuestion', 'ExitPlanMode') THEN left(a."input"::text, 400) END AS "input",
            a."created_at" AS "createdAt", a."decided_at" AS "decidedAt"
       FROM "approval" a
@@ -205,6 +231,10 @@ export async function loadDossierRecords(reader: DossierReader, ownerId: string,
            CASE WHEN e."type" = 'tool_use' THEN left(e."payload"->'input'->>'command', 1500) END AS "command",
            CASE WHEN e."type" = 'tool_use' THEN left(coalesce(e."payload"->'input'->>'file_path', e."payload"->'input'->>'path',
                 e."payload"->'input'->>'notebook_path'), 400) END AS "filePath",
+           CASE WHEN e."type" = 'tool_use' THEN CASE
+                WHEN e."payload"->'input'->>'file_path' IS NOT NULL THEN 'file_path'
+                WHEN e."payload"->'input'->>'path' IS NOT NULL THEN 'path'
+                WHEN e."payload"->'input'->>'notebook_path' IS NOT NULL THEN 'notebook_path' END END AS "filePathKey",
            CASE WHEN e."type" = 'tool_use' THEN left(e."payload"->'input'->>'pattern', 300) END AS "pattern",
            CASE WHEN e."type" = 'tool_use' THEN e."payload"->'input'->>'run_in_background' END AS "background",
            CASE WHEN e."type" = 'tool_use' AND coalesce(e."payload"->>'name', '') <> ALL (${DESCRIBED_TOOLS}::text[])
@@ -213,17 +243,23 @@ export async function loadDossierRecords(reader: DossierReader, ownerId: string,
            CASE WHEN e."type" = 'tool_result' THEN e."payload"->>'isError' END AS "isError",
            CASE WHEN e."type" = 'tool_result' THEN left(r."content", 1200) END AS "resultHead",
            CASE WHEN e."type" = 'tool_result' AND length(r."content") > 1200 THEN right(r."content", 600) END AS "resultTail",
-           CASE WHEN e."type" = 'background_task' THEN left(e."payload"->>'command', 600) END AS "bgCommand",
+           CASE WHEN e."type" = 'background_task' AND jsonb_typeof(e."payload"->'command') = 'string' THEN e."payload"->>'command' END AS "bgCommand",
            CASE WHEN e."type" = 'background_task' THEN e."payload"->>'status' END AS "bgStatus",
            CASE WHEN e."type" = 'background_task' THEN e."payload"->>'exitCode' END AS "bgExit",
-           CASE WHEN e."type" = 'background_task' THEN left(e."payload"->>'summary', 1000) END AS "bgSummary",
+           CASE WHEN e."type" = 'background_task' AND jsonb_typeof(e."payload"->'summary') = 'string' THEN e."payload"->>'summary' END AS "bgSummary",
            CASE WHEN e."type" = 'error' THEN left(e."payload"->>'message', 1500) END AS "errorMessage",
            CASE WHEN e."type" = 'turn_end' THEN e."payload"->>'subtype' END AS "subtype"
       FROM "run_event" e
+      -- A result's content as toolOutputText reads it: a string, or the text of its blocks — a list, or a
+      -- result's own content list — blank ones left out; anything else as its JSON.
       LEFT JOIN LATERAL (
         SELECT CASE WHEN e."type" = 'tool_result' THEN
-                 CASE WHEN jsonb_typeof(e."payload"->'content') = 'array'
-                      THEN (SELECT string_agg(coalesce(x->>'text', ''), E'\n') FROM jsonb_array_elements(e."payload"->'content') x)
+                 CASE WHEN jsonb_typeof(e."payload"->'content') = 'array' OR jsonb_typeof(e."payload"->'content'->'content') = 'array'
+                      THEN (SELECT string_agg(b."x"->>'text', E'\n' ORDER BY b."n")
+                              FROM jsonb_array_elements(CASE WHEN jsonb_typeof(e."payload"->'content') = 'array'
+                                                             THEN e."payload"->'content' ELSE e."payload"->'content'->'content' END)
+                                   WITH ORDINALITY AS b("x", "n")
+                             WHERE jsonb_typeof(b."x"->'text') = 'string' AND (b."x"->>'text') ~ ${TEXT_NOT_BLANK})
                       ELSE e."payload"->>'content' END
                END AS "content"
       ) r ON true
@@ -292,8 +328,8 @@ export async function loadDossierRecords(reader: DossierReader, ownerId: string,
   // task's newest session so that a task's retries do not each repeat it.
   const subjects = [session.id, ...(task?.latest ? [task.id] : [])];
   const blockers = await reader.$queryRaw<DossierBlockerRow[]>`
-    SELECT b."id"::text AS "id", b."kind", left(b."required_action", 1000) AS "requiredAction",
-           left(b."resolution_note", 3000) AS "resolutionNote", b."resolved_at" AS "resolvedAt"
+    SELECT b."id"::text AS "id", b."kind", b."required_action" AS "requiredAction",
+           b."resolution_note" AS "resolutionNote", b."resolved_at" AS "resolvedAt"
       FROM "project_blocker" b
       JOIN "project" p ON p."id" = b."project_id"
      WHERE p."owner_id" = ${ownerId}::uuid AND b."subject_id" = ANY(${subjects}::text[])
@@ -331,7 +367,126 @@ export function mergeReceiptText(receipt: Pick<DossierReceiptRow, 'result' | 'so
 
 /** A blocker the owner resolved, as an `owner_decision` source resolves to: what it asked, and the note. */
 export function ownerResolutionText(blocker: Pick<DossierBlockerRow, 'requiredAction' | 'resolutionNote'>): string {
-  return `${blocker.requiredAction}\n${blocker.resolutionNote}`;
+  return partsText(ownerResolutionParts(blocker))!;
+}
+
+/** The parts of an owner decision's text, a line each. */
+function ownerResolutionParts(blocker: Pick<DossierBlockerRow, 'requiredAction' | 'resolutionNote'>): RecordPart[] {
+  return [{ key: 'requiredAction', text: blocker.requiredAction }, { key: 'resolutionNote', text: blocker.resolutionNote }];
+}
+
+
+// ── Words, and where in their record each came from ─────────────────────────────────────────────
+
+/**
+ * Text, and for each of its UTF-16 units where it was copied from: an offset into the evidence of the line
+ * it belongs to, or -1 for the dossier's own words — a speaker's label, a marker, what says a cut was made.
+ */
+interface Mapped {
+  text: string;
+  origin: number[];
+}
+
+/** The dossier's own words: copied from nowhere. */
+function own(text: string): Mapped {
+  return { text, origin: new Array<number>(text.length).fill(-1) };
+}
+
+function cat(...parts: Mapped[]): Mapped {
+  return { text: parts.map((part) => part.text).join(''), origin: parts.flatMap((part) => part.origin) };
+}
+
+function sub(words: Mapped, start: number, end = words.text.length): Mapped {
+  return { text: words.text.slice(start, end), origin: words.origin.slice(start, end) };
+}
+
+/** `parts` with `separator`, the dossier's own, between each two. */
+function joined(parts: readonly Mapped[], separator: string): Mapped {
+  return cat(...parts.flatMap((part, index) => (index === 0 ? [part] : [own(separator), part])));
+}
+
+/**
+ * The fields of a record a line's words were copied from, each redacted, one after another; and for each,
+ * which part of the record's text it is (`RecordPart.key`) and where in that part's redacted text it starts
+ * — past a label such as `command: `, or at the part's end for the tail of a long result.
+ */
+interface Evidence {
+  text: string;
+  fields: Array<{ part: string; from: number; to: number; offset: number | 'end' }>;
+}
+
+/** A record's text, redacted, and where each of its parts is in it: null when a redaction ran across two. */
+interface Layout {
+  text: string;
+  regions: Map<string, { start: number; end: number }> | null;
+}
+
+/**
+ * A record's text from its parts (`wiki-verify-evidence.ts`), redacted whole as a quote of it is read. Each
+ * part redacted on its own lands where it is in the whole unless a secret ran across the line between two
+ * parts, which is the one case its parts' places are not known.
+ */
+function layoutOf(parts: readonly RecordPart[], redact: (text: string) => string): Layout {
+  const text = redact(partsText(parts) ?? '');
+  const each = parts.length === 1 ? [text] : parts.map((part) => redact(part.text));
+  if (each.join('\n') !== text) return { text, regions: null };
+  const regions = new Map<string, { start: number; end: number }>();
+  let at = 0;
+  parts.forEach((part, index) => {
+    regions.set(part.key, { start: at, end: at + each[index]!.length });
+    at += each[index]!.length + 1;
+  });
+  return { text, regions };
+}
+
+/**
+ * A record whose text is at hand: laid out, and its own text the evidence of the lines made from it. `part`
+ * is one part's words as they sit in it, or null when that part is empty or its place is not known.
+ */
+interface Held {
+  layout: Layout;
+  evidence: Evidence;
+  part: (key: string) => Mapped | null;
+}
+
+function held(parts: readonly RecordPart[], redact: (text: string) => string): Held {
+  const layout = layoutOf(parts, redact);
+  const whole: Mapped = { text: layout.text, origin: Array.from({ length: layout.text.length }, (_, index) => index) };
+  const fields = layout.regions
+    ? [...layout.regions].map(([part, region]) => ({ part, from: region.start, to: region.end, offset: 0 as const }))
+    : [{ part: '', from: 0, to: layout.text.length, offset: 0 as const }];
+  return {
+    layout,
+    evidence: { text: layout.text, fields },
+    part: (key) => {
+      const region = layout.regions?.get(key);
+      return region && region.end > region.start ? sub(whole, region.start, region.end) : null;
+    },
+  };
+}
+
+/** A record that is a single text: a turn's content, an event's words, a comment's body. */
+function heldText(key: string, text: string, redact: (text: string) => string): { held: Held; words: Mapped } {
+  const record = held([{ key, text }], redact);
+  return { held: record, words: record.part(key) ?? own(record.layout.text) };
+}
+
+/** Collects the fields a tool line's words are copied from, before the record they are in is read whole. */
+class EvidenceBuilder {
+  private text = '';
+  private readonly fields: Evidence['fields'] = [];
+
+  /** `value`, already redacted, as a field of `part` starting at `offset` in it: its words, each mapped. */
+  add(part: string, value: string, offset: number | 'end' = 0): Mapped {
+    const from = this.text.length;
+    this.text += value;
+    this.fields.push({ part, from, to: this.text.length, offset });
+    return { text: value, origin: Array.from({ length: value.length }, (_, index) => from + index) };
+  }
+
+  done(): Evidence {
+    return { text: this.text, fields: [...this.fields] };
+  }
 }
 
 // ── The timeline (prepare.py) ───────────────────────────────────────────────────────────────────
@@ -342,10 +497,15 @@ type Speaker =
 
 type ToolKind = 'read' | 'edit' | 'bash' | 'tool';
 
-interface Line {
+interface Line extends Mapped {
   sp: Speaker;
-  text: string;
   source: { kind: WikiSourceKind; id: string };
+  /** The fields of the line's record its words were copied from (`origin` counts in them). */
+  evidence: Evidence;
+  /** Where those fields are in the record's text; null for a tool call, which is read whole once it is chosen. */
+  layout: Layout | null;
+  /** The words a line stands for when it shows none of them: a task's repeated opening prompt. */
+  refers?: Mapped;
   /** The record's time, as milliseconds: lines are ordered by it, then by `order`, then as built. */
   at: number;
   order: number;
@@ -353,7 +513,7 @@ interface Line {
   /** Thinking: only its signal sentences are kept. A comment: only its digest. */
   rawThinking?: boolean;
   rawComment?: boolean;
-  tool?: { kind: ToolKind; err: boolean; target: string; head: string };
+  tool?: { kind: ToolKind; err: boolean; target: string; targetWords: Mapped; head: string };
   fold?: string[];
   score: number;
   sig: string[];
@@ -375,34 +535,62 @@ const TASK_BOILERPLATE = /\n*请按以下步骤进行：[\s\S]*$/;
 const READLIKE_BASH = /^\s*(?:cd\s+\S+\s*&&\s*)?(?:cat|sed -n|head|tail|ls|grep|rg|find|wc|nl|awk|less|file|stat|tree|git (?:log|show|diff|status|grep|ls-files|blame|rev-parse|branch)|jq|echo)\b/;
 const MEMORY_SENTENCE_SPLIT = /(?<=[。！？!?\n])|(?<=\.\s)/;
 
+/** The UTF-16 length of the first `max` code points of `text` — all of it, when it has no more. */
+function pointsEnd(text: string, max: number): number {
+  let units = 0;
+  for (let points = 0; units < text.length && points < max; points += 1) {
+    units += text.codePointAt(units)! > 0xffff ? 2 : 1;
+  }
+  return units;
+}
+
 /** `text` cut to `max` characters (code points, never half of one), with how much was left out. */
 function clip(text: string | null | undefined, max: number): string {
-  const value = text ?? '';
-  if (value.length <= max) return value;
-  const points = Array.from(value);
-  if (points.length <= max) return value;
-  return `${points.slice(0, max).join('')}…[+${points.length - max} chars]`;
+  return clipped(own(text ?? ''), max).text;
+}
+
+function clipped(words: Mapped, max: number): Mapped {
+  const value = words.text;
+  if (value.length <= max) return words;
+  const points = Array.from(value).length;
+  if (points <= max) return words;
+  return cat(headed(words, max), own(`…[+${points - max} chars]`));
 }
 
 /** The first `max` code points of `text`. */
 function head(text: string, max: number): string {
-  if (text.length <= max) return text;
-  const points = Array.from(text);
-  return points.length <= max ? text : points.slice(0, max).join('');
+  return headed(own(text), max).text;
+}
+
+function headed(words: Mapped, max: number): Mapped {
+  return words.text.length <= max ? words : sub(words, 0, pointsEnd(words.text, max));
+}
+
+/** Words without the whitespace around them, as `trim` takes it off. */
+function trimmed(words: Mapped): Mapped {
+  const start = words.text.length - words.text.trimStart().length;
+  const end = words.text.trimEnd().length;
+  return start >= end ? own('') : sub(words, start, end);
 }
 
 function firstLine(text: string | null | undefined, max = 200): string {
-  const line = (text ?? '').trim().split('\n', 1)[0] ?? '';
-  const cut = head(line, max);
-  return cut === line ? line : `${cut}…`;
+  return firstLineOf(own(text ?? ''), max).text;
 }
 
-function lastLine(text: string | null | undefined, max = 160): string {
-  const value = (text ?? '').trimEnd();
-  if (!value) return '';
-  const line = value.slice(value.lastIndexOf('\n') + 1).trim();
-  const cut = head(line, max);
-  return cut === line ? line : `${cut}…`;
+function firstLineOf(words: Mapped, max = 200): Mapped {
+  const all = trimmed(words);
+  const end = all.text.indexOf('\n');
+  const line = end < 0 ? all : sub(all, 0, end);
+  const cut = headed(line, max);
+  return cut.text === line.text ? line : cat(cut, own('…'));
+}
+
+function lastLineOf(words: Mapped, max = 160): Mapped {
+  const value = sub(words, 0, words.text.trimEnd().length);
+  if (!value.text) return own('');
+  const line = trimmed(sub(value, value.text.lastIndexOf('\n') + 1));
+  const cut = headed(line, max);
+  return cut.text === line.text ? line : cat(cut, own('…'));
 }
 
 function basename(path: string): string {
@@ -411,8 +599,19 @@ function basename(path: string): string {
 
 /** The sentences of `text` that do not point at the memory library. */
 function withoutMemory(text: string): string {
-  if (!text || !MEMORY_MENTION.test(text)) return text;
-  return text.split(MEMORY_SENTENCE_SPLIT).filter((part) => part && !MEMORY_MENTION.test(part)).join('');
+  return withoutMemoryOf(own(text)).text;
+}
+
+function withoutMemoryOf(words: Mapped): Mapped {
+  if (!words.text || !MEMORY_MENTION.test(words.text)) return words;
+  // The split is at points between sentences and takes nothing out, so its parts lie end to end.
+  const kept: Mapped[] = [];
+  let at = 0;
+  for (const part of words.text.split(MEMORY_SENTENCE_SPLIT)) {
+    if (part && !MEMORY_MENTION.test(part)) kept.push(sub(words, at, at + part.length));
+    at += part.length;
+  }
+  return cat(...kept);
 }
 
 /**
@@ -463,12 +662,22 @@ function speakerOf(turn: DossierTurnRow, session: DossierSessionRow): Speaker {
   return UUID_LOWER.test(key) ? 'user' : 'sender';
 }
 
+/**
+ * `needle`'s words where they stand in `haystack`, from `from` on — an answer's question is the key of the
+ * answers the approval holds — or `needle` as the dossier's own when they do not stand there.
+ */
+function foundIn(haystack: Mapped | null, needle: string, from = 0): Mapped {
+  const at = haystack && needle ? haystack.text.indexOf(needle, from) : -1;
+  return at < 0 ? own(needle) : sub(haystack!, at, at + needle.length);
+}
+
 /** An AskUserQuestion's questions and the answers given, as one line. */
-function askedAndAnswered(approval: DossierApprovalRow, redact: (text: string) => string): string {
+function askedAndAnswered(approval: DossierApprovalRow, record: Held, redact: (text: string) => string): Mapped {
   const questions = Array.isArray(approval.questions) ? (approval.questions as Array<Record<string, unknown>>) : [];
   const answers = approval.answers !== null && typeof approval.answers === 'object' && !Array.isArray(approval.answers)
     ? (approval.answers as Record<string, unknown>)
     : {};
+  const given = record.part('answers');
   const parts = questions.map((question) => {
     const text = typeof question.question === 'string' ? question.question : '';
     const options = (Array.isArray(question.options) ? question.options : [])
@@ -477,12 +686,13 @@ function askedAndAnswered(approval: DossierApprovalRow, redact: (text: string) =
       .slice(0, 6)
       .map((label) => clip(redact(label), 80));
     const chosen = answers[text];
-    return `Q: ${clip(redact(text), 400)} [options: ${options.join(' | ')}] → A: ${
-      chosen === undefined || chosen === null ? '(none)' : redact(JSON.stringify(chosen))
-    }`;
+    const asked = foundIn(given, redact(text));
+    const after = asked.origin[0] !== undefined && asked.origin[0] >= 0 && given ? asked.origin[asked.origin.length - 1]! + 1 - given.origin[0]! : 0;
+    const answer = chosen === undefined || chosen === null ? own('(none)') : foundIn(given, redact(JSON.stringify(chosen)), after);
+    return cat(own('Q: '), clipped(asked, 400), own(` [options: ${options.join(' | ')}] → A: `), answer);
   });
-  let line = `AskUserQuestion ${approval.status}. ${parts.join(' ; ')}`;
-  if (approval.message) line += ` · owner note: ${clip(redact(approval.message), 1500)}`;
+  let line = cat(own(`AskUserQuestion ${approval.status}. `), joined(parts, ' ; '));
+  if (approval.message) line = cat(line, own(' · owner note: '), clipped(record.part('message') ?? own(redact(approval.message)), 1500));
   return line;
 }
 
@@ -493,8 +703,19 @@ function askedAndAnswered(approval: DossierApprovalRow, redact: (text: string) =
 function timeline(records: DossierRecords, redact: (text: string) => string): Line[] {
   const { session } = records;
   const lines: Line[] = [];
-  const add = (at: Date | null, order: number, sp: Speaker, text: string, source: Line['source'], extra: Partial<Line> = {}) => {
-    lines.push({ sp, text, source, at: at ? at.getTime() : 0, order, score: 0, sig: [], ...extra });
+  const add = (
+    at: Date | null,
+    order: number,
+    sp: Speaker,
+    words: Mapped,
+    source: Line['source'],
+    record: { evidence: Evidence; layout: Layout | null },
+    extra: Partial<Line> = {},
+  ) => {
+    lines.push({
+      sp, text: words.text, origin: words.origin, source, evidence: record.evidence, layout: record.layout,
+      at: at ? at.getTime() : 0, order, score: 0, sig: [], ...extra,
+    });
   };
 
   // The conversation turns.
@@ -503,53 +724,65 @@ function timeline(records: DossierRecords, redact: (text: string) => string): Li
   for (const turn of records.turns) {
     const sp = speakerOf(turn, session);
     const key = turn.clientTurnId ?? '';
-    const content = redact(turn.content ?? '');
-    if (key.startsWith('bg-wake') && content.trim() === '') continue;
+    const { held: record, words: content } = heldText('content', turn.content ?? '', redact);
+    if (key.startsWith('bg-wake') && content.text.trim() === '') continue;
     const source = { kind: 'turn' as const, id: turn.id };
     if (turn.kind === 'interrupt') {
-      add(turn.createdAt, 1, sp, `⏹ interrupted the agent${content.trim() ? `: ${clip(content, 2000)}` : ''}`, source);
+      add(turn.createdAt, 1, sp, content.text.trim()
+        ? cat(own('⏹ interrupted the agent: '), clipped(content, 2000))
+        : own('⏹ interrupted the agent'), source, record);
       continue;
     }
     if (turn.kind === 'shell') {
-      add(turn.createdAt, 1, sp, `! ${clip(content, 600)}`, source);
+      add(turn.createdAt, 1, sp, cat(own('! '), clipped(content, 600)), source, record);
       continue;
     }
-    let text: string;
+    let text: Mapped;
     if (sp === 'taskprompt') {
+      const boilerplate = TASK_BOILERPLATE.exec(content.text);
+      const prompt = clipped(withoutMemoryOf(boilerplate ? sub(content, 0, boilerplate.index) : content), 9000);
       // A retry opens with the same prompt as before; the demo said so rather than repeating it.
       if (openingSeen) {
-        add(turn.createdAt, 1, sp, '(the same opening prompt again)', source);
+        add(turn.createdAt, 1, sp, own('(the same opening prompt again)'), source, record, { refers: prompt });
         continue;
       }
       openingSeen = true;
-      text = clip(withoutMemory(content.replace(TASK_BOILERPLATE, '')), 9000);
+      text = prompt;
     } else if (sp === 'owner' || sp === 'user') {
-      text = clip(content, 6000);
+      text = clipped(content, 6000);
     } else if (sp === 'system') {
-      text = clip(content, /^(?:watch:|open-item|pc:|project-started|task-run)/.test(key) ? 700 : 1200);
+      text = clipped(content, /^(?:watch:|open-item|pc:|project-started|task-run)/.test(key) ? 700 : 1200);
     } else {
-      text = clip(withoutMemory(content), 3000);
+      text = clipped(withoutMemoryOf(content), 3000);
     }
-    add(turn.createdAt, 1, sp, turn.kind === 'steer' ? `(steer) ${text}` : text, source);
+    add(turn.createdAt, 1, sp, turn.kind === 'steer' ? cat(own('(steer) '), text) : text, source, record);
   }
 
   // The approvals: the owner's answers to what the agent asked.
   for (const approval of records.approvals) {
     const source = { kind: 'approval' as const, id: approval.id };
+    const record = held(approvalParts({
+      toolName: approval.toolName,
+      input: approval.plan === null ? {} : { plan: approval.plan },
+      answers: approval.answers,
+      message: approval.message,
+    }), redact);
+    const note = (max: number) => clipped(record.part('message') ?? own(redact(approval.message ?? '')), max);
     if (approval.toolName === 'AskUserQuestion') {
       if (approval.status === 'PENDING' || approval.status === 'ABANDONED') continue;
-      add(approval.createdAt, 2, 'owner', askedAndAnswered(approval, redact), source, { decision: true });
+      add(approval.createdAt, 2, 'owner', askedAndAnswered(approval, record, redact), source, record, { decision: true });
     } else if (approval.toolName === 'ExitPlanMode') {
-      add(approval.createdAt, 2, 'agent', `PLAN: ${clip(redact(approval.plan ?? ''), 2500)}`, source);
+      add(approval.createdAt, 2, 'agent', cat(own('PLAN: '), clipped(record.part('plan') ?? own(redact(approval.plan ?? '')), 2500)), source, record);
       if (approval.status !== 'PENDING' && approval.status !== 'ABANDONED') {
-        const note = approval.message ? `: ${clip(redact(approval.message), 1500)}` : '';
-        add(approval.decidedAt ?? approval.createdAt, 3, 'owner', `plan ${approval.status.toLowerCase()}${note}`, source, { decision: true });
+        const decided = own(`plan ${approval.status.toLowerCase()}`);
+        add(approval.decidedAt ?? approval.createdAt, 3, 'owner', approval.message ? cat(decided, own(': '), note(1500)) : decided,
+          source, record, { decision: true });
       }
     } else if (approval.status === 'DENIED' && approval.message) {
       // A denial that says why is the owner teaching; a bare click is not (§8.2: DENIED with a reason).
       add(approval.decidedAt ?? approval.createdAt, 3, 'owner',
-        `${approval.toolName} denied ${clip(redact(approval.input ?? ''), 200)} · note: ${clip(redact(approval.message), 1000)}`,
-        source, { decision: true });
+        cat(own(`${approval.toolName} denied ${clip(redact(approval.input ?? ''), 200)} · note: `), note(1000)),
+        source, record, { decision: true });
     }
   }
 
@@ -560,29 +793,32 @@ function timeline(records: DossierRecords, redact: (text: string) => string): Li
   }
   for (const event of records.events) {
     const source = { kind: 'event' as const, id: event.id };
-    const sub = Boolean(event.parentToolUseId);
+    const nested = Boolean(event.parentToolUseId);
     switch (event.type) {
       case 'assistant': {
-        const text = withoutMemory(redact(event.text ?? ''));
-        if (text.trim()) add(event.createdAt, 4, sub ? 'sub-agent' : 'agent', clip(text, 5000), source);
+        const { held: record, words } = heldText('text', event.text ?? '', redact);
+        const text = withoutMemoryOf(words);
+        if (text.text.trim()) add(event.createdAt, 4, nested ? 'sub-agent' : 'agent', clipped(text, 5000), source, record);
         break;
       }
       case 'thinking': {
-        const text = withoutMemory(redact(event.text ?? ''));
-        if (text.trim()) add(event.createdAt, 4, 'think', text, source, { rawThinking: true });
+        const { held: record, words } = heldText('text', event.text ?? '', redact);
+        const text = withoutMemoryOf(words);
+        if (text.text.trim()) add(event.createdAt, 4, 'think', text, source, record, { rawThinking: true });
         break;
       }
       case 'user': {
         // A session from before conversation turns were stored: its user events are its messages.
-        const text = redact(event.text ?? '');
-        if (!hasMessages && text.trim()) add(event.createdAt, 1, 'user', clip(text, 6000), source);
+        const { held: record, words } = heldText('text', event.text ?? '', redact);
+        if (!hasMessages && words.text.trim()) add(event.createdAt, 1, 'user', clipped(words, 6000), source, record);
         break;
       }
       case 'tool_use': {
         const line = toolLine(event, results.get(event.toolUseId ?? ''), redact);
         if (!line) break;
         const callId = event.toolUseId ? records.toolCallIds.get(event.toolUseId) : undefined;
-        add(event.createdAt, 5, 'tool', line.text, callId ? { kind: 'tool_call', id: callId } : source, { tool: line.tool });
+        add(event.createdAt, 5, 'tool', line.words, callId ? { kind: 'tool_call', id: callId } : source,
+          { evidence: line.evidence, layout: null }, { tool: line.tool });
         break;
       }
       case 'background_task': {
@@ -591,19 +827,28 @@ function timeline(records: DossierRecords, redact: (text: string) => string): Li
         if (!finished) break;
         const command = redact(event.bgCommand ?? '');
         if (MEMORY_PATH.test(command)) break;
+        const record = held(runEventParts('background_task', { command: event.bgCommand, summary: event.bgSummary }), redact);
         const ok = ['0', 'None', ''].includes(String(event.bgExit ?? '')) && event.bgStatus !== 'failed';
         const exit = event.bgExit === null || event.bgExit === '' ? '' : ` exit=${event.bgExit}`;
-        const summary = event.bgSummary ? ` — ${clip(redact(event.bgSummary), 300)}` : '';
-        add(event.createdAt, 5, 'tool', `bg ${event.bgStatus ?? ''}${exit}: ${firstLine(command, 160)}${summary}`, source, {
-          tool: { kind: 'bash', err: !ok, target: firstLine(command, 80), head: commandHead(command) },
-        });
+        const summary = event.bgSummary
+          ? cat(own(' — '), clipped(record.part('summary') ?? own(redact(event.bgSummary)), 300))
+          : own('');
+        add(event.createdAt, 5, 'tool', cat(own(`bg ${event.bgStatus ?? ''}${exit}: `), firstLineOf(record.part('command') ?? own(command), 160), summary),
+          source, record, {
+            tool: { kind: 'bash', err: !ok, target: firstLine(command, 80), targetWords: own(firstLine(command, 80)), head: commandHead(command) },
+          });
         break;
       }
-      case 'error':
-        add(event.createdAt, 5, 'system', `ERROR: ${clip(redact(event.errorMessage ?? ''), 500)}`, source);
+      case 'error': {
+        const { held: record, words } = heldText('message', event.errorMessage ?? '', redact);
+        add(event.createdAt, 5, 'system', cat(own('ERROR: '), clipped(words, 500)), source, record);
         break;
+      }
       case 'turn_end':
-        if (event.subtype && event.subtype !== 'success') add(event.createdAt, 6, 'system', `turn ended: ${event.subtype}`, source);
+        if (event.subtype && event.subtype !== 'success') {
+          const record = held(runEventParts('turn_end', { subtype: event.subtype }), redact);
+          add(event.createdAt, 6, 'system', cat(own('turn ended: '), record.part('subtype') ?? own(redact(event.subtype))), source, record);
+        }
         break;
       default:
         break;
@@ -612,19 +857,24 @@ function timeline(records: DossierRecords, redact: (text: string) => string): Li
 
   // The task's closing records, and the session's receipts and the owner's resolutions.
   for (const comment of records.comments) {
-    const body = withoutMemory(redact(comment.body));
-    if (!body.trim()) continue;
+    const { held: record, words } = heldText('body', comment.body, redact);
+    const body = withoutMemoryOf(words);
+    if (!body.text.trim()) continue;
     add(comment.createdAt, 7, comment.authorType === 'USER' ? 'comment-owner' : 'comment', body,
-      { kind: 'task_comment', id: comment.id }, { rawComment: true });
+      { kind: 'task_comment', id: comment.id }, record, { rawComment: true });
   }
   for (const receipt of records.receipts) {
-    add(receipt.createdAt, 7, 'merge', `${redact(mergeReceiptText(receipt))} (recorded by ${redact(receipt.recordedBy)})`,
-      { kind: 'merge_receipt', id: receipt.id });
+    const record = held([{ key: 'receipt', text: mergeReceiptText(receipt) }], redact);
+    add(receipt.createdAt, 7, 'merge',
+      cat(record.part('receipt') ?? own(redact(mergeReceiptText(receipt))), own(` (recorded by ${redact(receipt.recordedBy)})`)),
+      { kind: 'merge_receipt', id: receipt.id }, record);
   }
   for (const blocker of records.blockers) {
+    const record = held(ownerResolutionParts(blocker), redact);
     add(blocker.resolvedAt, 7, 'blocker',
-      `${blocker.kind}: ${clip(redact(blocker.requiredAction), 400)} → the owner resolved it: ${clip(redact(blocker.resolutionNote), 1500)}`,
-      { kind: 'owner_decision', id: blocker.id }, { decision: true });
+      cat(own(`${blocker.kind}: `), clipped(record.part('requiredAction') ?? own(redact(blocker.requiredAction)), 400),
+        own(' → the owner resolved it: '), clipped(record.part('resolutionNote') ?? own(redact(blocker.resolutionNote)), 1500)),
+      { kind: 'owner_decision', id: blocker.id }, record, { decision: true });
   }
 
   // Oldest first; a stable sort, so records of one moment keep the order they were built in.
@@ -644,10 +894,15 @@ function timeline(records: DossierRecords, redact: (text: string) => string): Li
   }
   for (const line of folded) {
     if (!line.fold || !line.tool) continue;
+    // Only the first target is the line's own record's; the others are the records folded into it.
     const targets = [...new Set(line.fold)];
-    line.text = `${line.tool.kind} ×${line.fold.length}: ${targets.slice(0, 6).map((target) => head(target, 90)).join(', ')}${
-      targets.length > 6 ? ' …' : ''
-    }`;
+    const words = cat(
+      own(`${line.tool.kind} ×${line.fold.length}: `),
+      joined([headed(line.tool.targetWords, 90), ...targets.slice(1, 6).map((target) => own(head(target, 90)))], ', '),
+      own(targets.length > 6 ? ' …' : ''),
+    );
+    line.text = words.text;
+    line.origin = words.origin;
   }
   folded.forEach((line, index) => {
     line.ref = `L${index + 1}`;
@@ -655,12 +910,16 @@ function timeline(records: DossierRecords, redact: (text: string) => string): Li
   return folded;
 }
 
-/** One tool call and its result as a line, or null for a call the dossier leaves out. */
+/**
+ * One tool call and its result as a line, or null for a call the dossier leaves out. Its words are copied
+ * from the call's fields as the timeline read them — the command, the path, the result's first and last
+ * line — and placed in the call's text once the call is read whole (`toolRecords`).
+ */
 function toolLine(
   use: DossierEventRow,
   result: DossierEventRow | undefined,
   redact: (text: string) => string,
-): { text: string; tool: NonNullable<Line['tool']> } | null {
+): { words: Mapped; evidence: Evidence; tool: NonNullable<Line['tool']> } | null {
   const name = use.toolName ?? '?';
   const command = redact(use.command ?? '');
   const filePath = redact(use.filePath ?? '');
@@ -668,62 +927,73 @@ function toolLine(
   const input = redact(use.input ?? '');
   if (MEMORY_PATH.test([command, filePath, pattern, input].join(' '))) return null;
   if (SKIPPED_TOOLS.has(name)) return null;
+  const evidence = new EvidenceBuilder();
+  const field = (key: string, value: string): Mapped => evidence.add(`input.${key}`, value, key.length + 2);
   let err = String(result?.isError ?? '').toLowerCase() === 'true';
   let resultHead = redact(result?.resultHead ?? '');
   let resultTail = redact(result?.resultTail ?? '');
   const exit = /^\s*Exit code (\d+)/.exec(resultHead);
   if (exit && exit[1] !== '0') err = true;
+  let headWords: Mapped;
+  let tailWords: Mapped;
   if (MEMORY_MENTION.test(resultHead.slice(0, 300))) {
     resultHead = '(memory file content omitted)';
     resultTail = '';
+    headWords = own(resultHead);
+    tailWords = own('');
+  } else {
+    headWords = evidence.add('output', resultHead);
+    tailWords = evidence.add('output', resultTail, 'end');
   }
-  let text: string;
+  let text: Mapped;
   let kind: ToolKind;
-  let target: string;
+  let target: Mapped;
   let group: string;
   if (name === 'Bash') {
     kind = READLIKE_BASH.test(command) && !err ? 'read' : 'bash';
-    text = `$ ${firstLine(command, 220)}`;
+    const commandWords = field('command', command);
+    text = cat(own('$ '), firstLineOf(commandWords, 220));
     const more = command.split('\n').length - 1;
-    if (more > 0) text += ` …(+${more} lines)`;
-    if (use.background === 'true') text += ' [background]';
-    target = firstLine(command, 80);
+    if (more > 0) text = cat(text, own(` …(+${more} lines)`));
+    if (use.background === 'true') text = cat(text, own(' [background]'));
+    target = firstLineOf(commandWords, 80);
     group = commandHead(command);
   } else if (name === 'Read' || name === 'Glob' || name === 'Grep' || name === 'LS') {
     kind = 'read';
-    target = `${filePath}${pattern ? ` /${pattern}/` : ''}`;
-    text = `${name.toLowerCase()} ${target}`;
+    const path = field(use.filePathKey ?? 'file_path', filePath);
+    target = pattern ? cat(path, own(' /'), field('pattern', pattern), own('/')) : path;
+    text = cat(own(`${name.toLowerCase()} `), target);
     group = name;
   } else if (name === 'Edit' || name === 'Write' || name === 'MultiEdit' || name === 'NotebookEdit') {
     kind = 'edit';
-    target = filePath;
-    text = `${name.toLowerCase()} ${target}`;
-    group = `${name} ${target}`;
+    target = field(use.filePathKey ?? 'file_path', filePath);
+    text = cat(own(`${name.toLowerCase()} `), target);
+    group = `${name} ${target.text}`;
   } else {
     kind = 'tool';
     const orbit = name.startsWith('mcp__orbit__') || name.startsWith('orbit');
-    text = `${name} ${clip(withoutMemory(input), orbit ? 900 : 300)}`;
-    target = name;
+    text = cat(evidence.add('name', name), own(` ${clip(withoutMemory(input), orbit ? 900 : 300)}`));
+    target = own(name);
     group = name;
   }
   if (result) {
-    let outcome: string;
+    let outcome: Mapped;
     if (err) {
-      outcome = `ERR: ${firstLine(resultHead, 240)}`;
-      const last = lastLine(resultTail || resultHead, 200);
-      if (last && !outcome.includes(last)) outcome += ` … ${last}`;
+      outcome = cat(own('ERR: '), firstLineOf(headWords, 240));
+      const last = lastLineOf(resultTail ? tailWords : headWords, 200);
+      if (last.text && !outcome.text.includes(last.text)) outcome = cat(outcome, own(' … '), last);
     } else if (kind === 'bash' || kind === 'tool') {
-      outcome = 'ok';
-      const first = firstLine(resultHead, 160);
-      if (first) outcome += `: ${first}`;
-      const last = resultTail ? lastLine(resultTail, 140) : '';
-      if (last && last !== first) outcome += ` … ${last}`;
+      outcome = own('ok');
+      const first = firstLineOf(headWords, 160);
+      if (first.text) outcome = cat(outcome, own(': '), first);
+      const last = resultTail ? lastLineOf(tailWords, 140) : own('');
+      if (last.text && last.text !== first.text) outcome = cat(outcome, own(' … '), last);
     } else {
-      outcome = 'ok';
+      outcome = own('ok');
     }
-    text += ` → ${outcome}`;
+    text = cat(text, own(' → '), outcome);
   }
-  return { text, tool: { kind, err, target, head: group } };
+  return { words: text, evidence: evidence.done(), tool: { kind, err, target: target.text, targetWords: target, head: group } };
 }
 
 // ── Signals and packing (pack.py, packer v2) ────────────────────────────────────────────────────
@@ -741,34 +1011,44 @@ const SENTENCE_SPLIT = /(?<=[。！？!?\n])|(?<=[.;:]\s)/;
 const CONCLUSION = /结论|原因|决定|注意|坑|教训|发现|lesson|conclusion|decid|note:/i;
 
 /** Of a thought, only the sentences that carry a signal. */
-function signalSentences(text: string, maxChars: number): string {
-  const kept: string[] = [];
+function signalSentences(words: Mapped, maxChars: number): Mapped {
+  const kept: Mapped[] = [];
   let used = 0;
-  for (const sentence of text.split(SENTENCE_SPLIT)) {
-    const s = sentence.trim();
-    if (!s || !(SURPRISE_STRONG.test(s) || SURPRISE_WEAK.test(s))) continue;
-    const cut = head(s, 400);
-    if (used + cut.length > maxChars) break;
+  // The split is at points between sentences and takes nothing out, so its parts lie end to end.
+  let at = 0;
+  for (const sentence of words.text.split(SENTENCE_SPLIT)) {
+    const s = trimmed(sub(words, at, at + sentence.length));
+    at += sentence.length;
+    if (!s.text || !(SURPRISE_STRONG.test(s.text) || SURPRISE_WEAK.test(s.text))) continue;
+    const cut = headed(s, 400);
+    if (used + cut.text.length > maxChars) break;
     kept.push(cut);
-    used += cut.length;
+    used += cut.text.length;
   }
-  return kept.join(' … ');
+  return joined(kept, ' … ');
 }
 
 /** Of a comment, its first paragraph and the paragraphs that conclude something. */
-function commentDigest(body: string, maxChars: number): string {
-  const paragraphs = body.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
-  if (paragraphs.length === 0) return '';
-  const kept = [head(paragraphs[0]!, 500)];
-  let used = kept[0]!.length;
-  for (const paragraph of paragraphs.slice(1)) {
-    if (!(SURPRISE_STRONG.test(paragraph) || CONCLUSION.test(paragraph))) continue;
-    const cut = head(paragraph, 600);
-    if (used + cut.length > maxChars) break;
-    kept.push(cut);
-    used += cut.length;
+function commentDigest(words: Mapped, maxChars: number): Mapped {
+  const paragraphs: Mapped[] = [];
+  let at = 0;
+  for (const gap of words.text.matchAll(/\n\s*\n/g)) {
+    paragraphs.push(sub(words, at, gap.index));
+    at = gap.index + gap[0].length;
   }
-  return kept.join('\n');
+  paragraphs.push(sub(words, at));
+  const kept = paragraphs.map(trimmed).filter((paragraph) => paragraph.text !== '');
+  if (kept.length === 0) return own('');
+  const digest = [headed(kept[0]!, 500)];
+  let used = digest[0]!.text.length;
+  for (const paragraph of kept.slice(1)) {
+    if (!(SURPRISE_STRONG.test(paragraph.text) || CONCLUSION.test(paragraph.text))) continue;
+    const cut = headed(paragraph, 600);
+    if (used + cut.text.length > maxChars) break;
+    digest.push(cut);
+    used += cut.text.length;
+  }
+  return joined(digest, '\n');
 }
 
 /** Score every line for the signals it carries (pack.py `prepare_lines`, then v2's additions). */
@@ -776,13 +1056,13 @@ function scored(all: Line[]): Line[] {
   const lines: Line[] = [];
   for (const line of all) {
     if (line.rawThinking) {
-      const text = signalSentences(line.text, 700);
-      if (!text) continue;
-      lines.push({ ...line, text });
+      const words = signalSentences(line, 700);
+      if (!words.text) continue;
+      lines.push({ ...line, ...words });
     } else if (line.rawComment) {
-      const text = commentDigest(line.text, 2200);
-      if (!text) continue;
-      lines.push({ ...line, text });
+      const words = commentDigest(line, 2200);
+      if (!words.text) continue;
+      lines.push({ ...line, ...words });
     } else {
       lines.push({ ...line });
     }
@@ -853,7 +1133,8 @@ function scored(all: Line[]): Line[] {
 
 interface Packed {
   text: string;
-  sources: WikiDossierSource[];
+  /** The lines the text carries, in order, each with its words as the text carries them. */
+  carried: Array<{ line: Line; words: Mapped }>;
   tokens: number;
   truncated: boolean;
 }
@@ -875,21 +1156,21 @@ function pack(header: string, all: Line[], budget: number): Packed {
   // later lines, the markers between gaps — is paid for out of this, and checked after rendering.
   const reserve = Math.ceil(budget * 0.04);
   const limit = budget - reserve;
-  const chosen = new Map<number, string>();
+  const chosen = new Map<number, Mapped>();
   const takenOrder: number[] = [];
   let cut = false;
   let used = wikiEstimateTokens(header);
-  const render = (line: Line, cap: number): string => {
-    if (line.text.length <= cap) return line.text;
-    const kept = head(line.text, cap);
-    return kept === line.text ? kept : `${kept}…[cut]`;
+  const render = (line: Line, cap: number): Mapped => {
+    if (line.text.length <= cap) return { text: line.text, origin: line.origin };
+    const kept = headed(line, cap);
+    return kept.text === line.text ? kept : cat(kept, own('…[cut]'));
   };
   const take = (i: number, cap: number): boolean => {
     if (chosen.has(i)) return true;
-    const text = render(lines[i]!, cap);
-    const cost = wikiEstimateTokens(text) + 6;
+    const words = render(lines[i]!, cap);
+    const cost = wikiEstimateTokens(words.text) + 6;
     if (used + cost > limit) return false;
-    chosen.set(i, text);
+    chosen.set(i, words);
     takenOrder.push(i);
     used += cost;
     return true;
@@ -937,7 +1218,7 @@ function pack(header: string, all: Line[], budget: number): Packed {
     for (let j = window.lo; j <= window.hi; j += 1) {
       if (keepInWindow(j, window.center) && !chosen.has(j)) indexes.push(j);
     }
-    const cost = indexes.reduce((sum, j) => sum + wikiEstimateTokens(render(lines[j]!, capFor(lines[j]!))) + 6, 0);
+    const cost = indexes.reduce((sum, j) => sum + wikiEstimateTokens(render(lines[j]!, capFor(lines[j]!)).text) + 6, 0);
     if (used + cost <= limit) {
       for (const j of indexes) take(j, capFor(lines[j]!));
     } else {
@@ -956,18 +1237,19 @@ function pack(header: string, all: Line[], budget: number): Packed {
 
   const renderAll = (): Packed => {
     const out = [header, ''];
-    const sources: WikiDossierSource[] = [];
+    const carried: Packed['carried'] = [];
     let previous = -1;
     for (const i of [...chosen.keys()].sort((a, b) => a - b)) {
       if (i > previous + 1 && previous >= 0) out.push(`   … (${i - previous - 1} lines omitted)`);
       const line = lines[i]!;
-      out.push(`${line.ref} ${line.sp}: ${chosen.get(i)!.replace(/\n/g, '\n    ')}`);
-      sources.push({ ref: line.ref!, kind: line.source.kind, id: line.source.id });
+      const words = chosen.get(i)!;
+      out.push(`${line.ref} ${line.sp}: ${words.text.replace(/\n/g, '\n    ')}`);
+      carried.push({ line, words });
       previous = i;
     }
     if (previous >= 0 && previous < n - 1) out.push(`   … (${n - 1 - previous} lines omitted)`);
     const text = out.join('\n');
-    return { text, sources, tokens: wikiEstimateTokens(text), truncated: false };
+    return { text, carried, tokens: wikiEstimateTokens(text), truncated: false };
   };
   let packed = renderAll();
   // The estimate above is per line; the budget is for the whole text. What does not fit is taken off
@@ -981,7 +1263,7 @@ function pack(header: string, all: Line[], budget: number): Packed {
     packed = { ...packed, text: cutToTokens(packed.text, budget), tokens: 0 };
     packed.tokens = wikiEstimateTokens(packed.text);
   }
-  for (const text of chosen.values()) if (text.endsWith('…[cut]')) cut = true;
+  for (const words of chosen.values()) if (words.text.endsWith('…[cut]')) cut = true;
   packed.truncated = chosen.size < n || cut;
   return packed;
 }
@@ -999,6 +1281,138 @@ function cutToTokens(text: string, budget: number): string {
   return `${points.slice(0, lo).join('')}…[cut]`;
 }
 
+// ── Where each line's words are ─────────────────────────────────────────────────────────────────
+
+/**
+ * A tool call's output is read whole to place a line in it only up to this size as stored: past it, the
+ * line's call and the first line of its result are placed and the result's last line is not.
+ */
+const TOOL_OUTPUT_READ_MAX_BYTES = 262_144;
+
+/**
+ * The tool calls — and the tool_use events of calls with no row — the carried tool lines cite, read whole:
+ * a tool call's text is its name, its input and its output (`toolCallParts`), and an event's is its
+ * payload's (`runEventParts`). Only the lines a dossier carries are read, so a session of a thousand calls
+ * costs the reads of the few dozen it shows.
+ */
+async function toolRecords(
+  reader: DossierReader,
+  sessionId: string,
+  calls: readonly string[],
+  events: readonly string[],
+): Promise<{ calls: Map<string, RecordPart[]>; events: Map<string, RecordPart[]> }> {
+  const out = { calls: new Map<string, RecordPart[]>(), events: new Map<string, RecordPart[]>() };
+  if (calls.length > 0) {
+    const rows = await reader.$queryRaw<Array<{ id: string; name: string; input: unknown; output: unknown }>>`
+      SELECT c."id"::text AS "id", c."name", c."input",
+             CASE WHEN pg_column_size(c."output") <= ${TOOL_OUTPUT_READ_MAX_BYTES}::int THEN c."output" END AS "output"
+        FROM "tool_call" c
+       WHERE c."session_id" = ${sessionId}::uuid AND c."id" = ANY(${[...calls]}::uuid[])`;
+    for (const row of rows) out.calls.set(row.id, toolCallParts(row));
+  }
+  if (events.length > 0) {
+    const rows = await reader.$queryRaw<Array<{ id: string; payload: unknown }>>`
+      SELECT e."id"::text AS "id", e."payload" FROM "run_event" e
+       WHERE e."session_id" = ${sessionId}::uuid AND e."id" = ANY(${[...events]}::uuid[])`;
+    for (const row of rows) out.events.set(row.id, runEventParts('tool_use', row.payload));
+  }
+  return out;
+}
+
+/**
+ * Where a line's words are in its record's text: each run of them copied from one field of the record, put
+ * where that field is in the text and held to the words found there — a run that is not found is left out,
+ * never placed near enough. Ranges in UTF-16 units of the layout's text.
+ */
+function placed(words: Mapped, evidence: Evidence, layout: Layout): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  let cursor = 0;
+  let i = 0;
+  while (i < words.text.length) {
+    const origin = words.origin[i]!;
+    if (origin < 0) {
+      i += 1;
+      continue;
+    }
+    const field = evidence.fields.find((one) => origin >= one.from && origin < one.to);
+    let j = i + 1;
+    while (j < words.text.length && words.origin[j] === words.origin[j - 1]! + 1 && field && words.origin[j]! < field.to) j += 1;
+    const piece = words.text.slice(i, j);
+    const region = field ? layout.regions?.get(field.part) : undefined;
+    let start = -1;
+    if (field && region) {
+      const base = field.offset === 'end' ? region.end - (field.to - field.from) : region.start + field.offset;
+      const expected = base + (origin - field.from);
+      if (expected >= region.start && expected + piece.length <= region.end && layout.text.startsWith(piece, expected)) {
+        start = expected;
+      } else {
+        const again = layout.text.indexOf(piece, region.start);
+        if (again >= 0 && again + piece.length <= region.end) start = again;
+      }
+    } else if (!layout.regions) {
+      start = layout.text.indexOf(piece, cursor);
+    }
+    if (start >= 0) {
+      const last = ranges[ranges.length - 1];
+      if (last && last[1] === start) last[1] = start + piece.length;
+      else ranges.push([start, start + piece.length]);
+      cursor = start + piece.length;
+    }
+    i = j;
+  }
+  return ranges;
+}
+
+/**
+ * A line's spans: where its words are, or — for a line that shows none of its record's words — where the
+ * words it stands for are: a repeated prompt's prompt, a decision's plan, a status's record. A record with
+ * no words at all is pointed at where its text begins, and ends: a span of none.
+ */
+function spansOf(line: Line, words: Mapped, layout: Layout): WikiDossierSpan[] {
+  let ranges = placed(words, line.evidence, layout);
+  if (ranges.length === 0 && line.refers) ranges = placed(line.refers, line.evidence, layout);
+  if (ranges.length === 0) {
+    const regions = layout.regions ? [...layout.regions.values()] : [{ start: 0, end: layout.text.length }];
+    const worded = regions.find((region) => hasText(layout.text.slice(region.start, region.end)));
+    ranges = [worded ? [worded.start, worded.end] : [0, 0]];
+  }
+  return inCodePoints(layout.text, ranges);
+}
+
+/** UTF-16 ranges of `text` as code point spans, each with the words it covers. */
+function inCodePoints(text: string, ranges: ReadonlyArray<readonly [number, number]>): WikiDossierSpan[] {
+  const marks = [...new Set(ranges.flat())].sort((a, b) => a - b);
+  const points = new Map<number, number>();
+  let unit = 0;
+  let count = 0;
+  for (const mark of marks) {
+    for (; unit < mark; count += 1) unit += text.codePointAt(unit)! > 0xffff ? 2 : 1;
+    points.set(mark, count);
+  }
+  return ranges.map(([start, end]) => ({ start: points.get(start)!, end: points.get(end)!, text: text.slice(start, end) }));
+}
+
+/** Each carried line's record and spans: the tool calls among them read whole first. */
+async function sourcesOf(
+  reader: DossierReader,
+  records: DossierRecords,
+  carried: Packed['carried'],
+  redact: (text: string) => string,
+): Promise<WikiDossierSource[]> {
+  const unread = carried.filter(({ line }) => line.layout === null);
+  const tools = await toolRecords(
+    reader,
+    records.session.id,
+    unread.filter(({ line }) => line.source.kind === 'tool_call').map(({ line }) => line.source.id),
+    unread.filter(({ line }) => line.source.kind === 'event').map(({ line }) => line.source.id),
+  );
+  return carried.map(({ line, words }) => {
+    const parts = line.layout ? null : (line.source.kind === 'tool_call' ? tools.calls : tools.events).get(line.source.id);
+    const layout = line.layout ?? layoutOf(parts ?? [], redact);
+    return { ref: line.ref!, kind: line.source.kind, id: line.source.id, spans: spansOf(line, words, layout) };
+  });
+}
+
 // ── The dossier ─────────────────────────────────────────────────────────────────────────────────
 
 export interface DossierOptions {
@@ -1008,8 +1422,15 @@ export interface DossierOptions {
   maxTokens?: number;
 }
 
-/** A session's dossier, made from its records. Pure: the same records and literals give the same dossier. */
-export function buildDossier(records: DossierRecords, options: DossierOptions): Omit<WikiDossier, 'unchanged'> {
+/**
+ * A session's dossier, made from its records — and from the tool calls its lines cite, read whole to place
+ * those lines' words, through `reader`. The same records and literals give the same dossier.
+ */
+export async function buildDossier(
+  reader: DossierReader,
+  records: DossierRecords,
+  options: DossierOptions,
+): Promise<Omit<WikiDossier, 'unchanged'>> {
   const budget = options.maxTokens ?? WIKI_MAINTENANCE_RULES.dossierMaxTokens;
   const redact = (text: string): string => redactSecrets(text, { literals: options.literals }).text;
   const { session, task } = records;
@@ -1034,6 +1455,7 @@ export function buildDossier(records: DossierRecords, options: DossierOptions): 
     ? (wikiEstimateTokens(again.text) <= budget ? again.text : cutToTokens(again.text, budget))
     : packed.text;
   const tokens = wikiEstimateTokens(text);
+  const sources = await sourcesOf(reader, records, packed.carried, redact);
   return {
     sessionId: session.id,
     taskId: task?.id ?? null,
@@ -1042,12 +1464,24 @@ export function buildDossier(records: DossierRecords, options: DossierOptions): 
     tokens,
     truncated: packed.truncated || text !== packed.text,
     tainted: records.tainted,
-    sources: packed.sources,
-    hash: dossierHash(text, packed.sources),
+    sources,
+    hash: dossierHash(text, sources),
   };
 }
 
-/** The hash a dossier is kept by: its text, a NUL, and its sources as JSON. */
-export function dossierHash(text: string, sources: readonly WikiDossierSource[]): string {
+/**
+ * The hash a dossier is kept by: its text, a NUL, and its sources' records as JSON. The spans are not in it:
+ * they are where the same records' words are, and a dossier whose text and records did not change is one
+ * the run has already read.
+ */
+export function dossierHash(text: string, sources: ReadonlyArray<Pick<WikiDossierSource, 'ref' | 'kind' | 'id'>>): string {
   return sha256(`${text}\u0000${JSON.stringify(sources.map(({ ref, kind, id }) => ({ ref, kind, id })))}`);
+}
+
+/**
+ * The sources as `wiki_dossier` keeps them: each line's record and where its spans are — never the words in
+ * them, which are the session's text and are never stored (hard constraint 4).
+ */
+export function storedDossierSources(sources: readonly WikiDossierSource[]): Array<Omit<WikiDossierSource, 'spans'> & { spans: Array<{ start: number; end: number }> }> {
+  return sources.map(({ ref, kind, id, spans }) => ({ ref, kind, id, spans: spans.map(({ start, end }) => ({ start, end })) }));
 }

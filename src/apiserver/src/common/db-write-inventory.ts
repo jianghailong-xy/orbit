@@ -1227,6 +1227,43 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space (nothing depends on it).',
     answer: 'Typed 503 from the global boundary; the maintenance run asks for its plan again, and a topic still changed is written then.',
   },
+  // The plan (contracts/wiki.contract.json `plan`, migration 0325): a version stored, whoever made it —
+  // a drafting job's draft, the owner's edit, or an accepted proposal (whose settling runs inside it).
+  {
+    at: 'wiki/wiki-plan.ts#store',
+    shape: 'TX_RETRIED',
+    locks: 'The space\'s wiki_space row (rank 60) by SELECT … FOR NO KEY UPDATE — the one writer of a space\'s plan at a time — then its wiki_plan rows (60): the newest number read, the space\'s draft UPDATEd to superseded, one INSERT of the new version (its foreign key takes KEY SHARE on the space row this transaction holds), one INSERT of its wiki_plan_doc rows and one of their wiki_plan_section rows (60, KEY SHARE on the version and the documents just written); and, for an accepted proposal, one UPDATE of that wiki_plan_proposal row by id and status (60).',
+    identity: 'The version the caller built on. Under the lock the newest draft or confirmed version is read again; any other one means the plan moved, and the closure throws WIKI_PLAN_STALE having written nothing. So of two writers built on the same version the second finds the first\'s and is refused.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Everything written is computed before the closure from the request and the version it was built on, and the newest version and the next number are re-read under the space lock inside it, so a re-run writes the same version or finds the plan moved and writes nothing.',
+    effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space (nothing depends on it).',
+    answer: 'Typed 503 from the global boundary; the drafting job, the owner or the acceptance sends it again, and a plan that moved meanwhile is WIKI_PLAN_STALE then.',
+  },
+  // The owner's confirmation of a space's draft.
+  {
+    at: 'wiki/wiki-plan.ts#confirm',
+    shape: 'TX_RETRIED',
+    locks: 'The space\'s wiki_space row (rank 60) by SELECT … FOR NO KEY UPDATE, then its wiki_plan rows (60): the version read by number, the confirmed one UPDATEd to superseded, and the draft UPDATEd to confirmed by id — in that order, since a space has one confirmed version at a time.',
+    identity: 'The version number. Under the lock a version that is no longer a draft means it was confirmed or superseded already: the closure throws WIKI_PLAN_STALE and writes nothing.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The version\'s status is re-read under the space lock inside the closure, so a re-run either confirms the same draft or finds it already confirmed and writes nothing.',
+    effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space (nothing depends on it).',
+    answer: 'Typed 503 from the global boundary; the owner confirms again.',
+  },
+  // The owner's rejection of a plan proposal. (An acceptance is `store`'s, with the settling inside it.)
+  {
+    at: 'wiki/wiki-plan.ts#decide',
+    shape: 'TX_RETRIED',
+    locks: 'The space\'s wiki_space row (rank 60) by SELECT … FOR NO KEY UPDATE, then one UPDATE of the wiki_plan_proposal row by id and status pending (60).',
+    identity: 'The proposal and its status: the UPDATE matches only a pending proposal, and one that matched none was decided already — the closure throws WIKI_PLAN_STALE.',
+    isolation: '',
+    attempts: 4,
+    replay: 'A compare-and-set on the proposal\'s status, re-evaluated by the statement itself, so a re-run settles the same pending proposal or finds it settled.',
+    effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space (nothing depends on it).',
+    answer: 'Typed 503 from the global boundary; the owner answers again.',
+  },
 ];
 
 export interface TransactionParticipant {
@@ -1712,6 +1749,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'wiki/wiki-maintenance-run.ts#wikiMaintenanceRunContext', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The run started: the calling session and the time, written onto the run row by id. A later start of the same task (a retried session) overwrites both.' },
   { at: 'wiki/wiki-maintenance-run.ts#noteWikiMaintenanceRunEnd', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'How the run ended — outcome, error, report and the ops the server refused — written onto the run row by id after the cursor was advanced or refused. A later end of the same run overwrites it; `orbit wiki check` reads what is there.' },
   { at: 'wiki/wiki-articles.ts#plan', class: 'INSERT', statements: 1, note: 'A space with no topic is given the default ones (contracts/wiki.contract.json `articles.seeding`): one INSERT of the batch, ON CONFLICT DO NOTHING on (space_id, slug), so two first plans leave one set. Only when a count found none; a space that has topics is never written. Outside a transaction on purpose: the rows are names and path prefixes, nothing reads them as a fact about anything else, and a plan that loses the race simply reads the winner\'s.' },
+  { at: 'wiki/wiki-plan.ts#propose', class: 'INSERT', statements: 1, note: 'A maintenance run\'s proposed change to the plan (contracts/wiki.contract.json `plan.proposals`): one INSERT, pending, after the gate passed it against the confirmed version. Outside a transaction on purpose: it changes no version, and the owner\'s acceptance gates it again against the plan as it stands then.' },
 ];
 
 export interface TriggerWriteSource {

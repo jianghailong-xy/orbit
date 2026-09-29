@@ -53,6 +53,39 @@ services:
       # set at work_mem would hide.
       - -c
       - log_temp_files=1024
+      # Bound what a runaway statement or an abandoned transaction can hold. All three were 0
+      # — unlimited — which is how one updateMany held the owner row lock for five minutes on
+      # 2026-09-14, and how a 13-minute fan-out left nine UPDATEs queued behind it on 2026-09-19
+      # until the pool ran dry. Each number is measured, not a rule of thumb;
+      # docs/postgres-runtime-settings.md carries the evidence per setting.
+      #
+      # statement_timeout is sized by migrations, not by queries. Across 9.2 days / 62.8M calls
+      # the one application statement that ever ran past it is the once-a-minute dispatch sweep
+      # (655s worst), a read-only backstop whose next tick redoes whatever this one dropped.
+      # Migrations apply at apiserver boot and a failed one is a crash loop, so this leaves 5.8x
+      # over the longest we have run (52s). The nightly pg_basebackup takes 7-10 minutes and is
+      # not subject to it: BASE_BACKUP runs in a walsender, which never arms the timer.
+      # A migration or a manual VACUUM/REINDEX needing more sets `SET statement_timeout = 0`
+      # itself; autovacuum workers already force all three of these to 0.
+      - -c
+      - statement_timeout=300s
+      # In 4.4 days of log_lock_waits, 196 waits outlasted deadlock_timeout and none reached
+      # 30s (worst 12.1s) — this host runs at load 30-60, so textbook 1-5s values would fire on
+      # healthy traffic. This is the knob that protects the *waiters*: Prisma cannot roll back a
+      # transaction whose statement is parked on a lock, so only the server can end that wait.
+      - -c
+      - lock_timeout=30s
+      # 2.5x the longest transaction budget orbit declares (EVENTS_INGEST_TRANSACTION_TIMEOUT_MS,
+      # 120s), because Prisma's own timer can itself be late when the event loop is starved.
+      # Must never drop below 120s or it starts killing healthy event-batch writes. Sampled
+      # idle-in-transaction gaps top out at 0.14s, three orders of magnitude below this.
+      - -c
+      - idle_in_transaction_session_timeout=300s
+      # work_mem stays at its 4MB default on purpose. 40 of the 52GB of temp written in the 9.2
+      # days before this change came from one application read spilling 4.4MB per call, and that
+      # read was fixed where it lives (9cad03c7d) instead of raising this for every connection:
+      # work_mem multiplies hardest (per connection, per sort/hash node) on a host that is
+      # already out of swap.
     environment:
       POSTGRES_USER: orbit
       POSTGRES_PASSWORD: orbit
