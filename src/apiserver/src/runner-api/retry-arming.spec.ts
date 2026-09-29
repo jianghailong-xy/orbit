@@ -83,7 +83,7 @@ function planFor(
         retryAttempts: session.retryAttempts ?? 0,
       }),
     },
-    runner: { findUnique: async () => ({ planUsage: null }) },
+    runner: { findUnique: async () => ({ planUsage: null, capabilities: [] }) },
   });
   const controller = new RunnerApiController(
     {} as never,

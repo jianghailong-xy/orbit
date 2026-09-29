@@ -1128,6 +1128,15 @@ public final class APIClient: @unchecked Sendable {
         _ = try await send(makeRequest("sessions/\(sessionID)/config", method: "PATCH", body: req))
     }
 
+    /// Move a session on the built-in Codex or Claude engine to another of its runner's accounts —
+    /// `default` or a slot id, which pins it there — or back onto `automatic`. Spawn-only, like a
+    /// provider: a live session's engine re-spawns on the new account once no turn is in flight, and
+    /// an ended one takes it on its next resume.
+    public func switchAccount(sessionID: String, account: String) async throws {
+        _ = try await send(makeRequest("sessions/\(sessionID)/account", method: "PATCH",
+                                       body: SessionAccountRequest(account: account)))
+    }
+
     // MARK: worktree
 
     public func diff(sessionID: String) async throws -> SessionDiff {

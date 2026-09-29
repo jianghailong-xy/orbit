@@ -46,6 +46,10 @@ export interface CreateSessionDto {
    *  (Workspace.codexAccount). Only a session on the built-in Codex engine reads it, and an id the
    *  runner does not report runs on Default, as the workspace's does. */
   codexAccount?: string;
+  /** The Claude Code account, the sibling of `codexAccount` for a session on the built-in Claude engine:
+   *  `default` or one of the runner's slots. Omitted is Automatic where the workspace leaves the account
+   *  to Orbit (the one whose quota resets soonest), else the workspace's. */
+  claudeAccount?: string;
   /** Ids of pre-uploaded image attachments (`POST /api/attachments` with no sessionId) to
    *  send with the seeded first turn. Each must be the caller's and not yet scoped to a
    *  session/turn — they're scoped to this session on create, then linked to the initial
@@ -99,6 +103,15 @@ export interface SessionResumeDto extends SessionTurnDto {
    *  authorisation is for the run the person was SHOWN — a holder that changed hands in between is
    *  a different run, and asks again rather than being stopped on a confirmation about another. */
   stopSessionId?: string;
+}
+
+/** What `switchAccount` takes to put a session back on Automatic. */
+export const AUTOMATIC_ACCOUNT = 'automatic';
+
+/** Move a session on the built-in Codex or Claude engine to another of its runner's accounts —
+ *  `default` or a slot id, which pins it there — or back onto `automatic`. */
+export interface SessionAccountDto {
+  account: string;
 }
 
 export interface MergeToMainDto {

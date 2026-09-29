@@ -36,7 +36,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
-import { codexAccountAfterUsageLimit, codexAccountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
+import { accountAfterUsageLimit, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
+import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
 import { accountEnvVar } from '../providers/account';
 import { dispatchCodexResetCommand, receiveCodexResetResult } from './codex-reset-relay';
 import {
@@ -390,11 +391,7 @@ export const CODEX_ACCOUNT_REMOVE_V1 = 'codex-account-remove/v1';
  *  a Claude account named by the control plane rather than the machine's one login. */
 export const CLAUDE_ACCOUNT_LOGIN_V1 = 'claude-account-login/v1';
 export const CLAUDE_ACCOUNT_REMOVE_V1 = 'claude-account-remove/v1';
-/** Runner carries a Codex session's thread onto the account its claim names when that is not the one
- *  the thread lives in (runner codex_account_move.go). One that does not keeps the session where its
- *  thread is, whatever the claim says — so a session is only moved off a spent account on one that
- *  declares it. */
-export const CODEX_ACCOUNT_MOVE_V1 = 'codex-account-move/v1';
+export { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
 /** Runner guarantees a durable compaction boundary before the next Claude top-level turn. */
 export const SESSION_CLAUDE_COORDINATOR_CONTEXT_V1 =
   'session-claude-coordinator-context-v1';
@@ -2136,7 +2133,7 @@ export class RunnerApiController {
           modelCatalog: s.assignedRunner?.modelCatalog,
           workspaceEnv: workspace?.env as Record<string, string> | null,
           codexAccount: s.codexAccount ?? workspace?.codexAccount,
-          claudeAccount: workspace?.claudeAccount,
+          claudeAccount: s.claudeAccount ?? workspace?.claudeAccount,
           runnerEngines: s.assignedRunner?.engines,
         });
       let exec = resolveExec(s.model);
@@ -3325,6 +3322,7 @@ export class RunnerApiController {
         poolCodexAccountId: true,
         usesRuntimeDefaultModel: true,
         codexAccount: true,
+        claudeAccount: true,
         workspace: { select: { model: true, env: true, codexAccount: true, claudeAccount: true } },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
       },
@@ -3352,7 +3350,7 @@ export class RunnerApiController {
       modelCatalog: session.assignedRunner?.modelCatalog,
       workspaceEnv: session.workspace?.env as Record<string, string> | null,
       codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
-      claudeAccount: session.workspace?.claudeAccount,
+      claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
       runnerEngines: session.assignedRunner?.engines,
     });
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
@@ -3715,9 +3713,10 @@ export class RunnerApiController {
           // Which shared pool's key a failed turn may have ended on — see `keyRetryAt` below.
           provider: true,
           poolKeyId: true,
-          // Which of the runner's Codex accounts a turn its usage limit ended ran on — see
-          // `codexUsageLimit` below.
+          // Which of the runner's Codex accounts a turn its usage limit ended ran on, and whether it
+          // was picked by hand — see `codexUsageLimit` below.
           codexAccount: true,
+          codexAccountPinned: true,
           // What the run still has of its own in flight, for the OWNER_CONFIRMED question below:
           // work that will report back and wake this session again, which is what makes a turn the
           // run ends not the end of the run (`runStoppedWorking`). Read with the row.
@@ -4046,10 +4045,11 @@ export class RunnerApiController {
           : null;
       // A built-in Codex session whose account's usage limit ended the turn. Codex says so as the
       // turn's error, never as a reply, so the events path — which reads replies (`retryPlanFor`) —
-      // never armed it, and the session sat FAILED for good. It moves to another of the runner's
-      // accounts with room when its workspace leaves the account to Orbit (Automatic), and is re-sent
-      // there at once — its thread moves with it (runner codex_account_move.go) — else it waits for
-      // this account's reset. A task's run is not: its failure settles the task, as it always has.
+      // never armed it, and the session sat FAILED for good. On Automatic — nobody picked its account
+      // by hand, and its workspace leaves the account to Orbit — it moves to another of the runner's
+      // accounts with room and is re-sent there at once (its thread moves with it: runner
+      // codex_account_move.go); else it waits for this account's reset. A task's run is not: its
+      // failure settles the task, as it always has.
       const codexUsageLimit =
         failSession
         && completedTurn?.kind === 'message'
@@ -5314,9 +5314,31 @@ export class RunnerApiController {
       if (Object.keys(sessionData).length > 0) {
         await tx.session.update({ where: { id: sessionId }, data: sessionData });
       }
-      return { session, currentWorkAcknowledged, abandonedApprovals };
+      // A Claude session its account's usage limit just moved (retryPlanFor) still has its engine up on
+      // the old account. A reload naming the provider re-spawns it with the new account's
+      // CLAUDE_CONFIG_DIR (reloadProviderEnv), and the inbox hands it out ahead of the re-send.
+      const accountReload = retry.claudeAccount !== undefined;
+      if (accountReload) {
+        const last = await tx.conversationTurn.findFirst({
+          where: { sessionId },
+          orderBy: { seq: 'desc' },
+          select: { seq: true },
+        });
+        await tx.conversationTurn.create({
+          data: {
+            sessionId,
+            seq: (last?.seq ?? 0) + 1,
+            kind: 'reload',
+            content: JSON.stringify({ provider: AgentProvider.CLAUDE }),
+            clientTurnId: `account-switch:${randomUUID()}`,
+            status: 'PENDING',
+          },
+        });
+      }
+      return { session, currentWorkAcknowledged, abandonedApprovals, accountReload };
     }, loggedRetry(this.logger, 'runnerApi.events', { transaction: { timeout: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS, maxWait: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS } }));
 
+    if (eventOutcome.accountReload) this.realtime.notifyInbox(sessionId);
     // One frame per collected card, as a takeover sends: the clients re-read the conversation's
     // count on it, and one still drawing the card drops it.
     for (const id of eventOutcome.abandonedApprovals) {
@@ -6284,7 +6306,7 @@ export class RunnerApiController {
     runnerId: string,
     text: string,
     delivered = true,
-  ): Promise<{ retryAt?: Date | null; retryAttempts?: number }> {
+  ): Promise<{ retryAt?: Date | null; retryAttempts?: number; claudeAccount?: string; poolSwitchNotice?: string }> {
     const quotaSpent = isUsageLimitErrorText(text);
     if (!quotaSpent && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
     if (!delivered) return {};
@@ -6296,6 +6318,8 @@ export class RunnerApiController {
         taskId: true,
         retryAttempts: true,
         codexAccount: true,
+        claudeAccount: true,
+        claudeAccountPinned: true,
         workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
       },
     });
@@ -6303,6 +6327,33 @@ export class RunnerApiController {
     if (!quotaSpent) {
       if (session.taskId) return {};
       return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
+    }
+    // A built-in Claude session on Automatic — nobody picked its account by hand, and its workspace
+    // leaves the account to Orbit — moves to another of the runner's accounts with room and is re-sent
+    // at once: the events path queues the reload that re-spawns its engine there, and the runner
+    // carries the conversation across (CLAUDE_ACCOUNT_MOVE_V1). Not a task's run, as for Codex.
+    if (session.provider === AgentProvider.CLAUDE && !session.taskId) {
+      const runner = await tx.runner.findUnique({
+        where: { id: runnerId },
+        select: { planUsage: true, engines: true, capabilities: true },
+      });
+      const move = runner?.capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)
+        ? accountAfterUsageLimit(
+            'claude',
+            { account: session.claudeAccount, pinned: session.claudeAccountPinned },
+            session.workspace,
+            runner.engines,
+            runner.planUsage,
+            new Date(),
+          )
+        : null;
+      if (move) {
+        return {
+          retryAt: new Date(),
+          claudeAccount: move.to,
+          poolSwitchNotice: accountSwitchNotice('claude', move, runner?.engines),
+        };
+      }
     }
     const at = await this.quotaRetryAt(tx, runnerId, session, text, session.workspace);
     // No defensible moment → leave any earlier arming standing rather than replacing it with
@@ -6320,7 +6371,13 @@ export class RunnerApiController {
   private async codexUsageLimitRetry(
     tx: CodexUsageLimitTransaction,
     runnerId: string,
-    session: { ownerId: string; provider: string; codexAccount: string | null; workspaceId: string | null },
+    session: {
+      ownerId: string;
+      provider: string;
+      codexAccount: string | null;
+      codexAccountPinned: boolean;
+      workspaceId: string | null;
+    },
     text: string,
   ): Promise<{ retryAt: Date; move?: { to: string; notice: string } } | null> {
     const now = new Date();
@@ -6335,9 +6392,16 @@ export class RunnerApiController {
         })
       : null;
     const move = runner?.capabilities.includes(CODEX_ACCOUNT_MOVE_V1)
-      ? codexAccountAfterUsageLimit(session, workspace, runner.engines, runner.planUsage, now)
+      ? accountAfterUsageLimit(
+          'codex',
+          { account: session.codexAccount, pinned: session.codexAccountPinned },
+          workspace,
+          runner.engines,
+          runner.planUsage,
+          now,
+        )
       : null;
-    if (move) return { retryAt: now, move: { to: move.to, notice: codexAccountSwitchNotice(move, runner?.engines) } };
+    if (move) return { retryAt: now, move: { to: move.to, notice: accountSwitchNotice('codex', move, runner?.engines) } };
     const at = await this.quotaRetryAt(tx, runnerId, session, text, workspace);
     return at ? { retryAt: at } : null;
   }
@@ -6368,7 +6432,7 @@ export class RunnerApiController {
   private async quotaRetryAt(
     tx: QuotaRetryTransaction,
     runnerId: string,
-    session: { ownerId: string; provider: string; codexAccount: string | null },
+    session: { ownerId: string; provider: string; codexAccount: string | null; claudeAccount?: string | null },
     text: string,
     workspace: { env: unknown; codexAccount: string | null; claudeAccount: string | null } | null | undefined,
   ): Promise<Date | null> {
@@ -6391,7 +6455,10 @@ export class RunnerApiController {
         runAccount(
           session.provider,
           workspace?.env,
-          { codexAccount: session.codexAccount ?? workspace?.codexAccount, claudeAccount: workspace?.claudeAccount },
+          {
+            codexAccount: session.codexAccount ?? workspace?.codexAccount,
+            claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
+          },
           runner?.engines,
         ),
       );

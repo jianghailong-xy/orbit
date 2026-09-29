@@ -164,6 +164,9 @@ public extension Session {
                 // event never carry which account or key a claim chose.
                 poolMemberProviderId: poolMemberProviderId,
                 poolKeyId: poolKeyId,
-                codexAccount: codexAccount)
+                codexAccount: codexAccount,
+                codexAccountPinned: codexAccountPinned,
+                claudeAccount: claudeAccount,
+                claudeAccountPinned: claudeAccountPinned)
     }
 }

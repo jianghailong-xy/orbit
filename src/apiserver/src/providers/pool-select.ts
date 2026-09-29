@@ -1,4 +1,4 @@
-import type { PlanUsageSnapshot, PlanUsageWindow } from '@orbit/shared';
+import { quotaExpiresAt, quotaNearLimit, type PlanUsageSnapshot, type PlanUsageWindow } from '@orbit/shared';
 
 /** A window counts as spent at 100% consumed — the line planUsageBlockedUntil draws too. */
 const SPENT_UTILIZATION = 100;
@@ -45,24 +45,28 @@ export type PoolSelection<Row extends PoolMemberRow> =
   | { kind: 'UNAVAILABLE'; members: PoolMemberHold<Row>[] };
 
 /**
- * The member of an account pool the next run should go to: the one with the most room left in its
- * 5-hour window.
+ * The member of an account pool the next run should go to: the one whose quota would otherwise go to
+ * waste first. What a member has left when its weekly window resets is lost, so the pool spends its
+ * members first-expiring-first, as a runner's own accounts are spent (accountToStartOn).
  *
  * - `stickyId`, the member the session already runs on, is kept for as long as it is usable, even
- *   when another has more room: moving accounts over a few percent gains nothing.
- * - A member with no 5-hour reading ranks after every member that has one. Not reported is not the
- *   same as not used, so it is never taken for 0%.
+ *   when another would be taken first: moving accounts mid-conversation gains nothing.
+ * - A member with a window nearly spent (90%) comes after the rest: a run started there would soon
+ *   meet its limit and have to move.
+ * - Then the member whose quota resets soonest — its weekly window's reset (quotaExpiresAt) — and on
+ *   equal expiry the one with the most room in its 5-hour window. A member with nothing reported has
+ *   nothing known to expire, and ranks after every member that has room: not reported is not the same
+ *   as not used, so it is never taken for 0%. It does go ahead of one nearly spent, which soon will be.
  * - A refused credential is no candidate at all, whatever its last snapshot said. One whose quota
  *   could not be READ is a candidate, and ranks behind every member whose quota was: nothing says how
  *   much of it is left, so it takes the run only when no reading beats it — and a pool of nothing but
  *   those still runs on one, rather than hold every session for a number that never comes.
- * - Equal utilization goes to the lower slug, so the answer never depends on the order of the rows.
+ * - The rest of a tie goes to the lower slug, so the answer never depends on the order of the rows.
  *
- * Only the 5-hour window ranks, but any spent window rules a member out: a weekly limit stops an
- * account as surely as the 5-hour one. A spent window counts until its reset has passed, and so does
- * one that reported no reset at all — planUsageBlockedUntil lets that case through because holding a
- * lone account without a resume time would hold it forever, but here passing one member over just
- * sends the run to another.
+ * Any spent window rules a member out: a weekly limit stops an account as surely as the 5-hour one. A
+ * spent window counts until its reset has passed, and so does one that reported no reset at all —
+ * planUsageBlockedUntil lets that case through because holding a lone account without a resume time
+ * would hold it forever, but here passing one member over just sends the run to another.
  */
 export function selectPoolMember<Row extends PoolMemberRow>(
   candidates: readonly PoolCandidate<Row>[],
@@ -70,7 +74,7 @@ export function selectPoolMember<Row extends PoolMemberRow>(
   now: Date,
 ): PoolSelection<Row> {
   const usable = candidates.filter((c) => !c.refused && spentResets(c.usage, now).length === 0);
-  const chosen = usable.find((c) => c.row.id === stickyId) ?? usable.sort(byChoice)[0];
+  const chosen = usable.find((c) => c.row.id === stickyId) ?? usable.sort((a, b) => byChoice(a, b, now))[0];
   if (chosen) return { kind: 'SELECTED', row: chosen.row };
 
   const members = candidates.map((c) => ({
@@ -207,10 +211,17 @@ function latestReset(resets: number[]): Date | null {
 
 /**
  * The members whose quota could be read first, then the ones whose quota the endpoint would not
- * report — and within each of the two, least 5-hour utilization first, no reading last, then by slug.
+ * report — and within each of the two, none nearly spent before one that is, soonest-expiring quota
+ * first, then least 5-hour utilization, no reading last, then by slug.
  */
-function byChoice<Row extends PoolMemberRow>(a: PoolCandidate<Row>, b: PoolCandidate<Row>): number {
-  return Number(a.usageUnreadable) - Number(b.usageUnreadable) || byRoom(a, b);
+function byChoice<Row extends PoolMemberRow>(a: PoolCandidate<Row>, b: PoolCandidate<Row>, now: Date): number {
+  return (
+    Number(a.usageUnreadable) - Number(b.usageUnreadable) ||
+    Number(quotaNearLimit(a.usage, now)) - Number(quotaNearLimit(b.usage, now)) ||
+    // Two members expiring at Infinity (nothing reported) subtract to NaN, which falls through.
+    quotaExpiresAt(a.usage, now) - quotaExpiresAt(b.usage, now) ||
+    byRoom(a, b)
+  );
 }
 
 /** Least 5-hour utilization first, no reading last, then by slug. */

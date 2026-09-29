@@ -1,7 +1,8 @@
 /**
  * An account pool at dispatch, on real PostgreSQL: a claim on a session whose provider is a pool runs
- * on the member with the most 5-hour room, stays on it while it lasts, moves once it is spent, never
- * resolves another owner's pool, and leaves a line in the transcript when it moves.
+ * on the member ranked first — with every window here resetting together, the one with the most 5-hour
+ * room — stays on it while it lasts, moves once it is spent, never resolves another owner's pool, and
+ * leaves a line in the transcript when it moves.
  *
  * Everything between the rows and the job env is production code: the claim (QueueService), the quota
  * cache it reads (ProviderPlanUsageService, fed through `fetch` exactly as the usage endpoint answers)
@@ -40,9 +41,13 @@ process.env.PROVIDER_SECRET_KEY ??= 'pool-claim-selection-spec';
 /** What the usage endpoint answers for each key. A key with no answer gets a 500: nothing to read. */
 const usageAnswers = new Map<string, unknown>();
 
-/** The endpoint's body for a 5-hour window at `utilization`, resetting in two hours. */
+/** When every window here resets: the same time for all of them, so no member's quota runs out before
+ *  another's (a member whose quota resets sooner goes first) and 5-hour room alone ranks them. */
+const RESETS_AT = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
+
+/** The endpoint's body for a 5-hour window at `utilization`, resetting with every other in two hours. */
 function fiveHour(utilization: number) {
-  return { five_hour: { utilization, resets_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString() } };
+  return { five_hour: { utilization, resets_at: RESETS_AT } };
 }
 
 const usageEndpoint = (async (input: unknown, init?: { headers?: Record<string, string> }) => {
