@@ -127,11 +127,12 @@ and inbound task sources are not yet built.
 
 ## Community
 
-- Read the [documentation index](docs/README.md) or [support guide](SUPPORT.md).
-- Report bugs and request features with [GitHub Issues](https://github.com/jianghailong-xy/orbit/issues).
-- Read [CONTRIBUTING.md](CONTRIBUTING.md) before sending a pull request.
-- Project decisions and maintainer responsibilities are described in [GOVERNANCE.md](GOVERNANCE.md).
-- Security issues must follow [SECURITY.md](SECURITY.md), not a public issue.
+- Start with the [community guide](COMMUNITY.md), [public roadmap](ROADMAP.md), or [documentation index](docs/README.md).
+- Ask questions, share a deployment, or discuss direction in [GitHub Discussions](https://github.com/jianghailong-xy/orbit/discussions).
+- Report a reproducible bug or scoped proposal with [GitHub Issues](https://github.com/jianghailong-xy/orbit/issues); the repository's Issue Forms explain what to include.
+- Pick a small, independently scoped task from the [good first issue list](https://github.com/jianghailong-xy/orbit/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22).
+- Read [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md) before participating.
+- Project decisions and maintainer responsibilities are described in [GOVERNANCE.md](GOVERNANCE.md); security issues must follow [SECURITY.md](SECURITY.md), not a public issue.
 
 ## License
 
