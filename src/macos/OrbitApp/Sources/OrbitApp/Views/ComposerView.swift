@@ -825,12 +825,6 @@ struct ComposerView: View {
             .contentShape(Rectangle())
     }
 
-    /// A menu row whose checkmark sits at the TRAILING end of the row, the way a Picker draws it —
-    /// a Menu of Buttons has to render it explicitly. Trailing, not leading (`Label(_:systemImage:)`,
-    /// the natural spelling): a leading icon takes a column on the selected row only, so that row's
-    /// text starts one checkmark to the right of every sibling's, which is what the phone report
-    /// showed. Web parity too — `.scope-menu-row`'s check sits in a trailing slot.
-    @ViewBuilder
     /// The runner's accounts of the session's engine, right under it in the Provider submenu (web
     /// parity): Automatic first where its workspace leaves the account to Orbit, then each account with
     /// its own quota. A pick moves the session there (`ConsoleModel.switchAccount`); a signed-out
@@ -860,6 +854,12 @@ struct ComposerView: View {
         }
     }
 
+    /// A menu row whose checkmark sits at the TRAILING end of the row, the way a Picker draws it —
+    /// a Menu of Buttons has to render it explicitly. Trailing, not leading (`Label(_:systemImage:)`,
+    /// the natural spelling): a leading icon takes a column on the selected row only, so that row's
+    /// text starts one checkmark to the right of every sibling's, which is what the phone report
+    /// showed. Web parity too — `.scope-menu-row`'s check sits in a trailing slot.
+    @ViewBuilder
     private func menuItemLabel(_ text: String, selected: Bool) -> some View {
         HStack(spacing: 8) {
             Text(text)
