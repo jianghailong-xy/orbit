@@ -111,11 +111,11 @@
           "enabled": "boolean. Off by default: in a space whose maintenance is off, no fact starts a maintenance task.",
           "workspaceId": "The owner's workspace the maintenance task runs in, which decides the runner. Maintenance cannot be turned on without one.",
           "provider": "The provider the run is pinned to, with no fallback (design section 8.2, maintenance.run): a configured provider on the Claude Code runtime. The door refuses a built-in engine, a provider on another runtime and an account pool (400); a name no provider has yet is taken, and a run that finds it still missing is refused when it is claimed.",
-          "dailyRunLimit": "How many maintenance tasks the space may make in one UTC day: a whole number within bounds.dailyRunLimit. Counted as the tasks of the space's maintenance list made since midnight UTC, however they ended; the maintenance job reads the count (wikiMaintenanceRunsToday) before it makes one.",
-          "listId": "Server-written and never taken from a request: the space's hidden Wiki maintenance task list (maintenance.list), made the first time maintenance is turned on and kept when it is turned off."
+          "dailyRunLimit": "How many maintenance tasks the space may make in one UTC day: a whole number within bounds.dailyRunLimit. Counted as the tasks of the space's maintenance list made since midnight UTC, however they ended, but the plan's jobs (plan.jobs.notAMaintenanceRun); the maintenance job reads the count (wikiMaintenanceRunsToday) before it makes one.",
+          "listId": "Server-written and never taken from a request: the space's hidden Wiki maintenance task list (maintenance.list), made the first time maintenance is turned on, or by the space's first plan job (plan.jobs.task), and kept when it is turned off."
         },
         "bounds": { "dailyRunLimit": { "min": 1, "max": 48 } },
-        "channel": "The owner's alone: PATCH /api/wiki/spaces/:id on the user door with no session header, and WIKI_OWNER_CHANNEL_ONLY otherwise. A request names any of enabled, workspaceId, provider and dailyRunLimit; what it leaves out stays as it was. A stored value out of bounds, or of a key this contract no longer has, reads as the default."
+        "channel": "The owner's alone: PATCH /api/wiki/spaces/:id on the user door with no session header — or POST /api/wiki/spaces, whose maintenance is checked before the space is made and then written as the PATCH writes it (plan.jobs.trigger) — and WIKI_OWNER_CHANNEL_ONLY otherwise. A request names any of enabled, workspaceId, provider and dailyRunLimit; what it leaves out stays as it was. A stored value out of bounds, or of a key this contract no longer has, reads as the default."
       },
       "reservedForPhase2": ["embedding"]
     }
@@ -863,7 +863,7 @@
       "title": "Wiki maintenance",
       "hidden": true,
       "maxConcurrent": 1,
-      "means": "One per space, made by the first PATCH that turns maintenance on and recorded as settings.maintenance.listId. Hidden from the owner's list index (task_list.hidden); its tasks are the maintenance runs."
+      "means": "One per space, made by the first PATCH that turns maintenance on, or by the space's first plan job (plan.jobs.task), and recorded as settings.maintenance.listId. Hidden from the owner's list index (task_list.hidden); its tasks are the maintenance runs and the plan's jobs."
     },
     "dossier": {
       "route": "GET /api/runner/wiki/spaces/:id/dossiers",
@@ -932,7 +932,7 @@
       "permissionMode": "dontAsk",
       "runtime": "claude",
       "agent": "The same guardrails go into the claim's agent config, where every runtime reads them: maxTurns, disallowedTools (added to the workspace's own), permissionMode dontAsk (what is not pre-approved is refused, never asked: nobody watches a maintenance run), no effort. A maintenance session never orchestrates.",
-      "pinned": "The provider and the workspace are the space's maintenance settings. The run starts only when maintenance is on, the session is in settings.workspaceId, it names settings.provider, and that provider is an enabled configured provider on the Claude Code runtime; otherwise refusal says why, and the runner ends the run FAILED with it and starts no engine. Nothing falls back: not to the runner's own Claude login, not through an account pool.",
+      "pinned": "The provider and the workspace are the space's maintenance settings. The run starts only when maintenance is on (a plan job's run whether or not it is: plan.jobs.notAMaintenanceRun), the session is in settings.workspaceId, it names settings.provider, and that provider is an enabled configured provider on the Claude Code runtime; otherwise refusal says why, and the runner ends the run FAILED with it and starts no engine. Nothing falls back: not to the runner's own Claude login, not through an account pool.",
       "capability": "wiki-maintenance-run/v1",
       "undeclared": "A runner that does not declare the capability (X-Orbit-Runner-Capabilities) is never handed a maintenance session: the claim does not offer it the row and the reclaim leaves it out, so the session waits for a runner that can start it clean.",
       "cleanStart": {
@@ -943,7 +943,7 @@
         "thinking": "Off: CLAUDE_CODE_EFFORT_LEVEL=unset and MAX_THINKING_TOKENS=0, whatever effort the workspace or the provider declares.",
         "environment": "Built from nothing: the endpoint, token, model, custom headers and context window of the provider; PATH, locale, TMPDIR, certificates and proxies of the runner; ORBIT_HOME and the session context; nothing else of the runner's or the workspace's."
       },
-      "truncated": "A run whose opening prompt reaches maxTurns ends with the CLI's error_max_turns: its turn is FAILED, and the runner reports it on the cursor route as outcome truncated, one more of the space's consecutive failures, with the cursor where it was."
+      "truncated": "A run whose opening prompt reaches maxTurns ends with the CLI's error_max_turns: its turn is FAILED, and the runner reports it on the cursor route as outcome truncated, one more of the space's consecutive failures, with the cursor where it was. A plan job's run reported so ends its job failed instead (plan.jobs), and the cursor is neither moved nor counted."
     },
     "cli": {
       "dossier": "orbit wiki dossier --space <id> [--after <token>] [--limit N] [--json]",
@@ -1294,12 +1294,13 @@
       "edit": "POST /api/wiki/spaces/:id/plan/edits",
       "confirm": "POST /api/wiki/spaces/:id/plan/versions/:version/confirm",
       "decide": "POST /api/wiki/plan-proposals/:id/decide",
+      "redraft": "POST /api/wiki/spaces/:id/plan/redraft",
       "runnerState": "GET /api/runner/wiki/spaces/:id/plan",
       "draft": "POST /api/runner/wiki/spaces/:id/plan/drafts",
       "propose": "POST /api/runner/wiki/spaces/:id/plan/proposals"
     },
     "reads": {
-      "state": "{ spaceId, confirmed, draft, proposals }: the version in force and the draft, each whole or null, and the pending proposals, oldest first.",
+      "state": "{ spaceId, confirmed, draft, proposals, job }: the version in force and the draft, each whole or null, the pending proposals, oldest first, and the space's plan job (plan.jobs.read), or null when it never had one.",
       "versions": "Every version, newest first: { id, version, status, origin, baseVersion, proposalId, docCount, createdAt, confirmedAt, supersededAt }.",
       "version": "One version whole: its status, origin, baseVersion, categories, newFields, target, gate report, repoCheck, model, who made and confirmed it and when, and its documents in order, each with its sections in order; a session condition's projects are { id, title } with the title as it stands now (null for a project since deleted)."
     },
@@ -1307,10 +1308,113 @@
       "draft": "{ baseVersion, target?, plan: { categories, docs, newFields? }, repoCheck, model? }",
       "edit": "{ baseVersion, docSlug, doc } for a whole document (a new slug renames it), or { baseVersion, docSlug, sectionKey, section } for one of its sections",
       "propose": "{ reason, change: { doc, category? }, facts: [{ kind, id }] }",
-      "decide": "{ action: accept | reject, note? }"
+      "decide": "{ action: accept | reject, note? }",
+      "redraft": "{ instructions? }: with instructions (at most plan.jobs.rules.instructionsMaxChars characters) a revision, without them a draft"
     },
     "view": "Not knowledge: no source kind names a plan, so citing one is WIKI_SOURCE_UNRESOLVED; the push and the agent's search and get read entries alone.",
-    "tool": "none: no MCP tool reads, confirms or decides anything of the plan (hard constraint 2). The drafting job's verbs are the CLI's."
+    "tool": "none: no MCP tool reads, confirms or decides anything of the plan (hard constraint 2). The drafting job's verbs are the CLI's.",
+    "jobs": {
+      "phase": 2,
+      "doc": "docs/wiki-contract.md sections 21.7 and 21.8; criterion 11",
+      "migration": "src/apiserver/prisma/migrations/0327_wiki_plan_job/migration.sql",
+      "tables": ["wiki_plan_job"],
+      "means": "A space's plan is drafted, revised and built by jobs the server runs as tasks of the space's hidden Wiki maintenance list (maintenance.list), so the session that runs one is a maintenance session (isWikiMaintenanceSession) and the plan's runner door is open to it and to nothing else. A fact asks for a job — the space's creation, or its owner — never a clock.",
+      "kinds": {
+        "draft": "orbit wiki plan draft: a whole plan drafted from the repository at origin/main and what the space already knows, keeping every document the version it revises protects",
+        "revise": "orbit wiki plan revise: the space's newest version revised with the owner's instructions; a space with no version yet is drafted with the instructions as the owner's guidance",
+        "build": "the documents written from a confirmed version: kept for the task that writes them, which makes its own jobs"
+      },
+      "triggers": {
+        "space_created": "the space was created: through POST /api/wiki/spaces, or on the first proposal of a session whose workspace's repository had no space yet",
+        "owner": "the owner asked on the plan page: POST /api/wiki/spaces/:id/plan/redraft"
+      },
+      "storedStates": ["queued", "held", "made", "ended"],
+      "states": {
+        "queued": "the space's maintenance list has a task that has not ended; the job is made when a task of the owner's ends",
+        "held": "the space's maintenance names no workspace, or a provider no run could start on (held.reason); the job is made when the owner's next change to the maintenance settings, or their next request, finds that settled",
+        "running": "its task is made: dispatched, or running, with the gate round it is on",
+        "succeeded": "its run stored a draft the gate let through (version)",
+        "failed": "its run ended without one — errors are the gate's on its last round — or its task ended before the run said how it went"
+      },
+      "held": {
+        "reasons": ["no_maintenance_workspace", "maintenance_provider_unusable"],
+        "where": "wiki_plan_job.held_reason and held_at, served as the job's held: { reason, at }, or null. Written when a job is not made for one of the reasons, keeping the time the reason first held, as maintenance.job.held is on the cursor; cleared when its task is made.",
+        "no_maintenance_workspace": "settings.maintenance.workspaceId names no workspace of the owner's: a draft runs where maintenance runs.",
+        "maintenance_provider_unusable": "settings.maintenance.provider is one no maintenance run could start on (wikiMaintenanceProviderProblem): missing, turned off, or not on the Claude Code runtime."
+      },
+      "rules": {
+        "attemptsMax": 3,
+        "instructionsMaxChars": 4000,
+        "reportMaxBytes": 16000,
+        "draftMaxBytes": 1000000,
+        "errorMaxChars": 2000,
+        "checkTimeoutSeconds": 300,
+        "materialsSessionDays": 90,
+        "materialsSessionsMax": 5000,
+        "materialsProjectsMax": 500
+      },
+      "request": "A request asks for a draft, or with instructions a revision. The space's draft or revision that has not ended answers it (one open a space, a partial unique index) and is asked again whether it may be made now; a made job whose task already ended, or is gone, without its run saying how is ended failed first, so it cannot stand in the way. Otherwise a job is recorded and asked at once: held when the settings say so; queued when the list has a task that has not ended; else made.",
+      "trigger": "WikiPlanJobFacts takes every task change this replica publishes (task.changed): the made jobs of the tasks it names are ended failed when their task ended before the run said how it went, and the owner's queued jobs are asked again, since the list may have just been freed. The owner's change to a space's maintenance settings asks its queued and held jobs again. No clock asks anything.",
+      "staggered": "A job and the space's maintenance runs share its list, one task at a time: the maintenance trigger makes no task while the list has one that has not ended (maintenance.job.trigger.notMade), and a job waits behind one the same way, so the local model is never asked by both at once.",
+      "notAMaintenanceRun": "A job's task is not a maintenance run: it is not counted against settings.maintenance.dailyRunLimit (wikiMaintenanceRunsToday counts the list's other tasks), the day's limit does not hold it back, and it runs whether or not maintenance is turned on — the list is made for it when the space has none, and the claim does not refuse its session for maintenance being off (maintenance.run).",
+      "task": {
+        "list": "the space's hidden Wiki maintenance list (maintenance.list), made for the job when the space has none",
+        "title": "Wiki plan draft: <space title>, or Wiki plan redraft: <space title> for a revision",
+        "assignee": "settings.maintenance.workspaceId",
+        "provider": "settings.maintenance.provider, pinned: the session is claimed as maintenance.run says",
+        "runAt": "the moment it is made: the dispatcher's next scan starts it",
+        "creator": "USER, the space's owner",
+        "description": "the run's instructions: run `orbit wiki plan draft --space <id>` (or `revise`) once, and report the documents, the gate rounds with their errors, the token spend and the time it printed; a revision's instructions are quoted below them",
+        "completionCriterion": "EXECUTABLE",
+        "acceptanceCommand": "orbit wiki plan check --space <id> --job <id>",
+        "acceptanceExpectedExitCode": 0,
+        "acceptanceTimeoutSeconds": "rules.checkTimeoutSeconds"
+      },
+      "read": "The plan's read (plan.reads.state) carries the space's job that has not ended, else the one that ended last: { id, spaceId, kind, trigger, state, instructions, requestedAt, held, waitingFor: { taskId, title, sessionId, startedAt } for a queued one, taskId, provider, sessionId, madeAt, startedAt, endedAt, attempt, attemptsMax, version, errors, error, report, draft } — draft being the last draft of a failed job, as its run sent it to the gate.",
+      "routes": {
+        "redraft": "POST /api/wiki/spaces/:id/plan/redraft",
+        "context": "GET /api/runner/wiki/spaces/:id/plan/job",
+        "progress": "POST /api/runner/wiki/spaces/:id/plan/job/progress",
+        "finish": "POST /api/runner/wiki/spaces/:id/plan/job/finish",
+        "check": "GET /api/runner/wiki/spaces/:id/plan/check",
+        "materials": "GET /api/runner/wiki/spaces/:id/plan/materials"
+      },
+      "who": {
+        "redraft": "The owner, on the owner channel only: a request with a session header is refused WIKI_OWNER_CHANNEL_ONLY before anything is read. Its answer is { created, job }: the job made, or the space's draft that had not ended.",
+        "runner": "context, progress, finish and materials are a maintenance run's of the space alone, as the plan's other runner routes are: any other session WIKI_NOT_MAINTENANCE_SESSION, a headless call 400, another owner's space a plain 404. context, progress and finish answer a maintenance run whose task no job was made for WIKI_PLAN_NO_JOB, and progress and finish a job that has ended the same way. check answers the space's owner's runner with no session too — a task's acceptance command runs with none."
+      },
+      "context": "{ job, space: { id, title, repo: { urlNorm, rootCommitSha }, workspace: { id, workDir } } }: the job the calling session's task was made for and where its run starts; records the session and the time it first started.",
+      "progress": "{ attempt }: the gate round the run is on, 1 to rules.attemptsMax — what the plan page shows while it runs.",
+      "finish": "{ outcome: succeeded | failed, version?, errors?, error?, report?, draft?, attempt? }: a run that succeeded names the version its draft became, a draft of the space this very session stored; one that failed carries the gate's errors on its last round (at most plan.rules.errorsMax), what went wrong in words (redacted, at most rules.errorMaxChars), and the last draft it had (at most rules.draftMaxBytes of JSON). The report is at most rules.reportMaxBytes of JSON. The job is ended with it; a second end is refused.",
+      "check": {
+        "passes": "The job ended succeeded, and the version it names is one of the space's.",
+        "exit": "0 when it passes; 1 otherwise, with each reason a sentence: the run did not say how it ended, it failed (with its error and how many errors the gate's last round found), or the version it names is missing."
+      },
+      "materials": "{ spaceId, title, asOf, repo, workspace, projects: [{ id, title, status, createdAt, tasks, sessions }], sessions: { days, total, items: [{ title, month, task, project, provider }] }, entries: [{ kind, status, count }], topics: [{ slug, title, category, pathPrefixes, active, recent: [{ kind, title }] }] }: the owner's projects (at most rules.materialsProjectsMax, oldest first), the sessions of the space's workspaces of the last rules.materialsSessionDays days (at most rules.materialsSessionsMax, newest first, with the total), and how the space's entries and topics are spread. Every title is redacted before it leaves the server; the runner counts and clusters.",
+      "report": "What a run reports when it ends (WikiPlanJobReport): categories, docs, sections, target, attempts [{ attempt, local, server, checks }] — each gate round's errors found by the runner's own gate and by the server's, by check — repo { sha, checked, missing }, tokens { input, output, calls }, seconds, model, and rulesDraft: the fourth step's draft of the rules, cut to fit.",
+      "run": {
+        "steps": [
+          "context: GET …/plan/job — the job, the space, its repository and the maintenance workspace's checkout; and GET …/plan — the version it revises and the documents that version protects",
+          "checkout: the maintenance workspace's work directory, ~ expanded to the runner account's home, fetched; a checkout that is not the space's repository fails the run",
+          "materials: the repository at origin/main — its modules and entry points, the docs heading tree (docs/mocks and docs/evidence left out), the contracts and the code's symbols — and GET …/plan/materials, the owner's projects, the space's sessions counted and clustered by title, and its entries and topics",
+          "draft, in four steps each streamed to disk as it is written: the catalogue's skeleton (categories and documents), each category's documents in detail, each document's outline with where every section's material comes from, and a draft of the rules; one clean Claude Code call to the local model a unit, in a compact line format",
+          "gate: the runner's own gate first — schema, docCount, protected, references (files, docs sections, symbols and contracts at the sha, every project and topic, and every → x.y or 见 x.y a document of the plan) and, for a revision, sections moved out only of kind conventions — then the server's (POST …/plan/drafts)",
+          "redo: whatever either gate found is handed back to the model, unit by unit, and the draft gated again: rules.attemptsMax rounds in all",
+          "finish: POST …/plan/job/finish with the version the draft became, or the last round's errors"
+        ],
+        "revise": "A revision asks the model for the new catalogue — each document with the documents of the version it revises that it is made from, and the sections it moves into a category for agents — then writes again only the documents that merge or are new; one made from a single document of the version keeps its outline, less the sections moved out. A protected document is carried as it is, and a move out of one, or of a section of any kind but conventions, is refused by the runner's gate.",
+        "model": "Every call is a clean Claude Code (agentSurface.verify.cleanClaudeCode) on the model this session's provider names, thinking off, its answer streamed to a file as it arrives; the run waits for the endpoint's /health before its first call and stops at the first 401."
+      },
+      "cli": {
+        "draft": "orbit wiki plan draft --space <id> [--target MIN-MAX] [--model MODEL] [--concurrency N] [--work-dir DIR] [--json]",
+        "revise": "orbit wiki plan revise --space <id> [--instructions <file>] [--target MIN-MAX] [--model MODEL] [--concurrency N] [--work-dir DIR] [--json]",
+        "check": "orbit wiki plan check --space <id> --job <id> [--json]",
+        "tool": "none: all three are CLI only. draft and revise are the plan job's run alone, and check is its task's acceptance command, which runs where there is no session.",
+        "draftPrecondition": "Run this only as the plan job of the space, once, and let it finish: it drafts as the space's maintenance run, and only a draft that passed the plan's gate is stored — three rounds at most, each handing every error back to the model.",
+        "revisePrecondition": "Run this only as the plan job the owner's redraft made, once, and let it finish: it revises the plan's newest version with the owner's instructions, and only a draft that passed the plan's gate is stored — three rounds at most, each handing every error back to the model.",
+        "checkPrecondition": "Judge a plan job only by what this reads: it passes when the job's run stored a draft that passed the plan's gate, and a run cannot pass it by saying it finished."
+      }
+    }
   },
 
   "refusals": [
@@ -1333,7 +1437,8 @@
     { "code": "WIKI_ARTICLE_STALE", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "An article write named an entry-set fingerprint that is not its topic's current one: the topic's entries changed while the articles were being written (articles.regeneration). Nothing is written; the next run writes them from the entries as they stand." },
     { "code": "WIKI_PLAN_GATE", "httpStatus": 422, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A plan draft, an owner's edit of the plan, a proposed change to it or the acceptance of one did not pass the plan's gate (plan.gate): errors[] lists everything it found, each with its check and where it is. Nothing is stored." },
     { "code": "WIKI_PLAN_STALE", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A plan request was built on a version that is no longer the space's newest (plan.versions), confirmed a version that is no longer a draft, or answered a proposal already decided. Nothing is written; read the plan again." },
-    { "code": "WIKI_PLAN_UNCONFIRMED", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A space's documents were to be written, or a change proposed to its plan, and the space has no plan its owner confirmed (plan.guard)." }
+    { "code": "WIKI_PLAN_UNCONFIRMED", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A space's documents were to be written, or a change proposed to its plan, and the space has no plan its owner confirmed (plan.guard)." },
+    { "code": "WIKI_PLAN_NO_JOB", "httpStatus": 409, "scope": "request", "phase": 2, "addedByThisContract": true, "when": "A maintenance run asked for, or reported on, a job of the space's plan, and its task was made for none, or the job has ended — its run said how, or its task ended first (plan.jobs.who.runner). Nothing is written." }
   ],
   "refusalRules": {
     "order": ["changesetSize", "schema", "ownerOnlyKind", "sources", "redaction", "revision", "probe", "taint", "effect", "quota", "similar"],
@@ -1409,7 +1514,8 @@
           "GET /api/wiki/spaces/:id/plan/versions/:version",
           "POST /api/wiki/spaces/:id/plan/edits",
           "POST /api/wiki/spaces/:id/plan/versions/:version/confirm",
-          "POST /api/wiki/plan-proposals/:id/decide"
+          "POST /api/wiki/plan-proposals/:id/decide",
+        "POST /api/wiki/spaces/:id/plan/redraft"
         ]
       },
       "runner": {
@@ -1435,7 +1541,12 @@
           "GET /api/runner/wiki/spaces/:id/maintenance/check",
           "GET /api/runner/wiki/spaces/:id/plan",
           "POST /api/runner/wiki/spaces/:id/plan/drafts",
-          "POST /api/runner/wiki/spaces/:id/plan/proposals"
+          "POST /api/runner/wiki/spaces/:id/plan/proposals",
+        "GET /api/runner/wiki/spaces/:id/plan/job",
+        "POST /api/runner/wiki/spaces/:id/plan/job/progress",
+        "POST /api/runner/wiki/spaces/:id/plan/job/finish",
+        "GET /api/runner/wiki/spaces/:id/plan/check",
+        "GET /api/runner/wiki/spaces/:id/plan/materials"
         ],
         "maintenanceNote": "phase 2; any other session is refused WIKI_NOT_MAINTENANCE_SESSION. The maintenance job's check (maintenance.job.check) also answers the space's owner's runner with no session, since a task's acceptance command runs with none.",
         "verificationRoutes": [

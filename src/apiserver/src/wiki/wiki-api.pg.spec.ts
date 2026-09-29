@@ -369,6 +369,8 @@ test('the refusals, limits and effect policy this door answers with are the cont
       ['WIKI_OWNER_CHANNEL_ONLY', 403],
       // The plan (migration 0325, contract `plan.gate`, `plan.versions`, `plan.guard`).
       ['WIKI_PLAN_GATE', 422],
+      // The plan's jobs (migration 0327, contract `plan.jobs`): a run that runs none, or whose job ended.
+      ['WIKI_PLAN_NO_JOB', 409],
       ['WIKI_PLAN_STALE', 409],
       ['WIKI_PLAN_UNCONFIRMED', 409],
       ['WIKI_PROBE_REFUSED', 422],

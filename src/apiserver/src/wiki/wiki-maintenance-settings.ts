@@ -136,6 +136,37 @@ export function setWikiMaintenance(
   return new MaintenanceSettingsWriter(prisma).setWikiMaintenance(ownerId, spaceId, input);
 }
 
+/**
+ * What a request names of a space's maintenance, checked before a space is made with it (contract
+ * `space.settings.maintenance.channel`): a workspace of the owner's, and — named or turned on — a
+ * provider a maintenance run could start on. The same refusals `setWikiMaintenance` answers.
+ */
+export async function checkWikiMaintenanceInput(prisma: PrismaService, ownerId: string, input: WikiMaintenanceInput): Promise<void> {
+  if (input.workspaceId) {
+    const workspace = await prisma.workspace.findFirst({ where: { id: input.workspaceId, ownerId, deletedAt: null }, select: { id: true } });
+    if (!workspace) throw new NotFoundException('no such workspace');
+  }
+  const asked = merged(wikiMaintenanceSettings(undefined), input);
+  if (asked.enabled && !asked.workspaceId) {
+    throw new BadRequestException('maintenance.workspaceId is required to turn maintenance on: the workspace its runs take place in');
+  }
+  if (input.provider !== undefined || asked.enabled) {
+    const problem = await wikiMaintenanceProviderProblem(prisma, ownerId, asked.provider);
+    if (problem && !problem.unavailable) throw new BadRequestException(`maintenance.provider: ${problem.why}`);
+  }
+}
+
+/**
+ * The space's hidden «Wiki maintenance» list, made now when the space has none (contract
+ * `maintenance.list`): what a plan job needs to be made in, whether or not maintenance was ever turned on
+ * (contract `plan.jobs.task`). Answers the list the space's settings name, or null for a space that is
+ * gone. The list is made before the space row is locked, as `setWikiMaintenance` makes it, and deleted
+ * again when the locked row names one already.
+ */
+export function ensureWikiMaintenanceList(prisma: PrismaService, ownerId: string, spaceId: string): Promise<string | null> {
+  return new MaintenanceSettingsWriter(prisma).ensureList(ownerId, spaceId);
+}
+
 /** The one writer of `settings.maintenance`: a class only so that its retry is labelled like every other. */
 class MaintenanceSettingsWriter {
   private readonly logger = new Logger('WikiMaintenance');
@@ -191,6 +222,31 @@ class MaintenanceSettingsWriter {
         return next;
       },
       loggedRetry(this.logger, 'wiki.setMaintenance'),
+    );
+  }
+
+  async ensureList(ownerId: string, spaceId: string): Promise<string | null> {
+    return withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const made = await tx.taskList.create({
+          data: { ownerId, title: WIKI_MAINTENANCE_LIST_TITLE, hidden: true, maxConcurrent: 1 },
+          select: { id: true },
+        });
+        const [locked] = await tx.$queryRaw<Array<{ settings: unknown }>>`
+          SELECT "settings" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
+        const current = locked ? storedMaintenance(locked.settings) : null;
+        if (!current || current.listId) {
+          await tx.taskList.delete({ where: { id: made.id } });
+          return current?.listId ?? null;
+        }
+        const change = JSON.stringify({ maintenance: { ...current, listId: made.id } });
+        await tx.$executeRaw`
+          UPDATE "wiki_space" SET "settings" = "settings" || ${change}::jsonb, "updated_at" = now()
+           WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid`;
+        return made.id;
+      },
+      loggedRetry(this.logger, 'wiki.ensureMaintenanceList'),
     );
   }
 }

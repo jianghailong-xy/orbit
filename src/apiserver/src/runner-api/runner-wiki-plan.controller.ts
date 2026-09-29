@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, HttpCode, HttpStatus, Param, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { Runner } from '@prisma/client';
 import { toUuid } from '@orbit/shared';
 import { PublicIdPipe } from '../common/public-id';
@@ -12,7 +12,9 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 /**
  * The plan, on the runner door (contracts/wiki.contract.json `plan.routes`,
  * `agentSurface.doors.runner.maintenanceRoutes`): what the drafting job and the maintenance run ask —
- * the plan as it stands, a draft to store, and a change to propose.
+ * the plan as it stands, a draft to store, and a change to propose — and the job's own routes (contract
+ * `plan.jobs`): where its run starts, the gate round it is on, how it ended, the materials it reads,
+ * and the check its task's acceptance command asks.
  *
  * ONLY A MAINTENANCE RUN OF THE SPACE. The calling session (`X-Orbit-Session-Id`, one this runner
  * hosts for its owner) is the principal, and `WikiPlans.assertMaintainer` asks it the one test
@@ -62,6 +64,69 @@ export class RunnerWikiPlanController {
     @Body() body: Record<string, unknown>,
   ) {
     return this.plans.propose(await this.maintainer(runner, callingSessionId), id, body);
+  }
+
+  // ── The plan's jobs (contract `plan.jobs`) ────────────────────────────────────────────────────
+
+  /** The job this maintenance run runs, and the space and checkout it starts from; recorded as started. */
+  @Get('spaces/:id/plan/job')
+  async job(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    return this.plans.jobContext(await this.maintainer(runner, callingSessionId), id);
+  }
+
+  /** The gate round the run is on: what the plan page shows while it runs. */
+  @Post('spaces/:id/plan/job/progress')
+  @HttpCode(HttpStatus.OK)
+  async progress(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.plans.jobProgress(await this.maintainer(runner, callingSessionId), id, body);
+  }
+
+  /** How the run ended: the version it stored, or the gate's errors and why it failed. */
+  @Post('spaces/:id/plan/job/finish')
+  @HttpCode(HttpStatus.OK)
+  async finish(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.plans.jobFinish(await this.maintainer(runner, callingSessionId), id, body);
+  }
+
+  /**
+   * `orbit wiki plan check`: whether the job's run did what its task was made for. A task's acceptance
+   * command runs with no session, so a headless call of the space's owner's runner is answered; a call
+   * that names a session is held to the maintenance test like every other route here.
+   */
+  @Get('spaces/:id/plan/check')
+  async check(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('jobId', PublicIdPipe) jobId?: string,
+  ) {
+    if (callingSessionId?.trim()) await this.plans.assertMaintainer(await this.maintainer(runner, callingSessionId), id);
+    if (!jobId) throw new BadRequestException('jobId is required: the plan job the task was made for (--job)');
+    return this.plans.jobCheck(runner.ownerId, id, jobId);
+  }
+
+  /** What a draft reads of Orbit besides the repository: projects, the space's sessions, its entries and topics. */
+  @Get('spaces/:id/plan/materials')
+  async materials(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    return this.plans.materials(await this.maintainer(runner, callingSessionId), id);
   }
 
   /**

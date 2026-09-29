@@ -92,8 +92,12 @@ export class WikiController {
 
   /** A space the owner creates outright: a codebase, or a wiki with no repository behind it. */
   @Post('spaces')
-  createSpace(@CurrentUser() user: AuthUser, @Body() dto: CreateWikiSpaceDto) {
-    return this.wiki.createSpace(user.userId, dto);
+  createSpace(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateWikiSpaceDto,
+    @Req() request: { headers: Record<string, string | string[] | undefined> },
+  ) {
+    return this.wiki.createSpace(user.userId, dto, actingSession(request.headers));
   }
 
   /**
