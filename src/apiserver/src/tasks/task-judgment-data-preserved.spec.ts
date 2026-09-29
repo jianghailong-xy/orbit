@@ -1444,7 +1444,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       //        0291_drop_task_dispatch_authority on that task's branch and renumbered 0329 before it
       //        reached this line, whose 0291 is `approval_background_job` (0326–0328 were already
       //        claimed by branches not yet landed); it was never deployed under the old name.
-      '0329_drop_task_dispatch_authority'],
+      '0329_drop_task_dispatch_authority',
       // The Codex account one session was started on (0330): one nullable `ADD COLUMN` on `session`
       // (`codex_account`, TEXT, no default, no index, no CHECK, no foreign key — 0324's
       // `pool_codex_account_id` exactly — so the ALTER is catalog-only and no stored session row is
