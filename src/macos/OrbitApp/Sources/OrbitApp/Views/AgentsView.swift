@@ -1098,7 +1098,10 @@ struct NewSessionView: View {
             // the machine this draft would run on, and the one whose Engines section fixes a row.
             ProviderSwitchSheet(
                 choices: providerChoices, currentSlug: draft.provider, agentName: agent.name,
+                currentAccount: draft.codexAccount,
+                automatic: draft.codexAutomaticOffered ? draft.codexAutomatic : nil,
                 onSelect: { slug in draft.pickDraftProvider(slug) },
+                onSelectAccount: { slug, account in draft.pickDraftAccount(slug, account) },
                 onFixRunner: agent.runnerId.map { rid in { app.route(to: .runner(rid)) } })
         }
     }
@@ -1118,7 +1121,8 @@ struct NewSessionView: View {
         SessionProviderChoices.choices(configured: draft.configuredProviders,
                                        catalog: draft.modelCatalog,
                                        engines: draft.runnerEngines,
-                                       pools: draft.allPools)
+                                       pools: draft.allPools,
+                                       planUsage: draft.runnerPlanUsage)
     }
 
     private var currentProviderChoice: ProviderChoice {
@@ -1132,11 +1136,16 @@ struct NewSessionView: View {
     /// the credential earns a line only when it's broken — matching web, where it surfaces solely as
     /// the provider's `unavailable` warning (not yet modelled on the native ProviderChoice).
     private var heroSubtitle: String {
-        draft.providerCapabilitiesResolved
+        let model = draft.providerCapabilitiesResolved
             ? AgentDefaults.friendlyName(draft.modelID, for: draft.provider,
                                          catalog: draft.modelCatalog,
                                          configured: draft.configuredProviders)
             : "Runtime default"
+        // Which of the runner's accounts it would start on, when it has several — marked when that is
+        // Automatic's choice rather than a pick (web parity).
+        guard let account = currentProviderChoice.accounts?.first(where: { $0.id == draft.codexAccount })
+        else { return model }
+        return "\(model) · \(account.label)\(draft.codexAutomatic ? " (auto)" : "")"
     }
 }
 
