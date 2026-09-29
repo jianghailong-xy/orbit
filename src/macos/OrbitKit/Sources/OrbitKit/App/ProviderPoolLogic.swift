@@ -67,8 +67,7 @@ public enum ProviderPools {
         account.current
             ? "\(pool.label) is running this session on \(account.member.label)"
             : "A session on \(pool.label) starts on \(account.member.label) — "
-                + (pool.shared != nil ? "the key it picks for you" : "the account with the most room")
-                + " right now"
+                + (pool.shared != nil ? "the key it picks for you right now" : "the account whose quota resets soonest")
     }
 
     /// Why the new-session picker greys `pool` out, or nil while it can run: the server's own answer
@@ -118,7 +117,7 @@ public enum ProviderPools {
     public static let pageTitle = "Account pool"
     public static let accountsHeader = "Accounts"
     /// The web page's sentence under the pool's name; on a phone, the Accounts section's footer.
-    public static let accountsFooter = "Each session starts on the account with the most room in its 5-hour window, and stays on it until that one runs out."
+    public static let accountsFooter = "Each session starts on the account whose quota resets soonest, so none of it goes unused, and stays on it until that one runs out."
 
     public static func pageSubtitle(_ pool: ProviderPool) -> String {
         let n = pool.members.count

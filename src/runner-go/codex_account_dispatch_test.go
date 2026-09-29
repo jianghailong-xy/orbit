@@ -502,17 +502,23 @@ func TestCodexThreadStaysWhereItCannotBeCarried(t *testing.T) {
 	}
 }
 
-// The runner says it can carry a thread to another account, in the words the control plane asks for:
-// a session is moved off a spent account only on a runner that declares codex-account-move/v1.
-func TestTheRunnerDeclaresItCarriesCodexThreadsToAnotherAccount(t *testing.T) {
-	if !strings.Contains(","+runnerCapabilitiesV1+",", ","+codexAccountMoveCapabilityV1+",") {
-		t.Fatalf("this runner does not declare %s: %q", codexAccountMoveCapabilityV1, runnerCapabilitiesV1)
-	}
-	controller, err := os.ReadFile(filepath.Join("..", "apiserver", "src", "runner-api", "runner-api.controller.ts"))
+// The runner says it can carry a conversation to another account, in the words the control plane asks
+// for: a session is moved to another Codex or Claude account only on a runner that declares
+// codex-account-move/v1 or claude-account-move/v1.
+func TestTheRunnerDeclaresItCarriesConversationsToAnotherAccount(t *testing.T) {
+	controller, err := os.ReadFile(filepath.Join("..", "apiserver", "src", "providers", "account-move-capability.ts"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "CODEX_ACCOUNT_MOVE_V1 = '" + codexAccountMoveCapabilityV1 + "'"; !strings.Contains(string(controller), want) {
-		t.Fatalf("the control plane does not ask for %s in those words (%s)", codexAccountMoveCapabilityV1, want)
+	for constant, capability := range map[string]string{
+		"CODEX_ACCOUNT_MOVE_V1":  codexAccountMoveCapabilityV1,
+		"CLAUDE_ACCOUNT_MOVE_V1": claudeAccountMoveCapabilityV1,
+	} {
+		if !strings.Contains(","+runnerCapabilitiesV1+",", ","+capability+",") {
+			t.Fatalf("this runner does not declare %s: %q", capability, runnerCapabilitiesV1)
+		}
+		if want := constant + " = '" + capability + "'"; !strings.Contains(string(controller), want) {
+			t.Fatalf("the control plane does not ask for %s in those words (%s)", capability, want)
+		}
 	}
 }

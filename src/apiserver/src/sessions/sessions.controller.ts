@@ -32,6 +32,7 @@ import {
   MergeToMainDto,
   SessionArmRetryDto,
   SessionConfigDto,
+  SessionAccountDto,
   SessionRenameDto,
   SessionResumeDto,
   SessionInterruptDto,
@@ -470,6 +471,16 @@ export class SessionsController {
     @Body() dto: SessionConfigDto,
   ) {
     return this.sessions.updateConfig(user.userId, id, dto);
+  }
+
+  /** Which of its runner's Codex or Claude accounts the session runs on — see switchAccount. */
+  @Patch(':id/account')
+  switchAccount(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: SessionAccountDto,
+  ) {
+    return this.sessions.switchAccount(user.userId, id, dto?.account);
   }
 
   /** Rename a session's display title. Works on any session (live or ended) and never
