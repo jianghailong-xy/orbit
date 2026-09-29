@@ -250,11 +250,12 @@ async function projects(s: Services, ids: World, label: string): Promise<Record<
   };
 }
 
-/** A task of this project, assigned to the world's workspace, OPEN, not opted into auto-run. */
+/** A task of this project (or of none), assigned to the world's workspace, OPEN, not opted into
+ *  auto-run. */
 async function seedTask(
   db: PrismaClient,
   ids: World,
-  projectId: string,
+  projectId: string | null,
   title: string,
   extra: Record<string, unknown> = {},
 ): Promise<string> {
@@ -465,6 +466,53 @@ test('(2) the sweeps start nothing in a project that is not started or is paused
 
 // ═══ (3) the retry policy ══════════════════════════════════════════════════════════════════════════
 
+/** The dispatch moment a task is on (0137): what the retry policy moves on when it re-arms a run. */
+const epochOf = async (db: PrismaClient, taskId: string) => (await db.taskDispatchEpoch.findUniqueOrThrow({
+  where: { taskId }, select: { epoch: true },
+})).epoch;
+
+const workRuns = (db: PrismaClient, taskId: string) => db.session.findMany({
+  where: { taskId, startsTaskWork: true }, orderBy: { createdAt: 'asc' }, select: { id: true, createdAt: true },
+});
+
+/** An auto-run task waiting on one DONE prerequisite, both filed under `projectId` (or none). */
+async function retried(s: Services, ids: World, projectId: string | null, label: string): Promise<string> {
+  const prerequisite = await seedTask(s.db, ids, projectId, `${label}-prerequisite`, {
+    status: TaskStatus.DONE,
+  });
+  const task = await seedTask(s.db, ids, projectId, `${label}-fails`, { autoRunWhenReady: true });
+  await s.db.taskDependency.create({ data: { taskId: task, dependsOnTaskId: prerequisite } });
+  return task;
+}
+
+/**
+ * The sweep runs each task once and each run fails with its task left OPEN — the shape the retry
+ * policy is for. Answers the moments the runs failed on, and the instant past the first backoff.
+ */
+async function failFirstRuns(
+  s: Services,
+  held: string,
+  twin: string,
+): Promise<{ heldMoment: bigint; twinMoment: bigint; backoffPassed: Date }> {
+  await sweep(s.tasks);
+  const [heldRun] = await workRuns(s.db, held);
+  const [twinRun] = await workRuns(s.db, twin);
+  assert.ok(heldRun && twinRun, 'the first sweep did not start both tasks');
+  for (const run of [heldRun, twinRun]) {
+    await s.db.session.update({
+      where: { id: run.id },
+      data: { status: RunStatus.FAILED, error: null, finishedAt: new Date() },
+    });
+  }
+  return {
+    heldMoment: await epochOf(s.db, held),
+    twinMoment: await epochOf(s.db, twin),
+    backoffPassed: new Date(
+      Math.max(heldRun.createdAt.getTime(), twinRun.createdAt.getTime()) + AUTO_RUN_RETRY_BACKOFF_MS[0] + 1_000,
+    ),
+  };
+}
+
 test('(3) a paused project retries nothing — the moment stays where it was — and resumed, the retry comes',
 { skip, timeout: 300_000 }, async () => {
   assertCoordinatorPgUrlIsIsolated(URL!);
@@ -472,58 +520,70 @@ test('(3) a paused project retries nothing — the moment stays where it was —
   try {
     const ids = await world(s.db, 'retry');
     // Two projects moving alike, one of which the owner pauses once its task's run has failed. A
-    // project that was never started cannot be here: nothing automatic ever ran in one.
+    // project nobody has started is (3b).
     const held = await project(s, ids, 'retry-held', 'MOVING');
     const twin = await project(s, ids, 'retry-twin', 'MOVING');
-    const retried = async (projectId: string, label: string) => {
-      const prerequisite = await seedTask(s.db, ids, projectId, `${label}-prerequisite`, {
-        status: TaskStatus.DONE,
-      });
-      const task = await seedTask(s.db, ids, projectId, `${label}-fails`, { autoRunWhenReady: true });
-      await s.db.taskDependency.create({ data: { taskId: task, dependsOnTaskId: prerequisite } });
-      return task;
-    };
-    const heldTask = await retried(held, 'held');
-    const twinTask = await retried(twin, 'twin');
-    const epochOf = async (taskId: string) => (await s.db.taskDispatchEpoch.findUniqueOrThrow({
-      where: { taskId }, select: { epoch: true },
-    })).epoch;
-    const workRuns = (taskId: string) => s.db.session.findMany({
-      where: { taskId, startsTaskWork: true }, orderBy: { createdAt: 'asc' }, select: { id: true, createdAt: true },
-    });
-
-    // Both run once, and both runs fail with the task left OPEN — the shape the retry policy is for.
-    await sweep(s.tasks);
-    const [heldRun] = await workRuns(heldTask);
-    const [twinRun] = await workRuns(twinTask);
-    assert.ok(heldRun && twinRun, 'the first sweep did not start both tasks');
-    for (const run of [heldRun, twinRun]) {
-      await s.db.session.update({
-        where: { id: run.id },
-        data: { status: RunStatus.FAILED, error: null, finishedAt: new Date() },
-      });
-    }
-    const heldMoment = await epochOf(heldTask);
-    const twinMoment = await epochOf(twinTask);
+    const heldTask = await retried(s, ids, held, 'held');
+    const twinTask = await retried(s, ids, twin, 'twin');
+    const { heldMoment, twinMoment, backoffPassed } = await failFirstRuns(s, heldTask, twinTask);
 
     // The owner pauses one of them, and the backoff window passes for both.
     await s.projects.pause(ids.ownerId, held);
-    s.clock.now = new Date(
-      Math.max(heldRun.createdAt.getTime(), twinRun.createdAt.getTime()) + AUTO_RUN_RETRY_BACKOFF_MS[0] + 1_000,
-    );
+    s.clock.now = backoffPassed;
     await sweep(s.tasks);
 
-    assert.equal(await epochOf(twinTask), twinMoment + 1n, 'CONTROL: the twin\'s run was not re-armed');
-    assert.equal((await workRuns(twinTask)).length, 2, 'CONTROL: the twin was not retried');
-    assert.equal(await epochOf(heldTask), heldMoment,
+    assert.equal(await epochOf(s.db, twinTask), twinMoment + 1n, 'CONTROL: the twin\'s run was not re-armed');
+    assert.equal((await workRuns(s.db, twinTask)).length, 2, 'CONTROL: the twin was not retried');
+    assert.equal(await epochOf(s.db, heldTask), heldMoment,
       'the retry policy re-armed a task of a paused project');
-    assert.equal((await workRuns(heldTask)).length, 1, 'a paused project\'s task was retried');
+    assert.equal((await workRuns(s.db, heldTask)).length, 1, 'a paused project\'s task was retried');
 
     // Resumed: the same retry, on the next pass.
     await s.projects.resume(ids.ownerId, held);
     await sweep(s.tasks);
-    assert.equal(await epochOf(heldTask), heldMoment + 1n, 'the resumed project\'s run was not re-armed');
-    assert.equal((await workRuns(heldTask)).length, 2, 'the resumed project\'s task was not retried');
+    assert.equal(await epochOf(s.db, heldTask), heldMoment + 1n, 'the resumed project\'s run was not re-armed');
+    assert.equal((await workRuns(s.db, heldTask)).length, 2, 'the resumed project\'s task was not retried');
+  } finally {
+    await s.db.$disconnect();
+  }
+});
+
+test('(3b) nor does a project nobody has started: a run that failed before its task was filed there '
+  + 'is retried once the project is started, and not before',
+{ skip, timeout: 300_000 }, async () => {
+  assertCoordinatorPgUrlIsIsolated(URL!);
+  const s = connect();
+  try {
+    const ids = await world(s.db, 'retry-unstarted');
+    // Nothing automatic runs in a project nobody has started, so the failed run came first: both
+    // tasks run under no project, and the owner then files each under a project — one nobody has
+    // started, and its twin one that moves. Filing is not a new moment (`task_dispatch_epoch` moves
+    // on status, schedule and edges), so the moment the retry policy reads is the failed run's.
+    const unstarted = await project(s, ids, 'retry-unstarted', 'UNSTARTED');
+    const twin = await project(s, ids, 'retry-unstarted-twin', 'MOVING');
+    const heldTask = await retried(s, ids, null, 'unfiled-held');
+    const twinTask = await retried(s, ids, null, 'unfiled-twin');
+    const { heldMoment, twinMoment, backoffPassed } = await failFirstRuns(s, heldTask, twinTask);
+
+    // The owner's own door, which may file work anywhere.
+    await s.tasks.update(ids.ownerId, heldTask, { projectId: unstarted } as never);
+    await s.tasks.update(ids.ownerId, twinTask, { projectId: twin } as never);
+    assert.equal(await epochOf(s.db, heldTask), heldMoment, 'filing the task moved its dispatch moment');
+    s.clock.now = backoffPassed;
+    await sweep(s.tasks);
+
+    assert.equal(await epochOf(s.db, twinTask), twinMoment + 1n, 'CONTROL: the twin\'s run was not re-armed');
+    assert.equal((await workRuns(s.db, twinTask)).length, 2, 'CONTROL: the twin was not retried');
+    assert.equal(await epochOf(s.db, heldTask), heldMoment,
+      'the retry policy re-armed a task of a project nobody has started');
+    assert.equal((await workRuns(s.db, heldTask)).length, 1,
+      'a task of a project nobody has started was retried');
+
+    // Started by its owner: the same retry, on the next pass.
+    await start(s, ids, unstarted);
+    await sweep(s.tasks);
+    assert.equal(await epochOf(s.db, heldTask), heldMoment + 1n, 'the started project\'s run was not re-armed');
+    assert.equal((await workRuns(s.db, heldTask)).length, 2, 'the started project\'s task was not retried');
   } finally {
     await s.db.$disconnect();
   }
