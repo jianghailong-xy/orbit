@@ -487,4 +487,37 @@ final class NavigationTests: XCTestCase {
         XCTAssertEqual(nav.path, [.taskListsDirectory], "coming back lands on the page you left")
         XCTAssertFalse(nav.sectionAtRoot, "and the left edge still belongs to that page")
     }
+
+    /// A runner's record pushes two pages of its own — an engine's, its name's — and they are still
+    /// that runner's: the three-column list keeps the runner highlighted while one of them fills the
+    /// pane, and the back button lands on the record they were pushed from.
+    func testARunnersOwnPagesKeepItsRecordSelected() {
+        var nav = NavState(section: .runners)
+        nav.replaceTop(with: .runnerDetail(runnerID: "r1"))
+        nav.push(.runnerEngine(runnerID: "r1", engine: "codex"))
+        XCTAssertEqual(nav.selectedRunnerID, "r1", "an engine's page is its runner's")
+        XCTAssertFalse(nav.sectionAtRoot)
+
+        nav.pop()
+        XCTAssertEqual(nav.path, [.runnerDetail(runnerID: "r1")], "back is the record")
+        nav.push(.runnerName(runnerID: "r1"))
+        XCTAssertEqual(nav.selectedRunnerID, "r1", "and so is its name's")
+
+        // Picking another runner replaces the page showing, as selecting always does.
+        nav.replaceTop(with: .runnerDetail(runnerID: "r2"))
+        XCTAssertEqual(nav.selectedRunnerID, "r2")
+    }
+
+    /// From Settings (iOS) the same two pages ride Settings' own stack, one layer under the record.
+    func testARunnersOwnPagesRideSettingsStackWhileItIsUp() {
+        var nav = NavState(section: .agents)
+        nav.openSettings()
+        nav.push(.settingsRunners)
+        nav.push(.runnerDetail(runnerID: "r1"))
+        nav.push(.runnerEngine(runnerID: "r1", engine: "claude"))
+        XCTAssertEqual(nav.settingsPath, [.settingsRunners, .runnerDetail(runnerID: "r1"),
+                                          .runnerEngine(runnerID: "r1", engine: "claude")])
+        XCTAssertNil(nav.stacks[.runners], "the Runners section's stack is not Settings'")
+        XCTAssertNil(nav.stacks[.agents], "nor is the section under the sheet")
+    }
 }

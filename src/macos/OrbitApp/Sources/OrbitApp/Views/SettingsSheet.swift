@@ -21,9 +21,10 @@ extension View {
 }
 
 /// Settings' own stack: the list at its root, and each page it opens as a frame of
-/// `NavState.settingsPath` — the runners list and a runner's record, the `SettingsPage`s, and an
-/// account's record under Admin. A form row pushes with its `NavigationLink` value; a list row
-/// inside a page pushes through `AppModel.push`, which lands here while the sheet is up.
+/// `NavState.settingsPath` — the runners list, a runner's record and its engine and name pages, the
+/// `SettingsPage`s, and an account's record under Admin. A form row pushes with its `NavigationLink`
+/// value; a list row inside a page pushes through `AppModel.push`, which lands here while the sheet
+/// is up.
 struct SettingsSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -42,6 +43,8 @@ struct SettingsSheet: View {
                     switch node {
                     case .settingsRunners:            RunnersSettingsList()
                     case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)
+                    case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)
+                    case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)
                     case .settingsPage(let page):     SettingsPageView(page: page)
                     case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
                     case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
