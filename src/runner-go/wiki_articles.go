@@ -198,7 +198,9 @@ func (t *Transport) planWikiArticles(sessionID, spaceID string) (json.RawMessage
 	}
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/article-plan"
-	err := t.doHeaders(nil, http.MethodPost, path, map[string]interface{}{}, &out, wikiArticleReadTimeout, sessionHeader(sessionID))
+	// A POST only because a space with no topic is given the default ones, which happens once: a space that
+	// has topics is given none (and the insert skips duplicates), so the plan may be asked for again.
+	_, err := t.doWiki(http.MethodPost, path, map[string]interface{}{}, &out, wikiArticleReadTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
@@ -208,7 +210,7 @@ func (t *Transport) wikiArticleInput(sessionID, spaceID, slug string) (json.RawM
 	}
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/articles/" + url.PathEscape(slug) + "/input"
-	err := t.doHeaders(nil, http.MethodGet, path, nil, &out, wikiArticleReadTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodGet, path, nil, &out, wikiArticleReadTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
@@ -218,7 +220,9 @@ func (t *Transport) writeWikiArticles(sessionID, spaceID, slug string, body inte
 	}
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/articles/" + url.PathEscape(slug)
-	err := t.doHeaders(nil, http.MethodPost, path, body, &out, wikiArticleReadTimeout, sessionHeader(sessionID))
+	// A topic's articles are replaced whole, and only when the stored ones were written from another entry
+	// set: the same write landing again finds its own fingerprint stored, and answers unchanged.
+	_, err := t.doWiki(http.MethodPost, path, body, &out, wikiArticleReadTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
