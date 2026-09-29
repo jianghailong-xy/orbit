@@ -5,8 +5,9 @@ import { redactSecrets } from '../common/secret-redaction';
  * What a verification can read (criterion 7, revision 4; contract `reviewModes.verification.evidence`).
  *
  * ONE TEXT PER RECORD, FOR EVERY READER. A record's text is what a submission's quote is checked against
- * (`resolveSources`), what a verifier is handed (`listVerifications`), and what a dossier line's position
- * counts in (criterion 2, revision 2; contract `maintenance.dossier.spans`), so none of them disagrees
+ * (`resolveSources`), what a verifier is handed (`listVerifications`), what a dossier line's position
+ * counts in (criterion 2, revision 2; contract `maintenance.dossier.spans`), and what a document's footnote
+ * is checked against (`wiki-docs.ts`, contract `docs.verification.records`), so none of them disagrees
  * about what a record says: a quote taken from what the verifier read verifies, a verdict is never about
  * text the quote check did not see, and the words a dossier line points at are the words a quote of them
  * is checked against.

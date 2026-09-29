@@ -25,6 +25,7 @@ export * from './wikiArticles';
 export * from './wikiHealth';
 export * from './wikiMaintain';
 export * from './wikiPlan';
+export * from './wikiDocs';
 
 /** Hard cap on a single user prompt / turn message, in characters. An oversized input
  *  freezes the web and macOS clients — one giant text node lays out synchronously on the
