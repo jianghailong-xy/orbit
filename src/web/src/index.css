@@ -14864,6 +14864,43 @@ button.chat-jump-start:hover {
   margin-block-start: 8px;
   margin-inline-start: 32px;
 }
+/* A row opens its task over the page (ProjectTaskRow) and is tinted the way a Tasks page row is —
+   the same two tokens for "under the pointer" and "open in the panel". The inline padding gives
+   the tint room at the row's edges; the negative margin keeps the words where they were. Scoped
+   under .ant-list to outrank AntD's own item padding without !important. */
+.ant-list .project-task-row.is-openable {
+  cursor: pointer;
+  padding-inline: 12px;
+  margin-inline: -12px;
+}
+.project-task-row.is-openable:hover {
+  background: var(--bg-hover);
+}
+.project-task-row.is-open {
+  background: var(--brand-tint);
+}
+.project-task-row.is-open:hover {
+  background: var(--brand-border);
+}
+/* The title is a link for ⌘/middle-click and the keyboard; to the eye it is the row's title. */
+.project-task-row-link,
+.project-task-row-link:hover {
+  color: inherit;
+}
+/* A task open over its project's page (ProjectTaskPanel) — the Tasks page's panel, lying over the
+   page instead of beside it. The page is a whole document (graph, cards, the task list) and
+   narrowing it would re-flow all of it, carrying the row that was pressed out of view; the Tasks
+   page narrows its table instead, which suits a table. At ≤960px both are the same full-screen page
+   (the panel's own rule). */
+@media (min-width: 961px) {
+  .project-task-panel > .task-detail-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 40;
+    box-shadow: -12px 0 32px rgba(31, 35, 41, 0.1);
+  }
+}
 /* Preserve the reading order but stop fixed metadata from squeezing the identity down to a few
    characters: the full title/excerpt gets the first band, then count + disclosure share the next. */
 @media (max-width: 640px) {

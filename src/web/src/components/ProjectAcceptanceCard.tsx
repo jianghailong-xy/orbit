@@ -8,6 +8,7 @@ import { api } from '../api';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import { AppLink } from './AppLink';
+import { ProjectTaskLink } from './ProjectTaskLink';
 import { TaskStatusPill } from './TaskStatusPill';
 
 /**
@@ -268,9 +269,12 @@ function RequiredAction({ code }: { code: string }) {
 function CriterionWork({
   criterion,
   integrationRef,
+  projectId,
 }: {
   criterion: AcceptanceCriterionItem;
   integrationRef?: string | null;
+  /** The project whose page this is: a named task opens over it. Absent on a public page. */
+  projectId?: string;
 }) {
   if (criterion.satisfied === undefined) return null;
   const unmet = criterion.unmet ?? [];
@@ -311,11 +315,22 @@ function CriterionWork({
               {(reason.heldUpBy ?? []).map((task) => (
                 <div key={task.taskId} className="acceptance-held-up">
                   {/* The whole reason this line exists is "who does what next", and the reader's
-                      next move after recognising the name is to open it — on a public page, only
-                      where the link shares that task (AppLink asks the page's resolver). */}
-                  <AppLink className="acceptance-held-up-title" to={`/tasks/${task.taskId}`}>
-                    {task.title}
-                  </AppLink>
+                      next move after recognising the name is to open it — over this project's
+                      page, as its row in the task list opens it; on a public page, only where the
+                      link shares that task (AppLink asks the page's resolver). */}
+                  {projectId ? (
+                    <ProjectTaskLink
+                      className="acceptance-held-up-title"
+                      projectId={projectId}
+                      taskId={task.taskId}
+                    >
+                      {task.title}
+                    </ProjectTaskLink>
+                  ) : (
+                    <AppLink className="acceptance-held-up-title" to={`/tasks/${task.taskId}`}>
+                      {task.title}
+                    </AppLink>
+                  )}
                   {task.requiredAction ? (
                     <RequiredAction code={task.requiredAction} />
                   ) : task.status ? (
@@ -367,12 +382,15 @@ export function AcceptanceCriteriaList({
   criteria,
   id,
   integrationRef,
+  projectId,
 }: {
   criteria: AcceptanceCriterionItem[];
   id?: string;
   /** This project's integration branch, so a criterion met on it can NAME it. Absent for a project
    *  with no line, where the only two landings are "on main" and "nobody said". */
   integrationRef?: string | null;
+  /** The project whose page this is (CriterionWork). Absent on a public page. */
+  projectId?: string;
 }) {
   return (
     <ul id={id} className="acceptance-criteria">
@@ -391,7 +409,7 @@ export function AcceptanceCriteriaList({
             >
               {c.text}
             </Markdown>
-            <CriterionWork criterion={c} integrationRef={integrationRef} />
+            <CriterionWork criterion={c} integrationRef={integrationRef} projectId={projectId} />
             {c.verificationMethod ? <CriterionMethod method={c.verificationMethod} /> : null}
           </div>
         </li>
@@ -449,6 +467,7 @@ export function ProjectAcceptanceCard({
   });
   return (
     <AcceptanceCriteriaCard
+      projectId={projectId}
       action={action}
       pending={detail.isPending}
       error={detail.isError ? detail.error : null}
@@ -466,12 +485,15 @@ export function ProjectAcceptanceCard({
 export function AcceptanceCriteriaCard({
   criteria,
   integrationRef,
+  projectId,
   pending = false,
   error = null,
   action,
 }: {
   criteria: AcceptanceCriterionItem[];
   integrationRef: string | null;
+  /** The project whose page this is (CriterionWork). Absent on a public page. */
+  projectId?: string;
   pending?: boolean;
   error?: Error | null;
   action?: ReactNode;
@@ -521,6 +543,7 @@ export function AcceptanceCriteriaCard({
             id={criteriaListId}
             criteria={shown}
             integrationRef={integrationRef}
+            projectId={projectId}
           />
           {hasCriteriaDisclosure ? (
             // Says what it is hiding. A list that stopped at twelve without naming the other
