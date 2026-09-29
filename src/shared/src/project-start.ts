@@ -167,6 +167,35 @@ export interface ProjectStartNotReadyBody {
   findings: ProjectStartFinding[];
 }
 
+/**
+ * Why a project is paused (`project.paused_reason`).
+ *
+ * - `OWNER` — the owner pressed Pause project (`POST /projects/:id/pause`).
+ * - `LEGACY_AUTOMATIC_OFF` — a client that only knows the one Automatic switch turned it off
+ *   (`PATCH /projects/:id {coordinatorEnabled: false}`). On those clients the switch was the
+ *   project's on switch, so its off still means "stop"; switching it back on lifts this pause, and
+ *   never an `OWNER` one.
+ */
+export type ProjectPauseReason = 'OWNER' | 'LEGACY_AUTOMATIC_OFF';
+
+export const PROJECT_PAUSE_REASONS: readonly ProjectPauseReason[] = ['OWNER', 'LEGACY_AUTOMATIC_OFF'];
+
+/**
+ * Whether a project moves by itself, as `POST /projects/:id/pause` and `/resume` answer it.
+ *
+ * It moves while it is started and not paused. While `pausedAt` is set nothing starts its tasks by
+ * itself — no release of a task that depends on nothing, no prerequisite finishing, no schedule, no
+ * retry — an agent's `task_start` is refused, and nothing is merged into main by Automatic. The
+ * owner's own Run still starts a task, and a run already going is not stopped. Automatic
+ * (`coordinatorEnabled`) is a different question: who decides for the owner, not whether it moves.
+ */
+export interface ProjectPauseState {
+  projectId: string;
+  startedAt: string | null;
+  pausedAt: string | null;
+  pausedReason: ProjectPauseReason | null;
+}
+
 /** A merge check as it is stored: trimmed, and blank is none. */
 function storedMergeCheck(command: string | null | undefined): string | null {
   return command?.trim() || null;

@@ -1450,6 +1450,24 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // is not another writer of the DONE fence and names none of the six preserved objects. No
       // INSERT, UPDATE or DELETE.
       '0333_project_start_request',
+      // A project's pause as a fact of its own (0334): two nullable `ADD COLUMN`s with no default on
+      // `project` (`paused_at`, `paused_reason`, catalog-only) with one CHECK every stored row
+      // satisfies as both read NULL, and one UPDATE that pauses the started projects whose Automatic
+      // is off — writing those two columns and nothing else. Read against every claim above:
+      // `project` is named, as the table the columns are added to and the one the UPDATE writes; no
+      // trigger on `project` fires on either column, and none is created. It names no `task`,
+      // `session` or `project_acceptance_*` object and none of the six preserved triggers/functions,
+      // creates or replaces no function, trigger, enum or type — so it is not another writer of the
+      // DONE fence — and carries no `ALTER TYPE` and no `DROP`. No INSERT or DELETE.
+      '0334_project_paused',
+      // A profile photo of one's own (0335): one new table, `user_avatar`, keyed by the user it belongs
+      // to, with two CHECKs (the three image types, and a non-empty photo) and a foreign key to `user`
+      // whose `ON DELETE CASCADE` is a referential action on the new table's rows. Read against every
+      // claim above: no `task`, `session`, `project` or `project_acceptance_*` object is named, so the
+      // 0177 pair and every stored task and criterion row are out of its reach. No function, trigger or
+      // type is created, replaced or dropped — so it is not another writer of the DONE fence and names
+      // none of the six preserved objects. No INSERT, UPDATE or DELETE: the new table starts empty.
+      '0335_user_avatar',
       // Which account a session runs on, and whether it was picked by hand (0336): three `ADD COLUMN`s on
       // `session` — two BOOLEAN NOT NULL DEFAULT false (`codex_account_pinned`, `claude_account_pinned`),
       // catalog-only as a constant default is, and one nullable TEXT with no default (`claude_account`,

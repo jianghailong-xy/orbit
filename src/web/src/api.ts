@@ -11,6 +11,7 @@ import type {
 import type { ProjectPanoramaBuckets, ProjectPanoramaShape } from './components/ProjectPanoramaHeader';
 import type { ProjectDependencyGraphResponse } from './lib/projectDependencyGraph';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
+import type { Me } from './lib/queries';
 import { compatibleUuid as uuid } from './lib/uuid';
 
 const TOKEN_KEY = 'orbit_token';
@@ -552,6 +553,34 @@ export const fetchSessionArtifactObjectUrl = async (sessionId: string, artifactP
 export const fetchAttachmentDataUrl = async (id: string): Promise<string> => {
   const res = await authedFetch(`/api/attachments/${encodeURIComponent(id)}`);
   if (!res.ok) throw new Error(`attachment ${id}: ${res.status}`);
+  const blob = await res.blob();
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('read failed'));
+    reader.readAsDataURL(blob);
+  });
+};
+
+/** Set the signed-in account's profile photo (`PUT /users/me/avatar`): a square JPEG the page has
+ *  already cut and scaled (`squareJpeg` in lib/avatar). Multipart, like `uploadAttachment`.
+ *  Answers with the account, whose `avatarUpdatedAt` is then the new photo's version. */
+export const setAvatar = async (photo: Blob): Promise<Me> => {
+  const form = new FormData();
+  form.append('file', photo, 'avatar.jpg');
+  const res = await authedFetch('/api/users/me/avatar', { method: 'PUT', body: form });
+  if (!res.ok) {
+    const msg = (await res.json().catch(() => ({ message: res.statusText }))) as { message?: string };
+    throw new Error(msg.message || res.statusText);
+  }
+  return (await res.json()) as Me;
+};
+
+/** The account's profile photo as a data URL. The endpoint is bearer-guarded, so an `<img src>`
+ *  pointing at it would 401; a data URL, unlike an object URL, needs no revoking when it changes. */
+export const fetchAvatarDataUrl = async (): Promise<string> => {
+  const res = await authedFetch('/api/users/me/avatar');
+  if (!res.ok) throw new Error(`profile photo: ${res.status}`);
   const blob = await res.blob();
   return await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();

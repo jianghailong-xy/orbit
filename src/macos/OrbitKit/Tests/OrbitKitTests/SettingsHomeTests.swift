@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Foundation has them on Linux
+#endif
 import XCTest
 @testable import OrbitKit
 
@@ -124,6 +127,82 @@ final class SettingsHomeTests: XCTestCase {
     func testEveryAlertKindIsASwitchOrNamedAsAlwaysSent() {
         XCTAssertEqual(SettingsCopy.alwaysSent.count + 2, 6)
         XCTAssertEqual(Set(SettingsCopy.alwaysSent).count, SettingsCopy.alwaysSent.count)
+    }
+
+    // MARK: - Edit profile
+
+    /// Save is live only for a name that is there and is new: an unchanged name, or one that is
+    /// only spaces, has nothing to save — and spaces around a name are not a new name.
+    func testSaveIsLiveForANewNameOnly() {
+        XCTAssertFalse(ProfileEdit.canSave("jianghailong.rd", saved: "jianghailong.rd"))
+        XCTAssertFalse(ProfileEdit.canSave("  jianghailong.rd \n", saved: "jianghailong.rd"))
+        XCTAssertFalse(ProfileEdit.canSave("", saved: "jianghailong.rd"))
+        XCTAssertFalse(ProfileEdit.canSave(" \t ", saved: "jianghailong.rd"))
+        XCTAssertTrue(ProfileEdit.canSave("Hailong Jiang", saved: "jianghailong.rd"))
+        XCTAssertTrue(ProfileEdit.canSave("江海", saved: nil), "an account with no name yet can be given one")
+        XCTAssertFalse(ProfileEdit.canSave("  ", saved: nil))
+    }
+
+    /// What is sent is the name without the spaces around it — the spaces inside stay.
+    func testTheNameIsSentTrimmed() {
+        XCTAssertEqual(ProfileEdit.name("  Hailong  Jiang \n"), "Hailong  Jiang")
+    }
+
+    /// A new photo, or taking the photo away, is a change on its own — but never with the name blank.
+    func testAPhotoIsAChangeToSave() {
+        let jpeg = Data([0xFF, 0xD8, 0xFF])
+        XCTAssertTrue(ProfileEdit.canSave("jianghailong.rd", saved: "jianghailong.rd", photo: .replaced(jpeg)))
+        XCTAssertTrue(ProfileEdit.canSave("jianghailong.rd", saved: "jianghailong.rd", photo: .removed))
+        XCTAssertFalse(ProfileEdit.canSave("jianghailong.rd", saved: "jianghailong.rd", photo: .unchanged))
+        XCTAssertFalse(ProfileEdit.canSave("  ", saved: "jianghailong.rd", photo: .replaced(jpeg)),
+                       "a photo does not carry a blank name through")
+    }
+
+    /// Save writes the photo first, then the name, and only what changed.
+    func testSaveWritesThePhotoThenTheNameAndOnlyWhatChanged() {
+        let jpeg = Data([0xFF, 0xD8, 0xFF])
+        XCTAssertEqual(ProfileEdit.steps(" Hailong Jiang ", saved: "jianghailong.rd", photo: .replaced(jpeg)),
+                       [.setPhoto(jpeg), .rename("Hailong Jiang")])
+        XCTAssertEqual(ProfileEdit.steps("jianghailong.rd", saved: "jianghailong.rd", photo: .removed),
+                       [.removePhoto])
+        XCTAssertEqual(ProfileEdit.steps("Hailong Jiang", saved: "jianghailong.rd", photo: .unchanged),
+                       [.rename("Hailong Jiang")])
+        XCTAssertEqual(ProfileEdit.steps("jianghailong.rd", saved: "jianghailong.rd", photo: .unchanged), [])
+        XCTAssertEqual(ProfileEdit.steps("", saved: "jianghailong.rd", photo: .removed), [])
+    }
+
+    /// The crop screen starts with the photo just covering the circle, and never lets it uncover.
+    func testTheCropStartsCoveringTheCircleAndKeepsItCovered() {
+        XCTAssertEqual(AvatarCrop.fitted(CGSize(width: 4000, height: 3000), circle: 300), CGSize(width: 400, height: 300))
+        XCTAssertEqual(AvatarCrop.fitted(CGSize(width: 3000, height: 4000), circle: 300), CGSize(width: 300, height: 400))
+        XCTAssertEqual(AvatarCrop.clampedZoom(0.5), 1)
+        XCTAssertEqual(AvatarCrop.clampedZoom(2), 2)
+        XCTAssertEqual(AvatarCrop.clampedZoom(9), AvatarCrop.maxZoom)
+        let fitted = CGSize(width: 400, height: 300)
+        XCTAssertEqual(AvatarCrop.clampedOffset(CGSize(width: 80, height: 30), fitted: fitted, circle: 300, zoom: 1),
+                       CGSize(width: 50, height: 0), "a landscape photo slides sideways only, and only 50pt")
+        XCTAssertEqual(AvatarCrop.clampedOffset(CGSize(width: -80, height: -30), fitted: fitted, circle: 300, zoom: 1),
+                       CGSize(width: -50, height: 0))
+        XCTAssertEqual(AvatarCrop.clampedOffset(CGSize(width: 200, height: -100), fitted: fitted, circle: 300, zoom: 2),
+                       CGSize(width: 200, height: -100), "zoomed in, there is room to move both ways")
+    }
+
+    /// What is kept is the square the circle covers, in the photo's own points.
+    func testTheCropKeepsTheSquareTheCircleCovers() {
+        let photo = CGSize(width: 4000, height: 3000)
+        XCTAssertEqual(AvatarCrop.cropRect(image: photo, circle: 300, zoom: 1, offset: .zero),
+                       CGRect(x: 500, y: 0, width: 3000, height: 3000), "the middle square")
+        XCTAssertEqual(AvatarCrop.cropRect(image: photo, circle: 300, zoom: 1, offset: CGSize(width: 50, height: 0)),
+                       CGRect(x: 0, y: 0, width: 3000, height: 3000), "photo moved right: its left edge")
+        XCTAssertEqual(AvatarCrop.cropRect(image: photo, circle: 300, zoom: 1, offset: CGSize(width: -50, height: 0)),
+                       CGRect(x: 1000, y: 0, width: 3000, height: 3000), "photo moved left: its right edge")
+        XCTAssertEqual(AvatarCrop.cropRect(image: photo, circle: 300, zoom: 2, offset: .zero),
+                       CGRect(x: 1250, y: 750, width: 1500, height: 1500), "zoomed in twice: half the side, same centre")
+    }
+
+    func testAFailedSaveSaysWhy() {
+        XCTAssertEqual(SettingsCopy.nameNotSaved("the connection dropped"),
+                       "Couldn't save your name — the connection dropped.")
     }
 
     // MARK: - Shared links

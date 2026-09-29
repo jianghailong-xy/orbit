@@ -1,0 +1,34 @@
+changelog:
+  exclude:
+    labels:
+      - dependencies
+      - duplicate
+      - invalid
+      - wontfix
+    authors:
+      - dependabot
+  categories:
+    - title: "User-visible features"
+      labels:
+        - enhancement
+        - feature
+    - title: "Bug fixes"
+      labels:
+        - bug
+    - title: "Documentation and contributor experience"
+      labels:
+        - documentation
+        - area:docs
+    - title: "Operations and release engineering"
+      labels:
+        - area:ops
+        - docker
+        - github_actions
+    - title: "Runner and native clients"
+      labels:
+        - area:runner
+        - area:native
+        - swift_package_manager
+    - title: "Other changes"
+      labels:
+        - "*"

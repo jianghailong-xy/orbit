@@ -75,6 +75,7 @@ import {
 } from 'react';
 import { useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import { copyText } from '../lib/clipboard';
+import { REPO_CLEANUP_QUEUED, repoCleanupConfirm } from '../lib/repoCleanup';
 import { routeId, encodeId } from '../lib/idCodec';
 import { useIsMobile, useMediaQuery } from '../lib/useMediaQuery';
 import {
@@ -5256,19 +5257,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const repoCleanupMut = useMutation({
     mutationFn: (workspaceId: string) => cleanUpWorkspaceRepo(workspaceId),
     onSuccess: () => {
-      message.success('Cleaning up the checkout — the runner picks this up on its next heartbeat.');
+      message.success(REPO_CLEANUP_QUEUED);
       void qc.invalidateQueries({ queryKey: workspacesQuery().queryKey });
     },
     onError: (e: Error) => message.error(e.message),
   });
   const askCleanUpRepo = (workspaceId: string, root: string) =>
     modal.confirm({
-      title: 'Clean up this checkout?',
-      content:
-        `Orbit will save everything ${root} currently holds — uncommitted edits, conflict markers,` +
-        ' untracked files — to a new orbit/rescue-… branch, then return the checkout to its last' +
-        ' commit so merges work again. Nothing is discarded, and the rescue branch is never deleted.',
-      okText: 'Save and clean up',
+      ...repoCleanupConfirm(root),
       onOk: () => repoCleanupMut.mutateAsync(workspaceId).catch(() => {}),
     });
   // Merge this session's worktree branch into main on the runner that ran it. Async: the

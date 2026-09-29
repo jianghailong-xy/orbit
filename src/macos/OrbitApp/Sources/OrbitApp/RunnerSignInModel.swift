@@ -22,6 +22,13 @@ import OrbitKit
 final class RunnerSignInModel {
     let runnerID: String
     let engine: LoginEngine
+    /// The account this card signs in — `default` or the id of one the runner added — where the
+    /// runner keeps several; nil is the runner's own login, as every card was before accounts.
+    let account: String?
+    /// A card adding an account the runner doesn't have yet. It owns only the sign-in it started:
+    /// until the runner names the slot it adds, that sign-in names no account at all (web
+    /// RunnerSignIn `ownAccount`).
+    let adding: Bool
 
     /// Last state read back from the relay. Nil until the first read lands.
     private(set) var relay: RunnerLoginState?
@@ -37,6 +44,8 @@ final class RunnerSignInModel {
     private var sent = false
     /// Set once this card has seen a sign-in actually running — see `status`.
     private var watched = false
+    /// Set once this card has started a sign-in itself — see `mine`.
+    private var startedHere = false
 
     private let api: APIClient
     private var poll: Task<Void, Never>?
@@ -45,9 +54,12 @@ final class RunnerSignInModel {
     /// heartbeat and reports on the next one, so this is about noticing promptly, not about speed.
     private static let pollNanos: UInt64 = 2_000_000_000
 
-    init(runnerID: String, engine: LoginEngine, baseURL: URL, tokenStore: TokenStore) {
+    init(runnerID: String, engine: LoginEngine, account: String? = nil, adding: Bool = false,
+         baseURL: URL, tokenStore: TokenStore) {
         self.runnerID = runnerID
         self.engine = engine
+        self.account = account
+        self.adding = adding
         self.api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
     }
 
@@ -55,8 +67,14 @@ final class RunnerSignInModel {
 
     /// A runner runs one relay at a time. If the one in flight is for the other engine (another
     /// card, another device), this card has nothing to report — it reads as idle, so pressing its
-    /// button takes the relay over.
-    private var mine: Bool { relay?.engine == nil || relay?.engine == engine.rawValue }
+    /// button takes the relay over. The same goes for another account of this engine: a card for one
+    /// says nothing about another's sign-in.
+    private var mine: Bool {
+        guard let relayEngine = relay?.engine else { return true }
+        guard relayEngine == engine.rawValue else { return false }
+        if adding { return startedHere }
+        return account == nil || relay?.account == account
+    }
 
     /// The status this card may speak for.
     ///
@@ -99,12 +117,19 @@ final class RunnerSignInModel {
         adopt(next)
     }
 
-    func begin() async {
+    /// Start signing in: this card's account, or — on a card adding one — a new account the runner
+    /// adds under `accountName`.
+    func begin(accountName: String? = nil) async {
         errorText = nil
         busy = true
         defer { busy = false }
-        do { adopt(try await api.startRunnerLogin(runnerID, engine: engine)) }
-        catch { errorText = friendly(error) }
+        startedHere = true
+        let name = adding ? accountName?.trimmingCharacters(in: .whitespacesAndNewlines) : nil
+        do {
+            adopt(try await api.startRunnerLogin(runnerID, engine: engine, account: account, accountName: name))
+        } catch {
+            errorText = friendly(error)
+        }
     }
 
     func submitCode() async {

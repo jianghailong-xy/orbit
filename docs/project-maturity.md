@@ -48,8 +48,7 @@ chat histories.
 
 ### Promise
 
-Orbit keeps agent work running on your machines while preserving the plan, history, and human control in one
-self-hosted system.
+Run coding agents on your own machines. Keep the plan, history, and controls in one self-hosted place.
 
 ### Proof pillars
 
@@ -66,6 +65,9 @@ be elegant, not a speculative AI demo.
 
 ## Messaging hierarchy
 
+The [GitHub launch messaging brief](messaging-brief.md) is the canonical source for launch copy, scenario
+names, boundaries, and public gates. Keep this roadmap's summary aligned with it.
+
 Use one stable message at each level:
 
 | Level | Recommended message |
@@ -73,7 +75,7 @@ Use one stable message at each level:
 | Name | Orbit |
 | Descriptor | Agent Mission Control |
 | Category line | Self-hosted mission control for coding agents |
-| One sentence | Run coding agents on your own machines and keep the plan, history, and controls in one place. |
+| One sentence | Run coding agents on your own machines. Keep the plan, history, and controls in one self-hosted place. |
 | Primary proof | Durable task graph + distributed runners + human approvals |
 | Secondary proof | Multi-runtime support, isolated worktrees, and web/native clients |
 

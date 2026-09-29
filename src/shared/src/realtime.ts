@@ -57,6 +57,10 @@ export enum ControlEventType {
    *  the owner decided one. USER-SCOPED (see above). `data` is a `ControlResourceChanged` naming the
    *  project: a nudge to re-read that project's pending decisions, never the proposal or its key. */
   PROJECT_CRITERIA_DECISIONS_CHANGED = 'project.criteria_decisions.changed',
+  /** Whether one of the owner's projects moves changed: it was paused or resumed (Pause project, or
+   *  an older client's Automatic switch). USER-SCOPED (see above). `data` is a
+   *  `ControlResourceChanged` naming the project: a nudge to re-read that project, nothing more. */
+  PROJECT_CHANGED = 'project.changed',
   /** One of the owner's watches changed — made, edited, paused, resumed, stopped, matched, expired,
    *  ended unmatched, or one of its deliveries delivered or dead-lettered. USER-SCOPED (see above).
    *  `data` is a `ControlResourceChanged` naming the watch and NOTHING else: not its state, not its
@@ -81,8 +85,9 @@ export enum ControlEventType {
 export interface ControlEvent {
   type: ControlEventType;
   /** The session this event is about — EMPTY for the user-scoped events (`task.list.changed` /
-   *  `tag.changed` / `provider.changed` / `project.criteria_decisions.changed` / `watch.changed` /
-   *  `wiki.changed`), which belong to the owner, not to any one session. Clients must dispatch on `type`, not on the presence of a
+   *  `tag.changed` / `provider.changed` / `project.criteria_decisions.changed` /
+   *  `project.changed` / `watch.changed` / `wiki.changed`), which belong to the owner, not to any
+   *  one session. Clients must dispatch on `type`, not on the presence of a
    *  session id. */
   sessionId: string;
   agentId: string | null;

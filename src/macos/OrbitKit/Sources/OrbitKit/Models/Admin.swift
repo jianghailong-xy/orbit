@@ -14,6 +14,12 @@ public struct ChangePasswordRequest: Encodable, Sendable {
     }
 }
 
+/// PATCH /users/me — the account's own name, the one thing on it its owner changes themselves.
+public struct UpdateProfileRequest: Encodable, Sendable {
+    public let name: String
+    public init(name: String) { self.name = name }
+}
+
 /// POST /admin/users — create, or reset an existing user's password (`force`).
 public struct CreateUserRequest: Encodable, Sendable {
     public let email: String

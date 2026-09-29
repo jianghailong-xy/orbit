@@ -110,6 +110,8 @@ function mount(r: Runner, ws: ReturnType<typeof workspace>) {
     if (path === '/runners') return [r];
     if (path === '/workspaces') return [ws];
     if (path === '/providers') return [];
+    // The workspace rows' "N running" reads the sidebar's per-workspace tallies.
+    if (path === '/sessions/counts') return [];
     if (path === '/users/me') return { id: 'u', email: 'u@example.invalid', name: 'u', createdAt: '', preferences: {} };
     if (path.includes('permission-rules')) return [];
     if (path.includes('imported')) return { count: 0 };

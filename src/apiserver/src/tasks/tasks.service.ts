@@ -67,6 +67,14 @@ import {
   projectCancelledRefusal,
   projectNotCancelledSql,
 } from './project-cancelled-dispatch';
+import {
+  pausedProjectOf,
+  projectMoves,
+  projectMovesForTaskSql,
+  projectMovesSql,
+  projectPausedRefusal,
+  projectStandsStill,
+} from './project-pause-dispatch';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -515,6 +523,14 @@ export type TaskRunAnswer =
          */
         | 'project-cancelled'
         /**
+         * The task is filed under a project that does not move by itself: its owner has not started
+         * it, or has paused it (`project-pause-dispatch.ts`). Automatic callers only. Released, not
+         * frozen: starting or resuming the project lifts it, and the same moment arriving then must
+         * be able to start the task.
+         */
+        | 'project-not-started'
+        | 'project-paused'
+        /**
          * The moment this request names has passed: `task_dispatch_epoch` has moved since the scan
          * that produced this delivery. Terminal, and the one automatic stand-down that is — the
          * epoch only goes up, so the moment this token names can never come back, and every later
@@ -887,7 +903,9 @@ const DEPENDENCY_TOKEN_TASK_SQL = Prisma.sql`
  * second starter and started naming none at all: every task in a `coordinator_enabled` Project
  * (0122's `task_dispatch_authority_derive` gives them COORDINATOR at birth) fell out of this
  * candidate set and never ran, with nothing else scanning for it. Whether a task runs by itself is
- * now answered by the task's own auto-run opt-in and its prerequisites. The column and 0122's
+ * now answered by the task's own auto-run opt-in and its prerequisites — and, for a task filed under
+ * a project, by whether that project moves (started and not paused: project-pause-dispatch.ts),
+ * which is not the Automatic switch either. The column and 0122's
  * triggers that derive it are left standing — no reader of them is left in this service, but
  * removing them is its own change.
  */
@@ -909,6 +927,12 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
   -- task is for. Read off the project row, which outlives every task filed under it (see
   -- projectNotCancelledSql), and applied by every automatic door and by execute() alike.
   AND ${Prisma.raw(projectNotCancelledSql('t'))}
+  -- ...and so is a task filed under a project that does not move by itself: one its owner has not
+  -- started, or has paused (projectMovesForTaskSql). A prerequisite finishing is a reason to start
+  -- the next task only in a project that is running; this pass used not to ask, so switching
+  -- Automatic off — the old stop — never held a dependency chain back. One primary-key probe per
+  -- candidate, after the anchor below has already narrowed them to a few hundred.
+  AND ${Prisma.raw(projectMovesForTaskSql('t'))}
   -- Policy is deliberately NOT a candidate filter. The Session insert remains the fail-closed
   -- authority boundary. Filtering blocked work out here was the production silent READY bug: no
   -- Session and no dispatchAttempt existed for a reader to follow.
@@ -1007,7 +1031,9 @@ const AUTO_RUN_READY_SQL = Prisma.sql`
  *
  * Scoped to one Project by its caller rather than here, like AUTO_RUN_READY_SQL's owner scope: a
  * predicate that selected across Projects would be a second fleet-wide starter, and the budget
- * that bounds this one is a single Project's.
+ * that bounds this one is a single Project's. Whether that Project moves by itself — started and
+ * not paused (projectMovesSql) — is its callers' to ask too, on the join that scopes it: in the
+ * sweep that join is the scan's only selective entry point.
  */
 const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
@@ -1035,19 +1061,24 @@ const PROJECT_INDEPENDENT_READY_SQL = Prisma.sql`
  * `task t`. The scan that uses it joins the current moment's COMPLETED receipt itself.
  *
  * The standing rules that decide whether re-arming a moment could lead anywhere, and only those:
- * OPEN, opted into auto-run, not held, not filed under a cancelled project, an assignee bound to a
- * runner, not retired, and nothing occupying it. An occupied task is not waiting on its moment at all: the run occupying it (the
- * moment's own, or one a person started by hand) is what holds it. The rest of the two candidate
- * predicates is left to them, because each of those clauses is either fixed for the life of one
- * moment or applied again by the pass that dispatches the new one: a schedule, a prerequisite's
- * status and the edges cannot change without advancing the epoch themselves, and a Project's
- * coordinator switch is read by the scan that would release the task.
+ * OPEN, opted into auto-run, not held, not filed under a cancelled project, not filed under a project
+ * that does not move by itself (not started, or paused — projectMovesForTaskSql), an assignee bound
+ * to a runner, not retired, and nothing occupying it. An occupied task is not waiting on its moment
+ * at all: the run occupying it (the moment's own, or one a person started by hand) is what holds it.
+ * A paused project retries nothing, and it is asked here rather than left to the scans that would
+ * dispatch the new moment, so a pause leaves the task on the moment it was on — and its read says
+ * nothing about a retry, the pause being what holds it — instead of spending a re-arm on a moment
+ * nothing may start. The rest of the two candidate predicates is left to them, because each of those
+ * clauses is either fixed for the life of one moment or applied again by the pass that dispatches
+ * the new one: a schedule, a prerequisite's status and the edges cannot change without advancing the
+ * epoch themselves.
  */
 const AUTO_RUN_RETRY_CANDIDATE_SQL = Prisma.sql`
   t.status = 'OPEN'::task_status
   AND t.auto_run_when_ready = true
   AND t.dispatch_hold = false
   AND ${Prisma.raw(projectNotCancelledSql('t'))}
+  AND ${Prisma.raw(projectMovesForTaskSql('t'))}
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   AND ${Prisma.raw(taskNotObsoleteSql('t'))}
   AND NOT EXISTS (
@@ -1132,7 +1163,8 @@ type AutoRunRetryDecision =
  *
  * What it shares with the auto-run sweep it shares exactly, because these are the standing rules
  * about dispatching a task rather than anything to do with scheduling: OPEN, not held by a paused
- * list, not filed under a cancelled project, an assignee bound to a runner, no prerequisite outstanding, and nothing already occupying
+ * list, not filed under a cancelled project, not filed under a project that does not move by itself
+ * (not started, or paused), an assignee bound to a runner, no prerequisite outstanding, and nothing already occupying
  * it (TASK_OCCUPYING, so an idle-but-live session counts — a scheduled run must not barge in on a
  * session that is merely waiting for a human).
  *
@@ -1146,6 +1178,10 @@ const SCHEDULED_DUE_SQL = Prisma.sql`
   AND t.status = 'OPEN'::task_status
   AND t.dispatch_hold = false
   AND ${Prisma.raw(projectNotCancelledSql('t'))}
+  -- A schedule is an automatic start like the others: a project its owner has not started, or has
+  -- paused, keeps its appointment (not consumed, so it fires once the project moves) and starts
+  -- nothing meanwhile (projectMovesForTaskSql).
+  AND ${Prisma.raw(projectMovesForTaskSql('t'))}
   AND EXISTS (SELECT 1 FROM workspace a WHERE a.id = t.assignee_id AND a.runner_id IS NOT NULL)
   -- §13.6 SU9, and the same answer the Coordinator's pass gives: an edge names an ATTEMPT, and a
   -- replaced attempt's work is held by its successor. Read as a plain DONE check this is a
@@ -1336,6 +1372,35 @@ export function autoDispatchStillValid(current: bigint, observed: bigint): boole
 // coordinator that has failed this many times is reporting a problem it cannot solve, and the
 // next identical run is not what surfaces it.
 
+/**
+ * How many of each project's tasks are being worked right now: its tasks that are still OUTSTANDING
+ * (not DONE, not CANCELLED) and that a live or queued session occupies (TASK_OCCUPYING). A project's
+ * `max_concurrent_tasks` less this is the room it has — "At most N tasks at a time" — and every
+ * automatic door spends it (`takeProjectBudget`).
+ *
+ * Outstanding, because a task's run does not end when the task does: `statusAfterTurnCompleted`
+ * parks the session that just derived DONE at AWAITING_INPUT, which is live and resumable, and a
+ * count that included it would have a project's finished work fill the budget it was released into.
+ *
+ * A CTE body, named `occupied` by its caller and MATERIALIZED there, so "once per statement" is the
+ * statement's shape rather than the planner's choice: entered through the few sessions that occupy
+ * anything and grouped by project it is one pass of ~6ms, where the same count as a correlated
+ * subquery per candidate was 294ms a count on the 109,878-task project (2026-09-29).
+ */
+const PROJECT_OCCUPIED_SQL = Prisma.sql`
+  SELECT o.project_id, count(*)::int AS "tasks"
+    FROM task o
+   WHERE o.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)
+     AND EXISTS (
+       SELECT 1 FROM session s
+        WHERE s.task_id = o.id
+          AND s.status IN (${Prisma.join(
+            TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
+            ', ',
+          )})
+     )
+   GROUP BY o.project_id`;
+
 /** What the sweep is allowed to materialise, per runner and per capped list. */
 export interface MaterialisationBudget {
   runner: Map<string, number>;
@@ -1408,6 +1473,29 @@ export function takeListBudget(budget: MaterialisationBudget, listId: string | n
   if (listLeft !== undefined && listLeft <= 0) return false;
   if (listLeft !== undefined && listId) budget.list.set(listId, listLeft - 1);
   return true;
+}
+
+/**
+ * Whether a PROJECT has no slot left for another task: its `max_concurrent_tasks` less what it has
+ * occupied (PROJECT_OCCUPIED_SQL), as `projectBudget` read it for the pass, less what the pass has
+ * spent since (`spendProjectBudget`). A task in no project, or in one the read did not return, has
+ * no project cap.
+ *
+ * Asked before the runner and the list are spent, so a refusal here spends nothing; and the slot is
+ * spent only once they have agreed, so a task the runner or the list holds back does not use the
+ * project's room either. What it refuses stays OPEN and READY in the table that is already the
+ * durable queue, and the sweep offers it again once a slot frees. The owner's own Run does not come
+ * through here.
+ */
+export function projectBudgetSpent(budget: Map<string, number>, projectId: string | null): boolean {
+  const left = projectId ? budget.get(projectId) : undefined;
+  return left !== undefined && left <= 0;
+}
+
+/** One of the project's slots, taken by a task this pass is starting. */
+export function spendProjectBudget(budget: Map<string, number>, projectId: string | null): void {
+  const left = projectId ? budget.get(projectId) : undefined;
+  if (left !== undefined && projectId) budget.set(projectId, left - 1);
 }
 
 /**
@@ -4189,10 +4277,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // would promise fifty runs that never come, and inside one, calling them "needs manual
       // start" would have said nothing happens while fifty ran within the minute.
       //
-      // Read off the item, so `coordinator_enabled` — the project's switch, which decides whether
-      // that pass acts at all — is not consulted: a preview writes nothing and this is the one
-      // fact about the landing it would need a second read to learn. The residual error is
-      // therefore over-reporting under a project whose coordinator is switched off, which is the
+      // Read off the item, so whether the project moves — started and not paused, the switch that
+      // decides whether that pass acts at all — is not consulted: a preview writes nothing and this
+      // is the one fact about the landing it would need a second read to learn. The residual error
+      // is therefore over-reporting under a project that is not started or is paused, which is the
       // safe direction and the one this whole branch exists to keep it on.
       const hasPrerequisites =
         (item.dependsOnRefs?.length ?? 0) + (item.dependsOnTaskIds?.length ?? 0) > 0;
@@ -9177,6 +9265,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         // Its place in that list's queue: what decides whether it may take the slot now or has to
         // leave it to work the list ranks higher (readyPriorityAbove).
         priority: true,
+        // Whether the project it is filed under moves by itself (project-pause-dispatch.ts), read
+        // with the rest of what decides the candidate.
+        projectId: true,
+        project: { select: { startedAt: true, pausedAt: true } },
         assignee: { select: { id: true, runnerId: true } },
         // The moment this unlock IS (0137), read here because it is what NAMES this dispatch: two
         // passes — a second apiserver, or this one after a restart — over the same moment are one
@@ -9210,6 +9302,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // What each of their lists holds ready that could outrank them — read at most once for the
     // pass, and only once one of them is about to take a slot (readyPriorityAbove).
     let ranked: Map<string, number> | undefined;
+    // And how many each of their projects may still start — read at most once for the pass, the
+    // first time one of them is about to take a slot (projectBudget). "At most N tasks at a time"
+    // is the project's for every automatic door: a prerequisite finishing used to release all of its
+    // dependents at once, past it (2026-09-29, four tasks of a project whose limit was three).
+    let projectRoom: Map<string, number> | undefined;
     for (const dep of released) {
       if ((states.get(dep.id) ?? 'NONE') !== 'READY') continue;
       if (dep.status !== 'OPEN') continue; // already running/done/cancelled — leave it
@@ -9219,6 +9316,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         undecided.push(dep.id);
         continue;
       }
+      // Its project does not move by itself — not started, or paused: a prerequisite finishing is
+      // no reason to start anything in it. Left OPEN and READY, like every refusal here, and the
+      // sweep starts it once the project is started or resumed (AUTO_RUN_READY_SQL asks the same).
+      // After the opt-in above rather than before it: a dependent that waits on a decision is still
+      // handed to whoever makes it, which is a message and not a start.
+      if (dep.projectId && !projectMoves(dep.project)) continue;
       // Scheduled for later: being ready is not permission to start early. The schedule is kept,
       // not consumed — dispatchDueScheduledTasks picks the task up once it comes due, and by then
       // this same READY state is one of the things it re-checks. Two independent triggers, and
@@ -9235,7 +9338,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         ranked ??= await this.readyPriorityAbove(released);
         if ((ranked.get(dep.listId) ?? 0) > dep.priority) continue;
       }
+      // Its project is running as many tasks as it may: left OPEN and READY, and the sweep starts it
+      // once a slot frees — spending nothing of the runner's or the list's on it now.
+      projectRoom ??= await this.projectBudget(released.map((candidate) => candidate.projectId));
+      if (projectBudgetSpent(projectRoom, dep.projectId)) continue; // left to the sweep
       if (!takeBudget(budget, dep.assignee.runnerId, dep.listId)) continue; // left to the sweep
+      spendProjectBudget(projectRoom, dep.projectId);
       const epoch = dep.dispatchEpoch?.epoch ?? 0n;
       try {
         // Carrying WHICH MOMENT this scan read, so `execute` can prove it is still acting on it:
@@ -9307,7 +9415,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               OR (${PROJECT_INDEPENDENT_READY_SQL}
                   AND EXISTS (
                     SELECT 1 FROM project p
-                     WHERE p.id = t.project_id AND p.coordinator_enabled = true
+                     WHERE p.id = t.project_id AND ${Prisma.raw(projectMovesSql('p'))}
                   ))
             )
           ORDER BY t.priority DESC
@@ -9327,12 +9435,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * than on the finished task: what makes these tasks each other's next is being filed under the
    * same goal, which is the only relation they have.
    *
-   * Three things decide, and none of them is new. `coordinator_enabled` is the switch — releasing
-   * the next task is a coordinator's action, so a Project whose coordinator is off must not have
-   * one taken on its behalf. `max_concurrent_tasks` is the Project's own budget, counted over the
-   * Project's tasks that a live session already occupies, and it bounds what one completion may
-   * start. Everything about the candidate itself is PROJECT_INDEPENDENT_READY_SQL, which is the
-   * sweep's predicate with its one anchor inverted.
+   * Three things decide. Whether the Project moves by itself is the switch: started by its owner
+   * and not paused (projectMovesSql). It used to be `coordinator_enabled`, the Automatic setting,
+   * when Automatic doubled as the project's on switch; Automatic now says who decides for the owner,
+   * and a started, unpaused project releases its next independent task whichever way it is set.
+   * `max_concurrent_tasks` is the Project's own budget, counted over the Project's tasks that a live
+   * session already occupies, and it bounds what one completion may start. Everything about the
+   * candidate itself is PROJECT_INDEPENDENT_READY_SQL, which is the sweep's predicate with its one
+   * anchor inverted.
    *
    * Best-effort and self-contained, like the dependency dispatch it sits beside: every failure is
    * logged and none of them reaches the caller, because the completion this rides on is committed
@@ -9351,8 +9461,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (!projectId) return;
       // May this Project start anything, and how much room is there. One statement, because the
       // permission and the budget are read off the same row and a second round trip would let them
-      // be answered at two different instants. A Project whose coordinator is off returns no row at
-      // all, which is the difference between "no room" and "not mine to fill".
+      // be answered at two different instants. A Project that does not move by itself — not started,
+      // or paused — returns no row at all, which is the difference between "no room" and "not mine
+      // to fill".
       //
       // A slot is held by work that is still OUTSTANDING, which is why the count skips the settled
       // tasks rather than every task with a live session. A task's run does not end when the task
@@ -9377,7 +9488,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           FROM project p
          WHERE p.id = ${projectId}::uuid
            AND p.owner_id = ${ownerId}::uuid
-           AND p.coordinator_enabled = true`);
+           AND ${Prisma.raw(projectMovesSql('p'))}`);
       if (!room) return;
       if (room.free <= 0) {
         // Not a fault, and deliberately not a queue: the tasks keep their OPEN row, and the next
@@ -9578,11 +9689,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         listId: string | null;
         dispatchEpoch: bigint | null;
         priority: number;
+        projectId: string | null;
       }[]
     >`
       SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
-             t.list_id AS "listId", e.epoch AS "dispatchEpoch", t.priority AS "priority"
+             t.list_id AS "listId", e.epoch AS "dispatchEpoch", t.priority AS "priority",
+             t.project_id AS "projectId"
       FROM task t
       LEFT JOIN workspace a ON a.id = t.assignee_id
       LEFT JOIN runner r ON r.id = a.runner_id
@@ -9610,14 +9723,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // one completion reaching the same tasks is fine; two spellings of "may this task start on its
     // own" is how they come to disagree, and the flags they read are on the task itself.
     //
-    // The project join is both the gate and the entry point. `coordinator_enabled` is the switch —
-    // releasing the next task is a coordinator's action, so a project whose coordinator is off must
-    // not have one taken on its behalf — and it is also the only SELECTIVE thing this scan has,
-    // standing where AUTO_RUN_READY_SQL puts its dependency anchor: a candidate has to belong to
-    // one of the few projects whose coordinator is on, rather than be any OPEN task in the
-    // deployment. Selective only while those projects are small: on 2026-09-29 one of them held
-    // 109,878 of the deployment's 112k tasks, and this scan reads its ~82k OPEN auto-run tasks to
-    // find the ~55 with no edge (0.7–1.4s, through `task_project_id_idx`).
+    // The project join is both the gate and the entry point. Whether the project moves by itself is
+    // the switch — started by its owner and not paused (projectMovesSql); it was `coordinator_enabled`
+    // while the Automatic setting doubled as the project's on switch — and it is also the only
+    // SELECTIVE thing this scan has, standing where AUTO_RUN_READY_SQL puts its dependency anchor: a
+    // candidate has to belong to one of the few projects that move, rather than be any OPEN task in
+    // the deployment. The condition is on the project row (77 of them on 2026-09-29), so the plan is
+    // the one it was: filter the projects, then reach each one's tasks through
+    // `task_project_id_idx`. Selective only while those projects are small: on 2026-09-29 one of
+    // them held 109,878 of the deployment's 112k tasks, and this scan reads its ~82k OPEN auto-run
+    // tasks to find the ~55 with no edge (0.7–1.4s, through `task_project_id_idx`).
     //
     // The project's budget is counted ONCE per sweep, for every project together (`occupied`), and
     // not per candidate row. As a correlated subquery beside `rank` it was evaluated once for each
@@ -9631,40 +9746,28 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // `project.status` is read by both predicates rather than by this join — through
     // projectNotCancelledSql, the clause every door applies — so the two scans cannot fork on it.
     rows.push(...(await this.prisma.$queryRaw<typeof rows>`
-      WITH occupied AS MATERIALIZED (
-        -- Counted exactly as the completion edge counts it, down to the skipped statuses: a slot is
-        -- held by work that is still OUTSTANDING, so the parked AWAITING_INPUT run of a task that
-        -- has just finished does not fill the budget it was released into.
-        SELECT o.project_id, count(*)::int AS "tasks"
-          FROM task o
-         WHERE o.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)
-           AND EXISTS (
-             SELECT 1 FROM session s
-              WHERE s.task_id = o.id
-                AND s.status IN (${Prisma.join(
-                  TASK_OCCUPYING.map((status) => Prisma.sql`${status}::run_status`),
-                  ', ',
-                )})
-           )
-         GROUP BY o.project_id
-      )
+      -- Counted exactly as the completion edge counts it, down to the skipped statuses: a slot is
+      -- held by work that is still OUTSTANDING, so the parked AWAITING_INPUT run of a task that has
+      -- just finished does not fill the budget it was released into (PROJECT_OCCUPIED_SQL).
+      WITH occupied AS MATERIALIZED (${PROJECT_OCCUPIED_SQL})
       SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
-             c.list_id AS "listId", e.epoch AS "dispatchEpoch", c.priority AS "priority"
+             c.list_id AS "listId", e.epoch AS "dispatchEpoch", c.priority AS "priority",
+             c.project_id AS "projectId"
       FROM (
-        SELECT t.id, t.owner_id, t.assignee_id, t.list_id, t.created_at, t.priority,
-               -- The project's own budget, which nothing else on this path enforces: takeBudget
-               -- below spends the RUNNER's cap and a paused list's, and neither of them knows what
-               -- one project may run at once. Ranked by priority and then oldest first, so a
-               -- project with more ready tasks than room releases the one it raised, and among
-               -- equals the one that has waited longest — which, with nothing raised, is the whole
-               -- of the order, exactly as it was.
+        SELECT t.id, t.owner_id, t.assignee_id, t.list_id, t.created_at, t.priority, t.project_id,
+               -- The project's own budget, so this scan offers no project more than it has room
+               -- for; the loop below spends that same budget across both candidate sets
+               -- (projectBudgetSpent), and takeBudget the RUNNER's cap and a paused list's. Ranked
+               -- by priority and then oldest first, so a project with more ready tasks than room
+               -- releases the one it raised, and among equals the one that has waited longest —
+               -- which, with nothing raised, is the whole of the order, exactly as it was.
                row_number() OVER (
                  PARTITION BY t.project_id ORDER BY t.priority DESC, t.created_at, t.id
                ) AS "rank",
                p.max_concurrent_tasks - COALESCE(occupied."tasks", 0) AS "free"
           FROM task t
-          JOIN project p ON p.id = t.project_id AND p.coordinator_enabled = true
+          JOIN project p ON p.id = t.project_id AND ${Prisma.raw(projectMovesSql('p'))}
           LEFT JOIN occupied ON occupied.project_id = p.id
          WHERE ${PROJECT_INDEPENDENT_READY_SQL}
       ) c
@@ -9702,6 +9805,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       },
       diskShort: diskBelowFloor(row.freeBytes, row.minFreeDiskMb),
       listId: row.listId,
+      projectId: row.projectId,
       // Read here so the dispatch below can prove it is still acting on this row. Scheduling a
       // previously unscheduled task is the commonest way for this scan to be overtaken, and it is
       // one of the transitions that advances this counter — so is the task reopening, and so is any
@@ -9731,9 +9835,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // indistinguishable from real work in every session-scoped view — waiting on a cap that
     // permits one at a time.
     const budget = await this.materialisationBudget();
+    // And how many each project may still start: "At most N tasks at a time" holds for every door
+    // that starts one of its tasks by itself, not only the independent release that used to be the
+    // only one to ask (2026-09-29: a prerequisite finishing released four tasks of a project whose
+    // limit was three). One budget across both candidate sets, so the two scans together stay
+    // inside it; the independent scan's own window only keeps it from offering more than that.
+    const projectRoom = await this.projectBudget(ready.map((t) => t.projectId));
     let quotaHeld = 0;
     let diskHeld = 0;
     let atCapacity = 0;
+    let projectFull = 0;
     let overtaken = 0;
     let resumesAt: Date | undefined;
     // Per list as well as in total. The aggregate below answers "is the fleet moving"; a list's
@@ -9773,6 +9884,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
       if (heldOff.has(t.id)) continue;
+      // Its project is running as many tasks as it may: left OPEN and READY for a later sweep, and
+      // nothing of the runner's or the list's is spent on it.
+      if (projectBudgetSpent(projectRoom, t.projectId)) {
+        projectFull += 1;
+        continue;
+      }
       // Nothing left to claim it: leave the task OPEN and pick it up on a later sweep. The task
       // table is already the durable queue — it carries the assignee, the provider and the
       // description — so a second copy of it in `session` buys nothing until a slot exists.
@@ -9791,6 +9908,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         }
         continue;
       }
+      spendProjectBudget(projectRoom, t.projectId);
       try {
         const res = await this.dispatchReadyTask(t.ownerId, t.id, t.dispatchEpoch);
         // A task overtaken out from under this pass is not dispatched and must not be logged as
@@ -9820,6 +9938,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // dispatches whatever finished in between.
       this.logger.log(
         `auto-run: ${atCapacity} ready task(s) left for a later sweep — no free slot to claim them`,
+      );
+    }
+    if (projectFull > 0) {
+      this.logger.log(
+        `auto-run: ${projectFull} ready task(s) left for a later sweep — their project is running `
+          + 'as many tasks as it may at a time',
       );
     }
     if (overtaken > 0) {
@@ -9887,11 +10011,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const due = await this.prisma.$queryRaw<
       {
         id: string; ownerId: string; runnerId: string; listId: string | null;
-        dispatchEpoch: bigint | null; priority: number;
+        dispatchEpoch: bigint | null; priority: number; projectId: string | null;
       }[]
     >`
       SELECT t.id, t.owner_id AS "ownerId", a.runner_id AS "runnerId", t.list_id AS "listId",
-             e.epoch AS "dispatchEpoch", t.priority AS "priority"
+             e.epoch AS "dispatchEpoch", t.priority AS "priority", t.project_id AS "projectId"
       FROM task t
       JOIN workspace a ON a.id = t.assignee_id
       -- 0137's dispatch epoch: WHICH appointment this pass is keeping. Not the run_at instant,
@@ -9907,6 +10031,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // Only now — the query above is one partial-index scan that finds nothing on almost every
     // sweep, and a deployment with no schedules should pay for exactly that and no more.
     const budget = await this.materialisationBudget();
+    // A schedule coming due starts a task like any other automatic door, so it keeps the project to
+    // "At most N tasks at a time" as they do — read after the ready sweep on the same tick, so what
+    // that sweep started counts. Held back, the task keeps its `run_at` and is started by the sweep
+    // that finds its project with room.
+    const projectRoom = await this.projectBudget(due.map((t) => t.projectId));
     let dispatched = 0;
     let atCapacity = 0;
     let overtaken = 0;
@@ -9917,10 +10046,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // runner can claim produces sessions that sit PENDING and buy nothing. Here it is also what
       // makes "left for a later sweep" true rather than a hope — the task keeps its `run_at`, so
       // it is still due, and the sweep that finds a free slot is the one that starts it.
-      if (!takeBudget(budget, t.runnerId, t.listId)) {
+      if (projectBudgetSpent(projectRoom, t.projectId) || !takeBudget(budget, t.runnerId, t.listId)) {
         atCapacity += 1;
         continue;
       }
+      spendProjectBudget(projectRoom, t.projectId);
       const epoch = t.dispatchEpoch ?? 0n;
       try {
         // The appointment this pass is keeping, carried so the dispatch can check it is still the
@@ -9962,6 +10092,24 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         `scheduled: ${atCapacity} due task(s) left for a later sweep — no free slot to claim them`,
       );
     }
+  }
+
+  /**
+   * How many more of each of these projects' tasks may start now: its `max_concurrent_tasks` less its
+   * outstanding tasks that a live or queued session occupies (PROJECT_OCCUPIED_SQL) — the count the
+   * independent release has always spent — for `projectBudgetSpent` and `spendProjectBudget`. One
+   * statement for a pass, whatever it holds; a pass with no task in a project asks nothing.
+   */
+  private async projectBudget(projectIds: Iterable<string | null>): Promise<Map<string, number>> {
+    const ids = [...new Set([...projectIds].filter((id): id is string => id != null))];
+    if (ids.length === 0) return new Map();
+    const rows = await this.prisma.$queryRaw<Array<{ projectId: string; free: number }>>(Prisma.sql`
+      WITH occupied AS MATERIALIZED (${PROJECT_OCCUPIED_SQL})
+      SELECT p.id AS "projectId", p.max_concurrent_tasks - COALESCE(occupied."tasks", 0) AS "free"
+        FROM project p
+        LEFT JOIN occupied ON occupied.project_id = p.id
+       WHERE p.id = ANY(${ids}::uuid[])`);
+    return new Map(rows.map((row) => [row.projectId, Number(row.free)]));
   }
 
   /**
@@ -12490,7 +12638,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     actingSessionId?: string,
     /**
      * The runner's door — `task_start` and `orbit task start` — rather than the owner's own Run.
-     * Only this door waits for the owner to start the task's project (`projectAwaitingStart`).
+     * Only this door waits for the owner to start the task's project (`projectAwaitingStart`), and
+     * is refused while they have paused it (`pausedProjectOf`).
      */
     runnerDoor = false,
   ) {
@@ -12771,11 +12920,23 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         throw new ConflictException(projectCancelledRefusal(id, cancelled));
       }
     }
-    // An agent does not start a project its owner has not started (`projectAwaitingStart`). Ahead
-    // of the prerequisites, because it holds every task in the project and outlasts them all.
+    // Nothing automatic starts a task in a project that does not move by itself: one its owner has
+    // not started, or has paused (`project-pause-dispatch.ts`). Every automatic scan asks it in SQL
+    // before it gets here; this is the answer for a scan that read the project before it was paused,
+    // and for any automatic door that does not scan. Stands down like the others here, released, so
+    // the same moment starts the task once the project moves again. A person's Run is not held.
+    if (auto && task.projectId) {
+      const still = await projectStandsStill(this.prisma, ownerId, task.projectId);
+      if (still) return this.standDownReleasing(lease, { ok: false as const, skipped: still });
+    }
+    // An agent does not start a project its owner has not started (`projectAwaitingStart`), nor one
+    // its owner has paused (`pausedProjectOf`). Ahead of the prerequisites, because each holds every
+    // task in the project and outlasts them all.
     if (runnerDoor && task.projectId) {
       const awaiting = await projectAwaitingStart(this.prisma, ownerId, task.projectId);
       if (awaiting) throw new ConflictException(projectNotStartedRefusal(id, awaiting));
+      const paused = await pausedProjectOf(this.prisma, ownerId, task.projectId);
+      if (paused) throw new ConflictException(projectPausedRefusal(id, paused));
     }
     const depFacts = (await this.dependencyFactsFor(ownerId, [id])).get(id) ?? [];
     const depState = computeDependencyState(depFacts);

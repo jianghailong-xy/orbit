@@ -1,8 +1,17 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { Button, Card, Form, Input } from 'antd';
-import { api } from '../api';
-import { meQuery } from '../lib/queries';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Avatar, Button, Card, Form, Input } from 'antd';
+import { useRef, useState } from 'react';
+import { api, setAvatar } from '../api';
+import { squareJpeg } from '../lib/avatar';
+import { avatarQuery, meQuery, type Me } from '../lib/queries';
 import { useToast } from '../lib/toast';
+
+/** Under the name: who sees it besides you. The iOS edit-profile card says the same
+ *  (`SettingsCopy.nameCaption`). */
+export const NAME_CAPTION = 'People in your shared pools see you by this name.';
+/** The photo's two actions, in the words the iOS and macOS apps use (`SettingsCopy`). */
+export const CHOOSE_PHOTO = 'Choose photo';
+export const REMOVE_PHOTO = 'Remove photo';
 
 interface PwdValues {
   currentPassword: string;
@@ -10,14 +19,46 @@ interface PwdValues {
   confirmPassword: string;
 }
 
-// Self-service profile page: your identity (name/email, read-only for now) plus
-// account security. The only action is changing your own password (re-verified
-// server-side; the existing session keeps working — no token revocation).
+// Self-service profile page: your identity — the photo and the name, which you change here, and the
+// email you sign in with — plus account security: changing your own password (re-verified
+// server-side; the existing session keeps working — no token revocation). A photo is cut to its
+// middle square and sent the moment it is chosen; the name is written by its Save.
 export function ProfilePage() {
   const message = useToast();
+  const qc = useQueryClient();
   const [form] = Form.useForm<PwdValues>();
 
   const me = useQuery(meQuery());
+  const photo = useQuery(avatarQuery(me.data?.avatarUpdatedAt));
+  const chooser = useRef<HTMLInputElement>(null);
+  /** The name as it is being edited; null until touched, so the saved one shows. */
+  const [edited, setEdited] = useState<string | null>(null);
+  const draft = edited ?? me.data?.name ?? '';
+  const canSave = draft.trim() !== '' && draft.trim() !== (me.data?.name ?? '');
+  const initial = (me.data?.name || me.data?.email || '?').trim().charAt(0).toUpperCase();
+
+  /** Every write here answers with the account; it becomes the one every view shows. */
+  const adopt = (account: Me) => qc.setQueryData(meQuery().queryKey, account);
+
+  const rename = useMutation({
+    mutationFn: () => api<Me>('/users/me', { method: 'PATCH', body: { name: draft.trim() } }),
+    onSuccess: (account) => {
+      adopt(account);
+      setEdited(null);
+      message.success('Name saved');
+    },
+    onError: (e: Error) => message.error(`Couldn't save your name — ${e.message}`),
+  });
+  const upload = useMutation({
+    mutationFn: async (file: File) => setAvatar(await squareJpeg(file)),
+    onSuccess: adopt,
+    onError: (e: Error) => message.error(`Couldn't save your photo — ${e.message}`),
+  });
+  const remove = useMutation({
+    mutationFn: () => api<Me>('/users/me/avatar', { method: 'DELETE' }),
+    onSuccess: adopt,
+    onError: (e: Error) => message.error(`Couldn't save your photo — ${e.message}`),
+  });
 
   const changePwd = useMutation({
     mutationFn: (v: PwdValues) =>
@@ -37,10 +78,48 @@ export function ProfilePage() {
       <h1 className="page-title">Profile</h1>
 
       <Card title="Basic information" style={{ marginBottom: 16 }}>
-        <div style={{ display: 'grid', gap: 12 }}>
+        <div style={{ display: 'grid', gap: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <Avatar size={64} src={photo.data} style={{ background: 'var(--brand)', flex: 'none', fontSize: 28 }}>
+              {initial}
+            </Avatar>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              <Button loading={upload.isPending} onClick={() => chooser.current?.click()}>
+                {CHOOSE_PHOTO}
+              </Button>
+              {me.data?.avatarUpdatedAt && (
+                <Button loading={remove.isPending} onClick={() => remove.mutate()}>
+                  {REMOVE_PHOTO}
+                </Button>
+              )}
+            </div>
+            <input
+              ref={chooser}
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (file) upload.mutate(file);
+              }}
+            />
+          </div>
           <div>
-            <div style={{ color: 'var(--text-3)', fontSize: 12, marginBottom: 2 }}>Name</div>
-            <div>{me.data?.name ?? '—'}</div>
+            <div style={{ color: 'var(--text-3)', fontSize: 12, marginBottom: 4 }}>Name</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Input
+                value={draft}
+                maxLength={80}
+                autoComplete="name"
+                onChange={(e) => setEdited(e.target.value)}
+                onPressEnter={() => canSave && rename.mutate()}
+              />
+              <Button type="primary" disabled={!canSave} loading={rename.isPending} onClick={() => rename.mutate()}>
+                Save
+              </Button>
+            </div>
+            <div style={{ color: 'var(--text-3)', fontSize: 12, marginTop: 6 }}>{NAME_CAPTION}</div>
           </div>
           <div>
             <div style={{ color: 'var(--text-3)', fontSize: 12, marginBottom: 2 }}>Email</div>

@@ -110,10 +110,11 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
     // column being gone — passes a composed Prisma.sql. Told apart through the shared renderer, so
     // that a double answers by what was ASKED rather than by which calling convention carried it.
     //
-    // The independent scan — a coordinated project's tasks that depend on nothing — selects
-    // nothing here, and that is this world rather than a convenience: these fixtures have no
-    // projects at all, so no row of theirs could pass a predicate that joins one. Answering it
-    // with the READY rows would hand the sweep every task twice.
+    // The independent scan — a moving project's tasks that depend on nothing, the one statement
+    // that counts what each project has occupied (`WITH occupied`) — selects nothing here, and
+    // that is this world rather than a convenience: these fixtures have no projects at all, so no
+    // row of theirs could pass a predicate that joins one. Answering it with the READY rows would
+    // hand the sweep every task twice.
     $queryRaw: async (...args: unknown[]) => {
       const query = renderRawQuery(args);
       if (query.shape !== 'tagged-template') {
@@ -125,7 +126,7 @@ function makeService(readyTaskIds: string[], history: FailureHistory[], options:
           },
         ];
       }
-      if (query.text.includes('coordinator_enabled')) return [];
+      if (query.text.includes('WITH occupied')) return [];
       return taskIds.map((id) => ({
         id,
         ownerId: 'owner-1',

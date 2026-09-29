@@ -26,6 +26,12 @@ const DAY = 24 * HOUR;
  *  the network. */
 const STALE_UPDATE_MS = 7 * DAY;
 
+/** The version number in what a CLI reports as its version — `2.1.284 (Claude Code)` and
+ *  `codex-cli 0.158.0` are 2.1.284 and 0.158.0. A report with no number in it is shown as it is. */
+export function engineVersionNumber(reported: string): string {
+  return /\d+(?:\.\d+)+(?:-[0-9A-Za-z.]+)?/.exec(reported)?.[0] ?? reported.trim();
+}
+
 export function ago(iso: string, now: number): string {
   const diff = now - Date.parse(iso);
   if (!Number.isFinite(diff) || diff < 0) return 'just now';
