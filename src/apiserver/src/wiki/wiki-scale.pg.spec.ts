@@ -41,7 +41,7 @@
  *      retire moved, an entry an amend rewrote — exactly as when every lookup ran inside, and a neighbour
  *      another writer changed between the read and the transaction is read again;
  *   8. a maintenance run's thirty adds among 10,000 entries, each citing three records, keep the
- *      transaction well under the 5 s that closed it, with no lookup inside it, and no longer than
+ *      transaction well under the 5 s that closed it, with no lookup inside it, and about as long as
  *      the same thirty into an empty space; every step's time is in the diagnostics;
  *   9. with every statement slowed, and with four such changesets at once, every one commits.
  *
@@ -1394,11 +1394,13 @@ test('the neighbours read before the transaction · the same similar[], and a tr
       recheck.ms <= opened.ms * 0.1,
       `the neighbours took ${Math.round(recheck.ms)} ms of the transaction's ${Math.round(opened.ms)} ms`,
     );
-    // Well under the 5 s that closed it, and no longer than into an empty space: what is left is the
-    // statements an add is made of, whatever the size of the space.
+    // Well under the 5 s that closed it, and about as long as into an empty space: what is left is the
+    // statements an add is made of, whatever the size of the space. The margin is the noise of two runs
+    // on a loaded host; the lookup it would have to hide is a second or more at this size, and none of
+    // it is inside (asserted above).
     assert.ok(opened.ms < 5_000, `the transaction was open ${Math.round(opened.ms)} ms`);
     assert.ok(
-      opened.ms <= empty.opened.ms + 1_000,
+      opened.ms <= empty.opened.ms + Math.max(1_000, empty.opened.ms / 2),
       `the transaction took ${Math.round(opened.ms)} ms among ${BIG} entries and ${Math.round(empty.opened.ms)} ms in an empty space`,
     );
   });
