@@ -708,13 +708,15 @@ export interface SessionOwnerItem<Instant = string> {
 
 /**
  * What a session row says its `pendingApprovals` is counting, when one word says it better than
- * "approval" — the two kinds whose count is not an approval at all.
+ * "approval" — the three kinds whose count is not an approval at all.
  *
  * `OWNER_CONFIRMATION` is an OWNER_CONFIRMED task's run waiting for its owner to confirm it done.
  * `OWNER_ITEM` is one of the four above: the row says the oldest item's own word (`Escalated to
  * you`, `Paused`, …) — the same words the Needs-you banner and the card in the conversation use —
  * because on a project whose coordinator is switched off the item is the owner's precisely when
- * nobody else will take it. A row counting anything else (a blocked tool call, a proposal) keeps the
- * generic approval wording, and so does one counting two kinds at once.
+ * nobody else will take it. `START_REQUEST` is a project not started yet whose coordinator has asked
+ * to start it: the row says "Ready to start", over the "Start this project?" card. A row counting
+ * anything else (a blocked tool call, a proposal) keeps the generic approval wording, and so does
+ * one counting two kinds at once.
  */
-export type SessionWaitingKind = 'OWNER_CONFIRMATION' | 'OWNER_ITEM';
+export type SessionWaitingKind = 'OWNER_CONFIRMATION' | 'OWNER_ITEM' | 'START_REQUEST';
