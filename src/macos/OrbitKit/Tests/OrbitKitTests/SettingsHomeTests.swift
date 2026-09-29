@@ -145,6 +145,29 @@ final class SettingsHomeTests: XCTestCase {
         XCTAssertEqual(ProfileEdit.name("  Hailong  Jiang \n"), "Hailong  Jiang")
     }
 
+    /// A new photo, or taking the photo away, is a change on its own — but never with the name blank.
+    func testAPhotoIsAChangeToSave() {
+        let jpeg = Data([0xFF, 0xD8, 0xFF])
+        XCTAssertTrue(ProfileEdit.canSave("jianghailong.rd", saved: "jianghailong.rd", photo: .replaced(jpeg)))
+        XCTAssertTrue(ProfileEdit.canSave("jianghailong.rd", saved: "jianghailong.rd", photo: .removed))
+        XCTAssertFalse(ProfileEdit.canSave("jianghailong.rd", saved: "jianghailong.rd", photo: .unchanged))
+        XCTAssertFalse(ProfileEdit.canSave("  ", saved: "jianghailong.rd", photo: .replaced(jpeg)),
+                       "a photo does not carry a blank name through")
+    }
+
+    /// Save writes the photo first, then the name, and only what changed.
+    func testSaveWritesThePhotoThenTheNameAndOnlyWhatChanged() {
+        let jpeg = Data([0xFF, 0xD8, 0xFF])
+        XCTAssertEqual(ProfileEdit.steps(" Hailong Jiang ", saved: "jianghailong.rd", photo: .replaced(jpeg)),
+                       [.setPhoto(jpeg), .rename("Hailong Jiang")])
+        XCTAssertEqual(ProfileEdit.steps("jianghailong.rd", saved: "jianghailong.rd", photo: .removed),
+                       [.removePhoto])
+        XCTAssertEqual(ProfileEdit.steps("Hailong Jiang", saved: "jianghailong.rd", photo: .unchanged),
+                       [.rename("Hailong Jiang")])
+        XCTAssertEqual(ProfileEdit.steps("jianghailong.rd", saved: "jianghailong.rd", photo: .unchanged), [])
+        XCTAssertEqual(ProfileEdit.steps("", saved: "jianghailong.rd", photo: .removed), [])
+    }
+
     func testAFailedSaveSaysWhy() {
         XCTAssertEqual(SettingsCopy.nameNotSaved("the connection dropped"),
                        "Couldn't save your name — the connection dropped.")

@@ -41,7 +41,15 @@ final class AppModel {
     var busy = false
 
     // data
-    var user: User?
+    var user: User? {
+        didSet { refreshAvatar() }
+    }
+    /// The account's profile photo, once fetched — drawn wherever the account's avatar is
+    /// (`AccountAvatar`). Nil while the account has none, or before it has arrived; the name's first
+    /// letter stands in.
+    private(set) var avatarImage: PlatformImage?
+    /// Whose photo, at which version, `avatarImage` is — so a new `user` refetches only on a change.
+    private var avatarImageKey: String?
     var sessions: [Session] = []
     /// The owner's session-tag library — the 7 seeded system tags plus any custom ones, fetched from
     /// `GET /session-tags`. Drives the tag picker sheet and the list's tag filter/group chips; empty
@@ -511,6 +519,58 @@ final class AppModel {
             return nil
         } catch {
             return SettingsCopy.nameNotSaved(APIClient.failureReason(error))
+        }
+    }
+
+    /// Set the account's profile photo: a square JPEG already cropped and scaled
+    /// (`PlatformImage.orbitAvatarJPEG`). Returns nil once the server has it, else what went wrong.
+    /// The bytes sent are the ones shown, so nothing is fetched back.
+    func saveAvatar(_ jpeg: Data) async -> String? {
+        do {
+            guard let api else { throw APIError.notConfigured }
+            let account = try await api.setAvatar(jpeg: jpeg)
+            if let version = account.avatarUpdatedAt {
+                avatarImageKey = "\(account.id)|\(version)"
+                avatarImage = PlatformImage(data: jpeg)
+            }
+            user = account
+            return nil
+        } catch {
+            return SettingsCopy.photoNotSaved(APIClient.failureReason(error))
+        }
+    }
+
+    /// Take the account's profile photo away, so its avatar is the name's first letter again.
+    func removeAvatar() async -> String? {
+        do {
+            guard let api else { throw APIError.notConfigured }
+            user = try await api.removeAvatar()
+            return nil
+        } catch {
+            return SettingsCopy.photoNotSaved(APIClient.failureReason(error))
+        }
+    }
+
+    /// Fetch the photo `user` names when it is not the one held; drop it when there is none. A fetch
+    /// that fails is tried again by the next `user`.
+    private func refreshAvatar() {
+        guard let user, let version = user.avatarUpdatedAt else {
+            avatarImage = nil
+            avatarImageKey = nil
+            return
+        }
+        let key = "\(user.id)|\(version)"
+        guard key != avatarImageKey, let api else { return }
+        // Never another account's photo under this one's name while the new one loads.
+        if avatarImageKey?.hasPrefix("\(user.id)|") != true { avatarImage = nil }
+        avatarImageKey = key
+        Task {
+            do {
+                let data = try await api.avatar()
+                if avatarImageKey == key { avatarImage = PlatformImage(data: data) }
+            } catch {
+                if avatarImageKey == key { avatarImageKey = nil }
+            }
         }
     }
 

@@ -93,6 +93,37 @@ final class ProfileAPIClientTests: XCTestCase {
         XCTAssertEqual(user.preferences?.theme, "light", "the answer is the whole account, as `me` reads it")
     }
 
+    /// The photo: one multipart PUT of the JPEG the app made, one DELETE, and a GET of its bytes —
+    /// the first two answering with the account, whose `avatarUpdatedAt` is the version to show.
+    func testThePhotoIsPutRemovedAndReadAtOneAddress() async throws {
+        let recorder = ProfileRecorder()
+        let account = #"{"id":"u1","email":"owner@example.test","name":"Hailong Jiang","role":"ADMIN","#
+        ProfileURLProtocol.handler = { request in
+            recorder.append(request)
+            switch request.httpMethod {
+            case "PUT": return (200, Data((account + #""avatarUpdatedAt":"2026-09-29T01:20:00.000Z"}"#).utf8))
+            case "DELETE": return (200, Data((account + #""avatarUpdatedAt":null}"#).utf8))
+            default: return (200, Data([0xFF, 0xD8, 0xFF, 0xE0]))
+            }
+        }
+        let api = client()
+
+        let set = try await api.setAvatar(jpeg: Data("JPEGBYTES".utf8))
+        XCTAssertEqual(set.avatarUpdatedAt, "2026-09-29T01:20:00.000Z")
+        let bytes = try await api.avatar()
+        XCTAssertEqual(bytes, Data([0xFF, 0xD8, 0xFF, 0xE0]))
+        let removed = try await api.removeAvatar()
+        XCTAssertNil(removed.avatarUpdatedAt)
+
+        let sent = recorder.sent
+        XCTAssertEqual(sent.count, 3)
+        XCTAssertTrue(sent[0].hasPrefix("PUT /api/users/me/avatar --orbit."), sent[0])
+        XCTAssertTrue(sent[0].contains(#"name="file"; filename="avatar.jpg""#), sent[0])
+        XCTAssertTrue(sent[0].contains("Content-Type: image/jpeg\r\n\r\nJPEGBYTES\r\n"), sent[0])
+        XCTAssertEqual(sent[1], "GET /api/users/me/avatar ")
+        XCTAssertEqual(sent[2], "DELETE /api/users/me/avatar ")
+    }
+
     /// A refusal comes back in the server's own words, which is what the card shows under the field.
     func testARefusedNameSaysWhyInTheServersWords() async throws {
         ProfileURLProtocol.handler = { _ in

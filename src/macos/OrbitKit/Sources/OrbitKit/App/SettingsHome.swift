@@ -145,15 +145,46 @@ public enum SettingsHome {
 /// account has. The avatar is the name's first letter, so the name is the whole profile; the email is
 /// the sign-in and is not changed here.
 public enum ProfileEdit {
+    /// What the card will do to the photo on Save: nothing, put this one in its place, or take it away.
+    public enum Photo: Equatable, Sendable {
+        case unchanged
+        /// A square JPEG, already cropped and scaled.
+        case replaced(Data)
+        case removed
+    }
+
+    /// One write Save makes, in the order it makes them.
+    public enum Step: Equatable, Sendable {
+        case setPhoto(Data)
+        case removePhoto
+        case rename(String)
+    }
+
     /// The name as it is sent: without the spaces around it.
     public static func name(_ draft: String) -> String {
         draft.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Save is live once the draft names someone, and someone other than the account already is.
-    public static func canSave(_ draft: String, saved: String?) -> Bool {
+    /// Save is live once the draft names someone, and it changes something: a name other than the
+    /// account's, or the photo.
+    public static func canSave(_ draft: String, saved: String?, photo: Photo = .unchanged) -> Bool {
         let name = name(draft)
-        return !name.isEmpty && name != saved
+        return !name.isEmpty && (name != saved || photo != .unchanged)
+    }
+
+    /// What Save writes: the photo first, then the name — each only when it changed. A step that
+    /// lands is the account's from then on, so a Save that fails part way leaves only the rest to do.
+    public static func steps(_ draft: String, saved: String?, photo: Photo) -> [Step] {
+        guard canSave(draft, saved: saved, photo: photo) else { return [] }
+        var steps: [Step] = []
+        switch photo {
+        case .unchanged: break
+        case .replaced(let jpeg): steps.append(.setPhoto(jpeg))
+        case .removed: steps.append(.removePhoto)
+        }
+        let name = name(draft)
+        if name != saved { steps.append(.rename(name)) }
+        return steps
     }
 }
 
@@ -215,6 +246,12 @@ public enum SettingsCopy {
     public static let nameCaption = "People in your shared pools see you by this name."
     public static let saveProfile = "Save profile"
     public static func nameNotSaved(_ reason: String) -> String { "Couldn't save your name — \(reason)." }
+    /// The photo's actions — on iOS the sheet the card's avatar opens, the rows of the web Profile
+    /// page and of macOS Settings elsewhere. Taking one is a phone's alone.
+    public static let takePhoto = "Take photo"
+    public static let choosePhoto = "Choose photo"
+    public static let removePhoto = "Remove photo"
+    public static func photoNotSaved(_ reason: String) -> String { "Couldn't save your photo — \(reason)." }
 
     // MARK: Sign out
 

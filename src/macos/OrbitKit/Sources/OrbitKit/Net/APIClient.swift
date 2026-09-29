@@ -92,6 +92,24 @@ public final class APIClient: @unchecked Sendable {
     public func updateProfile(_ req: UpdateProfileRequest) async throws -> User {
         try await patch("users/me", body: req)
     }
+    /// Set the account's profile photo (`PUT /users/me/avatar`, multipart `file`): a square JPEG the
+    /// app has already cropped and scaled. Answers with the account, whose `avatarUpdatedAt` is then
+    /// the new photo's version.
+    public func setAvatar(jpeg: Data) async throws -> User {
+        let boundary = "orbit.\(UUID().uuidString)"
+        var req = try makeRequest("users/me/avatar", method: "PUT", body: Optional<Empty>.none)
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        req.httpBody = Multipart.body(boundary: boundary, fieldName: "file", filename: "avatar.jpg",
+                                      mimeType: "image/jpeg", fileData: jpeg)
+        return try decoder.decode(User.self, from: try await send(req))
+    }
+    /// Remove the account's profile photo (`DELETE /users/me/avatar`); answers with the account.
+    public func removeAvatar() async throws -> User { try await delete("users/me/avatar") }
+    /// The account's profile photo, as its bytes (`GET /users/me/avatar`). Bearer-guarded, so the
+    /// app fetches it and draws it itself.
+    public func avatar() async throws -> Data {
+        try await send(makeRequest("users/me/avatar", method: "GET", body: Optional<Empty>.none))
+    }
     public func changePassword(_ req: ChangePasswordRequest) async throws {
         _ = try await postRaw("auth/change-password", body: req)
     }
