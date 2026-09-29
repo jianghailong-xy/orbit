@@ -204,22 +204,35 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertTrue(saveName.contains("SettingsCopy.nameNotSaved(APIClient.failureReason(error))"))
     }
 
-    /// The photo on iOS: the card's avatar opens the photo's actions, a new one comes through UIKit's
-    /// picker with its square Move and Scale step and is cut down before it is kept as the draft.
-    func testTheCardChangesThePhotoThroughTheSystemCrop() throws {
+    /// The photo on iOS, as ChatGPT's card does it: the avatar opens a menu at the avatar — the photo
+    /// library, the camera, Files, and Remove when there is a photo — and every new photo goes through
+    /// Orbit's own round crop screen before it becomes the card's draft.
+    func testTheCardChangesThePhotoFromAMenuThroughARoundCrop() throws {
         let sheet = code(try appSource("Views/SettingsSheet.swift"))
         let card = try slice(sheet, from: "private struct ProfileEditSheet: View {", to: "private struct CameraBadge: View {")
-        XCTAssertTrue(card.contains("Button { askingForPhoto = true } label: {"))
+        XCTAssertTrue(card.contains("Menu {"))
+        XCTAssertTrue(card.contains("Label(SettingsCopy.photoLibrary, systemImage: \"photo.on.rectangle\")"))
+        XCTAssertTrue(card.contains("Button { photoFlow = .camera } label: {"))
+        XCTAssertTrue(card.contains("Label(SettingsCopy.chooseFile, systemImage: \"folder\")"))
+        XCTAssertTrue(card.contains("Label(SettingsCopy.removePhoto, systemImage: \"trash\")"))
         XCTAssertTrue(card.contains("avatar.overlay(alignment: .bottomTrailing) { CameraBadge() }"))
-        XCTAssertTrue(card.contains("Button(SettingsCopy.takePhoto) { photoSource = .camera }"))
-        XCTAssertTrue(card.contains("Button(SettingsCopy.choosePhoto) { photoSource = .library }"))
-        XCTAssertTrue(card.contains("Button(SettingsCopy.removePhoto, role: .destructive) {"))
-        XCTAssertTrue(card.contains("if let picked, let jpeg = picked.orbitAvatarJPEG() {"))
+        XCTAssertFalse(card.contains("confirmationDialog"), "the photo's actions are a menu at the avatar, not a sheet from the bottom")
+        XCTAssertTrue(card.contains(".photosPicker(isPresented: $showingLibrary, selection: $libraryPick, matching: .images)"))
+        XCTAssertTrue(card.contains(".fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image])"))
+        XCTAssertTrue(card.contains("CameraPicker { taken in photoFlow = taken.map(PhotoFlow.crop) }"))
+        XCTAssertTrue(card.contains("AvatarCropView(image: image, cancel: { photoFlow = nil }) { jpeg in"))
         XCTAssertTrue(card.contains("photo = .replaced(jpeg)"))
-        let picker = try slice(sheet, from: "private struct PhotoPicker: UIViewControllerRepresentable {",
+
+        let crop = try slice(sheet, from: "private struct AvatarCropView: View {", to: "private struct NotificationSettingsPage: View {")
+        XCTAssertTrue(crop.contains("MagnifyGesture()"), "pinched into place")
+        XCTAssertTrue(crop.contains("AvatarCrop.clampedOffset("), "and never uncovering the circle")
+        XCTAssertTrue(crop.contains("let square = AvatarCrop.cropRect(image: image.size, circle: circle, zoom: zoom, offset: offset)"))
+        XCTAssertTrue(crop.contains("image.orbitAvatarJPEG(crop: square)"))
+        XCTAssertTrue(crop.contains("Text(SettingsCopy.savePhoto)"))
+        let camera = try slice(sheet, from: "private struct CameraPicker: UIViewControllerRepresentable {",
                                to: "func imagePickerControllerDidCancel")
-        XCTAssertTrue(picker.contains("picker.allowsEditing = true"), "the square crop is the system's")
-        XCTAssertTrue(picker.contains("info[.editedImage]"))
+        XCTAssertTrue(camera.contains("picker.sourceType = .camera"))
+        XCTAssertFalse(camera.contains("allowsEditing = true"), "the square system crop is not the one used")
     }
 
     /// The photo is drawn wherever the account's avatar is: Settings' header on iOS, the sidebar's
