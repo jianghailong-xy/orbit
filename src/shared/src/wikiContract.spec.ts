@@ -82,6 +82,19 @@ import {
 } from './wikiMaintain';
 import { WIKI_MAINTENANCE_HEALTH, WIKI_MAINTENANCE_LOOKS, wikiMaintenanceLook } from './wikiHealth';
 import {
+  WIKI_DOC_BLOCK_KINDS,
+  WIKI_DOC_CHECKERS,
+  WIKI_DOC_FOOTNOTE_KINDS,
+  WIKI_DOC_RECORD_KINDS,
+  WIKI_DOC_REPO_KINDS,
+  WIKI_DOC_RULES,
+  WIKI_DOC_SCHEMA,
+  WIKI_DOC_SENTENCE_STATUSES,
+  WIKI_DOC_STATUSES,
+  WIKI_DOC_VERDICTS,
+  WIKI_DOC_WITHDRAW_REASONS,
+} from './wikiDocs';
+import {
   WIKI_PLAN_FACT_KINDS,
   WIKI_PLAN_GATE_CHECKS,
   WIKI_PLAN_NEW_FIELD_LEVELS,
@@ -819,6 +832,80 @@ describe('wiki contract', () => {
     // No tool: confirming and deciding are the owner's (hard constraint 2).
     expect(plan.tool).toMatch(/^none/u);
     for (const tool of CONTRACT.agentSurface.tools) expect(tool).not.toMatch(/plan/u);
+  });
+
+  it('ships the documents the contract states: their closed sets, rules and schema, their tables, the withdrawal and their doors', () => {
+    // Criterion 9 (revised 2026-09-28): written from the confirmed plan, footnoted to first-hand originals.
+    const docs = CONTRACT.docs;
+    expect(docs.phase).toBe(2);
+    expect(docs.tables).toEqual(['wiki_doc', 'wiki_doc_section', 'wiki_doc_sentence', 'wiki_doc_footnote']);
+    expect(docs.migration).toMatch(/0326_wiki_docs/u);
+    expect(existsSync(path.join(ROOT, docs.migration))).toBe(true);
+    expect(keysOf(docs.statuses)).toEqual([...WIKI_DOC_STATUSES]);
+    expect(keysOf(docs.sentenceStatuses)).toEqual([...WIKI_DOC_SENTENCE_STATUSES]);
+    expect(keysOf(docs.footnoteKinds)).toEqual([...WIKI_DOC_FOOTNOTE_KINDS]);
+    expect(docs.repoKinds).toEqual([...WIKI_DOC_REPO_KINDS]);
+    expect(docs.recordKinds).toEqual([...WIKI_DOC_RECORD_KINDS]);
+    expect(keysOf(docs.verdicts)).toEqual([...WIKI_DOC_VERDICTS]);
+    expect(keysOf(docs.checkers)).toEqual([...WIKI_DOC_CHECKERS]);
+    expect(docs.withdrawReasons).toEqual([...WIKI_DOC_WITHDRAW_REASONS]);
+    expect(keysOf(docs.blockKinds)).toEqual([...WIKI_DOC_BLOCK_KINDS]);
+    expect(docs.rules).toEqual(WIKI_DOC_RULES);
+    expect(docs.schema).toEqual(Object.fromEntries(Object.entries(WIKI_DOC_SCHEMA).map(([level, keys]) => [level, [...keys]])));
+    // More than 5% marks a document; a whole document fits one write.
+    expect(WIKI_DOC_RULES.needsReviewAbove).toBe(0.05);
+    expect(WIKI_DOC_RULES.sectionsPerWrite).toBe(CONTRACT.plan.rules.sectionsMax);
+    // A record a footnote names is a first-hand record a source may name too; a document is not one.
+    for (const kind of WIKI_DOC_RECORD_KINDS) expect(WIKI_SOURCE_KINDS).toContain(kind);
+    for (const kind of WIKI_DOC_REPO_KINDS) expect(WIKI_SOURCE_KINDS as readonly string[]).not.toContain(kind);
+    // Every section keeps the origin/main commit it was generated at, for a run to compare with origin/main.
+    expect(WIKI_DOC_SCHEMA.write).toContain('repoSha');
+    expect(docs.repoSha).toMatch(/origin\/main/u);
+    expect(docs.reads.writerState).toMatch(/repoSha/u);
+    // A repository footnote needs its sha; a record's is the server's own check.
+    expect(WIKI_DOC_SCHEMA.repoFootnote).toContain('sha');
+    expect(WIKI_DOC_SCHEMA.recordFootnote).not.toContain('verified');
+    expect(docs.verification.repository).toMatch(/sha/u);
+    expect(docs.verification.records).toMatch(/runEventText/u);
+    // The withdrawal hangs on the entry's single state writer, not on a writer of its own.
+    expect(docs.withdrawal).toMatch(/recomputeFlags/u);
+    expect(docs.withdrawal).toMatch(/applyOp/u);
+
+    // The migration's CHECKs are the contract's closed sets.
+    const sql = readFileSync(path.join(ROOT, docs.migration), 'utf8');
+    const quoted = (values: readonly string[]) => values.map((v) => `'${v}'`).join(', ');
+    expect(sql).toContain(`"status" IN (${quoted(WIKI_DOC_STATUSES)})`);
+    expect(sql).toContain(`"status" IN (${quoted(WIKI_DOC_SENTENCE_STATUSES)})`);
+    expect(sql.replace(/\s+/gu, ' ')).toContain(`"kind" IN ( ${quoted(WIKI_DOC_FOOTNOTE_KINDS)})`);
+    expect(sql).toContain(`"verdict" IN (${quoted(WIKI_DOC_VERDICTS)})`);
+    expect(sql).toContain(`"checked_by" IN (${quoted(WIKI_DOC_CHECKERS)})`);
+    expect(sql.replace(/\s+/gu, ' ')).toContain(`"withdrawn_reason" IN (${quoted(WIKI_DOC_WITHDRAW_REASONS)})`);
+    expect(sql).toContain(`char_length("quote") <= ${WIKI_DOC_RULES.quoteMaxChars}`);
+    expect(sql).toContain(`char_length("excerpt") <= ${WIKI_DOC_RULES.excerptMaxChars}`);
+    expect(sql).toContain(`CONSTRAINT "wiki_doc_section_repo_sha_chk" CHECK ("repo_sha" ~ '^[0-9a-f]{40}$')`);
+
+    // Its doors: the owner's three reads on the user door, a maintenance run's two on the runner door.
+    const routes = docs.routes;
+    const user: string[] = CONTRACT.agentSurface.doors.user.routes;
+    const maintenanceRoutes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
+    for (const read of [routes.directory, routes.doc, routes.index]) expect(user).toContain(read);
+    for (const route of [routes.writerState, routes.write]) expect(maintenanceRoutes).toContain(route);
+    expect(user.some((route) => route.startsWith('POST') && route.includes('/docs'))).toBe(false);
+    expect(docs.who.write).toMatch(/isWikiMaintenanceSession/u);
+    expect(docs.who.write).toMatch(/WIKI_PLAN_UNCONFIRMED/u);
+    // A view: never a source, never pushed, never an agent's answer.
+    expect(docs.view.push).toMatch(/Never in <orbit_wiki_context>/u);
+    expect(docs.view.source).toMatch(/WIKI_SOURCE_UNRESOLVED/u);
+    expect(docs.view.agents).toMatch(/wiki_search or wiki_get/u);
+    const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code)?.httpStatus;
+    expect(status('WIKI_DOC_INVALID')).toBe(422);
+    expect(status('WIKI_PLAN_STALE')).toBe(409);
+    expect(CONTRACT.realtime.publishedWhen.some((when: string) => /document's sections were written/u.test(when))).toBe(true);
+    expect(docs.tool).toMatch(/^none/u);
+    for (const tool of CONTRACT.agentSurface.tools) expect(tool).not.toMatch(/doc/u);
+    // The topic articles stay until the clients have moved over.
+    expect(docs.means).toMatch(/wiki_topic_summary/u);
+    expect(CONTRACT.articles.tables).toEqual(['wiki_topic_summary']);
   });
 
   it('declares every refusal once, with a status and a scope, and names no code it does not declare', () => {

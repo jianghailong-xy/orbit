@@ -67,6 +67,7 @@ import {
   storedAnchors,
   type AnchorReportEntry,
 } from './wiki-anchors';
+import { docWithdrawReason, withdrawDocSentences } from './wiki-doc-withdrawal';
 import { mergeReceiptText, ownerResolutionText } from './wiki-dossier';
 import { wikiMaintenanceRunChanges } from './wiki-maintenance-breaker';
 import { setWikiMaintenance, type WikiMaintenanceInput } from './wiki-maintenance-settings';
@@ -76,7 +77,7 @@ import { canonicalRepoUrl } from '../projects/project-integration-line';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { evidenceOf, readBeforeRevision4, runEventText, verifierText } from './wiki-verify-evidence';
+import { approvalText, evidenceOf, readBeforeRevision4, runEventText, taskText, toolCallText, verifierText } from './wiki-verify-evidence';
 import { entryAppliedBy } from './wiki-run-reads';
 
 /** `Prisma.TransactionClient`, named once: every write below takes one, never the unmanaged client. */
@@ -194,6 +195,7 @@ const WIKI_HTTP_STATUS: Readonly<Record<WikiRefusalCode, number>> = {
   WIKI_PLAN_GATE: 422,
   WIKI_PLAN_STALE: 409,
   WIKI_PLAN_UNCONFIRMED: 409,
+  WIKI_DOC_INVALID: 422,
 };
 
 /** A refusal carrying a contract code, thrown out of the service and answered by the door. */
@@ -535,11 +537,6 @@ function contentSha256(content: PreparedDraft): string {
 
 /** A string's characters, counted the way the schema's CHECK counts them. */
 const lengthOf = (value: string): number => [...value].length;
-
-/** A record's text, whatever shape its column holds it in. */
-function asText(value: unknown): string {
-  return typeof value === 'string' ? value : JSON.stringify(value ?? null);
-}
 
 /** The kind a draft names, when it names one this phase writes. */
 function draftKind(value: unknown): WikiKind | null {
@@ -3433,11 +3430,16 @@ export class WikiService {
    *
    * `unsupported`: a confirmed entry that every live source has left (design §9, Delete means forget).
    * What the owner wrote is never marked — an owner's entry is not supported by quotes it did not take.
+   *
+   * And the documents (contract `docs.withdrawal`): an entry rejected, retired or superseded, or whose
+   * anchor changed or went missing, withdraws every document sentence that came through it, in this same
+   * transaction — here, because every branch of `applyOp` ends here, so no path that moves an entry can
+   * leave a sentence standing on it.
    */
   private async recomputeFlags(tx: Tx, ownerId: string, entryId: string): Promise<void> {
     const entry = await tx.wikiEntry.findFirst({
       where: { id: entryId, ownerId },
-      select: { id: true, trust: true, status: true, currentRevision: true },
+      select: { id: true, trust: true, status: true, currentRevision: true, anchorState: true },
     });
     if (!entry) return;
     const revision = await tx.wikiEntryRevision.findFirst({
@@ -3456,6 +3458,8 @@ export class WikiService {
       where: { id: entryId, ownerId },
       data: { unsupported, challenged },
     });
+    const withdraws = docWithdrawReason(entry);
+    if (withdraws) await withdrawDocSentences(tx, ownerId, entryId, withdraws);
   }
 
   /**
@@ -3686,7 +3690,7 @@ export class WikiService {
         if (!call) return null;
         return {
           ref: call.id,
-          text: call.output === null ? null : asText(call.output),
+          text: toolCallText(call.output),
           tainted: false,
           ownerWords: false,
           sessionId: call.sessionId,
@@ -3699,7 +3703,7 @@ export class WikiService {
           select: { id: true, title: true, description: true },
         });
         if (!task) return null;
-        return { ref: task.id, text: `${task.title}\n${task.description ?? ''}`, tainted: false, ownerWords: false, sessionId: null };
+        return { ref: task.id, text: taskText(task), tainted: false, ownerWords: false, sessionId: null };
       }
       case 'task_comment': {
         if (!ref) return null;
@@ -3717,7 +3721,7 @@ export class WikiService {
           select: { id: true, answers: true, message: true, sessionId: true, toolName: true, status: true, decidedById: true },
         });
         if (!approval) return null;
-        const text = [approval.answers === null ? '' : asText(approval.answers), approval.message ?? ''].join('\n');
+        const text = approvalText(approval);
         return {
           ref: approval.id,
           text,

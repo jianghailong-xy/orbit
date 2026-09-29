@@ -4,10 +4,12 @@ import { redactSecrets } from '../common/secret-redaction';
 /**
  * What a verification can read (criterion 7, revision 4; contract `reviewModes.verification.evidence`).
  *
- * ONE TEXT PER RECORD, FOR BOTH READERS. A run event's text is what a submission's quote is checked
- * against (`resolveSources`) and what a verifier is handed (`listVerifications`), so the two never
- * disagree about what a record says: a quote taken from what the verifier read verifies, and a
- * verdict is never about text the quote check did not see.
+ * ONE TEXT PER RECORD, FOR EVERY READER. A run event's text is what a submission's quote is checked
+ * against (`resolveSources`), what a verifier is handed (`listVerifications`) and what a document's
+ * footnote is checked against (`wiki-docs.ts`, contract `docs.verification.records`), so none of them
+ * disagrees about what a record says: a quote taken from what the verifier read verifies, and a
+ * verdict is never about text the quote check did not see. A tool call's, a task's and an approval's
+ * text are defined here for the same reason.
  *
  * WHAT AN EVENT SAYS. A user's, an assistant's and a thinking event carry prose (`text`); a tool call
  * is its tool's name and its input; a tool result is its content, a string or the text of its blocks;
@@ -74,6 +76,26 @@ export function runEventText(type: string, payload: unknown): string | null {
     default:
       return null;
   }
+}
+
+/** A record's JSON column as text: a string as itself, anything else as its JSON. */
+export function jsonText(value: unknown): string {
+  return typeof value === 'string' ? value : JSON.stringify(value ?? null);
+}
+
+/** A tool call's text: its output, or none while it has none. */
+export function toolCallText(output: unknown): string | null {
+  return output === null || output === undefined ? null : jsonText(output);
+}
+
+/** A task's text: its title, and its description under it. */
+export function taskText(task: { title: string; description: string | null }): string {
+  return `${task.title}\n${task.description ?? ''}`;
+}
+
+/** An approval's text: the answers given, and the note beside them. */
+export function approvalText(approval: { answers: unknown; message: string | null }): string {
+  return [approval.answers === null || approval.answers === undefined ? '' : jsonText(approval.answers), approval.message ?? ''].join('\n');
 }
 
 /**
