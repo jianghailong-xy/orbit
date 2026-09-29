@@ -787,7 +787,7 @@ func (im *wikiImporter) register(source wikiImportSource) (bool, error) {
 		return false, fmt.Errorf("orbit wiki import: reading %s: %w", source.abs, err)
 	}
 	body := map[string]interface{}{"path": source.rel, "text": string(raw)}
-	out, err := im.t.registerWikiNote(im.sessionID, im.opts.spaceID, body)
+	out, sends, err := im.t.registerWikiNote(im.sessionID, im.opts.spaceID, body)
 	if err != nil {
 		var httpErr *transportHTTPError
 		if errors.As(err, &httpErr) && httpErr.statusCode == http.StatusBadRequest && httpErr.code() == "WIKI_SCHEMA" {
@@ -800,7 +800,11 @@ func (im *wikiImporter) register(source wikiImportSource) (bool, error) {
 	if err := json.Unmarshal(out, &note); err != nil || note.ID == "" {
 		return false, fmt.Errorf("orbit wiki import: the server's answer for a note is not the shape this build reads: %s", out)
 	}
-	if !note.Created && file.NoteID != note.ID {
+	// A note the server already held, when the registration had to be sent more than once under this very
+	// path, is most likely this registration's own: its first send landed and the answer was lost. It is read
+	// as this import's, rather than left out as imported before.
+	landedEarlier := sends > 1 && note.Path == source.rel
+	if !note.Created && file.NoteID != note.ID && !landedEarlier {
 		// The same text is a note of the space already: imported before, or the same text under another
 		// name. Proposing from it again would only repeat what is there.
 		file.NoteID, file.NotePath = note.ID, note.Path
@@ -809,7 +813,7 @@ func (im *wikiImporter) register(source wikiImportSource) (bool, error) {
 		fmt.Fprintf(im.progress, "%s: already in the space as the note %s — not read again\n", source.rel, note.Path)
 		return false, nil
 	}
-	if note.Created {
+	if note.Created || landedEarlier {
 		im.summary.NewNotes++
 	}
 	file.NoteID, file.NotePath, file.Status = note.ID, note.Path, wikiImportRegistered
@@ -1020,15 +1024,17 @@ func wikiImportReason(outcome map[string]interface{}) (string, string) {
 
 // ── The server's two routes ─────────────────────────────────────────────────────────────────────
 
-// registerWikiNote is `POST /api/runner/wiki/spaces/:id/notes` (contract `import.note`).
-func (t *Transport) registerWikiNote(sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
+// registerWikiNote is `POST /api/runner/wiki/spaces/:id/notes` (contract `import.note`), and how many
+// times it was sent. It is sent again through a transient failure: one text is one note of a space (UNIQUE
+// (space_id, content_sha256)), so a second landing is answered with the note the first one made.
+func (t *Transport) registerWikiNote(sessionID, spaceID string, body interface{}) (json.RawMessage, int, error) {
 	if err := validatePathSegmentID(spaceID); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/notes"
-	err := t.doHeaders(nil, http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID))
-	return out, err
+	sends, err := t.doWiki(http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID), true)
+	return out, sends, err
 }
 
 // importWikiChangeset is `POST /api/runner/wiki/spaces/:id/imports` (contract `import.propose`): a
@@ -1040,7 +1046,7 @@ func (t *Transport) importWikiChangeset(sessionID, spaceID string, body interfac
 	}
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/imports"
-	err := t.doHeaders(nil, http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID), wikiRecordsOnce(body))
 	return out, err
 }
 
