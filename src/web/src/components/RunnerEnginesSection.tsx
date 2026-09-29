@@ -1,11 +1,45 @@
+import { RightOutlined } from '@ant-design/icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from 'antd';
-import type { RunnerEngineHealth } from '@orbit/shared';
+import { Link } from 'react-router-dom';
+import type { ReportedEngine, RunnerEngineHealth } from '@orbit/shared';
 import { api } from '../api';
+import { engineKeepsAccounts } from '../lib/engineAccounts';
+import { encodeId } from '../lib/idCodec';
+import { planUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
 import { runnersQuery } from '../lib/queries';
+import {
+  RUNNER_ENGINES,
+  RUNNER_ENGINES_FOOTER,
+  RUNNER_ENGINES_OFFLINE_FOOTER,
+  RUNNER_ENGINE_NOT_INSTALLED,
+  RUNNER_ENGINE_NO_QUOTA,
+  RUNNER_ENGINE_SIGNED_IN,
+  RUNNER_ENGINE_SIGNED_OUT,
+  runnerEngineAccountsSignedIn,
+} from '../lib/runnerCopy';
 import { ENGINE_CLI_NAME, updateNoteOf } from '../lib/runnerEngines';
+import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
+import { ProviderTile } from './ProviderGallery';
+import { rowKindOf } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
+
+/** Where an engine's sign-in and accounts live: its card on Providers, opened at this engine. */
+export const engineSignInHref = (runnerId: string, engine: ReportedEngine) =>
+  `/providers?runner=${encodeId(runnerId)}&engine=${engine}`;
+
+/** POST /runners/:id/engine-update — every CLI on the machine, so it is the machine's to offer.
+ *  The section's own button and a Needs Attention card both start it. */
+export function useEngineUpdate(runnerId: string) {
+  const message = useToast();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api(`/runners/${runnerId}/engine-update`, { method: 'POST' }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+    onError: (e: Error) => message.error(e.message || 'Could not start the update'),
+  });
+}
 
 /**
  * The engine CLIs installed on one machine, and the control that updates them.
@@ -18,8 +52,9 @@ import type { Runner } from './TasksSidePanel';
  * named OpenCode, which Providers deliberately has no row for.
  *
  * So the split is by what an action changes. What's *available* — Install, Sign in — stays on
- * Providers. What *version* is installed belongs to the machine, next to its own runner version,
- * slots and heartbeat.
+ * Providers, one › away on every row. What *version* is installed belongs to the machine, next to
+ * its own runner version, slots and heartbeat; each row also says whether it is signed in and how
+ * much of its quota is left, because that is what decides whether this machine can run a session.
  */
 export function RunnerEnginesSection({ runner }: { runner: Runner }) {
   const message = useToast();
@@ -29,11 +64,7 @@ export function RunnerEnginesSection({ runner }: { runner: Runner }) {
   const updating = relay?.mode === 'update';
   const inFlight = relay?.status === 'pending' || relay?.status === 'installing';
 
-  const startUpdate = useMutation({
-    mutationFn: () => api(`/runners/${runner.id}/engine-update`, { method: 'POST' }),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
-    onError: (e: Error) => message.error(e.message || 'Could not start the update'),
-  });
+  const startUpdate = useEngineUpdate(runner.id);
   const dismiss = useMutation({
     mutationFn: () => api(`/runners/${runner.id}/install`, { method: 'DELETE' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
@@ -52,9 +83,9 @@ export function RunnerEnginesSection({ runner }: { runner: Runner }) {
   });
 
   return (
-    <section className="rd-section">
+    <section className="rd-section rd-engines">
       <div className="rd-section-head">
-        <div className="rd-section-title">Engines</div>
+        <div className="rd-section-title">{RUNNER_ENGINES}</div>
         {/* Understated on purpose: Orbit updates these every 30 min, so this is the escape hatch for
             when that isn't soon enough — not the way the CLIs are meant to stay current. The
             models button sits here for the same reason it exists: what a CLI offers is a fact
@@ -110,29 +141,103 @@ export function RunnerEnginesSection({ runner }: { runner: Runner }) {
         // an older one never will.
         <div className="rd-empty">This runner hasn’t reported its engines yet.</div>
       ) : (
-        <div className="rd-engine-list">
-          {engines.map((engine) => (
-            <EngineLine key={engine.engine} health={engine} />
-          ))}
-        </div>
+        <>
+          <div className="rd-engine-list">
+            {engines.map((engine) => (
+              <EngineLine key={engine.engine} runner={runner} health={engine} />
+            ))}
+          </div>
+          <div className="rd-hint">
+            {runner.online ? RUNNER_ENGINES_FOOTER : RUNNER_ENGINES_OFFLINE_FOOTER}
+          </div>
+        </>
       )}
     </section>
   );
 }
 
-function EngineLine({ health }: { health: RunnerEngineHealth }) {
+type Tone = 'ok' | 'warn' | 'muted';
+
+/**
+ * What a row says about its sign-in, read the way Providers reads it (rowKindOf): a CLI that
+ * wouldn't say is never "Signed in". With several accounts on the machine the row speaks for all of
+ * them — every one in, or the one that is out.
+ */
+function signInOf(runner: Runner, health: RunnerEngineHealth): { text: string; tone: Tone } {
+  const none = { text: '—', tone: 'muted' as const };
+  // OpenCode signs in per provider with nothing to relay: there is no sign-in to report.
+  if (health.engine === 'opencode') {
+    return health.installed ? none : { text: RUNNER_ENGINE_NOT_INSTALLED, tone: 'muted' };
+  }
+  const kind = rowKindOf(health, runner.install, health.engine);
+  if (kind === 'missing' || kind === 'install-failed') {
+    return { text: RUNNER_ENGINE_NOT_INSTALLED, tone: 'muted' };
+  }
+  // An install in flight is Providers' to narrate; the probe has nothing to say about it yet.
+  if (kind !== 'in' && kind !== 'out' && kind !== 'unknown') return none;
+  const accounts = engineKeepsAccounts(health.engine) ? (health.accounts ?? []) : [];
+  if (accounts.length >= 2) {
+    if (accounts.every((account) => account.auth === 'yes')) {
+      return { text: runnerEngineAccountsSignedIn(accounts.length), tone: 'ok' };
+    }
+    if (accounts.some((account) => account.auth === 'no')) {
+      return { text: RUNNER_ENGINE_SIGNED_OUT, tone: 'warn' };
+    }
+    return none;
+  }
+  if (kind === 'in') return { text: RUNNER_ENGINE_SIGNED_IN, tone: 'ok' };
+  if (kind === 'out') return { text: RUNNER_ENGINE_SIGNED_OUT, tone: 'warn' };
+  return none;
+}
+
+function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHealth }) {
   const note = health.installed ? updateNoteOf(health.update) : null;
+  const signIn = signInOf(runner, health);
+  // A quota belongs to a login that is in: signed out, its last reading is about a session that
+  // can no longer start. Same reading Providers shows at the head of its row.
+  const signedIn = health.engine !== 'opencode' && rowKindOf(health, runner.install, health.engine) === 'in';
+  const snapshot = signedIn ? planUsageSnapshotForProvider(runner.planUsage, health.engine) : null;
+  const quota = snapshot ? planUsageRows(snapshot) : [];
+  const name = ENGINE_CLI_NAME[health.engine] ?? health.engine;
   return (
-    <div className="rd-engine-row">
-      <div className="rd-engine-name">{ENGINE_CLI_NAME[health.engine] ?? health.engine}</div>
-      <div className="rd-engine-version">
-        {health.installed ? health.version || 'version not reported' : 'Not installed'}
+    <Link className="rd-engine-row" to={engineSignInHref(runner.id, health.engine)}>
+      <ProviderTile slug={ENGINE_PRESET[health.engine] ?? health.engine} label={name} size={24} />
+      <div className="rd-engine-main">
+        <div className="rd-engine-name">{name}</div>
+        {/* The machine's own sentence on hover — which path, which owner, which error. The line
+            itself has to stay short enough to sit after a version string. A CLI that isn't there
+            has no version to show; its sign-in column says it is missing. */}
+        {health.installed && (
+          <div className="rd-engine-version" title={health.update?.message}>
+            {health.version || 'version not reported'}
+            {note && (
+              <>
+                {' · '}
+                <span className={`rd-engine-note${note.tone === 'warn' ? ' warn' : ''}`}>{note.text}</span>
+              </>
+            )}
+          </div>
+        )}
       </div>
-      {/* The machine's own sentence on hover — which path, which owner, which error. The line
-          itself has to stay short enough to sit after a version string. */}
-      <div className={`rd-engine-note${note?.tone === 'warn' ? ' warn' : ''}`} title={health.update?.message}>
-        {note?.text ?? ''}
+      <div className={`rd-engine-auth ${signIn.tone}`}>{signIn.text}</div>
+      <div className="rd-engine-quota">
+        {quota.length > 0 ? (
+          quota.map((row) => (
+            <div key={row.key} className={`rd-quota${row.nearLimit ? ' near' : ''}`}>
+              <div className="rd-quota-head">
+                <span>{row.label}</span>
+                <span className="rd-quota-pct">{row.percent}%</span>
+              </div>
+              <div className="rd-quota-bar">
+                <span style={{ width: `${row.percent}%` }} />
+              </div>
+            </div>
+          ))
+        ) : (
+          <span className="rd-engine-muted">{signedIn ? RUNNER_ENGINE_NO_QUOTA : '—'}</span>
+        )}
       </div>
-    </div>
+      <RightOutlined className="rd-engine-chevron" />
+    </Link>
   );
 }
