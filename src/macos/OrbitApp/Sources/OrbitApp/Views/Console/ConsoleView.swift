@@ -412,7 +412,9 @@ struct TranscriptView: View {
                         // reliably (a chat flow, no hairlines).
                         .listRowInsets(rowInsets(row))
                         .listRowSeparator(.hidden)
-                        .listRowBackground(Color.clear)
+                        // The record a link opened (`SessionRecordLink`), marked for a moment.
+                        .listRowBackground(row.id == console.highlightedRowID
+                                           ? Color.accentColor.opacity(0.14) : Color.clear)
                 }
             }
             .listStyle(.plain)
@@ -460,7 +462,9 @@ struct TranscriptView: View {
                 // bottom the follow below wins instead — a short transcript auto-fills upward and
                 // must not yank the user off the live tail.
                 let prependAnchor = console.takePrependAnchor()
-                if atBottom {
+                // A window opened at a record ends at a gap, so its bottom is never the live tail to
+                // follow — pinning there would only walk the window down page by page.
+                if atBottom && !console.detached {
                     proxy.scrollTo(bottomID, anchor: .bottom)
                 } else if let prependAnchor {
                     proxy.scrollTo(ruler.topAnchorID ?? prependAnchor, anchor: .top)
@@ -522,10 +526,28 @@ struct TranscriptView: View {
                 }
                 #endif
             }
+            // A link to one record (`SessionRecordLink`): scroll to its row. The reader is taken off
+            // the live tail first, said outright as the sticky header's jump says it — a programmatic
+            // jump is no drag the scroll tracker could read, and the next publish would pull them back.
+            // `initial: true` because the page can land before this transcript first appears; the
+            // console consumes the request once followed, so reappearing does not jump back to it.
+            .onChange(of: console.recordRequest, initial: true) { _, request in
+                guard let request else { return }
+                atBottom = false
+                console.recordRequestFollowed(request)
+                #if os(iOS)
+                transcriptScroll.halt()
+                #endif
+                DispatchQueue.main.async {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(request.rowID, anchor: .center)
+                    }
+                }
+            }
             .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
             // Floating jump-to-latest button, shown only while scrolled up (web's `.scroll-to-bottom`).
             .overlay(alignment: .bottom) {
-                if !atBottom {
+                if !atBottom || console.detached {
                     scrollToBottomButton(proxy: proxy)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
@@ -687,7 +709,19 @@ struct TranscriptView: View {
                                onCancelQueued: { Task { await console.cancelQueued(bubble) } })
             }
         case .bottom:
-            Color.clear.frame(height: 1)
+            if console.detached {
+                // A window opened at a record ends at a gap: reaching its bottom pulls in the newer page.
+                HStack {
+                    Spacer()
+                    ProgressView().controlSize(.small)
+                    Spacer()
+                }
+                .padding(.vertical, 8)
+                .accessibilityLabel(SessionRecordLink.Copy.loadingNewer)
+                .onAppear { Task { await console.loadNewer() } }
+            } else {
+                Color.clear.frame(height: 1)
+            }
         }
     }
 
@@ -751,6 +785,13 @@ struct TranscriptView: View {
     // (near-filling it, with a hair of margin); bottom padding is 6, so it floats just above the composer.
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
         CoastingButton {
+            // A window opened at a record ends at a gap: the latest message is past it, so reaching it
+            // re-seeds the window from the tail (`jumpToLatest`), after which the follow pins the bottom.
+            if console.detached {
+                atBottom = true
+                Task { await console.jumpToLatest() }
+                return
+            }
             #if os(iOS)
             // Two steps, because neither alone reaches the true bottom while coasting: (1) cancel the
             // momentum in place via UIKit — otherwise `proxy.scrollTo` is swallowed by the deceleration —
@@ -790,8 +831,8 @@ struct TranscriptView: View {
                 .animation(.spring(response: 0.28, dampingFraction: 0.6), value: pressed)
         }
         .padding(.bottom, 6)
-        .accessibilityLabel("Scroll to latest")
-        .help("Scroll to latest")
+        .accessibilityLabel(console.detached ? SessionRecordLink.Copy.jumpToLatest : "Scroll to latest")
+        .help(console.detached ? SessionRecordLink.Copy.jumpToLatest : "Scroll to latest")
     }
 
     #if os(macOS)

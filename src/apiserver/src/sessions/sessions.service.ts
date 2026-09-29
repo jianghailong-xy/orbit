@@ -163,7 +163,15 @@ import {
   TaskCompletionPolicyValue,
   taskStartOwnedByCompletion,
 } from '../projects/task-aggregation';
-import { truncatePayload } from './truncate-payload';
+import {
+  pageAround,
+  type PageRow,
+  toPageEvent,
+  type TranscriptAnchor,
+  transcriptAnchorSql,
+  type TranscriptPage,
+  type TranscriptRecordKind,
+} from './transcript-around';
 import { EngineSignedOutConflict, signedOutEngineRefusal } from './engine-signin-preflight';
 import {
   CURRENT_WORK_INTERRUPTED,
@@ -3268,19 +3276,112 @@ export class SessionsService {
     const page = (hasMore ? rows.slice(0, take) : rows).reverse(); // back to seq asc
     return {
       hasMore,
-      events: page.map((e) => {
-        const cut = opts.maxPayload
-          ? truncatePayload(e.type, e.payload, opts.maxPayload)
-          : { payload: e.payload, truncated: false };
-        return {
-          seq: e.seq,
-          type: e.type,
-          payload: cut.payload,
-          turnId: e.turnId ?? null,
-          ts: e.createdAt,
-          ...(cut.truncated ? { truncated: true as const } : {}),
-        };
-      }),
+      events: page.map((e) => toPageEvent(e, opts.maxPayload)),
+    };
+  }
+
+  /**
+   * The page of a session's transcript around ONE record — a conversation turn, a run event or a
+   * tool call — for a link that names it (a wiki footnote's location link; see transcript-around.ts).
+   * `limit` events centred on the record, the anchor saying which seq it sits at, and a cursor each
+   * way: `before` for the ordinary `before=` read, `after` for the `after=` read below — so a client
+   * shows the record at once and pages out from it until it meets the tail it streams live.
+   *
+   * Everything that is not the caller's record in the caller's session is the same 404: another
+   * owner's session, a record of another session (and so of another owner), a record the transcript
+   * shows nothing of. The answer cannot tell anybody whether somebody else's record exists.
+   */
+  async getEventPageAround(
+    userId: string,
+    id: string,
+    opts: { around: string; limit?: number; maxPayload?: number },
+  ): Promise<TranscriptPage & { anchor: TranscriptAnchor }> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId: userId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const [found] = await this.prisma.$queryRaw<{ kind: TranscriptRecordKind; seq: number | null }[]>(
+      transcriptAnchorSql(id, opts.around),
+    );
+    if (!found || found.seq === null) throw new NotFoundException('record not found in this session');
+    const take = Math.min(Math.max(Math.trunc(opts.limit ?? 200), 1), 500);
+    // Each side read one row past the whole page, so pageAround can hand one side's unused room to
+    // the other and still tell whether rows remain beyond what it kept.
+    const [older, newer] = await Promise.all([
+      this.prisma.$queryRaw<PageRow[]>`
+        SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
+        FROM run_event
+        WHERE session_id = ${id}::uuid
+          AND seq < ${found.seq}
+          AND ${replayableEventSql}
+        ORDER BY seq DESC
+        LIMIT ${take + 1}
+      `,
+      this.prisma.$queryRaw<PageRow[]>`
+        SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
+        FROM run_event
+        WHERE session_id = ${id}::uuid
+          AND seq >= ${found.seq}
+          AND ${replayableEventSql}
+        ORDER BY seq ASC
+        LIMIT ${take + 1}
+      `,
+    ]);
+    const page = pageAround(older, newer, take);
+    return {
+      anchor: { kind: found.kind, id: opts.around, seq: found.seq },
+      events: page.events.map((e) => toPageEvent(e, opts.maxPayload)),
+      hasMore: page.before !== null,
+      before: page.before,
+      after: page.after,
+    };
+  }
+
+  /**
+   * The page just NEWER than a seq — the `after` cursor of a page read from the middle, paging back
+   * down towards the tail. The mirror of `before=`: `limit` events with seq above `after`, oldest
+   * first, and the cursor for the page after that, null once the page reaches the newest event.
+   */
+  async getEventPageAfter(
+    userId: string,
+    id: string,
+    opts: { after: number; limit?: number; maxPayload?: number },
+  ): Promise<TranscriptPage> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId: userId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const take = Math.min(Math.max(Math.trunc(opts.limit ?? 200), 1), 500);
+    const after = Math.trunc(opts.after);
+    const [rows, older] = await Promise.all([
+      this.prisma.$queryRaw<PageRow[]>`
+        SELECT seq, type, payload, turn_id AS "turnId", created_at AS "createdAt"
+        FROM run_event
+        WHERE session_id = ${id}::uuid
+          AND seq > ${after}
+          AND ${replayableEventSql}
+        ORDER BY seq ASC
+        LIMIT ${take + 1}
+      `,
+      this.prisma.$queryRaw<{ found: boolean }[]>`
+        SELECT EXISTS (
+          SELECT 1 FROM run_event
+          WHERE session_id = ${id}::uuid
+            AND seq <= ${after}
+            AND ${replayableEventSql}
+        ) AS "found"
+      `,
+    ]);
+    const hasNewer = rows.length > take;
+    const events = hasNewer ? rows.slice(0, take) : rows;
+    const hasOlder = older[0]?.found === true;
+    return {
+      events: events.map((e) => toPageEvent(e, opts.maxPayload)),
+      hasMore: hasOlder,
+      before: hasOlder ? (events[0]?.seq ?? after + 1) : null,
+      after: hasNewer ? events[events.length - 1].seq : null,
     };
   }
 

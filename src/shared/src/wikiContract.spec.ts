@@ -53,6 +53,8 @@ import {
   type WikiChangeset,
   type WikiChangesetCounts,
   type WikiChangesetView,
+  type WikiDossierSource,
+  type WikiDossierSpan,
   type WikiEntryAppliedBy,
   wikiEstimateTokens,
   wikiMaintenanceSettings,
@@ -599,6 +601,34 @@ describe('wiki contract', () => {
     // The dossier's text is never stored: the one table that keeps anything of it keeps its sources and hash.
     expect(maintenance.tables).toEqual(['wiki_cursor', 'wiki_dossier']);
     expect(maintenance.dossier.storage).toMatch(/text is never stored/u);
+  });
+
+  it("says where each dossier line's words are in its record, and a run quotes the record there (criterion 2, revision 2)", () => {
+    const dossier = CONTRACT.maintenance.dossier;
+    // A line's source here has the contract's fields, every one of them required: its record and its spans.
+    const span: Required<WikiDossierSpan> = { start: 0, end: 4, text: 'done' };
+    const source: Required<WikiDossierSource> = { ref: 'L1', kind: 'turn', id: 'turn-1', spans: [span] };
+    expect(keysOf(source)).toEqual(dossier.sourceFields);
+    expect(keysOf(span)).toEqual(dossier.spans.fields);
+    // Counted in code points of the one text a record has, redacted — and stored as where, never as the words.
+    expect(dossier.spans.unit).toMatch(/code points of the record's text/u);
+    expect(dossier.spans.unit).toMatch(/reviewModes\.verification\.evidence\.text/u);
+    expect(dossier.spans.unit).toMatch(/redacted/u);
+    expect(dossier.spans.stored).toMatch(/start and end alone/u);
+    expect(dossier.storage).toMatch(/never the words in them/u);
+    // The hash is the text and the records, as it was: spans do not make a dossier a run has read new.
+    expect(dossier.determinism).toMatch(/the sources' ref, kind and id as JSON/u);
+    // The text a span counts in is the text a quote is checked against and a verifier reads, part for part.
+    const text = CONTRACT.reviewModes.verification.evidence.text;
+    expect(text).toMatch(/a dossier line's spans count in/u);
+    for (const part of [
+      'background_task, its command and its summary', 'turn_end, its subtype', "A tool call's row is the call and its result together",
+      'for an ExitPlanMode the plan it decided',
+    ]) expect(text).toContain(part);
+    // A run cites the record's own words at a span, and where they are; the dossier's shorthand, with neither.
+    expect(CONTRACT.maintenance.job.citation.locator).toEqual(['start', 'end']);
+    expect(CONTRACT.maintenance.job.citation.rule).toMatch(/no quote and no locator/u);
+    expect(CONTRACT.maintenance.job.run.steps.find((step: string) => step.startsWith('extract:'))).toMatch(/locator \{start, end\}/u);
   });
 
   it('ships the maintenance job the contract states: its trigger, its task, its run and its check', () => {

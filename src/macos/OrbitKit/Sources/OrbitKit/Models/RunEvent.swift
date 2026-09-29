@@ -54,11 +54,39 @@ public struct RunEvent: Codable, Equatable, Sendable {
 /// One page of a session's persisted events (tail-first pagination — see `APIClient.eventPage`).
 /// `events` are chronological (seq ascending); `hasMore` is true when older events remain before
 /// this page. Mirrors the web `EventPage` (src/web/src/api.ts) and the server `/events/page`.
+///
+/// A page read from the middle of a transcript (`APIClient.eventPageAround` / `eventPageAfter`, for a
+/// link to one record — `SessionRecordLink`) carries a cursor each way as well: `before` is what to
+/// pass as `before=` for the page older than this one, `after` what to pass as `after=` for the page
+/// newer, each nil when that direction has nothing more. A tail page has neither — nothing is newer
+/// than the tail, which is what a nil `after` says. The page around a record also names the record's
+/// `anchor`.
 public struct EventPage: Decodable, Sendable {
     public let events: [RunEvent]
     public let hasMore: Bool
-    public init(events: [RunEvent], hasMore: Bool) {
+    public let before: Int?
+    public let after: Int?
+    public let anchor: TranscriptAnchor?
+    public init(events: [RunEvent], hasMore: Bool, before: Int? = nil, after: Int? = nil,
+                anchor: TranscriptAnchor? = nil) {
         self.events = events
         self.hasMore = hasMore
+        self.before = before
+        self.after = after
+        self.anchor = anchor
+    }
+}
+
+/// The record a page was read around, and the seq it sits at: an event is itself, a turn the `user`
+/// event its message entered the transcript as, a tool call its `tool_use`. `kind` is `turn`, `event`
+/// or `tool_call`; `id` is the record's public id.
+public struct TranscriptAnchor: Decodable, Equatable, Sendable {
+    public let kind: String
+    public let id: String
+    public let seq: Int
+    public init(kind: String, id: String, seq: Int) {
+        self.kind = kind
+        self.id = id
+        self.seq = seq
     }
 }

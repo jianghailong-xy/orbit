@@ -11,6 +11,9 @@
  *   4. a session that is not a maintenance run of the space, and any other tenant, are refused;
  *   5. each of the five committed facts adds one to the backlog;
  *   6. the cursor only moves forward, and a run that did not succeed does not move it;
+ *   7. every line goes back to its first-hand record: the words at the positions it names, read from the
+ *      record as a quote of it is checked and redacted, are the words it declares — the lines the dossier
+ *      compressed as much as the ones it copied whole (revision 2);
  *
  * and beside them: maintenance is off by default and only the owner changes it; turning it on makes
  * one hidden list; the dossier keeps nothing but its sources and hash; the agent's own trace is in it
@@ -30,11 +33,12 @@ import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
-import { WIKI_MAINTENANCE_RULES, toUuid, wikiEstimateTokens } from '@orbit/shared';
+import { WIKI_MAINTENANCE_RULES, toUuid, wikiEstimateTokens, type WikiDossierSpan, type WikiSourceKind } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PublicIdInterceptor } from '../common/public-id.interceptor';
+import { redactSecrets } from '../common/secret-redaction';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
@@ -43,7 +47,7 @@ import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RunnerWikiMaintenanceController } from '../runner-api/runner-wiki-maintenance.controller';
 import { WikiController } from './wiki.controller';
-import { buildDossier, loadDossierRecords } from './wiki-dossier';
+import { buildDossier, loadDossierRecords, storedDossierSources } from './wiki-dossier';
 import { isWikiMaintenanceSession, WikiMaintenance, wikiMaintenanceSpaceOf } from './wiki-maintenance';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService, type WikiPrincipal } from './wiki.service';
@@ -302,7 +306,7 @@ async function tool(
   sessionId: string,
   name: string,
   input: Record<string, unknown>,
-  output: string,
+  output: unknown,
   shape: { isError?: boolean; at?: Date } = {},
 ): Promise<{ useEventId: string; toolCallId: string }> {
   const toolUseId = `toolu_${randomUUID().replace(/-/g, '')}`;
@@ -909,15 +913,15 @@ test('a dossier is the same twice, carries no secret, keeps the agent\'s trace, 
   // 1. The same records, twice: byte for byte, hash for hash.
   const records = await loadDossierRecords(h.prisma, owner.id, talk);
   assert.ok(records, 'the session is the owner\'s');
-  const once = buildDossier(records, { literals: [literal] });
-  const twice = buildDossier((await loadDossierRecords(h.prisma, owner.id, talk))!, { literals: [literal] });
+  const once = await buildDossier(h.prisma, records, { literals: [literal] });
+  const twice = await buildDossier(h.prisma, (await loadDossierRecords(h.prisma, owner.id, talk))!, { literals: [literal] });
   assert.equal(twice.text, once.text, 'the same records give the same text');
   assert.equal(twice.hash, once.hash, 'and the same hash');
   assert.deepEqual(twice.sources, once.sources);
 
   const first = await call(h, { runner: machine.token, session: run }, 'GET', `/runner/wiki/spaces/${spaceId}/dossiers`);
   expectStatus(first, 200, 'the maintenance run reads the page');
-  const dossier = (first.body.dossiers as Array<{ sessionId: string; text: string; hash: string; tokens: number; truncated: boolean; unchanged: boolean; sources: Array<{ ref: string; kind: string; id: string }> }>)
+  const dossier = (first.body.dossiers as Array<{ sessionId: string; text: string; hash: string; tokens: number; truncated: boolean; unchanged: boolean; sources: Array<{ ref: string; kind: string; id: string; spans: WikiDossierSpan[] }> }>)
     .find((one) => toUuid(one.sessionId) === talk);
   assert.ok(dossier, 'the settled session has its dossier on the page');
   assert.equal(dossier.hash, once.hash, 'the door hands out the very dossier the function makes');
@@ -936,7 +940,7 @@ test('a dossier is the same twice, carries no secret, keeps the agent\'s trace, 
   assert.ok(dossier.text.includes('[redacted]'));
 
   // What the dossier carries, and cites. The door serves every id in its public spelling.
-  const sources = dossier.sources.map((source) => ({ ref: source.ref, kind: source.kind, id: toUuid(source.id) }));
+  const sources = dossier.sources.map((source) => ({ ref: source.ref, kind: source.kind, id: toUuid(source.id), spans: source.spans }));
   assert.deepEqual(sources, once.sources, 'the door hands out the sources the function made');
   const cited = new Map(sources.map((source) => [source.id, source.kind]));
   for (const [id, kind] of [
@@ -996,7 +1000,8 @@ test('a dossier is the same twice, carries no secret, keeps the agent\'s trace, 
     `SELECT "hash", "source_ids", "tokens" FROM "wiki_dossier" WHERE "space_id" = $1 AND "session_id" = $2`, [spaceId, talk]);
   assert.equal(kept.rowCount, 1);
   assert.equal(kept.rows[0]!.hash, dossier.hash);
-  assert.deepEqual(kept.rows[0]!.source_ids, once.sources);
+  assert.deepEqual(kept.rows[0]!.source_ids, storedDossierSources(once.sources), 'each line\'s record and where its spans are');
+  assert.ok(once.sources.every((source) => source.spans.length > 0), 'and every line has them');
   const columns = await h.sql.query<{ column_name: string }>(
     `SELECT column_name FROM information_schema.columns WHERE table_name = 'wiki_dossier' ORDER BY column_name`);
   assert.deepEqual(columns.rows.map((row) => row.column_name).sort(), [
@@ -1034,8 +1039,204 @@ test('a dossier is the same twice, carries no secret, keeps the agent\'s trace, 
   assert.equal(longOne.tokens, wikiEstimateTokens(longOne.text));
   assert.match(longOne.text, /lines omitted/, 'with the gaps marked');
   assert.equal(byId.get(short)!.truncated, false, 'a short session is whole');
-  const smaller = buildDossier((await loadDossierRecords(h.prisma, owner.id, long))!, { literals: [], maxTokens: 1_000 });
+  const smaller = await buildDossier(h.prisma, (await loadDossierRecords(h.prisma, owner.id, long))!, { literals: [], maxTokens: 1_000 });
   assert.ok(wikiEstimateTokens(smaller.text) <= 1_000, 'the cut holds at any budget');
+});
+
+// ── 7. every line goes back to its record, word for word ───────────────────────────────────────
+
+interface Placed {
+  ref: string;
+  kind: WikiSourceKind;
+  id: string;
+  spans: WikiDossierSpan[];
+}
+
+test('every line goes back to its record: the words at its spans, redacted, are the words it declares — compressed lines too', { skip }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'owner');
+  const machine = await runner(h, owner.id);
+  const literal = `envval-${randomUUID()}`;
+  const ws = await workspace(h, owner.id, { DEPLOY_HOOK: literal });
+  const spaceId = await space(h, owner, ws);
+  const listId = await maintained(h, owner, spaceId, ws);
+  const run = await maintenanceRun(h, owner.id, listId, ws, machine.id);
+  // A token the redactor takes out wherever it stands: the positions count in the text as redacted, so a
+  // secret before a line's words moves them, and the spans must say where they are after it.
+  const token = `ghp_${randomUUID().replace(/-/g, '')}Ab12`;
+  const at = (minutes: number, seconds = 0) => new Date(minutesAgo(minutes).getTime() + seconds * 1000);
+
+  const work = await task(h, owner.id, { title: 'Place every line', status: 'FAILED', assigneeId: ws, acceptance: 'Every line has its place.' });
+  const talk = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id, taskId: work, status: 'SUCCEEDED', lastTurnAt: minutesAgo(20) });
+  const prompt = 'Place every line of the dossier 🎯.\n\nPositions count in code points, not in UTF-16 units.\n\n请按以下步骤进行：\n1. read\n2. write';
+  const opening = await turn(h, talk, prompt, { clientTurnId: `initial-${randomUUID()}`, sendIntent: null, at: at(59) });
+  const retried = await turn(h, talk, prompt, { clientTurnId: `initial-${randomUUID()}`, sendIntent: null, at: at(58) });
+  const long = await turn(h, talk, `Keep 🎯 the budget at 8k, never 16k: ${token} ${literal} ${'the reason is recall, measured. '.repeat(220)}`, { at: at(57) });
+  const steer = await turn(h, talk, 'Stop — never push tags from a session.', { kind: 'steer', sendIntent: null, clientTurnId: randomUUID().toUpperCase(), at: at(56) });
+  const silent = await turn(h, talk, '', { kind: 'interrupt', sendIntent: null, clientTurnId: randomUUID().toUpperCase(), at: at(55) });
+  const shell = await turn(h, talk, 'git log --oneline -3', { kind: 'shell', sendIntent: null, at: at(54) });
+  const reply = await event(h, talk, 'assistant', {
+    text: 'I read the packer first. See /root/.claude/projects/-root-orbit/memory/packer.md for the old notes. The root cause is that the header was counted twice.',
+  }, at(53));
+  const thought = await event(h, talk, 'thinking', {
+    text: 'Planning the next step carefully. It turns out release.sh next is not a dry run. Moving on to the spec. Actually the tag is pushed at once.',
+  }, at(52));
+  const command = 'bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-dossier.pg.spec.ts \\\n  --verbose';
+  const failing = await tool(h, talk, 'Bash', { command, description: 'Run the dossier spec' },
+    `Exit code 1\ntoken: ${token}\n${'x'.repeat(1500)}\nrun-pg-spec: a skip is red`, { isError: true, at: at(51) });
+  const fixed = await tool(h, talk, 'Bash', { command, description: 'Run it again' }, '# pass 7\n# fail 0', { at: at(50) });
+  const firstRead = await tool(h, talk, 'Read', { file_path: 'src/apiserver/src/wiki/wiki-dossier.ts' }, 'import { Prisma } …', { at: at(49) });
+  await tool(h, talk, 'Read', { file_path: 'src/shared/src/wiki.ts', limit: 50 }, 'export const …', { at: at(49, 1) });
+  await event(h, talk, 'assistant', { text: 'Both files read.' }, at(46));
+  const mcp = await tool(h, talk, 'mcp__orbit__task_comment', { taskId: 'task-1', body: 'Delivered after git push origin HEAD.' }, [
+    { type: 'text', text: 'Comment recorded.\nid 34Wabc' },
+    { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } },
+  ], { at: at(45) });
+  // A call from before tool calls had rows: its line cites the tool_use event, whose text is the call alone.
+  const bare = await event(h, talk, 'tool_use', { id: 'toolu_bare', name: 'Bash', input: { command: 'git status --short' } }, at(44));
+  await event(h, talk, 'tool_result', { toolUseId: 'toolu_bare', content: ' M src/x.ts', isError: false }, at(44));
+  await event(h, talk, 'assistant', { text: 'The tree has one change.' }, at(43));
+  const background = await event(h, talk, 'background_task', {
+    toolUseId: 'toolu_bg', shellId: 'bg-1', kind: 'bash', status: 'completed', exitCode: 0, command: 'git push origin HEAD', summary: 'Pushed to origin in 3s',
+  }, at(42));
+  const failure = await event(h, talk, 'error', { message: 'The engine stopped: overloaded' }, at(41));
+  const ended = await event(h, talk, 'turn_end', { subtype: 'error_max_turns', numTurns: 120 }, at(40));
+  await event(h, talk, 'assistant', { text: 'It turns out the engine was overloaded, so the turn ran out.' }, at(39));
+  const asked = await approval(h, talk, {
+    tool: 'AskUserQuestion', status: 'ALLOWED', decidedBy: owner.id,
+    input: { questions: [{ question: 'Which unit do positions count in?', options: [{ label: 'Code points' }, { label: 'UTF-16 units' }] }] },
+    answers: { 'Which unit do positions count in?': 'Code points' },
+  });
+  const plan = await approval(h, talk, { tool: 'ExitPlanMode', status: 'ALLOWED', input: { plan: 'Give every line its spans.' }, decidedBy: owner.id });
+  const denied = await approval(h, talk, {
+    tool: 'Bash', status: 'DENIED', input: { command: 'git push --tags' }, decidedBy: owner.id, message: 'No tags from a session.',
+  });
+  const delivered = await comment(h, work, 'AGENT', owner.id,
+    'Delivered the positions.\n\nThe tests ran twice.\n\n结论：every line has its place, compressed ones too.', minutesAgo(16));
+  const merged = await receipt(h, owner.id, talk, minutesAgo(15));
+  const decision = await blocker(h, await project(h, owner.id), work, 'Accepted: spans count in code points.');
+
+  const records = (await loadDossierRecords(h.prisma, owner.id, talk))!;
+  const dossier = await buildDossier(h.prisma, records, { literals: [literal] });
+  const again = await buildDossier(h.prisma, (await loadDossierRecords(h.prisma, owner.id, talk))!, { literals: [literal] });
+  assert.deepEqual(again.sources, dossier.sources, 'the same records place every line the same way');
+  assert.equal(again.hash, dossier.hash);
+
+  // Every line: its record resolves among the owner's own, and the words at each of its spans — read from the
+  // record as a quote of it is checked, then redacted — are the words it declares, in order, none overlapping.
+  const reader: WikiPrincipal = { origin: 'agent', ownerId: owner.id, userId: null, sessionId: run, toolCallId: null };
+  const recordWords = async (source: { kind: WikiSourceKind; id: string }): Promise<string[]> => {
+    const found = await h.service.sourceText(h.prisma, reader, { kind: source.kind, ref: source.id });
+    assert.ok(found, `${source.kind} ${source.id} is one of the owner's records`);
+    return Array.from(redactSecrets(found.text ?? '', { literals: [literal] }).text);
+  };
+  const lineOf = new Map<string, string>();
+  for (const line of dossier.text.split(/\n(?! {4})/u)) {
+    const name = /^(L\d+) /u.exec(line);
+    if (name) lineOf.set(name[1]!, line);
+  }
+  assert.ok(dossier.sources.length >= 20, `the session's lines are carried: ${dossier.sources.length}`);
+  for (const source of dossier.sources) {
+    assert.ok(source.spans.length > 0, `${source.ref} says where its words are`);
+    const words = await recordWords(source);
+    let end = 0;
+    for (const span of source.spans) {
+      assert.ok(span.start >= end && span.end >= span.start && span.end <= words.length,
+        `${source.ref}: ${span.start}–${span.end} lies in its record of ${words.length} code points, after ${end}`);
+      assert.equal(words.slice(span.start, span.end).join(''), span.text,
+        `${source.ref} (${source.kind}): the record's words at ${span.start}–${span.end} are the words the line declares`);
+      end = span.end;
+    }
+    assert.ok(!source.spans.some((span) => span.text.includes(token) || span.text.includes(literal)), `${source.ref} declares no secret`);
+  }
+
+  const bySource = (id: string, kind: string): Placed => {
+    const found = dossier.sources.filter((source) => source.id === id && source.kind === kind);
+    assert.equal(found.length, 1, `one line cites ${kind} ${id}`);
+    return found[0]!;
+  };
+  const texts = (placed: Placed) => placed.spans.map((span) => span.text);
+
+  // The compressed lines point at the pieces of the record they were cut from.
+  const failed = bySource(failing.toolCallId, 'tool_call');
+  assert.match(lineOf.get(failed.ref)!, /\$ bash scripts\/run-pg-spec\.sh .* …\(\+1 lines\) → ERR: Exit code 1 … run-pg-spec: a skip is red$/u);
+  assert.deepEqual(texts(failed), [
+    'bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-dossier.pg.spec.ts \\', 'Exit code 1', 'run-pg-spec: a skip is red',
+  ], 'a tool call: its command, and its result\'s first and last line — the last found after a secret the redactor shortened');
+  assert.deepEqual(texts(bySource(fixed.toolCallId, 'tool_call')).slice(1), ['# pass 7'], 'a success: the command, then the line it printed');
+  const thinking = bySource(thought, 'event');
+  assert.equal(lineOf.get(thinking.ref), `${thinking.ref} think: It turns out release.sh next is not a dry run. … Actually the tag is pushed at once.`);
+  assert.deepEqual(texts(thinking), ['It turns out release.sh next is not a dry run.', 'Actually the tag is pushed at once.'],
+    'a thought: its signal sentences, each where it stands');
+  assert.deepEqual(texts(bySource(reply, 'event')), ['I read the packer first. ', 'The root cause is that the header was counted twice.'],
+    'a reply with its memory sentence cut out: the two pieces around it');
+  const cut = bySource(long, 'turn');
+  assert.match(lineOf.get(cut.ref)!, /…\[cut\]$/u, 'the long message is cut to its cap');
+  assert.equal(cut.spans.length, 1);
+  assert.equal(cut.spans[0]!.start, 0);
+  assert.equal(cut.spans[0]!.end, 3_000, 'and its span is the part it kept, counted in code points');
+  assert.match(cut.spans[0]!.text, /^Keep 🎯 the budget at 8k, never 16k: \[redacted\] \[redacted\] the reason/u);
+  const opened = bySource(opening, 'turn');
+  assert.deepEqual(texts(opened), ['Place every line of the dossier 🎯.\n\nPositions count in code points, not in UTF-16 units.'],
+    'the opening prompt without the step list every task ends with');
+  const repeated = bySource(retried, 'turn');
+  assert.equal(lineOf.get(repeated.ref), `${repeated.ref} taskprompt: (the same opening prompt again)`);
+  assert.deepEqual(texts(repeated), texts(opened), 'a repeated prompt points at the prompt it stands for');
+  assert.deepEqual(texts(bySource(steer, 'turn')), ['Stop — never push tags from a session.']);
+  assert.deepEqual(bySource(silent, 'turn').spans, [{ start: 0, end: 0, text: '' }], 'an interrupt with no words points at its record, which has none');
+  assert.deepEqual(texts(bySource(shell, 'turn')), ['git log --oneline -3']);
+  assert.deepEqual(texts(bySource(firstRead.toolCallId, 'tool_call')), ['src/apiserver/src/wiki/wiki-dossier.ts'],
+    'two reads folded into one line: the path of the call it cites');
+  assert.deepEqual(texts(bySource(mcp.toolCallId, 'tool_call')), ['mcp__orbit__task_comment', 'Comment recorded.'],
+    'a tool of its own: its name, and the first line of its result\'s text blocks');
+  assert.deepEqual(texts(bySource(bare, 'event')), ['git status --short'], 'a call with no row: the command in its tool_use event');
+  assert.deepEqual(texts(bySource(background, 'event')), ['git push origin HEAD', 'Pushed to origin in 3s'], 'a background task: its command and its summary');
+  assert.deepEqual(texts(bySource(failure, 'event')), ['The engine stopped: overloaded']);
+  assert.deepEqual(texts(bySource(ended, 'event')), ['error_max_turns']);
+  assert.deepEqual(texts(bySource(asked, 'approval')), ['Which unit do positions count in?', '"Code points"'],
+    'a question and its answer, as the answers the approval holds have them');
+  const planned = dossier.sources.filter((source) => source.id === plan);
+  assert.deepEqual(planned.map(texts), [['Give every line its spans.'], ['Give every line its spans.']],
+    'the plan, and the decision about it, which shows none of its words');
+  assert.deepEqual(texts(bySource(denied, 'approval')), ['No tags from a session.']);
+  assert.deepEqual(texts(bySource(delivered, 'task_comment')), ['Delivered the positions.', '结论：every line has its place, compressed ones too.'],
+    'a comment: its first paragraph and its conclusion');
+  assert.deepEqual(texts(bySource(merged.id, 'merge_receipt')), [`MERGED orbit/dossier-spec@${merged.sourceSha} → main@${merged.targetSha}`]);
+  assert.deepEqual(texts(bySource(decision, 'owner_decision')), ['decide whether the extra files land', 'Accepted: spans count in code points.']);
+
+  // The door hands the spans out with the words at them; the table keeps where they are and nothing they say.
+  const page = await call(h, { runner: machine.token, session: run }, 'GET', `/runner/wiki/spaces/${spaceId}/dossiers`);
+  expectStatus(page, 200, 'the maintenance run reads the page');
+  const served = (page.body.dossiers as Array<{ sessionId: string; sources: Placed[] }>).find((one) => toUuid(one.sessionId) === talk)!;
+  assert.deepEqual(served.sources.map(({ ref, kind, id, spans }) => ({ ref, kind, id: toUuid(id), spans })), dossier.sources,
+    'the door serves every id in its public spelling, and the spans as they are');
+  const kept = await h.sql.query<{ source_ids: unknown }>(`SELECT "source_ids" FROM "wiki_dossier" WHERE "space_id" = $1 AND "session_id" = $2`, [spaceId, talk]);
+  assert.deepEqual(kept.rows[0]!.source_ids, storedDossierSources(dossier.sources));
+  assert.equal((await h.sql.query(`SELECT 1 FROM "wiki_dossier" WHERE "session_id" = $1 AND "source_ids"::text LIKE '%release.sh next%'`, [talk])).rowCount, 0,
+    'no span\'s words are stored');
+
+  // A quote the spans declare is found in its record by the check every proposal meets; the dossier's own
+  // shorthand for the same call is not.
+  const quote = (text: string) => ({
+    op: 'add',
+    entry: {
+      kind: 'pitfall',
+      title: `A spec that skips is red ${randomUUID().slice(0, 8)}`,
+      summary: 'run-pg-spec counts a skip as a failure.',
+      fields: { trigger: { paths: ['scripts/run-pg-spec.sh'], commands: ['bash scripts/run-pg-spec.sh'] }, symptom: 'Exit code 1.', cause: 'A skip.', fix: 'Set the URL.' },
+    },
+    sources: [{ kind: 'tool_call', ref: failing.toolCallId, quote: text }],
+  });
+  const checked = await h.service.submitChangeset(reader, spaceId, {
+    dryRun: true,
+    idempotencyKey: `dossier-quotes-${randomUUID()}`,
+    rationale: 'quote what the spans declare, and what the line says',
+    ops: [quote(failed.spans[0]!.text), quote(failed.spans[2]!.text), quote('$ bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-dossier.pg.spec.ts \\ …(+1 lines) → ERR: Exit code 1')],
+  }) as { ops: Array<{ status: string; reasons?: Array<{ code: string }> }> };
+  assert.notEqual(checked.ops[0]!.status, 'refused', `the command, quoted from its span: ${JSON.stringify(checked.ops[0])}`);
+  assert.notEqual(checked.ops[1]!.status, 'refused', `the result's last line, quoted from its span: ${JSON.stringify(checked.ops[1])}`);
+  assert.equal(checked.ops[2]!.status, 'refused', 'the line as the dossier wrote it is not the record\'s words');
+  assert.equal(checked.ops[2]!.reasons?.[0]?.code, 'WIKI_QUOTE_NOT_FOUND');
 });
 
 // ── a session that speaks for a project belongs where the project's work runs ─────────────────

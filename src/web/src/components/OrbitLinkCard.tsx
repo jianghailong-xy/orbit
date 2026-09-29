@@ -31,6 +31,7 @@ import {
   type LinkPreviewWiki,
 } from '@orbit/shared';
 import { linkPreviewsQuery } from '../lib/queries';
+import { sessionCardHref } from '../lib/transcriptDeepLink';
 import {
   canonicalId,
   linkKey,
@@ -279,7 +280,11 @@ export function OrbitLinkCard({
   const state = preview === undefined ? 'loading' : answer === undefined ? 'unavailable' : 'ready';
   // Where the title leads. A wiki entry's page is `/wiki/<space>/e/<id>` — both halves, and only
   // the server knows the space — so an entry it would not describe has no page to offer.
-  const href = targetHref(link.target, state === 'ready' && kind === 'wiki' ? (answer as LinkPreviewWiki) : undefined);
+  const page = targetHref(link.target, state === 'ready' && kind === 'wiki' ? (answer as LinkPreviewWiki) : undefined);
+  // A pasted session URL that named one record of it (`?at=`) leads to that record.
+  const href = page !== null && kind === 'session' && link.source.kind === 'url'
+    ? sessionCardHref(page, link.source.url)
+    : page;
 
   const lines: CardLine[] = [];
   let title: string | null = null;

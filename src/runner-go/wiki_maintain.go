@@ -20,6 +20,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 // `orbit wiki maintain` and `orbit wiki check`: a space's Wiki maintenance run, and the judge of it
@@ -45,6 +46,12 @@ import (
 // exists on the checkout's origin/main. Then each batch is proposed with dryRun first, so what the server
 // would refuse is dropped rather than recorded, and the ops the review mode would apply are counted
 // against the circuit breaker before a single one is written.
+//
+// A QUOTE IS THE RECORD'S OWN WORDS, AT THE PLACE THE LINE NAMES (criterion 2, revision 2). A dossier line
+// is the dossier's writing — a tool call as `$ command → ok: first line … last line`, a message cut short —
+// and each of its sources says where in the record's text its words are. A quote the model copied from
+// those words is proposed as the record's words there, with the place as its locator; a quote that is the
+// dossier's own shorthand, or that runs across a gap the dossier cut, cites the record without a quote.
 
 // wikiMaintainPrecondition and wikiCheckPrecondition are contracts/wiki.contract.json
 // `maintenance.job.cli.maintainPrecondition` and `checkPrecondition`, word for word; wiki_maintain_test.go
@@ -796,12 +803,14 @@ func wikiMaintainOffTopic(answer string) bool {
 	return false
 }
 
-// wikiMaintainLine is one line of a dossier a source may name: its text, and the record behind it.
+// wikiMaintainLine is one line of a dossier a source may name: its text, the record behind it, and where in
+// that record's text the line's words are.
 type wikiMaintainLine struct {
 	text   string
 	kind   string
 	id     string
 	author string
+	spans  []wikiDossierSpan
 }
 
 var wikiMaintainLineHead = regexp.MustCompile(`^L(\d+) ([a-z-]+): ?(.*)$`)
@@ -825,7 +834,7 @@ func wikiMaintainLines(dossier wikiDossier) map[string]wikiMaintainLine {
 				current = ""
 				continue
 			}
-			lines[current] = wikiMaintainLine{text: m[3], kind: record.Kind, id: record.ID, author: m[2]}
+			lines[current] = wikiMaintainLine{text: m[3], kind: record.Kind, id: record.ID, author: m[2], spans: record.Spans}
 			continue
 		}
 		if current == "" || !strings.HasPrefix(raw, wikiMaintainContinuation) {
@@ -981,7 +990,9 @@ func (r *wikiMaintainRun) build(entries []map[string]interface{}, dossier wikiDo
 }
 
 // wikiMaintainSources are an entry's `[{ref, quote}]` as the sources an add cites: the record behind each
-// line it names, with the quote when it is copied from that line. A quote that is not is a problem.
+// line it names. A quote that is not copied from that line is a problem. One that is, is proposed as the
+// record's own words where the line's spans put them — its quote those words, its locator their place — and a
+// quote the spans do not hold, the dossier's shorthand for the record, leaves the record cited without one.
 func wikiMaintainSources(raw interface{}, lines map[string]wikiMaintainLine) ([]interface{}, []string) {
 	list, _ := raw.([]interface{})
 	var sources []interface{}
@@ -1010,9 +1021,95 @@ func wikiMaintainSources(raw interface{}, lines map[string]wikiMaintainLine) ([]
 			continue
 		}
 		seen[key] = true
-		sources = append(sources, map[string]interface{}{"kind": line.kind, "ref": line.id, "quote": cutRunes(quote, wikiMaintainQuoteMaxChars)})
+		cited := map[string]interface{}{"kind": line.kind, "ref": line.id}
+		if len(line.spans) == 0 {
+			// A server from before dossier lines said where their words are: the line's own words, which the
+			// self-check's dry run holds to the record.
+			cited["quote"] = cutRunes(quote, wikiMaintainQuoteMaxChars)
+		} else if words, start, end, ok := wikiMaintainPlace(line.spans, quote); ok {
+			cited["quote"] = words
+			cited["locator"] = map[string]interface{}{"start": start, "end": end}
+		}
+		sources = append(sources, cited)
 	}
 	return sources, problems
+}
+
+// wikiMaintainPlace finds a quote in the words a line's spans hold, read as a quote is compared
+// (wikiMaintainPlain: markdown marks and curly quotes aside, a run of whitespace one space), and answers the
+// record's own words there — marks, quotes and spacing as the record has them — and where they are: code points
+// of the record's redacted text, cut to the quote limit. A quote no single span holds, or whose words the
+// redactor took out, is not the record's words, and is not placed.
+func wikiMaintainPlace(spans []wikiDossierSpan, quote string) (string, int, int, bool) {
+	want := []rune(wikiMaintainPlain(quote))
+	if len(want) == 0 {
+		return "", 0, 0, false
+	}
+	for _, span := range spans {
+		words := []rune(span.Text)
+		plain, at := wikiMaintainPlainRunes(words)
+		i := wikiMaintainRunesIndex(plain, want)
+		if i < 0 {
+			continue
+		}
+		start, end := at[i], at[i+len(want)-1]+1
+		if end-start > wikiMaintainQuoteMaxChars {
+			end = start + wikiMaintainQuoteMaxChars
+		}
+		found := string(words[start:end])
+		if strings.Contains(found, "[redacted]") {
+			return "", 0, 0, false
+		}
+		return found, span.Start + start, span.Start + end, true
+	}
+	return "", 0, 0, false
+}
+
+// wikiMaintainRunesIndex is where needle first stands in haystack, or -1.
+func wikiMaintainRunesIndex(haystack, needle []rune) int {
+	for i := 0; i+len(needle) <= len(haystack); i++ {
+		j := 0
+		for j < len(needle) && haystack[i+j] == needle[j] {
+			j++
+		}
+		if j == len(needle) {
+			return i
+		}
+	}
+	return -1
+}
+
+// wikiMaintainPlainRunes is wikiMaintainPlain over runes, with where each rune it keeps stands in the runes it
+// was given: a run of whitespace is the one space at its first rune.
+func wikiMaintainPlainRunes(words []rune) ([]rune, []int) {
+	plain := make([]rune, 0, len(words))
+	at := make([]int, 0, len(words))
+	space := -1
+	for i, r := range words {
+		switch {
+		case r == '`' || r == '*':
+			continue
+		case unicode.IsSpace(r):
+			if space < 0 {
+				space = i
+			}
+			continue
+		}
+		if space >= 0 && len(plain) > 0 {
+			plain = append(plain, ' ')
+			at = append(at, space)
+		}
+		space = -1
+		switch r {
+		case '“', '”', '„':
+			r = '"'
+		case '‘', '’':
+			r = '\''
+		}
+		plain = append(plain, r)
+		at = append(at, i)
+	}
+	return plain, at
 }
 
 // wikiMaintainPlain is text as the demo's norm_quote compared it: backticks and asterisks out, curly
@@ -1105,7 +1202,8 @@ func (r *wikiMaintainRun) dryRun(topic string, ops []wikiMaintainOp) (wikiMainta
 			case status == "refused" && code == "WIKI_QUOTA" && strings.HasPrefix(message, "circuit breaker"):
 				return wikiMaintainBatch{}, fmt.Errorf("the circuit breaker tripped on the dry run: %s", message)
 			case status == "refused" && code == "WIKI_QUOTE_NOT_FOUND" && round == 0:
-				// The line's text is the dossier's, redacted and clipped; the record's is whole. Cite the
+				// A quote is the record's words where the dossier placed them, but a server can read a record
+				// otherwise — one from before a tool call's text held its input finds no command in it. Cite the
 				// record without the quote rather than drop what it supports.
 				wikiMaintainStripQuotes(op.body)
 				stripped = true
@@ -1129,12 +1227,13 @@ func (r *wikiMaintainRun) dryRun(topic string, ops []wikiMaintainOp) (wikiMainta
 	}
 }
 
-// wikiMaintainStripQuotes takes the quotes off an add's sources.
+// wikiMaintainStripQuotes takes the quotes off an add's sources, and the places they were quoted from.
 func wikiMaintainStripQuotes(body map[string]interface{}) {
 	sources, _ := body["sources"].([]interface{})
 	for _, item := range sources {
 		if source, ok := item.(map[string]interface{}); ok {
 			delete(source, "quote")
+			delete(source, "locator")
 		}
 	}
 }
@@ -1355,7 +1454,7 @@ The kind's own fields (all required; be terse: each text field is one short sent
 - recipe: "steps": ["..."], "verify": {"command": "...", "expectedExit": 0}
 - concept: "definition", "boundaries"
 RULES:
-- sources: 1 or 2 per entry. The quote is a contiguous span copied character for character from the line with that ref (<= 150 chars, no "…", no paraphrase, no translation). Never quote a span holding [redacted]. Prefer spans without double-quote characters; if one is unavoidable, escape it as \".
+- sources: 1 or 2 per entry. The quote is a contiguous span copied character for character from the line with that ref (<= 150 chars, no "…", no paraphrase, no translation). Quote the words the line carries from its record, never the case file's own markers ("$ ", "→ ok:", "ERR:", "(steer)", "…[cut]", "×N"). Never quote a span holding [redacted]. Prefer spans without double-quote characters; if one is unavoidable, escape it as \".
 - Write titles and text fields in the language the owner uses in the case (usually Chinese); keep code, paths and commands verbatim.
 - Only put a path in anchors if it appears in the case and is a path of this repository; never invent paths or shas.
 
