@@ -164,6 +164,8 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
       [...row.querySelectorAll('.np-row-name, .np-row-model')].map((part) => part.textContent).join(' '),
     );
   const pickedRow = () => document.querySelector<HTMLElement>('.np-account.picked .np-row-name')?.textContent;
+  /** The composer's account pill: which Codex account this session spends. */
+  const accountPill = () => mounted().querySelector<HTMLElement>('.composer-account[data-codex-account]')?.textContent;
 
   const sendMessage = async (text: string) => {
     const box = mounted().querySelector<HTMLTextAreaElement>('.composer-box textarea')!;
@@ -271,6 +273,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     // Default's 5-hour window is spent, so Automatic would start it on Work, whose quota the gauge shows.
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 0%');
     expect(mounted().querySelector('.np-summary')?.textContent).toContain('Work (auto)');
+    expect(accountPill()).toBe('Work');
 
     await click(mounted().querySelector('.np-card'));
     expect(accountRows()).toEqual(['Automatic most room', 'Default 5h 100%', 'Work Weekly 0%']);
@@ -329,12 +332,15 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     detail = session(WORK, null);
     await mount(`/sessions/${SESSION}`, '.composer-box textarea');
     await settlesOn('Plan usage 0%');
+    // Named beside the gauge, so whose quota it is can be read off the session.
+    expect(accountPill()).toBe('Work');
   });
 
   it('a session that picked Default shows Default’s quota on a workspace set to another account', async () => {
     detail = session('default', WORK);
     await mount(`/sessions/${SESSION}`, '.composer-box textarea');
     await settlesOn('Plan usage 100%');
+    expect(accountPill()).toBe('Default');
   });
 
   it("a session with no pick of its own shows its workspace's account's quota", async () => {
@@ -366,5 +372,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     };
     await mount(`/sessions/${SESSION}`, '.composer-box textarea');
     await settlesOn('Plan usage 30%');
+    // The Codex account pill is Codex's: a Claude session names none.
+    expect(accountPill()).toBeUndefined();
   });
 });

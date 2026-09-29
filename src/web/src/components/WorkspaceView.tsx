@@ -6231,6 +6231,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   );
   const shownAccount =
     shownProvider === 'codex' ? shownCodexAccount : shownProvider === 'claude' ? shownClaudeAccount : 'default';
+  // The Codex account named beside the quota gauge, once the runner has more than one to tell apart.
+  const shownCodexAccountRow =
+    shownProvider === 'codex' && codexAccountsHere.length >= 2
+      ? (codexAccountsHere.find((account) => account.id === shownCodexAccount) ?? { id: 'default', name: undefined })
+      : null;
+  const shownCodexAccountLabel = shownCodexAccountRow
+    ? shownCodexAccountRow.id === 'default'
+      ? 'Default'
+      : shownCodexAccountRow.name || `Account ${shownCodexAccountRow.id}`
+    : null;
   const shownPlanUsage = shownPool
     ? (shownPoolAccount?.member.planUsage ?? null)
     : (shownProvider === 'codex' || shownProvider === 'claude') && shownAccount !== 'default'
@@ -8686,6 +8696,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               >
                 <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>
                   <span className="composer-account-name">{shownPoolAccount.member.label}</span>
+                </span>
+              </Tooltip>
+            )}
+            {/* Which of the runner's Codex accounts this session spends — the quota beside it is that
+                account's. A draft names the one it would start on. */}
+            {!shownPool && shownCodexAccountLabel && (
+              <Tooltip
+                title={
+                  selectedId
+                    ? `This session runs on the Codex account ${shownCodexAccountLabel}`
+                    : draftCodexAccount || pickedWorkspace?.codexAccount
+                      ? `A new session runs on the Codex account ${shownCodexAccountLabel}`
+                      : `A new session starts on ${shownCodexAccountLabel} — the Codex account with the most room right now`
+                }
+              >
+                <span className="composer-pill composer-account" data-codex-account={shownCodexAccount}>
+                  <span className="composer-account-name">{shownCodexAccountLabel}</span>
                 </span>
               </Tooltip>
             )}

@@ -261,6 +261,20 @@ final class ConsoleModel {
     }
     /// This draft starts on Automatic: it is on offer and no account is picked.
     var codexAutomatic: Bool { codexAutomaticOffered && draftCodexAccount == nil }
+    /// The account label beside the composer's quota gauge: which of the runner's Codex accounts this
+    /// session spends. Nil unless it is on the built-in Codex engine and the runner has several.
+    var codexAccountLabel: String? {
+        guard currentPool == nil, provider == "codex", codexAccounts.count >= 2 else { return nil }
+        return CodexAccounts.label(codexAccount, accounts: codexAccounts)
+    }
+    /// What that label says when asked.
+    var codexAccountHelp: String {
+        let label = codexAccountLabel ?? "Default"
+        if !isDraft { return "This session runs on the Codex account \(label)" }
+        return codexAutomatic
+            ? "A new session starts on \(label) — the Codex account with the most room right now"
+            : "A new session runs on the Codex account \(label)"
+    }
     /// The Codex account this draft or session runs on, as far as its runner reports it: a draft's
     /// pick, else its workspace's, else the one Automatic would choose now; a session's own, else its
     /// workspace's. Default when the runner lists no such account, as dispatch resolves it.
