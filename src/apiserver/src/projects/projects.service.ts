@@ -2176,7 +2176,11 @@ export class ProjectsService {
       // Returning the transition instruction makes it part of this tool result — and therefore
       // the current provider transcript — while runner inbox delivery supplies the same standing
       // context again on later messages, including warm and reclaimed runtimes.
-      coordinatorInstructions: buildCoordinatorInstructions(project.title, project.id),
+      coordinatorInstructions: buildCoordinatorInstructions(
+        project.title,
+        project.id,
+        project.coordinatorEnabled,
+      ),
       // Keep the transition first in the serialized tool result. Project payloads can contain long
       // acceptance definitions, and the role change is what the currently-running turn must see.
       ...project,
@@ -3728,6 +3732,8 @@ export class ProjectsService {
       select: {
         id: true,
         title: true,
+        // Which of the two instruction texts the opening says (`coordinator-opening.ts`).
+        coordinatorEnabled: true,
         coordinatorSessionId: true,
         coordinatorWorkspaceId: true,
         // Both halves of the fold `deriveSessionLifecycleState` takes, rather than a second reading
@@ -3801,7 +3807,7 @@ export class ProjectsService {
         {
           workspaceId: runIn,
           title: coordinatorSessionTitle(project.title),
-          prompt: buildCoordinatorOpening(project.title, project.id),
+          prompt: buildCoordinatorOpening(project.title, project.id, project.coordinatorEnabled),
         },
         { source: 'user', titleManagedByProject: true },
       );
