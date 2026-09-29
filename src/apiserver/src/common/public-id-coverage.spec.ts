@@ -83,7 +83,12 @@ const OPAQUE_PARAM_ROUTES: Readonly<Record<string, string>> = {};
 // Query filters, on the other hand, are a mixed bag of ids and ordinary filters, so those do
 // read the shared classification — one list, so a name can't be an id on the way out and a
 // free-form string on the way in.
-const ID_QUERIES = PUBLIC_ID_FIELDS;
+//
+// Plus the query names that carry an id without being a field of anything, so no body ever spells
+// them: `around`, the transcript record — a turn, an event or a tool call — that
+// GET /sessions/:id/events/page reads a page around (a wiki footnote's location link).
+const QUERY_ONLY_IDS: ReadonlySet<string> = new Set(['around']);
+const ID_QUERIES: ReadonlySet<string> = new Set([...PUBLIC_ID_FIELDS, ...QUERY_ONLY_IDS]);
 
 const CONTROLLERS = [
   WorkspacesController,
@@ -196,6 +201,16 @@ for (const controller of CONTROLLERS) {
     assert.deepEqual(missing, []);
   });
 }
+
+// A name registered above and read by no route is a registration nothing checks: renaming the query
+// would leave this list vouching for a door that no longer exists.
+test('every query-only id is a query some route reads', () => {
+  const read = new Set(
+    CONTROLLERS.flatMap((controller) => inspect(controller as never).seen)
+      .map((arg) => arg.slice(arg.indexOf('(') + 1, -1)),
+  );
+  assert.deepEqual([...QUERY_ONLY_IDS].filter((name) => !read.has(name)), []);
+});
 
 test('opaque UUID route exceptions are exact, live, and use a non-translating UUID validator', () => {
   const live = CONTROLLERS.flatMap((controller) => inspect(controller as never).opaque).sort();
