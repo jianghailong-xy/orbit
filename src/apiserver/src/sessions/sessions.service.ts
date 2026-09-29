@@ -278,6 +278,35 @@ function resumeRequestFingerprint(dto: SessionResumeDto): string {
 }
 
 /**
+ * The id of the copy a send makes of a file an earlier turn of this session already carries (see
+ * `assertLinkableAttachments`). Derived from the request rather than drawn at random so that a
+ * replay of the same send names the same copy: the receipt check compares the files a turn holds
+ * with the ones its request named, and a random id would make every response-lost replay of a
+ * re-send read as a different payload.
+ */
+function resentAttachmentId(sessionId: string, clientTurnId: string, sourceId: string): string {
+  const b = createHash('sha256').update(`resend:${sessionId}:${clientTurnId}:${sourceId}`).digest();
+  b[6] = (b[6] & 0x0f) | 0x80; // RFC 9562 version 8, "custom"
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = b.subarray(0, 16).toString('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+/** The ids a turn written for this request holds, sorted: each one it named, except that a file an
+ *  earlier turn carries is there as its copy. `stored` is what the turn holds now — a named id in
+ *  it was linked as-is, one outside it was already another turn's when the request came in. */
+function expectedTurnAttachments(
+  sessionId: string,
+  clientTurnId: string,
+  attachmentIds: string[] | undefined,
+  stored: readonly string[],
+): string[] {
+  return [...new Set(attachmentIds ?? [])]
+    .map((id) => (stored.includes(id) ? id : resentAttachmentId(sessionId, clientTurnId, id)))
+    .sort();
+}
+
+/**
  * Guards the two spawn paths a machine drives — `orbit mcp` / `orbit session create` and the
  * headless service-token bridge. Their caller is a model or a script, not a form with a picker, so
  * an invented mode would be stored verbatim and only surface when the claim hands it to the CLI:
@@ -4199,27 +4228,49 @@ export class SessionsService {
   }
 
   /**
-   * Verify the given attachment ids are the caller's, scoped to this session, and not yet
-   * tied to a turn. Returns the de-duped ids. Throws on any unknown/foreign/already-used id
-   * so a bad reference is rejected BEFORE a turn is queued (no orphan text turn, no silent
-   * drop of an image the user meant to send). Call before inserting the turn; link after.
+   * Verify the given attachment ids are the caller's and scoped to this session, and return the
+   * de-duped ids to link to the turn. Throws on any unknown/foreign id so a bad reference is
+   * rejected BEFORE a turn is queued (no orphan text turn, no silent drop of an image the user
+   * meant to send). Call before inserting the turn; link after.
+   *
+   * An id already on a turn is a file this session sent before, named again — a retry re-sending
+   * the message it went out with (the clients' Retry carries that message's own ids). It is copied,
+   * and the copy is what gets linked: an attachment belongs to exactly one turn and is deleted with
+   * it, so moving it would take the picture out of the bubble it was sent in, and a withdrawn retry
+   * would take it with it — `AutoRetryService.copyAttachments` copies for the same reason. Refusing
+   * it instead failed every Retry of a message that had a file, and the words came back into the
+   * composer without it. The copy's id is `resentAttachmentId`, so a replay of this send finds it.
    */
   private async assertLinkableAttachments(
     ownerId: string,
     sessionId: string,
+    clientTurnId: string,
     attachmentIds: string[] | undefined,
-    tx: Prisma.TransactionClient | PrismaService = this.prisma,
+    tx: Prisma.TransactionClient,
   ): Promise<string[]> {
     const ids = [...new Set(attachmentIds ?? [])];
     if (ids.length === 0) return [];
     const found = await tx.attachment.findMany({
-      where: { id: { in: ids }, ownerId, sessionId, turnId: null },
-      select: { id: true },
+      where: { id: { in: ids }, ownerId, sessionId },
+      select: { id: true, turnId: true },
     });
     if (found.length !== ids.length) {
-      throw new BadRequestException('one or more attachments are unknown, not yours, or already attached');
+      throw new BadRequestException('one or more attachments are unknown or not yours');
     }
-    return ids;
+    const copyOf = new Map(
+      found
+        .filter((a) => a.turnId != null)
+        .map((a) => [a.id, resentAttachmentId(sessionId, clientTurnId, a.id)] as const),
+    );
+    if (copyOf.size === 0) return ids;
+    // In the database, so the bytes are not carried through this process under the session lock.
+    await tx.$executeRaw`
+      INSERT INTO "attachment" (id, owner_id, session_id, mime_type, size_bytes, file_name, data)
+      SELECT c.copy_id, a.owner_id, a.session_id, a.mime_type, a.size_bytes, a.file_name, a.data
+        FROM unnest(ARRAY[${Prisma.join([...copyOf.keys()])}]::uuid[],
+                    ARRAY[${Prisma.join([...copyOf.values()])}]::uuid[]) AS c(source_id, copy_id)
+        JOIN "attachment" a ON a.id = c.source_id`;
+    return ids.map((id) => copyOf.get(id) ?? id);
   }
 
   /**
@@ -4356,10 +4407,15 @@ export class SessionsService {
             : intent === 'NEXT_TURN'
               ? ['message']
               : ['message', 'steer'];
-        const expectedAttachments = [...new Set(dto.attachmentIds ?? [])].sort();
         const storedAttachments = (existing.attachments ?? [])
           .map((attachment) => attachment.id)
           .sort();
+        const expectedAttachments = expectedTurnAttachments(
+          id,
+          dto.clientTurnId,
+          dto.attachmentIds,
+          storedAttachments,
+        );
         if (
           !expectedKinds.includes(existing.kind)
           || existing.content !== dto.content
@@ -4431,7 +4487,13 @@ export class SessionsService {
       // Check attachments only after the idempotency lookup: on a retry of a successful
       // request they are already linked to this same turn and must not make the retry fail.
       // For a genuinely new request validation still precedes the turn insert.
-      const attachmentIds = await this.assertLinkableAttachments(ownerId, id, dto.attachmentIds, tx);
+      const attachmentIds = await this.assertLinkableAttachments(
+        ownerId,
+        id,
+        dto.clientTurnId,
+        dto.attachmentIds,
+        tx,
+      );
       // A claim can race the lazy first-turn seed. While holding the same Session lock as
       // queue.buildSession, ensure an unestablished runtime cannot lose its opening prompt.
       if (session.numTurns === 0) await this.ensurePromptSeeded(tx, session, attachmentIds);
@@ -4717,7 +4779,13 @@ export class SessionsService {
       // Checked before anything is dropped, so a request that cannot be honoured leaves
       // the queue exactly as it found it.
       const attachmentIds = followUp
-        ? await this.assertLinkableAttachments(ownerId, id, dto?.attachmentIds, tx)
+        ? await this.assertLinkableAttachments(
+          ownerId,
+          id,
+          dto!.clientTurnId!,
+          dto?.attachmentIds,
+          tx,
+        )
         : [];
       if (followUp) await opts?.participateFollowUpTransaction?.(tx);
       // Explicit CURRENT_WORK is durable authored input, not a disposable queue row. Settle it
@@ -6663,8 +6731,13 @@ export class SessionsService {
       });
       if (existing) {
         const expectedKind = dto.kind === 'shell' ? 'shell' : 'message';
-        const expectedAttachments = [...new Set(dto.attachmentIds ?? [])].sort();
         const storedAttachments = existing.attachments.map((attachment) => attachment.id).sort();
+        const expectedAttachments = expectedTurnAttachments(
+          id,
+          dto.clientTurnId,
+          dto.attachmentIds,
+          storedAttachments,
+        );
         if (
           existing.kind !== expectedKind
           || existing.content !== dto.content
@@ -6717,6 +6790,7 @@ export class SessionsService {
       const attachmentIds = await this.assertLinkableAttachments(
         ownerId,
         id,
+        dto.clientTurnId,
         dto.attachmentIds,
         tx,
       );
