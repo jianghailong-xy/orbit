@@ -223,7 +223,17 @@ public enum ComposerLogic {
     /// which is also where the message itself has just been put back. The reason comes from
     /// `APIClient.failureReason` rather than the raw error, which reads as a crash log.
     public static func sendFailureMessage(_ error: Error) -> String {
-        "Couldn't send — \(APIClient.failureReason(error)). Your message is back in the composer."
+        "\(sendFailurePrefix)\(APIClient.failureReason(error)). Your message is back in the composer."
+    }
+
+    private static let sendFailurePrefix = "Couldn't send — "
+
+    /// The line above the composer once a later send has gone through. That line stays until its ✕,
+    /// and a send failure's said the message had not gone out and was back in the composer — which
+    /// the accepted send has just made false, so it went on reading "Couldn't send" above a message
+    /// on its way. Only that line goes: an error about anything else is still true.
+    public static func statusAfterAcceptedSend(_ status: String?) -> String? {
+        status?.hasPrefix(sendFailurePrefix) == true ? nil : status
     }
 
     /// The human sentence out of a Nest error body (`{"message": "…"}`, or an array of them for a
