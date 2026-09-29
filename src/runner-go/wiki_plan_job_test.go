@@ -589,7 +589,7 @@ func TestWikiPlanSendsACatalogueOutsideTheTargetBackBeforeAnyDocument(t *testing
 	}
 	again := model.asked("# 任务：改正 wiki「")
 	if len(again) != 1 || !strings.Contains(again[0], "[docCount] plan.docs：the plan has 4 documents; it must have 3 to 3: "+
-		"merge documents that answer the same reader's question") || !strings.Contains(again[0], "release-channels") {
+		"merge documents that answer the same reader's question — 1 too many") || !strings.Contains(again[0], "release-channels") {
 		t.Fatalf("the catalogue was not sent back with its count: %d prompts\n%s", len(again), strings.Join(again, "\n----\n"))
 	}
 	// Not a round: the one draft went through the gates at the first.
@@ -625,7 +625,8 @@ func TestWikiPlanLeavesACountStillOutsideTheTargetToTheGate(t *testing.T) {
 		t.Fatalf("the catalogue was sent back %d times, want 8", len(again))
 	}
 	for _, prompt := range again {
-		if !strings.Contains(prompt, "[docCount] plan.docs：the plan has 3 documents; it must have 4 to 5: split the broadest documents") {
+		if !strings.Contains(prompt, "[docCount] plan.docs：the plan has 3 documents; it must have 4 to 5: split the broadest documents, "+
+			"or add the ones the categories are missing — 1 too few") {
 			t.Errorf("a catalogue sent back without its count:\n%s", prompt)
 		}
 	}

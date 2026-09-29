@@ -128,9 +128,10 @@ func wikiPlanCountError(n int, target wikiPlanLength) (wikiPlanGateError, bool) 
 	if n >= target.Min && n <= target.Max {
 		return wikiPlanGateError{}, false
 	}
-	advice := "merge documents that answer the same reader's question"
+	// How far off it is, said: a model told only to merge took a catalogue of 68 to 43 for a target of 20–35.
+	advice := fmt.Sprintf("merge documents that answer the same reader's question — %d too many", n-target.Max)
 	if n < target.Min {
-		advice = "split the broadest documents, or add the ones the categories are missing"
+		advice = fmt.Sprintf("split the broadest documents, or add the ones the categories are missing — %d too few", target.Min-n)
 	}
 	return wikiPlanGateError{Check: "docCount", Path: "plan.docs", Message: fmt.Sprintf("the plan has %d documents; it must have %d to %d: %s",
 		n, target.Min, target.Max, advice)}, true
