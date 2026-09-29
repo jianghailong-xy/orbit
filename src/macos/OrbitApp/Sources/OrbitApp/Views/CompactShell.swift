@@ -348,8 +348,9 @@ private struct CompactSections: View {
                     }
             }
 
-        // RUNNERS — runner list → detail. Same single stack as Agents: the rows carry their own
-        // destination and push it, so a deep link (`.runner(id)`) and a row tap are one navigation.
+        // RUNNERS — runner list → detail → an engine's or its name's page. Same single stack as
+        // Agents: the rows carry their own destination and push it, so a deep link (`.runner(id)`)
+        // and a row tap are one navigation.
         // Runners isn't in the drawer rail, so this section is only ever entered by that deep link
         // or from Settings' own list — neither of which is a `List` selection in this shell.
         case .runners:
@@ -360,6 +361,8 @@ private struct CompactSections: View {
                     .navigationDestination(for: NavNode.self) { node in
                         switch node {
                         case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)
+                        case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)
+                        case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)
                         default:                          EmptyView()
                         }
                     }

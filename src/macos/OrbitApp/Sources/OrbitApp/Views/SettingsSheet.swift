@@ -1,6 +1,8 @@
 #if os(iOS)
 import SwiftUI
 import UIKit
+import PhotosUI
+import UniformTypeIdentifiers
 import OrbitKit
 
 // Settings on iOS: a sheet over whatever is on screen, in the ChatGPT-style shape the owner picked
@@ -21,9 +23,10 @@ extension View {
 }
 
 /// Settings' own stack: the list at its root, and each page it opens as a frame of
-/// `NavState.settingsPath` — the runners list and a runner's record, the `SettingsPage`s, and an
-/// account's record under Admin. A form row pushes with its `NavigationLink` value; a list row
-/// inside a page pushes through `AppModel.push`, which lands here while the sheet is up.
+/// `NavState.settingsPath` — the runners list, a runner's record and its engine and name pages, the
+/// `SettingsPage`s, and an account's record under Admin. A form row pushes with its `NavigationLink`
+/// value; a list row inside a page pushes through `AppModel.push`, which lands here while the sheet
+/// is up.
 struct SettingsSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -42,6 +45,8 @@ struct SettingsSheet: View {
                     switch node {
                     case .settingsRunners:            RunnersSettingsList()
                     case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)
+                    case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)
+                    case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)
                     case .settingsPage(let page):     SettingsPageView(page: page)
                     case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
                     case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
@@ -353,7 +358,8 @@ private func turnOnAlerts(_ model: AppModel, now: Bool?) async -> Bool? {
 
 /// The card the header opens — ChatGPT's edit-profile card, with what an Orbit account has: the
 /// photo and the name, the avatar following the field while there is no photo. The photo is changed
-/// from the avatar (taken, chosen, or removed, each cropped square by the system's Move and Scale).
+/// from the avatar's menu, as ChatGPT's is: the library, the camera or Files, each through the round
+/// crop screen (`AvatarCropView`) — or removed.
 /// Nothing is written until Save, which writes the photo and then the name (`ProfileEdit.steps`);
 /// Cancel or a swipe down leaves the account as it was. A save that fails keeps the card up and says
 /// why where the caption was — and what had already landed stays landed.
@@ -365,8 +371,11 @@ private struct ProfileEditSheet: View {
     @State private var photo: ProfileEdit.Photo = .unchanged
     /// The chosen photo, decoded once for the card to show until Save.
     @State private var chosenImage: PlatformImage?
-    @State private var askingForPhoto = false
-    @State private var photoSource: PhotoSource?
+    @State private var showingLibrary = false
+    @State private var libraryPick: PhotosPickerItem?
+    @State private var choosingFile = false
+    /// The camera, or a new photo on its way through the crop screen.
+    @State private var photoFlow: PhotoFlow?
     @State private var saving = false
     @State private var failure: String?
     /// The card is as tall as what it holds, as ChatGPT's is — this is that height as last measured.
@@ -379,26 +388,51 @@ private struct ProfileEditSheet: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                Button { askingForPhoto = true } label: {
+                Menu {
+                    Button { showingLibrary = true } label: {
+                        Label(SettingsCopy.photoLibrary, systemImage: "photo.on.rectangle")
+                    }
+                    if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                        Button { photoFlow = .camera } label: {
+                            Label(SettingsCopy.takePhoto, systemImage: "camera")
+                        }
+                    }
+                    Button { choosingFile = true } label: {
+                        Label(SettingsCopy.chooseFile, systemImage: "folder")
+                    }
+                    if showsPhoto {
+                        Button(role: .destructive) {
+                            photo = .removed
+                            chosenImage = nil
+                        } label: {
+                            Label(SettingsCopy.removePhoto, systemImage: "trash")
+                        }
+                    }
+                } label: {
                     avatar.overlay(alignment: .bottomTrailing) { CameraBadge() }
                 }
-                .buttonStyle(.plain)
                 .disabled(saving)
                 .accessibilityLabel(SettingsCopy.choosePhoto)
                 .padding(.top, 28)
-                .confirmationDialog(SettingsCopy.choosePhoto, isPresented: $askingForPhoto,
-                                    titleVisibility: .hidden) {
-                    if UIImagePickerController.isSourceTypeAvailable(.camera) {
-                        Button(SettingsCopy.takePhoto) { photoSource = .camera }
+                .photosPicker(isPresented: $showingLibrary, selection: $libraryPick, matching: .images)
+                .onChange(of: libraryPick) { _, item in
+                    guard let item else { return }
+                    libraryPick = nil
+                    Task {
+                        guard let data = try? await item.loadTransferable(type: Data.self),
+                              let image = UIImage(data: data) else { return }
+                        photoFlow = .crop(image)
                     }
-                    Button(SettingsCopy.choosePhoto) { photoSource = .library }
-                    if showsPhoto {
-                        Button(SettingsCopy.removePhoto, role: .destructive) {
-                            photo = .removed
-                            chosenImage = nil
-                        }
+                }
+                .fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image]) { result in
+                    guard case .success(let url) = result else { return }
+                    let scoped = url.startAccessingSecurityScopedResource()
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    guard let data = try? Data(contentsOf: url), let image = UIImage(data: data) else {
+                        failure = SettingsCopy.photoNotSaved("that file isn't an image Orbit can read")
+                        return
                     }
-                    Button(SharePanelCopy.cancel, role: .cancel) {}
+                    photoFlow = .crop(image)
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -456,15 +490,18 @@ private struct ProfileEditSheet: View {
         .interactiveDismissDisabled(saving)
         .onChange(of: draft) { _, _ in failure = nil }
         .onChange(of: photo) { _, _ in failure = nil }
-        .fullScreenCover(item: $photoSource) { source in
-            PhotoPicker(source: source.sourceType) { picked in
-                if let picked, let jpeg = picked.orbitAvatarJPEG() {
+        .fullScreenCover(item: $photoFlow) { flow in
+            switch flow {
+            case .camera:
+                CameraPicker { taken in photoFlow = taken.map(PhotoFlow.crop) }
+                    .ignoresSafeArea()
+            case .crop(let image):
+                AvatarCropView(image: image, cancel: { photoFlow = nil }) { jpeg in
                     photo = .replaced(jpeg)
                     chosenImage = PlatformImage(data: jpeg)
+                    photoFlow = nil
                 }
-                photoSource = nil
             }
-            .ignoresSafeArea()
         }
         // A presentation of its own, like the Settings sheet under it.
         .preferredColorScheme(model.preferredColorScheme)
@@ -538,25 +575,22 @@ private struct CameraBadge: View {
     }
 }
 
-/// Where a new photo comes from.
-private enum PhotoSource: String, Identifiable {
-    case camera, library
+/// The camera, or a new photo in the crop screen — one full-screen cover for both, so a photo just
+/// taken goes on to its crop without the cover closing in between (the same id throughout).
+private enum PhotoFlow: Identifiable {
+    case camera
+    case crop(UIImage)
 
-    var id: String { rawValue }
-    var sourceType: UIImagePickerController.SourceType { self == .camera ? .camera : .photoLibrary }
+    var id: String { "photo" }
 }
 
-/// UIKit's image picker with its square Move and Scale step — the crop a profile photo needs, which
-/// PhotosPicker does not offer — for the camera or the library. Hands back the cropped image, or nil
-/// when cancelled.
-private struct PhotoPicker: UIViewControllerRepresentable {
-    let source: UIImagePickerController.SourceType
+/// UIKit's camera, handing back the photo as taken (nil when cancelled); the crop is Orbit's own.
+private struct CameraPicker: UIViewControllerRepresentable {
     let done: (UIImage?) -> Void
 
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
-        picker.sourceType = source
-        picker.allowsEditing = true
+        picker.sourceType = .camera
         picker.delegate = context.coordinator
         return picker
     }
@@ -572,10 +606,100 @@ private struct PhotoPicker: UIViewControllerRepresentable {
 
         func imagePickerController(_ picker: UIImagePickerController,
                                    didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            done((info[.editedImage] ?? info[.originalImage]) as? UIImage)
+            done(info[.originalImage] as? UIImage)
         }
 
         func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { done(nil) }
+    }
+}
+
+/// The crop screen a new photo passes through, as ChatGPT's does: the photo under a round window on
+/// black, dragged and pinched into place (`AvatarCrop` keeps the circle covered), Cancel (×) and Save
+/// along the bottom. Save hands back the circle's square as the JPEG that is sent.
+private struct AvatarCropView: View {
+    let image: UIImage
+    let cancel: () -> Void
+    let save: (Data) -> Void
+
+    @State private var zoom: CGFloat = 1
+    @State private var zoomAtStart: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var offsetAtStart: CGSize = .zero
+
+    var body: some View {
+        GeometryReader { geo in
+            let circle = max(1, min(geo.size.width, geo.size.height) - 88)
+            let fitted = AvatarCrop.fitted(image.size, circle: circle)
+            ZStack {
+                Image(uiImage: image)
+                    .resizable()
+                    .frame(width: fitted.width * zoom, height: fitted.height * zoom)
+                    .offset(offset)
+                // Everything outside the circle dimmed, and the circle's edge drawn.
+                Rectangle()
+                    .fill(Color.black.opacity(0.6))
+                    .mask {
+                        Rectangle()
+                            .overlay { Circle().frame(width: circle, height: circle).blendMode(.destinationOut) }
+                            .compositingGroup()
+                    }
+                    .allowsHitTesting(false)
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.7), lineWidth: 1)
+                    .frame(width: circle, height: circle)
+                    .allowsHitTesting(false)
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture()
+                    .onChanged { value in
+                        let moved = CGSize(width: offsetAtStart.width + value.translation.width,
+                                           height: offsetAtStart.height + value.translation.height)
+                        offset = AvatarCrop.clampedOffset(moved, fitted: fitted, circle: circle, zoom: zoom)
+                    }
+                    .onEnded { _ in offsetAtStart = offset }
+                    .simultaneously(with: MagnifyGesture()
+                        .onChanged { value in
+                            zoom = AvatarCrop.clampedZoom(zoomAtStart * value.magnification)
+                            offset = AvatarCrop.clampedOffset(offset, fitted: fitted, circle: circle, zoom: zoom)
+                        }
+                        .onEnded { _ in
+                            zoomAtStart = zoom
+                            offsetAtStart = offset
+                        })
+            )
+            .overlay(alignment: .bottom) {
+                HStack {
+                    Button(action: cancel) {
+                        Image(systemName: "xmark")
+                            .font(.orbitControl.weight(.semibold))
+                            .frame(width: 48, height: 48)
+                            .background(.regularMaterial, in: Circle())
+                    }
+                    .accessibilityLabel(SharePanelCopy.cancel)
+                    Spacer()
+                    Button {
+                        let square = AvatarCrop.cropRect(image: image.size, circle: circle, zoom: zoom, offset: offset)
+                        if let jpeg = image.orbitAvatarJPEG(crop: square) { save(jpeg) }
+                    } label: {
+                        Text(SettingsCopy.savePhoto)
+                            .font(.orbitControl.weight(.semibold))
+                            .padding(.horizontal, 22)
+                            .frame(height: 48)
+                            .background(.regularMaterial, in: Capsule())
+                    }
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.primary)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
+            }
+        }
+        .background(Color.black.ignoresSafeArea())
+        .environment(\.colorScheme, .dark)
+        .preferredColorScheme(.dark)
     }
 }
 

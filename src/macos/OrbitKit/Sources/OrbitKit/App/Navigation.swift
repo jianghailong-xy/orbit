@@ -42,6 +42,12 @@ public enum NavNode: Hashable, Sendable {
     case taskDetail(taskID: String)
     case taskListsDirectory
     case runnerDetail(runnerID: String)
+    /// One engine CLI on a runner — its version and updates, and each account it is signed into —
+    /// pushed from the Engines rows of that runner's record, onto whichever stack the record rides.
+    case runnerEngine(runnerID: String, engine: String)
+    /// A runner's name, pushed from its record's About › Name row: a page of its own, the way a
+    /// device's name is, instead of a text field and a Rename button on the record.
+    case runnerName(runnerID: String)
     case watchDetail(watchID: String)
     /// Settings' second layer: the runners list, pushed from Settings' own form. A runner's record is
     /// the third, and it is the *same* ``runnerDetail(runnerID:)`` frame the Runners section pushes —
@@ -179,10 +185,14 @@ public struct NavState: Equatable, Sendable {
         return id
     }
 
-    /// `AppModel.selectedRunnerID` — the runner record the Runners pane shows.
+    /// `AppModel.selectedRunnerID` — the runner record the Runners pane shows. A page the record
+    /// pushed over itself (an engine's, its name's) is still that runner's, so the list's highlight
+    /// stays on it.
     public var selectedRunnerID: String? {
-        guard case .runnerDetail(let id) = path.last else { return nil }
-        return id
+        switch path.last {
+        case .runnerDetail(let id)?, .runnerEngine(let id, _)?, .runnerName(let id)?: return id
+        default: return nil
+        }
     }
 
     /// `AppModel.selectedProjectID` — the project the Projects pane shows.
@@ -292,6 +302,20 @@ public struct NavState: Equatable, Sendable {
     public mutating func replaceTop(with node: NavNode) {
         withPath {
             if $0.isEmpty { $0.append(node) } else { $0[$0.count - 1] = node }
+        }
+    }
+
+    /// Down to the runner's record, off the pages it pushed over itself (an engine's, its name's).
+    /// Selecting a runner — or none — starts here: those pages were the old runner's, and replacing
+    /// only the top would leave its record under the new one.
+    public mutating func popRunnerPages() {
+        withPath { frames in
+            while let top = frames.last {
+                switch top {
+                case .runnerEngine, .runnerName: frames.removeLast()
+                default: return
+                }
+            }
         }
     }
 
