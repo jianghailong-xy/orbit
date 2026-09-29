@@ -1459,7 +1459,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `session` or `project_acceptance_*` object and none of the six preserved triggers/functions,
       // creates or replaces no function, trigger, enum or type — so it is not another writer of the
       // DONE fence — and carries no `ALTER TYPE` and no `DROP`. No INSERT or DELETE.
-      '0334_project_paused'],
+      '0334_project_paused',
+      // A profile photo of one's own (0335): one new table, `user_avatar`, keyed by the user it belongs
+      // to, with two CHECKs (the three image types, and a non-empty photo) and a foreign key to `user`
+      // whose `ON DELETE CASCADE` is a referential action on the new table's rows. Read against every
+      // claim above: no `task`, `session`, `project` or `project_acceptance_*` object is named, so the
+      // 0177 pair and every stored task and criterion row are out of its reach. No function, trigger or
+      // type is created, replaced or dropped — so it is not another writer of the DONE fence and names
+      // none of the six preserved objects. No INSERT, UPDATE or DELETE: the new table starts empty.
+      '0335_user_avatar'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

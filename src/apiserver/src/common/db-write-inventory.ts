@@ -1784,6 +1784,8 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "tasks/tasks.service.ts#removeComment", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "users/admin.controller.ts#deleteUser", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "users/admin.controller.ts#setRole", class: "ONE_ROW_BY_KEY", statements: 1 },
+  { at: "users/users.controller.ts#removeAvatar", class: "ONE_ROW_BY_KEY", statements: 1, note: "Removing one's profile photo (migration 0335): one DELETE by user_avatar's primary key, the caller's own user id — at most one row, and none when there was no photo, which is the same answer." },
+  { at: "users/users.controller.ts#setAvatar", class: "ONE_ROW_BY_KEY", statements: 1, note: "Setting one's profile photo (migration 0335): one upsert keyed by user_avatar's primary key, the caller's own user id, so a second photo takes the row over rather than writing another. Its foreign key to user(id) takes FOR KEY SHARE on the caller's user row, which only an admin deleting that account would conflict with; nothing else is locked." },
   { at: "users/users.controller.ts#updatePreferences", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "users/users.controller.ts#updateProfile", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "users/users.util.ts#createOrResetUser", class: "INSERT", statements: 2, note: "Two spellings, one write per call — update when the user exists, insert when not." },

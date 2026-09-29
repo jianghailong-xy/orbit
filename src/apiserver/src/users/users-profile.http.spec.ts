@@ -36,6 +36,7 @@ const prisma = {
         createdAt: new Date('2026-09-01T00:00:00Z'),
         preferences: {},
         role: 'MEMBER',
+        avatar: null,
       };
     },
   },
@@ -80,6 +81,7 @@ test('PATCH /users/me writes the trimmed name to the caller\'s own row, and only
 
   assert.equal(response.status, 200, `PATCH answered ${response.status}: ${text}`);
   assert.equal(JSON.parse(text).name, 'Hailong Jiang');
+  assert.equal(JSON.parse(text).avatarUpdatedAt, null, 'the answer is the account as `me` gives it');
   assert.equal(updates.length, 1);
   assert.deepEqual(updates[0].where, { id: USER_ID });
   // The email in the body never reaches the write: the sign-in is not this door's to change.
