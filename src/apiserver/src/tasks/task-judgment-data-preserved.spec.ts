@@ -1450,7 +1450,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // is not another writer of the DONE fence and names none of the six preserved objects. No
       // INSERT, UPDATE or DELETE.
       '0333_project_start_request',
-      // Which account a session runs on, and whether it was picked by hand (0334): three `ADD COLUMN`s on
+      // Which account a session runs on, and whether it was picked by hand (0336): three `ADD COLUMN`s on
       // `session` — two BOOLEAN NOT NULL DEFAULT false (`codex_account_pinned`, `claude_account_pinned`),
       // catalog-only as a constant default is, and one nullable TEXT with no default (`claude_account`,
       // 0330's `codex_account` exactly) — with no index, no CHECK and no foreign key, and nothing else.
@@ -1459,7 +1459,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // names no `project_acceptance_*` object and none of the six preserved triggers/functions, and
       // creates no function, trigger, enum or type — so it is not another writer of the DONE fence. No
       // INSERT, UPDATE or DELETE: nothing is backfilled.
-      '0334_session_account_choice'],
+      '0336_session_account_choice'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

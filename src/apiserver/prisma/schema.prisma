@@ -1014,10 +1014,10 @@ model Session {
   // (automaticCodexAccount). NULL follows the workspace's choice, as every session did before. Read
   // wherever a session's run is dispatched or its quota asked about, ahead of the workspace's.
   codexAccount         String?   @map("codex_account")
-  // That account was picked by hand (migration 0334): the session stays on it, and its usage limit
+  // That account was picked by hand (migration 0336): the session stays on it, and its usage limit
   // waits for the reset. False is Automatic — Orbit may move the session to an account with room.
   codexAccountPinned   Boolean   @default(false) @map("codex_account_pinned")
-  // Its Claude Code account, the sibling of codexAccount (migration 0334): `default` or a slot id,
+  // Its Claude Code account, the sibling of codexAccount (migration 0336): `default` or a slot id,
   // picked on the New Session screen or chosen by automaticClaudeAccount; NULL follows the
   // workspace's (Workspace.claudeAccount).
   claudeAccount        String?   @map("claude_account")

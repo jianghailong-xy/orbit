@@ -3,7 +3,7 @@
 -- a runner's accounts a session runs on, and whether it was picked by hand.
 --
 -- 0330 gave a session a Codex account of its own: picked on the New Session screen or, when nothing
--- picked one, the runner's account with the most room when it was created. A session its account's
+-- picked one, the account Automatic chose when it was created. A session its account's
 -- usage limit stops now moves to another account with room when its workspace leaves the account to
 -- Orbit — which must not happen to an account somebody picked by hand. `*_pinned` says which it is:
 -- false is Automatic (Orbit may move it), true stays put and waits for that account's reset.
