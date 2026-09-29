@@ -3955,6 +3955,11 @@ export class RunnerApiController {
       // A reserved L0 turn that cannot produce a comparison is unsettled, not a guessed task
       // failure. An ordinary failed model/shell turn retains the existing FAILED behaviour.
       const failTask = failSession && !!current.taskId && !taskAcceptanceTurn;
+      // What the turn failed with. A runtime that reports its failure as the turn's error rather
+      // than as a reply (Codex) has it sent on its own; an older runner puts the reply in its place,
+      // which for a turn that said anything before it died is the agent's last sentence — recorded
+      // as the "reason" on the session and on its task, it named something that was not a failure.
+      const failureText = dto.error || dto.result;
       // Keep this formerly post-transaction cleanup behind the same process fence. It is
       // valid for duplicate completions too, so apply it before the idempotent ack check.
       let branchMerged = dto.branchMerged;
@@ -4056,8 +4061,8 @@ export class RunnerApiController {
         && current.retryAt == null
         && !current.taskId
         && current.provider === AgentProvider.CODEX
-        && isUsageLimitErrorText(dto.result)
-          ? await this.codexUsageLimitRetry(tx, runner.id, current, dto.result!)
+        && isUsageLimitErrorText(failureText)
+          ? await this.codexUsageLimitRetry(tx, runner.id, current, failureText!)
           : null;
       const retryArmAt = keyRetryAt
         ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
@@ -4363,7 +4368,7 @@ export class RunnerApiController {
           // tear that process down and reclaim the slot (mirrors reaper forceFinalize).
           ...(failSession
             ? {
-                error: (acceptanceFailureReason ?? dto.result) || 'run failed',
+                error: (acceptanceFailureReason ?? failureText) || 'run failed',
                 finishedAt: new Date(),
                 cancelRequestedAt: new Date(),
                 // FAILED is where this session stops being live, so whatever it had running
@@ -4502,9 +4507,9 @@ export class RunnerApiController {
         taskReclaimed = await reclaimStalledTask(tx, current.taskId!, TaskStatus.FAILED, {
           sessionId,
           how: 'RUN_FAILED',
-          error: dto.result || 'run failed',
+          error: failureText || 'run failed',
         });
-        await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
+        await postRunFailureComment(tx, current.taskId!, failureText || 'run failed');
       }
       taskReclaimed = taskReclaimed || acceptanceTaskChanged;
       // Last, because it reads which turns are still live and everything above is what settled
