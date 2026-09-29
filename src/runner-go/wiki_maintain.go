@@ -94,8 +94,10 @@ const (
 	wikiMaintainQuoteMaxChars = 300
 	// How much of a repository's README tells the model what the repository is.
 	wikiMaintainAboutMaxChars = 300
-	// The whole run, as the maintenance session's Bash waits for it (wiki_maintenance_session.go).
-	wikiMaintainRunBudget = 3 * time.Hour
+	// The whole run, as the maintenance session's Bash waits for it (wiki_maintenance_session.go): a
+	// maintenance run, or a plan job's draft (wiki_plan_draft.go) — four steps of the local model and up to
+	// three gate rounds, which on a shared GPU takes longer than a maintenance run ever has.
+	wikiMaintainRunBudget = 5 * time.Hour
 )
 
 // wikiMaintainSystemPrompt is the demo's EXTRACT_SYSTEM: the whole system prompt an extraction call carries.
