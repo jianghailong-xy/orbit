@@ -721,13 +721,39 @@ func wikiPlanHeadingKey(text string) string {
 
 // hasDocSection reports whether a document of the sha has a heading that reads as section.
 func (r *wikiPlanRepo) hasDocSection(file, section string) bool {
-	want := wikiPlanHeadingKey(section)
-	if want == "" {
-		return false
+	return wikiPlanFindSection(r.headings[strings.TrimPrefix(strings.TrimSpace(file), "./")], section)
+}
+
+// wikiPlanHeadingPath is how a model names a subsection by the heading it sits under: «parent - child».
+var wikiPlanHeadingPath = regexp.MustCompile(`\s+(?:-|—|–|>|›|/)\s+`)
+
+// wikiPlanFindSection reports whether one of headings reads as section — or, when section names one by the
+// heading it sits under, «parent - child», whether one inside a heading that reads as parent reads as child.
+// A heading's own text may hold « - », so every place the name can be cut is tried.
+func wikiPlanFindSection(headings []wikiPlanHeading, section string) bool {
+	if want := wikiPlanHeadingKey(section); want != "" {
+		for _, h := range headings {
+			if wikiPlanHeadingKey(h.Text) == want {
+				return true
+			}
+		}
 	}
-	for _, h := range r.headings[strings.TrimPrefix(strings.TrimSpace(file), "./")] {
-		if wikiPlanHeadingKey(h.Text) == want {
-			return true
+	for _, cut := range wikiPlanHeadingPath.FindAllStringIndex(section, -1) {
+		parent := wikiPlanHeadingKey(section[:cut[0]])
+		if parent == "" {
+			continue
+		}
+		for i, h := range headings {
+			if wikiPlanHeadingKey(h.Text) != parent {
+				continue
+			}
+			end := i + 1
+			for end < len(headings) && headings[end].Level > h.Level {
+				end++
+			}
+			if wikiPlanFindSection(headings[i+1:end], section[cut[1]:]) {
+				return true
+			}
 		}
 	}
 	return false

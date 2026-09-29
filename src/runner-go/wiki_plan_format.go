@@ -228,7 +228,6 @@ func wikiPlanSplitNames(text string) []string {
 var (
 	wikiPlanSectionLine = regexp.MustCompile(`^#{2,5}\s*(\d+)[.、]\s*(.+?)\s*[|｜]\s*([A-Za-z]+)\s*[|｜]\s*(.+?)\s*$`)
 	wikiPlanDocHeading  = regexp.MustCompile(`^#{2,4}\s*(\d+\.\d+)\s*(.*)$`)
-	wikiPlanProjects    = regexp.MustCompile(`「([^」]+)」`)
 	wikiPlanDate        = regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)
 )
 
@@ -403,15 +402,83 @@ func wikiPlanDocSourcesOf(text string) []wikiPlanDocSource {
 	}
 	var out []wikiPlanDocSource
 	for _, section := range regexp.MustCompile(`\s*[、,，;；]\s*§\s*`).Split(sections, -1) {
-		section = strings.Trim(strings.TrimSpace(section), "（）()")
-		s := section
+		s := wikiPlanUnwrap(section)
+		if wikiPlanWholeDoc[s] {
+			out = append(out, wikiPlanDocSource{Path: paths[0]})
+			continue
+		}
 		out = append(out, wikiPlanDocSource{Path: paths[0], Section: &s})
 	}
 	return out
 }
 
-// wikiPlanCodeSourcesOf reads `src/x.go: a(), B.c`.
+// wikiPlanWholeDoc are the names a model gives the whole of a document after `§`: no section.
+var wikiPlanWholeDoc = map[string]bool{"正文": true, "全文": true, "全篇": true, "整篇": true}
+
+// wikiPlanUnwrap takes off parentheses a model put around a whole name, and one left unmatched at either
+// end — never the closing one of a name that ends in its own, as «4. 数据模型（新表 `share_link`）» does.
+func wikiPlanUnwrap(text string) string {
+	opening := func(r rune) bool { return r == '（' || r == '(' }
+	closing := func(r rune) bool { return r == '）' || r == ')' }
+	for {
+		runes := []rune(strings.TrimSpace(text))
+		if len(runes) == 0 {
+			return ""
+		}
+		depth, opens, closes, wraps := 0, 0, 0, opening(runes[0])
+		for i, r := range runes {
+			switch {
+			case opening(r):
+				depth++
+				opens++
+			case closing(r):
+				depth--
+				closes++
+				if depth == 0 && i < len(runes)-1 {
+					wraps = false
+				}
+			}
+		}
+		first, last := runes[0], runes[len(runes)-1]
+		switch {
+		case closing(last) && closes > opens:
+			text = string(runes[:len(runes)-1])
+		case opening(first) && opens > closes:
+			text = string(runes[1:])
+		case wraps && closing(last) && depth == 0:
+			text = string(runes[1 : len(runes)-1])
+		default:
+			return string(runes)
+		}
+	}
+}
+
+// wikiPlanCodeGroup is where another `path: symbols` begins on the same line, after a `；`: a path, then
+// a colon. What follows a `；` without one is more symbols of the path before it.
+var wikiPlanCodeGroup = regexp.MustCompile(`^[^\s:：,，、]+(?:/|\.[A-Za-z0-9]+)[^\s:：,，、]*\s*[:：]`)
+
+// wikiPlanCodeSourcesOf reads `src/x.go: a(), B.c`, and several of them on one line, `；` between them.
 func wikiPlanCodeSourcesOf(text string) []wikiPlanCodeSource {
+	var groups []string
+	for _, part := range strings.FieldsFunc(text, func(r rune) bool { return r == ';' || r == '；' }) {
+		part = strings.TrimSpace(part)
+		switch {
+		case part == "":
+		case len(groups) == 0 || wikiPlanCodeGroup.MatchString(part):
+			groups = append(groups, part)
+		default:
+			groups[len(groups)-1] += "、" + part
+		}
+	}
+	var out []wikiPlanCodeSource
+	for _, group := range groups {
+		out = append(out, wikiPlanCodeGroupOf(group)...)
+	}
+	return out
+}
+
+// wikiPlanCodeGroupOf reads one `src/x.go: a(), B.c`.
+func wikiPlanCodeGroupOf(text string) []wikiPlanCodeSource {
 	head, rest := text, ""
 	if m := regexp.MustCompile(`^(.*?\S)\s*[:：]\s+(.*)$`).FindStringSubmatch(text); m != nil {
 		head, rest = m[1], m[2]
@@ -431,12 +498,32 @@ func wikiPlanCodeSourcesOf(text string) []wikiPlanCodeSource {
 	return out
 }
 
+// wikiPlanProjectsOf reads project titles, each in 「」 — a 「」 inside one is part of its title, as in
+// 「把「什么算完成」从项目末尾搬到开工前」 — or, without them, between 、,，.
 func wikiPlanProjectsOf(text string) []string {
-	if m := wikiPlanProjects.FindAllStringSubmatch(text, -1); len(m) > 0 {
-		var out []string
-		for _, p := range m {
-			out = append(out, strings.TrimSpace(p[1]))
+	var out []string
+	var title strings.Builder
+	depth := 0
+	for _, r := range text {
+		switch {
+		case r == '「':
+			if depth > 0 {
+				title.WriteRune(r)
+			}
+			depth++
+		case r == '」' && depth > 0:
+			depth--
+			if depth > 0 {
+				title.WriteRune(r)
+			} else if t := strings.TrimSpace(title.String()); t != "" {
+				out = append(out, t)
+				title.Reset()
+			}
+		case depth > 0:
+			title.WriteRune(r)
 		}
+	}
+	if len(out) > 0 {
 		return out
 	}
 	return wikiPlanSplitNames(text)

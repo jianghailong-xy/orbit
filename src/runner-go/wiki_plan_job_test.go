@@ -737,6 +737,11 @@ func TestWikiPlanReferencesAreHeldToTheTreeAtItsSha(t *testing.T) {
 		{"docs/architecture.md", "execution model", true},
 		{"docs/wiki-design.md", "这不是一个章节", false},
 		{"docs/architecture.md", "Deployment", false},
+		// A subsection named by the heading it sits under, as a model reads the documents' list.
+		{"docs/wiki-design.md", "4. 写路径 - 4.4 锚点", true},
+		{"docs/wiki-design.md", "写路径 > 锚点", true},
+		{"docs/wiki-design.md", "4.4 锚点 - 4. 写路径", false},
+		{"docs/architecture.md", "Execution model - Realtime and recovery", false},
 	} {
 		if got := repo.hasDocSection(c.file, c.section); got != c.want {
 			t.Errorf("hasDocSection(%s, %s) = %v, want %v", c.file, c.section, got, c.want)
@@ -1110,6 +1115,31 @@ func TestWikiPlanReadsTheCompactLineFormat(t *testing.T) {
 	if c == nil || !reflect.DeepEqual(c.Projects, []string{"甲", "乙"}) || c.Since != "2026-09-01" || c.Until != "" ||
 		!reflect.DeepEqual(c.EntryKinds, []string{"pitfall", "decision"}) || c.Evidence != "原话；其余" || !reflect.DeepEqual(s.Stray, []string{"附注：不在格式里"}) {
 		t.Errorf("a session condition: %+v, stray %v", c, s.Stray)
+	}
+
+	// As the real model wrote them: a heading that ends in its own parenthesis, one it wrapped in them, the
+	// whole of a document, two files' symbols on one line, and a project whose title has 「」 in it.
+	_, sections, _ = parseWikiPlanDocBody("### 1.1 概览\n读者：甲：读完能改\n" +
+		"### 1. 模型 | concepts | 300\n讲什么：数据模型。\n- 文档：docs/a.md § 4. 数据模型（新表 `share_link`）、§ （5. 接口）\n- 文档：docs/b.md § 正文\n" +
+		"- 代码：src/a.ts: x; src/b.ts: y, z；w\n- 会话：项目「把「什么算完成」从项目末尾搬到开工前」「甲」；要找：原话\n")
+	if len(sections) != 1 {
+		t.Fatalf("sections: %+v", sections)
+	}
+	s = sections[0]
+	if len(s.Docs) != 3 || s.Docs[0].Section == nil || *s.Docs[0].Section != "4. 数据模型（新表 `share_link`）" ||
+		s.Docs[1].Section == nil || *s.Docs[1].Section != "5. 接口" || s.Docs[2].Path != "docs/b.md" || s.Docs[2].Section != nil {
+		t.Errorf("the documents' sections: %+v", s.Docs)
+	}
+	if !reflect.DeepEqual(s.Code, []wikiPlanCodeSource{{Path: "src/a.ts", Symbols: []string{"x"}}, {Path: "src/b.ts", Symbols: []string{"y", "z", "w"}}}) {
+		t.Errorf("the code: %+v", s.Code)
+	}
+	if s.Sessions == nil || !reflect.DeepEqual(s.Sessions.Projects, []string{"把「什么算完成」从项目末尾搬到开工前", "甲"}) {
+		t.Errorf("the projects: %+v", s.Sessions)
+	}
+	for in, want := range map[string]string{"（4. 写路径）": "4. 写路径", "写路径）": "写路径", "（写路径": "写路径", "（a）（b）": "（a）（b）", "Data model (Prisma)": "Data model (Prisma)"} {
+		if got := wikiPlanUnwrap(in); got != want {
+			t.Errorf("wikiPlanUnwrap(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 
