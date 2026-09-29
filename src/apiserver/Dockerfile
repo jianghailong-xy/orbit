@@ -29,6 +29,19 @@ RUN npm run build -w @orbit/shared \
  && npm run prisma:generate -w @orbit/apiserver \
  && npm run build -w @orbit/apiserver
 
+# ───────────────────────────────── codex ─────────────────────────────────
+# The official codex CLI: "Sign in with ChatGPT" for a Codex pool of one's own runs
+# `codex login --device-auth` on this server (providers/codex-login.service.ts). Pinned to the
+# version the runners run. npm is only how it is fetched: the package's own `codex` is a Node
+# wrapper that starts the native binary as a child of its own, and the sign-in ends an attempt with
+# SIGKILL, which the wrapper cannot pass on — the native CLI would outlive it, still waiting on the
+# code. So what ships is the platform package's standalone layout (the one a runner's standalone
+# install unpacks), and `codex` on PATH is its native binary. No match here fails the build: npm
+# only warns when an optional dependency — which is how the platform package arrives — is missing.
+FROM node:26-slim AS codex
+RUN npm install -g @openai/codex@0.158.0 \
+ && mv /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*-unknown-linux-musl /opt/codex
+
 # ──────────────────────────────── runtime ────────────────────────────────
 FROM node:26-slim AS runtime
 WORKDIR /app
@@ -36,6 +49,19 @@ ENV NODE_ENV=production
 
 # Same as the build stage: the runtime needs libssl's shared objects, which the base image ships,
 # not the `openssl` CLI.
+
+# The codex CLI (see the codex stage), and the roots it trusts: the native binary verifies TLS
+# against the system's CA certificates, which this base image does not have, and without them
+# `codex login --device-auth` dies on its first request to auth.openai.com. They are written out
+# of the Mozilla store Node itself carries rather than installed with apt, so this image still
+# builds without a Debian mirror. `--version` proves the binary runs here; what it leaves in
+# ~/.codex is removed.
+COPY --from=codex /opt/codex /opt/codex
+RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex \
+ && mkdir -p /etc/ssl/certs \
+ && node -p "require('tls').rootCertificates.join('\n')" > /etc/ssl/certs/ca-certificates.crt \
+ && codex --version \
+ && rm -rf /root/.codex
 
 # node_modules carries the generated Prisma client + the prisma CLI used at boot. WHICH tree npm
 # puts them in is a resolution outcome and not a contract: 7.9.1 kept `prisma`/`@prisma/client` in
