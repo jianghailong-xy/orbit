@@ -46,8 +46,8 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// Nil for anything else.
     public let note: String?
     /// The runner's own accounts of this engine, when it has signed in more than one: offered under
-    /// its row, so a session can start on another account than its workspace's. Codex only — the
-    /// engine a session can be started on an account of (`Session.codexAccount`).
+    /// its row, so a session can start on another account than its workspace's. Codex and Claude —
+    /// the engines whose CLI keeps a login per directory (`Session.codexAccount`, `.claudeAccount`).
     public let accounts: [AccountChoice]?
     public var id: String { slug }
 
@@ -76,7 +76,8 @@ public struct AccountChoice: Equatable, Sendable, Identifiable {
     /// `default`, or the id of a slot the runner added — what the session is created with.
     public let id: String
     public let label: String
-    /// Its own quota's first window, compactly: "5h 100%", "Weekly 0%". Nil when none is reported.
+    /// Its own quota's tightest window — the one closest to its limit, which is the one that stops it —
+    /// compactly: "5h 100%", "Weekly 0%". Nil when none is reported.
     public let quota: String?
     /// That window is at least 90% spent — where the composer's quota gauge turns amber too.
     public let nearLimit: Bool
@@ -96,21 +97,32 @@ public struct AccountChoice: Equatable, Sendable, Identifiable {
 public enum SessionProviderChoices {
     /// The runner's accounts of an engine as picker rows, each with its own quota — nil unless it has
     /// signed in more than one (web `providerChoices`).
-    static func accountChoices(_ accounts: [RunnerEngineAccount]?, usage: PlanUsageSnapshot?) -> [AccountChoice]? {
+    public static func accountChoices(_ accounts: [RunnerEngineAccount]?, usage: PlanUsageSnapshot?) -> [AccountChoice]? {
         guard let accounts, accounts.count >= 2 else { return nil }
         return accounts.map { account in
-            let row = account.auth == "yes"
-                ? CodexAccounts.snapshot(usage, account: account.id)?.rows.first : nil
-            let label = row.map { r in
-                r.label.hasSuffix(" limit") ? String(r.label.dropLast(" limit".count)) : r.label
+            // The window closest to its limit: a Claude login's 5-hour window can read 0% while its
+            // weekly one is spent, and the first window alone would say it has room.
+            let rows = account.auth == "yes" ? (CodexAccounts.snapshot(usage, account: account.id)?.rows ?? []) : []
+            let row = rows.reduce(nil as PlanUsageRow?) { tightest, row in
+                tightest.map { row.percent > $0.percent ? row : $0 } ?? row
             }
             return AccountChoice(
                 id: account.id,
                 label: account.id == CodexAccounts.defaultID ? "Default" : (account.name ?? "Account \(account.id)"),
-                quota: row.map { r in "\(label ?? r.label) \(r.percent)%" },
+                quota: row.map { r in "\(compactWindowLabel(r.label)) \(r.percent)%" },
                 nearLimit: (row?.window.utilization ?? 0) >= 90,
                 unavailable: account.auth == "no" ? "Not signed in" : nil)
         }
+    }
+
+    /// A window's name short enough for a row beside an account's: "5h", "Weekly", "Weekly Opus" —
+    /// Codex's "5h limit" and Claude's "5-hour limit" and "Weekly · all models" alike (web
+    /// `compactWindowLabel`).
+    static func compactWindowLabel(_ label: String) -> String {
+        var short = label.hasSuffix(" limit") ? String(label.dropLast(" limit".count)) : label
+        if short == "5-hour" { short = "5h" }
+        if short.hasSuffix(" · all models") { short = String(short.dropLast(" · all models".count)) }
+        return short.replacingOccurrences(of: " · ", with: " ")
     }
 
     /// Exactly the slugs a runner can sign into (`LoginEngine` in @orbit/shared). `opencode` is a
@@ -174,7 +186,7 @@ public enum SessionProviderChoices {
                 modelLabel: modelLabel(for: slug, configured: configured, catalog: catalog),
                 unavailable: blocker,
                 fixEngine: blocker == nil ? nil : slug,
-                accounts: slug == "codex" && blocker == nil
+                accounts: (slug == "codex" || slug == "claude") && blocker == nil
                     ? accountChoices(health(slug)?.accounts, usage: planUsage?.snapshot(for: slug))
                     : nil)
         }

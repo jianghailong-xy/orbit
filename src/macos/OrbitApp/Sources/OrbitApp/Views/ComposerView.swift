@@ -413,11 +413,12 @@ struct ComposerView: View {
                     .accessibilityLabel(help)
             }
             if let usage = console.planUsage {
-                // Which of the runner's Codex accounts this quota is, named in the gauge's detail
-                // rather than beside it, where a phone's footer has no room for an email (web parity).
+                // Which of the runner's Codex or Claude accounts this quota is, named in the gauge's
+                // detail rather than beside it, where a phone's footer has no room for an email (web
+                // parity).
                 PlanUsageIndicator(usage: usage,
-                                   account: console.codexAccountLabel.map {
-                                       PlanUsageAccount(label: $0, note: console.codexAccountNote)
+                                   account: console.accountLabel.map {
+                                       PlanUsageAccount(label: $0, note: console.accountNote)
                                    })
             }
             // Context stays visible even before the first turn reports tokens — a New Session
@@ -555,12 +556,15 @@ struct ComposerView: View {
     /// menu does, whichever way the system opens it.
     private var modelMenu: some View {
         Menu {
-            // Only when there is somewhere to go: a second account with the same vendor, or
-            // another endpoint on the same CLI. One entry means no switch is possible, and the row
-            // is left out rather than shown inert.
-            if console.providerSwitchChoices.count > 1 {
+            // Only when there is somewhere to go: a second account with the same vendor, another
+            // endpoint on the same CLI, or another of the runner's accounts of this engine. One entry
+            // means no switch is possible, and the row is left out rather than shown inert.
+            if console.providerSwitchChoices.count > 1 || console.accountRowsOffered {
                 Menu {
                     ForEach(console.providerSwitchChoices) { choice in
+                        // With its accounts listed under it, the tick is on the account (or on
+                        // Automatic) rather than on the engine.
+                        let listsAccounts = choice.slug == console.accountEngine && console.accountRowsOffered
                         // A choice this runner can't run stays listed and carries its reason
                         // (web parity): hiding it turns "not signed in on this machine" into
                         // "Orbit lost my provider". The running one is exempt — it is the row's
@@ -583,9 +587,10 @@ struct ComposerView: View {
                         } label: {
                             menuItemLabel(
                                 blocked ? "\(choice.label) — \(reason)\(fix)" : choice.label,
-                                selected: choice.slug == console.provider)
+                                selected: choice.slug == console.provider && !listsAccounts)
                         }
                         .disabled(blocked && !fixable)
+                        if listsAccounts { accountItems(choice.slug) }
                     }
                 } label: {
                     Text("Provider")
@@ -826,6 +831,35 @@ struct ComposerView: View {
     /// text starts one checkmark to the right of every sibling's, which is what the phone report
     /// showed. Web parity too — `.scope-menu-row`'s check sits in a trailing slot.
     @ViewBuilder
+    /// The runner's accounts of the session's engine, right under it in the Provider submenu (web
+    /// parity): Automatic first where its workspace leaves the account to Orbit, then each account with
+    /// its own quota. A pick moves the session there (`ConsoleModel.switchAccount`); a signed-out
+    /// account is a request for its sign-in, as a provider row in that state is.
+    @ViewBuilder
+    private func accountItems(_ engine: String) -> some View {
+        if console.automaticOffered(engine) {
+            Button {
+                Task { await console.switchAccount(CodexAccounts.automaticID) }
+            } label: {
+                menuItemLabel("Automatic · Most room", selected: console.sessionAutomatic)
+            }
+        }
+        ForEach(console.accountChoices) { account in
+            Button {
+                if account.unavailable != nil {
+                    if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                } else {
+                    Task { await console.switchAccount(account.id) }
+                }
+            } label: {
+                menuItemLabel(
+                    account.unavailable.map { "\(account.label) — \($0), sign in →" }
+                        ?? account.quota.map { "\(account.label) · \($0)" } ?? account.label,
+                    selected: !console.sessionAutomatic && account.id == console.account(for: engine))
+            }
+        }
+    }
+
     private func menuItemLabel(_ text: String, selected: Bool) -> some View {
         HStack(spacing: 8) {
             Text(text)

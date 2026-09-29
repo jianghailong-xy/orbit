@@ -9,10 +9,17 @@ import Foundation
 public enum CodexAccounts {
     /// The account every runner has: the CODEX_HOME its own environment selects.
     public static let defaultID = "default"
+    /// What `PATCH /sessions/:id/account` takes to put a session back on Automatic.
+    public static let automaticID = "automatic"
 
     /// Variables that mean a run brings a key of its own — it then spends no account's subscription
     /// (shared `OWN_CREDENTIAL_KEYS`) — or a CODEX_HOME of its own, which already says where it runs.
     private static let decidingEnvKeys = ["CODEX_HOME", "CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL"]
+    /// Claude Code's: a CLAUDE_CONFIG_DIR of its own, or a key or token of its own (shared
+    /// `OWN_CREDENTIAL_KEYS`).
+    private static let claudeDecidingEnvKeys = [
+        "CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN",
+    ]
 
     /// One account's own quota: Default's is the snapshot's own windows, any other account's is its
     /// entry under `accounts`. Nil when the runner reports none for that account.
@@ -40,13 +47,24 @@ public enum CodexAccounts {
         return wanted
     }
 
-    /// Whether a new session on `agent` starts on Automatic: its workspace picked no account, its env
-    /// selects no CODEX_HOME and no key of its own, and the runner has more than one account to choose
-    /// between (the server's `automaticCodexAccount`).
-    public static func automaticOffered(agent: Agent?, accounts: [RunnerEngineAccount]?) -> Bool {
-        guard (accounts?.count ?? 0) >= 2, agent?.codexAccount?.isEmpty ?? true else { return false }
-        let env = agent?.env ?? [:]
-        return !decidingEnvKeys.contains { key in
+    /// Whether a new session of `engine` (`codex` or `claude`) on `agent` starts on Automatic: its
+    /// workspace picked no account of that engine, its env selects no other config directory and no
+    /// key of its own, and the runner has more than one account to choose between (the server's
+    /// `automaticAccount`). The same answer says whether a session there is on Automatic unless an
+    /// account was picked for it by hand.
+    public static func automaticOffered(engine: String = "codex", agent: Agent?,
+                                        accounts: [RunnerEngineAccount]?) -> Bool {
+        automaticOffered(engine: engine, pick: engine == "claude" ? agent?.claudeAccount : agent?.codexAccount,
+                         env: agent?.env, accounts: accounts)
+    }
+
+    /// The same question asked of the workspace's `pick` for that engine and its `env` — what a
+    /// session's detail carries of its workspace (`SessionAgentRef`).
+    public static func automaticOffered(engine: String, pick: String?, env: [String: String]?,
+                                        accounts: [RunnerEngineAccount]?) -> Bool {
+        guard (accounts?.count ?? 0) >= 2, pick?.isEmpty ?? true else { return false }
+        let env = env ?? [:]
+        return !(engine == "claude" ? claudeDecidingEnvKeys : decidingEnvKeys).contains { key in
             !(env[key]?.trimmingCharacters(in: .whitespaces).isEmpty ?? true)
         }
     }
