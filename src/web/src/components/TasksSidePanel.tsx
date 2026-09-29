@@ -34,6 +34,7 @@ import type {
 import { api, clearToken, logoutSession } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
 import {
+  avatarQuery,
   meQuery,
   openProjectsQuery,
   sessionQuery,
@@ -284,6 +285,8 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // The signed-in user, for the footer avatar + name. Shares its key with the account
   // page (and the BootGate pre-warm) so it reads straight from cache.
   const me = useQuery(meQuery());
+  // The account's photo, when it has one — nothing is fetched until `me` names a version.
+  const avatar = useQuery(avatarQuery(me.data?.avatarUpdatedAt));
   const { mode, setMode } = useThemeMode();
   // The Wiki's amber count: the proposals waiting for the owner, summed over every space (a wiki
   // belongs to the account, and Review's own page asks across all of them). Its own key root, so the
@@ -801,6 +804,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
           <div className="tp-user-trigger">
             <Avatar
               size={32}
+              src={avatar.data}
               icon={<UserOutlined />}
               style={{ background: 'var(--brand)', flex: 'none' }}
             />

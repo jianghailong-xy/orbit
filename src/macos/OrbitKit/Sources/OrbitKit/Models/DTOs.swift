@@ -12,6 +12,9 @@ public struct User: Codable, Equatable, Sendable, Identifiable {
     // `GET /users/me` also returns these; login's user payload omits them (→ nil).
     public let createdAt: String?
     public let preferences: UserPreferences?
+    /// When the account's profile photo was set — the version it is fetched and cached by
+    /// (`GET /users/me/avatar`). Nil while there is none, and in login's user payload.
+    public let avatarUpdatedAt: String?
 }
 
 public struct LoginRequest: Codable, Sendable {

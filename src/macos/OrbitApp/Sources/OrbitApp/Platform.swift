@@ -40,6 +40,38 @@ extension PlatformImage {
         return pngData()
         #endif
     }
+
+    /// A profile photo as it is sent: the middle square of this image, scaled down to at most `side`
+    /// pixels, as a JPEG on white. The server keeps what it is given, so the size is decided here.
+    func orbitAvatarJPEG(side: Int = 512) -> Data? {
+        #if os(macOS)
+        guard let source = cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+        #elseif os(iOS)
+        // Redrawn first, so a camera photo's orientation is in its pixels rather than its metadata.
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = scale
+        let upright = UIGraphicsImageRenderer(size: size, format: format).image { _ in draw(at: .zero) }
+        guard let source = upright.cgImage else { return nil }
+        #endif
+        let edge = min(source.width, source.height)
+        let crop = CGRect(x: (source.width - edge) / 2, y: (source.height - edge) / 2, width: edge, height: edge)
+        guard edge > 0, let square = source.cropping(to: crop) else { return nil }
+        let out = min(edge, side)
+        guard let context = CGContext(data: nil, width: out, height: out, bitsPerComponent: 8, bytesPerRow: 0,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        let frame = CGRect(x: 0, y: 0, width: out, height: out)
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(frame)
+        context.interpolationQuality = .high
+        context.draw(square, in: frame)
+        guard let scaled = context.makeImage() else { return nil }
+        #if os(macOS)
+        return NSBitmapImageRep(cgImage: scaled).representation(using: .jpeg, properties: [.compressionFactor: 0.85])
+        #elseif os(iOS)
+        return UIImage(cgImage: scaled).jpegData(compressionQuality: 0.85)
+        #endif
+    }
 }
 
 /// Copy plain text to the system pasteboard — `NSPasteboard` on macOS, `UIPasteboard` on iOS.

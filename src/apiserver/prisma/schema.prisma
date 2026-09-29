@@ -287,6 +287,7 @@ model User {
   clientVersions   ClientVersion[] // which build of each client this user is running
   mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
   agents           Agent[] // Agent identities this user owns (tenant scope)
+  avatar           UserAvatar? // the profile photo, when one is set (0335)
 
   /// Presses of Run Now this user made, and the receipts of their requests (0137).
   runRequests       TaskRunRequest[]
@@ -1851,6 +1852,23 @@ model SessionScheduledWakeup {
 // over HTTP regardless of backend — so DB storage is the simplest option that also
 // survives `upgrade`. Bytes are stored raw (not base64); callers base64-encode only at
 // the claude/runner boundary. Bounded by a size cap + MIME allowlist (attachments.media.ts).
+/// A user's profile photo (0335): the image every client draws where the account's avatar is, in
+/// place of the name's first letter. The client crops it square and scales it down before sending;
+/// the server keeps the bytes whole, typed by what it read off them. One per user, replaced whole;
+/// removing the photo deletes the row, and so does deleting the user. Its own table rather than
+/// columns on `user`, which every sign-in and token refresh reads.
+model UserAvatar {
+  userId    String   @id @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  // image/jpeg | image/png | image/webp, read off the bytes (user_avatar_mime_type_check).
+  mimeType  String   @map("mime_type")
+  data      Bytes
+  // When this photo was set: the version a client fetches it by (`avatarUpdatedAt` on `me`).
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("user_avatar")
+}
+
 model Attachment {
   id        String            @id @default(uuid(7)) @db.Uuid
   ownerId   String            @map("owner_id") @db.Uuid // tenant scope; reads always filter by it
