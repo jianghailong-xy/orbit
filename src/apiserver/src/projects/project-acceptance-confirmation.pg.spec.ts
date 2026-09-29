@@ -722,12 +722,20 @@ test('the owner confirms one version of a project’s acceptance standard set, a
       'a confirmation that started nothing told the coordinator again');
   });
 
-  // ═══ (8) the Automatic switch is the other press that starts it ════════════════════════════════
+  // ═══ (8) the older Automatic switch is the other press that sets a started project moving ═══════
 
   await t.test('(8) switching the project on by hand tells its coordinator too, and only then', async () => {
     const project = await coordinated('switched', null);
     const switchTo = (coordinatorEnabled: boolean) =>
       switching.update(ownerId, project.id, { coordinatorEnabled } as never);
+    // A project its owner started whose Automatic is off, as an older client leaves it: paused by
+    // that switch (migration 0334's backfill writes exactly this). Only a started project moves
+    // by itself, so only for one does the switch coming on make Orbit start anything — the
+    // unstarted twin at the end of this case is told nothing.
+    await prisma.project.update({
+      where: { id: project.id },
+      data: { startedAt: new Date(), pausedAt: new Date(), pausedReason: 'LEGACY_AUTOMATIC_OFF' },
+    });
 
     // Off → on: told once, in the switch's own words and under the revision the switch wrote.
     await switchTo(true);
@@ -777,5 +785,13 @@ test('the owner confirms one version of a project’s acceptance standard set, a
     assert.equal(told[2].client_turn_id, projectStartedTurnId(project.id, {
       by: 'SWITCH', configRevision: '4', at: new Date(),
     }));
+
+    // A project nobody has started does not move when the switch comes on — it waits for its start
+    // card — so its coordinator is not told that Orbit now starts its tasks.
+    const unstarted = await coordinated('switched-unstarted', null);
+    await switching.update(ownerId, unstarted.id, { coordinatorEnabled: true } as never);
+    assert.deepEqual(await authorization(unstarted.id), { enabled: true, revision: '1' });
+    assert.equal((await turns(unstarted.sessionId)).length, 1,
+      'switching on a project nobody started told its coordinator its tasks now start by themselves');
   });
 });

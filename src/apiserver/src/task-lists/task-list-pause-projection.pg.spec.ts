@@ -421,6 +421,8 @@ test('(2b) both automatic candidate sweeps select nothing from a paused list, wh
         title: `o2b-${RUN}`,
         coordinatorEnabled: true,
         maxConcurrentTasks: 8,
+        // Started: only a started, unpaused project moves by itself (project-pause-dispatch.ts).
+        startedAt: new Date(),
       },
     });
     await establishProjectContractForPgTest(s.db, ids.ownerId, projectId, `o2b-${RUN}`);

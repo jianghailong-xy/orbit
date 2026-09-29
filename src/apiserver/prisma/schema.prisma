@@ -2055,6 +2055,17 @@ model Project {
   /// their first task-work session, or — switched on with neither — their creation.
   startedAt DateTime? @map("started_at") @db.Timestamptz(3)
 
+  /// When the project was paused (migration 0334). Null: not paused. A project moves by itself only
+  /// while it is started and not paused: while this is set nothing starts its tasks automatically,
+  /// an agent's `task_start` is refused, and nothing is merged into main by the Automatic setting
+  /// (`tasks/project-pause-dispatch.ts`). The owner's own Run is not held.
+  pausedAt DateTime? @map("paused_at") @db.Timestamptz(3)
+  /// Who paused it, set and cleared with `pausedAt`: 'OWNER' (Pause project) or
+  /// 'LEGACY_AUTOMATIC_OFF' (a client that only knows the Automatic switch turned it off, and whose
+  /// switching it back on lifts this pause and no other). 0334's CHECK holds the set, and holds a
+  /// pause to a started project.
+  pausedReason String? @map("paused_reason")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

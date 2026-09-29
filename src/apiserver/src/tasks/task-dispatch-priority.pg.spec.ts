@@ -73,11 +73,12 @@ interface Stack {
   scans: ScanLog;
 }
 
-/** The dependency scan: the sweep's one tagged statement that joins the disk columns and no project. */
+/** The dependency scan: the sweep's tagged statement that joins the disk columns and does not count
+ *  what each project has occupied (the independent scan's `WITH occupied`). */
 function isDependencyScan(args: unknown[]): boolean {
   try {
     const { text } = renderRawQuery(args);
-    return text.includes('work_dir_free_bytes') && !text.includes('coordinator_enabled');
+    return text.includes('work_dir_free_bytes') && !text.includes('WITH occupied');
   } catch {
     return false;
   }
