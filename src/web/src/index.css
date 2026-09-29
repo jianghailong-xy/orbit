@@ -13607,6 +13607,25 @@ button.chat-jump-start:hover {
 .ant-dropdown-menu-item.composer-provider-fix .scope-menu-row {
   color: var(--text-3);
 }
+/* A Codex account under Codex in that submenu: indented under its engine, its own quota on the right
+   where the other rows say their value, orange once a window is nearly spent. Names are often emails,
+   so the name gives way before the quota does. */
+.ant-dropdown-menu-item.composer-account-row .scope-menu-row {
+  padding-left: 14px;
+}
+.composer-account-row-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-account-row .scope-menu-value-text {
+  max-width: none;
+}
+.composer-account-row.near-limit .scope-menu-value {
+  color: var(--warning);
+}
 .np-row.on {
   background: var(--brand-tint);
   color: var(--text-1);
