@@ -18,15 +18,19 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
 import {
+  ConfirmedCriterionVersion,
   RecordedStandardSetConfirmation,
   StandardSetConfirmationStanding,
+  StandardSetConfirmationView,
   StandardSetVersion,
   StatedAcceptanceCriterion,
+  criteriaChangesSinceConfirmed,
   criteriaFromDefinitions,
   standardSetConfirmationStanding,
   standardSetVersion,
 } from './project-acceptance';
 import { refuseSessionAuthoredConfirmation } from './coordinator-authority';
+import { VERIFICATION_METHOD_RUNGS } from './criteria-edit-classification';
 import { storeDerivedProjectStatus } from './project-done-derived';
 import { defaultStartLine, startProjectLine } from './project-integration-line';
 import { tellCoordinatorProjectStarted } from './project-started';
@@ -180,20 +184,23 @@ export class ProjectAcceptanceService {
    * now, the newest confirmation on record, and whether the second names the first. That is the
    * whole of "a confirmation stops counting once the criteria move" — there is no flag an edit
    * has to remember to clear, so there is no way for an edit to forget.
+   *
+   * What changed since that confirmation is taken from the same two reads (`confirmationView`), so
+   * a CONFIRMED standing never has a change beside it.
    */
   async standardSetConfirmation(
     ownerId: string,
     projectId: string,
-  ): Promise<StandardSetConfirmationStanding> {
+  ): Promise<StandardSetConfirmationView> {
     await this.assertProject(ownerId, projectId);
     const stated = await ProjectAcceptanceService.statedCriteria(
       this.prisma as unknown as Prisma.TransactionClient,
       projectId,
     );
-    return standardSetConfirmationStanding(
+    return this.confirmationView(stated, standardSetConfirmationStanding(
       standardSetVersion(stated),
       await this.latestConfirmation(projectId),
-    );
+    ));
   }
 
   /**
@@ -236,15 +243,16 @@ export class ProjectAcceptanceService {
     projectId: string,
     input: { criteriaDigest: string },
     actingSessionId?: string,
-  ): Promise<StandardSetConfirmationStanding> {
+  ): Promise<StandardSetConfirmationView> {
     const refusal = refuseSessionAuthoredConfirmation(actingSessionId);
     if (refusal) throw new ForbiddenException(refusal);
     const { startedAt } = await this.assertProject(ownerId, projectId);
 
-    const currentVersion = standardSetVersion(await ProjectAcceptanceService.statedCriteria(
+    const stated = await ProjectAcceptanceService.statedCriteria(
       this.prisma as unknown as Prisma.TransactionClient,
       projectId,
-    ));
+    );
+    const currentVersion = standardSetVersion(stated);
     if (input.criteriaDigest !== currentVersion.digest) {
       throw criteriaVersionMoved(currentVersion.digest);
     }
@@ -267,10 +275,10 @@ export class ProjectAcceptanceService {
       });
       if (started) {
         await this.afterStart(ownerId, projectId, started);
-        return standardSetConfirmationStanding(
+        return this.confirmationView(stated, standardSetConfirmationStanding(
           currentVersion,
           await this.latestConfirmation(projectId),
-        );
+        ));
       }
     }
 
@@ -301,10 +309,13 @@ export class ProjectAcceptanceService {
         (error as { message?: string })?.message ?? String(error)}`),
     );
 
-    return standardSetConfirmationStanding(
+    // The same document the read answers, because the web writes this answer straight into the
+    // read's cache: a confirmation answered with less would take the card's changes away until the
+    // next poll.
+    return this.confirmationView(stated, standardSetConfirmationStanding(
       currentVersion,
       await this.latestConfirmation(projectId),
-    );
+    ));
   }
 
   /**
@@ -523,6 +534,66 @@ export class ProjectAcceptanceService {
       confirmedAt: row.confirmedAt,
       confirmedById: row.confirmedById,
     };
+  }
+
+  /** A standing, with what changed since the confirmation it names: `stated` against that
+   *  confirmation's stored material (`criteriaChangesSinceConfirmed`). */
+  private async confirmationView(
+    stated: StatedAcceptanceCriterion[],
+    standing: StandardSetConfirmationStanding,
+  ): Promise<StandardSetConfirmationView> {
+    if (standing.confirmation === null) {
+      return {
+        ...standing,
+        changesSinceConfirmed: null,
+        changesSinceConfirmedAbsentReason: 'NEVER_CONFIRMED',
+      };
+    }
+    const confirmed = standing.confirmation.criteriaMaterial;
+    return {
+      ...standing,
+      changesSinceConfirmed: criteriaChangesSinceConfirmed(
+        stated,
+        confirmed,
+        await this.confirmedVerificationMethods(stated, confirmed),
+      ),
+      changesSinceConfirmedAbsentReason: null,
+    };
+  }
+
+  /**
+   * For each criterion whose content moved since the confirmation, the verification method it was
+   * confirmed with — when its words are the ones it has now and that method was a rung of the
+   * ladder, the only shape a tightening that landed on its own can have.
+   *
+   * Asked of PostgreSQL because the content hash is PostgreSQL's: the definition trigger writes it
+   * with `project_acceptance_definition_content_hash` over the words AND the method, the
+   * confirmation stored it, and nothing in TypeScript reproduces it. So the question is put the
+   * other way round — which rung, beside the words stored on the row, hashes to what was confirmed
+   * — and a criterion whose words moved, or whose confirmed method was prose, gets no answer.
+   */
+  private async confirmedVerificationMethods(
+    stated: StatedAcceptanceCriterion[],
+    confirmed: ConfirmedCriterionVersion[],
+  ): Promise<Map<string, string>> {
+    const current = new Map(stated.map((criterion) => [criterion.definitionId, criterion.contentHash]));
+    const moved = confirmed.filter((item) =>
+      current.has(item.definitionId) && current.get(item.definitionId) !== item.contentHash);
+    if (moved.length === 0) return new Map();
+    const rows = await this.prisma.$queryRaw<Array<{
+      definitionId: string;
+      verificationMethod: string;
+    }>>(Prisma.sql`
+      SELECT d."id"::text AS "definitionId", ladder."rung" AS "verificationMethod"
+        FROM unnest(
+               ${moved.map((item) => item.definitionId)}::uuid[],
+               ${moved.map((item) => item.contentHash)}::text[]
+             ) AS confirmed("definitionId", "contentHash")
+        JOIN "project_acceptance_criterion_definition" d ON d."id" = confirmed."definitionId"
+       CROSS JOIN unnest(${[...VERIFICATION_METHOD_RUNGS]}::text[]) AS ladder("rung")
+       WHERE project_acceptance_definition_content_hash(d."text", ladder."rung")
+             = confirmed."contentHash"`);
+    return new Map(rows.map((row) => [row.definitionId, row.verificationMethod]));
   }
 
   /** Refresh the two digest lanes of `project_completion_contract` under the database's Project-row

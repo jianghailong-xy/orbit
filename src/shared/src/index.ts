@@ -6,6 +6,7 @@ export * from './permissionSemantics';
 export * from './bashRules';
 export * from './codec';
 export * from './codexRateLimitReset';
+export * from './criteria-changes';
 export * from './dbConflict';
 export * from './link-preview';
 export * from './realtime';
