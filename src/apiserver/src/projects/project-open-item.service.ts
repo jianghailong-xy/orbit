@@ -11,8 +11,16 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
-import type { OpenItemFacts } from '@orbit/shared';
+import type {
+  OpenItemFacts,
+  ProjectStartNotReadyBody,
+  ProjectStartRequest,
+  ProjectStartRequestBody,
+  ProjectStartRequestFiled,
+  ProjectStartSettings,
+} from '@orbit/shared';
 
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
@@ -39,7 +47,19 @@ import {
   sessionHasEnded,
 } from './project-open-item';
 import { escalatesAt } from './open-item-escalation.service';
+import { canonicalJson } from './canonical-json';
 import { FusePausedPayload, fusePausedDetailLine } from './project-fuse';
+import {
+  START_REQUEST_COORDINATOR_ONLY,
+  START_REQUEST_DEDUPE_KEY,
+  START_REQUEST_KIND,
+  START_REQUEST_NOT_READY,
+  START_REQUEST_TITLE,
+  readStartPlan,
+  startReadiness,
+  startRequestDetailLine,
+  supersedeStaleStartRequest,
+} from './project-start-request';
 
 /**
  * Who is asking for an item to be put in front of the project's coordinator conversation.
@@ -133,6 +153,9 @@ export interface OpenItemRow {
   >;
   /** What was asked, for a `COORDINATOR_QUESTION`; null for every other kind (§5.2, §4.8). */
   question: CoordinatorQuestion | null;
+  /** What a `START_REQUEST` asks — the "Start this project?" card's source; null for every other
+   *  kind. */
+  startRequest: ProjectStartRequest | null;
   /** What the item's payload holds, as the rows its card draws (§7.5); null when the payload is
    *  not a shape this build reads, which leaves the card drawing what it drew before. */
   facts: OpenItemFacts | null;
@@ -169,10 +192,12 @@ export interface OpenItemResolved {
   resolution: 'HANDLED' | 'WITHDRAWN';
 }
 
-/** The project's open exceptions, split by who is expected to act (§4.8). */
+/** The project's open exceptions, split by who is expected to act (§4.8), and the coordinator's
+ *  open request to start it — beside them rather than among them (`ProjectOpenItemsView`). */
 export interface ProjectOpenItems {
   needsYou: OpenItemRow[];
   withCoordinator: OpenItemRow[];
+  startRequest: OpenItemRow | null;
 }
 
 /** The item stopped being owed to the coordinator while its turn was being written. */
@@ -428,6 +453,11 @@ export class ProjectOpenItemService {
    * the project's name and shown to the owner as the project asking. Any other session — a task's
    * own run, a coordinator of some other project — is refused rather than filed under a project it
    * does not speak for.
+   *
+   * The conversation, not the Automatic switch: a question is the coordinator asking the owner, not
+   * acting for them, and the switch says how far the coordinator may act on its own. Before a
+   * project starts is when a coordinator has the most to ask, and it asked nothing while this
+   * required the switch — which a project that has not started need not have on.
    */
   async askOwner(
     ownerId: string,
@@ -438,14 +468,13 @@ export class ProjectOpenItemService {
     const project = await this.prisma.project.findFirst({
       where: { id: projectId, ownerId },
       select: {
-        coordinatorEnabled: true,
         coordinatorSessionId: true,
         exceptionEscalationSeconds: true,
       },
     });
     if (!project) throw new NotFoundException('project not found');
     const asking = actingSessionId?.trim();
-    if (!asking || !project.coordinatorEnabled || asking !== project.coordinatorSessionId) {
+    if (!asking || asking !== project.coordinatorSessionId) {
       throw new ForbiddenException({
         code: ASK_OWNER_COORDINATOR_ONLY,
         message:
@@ -503,6 +532,152 @@ export class ProjectOpenItemService {
       code: OPEN_ITEM_NOT_OPEN,
       message: 'a question under this clientQuestionId was already answered; ask under a new one',
     });
+  }
+
+  /**
+   * The coordinator asks the account owner to start the project (`project_request_start`,
+   * `project-start-request.ts`).
+   *
+   * Filed and returned at once, like a question: the owner answers on the "Start this project?"
+   * card, and the coordinator is told when the project starts (`project-started.ts`). Only the
+   * conversation the project is coordinated from may ask — the conversation, not the Automatic
+   * switch, which is one of the settings being asked for — and only before the project has started.
+   *
+   * One transaction under the project row (FOR NO KEY UPDATE, the lock the start door takes first):
+   * a request and a start of the same project are ordered, so no request is filed about a project
+   * that has just started. The plan is checked under it and a plan that is not ready is refused with
+   * every finding, writing nothing; one that is ready supersedes the request already open, if any,
+   * and files this one — unless it is that same request again, which writes nothing.
+   */
+  async requestStart(
+    ownerId: string,
+    projectId: string,
+    actingSessionId: string | undefined,
+    body: ProjectStartRequestBody,
+  ): Promise<ProjectStartRequestFiled> {
+    if (body.line === 'MAIN' && body.projectBranchName != null) {
+      throw new BadRequestException(
+        'a project that lands directly into main has no project branch to name',
+      );
+    }
+    const why = body.why?.trim();
+    if (!why) {
+      throw new BadRequestException(
+        'why is required: the sentence the owner reads on the card about why the plan is ready',
+      );
+    }
+    const settings: ProjectStartSettings = {
+      line: body.line,
+      ...(body.projectBranchName != null ? { projectBranchName: body.projectBranchName } : {}),
+      automatic: body.automatic,
+      maxConcurrentTasks: body.maxConcurrentTasks,
+      mergeCheckCommand: body.mergeCheckCommand?.trim() || null,
+    };
+    const asking = actingSessionId?.trim();
+    return withTransactionRetry(this.prisma, async (tx) => {
+      const [project] = await tx.$queryRaw<Array<{
+        startedAt: Date | null;
+        coordinatorSessionId: string | null;
+      }>>(Prisma.sql`
+        SELECT "started_at" AS "startedAt", "coordinator_session_id" AS "coordinatorSessionId"
+          FROM "project"
+         WHERE "id" = ${projectId}::uuid AND "owner_id" = ${ownerId}::uuid
+           FOR NO KEY UPDATE`);
+      if (!project) throw new NotFoundException('project not found');
+      if (!asking || asking !== project.coordinatorSessionId) {
+        throw new ForbiddenException({
+          code: START_REQUEST_COORDINATOR_ONLY,
+          message:
+            'only the conversation coordinating this project may ask its owner to start it. The '
+            + 'request is filed in the project’s name, so the session asking has to be the one the '
+            + 'project points at.',
+        });
+      }
+      if (project.startedAt) {
+        throw new ConflictException({
+          code: 'PROJECT_ALREADY_STARTED',
+          startedAt: project.startedAt.toISOString(),
+          message:
+            'this project has already been started, so there is nothing to ask: nothing was filed. '
+            + 'Its auto-run tasks start by themselves; start the ones set to start by hand with '
+            + 'task_start.',
+        });
+      }
+      const plan = await readStartPlan(tx, ownerId, projectId);
+      const findings = startReadiness(plan, settings);
+      const refusals = findings.filter((finding) => finding.severity === 'REFUSE');
+      if (refusals.length > 0) {
+        const notReady: ProjectStartNotReadyBody = {
+          code: START_REQUEST_NOT_READY,
+          message:
+            `this plan is not ready to start: ${refusals.length} check`
+            + `${refusals.length === 1 ? '' : 's'} refused it, and nothing was filed`,
+          written: 0,
+          findings,
+        };
+        throw new ConflictException(notReady);
+      }
+      const request: ProjectStartRequest = {
+        settings,
+        why,
+        criteriaDigest: plan.criteriaDigest,
+        planDigest: plan.planDigest,
+        repository: plan.repository,
+        warnings: findings,
+      };
+      const open = await tx.projectOpenItem.findFirst({
+        where: { projectId, kind: START_REQUEST_KIND, state: 'OPEN' },
+        select: { id: true, payload: true },
+      });
+      if (open && canonicalJson(open.payload) === canonicalJson(request)) {
+        return { ...request, itemId: open.id, state: 'OPEN', alreadyOpen: true, superseded: null };
+      }
+      const now = new Date();
+      // Named before either write, so the request it replaces can say which one did — a row that is
+      // no longer OPEN is final (`project_open_item_terminal_guard`) and cannot be told afterwards.
+      const itemId = randomUUID();
+      if (open) {
+        await tx.projectOpenItem.updateMany({
+          where: { id: open.id, state: 'OPEN' },
+          data: {
+            state: 'SUPERSEDED',
+            resolvedAt: now,
+            resolvedBy: 'COORDINATOR',
+            resolvedBySessionId: asking,
+            supersededByItemId: itemId,
+            resolutionNote: 'the coordinator asked again',
+          },
+        });
+      }
+      await tx.projectOpenItem.create({
+        data: {
+          id: itemId,
+          projectId,
+          ownerId,
+          kind: START_REQUEST_KIND satisfies OpenItemKind,
+          state: 'OPEN',
+          assignee: 'OWNER' satisfies OpenItemAssignee,
+          assigneeReason: 'DEFAULT' satisfies OpenItemAssigneeReason,
+          askedBySessionId: asking,
+          dedupeKey: START_REQUEST_DEDUPE_KEY,
+          title: START_REQUEST_TITLE,
+          payload: request as unknown as Prisma.InputJsonValue,
+          waitingSince: now,
+          assignedAt: now,
+          // The owner's from the start, so there is nobody to escalate to — and no reminder: the
+          // card stays in front of them until they start the project or the plan moves.
+          escalateAt: null,
+        },
+        select: { id: true },
+      });
+      return {
+        ...request,
+        itemId,
+        state: 'OPEN',
+        alreadyOpen: false,
+        superseded: open ? { itemId: open.id } : null,
+      };
+    }, loggedRetry(this.logger, 'projectOpenItem.requestStart'));
   }
 
   /**
@@ -827,6 +1002,10 @@ export class ProjectOpenItemService {
    * Keyed by the question AND the conversation, which is what makes a rotation safe: every
    * generation is told once, a replay of the same generation's key returns the turn already written,
    * and a project with nobody coordinating it is told nothing until it has somebody.
+   *
+   * Told whether or not the project's Automatic switch is on, for the reason `askOwner` asks either
+   * way: the answer is the owner's reply to a question the coordinator put, not a hand-over the
+   * switch has to authorize.
    */
   private async deliverAnswer(itemId: string): Promise<{ sessionId: string; turnId: string } | null> {
     const item = await this.prisma.projectOpenItem.findUnique({
@@ -840,12 +1019,12 @@ export class ProjectOpenItemService {
         resolvedAt: true,
         payload: true,
         answer: true,
-        project: { select: { coordinatorEnabled: true, coordinatorSessionId: true } },
+        project: { select: { coordinatorSessionId: true } },
       },
     });
     if (!item || item.state !== 'RESOLVED' || item.resolution !== 'ANSWERED') return null;
     if (!item.answer || !item.resolvedAt) return null;
-    const sessionId = item.project.coordinatorEnabled ? item.project.coordinatorSessionId : null;
+    const sessionId = item.project.coordinatorSessionId;
     if (!sessionId) return null;
     const clientTurnId = ownerAnswerTurnId(item.id, sessionId);
     const content = ownerAnswerMessage(
@@ -897,9 +1076,9 @@ export class ProjectOpenItemService {
   ): Promise<void> {
     const project = await this.prisma.project.findUnique({
       where: { id: projectId },
-      select: { coordinatorEnabled: true, coordinatorSessionId: true },
+      select: { coordinatorSessionId: true },
     });
-    const sessionId = project?.coordinatorEnabled ? project.coordinatorSessionId : null;
+    const sessionId = project?.coordinatorSessionId ?? null;
     if (!sessionId) return;
     const answered = await this.prisma.projectOpenItem.findMany({
       where: {
@@ -1037,6 +1216,11 @@ export class ProjectOpenItemService {
       },
     });
     if (!project) throw new NotFoundException('project not found');
+    // A start request whose plan has moved is superseded before the items are read, so the owner is
+    // never shown a card about a plan that is no longer there (`project-start-request.ts`).
+    await this.guarded('supersedeStaleStartRequest', async () => {
+      await supersedeStaleStartRequest(this.prisma, ownerId, projectId);
+    });
     // Whether there is a conversation to ask again — the SAME predicate `returnToCoordinator`
     // refuses on, minus the switch, which is not part of it: the press is the owner's own, so a
     // switched-off coordinator still has somewhere to put the item (`deliver`). Drawn the other way
@@ -1113,13 +1297,21 @@ export class ProjectOpenItemService {
       const question = row.kind === 'COORDINATOR_QUESTION'
         ? (row.payload as unknown as CoordinatorQuestion)
         : null;
+      const startRequest = row.kind === START_REQUEST_KIND
+        ? (row.payload as unknown as ProjectStartRequest)
+        : null;
       const title = row.taskId ? titles.get(row.taskId) : undefined;
       return {
         itemId: row.id,
         kind: row.kind as OpenItemKind,
         title: row.title,
-        detailLine: question ? questionDetailLine(question) : detailLine(row.kind, row.payload),
+        detailLine: question
+          ? questionDetailLine(question)
+          : startRequest
+            ? startRequestDetailLine(projectId, startRequest)
+            : detailLine(row.kind, row.payload),
         question,
+        startRequest,
         facts: openItemFacts(
           row.kind,
           row.payload,
@@ -1159,8 +1351,9 @@ export class ProjectOpenItemService {
       };
     });
     return {
-      needsYou: view.filter((row) => row.assignee === 'OWNER'),
+      needsYou: view.filter((row) => row.assignee === 'OWNER' && row.kind !== START_REQUEST_KIND),
       withCoordinator: view.filter((row) => row.assignee === 'COORDINATOR'),
+      startRequest: view.find((row) => row.kind === START_REQUEST_KIND) ?? null,
     };
   }
 

@@ -182,6 +182,8 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     public let version: String?
     /// The CLI's own answer to "am I signed in": `yes` / `no` / `unknown`.
     public let auth: String?
+    /// The accounts this engine is signed into on the runner, Default first — reported for an engine
+    /// whose CLI keeps a login per directory (Codex, Claude). Absent from an older runner.
     public let accounts: [RunnerEngineAccount]?
     public let update: RunnerEngineUpdate?
     public var id: String { engine }
@@ -200,17 +202,25 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-/// One engine login directory on the runner. Every field is optional so an account reported by a
-/// newer/older runner remains useful even when this client does not understand all of its shape.
+/// One of a runner's accounts of an engine (shared `RunnerEngineAccount`): `default`, the directory
+/// the runner's own environment selects, or a slot it added. Only what the clients read is modelled.
 public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
-    public let id: String?
+    /// `default`, or the slot's id — what a session is created with (`codexAccount`).
+    public let id: String
+    /// What the user called it. Absent for Default.
     public let name: String?
+    /// The CLI's own answer for this account: `yes` / `no` / `unknown`.
     public let auth: String?
+    /// The account's directory on that machine: a CODEX_HOME or a CLAUDE_CONFIG_DIR.
     public let home: String?
+    /// The same directory under Codex's historical field name, Codex accounts only: read
+    /// `home ?? codexHome`.
     public let codexHome: String?
+    /// `cxa1_` and the first 8 hex digits of the account's fingerprint; absent until the runner has
+    /// read one. Two accounts showing the same one are the same account.
     public let fingerprintPrefix: String?
 
-    public init(id: String? = nil, name: String? = nil, auth: String? = nil,
+    public init(id: String, name: String? = nil, auth: String? = nil,
                 home: String? = nil, codexHome: String? = nil,
                 fingerprintPrefix: String? = nil) {
         self.id = id
@@ -450,6 +460,9 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     public let credits: PlanUsageCredits?
     public let rateLimits: [PlanUsageRateLimit]?
     public let fetchedAt: String?
+    /// The runner's other accounts of this engine, by account id, each as its own windows: this
+    /// snapshot's windows are Default's (web `codexAccountSnapshot`).
+    public var accounts: [String: PlanUsageSnapshot]? = nil
 
     public init(provider: String? = nil, fiveHour: PlanUsageWindow? = nil,
                 sevenDay: PlanUsageWindow? = nil, sevenDayOpus: PlanUsageWindow? = nil,
@@ -458,7 +471,7 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
                 limitName: String? = nil, planType: String? = nil,
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
                 rateLimits: [PlanUsageRateLimit]? = nil,
-                fetchedAt: String? = nil) {
+                fetchedAt: String? = nil, accounts: [String: PlanUsageSnapshot]? = nil) {
         self.provider = provider
         self.fiveHour = fiveHour
         self.sevenDay = sevenDay
@@ -473,6 +486,7 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
         self.credits = credits
         self.rateLimits = rateLimits
         self.fetchedAt = fetchedAt
+        self.accounts = accounts
     }
 }
 

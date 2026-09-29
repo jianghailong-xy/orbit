@@ -141,3 +141,37 @@ test('a reader gets the start back off the key, and nothing off any other key', 
     assert.equal(projectStartOfTurn(other), null, `${String(other)} was read as a start`);
   }
 });
+
+test('a start that recorded its settings says them, and names what is not what it was asked for', () => {
+  const settings = {
+    line: 'PROJECT_BRANCH' as const,
+    projectBranchName: 'refs/heads/project/34WvwUS8YMXfOfWbMqVuu',
+    automatic: true,
+    maxConcurrentTasks: 3,
+    mergeCheckCommand: 'npm test',
+  };
+  const { text } = message([], 0, {
+    ...CONFIRMED,
+    record: { settings, differsFromRequest: [] },
+  });
+  assert.ok(text.includes('It runs with: tasks land on the project branch project/34WvwUS8YMXfOfWbMqVuu '
+    + 'first · Automatic on · at most 3 tasks at a time · merge check `npm test`.'));
+  assert.ok(!text.includes('Different from what the start asked for'), 'nothing differs, so nothing is named');
+  assert.ok(text.endsWith('Starting the project answered nothing else: if you are still waiting on the '
+    + 'owner for something, ask it again.'), 'the settings come before the last word, not after it');
+
+  const locked = message([], 0, {
+    ...CONFIRMED,
+    record: {
+      settings: { line: 'MAIN', automatic: false, maxConcurrentTasks: 1, mergeCheckCommand: null },
+      differsFromRequest: ['line', 'mergeCheckCommand'],
+    },
+    lineLocked: true,
+  }).text;
+  assert.ok(locked.includes('It runs with: tasks land directly into main · Automatic off · at most 1 '
+    + 'task at a time · no merge check. Different from what the start asked for: the integration '
+    + 'line, the merge check. Its integration line had already started, so it stays where it was.'));
+
+  const unrecorded = message([], 0, CONFIRMED).text;
+  assert.ok(!unrecorded.includes('It runs with'), 'a start that recorded no settings claims none');
+});

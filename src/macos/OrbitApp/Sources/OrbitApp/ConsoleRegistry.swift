@@ -40,6 +40,8 @@ final class ConsoleRegistry {
     private var lru: LRUOrder
     /// `maxSeq` last written to disk per session — lets `persist` skip no-op saves.
     private var savedSeq: [String: Int] = [:]
+    /// Records a link asked a console to open at, held until that console is made (`openRecord`).
+    private var pendingRecords: [String: String] = [:]
 
     init(baseURL: URL, tokenStore: TokenStore, store: TranscriptPersisting, capacity: Int = 12) {
         self.baseURL = baseURL
@@ -92,6 +94,17 @@ final class ConsoleRegistry {
         model.onToast = { [weak self] request in self?.onToast(request, nil) }
         wireAccountDefaults(model)
         return model
+    }
+
+    /// Open a session's console at one record — a link that named it (`AppModel.followRecord`). A
+    /// console that exists is told at once; otherwise the record waits here for the console the route
+    /// is about to make (`makeModel`).
+    func openRecord(_ record: String, inSession sessionID: String) {
+        if let model = models[sessionID] {
+            model.openRecord(record)
+        } else {
+            pendingRecords[sessionID] = record
+        }
     }
 
     /// Non-mutating lookup, safe inside a view `body`. Non-nil once `model(for:)` has run (the
@@ -166,6 +179,7 @@ final class ConsoleRegistry {
                                  tokenStore: tokenStore, attachments: attachments, restoring: restored)
         model.onToast = { [weak self] request in self?.onToast(request, sessionID) }
         wireAccountDefaults(model)
+        if let record = pendingRecords.removeValue(forKey: sessionID) { model.openRecord(record) }
         return model
     }
 
@@ -194,6 +208,10 @@ final class ConsoleRegistry {
     /// The default stays synchronous for the paths that must complete before the process can go away
     /// (`persistAll` at `.background` / sign-out).
     private func persist(_ sessionID: String, _ model: ConsoleModel, synchronously: Bool = true) {
+        // A window opened at a record ends at a gap, not at the tail: restored, it would resume the
+        // stream from its own end and replay the whole gap. The last window that reached the tail
+        // stays on disk instead.
+        guard !model.detached else { return }
         let reducer = model.snapshotReducer()
         guard savedSeq[sessionID] != reducer.state.maxSeq else { return }   // nothing new durable
         // Claimed before the write, so a later tick can't queue a second write of the same state.

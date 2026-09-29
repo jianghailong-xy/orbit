@@ -78,6 +78,9 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let env: [String: String]?
     public let enabled: Bool?
     public let autoInitGit: Bool?
+    /// Which of its runner's Codex accounts a session here runs on: a slot id or `default`. Nil is
+    /// Automatic — a new session starts on the account with the most room (`CodexAccounts.roomiest`).
+    public let codexAccount: String?
     public let enableWorktree: Bool?
     public let workDirExists: Bool?
     public let workDirIsGit: Bool?
@@ -92,7 +95,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case id, name, lastProvider, provider, model, permissionMode, effort, workDir
         case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
-        case autoInitGit, enableWorktree, workDirExists, workDirIsGit
+        case autoInitGit, codexAccount, enableWorktree, workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup
     }
 
@@ -119,6 +122,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         env = try c.decodeIfPresent([String: String].self, forKey: .env)
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled)
         autoInitGit = try c.decodeIfPresent(Bool.self, forKey: .autoInitGit)
+        codexAccount = try c.decodeIfPresent(String.self, forKey: .codexAccount)
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
         workDirIsGit = try c.decodeIfPresent(Bool.self, forKey: .workDirIsGit)
@@ -271,6 +275,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// On a shared pool: the key its last claim chose (nil before the first, or when none could
     /// run) — the same read as above, in the shared pool's own field.
     public let poolKeyId: String?
+    /// Which of the runner's Codex accounts this session runs on (`default` or a slot id): picked on
+    /// New Session, or the one with the most room when it was created. Nil follows its workspace's
+    /// (`Agent.codexAccount`). Carried by the detail payload, like the two above.
+    public let codexAccount: String?
     public let pendingApprovals: Int?
     /// What `pendingApprovals` is counting, when one word says it better than "approval":
     /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -431,6 +439,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         provider = try values.decodeIfPresent(String.self, forKey: .provider)
         poolMemberProviderId = try values.decodeIfPresent(String.self, forKey: .poolMemberProviderId)
         poolKeyId = try values.decodeIfPresent(String.self, forKey: .poolKeyId)
+        codexAccount = try values.decodeIfPresent(String.self, forKey: .codexAccount)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
@@ -484,7 +493,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
                 currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
-                poolMemberProviderId: String? = nil, poolKeyId: String? = nil) {
+                poolMemberProviderId: String? = nil, poolKeyId: String? = nil,
+                codexAccount: String? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -500,6 +510,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.provider = provider
         self.poolMemberProviderId = poolMemberProviderId
         self.poolKeyId = poolKeyId
+        self.codexAccount = codexAccount
         self.pendingApprovals = pendingApprovals
         self.waitingKind = waitingKind
         self.ownerItems = ownerItems
@@ -569,6 +580,9 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     public let provider: String?
     public let model: String?
     public let effort: String?
+    /// The workspace's Codex account (`Agent.codexAccount`): what a session that stored none of its
+    /// own runs on. Carried by the detail payload's workspace row.
+    public var codexAccount: String? = nil
 }
 
 /// A personal colored label (Files.app-style tag) the owner applies to their sessions. The library
@@ -761,11 +775,14 @@ public struct CreateSessionRequest: Codable, Sendable {
     /// of a normal message; nil/false → a normal prompt.
     public let shell: Bool?
     public let attachmentIds: [String]?
+    /// Which of the runner's Codex accounts the session runs on (`default` or a slot id), picked on
+    /// the new-session screen. Nil omits it: the server then uses the workspace's, or Automatic.
+    public let codexAccount: String?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
                 provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
-                shell: Bool? = nil, attachmentIds: [String]? = nil) {
+                shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil) {
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
@@ -777,6 +794,7 @@ public struct CreateSessionRequest: Codable, Sendable {
         self.fastMode = fastMode
         self.shell = shell
         self.attachmentIds = attachmentIds
+        self.codexAccount = codexAccount
     }
 }
 

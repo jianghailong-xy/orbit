@@ -102,6 +102,14 @@ final class ConsoleModel {
     /// own. Non-nil means the create request carries it AND the pick is remembered on the agent
     /// once the session exists — so the next draft here opens on it without the override.
     private(set) var draftProviderOverride: String?
+    /// Draft only: a Codex account picked under Codex in the new-session picker (`default` or a slot
+    /// id). Nil leaves it to the workspace: its own pick, else Automatic — the account with the most
+    /// room, which the server chooses when it creates the session.
+    private(set) var draftCodexAccount: String?
+    /// Which Codex account this session runs on, from its detail: its own (`Session.codexAccount`),
+    /// and its workspace's for a session that stored none. Only a detail read sets them.
+    private(set) var sessionCodexAccount: String?
+    private(set) var workspaceCodexAccount: String?
     /// A provider switch made while this session was ENDED. There is nothing to PATCH then, so it
     /// rides along with the resume that revives it — the route Model/Mode/Effort already take.
     /// Nil unless the user picked one here: the session's own provider must never be re-asserted
@@ -235,8 +243,49 @@ final class ConsoleModel {
     /// and none at all while no account can be named.
     var planUsage: PlanUsageSnapshot? {
         if currentPool != nil { return poolAccount?.member.planUsage }
+        // A built-in Codex session spends one of the runner's accounts — the one it runs on.
+        if provider == "codex", codexAccount != CodexAccounts.defaultID {
+            return CodexAccounts.snapshot(runnerPlanUsage?.snapshot(for: "codex"), account: codexAccount)
+        }
         return AgentDefaults.planUsage(for: provider, runner: runnerPlanUsage,
                                        configured: configuredProviders)
+    }
+    /// The runner's Codex accounts, as its heartbeat reports them.
+    var codexAccounts: [RunnerEngineAccount] {
+        runnerEngines?.first { $0.engine == "codex" }?.accounts ?? []
+    }
+    /// Automatic is on offer for this draft: its workspace picked no Codex account, and the runner has
+    /// more than one to choose between (`CodexAccounts.automaticOffered`).
+    var codexAutomaticOffered: Bool {
+        isDraft && CodexAccounts.automaticOffered(agent: draftAgent, accounts: codexAccounts)
+    }
+    /// This draft starts on Automatic: it is on offer and no account is picked.
+    var codexAutomatic: Bool { codexAutomaticOffered && draftCodexAccount == nil }
+    /// Which of the runner's Codex accounts this session spends, named in the quota gauge's detail.
+    /// Nil unless it is on the built-in Codex engine and the runner has several.
+    var codexAccountLabel: String? {
+        guard currentPool == nil, provider == "codex", codexAccounts.count >= 2 else { return nil }
+        return CodexAccounts.label(codexAccount, accounts: codexAccounts)
+    }
+    /// The line under that name on a draft nothing picked an account for: how it came to that one.
+    var codexAccountNote: String? {
+        guard codexAccountLabel != nil, codexAutomatic else { return nil }
+        return "Automatic — the account with the most room right now"
+    }
+    /// The Codex account this draft or session runs on, as far as its runner reports it: a draft's
+    /// pick, else its workspace's, else the one Automatic would choose now; a session's own, else its
+    /// workspace's. Default when the runner lists no such account, as dispatch resolves it.
+    var codexAccount: String {
+        let wanted: String?
+        if isDraft {
+            wanted = draftCodexAccount ?? draftAgent?.codexAccount
+                ?? (codexAutomatic
+                    ? CodexAccounts.roomiest(codexAccounts, usage: runnerPlanUsage?.snapshot(for: "codex"))
+                    : nil)
+        } else {
+            wanted = sessionCodexAccount ?? workspaceCodexAccount
+        }
+        return CodexAccounts.onRunner(wanted, accounts: codexAccounts)
     }
     private(set) var modelCatalog: RunnerModelCatalog?
     /// What the session's runner last reported about each engine CLI it can host. A provider
@@ -514,7 +563,10 @@ final class ConsoleModel {
         // from its max seq. Cold open only: a restored reducer already carries its transcript and
         // maxSeq, so it skips straight to the SSE resume below (which streams seq > maxSeq).
         let coldOpen = reducer.state.maxSeq == 0
-        if coldOpen, !sessionID.isEmpty { await seedTailPage() }
+        // A link to one record opens on the page around it (`openRecord`) — in place of the tail seed,
+        // and of a restored window, which ends at the tail and may be nowhere near the record.
+        let openedAtRecord = await followPendingRecord()
+        if !openedAtRecord, coldOpen, !sessionID.isEmpty { await seedTailPage() }
         if Task.isCancelled { return }
         // Seed the "Background processes" tray with the server's authoritative, complete list — every
         // Bash(run_in_background) the session launched, not just the few whose launch sits in the loaded
@@ -526,6 +578,12 @@ final class ConsoleModel {
         reconnectPolicy = ReconnectPolicy()
         var isReconnect = false          // the first connect is seeded by `approvalsSeed` above
         while !Task.isCancelled {
+            // A window opened at a record stays off the stream until it is back at the tail
+            // (`newerCursor`): what the stream carries belongs past the gap, not at this window's end.
+            if detached {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                continue
+            }
             kickRequested = false
             // On a reconnect (foregrounded / network back / dropped stream), re-fetch the durable
             // approvals. A card resolved elsewhere — e.g. answered on the web client — while this
@@ -564,6 +622,9 @@ final class ConsoleModel {
                             // session list that kept advancing (it comes from the list query, not
                             // this stream).
                             if ev.type == .resync { return .resync }
+                            // The window was re-opened at a record while this read was in flight:
+                            // it feeds a window that is gone, and the loop holds off until the gap closes.
+                            if detached { return .kicked }
                             // A queued turn is durable in conversation_turn but intentionally absent
                             // from run_event until leased. The nudge carries no duplicate payload;
                             // reconcile the authoritative REST list without delaying this stream.
@@ -819,6 +880,121 @@ final class ConsoleModel {
         publishStateNow()
     }
 
+    // MARK: - a link to one record (`SessionRecordLink`; web parity: WorkspaceView's `?at=`)
+
+    /// The record a link asked this console to open at, not yet followed. `run()` opens on it in place
+    /// of the tail; a console already streaming follows it at once (`openRecord`).
+    private var pendingRecord: String?
+    /// Non-nil exactly while the loaded window stops short of the tail: the `after=` cursor of the page
+    /// newer than it. The live stream is held off meanwhile — what it streams belongs past the gap, not
+    /// at the bottom of this window — until paging down (`loadNewer`) or jumping (`jumpToLatest`)
+    /// brings the window back to the latest event.
+    private(set) var newerCursor: Int?
+    /// Whether the loaded window stops short of the tail (see `newerCursor`).
+    var detached: Bool { newerCursor != nil }
+    /// True while a newer page is in flight — the single-flight guard of `loadNewer`.
+    private(set) var loadingNewer = false
+    /// True while `jumpToLatest` re-seeds from the tail, so a newer page landing meanwhile is dropped.
+    private var jumpingToLatest = false
+    /// The record's row for the transcript to scroll to. Its own request, apart from `scrollRequest`:
+    /// reaching it means leaving the live tail, which the view says outright before it scrolls.
+    private(set) var recordRequest: ScrollRequest?
+    /// The row of the record a link opened, marked for a moment once the transcript has scrolled to it.
+    private(set) var highlightedRowID: String?
+    private var highlightGeneration = 0
+
+    /// Open this console at one record of its session — a link that named it. Held until the stream
+    /// starts when the console is not streaming yet; followed at once when it is.
+    func openRecord(_ record: String) {
+        guard !isDraft, !sessionID.isEmpty else { return }
+        pendingRecord = record
+        guard streamTask != nil else { return }
+        Task { [weak self] in await self?.followPendingRecord() }
+    }
+
+    /// Follow the pending record: read the page around it, then scroll to it where the window already
+    /// holds it, or make that page the window when it is elsewhere in the history. Answers whether the
+    /// window is placed at the record — false when nothing was pending, or when the record is not this
+    /// session's, in which case the console opens as it would have anyway, with a note saying so.
+    @discardableResult
+    private func followPendingRecord() async -> Bool {
+        guard let record = pendingRecord, !sessionID.isEmpty else { return false }
+        pendingRecord = nil
+        guard let page = try? await api.eventPageAround(sessionID: sessionID, record: record,
+                                                        limit: Self.tailPage),
+              let anchor = page.anchor else {
+            showTransientStatus(SessionRecordLink.Copy.notFound)
+            return false
+        }
+        let window = reducer.state
+        if let oldest = window.oldestSeq, anchor.seq >= oldest, anchor.seq <= window.maxSeq {
+            markRecord(anchor, page: page.events)
+            return true
+        }
+        // Elsewhere in the history: the page becomes the window. Held off the stream first, so a read
+        // still in flight cannot fold live events onto the end of a window they do not follow.
+        newerCursor = page.after
+        reconnectNow()
+        reducer.applyRecordPage(page)
+        publishStateNow()
+        markRecord(anchor, page: page.events)
+        return true
+    }
+
+    /// Ask the transcript to scroll to the record's row. The row is found as the transcript draws it
+    /// (`TranscriptRows.build`), so a tool call folded into a run is reached through the run's row.
+    private func markRecord(_ anchor: TranscriptAnchor, page: [RunEvent]) {
+        let state = reducer.state
+        guard let itemID = TranscriptRecordAnchor.itemID(for: anchor, page: page, in: state.items) else { return }
+        let rows = TranscriptRows.build(state: state, statusCards: localStatusCards, canPageOlder: false,
+                                        showWorkingIndicator: false, decisionCards: decisionCards)
+        scrollTick += 1
+        recordRequest = ScrollRequest(rowID: TranscriptRecordAnchor.rowID(containing: itemID, in: rows) ?? itemID,
+                                      tick: scrollTick)
+    }
+
+    /// The transcript scrolled to the record's row: mark it for a moment, and consume the request so a
+    /// transcript appearing again later does not jump back to it.
+    func recordRequestFollowed(_ request: ScrollRequest) {
+        recordRequest = nil
+        highlightedRowID = request.rowID
+        highlightGeneration += 1
+        let generation = highlightGeneration
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 2_400_000_000)
+            guard let self, self.highlightGeneration == generation else { return }
+            self.highlightedRowID = nil
+        }
+    }
+
+    /// Pull the page just newer than a window opened at a record as the reader nears its bottom — the
+    /// mirror of `loadOlder`. The page that reaches the latest event closes the gap, and the stream loop,
+    /// holding off until then, resumes from it.
+    func loadNewer() async {
+        guard !loadingNewer, !jumpingToLatest, !sessionID.isEmpty, let after = newerCursor else { return }
+        loadingNewer = true
+        defer { loadingNewer = false }
+        guard let page = try? await api.eventPageAfter(sessionID: sessionID, after: after,
+                                                       limit: Self.olderPage),
+              !jumpingToLatest, newerCursor == after else { return }
+        reducer.appendNewer(page)
+        newerCursor = page.after
+        publishStateNow()
+    }
+
+    /// Trade a window opened at a record for the tail: the latest message is past the gap, so the window
+    /// is re-seeded from a tail page — still off the stream until that page has landed — and the stream
+    /// resumes from it.
+    func jumpToLatest() async {
+        guard detached, !jumpingToLatest else { return }
+        jumpingToLatest = true
+        defer { jumpingToLatest = false }
+        reducer.resetForResync()
+        await seedTailPage()
+        newerCursor = nil
+        publishStateNow()
+    }
+
     /// The untrimmed payload of one event, for a tool card whose call/result the server clipped to
     /// a preview (`APIClient.maxEventPayload`). The card asks for this only when the user expands
     /// it, so a big Read output or Write body crosses the network only if someone opens it. nil on
@@ -934,6 +1110,8 @@ final class ConsoleModel {
         provider = s.provider ?? "claude"
         poolMemberProviderID = s.poolMemberProviderId
         poolKeyID = s.poolKeyId
+        sessionCodexAccount = s.codexAccount
+        workspaceCodexAccount = s.agent?.codexAccount
 
         // A historical Session.model is authoritative and can be adopted immediately. If the user
         // already touched the picker while the session request was in flight, their explicit value
@@ -1068,6 +1246,8 @@ final class ConsoleModel {
         adoptServerSnapshot(s)
         poolMemberProviderID = s.poolMemberProviderId
         poolKeyID = s.poolKeyId
+        sessionCodexAccount = s.codexAccount
+        workspaceCodexAccount = s.agent?.codexAccount
         return true
     }
 
@@ -1175,6 +1355,15 @@ final class ConsoleModel {
         effort = AgentDefaults.normalizedEffort(effort, for: slug, model: modelID,
                                                 catalog: modelCatalog,
                                                 configured: configuredProviders)
+    }
+
+    /// Pick one of the runner's accounts of `slug` for this draft — or Automatic (`nil`) — from the rows
+    /// under that engine in the new-session picker. Picks the engine too, when it isn't the one
+    /// picked. Like the provider, it binds the session being drafted and rewrites no workspace setting.
+    func pickDraftAccount(_ slug: String, _ account: String?) {
+        guard isDraft else { return }
+        if slug != provider { pickDraftProvider(slug) }
+        draftCodexAccount = account
     }
 
     /// Adopt a provider catalogue with the pools folded in, each resolved like a key: a shared pool
@@ -1831,12 +2020,16 @@ final class ConsoleModel {
                 // explicit false the server would have to remember anyway.
                 fastMode: fastMode ? true : nil,
                 shell: shell ? true : nil,
-                attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
+                attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds,
+                // Only an explicit pick, as with the provider: none leaves it to the workspace's
+                // account, or to Automatic, which the server resolves when it creates the session.
+                codexAccount: provider == "codex" ? draftCodexAccount : nil))
             composerText = ""
             pendingAttachments = []
             // The pick was this session's binding; nothing to write back. The next draft here
             // opens on it anyway, because the default is read from what the project last ran.
             draftProviderOverride = nil
+            draftCodexAccount = nil
             // The Mode pick is different: without a write-back it lived on this one session, while
             // the runs nobody starts from a composer — task-launched, MCP-created — keep resolving
             // the ACCOUNT default server-side. Web parity, and best-effort: a failed write costs a

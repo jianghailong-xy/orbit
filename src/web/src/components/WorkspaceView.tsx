@@ -46,6 +46,16 @@ import {
   sampleTail,
   type TailScrollSample,
 } from '../lib/tailPinning';
+import {
+  elementForSeq,
+  JUMP_TO_LATEST,
+  LOADING_NEWER,
+  RECORD_FLASH_MS,
+  RECORD_NOT_FOUND,
+  RECORD_PARAM,
+  recordAtOf,
+  recordScrollDelta,
+} from '../lib/transcriptDeepLink';
 import { memoizeEventFull } from '../lib/eventFull';
 import { plainPreview } from '../lib/plainPreview';
 import { navigateWithPaneSlide, showsConversation } from '../lib/paneTransition';
@@ -137,6 +147,7 @@ import {
   type LocalStatusRow,
 } from '../lib/slashCommands';
 import { sessionPlanUsage } from '../lib/planUsage';
+import { accountPlanUsage } from '../lib/engineAccounts';
 import { poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
 import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import {
@@ -197,7 +208,10 @@ import {
   purgeSession,
   getSessionEventFull,
   getSessionEventPage,
+  getSessionEventPageAfter,
+  getSessionEventPageAround,
   getSessionRetryMessage,
+  type TranscriptAroundPage,
   renameSession,
   restoreSession,
   resumeSession,
@@ -264,6 +278,7 @@ import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
 import type { Runner } from './TasksSidePanel';
+import { accountsOf } from './AccountSelect';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
 import type {
   OpenItemDeliveryCard as OpenItemDelivery,
@@ -273,11 +288,13 @@ import type {
   WatchView,
 } from '@orbit/shared';
 import {
+  accountOfEnv,
   AgentProvider,
   derivePermissionSemantics,
   fastModeAvailable,
   MAX_PROMPT_CHARS,
   permissionModeAvailableOnRunner,
+  roomiestCodexAccount,
   TRASH_RETENTION_DAYS,
 } from '@orbit/shared';
 import { lastTypedUserMessage } from '../lib/deliveredMessage';
@@ -681,19 +698,23 @@ const TRANSCRIPT_CACHE_MAX = 20;
 // any viewport in one shot, so no auto-load fires until the user actually scrolls up.
 const TAIL_PAGE = 200;
 const OLDER_PAGE = 200;
+// A link to one record (`?at=`, lib/transcriptDeepLink) opens on the page around it instead: half
+// before the record and half after, the same size as a tail page so it fills the view as well.
+const AROUND_PAGE = 200;
 // Consecutive reconnects that fail to move the resume cursor before the transcript stops trying to
 // resume and re-seeds from a tail page instead. Three is past any single dropped connection while
 // still costing ~12s of the backoff below — short enough that a wedged tab recovers on its own,
 // long enough that an ordinary redeploy blip never throws away a loaded window. See reseed().
 const RESEED_AFTER_STALLED_RECONNECTS = 3;
-// Distance from the top (px) at which scrolling up pulls in the next older page.
+// Distance from the top (px) at which scrolling up pulls in the next older page — and, in a window
+// opened at a record, from the bottom at which scrolling down pulls in the next newer one.
 const LOAD_OLDER_AT = 400;
 // A ceiling on the pages "Jump to the beginning" may pull in at once — the same one ⌘F's jump
 // runs under (SessionFind's MAX_LOAD_PAGES), for the same reason: 30 pages is well past the
 // deepest session in this deployment, so it bounds a runaway without being a working limit. A
 // session deeper than that keeps the control, and a second press carries on from where it left.
 const JUMP_TO_START_PAGES = 30;
-// What the sticky bar calls a turn the person typed. A wake carries its own label on its card
+// What the sticky bar calls a turn the person typed. A watch's wake carries its own label on its card
 // instead (`data-sticky-label`), since saying this above a card reading "not typed by you" is the
 // screen contradicting itself — which is what the account owner photographed on 2026-09-17.
 const STICKY_LABEL = 'Your question';
@@ -1427,6 +1448,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // transcript. Assigning during render is safe for a "current value" ref.
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
+  // The record a link opened the session at (`/sessions/<id>?at=<record>`, lib/transcriptDeepLink),
+  // in its public spelling, or null. Mirrored for the session effect, which reads the one it opens
+  // with and must not re-run — re-seeding the whole window — when only this changes.
+  const recordAt = recordAtOf(searchParams);
+  const recordAtRef = useRef(recordAt);
+  recordAtRef.current = recordAt;
   // Inline header-title rename: double-click swaps the title for an input. `editingTitle`
   // gates the editor, `titleDraft` holds the in-progress text, `cancelTitleEdit` lets
   // Escape skip the blur-commit. Switching sessions closes any open editor (effect below).
@@ -1665,6 +1692,26 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Set while "Jump to the beginning" is walking the pages back, so each page it asks for is
   // stamped as one that wants the top (see prependAnchorRef).
   const jumpingToStartRef = useRef(false);
+  // A window opened at a record (`?at=`) stops short of the tail: this is the `after=` cursor for the
+  // page newer than what is loaded, and it is non-null exactly while that is so. The live stream stays
+  // closed meanwhile — its events belong after the gap, not at the bottom of this window — and opens
+  // once paging down reaches the latest event (joinLiveRef) or the reader jumps there (backToLatestRef).
+  const newerCursorRef = useRef<number | null>(null);
+  const [detached, setDetached] = useState(false); // render mirror of newerCursorRef !== null
+  const loadingNewerRef = useRef<Promise<boolean> | null>(null);
+  const [loadingNewer, setLoadingNewer] = useState(false);
+  // The record to bring into view and mark once its page has rendered; the tick re-asks when the page
+  // is already on screen, where nothing else would re-render.
+  const pendingRecordRef = useRef<{ sessionId: string; seq: number } | null>(null);
+  const [recordTick, setRecordTick] = useState(0);
+  // The `?at=` already followed (`<session> <record>`), so one link is followed once, not on every render.
+  const followedRecordRef = useRef<string | null>(null);
+  // Set by the session effect, which owns the stream: open a record of the session already open, join
+  // the live stream once a detached window reaches the latest event, and trade a detached window for
+  // the tail.
+  const openRecordRef = useRef<((recordId: string) => void) | null>(null);
+  const joinLiveRef = useRef<(() => void) | null>(null);
+  const backToLatestRef = useRef<(() => void) | null>(null);
   // True from the moment a session with no cached transcript is selected until its tail page
   // lands (or gives up). Drives the skeleton: without it an unvisited session paints a blank
   // pane for the whole fetch, since an ended session matches none of the empty-state notes.
@@ -1791,11 +1838,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         }
         oldestSeqRef.current = page.events.length ? page.events[0].seq : before;
         hasMoreOlderRef.current = page.hasMore;
-        transcriptCache.current.set(selectedId, {
-          events: accRef.current,
-          oldestSeq: oldestSeqRef.current,
-          hasMoreOlder: page.hasMore,
-        });
+        // A window opened at a record is not cached: the cache is a window that ends at the tail,
+        // which a reopen resumes the live stream from.
+        if (newerCursorRef.current === null) {
+          transcriptCache.current.set(selectedId, {
+            events: accRef.current,
+            oldestSeq: oldestSeqRef.current,
+            hasMoreOlder: page.hasMore,
+          });
+        }
         return fresh.length > 0;
       })
       .catch(() => false)
@@ -1833,6 +1884,40 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // when the reader has moved on to another session, whose transcript this is now.
     if (selectedIdRef.current === session) scrollRef.current?.scrollTo({ top: 0 });
   }, [loadOlder]);
+  // loadOlder's mirror, for a window opened at a record: pull in the page just newer than what is
+  // loaded as the reader nears the bottom. Rows appended below the viewport move nothing the reader is
+  // looking at, so there is no position to hold. The page that reaches the latest event re-attaches
+  // the window to the tail, and the live stream opens from there (joinLiveRef).
+  const loadNewer = useCallback((): Promise<boolean> => {
+    if (loadingNewerRef.current) return loadingNewerRef.current;
+    const after = newerCursorRef.current;
+    if (!selectedId || after === null) return Promise.resolve(false);
+    setLoadingNewer(true);
+    const inFlight = getSessionEventPageAfter(selectedId, after, { limit: OLDER_PAGE })
+      .then((page) => {
+        // Another session, or the window re-opened at another record meanwhile: not this window's page.
+        if (selectedIdRef.current !== selectedId || newerCursorRef.current !== after) return false;
+        const fresh = page.events.filter((e) => !seen.current.has(e.seq));
+        for (const e of fresh) if (typeof e.seq === 'number') seen.current.add(e.seq);
+        if (fresh.length) {
+          accRef.current = [...accRef.current, ...fresh];
+          setEvents(accRef.current);
+        }
+        newerCursorRef.current = page.after;
+        if (page.after === null) {
+          setDetached(false);
+          joinLiveRef.current?.();
+        }
+        return fresh.length > 0;
+      })
+      .catch(() => false)
+      .finally(() => {
+        loadingNewerRef.current = null;
+        setLoadingNewer(false);
+      });
+    loadingNewerRef.current = inFlight;
+    return inFlight;
+  }, [selectedId]);
   // The tail-first window's edges, read through callbacks because they live in refs (kept out of
   // render for cost). ⌘F needs both: whether older events exist, and how far back it has loaded.
   const hasOlderNow = useCallback(() => hasMoreOlderRef.current, []);
@@ -1866,6 +1951,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       performance.now() - readerInputAtRef.current < READER_INPUT_GRACE_MS,
     );
     lastSampleRef.current = sample;
+    // A window opened at a record is never at the live tail, whatever its scroll says: its bottom is a
+    // gap, so nothing may pin there — and near it the next newer page comes in.
+    if (newerCursorRef.current !== null) {
+      atBottomRef.current = false;
+      if (el.scrollHeight - top - el.clientHeight < LOAD_OLDER_AT) loadNewer();
+    }
     setAtBottom(atBottomRef.current); // React bails out when unchanged, so no per-scroll re-render
     setHasMoreOlder(hasMoreOlderRef.current); // same bail-out; drives the way back to the start
     // Near the top with older history still on the server → pull in the next page.
@@ -1874,7 +1965,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // A turn a watch or the control plane queued is one of these too — it is where the answer under
     // it starts, so it is where the bar has to point — but it is no bubble and nobody typed it, so
     // its card hands over what to call it (`data-sticky-label` / `data-sticky-text`). Its queued
-    // twin in the tail is skipped like any queued turn: it hasn't been asked yet.
+    // twin in the tail is skipped like any queued turn: it hasn't been asked yet. A background
+    // job's news or a wakeup coming due is not one: it is a line inside the answer the agent is
+    // still giving (BackgroundWakeCard), so it carries no label and the bar keeps the question.
     const bubbles = Array.from(
       el.querySelectorAll<HTMLElement>('.chat-user:not(.chat-queued), [data-sticky-label]:not(.is-queued)'),
     ).filter((b) => !b.closest('.chat-subagent')); // ignore prompts nested in a sub-workspace transcript
@@ -1905,7 +1998,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     } else {
       setStuck(null);
     }
-  }, [loadOlder]);
+  }, [loadOlder, loadNewer]);
+  // The same button in a window opened at a record: the latest message is past the gap, so the window
+  // is traded for the tail (backToLatestRef), and the record leaves the URL — a reload now opens at the
+  // latest message, which is where the reader went.
+  const backToLatest = useCallback(() => {
+    atBottomRef.current = true;
+    setAtBottom(true);
+    backToLatestRef.current?.();
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete(RECORD_PARAM);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
   // Snap back to the live tail; the scroll events it fires re-pin atBottomRef via measure().
   const scrollToBottom = useCallback(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -2459,6 +2568,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // deprecated alias of the same derived value, still served for older native builds.
   const pickedProvider: string =
     draftProvider ?? pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? 'claude';
+  // The Codex account picked for the draft on the New Session hero, scoped to its workspace like the
+  // provider pick. Without one a new session runs on its workspace's account (Workspace.codexAccount).
+  const [draftAccountPick, setDraftAccountPick] = useState<{
+    workspaceId?: string;
+    account: string;
+  } | null>(null);
+  const draftCodexAccount =
+    draftAccountPick && draftAccountPick.workspaceId === workspaceId ? draftAccountPick.account : null;
 
   // A provider switch made on an ENDED session, scoped to that session for the same reason the
   // draft pick is scoped to its workspace. There is nothing to PATCH while a session is ended, so
@@ -2600,6 +2717,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         runner.runtimeDefaultModels,
         runner.engines,
         accountPools,
+        runner.planUsage,
       ),
     [
       configuredProviders,
@@ -2607,6 +2725,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runner.runtimeDefaultModels,
       runner.engines,
       accountPools,
+      runner.planUsage,
     ],
   );
   const currentProviderChoiceForDraft = useMemo(
@@ -2669,6 +2788,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     setProviderSwitchNote(picked ? `Model → ${picked.modelLabel}` : null);
     if (providerNoteTimer.current) clearTimeout(providerNoteTimer.current);
     providerNoteTimer.current = setTimeout(() => setProviderSwitchNote(null), 4000);
+  };
+  // An account row under an engine: that engine, on that account — or on Automatic (`null`). Like the
+  // provider, it binds the session being drafted and rewrites no workspace setting.
+  const pickDraftAccount = (slug: string, account: string | null): void => {
+    if (slug !== pickedProvider) pickDraftProvider(slug);
+    setDraftAccountPick(account === null ? null : { workspaceId, account });
   };
 
   // The provider is part of the draft's seed context: picking a different one has to re-seed
@@ -3012,23 +3137,36 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     jumpingToStartRef.current = false; // a walk to the start belongs to the session it was run on
     setLoadingOlder(false);
     setHasMoreOlder(false); // measure() re-reads it once this session's window is established
+    // Every session opens attached to its tail, unless its own link names a record (below).
+    newerCursorRef.current = null;
+    loadingNewerRef.current = null;
+    pendingRecordRef.current = null;
+    setDetached(false);
+    setLoadingNewer(false);
     if (!selectedId) {
       accRef.current = [];
       setEvents([]);
       seen.current = new Set();
       oldestSeqRef.current = null;
       hasMoreOlderRef.current = false;
+      followedRecordRef.current = null;
       setSeeding(false);
       return;
     }
     const isSeq = (s: unknown): s is number =>
       typeof s === 'number' && s !== Number.MAX_SAFE_INTEGER;
+    const maxSeqOf = (list: RunEvent[]): number =>
+      list.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), 0);
+    // A link to one record of this session (`?at=`) opens on the page around that record — not on
+    // the cached window, which ends at the tail and may be nowhere near it.
+    const openAt = recordAtRef.current;
+    followedRecordRef.current = openAt ? `${selectedId} ${openAt}` : null;
     // Seed from cache for an instant paint; touch the entry so it's most-recently-used. On a
     // cache miss the transcript stays empty until boot() fetches the newest page below (no more
     // replaying the whole history over SSE — that's what caused a long session to "fast-forward"
     // on open). The older-pagination boundary is restored from cache, or established by boot().
     const cache = transcriptCache.current;
-    const entry = cache.get(selectedId);
+    const entry = openAt ? undefined : cache.get(selectedId);
     const cached = entry?.events ?? [];
     if (entry) {
       cache.delete(selectedId);
@@ -3120,6 +3258,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     let seqAtConnect = -1;
     let stalled = 0;
     const writeCache = (): void => {
+      // A window opened at a record ends at a gap, not at the tail: a reopen must not resume from it.
+      if (newerCursorRef.current !== null) return;
       const snapshot = {
         events: accRef.current,
         oldestSeq: oldestSeqRef.current,
@@ -3443,7 +3583,88 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       if (closed || !paused) return;
       paused = false;
       fails = 0;
+      // A window opened at a record stays off the stream until it reaches the tail (joinLiveRef).
+      if (newerCursorRef.current !== null) return;
       connect();
+    };
+    /**
+     * Make the page around a record the loaded window. Its older edge is set from the page's `before`
+     * cursor, as a tail page's `hasMore` would set it; where the page stops short of the latest event
+     * the newer edge stays open (newerCursorRef) and the stream stays closed, since what it streams
+     * belongs past the gap. The record is brought into view once its row has rendered.
+     */
+    const applyRecordPage = (page: TranscriptAroundPage): void => {
+      accRef.current = page.events;
+      seen.current = new Set(page.events.map((e) => e.seq).filter(isSeq));
+      oldestSeqRef.current = page.events.length ? page.events[0].seq : null;
+      hasMoreOlderRef.current = page.before !== null;
+      lastSeq = maxSeqOf(page.events);
+      newerCursorRef.current = page.after;
+      setDetached(page.after !== null);
+      // Drafts streamed into the window being replaced are not this window's to show.
+      setStreamingText('');
+      setStreamingThink('');
+      setThinkStartedAt(null);
+      streamAnchorRef.current = null;
+      // The reader came for this record, not the latest message: nothing may pin to the bottom.
+      atBottomRef.current = false;
+      setAtBottom(false);
+      pendingRecordRef.current = { sessionId: selectedId, seq: page.anchor.seq };
+      setRecordTick((n) => n + 1);
+      setEvents(accRef.current);
+      setSeeding(false);
+      writeCache(); // only a page that reaches the tail is a window a reopen may resume from
+    };
+    // A detached window's last newer page reached the latest event: resume the stream from there.
+    joinLiveRef.current = () => {
+      if (closed) return;
+      lastSeq = maxSeqOf(accRef.current);
+      writeCache();
+      es?.close();
+      if (!paused) connect();
+    };
+    // "Jump to the latest" from a detached window: the latest message is past the gap, so the window
+    // is traded for a tail page and the stream reopens from it — reseed() is exactly that.
+    backToLatestRef.current = () => {
+      if (closed) return;
+      es?.close();
+      clearTimeout(retry);
+      newerCursorRef.current = null;
+      pendingRecordRef.current = null;
+      setDetached(false);
+      void reseed();
+    };
+    // A record of this session, named by a link followed while it is open. A record already in the
+    // window — every seq from its oldest to its newest is loaded — is a scroll; one elsewhere in the
+    // history replaces the window with the page around it, exactly as opening the session at it does.
+    openRecordRef.current = (recordId: string): void => {
+      void (async () => {
+        let page: TranscriptAroundPage;
+        try {
+          page = await getSessionEventPageAround(selectedId, recordId, {
+            limit: AROUND_PAGE,
+            signal: seedAbort.signal,
+          });
+        } catch {
+          if (!closed) message.info(RECORD_NOT_FOUND);
+          return;
+        }
+        if (closed) return;
+        const seq = page.anchor.seq;
+        const oldest = oldestSeqRef.current;
+        if (oldest !== null && seq >= oldest && seq <= maxSeqOf(accRef.current)) {
+          atBottomRef.current = false;
+          setAtBottom(false);
+          pendingRecordRef.current = { sessionId: selectedId, seq };
+          setRecordTick((n) => n + 1);
+          return;
+        }
+        es?.close();
+        es = null;
+        clearTimeout(retry);
+        applyRecordPage(page);
+        if (page.after === null && !paused) connect();
+      })();
     };
     // Tail-first seed, fired NOW rather than from the debounced block below: on a cache miss it
     // is the only request whose answer the transcript is waiting on, so making it wait out the
@@ -3452,75 +3673,94 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // Null on a cache hit, where the SSE's replay of the gap after the cached seq is enough. The
     // debounced block awaits this before connect(), so the stream still opens at the seq the
     // page established, however long it took.
-    const seed: Promise<void> | null =
-      cached.length === 0
-        ? (async () => {
-            // L2 first: the same transcript, kept in IndexedDB so it outlives the page. A hit skips
-            // the tail page entirely — the SSE resumes from the stored max seq and replays only what
-            // happened since, exactly as an L1 hit does. A miss (or any error) returns null and falls
-            // through to the network below, so this can only save a request, never cost correctness.
-            const stored = await loadTranscript(selectedId);
-            if (closed) return;
-            if (stored && stored.events.length > 0) {
-              accRef.current = stored.events;
-              for (const e of stored.events) if (isSeq(e.seq)) seen.current.add(e.seq);
-              oldestSeqRef.current = stored.oldestSeq;
-              hasMoreOlderRef.current = stored.hasMoreOlder;
-              lastSeq = stored.events.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), lastSeq);
-              const { now, deferred } = firstPaintSlice(stored.events);
-              setEvents(now);
-              setSeeding(false);
-              // Into L1 too, so switching away and back in this page load is synchronous again.
-              cache.set(selectedId, stored);
-              if (deferred) {
-                paintRest = setTimeout(() => {
-                  if (!closed) setEvents(accRef.current);
-                }, 0);
-              }
-              return;
-            }
-            // Retry the tail seed a few times before giving up. A transient failure here used to fall
-            // straight through to the SSE with lastSeq=0, replaying the whole history (now server-capped,
-            // but still a needless full tail). Stop as soon as a page seeds; on total failure fall through.
-            for (let attempt = 0; attempt < 3; attempt++) {
-              try {
-                const page = await getSessionEventPage(selectedId, {
-                  tail: TAIL_PAGE,
-                  signal: seedAbort.signal,
-                });
-                if (closed) return;
-                accRef.current = page.events;
-                for (const e of page.events) if (isSeq(e.seq)) seen.current.add(e.seq);
-                oldestSeqRef.current = page.events.length ? page.events[0].seq : null;
-                hasMoreOlderRef.current = page.hasMore;
-                lastSeq = page.events.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), lastSeq);
-                // Paint the newest slice first and release the rest after the browser has drawn it:
-                // a full page is a few hundred Markdown bodies to parse and highlight in one
-                // synchronous burst, which the user would otherwise spend staring at the skeleton.
-                // accRef keeps the whole page throughout, so the SSE and the cache are unaffected,
-                // and the remainder lands above a viewport that stays pinned to the tail.
-                const { now, deferred } = firstPaintSlice(page.events);
-                setEvents(now);
-                setSeeding(false); // history is on screen — drop the skeleton
-                writeCache();
-                if (deferred) {
-                  // A macrotask, not rAF: rAF callbacks run BEFORE the paint they're queued for,
-                  // which would merge the two renders and defeat the split.
-                  paintRest = setTimeout(() => {
-                    if (!closed) setEvents(accRef.current);
-                  }, 0);
-                }
-                return;
-              } catch {
-                if (closed) return;
-                // Last attempt failed: fall through to the SSE (the server caps a cursor-less replay).
-                if (attempt < 2) await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
-              }
-            }
-            // Every attempt failed. Clear the skeleton anyway rather than spin forever — the SSE
-            // replay below is the remaining path to content.
-            if (!closed) setSeeding(false);
-          })()
+    const seedTail = async (): Promise<void> => {
+      // L2 first: the same transcript, kept in IndexedDB so it outlives the page. A hit skips
+      // the tail page entirely — the SSE resumes from the stored max seq and replays only what
+      // happened since, exactly as an L1 hit does. A miss (or any error) returns null and falls
+      // through to the network below, so this can only save a request, never cost correctness.
+      const stored = await loadTranscript(selectedId);
+      if (closed) return;
+      if (stored && stored.events.length > 0) {
+        accRef.current = stored.events;
+        for (const e of stored.events) if (isSeq(e.seq)) seen.current.add(e.seq);
+        oldestSeqRef.current = stored.oldestSeq;
+        hasMoreOlderRef.current = stored.hasMoreOlder;
+        lastSeq = stored.events.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), lastSeq);
+        const { now, deferred } = firstPaintSlice(stored.events);
+        setEvents(now);
+        setSeeding(false);
+        // Into L1 too, so switching away and back in this page load is synchronous again.
+        cache.set(selectedId, stored);
+        if (deferred) {
+          paintRest = setTimeout(() => {
+            if (!closed) setEvents(accRef.current);
+          }, 0);
+        }
+        return;
+      }
+      // Retry the tail seed a few times before giving up. A transient failure here used to fall
+      // straight through to the SSE with lastSeq=0, replaying the whole history (now server-capped,
+      // but still a needless full tail). Stop as soon as a page seeds; on total failure fall through.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          const page = await getSessionEventPage(selectedId, {
+            tail: TAIL_PAGE,
+            signal: seedAbort.signal,
+          });
+          if (closed) return;
+          accRef.current = page.events;
+          for (const e of page.events) if (isSeq(e.seq)) seen.current.add(e.seq);
+          oldestSeqRef.current = page.events.length ? page.events[0].seq : null;
+          hasMoreOlderRef.current = page.hasMore;
+          lastSeq = page.events.reduce((m, e) => (isSeq(e.seq) ? Math.max(m, e.seq) : m), lastSeq);
+          // Paint the newest slice first and release the rest after the browser has drawn it:
+          // a full page is a few hundred Markdown bodies to parse and highlight in one
+          // synchronous burst, which the user would otherwise spend staring at the skeleton.
+          // accRef keeps the whole page throughout, so the SSE and the cache are unaffected,
+          // and the remainder lands above a viewport that stays pinned to the tail.
+          const { now, deferred } = firstPaintSlice(page.events);
+          setEvents(now);
+          setSeeding(false); // history is on screen — drop the skeleton
+          writeCache();
+          if (deferred) {
+            // A macrotask, not rAF: rAF callbacks run BEFORE the paint they're queued for,
+            // which would merge the two renders and defeat the split.
+            paintRest = setTimeout(() => {
+              if (!closed) setEvents(accRef.current);
+            }, 0);
+          }
+          return;
+        } catch {
+          if (closed) return;
+          // Last attempt failed: fall through to the SSE (the server caps a cursor-less replay).
+          if (attempt < 2) await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
+        }
+      }
+      // Every attempt failed. Clear the skeleton anyway rather than spin forever — the SSE
+      // replay below is the remaining path to content.
+      if (!closed) setSeeding(false);
+    };
+    // A link to one record: the page around it — or, for a record that is not this session's, the
+    // tail, with a note saying the link could not be followed.
+    const seedRecord = async (recordId: string): Promise<void> => {
+      try {
+        const page = await getSessionEventPageAround(selectedId, recordId, {
+          limit: AROUND_PAGE,
+          signal: seedAbort.signal,
+        });
+        if (closed) return;
+        applyRecordPage(page);
+        return;
+      } catch {
+        if (closed) return;
+        message.info(RECORD_NOT_FOUND);
+      }
+      await seedTail();
+    };
+    const seed: Promise<void> | null = openAt
+      ? seedRecord(openAt)
+      : cached.length === 0
+        ? seedTail()
         : null;
     // Debounce the rest of the network work: scrubbing the list with the arrow keys shouldn't
     // open (and tear down) a connection — nor re-fetch approvals/queued turns — for each
@@ -3564,7 +3804,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       void (async () => {
         await seed;
         if (closed) return;
-        connect();
+        // A window opened at a record waits for the reader to reach the tail (joinLiveRef).
+        if (newerCursorRef.current === null) connect();
         // Last, deliberately: the tray it feeds sits below the fold and nothing else waits on it,
         // whereas the scan behind it is the most expensive read on this path. Issuing it here
         // rather than alongside the seed keeps it from competing for the connection — and, on the
@@ -3574,10 +3815,26 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     }, SWITCH_DEBOUNCE_MS);
     return () => {
       resumeStreamRef.current = null;
+      openRecordRef.current = null;
+      joinLiveRef.current = null;
+      backToLatestRef.current = null;
       clearTimeout(start);
       stop();
     };
   }, [selectedId]);
+
+  // A link to a record of the session already open — a footnote, a link in a message, back and
+  // forward through them. The session effect above followed the record the session opened with.
+  useEffect(() => {
+    if (!selectedId || !recordAt) {
+      followedRecordRef.current = null;
+      return;
+    }
+    const key = `${selectedId} ${recordAt}`;
+    if (followedRecordRef.current === key) return;
+    followedRecordRef.current = key;
+    openRecordRef.current?.(recordAt);
+  }, [selectedId, recordAt]);
 
   // Polled fallback for idleness, in case an SSE turn_end was missed / reconnected.
   // Also keyed on selectedId so it re-syncs on a session switch: the SSE effect above
@@ -3645,6 +3902,28 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     localStatusCards,
     measure,
   ]);
+
+  // The record a link named (`?at=`): once its row has rendered, bring it into view and mark it for a
+  // moment. A row not rendered yet leaves the request standing for the next render of the transcript.
+  useEffect(() => {
+    const pending = pendingRecordRef.current;
+    const root = scrollRef.current;
+    if (!pending || !root || pending.sessionId !== selectedId) return;
+    const row = elementForSeq(root, pending.seq);
+    if (!row) return;
+    pendingRecordRef.current = null;
+    const view = root.getBoundingClientRect();
+    const box = row.getBoundingClientRect();
+    root.scrollTop += recordScrollDelta(
+      { top: view.top, height: root.clientHeight },
+      { top: box.top, height: box.height },
+    );
+    // Restarted, not just added, so a second link to the same row marks it again.
+    row.classList.remove('record-flash');
+    void row.offsetWidth;
+    row.classList.add('record-flash');
+    window.setTimeout(() => row.classList.remove('record-flash'), RECORD_FLASH_MS);
+  }, [transcriptEvents, recordTick, selectedId]);
 
   // Track at-bottom + which prompt to surface as the user scrolls.
   useEffect(() => {
@@ -4332,6 +4611,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // Only when it is on. Off is the server's default and the engine's, so saying it is the
         // one way this could disagree with either of them later.
         ...(fastMode ? { fastMode: true } : {}),
+        // Only an explicit pick, as with the provider: none keeps the workspace's account.
+        ...(draftCodexAccount && pickedProvider === 'codex' ? { codexAccount: draftCodexAccount } : {}),
         attachmentIds,
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
@@ -5922,9 +6203,49 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     shownPool && (!selectedId || detailForSelected)
       ? sessionPoolAccount(shownPool, selectedId ? shownPoolMemberId : null)
       : null;
+  // Which of the runner's accounts a built-in session spends — for Codex the draft's pick, or the one
+  // picked for the session, else its workspace's; for Claude its workspace's — and Default for an id
+  // this runner does not report, as dispatch resolves it (providers/account.ts accountOnRunner).
+  const accountOnThisRunner = (engine: 'codex' | 'claude', wanted: string | null | undefined): string =>
+    wanted && accountsOf(runner, engine).some((account) => account.id === wanted) ? wanted : 'default';
+  // A new session on a workspace that picked no Codex account (and whose env selects no other CODEX_HOME
+  // or key of its own) starts on the runner's account with the most room: the choice the server makes
+  // when it creates the session (automaticCodexAccount), asked here of the same numbers to say which.
+  const codexAccountsHere = accountsOf(runner, 'codex');
+  const codexAutoOffered =
+    !pickedWorkspace?.codexAccount &&
+    codexAccountsHere.length >= 2 &&
+    accountOfEnv('codex', pickedWorkspace?.env ?? null, codexAccountsHere) === 'default';
+  const codexAutoAccount = codexAutoOffered
+    ? roomiestCodexAccount(codexAccountsHere, runner.planUsage, new Date())
+    : null;
+  const shownCodexAccount = accountOnThisRunner(
+    'codex',
+    selectedId
+      ? (detailForSelected?.codexAccount ?? detailForSelected?.workspace?.codexAccount)
+      : (draftCodexAccount ?? pickedWorkspace?.codexAccount ?? codexAutoAccount),
+  );
+  const shownClaudeAccount = accountOnThisRunner(
+    'claude',
+    selectedId ? detailForSelected?.workspace?.claudeAccount : pickedWorkspace?.claudeAccount,
+  );
+  const shownAccount =
+    shownProvider === 'codex' ? shownCodexAccount : shownProvider === 'claude' ? shownClaudeAccount : 'default';
+  // The Codex account named in the quota gauge's popover, once the runner has more than one to tell apart.
+  const shownCodexAccountRow =
+    shownProvider === 'codex' && codexAccountsHere.length >= 2
+      ? (codexAccountsHere.find((account) => account.id === shownCodexAccount) ?? { id: 'default', name: undefined })
+      : null;
+  const shownCodexAccountLabel = shownCodexAccountRow
+    ? shownCodexAccountRow.id === 'default'
+      ? 'Default'
+      : shownCodexAccountRow.name || `Account ${shownCodexAccountRow.id}`
+    : null;
   const shownPlanUsage = shownPool
     ? (shownPoolAccount?.member.planUsage ?? null)
-    : sessionPlanUsage(shownProvider, runner.planUsage, configuredProviders);
+    : (shownProvider === 'codex' || shownProvider === 'claude') && shownAccount !== 'default'
+      ? accountPlanUsage(runner.planUsage, shownProvider, shownAccount)
+      : sessionPlanUsage(shownProvider, runner.planUsage, configuredProviders);
   // Where this session could move without changing CLI. Offered on the two routes that actually
   // carry a provider: a live session's config PATCH, and the resume that revives an ended one. A
   // draft picks in the hero above instead (which offers every runtime, not one), and a terminal
@@ -7482,7 +7803,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 // its delivery stands is the queue's line to say, as for every queued row.
                 const wake = parseWatchWake(q.content);
                 // A wake the control plane queued for a background job's news, or for a wakeup coming
-                // due, is nobody's message either: it gets the card the transcript draws once a
+                // due, is nobody's message either: it gets the line the transcript draws once a
                 // runner takes it. Withdrawing it is an ordinary cancel — nothing re-sends it.
                 const background = wake ? null : parseBackgroundWake(q.content);
                 return wake ? (
@@ -7662,6 +7983,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 current={currentProviderChoiceForDraft}
                 choices={providerChoicesForRunner}
                 onPick={pickDraftProvider}
+                currentAccount={shownCodexAccount}
+                automatic={codexAutoOffered ? !draftCodexAccount : undefined}
+                onPickAccount={pickDraftAccount}
                 runnerId={runner.id}
                 // Nothing to choose until we know which workspace (and so which project) this runs in.
                 disabled={!pickedWorkspace}
@@ -7684,8 +8008,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               oldestSeq={oldestSeqNow}
             />
           )}
+          {selectedId && detached && loadingNewer && (
+            <div className="chat-newer-bottom">
+              <span className="chat-older-pill">{LOADING_NEWER}</span>
+            </div>
+          )}
           {selectedId && !atBottom && (
-            <button className="scroll-to-bottom" aria-label="Scroll to bottom" onClick={scrollToBottom}>
+            <button
+              className="scroll-to-bottom"
+              aria-label={detached ? JUMP_TO_LATEST : 'Scroll to bottom'}
+              onClick={detached ? backToLatest : scrollToBottom}
+            >
               <ArrowDownOutlined />
             </button>
           )}
@@ -8369,9 +8702,27 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             {shownPlanUsage && (
               <PlanUsageIndicator
                 usage={shownPlanUsage}
+                // Which of the runner's Codex accounts this quota is, named inside the popover rather
+                // than beside the gauge, where a phone's toolbar has no room for an email. A draft
+                // names the one it would start on.
+                account={
+                  !shownPool && shownCodexAccountLabel
+                    ? {
+                        label: shownCodexAccountLabel,
+                        ...(!selectedId && !draftCodexAccount && !pickedWorkspace?.codexAccount
+                          ? { note: 'Automatic — the account with the most room right now' }
+                          : {}),
+                      }
+                    : undefined
+                }
                 // Earned reset credits belong to the runner's own Codex sign-in, so only a session on
-                // the built-in Codex runtime is offered them; the create route judges the workspace.
-                reset={shownProvider === 'codex' ? { runner, workspaceId: shownWorkspaceId } : undefined}
+                // the built-in Codex runtime is offered them — on Default, whose quota this then is;
+                // the create route judges the workspace.
+                reset={
+                  shownProvider === 'codex' && shownCodexAccount === 'default'
+                    ? { runner, workspaceId: shownWorkspaceId }
+                    : undefined
+                }
               />
             )}
             {/* Context stays visible even before the first turn reports tokens — a New Session reads

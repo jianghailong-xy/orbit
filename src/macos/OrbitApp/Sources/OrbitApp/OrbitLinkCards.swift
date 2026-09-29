@@ -173,7 +173,17 @@ extension AppModel {
     func openOrbitLink(_ url: URL, overConsole: Bool = false) -> Bool {
         guard let ref = orbitRef(for: url) else { return false }
         openOrbitLink(ref, overConsole: overConsole)
+        followRecord(in: url)
         return true
+    }
+
+    /// A link that names one record of a session (`SessionRecordLink`: `orbit://session/<id>?at=…`, or
+    /// a page URL of this deployment) opens that session at the record: its console is told which
+    /// record, and opens on the page around it instead of at the latest message. Called beside the
+    /// route or the link door, never instead of them — they put the session on screen, this says where.
+    func followRecord(in url: URL) {
+        guard let link = SessionRecordLink.parse(url, host: baseURL?.absoluteString) else { return }
+        consoleRegistry?.openRecord(link.record, inSession: link.session)
     }
 
     /// Where a link goes: every kind is known from the link alone — a task, a session, a task list, a

@@ -364,3 +364,44 @@ fact any more" note at the `route(...)` call (lines 389-391):
 > that no longer exists. `src/apiserver/src/projects/decision-facts-no-coordinator-turn.pg.spec.ts`
 > holds that neither fact writes a coordinator turn, beside a `CRITERION_UNLANDED` delivery to the
 > same conversation that does.
+
+> **Changed on 2026-09-29 — in an Automatic project the coordinator decides the evidence, and the
+> owner's card is the fallback.**
+>
+> The two notes above are left as written, and they still describe every project whose coordinator
+> switch is off, every task filed under no project, and everything the owner does in the app. What
+> changed is who decides first in a project with `coordinatorEnabled = true`. The premise of
+> 2026-09-10 — only the owner can answer — was never the product's rule there: `coordinator-authority.ts`
+> makes concluding a verdict from evidence COORDINATOR_BOUNDED, and from 09-14 to 09-29 the owner
+> pressed 96 of the 100 EVIDENCE_JUDGMENT cards in Automatic projects, the coordinator 4.
+>
+> - `CompletionInputRouter.routeCompletionEvidence` hands the revision to
+>   `CompletionEvidenceProducer`, which queues it on the project's standing coordinator conversation
+>   (`CoordinatorDeliveryService.queue`, the carrier `DEPENDENT_READY` uses) when that conversation
+>   can decide it: the task declared EVIDENCE_JUDGMENT and has not settled, the revision is its
+>   latest and unanswered, the evidence quotes a live standard (`criterionStandingRefusal`), and the
+>   conversation took no part in the work (`decidingSessionDisqualification`). The authorizer is the
+>   switch, then the fuse (`refusingWhileFusePaused`), then `convergence.authorizeWake`. Any other
+>   revision is recorded against `JUDGMENT_REQUEST_DERIVER` exactly as before.
+> - The turn asks the coordinator to decide, not to relay: read the revision with
+>   `task_evidence_list`, then `task_evidence_decide` it — CONFIRM, or SEND_BACK with a note saying
+>   what the next revision has to show. It quotes the criterion the evidence cites, says that after
+>   the project's `exceptionEscalationSeconds` the revision goes to the owner, and that a question
+>   that really is the owner's goes through `ask_owner` — wanting the owner to take a look is not
+>   one.
+> - `readPendingEvidenceJudgments` and `countPendingEvidenceJudgments` (the "Needs you" count) share
+>   one predicate: a revision whose wake was DELIVERED, in a project that is still Automatic, to a
+>   conversation that has not ended, less than `exceptionEscalationSeconds` ago, is not placed in
+>   `pending` and not counted. A refused delivery (switch, fuse, no conversation, an ended one), a
+>   revision that was only recorded, and one whose time is up are the owner's card at once, as on
+>   2026-09-10. The decision door is unchanged: the owner may decide any revision at any moment.
+>   `TaskCompletionEvidenceService.submit` nudges open pages only after the routing, so the re-read
+>   it prompts already sees the hold instead of drawing, for one poll, a card the coordinator holds.
+>
+> **Why this is not the relay 2026-09-10 removed.** That turn could only pass the question on, and
+> the card died with it. This one asks its reader for the answer, and the owner's card does not
+> depend on it: the card is still drawn from the derived read, which lists the revision again by
+> itself when the hold ends — nothing is re-sent and nothing has to be. No migration: the event was
+> already in the ledger's CHECK. `src/apiserver/src/projects/automatic-evidence-to-coordinator.pg.spec.ts`
+> holds both halves, and `decision-facts-no-coordinator-turn.pg.spec.ts` now holds that a project
+> that is not Automatic still gets no turn for its evidence, beside the Automatic one that does.

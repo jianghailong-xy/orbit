@@ -162,14 +162,19 @@ test('an account the runner reports without a name is named by its slot id', asy
 });
 
 test('a workspace on Default is judged on Default, and named as such only among several accounts', async () => {
-  for (const codexAccount of [null, 'default']) {
-    const err = await refusal({ codexAccount, engines: codex('no', 'yes') });
+  const err = await refusal({ codexAccount: 'default', engines: codex('no', 'yes') });
 
-    assert.ok(isEngineSignedOut(err), String(codexAccount));
-    assert.match(err.message, /^Codex account "Default" is signed out on runner "build-box"/);
-    assert.ok(err.message.includes('`codex login --device-auth`'), 'Default signs in in the runner’s own environment');
-    assert.ok(!err.message.includes('CODEX_HOME'), err.message);
-  }
+  assert.ok(isEngineSignedOut(err));
+  assert.match(err.message, /^Codex account "Default" is signed out on runner "build-box"/);
+  assert.ok(err.message.includes('`codex login --device-auth`'), 'Default signs in in the runner’s own environment');
+  assert.ok(!err.message.includes('CODEX_HOME'), err.message);
+
+  // A workspace that picked none is Automatic, which never starts a session on a signed-out account:
+  // it goes to Work, the one that is signed in, and is judged there.
+  const automatic = makeService({ codexAccount: null, engines: codex('no', 'yes') });
+  await automatic.service.create('owner-1', CODEX_SESSION as never);
+  assert.equal(automatic.creates[0]?.codexAccount, WORK);
+
   // The only account: the refusal reads exactly as it did before accounts.
   for (const accounts of [[{ id: 'default', home: DEFAULT_HOME, codexHome: DEFAULT_HOME, auth: 'no' }], undefined]) {
     const err = await refusal({

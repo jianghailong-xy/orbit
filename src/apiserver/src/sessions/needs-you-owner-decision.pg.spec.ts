@@ -42,6 +42,11 @@
  *       CONFIRM puts it back. Each write also asks for the coordinator's row to be re-drawn,
  *       because `task.changed` refreshes no session row.
  *
+ *       In a project whose coordinator switch is OFF, which is where every revision is the owner's
+ *       card at once. In an Automatic one a revision handed to its coordinator is not counted until
+ *       the project's `exceptionEscalationSeconds` have passed — the same reads, witnessed by
+ *       `projects/automatic-evidence-to-coordinator.pg.spec.ts`.
+ *
  *       That re-draw is the one signal the evidence service addresses to a session, and its census
  *       (`task-completion-evidence.spec.ts`) lets it out on what (6d) and (6e) pin: it names the
  *       coordinator whichever run submitted or answered, it is asked for once a write has
@@ -481,6 +486,10 @@ test('the badge counts evidence waiting on the coordinator’s card, and only wh
   // Confirmed before any of the work below is filed: this fixture is about the evidence question,
   // and a plan nobody has confirmed would be counted here as a question of its own (last case).
   assert.equal((await confirmStandardSet(f, stack)).state, 'CONFIRMED');
+  // And switched off, where the fixture — like the confirmation — leaves it on: in an Automatic
+  // project an answerable revision is handed to the coordinator and held off this count for a while
+  // (the header), and what is counted here is the owner's card as it is drawn at once.
+  await db.project.update({ where: { id: f.projectId }, data: { coordinatorEnabled: false } });
   const { runnerId } = await db.workspace.findUniqueOrThrow({
     where: { id: f.workspaceId },
     select: { runnerId: true },

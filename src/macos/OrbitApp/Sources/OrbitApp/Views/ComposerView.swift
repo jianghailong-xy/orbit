@@ -413,7 +413,12 @@ struct ComposerView: View {
                     .accessibilityLabel(help)
             }
             if let usage = console.planUsage {
-                PlanUsageIndicator(usage: usage)
+                // Which of the runner's Codex accounts this quota is, named in the gauge's detail
+                // rather than beside it, where a phone's footer has no room for an email (web parity).
+                PlanUsageIndicator(usage: usage,
+                                   account: console.codexAccountLabel.map {
+                                       PlanUsageAccount(label: $0, note: console.codexAccountNote)
+                                   })
             }
             // Context stays visible even before the first turn reports tokens — a New Session
             // reads 0%. Rightmost gauge, next to Send.
@@ -1198,10 +1203,18 @@ private final class PlaceholderTextView: UITextView {
 }
 #endif
 
+/// Whose quota the detail's windows are: one of the runner's Codex accounts, where it has several.
+/// `note` says how a new session came to it when nothing picked one.
+private struct PlanUsageAccount {
+    let label: String
+    let note: String?
+}
+
 /// Compact plan-usage pill for the composer footer. Limit items mirror Codex TUI,
 /// while percentages retain Orbit's percent-consumed semantics.
 private struct PlanUsageIndicator: View {
     let usage: PlanUsageSnapshot
+    var account: PlanUsageAccount?
     @State private var showDetail = false
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -1232,7 +1245,7 @@ private struct PlanUsageIndicator: View {
             .buttonStyle(.plain)
             .help("Plan usage \(pct)%")
             .accessibilityLabel("Plan usage \(pct)%")
-            .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage))
+            .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage, account: account))
         }
     }
 }
@@ -1422,15 +1435,24 @@ private struct ContextWindowDetailPresentation: ViewModifier {
 private struct PlanUsageDetailPresentation: ViewModifier {
     @Binding var isPresented: Bool
     let usage: PlanUsageSnapshot
+    let account: PlanUsageAccount?
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
+
+    /// What the account row adds to the phone sheet's height: its line, the rule and the gap after
+    /// it, and the note when there is one.
+    private var accountHeight: Int {
+        guard let account else { return 0 }
+        return account.note == nil ? 50 : 70
+    }
 
     func body(content: Content) -> some View {
         #if os(macOS)
         content.popover(isPresented: $isPresented, arrowEdge: .top) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Plan usage").font(.headline)
+                if let account { PlanUsageAccountRow(account: account, compact: true) }
                 PlanUsageDetailRows(rows: usage.rows, compact: true)
             }
             .padding(14)
@@ -1445,6 +1467,7 @@ private struct PlanUsageDetailPresentation: ViewModifier {
             content.popover(isPresented: $isPresented) {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Plan usage").font(.headline)
+                    if let account { PlanUsageAccountRow(account: account) }
                     PlanUsageDetailRows(rows: usage.rows)
                 }
                 .padding(16)
@@ -1459,6 +1482,9 @@ private struct PlanUsageDetailPresentation: ViewModifier {
                         Button("Done") { isPresented = false }
                     }
                     .padding(.bottom, 16)
+                    if let account {
+                        PlanUsageAccountRow(account: account).padding(.bottom, 18)
+                    }
                     PlanUsageDetailRows(rows: usage.rows)
                     Spacer(minLength: 0)
                 }
@@ -1466,11 +1492,36 @@ private struct PlanUsageDetailPresentation: ViewModifier {
                 .padding(.top, 24)
                 .padding(.bottom, 20)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .presentationDetents([.height(CGFloat(120 + usage.rows.count * 66))])
+                .presentationDetents([.height(CGFloat(120 + usage.rows.count * 66 + accountHeight))])
                 .presentationDragIndicator(.visible)
             }
         }
         #endif
+    }
+}
+
+/// Whose quota the windows below are, ruled off from them: "Account" and the account's name, which
+/// gives way with an ellipsis (names are often emails), and the note under it when there is one.
+private struct PlanUsageAccountRow: View {
+    let account: PlanUsageAccount
+    var compact: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 16) {
+                Text("Account").layoutPriority(1)
+                Spacer(minLength: 0)
+                Text(account.label).foregroundStyle(.secondary).lineLimit(1)
+            }
+            .font(compact ? .caption : .subheadline)
+            if let note = account.note {
+                Text(note)
+                    .font(compact ? .caption2 : .caption)
+                    .foregroundStyle(.tertiary)
+            }
+            Divider().padding(.top, compact ? 8 : 10)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

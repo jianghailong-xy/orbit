@@ -17,12 +17,12 @@ import type { DerivedProjectDoneReading } from './project-done-derived';
  * WHY THIS IS NOT `coordinator-opening.ts`
  * ========================================
  * That one is the opening of a user-origin conversation, and it is written for a reader who will
- * answer it: it says "推进靠的是跟人对话" and "没有任何自动的环会替你决定什么时候动". Both are
- * true there and false here. This session was decided on by something automatic — a fact
- * `CoordinatorWakeService` claimed — and there is nobody on the other end of it. Reusing that
- * opening would open every judgment by telling it two things that are not so, which is the mistake
- * 60dece5e removed from the OLD opening (it described a §9.2 policy matrix no code enforced any
- * more) and worth not making a second time.
+ * answer it: with the project's Automatic switch off it says "推进靠的是跟人对话" and
+ * "没有任何自动的环会替你决定什么时候动". Both are true there and false here. This session was
+ * decided on by something automatic — a fact `CoordinatorWakeService` claimed — and there is
+ * nobody on the other end of it. Reusing that opening would open every judgment by telling it two
+ * things that are not so, which is the mistake 60dece5e removed from the OLD opening (it described
+ * a §9.2 policy matrix no code enforced any more) and worth not making a second time.
  *
  * FACTS FIRST; ONE CLOSED PROTOCOL FOR PROJECT SETTLEMENT
  * ======================================================
@@ -92,9 +92,13 @@ export function describeWakeFact(fact: WakeFact): string {
         `已经在默认分支上（落地判定：${String(detail.landing ?? '未知')}）。`
       );
     case 'COMPLETION_EVIDENCE_REVISED':
+      // The title is there when the fact is delivered to be decided (`CompletionEvidenceProducer`);
+      // a fact that was only recorded carries the id alone.
       return (
-        `任务 ${uuidToBase62(fact.subjectId)} 提交了第 ${String(detail.evidenceRevision ?? '未知')} `
-        + '版完成证据。'
+        (typeof detail.title === 'string'
+          ? `任务「${detail.title}」（${uuidToBase62(fact.subjectId)}）`
+          : `任务 ${uuidToBase62(fact.subjectId)} `)
+        + `提交了第 ${String(detail.evidenceRevision ?? '未知')} 版完成证据。`
       );
     case 'COMPLETION_ACK_STALE':
       {
@@ -375,10 +379,21 @@ function renderSettledCriteria(criteria: readonly SettledCriterionReport[]): str
  * ===================================
  * Until 2026-09-10 two more facts had a branch here: `COMPLETION_EVIDENCE_REVISED`, whose message
  * told the turn to ask the account owner through `AskUserQuestion`, and
- * `CRITERIA_DECISION_PENDING`, whose message relayed a held loosening's diff. Both were questions
- * only the account owner may answer, so the turn that carried them could only pass them on. Both
- * are now cards the clients draw from the pending reads, with buttons that reach the decision doors
- * directly, and neither fact is delivered to any conversation.
+ * `CRITERIA_DECISION_PENDING`, whose message relayed a held loosening's diff. Both were treated as
+ * questions only the account owner may answer, so the turn that carried them could only pass them
+ * on. Both became cards the clients draw from the pending reads, with buttons that reach the
+ * decision doors directly. The held loosening is still delivered to nobody.
+ *
+ * AND WHAT CAME BACK, AS SOMETHING ELSE (2026-09-29)
+ * ==================================================
+ * `COMPLETION_EVIDENCE_REVISED` has a branch again, in an Automatic project only, and it is not a
+ * relay: deciding evidence is COORDINATOR_BOUNDED (`coordinator-authority.ts`), so the message
+ * asks this conversation to read the evidence and decide it itself — CONFIRM, or SEND_BACK with a
+ * note saying what the next revision must show — and says the one thing it cannot see from where
+ * it sits: that the owner's card is held back only for the project's `exceptionEscalationSeconds`,
+ * after which the owner is asked. The criterion the evidence quotes is copied in, as its own
+ * words: it is the standard the decision binds to, and the reader has no other place to find the
+ * version this revision was measured against.
  */
 export function buildCoordinatorDeliveryMessage(
   fact: WakeFact,
@@ -468,6 +483,42 @@ export function buildCoordinatorDeliveryMessage(
       + `${projectId}）读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
       + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
       + '所以以你自己刚读到的库里状态为准。'
+    );
+  }
+  if (fact.event === 'COMPLETION_EVIDENCE_REVISED') {
+    const detail = (fact.detail ?? {}) as {
+      evidenceRevision?: unknown;
+      criterion?: { key?: unknown; text?: unknown } | null;
+      escalationSeconds?: unknown;
+    };
+    const taskId = uuidToBase62(fact.subjectId);
+    const revision = String(detail.evidenceRevision ?? '');
+    const criterion = detail.criterion && typeof detail.criterion.text === 'string'
+      ? detail.criterion
+      : null;
+    const escalation = typeof detail.escalationSeconds === 'number'
+      ? `（现在是 ${detail.escalationSeconds} 秒）`
+      : '';
+    return (
+      `【项目「${projectTitle}」有一版完成证据等你判】\n\n`
+      + `${describeWakeFact(fact)}\n\n`
+      + (criterion
+        ? `这版证据引用的判据（key ${String(criterion.key)}），原文：\n「${String(criterion.text)}」\n\n`
+        : '')
+      + '这个项目开着 Automatic：任务做没做完由你按证据判，不先交给账号所有者。'
+      + `先用 task_evidence_list（taskId 传 ${taskId}）读第 ${revision} 版证据——它声称做成了什么`
+      + '（claim）、引用了哪些检查（checks）、自己承认没证明什么（gaps）；需要时用 task_get '
+      + `（taskId 传 ${taskId}）看任务描述和评论。然后用 task_evidence_decide（taskId 传 ${taskId}，`
+      + `evidenceRevision 传 "${revision}"）判：证据足以证明上面那条判据，判 CONFIRM，任务随之 DONE；`
+      + '不足，判 SEND_BACK，note 里写清下一版证据要证明什么——任务保持 OPEN，等下一版。\n\n'
+      + `你不判的话，投递之后过了这个项目的 exceptionEscalationSeconds${escalation}，这一版会交给`
+      + '账号所有者在 app 里判；账号所有者任何时候也都可以直接判。真正要账号所有者拍板的题另用 '
+      + 'ask_owner 问（每题带推荐默认）；「想让账号所有者看一眼」不是不判的理由。\n\n'
+      + `全量状态自己读，这条消息里除了上面那个事实和它引用的判据原文，没有这个项目的任何其他状态：`
+      + `project_get（projectId 传 ${projectId}）读目标与验收标准，task_list（projectId 传 `
+      + `${projectId}）读每个任务的状态与依赖。\n\n`
+      + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
+      + '所以以你自己刚读到的库里状态为准——这一版可能已经被判过，或者已经有了更新的一版。'
     );
   }
   if (fact.event === 'DEPENDENT_READY') {

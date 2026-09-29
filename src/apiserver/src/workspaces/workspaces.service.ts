@@ -19,10 +19,14 @@ import {
 } from '../common/runner-repo-health';
 import { CreateWorkspaceDto, UpdateWorkspaceDto } from './dto';
 
-/** Default is stored as NULL however the request spelled it: one value means "no other account". */
-function storedAccountChoice(value: string | null | undefined): string | null | undefined {
+/**
+ * Default is stored as NULL however the request spelled it: one value means "no other account". Except
+ * for Codex (`keepDefault`), where the two differ: NULL is Automatic — a new session starts on the
+ * runner's account with the most room (automaticCodexAccount) — and `default` pins its sessions to Default.
+ */
+function storedAccountChoice(value: string | null | undefined, keepDefault = false): string | null | undefined {
   if (value === undefined) return undefined;
-  return value === null || value === DEFAULT_ACCOUNT ? null : value;
+  return value === null || (value === DEFAULT_ACCOUNT && !keepDefault) ? null : value;
 }
 
 @Injectable()
@@ -72,7 +76,7 @@ export class WorkspacesService {
         // itself (canonicalRepoUrl), so nothing here has to agree with that function's shape.
         repoUrl: dto.repoUrl,
         env: (dto.env ?? Prisma.JsonNull) as Prisma.InputJsonValue,
-        codexAccount: storedAccountChoice(dto.codexAccount) ?? null,
+        codexAccount: storedAccountChoice(dto.codexAccount, true) ?? null,
         claudeAccount: storedAccountChoice(dto.claudeAccount) ?? null,
         enabled: dto.enabled ?? true,
         autoInitGit: dto.autoInitGit ?? false,
@@ -272,7 +276,7 @@ export class WorkspacesService {
       canDelegate: dto.canDelegate,
       maxConcurrentTasks: dto.maxConcurrentTasks,
       defaultMergeTarget: dto.defaultMergeTarget,
-      codexAccount: storedAccountChoice(dto.codexAccount),
+      codexAccount: storedAccountChoice(dto.codexAccount, true),
       claudeAccount: storedAccountChoice(dto.claudeAccount),
     };
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;

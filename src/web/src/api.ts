@@ -285,6 +285,46 @@ export const getSessionEventPage = (
   return api<EventPage>(`/sessions/${id}/events/page?${qs.toString()}`, { signal: opts.signal });
 };
 
+/** A page read from the middle of a transcript (`around=` or `after=`), with a cursor each way:
+ *  `before` is what to pass as `before=` for the page older than this one, `after` what to pass as
+ *  `after=` for the page newer. Null when that direction has nothing more — an `after` of null means
+ *  the page reaches the session's latest event. */
+export interface TranscriptWindowPage extends EventPage {
+  before: number | null;
+  after: number | null;
+}
+
+/** The page around one record, and where the record resolved to: an event is itself, a turn the
+ *  `user` event its message entered the transcript as, a tool call its `tool_use`. */
+export interface TranscriptAroundPage extends TranscriptWindowPage {
+  anchor: { kind: 'turn' | 'event' | 'tool_call'; id: string; seq: number };
+}
+
+/** The page of a session's history around one record — a turn, an event or a tool call, named by
+ *  its id in either spelling — for a link that opens the session at that record
+ *  (lib/transcriptDeepLink). 404 when it is not a record of this session. */
+export const getSessionEventPageAround = (
+  id: string,
+  recordId: string,
+  opts: { limit?: number; signal?: AbortSignal } = {},
+): Promise<TranscriptAroundPage> => {
+  const qs = new URLSearchParams({ around: recordId, maxPayload: String(MAX_EVENT_PAYLOAD) });
+  if (opts.limit != null) qs.set('limit', String(opts.limit));
+  return api<TranscriptAroundPage>(`/sessions/${id}/events/page?${qs.toString()}`, { signal: opts.signal });
+};
+
+/** The page just newer than a seq — how a window opened at a record pages back down to the latest
+ *  message, the mirror of `before`. */
+export const getSessionEventPageAfter = (
+  id: string,
+  after: number,
+  opts: { limit?: number; signal?: AbortSignal } = {},
+): Promise<TranscriptWindowPage> => {
+  const qs = new URLSearchParams({ after: String(after), maxPayload: String(MAX_EVENT_PAYLOAD) });
+  if (opts.limit != null) qs.set('limit', String(opts.limit));
+  return api<TranscriptWindowPage>(`/sessions/${id}/events/page?${qs.toString()}`, { signal: opts.signal });
+};
+
 /** The untrimmed payload of one event, fetched when the user expands a card that arrived
  *  `truncated` — so a big Read/Write body costs a request only if someone actually opens it. */
 export const getSessionEventFull = (id: string, seq: number): Promise<EventPageEvent> =>
@@ -313,6 +353,9 @@ export const createInteractiveSession = (body: {
   effort?: string;
   /** Start the session in Claude Code's fast lane (`/fast`). Omitted → off. */
   fastMode?: boolean;
+  /** Which of the runner's Codex accounts the session runs on (`default` or a slot id), picked on
+   *  the New Session screen. Omitted follows the workspace's account. */
+  codexAccount?: string;
   /** Ids of images uploaded unscoped on the compose page; the server scopes them to the
    *  new session and links them to its seeded first turn. */
   attachmentIds?: string[];
@@ -1171,6 +1214,9 @@ export interface SessionDetail {
   poolMemberProviderId?: string | null;
   /** On a shared pool: the key its last claim chose (null before the first, or when none could run). */
   poolKeyId?: string | null;
+  /** The Codex account picked for this session on the New Session screen; null follows the
+   *  workspace's (`workspace.codexAccount`). */
+  codexAccount?: string | null;
   // When the armed auto-retry fires (null = nothing armed), and how many attempts this run of
   // failures has already spent. Drives the transcript's quota / provider-error card.
   retryAt?: string | null;
@@ -1186,6 +1232,10 @@ export interface SessionDetail {
     model?: string | null;
     effort?: string | null;
     defaultMergeTarget?: string | null;
+    /** The Codex account this workspace's sessions run on; null is Default. */
+    codexAccount?: string | null;
+    /** The Claude account this workspace's sessions run on; null is Default. */
+    claudeAccount?: string | null;
   } | null;
   branch?: string | null;
   baseSha?: string | null;

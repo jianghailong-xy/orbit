@@ -37,6 +37,7 @@ import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { runAccount } from '../providers/plan-usage-accounts';
+import { accountEnvVar } from '../providers/account';
 import { dispatchCodexResetCommand, receiveCodexResetResult } from './codex-reset-relay';
 import {
   INTEGRATION_RESULT_REFUSAL_STATUS,
@@ -146,7 +147,7 @@ import { ProjectAcceptanceService } from '../projects/project-acceptance.service
 import {
   appendCoordinatorDeliveryContext,
   buildCoordinatorDeliveryContextKey,
-  hasCoordinatorOpening,
+  coordinatorOpeningIsCurrent,
   wrapCoordinatorDeliveryContext,
 } from '../projects/coordinator-opening';
 import { appendWikiContext } from '../wiki/wiki-push';
@@ -286,6 +287,7 @@ import {
   advertisedRunnerProviders,
   runnerAdvertisesProvider,
 } from './runner-provider-support';
+import { START_CARD_REVIEWS_MESSAGE, startCardReviewsCreate } from './unstarted-project-create';
 import {
   freezeSessionSourcePin,
   hasResolvedSource,
@@ -2125,7 +2127,8 @@ export class RunnerApiController {
           workspaceModel: workspace?.model,
           modelCatalog: s.assignedRunner?.modelCatalog,
           workspaceEnv: workspace?.env as Record<string, string> | null,
-          codexAccount: workspace?.codexAccount,
+          codexAccount: s.codexAccount ?? workspace?.codexAccount,
+          claudeAccount: workspace?.claudeAccount,
           runnerEngines: s.assignedRunner?.engines,
         });
       let exec = resolveExec(s.model);
@@ -3050,7 +3053,9 @@ export class RunnerApiController {
             titleBeforeProjectManagement: true,
             coordinatorContextEpoch: true,
             coordinatorContextAckKey: true,
-            coordinatorForProject: { select: { id: true } },
+            // The switch picks which instruction text is delivered, and so is part of the context
+            // key — read here and in turnComplete alike, so both sides compute the same key.
+            coordinatorForProject: { select: { id: true, coordinatorEnabled: true } },
             // What the wiki context below is decided from: which space this session's workspace is
             // bound to, and the three things about a run that take it out of the push entirely —
             // a verifier, a foreman, or a judgment session (design §7.3).
@@ -3162,24 +3167,26 @@ export class RunnerApiController {
               sessionContext.coordinatorForProject,
             );
           } else if (t.kind !== 'steer' && sessionContext.coordinatorForProject) {
-            const projectId = sessionContext.coordinatorForProject.id;
+            const { id: projectId, coordinatorEnabled } = sessionContext.coordinatorForProject;
             const contextKey = buildCoordinatorDeliveryContextKey(
               projectId,
               leaseGeneration!,
               sessionContext.coordinatorContextEpoch,
+              coordinatorEnabled,
             );
             if (sessionContext.coordinatorContextAckKey !== contextKey) {
               // A dedicated project-page coordinator's initial turn already IS the canonical
               // opening. Stamp it for acknowledgement without appending a second copy. A resumed
               // delivery is not treated as that opening: its content is a continuation nudge and
-              // the replacement engine must receive the standing context again.
+              // the replacement engine must receive the standing context again. Nor is an opening
+              // rendered before the Automatic switch flipped: it is not the text this key names.
               const openingAlreadyPresent =
                 !runtimeStarted
                 && t.clientTurnId === `initial-${sessionId}`
                 && sessionContext.titleBeforeProjectManagement == null
-                && hasCoordinatorOpening(sessionContext.prompt, projectId);
+                && coordinatorOpeningIsCurrent(sessionContext.prompt, projectId, coordinatorEnabled);
               if (!openingAlreadyPresent) {
-                content = wrapCoordinatorDeliveryContext(content, projectId);
+                content = wrapCoordinatorDeliveryContext(content, projectId, coordinatorEnabled);
               }
               if (t.coordinatorContextKey !== contextKey) {
                 await tx.conversationTurn.updateMany({
@@ -3305,7 +3312,8 @@ export class RunnerApiController {
         poolKeyId: true,
         poolCodexAccountId: true,
         usesRuntimeDefaultModel: true,
-        workspace: { select: { model: true, env: true, codexAccount: true } },
+        codexAccount: true,
+        workspace: { select: { model: true, env: true, codexAccount: true, claudeAccount: true } },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
       },
     });
@@ -3331,7 +3339,8 @@ export class RunnerApiController {
       workspaceModel: session.workspace?.model,
       modelCatalog: session.assignedRunner?.modelCatalog,
       workspaceEnv: session.workspace?.env as Record<string, string> | null,
-      codexAccount: session.workspace?.codexAccount,
+      codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
+      claudeAccount: session.workspace?.claudeAccount,
       runnerEngines: session.assignedRunner?.engines,
     });
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
@@ -3366,6 +3375,13 @@ export class RunnerApiController {
     // to re-answer a settled question. Recorded as a decided approval with no decider, which is
     // what makes an automatic allow tellable from a human one afterwards.
     const autoAllowed = existing ? false : await this.standingGrantCovers(session, dto);
+    // The same shape for a coordinator's task creates in a project nobody has started: the start
+    // card reviews them, so none of them is a question on its own (`unstarted-project-create.ts`).
+    const allowedMessage = autoAllowed
+      ? AUTO_ALLOWED_MESSAGE
+      : !existing && (await startCardReviewsCreate(this.prisma, session, dto.toolName, dto.input))
+        ? START_CARD_REVIEWS_MESSAGE
+        : null;
     // Which turn is asking. Derived here rather than sent by the runner: the MCP server knows only
     // its session, and the server already knows which turn it leased to that session — the runner
     // has been polling inside it since the dequeue. It is what makes an abandoned call provable
@@ -3399,14 +3415,14 @@ export class RunnerApiController {
           toolUseId: toolUseId ?? null,
           turnId: openingTurn?.id ?? null,
           backgroundJobId: backgroundJobId === '' ? null : backgroundJobId,
-          ...(autoAllowed
-            ? { status: 'ALLOWED', decidedAt: new Date(), message: AUTO_ALLOWED_MESSAGE }
+          ...(allowedMessage
+            ? { status: 'ALLOWED', decidedAt: new Date(), message: allowedMessage }
             : {}),
         },
       }));
     // An already-answered approval raises no card and buzzes no phone: not interrupting is the
     // entire point of having granted it.
-    if (!existing && !autoAllowed) {
+    if (!existing && !allowedMessage) {
       this.realtime.publish(sessionId, {
         seq: 0,
         type: RunEventType.APPROVAL_REQUEST,
@@ -3673,7 +3689,7 @@ export class RunnerApiController {
           assignedRunnerId: true,
           inboxLeaseGeneration: true,
           coordinatorContextEpoch: true,
-          coordinatorForProject: { select: { id: true } },
+          coordinatorForProject: { select: { id: true, coordinatorEnabled: true } },
           mergeStatus: true,
           mergedSourceSha: true,
           // Armed by the event batch that carried this turn's error (the runner flushes events
@@ -3712,14 +3728,16 @@ export class RunnerApiController {
       });
       // A dequeue only proposes that context was delivered. The successful top-level turn is its
       // acknowledgement. Recompute from current state under the Session lock: a late completion
-      // from an old process, a pre-compaction turn, a re-bound project or an older instruction
-      // body cannot acknowledge the context needed now.
+      // from an old process, a pre-compaction turn, a re-bound project, an older instruction
+      // body or one rendered before the Automatic switch flipped cannot acknowledge the context
+      // needed now.
       const expectedCoordinatorContextKey =
         current.coordinatorForProject && current.inboxLeaseGeneration
           ? buildCoordinatorDeliveryContextKey(
               current.coordinatorForProject.id,
               current.inboxLeaseGeneration,
               current.coordinatorContextEpoch,
+              current.coordinatorForProject.coordinatorEnabled,
             )
           : null;
       const acknowledgedCoordinatorContextKey =
@@ -5354,13 +5372,13 @@ export class RunnerApiController {
       // an overwrite: an ingestion-armed retry already knows more than the terminal message does.
       const quotaSpent =
         effectiveStatus === RunStatus.FAILED && current.retryAt == null && isUsageLimitErrorText(dto.error);
-      // Which Codex account the run spent is its workspace's to say, and only that account's quota
-      // says when it frees up.
+      // Which Codex or Claude account the run spent is the session's pick or else its workspace's to
+      // say, and only that account's quota says when it frees up.
       const workspace =
-        quotaSpent && current.provider === 'codex' && current.workspaceId
+        quotaSpent && accountEnvVar(current.provider) && current.workspaceId
           ? await tx.workspace.findUnique({
               where: { id: current.workspaceId },
-              select: { env: true, codexAccount: true },
+              select: { env: true, codexAccount: true, claudeAccount: true },
             })
           : null;
       // A shared pool's key that ended the run is waited out the same way, from the keys rather than the
@@ -6238,7 +6256,8 @@ export class RunnerApiController {
         provider: true,
         taskId: true,
         retryAttempts: true,
-        workspace: { select: { env: true, codexAccount: true } },
+        codexAccount: true,
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
       },
     });
     if (!session) return {};
@@ -6271,16 +6290,16 @@ export class RunnerApiController {
    * the freshly reset window.
    *
    * `text` is whichever words carried the refusal — the assistant reply that ingestion saw, or the
-   * terminal `error` of a run that never got to speak. `workspace` is the session's workspace, whose
-   * picked Codex account and env say which of the runner's Codex accounts the run spent
-   * (runCodexAccount): the snapshot read is that account's, never another's.
+   * terminal `error` of a run that never got to speak. The account picked for the session, else the
+   * one its workspace picked, and the workspace's env say which of the runner's Codex or Claude
+   * accounts the run spent (runAccount): the snapshot read is that account's, never another's.
    */
   private async quotaRetryAt(
     tx: QuotaRetryTransaction,
     runnerId: string,
-    session: { ownerId: string; provider: string },
+    session: { ownerId: string; provider: string; codexAccount: string | null },
     text: string,
-    workspace: { env: unknown; codexAccount: string | null } | null | undefined,
+    workspace: { env: unknown; codexAccount: string | null; claudeAccount: string | null } | null | undefined,
   ): Promise<Date | null> {
     const now = new Date();
     const runner = await tx.runner.findUnique({
@@ -6298,7 +6317,12 @@ export class RunnerApiController {
         runner?.planUsage as PlanUsage | null,
         session.provider,
         now,
-        runAccount(session.provider, workspace?.env, workspace, runner?.engines),
+        runAccount(
+          session.provider,
+          workspace?.env,
+          { codexAccount: session.codexAccount ?? workspace?.codexAccount, claudeAccount: workspace?.claudeAccount },
+          runner?.engines,
+        ),
       );
     return at ? new Date(at.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS)) : null;
   }

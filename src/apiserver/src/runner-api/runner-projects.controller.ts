@@ -21,6 +21,7 @@ import {
   AskOwnerDto,
   CreateProjectDto,
   RecordMergeEvidenceDto,
+  RequestProjectStartDto,
   ResolveOpenItemDto,
   ResolveProjectBlockerDto,
   SendToCoordinatorDto,
@@ -72,9 +73,10 @@ export class RunnerProjectsController {
     private readonly acceptance: ProjectAcceptanceService,
     private readonly handoffs: ProjectHandoffService,
     private readonly orchestration: RunnerOrchestrationAuthorizer,
-    // Only `askOwner` needs it. Defaulted for the reason `ProjectsService`'s own late parameters
-    // are: Nest injects by type rather than by position, while the specs that build this controller
-    // by hand to exercise one route would each have to stub a service they never reach.
+    // Only `askOwner`, `requestStart` and `resolveOpenItem` need it. Defaulted for the reason
+    // `ProjectsService`'s own late parameters are: Nest injects by type rather than by position,
+    // while the specs that build this controller by hand to exercise one route would each have to
+    // stub a service they never reach.
     private readonly openItems: ProjectOpenItemService = undefined as unknown as ProjectOpenItemService,
     /**
      * The attempt charge the coordinator-message door spends, exactly as `RunnerSessionsController`
@@ -414,6 +416,29 @@ export class RunnerProjectsController {
     @Body() dto: AskOwnerDto,
   ) {
     return this.openItems.askOwner(runner.ownerId, id, sessionId?.trim(), dto);
+  }
+
+  /**
+   * A coordinator asking the account owner to start its project (`project_request_start`).
+   *
+   * Filed and returned, like a question: the owner answers on the "Start this project?" card, and
+   * the coordinator is told when the project starts. The plan is checked first — a plan that is not
+   * ready is 409 `START_REQUEST_NOT_READY` with every finding and nothing filed, and one that is
+   * comes back with the warnings the owner will read beside it.
+   *
+   * X-Orbit-Session-Id is the authority, checked by the service against the project's own
+   * coordinator pointer, exactly as for `askOwner` — and, like it, not against the Automatic switch,
+   * which is one of the settings being asked for. No orchestration credential: the request starts
+   * nothing; the owner's press does.
+   */
+  @Post('projects/:id/start-requests')
+  requestStart(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: RequestProjectStartDto,
+  ) {
+    return this.openItems.requestStart(runner.ownerId, id, sessionId?.trim(), dto);
   }
 
   /**

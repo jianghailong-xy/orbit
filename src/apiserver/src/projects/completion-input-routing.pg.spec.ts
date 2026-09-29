@@ -71,8 +71,10 @@ const noUnlandedCriteria = {
  *
  * It has no method the evidence door may call. Until 2026-09-10 it had one — the door also handed
  * its fact to the conversation the project already has, and this double recorded that — and the
- * door now tells nobody, so it asks nothing of this unit at all. That no turn is written is held
- * against the real delivery unit by `decision-facts-no-coordinator-turn.pg.spec.ts`.
+ * door asks nothing of this unit any more. What it tells an Automatic project's coordinator since
+ * 2026-09-29 goes through `CompletionEvidenceProducer`, which this router is built without, so
+ * every revision here is only recorded. Both halves are held against the real delivery unit by
+ * `decision-facts-no-coordinator-turn.pg.spec.ts` and `automatic-evidence-to-coordinator.pg.spec.ts`.
  */
 const noWakeDisposition = {
   openIfDecisive: () => {
