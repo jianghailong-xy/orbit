@@ -149,7 +149,7 @@ func (t *Transport) wikiMaintainRunContext(sessionID, spaceID string) (json.RawM
 	}
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/maintenance/run"
-	err := t.doHeaders(nil, http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
@@ -168,7 +168,7 @@ func (t *Transport) listWikiDossiersUntil(sessionID, spaceID, after, until strin
 	values.Set("limit", strconv.Itoa(limit))
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/dossiers?" + values.Encode()
-	err := t.doHeaders(nil, http.MethodGet, path, nil, &out, wikiDossierPageTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodGet, path, nil, &out, wikiDossierPageTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
@@ -180,17 +180,19 @@ func (t *Transport) proposeWikiMaintenance(sessionID, spaceID string, body inter
 	}
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/maintenance/changesets"
-	err := t.doHeaders(nil, http.MethodPost, path, body, &out, wikiDossierPageTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodPost, path, body, &out, wikiDossierPageTimeout, sessionHeader(sessionID), wikiRecordsOnce(body))
 	return out, err
 }
 
+// finishWikiMaintenance ends the run: the cursor advanced as `orbit wiki cursor advance` would, and the
+// report kept. Only a succeeded run's end is sent again through a transient failure (wikiReportsSuccess).
 func (t *Transport) finishWikiMaintenance(sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(spaceID); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/maintenance/finish"
-	err := t.doHeaders(nil, http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID), wikiReportsSuccess(body))
 	return out, err
 }
 
@@ -201,7 +203,7 @@ func (t *Transport) checkWikiMaintenance(spaceID, expect string) (json.RawMessag
 	}
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/maintenance/check?" + url.Values{"expect": {expect}}.Encode()
-	err := t.doHeaders(nil, http.MethodGet, path, nil, &out, taskOpTimeout, nil)
+	_, err := t.doWiki(http.MethodGet, path, nil, &out, taskOpTimeout, nil, true)
 	return out, err
 }
 
