@@ -1970,13 +1970,21 @@ private struct StartProjectCardView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Text(draft.line == .main ? RunSettings.lineMain : RunSettings.lineProjectBranch)
+                            .lineLimit(1)
+                        // macOS draws its own disclosure mark beside a borderless menu's title.
+                        #if os(iOS)
                         Image(systemName: "chevron.up.chevron.down").font(.orbitMeta)
+                        #endif
                     }
                     .font(.orbitProse)
                     .foregroundStyle(Color.blue)
                 }
                 .borderlessMenuStyle()
+                // Not on iOS: a fixed-size menu there draws a long subtitle's lines empty (measured on
+                // iOS 26.5 — the items keep their height and lose their second line).
+                #if os(macOS)
                 .fixedSize()
+                #endif
                 .disabled(!editable)
             }
             if draft.line == .projectBranch {
