@@ -534,39 +534,45 @@ public enum OwnerConfirmations {
 
     // MARK: the words as a reader sees them
 
-    /// A field written as Markdown, degraded to the line a reader would see — the native half of the
-    /// browser's `markdownToPlainText`, which the card applies to both boxes.
+    /// A field written as Markdown, as plain text that keeps its lines — the native half of the
+    /// browser's `markdownToPlainLines`, which the card applies to both boxes.
     ///
     /// A task's acceptance criteria and a run's report are written as prompts: headings, bullets,
-    /// fenced commands, `paths/like/this.ts:521`. The browser shows them flattened in this card, and
-    /// showing the same field as its source on a phone would be the two ends disagreeing about what
-    /// the owner is deciding from — `**一个依赖字段都没有**` is not a sentence anybody wrote in a
-    /// box that says WHAT SETTLES IT.
+    /// fenced commands, `paths/like/this.ts:521`. The browser shows them without their marks in this
+    /// card, and showing the same field as its source on a phone would be the two ends disagreeing
+    /// about what the owner is deciding from — `**一个依赖字段都没有**` is not a sentence anybody
+    /// wrote in a box that says WHAT SETTLES IT. The lines stay: each paragraph and list item on a
+    /// line of its own, a bullet drawn as `•`, an ordered item keeping its number, at most one blank
+    /// line between them. Flattened onto one line, a report written as a lead and a list is a
+    /// run-on sentence that has lost the list.
     ///
     /// Deliberately not a Markdown parser, for the reason the web one gives: the failure mode is
     /// cosmetic — an exotic construct that survives is a stray character, not a broken render — so
     /// what matters is that the marks anyone actually writes are gone and the words survive in
-    /// order.
+    /// order. The rules that read a line's start or end say `(?m)`: without it `^` and `$` are the
+    /// whole text's, and every line after the first kept its marks.
     public static func plainText(_ markdown: String?) -> String {
         guard var text = markdown, !text.isEmpty else { return "" }
+        text = text.replacingOccurrences(of: "\\r\\n?", with: "\n", options: [.regularExpression])
         // Fence lines only: the code between them is text a reader still recognises.
-        text = text.replacingOccurrences(of: "^[ \\t]*(?:`{3,}|~{3,}).*$", with: "",
+        text = text.replacingOccurrences(of: "(?m)^[ \\t]*(?:`{3,}|~{3,}).*$", with: "",
                                          options: [.regularExpression])
         // Thematic breaks, before the list rule below would read `- - -` as a bullet.
         text = text.replacingOccurrences(
-            of: "^[ \\t]*(?:(?:\\*[ \\t]*){3,}|(?:-[ \\t]*){3,}|(?:_[ \\t]*){3,})$", with: "",
+            of: "(?m)^[ \\t]*(?:(?:\\*[ \\t]*){3,}|(?:-[ \\t]*){3,}|(?:_[ \\t]*){3,})$", with: "",
             options: [.regularExpression])
-        text = text.replacingOccurrences(of: "^[ \\t]*=+[ \\t]*$", with: "",
+        text = text.replacingOccurrences(of: "(?m)^[ \\t]*=+[ \\t]*$", with: "",
                                          options: [.regularExpression])
         // Headings: the opening run, and the optional one that mirrors it.
-        text = text.replacingOccurrences(of: "^[ \\t]{0,3}#{1,6}[ \\t]+", with: "",
+        text = text.replacingOccurrences(of: "(?m)^[ \\t]{0,3}#{1,6}[ \\t]+", with: "",
                                          options: [.regularExpression])
-        text = text.replacingOccurrences(of: "[ \\t]+#+[ \\t]*$", with: "",
+        text = text.replacingOccurrences(of: "(?m)[ \\t]+#+[ \\t]*$", with: "",
                                          options: [.regularExpression])
-        // Blockquotes, however deeply nested, then list markers of both kinds.
-        text = text.replacingOccurrences(of: "^[ \\t]*(?:>[ \\t]?)+", with: "",
+        // Blockquotes, however deeply nested. Then a bullet keeps its place as `•` at its own
+        // indent, so a nested item still reads as one, and an ordered item keeps its number.
+        text = text.replacingOccurrences(of: "(?m)^[ \\t]*(?:>[ \\t]?)+", with: "",
                                          options: [.regularExpression])
-        text = text.replacingOccurrences(of: "^[ \\t]*(?:[-*+]|\\d{1,9}[.)])[ \\t]+", with: "",
+        text = text.replacingOccurrences(of: "(?m)^([ \\t]*)[-*+][ \\t]+", with: "$1• ",
                                          options: [.regularExpression])
         // Images before links: `![alt](src)` is a link whose text is its alt, and taking the link
         // syntax first would leave the `!` behind with nothing attached to it.
@@ -594,17 +600,22 @@ public enum OwnerConfirmations {
             with: "$1$3", options: [.regularExpression])
         // Whatever backticks are left are an unpaired mark, never punctuation somebody meant.
         text = text.replacingOccurrences(of: "`", with: "")
-        // Every run of whitespace becomes the one space that separates two paragraphs here.
-        text = text.replacingOccurrences(of: "\\s+", with: " ", options: [.regularExpression])
+        // Trailing whitespace goes, and so does a stack of blank lines — most of them the rows a
+        // fence or a thematic break used to take up.
+        text = text.replacingOccurrences(of: "(?m)[ \\t]+$", with: "", options: [.regularExpression])
+        text = text.replacingOccurrences(of: "\\n{3,}", with: "\n\n", options: [.regularExpression])
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// A box's body as it is shown at rest: folded at `reportClamp` when it is longer, with whether
     /// anything was folded away — so the card can offer the rest (`EvidenceDecisions.foldedClaim`).
+    /// The whitespace the cut lands on is dropped, so the `…` never sits alone on the next line.
     public static func foldedBody(_ markdown: String?) -> (text: String, folded: Bool) {
         let said = plainText(markdown)
         guard said.count > reportClamp else { return (said, false) }
-        return (String(said.prefix(reportClamp)) + "…", true)
+        var cut = String(said.prefix(reportClamp))
+        while cut.last?.isWhitespace == true { cut.removeLast() }
+        return (cut + "…", true)
     }
 
     /// The moment, in the words both receipts use: "16:00", or "9/10 16:00" when it was another
