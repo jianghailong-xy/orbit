@@ -251,6 +251,16 @@ public enum AgentDefaults {
         return offered.contains { $0.id == model } ? model : nil
     }
 
+    /// An interactive draft remembers the last explicit model pick for its provider. A retired
+    /// model falls back to the caller's current provider default; an empty OpenCode pick is kept.
+    public static func newSessionModel(for provider: String, accountModels: [String: String]?,
+                                       fallback: String, catalog: RunnerModelCatalog?,
+                                       configured: [ConfiguredProvider]?,
+                                       runtimeDefaults: [String: String]? = nil) -> String {
+        livePin(accountModels?[provider], provider: provider, catalog: catalog,
+                configured: configured, runtimeDefaults: runtimeDefaults) ?? fallback
+    }
+
     /// Resolve a persisted built-in/configured provider identity to the local runtime that
     /// executes it. Missing configured providers retain the server's historical Claude fallback.
     public static func runtime(for provider: String,

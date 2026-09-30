@@ -148,6 +148,8 @@ export const presetModelsQuery = () =>
 export interface UserPreferences {
   theme?: 'system' | 'light' | 'dark';
   defaultModel?: string;
+  /** Last-picked model for each provider, synced across clients. */
+  defaultModels?: Record<string, string>;
   defaultPermissionMode?: string;
   /** Account-wide default reasoning effort for a new session (last-picked-wins). '' = model
    *  default. Synced so the value carries to the iOS/macOS clients (replaces localStorage). */
