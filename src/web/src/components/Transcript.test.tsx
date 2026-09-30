@@ -160,6 +160,22 @@ describe('transient provider error card', () => {
 // Which window ran out is the whole point of the card: a 5-hour quota named as the weekly one
 // tells the reader to come back in days for something that returns this evening.
 describe('spent quota card', () => {
+  const CODEX_LIMIT =
+    "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit " +
+    'https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:58 AM.';
+
+  it('renders a Codex quota error event as the same auto-retry card as assistant text', () => {
+    const html = renderToStaticMarkup(
+      <AutoRetryCtx.Provider value={{ provider: 'codex' }}>
+        <Transcript events={[errorEvent(1, CODEX_LIMIT)]} />
+      </AutoRetryCtx.Provider>,
+    );
+
+    expect(html).toContain('chat-quota');
+    expect(html).toContain('Usage limit reached');
+    expect(html).not.toContain('chat-error');
+  });
+
   const render = (text: string) =>
     renderToStaticMarkup(
       <AutoRetryCtx.Provider value={{ provider: 'claude', runnerName: 'wikova' }}>

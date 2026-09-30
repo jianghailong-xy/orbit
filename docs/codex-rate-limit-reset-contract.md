@@ -475,7 +475,7 @@ REFRESH：在收到 consume outcome **之后开始**一次新的 `account/rateLi
 | 旧 runner → 新 apiserver | heartbeat 没有块也没有 capability：快照照存，资格为 `CAPABILITY_MISSING` / `SNAPSHOT_MISSING`，不派发 |
 | 新 runner → 旧 apiserver | 块作为 JSON 存进 `planUsage`，无人读取；响应里没有 command，runner 什么都不做 |
 | 旧 Web | 忽略新字段 |
-| macOS / iOS（`PlanUsageSnapshot: Codable`） | `JSONDecoder` 忽略未知键，无需改动；v1 不在原生端提供 reset |
+| macOS / iOS（`PlanUsageSnapshot: Codable`） | 旧客户端的 `JSONDecoder` 忽略未知键；当前 iOS Plan usage 复用 §6.1 API，macOS 仍不提供 reset |
 | 回滚 runner | apiserver 看到 capability 消失，停止派发；在途 operation 按 §7.5 到期 |
 
 ### 9.2 受影响模块（按下游任务）
