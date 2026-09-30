@@ -26,6 +26,7 @@ import {
   type WikiAnchorOutcome,
   type WikiAnchorReportResult,
   type WikiAnchorState,
+  type WikiBreakerReading,
   type WikiChallengeAnswer,
   type WikiChangesetOrigin,
   type WikiDecideAction,
@@ -389,7 +390,7 @@ interface ChangesetBudget {
   activeAtStart: number;
   changedByMode: Set<string>;
   /** A maintenance run's changeset counts the breaker over the whole run (wiki-maintenance-breaker.ts). */
-  breakerScope: 'changeset' | 'run';
+  breakerScope: WikiBreakerReading['scope'];
   /** How many ops the space's review mode had applied before this one: what the spot-check draw counts. */
   appliedByModeBefore: number;
 }
@@ -1223,6 +1224,9 @@ export class WikiService {
             where: { ownerId: principal.ownerId, appliedByMode: { not: null }, changeset: { spaceId: space.id } },
           }),
     };
+    // What a dry run says of the breaker is its reading before any op of the request is counted: a maintenance
+    // run checks every batch before it proposes one, and adds up against it what they would change together.
+    const breaker = dryRun ? breakerReading(budget, principal.origin) : null;
     // The changeset is created before its ops: an op's row is what a revision came from, and both must
     // exist before the first entry is written.
     const changesetId = dryRun
@@ -1294,7 +1298,7 @@ export class WikiService {
       }
       outcomes.push(outcome);
     }
-    if (dryRun) return { changesetId: null, replayed: false, dryRun: true, ops: outcomes };
+    if (dryRun) return { changesetId: null, replayed: false, dryRun: true, ops: outcomes, breaker };
     if (recorded === 0) {
       // A request none of whose ops was recorded leaves no changeset behind: an empty queue entry is not
       // a fact. The answer still carries every refusal.
@@ -1441,7 +1445,7 @@ export class WikiService {
         budget.breakerScope === 'run'
           ? `circuit breaker: this Wiki maintenance run has already changed ${budget.changedByMode.size} of the `
             + `${budget.activeAtStart} entries the space held active when it began, and one run may change at most `
-            + `${WIKI_REVIEW_RULES.breakerMaxChangedPercent}% of them — the run stops here, and moves no cursor`
+            + `${WIKI_REVIEW_RULES.breakerMaxChangedPercent}% of them — what is past that is the next run's`
           : `circuit breaker: this changeset has already changed ${budget.changedByMode.size} of the space's `
             + `${budget.activeAtStart} active entries, and one changeset may change at most `
             + `${WIKI_REVIEW_RULES.breakerMaxChangedPercent}% of them — submit the rest in another changeset`,
@@ -4494,6 +4498,25 @@ function breakerTrips(budget: ChangesetBudget, amendedEntryId: string | null): b
   if (amendedEntryId !== null && budget.changedByMode.has(amendedEntryId)) return false;
   if (budget.activeAtStart < WIKI_REVIEW_RULES.breakerMinActiveEntries) return false;
   return (budget.changedByMode.size + 1) * 100 > budget.activeAtStart * WIKI_REVIEW_RULES.breakerMaxChangedPercent;
+}
+
+/**
+ * The circuit breaker's reading as a changeset begins, as a dry run answers it (contract `refusalRules.dryRun`):
+ * the active entries it is counted against, the entries already changed through the mode — for a maintenance
+ * run's changeset, by the run's earlier changesets — and how many more distinct entries the mode may change:
+ * `breakerTrips` lets exactly that many through and refuses the next. `remaining` is null where no op is held to
+ * the breaker: in a Manual space, for the owner's own write, and below `breakerMinActiveEntries`.
+ */
+function breakerReading(budget: ChangesetBudget, origin: WikiChangesetOrigin): WikiBreakerReading {
+  const bounded = budget.mode !== 'manual' && origin !== 'owner'
+    && budget.activeAtStart >= WIKI_REVIEW_RULES.breakerMinActiveEntries;
+  const allowed = Math.floor((budget.activeAtStart * WIKI_REVIEW_RULES.breakerMaxChangedPercent) / 100);
+  return {
+    scope: budget.breakerScope,
+    activeAtStart: budget.activeAtStart,
+    changed: budget.changedByMode.size,
+    remaining: bounded ? Math.max(0, allowed - budget.changedByMode.size) : null,
+  };
 }
 
 /** The op's sources as submitted. */

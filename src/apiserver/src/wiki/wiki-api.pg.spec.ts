@@ -915,6 +915,8 @@ test('0307 · the wiki write path', { skip, concurrency: 1, timeout: 300_000 }, 
     assert.equal(answer.body.ops[0].entryId, null);
     assert.equal(answer.body.ops[1].status, 'refused', 'and it still refuses what the request would');
     assert.equal(refusalOf(answer).code, 'WIKI_PROBE_REFUSED');
+    // And the breaker as the request found it: a changeset's own, in a space too small to have one.
+    assert.deepEqual(answer.body.breaker, { scope: 'changeset', activeAtStart: 0, changed: 0, remaining: null });
     assert.equal(await h.prisma.wikiEntry.count({ where: { ownerId: owner.id } }), 0);
     assert.equal(await h.prisma.wikiChangeset.count({ where: { ownerId: owner.id } }), 0);
   });
