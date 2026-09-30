@@ -13,7 +13,7 @@ import {
   wayPosition,
   type PendingDecisionQueue,
 } from './DecisionRail';
-import { ACCEPTANCE_START_LABEL } from './AcceptanceConfirmationCard';
+import { ACCEPTANCE_CONFIRM_LABEL } from './AcceptanceConfirmationCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import {
   acceptanceConfirmationKey,
@@ -179,9 +179,10 @@ const ORDINARY_QUEUE: PendingDecisionQueue = {
   ],
 };
 
-/** What the stubbed server answers right now. Each case starts from a project waiting to be
- *  started: two criteria stated and unmet, the set unconfirmed, and one weakening waiting beside
- *  it. */
+/** What the stubbed server answers right now. Each case starts from a started project nobody ever
+ *  confirmed the criteria of — the settlement card that asks this is the older confirmation card,
+ *  and the start card's own strip wording is `DecisionRail.settlement.test.tsx`'s — with two
+ *  criteria stated and unmet, and one weakening waiting beside it. */
 const server: {
   standing: StandardSetConfirmationStanding;
   criteria: ReturnType<typeof criteriaOf>;
@@ -273,8 +274,11 @@ beforeEach(() => {
         id: PROJECT_PUBLIC,
         title: 'the settlement pointer',
         status: 'OPEN',
+        // Started, which is what this card asks about now: an unstarted project is the start
+        // card's, drawn only on its coordinator's request.
+        startedAt: '2026-09-10T08:00:00.000Z',
         // A project with work filed under it: the card's condition asks for one, so a fixture
-        // without it would be a project nobody could start and the card would never draw.
+        // without it would be a project with nothing to run and the card would never draw.
         _count: { tasks: 1 },
         acceptanceCriteriaItems: server.criteria,
       });
@@ -572,11 +576,11 @@ describe('the settlement question on the pinned line', { timeout: 60_000 }, () =
     const stray = [...strip()!.querySelectorAll<HTMLButtonElement>('button')]
       .filter((button) => !button.classList.contains('decision-strip-line'));
     expect(stray.map((button) => button.outerHTML), 'the strip grew a control that goes nowhere').toEqual([]);
-    expect(strip()!.textContent).not.toContain(ACCEPTANCE_START_LABEL);
+    expect(strip()!.textContent).not.toContain(ACCEPTANCE_CONFIRM_LABEL);
     expect(strip()!.textContent).not.toContain(OWNER_SEND_BACK_ACTION);
     // The answer is still where it lives: on the card.
     expect([...settlementCards()[0]!.querySelectorAll<HTMLButtonElement>('button')].map(labelOf))
-      .toContain(ACCEPTANCE_START_LABEL);
+      .toContain(ACCEPTANCE_CONFIRM_LABEL);
   });
 });
 

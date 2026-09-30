@@ -3,6 +3,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Typography } from 'antd';
 import { ACCEPTANCE_CONFIRMATION_TITLE } from './AcceptanceConfirmationCard';
 import {
+  CRITERIA_CHANGE_TITLE,
+  READY_TO_START,
+  type SettlementQuestion,
+} from '../lib/projectStart';
+import {
   CRITERIA_DECISION_HEADING,
   type PendingCriteriaDecisionQueue,
   type PendingCriteriaDecisionRow,
@@ -193,12 +198,13 @@ export const WAITING_ON_YOU_LABEL = 'WAITING ON YOU';
  * Take the reader to the settlement card: the third kind of question the line counts.
  *
  * Whether this project's criteria, together, are what "done" means is the question Orbit draws into
- * the coordinator conversation (`AcceptanceConfirmationCard.tsx`) as soon as the plan is written and
- * before any of it runs. The card stays where it was drawn while the conversation goes on, and
- * nothing pinned said it was there.
+ * the coordinator conversation (`AcceptanceConfirmationCard.tsx`) — as "Start this project?" once its
+ * coordinator asks to start it, and as "Confirm the new criteria?" once a started project's criteria
+ * move. The card stays where it was drawn while the conversation goes on, and nothing pinned said it
+ * was there; the line names it by which of those it is (`settlementPointer`).
  *
- * It is counted while that card is on screen and the project it is about has still not been started,
- * which is how iOS's needs-you bar counts it (`openQuestionRowIDs`,
+ * It is counted while that card is on screen and still asking, which is how iOS's needs-you bar
+ * counts it (`openQuestionRowIDs`,
  * `AcceptanceConfirmations.isOpen`) — and the card is what says so. Neither half can be read back off
  * the standing: a delivered card stays when the criteria move, and a project started at another end
  * leaves it on screen with nothing left to press. So nothing here decides when that card is drawn;
@@ -215,6 +221,18 @@ export function revealSettlementCard(scope: ParentNode = document): boolean {
   card.scrollIntoView({ block: 'center', behavior: 'smooth' });
   markReached(card);
   return true;
+}
+
+/**
+ * What the line calls the settlement question, by which card is asking it: a project waiting to be
+ * started says what the session row and its header say — "Ready to start" — and the other two say
+ * their card's own heading. `true` is a card that said only that it was there, which is the older
+ * confirmation card's question.
+ */
+export function settlementPointer(question: true | SettlementQuestion): string {
+  if (question === 'START') return READY_TO_START;
+  if (question === 'CRITERIA_CHANGE') return CRITERIA_CHANGE_TITLE;
+  return ACCEPTANCE_CONFIRMATION_TITLE;
 }
 
 /** Take the reader to a held weakening's card, which carries its intent in its id. Returns whether
@@ -485,9 +503,10 @@ export function DecisionStrip({
   /** The held criteria proposals of the project this session coordinates, when it coordinates one.
    *  Null for every ordinary session, which has no ruler of its own to move. */
   criteria?: PendingCriteriaDecisionQueue | null;
-  /** Whether this conversation's settlement card is on screen and its project is still unstarted:
-   *  the card's own report, passed on by the page. False wherever no such card is drawn. */
-  confirmation?: boolean;
+  /** Which settlement question this conversation's card is asking, while it is on screen and still
+   *  asking — the card's own report, passed on by the page; `true` for a card that said only that
+   *  it was there. False wherever no such card is drawn. */
+  confirmation?: boolean | SettlementQuestion | null;
   /** The OWNER_CONFIRMED task whose run in this session is waiting on its owner, when the page draws
    *  its confirmation card here: the task's title and how long the run has waited. */
   ownerConfirmation?: { title: string; ageSeconds: number | null } | null;
@@ -544,7 +563,7 @@ export function DecisionStrip({
       }]
       : []),
     ...(confirmation
-      ? [{ key: 'settlement', label: ACCEPTANCE_CONFIRMATION_TITLE, ageSeconds: null, go: onRevealConfirmation }]
+      ? [{ key: 'settlement', label: settlementPointer(confirmation), ageSeconds: null, go: onRevealConfirmation }]
       : []),
   ];
   if (ways.length === 0 && yours.length === 0) return null;
@@ -642,9 +661,9 @@ export function SessionDecisionStrip({
   /** The rows whose evidence card this conversation draws, by `decisionRowKey`. Computed by the
    *  page, which mounts that card beside this strip, with the card's own filter. */
   cards?: ReadonlySet<string>;
-  /** Whether this conversation's settlement card is on screen and its project is still unstarted,
-   *  as the card reported it to the page that mounts both (`SessionAcceptanceConfirmationCard`). */
-  confirmation?: boolean;
+  /** Which settlement question this conversation's card is asking while it is on screen, as the
+   *  card reported it to the page that mounts both (`SessionAcceptanceConfirmationCard`). */
+  confirmation?: boolean | SettlementQuestion | null;
   /** The OWNER_CONFIRMED task whose run in this session is waiting on its owner, as the page that
    *  draws its confirmation card read it. Null wherever no such card is drawn. */
   ownerConfirmation?: { title: string; ageSeconds: number | null } | null;

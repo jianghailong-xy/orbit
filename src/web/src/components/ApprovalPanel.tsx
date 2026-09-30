@@ -145,6 +145,10 @@ export function createDetail(input: CreateInput): string {
 /** The caption over the field the owner is agreeing to. macOS/iOS: `Approvals.createDoneWhen`. */
 export const CREATE_DONE_WHEN = 'Done when';
 
+/** Under a new project's criteria: approving the create is not confirming them — the project's
+ *  start card asks that, once its coordinator has a plan to start. */
+export const CREATE_CRITERIA_CONFIRMED_AT_START = 'You’ll confirm these when the project starts.';
+
 /** The fold's own line, carrying its length the way the evidence card's claim fold does: this is the
  *  longest field on the card and the least decisive, and how much of it there is is what decides
  *  whether to open it. macOS/iOS: `Approvals.createFold`. */
@@ -541,13 +545,16 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
         <>
           <p className="dag-approval-caption">{CREATE_DONE_WHEN}</p>
           {input.isProject ? (
-            <Markdown
-              remarkPlugins={[remarkGfm]}
-              urlTransform={referenceUrlTransform}
-              components={{ a: ReferenceLink }}
-            >
-              {input.criteria}
-            </Markdown>
+            <>
+              <Markdown
+                remarkPlugins={[remarkGfm]}
+                urlTransform={referenceUrlTransform}
+                components={{ a: ReferenceLink }}
+              >
+                {input.criteria}
+              </Markdown>
+              <p className="create-criteria-note">{CREATE_CRITERIA_CONFIRMED_AT_START}</p>
+            </>
           ) : (
             <>
               <p className="dag-approval-criteria">
