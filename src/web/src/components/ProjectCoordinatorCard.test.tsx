@@ -6,7 +6,6 @@ import { describe, expect, it } from 'vitest';
 import {
   ProjectCoordinatorCard,
   type CoordinatorCardLayout,
-  type CoordinatorIntegration,
   type CoordinatorSession,
   type CoordinatorStatus,
 } from './ProjectCoordinatorCard';
@@ -210,8 +209,6 @@ function paint(
   opts: {
     layout?: CoordinatorCardLayout;
     openTaskCount?: number;
-    automatic?: boolean;
-    integration?: CoordinatorIntegration;
   } = {},
 ): string {
   return renderToStaticMarkup(
@@ -219,8 +216,6 @@ function paint(
       status={status}
       layout={opts.layout}
       openTaskCount={opts.openTaskCount}
-      automatic={opts.automatic}
-      integration={opts.integration}
     />,
   );
 }
@@ -285,9 +280,9 @@ describe('ProjectCoordinatorCard — NEVER_OPENED', () => {
   it('leads with what the conversation is FOR, and no longer claims nothing here starts on its own', () => {
     const body = text(paint(neverOpenedStatus()));
     expect(body).toContain('decide what runs next');
-    // Sibling dispatch landed on 2026-09-06: a project whose `coordinatorEnabled` is on starts its
-    // own ready tasks whether or not a coordinator was ever opened here. The Automatic switch is
-    // where that is stated now, per project, from the field that decides it.
+    // Sibling dispatch landed on 2026-09-06: a started project starts its own ready tasks whether
+    // or not a coordinator was ever opened here. How it runs is where the project page says how it
+    // runs, per project, from the fields that decide it.
     // The fragment, not the whole sentence: any way of putting that claim back on this card
     // contains it, and spelling the old sentence out here would leave the copy in the tree that
     // a grep for it is supposed to find nowhere.
@@ -417,48 +412,21 @@ describe('ProjectCoordinatorCard — LIVE', () => {
   });
 });
 
-describe('ProjectCoordinatorCard — what Automatic says it does', () => {
-  it('states the integration rule for a project that lands on its own branch', () => {
-    const body = text(paint(liveStatus(), {
-      automatic: true,
-      integration: { line: 'PROJECT_BRANCH', ref: 'project/bg-jobs' },
-    }));
-    expect(body).toContain('Tasks land on project/bg-jobs by themselves and start once their');
-    expect(body).toContain('prerequisites land.');
-    // The sentence it replaced described a platform that no longer opens a judgment session for a
-    // failed task, and a task that waits for a prerequisite to be DONE rather than to land.
-    expect(body).not.toContain('opens a judgment session');
-  });
-
-  it('says that on a branch of its own, Automatic also merges into main without asking', () => {
-    // Owner decision 2026-09-23 (contract §3.3 M-T11): the same switch is now the authorization to
-    // merge a clean project branch into main by itself. A sentence that still promised "merging into
-    // main always asks you" would be the switch widening its own grant without saying so.
-    const body = text(paint(liveStatus(), {
-      automatic: true,
-      integration: { line: 'PROJECT_BRANCH', ref: 'project/bg-jobs' },
-    }));
-    expect(body).toContain('It also merges project/bg-jobs into main by itself when the');
-    expect(body).toContain('checks pass cleanly, and leaves you a receipt with the commit to revert.');
-    expect(body).not.toContain('Merging into main always asks you');
-  });
-
-  it('states it for a project whose line is main', () => {
-    const body = text(paint(liveStatus(), { automatic: true, integration: { line: 'MAIN', ref: 'main' } }));
-    expect(body).toContain('Tasks are checked on main by themselves and start once their');
-    expect(body).toContain('Merging into main always asks you.');
-  });
-
-  it('keeps the old sentence while no line has been decided', () => {
-    const body = text(paint(liveStatus(), { automatic: true }));
-    expect(body).toContain('Starts ready tasks on its own');
-    expect(body).not.toContain('Merging into main always asks you');
-    // …and says what it will do if the line that is decided turns out to be a branch of its own.
-    expect(body).toContain('it also merges that branch into main by itself when');
+describe('ProjectCoordinatorCard — Automatic is not on this card', () => {
+  it('draws no Automatic switch and none of its sentences, in any state', () => {
+    // Automatic moved to the project page's How it runs block (ProjectRunSettings), beside the other
+    // settings the start card set: it is how the project runs, not a property of the conversation.
+    for (const status of [neverOpenedStatus(), liveStatus(), completedStatus(), trashedStatus(), unavailableStatus()]) {
+      const html = paint(status, { openTaskCount: 3 });
+      expect(html).not.toContain('role="switch"');
+      expect(text(html)).not.toContain('Automatic');
+      expect(text(html)).not.toContain('Nothing here starts or asks on its own');
+      expect(text(html)).not.toContain('merges');
+    }
   });
 
   it('draws the two progress rows a payload carries them on, and neither when it does not', () => {
-    const withRows = text(paint(liveStatus(), { automatic: true }));
+    const withRows = text(paint(liveStatus()));
     expect(withRows).toContain('Wake-ups');
     expect(withRows).toContain('Self-started today');
 
