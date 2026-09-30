@@ -1,6 +1,6 @@
 # 目标分支分叉：Review 与产品恢复方案
 
-状态：提案，尚未实现。2026-09-30 对照重新 fetch 的 main `2c78b7e023fe2c5690a7ca6859dd2ca0fe846b4f`。
+状态：首版已实现，验证与交付范围见文末。2026-09-30 对照重新 fetch 的 main `2c78b7e023fe2c5690a7ca6859dd2ca0fe846b4f`。
 
 ## 判断与范围
 
@@ -8,7 +8,7 @@
 
 截图中的错误来自 `reconcileTargetWithOrigin`，表明 `develop` 和 `origin/develop` 互不为祖先。它不证明有文件冲突，也不证明任何一侧可以丢弃。截图没有实际仓库路径、提交清单或保护策略；本文不判断截图对应仓库的真实冲突数量。原型中的提交、文件、检查结果和数量均为演示数据。
 
-此次交付是设计文档和[可点击原型](mocks/target-branch-divergence/index.html)，附[桌面预览](mocks/target-branch-divergence/desktop-preview.png)与[手机预览](mocks/target-branch-divergence/mobile-preview.png)。不执行截图中仓库的修复、推送或合入。
+设计阶段提供了[可点击原型](mocks/target-branch-divergence/index.html)。首版已接通 runner、服务端、Web 和原生客户端共享代码；[实际 Web 组件桌面效果](mocks/target-branch-divergence/implemented-desktop.png)与[手机效果](mocks/target-branch-divergence/implemented-mobile.png)使用明确的测试 fixture，不代表截图中仓库的真实数据。此次实现没有操作截图中的外部仓库。
 
 ## 现有实现 Review
 
@@ -40,7 +40,7 @@
 
 成功检查后才显示“本地 2 个 / 远端 5 个独有提交”和更新时间；未检查时不编造数字。主操作从“重试合并”改为“检查并修复”。切换合入目标继续可用，但明确是用户更换目的地，不自动替用户改目标。
 
-相同 runner、相同 Git 仓库、相同目标 ref 的多次失败指向同一恢复操作。共享的提示只说“影响这台机器上向 develop 合入的会话”，不把它扩成所有仓库、所有分支都受影响。
+首版在原会话保存恢复状态。同一会话在输入未变化时复用修复 worktree；所有目标 ref 写入沿用 runner 的 `mergeLock`。跨会话合并恢复卡片、在 runner 页面统一列出受影响的仓库/目标，留作后续能力。
 
 ### 2. 检查与预览
 
@@ -66,7 +66,7 @@
 | --- | --- | --- |
 | 目标同步、本次改动重放均无冲突，检查通过 | 提交清单、完整 diff、合并提交和推送范围 | 同步 develop 并合入 |
 | 本地与远端目标同步冲突 | “develop 同步时存在冲突”，展示实际冲突文件 | 在修复会话中处理 |
-| 同步无冲突，但本次会话改动重放冲突 | “本次改动与同步后的 develop 冲突” | 在当前会话中处理，复用 source 冲突入口 |
+| 同步无冲突，但本次会话改动重放冲突 | “本次改动与同步后的 develop 冲突” | 在独立修复会话处理，保留原 source 分支 |
 | 要求线性历史，或目标要求通过 PR 合入 | 解释对应策略，展示可交付的候选分支 / patch | 准备 PR；不能直接推送目标 |
 | 网络 / 鉴权失败，或无法判断祖先关系 | “无法检查远端”，展示可恢复的具体原因 | 重新检查 / 处理连接 |
 | 无共同祖先 | “两侧没有可验证的共同历史” | 查看详情 / 在修复会话中检查；不使用 allow-unrelated-histories |
@@ -95,7 +95,7 @@
 
 ### 结构化诊断，保持现有状态兼容
 
-给普通合入结果增加可选诊断：`errorCode: TARGET_DIVERGED` 和 `errorDetail`，`mergeStatus` 继续使用现有 `error`。客户端依据代码渲染恢复入口，不解析英文错误字符串。诊断经过 shared DTO、runner 结果上报、服务端持久化和 Session detail 投影，Web / iOS / macOS 使用同一语义。旧 runner / 旧客户端继续看到现有 message；恢复操作只对声明支持该能力的 runner 开放。
+给普通合入结果增加可选诊断 `recovery: { code: 'TARGET_DIVERGED', ... }`，保存为 Session 的 `mergeRecovery`；预览继续使用现有 `error` 状态加结构化 `READY`，不扩充旧 wire 的 status 取值。客户端依据代码渲染恢复入口，不解析英文错误字符串。诊断经过 shared DTO、runner 结果上报、服务端持久化和 Session detail 投影，Web / iOS / macOS 使用同一语义。旧 runner / 旧客户端继续看到现有 message；恢复操作只对声明 `session-merge-recovery-v1` 的 runner 开放。
 
 首版只实现本 case 和恢复操作实际需要的原因，不先建设通用 Git 错误框架。诊断包含 runner 提供的仓库标识、目标 ref、remote 名、当时两侧 SHA、检查时间；完整提交清单和候选结果在用户点击检查后生成。
 
@@ -104,7 +104,7 @@
 1. **检查**：请求 runner inspect/preview，返回可持久化的 previewId、source / local / remote SHA、同步方式、额外提交集、候选 SHA/tree、完整 diff、两阶段冲突和检查结果。获取失败和“远端没有该分支”须区分；不能拿 fetch 失败后的缓存作确认依据。
 2. **执行**：请求引用 previewId；server 校验 owner、关联会话/仓库、用户授权范围和 runner 能力。runner 校验三侧 SHA、source checkpoint、checkout 状态与候选树，才执行这个已预览结果。请求和结果使用 operationId / leaseOwner；重复点击或心跳重投只关联同一个操作。
 
-采用仓库/目标身份复用已有锁与串行化规则；识别共用 Git common directory 的 worktree，避免两个 workspace 各创建一次修复。执行不能与现有 merge、repo-cleanup、项目 integration 的 ref 写入相互穿插。长期持久化只需 preview/操作事实及候选 ref；不新增与现有回执平行的“已合入”真相来源。
+首版按会话保存候选，复用已有锁与串行化规则。执行不能与现有 merge、repo-cleanup、项目 integration 的 ref 写入相互穿插。长期持久化只需 preview/操作事实及候选 ref；不新增与现有回执平行的“已合入”真相来源。跨 workspace 的候选去重尚未实现。
 
 ### 执行顺序
 
@@ -124,7 +124,7 @@
 - Runner：`worktree.go` 的目标关系诊断、隔离预演、候选执行与 `runloop.go` 的派发/结果链路；复用 `repohealth.go` 的 checkout 检查，借鉴 `integrate.go` 的检查和回读验证。
 - Shared / API：`src/shared/src/dto.ts` 的可选诊断和恢复请求；`sessions.service.ts`、`runner-api.controller.ts` 的持久化/权限/lease fence；继续使用 `merge-receipt.service.ts` 的回执投影。
 - Web：`SessionOutputs.tsx` 的 `error` 分支和 `MergeButton`，新增检查预览；相关 runner 页面按同一仓库/目标展示入口。
-- Native：`WorktreeBar.swift` 和共享 Session 模型同步新诊断；iOS 使用 sheet，macOS 使用面板，操作语义保持一致。
+- Native：`WorktreeBar.swift` 和共享 Session 模型同步新诊断；首版 iOS / macOS 都在合入条下显示可展开的面板，完整 diff 按需展开，使用已有字体 token 支持手机 Dynamic Type。
 
 ## 建议分期与验收
 
@@ -146,4 +146,28 @@
 | 相同、单纯落后、无 remote、无共同祖先、旧 runner | 保留适用的原有路径；无共同祖先和不支持的新操作明确拒绝 |
 | Web / iOS / macOS | 同一诊断对应同一恢复动作；分叉提示与普通 source conflict 不混淆 |
 
-本次 review 在基线运行的 5 个既有 Go 回归均通过：落后同步、已在上游落地、分叉拒绝、正常推送、脏文件重叠阻塞。原型的桌面/手机布局、两类冲突入口、PR 等待落地、过期预览重新检查、远端落地后的本机恢复点击验证均通过，无脚本异常或横向溢出。新功能的上述验收仍属于实现要求，不能以旧回归通过代替。
+设计阶段在基线运行的 5 个既有 Go 回归均通过。落地阶段另在独立、重新 fetch 的 main checkout 上执行 `^TestMergeToMain` 回归，通过；新实现使用真实本地 Git 仓库与 bare origin 验证下列恢复路径。
+
+## 首版实现与验证
+
+- [merge_recovery.go](../src/runner-go/merge_recovery.go) 在独立 worktree 同步目标历史、重放本次 source，输出双方独有提交与相对远端的完整 diff。真正分叉新增合并提交；本地领先也先 review。本地已包含 source、远端还未接受时不会写虚假的远端成功结果。
+- 每次检查生成新的 `previewId`。执行冻结 source / local / remote / candidate / tree，同时复验检查命令及其超时配置。修复后的内容需重新检查；旧审批编号不能批准新候选。回执中的 `rebaseBaseSha` 是实际同步结果的 SHA。
+- `merge.ff=only` 的真正分叉明确进入 PR 候选入口。远端保护策略由正常 push 的服务端拒绝承接，不提供 force push。首版不自动查询托管平台的分支规则，也不自动创建 PR。
+- 目标同步和 source 重放冲突均留在独立修复 worktree。Web / 原生端的入口创建独立修复会话，携带实际路径、冻结输入和阶段，完成后回原会话重新预览。原 source 分支保持不变。
+- 远端已落地、本机 checkout 受阻时仍保存一条 `MERGED` 回执，并保留 `LOCAL_SYNC_PENDING`。本机同步重试不再次推送或写第二条回执，不改原合入时间和已记录 fork；连接失败仍保留本机重试入口。
+- 修复 worktree 不进入会话 GC，避免磁盘压力下清掉正在修复或等待 review 的候选。首版保留这些材料，尚未提供自动过期清理入口。超过 200 个独有提交或 1 MiB diff 时不提供直接批准按钮。
+
+本地验证：
+
+| 检查 | 结果 |
+| --- | --- |
+| Go 恢复、既有合入、wire 与 worktree GC 回归 | 通过；覆盖两阶段冲突及修复、输入变化、检查失败及修复、推送拒绝、线性历史、其他 worktree 占用、本地未跟踪文件和仅本机重试 |
+| API 审批、operation / lease fence、checkpoint 和回执回归 | 93 个测试通过 |
+| PostgreSQL 16 临时实例 | 全量迁移含 `0341_session_merge_recovery` 通过；新的队列→心跳→结果→部分落地→本机重试链路通过，22 个既有回执与等待合入回归串行通过 |
+| Shared / Web 恢复与合入条组件 | 19 个测试通过；真实组件在 Chromium 的桌面/手机布局、固定候选批准、本机单独重试通过，无横向溢出或脚本异常 |
+| TypeScript 与 Web 生产构建 | 通过 |
+| Swift 共享模型与合入条逻辑 | 42 个测试通过；SwiftUI 改动通过语法检查，字体与导航门禁通过。完整 macOS / iOS 构建由 PR 的 Client CI 验证 |
+
+`go test ./...` 的全量尝试不能报告全绿：真实引擎测试受本机 CLI 版本/鉴权影响，任务与项目 CLI 测试还会继承当前 Orbit 会话环境。`TestRealClaudeAcceptsASetModel`、`TestProjectCreateSendsOnlyTheFieldsGiven` 的失败和 `TestCLITaskCreateExposesAndForwardsTheThreePeerCompletionCriteria` 的超时已在独立 main checkout 复现；后二者去掉继承的 `ORBIT_*` 环境后通过。未修改这些与合入恢复无关的基线代码。
+
+上线需要先更新服务端/Web 并应用迁移，再更新 runner 与原生客户端。只有 runner 心跳声明新能力后才可使用恢复操作；旧 runner 不会被派发新语义。当前交付是分支上的实现与验证，未部署或发布客户端。

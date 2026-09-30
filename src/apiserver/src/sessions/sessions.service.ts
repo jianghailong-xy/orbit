@@ -1,3 +1,4 @@
+import { SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryReady, type MergeRecoveryAction } from '@orbit/shared';
 import {
   BadRequestException,
   ConflictException,
@@ -3047,7 +3048,7 @@ export class SessionsService {
       include: {
         workspace: true,
         assignedRunner: {
-          select: { id: true, name: true, status: true, lastHeartbeatAt: true },
+          select: { id: true, name: true, status: true, lastHeartbeatAt: true, capabilities: true },
         },
         tagLinks: {
           include: {
@@ -3113,6 +3114,7 @@ export class SessionsService {
       .sort((a, b) => Number(b.isSystem) - Number(a.isSystem) || a.position - b.position);
     return withSessionCapabilities({
       ...rest,
+      mergeRecoverySupported: session.assignedRunner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1) ?? false,
       tags,
       // Both shapes of the same fact, because the two faces of the API have always differed here:
       // the row's `runningBgJobs`/`runningBgShells` arrays ride along in the spread above, and a
@@ -5392,8 +5394,11 @@ export class SessionsService {
     id: string,
     targetBranch?: string,
     waitSeconds?: number,
-    options: { rememberTarget?: boolean } = {},
+    options: { rememberTarget?: boolean; recoveryAction?: MergeRecoveryAction; previewId?: string } = {},
   ) {
+    if (options.recoveryAction && !['preview', 'apply', 'sync-local'].includes(options.recoveryAction)) {
+      throw new BadRequestException('invalid merge recovery action');
+    }
     const wait = SessionsService.mergeWaitSeconds(waitSeconds);
     const target = targetBranch?.trim() || null;
     // The operation this call is about, for a caller that asked to wait on it. Assigned inside the
@@ -5438,6 +5443,29 @@ export class SessionsService {
       ) {
         throw new ConflictException('wait for the current turn to finish before merging');
       }
+      if (options.recoveryAction) {
+        const runner = await tx.runner.findUnique({
+          where: { id: session.assignedRunnerId }, select: { capabilities: true },
+        });
+        if (!runner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1)) {
+          throw new ConflictException('upgrade this runner to check and repair target branches');
+        }
+        const recovery = readMergeRecovery(session.mergeRecovery);
+        if (options.recoveryAction !== 'preview') {
+          if (!recovery || !options.previewId || recovery.previewId !== options.previewId ||
+              (target && recovery.targetBranch !== target)) {
+            throw new ConflictException('the recovery preview is no longer current; check again');
+          }
+          const retry = session.mergeRecoveryAction === 'apply' &&
+            ['PUSH_FAILED', 'REMOTE_NOT_VERIFIED'].includes(recovery.code);
+          if (options.recoveryAction === 'apply' && !mergeRecoveryReady(recovery) && !retry) {
+            throw new ConflictException('review a ready candidate before applying it');
+          }
+          if (options.recoveryAction === 'sync-local' && recovery.code !== 'LOCAL_SYNC_PENDING') {
+            throw new ConflictException('no landed candidate is waiting for local sync');
+          }
+        }
+      }
       // `[K6]` §7, the dispatch gate: everything that can be decided before a repository is
       // touched. Two questions, and the ORDER is the point.
       //
@@ -5460,8 +5488,8 @@ export class SessionsService {
         taskId: session.taskId,
         targetBranch: target ?? session.mergeTarget ?? '',
       });
-      if (gate.decision === 'ALREADY_LANDED') return { alreadyLanded: gate };
-      if (gate.decision !== 'ALLOWED') {
+      if (gate.decision === 'ALREADY_LANDED' && !options.recoveryAction) return { alreadyLanded: gate };
+      if (gate.decision !== 'ALLOWED' && gate.decision !== 'ALREADY_LANDED' && options.recoveryAction !== 'sync-local') {
         throw new ConflictException(`${gate.decision}: ${gate.detail}`);
       }
 
@@ -5470,7 +5498,9 @@ export class SessionsService {
         where: { id },
         data: {
           mergeStatus: 'pending',
-          mergeTarget: target,
+          mergeTarget: target ?? (options.recoveryAction ? readMergeRecovery(session.mergeRecovery)?.targetBranch ?? null : null),
+          mergeRecoveryAction: options.recoveryAction ?? null,
+          ...(!options.recoveryAction ? { mergeRecovery: Prisma.DbNull } : {}),
           mergeRequestedAt: new Date(),
           mergeOperationId: operationId,
           // `[K6]` §7: which checkpoint THIS operation was authorised for, persisted with the
@@ -5478,12 +5508,14 @@ export class SessionsService {
           // commit against this rather than against anything the runner sent — a gate that only
           // holds when the client cooperates is not a gate. Null for unmanaged work, which is
           // almost every merge, and which is then unaffected by all of this.
-          mergeCheckpointId: gate.checkpointId,
+          mergeCheckpointId: options.recoveryAction === 'apply' || options.recoveryAction === 'sync-local' || gate.decision !== 'ALLOWED' ? session.mergeCheckpointId : gate.checkpointId,
           mergeOperationOwner: null,
           mergeError: null,
-          mergedAt: null,
-          mergedSourceSha: null,
-          branchMerged: null,
+          ...(!['preview', 'sync-local'].includes(options.recoveryAction ?? '') ? {
+            mergedAt: null,
+            mergedSourceSha: null,
+            branchMerged: null,
+          } : {}),
         },
       });
       return session.workspaceId;

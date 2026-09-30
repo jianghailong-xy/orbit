@@ -1241,8 +1241,8 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("sessions/\(sessionID)/commit", body: Optional<Empty>.none)
     }
 
-    public func merge(sessionID: String, targetBranch: String?) async throws {
-        _ = try await postRaw("sessions/\(sessionID)/merge", body: MergeRequest(targetBranch: targetBranch))
+    public func merge(sessionID: String, targetBranch: String?, recoveryAction: String? = nil, previewId: String? = nil) async throws {
+        _ = try await postRaw("sessions/\(sessionID)/merge", body: MergeRequest(targetBranch: targetBranch, recoveryAction: recoveryAction, previewId: previewId))
     }
 
     /// Adopt the worktree's actual HEAD branch (after an in-worktree `git checkout -b`) as the

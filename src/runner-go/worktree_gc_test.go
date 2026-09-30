@@ -284,6 +284,16 @@ func TestSweepNeverTouchesTheRebaseScratchWorktree(t *testing.T) {
 	requireCheckoutReclaimed(t, doomed, "its terminal neighbour still goes, so the sweep did run")
 }
 
+func TestSweepNeverReclaimsMergeRecoveryCheckout(t *testing.T) {
+	f := newGCFixture(t)
+	repair := filepath.Join(worktreesDir(), mergeRecoveryWorktreePrefix+"reviewed")
+	mustGit(t, f.repo, "worktree", "add", "-q", "-b", "orbit/recovery/reviewed", repair)
+	doomed := f.checkout(t, "sess-completed")
+	gcWorktrees(f.transport, map[string]bool{}, diskUnderTheFloor())
+	requireCheckoutOnDisk(t, repair, "a retained reviewed candidate must survive session GC")
+	requireCheckoutReclaimed(t, doomed, "ordinary terminal checkouts remain reclaimable")
+}
+
 // A session this runner is driving is never a candidate, whatever the server would say about it
 // and however tight the disk is: its engine is writing in that directory right now.
 func TestSweepNeverTouchesALiveSessionsCheckout(t *testing.T) {

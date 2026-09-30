@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { Prisma, RunStatus } from '@prisma/client';
 import { RunnerApiController } from './runner-api.controller';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -77,6 +77,67 @@ test('terminal merge result is fenced by operation id and operation owner, not s
 
   assert.equal(h.writes.length, 1);
   assert.equal(h.writes[0]?.data.mergeStatus, 'merged');
+});
+
+const reviewed = {
+  code: 'READY', targetBranch: 'develop', previewId: 'reviewed', repoRoot: '/repo',
+  sourceSha: 'a'.repeat(40), localSha: 'b'.repeat(40), remoteSha: 'c'.repeat(40),
+  candidateSha: 'd'.repeat(40), candidateTreeSha: 'e'.repeat(40), patch: 'full diff',
+  check: { status: 'unconfigured' as const },
+};
+
+test('read-only recovery preview persists its result without inventing a merge receipt', async () => {
+  const h = harness(mergeRow({ mergeRecoveryAction: 'preview', branch: 'orbit/session', taskId: null }));
+  await h.api.mergeResult({ id: RUNNER_ID }, SESSION_ID, {
+    operationId: NEW_OPERATION, leaseOwner: NEW_OWNER, status: 'error',
+    sourceSha: reviewed.sourceSha, targetBranch: 'develop', recovery: reviewed,
+  });
+  assert.deepEqual(h.writes[0].data.mergeRecovery, reviewed);
+  assert.equal(h.writes[0].data.branchMerged, undefined);
+  assert.equal('mergedAt' in h.writes[0].data, false);
+});
+
+test('recovery cannot report an unreviewed source, candidate, identity, or target as landed', async (t) => {
+  for (const change of [{ candidateSha: 'f'.repeat(40) }, { sourceSha: 'f'.repeat(40) },
+    { previewId: 'old' }, { targetBranch: 'main' }]) {
+    await t.test(Object.keys(change)[0], async () => {
+      const h = harness(mergeRow({ mergeRecoveryAction: 'apply', mergeRecovery: reviewed }));
+      await assert.rejects(() => h.api.mergeResult({ id: RUNNER_ID }, SESSION_ID, {
+        operationId: NEW_OPERATION, leaseOwner: NEW_OWNER, status: 'merged',
+        sourceSha: reviewed.sourceSha, targetBranch: reviewed.targetBranch, mergedSha: reviewed.candidateSha,
+        recovery: { ...reviewed, code: 'DONE', ...change },
+      }), ConflictException);
+      assert.deepEqual(h.writes, []);
+    });
+  }
+});
+
+test('local sync settles the diagnostic without writing a second landing receipt', async () => {
+  const h = harness(mergeRow({ mergeRecoveryAction: 'sync-local', mergeRecovery: { ...reviewed, code: 'LOCAL_SYNC_PENDING' },
+    branch: 'orbit/session', taskId: null }));
+  await h.api.mergeResult({ id: RUNNER_ID }, SESSION_ID, {
+    operationId: NEW_OPERATION, leaseOwner: NEW_OWNER, status: 'merged',
+    sourceSha: reviewed.sourceSha, targetBranch: reviewed.targetBranch, mergedSha: reviewed.candidateSha,
+    recovery: { ...reviewed, code: 'DONE' },
+  });
+  assert.equal(h.writes[0].data.mergeRecovery, Prisma.DbNull);
+  assert.equal(h.writes[0].data.branchMerged, true);
+  assert.equal('mergedAt' in h.writes[0].data, false);
+  assert.equal('baseSha' in h.writes[0].data, false);
+});
+
+test('a preview cannot report a landing and a malformed diagnostic cannot change state', async () => {
+  const preview = harness(mergeRow({ mergeRecoveryAction: 'preview' }));
+  await assert.rejects(() => preview.api.mergeResult({ id: RUNNER_ID }, SESSION_ID, {
+    operationId: NEW_OPERATION, leaseOwner: NEW_OWNER, status: 'merged',
+  }), ConflictException);
+  assert.deepEqual(preview.writes, []);
+  const malformed = harness(mergeRow());
+  await assert.rejects(() => malformed.api.mergeResult({ id: RUNNER_ID }, SESSION_ID, {
+    operationId: NEW_OPERATION, leaseOwner: NEW_OWNER, status: 'error',
+    recovery: { code: 'READY', targetBranch: 'develop', localCommits: [null] } as never,
+  }), BadRequestException);
+  assert.deepEqual(malformed.writes, []);
 });
 
 test('merge result rejects stale operation ABA, stale process owner, and open-session owner loss', async (t) => {
