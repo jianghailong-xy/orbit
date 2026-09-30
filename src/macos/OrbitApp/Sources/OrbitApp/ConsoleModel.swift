@@ -209,6 +209,7 @@ final class ConsoleModel {
     /// asynchronously, so a console built before it lands must still read the current one.
     @ObservationIgnored var accountDefaultPermissionMode: () -> String? = { nil }
     @ObservationIgnored var rememberDefaultPermissionMode: (String) -> Void = { _ in }
+    @ObservationIgnored var accountDefaultModels: () -> [String: String] = { [:] }
     var effort: Effort = .default
     /// Account preferences can arrive after a restored-token launch has already presented the
     /// draft. They may refine the legacy workspace seed only until the user touches the picker;
@@ -245,6 +246,11 @@ final class ConsoleModel {
     /// credentials expired). Loaded with the footer context.
     private(set) var runnerID: String?
     private(set) var runnerName: String?
+    /// Heartbeat admission facts used by the iOS Codex reset-credit card. Nil means an older server
+    /// or an unavailable runner read, so the destructive action stays unavailable.
+    private(set) var runnerOnline: Bool?
+    private(set) var runnerHeartbeatLeaseOwner: String?
+    private(set) var runnerHeartbeatDraining: Bool?
     /// What the runner's own engine logins report, verbatim. Kept whole rather than resolved on
     /// arrival so the gauge follows a provider switch made after the fetch — see `planUsage`.
     private(set) var runnerPlanUsage: PlanUsage?
@@ -260,6 +266,180 @@ final class ConsoleModel {
         }
         return AgentDefaults.planUsage(for: provider, runner: runnerPlanUsage,
                                        configured: configuredProviders)
+    }
+
+    /// The reset block is offered only for the runner's built-in Codex Default account. A custom
+    /// key, CODEX_HOME, or another account would spend a different credential, so showing this card
+    /// there would make a valid-looking confirmation that the API must refuse.
+    var codexResetBlock: PlanUsageRateLimitReset? {
+        guard provider == "codex", codexAccount == CodexAccounts.defaultID else { return nil }
+        return planUsage?.rateLimitReset
+    }
+
+    /// Whether the usage sheet should reserve room for the reset card. Unsupported/auth-unknown
+    /// answers stay hidden just like the web card; CREDITS_UNAVAILABLE remains visible with a reason.
+    var codexResetCardVisible: Bool {
+        guard let block = codexResetBlock,
+              Self.isCodexResetBlockValid(block),
+              let fingerprint = block.accountFingerprint,
+              Self.isCodexResetFingerprint(fingerprint) else { return false }
+        return block.support == "SUPPORTED" || block.support == "CREDITS_UNAVAILABLE"
+    }
+
+    var codexResetAvailableCount: Int? { codexResetBlock?.rateLimitResetCredits?.availableCount }
+
+    /// The earliest expiry among listed, currently available credits. A nil result means the
+    /// provider did not send details or none of the listed credits has an expiry.
+    var codexResetNextExpiry: String? {
+        guard let credits = codexResetBlock?.rateLimitResetCredits?.credits else { return nil }
+        return credits
+            .filter { $0.status == "available" && $0.expiresAt != nil }
+            .compactMap(\.expiresAt)
+            .sorted()
+            .first
+    }
+
+    /// The web contract admits a snapshot for fifteen minutes, with five minutes of future-clock
+    /// tolerance. Keep the same fence on-device so a stale card cannot submit a reset blindly.
+    func codexResetFresh(_ now: Date = Date()) -> Bool {
+        guard let fetchedAt = codexResetBlock.flatMap({ Self.codexResetDate($0.fetchedAt) }) else { return false }
+        let age = now.timeIntervalSince(fetchedAt)
+        return age >= -5 * 60 && age <= 15 * 60
+    }
+
+    func codexResetFreshnessText(_ now: Date = Date()) -> String? {
+        guard let block = codexResetBlock, let fetchedAt = Self.codexResetDate(block.fetchedAt) else { return nil }
+        if fetchedAt.timeIntervalSince(now) > 5 * 60 { return "Updated at a time ahead of this device's clock" }
+        let minutes = max(0, Int(now.timeIntervalSince(fetchedAt) / 60))
+        let ago = minutes < 1 ? "just now" : minutes < 60 ? "\(minutes) min ago" : "\(minutes / 60) h ago"
+        return codexResetFresh(now) ? "Updated \(ago)" : "Updated \(ago) · out of date"
+    }
+
+    /// The exact admission reason is exposed to the sheet so a disabled button explains itself.
+    var codexResetEligibilityReason: String? {
+        guard let block = codexResetBlock else { return nil }
+        if codexResetAccountOverride {
+            return "This workspace doesn't run on the runner's own Codex sign-in."
+        }
+        if codexResetOperation?.isActive == true || codexResetOperations?.active?.isActive == true {
+            return "A reset is already in progress for this Codex account."
+        }
+        if runnerOnline != true { return "The runner is offline." }
+        if !(runnerCapabilities ?? []).contains(where: {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "codex-rate-limit-reset-v1"
+        }) { return "Update this runner to use reset credits." }
+        if !Self.isCodexResetUUID(runnerHeartbeatLeaseOwner) { return "The runner hasn't checked in yet." }
+        if runnerHeartbeatDraining == true { return "The runner is restarting." }
+        guard block.support == "SUPPORTED" || block.support == "CREDITS_UNAVAILABLE" else {
+            return "Reset credits are not supported by this Codex account."
+        }
+        guard let fingerprint = block.accountFingerprint, !fingerprint.isEmpty else {
+            return "Codex didn't identify this account."
+        }
+        if !codexResetFresh() { return "Usage is out of date. Waiting for the runner to refresh it." }
+        if let latest = codexResetOperations?.latest,
+           latest.accountFingerprint == fingerprint,
+           let completedAt = latest.completedAt,
+           (latest.consumeState == "UNRESOLVED"
+               || (latest.consumeState == "CONFIRMED" && latest.refreshState == "FAILED")) {
+            guard let completed = Self.codexResetDate(completedAt),
+                  let fetched = Self.codexResetDate(block.fetchedAt),
+                  fetched > completed else {
+                return "Usage hasn't refreshed since the last reset attempt."
+            }
+        }
+        guard block.support == "SUPPORTED", let credits = block.rateLimitResetCredits else {
+            return "Codex isn't reporting reset credits right now."
+        }
+        if credits.availableCount <= 0 { return "No reset credits available." }
+        return nil
+    }
+
+    var codexResetEligible: Bool {
+        codexResetCardVisible && codexResetEligibilityReason == nil
+    }
+
+    private var codexResetAccountOverride: Bool {
+        guard provider == "codex", codexAccount == CodexAccounts.defaultID else { return true }
+        // The API judges the workspace that supplied the confirmation, not the session's
+        // already-resolved account. A session can still be pinned to Default after its workspace
+        // was changed to another account; looking at `sessionCodexAccount` first would incorrectly
+        // leave the destructive action enabled in that case.
+        let pickedAccount = isDraft
+            ? (draftCodexAccount ?? draftAgent?.codexAccount)
+            : workspaceCodexAccount
+        if let pickedAccount = pickedAccount?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !pickedAccount.isEmpty, pickedAccount != CodexAccounts.defaultID { return true }
+        let env = workspaceEnv ?? draftAgent?.env ?? [:]
+        return env.contains { key, value in
+            let deciding = key == "CODEX_HOME" || key == "CODEX_API_KEY" || key.hasPrefix("OPENAI_")
+            return deciding && !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    private static func codexResetDate(_ value: String) -> Date? {
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return parser.date(from: value) ?? {
+            parser.formatOptions = [.withInternetDateTime]
+            return parser.date(from: value)
+        }()
+    }
+
+    private static func isCodexResetFingerprint(_ value: String) -> Bool {
+        value.count == 37 && value.hasPrefix("cxa1_")
+            && value.dropFirst(5).allSatisfy { "0123456789abcdef".contains($0) }
+    }
+
+    private static func isCodexResetUUID(_ value: String?) -> Bool {
+        guard let value, value.count == 36 else { return false }
+        let chars = Array(value)
+        for index in chars.indices {
+            if [8, 13, 18, 23].contains(index) {
+                if chars[index] != "-" { return false }
+            } else if !"0123456789abcdef".contains(chars[index]) {
+                return false
+            }
+        }
+        return "12345678".contains(chars[14]) && "89ab".contains(chars[19])
+    }
+
+    /// Reject a block from a newer/malformed wire contract instead of presenting an action the
+    /// server will refuse. The API validates the same invariants before storing runner telemetry.
+    private static func isCodexResetBlockValid(_ block: PlanUsageRateLimitReset) -> Bool {
+        let identified = block.support == "SUPPORTED" || block.support == "CREDITS_UNAVAILABLE"
+        guard block.protocolVersion == 1,
+              ["SUPPORTED", "CREDITS_UNAVAILABLE", "PROVIDER_UNSUPPORTED",
+               "UNSUPPORTED_AUTH", "ACCOUNT_UNIDENTIFIED"].contains(block.support),
+              identified == (block.accountFingerprint != nil),
+              block.accountFingerprint.map(isCodexResetFingerprint) ?? !identified,
+              (block.support == "SUPPORTED") == (block.rateLimitResetCredits != nil),
+              codexResetDate(block.fetchedAt) != nil,
+              isCodexResetUUID(block.generation),
+              block.sequence >= 1 else { return false }
+        guard let credits = block.rateLimitResetCredits else { return true }
+        return credits.availableCount >= 0 && (credits.credits?.count ?? 0) <= 100
+    }
+
+    private static func codexResetRefusalReason(_ code: String?) -> String? {
+        switch code {
+        case "REQUEST_ID_REUSED": return "That request couldn't be matched to this runner. Try again."
+        case "ACCOUNT_OVERRIDE": return "This workspace doesn't run on the runner's own Codex sign-in."
+        case "OPERATION_IN_FLIGHT": return "A reset is already in progress for this Codex account."
+        case "RUNNER_OFFLINE": return "The runner is offline."
+        case "CAPABILITY_MISSING": return "Update this runner to use reset credits."
+        case "NO_ACTIVE_LEASE": return "The runner hasn't checked in yet."
+        case "RUNNER_DRAINING": return "The runner is restarting."
+        case "SNAPSHOT_MISSING": return "This runner hasn't reported reset credits."
+        case "UNSUPPORTED_AUTH": return "Reset credits need a ChatGPT sign-in on this runner."
+        case "PROVIDER_UNSUPPORTED": return "This runner's Codex CLI doesn't support reset credits."
+        case "ACCOUNT_UNIDENTIFIED": return "Codex didn't say which account this is."
+        case "ACCOUNT_MISMATCH": return "The runner's Codex account changed. Check the updated usage."
+        case "SNAPSHOT_STALE": return "Usage is out of date. Waiting for the runner to refresh it."
+        case "CREDITS_UNAVAILABLE": return "Codex isn't reporting reset credits right now."
+        case "NO_CREDIT_AVAILABLE": return "No reset credits available."
+        default: return nil
+        }
     }
     /// The engine whose account this draft or session names: the built-in Codex or Claude engine, not
     /// an account pool. Nil for everything else.
@@ -352,6 +532,16 @@ final class ConsoleModel {
     /// the composer's Mode menu (`AgentDefaults.isRunnable`). Same nil semantics as the engines
     /// above: not reported claims nothing, so no mode is withdrawn on a guess.
     private(set) var runnerRunsAsRoot: Bool?
+
+    // Codex earned reset-credit state. The operation API is runner-scoped; keeping it on the
+    // console lets the iOS sheet continue polling even when the usage popover is briefly dismissed.
+    private(set) var codexResetOperations: CodexRateLimitResetOperations?
+    private(set) var codexResetOperation: CodexRateLimitResetOperation?
+    private(set) var codexResetBusy = false
+    private(set) var codexResetError: String?
+    private var codexResetRequestID: String?
+    private var codexResetPollTask: Task<Void, Never>?
+    private var codexResetPollingOperationID: String?
     /// Control-plane–configured providers (custom slugs borrowing a built-in runtime) — this
     /// session's provider may be one, so the composer's model menu/pill and the context gauge
     /// merge them in. Loaded with the footer context; left empty by an older server without
@@ -465,8 +655,8 @@ final class ConsoleModel {
     /// Draft (pre-session) console backing the "new session" composer. There's no session yet, so it
     /// runs no stream; the first `send()` calls `createSession` for `agent` and hands the new session
     /// to `onSessionCreated`, after which the caller opens its live console. The model pill is
-    /// seeded from the owning runner's Runtime heartbeat; permission and effort remain agent/account
-    /// settings.
+    /// seeded from the account's remembered choice or the owning runner's Runtime heartbeat;
+    /// permission and effort remain agent/account settings.
     init(draftFor agent: Agent, defaultModel: String,
          configuredProviders: [ConfiguredProvider] = [],
          configuredProvidersLoaded: Bool = false,
@@ -583,6 +773,9 @@ final class ConsoleModel {
         worktreePollTask = nil
         createdTasksPollTask?.cancel()
         createdTasksPollTask = nil
+        codexResetPollTask?.cancel()
+        codexResetPollTask = nil
+        codexResetPollingOperationID = nil
     }
 
     func run() async {
@@ -1140,6 +1333,37 @@ final class ConsoleModel {
     private var syncedConfig: (model: String, permissionMode: String, effort: String,
                                fastMode: Bool)?
 
+    private func adoptRunnerSnapshot(_ runner: Runner) {
+        runnerName = runner.displayName?.isEmpty == false ? runner.displayName : runner.name
+        runnerOnline = runner.online
+        runnerHeartbeatLeaseOwner = runner.heartbeatLeaseOwner
+        runnerHeartbeatDraining = runner.heartbeatDraining
+        runnerPlanUsage = runner.planUsage
+        modelCatalog = runner.modelCatalog
+        runnerEngines = runner.engines
+        runnerCapabilities = runner.capabilities
+        runnerRunsAsRoot = runner.runsAsRoot
+    }
+
+    private func clearRunnerSnapshot() {
+        runnerOnline = nil
+        runnerHeartbeatLeaseOwner = nil
+        runnerHeartbeatDraining = nil
+        runnerPlanUsage = nil
+        modelCatalog = nil
+        runnerEngines = nil
+        runnerCapabilities = nil
+        runnerRunsAsRoot = nil
+    }
+
+    /// Reset admission must fail closed on a transient runner-list failure. Keep the ordinary
+    /// plan/model snapshot for the composer, but do not let an old lease make a credit spendable.
+    private func clearCodexResetAdmission() {
+        runnerOnline = nil
+        runnerHeartbeatLeaseOwner = nil
+        runnerHeartbeatDraining = nil
+    }
+
     /// Load the footer context once: the owning agent's name + the runner's plan usage, and
     /// adopt the session's stored model/permission/effort so the pills show its real settings
     /// (matching web — see AgentView's seed effects). This runs for terminal sessions too: a
@@ -1205,23 +1429,20 @@ final class ConsoleModel {
         var sessionRunner: Runner?
         var runnerSnapshotLoaded = false
         runnerID = s.assignedRunnerId
-        if let rid = s.assignedRunnerId, let rows = try? await api.runners() {
-            if let r = rows.first(where: { $0.id == rid }) {
-                sessionRunner = r
-                runnerSnapshotLoaded = true
-                runnerName = r.displayName?.isEmpty == false ? r.displayName : r.name
-                runnerPlanUsage = r.planUsage
-                modelCatalog = r.modelCatalog
-                runnerEngines = r.engines
-                runnerCapabilities = r.capabilities
-                runnerRunsAsRoot = r.runsAsRoot
+        if let rid = s.assignedRunnerId {
+            if let rows = try? await api.runners() {
+                if let r = rows.first(where: { $0.id == rid }) {
+                    sessionRunner = r
+                    runnerSnapshotLoaded = true
+                    adoptRunnerSnapshot(r)
+                } else {
+                    clearRunnerSnapshot()
+                }
             } else {
-                runnerPlanUsage = nil
-                modelCatalog = nil
-                runnerEngines = nil
-                runnerCapabilities = nil
-                runnerRunsAsRoot = nil
+                clearCodexResetAdmission()
             }
+        } else {
+            clearCodexResetAdmission()
         }
         applySlashItems(from: sessionRunner)
         // Configured providers own a separate model space/default. Best-effort: a transient failure
@@ -1415,15 +1636,15 @@ final class ConsoleModel {
 
     /// Pick a provider for this draft (the new-session hero). Each provider owns its own model
     /// space, so the model can't survive the switch — it is re-seeded from the incoming provider's
-    /// default, and the mode/effort pills are re-clamped to what that provider accepts. The seed is
+    /// remembered model or default, and the mode/effort pills are re-clamped to what it accepts. The seed is
     /// marked pristine again on purpose: a model chosen for the outgoing provider is not a choice
     /// about this one, and keeping it would pin an id the new provider may not even offer.
     func pickDraftProvider(_ slug: String) {
         guard isDraft, slug != provider else { return }
         draftProviderOverride = slug
         provider = slug
-        modelID = AgentDefaults.defaultModel(for: slug, catalog: modelCatalog,
-                                             configured: configuredProviders)
+        modelID = draftModelSeed(AgentDefaults.defaultModel(
+            for: slug, catalog: modelCatalog, configured: configuredProviders))
         modelSelectionRevision = ModelSelectionRevision()
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
@@ -1490,10 +1711,11 @@ final class ConsoleModel {
             // `defaultModel` is the parent's, computed for the AGENT's provider. Once this draft
             // has been pointed somewhere else, that value belongs to a different model space —
             // resolve the picked provider's own default instead of dragging the agent's back in.
-            modelID = draftProviderOverride == nil
+            let fallback = draftProviderOverride == nil
                 ? defaultModel
                 : AgentDefaults.defaultModel(for: provider, catalog: modelCatalog,
                                              configured: configuredProviders)
+            modelID = draftModelSeed(fallback)
         }
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
@@ -1504,6 +1726,12 @@ final class ConsoleModel {
         effort = AgentDefaults.normalizedEffort(
             effort, for: provider, model: modelID, catalog: modelCatalog,
             configured: configuredProviders)
+    }
+
+    private func draftModelSeed(_ fallback: String, runtimeDefaults: [String: String]? = nil) -> String {
+        AgentDefaults.newSessionModel(
+            for: provider, accountModels: accountDefaultModels(), fallback: fallback,
+            catalog: modelCatalog, configured: configuredProviders, runtimeDefaults: runtimeDefaults)
     }
 
     /// A picker change on a LIVE session is pushed to the server immediately (PATCH /config,
@@ -2150,23 +2378,22 @@ final class ConsoleModel {
         var runtimeDefaults: [String: String]?
         var runnerSnapshotLoaded = false
         var agentRunner: Runner?
-        if let rid = draftAgent?.runnerId, let rows = try? await api.runners() {
-            if let r = rows.first(where: { $0.id == rid }) {
-                agentRunner = r
-                runnerPlanUsage = r.planUsage
-                modelCatalog = r.modelCatalog
-                runtimeDefaults = r.runtimeDefaultModels
-                runnerSnapshotLoaded = true
-                runnerEngines = r.engines
-                runnerCapabilities = r.capabilities
-                runnerRunsAsRoot = r.runsAsRoot
+        if let rid = draftAgent?.runnerId {
+            if let rows = try? await api.runners() {
+                if let r = rows.first(where: { $0.id == rid }) {
+                    agentRunner = r
+                    runnerID = r.id
+                    adoptRunnerSnapshot(r)
+                    runtimeDefaults = r.runtimeDefaultModels
+                    runnerSnapshotLoaded = true
+                } else {
+                    clearRunnerSnapshot()
+                }
             } else {
-                runnerPlanUsage = nil
-                modelCatalog = nil
-                runnerEngines = nil
-                runnerCapabilities = nil
-                runnerRunsAsRoot = nil
+                clearCodexResetAdmission()
             }
+        } else {
+            clearCodexResetAdmission()
         }
         let pools = try? await api.providerPools()
         let shared = try? await api.sharedPools()
@@ -2176,11 +2403,12 @@ final class ConsoleModel {
         // AgentsModel resolves the seed from its cached runner snapshot so the composer is correct
         // immediately. Re-resolve only while no explicit picker action has ever occurred.
         if draftAgent != nil, modelSelectionRevision.isPristine {
-            modelID = AgentDefaults.refreshedDefaultModel(
+            let fallback = AgentDefaults.refreshedDefaultModel(
                 currentModel: modelID, for: provider, catalog: modelCatalog,
                 configured: configuredProviders, runtimeDefaults: runtimeDefaults,
                 runnerSnapshotLoaded: runnerSnapshotLoaded,
                 configuredProvidersLoaded: configuredProvidersLoaded)
+            modelID = draftModelSeed(fallback, runtimeDefaults: runtimeDefaults)
         }
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
@@ -2193,6 +2421,127 @@ final class ConsoleModel {
         effort = AgentDefaults.normalizedEffort(
             effort, for: provider, model: modelID, catalog: modelCatalog,
             configured: configuredProviders)
+    }
+
+    /// Read the reset operation list when the iOS Plan usage sheet opens. An active operation may
+    /// have been started by another device, so the sheet follows it instead of racing a second POST.
+    func loadCodexResetOperations() async {
+        guard let runnerID else { return }
+        do {
+            let operations = try await api.codexRateLimitResetOperations(runnerID: runnerID)
+            codexResetOperations = operations
+            if let active = operations.active {
+                codexResetOperation = active
+                startCodexResetPolling(active.id)
+            } else {
+                // Do not surface an arbitrary old operation on every open. Only replace the one
+                // this console was already following when the list says it has now settled.
+                if let current = codexResetOperation,
+                   let latest = operations.latest, latest.id == current.id {
+                    codexResetOperation = latest
+                }
+                codexResetPollTask?.cancel()
+                codexResetPollTask = nil
+                codexResetPollingOperationID = nil
+                await refreshCodexResetRunner()
+            }
+            codexResetError = nil
+        } catch {
+            codexResetError = APIClient.failureReason(error)
+        }
+    }
+
+    /// Confirm and start one reset-credit operation. Reusing `codexResetRequestID` after a dropped
+    /// POST makes a user retry idempotent instead of spending a second credit.
+    func useCodexReset() async {
+        guard !codexResetBusy,
+              codexResetEligible,
+              let runnerID,
+              let fingerprint = codexResetBlock?.accountFingerprint else { return }
+        codexResetBusy = true
+        codexResetError = nil
+        let requestID = codexResetRequestID ?? UUID().uuidString.lowercased()
+        codexResetRequestID = requestID
+        let request = CreateCodexRateLimitResetRequest(
+            clientRequestId: requestID,
+            accountFingerprint: fingerprint,
+            workspaceId: agentID)
+        do {
+            let response = try await api.createCodexRateLimitReset(runnerID: runnerID, request)
+            codexResetRequestID = nil
+            codexResetOperation = response.operation
+            codexResetOperations = CodexRateLimitResetOperations(
+                active: response.operation.isActive ? response.operation : nil,
+                latest: response.operation)
+            if response.operation.isActive {
+                startCodexResetPolling(response.operation.id)
+            } else {
+                await refreshCodexResetRunner()
+            }
+        } catch {
+            let refusal = APIClient.refusalCode(error)
+            codexResetError = Self.codexResetRefusalReason(refusal)
+                ?? "Couldn't use reset credit — \(APIClient.failureReason(error))."
+            // The refusal may reflect a newer heartbeat, account choice, or snapshot than the
+            // one that rendered this sheet. Refresh the runner before leaving the stale button in
+            // place; the next eligibility pass can then disable or hide it for the right reason.
+            await refreshCodexResetRunner()
+            // Another device may already own the one-operation slot. Read it and follow that
+            // operation rather than hiding the card behind a generic POST error.
+            if refusal == "OPERATION_IN_FLIGHT" {
+                await loadCodexResetOperations()
+            } else if refusal != nil {
+                codexResetRequestID = nil
+            }
+        }
+        codexResetBusy = false
+    }
+
+    private func startCodexResetPolling(_ operationID: String) {
+        guard let runnerID else { return }
+        if codexResetPollTask != nil, codexResetPollingOperationID == operationID { return }
+        codexResetPollTask?.cancel()
+        codexResetPollingOperationID = operationID
+        codexResetPollTask = Task { [weak self] in
+            defer {
+                if self?.codexResetPollingOperationID == operationID {
+                    self?.codexResetPollTask = nil
+                    self?.codexResetPollingOperationID = nil
+                }
+            }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                guard let self, !Task.isCancelled else { return }
+                do {
+                    let operation = try await self.api.codexRateLimitResetOperation(
+                        runnerID: runnerID, operationID: operationID)
+                    self.codexResetOperation = operation
+                    self.codexResetOperations = CodexRateLimitResetOperations(
+                        active: operation.isActive ? operation : nil,
+                        latest: operation)
+                    if !operation.isActive {
+                        await self.refreshCodexResetRunner()
+                        return
+                    }
+                    self.codexResetError = nil
+                } catch {
+                    self.codexResetError = APIClient.failureReason(error)
+                }
+            }
+        }
+    }
+
+    private func refreshCodexResetRunner() async {
+        guard let runnerID else { return }
+        guard let rows = try? await api.runners() else {
+            clearCodexResetAdmission()
+            return
+        }
+        guard let runner = rows.first(where: { $0.id == runnerID }) else {
+            clearCodexResetAdmission()
+            return
+        }
+        adoptRunnerSnapshot(runner)
     }
 
     func interrupt() async {

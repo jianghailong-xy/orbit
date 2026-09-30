@@ -2,12 +2,15 @@ import Foundation
 
 // User preferences, mirroring users.controller `me` / `me/preferences` (UpdatePreferencesDto).
 // The PATCH body is a partial set shallow-merged server-side: an omitted key keeps its value.
+// `defaultModels` also merges its provider entries, preserving the other providers' choices.
 // `theme` / `defaultPermissionMode` are kept as `String` (not enums) so an unknown future value
 // decodes rather than throwing — the app maps known values and ignores the rest.
 
 public struct UserPreferences: Codable, Equatable, Sendable {
     public let theme: String?                  // "system" | "light" | "dark"
     public let defaultModel: String?
+    /// Last-picked model per provider, synced across clients.
+    public let defaultModels: [String: String]?
     public let defaultPermissionMode: String?
     /// Account-wide default reasoning effort for a new session (last-picked-wins). "" = model
     /// default; otherwise an `Effort` raw value. Synced so a value chosen on web seeds new
@@ -30,16 +33,19 @@ public struct UserPreferences: Codable, Equatable, Sendable {
 public struct UpdatePreferencesRequest: Encodable, Sendable {
     public var theme: String?
     public var defaultModel: String?
+    public var defaultModels: [String: String]?
     public var defaultPermissionMode: String?
     public var defaultEffort: String?
     public var enableOrchestration: Bool?
     public var notifySessionFinished: Bool?
     public var notifyAgentMessage: Bool?
-    public init(theme: String? = nil, defaultModel: String? = nil, defaultPermissionMode: String? = nil,
+    public init(theme: String? = nil, defaultModel: String? = nil, defaultModels: [String: String]? = nil,
+                defaultPermissionMode: String? = nil,
                 defaultEffort: String? = nil, enableOrchestration: Bool? = nil,
                 notifySessionFinished: Bool? = nil, notifyAgentMessage: Bool? = nil) {
         self.theme = theme
         self.defaultModel = defaultModel
+        self.defaultModels = defaultModels
         self.defaultPermissionMode = defaultPermissionMode
         self.defaultEffort = defaultEffort
         self.enableOrchestration = enableOrchestration
