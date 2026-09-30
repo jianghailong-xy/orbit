@@ -163,11 +163,12 @@
 | --- | --- |
 | Go 恢复、既有合入、wire 与 worktree GC 回归 | 通过；覆盖两阶段冲突及修复、输入变化、检查失败及修复、推送拒绝、线性历史、其他 worktree 占用、本地未跟踪文件和仅本机重试 |
 | API 审批、operation / lease fence、checkpoint 和回执回归 | 93 个测试通过 |
+| Runner 能力派发、详情能力与迁移审计回归 | 20 个测试通过；旧 runner 不接收恢复命令，新 runner 可派发，无 assigned runner 时不提供入口 |
 | PostgreSQL 16 临时实例 | 全量迁移含 `0341_session_merge_recovery` 通过；新的队列→心跳→结果→部分落地→本机重试链路通过，22 个既有回执与等待合入回归串行通过 |
 | Shared / Web 恢复与合入条组件 | 19 个测试通过；真实组件在 Chromium 的桌面/手机布局、固定候选批准、本机单独重试通过，无横向溢出或脚本异常 |
 | TypeScript 与 Web 生产构建 | 通过 |
-| Swift 共享模型与合入条逻辑 | 42 个测试通过；SwiftUI 改动通过语法检查，字体与导航门禁通过。完整 macOS / iOS 构建由 PR 的 Client CI 验证 |
+| Swift 共享模型与合入条逻辑 | 42 个测试通过；SwiftUI 改动通过语法检查，字体与导航门禁通过。PR #104 首轮完整 macOS 构建与测试、iOS 生成与编译均通过 |
 
-`go test ./...` 的全量尝试不能报告全绿：真实引擎测试受本机 CLI 版本/鉴权影响，任务与项目 CLI 测试还会继承当前 Orbit 会话环境。`TestRealClaudeAcceptsASetModel`、`TestProjectCreateSendsOnlyTheFieldsGiven` 的失败和 `TestCLITaskCreateExposesAndForwardsTheThreePeerCompletionCriteria` 的超时已在独立 main checkout 复现；后二者去掉继承的 `ORBIT_*` 环境后通过。未修改这些与合入恢复无关的基线代码。
+本机 `go test ./...` 的全量尝试不能报告全绿：真实引擎测试受本机 CLI 版本/鉴权影响，任务与项目 CLI 测试还会继承当前 Orbit 会话环境。`TestRealClaudeAcceptsASetModel`、`TestProjectCreateSendsOnlyTheFieldsGiven` 的失败和 `TestCLITaskCreateExposesAndForwardsTheThreePeerCompletionCriteria` 的超时已在独立 main checkout 复现；后二者去掉继承的 `ORBIT_*` 环境后通过。未修改这些与合入恢复无关的基线代码。PR #104 的干净 CI 环境已通过全量 Go runner 与 Swift core 检查。
 
 上线需要先更新服务端/Web 并应用迁移，再更新 runner 与原生客户端。只有 runner 心跳声明新能力后才可使用恢复操作；旧 runner 不会被派发新语义。当前交付是分支上的实现与验证，未部署或发布客户端。
