@@ -35,8 +35,13 @@ import (
 // truncated run's report counts one more failure each time it lands, so it is sent once.
 //
 // HOW LONG. From about 2 seconds, doubling, each wait jittered and none longer than 30 seconds, until the call
-// has gone on for 5 minutes — a deploy's switch is some 20 seconds of 502s. Then the last failure goes back to
-// the caller exactly as the transport returned it, so what a caller did with a failure before, it still does.
+// has gone on for 5 minutes — a deploy's switch is some 20 seconds of 502s. Each send waits for its answer as
+// long as its call's timeout says — 20 seconds for the door's light calls; 2 minutes for its heavy ones (a
+// dossier page, an article's input or write, an anchor report), which is past the 100 seconds the edge waits
+// for the server before it answers 524 itself — and never past the budget's end, and a retry is sent only
+// while the budget has time left after its wait: the whole call is over within the 5 minutes. A send that
+// failed on its way is sent again on a new connection (wiki_conn.go). Then the last failure goes back to the
+// caller exactly as the transport returned it, so what a caller did with a failure before, it still does.
 // Each wait is one line on stderr: stdout is `orbit mcp`'s protocol and `--json`'s document.
 
 // wikiRetryPolicy is the backoff a wiki call waits by. wikiRetry is the one every call uses; a test gives it
@@ -84,20 +89,27 @@ func (t *Transport) doWiki(method, path string, body, out interface{}, timeout t
 	p := wikiRetry
 	began := p.now()
 	for sends := 1; ; sends++ {
-		err := t.doHeaders(nil, method, path, body, out, timeout, headers)
-		if err == nil || !resend {
-			return sends, err
+		client := t.wikiClient()
+		err := t.doVia(nil, client, method, path, body, out, min(timeout, p.budget-p.now().Sub(began)), headers)
+		if err == nil {
+			return sends, nil
 		}
 		now := p.now()
 		why, wait, transient := wikiTransient(err, method, path, now)
-		if !transient {
+		var answer *transportHTTPError
+		if transient && !errors.As(err, &answer) {
+			// No answer came back, and the connection the send went out on may be dead: whatever is sent next
+			// goes out on a new one, this call's retry or the next call.
+			t.wikiRetire(client)
+		}
+		if !resend || !transient {
 			return sends, err
 		}
 		if wait == 0 {
 			wait = p.wait(sends)
 		}
 		left := p.budget - now.Sub(began)
-		if wait > left {
+		if wait >= left {
 			fmt.Fprintf(p.log, "orbit wiki: %s %s failed (%s) on send %d; the %s retry budget is spent, so the failure stands\n",
 				method, path, why, sends, p.budget)
 			return sends, err

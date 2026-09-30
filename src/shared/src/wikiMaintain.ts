@@ -67,7 +67,10 @@ export interface WikiMaintenanceRunContext {
   /** The space's repository: what the run's checkout must be a clone of. */
   repo: { urlNorm: string | null; rootCommitSha: string | null };
   reviewMode: WikiReviewMode;
-  /** The space's active entries now: what the circuit breaker is counted against. */
+  /**
+   * The space's active entries now. Not what the run's circuit breaker is counted against: that is the entries
+   * active when the run began, its own adds since taken off, and a dry run says it (`WikiBreakerReading`).
+   */
   activeEntries: number;
   breaker: { minActiveEntries: number; maxChangedPercent: number };
   /** The workspace the space's maintenance runs in, with its work directory as stored (`~` unexpanded). */
@@ -90,7 +93,17 @@ export interface WikiMaintenanceReport {
   unchanged: number;
   offTopic: number;
   entries: { extracted: number; kept: number; dropped: number; foreign: number; principles: number };
-  ops: { proposed: number; recorded: number; refused: number; selfCheckDropped: number; heldBack: number; applied: number; waiting: number };
+  /** `heldBack` is what the review queue's quotas held back; `heldBackByBreaker` what the run's circuit breaker did. */
+  ops: {
+    proposed: number;
+    recorded: number;
+    refused: number;
+    selfCheckDropped: number;
+    heldBack: number;
+    heldBackByBreaker: number;
+    applied: number;
+    waiting: number;
+  };
   verification?: { verified: number; failed: number };
   anchors?: { entries: number; changed: number; missing: number };
   articles?: { written: number; unchanged: number; failed: number };
