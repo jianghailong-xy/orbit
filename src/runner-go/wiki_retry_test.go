@@ -518,6 +518,14 @@ func wikiEffectOf(route string, body map[string]interface{}, landing int) string
 		return once(str("entrySetSha256")) // replaced whole, and only from another entry set
 	case strings.HasSuffix(route, "anchor-checks"):
 		return once(str("ref")) // anchors set to what was found; a challenge only while none is open
+	case strings.HasPrefix(route, "POST docs/"):
+		sections, _ := body["sections"].([]interface{})
+		var written []string
+		for _, raw := range sections {
+			section, _ := raw.(map[string]interface{})
+			written = append(written, fmt.Sprint(section["key"]), fmt.Sprint(section["materialSha256"]))
+		}
+		return once(written...) // a section whose stored fingerprint is the write's is left as it is
 	case strings.HasSuffix(route, "article-plan"):
 		return once() // the default topics, for a space with none
 	case strings.HasSuffix(route, "cursor") || strings.HasSuffix(route, "maintenance/finish"):
@@ -591,6 +599,11 @@ func TestWikiRetryResendsOnlyTheWritesTheServerRecordsOnce(t *testing.T) {
 		}},
 		{"the article plan", "POST article-plan", true, 1, func(tr *Transport) error {
 			_, err := tr.planWikiArticles("s", "space-1")
+			return err
+		}},
+		{"a document's sections", "POST docs/session-runtime", true, 1, func(tr *Transport) error {
+			_, err := tr.writeWikiDoc("s", "space-1", "session-runtime", wikiDocWriteRequest{PlanVersion: 1, RepoSha: strings.Repeat("a", 40),
+				Sections: []wikiDocSection{{Key: "s2", MaterialSha256: strings.Repeat("b", 64), Markdown: "一句[1]。", Footnotes: []wikiDocFootnote{}, Dispositions: []wikiDocDisposition{}}}})
 			return err
 		}},
 		{"the anchors' checks", "POST anchor-checks", true, 1, func(tr *Transport) error {

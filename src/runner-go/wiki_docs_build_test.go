@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -33,6 +34,7 @@ type docsBuildDoor struct {
 	calls    []string
 	sessions []string
 	writes   []wikiDocWriteRequest
+	raw      []string
 }
 
 func newDocsBuildDoor(t *testing.T) *docsBuildDoor {
@@ -88,6 +90,19 @@ func newDocsBuildDoor(t *testing.T) *docsBuildDoor {
 			if err := json.Unmarshal(raw, &body); err != nil {
 				t.Errorf("a write that is not JSON: %s", raw)
 			}
+			// The server's schema: a section's footnotes are a list, empty or not, and never null.
+			var shape struct {
+				Sections []map[string]json.RawMessage `json:"sections"`
+			}
+			_ = json.Unmarshal(raw, &shape)
+			for i, section := range shape.Sections {
+				if footnotes := strings.TrimSpace(string(section["footnotes"])); !strings.HasPrefix(footnotes, "[") {
+					reply(http.StatusUnprocessableEntity, map[string]interface{}{"code": "WIKI_DOC_INVALID", "message": "the write does not have the shape",
+						"errors": []interface{}{map[string]string{"path": fmt.Sprintf("sections[%d].footnotes", i), "message": "must be a list of at most 200 footnotes"}}})
+					return
+				}
+			}
+			door.raw = append(door.raw, string(raw))
 			door.writes = append(door.writes, body)
 			sections := []map[string]interface{}{}
 			for _, section := range body.Sections {
@@ -642,9 +657,10 @@ func TestWikiArticleBuildGivesEveryFootnoteItsVerbatimQuote(t *testing.T) {
 	if comment.Kind != "task_comment" || comment.Ref != "comment-1" || comment.Quote == nil || *comment.Quote != "在 runner 宿主上跑完整包" {
 		t.Errorf("the comment's footnote = %+v", comment)
 	}
+	// s2 and s3 are written side by side, so the repair asked about s3 is found by what it asks about.
 	var repair, again string
 	for _, prompt := range model.Prompts() {
-		if strings.Contains(prompt, "补逐字引文") {
+		if strings.Contains(prompt, "补逐字引文") && strings.Contains(prompt, "## [S3] 标在") {
 			repair = prompt
 		}
 		if strings.Contains(prompt, "上一稿的问题") {
@@ -1060,5 +1076,41 @@ func TestWikiArticleBuildFingerprintIsTheDefinitionAndTheMaterial(t *testing.T) 
 	sort.Strings(keys)
 	if !reflect.DeepEqual(keys, []string{"covers", "kind", "length", "sources", "title"}) {
 		t.Errorf("the definition fingerprinted = %v, the contract's (title, kind, covers, length, sources)", keys)
+	}
+}
+
+// A section the plan gives no material — 7.1's closing «约定», whose outline names nothing to take — is
+// still written: the model is asked for its boundary alone, with no merge, and the write carries its
+// footnotes and its ledger as empty lists, which the server's schema asks for (null is refused).
+func TestWikiArticleBuildWritesASectionWithNoMaterialAsEmptyLists(t *testing.T) {
+	door, model, _, _, repo := docsBuildSetup(t)
+	door.mu.Lock()
+	plan := door.plan["confirmed"].(map[string]interface{})["docs"].([]interface{})[0].(map[string]interface{})
+	plan["sections"] = append(plan["sections"].([]interface{}), map[string]interface{}{
+		"id": "sec-s4", "key": "s4", "position": 3, "title": "边界", "kind": "conventions", "covers": "本篇不讲什么。", "length": 200,
+		"sources": map[string]interface{}{"docs": []interface{}{}, "code": []interface{}{}, "contracts": []interface{}{}, "sessions": nil},
+		"extra": map[string]interface{}{},
+	})
+	door.mu.Unlock()
+	model.write["边界"] = []string{"### 边界\n本篇只讲会话怎么运转，任务怎么派发另有专篇。\n"}
+	summary, out, err := docsBuildRun(t, repo.checkout, "--doc", "session-runtime", "--section", "s4")
+	if err != nil {
+		t.Fatalf("orbit wiki docs build --section s4: %v\n%s", err, out)
+	}
+	if summary.Written != 1 || summary.Calls != 1 {
+		t.Errorf("a section with no material: %+v (want it written from one call, with no merge)", summary)
+	}
+	prompts := model.Prompts()
+	if len(prompts) != 1 || !strings.Contains(prompts[0], "归并后没有可用材料") || strings.Contains(prompts[0], "做「归并」") {
+		t.Errorf("the one call was %q", prompts)
+	}
+	door.mu.Lock()
+	raw := append([]string{}, door.raw...)
+	door.mu.Unlock()
+	if len(raw) != 1 || !strings.Contains(raw[0], `"footnotes":[]`) || !strings.Contains(raw[0], `"dispositions":[]`) {
+		t.Errorf("the write sent %v: want its footnotes and its ledger as empty lists", raw)
+	}
+	if got := door.written(t, "s4"); got.Markdown != "本篇只讲会话怎么运转，任务怎么派发另有专篇。" {
+		t.Errorf("the section = %q", got.Markdown)
 	}
 }

@@ -169,7 +169,7 @@ func (t *Transport) wikiDocMaterialOf(sessionID, spaceID, slug, key string) (jso
 	}
 	var out json.RawMessage
 	path := wikiDocsPath(spaceID) + "/" + url.PathEscape(slug) + "/material?section=" + url.QueryEscape(key)
-	err := t.doHeaders(nil, http.MethodGet, path, nil, &out, wikiDocTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodGet, path, nil, &out, wikiDocTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
@@ -180,7 +180,7 @@ func (t *Transport) wikiDocWritten(sessionID, spaceID, slug string) (json.RawMes
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodGet, wikiDocsPath(spaceID)+"/"+url.PathEscape(slug), nil, &out, wikiDocTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodGet, wikiDocsPath(spaceID)+"/"+url.PathEscape(slug), nil, &out, wikiDocTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
@@ -191,16 +191,19 @@ func (t *Transport) wikiDocsState(sessionID, spaceID string) (json.RawMessage, e
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodGet, wikiDocsPath(spaceID), nil, &out, wikiDocTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodGet, wikiDocsPath(spaceID), nil, &out, wikiDocTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
-// writeWikiDoc writes sections of one document, or answers the refusal of its shape (wikiDocRefused).
+// writeWikiDoc writes sections of one document, or answers the refusal of its shape (wikiDocRefused). It
+// may land twice (wiki_retry.go): a section whose stored fingerprint is the one the write names, and from
+// which nothing was withdrawn since, is left as it is (contract `docs.regeneration`), so a second landing of
+// the same write records nothing more.
 func (t *Transport) writeWikiDoc(sessionID, spaceID, slug string, write wikiDocWriteRequest) (json.RawMessage, error) {
 	if err := validatePathSegmentID(spaceID); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodPost, wikiDocsPath(spaceID)+"/"+url.PathEscape(slug), write, &out, wikiDocTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodPost, wikiDocsPath(spaceID)+"/"+url.PathEscape(slug), write, &out, wikiDocTimeout, sessionHeader(sessionID), true)
 	return out, err
 }

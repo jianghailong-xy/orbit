@@ -902,7 +902,7 @@ func (r *wikiDocsBuildRun) overviewFootnotes(body string, notes []wikiDocOvervie
 	for _, note := range notes {
 		byID[note.id] = note.footnote
 	}
-	var footnotes []wikiDocFootnote
+	footnotes := []wikiDocFootnote{}
 	numberOf := map[string]int{}
 	markdown := wikiDocRewriteMarkers(body, func(id string) (int, bool) {
 		footnote, ok := byID[id]
@@ -2116,7 +2116,8 @@ func (r *wikiDocsBuildRun) footnotes(run *wikiDocsBuildSectionRun, draft wikiDoc
 	for _, piece := range used {
 		byID[piece.id] = piece
 	}
-	var footnotes []wikiDocFootnote
+	// A list even when empty: a section with no footnote sends [] (docs.schemaNote), never null.
+	footnotes := []wikiDocFootnote{}
 	numberOf := map[string]int{}
 	markdown := wikiDocRewriteMarkers(draft.body, func(id string) (int, bool) {
 		piece := byID[id]

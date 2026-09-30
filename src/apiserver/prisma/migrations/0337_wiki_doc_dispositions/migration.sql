@@ -22,9 +22,9 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 0337: origin/main stood at 0335 when this was written (2026-09-29), 0336 is given to the plan's
--- drafting job, and no branch had a 0337. ADD COLUMN IF NOT EXISTS, and the CHECK added only when it
--- is not there, so every statement can run twice.
+-- 0337: origin/main stood at 0336 (0336_session_account_choice) when this was merged (2026-09-30), and no
+-- other branch had a 0337. ADD COLUMN IF NOT EXISTS, and the CHECK added only when it is not there, so
+-- every statement can run twice.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
 ALTER TABLE "wiki_doc_section" ADD COLUMN IF NOT EXISTS "dispositions" JSONB NOT NULL DEFAULT '[]';

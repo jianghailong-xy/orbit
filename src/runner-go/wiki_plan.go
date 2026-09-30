@@ -222,7 +222,7 @@ func (t *Transport) wikiPlanState(sessionID, spaceID string) (json.RawMessage, e
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodGet, wikiPlanPath(spaceID), nil, &out, wikiPlanTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodGet, wikiPlanPath(spaceID), nil, &out, wikiPlanTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
