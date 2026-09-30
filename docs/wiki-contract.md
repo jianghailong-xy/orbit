@@ -717,9 +717,12 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
 
 ### 16.1 维护设置与维护会话
 
-- `settings.maintenance = { enabled, workspaceId, provider, dailyRunLimit, listId }`，默认
-  `{ false, null, 'local-vllm', 8, null }`。只能经用户门 `PATCH /api/wiki/spaces/:id` 改，带会话头一律 `WIKI_OWNER_CHANNEL_ONLY`；
+- `settings.maintenance = { enabled, workspaceId, provider, dailyRunLimit, lookbackDays, listId }`，默认
+  `{ false, null, 'local-vllm', 8, 14, null }`。只能经用户门 `PATCH /api/wiki/spaces/:id` 改，带会话头一律 `WIKI_OWNER_CHANNEL_ONLY`；
   runner 门没有改设置的路由。只写 `maintenance` 这一个键，在 SQL 里合并，其他设置的并发写不会互相覆盖。
+- `lookbackDays`：打开维护时游标从多少天前起读，整数 0–365（`bounds.lookbackDays`），默认 14；0 只读打开之后的事实，
+  `null` 是「全部历史」，从最早的事实读起。`null` 是一个取值，不是没传：请求里不带这个键才是不改。存着的值越界或不是整数，
+  读出来是默认的 14。怎么写起点见 16.2。
 - `dailyRunLimit`：这个 space 每个 UTC 自然日最多建几个维护任务，整数 1–48（`bounds.dailyRunLimit`），默认 8，不按 token 算。
   计数是维护清单里自 UTC 零点起建出的任务数，不论结局；维护作业建任务前用 `wikiMaintenanceRunsToday` 读它。存着的值越界、
   或是契约已经没有的键（早先的 `dailyTokenBudget`），读出来一律是默认值。
@@ -746,6 +749,11 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
   只看第一条会漏掉任务还没跑的项目：2026-09-28 线上按字面规则会排除 orbit 自己的 15 个项目的协调会话。项目属于 space 用的也是这三条。
   维护作业自己的会话、任务、审批和回执都不算事实，免得一次运行喂大自己的 backlog。
 - 事实按（时间到毫秒, 种类, id）排成一条线；水位是线上的一个位置，存成三列而不是 jsonb，所以推进是一条 compare-and-set。
+- **起点只写一次**（`maintenance.cursor.start`）：把维护从关变成开的那次 PATCH，如果这个 space 的游标还没有位置，就在同一个事务里
+  把游标起点定在「那一刻减 `lookbackDays` 天」：水位设成起点位置（那个时刻、顺序里最前的种类、nil id，排在那一刻所有事实之前），
+  已下发的最远位置取它原来的值和起点中较后的那个。`lookbackDays` 为 `null` 时什么都不写，没有位置的游标从最早的事实读起。
+  游标已有位置就不动：之后再打开维护、或改 `lookbackDays`，都不会把它往回拨。只有这一次写读时钟，时钟不启动任何工作。
+  在此之前，新开维护的 space 会从最早的事实读起；orbit space 的起点是 2026-09-28 经 owner 批准手工写的一行 `wiki_cursor`。
 - 到期条件（判据 3，§19.1）：水位之后有事实的会话达到 20 个（设计 §8.2 说的是「20 个会话」，不是 20 条事实），或新事实到达时
   最老的未处理事实已超过 24 小时（`state.due`）。时钟不启动任何工作。
 

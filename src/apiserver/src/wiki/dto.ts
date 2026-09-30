@@ -21,6 +21,7 @@ import {
   WIKI_CURSOR_OUTCOMES,
   WIKI_DECIDE_ACTIONS,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
+  WIKI_MAINTENANCE_LOOKBACK_DAYS,
   WIKI_REJECT_REASONS,
   WIKI_REVIEW_MODES,
   type WikiCursorOutcome,
@@ -62,7 +63,7 @@ export class CreateWikiSpaceDto {
 
 /**
  * `maintenance` in PATCH /api/wiki/spaces/:id (contract `space.settings.maintenance`): any of the
- * four the owner sets. `listId` is the server's and is not a field here — the whitelist drops it.
+ * five the owner sets. `listId` is the server's and is not a field here — the whitelist drops it.
  */
 export class WikiMaintenanceSettingsDto {
   @IsOptional()
@@ -87,6 +88,14 @@ export class WikiMaintenanceSettingsDto {
   @Min(WIKI_MAINTENANCE_DAILY_RUN_LIMIT.min)
   @Max(WIKI_MAINTENANCE_DAILY_RUN_LIMIT.max)
   dailyRunLimit?: number;
+
+  /** How many days back the cursor starts when maintenance is turned on; null is all of history. */
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsInt()
+  @Min(WIKI_MAINTENANCE_LOOKBACK_DAYS.min)
+  @Max(WIKI_MAINTENANCE_LOOKBACK_DAYS.max)
+  lookbackDays?: number | null;
 }
 
 /** PATCH /api/wiki/spaces/:id — the owner's settings (§2.1 settings, contract `space.settings`). */
