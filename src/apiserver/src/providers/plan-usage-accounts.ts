@@ -7,7 +7,14 @@
  */
 import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
 import { ENGINE_ACCOUNTS_MAX, sanitizeRunnerEngines } from '../common/runner-engines';
-import { accountDir, accountOfEnv, accountToMoveTo, accountToStartOn, type AccountEngine } from '@orbit/shared';
+import {
+  accountDir,
+  accountOfEnv,
+  accountToMoveTo,
+  accountToStartOn,
+  planUsageBlockedUntil,
+  type AccountEngine,
+} from '@orbit/shared';
 import { DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner } from './account';
 
 /** An account a runner added: 4 random bytes in lowercase hex (src/runner-go/account_slot.go).
@@ -131,6 +138,31 @@ export function automaticCodexAccount(
  * account's reset: a hand-picked account, a workspace pinned to one, a runner with no second account,
  * or no other account with room.
  */
+/**
+ * Where a session on Automatic goes BEFORE a turn is dispatched to it, when its runner's own snapshot
+ * already reports the account it is on spent: another of the runner's accounts with room
+ * (accountToMoveTo) — the move a usage-limit failure makes (accountAfterUsageLimit), without the
+ * failed turn it costs first. Null when the session is pinned, its workspace decides, its account is
+ * not known to be spent (a window at 100% whose reset has not passed), or no other account has room.
+ */
+export function accountBeforeDispatch(
+  engine: AccountEngine,
+  session: { account?: string | null; pinned?: boolean },
+  workspace: { env?: unknown; codexAccount?: string | null; claudeAccount?: string | null } | null | undefined,
+  runnerEngines: unknown,
+  planUsage: unknown,
+  now: Date,
+): { from: string; to: string } | null {
+  if (session.pinned || !workspaceLeavesAccountToOrbit(engine, workspace, runnerEngines)) return null;
+  const choice = engine === 'claude' ? { claudeAccount: session.account } : { codexAccount: session.account };
+  const from = runAccount(engine, workspace?.env, choice, runnerEngines);
+  if (!from) return null;
+  const usage = isObject(planUsage) ? (planUsage as PlanUsage) : null;
+  if (!planUsageBlockedUntil(usage, engine, now, from)) return null;
+  const to = accountToMoveTo(engine, accountsOf(engine, runnerEngines), usage, now, from);
+  return to ? { from, to } : null;
+}
+
 export function accountAfterUsageLimit(
   engine: AccountEngine,
   session: { account?: string | null; pinned?: boolean },

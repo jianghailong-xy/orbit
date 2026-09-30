@@ -21,6 +21,10 @@
  *       picks — not on Default because it followed its workspace — unless it is pinned, or its runner
  *       cannot carry the conversation it already has; a switch that names an account lands there
  *       pinned (or on Automatic, unpinned), live or with the message that revives an ended session.
+ *   (8) On Automatic, an account the runner's own snapshot already reports spent is left BEFORE a turn
+ *       reaches it — at the claim that starts its engine, and ahead of the message an idle resident
+ *       engine is sent — not after that turn fails on the limit. A pinned session, and a runner that
+ *       cannot carry the conversation, stay where they are.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-account-choice.pg.spec.ts
  *
@@ -44,6 +48,8 @@ import {
 } from '../projects/coordinator-pg-test-safety';
 import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { ProviderPlanUsageService } from '../providers/plan-usage.service';
+import { QueueService as RealQueueService } from '../queue/queue.service';
 import { SessionsService } from './sessions.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -392,5 +398,58 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     const endedAuto = await onKey(m, await apiKey(m.ownerId), { status: RunStatus.FAILED, finishedAt: new Date() });
     await sessions.resume(m.ownerId, endedAuto, { content: 'go on', clientTurnId: randomUUID(), provider: 'claude' });
     assert.equal((await row(endedAuto)).claude_account, WORK);
+  });
+  await t.test('(8) a spent account is left before a turn reaches it, not after the turn fails there', async () => {
+    const claims = new RealQueueService(prisma, quiet, new ProviderPlanUsageService(quiet));
+    const claimOn = async (runnerId: string) => {
+      const claimed = await claims.claimSessionForRunner({ id: runnerId }, 0, false, false);
+      assert.ok(claimed, 'the runner was offered no session');
+      return claimed;
+    };
+    const notice = 'Switched to Work — the usage limit on Default is reached';
+
+    // A session woken on Default — whose weekly window the runner reports spent — starts on Work.
+    const woken = await machine('claim-spent');
+    const id = await sessionOn(woken, 'claude', RunStatus.PENDING, { numTurns: 0 });
+    const claimed = await claimOn(woken.runnerId);
+    assert.equal(claimed.agent.env?.CLAUDE_CONFIG_DIR, CLAUDE_WORK_HOME);
+    assert.deepEqual(
+      { account: (await row(id)).claude_account, pinned: (await row(id)).claude_account_pinned, notice: (await row(id)).pool_switch_notice },
+      { account: WORK, pinned: false, notice },
+    );
+    // Pinned to Default by hand, it starts there all the same — and a runner too old to carry the
+    // conversation starts it where it is.
+    const pinnedMachine = await machine('claim-pinned');
+    const pinned = await sessionOn(pinnedMachine, 'claude', RunStatus.PENDING, { numTurns: 0, claudeAccountPinned: true });
+    assert.equal((await claimOn(pinnedMachine.runnerId)).agent.env?.CLAUDE_CONFIG_DIR, undefined);
+    assert.equal((await row(pinned)).claude_account, 'default');
+    const oldMachine = await machine('claim-old', []);
+    const onOld = await sessionOn(oldMachine, 'claude', RunStatus.PENDING, { numTurns: 0 });
+    await claimOn(oldMachine.runnerId);
+    assert.equal((await row(onOld)).claude_account, 'default');
+
+    // An idle resident engine on Default: the message goes behind a reload that re-spawns it on Work.
+    const idle = await machine('idle-spent');
+    const resident = await sessionOn(idle, 'claude', RunStatus.AWAITING_INPUT);
+    await sessions.createTurn(idle.ownerId, resident, { content: 'go on', clientTurnId: randomUUID() });
+    const queued = (
+      await sql.query(
+        `SELECT kind, content FROM "conversation_turn" WHERE session_id = $1::uuid AND status = 'PENDING' ORDER BY seq`,
+        [resident],
+      )
+    ).rows as Array<{ kind: string; content: string }>;
+    assert.deepEqual(queued, [
+      { kind: 'reload', content: JSON.stringify({ provider: 'claude' }) },
+      { kind: 'message', content: 'go on' },
+    ]);
+    assert.deepEqual(
+      { account: (await row(resident)).claude_account, notice: (await row(resident)).pool_switch_notice },
+      { account: WORK, notice },
+    );
+    // With room where it is, the message goes to it and nothing else is queued.
+    const roomy = await sessionOn(idle, 'claude', RunStatus.AWAITING_INPUT, { claudeAccount: WORK });
+    await sessions.createTurn(idle.ownerId, roomy, { content: 'go on', clientTurnId: randomUUID() });
+    assert.deepEqual(await reloads(roomy), []);
+    assert.equal((await row(roomy)).claude_account, WORK);
   });
 });
