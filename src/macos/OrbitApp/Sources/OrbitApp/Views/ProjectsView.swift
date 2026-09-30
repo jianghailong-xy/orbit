@@ -512,7 +512,7 @@ struct ProjectDetailView: View {
                 case .mergeCheck:
                     if let view = store.integration {
                         MergeCheckEditor(store: store, view: view,
-                                         automatic: store.document?.coordinatorEnabled ?? false) { notice = $0 }
+                                         automatic: store.document?.coordinatorEnabled ?? false)
                     }
                 }
             }
@@ -1896,21 +1896,20 @@ private struct OwnerStartProjectSheet: View {
 
 /// The merge check, where a command has room: what is typed, what it runs on, and the warning while
 /// Automatic would merge the branch into main with nothing run. Saved at the integration door; blank
-/// is none.
+/// is none. A save the door refuses keeps the sheet up, the command as typed, with the door's words
+/// under it — an alert raised on the page while this sheet went down would be lost with it.
 private struct MergeCheckEditor: View {
     let store: ProjectDetailModel
     let view: ProjectIntegrationView
     let automatic: Bool
-    let onRefused: (String) -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var command: String
+    @State private var refused: String?
 
-    init(store: ProjectDetailModel, view: ProjectIntegrationView, automatic: Bool,
-         onRefused: @escaping (String) -> Void) {
+    init(store: ProjectDetailModel, view: ProjectIntegrationView, automatic: Bool) {
         self.store = store
         self.view = view
         self.automatic = automatic
-        self.onRefused = onRefused
         _command = State(initialValue: view.mergeCheckCommand ?? "")
     }
 
@@ -1932,6 +1931,9 @@ private struct MergeCheckEditor: View {
                         if missing {
                             Text("⚠ \(RunSettings.noMergeCheckWarning)").foregroundStyle(Color.orange)
                         }
+                        if let refused {
+                            Text(refused).foregroundStyle(Color.red)
+                        }
                     }
                 }
             }
@@ -1949,13 +1951,20 @@ private struct MergeCheckEditor: View {
                 }
             }
         }
+        // A one-field form, sized like the app's other ones (New Tag).
+        #if os(iOS)
+        .presentationDetents([.medium])
+        #endif
     }
 
     private func save() {
         let write = RunSettings.mergeCheckWrite(view, to: command)
         Task {
-            if let refused = await store.updateIntegration(write) { onRefused(refused) }
-            dismiss()
+            if let failure = await store.updateIntegration(write) {
+                refused = failure
+            } else {
+                dismiss()
+            }
         }
     }
 }

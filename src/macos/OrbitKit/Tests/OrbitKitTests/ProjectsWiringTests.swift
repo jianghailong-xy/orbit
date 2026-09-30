@@ -219,6 +219,16 @@ final class ProjectsWiringTests: XCTestCase {
         let check = try slice(view, from: "private func mergeCheckSetting(", to: "private func escalationSetting(")
         XCTAssertTrue(check.contains("RunSettings.mergeCheckMissing(onLine: view.line,"))
         XCTAssertTrue(check.contains("pageSheet = .mergeCheck"))
+        // Its editor keeps a refused save on the sheet — the door's words under the command as typed —
+        // and closes only on one that went through: an alert raised on the page while the sheet went
+        // down would be lost with it.
+        let editor = try slice(view, from: "private struct MergeCheckEditor: View {", to: "private extension View {")
+        XCTAssertTrue(editor.contains("if let refused {"))
+        let save = try slice(editor, from: "private func save() {", to: "\n    }\n")
+        XCTAssertTrue(save.contains("if let failure = await store.updateIntegration(write) {"))
+        XCTAssertFalse(try slice(save, from: "if let failure", to: "} else {").contains("dismiss()"),
+                       "a refused save keeps the sheet up")
+        XCTAssertTrue(save.components(separatedBy: "} else {").last?.contains("dismiss()") == true)
         let escalate = try slice(view, from: "private func escalationSetting(", to: "private func pauseSetting(")
         XCTAssertTrue(escalate.contains(".pickerStyle(.menu)"))
         XCTAssertTrue(escalate.contains("RunSettings.escalationOptions(current: seconds)"))
