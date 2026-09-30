@@ -3818,7 +3818,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         await seed;
         if (closed) return;
         // A window opened at a record waits for the reader to reach the tail (joinLiveRef).
-        if (newerCursorRef.current === null) connect();
+        // The reader may have joined already while this startup was debounced.
+        if (newerCursorRef.current === null && !es) connect();
         // Last, deliberately: the tray it feeds sits below the fold and nothing else waits on it,
         // whereas the scan behind it is the most expensive read on this path. Issuing it here
         // rather than alongside the seed keeps it from competing for the connection — and, on the
