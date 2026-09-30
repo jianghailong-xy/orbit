@@ -183,6 +183,7 @@ import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import {
   accountLabel,
   accountSwitchNotice,
+  accountBeforeDispatch,
   automaticAccount,
   runAccount,
   workspaceLeavesAccountToOrbit,
@@ -583,7 +584,7 @@ function automaticAccountOnSwitch(
 
 /** Whether `runner` carries a conversation from one of its `engine` accounts to another. */
 function runnerCarriesAccounts(runner: { capabilities: string[] }, engine: AccountEngine): boolean {
-  return runner.capabilities.includes(engine === AgentProvider.CODEX ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1);
+  return (runner.capabilities ?? []).includes(engine === AgentProvider.CODEX ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1);
 }
 
 /** The account columns a provider switch writes (accountOnProviderSwitch); empty writes none. */
@@ -4384,6 +4385,58 @@ export class SessionsService {
   }
 
   /** Enqueue a user message for a live or still-queued (PENDING) session. */
+  /**
+   * On Automatic, the account an idle session's next message should not reach: one its runner's own
+   * snapshot already reports spent (accountBeforeDispatch). The session moves to one with room and a
+   * reload is queued ahead of the message — re-spawning the engine there with the conversation carried
+   * across, as picking the account in the menu does (switchAccount) — instead of the message failing on
+   * the limit first and being sent again after that failure's move. The columns to write, for the
+   * caller's one Session write; null when nothing moves.
+   *
+   * Only an idle session (AWAITING_INPUT): a turn in flight finishes or fails where it is, and a
+   * failure there makes the move itself.
+   */
+  private async accountMoveBeforeTurn(
+    tx: Prisma.TransactionClient,
+    session: Session,
+  ): Promise<Prisma.SessionUncheckedUpdateInput | null> {
+    if (session.status !== RunStatus.AWAITING_INPUT || !session.assignedRunnerId) return null;
+    const engine: AccountEngine | null =
+      session.provider === AgentProvider.CODEX || session.provider === AgentProvider.CLAUDE ? session.provider : null;
+    if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin)) return null;
+    const runner = await tx.runner.findUnique({
+      where: { id: session.assignedRunnerId },
+      select: { engines: true, planUsage: true, capabilities: true },
+    });
+    if (!runner || !runnerCarriesAccounts(runner, engine)) return null;
+    const workspace = session.workspaceId
+      ? await tx.workspace.findUnique({
+          where: { id: session.workspaceId },
+          select: { env: true, codexAccount: true, claudeAccount: true },
+        })
+      : null;
+    const codex = engine === AgentProvider.CODEX;
+    const move = accountBeforeDispatch(
+      engine,
+      { account: codex ? session.codexAccount : session.claudeAccount, pinned: codex ? session.codexAccountPinned : session.claudeAccountPinned },
+      workspace,
+      runner.engines,
+      runner.planUsage,
+      new Date(),
+    );
+    if (!move) return null;
+    await this.insertTurnLocked(tx, session.id, {
+      kind: 'reload',
+      content: JSON.stringify({ provider: engine }),
+      clientTurnId: randomUUID(),
+    });
+    return {
+      ...(codex ? { codexAccount: move.to } : { claudeAccount: move.to }),
+      // Said on the `resumed` that reload earns, unless another line is already owed.
+      ...(session.poolSwitchNotice ? {} : { poolSwitchNotice: accountSwitchNotice(engine, move, runner.engines) }),
+    };
+  }
+
   async createTurn(
     ownerId: string,
     id: string,
@@ -4639,6 +4692,10 @@ export class SessionsService {
         // rolls the charge back with the turn it was for.
         await opts?.participateSendTransaction?.(tx);
       }
+      // On Automatic, an idle session whose account its runner's own snapshot already reports spent
+      // moves to one with room before this message reaches it, a reload going ahead of it
+      // (accountMoveBeforeTurn). Its columns ride on the one Session write below (lock-order I3).
+      const accountMove = kind === 'message' ? await this.accountMoveBeforeTurn(tx, session) : null;
       // This is the authoritative queue placement: it is read before this row exists and while
       // the Session lock prevents dequeue/complete from changing its predecessors underneath it.
       // A steer takes precedence because it joins the running turn instead of waiting behind it.
@@ -4672,6 +4729,7 @@ export class SessionsService {
           // their back would be a second, unasked-for turn) or from the sweeper itself
           // (the retry has now fired). Both routes into a new turn pass through here.
           retryAt: null,
+          ...(accountMove ?? {}),
           ...(session.mergeStatus === 'pending' && !mergeExecuting
             ? {
                 mergeStatus: null,

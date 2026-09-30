@@ -1669,6 +1669,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "auth/auth.service.ts#changePassword", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "auth/auth.service.ts#issueRefreshToken", class: "INSERT", statements: 1 },
   { at: "auth/auth.service.ts#logout", class: "ONE_ROW_CAS", statements: 1 },
+  { at: 'queue/queue.service.ts#accountsForClaim', class: 'ONE_ROW_CAS', statements: 2, note: "At most two UPDATEs of the claimed session's row by its key, from buildSession after the claim committed, and only when the session is on Automatic and its runner's own snapshot reports its account spent. The move is the compare-and-set: predicated on the account the claim read and on the session not being pinned, so a pick made in between writes nothing here and the engine is built where that pick put it. The second writes the transcript line owed, only while none is (`pool_switch_notice IS NULL`), as PoolNotices.owe does. Deliberately no transaction: each statement stands alone, and one that does not land costs only the move, which the usage-limit failure then makes as it always did." },
   // The three writes exception items make outside anybody's transaction. All of them run after the
   // fact they are about has committed, and none of them may cost it: a delivery that could not be
   // made is re-derived from the same rows the next time the conversation's turn ends (§4.4 X-D4).
