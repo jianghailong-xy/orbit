@@ -1967,11 +1967,17 @@ export class WikiService {
    * model — and the neighbours recorded with the op, each as it reads now, because a duplicate may
    * only name one that is still live. The space's mode rides along: a verdict is refused outside
    * Automatic, and a verifier that reads it can stop before it asks a model anything.
+   *
+   * `adopt` is a maintenance run's read instead (contract `reviewModes.verification.adoption`): the ops
+   * ended sessions left waiting in the space, which no proposer will verify now. The caller — a
+   * maintenance run of the space, which its door has checked — never proposed them, so each is handed
+   * with the neighbours its draft has NOW beside the ones recorded: a later op may have made the same
+   * knowledge live while it waited.
    */
   async listVerifications(
     principal: WikiPrincipal,
     spaceId: string,
-    options: { after?: string | null; limit?: number } = {},
+    options: { after?: string | null; limit?: number; adopt?: boolean } = {},
   ): Promise<{ spaceId: string; mode: WikiReviewMode; items: WikiVerificationItem[]; next: string | null }> {
     const space = await this.requireSpace(principal.ownerId, spaceId);
     const asked = Number.isFinite(options.limit) ? Math.trunc(options.limit as number) : 20;
@@ -1986,12 +1992,15 @@ export class WikiService {
         ]);
       }
     }
+    const scope = options.adopt
+      ? { sessionId: { in: await this.adoptableSessions(principal, space.id) } }
+      : proposerScope(principal);
     const rows = await this.prisma.wikiChangesetOp.findMany({
       where: {
         ownerId: principal.ownerId,
         decision: 'verifying',
         ...(after ? { id: { gt: after } } : {}),
-        changeset: { spaceId: space.id, ...proposerScope(principal) },
+        changeset: { spaceId: space.id, ...scope },
       },
       // uuid(7): the id order is the order the ops were recorded in, and the partial index 0312 made.
       orderBy: { id: 'asc' },
@@ -2001,6 +2010,7 @@ export class WikiService {
         changesetId: true,
         op: true,
         entryId: true,
+        resultEntryId: true,
         payload: true,
         similar: true,
         changeset: { select: { sessionId: true } },
@@ -2009,7 +2019,9 @@ export class WikiService {
     const page = rows.slice(0, limit);
     const literals = await this.envLiterals(this.prisma, principal.ownerId);
     const items: WikiVerificationItem[] = [];
-    for (const row of page) items.push(await this.verificationItem(principal.ownerId, row, literals));
+    for (const row of page) {
+      items.push(await this.verificationItem(principal.ownerId, row, literals, options.adopt ? space.id : null));
+    }
     return {
       spaceId: space.id,
       mode: space.settings.reviewMode,
@@ -2018,7 +2030,10 @@ export class WikiService {
     };
   }
 
-  /** One op of the verification list, read the way {@link listVerifications} says. */
+  /**
+   * One op of the verification list, read the way {@link listVerifications} says. `adoptedIn` is the
+   * space of a maintenance run's adoption, whose ops are offered their neighbours as they are now too.
+   */
   private async verificationItem(
     ownerId: string,
     row: {
@@ -2026,11 +2041,13 @@ export class WikiService {
       changesetId: string;
       op: string;
       entryId: string | null;
+      resultEntryId: string | null;
       payload: Prisma.JsonValue;
       similar: Prisma.JsonValue;
       changeset: { sessionId: string | null };
     },
     literals: readonly string[],
+    adoptedIn: string | null = null,
   ): Promise<WikiVerificationItem> {
     const reader = this.prisma as unknown as Tx;
     const payload = (row.payload ?? {}) as Record<string, unknown>;
@@ -2085,6 +2102,12 @@ export class WikiService {
           ...(stillRejected && rejectedBecause ? { rejectedBecause } : {}),
         };
       });
+    if (adoptedIn !== null) {
+      const listed = new Set(similar.map((near) => near.id));
+      for (const near of await this.currentNeighbours(reader, ownerId, adoptedIn, row)) {
+        if (!listed.has(near.id)) similar.push(near);
+      }
+    }
     return {
       opId: row.id,
       changesetId: row.changesetId,
@@ -2138,6 +2161,65 @@ export class WikiService {
   }
 
   /**
+   * The sessions whose waiting ops a maintenance run of the space adopts (contract
+   * `reviewModes.verification.adoption.who`): each session with an op still verifying there whose run
+   * has ended ({@link ENDED_SESSION}), so that it will verify nothing of its own again — never the caller.
+   */
+  private async adoptableSessions(principal: WikiPrincipal, spaceId: string): Promise<string[]> {
+    const waiting = await this.prisma.wikiChangesetOp.findMany({
+      where: { ownerId: principal.ownerId, decision: 'verifying', changeset: { spaceId, sessionId: { not: null } } },
+      select: { changeset: { select: { sessionId: true } } },
+    });
+    const named = [...new Set(waiting.map((row) => row.changeset.sessionId!))].filter((id) => id !== principal.sessionId);
+    if (named.length === 0) return [];
+    const ended = await this.prisma.session.findMany({
+      where: { id: { in: named }, ownerId: principal.ownerId, ...ENDED_SESSION },
+      select: { id: true },
+    });
+    return ended.map((row) => row.id);
+  }
+
+  /** Whether an op proposed by `sessionId` is one the calling maintenance run may adopt: see {@link adoptableSessions}. */
+  private async adoptable(tx: Tx, principal: WikiPrincipal, sessionId: string | null): Promise<boolean> {
+    if (sessionId === null || sessionId === principal.sessionId) return false;
+    return (await tx.session.count({ where: { id: sessionId, ownerId: principal.ownerId, ...ENDED_SESSION } })) === 1;
+  }
+
+  /**
+   * The neighbours an adopted add's draft has now, its own lineage never among them: what a duplicate
+   * of it may name besides the ones recorded with it, since a later op may have made the same knowledge
+   * live while it waited. An amend has none: its entry moving since is a conflict, not a duplicate.
+   */
+  private async currentNeighbours(
+    tx: Tx,
+    ownerId: string,
+    spaceId: string,
+    op: { op: string; payload: Prisma.JsonValue; resultEntryId: string | null },
+  ): Promise<WikiSimilar[]> {
+    if (op.op !== 'add') return [];
+    const draft = ((op.payload ?? {}) as Record<string, unknown>).entry;
+    if (draft === null || typeof draft !== 'object' || Array.isArray(draft)) return [];
+    return this.nearNeighbours(tx, ownerId, spaceId, draft as Record<string, unknown>, op.resultEntryId);
+  }
+
+  /**
+   * The live entry of the space that holds, word for word, what an adopted add's own lineage holds — the
+   * same kind, title and summary — other than that lineage: what a later op made live of the very same
+   * knowledge while this one waited (contract `reviewModes.verification.adoption.twin`). The earliest,
+   * should there be more than one.
+   */
+  private async liveTwin(tx: Tx, ownerId: string, spaceId: string, lineageId: string): Promise<string | null> {
+    const own = await tx.wikiEntry.findFirst({ where: { id: lineageId, ownerId }, select: { kind: true, title: true, summary: true } });
+    if (!own) return null;
+    const twin = await tx.wikiEntry.findFirst({
+      where: { ownerId, spaceId, status: 'active', kind: own.kind, title: own.title, summary: own.summary, id: { not: lineageId } },
+      orderBy: [{ recordedAt: 'asc' }, { id: 'asc' }],
+      select: { id: true },
+    });
+    return twin?.id ?? null;
+  }
+
+  /**
    * Record verdicts, and apply each as its verdict says (contract `reviewModes.verification.verdicts`):
    * the runner door's report, and the import's own.
    *
@@ -2148,11 +2230,15 @@ export class WikiService {
    *
    * WHO MAY: the proposer (`proposerScope`), and nobody else's op is even found — a 404, as another
    * owner's is. WHEN: while the space is Automatic, and only then (`verification.notAutomatic`).
+   *
+   * `adopt` is a maintenance run's report for what it adopted (`verification.adoption`): then the ops
+   * found are those of the space's ended sessions, and nobody's still running.
    */
   async recordVerifications(
     principal: WikiPrincipal,
     spaceId: string,
     verdicts: unknown,
+    options: { adopt?: boolean } = {},
   ): Promise<{ spaceId: string; mode: WikiReviewMode; outcomes: WikiVerificationOutcome[] }> {
     const space = await this.requireSpace(principal.ownerId, spaceId);
     if (!Array.isArray(verdicts) || verdicts.length === 0) {
@@ -2172,7 +2258,7 @@ export class WikiService {
         const verdict = verdictInput(raw, index);
         const done = await withTransactionRetry(
           this.prisma,
-          (tx) => this.applyVerdict(tx, principal, space.id, verdict, literals),
+          (tx) => this.applyVerdict(tx, principal, space.id, verdict, literals, options.adopt === true),
           loggedRetry(this.logger, 'wiki.recordVerifications'),
         );
         outcomes.push(done.outcome);
@@ -2200,6 +2286,11 @@ export class WikiService {
    * predicate is the compare-and-set — the op still `verifying` — so two verdicts for the same op
    * cannot both land, and a second one sent for an op already verified the same way is answered with
    * what was recorded and writes nothing.
+   *
+   * An ADOPTED op (`adopt`, `verification.adoption`) is found among the space's ended sessions' ops
+   * instead of the caller's, may be named a duplicate of what its adoption list offered it now, and —
+   * an add whose verdict would apply it while an entry of the space already holds its very content
+   * live — is judged a duplicate of that entry: no verdict makes a second live copy of it.
    */
   private async applyVerdict(
     tx: Tx,
@@ -2207,11 +2298,12 @@ export class WikiService {
     spaceId: string,
     verdict: VerdictInput,
     literals: readonly string[],
+    adopt = false,
   ): Promise<{ outcome: WikiVerificationOutcome; trip: VerificationTrip | null; wrote: boolean }> {
     const ownerId = principal.ownerId;
     const opId = toUuid(verdict.opId);
     const op = await tx.wikiChangesetOp.findFirst({
-      where: { id: opId, ownerId, changeset: { spaceId, ...proposerScope(principal) } },
+      where: { id: opId, ownerId, changeset: { spaceId, ...(adopt ? { sessionId: { not: null } } : proposerScope(principal)) } },
       select: {
         id: true,
         changesetId: true,
@@ -2222,13 +2314,20 @@ export class WikiService {
         similar: true,
         tainted: true,
         decision: true,
+        decisionReason: true,
+        decidedAt: true,
         resultEntryId: true,
         resultRevision: true,
         verificationVerdict: true,
         verificationDuplicateOf: true,
+        verifiedAt: true,
         changeset: { select: { sessionId: true, toolCallId: true } },
       },
     });
+    if (adopt && (!op || !(await this.adoptable(tx, principal, op.changeset.sessionId)))) {
+      throw new VerdictRefusal(404, 'no op of an ended session waits for a verdict in this space by that id: a maintenance '
+        + 'run reports for the ops its adoption list gave, by their opId');
+    }
     if (!op) {
       throw new VerdictRefusal(404, 'no such op waits for a verdict from this caller in this space: a verdict is '
         + "reported for the ops the caller itself proposed, by the opId the verification list gave");
@@ -2239,7 +2338,7 @@ export class WikiService {
         return {
           outcome: {
             opId: op.id,
-            status: verdictStatus(op.verificationVerdict as WikiVerificationVerdict, op.decision),
+            status: verdictStatus(op.verificationVerdict as WikiVerificationVerdict, op.decision, verdictDuplicated(op)),
             verdict: verdict.verdict,
             entryId: duplicateOf ?? op.resultEntryId ?? op.entryId,
             replayed: true,
@@ -2261,6 +2360,9 @@ export class WikiService {
     if (duplicateOf !== null) {
       const recorded = (Array.isArray(op.similar) ? op.similar : []) as unknown as WikiSimilar[];
       const named = new Set([...recorded.map((near) => near.id), ...(op.op === 'amend' && op.entryId ? [op.entryId] : [])]);
+      if (adopt && !named.has(duplicateOf)) {
+        for (const near of await this.currentNeighbours(tx, ownerId, spaceId, op)) named.add(near.id);
+      }
       if (!named.has(duplicateOf)) {
         throw new VerdictRefusal(400, "duplicateOf names no entry among this op's similar[] (or, for an amend, its own "
           + 'entry): a duplicate names the neighbour the verification list gave', 'WIKI_SCHEMA');
@@ -2287,8 +2389,16 @@ export class WikiService {
     // source readable, whatever it said leaves the op no more than unreviewed and is not counted; and a
     // tainted op is never more than unreviewed, its duplicate adding nothing (`floors.taintedWaits`).
     const { evidence } = await this.verifierSources(tx, ownerId, op.changeset.sessionId, payload, literals);
-    const effect = wikiVerdictEffect({ verdict: verdict.verdict, tainted: op.tainted, evidence });
+    let effect = wikiVerdictEffect({ verdict: verdict.verdict, tainted: op.tainted, evidence });
+    // An adopted add waited while the space moved on: the entry a later op made of the very same content
+    // is the one it duplicates, whatever its verdict would have applied (`verification.adoption.twin`).
+    const twin = adopt && effect.trust !== null && op.op === 'add' && op.resultEntryId
+      ? await this.liveTwin(tx, ownerId, spaceId, op.resultEntryId)
+      : null;
+    if (twin !== null) effect = wikiVerdictEffect({ verdict: 'duplicate', tainted: op.tainted, evidence });
     const trust = effect.trust;
+    /** The entry this op duplicates: the one its verdict names, or its adopted twin. */
+    const duplicated = duplicateOf ?? twin;
     let status: 'applied' | 'rejected' | 'reinforced' | 'conflict';
     let decision: 'auto_applied' | 'pending' | 'rejected' | 'conflict';
     let decisionReason: WikiRejectReason | null = null;
@@ -2343,7 +2453,7 @@ export class WikiService {
         }, author);
       }
       decision = 'rejected';
-      if (verdict.verdict === 'unsupported') {
+      if (duplicated === null) {
         status = 'rejected';
         decisionReason = 'not_true';
       } else {
@@ -2360,7 +2470,7 @@ export class WikiService {
             ? await this.sourcesOfRevision(tx, ownerId, lineage.id)
             : await this.sourcesOfOp(tx, ownerId, op.changeset.sessionId, payload);
           await this.applyOp(tx, ownerId, spaceId, {
-            op: 'reinforce', entryId: duplicateOf, draft: null, changes: null, payload, sources, tainted: op.tainted,
+            op: 'reinforce', entryId: duplicated, draft: null, changes: null, payload, sources, tainted: op.tainted,
           }, author);
         }
       }
@@ -2395,7 +2505,7 @@ export class WikiService {
         opId: op.id,
         status,
         verdict: verdict.verdict,
-        entryId: status === 'reinforced' ? duplicateOf : (op.resultEntryId ?? op.entryId),
+        entryId: status === 'reinforced' ? duplicated : (op.resultEntryId ?? op.entryId),
         ...(status === 'applied' ? { trust: trust!, spotCheck } : {}),
         ...(reinforced !== undefined ? { reinforced } : {}),
       },
@@ -4513,6 +4623,15 @@ function proposerScope(principal: WikiPrincipal): Prisma.WikiChangesetWhereInput
 }
 
 /**
+ * A session that has ended (contract `reviewModes.verification.adoption.who`): its run succeeded, failed
+ * or was cancelled, or it was completed or deleted. What it proposed and left waiting for a verdict is
+ * nobody's to verify but a maintenance run's that adopts it.
+ */
+const ENDED_SESSION: Prisma.SessionWhereInput = {
+  OR: [{ status: { in: ['SUCCEEDED', 'FAILED', 'CANCELLED'] } }, { completedAt: { not: null } }, { deletedAt: { not: null } }],
+};
+
+/**
  * One verdict, checked for the shape the contract gives it (`reviewModes.verification.report`) before
  * anything is read: a verdict the service cannot read is refused WIKI_SCHEMA, naming the field.
  */
@@ -4553,9 +4672,22 @@ function verdictInput(raw: unknown, index: number): VerdictInput {
   };
 }
 
+/**
+ * Whether the verdict recorded on an op rejected it as a duplicate: a duplicate verdict, or an adopted add
+ * its live twin took whatever its verdict said (`verification.adoption.twin`). Decided the moment it was
+ * verified, as a verdict decides — an owner's later rejection of the entry, for whatever reason, is not it.
+ */
+function verdictDuplicated(op: { decisionReason: string | null; decidedAt: Date | null; verifiedAt: Date | null }): boolean {
+  return op.decisionReason === 'duplicate' && op.decidedAt !== null && op.decidedAt.getTime() === op.verifiedAt?.getTime();
+}
+
 /** What a verdict recorded earlier did, for its replay. */
-function verdictStatus(verdict: WikiVerificationVerdict, decision: string): 'applied' | 'rejected' | 'reinforced' | 'conflict' {
-  if (verdict === 'duplicate') return 'reinforced';
+function verdictStatus(
+  verdict: WikiVerificationVerdict,
+  decision: string,
+  duplicated: boolean,
+): 'applied' | 'rejected' | 'reinforced' | 'conflict' {
+  if (verdict === 'duplicate' || duplicated) return 'reinforced';
   if (decision === 'conflict') return 'conflict';
   // An unsupported verdict about records nobody could read applied its op as unreviewed.
   return verdict === 'unsupported' && decision === 'rejected' ? 'rejected' : 'applied';

@@ -16,6 +16,11 @@ export const WIKI_MAINTENANCE_JOB = {
   extractConcurrency: 4,
   /** The budget the task declares for its check, in seconds: the check reads two rows. */
   checkTimeoutSeconds: 300,
+  /**
+   * The most ops ended sessions left waiting that one run of an automatic space adopts and verifies
+   * (contract `reviewModes.verification.adoption`): the rest wait for the next run, oldest first.
+   */
+  adoptOpsMax: 50,
 } as const;
 
 /** What made a maintenance task: the backlog reached the threshold, or its oldest fact the age. */
@@ -91,7 +96,12 @@ export interface WikiMaintenanceReport {
   offTopic: number;
   entries: { extracted: number; kept: number; dropped: number; foreign: number; principles: number };
   ops: { proposed: number; recorded: number; refused: number; selfCheckDropped: number; heldBack: number; applied: number; waiting: number };
-  verification?: { verified: number; failed: number };
+  verification?: {
+    verified: number;
+    failed: number;
+    /** What the run adopted of what ended sessions left waiting, counted apart from its own ops. */
+    adopted?: { ops: number; verified: number; failed: number };
+  };
   anchors?: { entries: number; changed: number; missing: number };
   articles?: { written: number; unchanged: number; failed: number };
   tokens: { input: number; output: number; calls: number };

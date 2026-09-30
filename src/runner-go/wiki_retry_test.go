@@ -575,7 +575,12 @@ func TestWikiRetryResendsOnlyTheWritesTheServerRecordsOnce(t *testing.T) {
 			return err
 		}},
 		{"a verdict", "POST verifications", true, 1, func(tr *Transport) error {
-			_, err := tr.reportWikiVerifications("s", "space-1", map[string]interface{}{"verdicts": []interface{}{
+			_, err := tr.reportWikiVerifications("verifications", "s", "space-1", map[string]interface{}{"verdicts": []interface{}{
+				map[string]interface{}{"opId": "op-1", "verdict": "supported", "reason": "it says so", "model": "m"}}})
+			return err
+		}},
+		{"a verdict for an adopted op", "POST maintenance/verifications", true, 1, func(tr *Transport) error {
+			_, err := tr.reportWikiVerifications("maintenance/verifications", "s", "space-1", map[string]interface{}{"verdicts": []interface{}{
 				map[string]interface{}{"opId": "op-1", "verdict": "supported", "reason": "it says so", "model": "m"}}})
 			return err
 		}},

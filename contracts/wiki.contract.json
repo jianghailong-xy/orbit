@@ -668,7 +668,8 @@
       },
       "who": {
         "runner": "Only the session that proposed the ops. The runner door requires X-Orbit-Session-Id (a headless call is refused) and lists and accepts verdicts for that session's own ops alone: another session's op, and anything of another owner's, is the same 404 as one that does not exist.",
-        "import": "The one-off import the API server's container runs as {origin: import, authorKind: system} calls WikiService.listVerifications and WikiService.recordVerifications directly, and reaches the ops of import changesets that name no session. Its verdicts leave the same trail and apply the same way."
+        "import": "The one-off import the API server's container runs as {origin: import, authorKind: system} calls WikiService.listVerifications and WikiService.recordVerifications directly, and reaches the ops of import changesets that name no session. Its verdicts leave the same trail and apply the same way.",
+        "maintenance": "A Wiki maintenance run of the space also verifies what ended sessions left waiting there, on its own two routes (adoption): the ops whose proposing session has ended, which nobody else is left to verify."
       },
       "routes": {
         "list": "GET /api/runner/wiki/spaces/:id/verifications",
@@ -685,6 +686,19 @@
         "rejected": "An add or an amend an unsupported verdict rejected (not_true) while none of its sources could be read — by the verdict's evidence mark, or for a verdict recorded before there was one, by what the list handed a verifier then: the text of a user's or an assistant's event, and of no other event — waits for its verification again. Its verdict, decision and when they were given move into verification_history, oldest first, with when it was reopened; an add's lineage is proposed again, and a settled changeset pending again. The next similar[] names no rejection for it.",
         "tainted": "In a space that is automatic now, a tainted add or amend that waits for the owner goes to its verification when automatic would take it today (effect.function): it leaves Review and pendingOpsPerSpace. An amend of what the owner wrote or confirmed keeps waiting for them.",
         "answer": "{spaceId, mode, reopened[], toVerification[], skipped[{opId, reason}]}: each op moves in a transaction of its own, by a compare-and-set on the decision it stood at, so a second call finds nothing left to move. Nothing but a call moves anything."
+      },
+      "adoption": {
+        "why": "Cold start, 2026-09-29: 71 ops of the owner's orbit space waited for their verification after the three maintenance runs that proposed them failed. Only the session that proposed an op verifies it, and a run that failed verifies nothing again: those ops were never live, never in Review, and the next run, reading the same dossiers, proposed the same knowledge again.",
+        "who": "A Wiki maintenance run of the space (maintenance.session), and nobody else: routes are the runner door's maintenance routes, X-Orbit-Session-Id is required — a headless call is refused 400, any other session of the owner WIKI_NOT_MAINTENANCE_SESSION, another owner's space a plain 404. It adopts the space's ops waiting for their verification whose proposing session has ended — its run SUCCEEDED, FAILED or CANCELLED, or it was completed or deleted — never its own, never a running session's, and never an op no session proposed.",
+        "routes": {
+          "list": "GET /api/runner/wiki/spaces/:id/maintenance/verifications",
+          "report": "POST /api/runner/wiki/spaces/:id/maintenance/verifications"
+        },
+        "list": "As list, over the adopted ops, oldest first; and each op's similar[] adds the neighbours its draft has now, its own lineage never among them — while it waited, a later op may have made the same knowledge live.",
+        "report": "As report, for the adopted ops; a duplicate may name any neighbour the adoption list offered.",
+        "twin": "An adopted add whose verdict would apply it while an active entry of the space holds its very content — the same kind, title and summary as its own lineage — is judged a duplicate of that entry instead: its lineage rejected with decision_reason duplicate, its sources added to that entry as a duplicate verdict's are (verdicts.duplicate, evidence.tainted, autoAcceptReinforce), the outcome reinforced. The trail keeps the verdict as the model gave it, and names no verification_duplicate_of, which only a duplicate verdict names. No verdict makes a second live copy of what a later op made live.",
+        "floors": "Everything else is the proposer's own verification, unchanged: nothing applies without a verdict, each source is read against the session that proposed the op, a tainted op is never more than unreviewed, a verdict about unreadable sources is capped and not counted, an unsupported verdict counts toward the fallback, and a space no longer automatic records none.",
+        "run": "maintenance.job.run.steps verify: after the run's own ops, at most maintenance.job.rules.adoptOpsMax adopted ones a run, oldest first. One left without a verdict does not fail the run; it waits for the next. The report counts them apart (maintenance.job.report, verification.adopted)."
       }
     },
     "spotChecks": {
@@ -974,7 +988,8 @@
         "runSessionsMax": 20,
         "entriesPerSessionMax": 6,
         "extractConcurrency": 4,
-        "checkTimeoutSeconds": 300
+        "checkTimeoutSeconds": 300,
+        "adoptOpsMax": 50
       },
       "trigger": {
         "who": "The server (WikiMaintenanceTrigger), for every space of the owner whose maintenance is on, when an event this replica published names a committed fact of the space that is still after the cursor: a session of the space at rest, an approval it answered, a merge receipt of it (all through the session's own events), or a settled task of the space (task.changed). A merge receipt or a criterion revision that publishes nothing of its own is counted in the backlog and taken in with the next fact that arrives.",
@@ -1026,7 +1041,7 @@
           "self-check: the entries as adds, grouped by topic into batches of at most limits.opsPerChangeset ops (limits.opsPerTurn in Manual), each proposed with dryRun; a quote the server does not find is dropped from its source and the op checked again, an op still refused is dropped, and one the review queue holds back is not proposed",
           "breaker: when the space holds breakerMinActiveEntries active entries or more, the ops the mode would apply across every batch may change at most breakerMaxChangedPercent of them; more trips the breaker before anything is recorded",
           "propose: each batch through POST …/maintenance/changesets, origin maintenance; an op the server refuses now fails the run",
-          "verify: in an Automatic space, orbit wiki verify's verification of the run's own ops, and one more pass for those left without a verdict",
+          "verify: in an Automatic space, orbit wiki verify's verification of the run's own ops, and one more pass for those left without a verdict; then the ops ended sessions left waiting (reviewModes.verification.adoption), at most rules.adoptOpsMax a run, the model set up for them when the run extracted nothing — one of them left without a verdict waits for the next run and fails nothing",
           "anchors: orbit wiki anchors verify with --repo the checkout",
           "articles: orbit wiki articles, which rewrites only the topics whose entry set changed",
           "finish: POST …/maintenance/finish with the last page's token, outcome succeeded and the report"
@@ -1041,7 +1056,7 @@
         "strip": "A quote the server does not find is taken off its source with its locator, and the op checked again (run.steps, self-check)."
       },
       "breaker": "The circuit breaker over a run (wiki-maintenance-breaker.ts): a maintenance run's changeset counts reviewModes.floors.circuitBreaker over the whole run — every entry its earlier changesets changed through the mode is spent, and the active entries are counted as they stood when the run began — and its refusal says the run stops and moves no cursor.",
-      "report": "What a run reports when it ends (WikiMaintenanceReport): sessions, dossiers, unchanged, offTopic, entries {extracted, kept, dropped, foreign, principles}, ops {proposed, recorded, refused, selfCheckDropped, heldBack, applied, waiting}, verification, anchors, articles, tokens {input, output, calls}, seconds, and stoppedAt when it did not succeed. At most 16,000 bytes of JSON, kept on the run's row with ops.refused as a column of its own.",
+      "report": "What a run reports when it ends (WikiMaintenanceReport): sessions, dossiers, unchanged, offTopic, entries {extracted, kept, dropped, foreign, principles}, ops {proposed, recorded, refused, selfCheckDropped, heldBack, applied, waiting}, verification {verified, failed, and adopted {ops, verified, failed} when the run adopted any}, anchors, articles, tokens {input, output, calls}, seconds, and stoppedAt when it did not succeed. At most 16,000 bytes of JSON, kept on the run's row with ops.refused as a column of its own.",
       "check": {
         "route": "GET /api/runner/wiki/spaces/:id/maintenance/check",
         "who": "The space's owner's runner with no session — a task's acceptance command runs with none — or a maintenance run of the space; any other session WIKI_NOT_MAINTENANCE_SESSION, another owner's space a 404. It reads and writes nothing.",
@@ -1051,6 +1066,8 @@
       "routes": {
         "context": "GET /api/runner/wiki/spaces/:id/maintenance/run",
         "propose": "POST /api/runner/wiki/spaces/:id/maintenance/changesets",
+        "adoptions": "GET /api/runner/wiki/spaces/:id/maintenance/verifications",
+        "adopt": "POST /api/runner/wiki/spaces/:id/maintenance/verifications",
         "finish": "POST /api/runner/wiki/spaces/:id/maintenance/finish",
         "check": "GET /api/runner/wiki/spaces/:id/maintenance/check"
       },
@@ -1567,6 +1584,8 @@
           "POST /api/runner/wiki/spaces/:id/articles/:slug",
           "GET /api/runner/wiki/spaces/:id/maintenance/run",
           "POST /api/runner/wiki/spaces/:id/maintenance/changesets",
+          "GET /api/runner/wiki/spaces/:id/maintenance/verifications",
+          "POST /api/runner/wiki/spaces/:id/maintenance/verifications",
           "POST /api/runner/wiki/spaces/:id/maintenance/finish",
           "GET /api/runner/wiki/spaces/:id/maintenance/check",
           "GET /api/runner/wiki/spaces/:id/plan",

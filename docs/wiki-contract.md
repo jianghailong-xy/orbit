@@ -428,6 +428,18 @@ owner 2026-09-27 定：Automatic 收下的 op 先由本地模型核实，再按�
     各自回答 `applied` / `rejected` / `reinforced` / `conflict` / `refused`；全被拒时回第一条拒绝的状态。同一结论重报回放、不写；换结论 409。
   - 系统导入路径：`{origin: import, authorKind: system}` 的 principal 在容器里直接调 `WikiService.listVerifications` /
     `recordVerifications`，只够得着不带会话的 import 变更集，落到同样的留痕。
+  - 维护运行接手核实（`reviewModes.verification.adoption`）：提议它的会话已经结束——run 状态 SUCCEEDED / FAILED / CANCELLED，
+    或已 completed / 已删除——还在等核实的 op，没人会再核它（2026-09-29 冷启动时 orbit space 有 71 个，来自 3 次失败的维护运行）。
+    本 space 的维护运行在自己的核实之后接手它们：`GET` / `POST /api/runner/wiki/spaces/:id/maintenance/verifications`，
+    只对本 space 的维护会话开放（无会话 400、别的会话 `WIKI_NOT_MAINTENANCE_SESSION`、别的 owner 的 space 404），从不列自己的、
+    还在跑的会话的、不带会话的 op；每次最多 `maintenance.job.rules.adoptOpsMax`（50）个，旧的在前，没拿到结论的留给下一次运行，
+    不让本次运行失败。列表里每个 op 的 `similar[]` 除了当时记下的，还加上它的草稿**现在**的近邻（不含它自己的谱系）——等待期间，
+    后来的 op 可能已经把同一条知识变成了 live 条目；duplicate 可以点名这些近邻里的任何一个，走现有的 reinforce。
+    另有一道确定性的闸：接手的 add 若按结论会生效，而 space 里已有一条 active 条目与它的谱系**一字不差**（同种类、同标题、同摘要），
+    就按那条的 duplicate 处理——谱系 rejected、`decision_reason = duplicate`、出处按 duplicate 的规则加到那条上（tainted 不加、
+    `autoAcceptReinforce` 关着不加），回答 `reinforced`；留痕照记模型给的结论，不写 `verification_duplicate_of`（只有 duplicate 结论才点名）。
+    其余一切同提议者自己的核实：没结论不生效，出处按提议它的会话读，tainted 最多 `unreviewed`，读不到原文的封顶且不计，
+    unsupported 照常计入自动退回，space 不是 Automatic 就拒收。
 - **不靠时钟**（选的是「一直等着」）：`verifying` 的 op 没有结论就一直等，不过期、不撤回、不生效，`pendingExpiryDays` 管不到它。
   让它结束等待的只有事实：结论到来；owner 整次撤回（`withdrawn`）；amend 的目标条目离开 active（`withdrawn`）。
 - **离开 Automatic 之后**：space 不再是 Automatic（owner 切走，或下面的退回）时，结论一律 409 拒收，op 原样继续等，
@@ -613,7 +625,8 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   按 id 读一次运行（`GET /api/wiki/changesets/:id`，§7.6）、decide、整次撤回、重开核实（§7.5）。
 - **runner 门** `/api/runner/wiki`（RunnerAuthGuard，外加照 `runner-watches.controller.ts` 校验调用会话）：search（只返回 active 条目，
   外加本会话自己的待审提议；tainted 且没人担保——trust 不是 owner / confirmed——的 active 条目不返回，get 同样 404）、条目、提议、推送块预览；阶段 2 的维护专用路由（dossiers、anchors、anchor-checks、cursor）；
-  核实的两条路由 `GET` / `POST /api/runner/wiki/spaces/:id/verifications`（§7.4，只对提交这批 op 的会话）。
+  核实的两条路由 `GET` / `POST /api/runner/wiki/spaces/:id/verifications`（§7.4，只对提交这批 op 的会话），以及维护运行接手核实的
+  `GET` / `POST /api/runner/wiki/spaces/:id/maintenance/verifications`（§7.4，只对本 space 的维护会话）。
 - **decide 只在用户门**：任何带会话头的请求都拒 `WIKI_OWNER_CHANNEL_ONLY`（先例：`coordinator-authority.ts` 的
   `refuseSessionAuthoredConfirmation`）。runner 里弹的确认卡不是闸门：服务端不校验它，headless 调用直接放行。
   整次撤回、逐条 Reject 与 Confirm、重开核实、切换审阅模式、读一次运行同样只在用户门、同样拒绝带会话头的请求。
@@ -1037,14 +1050,16 @@ JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端�
    一条都不写。服务端对维护运行的 changeset 也按整次运行计熔断（`wiki-maintenance-breaker.ts`）：本次运行先前各 changeset 经
    模式改动的条目都算已用，active 数按运行开始时算（现在的 active 减去本次运行自己加出来且仍 active 的）。
 7. **提议**：`POST …/maintenance/changesets`，origin 为 `maintenance`；此时还有 op 被拒就判失败。
-8. **核实**：Automatic 下走 `orbit wiki verify` 对本次运行自己的 op 的核实，没拿到结论的再核一遍。
+8. **核实**：Automatic 下走 `orbit wiki verify` 对本次运行自己的 op 的核实，没拿到结论的再核一遍；然后接手已结束的会话留下的
+   等核实的 op（§7.4），每次最多 `adoptOpsMax`（50）个，本次运行没抽取过就先为它们备好模型；接手的 op 没拿到结论不算失败，留给下一次。
 9. **锚点**：`orbit wiki anchors verify`，`--repo` 取上面的 checkout。
 10. **文章**：`orbit wiki articles`，只重写条目集合变了的主题。
 11. **收尾**：`POST …/maintenance/finish`，带最后一页的 token、outcome 与运行报告；失败时 outcome 为 failed、带原因，游标不动、连续失败加一。
     被 maxTurns 截断时由 runner 在游标路由上报 truncated（§16.5），同样记到运行上。
 
 运行报告（`WikiMaintenanceReport`）：会话、案卷、跳过、离题数，条目（抽到 / 保留 / 丢弃 / 锚点在库外 / principle），
-op（提议 / 记下 / 被拒 / 自检丢弃 / 被配额挡住 / 直接生效 / 等待），核实、锚点、文章各自的结果，**token（输入、输出、调用次数，含抽取、
+op（提议 / 记下 / 被拒 / 自检丢弃 / 被配额挡住 / 直接生效 / 等待），核实（本次运行自己的 op；接手的单列为
+`verification.adopted {ops, verified, failed}`，CLI 输出里是一行 `- adopted: …`）、锚点、文章各自的结果，**token（输入、输出、调用次数，含抽取、
 核实、文章三处）**与耗时，失败时 `stoppedAt`。最多 16,000 字节 JSON，存在运行那一行上，`ops.refused` 单独成列。
 
 ### 19.5 `orbit wiki check --space <id> --expect-cursor <token> [--json]`

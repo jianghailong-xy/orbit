@@ -2055,8 +2055,10 @@ func (t *Transport) proposeWikiChangeset(sessionID string, body interface{}) (js
 }
 
 // listWikiVerifications reads one page of the ops the calling session proposed that wait for their
-// verification in a space (`orbit wiki verify`, contract `reviewModes.verification.list`).
-func (t *Transport) listWikiVerifications(sessionID, spaceID, after string, limit int) (json.RawMessage, error) {
+// verification in a space (`orbit wiki verify`, contract `reviewModes.verification.list`) — or, on
+// `maintenance/verifications`, of the ops ended sessions left waiting there, which a maintenance run of the
+// space adopts (`reviewModes.verification.adoption`). route is the path after the space.
+func (t *Transport) listWikiVerifications(route, sessionID, spaceID, after string, limit int) (json.RawMessage, error) {
 	if err := validatePathSegmentID(spaceID); err != nil {
 		return nil, err
 	}
@@ -2066,23 +2068,23 @@ func (t *Transport) listWikiVerifications(sessionID, spaceID, after string, limi
 		values.Set("after", after)
 	}
 	var out json.RawMessage
-	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/verifications?" + values.Encode()
+	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/" + route + "?" + values.Encode()
 	_, err := t.doWiki(http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
-// reportWikiVerifications reports verdicts for ops the calling session proposed. A report none of
+// reportWikiVerifications reports verdicts for ops the list on the same route gave. A report none of
 // whose verdicts was recorded comes back as a 4xx carrying every outcome, as a refused proposal does.
 //
 // Sent again through a transient failure: a verdict is recorded only while its op still waits for one
 // (the update's predicate), and the same verdict for an op already verified that way is answered with
 // what was recorded, writing nothing (wiki.service.ts applyVerdict).
-func (t *Transport) reportWikiVerifications(sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
+func (t *Transport) reportWikiVerifications(route, sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(spaceID); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/verifications"
+	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/" + route
 	_, err := t.doWiki(http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
