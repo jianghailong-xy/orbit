@@ -1110,7 +1110,7 @@ owner 09-29：agent 往 `docs/` 里写的设计文档，wiki 要主动跟上。
 - **落不进任何一节的新知识**：GET 答的 `unplaced`（生成 plan 之后变过、符合不了任何一节、也没有被任何修改建议点名过的条目），加上 origin/main 自
   plan 核对引用那次提交（`plan.repoSha`）以来在 `docs/` 下新增或改名进来的 Markdown 设计文档（不含 `docs/mocks`、`docs/evidence`），且没被
   任何一节、任何一条修改建议引用。每次运行至多产出**一条** plan 修改建议：本地模型拿到 plan 的目录、这些新知识（设计文档附标题、章节与开头，
-  至多 `rules.proposalItemsMax` = 12 条，设计文档在前），用 plan 的行格式回答放进哪一篇（给它加节）或新增哪一篇；runner 先在 origin/main 上
+  至多 `rules.proposalItemsMax` = 12 条，设计文档在前），挑出讲同一件事的一组（不相干的不凑在一起，也不建「杂项」篇），用 plan 的行格式回答放进哪一篇（给它加节）或新增哪一篇；runner 先在 origin/main 上
   核对它引用的文件、章节、符号、契约，再交服务端的检查闸（`POST …/plan/proposals`）；哪道闸查出问题就带着逐条问题让模型重写，最多
   `rules.proposalRoundsMax` = 3 轮。事实是它放进去的条目（`entry`）和加入设计文档的提交（`commit`，完整 sha）。owner 确认之前 plan 不变；
   没放进这条建议的新知识留给下一次运行。修改建议没过闸不让运行失败，报告里写明原因。

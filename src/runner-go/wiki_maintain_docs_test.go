@@ -439,7 +439,9 @@ func TestWikiMaintainProposesOneChangeForANewDesignDocumentNoSectionCites(t *tes
 	if len(asked) != 3 {
 		t.Fatalf("the proposal was asked %d times, want 3 rounds", len(asked))
 	}
-	for _, want := range []string{"[K1] 新设计文档 docs/new-design.md「账号代管」", "## 1. 保管", "[K2] 条目（concept）「Codex 登录由服务器保管」", "`runner`《Runner》"} {
+	// One place, one subject: what does not belong with the group waits for the next run.
+	for _, want := range []string{"[K1] 新设计文档 docs/new-design.md「账号代管」", "## 1. 保管", "[K2] 条目（concept）「Codex 登录由服务器保管」", "`runner`《Runner》",
+		"留给下一次维护作业再提", "不要为了一次放完，把不相干的知识凑进同一篇或同一节"} {
 		if !strings.Contains(asked[0], want) {
 			t.Errorf("the proposal prompt does not say %q", want)
 		}

@@ -1194,3 +1194,27 @@ func TestWikiArticleBuildTellsNoJobWhenItRunsNone(t *testing.T) {
 		t.Errorf("a draft job's session is no build's: %v, job %+v, posts %v", err, summary.Job, door.jobPosts)
 	}
 }
+
+func TestWikiArticleBuildTakesTheHeadingASectionNamesBeforeOneItsNameContains(t *testing.T) {
+	f := newDocsFixture(t, map[string]string{"docs/contract.md": "# Contract\n\n## 2. Space\n\nOne space a repository.\n\n" +
+		"## 19. 维护作业：由事实建任务\n\nThe trigger.\n\n### 19.4 `orbit wiki maintain --space <id> [--json]`\n\nThe run's steps.\n\n" +
+		"### 19.5 `orbit wiki check --space <id>`\n\nThe check.\n"})
+	repo := newWikiDocRepo(f.checkout, f.first)
+	for cited, want := range map[string]string{
+		// Its number names it, though a shorter heading's words («space») are in the name as well.
+		"19.4 `orbit wiki maintain --space <id> [--model MODEL] [--json]`": "19.4 `orbit wiki maintain --space <id> [--json]`",
+		"§19.5 `orbit wiki check --space <id> --expect-cursor <token>`":    "19.5 `orbit wiki check --space <id>`",
+		"2. Space": "2. Space",
+		// With no heading of that name or number, one whose words contain the name still answers.
+		"维护作业": "19. 维护作业：由事实建任务",
+	} {
+		piece, ok := repo.docSection("docs/contract.md", cited)
+		if !ok || piece.section != want {
+			got := "nothing"
+			if ok {
+				got = piece.section
+			}
+			t.Errorf("§ %q read %q, want %q", cited, got, want)
+		}
+	}
+}

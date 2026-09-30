@@ -1387,14 +1387,20 @@ func (r *wikiDocRepo) docSection(path, section string) (*wikiDocPiece, bool) {
 	if strings.TrimSpace(section) != "" {
 		want := wikiDocHeadingKey(section)
 		number := wikiDocNumbered.FindStringSubmatch(section)
+		// The heading named — by its words or its number — before one whose words only contain the name or
+		// are contained in it: a short heading («2. Space») is contained in many a longer one's name.
 		found := false
-		for _, h := range headings {
-			key := wikiDocHeadingKey(h.text)
-			numbered := number != nil && regexp.MustCompile(`^\s*§?\s*`+regexp.QuoteMeta(number[1])+`(?:[.\s:：、)]|$)`).MatchString(h.text)
-			if key == want || numbered || (utf8.RuneCountInString(want) >= 4 && strings.Contains(key, want)) ||
-				(utf8.RuneCountInString(key) >= 4 && strings.Contains(want, key)) {
-				start, level, title, found = h.line, h.level, h.text, true
-				break
+		for pass := 0; pass < 2 && !found; pass++ {
+			for _, h := range headings {
+				key := wikiDocHeadingKey(h.text)
+				named := key == want ||
+					(number != nil && regexp.MustCompile(`^\s*§?\s*`+regexp.QuoteMeta(number[1])+`(?:[.\s:：、)]|$)`).MatchString(h.text))
+				near := (utf8.RuneCountInString(want) >= 4 && strings.Contains(key, want)) ||
+					(utf8.RuneCountInString(key) >= 4 && strings.Contains(want, key))
+				if (pass == 0 && named) || (pass == 1 && near) {
+					start, level, title, found = h.line, h.level, h.text, true
+					break
+				}
 			}
 		}
 		if !found {
