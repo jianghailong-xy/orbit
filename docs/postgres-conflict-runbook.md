@@ -262,14 +262,14 @@ Three sources, in the order to read them:
 1. **The metric** says WHICH operation and WHICH SQLSTATE, with no timestamp finer than the scrape.
 2. **The API server log** says WHEN and how hard it tried. One line per retried transaction:
 
-   ```
+   ```text
    WARN [TasksService] operation=tasks.create outcome=RETRYING attempt=1/4 sqlstate=40P01
    WARN [TasksService] operation=tasks.create outcome=EXHAUSTED attempt=4/4 sqlstate=40P01
    ```
 
    and one per conflict that reached the boundary:
 
-   ```
+   ```text
    WARN [TransientDbConflict] DEADLOCK reached the API boundary · answered 503 TRANSIENT_DB_CONFLICT · evidence=40P01 depth=2 · POST /tasks
    ```
 
@@ -280,7 +280,7 @@ Three sources, in the order to read them:
 3. **The PostgreSQL log** says WHAT the cycle was made of. A `40P01` is logged by the server with
    both sides of it:
 
-   ```
+   ```text
    ERROR:  deadlock detected
    DETAIL:  Process 4711 waits for ShareLock on transaction 90210; blocked by process 4712.
            Process 4712 waits for ShareLock on transaction 90209; blocked by process 4711.
@@ -485,11 +485,11 @@ scripts/deadlock-barrier.sh retry
 
 ## Related
 
-- [The database write audit](db-write-audit.md) — every write, its lock order and its retry decision.
-- [The canonical lock order](postgres-lock-order.md) — the partial order a lock-order defect violates.
-- [PostgreSQL lock-order barrier fixture](postgres-deadlock-barrier.md) — the two reproduced
+* [The database write audit](db-write-audit.md) — every write, its lock order and its retry decision.
+* [The canonical lock order](postgres-lock-order.md) — the partial order a lock-order defect violates.
+* [PostgreSQL lock-order barrier fixture](postgres-deadlock-barrier.md) — the two reproduced
   production deadlocks and their lock graphs.
-- [Task dependency revision](task-dependency-revision.md) and
+* [Task dependency revision](task-dependency-revision.md) and
   [the Session event source scope](session-event-trigger-scope.md) — the two migrations, their
   upgrade and rollback procedures in full.
-- [Postgres backup and restore](postgres-backup-restore.md) — for the failures this page is not about.
+* [Postgres backup and restore](postgres-backup-restore.md) — for the failures this page is not about.

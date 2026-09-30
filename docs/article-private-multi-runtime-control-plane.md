@@ -137,5 +137,5 @@ pre-1.0 open-source project. Operators own deployment, TLS, host hardening, back
 least-privilege credentials, and the final merge decision. Start with the [README](../README.md),
 pin a tagged release, and review the limits before using it on sensitive systems.
 
-For a 90-second visual version, follow [Access to private infrastructure](90-second-demo.md#scene-3--access-to-private-infrastructure)
-and [Parallel agents without checkout collisions](90-second-demo.md#scene-2--parallel-agents-without-checkout-collisions).
+For a 90-second visual version, follow [Access to private infrastructure](90-second-demo.md#scene-3--access-to-private-infrastructure-056118)
+and [Parallel agents without checkout collisions](90-second-demo.md#scene-2--parallel-agents-without-checkout-collisions-032056).

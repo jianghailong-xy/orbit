@@ -83,6 +83,30 @@ guide.
 
 Start at [docs/README.md](docs/README.md).
 
+From the repository root, with the Node.js version in `package.json`, check documentation on a clean checkout:
+
+```bash
+npm ci --ignore-scripts
+npm run test:docs
+npm run docs:check
+```
+
+The check reuses `.markdownlint-cli2.jsonc` and `.markdown-link-check.json`. It checks tracked root public
+guides, public `.github/` Markdown, and the current guides listed in
+[`scripts/docs-public-files.txt`](scripts/docs-public-files.txt). Add a new public guide to that list and
+stage the file with Git before checking it locally. Agent instructions, historical design records,
+generated `docs/evidence/`, and mocks are outside the lint scope; linked local files still have to exist
+in the checkout. Local paths and GitHub heading/HTML anchors are checked, including links to other pages;
+external URLs are excluded so network failures and authenticated pages do not make the gate flaky.
+
+The **Documentation / Markdown and local links** workflow checks Markdown, Issue Form, configuration,
+and checker changes on pull requests and pushes to `main`. Its status is also reported for code-only
+changes, so maintainers can require **Markdown and local links** in branch protection without a path-filter
+deadlock. The existing required **JavaScript** check also runs both documentation commands, so documentation
+failures block merging through the current branch protection. A failure in the focused workflow uploads only
+`docs-check.log` with file/rule or local-target diagnostics; it does not
+upload `.env`, runner config, container output, or credentials.
+
 ## License
 
 By submitting a contribution, you agree that it may be distributed under the project's [MIT License](LICENSE).

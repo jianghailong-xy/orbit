@@ -31,7 +31,7 @@ The pages link back to the repository for detail; they do not mirror the complet
 
 The site has no package or bundler dependency:
 
-~~~
+~~~bash
 ./scripts/build-pages.sh --output dist/pages
 ~~~
 
@@ -90,7 +90,7 @@ added after a privacy review.
 
 From a checkout:
 
-~~~
+~~~bash
 ./scripts/build-pages.sh --output /tmp/orbit-pages
 test -f /tmp/orbit-pages/.nojekyll
 test -f /tmp/orbit-pages/404.html
@@ -102,9 +102,9 @@ After a successful Pages workflow, check both language URLs from a desktop and a
 - all external links and both branded 404 routes (including a deep-link refresh);
 - `<html lang>`, title/description, canonical, hreflang, social metadata, image alt text, and equivalent section IDs;
 - the exact pre-1.0/security-boundary wording;
-- curl -I https://jianghailong-xy.github.io/orbit/ returns 200;
-- curl -I https://jianghailong-xy.github.io/orbit/zh/ returns 200;
-- curl -I https://jianghailong-xy.github.io/orbit/appcast.xml returns 200 and application/xml.
+- `curl -I https://jianghailong-xy.github.io/orbit/` returns 200;
+- `curl -I https://jianghailong-xy.github.io/orbit/zh/` returns 200;
+- `curl -I https://jianghailong-xy.github.io/orbit/appcast.xml` returns 200 and application/xml.
 
 A release must continue to seed the current appcast before generate_appcast and publish with keep_files: true.
 
