@@ -416,11 +416,9 @@ func initGitRepo(dir string) error {
 	if _, err := git(dir, "add", "-A"); err != nil {
 		return err
 	}
-	// Inline identity + --no-verify so the baseline never fails on a runner with no git
-	// user.* set or a stray hook; --allow-empty so even an empty dir gets a HEAD to fork.
-	_, err := git(dir,
-		"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner",
-		"commit", "--no-verify", "--allow-empty", "-m", "orbit: baseline")
+	// Use the user's git identity; --no-verify keeps hooks from blocking the baseline,
+	// and --allow-empty gives even an empty dir a HEAD to fork.
+	_, err := git(dir, "commit", "--no-verify", "--allow-empty", "-m", "orbit: baseline")
 	return err
 }
 
@@ -847,11 +845,8 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 			// diff into a real message, never the raw session title/prompt.
 			msg = generateCommitMessage(wt.Path, diffstatFallbackMessage(wt.Path, wt.Branch))
 		}
-		// Inline identity so the commit never fails on a runner with no git user.* set;
-		// --no-verify so a repo's pre-commit hook can't block finalization.
-		if _, err := git(wt.Path,
-			"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner",
-			"commit", "--no-verify", "-m", msg); err != nil {
+		// Use the user's git identity; --no-verify keeps hooks from blocking finalization.
+		if _, err := git(wt.Path, "commit", "--no-verify", "-m", msg); err != nil {
 			return nil, nil, fmt.Errorf("committing the work of session %s failed: %w", wt.Session, err)
 		}
 	}
@@ -1436,8 +1431,8 @@ func replayAnchor(repoRoot, sessionID, sourceSha, serverBase string) string {
 // it's checked out. ffAtRoot picks how target is advanced: in place at the repo root
 // (merge --ff-only) when it's the root checkout, else by moving its ref (branch -f) when it's
 // checked out nowhere — both strict fast-forwards, since the rebase put target underneath. On a
-// rebase conflict it aborts and reports "conflict". Inline identity so the rewritten commits
-// never fail on a runner with no git user.*.
+// rebase conflict it aborts and reports "conflict". Rewritten commits keep their original
+// authors and use the user's git committer identity.
 //
 // `onto` (see replayAnchor) bounds what gets replayed: given the session's fork point, only its
 // own commits move, rather than everything the branch carries ahead of the target. Empty replays
@@ -1486,7 +1481,7 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 				return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf("could not restage %s for retry: %s", source, gitStderr(err)), 1000)}
 			}
 		}
-		rebase := []string{"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner", "rebase"}
+		rebase := []string{"rebase"}
 		if onto != "" {
 			rebase = append(rebase, "--onto", target, onto)
 		} else {
@@ -1935,11 +1930,8 @@ func commitWorktree(req CommitCommand) commitOutcome {
 	// Claude); fall back to a diffstat subject, then the bare branch slug, so the history
 	// reads like hand-written commits instead of "orbit: commit <branch>".
 	msg := generateCommitMessage(wtPath, diffstatFallbackMessage(wtPath, req.Branch))
-	// Inline identity + --no-verify so the commit never fails on a runner with no git user.*
-	// set or a repo pre-commit hook (mirrors finalizeWorktree).
-	if err := gitIndex(
-		"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner",
-		"commit", "--no-verify", "-m", msg); err != nil {
+	// Use the user's git identity; --no-verify skips hooks, as in finalizeWorktree.
+	if err := gitIndex("commit", "--no-verify", "-m", msg); err != nil {
 		return fail(err)
 	}
 	failedCommits.clear(req.SessionID)
