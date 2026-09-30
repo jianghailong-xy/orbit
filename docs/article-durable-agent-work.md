@@ -132,6 +132,6 @@ and restore testing.
 4. Close the browser, reopen the task, and review the session and comment history before starting
    the dependent task.
 
-For the exact shots and narration, use [Work that outlives a chat](90-second-demo.md#scene-1--work-that-outlives-a-chat)
+For the exact shots and narration, use [Work that outlives a chat](90-second-demo.md#scene-1--work-that-outlives-a-chat-008032)
 in the 90-second storyboard. For deployment and recovery boundaries, read the
 [architecture overview](architecture.md) and [self-hosting guide](self-hosting.md).
