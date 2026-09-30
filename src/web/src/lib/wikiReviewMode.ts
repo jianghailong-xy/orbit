@@ -16,6 +16,7 @@
  * invent: how many sessions a run read and on which provider.
  */
 import {
+  WIKI_DEFAULT_MAINTENANCE_SETTINGS,
   WIKI_LIMITS,
   WIKI_REVIEW_RULES,
   type WikiAnchor,
@@ -119,6 +120,27 @@ export const WIKI_RUNS_A_DAY = 'runs a day';
 export const wikiRunsADay = (runs: number): string => (runs === 1 ? '1 run a day' : `${runs} ${WIKI_RUNS_A_DAY}`);
 export const WIKI_DAILY_LIMIT_NOTE =
   'A run starts when 20 sessions have settled, or when the oldest waits a day. Each run writes at most 30 changes.';
+/** How far back maintenance starts reading when it is turned on (contract `space.settings.maintenance.lookbackDays`). */
+export const WIKI_LOOKBACK = 'Look back';
+export const WIKI_LOOKBACK_NOTE =
+  'How far back maintenance starts reading when you turn it on. Changing it later never moves maintenance back.';
+export const WIKI_LOOKBACK_NOW = 'From now on';
+export const WIKI_LOOKBACK_ALL = 'All history';
+export const WIKI_LOOKBACK_UNIT = 'days';
+/** `Last 14 days`, `From now on`, `All history`: a look-back as its row and its picker say it. */
+export const wikiLookbackLabel = (days: number | null): string =>
+  days === null ? WIKI_LOOKBACK_ALL : days === 0 ? WIKI_LOOKBACK_NOW : days === 1 ? 'Last 1 day' : `Last ${days} ${WIKI_LOOKBACK_UNIT}`;
+/** The three ways a look-back is picked, in the order both clients list them: none, some days, all of history. */
+export const WIKI_LOOKBACK_CHOICES = ['now', 'days', 'all'] as const;
+export type WikiLookbackChoice = (typeof WIKI_LOOKBACK_CHOICES)[number];
+export const wikiLookbackChoice = (days: number | null): WikiLookbackChoice =>
+  days === null ? 'all' : days === 0 ? 'now' : 'days';
+/** The setting a pick writes: 0 from now on, null all of history, and `days` for the days picked. */
+export const wikiLookbackDays = (choice: WikiLookbackChoice, days: number): number | null =>
+  choice === 'now' ? 0 : choice === 'all' ? null : days;
+/** The days `Last … days` starts on: the setting's own when it looks back some days, else the default's. */
+export const wikiLookbackDaysOffered = (days: number | null): number =>
+  days !== null && days > 0 ? days : WIKI_DEFAULT_MAINTENANCE_SETTINGS.lookbackDays!;
 export const WIKI_CANCEL = 'Cancel';
 export const WIKI_TURN_ON = 'Turn on';
 export const WIKI_TURN_OFF = 'Turn off';

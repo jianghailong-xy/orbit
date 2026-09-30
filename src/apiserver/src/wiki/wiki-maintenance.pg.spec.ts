@@ -16,6 +16,10 @@
  *      changed through the mode is spent, so the run stops at ten percent of the active entries it began
  *      with, where the same ops in one changeset each would have passed; a dry run says what remains, and
  *      the proposal is refused exactly past it; a run that held back the rest ends succeeded before it;
+ *   7. what a failed run left waiting for its verification is the next run's to verify
+ *      (`reviewModes.verification.adoption`): it reads them and its verdicts apply, a later op's live entry
+ *      of the same content is never joined by a second copy, every floor holds, and nobody but a
+ *      maintenance run of the space reads them;
  *
  * and beside them: the daily limit holds a due space and says so in its health; the task is made pinned,
  * at once, with `orbit wiki check --expect-cursor` as its one criterion; the run proposes as `maintenance`
@@ -78,6 +82,8 @@ interface Harness {
   announced: Array<{ ownerId: string; type: string; change: unknown }>;
   published: Subject<{ runId: string; event: NormalizedRunEvent }>;
   trigger: WikiMaintenanceTrigger;
+  /** Every notification that a space's verification sent it back to Tiered. */
+  fellBack: Array<{ ownerId: string; spaceId: string; unsupported: number }>;
 }
 
 let harness: Promise<Harness> | undefined;
@@ -91,13 +97,18 @@ function boot(): Promise<Harness> {
     const prisma = prismaClientFor(URL);
     const bearers = new Map<string, string>();
     const announced: Harness['announced'] = [];
+    const fellBack: Harness['fellBack'] = [];
     const published = new Subject<{ runId: string; event: NormalizedRunEvent }>();
     const hub = {
       publishWikiChanged: () => undefined,
       publishForUser: (ownerId: string, type: string, change: unknown) => announced.push({ ownerId, type, change }),
       localPublications: () => published.asObservable(),
     } as unknown as RealtimeService;
-    const push = {} as unknown as PushService;
+    const push = {
+      notifyWikiVerificationTripped: async (input: Harness['fellBack'][number]) => {
+        fellBack.push({ ownerId: input.ownerId, spaceId: input.spaceId, unsupported: input.unsupported });
+      },
+    } as unknown as PushService;
     const service = new WikiService(prisma as unknown as PrismaService, hub, push);
     const maintenance = new WikiMaintenance(prisma as unknown as PrismaService);
     const trigger = new WikiMaintenanceTrigger(prisma as unknown as PrismaService, hub);
@@ -132,7 +143,7 @@ function boot(): Promise<Harness> {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
     app.useGlobalInterceptors(new PublicIdInterceptor());
     await app.listen(0, '127.0.0.1');
-    return { base: await app.getUrl(), sql, prisma, app, service, maintenance, bearers, announced, published, trigger };
+    return { base: await app.getUrl(), sql, prisma, app, service, maintenance, bearers, announced, published, trigger, fellBack };
   })();
   return harness;
 }
@@ -634,6 +645,9 @@ test('a Manual space whose review queue has no room is held too, and a run of on
 test('a run cut short by its turn limit moves nothing, counts one more failure, and its check fails', { skip }, async () => {
   const h = await boot();
   const s = await maintainedSpace(h, 'truncated');
+  // Where turning maintenance on started the cursor: fourteen days back, by default.
+  const { position_at: started } = await cursorRow(h, s);
+  assert.ok(started, 'turning maintenance on started the cursor');
   const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
   const made = await consider(h, s, hintOf([sessions[0]!]));
   assert.equal(made.made, true);
@@ -652,7 +666,7 @@ test('a run cut short by its turn limit moves nothing, counts one more failure, 
   expectStatus(truncated, 200, 'a truncated run is recorded');
   assert.equal(truncated.body.advanced, false);
   const cursor = await cursorRow(h, s);
-  assert.equal(cursor.position_at, null, 'the cursor did not move');
+  assert.deepEqual(cursor.position_at, started, 'the cursor did not move');
   assert.equal(cursor.consecutive_failures, 1);
   assert.equal(cursor.last_outcome, 'truncated');
   const row = await h.prisma.wikiMaintenanceRun.findUniqueOrThrow({ where: { taskId: made.taskId } });
@@ -663,7 +677,7 @@ test('a run cut short by its turn limit moves nothing, counts one more failure, 
   expectStatus(check, 200, 'the check answers the runner with no session');
   assert.equal(check.body.ok, false);
   assert.equal(check.body.reached, false);
-  assert.ok((check.body.problems as string[]).some((p) => /cursor has never moved/u.test(p)));
+  assert.ok((check.body.problems as string[]).some((p) => /cursor stands before the position this task expects/u.test(p)));
   assert.ok((check.body.problems as string[]).some((p) => /ended truncated/u.test(p)));
 });
 
@@ -672,6 +686,7 @@ test('a run cut short by its turn limit moves nothing, counts one more failure, 
 test('the circuit breaker counts a whole maintenance run: its changesets stop at 10% of what it began with', { skip }, async () => {
   const h = await boot();
   const s = await maintainedSpace(h, 'breaker');
+  const { position_at: started } = await cursorRow(h, s);
   await activeEntries(h, s, WIKI_REVIEW_RULES.breakerMinActiveEntries);
   const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
   const cite = await turn(h, sessions[0]!, 'the record every proposal of this run cites');
@@ -734,7 +749,7 @@ test('the circuit breaker counts a whole maintenance run: its changesets stop at
   assert.equal(held.body.advanced, false);
   assert.equal(held.body.outcome, 'succeeded');
   const cursor = await cursorRow(h, s);
-  assert.equal(cursor.position_at, null, 'the cursor stays before what the run held back');
+  assert.deepEqual(cursor.position_at, started, 'the cursor stays before what the run held back');
   assert.equal(cursor.consecutive_failures, 0);
   assert.equal(cursor.last_outcome, 'succeeded');
   const row = await h.prisma.wikiMaintenanceRun.findUniqueOrThrow({ where: { taskId: made.taskId } });
@@ -848,4 +863,269 @@ test('the check passes a run that reached its position with no op refused, and n
   const behind = await call(h, { runner: s.machine.token }, 'GET', `${route('check')}?expect=${encodeURIComponent(context.body.expect)}x`);
   expectStatus(behind, 400, 'a token that does not decode is refused');
   assert.equal(behind.body.code, 'WIKI_CURSOR_INVALID');
+});
+
+// ── 7. what ended sessions left waiting ──────────────────────────────────────────────────────────
+
+/** A concept whose every word is its title's, so near neighbours are found by their titles alone. */
+function concept(title: string): Record<string, unknown> {
+  return { kind: 'concept', title, summary: `${title}.`, fields: { definition: title, boundaries: title } };
+}
+
+/** An Automatic space whose maintenance is on, and a record every proposal of its runs cites. */
+async function automaticSpace(h: Harness, name: string): Promise<Space & { cite: string }> {
+  const s = await maintainedSpace(h, name);
+  expectStatus(await call(h, { bearer: s.owner.bearer }, 'PATCH', `/wiki/spaces/${s.spaceId}`, { reviewMode: 'automatic' }), 200, 'the owner makes it automatic');
+  const records = await session(h, s.owner.id, { workspaceId: s.workspaceId });
+  return { ...s, cite: await turn(h, records, 'what the sessions of this space found out, in the words of their record') };
+}
+
+/** A maintenance run of the space: its task in the space's list, its session running on the space's runner. */
+async function maintenanceRun(h: Harness, s: Space): Promise<string> {
+  return runSession(h, s, await task(h, s.owner.id, { listId: s.listId, assigneeId: s.workspaceId }));
+}
+
+/** A run proposes as the space's maintenance run: what each op came to. */
+async function proposeAsRun(h: Harness, s: Space, run: string, ops: unknown[]): Promise<Array<{ status: string; opId: string; entryId: string }>> {
+  const answer = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/changesets`,
+    { ops, rationale: 'what the run learned', idempotencyKey: randomUUID() });
+  expectStatus(answer, 200, 'the run proposes');
+  return answer.body.ops;
+}
+
+/** The run fails, as the three runs of 2026-09-28 did: its session and its task end FAILED, the cursor unmoved. */
+async function failRun(h: Harness, s: Space, run: string): Promise<void> {
+  const ended = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/finish`,
+    { outcome: 'failed', error: 'verify: 7 ops were left without a verdict after two passes' });
+  expectStatus(ended, 200, 'the failed run is recorded');
+  await h.sql.query(`UPDATE "session" SET "status" = 'FAILED', "completed_at" = now() WHERE "id" = $1`, [run]);
+  await h.sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = (SELECT "task_id" FROM "session" WHERE "id" = $1)`, [run]);
+}
+
+interface Adoptable {
+  opId: string;
+  entry: { title: string };
+  evidence: string;
+  similar: Array<{ id: string; status: string; title: string }>;
+}
+
+/** Every op the adoption list hands `run`, page by page. */
+async function adoptionList(h: Harness, s: Space, run: string): Promise<Adoptable[]> {
+  const items: Adoptable[] = [];
+  let after = '';
+  for (let page = 0; page < 20; page += 1) {
+    const query = new URLSearchParams({ limit: '2', ...(after ? { after } : {}) });
+    const answer = await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications?${query}`);
+    expectStatus(answer, 200, 'the adoption list');
+    assert.equal(answer.body.mode, 'automatic');
+    items.push(...(answer.body.items as Adoptable[]));
+    after = answer.body.next ?? '';
+    if (!after) return items;
+  }
+  throw new Error('the adoption list never ended');
+}
+
+function verdictFor(opId: string, verdict: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return { opId, verdict, reason: `The record ${verdict === 'unsupported' ? 'does not say' : 'says'} this.`, model: 'qwen3.8-27b-fp8', ...extra };
+}
+
+test('a failed run\'s waiting ops are the next run\'s to verify: none goes live twice, every floor holds, and only a maintenance run reads them', { skip }, async (t) => {
+  const h = await boot();
+  const s = await automaticSpace(h, 'adoption');
+  const opRow = (id: string) => h.prisma.wikiChangesetOp.findUniqueOrThrow({ where: { id: toUuid(id) } });
+  const entryRow = (id: string) => h.prisma.wikiEntry.findUniqueOrThrow({ where: { id: toUuid(id) } });
+  const cite = [{ kind: 'turn', ref: s.cite }];
+
+  // The run of 09-28 proposes four entries and fails before it verifies any: they wait, and nobody is left
+  // to verify them — its session has ended.
+  const failed = await maintenanceRun(h, s);
+  const [twice, alone, reworded, unverified] = await proposeAsRun(h, s, failed, [
+    { op: 'add', entry: concept('The same knowledge twice'), sources: cite },
+    { op: 'add', entry: concept('What only the failed run found'), sources: cite },
+    { op: 'add', entry: concept('Tmpfs fills up during every build'), sources: cite },
+    { op: 'add', entry: concept('A claim nobody gets to judge this time'), sources: cite },
+  ]);
+  for (const op of [twice, alone, reworded, unverified]) assert.equal(op.status, 'pending');
+  await failRun(h, s, failed);
+
+  // An agent session that read the web proposed into the space too, and ended without verifying its op.
+  const reader = await session(h, s.owner.id, { workspaceId: s.workspaceId, runnerId: s.machine.id, status: 'RUNNING' });
+  await h.sql.query(`INSERT INTO "tool_call"("id","session_id","name","output") VALUES ($1,$2,'WebFetch',$3)`, [randomUUID(), reader, JSON.stringify('a page from the web')]);
+  const web = await call(h, { runner: s.machine.token, session: reader }, 'POST', '/runner/wiki/changesets',
+    { ops: [{ op: 'add', entry: concept('A claim a session that read the web made'), sources: cite }], rationale: 'read off the web', idempotencyKey: randomUUID() });
+  expectStatus(web, 200, 'the agent proposes');
+  const tainted = web.body.ops[0] as { opId: string; entryId: string };
+  assert.equal((await opRow(tainted.opId)).tainted, true);
+  await h.sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "completed_at" = now() WHERE "id" = $1`, [reader]);
+
+  // And a session still running has an op waiting: that one is its own to verify, and nobody adopts it.
+  const busy = await session(h, s.owner.id, { workspaceId: s.workspaceId, runnerId: s.machine.id, status: 'RUNNING' });
+  const running = await call(h, { runner: s.machine.token, session: busy }, 'POST', '/runner/wiki/changesets',
+    { ops: [{ op: 'add', entry: concept('A claim its session will verify itself'), sources: cite }], rationale: 'mine', idempotencyKey: randomUUID() });
+  expectStatus(running, 200, 'a running session proposes');
+  const stillMine = (running.body.ops[0] as { opId: string }).opId;
+
+  // The next run reads the same dossiers again: it proposes the same knowledge word for word, and a reworded
+  // cousin of another, and its own verdicts make both live before it looks at what the failed run left.
+  const next = await maintenanceRun(h, s);
+  const [again, cousin] = await proposeAsRun(h, s, next, [
+    { op: 'add', entry: concept('The same knowledge twice'), sources: cite },
+    { op: 'add', entry: concept('Tmpfs fills up during each build'), sources: cite },
+  ]);
+  const own = await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/verifications`,
+    { verdicts: [verdictFor(again.opId, 'supported'), verdictFor(cousin.opId, 'supported')] });
+  expectStatus(own, 200, 'the run verifies its own ops');
+  assert.equal((await entryRow(again.entryId)).status, 'active');
+  assert.equal((await entryRow(cousin.entryId)).status, 'active');
+
+  const list = await adoptionList(h, s, next);
+  const item = (opId: string) => list.find((one) => toUuid(one.opId) === toUuid(opId));
+
+  await t.test('the next run reads what the failed run and an ended session left waiting, and nothing else', async () => {
+    assert.deepEqual(list.map((one) => toUuid(one.opId)), [twice, alone, reworded, unverified, tainted].map((op) => toUuid(op.opId)),
+      'oldest first, the failed run\'s and the ended session\'s — never its own, nor a running session\'s');
+    assert.equal(item(stillMine), undefined);
+    for (const one of list) assert.equal(one.evidence, 'readable', 'each source read against the session that proposed it');
+    // Listing it changed nothing: no verdict, no effect.
+    assert.equal((await opRow(twice.opId)).decision, 'verifying');
+    assert.equal((await entryRow(twice.entryId)).status, 'proposed');
+  });
+
+  await t.test('each is offered what a later op made live since, as a duplicate it may name', async () => {
+    const offered = (opId: string) => item(opId)!.similar.filter((near) => near.status === 'active').map((near) => toUuid(near.id));
+    assert.ok(offered(twice.opId).includes(toUuid(again.entryId)), `the same knowledge's live entry: ${JSON.stringify(item(twice.opId)!.similar)}`);
+    assert.ok(offered(reworded.opId).includes(toUuid(cousin.entryId)), `the reworded cousin: ${JSON.stringify(item(reworded.opId)!.similar)}`);
+    assert.ok(!item(twice.opId)!.similar.some((near) => toUuid(near.id) === toUuid(twice.entryId)), 'never its own lineage');
+    // Neither was there when the failed run proposed them: only the list's lookup now finds them.
+    const recorded = ((await opRow(reworded.opId)).similar as Array<{ id: string }>).map((near) => near.id);
+    assert.equal(recorded.includes(toUuid(cousin.entryId)), false);
+  });
+
+  await t.test('nobody but a maintenance run of the space reads or reports them, and another owner meets a 404', async () => {
+    const route = `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`;
+    const verdicts = { verdicts: [verdictFor(alone.opId, 'supported')] };
+    const ordinary = await session(h, s.owner.id, { workspaceId: s.workspaceId, runnerId: s.machine.id, status: 'RUNNING' });
+    for (const [method, body] of [['GET', undefined], ['POST', verdicts]] as const) {
+      const refused = await call(h, { runner: s.machine.token, session: ordinary }, method, route, body);
+      expectStatus(refused, 403, `another session of the owner may not ${method} the adoptions`);
+      assert.equal(refused.body.code, 'WIKI_NOT_MAINTENANCE_SESSION');
+      expectStatus(await call(h, { runner: s.machine.token }, method, route, body), 400, `a headless ${method}`);
+    }
+    // Its own list is its own ops: none of the failed run's.
+    const theirs = await call(h, { runner: s.machine.token, session: ordinary }, 'GET', `/runner/wiki/spaces/${s.spaceId}/verifications`);
+    expectStatus(theirs, 200, 'an ordinary session\'s own list');
+    assert.deepEqual(theirs.body.items, []);
+    // Another owner's maintenance run: our space is a 404, and our op through their own space is not found.
+    const stranger = await automaticSpace(h, 'adoption-stranger');
+    const strangerRun = await maintenanceRun(h, stranger);
+    for (const [method, body] of [['GET', undefined], ['POST', verdicts]] as const) {
+      expectStatus(await call(h, { runner: stranger.machine.token, session: strangerRun }, method, route, body), 404, `another owner ${method}s our adoptions`);
+    }
+    const through = await call(h, { runner: stranger.machine.token, session: strangerRun }, 'POST', `/runner/wiki/spaces/${stranger.spaceId}/maintenance/verifications`, verdicts);
+    expectStatus(through, 404, 'our op reported through their space');
+    const theirList = await call(h, { runner: stranger.machine.token, session: strangerRun }, 'GET', `/runner/wiki/spaces/${stranger.spaceId}/maintenance/verifications`);
+    assert.deepEqual(theirList.body.items, [], 'nothing of ours in their adoptions');
+    // A running session's op is not adoptable, even by a run that names it.
+    const notYet = await call(h, { runner: s.machine.token, session: next }, 'POST', route, { verdicts: [verdictFor(stillMine, 'supported')] });
+    expectStatus(notYet, 404, 'a running session\'s op');
+    assert.equal((await opRow(alone.opId)).decision, 'verifying', 'none of that recorded anything');
+    assert.equal((await opRow(stillMine)).decision, 'verifying');
+  });
+
+  await t.test('its verdicts apply as a proposer\'s own: supported goes live as Auto, and a tainted op no further than Unreviewed', async () => {
+    const report = await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`,
+      { verdicts: [verdictFor(alone.opId, 'supported'), verdictFor(tainted.opId, 'supported')] });
+    expectStatus(report, 200, 'the adopted verdicts');
+    assert.deepEqual((report.body.outcomes as Array<{ status: string; trust?: string }>).map((o) => [o.status, o.trust]), [['applied', 'auto'], ['applied', 'unreviewed']]);
+    assert.equal((await entryRow(alone.entryId)).trust, 'auto');
+    assert.equal((await entryRow(tainted.entryId)).trust, 'unreviewed', 'what rests on the web is never pushed on a verdict');
+    const op = await opRow(alone.opId);
+    assert.equal(op.decision, 'auto_applied');
+    assert.equal(op.verificationModel, 'qwen3.8-27b-fp8');
+    assert.equal(op.verificationEvidence, 'readable');
+  });
+
+  await t.test('the same knowledge a later op made live is never live twice: a supported verdict joins that entry', async () => {
+    const report = await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`,
+      { verdicts: [verdictFor(twice.opId, 'supported')] });
+    expectStatus(report, 200, 'the verdict');
+    const [outcome] = report.body.outcomes as Array<{ status: string; entryId: string; reinforced: boolean; verdict: string }>;
+    assert.equal(outcome.status, 'reinforced');
+    assert.equal(toUuid(outcome.entryId), toUuid(again.entryId));
+    assert.equal(outcome.reinforced, true);
+    const live = await h.prisma.wikiEntry.count({ where: { spaceId: s.spaceId, title: 'The same knowledge twice', status: 'active' } });
+    assert.equal(live, 1, 'one live entry of it');
+    assert.equal((await entryRow(twice.entryId)).status, 'rejected', 'the waiting copy is not kept');
+    const op = await opRow(twice.opId);
+    assert.equal(op.decision, 'rejected');
+    assert.equal(op.decisionReason, 'duplicate');
+    assert.equal(op.verificationVerdict, 'supported', 'the verdict stays as the model gave it');
+    assert.equal(op.verificationDuplicateOf, null);
+    // What it cited is kept, on the entry that holds it.
+    const revision = await h.prisma.wikiEntryRevision.findFirstOrThrow({ where: { entryId: toUuid(again.entryId), revision: 1 } });
+    assert.equal(await h.prisma.wikiSource.count({ where: { revisionId: revision.id, ref: s.cite } }), 2, 'its source added beside the one it had');
+    // Sent again, it is its recorded answer, and writes nothing.
+    const replay = await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`,
+      { verdicts: [verdictFor(twice.opId, 'supported')] });
+    expectStatus(replay, 200, 'the same verdict again');
+    assert.deepEqual([replay.body.outcomes[0].status, replay.body.outcomes[0].replayed], ['reinforced', true]);
+    assert.equal(await h.prisma.wikiSource.count({ where: { revisionId: revision.id, ref: s.cite } }), 2);
+  });
+
+  await t.test('a reworded cousin is the model\'s to call a duplicate, of the entry the list offered', async () => {
+    const report = await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`,
+      { verdicts: [verdictFor(reworded.opId, 'duplicate', { duplicateOf: cousin.entryId })] });
+    expectStatus(report, 200, 'a duplicate of an entry made live after the op was proposed');
+    assert.equal(report.body.outcomes[0].status, 'reinforced');
+    assert.equal((await entryRow(reworded.entryId)).status, 'rejected');
+    assert.equal(await h.prisma.wikiEntry.count({ where: { spaceId: s.spaceId, title: { startsWith: 'Tmpfs fills up' }, status: 'active' } }), 1);
+    // A neighbour, still: an entry the list did not offer is no duplicate an adopted op may name.
+    const refused = await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`,
+      { verdicts: [verdictFor(unverified.opId, 'duplicate', { duplicateOf: alone.entryId })] });
+    expectStatus(refused, 400, 'a duplicate of an entry that is no neighbour of it');
+    assert.equal(refused.body.outcomes[0].code, 'WIKI_SCHEMA');
+  });
+
+  await t.test('what gets no verdict keeps waiting for the next run', async () => {
+    assert.equal((await opRow(unverified.opId)).decision, 'verifying');
+    assert.equal((await entryRow(unverified.entryId)).status, 'proposed');
+    const later = await maintenanceRun(h, s);
+    assert.deepEqual((await adoptionList(h, s, later)).map((one) => toUuid(one.opId)), [toUuid(unverified.opId)]);
+  });
+});
+
+test('an adopted op\'s unsupported verdict counts toward the fallback as any does, and sends the space back to Tiered', { skip }, async () => {
+  const h = await boot();
+  const s = await automaticSpace(h, 'adoption-fallback');
+  const failed = await maintenanceRun(h, s);
+  const [left] = await proposeAsRun(h, s, failed, [{ op: 'add', entry: concept('A claim its record never made'), sources: [{ kind: 'turn', ref: s.cite }] }]);
+  await failRun(h, s, failed);
+  // Forty-nine verdicts the space's verification already gave since it was made Automatic: fifteen unsupported.
+  const earlier = randomUUID();
+  await h.sql.query(`INSERT INTO "wiki_changeset"("id","owner_id","space_id","origin","status","decided_at") VALUES ($1,$2,$3,'maintenance','settled',now())`,
+    [earlier, s.owner.id, s.spaceId]);
+  for (let seq = 0; seq < 49; seq += 1) {
+    const unsupported = seq < 15;
+    await h.sql.query(
+      `INSERT INTO "wiki_changeset_op"("id","changeset_id","owner_id","seq","op","payload","decision","decision_reason","decided_at","applied_by_mode",
+                                       "verification_verdict","verification_reason","verification_model","verified_at","verification_evidence")
+       VALUES ($1,$2,$3,$4,'add','{}',$5,$6,now(),$7,$8,'as the model said','qwen3.8-27b-fp8',now(),'readable')`,
+      [randomUUID(), earlier, s.owner.id, seq, unsupported ? 'rejected' : 'auto_applied', unsupported ? 'not_true' : null,
+        unsupported ? null : 'automatic', unsupported ? 'unsupported' : 'supported'],
+    );
+  }
+  const next = await maintenanceRun(h, s);
+  const report = await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`,
+    { verdicts: [verdictFor(left.opId, 'unsupported')] });
+  expectStatus(report, 200, 'the adopted verdict');
+  assert.equal(report.body.outcomes[0].status, 'rejected');
+  assert.equal(report.body.mode, 'tiered', 'sixteen of the latest fifty is over the line');
+  const settings = (await h.prisma.wikiSpace.findUniqueOrThrow({ where: { id: s.spaceId } })).settings as Record<string, unknown>;
+  assert.equal(settings.reviewMode, 'tiered');
+  assert.equal(settings.reviewModeChangedBy, 'verification');
+  assert.deepEqual(h.fellBack.filter((one) => one.spaceId === s.spaceId), [{ ownerId: s.owner.id, spaceId: s.spaceId, unsupported: 16 }],
+    'the owner is told once');
+  // Out of Automatic, the adoption list says so before a model is asked anything.
+  const list = await call(h, { runner: s.machine.token, session: next }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`);
+  assert.equal(list.body.mode, 'tiered');
 });

@@ -503,6 +503,10 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'viaEntryId',
   'withdrawnEntryId',
   'recordId',
+  // The plan's jobs (migration 0338): the job a check or a redraft names, and the owner who asked for
+  // one (a history reference with no foreign key). Addresses a reader follows — never a fence.
+  'jobId',
+  'requestedByUserId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

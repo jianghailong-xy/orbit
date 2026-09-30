@@ -1031,8 +1031,9 @@ func TestWikiCLIFlagsBecomeTheToolArguments(t *testing.T) {
 // wikiCLIOnlyCapabilities are the wiki verbs no MCP tool stands beside: verify runs a model (contract
 // `agentSurface.verify.tool`), and dossier, cursor advance and anchors verify are a Wiki maintenance
 // run's and no other session's (`maintenance.cli.tool`, `anchorRules.verify.tool`), and so are the
-// articles (`articles.cli.tool`), and the maintenance job's run and check (`maintenance.job.cli.tool`).
-var wikiCLIOnlyCapabilities = map[string]bool{"wiki_verify": true, "wiki_dossier": true, "wiki_cursor_advance": true, "wiki_anchors_verify": true, "wiki_articles": true, "wiki_maintain": true, "wiki_check": true}
+// articles (`articles.cli.tool`), the documents' build (`docs.build.tool`), and the maintenance job's run
+// and check (`maintenance.job.cli.tool`).
+var wikiCLIOnlyCapabilities = map[string]bool{"wiki_verify": true, "wiki_dossier": true, "wiki_cursor_advance": true, "wiki_anchors_verify": true, "wiki_articles": true, "wiki_docs_build": true, "wiki_maintain": true, "wiki_check": true}
 
 // wikiHeadlessCapabilities are the wiki verbs a terminal outside a session may run: the maintenance task's
 // check, which is its acceptance command, and that runs in a shell with no session.
@@ -1123,6 +1124,12 @@ func writtenFlagIsParsed(action, name string) bool {
 		fs.String("space", "", "")
 		fs.String("topic", "", "")
 		fs.String("model", "", "")
+	case "docs build":
+		fs.String("space", "", "")
+		fs.String("doc", "", "")
+		fs.String("section", "", "")
+		fs.String("repo", "", "")
+		fs.String("model", "", "")
 	case "maintain":
 		fs.String("space", "", "")
 		fs.String("model", "", "")
@@ -1155,7 +1162,7 @@ func TestWikiInstructionsLinkEntriesAndPreApproveTheCommands(t *testing.T) {
 		t.Errorf("the citation is not the link shape the clients draw: %q", instructions)
 	}
 	rules := strings.Join(orbitCLIAllowedTools(exe, false), "\n")
-	for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "anchors verify", "articles", "maintain", "check"} {
+	for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "anchors verify", "articles", "docs build", "maintain", "check", "plan draft", "plan revise", "plan check"} {
 		if !strings.Contains(rules, "Bash("+exe+" wiki "+action+" *)") {
 			t.Errorf("orbit wiki %s is advertised and pre-approved for nobody: %q", action, rules)
 		}

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -160,6 +162,20 @@ type wikiPlanDraftRequest struct {
 	Plan        wikiPlanDraft     `json:"plan"`
 	RepoCheck   wikiPlanRepoCheck `json:"repoCheck"`
 	Model       string            `json:"model,omitempty"`
+	// The key the server stores the draft under (contract `plan.idempotency`): the same draft landing again
+	// under it is answered with the version its first landing stored (wikiPlanDraftKey).
+	IdempotencyKey string `json:"idempotencyKey,omitempty"`
+}
+
+// wikiPlanDraftKey is the key a run sends a draft under: the job, the session that runs it and the draft,
+// digested. The same draft sent again carries the same key, so the server answers it with the version its
+// first landing stored rather than refusing it WIKI_PLAN_STALE; a later round's draft, or another run's, is
+// another key.
+func wikiPlanDraftKey(jobID, sessionID string, draft wikiPlanDraftRequest) string {
+	draft.IdempotencyKey = ""
+	raw, _ := json.Marshal(draft)
+	sum := sha256.Sum256(append([]byte(jobID+"\x00"+sessionID+"\x00"), raw...))
+	return "wiki-plan-" + hex.EncodeToString(sum[:20])
 }
 
 type wikiPlanFact struct {
@@ -222,17 +238,20 @@ func (t *Transport) wikiPlanState(sessionID, spaceID string) (json.RawMessage, e
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodGet, wikiPlanPath(spaceID), nil, &out, wikiPlanTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodGet, wikiPlanPath(spaceID), nil, &out, wikiPlanTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
-// submitWikiPlanDraft stores a draft, or answers the gate's refusal (wikiPlanGateRefused).
+// submitWikiPlanDraft stores a draft, or answers the gate's refusal (wikiPlanGateRefused). A draft under an
+// idempotency key is sent again through a transient failure (wikiRecordsOnce): landing twice, it is answered
+// with the version it stored. One with no key is sent once — its second landing would be refused
+// WIKI_PLAN_STALE, its base no longer the newest.
 func (t *Transport) submitWikiPlanDraft(sessionID, spaceID string, draft wikiPlanDraftRequest) (json.RawMessage, error) {
 	if err := validatePathSegmentID(spaceID); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodPost, wikiPlanPath(spaceID)+"/drafts", draft, &out, wikiPlanTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodPost, wikiPlanPath(spaceID)+"/drafts", draft, &out, wikiPlanTimeout, sessionHeader(sessionID), wikiRecordsOnce(draft))
 	return out, err
 }
 
@@ -242,6 +261,7 @@ func (t *Transport) proposeWikiPlanChange(sessionID, spaceID string, proposal wi
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodPost, wikiPlanPath(spaceID)+"/proposals", proposal, &out, wikiPlanTimeout, sessionHeader(sessionID))
+	// Sent once: a proposal that landed twice would be two proposals.
+	_, err := t.doWiki(http.MethodPost, wikiPlanPath(spaceID)+"/proposals", proposal, &out, wikiPlanTimeout, sessionHeader(sessionID), false)
 	return out, err
 }

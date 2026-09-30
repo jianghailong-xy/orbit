@@ -45,6 +45,8 @@ func TestWikiDocsClosedSetsAreTheContracts(t *testing.T) {
 		"verdicts":         {keysOf(docs["verdicts"]), sorted(wikiDocVerdicts)},
 		"checkers":         {keysOf(docs["checkers"]), sorted(wikiDocCheckers)},
 		"withdrawReasons":  {list(docs["withdrawReasons"]), wikiDocWithdrawReasons},
+		"dispositionActions": {keysOf(docs["dispositionActions"]), sorted(wikiDocDispositionActions)},
+		"material.weights":   {keysOf(docs["material"].(map[string]interface{})["weights"]), sorted(wikiDocMaterialWeights)},
 	} {
 		if !reflect.DeepEqual(pair[0], pair[1]) {
 			t.Errorf("docs.%s = %v, this build has %v", name, pair[0], pair[1])
@@ -54,6 +56,14 @@ func TestWikiDocsClosedSetsAreTheContracts(t *testing.T) {
 	if rules["needsReviewAbove"].(float64) != wikiDocNeedsReviewAbove || int(rules["quoteMinChars"].(float64)) != wikiDocQuoteMinChars ||
 		int(rules["sectionsPerWrite"].(float64)) != wikiDocSectionsPerWrite || int(rules["footnotesPerSection"].(float64)) != wikiDocFootnotesMax {
 		t.Errorf("docs.rules = %v, this build has %v / %d / %d / %d", rules, wikiDocNeedsReviewAbove, wikiDocQuoteMinChars, wikiDocSectionsPerWrite, wikiDocFootnotesMax)
+	}
+	for name, want := range map[string]int{
+		"dispositionsPerSection": wikiDocDispositionsMax, "reasonMaxChars": wikiDocReasonMaxChars, "quoteMaxChars": wikiDocQuoteMaxChars,
+		"excerptMaxChars": wikiDocExcerptMaxChars, "markdownMaxChars": wikiDocMarkdownMaxChars,
+	} {
+		if int(rules[name].(float64)) != want {
+			t.Errorf("docs.rules.%s = %v, this build has %d", name, rules[name], want)
+		}
 	}
 	statuses := map[string]float64{}
 	for _, refusal := range wikiContract(t)["refusals"].([]interface{}) {
@@ -81,7 +91,7 @@ func TestWikiDocsClosedSetsAreTheContracts(t *testing.T) {
 func TestWikiDocWriteCarriesTheContractsFieldsAndNoOther(t *testing.T) {
 	docs := wikiContract(t)["docs"].(map[string]interface{})
 	schema := docs["schema"].(map[string]interface{})
-	yes, quote := true, "export function claimTask("
+	yes, quote, into := true, "export function claimTask(", "C2"
 	request := wikiDocWriteRequest{
 		PlanVersion: 3,
 		RepoSha:     strings.Repeat("c", 40),
@@ -90,6 +100,9 @@ func TestWikiDocWriteCarriesTheContractsFieldsAndNoOther(t *testing.T) {
 			Key:            "s2",
 			MaterialSha256: strings.Repeat("d", 64),
 			Markdown:       "派发由 `claimTask` 开始[1]。先存后投[2]。",
+			Dispositions: []wikiDocDisposition{
+				{Material: "C1", Kind: "code", Ref: "src/apiserver/src/tasks/tasks.service.ts#L10-20", Action: "merge", Into: &into, Reason: "同一件事"},
+			},
 			Footnotes: []wikiDocFootnote{
 				{
 					Kind: "code", Path: "src/apiserver/src/tasks/tasks.service.ts", Sha: strings.Repeat("b", 40), Lines: &wikiDocRange{Start: 10, End: 20},
@@ -129,6 +142,7 @@ func TestWikiDocWriteCarriesTheContractsFieldsAndNoOther(t *testing.T) {
 	check("recordFootnote", object(footnotes[1]))
 	check("lines", object(object(footnotes[0])["lines"]))
 	check("chars", object(object(footnotes[1])["chars"]))
+	check("disposition", object(section["dispositions"].([]interface{})[0]))
 	for key := range tree {
 		if !strings.Contains(docs["requests"].(map[string]interface{})["write"].(string), key) {
 			t.Errorf("a write carries %s, which the contract's write request does not name", key)

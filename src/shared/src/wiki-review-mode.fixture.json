@@ -8,7 +8,9 @@
     "",
     "`settings`: the page's sections top to bottom, the three modes in the order both list them (the",
     "default one tagged), the Automatic spot check, the floors, and maintenance off / its Set up form /",
-    "on. `fallbacks`: a space's settings → the sentence the page leads Review mode with, or null.",
+    "on. `lookbacks`: a look-back setting → the choice its picker shows, the days `Last … days` starts on,",
+    "and the words its row and its picker say. `fallbacks`: a space's settings → the sentence the page",
+    "leads Review mode with, or null.",
     "`marks`: one entry → the answers it offers, the bar under its head, and the line Where it's used",
     "adds. `checkedLines`: the bar's second line. `runs`: one run as its read answers it (`GET",
     "/api/wiki/changesets/:id`: the changeset, the entries its ops name, the server's counts, and what Revert",
@@ -75,6 +77,10 @@
           {
             "label": "Daily limit",
             "note": "A run starts when 20 sessions have settled, or when the oldest waits a day. Each run writes at most 30 changes."
+          },
+          {
+            "label": "Look back",
+            "note": "How far back maintenance starts reading when you turn it on. Changing it later never moves maintenance back."
           }
         ],
         "unit": "runs a day",
@@ -86,13 +92,22 @@
           "dailyRunLimit": 8,
           "min": 1,
           "max": 48
+        },
+        "lookback": {
+          "choices": ["now", "days", "all"],
+          "says": ["From now on", "Last 14 days", "All history"],
+          "unit": "days",
+          "defaultDays": 14,
+          "min": 0,
+          "max": 365
         }
       },
       "rows": [
         "Status",
         "Workspace",
         "Provider",
-        "Daily limit"
+        "Daily limit",
+        "Look back"
       ],
       "edit": "Edit",
       "turnOff": "Turn off",
@@ -105,6 +120,13 @@
           "runs": 1,
           "says": "1 run a day"
         }
+      ],
+      "lookbacks": [
+        { "days": 14, "choice": "days", "offered": 14, "says": "Last 14 days" },
+        { "days": 1, "choice": "days", "offered": 1, "says": "Last 1 day" },
+        { "days": 365, "choice": "days", "offered": 365, "says": "Last 365 days" },
+        { "days": 0, "choice": "now", "offered": 14, "says": "From now on" },
+        { "days": null, "choice": "all", "offered": 14, "says": "All history" }
       ],
       "workspaceLabels": [
         {

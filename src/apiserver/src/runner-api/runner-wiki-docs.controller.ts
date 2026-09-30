@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, HttpCode, HttpStatus, Param, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Headers, HttpCode, HttpStatus, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { Runner } from '@prisma/client';
 import { toUuid } from '@orbit/shared';
 import { PublicIdPipe } from '../common/public-id';
@@ -12,7 +12,8 @@ import { RunnerAuthGuard } from './runner-auth.guard';
 /**
  * The documents, on the runner door (contracts/wiki.contract.json `docs.routes`,
  * `agentSurface.doors.runner.maintenanceRoutes`): what a maintenance run's writer asks — what is written
- * already, and the write of one document's sections.
+ * already, one document as it is written, the server's half of a section's material, and the write of
+ * one document's sections.
  *
  * ONLY A MAINTENANCE RUN OF THE SPACE. The calling session (`X-Orbit-Session-Id`, one this runner hosts
  * for its owner) is the principal, and `WikiDocs.assertWriter` asks it the one test criterion 2 exported
@@ -37,6 +38,29 @@ export class RunnerWikiDocsController {
     @Param('id', PublicIdPipe) id: string,
   ) {
     return this.docs.writerState(await this.maintainer(runner, callingSessionId), id);
+  }
+
+  /** One document as it is written: the owner's read, for a run that writes an overview over sections it left as they are. */
+  @Get('spaces/:id/docs/:slug')
+  async doc(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('slug') slug: string,
+  ) {
+    return this.docs.writerDoc(await this.maintainer(runner, callingSessionId), id, slug);
+  }
+
+  /** The server's half of one section's material: its condition's entries and records, redacted and placed. */
+  @Get('spaces/:id/docs/:slug/material')
+  async material(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('slug') slug: string,
+    @Query('section') section: string | undefined,
+  ) {
+    return this.docs.material(await this.maintainer(runner, callingSessionId), id, slug, section);
   }
 
   /** Sections of one document, checked and stored; a section whose material did not change is left as it is. */
