@@ -47,6 +47,14 @@ struct ProjectStartedCardView: View {
                 .font(.orbitProse.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            // What the start left the project running with — the line, Automatic, concurrency and
+            // the merge check — with every setting the owner changed from the coordinator's
+            // suggestion in bold, so the coordinator reading its own conversation can see what it
+            // did not ask for. Absent for a start that recorded none.
+            if let settings = card.settings {
+                RunSettingsSummaryText(settings: settings, differs: card.differsFromRequest)
+                    .font(.orbitSubtext)
+            }
             if card.heldCount == 0 {
                 Text(ProjectStartedCard.noneHeld)
                     .font(.orbitSubtext)

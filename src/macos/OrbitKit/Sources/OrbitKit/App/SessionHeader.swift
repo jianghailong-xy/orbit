@@ -62,14 +62,18 @@ public enum SessionHeader {
     ///
     /// The server names the kind when everything it counted is one kind with words of its own
     /// (`waitingKind`), and then the row says it: an OWNER_CONFIRMED task's run in the confirmation
-    /// card's words, and one of the four owner items in the words the banner and the card use, so a
-    /// person who pressed either arrives where the words came from. Anything else waiting on you —
+    /// card's words, one of the four owner items in the words the banner and the card use, so a
+    /// person who pressed either arrives where the words came from, and a project waiting to be
+    /// started in the start card's own `Ready to start`. Anything else waiting on you —
     /// a blocked tool call, a proposal, a row counting two kinds at once — keeps the approval
     /// wording. Web parity: `waitingLabel` in `WorkspaceView.tsx`, which the copy-parity test reads.
     public static func waitingWord(for s: Session) -> String {
         switch s.waitingKind {
         case .ownerConfirmation: return OwnerConfirmations.waitingForConfirmation
         case .ownerItem:         return NeedsYouLogic.oldestItemWord(s.ownerItems) ?? unnamedWord
+        // A project its coordinator asked to start: the row says what the card in it asks, not an
+        // approval nobody is being asked for.
+        case .startRequest:      return StartProject.readyToStart
         default:                 return unnamedWord
         }
     }

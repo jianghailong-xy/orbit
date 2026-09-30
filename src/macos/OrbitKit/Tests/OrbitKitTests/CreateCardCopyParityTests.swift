@@ -116,6 +116,17 @@ final class CreateCardCopyParityTests: XCTestCase {
                        "the caption over the acceptance criteria")
     }
 
+    /// Under a new project's criteria: approving the create is not confirming them — the project's
+    /// start card asks that. Drawn under the criteria of a project create, and of nothing else.
+    func testTheNoteUnderANewProjectsCriteriaMatchesTheWebCard() throws {
+        let web = try flat(Self.webCard)
+
+        assertContains(web, "export const CREATE_CRITERIA_CONFIRMED_AT_START = "
+                           + "'\(Approvals.createCriteriaConfirmedAtStart)';",
+                       "the note that the criteria are confirmed when the project starts")
+        assertContains(web, "{CREATE_CRITERIA_CONFIRMED_AT_START}", "the note, drawn")
+    }
+
     func testBothEndsFoldTheCriteriaAtTheOwnerCardsCeiling() throws {
         let web = try flat(Self.webCard)
 
