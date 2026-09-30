@@ -198,7 +198,8 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 	app, err := startReadyCodexAppServer(ctx, state, initTimeout, func() (*codexAppServer, error) {
 		return startCodexAppServer(ctx, job, execDir, state.Dir, processEnv, emit,
 			func(approvalCtx context.Context, request codexApprovalRequest, params map[string]interface{}) bool {
-				return bridgeCodexApproval(approvalCtx, t, job, request, params)
+				return bridgeCodexApprovalWithContext(approvalCtx, t, job, request, params,
+					codexAutoApprovalContextFor(execDir, upDir))
 			})
 	})
 	if err != nil {
@@ -793,9 +794,9 @@ func codexStderrIsStateInitFailure(line string) bool {
 // auto-approves only known-safe read-only commands and asks about everything else, which Orbit
 // then routes to the same approval card Claude and Kimi use.
 //
-// Auto maps to `on-request`, which Codex documents as "the model decides when to ask the user for
-// approval" — that is what Auto is, so the mode means the same thing here as on Claude rather
-// than being a Claude-only feature. Its requests reach the same card `untrusted` already uses.
+// Auto maps to `on-request`, which lets Codex surface requests that need a boundary decision. The
+// approval bridge automatically accepts routine requests inside the workspace; requests that
+// need network, extra filesystem access, or a high-impact command still reach the owner.
 //
 // dontAsk deliberately stays on `never`. Orbit's Don't Ask is fail-closed ("deny anything not
 // pre-approved"), but Codex is never handed an allowlist — so switching it to `untrusted` would
@@ -849,11 +850,20 @@ func codexAutomaticApproval(permissionMode string, request codexApprovalRequest)
 // human via the same approval card the other runtimes use. Fails CLOSED on every error path —
 // a control-plane outage must never auto-approve a command.
 func bridgeCodexApproval(ctx context.Context, t *Transport, job *ClaimedSession, request codexApprovalRequest, params map[string]interface{}) bool {
+	return bridgeCodexApprovalWithContext(ctx, t, job, request, params, codexAutoApprovalContext{})
+}
+
+func bridgeCodexApprovalWithContext(ctx context.Context, t *Transport, job *ClaimedSession, request codexApprovalRequest, params map[string]interface{}, autoContext codexAutoApprovalContext) bool {
 	if ctx.Err() != nil || t == nil || job == nil {
 		return false
 	}
 	if allowed, decided := codexAutomaticApproval(job.Agent.PermissionMode, request); decided {
 		return allowed
+	}
+	if job.Agent.PermissionMode == "auto" {
+		if allowed, decided := codexAutoApproval(request, params, autoContext); decided {
+			return allowed
+		}
 	}
 	input := map[string]interface{}{}
 	if request.mcpTool {
@@ -1299,22 +1309,13 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 		input = append(input, map[string]interface{}{"type": "localImage", "path": p})
 	}
 	params := map[string]interface{}{
-		"threadId":            threadID,
-		"clientUserMessageId": orbitTurnID,
-		"input":               input,
-		"cwd":                 execDir,
-		"approvalPolicy":      codexApprovalPolicy(job.Agent.PermissionMode),
-		"runtimeWorkspaceRoots": []string{
-			execDir,
-			upDir,
-		},
-		// danger-full-access mirrors the Claude path, which runs unsandboxed in execDir.
-		// approvalPolicy is already "never" (Orbit fully trusts the agent), so codex's
-		// sandbox is the only thing left restricting it — and workspace-write (network off,
-		// writableRoots limited to the uploads dir) breaks git: fetch has no network, and a
-		// worktree session's real .git lives outside the workspace so FETCH_HEAD writes get
-		// denied. Full access removes that asymmetry with Claude.
-		"sandboxPolicy": map[string]interface{}{"type": "dangerFullAccess"},
+		"threadId":              threadID,
+		"clientUserMessageId":   orbitTurnID,
+		"input":                 input,
+		"cwd":                   execDir,
+		"approvalPolicy":        codexApprovalPolicy(job.Agent.PermissionMode),
+		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(job.Agent.PermissionMode, job, execDir, upDir),
+		"sandboxPolicy":         codexSandboxPolicy(job.Agent.PermissionMode, job, execDir, upDir),
 	}
 	if contextOptions.Mode == codexInstructionsAdditionalContext {
 		if additional := codexAgentAdditionalContext(
@@ -1345,14 +1346,11 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 
 func codexThreadParams(job *ClaimedSession, execDir, upDir string) map[string]interface{} {
 	params := map[string]interface{}{
-		"cwd":            execDir,
-		"approvalPolicy": codexApprovalPolicy(job.Agent.PermissionMode),
-		"sandbox":        "danger-full-access", // see codexTurnParams: parity with unsandboxed Claude
-		"runtimeWorkspaceRoots": []string{
-			execDir,
-			upDir,
-		},
-		"threadSource": "orbit",
+		"cwd":                   execDir,
+		"approvalPolicy":        codexApprovalPolicy(job.Agent.PermissionMode),
+		"sandbox":               codexSandboxMode(job.Agent.PermissionMode),
+		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(job.Agent.PermissionMode, job, execDir, upDir),
+		"threadSource":          "orbit",
 	}
 	if job.Agent.Model != "" {
 		params["model"] = job.Agent.Model
