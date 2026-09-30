@@ -1826,6 +1826,22 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(r.state.items.last?.asError, "stream disconnected")
     }
 
+    /// Codex may report an exhausted quota as an `error` event rather than assistant text. It must
+    /// still use the quota card; rendering this shape as a bare red line made the iOS transcript
+    /// show the provider's retryable pause as an ordinary failure.
+    func testCodexUsageLimitErrorEventBecomesAnAutoRetryCard() {
+        var r = TranscriptReducer()
+        let text = "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), "
+            + "visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:58 AM."
+        r.apply(RunEvent(seq: 1, type: .error, payload: .object(["message": .string(text)])))
+
+        guard case .autoRetry(let n)? = r.state.items.last else {
+            return XCTFail("expected a quota auto-retry card, got \(String(describing: r.state.items.last))")
+        }
+        XCTAssertEqual(n.variant, .quota)
+        XCTAssertEqual(n.message, text)
+    }
+
     /// The next user message — the retry firing, a manual retry, or the user typing something else —
     /// settles the outage. Without this the card of a failure the session recovered from would keep
     /// its countdown, and (the armed retry being cleared once it fires) read as "switched off".
