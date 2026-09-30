@@ -220,6 +220,13 @@ export function panoramaBucketValue(buckets: ProjectPanoramaBuckets, key: Bucket
 }
 
 /**
+ * What Ready's footnote says on a project nobody has started (mock board3 ②): its ready tasks start
+ * when the owner starts the project and not before, so "can start now" would be the one untrue
+ * thing about them.
+ */
+export const READY_UNTIL_STARTED = 'starts when you start';
+
+/**
  * Work that could start, and nothing starting it.
  *
  * The one condition this card exists to make visible, and the only thing that renders the banner:
@@ -607,6 +614,7 @@ export function ProjectPanoramaHeader({
   projectId,
   projectStatus,
   integrationLine,
+  started,
 }: {
   projectId: string;
   /** Goal-level status. Task completion does not close a project, so this is what lets the card
@@ -616,6 +624,9 @@ export function ProjectPanoramaHeader({
    *  that has no branch to strand work on. Handed in rather than read again: the integration row
    *  above this card already holds it, and a second read for one boolean is a second request. */
   integrationLine?: 'MAIN' | 'PROJECT_BRANCH' | null;
+  /** Whether the project has been started, from the document the page holds. Only `false` changes
+   *  anything: ready work on a project nobody has started is waiting for the start. */
+  started?: boolean | null;
 }) {
   const panorama = useQuery({ ...projectPanoramaQuery(projectId), enabled: Boolean(projectId) });
 
@@ -673,6 +684,7 @@ export function ProjectPanoramaHeader({
       panorama={panorama.data}
       projectStatus={projectStatus}
       integrationLine={integrationLine}
+      started={started}
       landing={integration.data ? landingLine(integration.data, now) : null}
     />
   );
@@ -690,20 +702,28 @@ export function ProjectPanoramaCard({
   integrationLine,
   banners = true,
   landing = null,
+  started,
 }: {
   panorama: ProjectPanorama;
   projectStatus?: 'OPEN' | 'DONE' | 'CANCELLED';
   integrationLine?: 'MAIN' | 'PROJECT_BRANCH' | null;
   banners?: boolean;
+  /** Whether the project has been started; `false` says ready work waits for the start. */
+  started?: boolean | null;
   /** The landing in flight, from the header's own integration read. A public project page has no
    *  such read, so it draws the card without the row. */
   landing?: LandingLine | null;
 }) {
   const { shape } = panorama;
   const loaded = panorama.buckets;
-  const stalled = stalledOnReady(loaded);
+  // Ready work with nothing running is the queue not being served — unless nobody has started the
+  // project, when it is the start that ready work is waiting for, and the Ready cell says so.
+  const notStarted = started === false;
+  const stalled = stalledOnReady(loaded) && !notStarted;
+  const readyFootnote = notStarted ? READY_UNTIL_STARTED : 'can start now';
   const lanes = reportsIntegrationLanes(loaded)
-    ? integrationLanes(loaded, integrationLine ?? null)
+    ? integrationLanes(loaded, integrationLine ?? null).map((lane) =>
+        lane.key === 'ready' ? { ...lane, footnote: readyFootnote } : lane)
     : null;
   const awaitingVerification = loaded.awaitingVerification ?? 0;
   const failed = loaded.failed ?? 0;
@@ -718,7 +738,7 @@ export function ProjectPanoramaCard({
     && settled > 0;
   const footnotes: Record<BucketKey, string> = {
     running: 'active sessions',
-    ready: 'can start now',
+    ready: readyFootnote,
     blocked: 'waiting on dependencies',
     awaitingVerification: 'verifier must conclude',
     done:
