@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { App, Button, Drawer, Dropdown, Input, InputNumber, Modal, Select, Switch } from 'antd';
 import {
+  BranchesOutlined,
   CheckCircleFilled,
   CheckCircleOutlined,
   ClockCircleOutlined,
@@ -34,7 +35,7 @@ import {
 import { useWikiMaintenanceWhere } from '../lib/useWikiMaintenanceWhere';
 import { encodeId } from '../lib/idCodec';
 import { MOBILE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
-import { WIKI_HISTORY_MAINTENANCE, WIKI_TITLE, wikiEntryPath, wikiShowMore, wikiSpacePath } from '../lib/wiki';
+import { WIKI_HISTORY_MAINTENANCE, WIKI_TITLE, shortSha, wikiEntryPath, wikiShowMore, wikiSpacePath } from '../lib/wiki';
 import { wikiCount } from '../lib/wikiArticles';
 import { wikiSectionKindLabel } from '../lib/wikiDocs';
 import {
@@ -723,9 +724,14 @@ function PlanChangeCard({
                 {facts.map((fact) =>
                   fact.kind === 'session' ? (
                     <WikiSourceCard key={fact.id} kind="session" id={fact.id} />
-                  ) : (
+                  ) : fact.kind === 'entry' ? (
                     <div className="wk-pl-fact" key={fact.id}>
                       <Link to={wikiEntryPath(spaceSlug, fact.id)}>{titles.get(fact.id) ?? fact.id}</Link>
+                    </div>
+                  ) : (
+                    // A design document that landed on origin/main: the commit that added it, by its sha — no page of Orbit's.
+                    <div className="wk-pl-fact commit" key={fact.id}>
+                      <BranchesOutlined /> <code>{shortSha(fact.id)}</code>
                     </div>
                   ),
                 )}
