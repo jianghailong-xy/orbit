@@ -678,6 +678,9 @@ test('a Manual space whose review queue has no room is held too, and a run of on
 test('a run cut short by its turn limit moves nothing, counts one more failure, and its check fails', { skip }, async () => {
   const h = await boot();
   const s = await maintainedSpace(h, 'truncated');
+  // Where turning maintenance on started the cursor: fourteen days back, by default.
+  const { position_at: started } = await cursorRow(h, s);
+  assert.ok(started, 'turning maintenance on started the cursor');
   const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
   const made = await consider(h, s, hintOf([sessions[0]!]));
   assert.equal(made.made, true);
@@ -696,7 +699,7 @@ test('a run cut short by its turn limit moves nothing, counts one more failure, 
   expectStatus(truncated, 200, 'a truncated run is recorded');
   assert.equal(truncated.body.advanced, false);
   const cursor = await cursorRow(h, s);
-  assert.equal(cursor.position_at, null, 'the cursor did not move');
+  assert.deepEqual(cursor.position_at, started, 'the cursor did not move');
   assert.equal(cursor.consecutive_failures, 1);
   assert.equal(cursor.last_outcome, 'truncated');
   const row = await h.prisma.wikiMaintenanceRun.findUniqueOrThrow({ where: { taskId: made.taskId } });
@@ -707,7 +710,7 @@ test('a run cut short by its turn limit moves nothing, counts one more failure, 
   expectStatus(check, 200, 'the check answers the runner with no session');
   assert.equal(check.body.ok, false);
   assert.equal(check.body.reached, false);
-  assert.ok((check.body.problems as string[]).some((p) => /cursor has never moved/u.test(p)));
+  assert.ok((check.body.problems as string[]).some((p) => /cursor stands before the position this task expects/u.test(p)));
   assert.ok((check.body.problems as string[]).some((p) => /ended truncated/u.test(p)));
 });
 
@@ -716,6 +719,7 @@ test('a run cut short by its turn limit moves nothing, counts one more failure, 
 test('the circuit breaker counts a whole maintenance run: its changesets stop at 10% of what it began with', { skip }, async () => {
   const h = await boot();
   const s = await maintainedSpace(h, 'breaker');
+  const { position_at: started } = await cursorRow(h, s);
   await activeEntries(h, s, WIKI_REVIEW_RULES.breakerMinActiveEntries);
   const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
   const cite = await turn(h, sessions[0]!, 'the record every proposal of this run cites');
@@ -778,7 +782,7 @@ test('the circuit breaker counts a whole maintenance run: its changesets stop at
   assert.equal(held.body.advanced, false);
   assert.equal(held.body.outcome, 'succeeded');
   const cursor = await cursorRow(h, s);
-  assert.equal(cursor.position_at, null, 'the cursor stays before what the run held back');
+  assert.deepEqual(cursor.position_at, started, 'the cursor stays before what the run held back');
   assert.equal(cursor.consecutive_failures, 0);
   assert.equal(cursor.last_outcome, 'succeeded');
   const row = await h.prisma.wikiMaintenanceRun.findUniqueOrThrow({ where: { taskId: made.taskId } });

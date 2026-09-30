@@ -10,7 +10,10 @@
  *   3. a space with a draft that has not ended makes no second; a list whose maintenance task has not
  *      ended queues the job, and that task's end makes it;
  *   4. a space whose maintenance is not set up makes none and says why; the settings supplied make it;
- *   5. the new reads are a maintenance run's alone, and another tenant's is a 404, every one of them.
+ *   5. the new reads are a maintenance run's alone, and another tenant's is a 404, every one of them;
+ *   6. a draft landing again under its idempotency key (migration 0339, contract `plan.idempotency`) is
+ *      answered with the version it stored and writes none; another draft under the key is a 409; a
+ *      draft with no key is as it was.
  *
  * and beside them what the design leans on: the run's start, rounds and end, and the check its task's
  * acceptance command asks; a job is no maintenance run (the day's count, the day's limit, maintenance
@@ -76,6 +79,8 @@ interface Harness {
   facts: WikiPlanJobFacts;
   /** Every task the doors published as changed, in order. */
   published: string[];
+  /** Every space the doors announced `wiki.changed` for, in order. */
+  changed: string[];
 }
 
 let harness: Promise<Harness> | undefined;
@@ -89,8 +94,9 @@ function boot(): Promise<Harness> {
     const prisma = prismaClientFor(URL);
     const bearers = new Map<string, string>();
     const published: string[] = [];
+    const changed: string[] = [];
     const hub = {
-      publishWikiChanged: () => undefined,
+      publishWikiChanged: (_owner: string, spaceId: string) => changed.push(spaceId),
       publishForUser: (_owner: string, _type: string, payload: { taskIds?: string[] }) => published.push(...(payload.taskIds ?? [])),
     } as unknown as RealtimeService;
     const service = new WikiService(prisma as unknown as PrismaService, hub, {} as unknown as PushService);
@@ -126,7 +132,7 @@ function boot(): Promise<Harness> {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
     app.useGlobalInterceptors(new PublicIdInterceptor());
     await app.listen(0, '127.0.0.1');
-    return { base: await app.getUrl(), sql, prisma, app, bearers, service, facts, published };
+    return { base: await app.getUrl(), sql, prisma, app, bearers, service, facts, published, changed };
   })();
   return harness;
 }
@@ -809,6 +815,116 @@ test('a run reports its rounds and how it ended; the check passes only for a dra
   state = await planState(h, w, spaceId);
   assert.deepEqual([state.body.job.state, state.body.job.version, state.body.job.draft], ['succeeded', 1, null]);
   assert.equal(state.body.draft.version, 1);
+});
+
+// ── a draft under an idempotency key ────────────────────────────────────────────────────────────
+
+interface VersionRow {
+  version: number;
+  status: string;
+  idempotency_key: string | null;
+  request_sha256: string | null;
+}
+
+async function versionsOf(h: Harness, spaceId: string): Promise<VersionRow[]> {
+  return (await h.sql.query<VersionRow>(
+    `SELECT "version","status","idempotency_key","request_sha256" FROM "wiki_plan" WHERE "space_id" = $1 ORDER BY "version"`,
+    [spaceId],
+  )).rows;
+}
+
+/** The same JSON with every object's keys in the reverse order: the same request, spelled otherwise. */
+function respelled(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(respelled);
+  if (value === null || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).reverse().map(([key, entry]) => [key, respelled(entry)]));
+}
+
+test('a draft landing again under its idempotency key is answered with the version it stored and writes none; another draft under the key is refused 409; with no key a draft is as it was', { skip }, async () => {
+  const h = await boot();
+  const w = await world(h, 'replayer');
+  const { spaceId } = await plannedSpace(h, w);
+  const { task } = await madeJob(h, spaceId);
+  const maintainer: Caller = { runner: w.machine.token, session: await session(h, w.owner.id, w.ws, w.machine.id, task.id) };
+  const drafts = `/runner/wiki/spaces/${spaceId}/plan/drafts`;
+  const repoCheck = { sha: 'd'.repeat(40), checked: 40, missing: [] };
+  // What the drafts announced: the space's creation and binding may have been announced before them.
+  const since = h.changed.length;
+  const announced = () => h.changed.slice(since).filter((id) => id === spaceId).length;
+
+  // The first landing stores version 1 under its key, with the digest of its request.
+  const keyed = { baseVersion: null, plan: planOf(), repoCheck, model: 'qwen3.8-27b-fp8', idempotencyKey: `wiki-plan-${randomUUID()}` };
+  const first = await call(h, maintainer, 'POST', drafts, keyed);
+  expectStatus(first, 200, 'the first landing of a draft under a key');
+  assert.deepEqual([first.body.version, first.body.status, first.body.replayed], [1, 'draft', false]);
+  let rows = await versionsOf(h, spaceId);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].idempotency_key, keyed.idempotencyKey);
+  assert.match(rows[0].request_sha256 ?? '', /^[0-9a-f]{64}$/u);
+  assert.equal(announced(), 1, 'the version stored was not announced');
+
+  // The same draft again — the answer to its first landing lost on the way back — spelled otherwise: the
+  // version it stored, replayed, where without its key it would be WIKI_PLAN_STALE; nothing written or announced.
+  const again = await call(h, maintainer, 'POST', drafts, respelled(keyed));
+  expectStatus(again, 200, 'the same draft landing again under its key');
+  assert.equal(again.body.replayed, true);
+  assert.deepEqual({ ...again.body, replayed: false }, first.body, 'the replay answered another version, or another way');
+  assert.deepEqual(await versionsOf(h, spaceId), rows, 'the replay wrote a version');
+  assert.equal(announced(), 1, 'the replay was announced');
+
+  // Another draft under the same key — another plan, another base, another model — is refused, and writes nothing.
+  for (const [other, why] of [
+    [{ ...keyed, plan: planOf(21) }, 'another plan'],
+    [{ ...keyed, baseVersion: 1 }, 'the same plan built on another version'],
+    [{ ...keyed, model: 'another-model' }, 'the same plan from another model'],
+  ] as const) {
+    expectRefusal(await call(h, maintainer, 'POST', drafts, other), 409, 'WIKI_IDEMPOTENCY_KEY_REUSED', `${why} under the key`);
+  }
+  assert.deepEqual(await versionsOf(h, spaceId), rows, 'a key reused wrote a version');
+
+  // Two landings of one draft at once are one version: the second, under the space's lock, finds the first's.
+  const pair = { baseVersion: 1, plan: planOf(22), repoCheck, model: 'qwen3.8-27b-fp8', idempotencyKey: `wiki-plan-${randomUUID()}` };
+  const both = await Promise.all([1, 2].map(() => call(h, maintainer, 'POST', drafts, pair)));
+  for (const answer of both) expectStatus(answer, 200, 'one of two landings at once');
+  assert.deepEqual(both.map((answer) => answer.body.version), [2, 2]);
+  assert.deepEqual(both.map((answer) => answer.body.replayed).sort(), [false, true]);
+  rows = await versionsOf(h, spaceId);
+  assert.deepEqual(rows.map((row) => [row.version, row.status, row.idempotency_key]), [[1, 'superseded', keyed.idempotencyKey], [2, 'draft', pair.idempotencyKey]]);
+  assert.equal(announced(), 2, 'two landings at once announced other than one version');
+  // The replay answers the version as it stands now: version 1, since superseded.
+  const late = await call(h, maintainer, 'POST', drafts, keyed);
+  expectStatus(late, 200, 'the first draft again after it was superseded');
+  assert.deepEqual([late.body.version, late.body.status, late.body.replayed], [1, 'superseded', true]);
+
+  // With no key, a draft is what it was: stored with neither key nor digest, and the same draft again is STALE.
+  const plain = { baseVersion: 2, plan: planOf(23), repoCheck, model: 'qwen3.8-27b-fp8' };
+  const stored = await call(h, maintainer, 'POST', drafts, plain);
+  expectStatus(stored, 200, 'a draft with no key');
+  assert.deepEqual([stored.body.version, stored.body.replayed], [3, false]);
+  expectRefusal(await call(h, maintainer, 'POST', drafts, plain), 409, 'WIKI_PLAN_STALE', 'the same draft with no key, again');
+  rows = await versionsOf(h, spaceId);
+  assert.deepEqual(rows.map((row) => [row.version, row.status, row.idempotency_key, row.request_sha256]).at(-1), [3, 'draft', null, null]);
+  assert.equal(rows.length, 3, 'a draft with no key landing again wrote a version');
+
+  // A key the schema refuses is a refusal of the gate, like every other field of a draft, and writes nothing.
+  for (const [key, why] of [[42, 'a key that is not words'], ['  ', 'an empty key'], ['k'.repeat(201), 'a key past 200 characters']] as const) {
+    const refused = await call(h, maintainer, 'POST', drafts, { ...plain, baseVersion: 3, idempotencyKey: key });
+    expectRefusal(refused, 422, 'WIKI_PLAN_GATE', why);
+    assert.deepEqual(refused.body.errors.map((e: { check: string; path: string }) => [e.check, e.path]), [['schema', 'idempotencyKey']], why);
+  }
+  assert.equal((await versionsOf(h, spaceId)).length, 3, 'a refused key wrote a version');
+
+  // The key is the owner's: another owner's run may use the same one for a draft of their own.
+  const them = await world(h, 'another replayer');
+  const theirs = await plannedSpace(h, them);
+  const theirRun: Caller = {
+    runner: them.machine.token,
+    session: await session(h, them.owner.id, them.ws, them.machine.id, (await madeJob(h, theirs.spaceId)).task.id),
+  };
+  const theirDraft = await call(h, theirRun, 'POST', `/runner/wiki/spaces/${theirs.spaceId}/plan/drafts`, keyed);
+  expectStatus(theirDraft, 200, 'another owner\'s draft under the same key');
+  assert.deepEqual([theirDraft.body.version, theirDraft.body.replayed], [1, false]);
+  assert.equal(toUuid(theirDraft.body.spaceId), theirs.spaceId);
 });
 
 // ── a job is no maintenance run ─────────────────────────────────────────────────────────────────

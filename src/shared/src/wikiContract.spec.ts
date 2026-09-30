@@ -27,6 +27,7 @@ import {
   WIKI_LIMITS,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
   WIKI_MAINTENANCE_LIST_TITLE,
+  WIKI_MAINTENANCE_LOOKBACK_DAYS,
   WIKI_MAINTENANCE_RULES,
   WIKI_MAINTENANCE_RUN,
   WIKI_MAINTENANCE_RUN_V1,
@@ -617,7 +618,7 @@ describe('wiki contract', () => {
     expect(wikiSpaceSettings({ maintenance: { enabled: 'yes', dailyRunLimit: -1, provider: '' } }).maintenance)
       .toEqual(WIKI_DEFAULT_MAINTENANCE_SETTINGS);
     expect(wikiMaintenanceSettings({ enabled: true, workspaceId: 'w', listId: 'l', dailyRunLimit: 5 }))
-      .toEqual({ enabled: true, workspaceId: 'w', provider: 'local-vllm', dailyRunLimit: 5, listId: 'l' });
+      .toEqual({ enabled: true, workspaceId: 'w', provider: 'local-vllm', dailyRunLimit: 5, lookbackDays: 14, listId: 'l' });
     // A day's runs are counted, not its tokens: 8 by default, 1 to 48, and anything else reads as the default —
     // a value out of bounds, one that is not a whole number, and the token budget this setting replaced.
     expect(WIKI_DEFAULT_MAINTENANCE_SETTINGS.dailyRunLimit).toBe(8);
@@ -628,6 +629,20 @@ describe('wiki contract', () => {
     }
     expect(wikiMaintenanceSettings({ dailyTokenBudget: 2_000_000 })).toEqual(WIKI_DEFAULT_MAINTENANCE_SETTINGS);
     expect(setting.channel).toMatch(/dailyRunLimit/u);
+    // How far back a cursor starts when maintenance is turned on: 14 days by default, 0 to 365, and null —
+    // all of history — kept as the choice it is, where an absent or malformed value reads as the default.
+    expect(WIKI_DEFAULT_MAINTENANCE_SETTINGS.lookbackDays).toBe(14);
+    expect(setting.bounds.lookbackDays).toEqual(WIKI_MAINTENANCE_LOOKBACK_DAYS);
+    expect(WIKI_MAINTENANCE_LOOKBACK_DAYS).toEqual({ min: 0, max: 365 });
+    for (const [stored, reads] of [[0, 0], [1, 1], [365, 365], [null, null], [-1, 14], [366, 14], [2.5, 14], ['7', 14], [undefined, 14]] as const) {
+      expect(wikiMaintenanceSettings({ lookbackDays: stored }).lookbackDays, String(stored)).toBe(reads);
+    }
+    expect(setting.channel).toMatch(/lookbackDays null is a value \(all history\)/u);
+    // The start is written once, where the cursor has no position, and moves no cursor that has one.
+    const start: string = CONTRACT.maintenance.cursor.start;
+    expect(start).toMatch(/turns maintenance on \(enabled false to true\) and the space's cursor has no position yet/u);
+    expect(start).toMatch(/lookbackDays null writes nothing/u);
+    expect(start).toMatch(/A cursor that has a position is never moved by it/u);
 
     const maintenance = CONTRACT.maintenance;
     expect(maintenance.rules).toEqual(WIKI_MAINTENANCE_RULES);
@@ -928,6 +943,20 @@ describe('wiki contract', () => {
     // No tool: confirming and deciding are the owner's (hard constraint 2).
     expect(plan.tool).toMatch(/^none/u);
     for (const tool of CONTRACT.agentSurface.tools) expect(tool).not.toMatch(/plan/u);
+
+    // A draft under an idempotency key (0339): the same draft landing again is answered with the version
+    // it stored, before WIKI_PLAN_STALE could refuse it; another request under the key is a 409.
+    expect(plan.requests.draft).toContain('idempotencyKey?');
+    expect(plan.versions).toMatch(/plan\.idempotency/u);
+    expect(plan.idempotency.replay).toMatch(/replayed: true/u);
+    expect(plan.idempotency.replay).toMatch(/before WIKI_PLAN_STALE/u);
+    expect(plan.idempotency.reused).toMatch(/WIKI_IDEMPOTENCY_KEY_REUSED \(409\)/u);
+    expect(status('WIKI_IDEMPOTENCY_KEY_REUSED')).toBe(409);
+    expect(plan.idempotency.runner).toMatch(/wikiRecordsOnce/u);
+    const keyed = readFileSync(path.join(ROOT, plan.idempotency.migration), 'utf8').replace(/\s+/gu, ' ');
+    expect(plan.idempotency.migration).toMatch(/0339_wiki_plan_idempotency/u);
+    expect(keyed).toContain('CREATE UNIQUE INDEX IF NOT EXISTS "wiki_plan_owner_idempotency_key" ON "wiki_plan" ("owner_id", "idempotency_key")');
+    expect(keyed).toContain('CHECK (("idempotency_key" IS NULL) = ("request_sha256" IS NULL)');
   });
 
   it('ships the plan\'s jobs the contract states: kinds, triggers, states, held reasons, rules, routes and CLI', () => {

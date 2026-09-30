@@ -585,7 +585,8 @@ func wikiPlanCatalogueLevel(path string) bool {
 // ── Sending it ──────────────────────────────────────────────────────────────────────────────────
 
 // submit sends a draft this runner's gate let through to the server's: the version it became, or the
-// server's errors.
+// server's errors. It goes under its key, so a send whose answer was lost after the draft was stored is sent
+// again and answered with that version.
 func (r *wikiPlanRun) submit(a wikiPlanAssembled) (int, []wikiPlanGateError, error) {
 	var baseVersion *int
 	if r.base != nil {
@@ -594,6 +595,7 @@ func (r *wikiPlanRun) submit(a wikiPlanAssembled) (int, []wikiPlanGateError, err
 	}
 	target := r.target
 	request := wikiPlanDraftRequest{BaseVersion: baseVersion, Target: &target, Plan: a.plan, RepoCheck: a.repo, Model: r.cfg.model}
+	request.IdempotencyKey = wikiPlanDraftKey(r.job.Job.ID, r.sessionID, request)
 	raw, err := r.t.submitWikiPlanDraft(r.sessionID, r.spaceID, request)
 	if err != nil {
 		if refusal, ok := wikiPlanGateRefused(err); ok {
@@ -606,10 +608,14 @@ func (r *wikiPlanRun) submit(a wikiPlanAssembled) (int, []wikiPlanGateError, err
 		return 0, nil, wikiPlanCallError("orbit wiki plan "+r.opts.kind, r.spaceID, err)
 	}
 	var stored struct {
-		Version int `json:"version"`
+		Version  int  `json:"version"`
+		Replayed bool `json:"replayed"`
 	}
 	if err := json.Unmarshal(raw, &stored); err != nil || stored.Version < 1 {
 		return 0, nil, fmt.Errorf("the server stored the draft and answered no version: %s", cutRunes(string(raw), 200))
+	}
+	if stored.Replayed {
+		r.say("The server had stored this draft already, as version %d: the answer to its first send was lost on the way back.", stored.Version)
 	}
 	return stored.Version, nil, nil
 }

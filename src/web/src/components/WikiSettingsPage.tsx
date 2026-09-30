@@ -6,6 +6,7 @@ import { App, Button, Card, InputNumber, Modal, Radio, Select, Switch } from 'an
 import {
   WIKI_DEFAULT_MAINTENANCE_SETTINGS,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
+  WIKI_MAINTENANCE_LOOKBACK_DAYS,
   wikiSpaceSettings,
   type WikiMaintenanceSettings,
   type WikiReviewMode,
@@ -19,6 +20,10 @@ import {
   WIKI_DEFAULT_REVIEW_MODE,
   WIKI_FLOORS_LEAD,
   WIKI_FLOORS_NOTE,
+  WIKI_LOOKBACK,
+  WIKI_LOOKBACK_CHOICES,
+  WIKI_LOOKBACK_NOTE,
+  WIKI_LOOKBACK_UNIT,
   WIKI_MAINTENANCE,
   WIKI_MAINTENANCE_EDIT,
   WIKI_MAINTENANCE_NAME,
@@ -49,10 +54,15 @@ import {
   WIKI_TURN_ON,
   WIKI_WORKSPACE,
   WIKI_WORKSPACE_NOTE,
+  wikiLookbackChoice,
+  wikiLookbackDays,
+  wikiLookbackDaysOffered,
+  wikiLookbackLabel,
   wikiModeFallback,
   wikiProviderLabel,
   wikiRunsADay,
   wikiWorkspaceLabel,
+  type WikiLookbackChoice,
 } from '../lib/wikiReviewMode';
 import { updateWikiSpace, useWikiWrite, type WikiSpaceUpdate } from '../lib/wikiWrites';
 import type { ConfiguredProvider } from '../lib/workspaceDefaults';
@@ -213,6 +223,8 @@ function MaintenanceOn({
         </span>
         <span className="k">{WIKI_DAILY_LIMIT}</span>
         <span className="v">{wikiRunsADay(maintenance.dailyRunLimit)}</span>
+        <span className="k">{WIKI_LOOKBACK}</span>
+        <span className="v">{wikiLookbackLabel(maintenance.lookbackDays)}</span>
       </div>
       <div className="wk-maint-foot">
         <Button onClick={onEdit} disabled={busy}>
@@ -227,8 +239,8 @@ function MaintenanceOn({
 }
 
 /**
- * Set up maintenance: the workspace it runs in, the provider it is pinned to and how many runs a day
- * it may start — then Turn on (or Save, for one already on).
+ * Set up maintenance: the workspace it runs in, the provider it is pinned to, how many runs a day it
+ * may start and how far back it starts reading — then Turn on (or Save, for one already on).
  *
  * THE PROVIDERS ARE THE ONES THE SERVER TAKES: configured providers on the Claude Code runtime, since
  * a maintenance run starts a clean Claude Code (contract `space.settings.maintenance.provider`). The
@@ -256,6 +268,8 @@ function MaintenanceSetUp({
   );
   const [provider, setProvider] = useState(maintenance.provider || WIKI_DEFAULT_MAINTENANCE_SETTINGS.provider);
   const [limit, setLimit] = useState(maintenance.dailyRunLimit);
+  const [lookback, setLookback] = useState(() => wikiLookbackChoice(maintenance.lookbackDays));
+  const [days, setDays] = useState(() => wikiLookbackDaysOffered(maintenance.lookbackDays));
   const [saving, setSaving] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const chosen = workspaceId ?? rows.find((row) => row.name === spaceSlug)?.id ?? null;
@@ -275,7 +289,7 @@ function MaintenanceSetUp({
     setSaving(true);
     setRefusal(null);
     try {
-      await onSubmit({ enabled: true, workspaceId: chosen, provider, dailyRunLimit: limit });
+      await onSubmit({ enabled: true, workspaceId: chosen, provider, dailyRunLimit: limit, lookbackDays: wikiLookbackDays(lookback, days) });
       onClose();
     } catch (error) {
       setSaving(false);
@@ -337,6 +351,30 @@ function MaintenanceSetUp({
           <span>{WIKI_RUNS_A_DAY}</span>
         </div>
         <div className="wk-setup-d">{WIKI_DAILY_LIMIT_NOTE}</div>
+
+        <label className="wk-setup-k" htmlFor="wk-setup-lookback">
+          {WIKI_LOOKBACK}
+        </label>
+        <Select
+          id="wk-setup-lookback"
+          value={lookback}
+          onChange={(value: WikiLookbackChoice) => setLookback(value)}
+          options={WIKI_LOOKBACK_CHOICES.map((choice) => ({ value: choice, label: wikiLookbackLabel(wikiLookbackDays(choice, days)) }))}
+        />
+        {lookback === 'days' && (
+          <div className="wk-setup-limit wk-setup-days">
+            <InputNumber
+              aria-label={WIKI_LOOKBACK_UNIT}
+              min={1}
+              max={WIKI_MAINTENANCE_LOOKBACK_DAYS.max}
+              precision={0}
+              value={days}
+              onChange={(value) => setDays(typeof value === 'number' ? value : days)}
+            />
+            <span>{WIKI_LOOKBACK_UNIT}</span>
+          </div>
+        )}
+        <div className="wk-setup-d">{WIKI_LOOKBACK_NOTE}</div>
       </div>
       {refusal && (
         <div className="wk-warn wk-setup-refusal" role="alert">

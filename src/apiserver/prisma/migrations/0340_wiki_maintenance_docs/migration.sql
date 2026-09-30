@@ -38,7 +38,7 @@
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
 -- 0340: origin/main stood at 0336, the project branch at 0338, and 0339 was another branch's (the plan
--- draft's idempotency key) — the first free number after the highest. Every statement can run twice:
+-- draft's idempotency key, since landed on both) — the first free number after the highest. Every statement can run twice:
 -- ADD COLUMN / CREATE INDEX IF NOT EXISTS, and each CHECK dropped IF EXISTS before it is added.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 

@@ -213,6 +213,10 @@ export interface WikiPlanDraftRequest {
   plan: WikiPlanDraftInput;
   repoCheck: WikiPlanRepoCheck;
   model?: string;
+  /** The owner's, as a changeset's (contract `plan.idempotency`): the same draft sent again under it is
+   *  answered with the version it stored, `replayed`; another draft under it is refused
+   *  `WIKI_IDEMPOTENCY_KEY_REUSED`. */
+  idempotencyKey?: string;
 }
 
 /** `POST /api/runner/wiki/spaces/:id/plan/proposals`. */
@@ -334,6 +338,11 @@ export interface WikiPlanVersion {
   supersededAt: string | null;
   createdAt: string;
   docs: WikiPlanDoc[];
+}
+
+/** The answer to a draft: the version it stored, `replayed` when the same draft under its key stored it before. */
+export interface WikiPlanDraftAnswer extends WikiPlanVersion {
+  replayed: boolean;
 }
 
 /** One version as the history lists it. */

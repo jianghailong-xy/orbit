@@ -16,7 +16,9 @@
  *      compressed as much as the ones it copied whole (revision 2);
  *
  * and beside them: maintenance is off by default and only the owner changes it; turning it on makes
- * one hidden list; the dossier keeps nothing but its sources and hash; the agent's own trace is in it
+ * one hidden list, and starts the cursor as far back as the owner's look-back says — 14 days by default,
+ * the moment itself, or the earliest fact — never moving a cursor that has a position; the dossier
+ * keeps nothing but its sources and hash; the agent's own trace is in it
  * and memory-file tool calls are not; a batch project gets counts and no dossiers; and a tool error
  * shared by three sessions is a cluster.
  *
@@ -523,6 +525,135 @@ test('maintenance is off by default, only the owner changes it, and turning it o
   assert.equal(push.body.settings.maintenance.dailyRunLimit, 24);
 });
 
+// ── 0b. where the cursor starts: as far back as the owner says, once ────────────────────────────
+
+const DAY_MS = 86_400_000;
+
+/** The space's cursor row as the database holds it, or null before anything made it. */
+async function cursorRowOf(h: Harness, spaceId: string) {
+  const rows = await h.sql.query<{
+    position_at: Date | null; position_kind: string | null; position_ref: string | null;
+    issued_at: Date | null; issued_kind: string | null; issued_ref: string | null;
+  }>(`SELECT "position_at","position_kind","position_ref","issued_at","issued_kind","issued_ref" FROM "wiki_cursor" WHERE "space_id" = $1`,
+    [spaceId]);
+  return rows.rows[0] ?? null;
+}
+
+test('turning maintenance on starts the cursor as far back as the owner says — 14 days by default, now, or the earliest fact — and never moves one that has a position', { skip }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'owner');
+  const stranger = await account(h, 'stranger');
+  const machine = await runner(h, owner.id);
+
+  /** A space of its own workspace, whose sessions came to rest 40, 20 and 13 days ago and half an hour ago. */
+  const withHistory = async () => {
+    const ws = await workspace(h, owner.id);
+    const spaceId = await space(h, owner, ws);
+    const sessions: Array<{ id: string; at: Date }> = [];
+    for (const at of [new Date(Date.now() - 40 * DAY_MS), new Date(Date.now() - 20 * DAY_MS), new Date(Date.now() - 13 * DAY_MS), minutesAgo(30)]) {
+      const id = await session(h, owner.id, { workspaceId: ws, runnerId: machine.id, lastTurnAt: at, createdAt: new Date(at.getTime() - 60_000) });
+      await turn(h, id, 'The owner says what the wiki should know.', { at: new Date(at.getTime() - 30_000) });
+      sessions.push({ id, at });
+    }
+    return { ws, spaceId, sessions };
+  };
+  const patch = (spaceId: string, maintenance: Record<string, unknown>, who: Caller = { bearer: owner.bearer }) =>
+    call(h, who, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance });
+  /** The owner turns maintenance on: when, to the millisecond either side, and the settings it answered. */
+  const turnOn = async (spaceId: string, ws: string, maintenance: Record<string, unknown> = {}) => {
+    const before = Date.now();
+    const on = await patch(spaceId, { enabled: true, workspaceId: ws, ...maintenance });
+    expectStatus(on, 200, 'the owner turns maintenance on');
+    return { before, after: Date.now(), settings: on.body.settings.maintenance };
+  };
+  const within = (at: Date | null | undefined, from: number, to: number, why: string) =>
+    assert.ok(at && at.getTime() >= from && at.getTime() <= to, `${why}: ${at?.toISOString()} is not within ${new Date(from).toISOString()} … ${new Date(to).toISOString()}`);
+
+  // ── By default: fourteen days back, as the one position before every fact of that moment.
+  const fourteen = await withHistory();
+  const fresh = await call(h, { bearer: owner.bearer }, 'GET', `/wiki/spaces/${fourteen.spaceId}`);
+  assert.equal(fresh.body.settings.maintenance.lookbackDays, 14, 'fourteen days unless the owner says otherwise');
+  assert.equal(await cursorRowOf(h, fourteen.spaceId), null, 'no cursor before maintenance is on');
+  const on = await turnOn(fourteen.spaceId, fourteen.ws);
+  assert.equal(on.settings.lookbackDays, 14);
+  const started = (await cursorRowOf(h, fourteen.spaceId))!;
+  within(started.position_at, on.before - 14 * DAY_MS, on.after - 14 * DAY_MS, 'the watermark is now less fourteen days');
+  assert.deepEqual([started.position_kind, started.position_ref], ['approval_answered', '00000000-0000-0000-0000-000000000000'],
+    'the first kind in the order and the nil id: before every fact of that moment');
+  assert.deepEqual([started.issued_at, started.issued_kind, started.issued_ref], [started.position_at, started.position_kind, started.position_ref],
+    'and the furthest position handed out is the start too');
+  const state = await h.maintenance.cursorState(owner.id, fourteen.spaceId);
+  assert.equal(state.backlog, 2, 'the facts of the last fourteen days, and none older');
+  assert.equal(state.oldestPendingAt, fourteen.sessions[2]!.at.toISOString(), 'the oldest fact after the start is thirteen days old');
+  // The first run reads from there.
+  const run = await maintenanceRun(h, owner.id, toUuid(on.settings.listId as string), fourteen.ws, machine.id);
+  const page = await call(h, { runner: machine.token, session: run }, 'GET', `/runner/wiki/spaces/${fourteen.spaceId}/dossiers`);
+  expectStatus(page, 200, 'the first run reads its first page');
+  assert.deepEqual((page.body.dossiers as Array<{ sessionId: string }>).map((dossier) => toUuid(dossier.sessionId)),
+    [fourteen.sessions[2]!.id, fourteen.sessions[3]!.id], 'the first page starts thirteen days back, not forty');
+
+  // ── 0: from the moment it is turned on, and nothing before.
+  const now = await withHistory();
+  const zero = await turnOn(now.spaceId, now.ws, { lookbackDays: 0 });
+  assert.equal(zero.settings.lookbackDays, 0);
+  within((await cursorRowOf(h, now.spaceId))?.position_at, zero.before, zero.after, 'the watermark is the moment maintenance was turned on');
+  assert.equal((await h.maintenance.cursorState(owner.id, now.spaceId)).backlog, 0, 'not even the half-hour-old session is after it');
+  await session(h, owner.id, { workspaceId: now.ws, lastTurnAt: new Date() });
+  assert.equal((await h.maintenance.cursorState(owner.id, now.spaceId)).backlog, 1, 'what comes to rest after it is');
+
+  // ── All of history: no position, which reads from the earliest fact.
+  const all = await withHistory();
+  const everything = await turnOn(all.spaceId, all.ws, { lookbackDays: null });
+  assert.equal(everything.settings.lookbackDays, null, 'all of history is kept as the choice it is, not read as the default');
+  assert.equal((await cursorRowOf(h, all.spaceId))?.position_at ?? null, null, 'the cursor has no position');
+  const allState = await h.maintenance.cursorState(owner.id, all.spaceId);
+  assert.equal(allState.position, null);
+  assert.equal(allState.backlog, 4, 'every fact there is');
+  assert.equal(allState.oldestPendingAt, all.sessions[0]!.at.toISOString(), 'the forty-day-old session first');
+  const kept = await call(h, { bearer: owner.bearer }, 'GET', `/wiki/spaces/${all.spaceId}`);
+  assert.equal(kept.body.settings.maintenance.lookbackDays, null, 'and it reads back as all of history');
+
+  // ── A cursor that has a position is never moved: not by a look-back changed, nor by maintenance turned
+  // off and on again — and one a run advanced stays where the run put it.
+  const read = await cursorRowOf(h, fourteen.spaceId);
+  for (const lookbackDays of [0, null, 365]) {
+    expectStatus(await patch(fourteen.spaceId, { lookbackDays }), 200, `the owner sets the look-back to ${lookbackDays}`);
+    assert.deepEqual(await cursorRowOf(h, fourteen.spaceId), read, `a look-back of ${lookbackDays} moves no cursor`);
+  }
+  expectStatus(await patch(fourteen.spaceId, { enabled: false }), 200, 'the owner turns maintenance off');
+  const again = await turnOn(fourteen.spaceId, fourteen.ws, { lookbackDays: 1 });
+  assert.equal(again.settings.lookbackDays, 1);
+  assert.deepEqual(await cursorRowOf(h, fourteen.spaceId), read, 'turning it on again starts nothing: the cursor has its position');
+  const advanced = await call(h, { runner: machine.token, session: run }, 'POST', `/runner/wiki/spaces/${fourteen.spaceId}/cursor`, { to: page.body.cursor });
+  expectStatus(advanced, 200, 'the run advances past what it read');
+  assert.equal(advanced.body.advanced, true);
+  const moved = await cursorRowOf(h, fourteen.spaceId);
+  assert.equal(moved?.position_ref, fourteen.sessions[3]!.id, 'the watermark is the last fact the run read');
+  expectStatus(await patch(fourteen.spaceId, { enabled: false }), 200, 'off');
+  expectStatus(await patch(fourteen.spaceId, { enabled: true, lookbackDays: 30 }), 200, 'on, thirty days back');
+  assert.deepEqual(await cursorRowOf(h, fourteen.spaceId), moved, 'a cursor a run advanced is never moved back');
+  // A cursor that has no position yet has read nothing: the next turn-on starts it as its own look-back says.
+  expectStatus(await patch(all.spaceId, { enabled: false }), 200, 'off');
+  const week = await turnOn(all.spaceId, all.ws, { lookbackDays: 7 });
+  within((await cursorRowOf(h, all.spaceId))?.position_at, week.before - 7 * DAY_MS, week.after - 7 * DAY_MS, 'a week back');
+  assert.equal((await h.maintenance.cursorState(owner.id, all.spaceId)).backlog, 1, 'only the half-hour-old session is after it');
+
+  // ── The owner's alone: a session, another account and the runner door change nothing, nor does a bad value.
+  const fromSession = await patch(now.spaceId, { lookbackDays: 30 }, { bearer: owner.bearer, session: randomUUID() });
+  expectStatus(fromSession, 403, 'a session may not set the look-back');
+  assert.equal(fromSession.body.code, 'WIKI_OWNER_CHANNEL_ONLY');
+  expectStatus(await patch(now.spaceId, { lookbackDays: 30 }, { bearer: stranger.bearer }), 404, "another account's space is a plain 404");
+  const runnerDoor = await call(h, { runner: machine.token, session: run }, 'PATCH', `/runner/wiki/spaces/${now.spaceId}`, { maintenance: { lookbackDays: 30 } });
+  expectStatus(runnerDoor, 404, 'the runner door has no settings route at all');
+  for (const bad of [-1, 366, 2.5, '14']) {
+    expectStatus(await patch(now.spaceId, { lookbackDays: bad }), 400, `a look-back of ${JSON.stringify(bad)}`);
+  }
+  const unchanged = await call(h, { bearer: owner.bearer }, 'GET', `/wiki/spaces/${now.spaceId}`);
+  assert.equal(unchanged.body.settings.maintenance.lookbackDays, 0, 'none of them changed it');
+  expectStatus(await patch(now.spaceId, { lookbackDays: 30 }), 200, 'the owner changes it');
+  assert.equal((await call(h, { bearer: owner.bearer }, 'GET', `/wiki/spaces/${now.spaceId}`)).body.settings.maintenance.lookbackDays, 30);
+});
+
 // ── 4. only a maintenance session of the space, and no other tenant ──────────────────────────────
 
 test('the dossier door and the cursor answer a maintenance session of the space and refuse everyone else', { skip }, async () => {
@@ -688,18 +819,21 @@ test('the cursor only moves forward, and a failed or truncated run does not move
   assert.equal(first.body.more, false);
   assert.equal(first.body.state.backlog, 4, 'the backlog counts every fact after the watermark, however recent');
   const t1 = first.body.cursor as string;
+  // Where turning maintenance on started it (fourteen days back, by default): a page moves no watermark.
+  const start = first.body.state.position as string;
+  assert.ok(start, 'the cursor starts where turning maintenance on put it');
 
   const failed = await advance({ to: t1, outcome: 'failed', error: 'the model endpoint answered 500; POSTGRES_PASSWORD=hunter2-dossier-spec' });
   expectStatus(failed, 200, 'a failed run is recorded');
   assert.equal(failed.body.advanced, false);
-  assert.equal(failed.body.state.position, null, 'a failed run moves nothing');
+  assert.equal(failed.body.state.position, start, 'a failed run moves nothing');
   assert.equal(failed.body.state.consecutiveFailures, 1);
   assert.equal(failed.body.state.lastOutcome, 'failed');
   assert.doesNotMatch(failed.body.state.lastError, /hunter2/, 'the error is redacted before it is kept');
   const truncated = await advance({ to: t1, outcome: 'truncated' });
   expectStatus(truncated, 200, 'a truncated run is recorded');
   assert.equal(truncated.body.advanced, false);
-  assert.equal(truncated.body.state.position, null, 'a truncated run moves nothing');
+  assert.equal(truncated.body.state.position, start, 'a truncated run moves nothing');
   assert.equal(truncated.body.state.consecutiveFailures, 2);
   assert.equal(truncated.body.state.backlog, 4);
   const noToken = await advance({ outcome: 'failed', error: 'died before its first page' });

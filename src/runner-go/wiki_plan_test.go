@@ -107,6 +107,7 @@ func TestWikiPlanDraftCarriesTheContractsFieldsAndNoOther(t *testing.T) {
 		RepoCheck: wikiPlanRepoCheck{Sha: strings.Repeat("a", 40), Checked: 3, Missing: []wikiPlanRepoMiss{{Kind: "symbol", Ref: "runLoop()", At: &at}}},
 		Model:     "qwen3.8-27b-fp8",
 	}
+	request.IdempotencyKey = wikiPlanDraftKey("job-1", "session-1", request)
 	var tree map[string]interface{}
 	raw, _ := json.Marshal(request)
 	if err := json.Unmarshal(raw, &tree); err != nil {
@@ -153,6 +154,9 @@ func TestWikiPlanDraftCarriesTheContractsFieldsAndNoOther(t *testing.T) {
 		if !strings.Contains(requests["draft"].(string), key) {
 			t.Errorf("a draft request carries %s, which the contract's draft request does not name", key)
 		}
+	}
+	if _, keyed := tree["idempotencyKey"]; !keyed {
+		t.Error("a draft request does not carry its idempotency key")
 	}
 	var proposal map[string]interface{}
 	raw, _ = json.Marshal(wikiPlanProposalRequest{Reason: "It fits no section.", Change: wikiPlanChange{Doc: doc, Category: &category}, Facts: []wikiPlanFact{{Kind: "entry", ID: "34WEntry"}}})
@@ -236,5 +240,37 @@ func TestWikiPlanCallsTheContractsRoutesAndReadsTheGatesRefusal(t *testing.T) {
 	defer mu.Unlock()
 	if !reflect.DeepEqual(calls, want) {
 		t.Errorf("the calls = %v, the contract's routes %v", calls, want)
+	}
+}
+
+// A draft's key is its run's and its own (contract `plan.idempotency`): the same draft of the same run is the
+// same key however often it is sent — the key itself left out of what is digested — and a later round's draft,
+// the same draft on another base, or another run's is another. The server takes a key of at most 200 characters.
+func TestWikiPlanDraftKeyIsTheRunsAndTheDrafts(t *testing.T) {
+	one := 1
+	draft := wikiPlanDraftRequest{Target: &wikiPlanLength{Min: 3, Max: 3}, Plan: wikiPlanDraft{Categories: []wikiPlanCategory{{Key: "product", Title: "Product"}}},
+		RepoCheck: wikiPlanRepoCheck{Sha: strings.Repeat("a", 40), Checked: 3}, Model: "qwen3.8-27b-fp8"}
+	key := wikiPlanDraftKey("job-1", "session-1", draft)
+	if !strings.HasPrefix(key, "wiki-plan-") || len(key) > 200 {
+		t.Fatalf("the key %q is not the run's, or longer than the server takes", key)
+	}
+	sent := draft
+	sent.IdempotencyKey = key
+	if again := wikiPlanDraftKey("job-1", "session-1", sent); again != key {
+		t.Errorf("the same draft sent under its key digests to %s, not %s", again, key)
+	}
+	later := draft
+	later.Plan = wikiPlanDraft{Categories: []wikiPlanCategory{{Key: "product", Title: "Product, redone"}}}
+	rebased := draft
+	rebased.BaseVersion = &one
+	for name, other := range map[string]string{
+		"a later round's draft":          wikiPlanDraftKey("job-1", "session-1", later),
+		"the same draft on another base": wikiPlanDraftKey("job-1", "session-1", rebased),
+		"another job's":                  wikiPlanDraftKey("job-2", "session-1", draft),
+		"another session's":              wikiPlanDraftKey("job-1", "session-2", draft),
+	} {
+		if other == key {
+			t.Errorf("%s draft has the same key", name)
+		}
 	}
 }

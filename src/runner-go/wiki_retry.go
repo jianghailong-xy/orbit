@@ -30,9 +30,9 @@ import (
 // every other 4xx among them, goes back to the caller as it came.
 //
 // AND ONLY WHAT MAY LAND TWICE. Every read is sent again, and a write only when the server records it at most
-// once however many times it lands: a proposal under an idempotency key or a dry run (wikiRecordsOnce), a
-// run's report of success (wikiReportsSuccess), and the writes whose routes say why they may. A failed or
-// truncated run's report counts one more failure each time it lands, so it is sent once.
+// once however many times it lands: a proposal or a plan draft under an idempotency key, or a dry run
+// (wikiRecordsOnce), a run's report of success (wikiReportsSuccess), and the writes whose routes say why they
+// may. A failed or truncated run's report counts one more failure each time it lands, so it is sent once.
 //
 // HOW LONG. From about 2 seconds, doubling, each wait jittered and none longer than 30 seconds, until the call
 // has gone on for 5 minutes — a deploy's switch is some 20 seconds of 502s. Each send waits for its answer as
@@ -191,8 +191,12 @@ func wikiRetryAfter(value string, now time.Time) (time.Duration, bool) {
 
 // wikiRecordsOnce reports a proposal the server records at most once however many times it lands: one under
 // an idempotency key, which a second landing is answered from (UNIQUE (owner_id, idempotency_key), and
-// submitChangeset's replay), or a dry run, which records nothing.
+// submitChangeset's replay), or a dry run, which records nothing. A plan draft under a key is one too: the
+// server answers its second landing with the version the first stored (contract `plan.idempotency`).
 func wikiRecordsOnce(body interface{}) bool {
+	if draft, ok := body.(wikiPlanDraftRequest); ok {
+		return strings.TrimSpace(draft.IdempotencyKey) != ""
+	}
 	fields, _ := body.(map[string]interface{})
 	key, _ := fields["idempotencyKey"].(string)
 	dryRun, _ := fields["dryRun"].(bool)
