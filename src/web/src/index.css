@@ -8441,6 +8441,8 @@ button.chat-jump-start:hover {
   line-height: 1.55;
   color: var(--text-1);
   overflow-wrap: anywhere;
+  /* The text keeps its paragraphs and list items on lines of their own (`markdownToPlainLines`). */
+  white-space: pre-wrap;
 }
 /* The line under the buttons on both cards whose second answer is a composer handoff: where the
    next message goes, and what pressing does not do. One rule, two cards — the sentence is the
@@ -8572,6 +8574,239 @@ button.chat-jump-start:hover {
   margin: 4px 0 0;
   font-size: 12px;
   color: var(--text-3);
+}
+/* The settings a start left the project running with, under the receipt's line and the "Project
+   started" card's title (`RunSettingsSummary`): one quiet line, with what the owner changed from the
+   coordinator's suggestion set in bold where it stands. */
+.settlement-receipt-settings {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.run-settings-changed {
+  font-weight: 600;
+  color: var(--text-1);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+/* ── Start this project? ─────────────────────────────────────────────────────────────────
+   `StartProjectCard.tsx`: the settlement card's shell, with three sections under it — the
+   criteria, the plan, and How it runs, drawn with the integration settings card's own rows
+   (`.project-integration-setting`) in a raised panel. Mock: start-mock/board2-start-web.html. */
+.start-card-section {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 14px 0 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.start-card-section + .settlement-card-criteria {
+  margin-top: 4px;
+}
+.start-card-section-aside {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--brand);
+}
+.start-card-plan {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-1);
+}
+.start-card-link {
+  margin-left: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--brand);
+  text-decoration: none;
+  cursor: pointer;
+}
+.start-card-plan > .start-card-link:first-child {
+  margin-left: 0;
+}
+.start-card-link:hover {
+  text-decoration: underline;
+}
+.start-card-warn {
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--warning);
+}
+.start-card-settings {
+  padding: 0 12px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+/* The two lines, one under the other; the class makes these rules outrank antd's own
+   `.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. */
+.start-card-settings .start-card-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.start-card-settings .start-card-lines .ant-radio-wrapper {
+  align-items: flex-start;
+  margin-inline-end: 0;
+}
+.start-card-settings .start-card-lines .ant-radio {
+  align-self: flex-start;
+  margin-top: 3px;
+}
+.start-card-branch,
+.start-card-mono,
+.start-card-mono input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.start-card-branch {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  overflow-wrap: anywhere;
+}
+.start-card-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.start-card-settings .start-card-count {
+  width: 72px;
+}
+/* The merge check row when Automatic would merge the branch into main with nothing run on the
+   combined tree: its label in the warning colour, and the sentence saying why under the box. */
+.project-integration-setting.is-warn .project-integration-setting-label {
+  color: var(--warning);
+}
+.start-card-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.start-card-checked {
+  display: flex;
+  gap: 7px;
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.start-card-tick {
+  flex: none;
+  font-weight: 700;
+  color: var(--success);
+}
+/* 443px and the like: the settings rows go to one column at the integration card's own 640px
+   breakpoint, and the lines keep their names and lose their descriptions. */
+@media (max-width: 640px) {
+  .start-card-option-hint {
+    display: none;
+  }
+}
+
+/* ── Confirm the new criteria? ───────────────────────────────────────────────────────────
+   `CriteriaChangeCard.tsx`: only what changed, one row each — a mark, which criterion and what
+   happened to it, and its words (a stricter check's old one quieter under the new).
+   Mock: start-mock/board4-criteria-change.html. */
+.criteria-change-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.criteria-change-list li {
+  display: grid;
+  grid-template-columns: 22px 100px minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-1);
+}
+.criteria-change-list li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+.criteria-change-mark {
+  font-weight: 700;
+  text-align: center;
+  border-radius: 4px;
+}
+.criteria-change-kind {
+  padding-top: 1px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.criteria-change-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.criteria-change-was {
+  display: block;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.criteria-change-list .is-new .criteria-change-mark {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.criteria-change-list .is-new .criteria-change-kind {
+  color: var(--success);
+}
+.criteria-change-list .is-stricter .criteria-change-mark,
+.criteria-change-list .is-revised .criteria-change-mark {
+  color: var(--brand);
+  background: var(--brand-tint);
+}
+.criteria-change-list .is-stricter .criteria-change-kind,
+.criteria-change-list .is-revised .criteria-change-kind {
+  color: var(--brand);
+}
+.criteria-change-rest {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.criteria-change-rest .settlement-card-read {
+  margin-top: 0;
+}
+@media (max-width: 640px) {
+  .criteria-change-list li {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+  .criteria-change-text {
+    grid-column: 2;
+  }
+}
+/* Two short answers stay side by side on a phone: the stacked action sheet below 600px exists for
+   the approval card's third, long label, and these cards have none. */
+@media (max-width: 600px) {
+  .start-card .card-actions,
+  .criteria-change-card .card-actions {
+    flex-direction: row;
+    align-items: center;
+  }
+  .start-card .card-action,
+  .criteria-change-card .card-action {
+    width: auto;
+  }
 }
 
 /* ── Why is this project not done ────────────────────────────────────────────────────────
@@ -9027,6 +9262,12 @@ button.chat-jump-start:hover {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+/* Under a new project's criteria on its create card: approving the create does not confirm them. */
+.create-criteria-note {
+  margin: 2px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
 .dag-approval-ops,
 .dag-approval-changes {
   list-style: none;
@@ -9093,6 +9334,7 @@ button.chat-jump-start:hover {
   margin: 0;
   color: var(--text-2);
   line-height: 1.6;
+  white-space: pre-wrap;
 }
 .approval-input {
   white-space: pre-wrap;
@@ -13877,6 +14119,25 @@ button.chat-jump-start:hover {
 .ant-dropdown-menu-item.composer-provider-fix .scope-menu-row {
   color: var(--text-3);
 }
+/* A Codex account under Codex in that submenu: indented under its engine, its own quota on the right
+   where the other rows say their value, orange once a window is nearly spent. Names are often emails,
+   so the name gives way before the quota does. */
+.ant-dropdown-menu-item.composer-account-row .scope-menu-row {
+  padding-left: 14px;
+}
+.composer-account-row-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-account-row .scope-menu-value-text {
+  max-width: none;
+}
+.composer-account-row.near-limit .scope-menu-value {
+  color: var(--warning);
+}
 .np-row.on {
   background: var(--brand-tint);
   color: var(--text-1);
@@ -16476,6 +16737,12 @@ button.chat-jump-start:hover {
 .psc-title {
   margin: 4px 0 2px;
   font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.psc-settings {
+  margin: 0 0 2px;
+  font-size: 12.5px;
+  color: var(--text-2);
   overflow-wrap: anywhere;
 }
 .psc-lead {

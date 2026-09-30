@@ -5,7 +5,7 @@ import {
   TRANSIENT_DB_CONFLICT_RETRY_AFTER_SECONDS,
   transientDbConflictBody,
 } from '@orbit/shared';
-import { ApiError, api, getSessionEventPage, listQueuedTurns, resumeSession, sendTurn } from './api';
+import { ApiError, api, getSessionEventPage, listQueuedTurns, resumeSession, sendTurn, setAvatar } from './api';
 
 const okJson = (body: unknown) =>
   ({ ok: true, status: 200, text: async () => JSON.stringify(body) }) as Response;
@@ -289,5 +289,26 @@ describe('the 401 refresh-and-retry', () => {
     expect(runs).toHaveLength(2);
     expect(runs[0].init.body).toBe(runs[1].init.body);
     expect(JSON.parse(runs[1].init.body as string)).toEqual({ triggerId: '341DOGTVEs0Fk0gAn1mje' });
+  });
+});
+
+describe('setAvatar', () => {
+  it('puts the photo as one multipart file at the account\'s own address, and answers with the account', async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 'u1', email: 'a@b.c', name: 'A', createdAt: 'x', avatarUpdatedAt: 'v2' }),
+    }) as unknown as Response);
+    vi.stubGlobal('fetch', fetchMock);
+
+    const account = await setAvatar(new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: 'image/jpeg' }));
+
+    expect(account.avatarUpdatedAt).toBe('v2');
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/users/me/avatar');
+    expect(init.method).toBe('PUT');
+    const file = (init.body as FormData).get('file') as File;
+    expect(file.name).toBe('avatar.jpg');
+    expect(new Uint8Array(await file.arrayBuffer())).toEqual(new Uint8Array([0xff, 0xd8, 0xff]));
   });
 });

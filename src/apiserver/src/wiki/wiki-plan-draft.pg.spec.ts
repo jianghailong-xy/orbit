@@ -1,5 +1,5 @@
 /**
- * The plan's jobs (criterion 11; contracts/wiki.contract.json `plan.jobs`, migration 0336), over real
+ * The plan's jobs (criterion 11; contracts/wiki.contract.json `plan.jobs`, migration 0338), over real
  * HTTP and against a real PostgreSQL.
  *
  * What the task's verification asks, each read back from the doors and from the database:

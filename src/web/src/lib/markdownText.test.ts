@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { markdownToPlainText } from './markdownText';
+import { markdownToPlainLines, markdownToPlainText } from './markdownText';
 
 /** The marks a row must never show. Asserted as a set on every case below, so a rule that stops
  *  firing shows up as a failure here rather than as source text on the page. */
@@ -97,5 +97,56 @@ describe('markdownToPlainText', () => {
     expect(line).toContain('一个依赖字段都没有');
     expect(line).toContain('依赖图设计');
     expect(line).not.toContain('https://example.com/design');
+  });
+});
+
+describe('markdownToPlainLines', () => {
+  it('returns the empty string for nothing to strip', () => {
+    expect(markdownToPlainLines(null)).toBe('');
+    expect(markdownToPlainLines(undefined)).toBe('');
+    expect(markdownToPlainLines('   \n\n  ')).toBe('');
+  });
+
+  it('keeps each paragraph and list item on a line of its own', () => {
+    expect(markdownToPlainLines('lead\n\n- a\n* b\n+ c')).toBe('lead\n\n• a\n• b\n• c');
+    // An ordered item keeps its number; a nested bullet keeps its indent.
+    expect(markdownToPlainLines('1. one\n2) two\n  - under two')).toBe('1. one\n2) two\n  • under two');
+  });
+
+  it('takes the marks off every line, not only the first', () => {
+    const lines = markdownToPlainLines('# Title\n\n## Section\n> quoted\n- **bold** and `code`');
+    expect(lines).toBe('Title\n\nSection\nquoted\n• bold and code');
+    expect(lines).not.toMatch(MARKS);
+  });
+
+  it('leaves at most one blank line, and none where a fence or a break stood', () => {
+    expect(markdownToPlainLines('a\r\n\r\n\r\n```sh\nnpm test\n```\n\n---\n\nb  ')).toBe(
+      'a\n\nnpm test\n\nb',
+    );
+  });
+
+  it('reads a real report as its lead and its list', () => {
+    // A run's report as it reached the owner-confirmation card, which showed it as one run-on line.
+    const report = [
+      '冷启动做完了，第一批条目和文章都已上线。判据 6 要的数字都写在任务评论 `34XUSjYR0mkLkLx8VCFeT` 里。',
+      '',
+      '- **第一批条目上线**：2026-09-28T13:33:18.670Z，来自维护回填的第一次运行。',
+      '- **文章**：139 篇，覆盖 22 个主题。',
+      '',
+      '有几处要你留意：',
+      '- **每日上限**：设置里维护每天是 8 次，你批准时说的是 16。',
+    ].join('\n');
+
+    expect(markdownToPlainLines(report)).toBe(
+      [
+        '冷启动做完了，第一批条目和文章都已上线。判据 6 要的数字都写在任务评论 34XUSjYR0mkLkLx8VCFeT 里。',
+        '',
+        '• 第一批条目上线：2026-09-28T13:33:18.670Z，来自维护回填的第一次运行。',
+        '• 文章：139 篇，覆盖 22 个主题。',
+        '',
+        '有几处要你留意：',
+        '• 每日上限：设置里维护每天是 8 次，你批准时说的是 16。',
+      ].join('\n'),
+    );
   });
 });

@@ -28,7 +28,7 @@ import { spaceScope } from './wiki-maintenance';
 import { ensureWikiMaintenanceList, wikiMaintenanceProviderProblem } from './wiki-maintenance-settings';
 
 /**
- * The plan's jobs (criterion 11; contracts/wiki.contract.json `plan.jobs`, migration 0336): a draft, a
+ * The plan's jobs (criterion 11; contracts/wiki.contract.json `plan.jobs`, migration 0338): a draft, a
  * revision or — for the task that writes the documents — a build of a space's plan, each run as a task of
  * the space's hidden «Wiki maintenance» list, so its session is a maintenance session
  * (`isWikiMaintenanceSession`) and the plan's runner door, which only such a session may use, is open to it.

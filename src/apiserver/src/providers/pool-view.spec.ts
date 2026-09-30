@@ -161,7 +161,7 @@ test('a member some session is generating on right now is Running now', async ()
     ],
   });
   assert.deepEqual(states(pool), { a: 'AVAILABLE', b: 'RUNNING', c: 'RUNNING' });
-  // Busy is not full: the member with the most room is still the next one.
+  // Busy is not full: with every window resetting together, the member with the most room is still next.
   assert.deepEqual(next(pool), ['a']);
 });
 

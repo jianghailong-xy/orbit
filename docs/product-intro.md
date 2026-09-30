@@ -1,6 +1,8 @@
 # Orbit
 
-**Your coding agents, running on your machines, in an app you can actually use.**
+**Self-hosted mission control for coding agents.**
+
+Run coding agents on your own machines. Keep the plan, history, and controls in one self-hosted place.
 
 You already have agents that can write code. What you don't have is a place to run five of
 them at once, keep track of what they're doing, tell one of them "no, not that command," and
@@ -58,7 +60,7 @@ Write tasks, group them into lists, and say which ones depend on which. Orbit ha
 to whichever of your machines is free, keeps them moving, and starts the downstream work the
 moment its prerequisites land. You come back to results instead of babysitting a terminal.
 
-### Run projects that outlive any one conversation
+### Work that outlives a chat
 
 Some work doesn't finish in an afternoon. A migration, a test-suite rescue, a rewrite that
 takes three weeks — the kind of thing where the plan matters more than any single session.
@@ -94,14 +96,14 @@ default so you set it once. Anything outside that surfaces as an
 approval card — the actual command, allow or deny, and a "don't ask me again for this" if
 you're tired of seeing it. Nothing blocks in silence waiting for a human who isn't looking.
 
-### Run several agents on one repo without the mess
+### Parallel agents without checkout collisions
 
 Enable worktree isolation for a workspace and every session gets its own private copy of the
 repository. Five agents can then work at once without overwriting one another's edits. When
 you're happy, review the diff full-screen and merge without leaving the app. Isolation is off
 by default; without it, concurrent sessions share the configured directory and can collide.
 
-### Let agents reach your actual systems
+### Access to private infrastructure
 
 This is the part hosted agent tools can't do. Your agents run on **your** machines — the ones
 that already have your internal CLIs, your cluster access, your VPN, your SSH keys. So
@@ -181,3 +183,7 @@ task sources yet either (pulling work from a ticket system or a chat tool); both
 for, not built.
 
 Self-hosted. MIT licensed.
+
+Orbit is a pre-1.0 open-source project under active development. Pin deployments to a tagged release and
+review upgrade notes before changing versions. The latest published release receives best-effort security
+fixes; `main` is a development branch and older releases are not supported.

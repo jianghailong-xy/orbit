@@ -33,9 +33,10 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 0336: written as 0327 when origin/main and project/34VR0RwUSIcaoO7ZZqv52 stood at 0325 (2026-09-29);
--- renumbered before landing, when origin/main stood at 0334 and 0335 was another branch's — the first
--- free number after the highest. Every statement can run twice:
+-- 0338: written as 0327 when origin/main and project/34VR0RwUSIcaoO7ZZqv52 stood at 0325 (2026-09-29),
+-- renumbered to 0336 when main stood at 0334, and to 0338 when main stood at 0336 and 0337 was another
+-- branch's (the documents' dispositions) — each time the first free number after the highest. Every
+-- statement can run twice:
 -- CREATE TABLE / INDEX IF NOT EXISTS, with the table's constraints inside its CREATE.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 

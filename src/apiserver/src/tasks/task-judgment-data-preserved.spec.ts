@@ -1460,6 +1460,24 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // creates or replaces no function, trigger, enum or type — so it is not another writer of the
       // DONE fence — and carries no `ALTER TYPE` and no `DROP`. No INSERT or DELETE.
       '0334_project_paused',
+      // A profile photo of one's own (0335): one new table, `user_avatar`, keyed by the user it belongs
+      // to, with two CHECKs (the three image types, and a non-empty photo) and a foreign key to `user`
+      // whose `ON DELETE CASCADE` is a referential action on the new table's rows. Read against every
+      // claim above: no `task`, `session`, `project` or `project_acceptance_*` object is named, so the
+      // 0177 pair and every stored task and criterion row are out of its reach. No function, trigger or
+      // type is created, replaced or dropped — so it is not another writer of the DONE fence and names
+      // none of the six preserved objects. No INSERT, UPDATE or DELETE: the new table starts empty.
+      '0335_user_avatar',
+      // Which account a session runs on, and whether it was picked by hand (0336): three `ADD COLUMN`s on
+      // `session` — two BOOLEAN NOT NULL DEFAULT false (`codex_account_pinned`, `claude_account_pinned`),
+      // catalog-only as a constant default is, and one nullable TEXT with no default (`claude_account`,
+      // 0330's `codex_account` exactly) — with no index, no CHECK and no foreign key, and nothing else.
+      // Read against every claim above: `task`, `project` and `project_acceptance_criterion_definition`
+      // are not named, so the 0177 pair and every stored task and criterion row are out of its reach. It
+      // names no `project_acceptance_*` object and none of the six preserved triggers/functions, and
+      // creates no function, trigger, enum or type — so it is not another writer of the DONE fence. No
+      // INSERT, UPDATE or DELETE: nothing is backfilled.
+      '0336_session_account_choice',
       // The wiki plan's jobs: one new table, `wiki_plan_job` (a draft, revision or build of a space's plan,
       // run as a task of the space's maintenance list), reaching `wiki_space` through (space_id, owner_id),
       // with its own CHECKs, one unique index, one partial unique index and two indexes. Its task_id and
@@ -1468,7 +1486,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // task and criterion row are out of its reach. No function, trigger or type is created, replaced or
       // dropped — no `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names
       // none of the six preserved objects. No INSERT, UPDATE or DELETE: the new table starts empty.
-      '0336_wiki_plan_job'],
+      '0338_wiki_plan_job'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

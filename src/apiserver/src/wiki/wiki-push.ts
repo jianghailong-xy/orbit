@@ -36,7 +36,11 @@ import { currentWikiRollout, wikiOnFor, type WikiRollout } from './wiki-rollout'
  * the space must not have turned the push off. And a session that VERIFIES, FOREMS or JUDGES work
  * gets nothing at all: knowledge is not evidence (design §7.3), and a note that reached a verdict
  * session would be a note judging the work it was handed (tasks.service.ts suppresses a list's
- * instructions from exactly those runs, for exactly that reason).
+ * instructions from exactly those runs, for exactly that reason). Nor is a project's COORDINATOR
+ * session handed the block: it does not need it (the owner, 2026-09-29), and because the block is
+ * said once per engine process, every recycle of a coordinator's engine attached it again. That one
+ * is the push alone — unlike the three above, a coordinator still pulls with `wiki_search` and
+ * `wiki_get` whenever it wants a note.
  *
  * ONCE PER ENGINE PROCESS, NOT ONCE PER TURN. The inbox lease generation IS the process:
  * activation and takeover mint one, and a turn records the generation it was handed out under, so
@@ -126,6 +130,12 @@ export interface WikiPushSubject {
   task: { verifiesTaskId: string | null; isForeman: boolean } | null;
   /** What made the session; a judgment session is knowledge-free (design §7.3). */
   dispatchOrigin: string | null;
+  /**
+   * The project this session coordinates (`Project.coordinatorSessionId`), which takes it out of the
+   * push: the same relation dequeueTurn appends the coordinator's standing role from. Left out, the
+   * session coordinates nothing.
+   */
+  coordinatorForProject?: { id: string } | null;
   /** The content delivery is about to hand over. Returned unchanged whenever nothing is pushed. */
   content: string | null | undefined;
 }
@@ -168,6 +178,9 @@ export async function appendWikiContext(
   // `assertNotExcluded`), so a session cannot read here what it is refused there.
   if (subject.task?.isForeman === true || subject.task?.verifiesTaskId != null) return subject.content;
   if (subject.dispatchOrigin === JUDGMENT_DISPATCH_ORIGIN) return subject.content;
+  // A project's coordinator is handed no notes either (the owner, 2026-09-29), but not refused the
+  // tools: `assertNotExcluded` does not ask this, so it reads the wiki when it chooses to.
+  if (subject.coordinatorForProject) return subject.content;
   if (!(await isFirstDeliveryOfGeneration(tx, subject))) return subject.content;
   if (!subject.workspaceId) return subject.content;
 

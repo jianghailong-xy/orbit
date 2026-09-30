@@ -503,7 +503,7 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'viaEntryId',
   'withdrawnEntryId',
   'recordId',
-  // The plan's jobs (migration 0336): the job a check or a redraft names, and the owner who asked for
+  // The plan's jobs (migration 0338): the job a check or a redraft names, and the owner who asked for
   // one (a history reference with no foreign key). Addresses a reader follows — never a fence.
   'jobId',
   'requestedByUserId',

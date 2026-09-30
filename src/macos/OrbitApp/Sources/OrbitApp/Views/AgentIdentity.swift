@@ -96,8 +96,8 @@ private struct PoolCountBadge: View {
 
 /// Provider picker opened from the new-session hero — who runs this session, as opposed to the
 /// agent switcher below (where it runs). Sectioned by whose money a row spends: an engine spends the
-/// subscription signed into on that machine, an account pool whichever of its subscriptions has the
-/// most room, a configured provider the API key you pasted. Each row previews the model it would
+/// subscription signed into on that machine, an account pool whichever of its subscriptions' quota
+/// resets soonest, a configured provider the API key you pasted. Each row previews the model it would
 /// switch to, so the consequence is visible before the tap. The order is web's one flat list —
 /// engines, pools, keys — and a pool's own accounts fold away at the end of the keys, behind "Pin a
 /// specific account", as web's `NewSessionProviderHero` folds them.
@@ -108,9 +108,10 @@ struct ProviderSwitchSheet: View {
     let onSelect: (String) -> Void
     /// Which of the current engine's accounts the session would start on (`ProviderChoice.accounts`).
     var currentAccount: String?
-    /// Automatic is on offer — the workspace picked no account — and whether it is the pick, in which
-    /// case `currentAccount` is the account it would start on. Nil when it is not on offer.
-    var automatic: Bool?
+    /// Per engine that lists accounts: whether Automatic is its pick — present only where Automatic is
+    /// on offer (the workspace leaves that engine's account to Orbit). On the current engine's pick,
+    /// `currentAccount` is the account it would start on (web `automatic`).
+    var automatic: [String: Bool]
     /// An account row under an engine was picked — nil for Automatic. Nil lists no account rows.
     var onSelectAccount: ((String, String?) -> Void)?
     /// Where to send a row this machine can't run: the runner whose Engines section holds its
@@ -122,7 +123,7 @@ struct ProviderSwitchSheet: View {
     @State private var pinOpen: Bool
 
     init(choices: [ProviderChoice], currentSlug: String, agentName: String,
-         currentAccount: String? = nil, automatic: Bool? = nil,
+         currentAccount: String? = nil, automatic: [String: Bool] = [:],
          onSelect: @escaping (String) -> Void,
          onSelectAccount: ((String, String?) -> Void)? = nil,
          onFixRunner: (() -> Void)? = nil) {
@@ -153,15 +154,15 @@ struct ProviderSwitchSheet: View {
                         // The engine's own accounts, right under it: Automatic first when the
                         // workspace picked none, then each account with its own quota (web parity).
                         if let accounts = choice.accounts, onSelectAccount != nil {
-                            if automatic != nil { automaticRow(choice) }
+                            if automatic[choice.slug] != nil { automaticRow(choice) }
                             ForEach(accounts) { accountRow(choice, $0) }
                         }
                     }
                 } header: {
                     Text("Engines")
                 } footer: {
-                    Text(automatic != nil
-                         ? "Signed in on this runner. Automatic starts each new session on the Codex account with the most room, and keeps it there."
+                    Text(!automatic.isEmpty
+                         ? "Signed in on this runner. Automatic starts each new session on the account whose quota resets soonest, so none of it goes unused, and moves it when that account hits its limit."
                          : "Signed in on this runner.")
                 }
                 if !pools.isEmpty {
@@ -264,7 +265,7 @@ struct ProviderSwitchSheet: View {
     /// Above an engine's accounts, when the workspace picked none: start on whichever has the most
     /// room. Ticked while it is the pick. Indented to the engine's name, like the accounts below it.
     private func automaticRow(_ choice: ProviderChoice) -> some View {
-        let picked = choice.slug == currentSlug && automatic == true
+        let picked = choice.slug == currentSlug && automatic[choice.slug] == true
         return Button {
             dismiss()
             if !picked { onSelectAccount?(choice.slug, nil) }
@@ -272,7 +273,7 @@ struct ProviderSwitchSheet: View {
             HStack(spacing: 12) {
                 Text("Automatic").foregroundStyle(.primary).lineLimit(1)
                 Spacer(minLength: 8)
-                Text("Most room").font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
+                Text("Resets soonest").font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
                 if picked {
                     Image(systemName: "checkmark")
                         .font(.body.weight(.semibold)).foregroundStyle(Color.accentColor)
@@ -282,13 +283,13 @@ struct ProviderSwitchSheet: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Automatic: the \(choice.label) account with the most room")
+        .accessibilityLabel("Automatic: the \(choice.label) account whose quota resets soonest")
     }
 
     /// One of an engine's accounts: its name and its own quota — amber once a window is nearly spent.
     /// One the CLI says is signed out goes to the runner, where its sign-in is, rather than picking.
     private func accountRow(_ choice: ProviderChoice, _ account: AccountChoice) -> some View {
-        let picked = choice.slug == currentSlug && automatic != true && account.id == currentAccount
+        let picked = choice.slug == currentSlug && automatic[choice.slug] != true && account.id == currentAccount
         return Button {
             dismiss()
             if account.unavailable != nil {

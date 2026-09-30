@@ -34,6 +34,16 @@ func codexContextTokens(usage *TokenUsage) int {
 	return usage.InputTokens + usage.OutputTokens
 }
 
+// codexTurnError is what a failed turn failed with, for /turn-complete's `error`. Codex reports it
+// as the turn's error, never as a reply, so Result — the reply, whenever the turn said anything
+// before it died — cannot carry it. Empty for a turn that did not fail.
+func codexTurnError(result codexTurnResult) string {
+	if result.Status != stFailed {
+		return ""
+	}
+	return result.Error
+}
+
 func codexTurnEndPayload(result codexTurnResult, numTurns int, costUsd float64, job *ClaimedSession) map[string]interface{} {
 	contextTokens := result.ContextTokens
 	if contextTokens <= 0 {
@@ -124,6 +134,7 @@ func runCodexExecSessionProcess(ctx context.Context, shutdownCtx context.Context
 				TurnID:           resp.TurnID,
 				Status:           result.Status,
 				Result:           result.Result,
+				Error:            codexTurnError(result),
 				Subtype:          result.Subtype,
 				NumTurns:         1,
 				CostUsd:          0,

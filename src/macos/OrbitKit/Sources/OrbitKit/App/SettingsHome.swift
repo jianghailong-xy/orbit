@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(CoreGraphics)
+import CoreGraphics   // CGSize/CGRect's Swift members on Apple platforms; Foundation has them on Linux
+#endif
 
 /// A page Settings opens from its list, each one a frame of Settings' own stack
 /// (`NavNode.settingsPage`). The runners list is the one page that predates these and keeps its own
@@ -141,6 +144,88 @@ public enum SettingsHome {
     }
 }
 
+/// The card Settings' header opens on iOS — ChatGPT's edit-profile card, with only what an Orbit
+/// account has. The avatar is the name's first letter, so the name is the whole profile; the email is
+/// the sign-in and is not changed here.
+public enum ProfileEdit {
+    /// What the card will do to the photo on Save: nothing, put this one in its place, or take it away.
+    public enum Photo: Equatable, Sendable {
+        case unchanged
+        /// A square JPEG, already cropped and scaled.
+        case replaced(Data)
+        case removed
+    }
+
+    /// One write Save makes, in the order it makes them.
+    public enum Step: Equatable, Sendable {
+        case setPhoto(Data)
+        case removePhoto
+        case rename(String)
+    }
+
+    /// The name as it is sent: without the spaces around it.
+    public static func name(_ draft: String) -> String {
+        draft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Save is live once the draft names someone, and it changes something: a name other than the
+    /// account's, or the photo.
+    public static func canSave(_ draft: String, saved: String?, photo: Photo = .unchanged) -> Bool {
+        let name = name(draft)
+        return !name.isEmpty && (name != saved || photo != .unchanged)
+    }
+
+    /// What Save writes: the photo first, then the name — each only when it changed. A step that
+    /// lands is the account's from then on, so a Save that fails part way leaves only the rest to do.
+    public static func steps(_ draft: String, saved: String?, photo: Photo) -> [Step] {
+        guard canSave(draft, saved: saved, photo: photo) else { return [] }
+        var steps: [Step] = []
+        switch photo {
+        case .unchanged: break
+        case .replaced(let jpeg): steps.append(.setPhoto(jpeg))
+        case .removed: steps.append(.removePhoto)
+        }
+        let name = name(draft)
+        if name != saved { steps.append(.rename(name)) }
+        return steps
+    }
+}
+
+/// Where a round profile photo is cut from, as the crop screen frames it: the photo covers the circle
+/// at least (zoom 1), zooms in to `maxZoom`, and moves only as far as keeps the circle on the photo.
+/// Offsets are in screen points, from the circle's centre to the photo's.
+public enum AvatarCrop {
+    public static let maxZoom: CGFloat = 5
+
+    /// The photo's size on screen at zoom 1: just covering a circle of that diameter.
+    public static func fitted(_ image: CGSize, circle: CGFloat) -> CGSize {
+        guard image.width > 0, image.height > 0 else { return .zero }
+        let k = max(circle / image.width, circle / image.height)
+        return CGSize(width: image.width * k, height: image.height * k)
+    }
+
+    public static func clampedZoom(_ zoom: CGFloat) -> CGFloat { min(max(zoom, 1), maxZoom) }
+
+    /// The offset, moved back inside what keeps the circle on the photo at that zoom.
+    public static func clampedOffset(_ offset: CGSize, fitted: CGSize, circle: CGFloat, zoom: CGFloat) -> CGSize {
+        let slackX = max(0, (fitted.width * zoom - circle) / 2)
+        let slackY = max(0, (fitted.height * zoom - circle) / 2)
+        return CGSize(width: min(max(offset.width, -slackX), slackX),
+                      height: min(max(offset.height, -slackY), slackY))
+    }
+
+    /// The square of the photo, in the photo's own points, that the circle covers.
+    public static func cropRect(image: CGSize, circle: CGFloat, zoom: CGFloat, offset: CGSize) -> CGRect {
+        let fitted = fitted(image, circle: circle)
+        guard fitted.width > 0 else { return .zero }
+        let shown = CGSize(width: fitted.width * zoom, height: fitted.height * zoom)
+        let k = shown.width / image.width   // screen points per photo point
+        return CGRect(x: (shown.width / 2 - offset.width - circle / 2) / k,
+                      y: (shown.height / 2 - offset.height - circle / 2) / k,
+                      width: circle / k, height: circle / k)
+    }
+}
+
 /// The words of Settings' own pages. Wherever the web says the same thing, these are its words byte
 /// for byte (`SettingsCopyParityTests` reads them back out of `SettingsPage.tsx` and
 /// `ProfilePage.tsx`); the rest are the app's own — what only a phone has to say.
@@ -186,6 +271,30 @@ public enum SettingsCopy {
     public static let passwordsDoNotMatch = "Passwords do not match"
     public static let changePassword = "Change password"
     public static let passwordChanged = "Password changed"
+
+    // MARK: Edit profile (the card Settings' header opens)
+
+    /// What the header does, for VoiceOver: the avatar and name are the button.
+    public static let editProfile = "Edit profile"
+    /// Over the field — the web Profile page's word for it.
+    public static let nameLabel = "Name"
+    public static let namePlaceholder = "Your name"
+    /// Who sees the name besides its owner: the people in their shared pools, on the member list and
+    /// beside each key given. A public link never shows it.
+    public static let nameCaption = "People in your shared pools see you by this name."
+    public static let saveProfile = "Save profile"
+    public static func nameNotSaved(_ reason: String) -> String { "Couldn't save your name — \(reason)." }
+    /// The photo's actions. On iOS they are the menu the card's avatar opens, as ChatGPT's is: the
+    /// library, the camera (a phone's alone) or Files, and — when there is a photo — taking it away.
+    /// The web Profile page and macOS Settings choose a file, in `choosePhoto`'s words.
+    public static let photoLibrary = "Photo library"
+    public static let takePhoto = "Take photo"
+    public static let chooseFile = "Choose file"
+    public static let choosePhoto = "Choose photo"
+    public static let removePhoto = "Remove photo"
+    /// The crop screen's button: the circle's square becomes the card's photo, until Save profile.
+    public static let savePhoto = "Save"
+    public static func photoNotSaved(_ reason: String) -> String { "Couldn't save your photo — \(reason)." }
 
     // MARK: Sign out
 

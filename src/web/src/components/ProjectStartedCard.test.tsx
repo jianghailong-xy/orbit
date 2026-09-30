@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ProjectStartedCard as Started } from '@orbit/shared';
 import { acceptedUserTurnEvent } from '../lib/acceptedUserTurn';
+import { RUN_SETTING_DIFFERS } from '../lib/projectStart';
 import { Transcript, type RunEvent } from './Transcript';
 import { queuedTurnFromActiveSnapshot } from './WorkspaceView';
 
@@ -141,6 +142,46 @@ describe('a project start told to the coordinator', () => {
       expect(card(), `drew a card from ${JSON.stringify(bad)}`).toBeNull();
       expect(container.querySelector('.chat-user')).not.toBeNull();
     }
+  });
+
+  /**
+   * What the start left the project running with, under the title — and which of it is not what
+   * the coordinator suggested, marked where it stands, so the coordinator reading its own
+   * conversation sees what it did not ask for.
+   */
+  it('carries the settings the start left, and marks the ones that differ from the suggestion', async () => {
+    await mount([told({
+      ...CARD,
+      settings: {
+        line: 'PROJECT_BRANCH',
+        projectBranchName: 'refs/heads/project/34WvwUS8YMXfOfWbMqVuu',
+        automatic: true,
+        maxConcurrentTasks: 3,
+        mergeCheckCommand: null,
+      },
+      differsFromRequest: ['line', 'mergeCheckCommand'],
+    })]);
+    const settings = card()!.querySelector('.psc-settings');
+    expect(settings, 'the card drew no settings line').not.toBeNull();
+    expect(settings!.textContent?.split(` (${RUN_SETTING_DIFFERS})`).join(''))
+      .toBe('project/34Wvw… · Automatic on · 3 tasks at a time · no merge check');
+    const changed = [...settings!.querySelectorAll('.run-settings-changed')].map((part) =>
+      part.textContent?.replace(` (${RUN_SETTING_DIFFERS})`, ''));
+    expect(changed).toEqual(['project/34Wvw…', 'no merge check']);
+    // Right under the title, above the tasks that wait on the coordinator.
+    expect(card()!.querySelector('.psc-title')?.nextElementSibling).toBe(settings);
+  });
+
+  it('draws no settings line for a start that recorded none, nor for a malformed one', async () => {
+    await mount([told(CARD)]);
+    expect(card()!.querySelector('.psc-settings')).toBeNull();
+    await act(async () => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    await mount([told({ ...CARD, settings: { line: 'SIDEWAYS', automatic: 'yes' }, differsFromRequest: ['line'] })]);
+    expect(card(), 'a malformed settings object took the card with it').not.toBeNull();
+    expect(card()!.querySelector('.psc-settings')).toBeNull();
   });
 
   it('names the Automatic switch as its own kind of start, confirming nothing', async () => {

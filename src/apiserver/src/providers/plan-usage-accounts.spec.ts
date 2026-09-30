@@ -21,9 +21,10 @@ import { RunnerApiController, type RetryPlanTransaction } from '../runner-api/ru
 import { transactionDouble } from '../test-support/prisma-transaction-double';
 import { resolveProviderExec } from './custom-provider';
 import {
+  accountAfterUsageLimit,
+  accountSwitchNotice,
+  automaticAccount,
   automaticCodexAccount,
-  codexAccountAfterUsageLimit,
-  codexAccountSwitchNotice,
   runAccount,
   sanitizePlanUsageAccounts,
 } from './plan-usage-accounts';
@@ -294,7 +295,7 @@ async function retryAtFor(
         workspace: { env, codexAccount, claudeAccount: claude?.claudeAccount ?? null },
       }),
     },
-    runner: { findUnique: async () => ({ planUsage, engines: ENGINES }) },
+    runner: { findUnique: async () => ({ planUsage, engines: ENGINES, capabilities: [] }) },
   });
   const controller = new RunnerApiController(
     {} as never,
@@ -472,7 +473,7 @@ test('a workspace that picked no account is judged by its env, as before account
   assert.ok(withinJitterOf(await retryAtFor({ CODEX_HOME: WORK_HOME }, WORK_SPENT, null), WORK_RESET));
 });
 
-test('a new session nothing picked an account for starts on the one with the most room, unless the workspace decides', () => {
+test('a new session nothing picked an account for starts on the one Automatic picks, unless the workspace decides', () => {
   const now = new Date();
   const defaultSpent = { codex: { provider: AgentProvider.CODEX, primary: window(100, DEFAULT_RESET), accounts: { [WORK]: work(8) } } };
   assert.equal(automaticCodexAccount({ env: null, codexAccount: null }, ENGINES, defaultSpent, now), WORK);
@@ -486,19 +487,23 @@ test('a new session nothing picked an account for starts on the one with the mos
   assert.equal(automaticCodexAccount({ env: null, codexAccount: null }, null, null, now), null);
 });
 
-test("a Codex session its account's usage limit stopped moves to another account with room, unless its workspace decides", () => {
+test("a session its account's usage limit stopped moves to another account with room, unless it or its workspace decides", () => {
   const now = new Date();
   const defaultSpent = { codex: { provider: AgentProvider.CODEX, primary: window(100, DEFAULT_RESET), accounts: { [WORK]: work(8) } } };
   const automatic = { env: null, codexAccount: null };
+  const after = (account: string | null, workspace: Parameters<typeof accountAfterUsageLimit>[2], usage: unknown = defaultSpent, pinned = false, engines: unknown = ENGINES) =>
+    accountAfterUsageLimit('codex', { account, pinned }, workspace, engines, usage, now);
   // Stopped on Default — picked for it, or the account of an older session that picked none — it moves
   // to Work, which has room.
-  assert.deepEqual(codexAccountAfterUsageLimit({ codexAccount: 'default' }, automatic, ENGINES, defaultSpent, now), { from: 'default', to: WORK });
-  assert.deepEqual(codexAccountAfterUsageLimit({ codexAccount: null }, automatic, ENGINES, defaultSpent, now), { from: 'default', to: WORK });
-  assert.deepEqual(codexAccountAfterUsageLimit({ codexAccount: 'default' }, null, ENGINES, defaultSpent, now), { from: 'default', to: WORK });
+  assert.deepEqual(after('default', automatic), { from: 'default', to: WORK });
+  assert.deepEqual(after(null, automatic), { from: 'default', to: WORK });
+  assert.deepEqual(after('default', null), { from: 'default', to: WORK });
+  // An account somebody picked by hand stays, and waits for its reset.
+  assert.equal(after('default', automatic, defaultSpent, true), null);
   // Stopped on Work before its snapshot caught up: never onto a spent account, so it stays and waits.
-  assert.equal(codexAccountAfterUsageLimit({ codexAccount: WORK }, automatic, ENGINES, defaultSpent, now), null);
+  assert.equal(after(WORK, automatic), null);
   const workSpent = { codex: { provider: AgentProvider.CODEX, primary: window(20, DEFAULT_RESET), accounts: { [WORK]: work(100) } } };
-  assert.deepEqual(codexAccountAfterUsageLimit({ codexAccount: WORK }, automatic, ENGINES, workSpent, now), { from: WORK, to: 'default' });
+  assert.deepEqual(after(WORK, automatic, workSpent), { from: WORK, to: 'default' });
   // A workspace that decides the account keeps the session where it is: its pick, Default included, or
   // a CODEX_HOME or a key of its own in its env.
   for (const workspace of [
@@ -507,7 +512,7 @@ test("a Codex session its account's usage limit stopped moves to another account
     { env: { CODEX_HOME: WORK_HOME }, codexAccount: null },
     { env: { CODEX_API_KEY: 'sk-test' }, codexAccount: null },
   ]) {
-    assert.equal(codexAccountAfterUsageLimit({ codexAccount: 'default' }, workspace, ENGINES, defaultSpent, now), null, JSON.stringify(workspace));
+    assert.equal(after('default', workspace), null, JSON.stringify(workspace));
   }
   // A signed-out account is nowhere to go, and a runner with one account has nowhere else.
   const workSignedOut = ENGINES.map((engine) =>
@@ -515,18 +520,39 @@ test("a Codex session its account's usage limit stopped moves to another account
       ? { ...engine, accounts: engine.accounts!.map((account) => (account.id === WORK ? { ...account, auth: 'no' as const } : account)) }
       : engine,
   );
-  assert.equal(codexAccountAfterUsageLimit({ codexAccount: 'default' }, automatic, workSignedOut, defaultSpent, now), null);
+  assert.equal(after('default', automatic, defaultSpent, false, workSignedOut), null);
+  assert.equal(after('default', automatic, defaultSpent, false, [{ engine: 'codex', installed: true, auth: 'yes' }]), null);
+});
+
+test("a Claude session is picked and moved by its own accounts' quota, as a Codex one is", () => {
+  const now = new Date();
+  // Default's weekly window spent while its 5-hour one reads 0%: Work, with room, is where it goes.
+  const claudeUsage = {
+    claude: {
+      provider: AgentProvider.CLAUDE,
+      fiveHour: { utilization: 0, resetsAt: DEFAULT_RESET },
+      sevenDay: { utilization: 100, resetsAt: DEFAULT_RESET },
+      accounts: { [WORK]: { provider: AgentProvider.CLAUDE, fiveHour: { utilization: 19, resetsAt: WORK_RESET }, sevenDay: { utilization: 28, resetsAt: WORK_RESET } } },
+    },
+  };
+  const automatic = { env: null, codexAccount: null, claudeAccount: null };
+  assert.equal(automaticAccount('claude', automatic, ENGINES, claudeUsage, now), WORK);
+  assert.deepEqual(accountAfterUsageLimit('claude', { account: 'default' }, automatic, ENGINES, claudeUsage, now), { from: 'default', to: WORK });
+  // The workspace's Claude pick decides for its Claude sessions, and its Codex pick does not.
+  assert.equal(automaticAccount('claude', { ...automatic, claudeAccount: 'default' }, ENGINES, claudeUsage, now), null);
+  assert.equal(automaticAccount('claude', { ...automatic, codexAccount: 'default' }, ENGINES, claudeUsage, now), WORK);
+  assert.equal(accountAfterUsageLimit('claude', { account: 'default', pinned: true }, automatic, ENGINES, claudeUsage, now), null);
   assert.equal(
-    codexAccountAfterUsageLimit({ codexAccount: 'default' }, automatic, [{ engine: 'codex', installed: true, auth: 'yes' }], defaultSpent, now),
-    null,
+    accountSwitchNotice('claude', { from: 'default', to: WORK }, ENGINES),
+    'Switched to Work — the usage limit on Default is reached',
   );
 });
 
 test('the line a moved session carries names both accounts the way the picker names them', () => {
-  assert.equal(codexAccountSwitchNotice({ from: 'default', to: WORK }, ENGINES), 'Switched to Work — the usage limit on Default is reached');
-  assert.equal(codexAccountSwitchNotice({ from: WORK, to: 'default' }, ENGINES), 'Switched to Default — the usage limit on Work is reached');
+  assert.equal(accountSwitchNotice('codex', { from: 'default', to: WORK }, ENGINES), 'Switched to Work — the usage limit on Default is reached');
+  assert.equal(accountSwitchNotice('codex', { from: WORK, to: 'default' }, ENGINES), 'Switched to Default — the usage limit on Work is reached');
   assert.equal(
-    codexAccountSwitchNotice({ from: 'default', to: 'c0ffee42' }, ENGINES),
+    accountSwitchNotice('codex', { from: 'default', to: 'c0ffee42' }, ENGINES),
     'Switched to Account c0ffee42 — the usage limit on Default is reached',
   );
 });

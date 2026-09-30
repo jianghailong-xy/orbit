@@ -287,6 +287,7 @@ model User {
   clientVersions   ClientVersion[] // which build of each client this user is running
   mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
   agents           Agent[] // Agent identities this user owns (tenant scope)
+  avatar           UserAvatar? // the profile photo, when one is set (0335)
 
   /// Presses of Run Now this user made, and the receipts of their requests (0137).
   runRequests       TaskRunRequest[]
@@ -1014,6 +1015,14 @@ model Session {
   // (automaticCodexAccount). NULL follows the workspace's choice, as every session did before. Read
   // wherever a session's run is dispatched or its quota asked about, ahead of the workspace's.
   codexAccount         String?   @map("codex_account")
+  // That account was picked by hand (migration 0336): the session stays on it, and its usage limit
+  // waits for the reset. False is Automatic — Orbit may move the session to an account with room.
+  codexAccountPinned   Boolean   @default(false) @map("codex_account_pinned")
+  // Its Claude Code account, the sibling of codexAccount (migration 0336): `default` or a slot id,
+  // picked on the New Session screen or chosen by automaticClaudeAccount; NULL follows the
+  // workspace's (Workspace.claudeAccount).
+  claudeAccount        String?   @map("claude_account")
+  claudeAccountPinned  Boolean   @default(false) @map("claude_account_pinned")
   // The only runner-engine generation allowed to dequeue this session's inbox. Retired values
   // remain here as tombstones until the next activation, so legacy NULL polls stay fenced.
   inboxLeaseGeneration String?   @map("inbox_lease_generation") @db.Uuid
@@ -1851,6 +1860,23 @@ model SessionScheduledWakeup {
 // over HTTP regardless of backend — so DB storage is the simplest option that also
 // survives `upgrade`. Bytes are stored raw (not base64); callers base64-encode only at
 // the claude/runner boundary. Bounded by a size cap + MIME allowlist (attachments.media.ts).
+/// A user's profile photo (0335): the image every client draws where the account's avatar is, in
+/// place of the name's first letter. The client crops it square and scales it down before sending;
+/// the server keeps the bytes whole, typed by what it read off them. One per user, replaced whole;
+/// removing the photo deletes the row, and so does deleting the user. Its own table rather than
+/// columns on `user`, which every sign-in and token refresh reads.
+model UserAvatar {
+  userId    String   @id @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  // image/jpeg | image/png | image/webp, read off the bytes (user_avatar_mime_type_check).
+  mimeType  String   @map("mime_type")
+  data      Bytes
+  // When this photo was set: the version a client fetches it by (`avatarUpdatedAt` on `me`).
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("user_avatar")
+}
+
 model Attachment {
   id        String            @id @default(uuid(7)) @db.Uuid
   ownerId   String            @map("owner_id") @db.Uuid // tenant scope; reads always filter by it
@@ -6316,7 +6342,7 @@ model WikiPlanProposal {
   @@map("wiki_plan_proposal")
 }
 
-/// A job of a space's plan (migration 0336, contract `plan.jobs`): a draft, a revision or a build, run as
+/// A job of a space's plan (migration 0338, contract `plan.jobs`): a draft, a revision or a build, run as
 /// a task of the space's hidden «Wiki maintenance» list, which the server makes from a fact — the space's
 /// creation, or its owner asking — and never from a clock. At most one draft or revision of a space is
 /// not ended (a partial unique index the migration makes).

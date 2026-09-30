@@ -228,10 +228,10 @@ final class ProviderPoolsParityTests: XCTestCase {
         }
         XCTAssertTrue(web.contains("`\(theirs(true))`"), "WorkspaceView.tsx has no `\(theirs(true))`")
         let next = theirs(false)
-        let chosen = " — the account with the most room right now"
+        let chosen = " — the account whose quota resets soonest"
         XCTAssertTrue(next.hasSuffix(chosen))
         let opening = next.dropLast(chosen.count)
-        XCTAssertTrue(web.contains("`\(opening) — ${ shownPool.shared ? 'the key it picks for you' : 'the account with the most room' } right now`"),
+        XCTAssertTrue(web.contains("`\(opening) — ${ shownPool.shared ? 'the key it picks for you right now' : 'the account whose quota resets soonest' }`"),
                       "WorkspaceView.tsx no longer says `\(next)` for an account pool")
         // A shared pool's key says the same sentence with the web's other branch, which the ternary
         // above already carries — so it has to be the same opening and the one word changed.
@@ -242,8 +242,8 @@ final class ProviderPoolsParityTests: XCTestCase {
             .replacingOccurrences(of: "POOLNAME", with: "${shownPool.label}")
             .replacingOccurrences(of: "MEMBERNAME", with: "${shownPoolAccount.member.label}")
         XCTAssertTrue(asKey.hasSuffix(" — the key it picks for you right now"), asKey)
-        XCTAssertEqual(asKey.replacingOccurrences(of: "the key it picks for you",
-                                                  with: "the account with the most room"),
+        XCTAssertEqual(asKey.replacingOccurrences(of: "the key it picks for you right now",
+                                                  with: "the account whose quota resets soonest"),
                        next, "a shared pool's sentence differs from an account pool's in one branch only")
         // Running — as opposed to starting — names the key the same way either kind does.
         XCTAssertEqual(ProviderPools

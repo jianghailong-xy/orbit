@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { CheckSquareOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
@@ -26,9 +26,19 @@ import { relTime } from './Transcript';
  * those same rows — so re-sorting or re-reading them here is how the pills and the sentence would
  * stop agreeing.
  */
-export function SessionCreatedTasksStrip({ sessionId }: { sessionId: string }) {
+export function SessionCreatedTasksStrip({
+  sessionId,
+  openRequest = 0,
+}: {
+  sessionId: string;
+  /** Bumped to open the list from elsewhere on the page — the start card's "View tasks". */
+  openRequest?: number;
+}) {
   const { data } = useQuery(sessionCreatedTasksQuery(sessionId));
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (openRequest > 0) setOpen(true);
+  }, [openRequest]);
   // Nothing created, nothing drawn. Once something is, the row stays — finished or not, it is the
   // list of what this conversation produced.
   if (!data?.total) return null;

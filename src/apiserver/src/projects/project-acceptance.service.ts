@@ -550,6 +550,7 @@ export class ProjectAcceptanceService {
         criteriaMaterial: true,
         confirmedAt: true,
         confirmedById: true,
+        startedWith: true,
       },
     });
     return row === null ? null : {
@@ -557,6 +558,9 @@ export class ProjectAcceptanceService {
       criteriaMaterial: row.criteriaMaterial as unknown as RecordedStandardSetConfirmation['criteriaMaterial'],
       confirmedAt: row.confirmedAt,
       confirmedById: row.confirmedById,
+      // What a start left the project with, for the receipt of it; null on a confirmation that
+      // started nothing, which is how a receipt tells the two apart.
+      startedWith: (row.startedWith as unknown as ProjectStartRecord | null) ?? null,
     };
   }
 

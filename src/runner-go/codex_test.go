@@ -484,6 +484,34 @@ func TestCodexTurnEndPayloadIncludesContextTokens(t *testing.T) {
 	}
 }
 
+// A Codex turn that worked for an hour and then hit "Selected model is at capacity" ends with a
+// reply AND an error. Result carries the reply, so the error has to travel on its own: without it
+// the control plane recorded the agent's last sentence as the reason the run failed.
+func TestCodexTurnErrorTravelsBesideTheReply(t *testing.T) {
+	const capacity = "Selected model is at capacity. Please try a different model."
+	failed := codexTurnResult{Status: stFailed, Result: "Verified; now running the ledger spec.", Error: capacity}
+	if got := codexTurnError(failed); got != capacity {
+		t.Fatalf("codexTurnError = %q, want the engine's own error", got)
+	}
+	body, err := json.Marshal(TurnCompleteRequest{TurnID: "t", Status: stFailed, Result: failed.Result, Error: codexTurnError(failed)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `"error":"`+capacity+`"`) || !strings.Contains(string(body), `"result":"Verified;`) {
+		t.Fatalf("turn-complete body = %s, want both the reply and the error", body)
+	}
+
+	// A turn that did not fail has nothing to report, and says nothing.
+	done := codexTurnResult{Status: stSucceeded, Result: "done", Error: "Reconnecting... 1/5"}
+	if got := codexTurnError(done); got != "" {
+		t.Fatalf("codexTurnError on a succeeded turn = %q, want empty", got)
+	}
+	body, _ = json.Marshal(TurnCompleteRequest{TurnID: "t", Status: stSucceeded, Error: codexTurnError(done)})
+	if strings.Contains(string(body), `"error"`) {
+		t.Fatalf("turn-complete body = %s, want no error field", body)
+	}
+}
+
 func TestCodexTurnEndPayloadPrefersAppServerContextTokens(t *testing.T) {
 	got := codexTurnEndPayload(codexTurnResult{
 		Subtype:       "completed",

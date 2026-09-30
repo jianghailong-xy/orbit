@@ -24,6 +24,54 @@ function windowsOf(snapshot: PlanUsageSnapshot): PlanUsageWindow[] {
   return windows.filter((w): w is PlanUsageWindow => !!w);
 }
 
+/** At or over this share consumed, a window is nearly spent: an account there is used last, since a
+ *  run started on it would soon meet its limit and have to move. The composer's gauge turns amber here. */
+const NEAR_LIMIT_UTILIZATION = 90;
+
+/** Every window of one snapshot with its length in minutes: Claude's named windows by their names,
+ *  Codex's as they report it (null when one does not). */
+function windowsWithLength(snapshot: PlanUsageSnapshot): Array<{ window: PlanUsageWindow; mins: number | null }> {
+  const named: Array<[PlanUsageWindow | undefined, number]> = [
+    [snapshot.fiveHour, 5 * 60],
+    [snapshot.sevenDay, 7 * 24 * 60],
+    [snapshot.sevenDayOpus, 7 * 24 * 60],
+    [snapshot.sevenDaySonnet, 7 * 24 * 60],
+  ];
+  const reported = [
+    snapshot.primary,
+    snapshot.secondary,
+    ...(snapshot.rateLimits ?? []).flatMap((bucket) => [bucket.primary, bucket.secondary]),
+  ];
+  return [
+    ...named.flatMap(([window, mins]) => (window ? [{ window, mins: window.windowDurationMins ?? mins }] : [])),
+    ...reported.flatMap((window) => (window ? [{ window, mins: window.windowDurationMins ?? null }] : [])),
+  ];
+}
+
+/**
+ * When what an account has left of its quota goes to waste: the reset of its longest window — a
+ * weekly one where it has one — which gives back a full window whatever was left of the old one. A
+ * shorter window's reset loses nothing the longer one does not cap anyway. When no window says how
+ * long it is, the latest reset. Infinity when no window names a reset ahead of `now`: nothing is known
+ * to expire.
+ */
+export function quotaExpiresAt(snapshot: PlanUsageSnapshot | null | undefined, now: Date): number {
+  const ahead = (snapshot ? windowsWithLength(snapshot) : []).filter(
+    ({ window }) => Date.parse(window.resetsAt ?? '') > now.getTime(),
+  );
+  if (ahead.length === 0) return Number.POSITIVE_INFINITY;
+  const longest = Math.max(...ahead.map(({ mins }) => mins ?? -1));
+  const pick = longest >= 0 ? ahead.filter(({ mins }) => (mins ?? -1) === longest) : ahead;
+  return Math.max(...pick.map(({ window }) => Date.parse(window.resetsAt!)));
+}
+
+/** Whether any window of `snapshot` is nearly spent (NEAR_LIMIT_UTILIZATION) and not past its reset. */
+export function quotaNearLimit(snapshot: PlanUsageSnapshot | null | undefined, now: Date): boolean {
+  return (snapshot ? windowsOf(snapshot) : []).some(
+    (w) => w.utilization >= NEAR_LIMIT_UTILIZATION && !(Date.parse(w.resetsAt ?? '') <= now.getTime()),
+  );
+}
+
 /**
  * The snapshot describing `provider`'s quota, or undefined when this runner reports none
  * for it. Newer runners nest one snapshot per runtime; older ones report a single flat
@@ -216,47 +264,66 @@ export function planUsageBlockedUntil(
   return latest === null ? null : new Date(latest);
 }
 
+/** The engines whose CLI keeps a login per directory — a CODEX_HOME, a CLAUDE_CONFIG_DIR — so that a
+ *  runner can hold several accounts of them, each with its own quota. */
+export type AccountEngine = 'codex' | 'claude';
+
 /**
- * Which of a runner's Codex accounts a new session starts on when neither it nor its workspace picked
- * one: the one with the most room right now. The server makes this choice once, when the session is
- * created, and stores it on the session, so the session stays on that account for its life (its
- * thread lives in that account's CODEX_HOME); the New Session screen asks the same question to say
- * where a session would start.
+ * Which of a runner's accounts of `engine` a new session starts on when neither it nor its workspace
+ * picked one: the one whose quota would otherwise go to waste first. Quota comes back in windows, and
+ * whatever an account has left when its window resets is lost — so it is spent first-expiring-first:
+ * the account whose quota resets soonest takes the work, and one that resets later is kept for when
+ * that one runs out. The server makes this choice when the session is created and stores it; the New
+ * Session screen asks the same question to say where a session would start.
  *
  * - Only an account the CLI does not say is signed out is a candidate.
  * - One with a spent window — at 100% and not past its reset, or with no reset time to go by — is
  *   passed over while another can run.
- * - Among the rest, the most room is the least used of each account's tightest window: accounts report
- *   different windows (a Plus login a 5-hour and a weekly one, a Pro login only a weekly one), and the
- *   one closest to its limit is the one that stops it. An account with nothing reported ranks after
- *   every account with a reading, since unread is not the same as unused.
+ * - One with a window nearly spent (90%) comes after the rest: a run started there would soon meet
+ *   its limit and have to move.
+ * - Then soonest-expiring first: the reset of each account's longest window (quotaExpiresAt).
+ *   Different plans hold very different amounts, so how much is left is not compared across accounts
+ *   — only when it expires. An account with nothing reported has nothing known to expire, and comes
+ *   after every one that has.
+ * - Equal expiry: the one with more room, by its tightest window.
  * - Every candidate spent: the one that frees up first, where the session's run then waits.
  * - Ties go to Default, then to the lower id, so the answer never depends on the order of the report.
  *
  * Null when there is nothing to choose between — fewer than two accounts reported, or none signed in —
  * and the session runs where it always did.
  */
-export function roomiestCodexAccount(
+export function accountToStartOn(
+  engine: AccountEngine,
   accounts: readonly RunnerEngineAccount[] | null | undefined,
   usage: PlanUsage | null | undefined,
   now: Date,
 ): string | null {
   if (!accounts || accounts.length < 2) return null;
-  const candidates = rankCodexAccounts(accounts, usage, now);
+  const candidates = rankAccounts(engine, accounts, usage, now);
   const usable = candidates.filter((c) => c.spentUntil === null);
   if (usable.length > 0) return usable[0].id;
   const first = [...candidates].sort((a, b) => (a.spentUntil ?? 0) - (b.spentUntil ?? 0) || byAccountId(a, b))[0];
   return first?.id ?? null;
 }
 
+/** {@link accountToStartOn} for Codex. */
+export function codexAccountToStartOn(
+  accounts: readonly RunnerEngineAccount[] | null | undefined,
+  usage: PlanUsage | null | undefined,
+  now: Date,
+): string | null {
+  return accountToStartOn('codex', accounts, usage, now);
+}
+
 /**
- * Which of a runner's Codex accounts a session whose own account (`from`) just hit its usage limit
- * can move to, between turns: another account that can run now — not signed out, no spent window —
- * the one with the most room, ranked as {@link roomiestCodexAccount} ranks. Never a spent one: when no
- * other account has room, moving gains nothing, and the session waits for its own account's reset.
- * Null then, and for a runner with no second account.
+ * Which of a runner's accounts of `engine` a session whose own account (`from`) just hit its usage
+ * limit can move to, between turns: another account that can run now — not signed out, no spent
+ * window — ranked as {@link accountToStartOn} ranks. Never a spent one: when no other account has
+ * room, moving gains nothing, and the session waits for its own account's reset. Null then, and for a
+ * runner with no second account.
  */
-export function codexAccountToMoveTo(
+export function accountToMoveTo(
+  engine: AccountEngine,
   accounts: readonly RunnerEngineAccount[] | null | undefined,
   usage: PlanUsage | null | undefined,
   now: Date,
@@ -264,8 +331,18 @@ export function codexAccountToMoveTo(
 ): string | null {
   if (!accounts || accounts.length < 2) return null;
   return (
-    rankCodexAccounts(accounts, usage, now).find((c) => c.id !== from && c.spentUntil === null)?.id ?? null
+    rankAccounts(engine, accounts, usage, now).find((c) => c.id !== from && c.spentUntil === null)?.id ?? null
   );
+}
+
+/** {@link accountToMoveTo} for Codex. */
+export function codexAccountToMoveTo(
+  accounts: readonly RunnerEngineAccount[] | null | undefined,
+  usage: PlanUsage | null | undefined,
+  now: Date,
+  from: string,
+): string | null {
+  return accountToMoveTo('codex', accounts, usage, now, from);
 }
 
 /** Ties go to Default, then to the lower id, so no answer depends on the order of the report. */
@@ -273,21 +350,23 @@ const byAccountId = (a: { id: string }, b: { id: string }) =>
   Number(b.id === CODEX_DEFAULT_ACCOUNT) - Number(a.id === CODEX_DEFAULT_ACCOUNT) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 /**
- * The accounts that are candidates at all — the CLI does not say they are signed out — most room
- * first: least-used tightest window, unread after read. `spentUntil` is set for one with a spent window
- * (100% and not past its reset, or with no reset to go by): the latest of those resets, Infinity when
- * one named none.
+ * The accounts that are candidates at all — the CLI does not say they are signed out — in the order
+ * {@link accountToStartOn} takes them: none nearly spent before one that is, then soonest-expiring
+ * quota first, then the most room by the tightest window, unread after read. `spentUntil` is set for
+ * one with a spent window (100% and not past its reset, or with no reset to go by): the latest of
+ * those resets, Infinity when one named none.
  */
-function rankCodexAccounts(
+function rankAccounts(
+  engine: AccountEngine,
   accounts: readonly RunnerEngineAccount[],
   usage: PlanUsage | null | undefined,
   now: Date,
-): Array<{ id: string; tightest: number; spentUntil: number | null }> {
-  const codex = usage ? snapshotFor(usage, 'codex') : undefined;
+): Array<{ id: string; spentUntil: number | null }> {
+  const reported = usage ? snapshotFor(usage, engine) : undefined;
   return accounts
     .filter((account) => account.auth !== 'no')
     .map((account) => {
-      const snapshot = codex ? codexAccountSnapshot(codex, account.id) : undefined;
+      const snapshot = reported ? codexAccountSnapshot(reported, account.id) : undefined;
       const windows = snapshot ? windowsOf(snapshot) : [];
       const spent = windows.filter(
         (w) => w.utilization >= EXHAUSTED_UTILIZATION && !(Date.parse(w.resetsAt ?? '') <= now.getTime()),
@@ -295,10 +374,19 @@ function rankCodexAccounts(
       const resets = spent.map((w) => Date.parse(w.resetsAt ?? ''));
       return {
         id: account.id,
+        nearLimit: quotaNearLimit(snapshot, now),
+        expiresAt: quotaExpiresAt(snapshot, now),
         tightest: windows.length > 0 ? Math.max(...windows.map((w) => w.utilization)) : Number.POSITIVE_INFINITY,
         spentUntil: spent.length === 0 ? null : resets.some(Number.isNaN) ? Number.POSITIVE_INFINITY : Math.max(...resets),
       };
     })
-    // Two accounts with no reading subtract to NaN, which falls through to the id like any other tie.
-    .sort((a, b) => a.tightest - b.tightest || byAccountId(a, b));
+    // Two accounts expiring at Infinity, or unread, subtract to NaN, which falls through to the next
+    // key like any other tie.
+    .sort(
+      (a, b) =>
+        Number(a.nearLimit) - Number(b.nearLimit) ||
+        a.expiresAt - b.expiresAt ||
+        a.tightest - b.tightest ||
+        byAccountId(a, b),
+    );
 }
