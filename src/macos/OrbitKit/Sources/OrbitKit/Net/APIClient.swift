@@ -508,6 +508,15 @@ public final class APIClient: @unchecked Sendable {
         try await get("projects/\(projectID)")
     }
 
+    /// Start the project: the criteria confirmed by the seal the owner read, and the settings on the
+    /// card, in one write (`StartProject.body`). The owner's own credential and no acting session —
+    /// the door refuses one. A seal that moved, or a project already started, is a 409 and nothing
+    /// is written. The answer is not read here: what the start left is drawn from the reads that
+    /// follow it (the receipt, the project), as the browser does.
+    public func startProject(projectID: String, _ body: StartProjectRequestBody) async throws {
+        try await postRaw("projects/\(projectID)/start", body: body)
+    }
+
     // MARK: a project's owner items — the merge to confirm, and the coordinator's question
 
     /// What this project still owes somebody a decision about, split by who is expected to act

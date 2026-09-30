@@ -175,6 +175,11 @@ public extension Approvals {
     /// The caption over the field the owner is agreeing to. The same two words web puts over it.
     static let createDoneWhen = "Done when"
 
+    /// Under a new project's criteria: approving the create is not confirming them — the project's
+    /// start card asks that, once its coordinator has a plan to start. Web's
+    /// `CREATE_CRITERIA_CONFIRMED_AT_START`.
+    static let createCriteriaConfirmedAtStart = "You’ll confirm these when the project starts."
+
     /// The single create card's header: the count, exactly as the batch card's header is a count —
     /// "Create 1 task?" beside "Create 3 tasks?". The web half composes the same sentence into its
     /// own `Confirm: …` line and the native card draws an icon chip beside it, so it is the words

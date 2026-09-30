@@ -51,6 +51,9 @@ struct CreatedTasksCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
                 .padding(.bottom, .composerBandGap)
+                // Opened from elsewhere in the conversation: the start card's "View tasks ›" names
+                // the plan's tasks, and this is the list they are in (web's `openRequest`).
+                .onChange(of: console.createdTasksOpenTick) { _, _ in open = true }
             }
         }
     }
