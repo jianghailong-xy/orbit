@@ -1,0 +1,11 @@
+__pycache__/
+.dd/
+*.xcodeproj/
+build.log
+shots/
+results/
+.build/
+# Generated at run time from the commit under test — never kept here.
+Generated/
+macos/Sources/StartProbeMac/Generated/
+macos/Sources/StartProbeMac/shared/
