@@ -230,6 +230,7 @@ import {
   SessionDecisionStrip,
   decisionRowKey,
   revealCriteriaCard,
+  revealSettlementCard,
   type PendingDecisionRow,
 } from './DecisionRail';
 import {
@@ -266,6 +267,7 @@ import {
 } from './AcceptanceConfirmationCard';
 import {
   READY_TO_START,
+  START_PROJECT_INTENT,
   confirmedChangesKey,
   type SettlementQuestion,
 } from '../lib/projectStart';
@@ -4371,6 +4373,22 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     },
     [selectedId],
   );
+  // Arriving from the project page's "Review" on a request to start (`?intent=start-project`): once
+  // this conversation's start card is on screen it is scrolled to and marked, as the pinned strip's
+  // press does, and the intent goes, so a refresh does not scroll there again.
+  const startIntent = Boolean(selectedId) && searchParams.get('intent') === START_PROJECT_INTENT;
+  const startCardShown = openSettlementIn?.sessionId === selectedId && openSettlementIn?.question === 'START';
+  useEffect(() => {
+    if (!startIntent || !startCardShown || !revealSettlementCard()) return;
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('intent');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [startIntent, startCardShown, setSearchParams]);
   // The start card's "View tasks": the tasks this conversation filed are the strip above the
   // composer, so it is opened there rather than navigating away from the card being read. The same
   // read the strip is drawn from says whether there is one; without it the card links to the

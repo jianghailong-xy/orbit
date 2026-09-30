@@ -69,6 +69,11 @@ public enum WikiModeCopy {
     public static let dailyLimit = "Daily limit"                                  // WIKI_DAILY_LIMIT
     public static let runsADayUnit = "runs a day"                                 // WIKI_RUNS_A_DAY
     public static let dailyLimitNote = "A run starts when 20 sessions have settled, or when the oldest waits a day. Each run writes at most 30 changes."
+    public static let lookback = "Look back"                                      // WIKI_LOOKBACK
+    public static let lookbackNote = "How far back maintenance starts reading when you turn it on. Changing it later never moves maintenance back."
+    public static let lookbackNow = "From now on"                                 // WIKI_LOOKBACK_NOW
+    public static let lookbackAll = "All history"                                 // WIKI_LOOKBACK_ALL
+    public static let lookbackUnit = "days"                                       // WIKI_LOOKBACK_UNIT
     public static let cancel = "Cancel"                                           // WIKI_CANCEL
     public static let turnOn = "Turn on"                                          // WIKI_TURN_ON
     public static let turnOff = "Turn off"                                        // WIKI_TURN_OFF
@@ -79,6 +84,13 @@ public enum WikiModeCopy {
 
     /// `8 runs a day` (`wikiRunsADay`).
     public static func runsADay(_ runs: Int) -> String { runs == 1 ? "1 run a day" : "\(runs) \(runsADayUnit)" }
+
+    /// `Last 14 days`, `From now on`, `All history`: a look-back as its row and its picker say it (`wikiLookbackLabel`).
+    public static func lookbackLabel(_ days: Int?) -> String {
+        guard let days else { return lookbackAll }
+        if days == 0 { return lookbackNow }
+        return days == 1 ? "Last 1 day" : "Last \(days) \(lookbackUnit)"
+    }
 
     // MARK: an entry's marks and the owner's answers (mocks 17–18)
 
@@ -225,6 +237,35 @@ public enum WikiModeLogic {
     public static func providerLabel(_ provider: String, model: String?) -> String {
         guard let model, !model.isEmpty else { return provider }
         return "\(provider) · \(model)"
+    }
+
+    /// The three ways a look-back is picked, in the order both clients list them: none, some days, all of
+    /// history (`WIKI_LOOKBACK_CHOICES`).
+    public enum LookbackChoice: String, CaseIterable, Sendable {
+        case now, days, all
+    }
+
+    /// The pick a look-back setting shows (`wikiLookbackChoice`).
+    public static func lookbackChoice(_ days: Int?) -> LookbackChoice {
+        guard let days else { return .all }
+        return days == 0 ? .now : .days
+    }
+
+    /// The setting a pick writes: 0 from now on, nil all of history, and `days` for the days picked
+    /// (`wikiLookbackDays`).
+    public static func lookbackDays(_ choice: LookbackChoice, days: Int) -> Int? {
+        switch choice {
+        case .now:  return 0
+        case .days: return days
+        case .all:  return nil
+        }
+    }
+
+    /// The days `Last … days` starts on: the setting's own when it looks back some days, else the default's
+    /// (`wikiLookbackDaysOffered`).
+    public static func lookbackDaysOffered(_ days: Int?) -> Int {
+        if let days, days > 0 { return days }
+        return WikiMaintenanceSettings.default.lookbackDays!
     }
 
     // MARK: an entry's marks

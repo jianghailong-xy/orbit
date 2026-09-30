@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   WIKI_LIMITS,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
+  WIKI_MAINTENANCE_LOOKBACK_DAYS,
   WIKI_REJECT_REASON_LABELS,
   WIKI_REJECT_REASONS,
   WIKI_REVIEW_RULES,
@@ -29,6 +30,10 @@ import {
   WIKI_DEFAULT_REVIEW_MODE,
   WIKI_FLOORS_LEAD,
   WIKI_FLOORS_NOTE,
+  WIKI_LOOKBACK,
+  WIKI_LOOKBACK_CHOICES,
+  WIKI_LOOKBACK_NOTE,
+  WIKI_LOOKBACK_UNIT,
   WIKI_MAINTENANCE_EDIT,
   WIKI_MAINTENANCE_NAME,
   WIKI_MAINTENANCE_NOTE,
@@ -78,6 +83,10 @@ import {
   wikiCheckedOnMain,
   wikiEntryAnswerable,
   wikiIsRun,
+  wikiLookbackChoice,
+  wikiLookbackDays,
+  wikiLookbackDaysOffered,
+  wikiLookbackLabel,
   wikiMarkBanner,
   wikiModeFallback,
   wikiProviderLabel,
@@ -124,11 +133,13 @@ interface Fixture {
         turnOn: string;
         save: string;
         defaults: { provider: string; dailyRunLimit: number; min: number; max: number };
+        lookback: { choices: string[]; says: string[]; unit: string; defaultDays: number; min: number; max: number };
       };
       rows: string[];
       edit: string;
       turnOff: string;
       runsADay: Array<{ runs: number; says: string }>;
+      lookbacks: Array<{ days: number | null; choice: string; offered: number; says: string }>;
       workspaceLabels: Array<{ workspace: Parameters<typeof wikiWorkspaceLabel>[0]; says: string }>;
       providerLabels: Array<{ provider: string; model: string | null; says: string }>;
     };
@@ -266,6 +277,7 @@ describe('the Wiki settings page says the fixture’s words, in its order', () =
         [WIKI_WORKSPACE, WIKI_WORKSPACE_NOTE],
         [WIKI_PROVIDER, WIKI_PROVIDER_NOTE],
         [WIKI_DAILY_LIMIT, WIKI_DAILY_LIMIT_NOTE],
+        [WIKI_LOOKBACK, WIKI_LOOKBACK_NOTE],
       ].map(([label, note]) => ({ label, note })),
     ).toEqual(maintenance.form.fields);
     expect(WIKI_RUNS_A_DAY).toBe(maintenance.form.unit);
@@ -274,7 +286,7 @@ describe('the Wiki settings page says the fixture’s words, in its order', () =
       maintenance.form.turnOn,
       maintenance.form.save,
     ]);
-    expect([WIKI_STATUS, WIKI_WORKSPACE, WIKI_PROVIDER, WIKI_DAILY_LIMIT]).toEqual(maintenance.rows);
+    expect([WIKI_STATUS, WIKI_WORKSPACE, WIKI_PROVIDER, WIKI_DAILY_LIMIT, WIKI_LOOKBACK]).toEqual(maintenance.rows);
     expect([WIKI_MAINTENANCE_EDIT, WIKI_TURN_OFF]).toEqual([maintenance.edit, maintenance.turnOff]);
     // The form opens on the contract's defaults and bounds.
     expect(WIKI_DEFAULT_MAINTENANCE_SETTINGS.provider).toBe(maintenance.form.defaults.provider);
@@ -283,6 +295,23 @@ describe('the Wiki settings page says the fixture’s words, in its order', () =
     for (const row of maintenance.runsADay) expect(wikiRunsADay(row.runs)).toBe(row.says);
     for (const row of maintenance.workspaceLabels) expect(wikiWorkspaceLabel(row.workspace)).toBe(row.says);
     for (const row of maintenance.providerLabels) expect(wikiProviderLabel(row.provider, row.model)).toBe(row.says);
+  });
+
+  it('offers the look-back as the fixture does: from now on, some days, all history — 14 days by default', () => {
+    const lookback = shared.settings.maintenance.form.lookback;
+    expect([...WIKI_LOOKBACK_CHOICES]).toEqual(lookback.choices);
+    expect(WIKI_LOOKBACK_CHOICES.map((choice) => wikiLookbackLabel(wikiLookbackDays(choice, lookback.defaultDays)))).toEqual(lookback.says);
+    expect(WIKI_LOOKBACK_UNIT).toBe(lookback.unit);
+    // The form opens on the contract's default and bounds.
+    expect(WIKI_DEFAULT_MAINTENANCE_SETTINGS.lookbackDays).toBe(lookback.defaultDays);
+    expect(WIKI_MAINTENANCE_LOOKBACK_DAYS).toEqual({ min: lookback.min, max: lookback.max });
+    for (const row of shared.settings.maintenance.lookbacks) {
+      expect(wikiLookbackLabel(row.days), String(row.days)).toBe(row.says);
+      expect(wikiLookbackChoice(row.days), String(row.days)).toBe(row.choice);
+      expect(wikiLookbackDaysOffered(row.days), String(row.days)).toBe(row.offered);
+      // What the picker opens on writes back the setting it was read from.
+      expect(wikiLookbackDays(wikiLookbackChoice(row.days), wikiLookbackDaysOffered(row.days)), String(row.days)).toBe(row.days);
+    }
   });
 
   it('explains a mode the space switched back to on its own, and nothing the owner chose', () => {

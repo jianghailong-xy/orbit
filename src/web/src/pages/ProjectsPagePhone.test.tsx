@@ -55,6 +55,30 @@ const DONE_PROJECT = {
   buckets: { running: 0, ready: 0, blocked: 0, done: 1, cancelled: 0 },
   lastActivityAt: '2026-01-02T00:00:00Z',
 };
+/** A project nobody has started, whose coordinator asked to start it two minutes ago (mock board3 ①). */
+const STARTABLE_ID = '0195c0de-0000-7000-8000-0000000000c4';
+const STARTABLE_PROJECT = {
+  id: STARTABLE_ID,
+  title: 'Runner 页整页改版（iOS/macOS + web）',
+  status: 'OPEN',
+  goal: 'One page for runners on every client',
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-02T00:00:00Z',
+  _count: { tasks: 5 },
+  buckets: { running: 0, ready: 1, blocked: 4, done: 0, cancelled: 0 },
+  lastActivityAt: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+  attention: {
+    userBlockers: 0,
+    coordinatorBlockers: 0,
+    systemBlockers: 0,
+    maxSeverity: null,
+    attentionSinceAt: null,
+    nextCheckAt: null,
+    ownerItems: [],
+    coordinatorItems: null,
+    startRequest: { waitingSince: new Date(Date.now() - 2 * 60 * 1000 - 5_000).toISOString() },
+  },
+};
 const CANCELLED_PROJECT = {
   id: CANCELLED_ID,
   title: 'Discarded work',
@@ -150,7 +174,7 @@ afterEach(async () => {
   }
 });
 
-async function mount(): Promise<void> {
+async function mount(firstTitle = 'Row folding'): Promise<void> {
   const nextClient = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
   });
@@ -171,7 +195,7 @@ async function mount(): Promise<void> {
     );
   });
   await waitForUi(() => {
-    expect(nextContainer.querySelector('.project-row-title')?.textContent).toBe('Row folding');
+    expect(nextContainer.querySelector('.project-row-title')?.textContent).toBe(firstTitle);
     expect(nextContainer.querySelector('[data-testid="location"]')?.textContent).toBe('/projects');
   });
 }
@@ -290,6 +314,28 @@ describe('projects list on a phone', () => {
     expect(btn.getAttribute('aria-label')).toBe('New project');
     // Still the same control: the icon is what is left to press.
     expect(btn.querySelector('.anticon-plus')).toBeTruthy();
+  });
+
+  it('leads with a project waiting to be started: Needs attention, and Needs you · Ready to start', async () => {
+    stubViewport(true);
+    apiMock.mockImplementation((path: string) => {
+      if (path === '/projects?status=OPEN') return Promise.resolve([OPEN_PROJECT, STARTABLE_PROJECT]) as Promise<never>;
+      if (path === '/workspaces' || path === '/runners') return Promise.resolve([]) as Promise<never>;
+      return Promise.reject(new Error(`unstubbed endpoint: ${path}`));
+    });
+    await mount(STARTABLE_PROJECT.title);
+
+    const attention = mountedContainer().querySelector('section[data-section="attention"]')!;
+    expect(attention).toBeTruthy();
+    expect(attention.querySelector('.project-row-title')?.textContent).toBe(STARTABLE_PROJECT.title);
+    expect(attention.querySelector('.project-row-chip')?.textContent).toBe('Needs you · Ready to start · 2m');
+    expect(attention.querySelector('.project-row-chip')?.classList.contains('project-row-chip-warning')).toBe(true);
+    // The phone drops the status tag, for this row as for every other.
+    await waitForUi(() => expect(rowTags()).toEqual([]));
+    // The project nobody is waiting on stays where its work puts it.
+    expect(
+      mountedContainer().querySelector('section[data-section="running"] .project-row-title')?.textContent,
+    ).toBe('Row folding');
   });
 
   it('spells the label out on a desktop, and needs no aria-label to do it', async () => {

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // `orbit wiki verify` against a fake vLLM endpoint (contract `agentSurface.verify`).
@@ -115,6 +116,28 @@ func runFakeVerifyClaude(dir string) int {
 		"type": "result", "subtype": "success", "is_error": false, "api_error_status": nil, "result": message.Content[0].Text,
 		"usage": message.Usage,
 	})
+	if flag("--output-format") == "stream-json" {
+		// --include-partial-messages: the answer as it arrives, a delta at a time, written out as it comes,
+		// then the whole message and the result line — the order the real one writes them in.
+		emit := func(v interface{}) {
+			line, _ := json.Marshal(v)
+			_, _ = os.Stdout.Write(append(line, '\n'))
+			_ = os.Stdout.Sync()
+		}
+		emit(map[string]interface{}{"type": "system", "subtype": "init", "model": flag("--model")})
+		text := []rune(message.Content[0].Text)
+		for start := 0; start < len(text); start += 400 {
+			end := start + 400
+			if end > len(text) {
+				end = len(text)
+			}
+			emit(map[string]interface{}{"type": "stream_event", "event": map[string]interface{}{"type": "content_block_delta", "index": 0,
+				"delta": map[string]interface{}{"type": "text_delta", "text": string(text[start:end])}}})
+			time.Sleep(2 * time.Millisecond)
+		}
+		emit(map[string]interface{}{"type": "assistant", "message": map[string]interface{}{"role": "assistant",
+			"content": []map[string]interface{}{{"type": "text", "text": message.Content[0].Text}}}})
+	}
 	fmt.Println(string(out))
 	return 0
 }
@@ -1027,6 +1050,27 @@ func TestWikiVerifyOffersTheModelOnlyLiveNeighboursAndTheAmendsOwnEntry(t *testi
 		if !strings.Contains(prompt, part) {
 			t.Errorf("the prompt does not carry %q:\n%s", part, prompt)
 		}
+	}
+}
+
+// An adopted add whose very content a later op made live is judged that entry's duplicate by the server,
+// whatever the model said (contract `reviewModes.verification.adoption.twin`): the line names the entry the
+// server found, where a duplicate verdict names the one the model did.
+func TestWikiVerifySaysWhichLiveEntryAnAdoptedOpTurnedOutToDuplicate(t *testing.T) {
+	twin := describeWikiVerdictOutcome(map[string]interface{}{"status": "reinforced", "entryId": "entry-later", "reinforced": true},
+		wikiVerdict{Verdict: "supported", Reason: "The record says so."})
+	if twin != "a duplicate of the live entry entry-later, which holds its very content: its sources were added there" {
+		t.Errorf("an adopted twin reads %q", twin)
+	}
+	held := describeWikiVerdictOutcome(map[string]interface{}{"status": "reinforced", "entryId": "entry-later", "reinforced": false},
+		wikiVerdict{Verdict: "partial", Reason: "Some of it."})
+	if !strings.HasPrefix(held, "a duplicate of the live entry entry-later") || !strings.Contains(held, "its sources were not added") {
+		t.Errorf("an adopted twin in a space that reviews every reinforce reads %q", held)
+	}
+	named := describeWikiVerdictOutcome(map[string]interface{}{"status": "reinforced", "entryId": "entry-named", "reinforced": true},
+		wikiVerdict{Verdict: "duplicate", Reason: "Said already.", DuplicateOf: "entry-named"})
+	if named != "a duplicate of entry-named: its sources were added there" {
+		t.Errorf("a duplicate verdict reads %q", named)
 	}
 }
 

@@ -33,7 +33,7 @@ import { wikiMaintenanceProviderProblem, wikiMaintenanceSpaceOf } from './wiki-m
  * the reclaim leaves it out, the way a pinned SOURCE is withheld from a runner that cannot pin (SR35).
  */
 
-type RunReader = Pick<Prisma.TransactionClient, 'session' | 'wikiSpace' | 'modelProvider' | 'providerPool'>;
+type RunReader = Pick<Prisma.TransactionClient, 'session' | 'wikiSpace' | 'modelProvider' | 'providerPool' | 'wikiPlanJob'>;
 
 /**
  * The run a session is claimed with when it is a maintenance session, or null for every other session.
@@ -61,8 +61,11 @@ export async function wikiMaintenanceRunOf(
     cleanStart: true,
   };
   const named = session.provider ?? AgentProvider.CLAUDE;
+  // A plan job's task (contract `plan.jobs.task`) runs in the maintenance list whether or not maintenance
+  // is on: a space is drafted a plan before its owner turns maintenance on. Everything else holds for it.
+  const planJob = (await db.wikiPlanJob.findFirst({ where: { taskId: session.taskId }, select: { id: true } })) !== null;
   let why: string | null = null;
-  if (!settings.enabled) {
+  if (!settings.enabled && !planJob) {
     why = "maintenance is off in its space: the owner turned it off after this run was made";
   } else if (!settings.workspaceId || settings.workspaceId !== session.workspaceId) {
     why = "it runs only in the workspace its space's maintenance settings name, and this session is in another one";
@@ -118,10 +121,11 @@ export function wikiMaintenanceSessionSql(sessionAlias: string): Prisma.Sql {
 /**
  * How many maintenance tasks a space has made today (the UTC day `now` is in) against its daily limit
  * (contract `space.settings.maintenance.keys.dailyRunLimit`): every task of its maintenance list made
- * since midnight UTC, however it ended. The maintenance job asks it before it makes another.
+ * since midnight UTC, however it ended — but a plan job's (contract `plan.jobs`), which is not a
+ * maintenance run and is not counted against the day. The maintenance job asks it before it makes another.
  */
 export async function wikiMaintenanceRunsToday(
-  db: Pick<Prisma.TransactionClient, 'wikiSpace' | 'task'>,
+  db: Pick<Prisma.TransactionClient, 'wikiSpace' | 'task' | 'wikiPlanJob'>,
   ownerId: string,
   spaceId: string,
   now: Date = new Date(),
@@ -133,8 +137,14 @@ export async function wikiMaintenanceRunsToday(
     : undefined;
   const settings = wikiMaintenanceSettings(stored);
   const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const planTasks = settings.listId
+    ? (await db.wikiPlanJob.findMany({ where: { ownerId, spaceId, madeAt: { gte: since }, taskId: { not: null } }, select: { taskId: true } }))
+      .map((job) => job.taskId as string)
+    : [];
   const used = settings.listId
-    ? await db.task.count({ where: { ownerId, listId: settings.listId, createdAt: { gte: since } } })
+    ? await db.task.count({
+      where: { ownerId, listId: settings.listId, createdAt: { gte: since }, ...(planTasks.length > 0 ? { id: { notIn: planTasks } } : {}) },
+    })
     : 0;
   return {
     limit: settings.dailyRunLimit,
