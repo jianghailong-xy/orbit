@@ -94,6 +94,9 @@ export interface SessionResumeDto extends SessionTurnDto {
    *  same rejection as SessionConfigDto.provider. No reload turn is needed here: the revived
    *  session is claimed afresh, and the claim resolves the environment from the row. */
   provider?: string;
+  /** With `provider` naming the built-in Codex or Claude engine: which of the runner's accounts of
+   *  it — `automatic`, `default` or a slot id — as SessionConfigDto.account. */
+  account?: string;
   /** The run this message authorises STOPPING, named by its public id.
    *
    *  Only read when this session's task is being worked by another run and `provider` names a
@@ -161,6 +164,11 @@ export interface SessionConfigDto {
    *  the transcript, the resume id and the wire protocol belong to the CLI that started the
    *  session. Omitted keeps the current provider. */
   provider?: string;
+  /** With `provider` moving the session onto the built-in Codex or Claude engine: which of the
+   *  runner's accounts of it the session runs on — `automatic` (Orbit's pick, unpinned), `default`
+   *  or a slot id (pinned). Omitted is Automatic's pick unless the session is pinned there. A
+   *  session already on that engine moves with PATCH /sessions/:id/account instead. */
+  account?: string;
 }
 
 /**

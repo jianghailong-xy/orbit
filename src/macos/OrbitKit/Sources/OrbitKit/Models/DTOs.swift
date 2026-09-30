@@ -1122,6 +1122,9 @@ public struct ResumeRequest: Codable, Sendable {
     /// the same vendor, say). Cross-runtime is rejected server-side. Sent only when the user picked
     /// one while the session was ended; nil keeps whatever it ended on.
     public let provider: String?
+    /// With `provider` naming the built-in Codex or Claude engine: which of the runner's accounts of
+    /// it the revived session runs on — `automatic`, `default` or a slot id (`ConfigUpdateRequest`).
+    public let account: String?
     /// The one thing that authorises stopping a run that is doing work: the reader's answer to
     /// `TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED`, echoed back as the public id the server
     /// put in `confirm.value`. It names the RUN rather than being a bare flag, so a claim that
@@ -1131,7 +1134,7 @@ public struct ResumeRequest: Codable, Sendable {
     public init(clientTurnId: String, content: String, kind: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
-                attachmentIds: [String]? = nil, provider: String? = nil,
+                attachmentIds: [String]? = nil, provider: String? = nil, account: String? = nil,
                 stopSessionId: String? = nil) {
         self.clientTurnId = clientTurnId
         self.content = content
@@ -1142,6 +1145,7 @@ public struct ResumeRequest: Codable, Sendable {
         self.fastMode = fastMode
         self.attachmentIds = attachmentIds
         self.provider = provider
+        self.account = account
         self.stopSessionId = stopSessionId
     }
 }
@@ -1166,13 +1170,19 @@ public struct ConfigUpdateRequest: Codable, Sendable {
     /// re-spawns with the new environment and --resume, so the conversation carries over.
     /// Cross-runtime is rejected server-side.
     public let provider: String?
+    /// With `provider` moving the session onto the built-in Codex or Claude engine: which of the
+    /// runner's accounts of it — `automatic` (Orbit's pick), `default` or a slot id (pinned). Nil is
+    /// Automatic's pick unless the session is pinned there. The Provider submenu lists each engine's
+    /// accounts under it, so a switch can land on one directly (web parity).
+    public let account: String?
     public init(model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
-                fastMode: Bool? = nil, provider: String? = nil) {
+                fastMode: Bool? = nil, provider: String? = nil, account: String? = nil) {
         self.model = model
         self.permissionMode = permissionMode
         self.effort = effort
         self.fastMode = fastMode
         self.provider = provider
+        self.account = account
     }
 }
 

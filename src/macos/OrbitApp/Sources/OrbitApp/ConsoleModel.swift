@@ -126,6 +126,9 @@ final class ConsoleModel {
     /// Nil unless the user picked one here: the session's own provider must never be re-asserted
     /// from a console whose context has not loaded yet.
     private(set) var pendingResumeProvider: String?
+    /// The account of the engine `pendingResumeProvider` moves the session onto, picked under it in the
+    /// Provider submenu — sent with that switch on the revive (`ResumeRequest.account`).
+    private(set) var pendingResumeAccount: String?
     /// The refusal this console's last send met, as structure rather than as the server's sentence.
     /// Nil for every other failure, which still reads its own words out of `statusMessage`.
     private(set) var runConflict: TaskRunHandoff.Conflict?
@@ -288,10 +291,28 @@ final class ConsoleModel {
     /// This draft starts `engine` on Automatic: it is on offer and no account is picked.
     func draftAutomatic(_ engine: String) -> Bool { isDraft && automaticOffered(engine) && draftAccount(engine) == nil }
     /// This session is on Automatic: nobody picked its account by hand, and its workspace leaves the
-    /// account to Orbit — so it moves to an account with room when the one it is on hits its limit.
+    /// account to Orbit — so it moves to an account with room when the one it is on hits its limit. An
+    /// ended session's held switch onto the engine says so itself.
     var sessionAutomatic: Bool {
         guard !isDraft, let engine = accountEngine else { return false }
+        if pendingResumeProvider == engine && !isLive {
+            return automaticOffered(engine)
+                && (pendingResumeAccount == nil || pendingResumeAccount == CodexAccounts.automaticID)
+        }
         return automaticOffered(engine) && !(engine == "claude" ? sessionClaudeAccountPinned : sessionCodexAccountPinned)
+    }
+    /// Where an ended session's held switch onto `engine` resumes, as the server decides it
+    /// (accountOnProviderSwitch): the account it names; else, unless the session is pinned there,
+    /// Automatic's pick; else where it already was.
+    private func pendingEngineAccount(_ engine: String) -> String? {
+        if let named = pendingResumeAccount, named != CodexAccounts.automaticID { return named }
+        let own = engine == "claude" ? sessionClaudeAccount : sessionCodexAccount
+        let pinned = engine == "claude" ? sessionClaudeAccountPinned : sessionCodexAccountPinned
+        if pinned && pendingResumeAccount == nil { return own }
+        if automaticOffered(engine) {
+            return CodexAccounts.toStartOn(engineAccounts(engine), usage: runnerPlanUsage?.snapshot(for: engine))
+        }
+        return own ?? (engine == "claude" ? workspaceClaudeAccount : workspaceCodexAccount)
     }
     /// The `engine` account this draft or session runs on, as far as its runner reports it: a draft's
     /// pick, else its workspace's, else the one Automatic would choose now; a session's own, else its
@@ -303,6 +324,9 @@ final class ConsoleModel {
                 ?? (draftAutomatic(engine)
                     ? CodexAccounts.toStartOn(engineAccounts(engine), usage: runnerPlanUsage?.snapshot(for: engine))
                     : nil)
+        } else if pendingResumeProvider == engine && !isLive {
+            // Only while it is held: once the revive lands the session is live and says itself.
+            wanted = pendingEngineAccount(engine)
         } else {
             wanted = engine == "claude"
                 ? (sessionClaudeAccount ?? workspaceClaudeAccount)
@@ -337,6 +361,16 @@ final class ConsoleModel {
     /// Those rows, each with its own quota (`SessionProviderChoices.accountChoices`).
     var accountChoices: [AccountChoice] {
         guard accountRowsOffered, let engine = accountEngine else { return [] }
+        return SessionProviderChoices.accountChoices(engineAccounts(engine),
+                                                     usage: runnerPlanUsage?.snapshot(for: engine)) ?? []
+    }
+    /// Another built-in engine's accounts, listed under it in the Provider submenu as the new-session
+    /// picker lists them (web parity): a switch onto that engine can land on any of them. A session, on
+    /// a runner that carries a conversation between them, with two or more to choose from.
+    func accountChoices(for engine: String) -> [AccountChoice] {
+        guard !isDraft, engine == "codex" || engine == "claude", engineAccounts(engine).count >= 2 else { return [] }
+        let capability = engine == "claude" ? "claude-account-move/v1" : "codex-account-move/v1"
+        guard runnerCapabilities?.contains(capability) ?? false else { return [] }
         return SessionProviderChoices.accountChoices(engineAccounts(engine),
                                                      usage: runnerPlanUsage?.snapshot(for: engine)) ?? []
     }
@@ -1360,8 +1394,16 @@ final class ConsoleModel {
     /// endpoint with a list of its own does not), and mode/effort are re-clamped to what that pair
     /// accepts — the same follow-on a model change makes. Live pushes it now; ended holds it for
     /// the resume.
-    func selectProvider(_ slug: String) async {
-        guard !isDraft, slug != provider else { return }
+    ///
+    /// `account`, when the pick was one of the engine's accounts listed under it rather than the
+    /// engine's own row: the switch lands the session there (`ConfigUpdateRequest.account`) —
+    /// Automatic's pick otherwise.
+    func selectProvider(_ slug: String, account: String? = nil) async {
+        guard !isDraft else { return }
+        if slug == provider {
+            if let account { await switchAccount(account) }
+            return
+        }
         // Read before the assignment below, because what the note is ABOUT is the move from one to
         // the other — and the timing of it, which is the whole question: a run keeps its provider
         // for its whole life, so a pick made over something that is going lands on the next turn.
@@ -1394,13 +1436,15 @@ final class ConsoleModel {
         effort = nextEffort
         guard isLive else {
             pendingResumeProvider = slug
+            pendingResumeAccount = account
             return
         }
         // Cleared, not left behind: a live switch is already persisted, and a pick still sitting
         // here would silently re-assert itself on some later resume of this same console.
         pendingResumeProvider = nil
+        pendingResumeAccount = nil
         await applyConfig(model: nextModel, permissionMode: nextMode.rawValue,
-                          effort: nextEffort.rawValue, provider: slug)
+                          effort: nextEffort.rawValue, provider: slug, account: account)
     }
 
     /// Pick a provider for this draft (the new-session hero). Each provider owns its own model
@@ -1441,6 +1485,12 @@ final class ConsoleModel {
     /// conversation across; an ended session takes it with its next resume.
     func switchAccount(_ account: String) async {
         guard !isDraft, let engine = accountEngine else { return }
+        // An ended session whose switch onto this engine is still held: nothing on the server is on
+        // the engine yet, so the account rides along with the switch, on the message that revives it.
+        if pendingResumeProvider == engine && !isLive {
+            pendingResumeAccount = account
+            return
+        }
         // Nothing moves: Automatic picked again, or the account the session is already pinned to.
         if account == CodexAccounts.automaticID ? sessionAutomatic : account == self.account(for: engine) && !sessionAutomatic {
             return
@@ -1513,7 +1563,7 @@ final class ConsoleModel {
     /// still re-spawns for all of them. Neither client shows the difference, so this comment is
     /// where it is written down.
     func applyConfig(model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
-                     fastMode: Bool? = nil, provider: String? = nil) async {
+                     fastMode: Bool? = nil, provider: String? = nil, account: String? = nil) async {
         guard isLive else { return }
         // A provider only ever arrives from an explicit pick — `loadContext`'s adopt never sets one
         // — so it needs no comparison against the synced pair to prove it isn't an echo.
@@ -1526,7 +1576,8 @@ final class ConsoleModel {
         do {
             try await api.updateConfig(sessionID: sessionID,
                 ConfigUpdateRequest(model: model, permissionMode: permissionMode, effort: effort,
-                                    fastMode: fastMode, provider: provider))
+                                    fastMode: fastMode, provider: provider,
+                                    account: provider != nil ? account : nil))
             let baseline = syncedConfig ?? (model: modelID,
                                              permissionMode: self.permissionMode.rawValue,
                                              effort: self.effort.rawValue,
@@ -1990,6 +2041,7 @@ final class ConsoleModel {
                                           fastMode: fastMode,
                                           attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds,
                                           provider: pendingResumeProvider,
+                                          account: pendingResumeProvider != nil ? pendingResumeAccount : nil,
                                           // Only ever the answer to the question that asked about
                                           // stopping this exact run, and only for this one send.
                                           stopSessionId: confirmedStopSessionID)
