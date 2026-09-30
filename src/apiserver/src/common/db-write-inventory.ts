@@ -1269,6 +1269,31 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside. After the commit and outside the closure: one `task.changed` for the task made (nothing depends on it; the dispatcher reads runAt).',
     answer: 'Typed 503 from the global boundary is never reached: the trigger runs off the request path, logs the failure, and the next fact of the space asks again.',
   },
+  // The plan's jobs (contracts/wiki.contract.json `plan.jobs`, migration 0338): the space's hidden
+  // maintenance list a job needs, made when maintenance was never turned on, and the job's task, made
+  // under that list's lock like a maintenance task.
+  {
+    at: 'wiki/wiki-maintenance-settings.ts#ensureList',
+    shape: 'TX_RETRIED',
+    locks: 'The task_list INSERT first, whose owner foreign key takes the user row FOR KEY SHARE (rank 10) and which creates the list row (rank 20); then the wiki_space row FOR UPDATE (rank 60), read again under that lock; then either the DELETE of the list it just made (the same rank-20 row, its own) when the locked row names one already, or one UPDATE of that wiki_space row merging the maintenance key alone. Ascending throughout, as `setWikiMaintenance`: the list is written before the space row is locked, never after.',
+    identity: 'The space and its owner. The list is recorded only when the locked row names none, so two first asks leave one list: the second finds the first one\'s and deletes its own.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The settings are re-read under the row lock inside the closure and the decision is re-derived from them, so a re-run reaches what the committed row says. A rolled-back attempt takes the list it made with it.',
+    effects: 'None inside, and none after: the list is hidden, so no list-index event is owed.',
+    answer: 'Typed 503 from the global boundary; the plan job stays queued or held, and the owner\'s next request or settings change asks again.',
+  },
+  {
+    at: 'wiki/wiki-plan-job.ts#make',
+    shape: 'TX_RETRIED',
+    locks: 'The space\'s maintenance task_list row (rank 20) by SELECT … FOR NO KEY UPDATE — the lock the maintenance trigger takes, so a job and a maintenance run make their tasks one at a time — before any task of it is read or written; then the job (read, not locked) and the list\'s unended tasks are read under it; then one task INSERT (its foreign keys take the user, the list this transaction already holds and the workspace FOR KEY SHARE) and one UPDATE of the wiki_plan_job row by id (rank 60, reaching wiki_space through (space_id, owner_id) FOR KEY SHARE). Ascending throughout: the list before the task, the task before the wiki row.',
+    identity: 'The job and the space\'s maintenance list. Under the list lock a job no longer queued or held, or a task of the list that has not ended, makes the closure write nothing and answer why, so of two facts asking together one makes the task and the other finds it.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The job\'s state and the unended task are re-read under the list lock inside the closure, and the task written is built before it from reads that do not change with a retry, so a re-run either finds its own committed task (and writes nothing) or writes the same task and job update.',
+    effects: 'None inside. After the commit and outside the closure: one `task.changed` for the task made, published by the caller (nothing depends on it; the dispatcher reads runAt).',
+    answer: 'Typed 503 from the global boundary; the job stays queued or held and the next fact asks again.',
+  },
   // The articles (contracts/wiki.contract.json `articles`, migration 0317): one topic's articles
   // replaced together, by a maintenance run of the space or the server's own import.
   {
@@ -1829,6 +1854,13 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'wiki/wiki-maintenance-run.ts#wikiMaintenanceRunContext', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The run started: the calling session and the time, written onto the run row by id. A later start of the same task (a retried session) overwrites both.' },
   { at: 'wiki/wiki-maintenance-run.ts#noteWikiMaintenanceRunEnd', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'How the run ended — outcome, error, report and the ops the server refused — written onto the run row by id after the cursor was advanced or refused. A later end of the same run overwrites it; `orbit wiki check` reads what is there.' },
   { at: 'wiki/wiki-articles.ts#plan', class: 'INSERT', statements: 1, note: 'A space with no topic is given the default ones (contracts/wiki.contract.json `articles.seeding`): one INSERT of the batch, ON CONFLICT DO NOTHING on (space_id, slug), so two first plans leave one set. Only when a count found none; a space that has topics is never written. Outside a transaction on purpose: the rows are names and path prefixes, nothing reads them as a fact about anything else, and a plan that loses the race simply reads the winner\'s.' },
+  { at: 'wiki/wiki-plan-job.ts#requestWikiPlanJob', class: 'INSERT', statements: 1, note: 'A plan job a fact asked for (contracts/wiki.contract.json `plan.jobs`): one INSERT, queued, when the space has no draft or revision that has not ended. Outside a transaction on purpose: the partial unique index on the space\'s open drafts is the fence, and the loser of two requests at once reads the winner\'s job and answers with it.' },
+  { at: 'wiki/wiki-plan-job.ts#holdJob', class: 'ONE_ROW_CAS', statements: 1, note: 'Why a job was not made (contract `plan.jobs.held`), written onto its row by id and only while it is still queued or held, and only when the reason is not the one it already holds, so the time it first held for that reason is kept. The task made clears it.' },
+  { at: 'wiki/wiki-plan-job.ts#queueJob', class: 'ONE_ROW_CAS', statements: 1, note: 'A job that waits behind an unended task of its list: its row by id, only while it is still queued or held, its held reason cleared.' },
+  { at: 'wiki/wiki-plan-job.ts#endJobWhoseTaskIsOver', class: 'ONE_ROW_CAS', statements: 1, note: 'A made job whose task ended or is gone before its run said how it went: its row by id, only while it is still made, ended failed with why. A job its run ended already is not matched and keeps what the run said.' },
+  { at: 'wiki/wiki-plan-job.ts#startWikiPlanJob', class: 'ONE_ROW_CAS', statements: 1, note: 'A job\'s run started (contract `plan.jobs.context`): the calling session, and the first time it said so (coalesce), on its row by id while it is made. A retried session of the same task overwrites the session and keeps the time.' },
+  { at: 'wiki/wiki-plan-job.ts#progressWikiPlanJob', class: 'ONE_ROW_CAS', statements: 1, note: 'The gate round a job\'s run is on (contract `plan.jobs.progress`), on its row by id while it is made; a later round overwrites it. A job ended meanwhile is not matched, and the door answers WIKI_PLAN_NO_JOB.' },
+  { at: 'wiki/wiki-plan-job.ts#finishWikiPlanJob', class: 'ONE_ROW_CAS', statements: 1, note: 'How a job\'s run ended (contract `plan.jobs.finish`): its row by id while it is made, ended with the outcome, the version or the gate\'s errors, the report and the last draft. A job ended already is not matched, so a second end keeps the first.' },
   { at: 'wiki/wiki-plan.ts#propose', class: 'INSERT', statements: 1, note: 'A maintenance run\'s proposed change to the plan (contracts/wiki.contract.json `plan.proposals`): one INSERT, pending, after the gate passed it against the confirmed version. Outside a transaction on purpose: it changes no version, and the owner\'s acceptance gates it again against the plan as it stands then.' },
 ];
 

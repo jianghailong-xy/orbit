@@ -40,29 +40,10 @@ import { IsPublicId } from '../common/public-id';
  * naming the field is the honest answer for it.
  */
 
-/** POST /api/wiki/spaces — the owner's own space, for a codebase or for nothing in particular. */
-export class CreateWikiSpaceDto {
-  @IsString()
-  @MinLength(1)
-  @MaxLength(120)
-  title!: string;
-
-  /** The repository as the owner states it; normalized on the way in (§2.1). */
-  @IsOptional()
-  @IsString()
-  @MaxLength(300)
-  repoUrl?: string;
-
-  /** Left out, the slug is derived from the repository and, with none, from the title. */
-  @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  slug?: string;
-}
-
 /**
- * `maintenance` in PATCH /api/wiki/spaces/:id (contract `space.settings.maintenance`): any of the
- * four the owner sets. `listId` is the server's and is not a field here — the whitelist drops it.
+ * `maintenance` in PATCH /api/wiki/spaces/:id, and in POST /api/wiki/spaces (contract
+ * `space.settings.maintenance`): any of the four the owner sets. Declared before the two bodies that
+ * carry it, whose decorator metadata names it as they are defined. `listId` is the server's and is not a field here — the whitelist drops it.
  */
 export class WikiMaintenanceSettingsDto {
   @IsOptional()
@@ -87,6 +68,36 @@ export class WikiMaintenanceSettingsDto {
   @Min(WIKI_MAINTENANCE_DAILY_RUN_LIMIT.min)
   @Max(WIKI_MAINTENANCE_DAILY_RUN_LIMIT.max)
   dailyRunLimit?: number;
+}
+
+/** POST /api/wiki/spaces — the owner's own space, for a codebase or for nothing in particular. */
+export class CreateWikiSpaceDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  title!: string;
+
+  /** The repository as the owner states it; normalized on the way in (§2.1). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  repoUrl?: string;
+
+  /** Left out, the slug is derived from the repository and, with none, from the title. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  slug?: string;
+
+  /**
+   * The space's Wiki maintenance from the start (contract `space.settings.maintenance`), as a PATCH sets
+   * it: a space created with a maintenance workspace has its plan's first draft made at once (contract
+   * `plan.jobs.trigger`). The owner channel's alone, like the PATCH.
+   */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => WikiMaintenanceSettingsDto)
+  maintenance?: WikiMaintenanceSettingsDto;
 }
 
 /** PATCH /api/wiki/spaces/:id — the owner's settings (§2.1 settings, contract `space.settings`). */

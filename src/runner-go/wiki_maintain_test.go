@@ -1006,8 +1006,10 @@ func TestWikiMaintainCleanStartLetsTheRunFinish(t *testing.T) {
 			t.Errorf("%s=%q, want %q", key, env[key], want)
 		}
 	}
-	if budget != "10800000" {
-		t.Errorf("the run's budget is %s ms, want three hours", budget)
+	// Five hours: the same clean start runs a plan job's draft (wiki_plan_draft.go), whose four steps and
+	// three gate rounds take longer on a shared GPU than a maintenance run's three hours.
+	if budget != "18000000" {
+		t.Errorf("the run's budget is %s ms, want five hours", budget)
 	}
 }
 

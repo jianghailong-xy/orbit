@@ -242,7 +242,9 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// the same run's re-verification, refused to every other session the same way.
 		// articles is the same run's too, refused to every other session the same way, and so is maintain,
 		// the whole run in one command. check only reads whether a run did what its task expected.
-		for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "anchors verify", "articles", "maintain", "check"} {
+		// plan draft and plan revise are a plan job's run, refused to every session but the job's the same
+		// way, and plan check, like check, only reads whether a job did what its task was made for.
+		for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "anchors verify", "articles", "maintain", "check", "plan draft", "plan revise", "plan check"} {
 			rules = append(rules, "Bash("+command+" wiki "+action+" *)")
 		}
 		// import proposes, into a space its owner named, what the session's own provider's model read in

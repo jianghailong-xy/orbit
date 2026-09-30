@@ -2,6 +2,7 @@ import { ConflictException, HttpException, Injectable, Logger, NotFoundException
 import { Prisma } from '@prisma/client';
 import {
   KIND_SPECS,
+  RunEventType,
   WIKI_CHALLENGE_ANSWERS,
   WIKI_DEFAULT_SPACE_SETTINGS,
   WIKI_KINDS,
@@ -80,7 +81,8 @@ import {
   type NeighbourLookups,
   type NeighbourRow,
 } from './wiki-neighbours';
-import { setWikiMaintenance, type WikiMaintenanceInput } from './wiki-maintenance-settings';
+import { checkWikiMaintenanceInput, setWikiMaintenance, type WikiMaintenanceInput } from './wiki-maintenance-settings';
+import { requestWikiPlanJob, resumeWikiPlanJobs } from './wiki-plan-job';
 import { isOrbitAuthoredTurn } from '../sessions/orbit-authored-turn';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { canonicalRepoUrl } from '../projects/project-integration-line';
@@ -205,6 +207,7 @@ const WIKI_HTTP_STATUS: Readonly<Record<WikiRefusalCode, number>> = {
   WIKI_PLAN_GATE: 422,
   WIKI_PLAN_STALE: 409,
   WIKI_PLAN_UNCONFIRMED: 409,
+  WIKI_PLAN_NO_JOB: 409,
   WIKI_DOC_INVALID: 422,
 };
 
@@ -836,7 +839,7 @@ export class WikiService {
           + 'the workspace form, or binds the workspace in Wiki settings.',
       );
     }
-    return withTransactionRetry(
+    const bound = await withTransactionRetry(
       this.prisma,
       async (tx) => {
         const existing = await tx.wikiSpace.findFirst({
@@ -852,10 +855,45 @@ export class WikiService {
           update: {},
           select: { id: true },
         });
-        return spaceId;
+        return { spaceId, created: !existing };
       },
       loggedRetry(this.logger, 'wiki.bindOnFirstUse'),
     );
+    // A space made here, where a session's proposal needed one, is a new space like any other: its
+    // plan's first draft is asked for (contract `plan.jobs.trigger`).
+    if (bound.created) await this.spaceCreated(ownerId, bound.spaceId, null);
+    return bound.spaceId;
+  }
+
+  /**
+   * A space was created (contract `plan.jobs.trigger`, criterion 11): its plan's first draft is asked
+   * for — made at once as a task of its maintenance list, or queued, or held with why. After the space's
+   * own write committed, and never failing it: a draft not asked for now is asked for by the owner.
+   */
+  private async spaceCreated(ownerId: string, spaceId: string, requestedByUserId: string | null): Promise<void> {
+    await this.planJobFact(ownerId, async () => {
+      const answer = await requestWikiPlanJob(this.prisma, {
+        ownerId,
+        spaceId,
+        kind: 'draft',
+        instructions: null,
+        trigger: 'space_created',
+        requestedByUserId,
+      });
+      return answer.madeTaskId ? [answer.madeTaskId] : [];
+    });
+  }
+
+  /** A fact about a space's plan jobs, taken; the tasks it made published. Logged, never thrown. */
+  private async planJobFact(ownerId: string, take: () => Promise<string[]>): Promise<void> {
+    try {
+      const made = await take();
+      if (made.length > 0 && typeof this.realtime?.publishForUser === 'function') {
+        this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: made, resync: false });
+      }
+    } catch (error) {
+      this.logger.warn(`a plan job of a space was not moved on: ${(error as Error).message}`);
+    }
   }
 
   /** One space row, under a slug and a repository that are unique within its owner. */
@@ -922,17 +960,36 @@ export class WikiService {
     }));
   }
 
-  /** The owner creating a space outright: a codebase, or a wiki with no repository behind it. */
-  async createSpace(ownerId: string, input: { title: string; repoUrl?: string; slug?: string }) {
+  /**
+   * The owner creating a space outright: a codebase, or a wiki with no repository behind it — with its
+   * maintenance from the start when the request names it, which is the owner channel's alone, as the
+   * PATCH that sets it later is. The maintenance a request names is checked before the space is made
+   * (the workspace is the owner's, the provider one a run could start on), so a refused one makes nothing.
+   */
+  async createSpace(
+    ownerId: string,
+    input: { title: string; repoUrl?: string; slug?: string; maintenance?: WikiMaintenanceInput },
+    actingSessionId: string | null = null,
+  ) {
+    if (input.maintenance !== undefined && actingSessionId) {
+      return refuse(
+        'WIKI_OWNER_CHANNEL_ONLY',
+        "a space's Wiki maintenance is the account owner's to set, through an owner channel with no acting session: "
+          + 'create the space without it, and let a person set it.',
+      );
+    }
     const normalized = input.repoUrl ? normalizeRepoUrl(input.repoUrl) : null;
     if (input.repoUrl && normalized === null) {
       return refuse('WIKI_SCHEMA', 'repoUrl says nothing a repository identity can be read from');
     }
+    if (input.maintenance !== undefined) await checkWikiMaintenanceInput(this.prisma, ownerId, input.maintenance);
     const spaceId = await withTransactionRetry(
       this.prisma,
       (tx) => this.createSpaceRow(tx, ownerId, input.title, normalized, input.slug),
       loggedRetry(this.logger, 'wiki.createSpace'),
     );
+    if (input.maintenance !== undefined) await setWikiMaintenance(this.prisma, ownerId, spaceId, input.maintenance);
+    await this.spaceCreated(ownerId, spaceId, ownerId);
     return this.requireSpace(ownerId, spaceId);
   }
 
@@ -1010,7 +1067,11 @@ export class WikiService {
     // Maintenance is written by its own unit, under the space row's lock and with the hidden list it
     // may need (`setWikiMaintenance`); every other key below is merged over the row as it stands, so
     // neither write can put back what the other just changed.
-    if (input.maintenance !== undefined) await setWikiMaintenance(this.prisma, ownerId, spaceId, input.maintenance);
+    if (input.maintenance !== undefined) {
+      await setWikiMaintenance(this.prisma, ownerId, spaceId, input.maintenance);
+      // The settings a held plan job waited for may be here now (contract `plan.jobs.held`).
+      await this.planJobFact(ownerId, () => resumeWikiPlanJobs(this.prisma, ownerId, { spaceId }));
+    }
     const { maintenance: _maintenance, ...settings }: Record<string, unknown> = { ...current.settings };
     if (input.push !== undefined) settings.push = input.push;
     if (input.autoAcceptReinforce !== undefined) settings.autoAcceptReinforce = input.autoAcceptReinforce;

@@ -363,12 +363,14 @@ export interface WikiPlanProposal {
   createdAt: string;
 }
 
-/** `GET …/plan`: the version in force, the draft waiting for the owner, and the pending proposals. */
+/** `GET …/plan`: the version in force, the draft waiting for the owner, the pending proposals, and the job. */
 export interface WikiPlanState {
   spaceId: string;
   confirmed: WikiPlanVersion | null;
   draft: WikiPlanVersion | null;
   proposals: WikiPlanProposal[];
+  /** The space's plan job: the one not ended, else the one that ended last; null when it never had one. */
+  job: WikiPlanJob | null;
 }
 
 /** `POST …/plan/proposals/:id/decide`. */
@@ -376,4 +378,195 @@ export interface WikiPlanDecisionResult {
   proposal: WikiPlanProposal;
   /** The draft an acceptance made; null for a rejection. */
   draft: WikiPlanVersion | null;
+}
+
+// ── The plan's jobs (contract `plan.jobs`, migration 0338) ──────────────────────────────────────
+
+/**
+ * What a job does: draft a plan (`orbit wiki plan draft`), revise the newest version with the owner's
+ * words (`orbit wiki plan revise`), or build the documents from a confirmed version — the last is kept
+ * for the task that writes them, which makes its own.
+ */
+export const WIKI_PLAN_JOB_KINDS = ['draft', 'revise', 'build'] as const;
+export type WikiPlanJobKind = (typeof WIKI_PLAN_JOB_KINDS)[number];
+
+/** The fact that asked for a job: the space was created, or its owner asked on the plan page. */
+export const WIKI_PLAN_JOB_TRIGGERS = ['space_created', 'owner'] as const;
+export type WikiPlanJobTrigger = (typeof WIKI_PLAN_JOB_TRIGGERS)[number];
+
+/** Where a job stands as it is stored (`wiki_plan_job.state`). */
+export const WIKI_PLAN_JOB_STORED_STATES = ['queued', 'held', 'made', 'ended'] as const;
+export type WikiPlanJobStoredState = (typeof WIKI_PLAN_JOB_STORED_STATES)[number];
+
+/**
+ * Where a job stands as the plan's read says it (contract `plan.jobs.states`): queued behind an
+ * unfinished task of the space's maintenance list, held (with why), running (its task is made), or
+ * ended — succeeded with the version it stored, or failed with the gate's errors.
+ */
+export const WIKI_PLAN_JOB_STATES = ['queued', 'held', 'running', 'succeeded', 'failed'] as const;
+export type WikiPlanJobState = (typeof WIKI_PLAN_JOB_STATES)[number];
+
+/**
+ * Why a job was not made (contract `plan.jobs.held`), kept on the job until it is: the space's
+ * maintenance names no workspace a run could take place in, or its provider is one no run could start
+ * on. The owner's next change to the space's maintenance settings, or their next request, asks again.
+ */
+export const WIKI_PLAN_JOB_HELD_REASONS = ['no_maintenance_workspace', 'maintenance_provider_unusable'] as const;
+export type WikiPlanJobHeldReason = (typeof WIKI_PLAN_JOB_HELD_REASONS)[number];
+
+export const WIKI_PLAN_JOB_OUTCOMES = ['succeeded', 'failed'] as const;
+export type WikiPlanJobOutcome = (typeof WIKI_PLAN_JOB_OUTCOMES)[number];
+
+/** The numbers a job runs by (contract `plan.jobs.rules`). */
+export const WIKI_PLAN_JOB_RULES = {
+  /** The gate rounds a draft has: the first, and two more with every error handed back to the model. */
+  attemptsMax: 3,
+  /** The owner's instructions for a revision, at most. */
+  instructionsMaxChars: 4_000,
+  /** What a run's report may weigh as JSON: counts and a few short strings. */
+  reportMaxBytes: 16_000,
+  /** The last draft a job that failed keeps, as JSON, at most. */
+  draftMaxBytes: 1_000_000,
+  /** A failure in words, at most. */
+  errorMaxChars: 2_000,
+  /** The budget a job's task declares for its check, in seconds: the check reads one row. */
+  checkTimeoutSeconds: 300,
+  /** The window of sessions the materials count and cluster, in days. */
+  materialsSessionDays: 90,
+  /** The most sessions and projects the materials list. */
+  materialsSessionsMax: 5_000,
+  materialsProjectsMax: 500,
+} as const;
+
+/** What a run reports when it ends (contract `plan.jobs.report`), kept as it was said. */
+export interface WikiPlanJobReport {
+  categories: number;
+  docs: number;
+  sections: number;
+  target: { min: number; max: number };
+  /** Every gate round: the errors the runner's own gate found, and the server's. */
+  attempts: Array<{ attempt: number; local: number; server: number; checks: Record<string, number> }>;
+  repo: { sha: string; checked: number; missing: number } | null;
+  tokens: { input: number; output: number; calls: number };
+  seconds: number;
+  model: string | null;
+  /** The fourth step's draft of the rules the documents are written by, cut to fit. */
+  rulesDraft?: string;
+}
+
+/** A space's plan job, as the plan's read gives it. */
+export interface WikiPlanJob {
+  id: string;
+  spaceId: string;
+  kind: WikiPlanJobKind;
+  trigger: WikiPlanJobTrigger;
+  state: WikiPlanJobState;
+  /** A revision's instructions: the owner's words, as they were given. */
+  instructions: string | null;
+  requestedAt: string;
+  /** Held: why, and since when. */
+  held: { reason: WikiPlanJobHeldReason; at: string } | null;
+  /** Queued: the unfinished task of the maintenance list it waits for, and that task's run. */
+  waitingFor: { taskId: string; title: string; sessionId: string | null; startedAt: string | null } | null;
+  /** The task it made, the provider that task is pinned to, and the session that runs it. */
+  taskId: string | null;
+  provider: string | null;
+  sessionId: string | null;
+  madeAt: string | null;
+  startedAt: string | null;
+  endedAt: string | null;
+  /** The gate round the run is on, or ended on, of `attemptsMax`. */
+  attempt: number | null;
+  attemptsMax: number;
+  /** Succeeded: the version it stored. */
+  version: number | null;
+  /** Failed: the gate's errors on the last round, and what went wrong in words. */
+  errors: WikiPlanGateError[];
+  error: string | null;
+  report: WikiPlanJobReport | null;
+  /** Failed: the last draft it had, as it was sent to the gate. */
+  draft: WikiPlanDraftInput | null;
+}
+
+/** `POST /api/wiki/spaces/:id/plan/redraft`: with instructions a revision, without them a draft. */
+export interface WikiPlanRedraftRequest {
+  instructions?: string | null;
+}
+
+/** Its answer: the job — the one made, or the space's draft that had not ended, and whether it was new. */
+export interface WikiPlanRedraftResult {
+  created: boolean;
+  job: WikiPlanJob;
+}
+
+/**
+ * `GET /api/runner/wiki/spaces/:id/plan/job`: the job the calling maintenance session runs, and what it
+ * starts from — the space, its repository and the maintenance workspace's checkout.
+ */
+export interface WikiPlanJobContext {
+  job: WikiPlanJob;
+  space: {
+    id: string;
+    title: string;
+    repo: { urlNorm: string | null; rootCommitSha: string | null };
+    workspace: { id: string; workDir: string | null } | null;
+  };
+}
+
+/** `POST …/plan/job/progress`: the gate round the run is on. */
+export interface WikiPlanJobProgressRequest {
+  attempt: number;
+}
+
+/** `POST …/plan/job/finish`: how the run ended. */
+export interface WikiPlanJobFinishRequest {
+  outcome: WikiPlanJobOutcome;
+  version?: number | null;
+  errors?: WikiPlanGateError[];
+  error?: string | null;
+  report?: WikiPlanJobReport | null;
+  draft?: WikiPlanDraftInput | null;
+}
+
+/** `GET …/plan/check?job=<id>`: `orbit wiki plan check`'s verdict. */
+export interface WikiPlanJobCheck {
+  spaceId: string;
+  jobId: string;
+  kind: WikiPlanJobKind;
+  outcome: WikiPlanJobOutcome | null;
+  version: number | null;
+  ok: boolean;
+  /** Why it is not ok, one sentence each. */
+  problems: string[];
+}
+
+/**
+ * `GET /api/runner/wiki/spaces/:id/plan/materials` (contract `plan.jobs.materials`): what the drafting
+ * job reads of Orbit besides the repository — the owner's projects, the space's sessions of the last
+ * `materialsSessionDays` days, and how the space's entries and topics are spread. Titles are redacted
+ * before they leave the server; the runner counts and clusters them.
+ */
+export interface WikiPlanMaterials {
+  spaceId: string;
+  title: string;
+  asOf: string;
+  repo: { urlNorm: string | null; rootCommitSha: string | null };
+  workspace: { id: string; workDir: string | null } | null;
+  projects: Array<{ id: string; title: string; status: string; createdAt: string; tasks: number; sessions: number }>;
+  sessions: {
+    days: number;
+    total: number;
+    /** Newest first, at most `materialsSessionsMax`. */
+    items: Array<{ title: string; month: string; task: boolean; project: string | null; provider: string | null }>;
+  };
+  entries: Array<{ kind: string; status: string; count: number }>;
+  topics: Array<{
+    slug: string;
+    title: string;
+    category: string | null;
+    pathPrefixes: string[];
+    active: number;
+    /** The topic's newest active entries, at most six. */
+    recent: Array<{ kind: string; title: string }>;
+  }>;
 }

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // `orbit wiki verify` against a fake vLLM endpoint (contract `agentSurface.verify`).
@@ -115,6 +116,28 @@ func runFakeVerifyClaude(dir string) int {
 		"type": "result", "subtype": "success", "is_error": false, "api_error_status": nil, "result": message.Content[0].Text,
 		"usage": message.Usage,
 	})
+	if flag("--output-format") == "stream-json" {
+		// --include-partial-messages: the answer as it arrives, a delta at a time, written out as it comes,
+		// then the whole message and the result line — the order the real one writes them in.
+		emit := func(v interface{}) {
+			line, _ := json.Marshal(v)
+			_, _ = os.Stdout.Write(append(line, '\n'))
+			_ = os.Stdout.Sync()
+		}
+		emit(map[string]interface{}{"type": "system", "subtype": "init", "model": flag("--model")})
+		text := []rune(message.Content[0].Text)
+		for start := 0; start < len(text); start += 400 {
+			end := start + 400
+			if end > len(text) {
+				end = len(text)
+			}
+			emit(map[string]interface{}{"type": "stream_event", "event": map[string]interface{}{"type": "content_block_delta", "index": 0,
+				"delta": map[string]interface{}{"type": "text_delta", "text": string(text[start:end])}}})
+			time.Sleep(2 * time.Millisecond)
+		}
+		emit(map[string]interface{}{"type": "assistant", "message": map[string]interface{}{"role": "assistant",
+			"content": []map[string]interface{}{{"type": "text", "text": message.Content[0].Text}}}})
+	}
 	fmt.Println(string(out))
 	return 0
 }

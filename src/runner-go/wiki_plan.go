@@ -222,7 +222,7 @@ func (t *Transport) wikiPlanState(sessionID, spaceID string) (json.RawMessage, e
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodGet, wikiPlanPath(spaceID), nil, &out, wikiPlanTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodGet, wikiPlanPath(spaceID), nil, &out, wikiPlanTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
@@ -232,7 +232,8 @@ func (t *Transport) submitWikiPlanDraft(sessionID, spaceID string, draft wikiPla
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodPost, wikiPlanPath(spaceID)+"/drafts", draft, &out, wikiPlanTimeout, sessionHeader(sessionID))
+	// Sent once: a draft that landed twice would be refused WIKI_PLAN_STALE the second time, its base no longer the newest.
+	_, err := t.doWiki(http.MethodPost, wikiPlanPath(spaceID)+"/drafts", draft, &out, wikiPlanTimeout, sessionHeader(sessionID), false)
 	return out, err
 }
 
@@ -242,6 +243,7 @@ func (t *Transport) proposeWikiPlanChange(sessionID, spaceID string, proposal wi
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodPost, wikiPlanPath(spaceID)+"/proposals", proposal, &out, wikiPlanTimeout, sessionHeader(sessionID))
+	// Sent once: a proposal that landed twice would be two proposals.
+	_, err := t.doWiki(http.MethodPost, wikiPlanPath(spaceID)+"/proposals", proposal, &out, wikiPlanTimeout, sessionHeader(sessionID), false)
 	return out, err
 }

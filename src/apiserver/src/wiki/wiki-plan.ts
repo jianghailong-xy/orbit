@@ -2,8 +2,12 @@ import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import {
+  RunEventType,
   toUuid,
   WIKI_ENTRY_KINDS,
+  WIKI_PLAN_JOB_OUTCOMES,
+  WIKI_PLAN_JOB_RULES,
+  wikiMaintenanceSettings,
   WIKI_PLAN_FACT_KINDS,
   WIKI_PLAN_GATE_CHECKS,
   WIKI_PLAN_NEW_FIELD_LEVELS,
@@ -22,6 +26,12 @@ import {
   type WikiPlanGateCheck,
   type WikiPlanGateError,
   type WikiPlanGateReport,
+  type WikiPlanJob,
+  type WikiPlanJobCheck,
+  type WikiPlanJobContext,
+  type WikiPlanJobOutcome,
+  type WikiPlanMaterials,
+  type WikiPlanRedraftResult,
   type WikiPlanNewField,
   type WikiPlanNewFieldLevel,
   type WikiPlanOrigin,
@@ -36,10 +46,24 @@ import {
   type WikiPlanVersion,
   type WikiPlanVersionSummary,
 } from '@orbit/shared';
+import { redactSecrets } from '../common/secret-redaction';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
+import {
+  finishWikiPlanJob,
+  progressWikiPlanJob,
+  requestWikiPlanJob,
+  startWikiPlanJob,
+  wikiPlanJobById,
+  wikiPlanJobCheck,
+  wikiPlanJobOfSession,
+  wikiPlanJobOfSpace,
+  wikiPlanMaterials,
+  type WikiPlanJobEnd,
+  type WikiPlanJobRow,
+} from './wiki-plan-job';
 import { WikiRefusalError, type WikiPrincipal } from './wiki.service';
 
 /**
@@ -873,6 +897,7 @@ export class WikiPlans {
       confirmed: views.find((view) => view.status === 'confirmed') ?? null,
       draft: views.find((view) => view.status === 'draft') ?? null,
       proposals: proposals.map(proposalView),
+      job: await wikiPlanJobOfSpace(this.prisma, ownerId, spaceId),
     };
   }
 
@@ -1485,6 +1510,243 @@ export class WikiPlans {
     const accepted = await this.prisma.wikiPlanProposal.findFirstOrThrow({ where: { id: proposalId }, select: PROPOSAL_SELECT });
     return { proposal: proposalView(accepted), draft: await this.version(ownerId, spaceId, number) };
   }
+
+  // ── The plan's jobs (contract `plan.jobs`) ────────────────────────────────────────────────────
+
+  /**
+   * The owner asks for a draft of the space's plan — with instructions, a revision of its newest version
+   * (contract `plan.routes.redraft`). The owner channel only: a request with a session header is refused
+   * before anything is read. The space's draft that has not ended answers it, asked again whether it may
+   * be made now; otherwise a job is recorded, and made as a task of the space's maintenance list, queued
+   * behind the list's unfinished task, or held with why.
+   */
+  async redraft(ownerId: string, spaceId: string, body: unknown, actingSessionId: string | null): Promise<WikiPlanRedraftResult> {
+    ownerChannel(actingSessionId, "asking for a draft of the space's plan");
+    await this.requireSpace(ownerId, spaceId);
+    const raw = body === undefined || body === null ? {} : body;
+    if (typeof raw !== 'object' || Array.isArray(raw)) throw schemaRefusal('the body is an object: { instructions? }');
+    const record = raw as Record<string, unknown>;
+    for (const key of Object.keys(record)) {
+      if (key !== 'instructions') throw schemaRefusal(`${key} is not a field of a redraft: instructions`);
+    }
+    let instructions: string | null = null;
+    if (record.instructions !== undefined && record.instructions !== null) {
+      if (typeof record.instructions !== 'string') throw schemaRefusal('instructions is a string: what the owner wants the plan to change');
+      const text = record.instructions.trim();
+      if (chars(text) > WIKI_PLAN_JOB_RULES.instructionsMaxChars) {
+        throw schemaRefusal(`instructions are at most ${WIKI_PLAN_JOB_RULES.instructionsMaxChars} characters`);
+      }
+      instructions = text === '' ? null : text;
+    }
+    const answer = await requestWikiPlanJob(this.prisma, {
+      ownerId,
+      spaceId,
+      kind: instructions ? 'revise' : 'draft',
+      instructions,
+      trigger: 'owner',
+      requestedByUserId: ownerId,
+    });
+    if (answer.madeTaskId && typeof this.realtime?.publishForUser === 'function') {
+      this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [answer.madeTaskId], resync: false });
+    }
+    this.realtime?.publishWikiChanged(ownerId, spaceId);
+    const job = await wikiPlanJobById(this.prisma, ownerId, answer.jobId);
+    if (!job) throw new NotFoundException('no such plan job');
+    return { created: answer.created, job };
+  }
+
+  /**
+   * Where a job's run starts (contract `plan.jobs.context`): the job its maintenance session runs, and the
+   * space, its repository and the maintenance workspace's checkout. Records that the run started.
+   */
+  async jobContext(principal: WikiPrincipal, spaceId: string): Promise<WikiPlanJobContext> {
+    await this.assertMaintainer(principal, spaceId);
+    const row = await this.jobOfRun(principal, spaceId);
+    await startWikiPlanJob(this.prisma, row.id, principal.sessionId!);
+    const job = await wikiPlanJobById(this.prisma, principal.ownerId, row.id);
+    const space = await this.prisma.wikiSpace.findFirstOrThrow({
+      where: { id: spaceId, ownerId: principal.ownerId },
+      select: { id: true, title: true, repoUrlNorm: true, rootCommitSha: true, settings: true },
+    });
+    const stored = space.settings !== null && typeof space.settings === 'object' && !Array.isArray(space.settings)
+      ? (space.settings as Record<string, unknown>).maintenance
+      : undefined;
+    const workspaceId = wikiMaintenanceSettings(stored).workspaceId;
+    const workspace = workspaceId
+      ? await this.prisma.workspace.findFirst({ where: { id: workspaceId, ownerId: principal.ownerId }, select: { id: true, workDir: true } })
+      : null;
+    this.realtime?.publishWikiChanged(principal.ownerId, spaceId);
+    return {
+      job: job!,
+      space: {
+        id: space.id,
+        title: space.title,
+        repo: { urlNorm: space.repoUrlNorm, rootCommitSha: space.rootCommitSha },
+        workspace: workspace ? { id: workspace.id, workDir: workspace.workDir } : null,
+      },
+    };
+  }
+
+  /** The gate round a job's run is on (contract `plan.jobs.progress`): what the plan page shows as it runs. */
+  async jobProgress(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiPlanJob> {
+    await this.assertMaintainer(principal, spaceId);
+    const row = await this.jobOfRun(principal, spaceId);
+    const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+    const attempt = raw.attempt;
+    if (row.state !== 'made') throw jobEnded();
+    if (typeof attempt !== 'number' || !Number.isInteger(attempt) || attempt < 1 || attempt > WIKI_PLAN_JOB_RULES.attemptsMax) {
+      throw schemaRefusal(`attempt is the gate round the run is on, from 1 to ${WIKI_PLAN_JOB_RULES.attemptsMax}`);
+    }
+    if (!(await progressWikiPlanJob(this.prisma, row.id, principal.sessionId!, attempt))) throw jobEnded();
+    this.realtime?.publishWikiChanged(principal.ownerId, spaceId);
+    return (await wikiPlanJobById(this.prisma, principal.ownerId, row.id))!;
+  }
+
+  /**
+   * How a job's run ended (contract `plan.jobs.finish`): succeeded with the version it stored — a draft of
+   * this space this very session submitted — or failed with the gate's errors on its last round, what went
+   * wrong, its report and the last draft it had. Kept on its job, which is ended; a job ended already is
+   * refused WIKI_PLAN_NO_JOB.
+   */
+  async jobFinish(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiPlanJob> {
+    await this.assertMaintainer(principal, spaceId);
+    const row = await this.jobOfRun(principal, spaceId);
+    if (row.state !== 'made') {
+      // The same end said again by the run that said it — its first send landed and the answer was lost on
+      // the way back (the runner sends it again, `Transport.doWiki`) — is answered with what was kept. Any
+      // other word to an ended job is refused.
+      if (row.sessionId === principal.sessionId && sameJobEnd(row, body)) {
+        return (await wikiPlanJobById(this.prisma, principal.ownerId, row.id))!;
+      }
+      throw jobEnded();
+    }
+    const end = jobEndOf(body);
+    if (end.outcome === 'succeeded') {
+      const stored = await this.prisma.wikiPlan.findFirst({
+        where: { ownerId: principal.ownerId, spaceId, version: end.version!, authorSessionId: principal.sessionId },
+        select: { id: true },
+      });
+      if (!stored) {
+        throw schemaRefusal(`version ${end.version} is not a draft of this space this run stored: a run that succeeded names the version its draft became`);
+      }
+    }
+    if (!(await finishWikiPlanJob(this.prisma, row.id, principal.sessionId!, end))) throw jobEnded();
+    this.realtime?.publishWikiChanged(principal.ownerId, spaceId);
+    return (await wikiPlanJobById(this.prisma, principal.ownerId, row.id))!;
+  }
+
+  /**
+   * `orbit wiki plan check` (contract `plan.jobs.check`): whether a job's run did what its task was made
+   * for. The owner's runner with no session — a task's acceptance command runs with none — or a
+   * maintenance run of the space; another owner's space or job is a 404. It writes nothing.
+   */
+  async jobCheck(ownerId: string, spaceId: string, jobId: string): Promise<WikiPlanJobCheck> {
+    await this.requireSpace(ownerId, spaceId);
+    const check = await wikiPlanJobCheck(this.prisma, ownerId, spaceId, jobId);
+    if (!check) throw new NotFoundException('no such plan job');
+    return { spaceId, jobId, ...check };
+  }
+
+  /** What a draft reads of Orbit besides the repository (contract `plan.jobs.materials`): a maintenance run's alone. */
+  async materials(principal: WikiPrincipal, spaceId: string): Promise<WikiPlanMaterials> {
+    await this.assertMaintainer(principal, spaceId);
+    return wikiPlanMaterials(this.prisma, principal.ownerId, spaceId);
+  }
+
+  /** The job the calling maintenance run runs, or WIKI_PLAN_NO_JOB. */
+  private async jobOfRun(principal: WikiPrincipal, spaceId: string): Promise<WikiPlanJobRow> {
+    const row = await wikiPlanJobOfSession(this.prisma, principal.ownerId, spaceId, principal.sessionId!);
+    if (!row) {
+      throw new WikiRefusalError({
+        code: 'WIKI_PLAN_NO_JOB',
+        message:
+          "this maintenance run runs no job of this space's plan: its task was not made for one. A draft or a revision "
+            + "of the plan is asked for by the space's creation or by its owner, and runs as a task the server makes.",
+      });
+    }
+    return row;
+  }
+}
+
+/** A malformed request of the plan's jobs. */
+function schemaRefusal(message: string): WikiRefusalError {
+  return new WikiRefusalError({ code: 'WIKI_SCHEMA', message });
+}
+
+/** Whether body says the end an ended job has: the same outcome, and for a success the same version. */
+function sameJobEnd(row: WikiPlanJobRow, body: unknown): boolean {
+  try {
+    const end = jobEndOf(body);
+    return end.outcome === row.outcome && (end.version ?? null) === (row.version ?? null);
+  } catch {
+    return false;
+  }
+}
+
+/** A job that ended already is told so, whichever way it ended. */
+function jobEnded(): WikiRefusalError {
+  return new WikiRefusalError({
+    code: 'WIKI_PLAN_NO_JOB',
+    message: "this run's plan job has ended — its run said how, or its task ended first — so nothing more is kept of it.",
+  });
+}
+
+/** A run's end as it said it, checked (contract `plan.jobs.finish`). */
+function jobEndOf(body: unknown): WikiPlanJobEnd {
+  const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
+  if (!raw) throw schemaRefusal('the body is an object: { outcome, version?, errors?, error?, report?, draft?, attempt? }');
+  const known = ['outcome', 'version', 'errors', 'error', 'report', 'draft', 'attempt'];
+  for (const key of Object.keys(raw)) {
+    if (!known.includes(key)) throw schemaRefusal(`${key} is not a field of a job's end: ${known.join(', ')}`);
+  }
+  if (!(WIKI_PLAN_JOB_OUTCOMES as readonly unknown[]).includes(raw.outcome)) {
+    throw schemaRefusal(`outcome is one of ${WIKI_PLAN_JOB_OUTCOMES.join(', ')}`);
+  }
+  const outcome = raw.outcome as WikiPlanJobOutcome;
+  const version = raw.version === undefined || raw.version === null ? null : raw.version;
+  if (version !== null && (typeof version !== 'number' || !Number.isInteger(version) || version < 1)) {
+    throw schemaRefusal('version is the number of the version the run stored, 1 or more');
+  }
+  if (outcome === 'succeeded' && version === null) throw schemaRefusal('a run that succeeded names the version its draft became');
+  const errors: WikiPlanGateError[] = [];
+  if (raw.errors !== undefined && raw.errors !== null) {
+    if (!Array.isArray(raw.errors)) throw schemaRefusal('errors is a list of the gate\'s errors: [{ check, path, message }]');
+    for (const item of raw.errors.slice(0, WIKI_PLAN_RULES.errorsMax)) {
+      const error = item && typeof item === 'object' && !Array.isArray(item) ? (item as Record<string, unknown>) : null;
+      if (!error || typeof error.check !== 'string' || typeof error.path !== 'string' || typeof error.message !== 'string') {
+        throw schemaRefusal('each of errors is { check, path, message }, three strings');
+      }
+      errors.push({
+        check: error.check.slice(0, 40) as WikiPlanGateCheck,
+        path: error.path.slice(0, WIKI_PLAN_RULES.textMaxChars),
+        message: error.message.slice(0, WIKI_PLAN_RULES.reasonMaxChars),
+      });
+    }
+  }
+  let error: string | null = null;
+  if (raw.error !== undefined && raw.error !== null) {
+    if (typeof raw.error !== 'string') throw schemaRefusal('error is what went wrong, in words');
+    error = redactSecrets(raw.error.trim()).text.slice(0, WIKI_PLAN_JOB_RULES.errorMaxChars).trim() || null;
+  }
+  const object = (value: unknown, name: string, max: number): Record<string, unknown> | null => {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== 'object' || Array.isArray(value)) throw schemaRefusal(`${name} is an object`);
+    if (Buffer.byteLength(JSON.stringify(value), 'utf8') > max) throw schemaRefusal(`${name} is at most ${max} bytes of JSON`);
+    return value as Record<string, unknown>;
+  };
+  const attempt = raw.attempt === undefined || raw.attempt === null ? null : raw.attempt;
+  if (attempt !== null && (typeof attempt !== 'number' || !Number.isInteger(attempt) || attempt < 1 || attempt > WIKI_PLAN_JOB_RULES.attemptsMax)) {
+    throw schemaRefusal(`attempt is the gate round the run ended on, from 1 to ${WIKI_PLAN_JOB_RULES.attemptsMax}`);
+  }
+  return {
+    outcome,
+    version: version as number | null,
+    errors,
+    error,
+    report: object(raw.report, 'report', WIKI_PLAN_JOB_RULES.reportMaxBytes),
+    draft: object(raw.draft, 'draft', WIKI_PLAN_JOB_RULES.draftMaxBytes),
+    attempt: attempt as number | null,
+  };
 }
 
 /** The plan with one document put in: in place of the one of its slug, or after the last of its category. */

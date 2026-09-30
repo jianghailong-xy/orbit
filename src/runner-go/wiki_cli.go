@@ -19,7 +19,8 @@ import (
 // verify` (wiki_anchors.go), `orbit wiki articles` (wiki_articles.go) and `orbit wiki maintain`
 // (wiki_maintain.go) are a Wiki maintenance run's, and no other session's. `orbit wiki check`
 // (wiki_maintain.go) is the one with a headless form: it is a maintenance task's acceptance command,
-// which runs after the session's turn in a shell with no session.
+// which runs after the session's turn in a shell with no session. `orbit wiki plan draft|revise|check`
+// (wiki_plan_cli.go) are a plan job's run and its task's acceptance command, in the same two shapes.
 
 const wikiHelp = `orbit wiki — read the Orbit wiki and propose to it
 
@@ -37,6 +38,9 @@ Usage:
   orbit wiki articles --space <id> [--topic <slug>] [--model MODEL] [--json]
   orbit wiki maintain --space <id> [--model MODEL] [--concurrency N] [--json]
   orbit wiki check --space <id> --expect-cursor <token> [--json]
+  orbit wiki plan draft --space <id> [--target MIN-MAX] [--model MODEL] [--concurrency N] [--work-dir DIR] [--json]
+  orbit wiki plan revise --space <id> [--instructions <file>] [--target MIN-MAX] [...] [--json]
+  orbit wiki plan check --space <id> --job <id> [--json]
 
 The wiki is this codebase's own knowledge: decisions and what they rejected, pitfalls and their
 fixes, conventions, recipes. You READ it and you PROPOSE to it; you never decide. An agent's write
@@ -49,7 +53,9 @@ reads what happened in its space since the cursor, proposes what it learned citi
 behind it, re-verifies the anchors of its space's entries on origin/main, advances the cursor once
 it has processed a page, and has the local model write the articles of the topics whose entries
 changed. 'orbit wiki maintain' does all of it in one run; 'orbit wiki check' is its task's
-acceptance command, and needs no session.
+acceptance command, and needs no session. 'orbit wiki plan draft' and 'orbit wiki plan revise' are a
+plan job's run — the task the server makes for a draft of the space's plan — and 'orbit wiki plan
+check' is that task's acceptance command.
 
 These commands act for the session they run in (ORBIT_SESSION_ID): what it may read is what that
 session's workspace is bound to, and its proposal is recorded against it.
@@ -59,6 +65,8 @@ Run 'orbit wiki <command> --help' for options.
 var wikiActionHelp = map[string]string{
 	// Written beside the command it documents (wiki_import.go), as its capability is.
 	"import": wikiImportHelp,
+	// The plan job's three verbs, written beside them (wiki_plan_cli.go).
+	"plan": wikiPlanHelp,
 	"maintain": `orbit wiki maintain — run a space's Wiki maintenance, whole, as its maintenance run
 
 Usage:
@@ -570,6 +578,11 @@ func cmdWikiCLI(args []string, in io.Reader, out io.Writer) error {
 	if action == "check" {
 		// A maintenance task's acceptance command: it runs after the session's turn, with no session.
 		return cliWikiCheck(args[1:], out)
+	}
+	if action == "plan" {
+		// Three verbs, one of them — check, a plan job's acceptance command — with no session: each
+		// asks for the session context itself when it needs one.
+		return cliWikiPlan(args[1:], in, out)
 	}
 	ctx, err := wikiCLIContext(command)
 	if err != nil {
