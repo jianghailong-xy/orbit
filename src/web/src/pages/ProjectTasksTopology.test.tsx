@@ -400,7 +400,10 @@ describe('ProjectTasks — the parent/child level underneath', () => {
     });
     const level = renderToStaticMarkup(
       <QueryClientProvider client={qc}>
-        <ProjectTaskLevel projectId={PROJECT} parentTaskId={T1} />
+        {/* Every row opens its task over the project's page — a navigation, so a router. */}
+        <MemoryRouter>
+          <ProjectTaskLevel projectId={PROJECT} parentTaskId={T1} />
+        </MemoryRouter>
       </QueryClientProvider>,
     );
     expect(level).toContain('A child');

@@ -307,11 +307,13 @@ private struct CompactSections: View {
                     }
             }
 
-        // PROJECTS — the index → one project's page. The path IS the section's stack, like every
-        // section here. A task a project's rows open is opened where tasks live (`route(to: .task)`),
-        // so the Tasks stack stays the one page its detail store follows. A page one of the drawer's
-        // project rows opened hands the left edge to the drawer-open swipe, as a Recents console
-        // does: the system back-swipe is off there, and the back button still returns to the list.
+        // PROJECTS — the index → one project's page → one of its tasks. The path IS the section's
+        // stack, like every section here. A task a project's rows open is pushed over the page on
+        // this stack, so the back swipe returns to the project — not opened in Tasks, whose every-task
+        // scope is the tasks outside projects. The push keeps the detail store in step
+        // (`AppModel.push`), as a console's task page does. A page one of the drawer's project rows
+        // opened hands the left edge to the drawer-open swipe, as a Recents console does: the system
+        // back-swipe is off there, and the back button still returns to the list.
         case .projects:
             NavigationStack(path: $model.nav.path) {
                 ProjectsListView(rowNavigation: .push)
@@ -322,6 +324,7 @@ private struct CompactSections: View {
                         case .projectDetail(let projectID, _):
                             ProjectDetailView(projectID: projectID)
                                 .background { SwipeBackGestureToggle(enabled: !model.projectFromDrawer) }
+                        case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)
                         default:                            EmptyView()
                         }
                     }

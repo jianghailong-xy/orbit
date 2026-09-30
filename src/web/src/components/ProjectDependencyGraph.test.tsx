@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import {
   buildProjectFlowElements,
+  GraphProjectCtx,
   highlightThrough,
   NODE_TYPES,
   planProjectGraphViewport,
@@ -12,6 +13,7 @@ import {
   type ProjectFlowNode,
 } from './ProjectDependencyGraph';
 import { EDGE_COLORS } from './TaskDependencyGraph';
+import { PublicLinkResolverCtx, type PublicLinkResolver } from '../lib/publicLinks';
 import {
   expandRunMarks,
   foldSettledMarks,
@@ -355,7 +357,10 @@ const zero = { DONE: 0, IN_PROGRESS: 0, FAILED: 0, CANCELLED: 0, OPEN: 0 };
  * told about a task is not: a flag that reaches `data` and never reaches the pill is exactly the
  * bug this describes, and it is invisible to an assertion on the node array.
  */
-function drawNode(node: ProjectFlowNode): string {
+function drawNode(
+  node: ProjectFlowNode,
+  around: { projectId?: string; resolve?: PublicLinkResolver } = {},
+): string {
   const props = {
     ...node,
     selected: false,
@@ -372,12 +377,43 @@ function drawNode(node: ProjectFlowNode): string {
   // A node draws its own connection handles, and a handle reads React Flow's store.
   return renderToStaticMarkup(
     <MemoryRouter>
-      <ReactFlowProvider>
-        <Node {...props} />
-      </ReactFlowProvider>
+      <PublicLinkResolverCtx.Provider value={around.resolve ?? null}>
+        <GraphProjectCtx.Provider value={around.projectId ?? null}>
+          <ReactFlowProvider>
+            <Node {...props} />
+          </ReactFlowProvider>
+        </GraphProjectCtx.Provider>
+      </PublicLinkResolverCtx.Provider>
     </MemoryRouter>,
   );
 }
+
+/**
+ * Where a task mark goes. In the app, over its project's page — the address its row in the task
+ * list opens, so the plan and the list open a task the same way (lib/projectTaskRoute). On a public
+ * project page, wherever that page's link sends it, exactly as before.
+ */
+describe('a task mark’s link', () => {
+  const graph: ProjectDependencyGraphResponse = {
+    marks: [{ kind: 'TASK', id: 't1', taskId: 't1', title: 'Clone the repo', status: 'OPEN', parentTaskId: null }],
+    edges: [],
+    taskCount: 1,
+    folded: false,
+    truncated: false,
+    limits: { maxTasks: 50_000, maxMarks: 500 },
+  };
+  const node = () => buildProjectFlowElements(layoutProjectDependencyGraph(graph)).nodes[0];
+
+  it('opens the task over its project’s page', () => {
+    expect(drawNode(node(), { projectId: 'p1' })).toContain('href="/projects/p1/tasks/t1"');
+  });
+
+  it('keeps a public page’s own address for it', () => {
+    const html = drawNode(node(), { projectId: 'p1', resolve: () => '/s/token/t/t1' });
+    expect(html).toContain('href="/s/token/t/t1"');
+    expect(html).not.toContain('/projects/p1/tasks/');
+  });
+});
 
 /**
  * The live run on a task, drawn.

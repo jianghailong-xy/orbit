@@ -602,9 +602,11 @@ struct ComposerView: View {
                         }
                     }
                 } label: {
-                    Text("Provider")
-                    Text(AgentDefaults.providerName(console.provider,
-                                                    configured: console.configuredProviders))
+                    menuSubmenuLabel(
+                        "Provider",
+                        value: AgentDefaults.providerName(
+                            console.provider,
+                            configured: console.configuredProviders))
                 }
                 Divider()
             }
@@ -648,8 +650,7 @@ struct ComposerView: View {
                     }
                 }
             } label: {
-                Text("Effort")
-                Text(console.effort.label)
+                menuSubmenuLabel("Effort", value: console.effort.label)
             }
             // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast"
             // tier both exist on some models and not others, so a row drawn regardless would be a
@@ -670,8 +671,7 @@ struct ComposerView: View {
                         }
                     }
                 } label: {
-                    Text("Speed")
-                    Text(console.fastMode ? "Fast" : "Standard")
+                    menuSubmenuLabel("Speed", value: console.fastMode ? "Fast" : "Standard")
                 }
             }
         } label: {
@@ -894,18 +894,44 @@ struct ComposerView: View {
         }
     }
 
-    /// A menu row whose checkmark sits at the TRAILING end of the row, the way a Picker draws it —
-    /// a Menu of Buttons has to render it explicitly. Trailing, not leading (`Label(_:systemImage:)`,
-    /// the natural spelling): a leading icon takes a column on the selected row only, so that row's
-    /// text starts one checkmark to the right of every sibling's, which is what the phone report
-    /// showed. Web parity too — `.scope-menu-row`'s check sits in a trailing slot.
+    /// Keep every option's text on one left edge and reserve the same trailing checkmark slot on
+    /// every row. iOS treats any Image inside a Menu label as its leading system icon, even when
+    /// it is transparent, so the slot is a Text glyph instead; that keeps the check at the trailing
+    /// edge and prevents an unselected row from rendering a check (web parity: `.scope-menu-row`'s
+    /// check sits in a trailing slot).
     @ViewBuilder
     private func menuItemLabel(_ text: String, selected: Bool) -> some View {
         HStack(spacing: 8) {
-            Text(text)
-            Spacer(minLength: 12)
-            if selected { Image(systemName: "checkmark") }
+            Text(text).lineLimit(1)
+            Spacer(minLength: 8)
+            Text(selected ? "✓" : " ")
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 20, alignment: .trailing)
+                .accessibilityHidden(!selected)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The two-level settings rows stay on one baseline: the title owns the left edge, the current
+    /// value follows it in a muted run, and the nested Menu supplies its disclosure chevron. iOS
+    /// keeps only one text label for a submenu, so a single concatenated Text is used there; two
+    /// sibling Text views make the current value disappear from the native menu row.
+    @ViewBuilder
+    private func menuSubmenuLabel(_ title: String, value: String) -> some View {
+        #if os(iOS)
+        (Text(title) + Text("    ") + Text(value).foregroundStyle(Color.secondary))
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        #else
+        HStack(spacing: 8) {
+            Text(title)
+            Spacer(minLength: 12)
+            Text(value)
+                .foregroundStyle(Color.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        #endif
     }
 
     // MARK: `/` autocomplete menu
@@ -1526,7 +1552,23 @@ private struct PlanUsageDetailPresentation: ViewModifier {
 
     #if os(iOS)
     private var resetHeight: Int {
-        resetConsole?.codexResetCardVisible == true ? 238 : 0
+        guard let resetConsole, resetConsole.codexResetCardVisible else { return 0 }
+
+        // The normal card is about 160pt including its top inset. Add room only for the
+        // secondary lines that are actually visible; reserving the maximum state here leaves a
+        // large empty tail below the button on the common, ready-to-use state.
+        var height = 160
+        if let operation = resetConsole.codexResetOperation,
+           operation.isActive || !operation.status.isEmpty {
+            height += 28
+        }
+        if resetConsole.codexResetEligibilityReason != nil && !resetConsole.codexResetEligible {
+            height += 28
+        }
+        if resetConsole.codexResetError != nil {
+            height += 28
+        }
+        return height
     }
     #endif
 

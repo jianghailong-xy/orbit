@@ -176,6 +176,14 @@ final class AppModel {
     var selectedProjectID: String? {
         get { nav.selectedProjectID }
         set {
+            // The list's selection is a project. With one of its tasks open over it, selecting that
+            // same project again is no change; selecting another, or clearing it, takes the task
+            // page with it — a task shows over its own project's page and nowhere else.
+            if nav.projectBeneathTask != nil {
+                guard newValue.map(PublicID.storageKey) != nav.selectedProjectID.map(PublicID.storageKey)
+                else { return }
+                nav.pop()
+            }
             if let id = newValue {
                 nav.replaceTop(with: .projectDetail(projectID: id))
             } else if case .projectDetail = nav.path.last {
@@ -1903,6 +1911,14 @@ final class AppModel {
         nav.path = [.projectDetail(projectID: id, origin: origin)]
     }
 
+    /// The project line on a task's page. Over that project's own page — one of its rows opened the
+    /// task, on the phone's Projects stack or in the wide shells' Projects pane — it goes back down
+    /// to that page instead of stacking a second copy of it; anywhere else it opens the project.
+    func openTaskProject(_ id: String) {
+        if nav.returnToProject(id) { return }
+        openProject(id)
+    }
+
     /// A project's page opened from inside a conversation — a coordinator conversation's title, a
     /// project link in a transcript. On a phone (`overConsole`) it is pushed over the console, so the
     /// back swipe returns to the conversation; on the wide shells it opens in the Projects section,
@@ -1994,6 +2010,8 @@ final class AppModel {
             tasks?.filter = .all
             tasks?.searchText = ""
             selectedTaskID = id
+            // …and a project's task goes on over its project's page once its row says so.
+            rehomeProjectTask(id)
         case .list(let id):
             // A named list is a scope of the Tasks page, not a page of its own: the scope follows the
             // link, and any task page that was open comes off so the list is what is showing. The
@@ -2005,6 +2023,29 @@ final class AppModel {
             selectedTaskID = nil
         case .runner(let id):  selectedRunnerID = id
         case .watch(let id):   openWatch(id)
+        }
+    }
+
+    /// A task a route opened in Tasks, moved over its project's page once its row says it has one.
+    ///
+    /// Tasks' every-task scope is the tasks outside projects (2026-09-26), so a project's task routed
+    /// there — a notification, a link, ⌘K, a dependency jumped to from another task's page — sits
+    /// over a list it is not in, and back lands on that list. The web sends `/tasks/<id>` on to the
+    /// project's page for the same reason. The route still lands at once; the row read (the light
+    /// one, without comments or runs) says where the task lives, and when that is a project and the
+    /// reader is still on this task, it moves over the project's page — the pair the project's own
+    /// rows push. A task in no project, a server without the row route, or a reader who has moved
+    /// on: nothing moves.
+    private func rehomeProjectTask(_ id: String) {
+        guard let api else { return }
+        Task { @MainActor [weak self] in
+            guard let row = try? await api.taskRow(id), let project = row.projectId else { return }
+            guard let self, self.selectedSection == .tasks,
+                  self.selectedTaskID.map(PublicID.storageKey) == PublicID.storageKey(id) else { return }
+            self.nav.moveTaskOverProject(id, project: PublicID.toPublic(project))
+            // The section's setter re-points the detail store at the task now on screen — the same
+            // task, so its page does not load again.
+            self.selectedSection = .projects
         }
     }
 

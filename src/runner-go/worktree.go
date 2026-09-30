@@ -1183,6 +1183,7 @@ var mergeLock sync.Mutex
 // cleanly, "error" means a precondition failed. Message carries git's output / the failed
 // precondition for the UI.
 type mergeOutcome struct {
+	Recovery  *MergeRecovery
 	Status    string
 	MergedSha string
 	SourceSha string
@@ -1234,6 +1235,9 @@ type mergeOutcome struct {
 func mergeToMain(req MergeCommand) mergeOutcome {
 	mergeLock.Lock()
 	defer mergeLock.Unlock()
+	if req.RecoveryAction != "" {
+		return recoverMerge(req)
+	}
 
 	repoRoot, err := git(expandTilde(req.WorkDir), "rev-parse", "--show-toplevel")
 	if err != nil || repoRoot == "" {
@@ -1284,6 +1288,24 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 	// reconcile below, which is the case where the work landed upstream and this machine has only
 	// just learned it.
 	if tip, _ := git(repoRoot, "rev-parse", "--verify", "refs/heads/"+target); targetContainsSource(repoRoot, sourceSha, tip) {
+		// A local-only landing is not evidence that origin accepted these commits. Keep the
+		// no-replay guard, but expose the unpublished target content for explicit review.
+		if originTracks(repoRoot, target) {
+			r := &MergeRecovery{TargetBranch: target, RepoRoot: repoRoot, SourceSha: sourceSha, LocalSha: tip}
+			remote, err := recoveryRemoteTip(repoRoot, target)
+			if err != nil {
+				out := recoveryError(r, "FETCH_FAILED", "could not verify whether the local landing reached origin/"+target+": "+gitStderr(err))
+				return out
+			}
+			if !targetContainsSource(repoRoot, sourceSha, remote) {
+				r.RemoteSha = remote
+				code := "TARGET_DIVERGED"
+				if targetContainsSource(repoRoot, remote, tip) {
+					code = "TARGET_AHEAD"
+				}
+				return recoveryError(r, code, "the source is only in local "+target+"; review its unpublished commits before pushing to origin")
+			}
+		}
 		return alreadyMergedOutcome(req.SessionID, target, sourceSha, tip)
 	}
 
@@ -1323,7 +1345,20 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 	// comment): a target that lagged origin/<target> would replay the branch onto a stale base and
 	// conflict on lines already reconciled upstream.
 	if out := reconcileTargetWithOrigin(repoRoot, target); out != nil {
+		out.SourceSha, out.TargetBranch = sourceSha, target
+		if out.Recovery != nil {
+			out.Recovery.SourceSha = sourceSha
+		}
 		return *out
+	}
+	if originTracks(repoRoot, target) {
+		local, _ := git(repoRoot, "rev-parse", "refs/heads/"+target)
+		remote, _ := git(repoRoot, "rev-parse", "refs/remotes/origin/"+target)
+		if local != remote && targetContainsSource(repoRoot, remote, local) {
+			return mergeOutcome{Status: "error", SourceSha: sourceSha, TargetBranch: target,
+				Message:  "local " + target + " has additional commits — review them before pushing the merge",
+				Recovery: &MergeRecovery{Code: "TARGET_AHEAD", TargetBranch: target, RepoRoot: repoRoot, SourceSha: sourceSha, LocalSha: local, RemoteSha: remote}}
+		}
 	}
 
 	// The target tip the replay is computed against, read AFTER the origin reconcile above so it
@@ -1666,7 +1701,7 @@ func reconcileTargetWithOrigin(repoRoot, target string) *mergeOutcome {
 	}
 	// Neither is an ancestor of the other → genuinely diverged. Rebasing onto the stale local
 	// target is exactly the phantom-conflict bug, so surface it instead of merging blindly.
-	return &mergeOutcome{Status: "error", Message: fmt.Sprintf(
+	return &mergeOutcome{Status: "error", Recovery: &MergeRecovery{Code: "TARGET_DIVERGED", TargetBranch: target, RepoRoot: repoRoot, LocalSha: localSha, RemoteSha: remoteSha}, Message: fmt.Sprintf(
 		"local %s has diverged from origin/%s — reconcile it with origin first (git checkout %s && git merge origin/%s), then retry the merge",
 		target, target, target, target)}
 }
@@ -2452,7 +2487,7 @@ func gcWorktrees(t *Transport, live map[string]bool, pressure worktreeGCPressure
 	var candidates []candidate
 	var names []string
 	for _, e := range entries {
-		if !e.IsDir() || live[e.Name()] || strings.HasPrefix(e.Name(), rebaseScratchPrefix) {
+		if !e.IsDir() || live[e.Name()] || strings.HasPrefix(e.Name(), rebaseScratchPrefix) || strings.HasPrefix(e.Name(), mergeRecoveryWorktreePrefix) {
 			continue
 		}
 		var touched time.Time
