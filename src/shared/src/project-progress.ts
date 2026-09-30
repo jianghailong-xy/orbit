@@ -687,6 +687,14 @@ export interface ProjectListAttention<Instant = string> {
   nextCheckAt: Instant | null;
   ownerItems?: Array<ProjectListOwnerItem<Instant>>;
   coordinatorItems?: ProjectListCoordinatorItems<Instant> | null;
+  /**
+   * The coordinator's open request to start this project (`START_REQUEST`, `project_request_start`)
+   * while nobody has started it — since when it has been asking — or null. The fifth thing the row
+   * names as waiting on the owner ("Needs you · Ready to start"), and kept out of `ownerItems`
+   * because it is none of those four: nothing escalated, and nothing pushes. Optional for the same
+   * reason the two fields above are.
+   */
+  startRequest?: { waitingSince: Instant } | null;
 }
 
 /**

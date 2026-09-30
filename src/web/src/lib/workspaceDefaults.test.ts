@@ -14,6 +14,7 @@ import {
   mergedProviderOptions,
   modelOptionsForProvider,
   newSessionEffortForProvider,
+  newSessionModelForProvider,
   normalizeEffortForProvider,
   OPENCODE_EFFORT_OPTIONS,
   providerIdentityResolved,
@@ -21,6 +22,23 @@ import {
   supportsAuto,
   type ConfiguredProvider,
 } from './workspaceDefaults';
+
+describe('remembered new-session models', () => {
+  const catalog: RunnerModelCatalog = { codex: [
+    { value: 'gpt-5.6-sol', label: 'GPT-5.6-Sol' },
+    { value: 'gpt-6.1-sol', label: 'GPT-6.1-Sol' },
+  ] };
+  const defaults = { codex: 'gpt-5.6-sol' };
+  it('uses only this provider’s last pick and drops retired models', () => {
+    expect(newSessionModelForProvider('codex', { codex: 'gpt-6.1-sol' }, catalog, null, defaults)).toBe('gpt-6.1-sol');
+    expect(newSessionModelForProvider('codex', { claude: 'claude-sonnet-5' }, catalog, null, defaults)).toBe('gpt-5.6-sol');
+    expect(newSessionModelForProvider('codex', { codex: 'gpt-retired' }, catalog, null, defaults)).toBe('gpt-5.6-sol');
+  });
+  it('keeps a remembered model while the catalog is unavailable, including OpenCode’s empty choice', () => {
+    expect(newSessionModelForProvider('codex', { codex: 'gpt-6.1-sol' }, null, null, defaults)).toBe('gpt-6.1-sol');
+    expect(newSessionModelForProvider('opencode', { opencode: '' }, null, null, { opencode: 'some/model' })).toBe('');
+  });
+});
 
 describe('Claude model capabilities', () => {
   it('knows the current tiers without a static picker list', () => {

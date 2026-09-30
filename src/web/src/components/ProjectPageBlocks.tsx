@@ -3,9 +3,9 @@ import type { ReactNode } from 'react';
 /**
  * The project page's blocks, in the order ProjectDetailPage draws them, and which of them a public
  * link keeps (docs/share-links-design.md §7; mock 04's table). A public project page is the app's
- * page with nine of its sixteen blocks taken out and nothing moved: the seven it keeps are the
- * project's work as a visitor can read it, the nine it drops are the owner's — what they have to
- * answer, merge, run or tell their agents.
+ * page with ten of its seventeen blocks taken out and nothing moved: the seven it keeps are the
+ * project's work as a visitor can read it, the ten it drops are the owner's — what they have to
+ * answer, merge, run, set or tell their agents.
  *
  * Both pages mark each block they draw with `data-project-block` (ProjectPageBlock, or the attribute
  * on a block's own root where a wrapper would sit inside a grid), so the order a reader gets is
@@ -19,6 +19,7 @@ export const PROJECT_PAGE_BLOCKS = [
   { key: 'coordinator-questions', label: 'Coordinator questions', public: false },
   { key: 'work-overview', label: 'Work overview', public: true },
   { key: 'coordinator', label: 'Coordinator', public: false },
+  { key: 'run-settings', label: 'How it runs', public: false },
   { key: 'goal', label: 'Goal', public: true },
   { key: 'task-graph', label: 'Task graph', public: true },
   { key: 'chain-progress', label: 'Chain progress', public: true },

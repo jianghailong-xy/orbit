@@ -299,35 +299,44 @@ public struct WikiSpaceSettings: Codable, Equatable, Sendable {
 }
 
 /// A space's Wiki maintenance run (contract `space.settings.maintenance`): whether facts start
-/// maintenance tasks, where they run, on which provider, and how many runs a UTC day may make. The
-/// owner's alone to change; `listId` is the hidden list the server made for the runs, and is never sent.
+/// maintenance tasks, where they run, on which provider, how many runs a UTC day may make, and how far
+/// back the first one reads. The owner's alone to change; `listId` is the hidden list the server made for
+/// the runs, and is never sent.
 public struct WikiMaintenanceSettings: Codable, Equatable, Sendable {
     public let enabled: Bool
     public let workspaceId: String?
     public let provider: String
     public let dailyRunLimit: Int
+    /// How many days back the cursor starts when maintenance is turned on: 0 is from now on, and nil is
+    /// all of history (contract `maintenance.cursor.start`). Sent as null, which is not a key left out.
+    public let lookbackDays: Int?
     public let listId: String?
 
     /// The contract's `default`: what a space reads as before its owner turns maintenance on.
     public static let `default` = WikiMaintenanceSettings(enabled: false, workspaceId: nil, provider: "local-vllm",
-                                                          dailyRunLimit: 8, listId: nil)
+                                                          dailyRunLimit: 8, lookbackDays: 14, listId: nil)
 
     /// The contract's `bounds.dailyRunLimit`: what the settings page offers, and what the server takes.
     public static let dailyRunLimitRange: ClosedRange<Int> = 1...48
+    /// The contract's `bounds.lookbackDays`.
+    public static let lookbackDaysRange: ClosedRange<Int> = 0...365
 
     public enum CodingKeys: String, CodingKey, CaseIterable {
-        case enabled, workspaceId, provider, dailyRunLimit, listId
+        case enabled, workspaceId, provider, dailyRunLimit, lookbackDays, listId
     }
 
-    public init(enabled: Bool, workspaceId: String?, provider: String, dailyRunLimit: Int, listId: String?) {
+    public init(enabled: Bool, workspaceId: String?, provider: String, dailyRunLimit: Int, lookbackDays: Int?,
+                listId: String?) {
         self.enabled = enabled
         self.workspaceId = workspaceId
         self.provider = provider
         self.dailyRunLimit = dailyRunLimit
+        self.lookbackDays = lookbackDays
         self.listId = listId
     }
 
-    /// A key the server left out reads as its default, the way `wikiMaintenanceSettings` reads it.
+    /// A key the server left out reads as its default, the way `wikiMaintenanceSettings` reads it — and a
+    /// look-back of null is all of history, kept as the choice it is.
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         let fallback = WikiMaintenanceSettings.default
@@ -336,7 +345,24 @@ public struct WikiMaintenanceSettings: Codable, Equatable, Sendable {
         provider = try c.decodeIfPresent(String.self, forKey: .provider) ?? fallback.provider
         let limit = try? c.decodeIfPresent(Int.self, forKey: .dailyRunLimit)
         dailyRunLimit = limit.flatMap { Self.dailyRunLimitRange.contains($0) ? $0 : nil } ?? fallback.dailyRunLimit
+        if c.contains(.lookbackDays), try c.decodeNil(forKey: .lookbackDays) {
+            lookbackDays = nil
+        } else {
+            let lookback = try? c.decodeIfPresent(Int.self, forKey: .lookbackDays)
+            lookbackDays = lookback.flatMap { Self.lookbackDaysRange.contains($0) ? $0 : nil } ?? fallback.lookbackDays
+        }
         listId = try c.decodeIfPresent(String.self, forKey: .listId)
+    }
+
+    /// A look-back of all of history is written as null: left out, it would read back as the default.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(enabled, forKey: .enabled)
+        try c.encodeIfPresent(workspaceId, forKey: .workspaceId)
+        try c.encode(provider, forKey: .provider)
+        try c.encode(dailyRunLimit, forKey: .dailyRunLimit)
+        try c.encode(lookbackDays, forKey: .lookbackDays)
+        try c.encodeIfPresent(listId, forKey: .listId)
     }
 }
 
@@ -952,12 +978,16 @@ public struct WikiMaintenanceUpdate: Encodable, Equatable, Sendable {
     public var workspaceId: String?
     public var provider: String?
     public var dailyRunLimit: Int?
+    /// Left nil, not sent; `.some(nil)` is sent as null — all of history — and `.some(days)` as the days.
+    public var lookbackDays: Int??
 
-    public init(enabled: Bool? = nil, workspaceId: String? = nil, provider: String? = nil, dailyRunLimit: Int? = nil) {
+    public init(enabled: Bool? = nil, workspaceId: String? = nil, provider: String? = nil, dailyRunLimit: Int? = nil,
+                lookbackDays: Int?? = nil) {
         self.enabled = enabled
         self.workspaceId = workspaceId
         self.provider = provider
         self.dailyRunLimit = dailyRunLimit
+        self.lookbackDays = lookbackDays
     }
 }
 

@@ -114,6 +114,14 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                         let min: Int
                         let max: Int
                     }
+                    struct Lookback: Decodable {
+                        let choices: [String]
+                        let says: [String]
+                        let unit: String
+                        let defaultDays: Int
+                        let min: Int
+                        let max: Int
+                    }
                     let title: String
                     let fields: [Field]
                     let unit: String
@@ -121,9 +129,16 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                     let turnOn: String
                     let save: String
                     let defaults: Defaults
+                    let lookback: Lookback
                 }
                 struct Runs: Decodable {
                     let runs: Int
+                    let says: String
+                }
+                struct LookbackCase: Decodable {
+                    let days: Int?
+                    let choice: String
+                    let offered: Int
                     let says: String
                 }
                 struct WorkspaceLabel: Decodable {
@@ -153,6 +168,7 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                 let edit: String
                 let turnOff: String
                 let runsADay: [Runs]
+                let lookbacks: [LookbackCase]
                 let workspaceLabels: [WorkspaceLabel]
                 let providerLabels: [ProviderLabel]
             }
@@ -308,9 +324,10 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                         WikiModeCopy.setUp],
                        [maintenance.name, maintenance.note, maintenance.off, maintenance.on, maintenance.setUp])
         XCTAssertEqual(WikiModeCopy.setUpTitle, maintenance.form.title)
-        XCTAssertEqual([WikiModeCopy.workspace, WikiModeCopy.provider, WikiModeCopy.dailyLimit],
+        XCTAssertEqual([WikiModeCopy.workspace, WikiModeCopy.provider, WikiModeCopy.dailyLimit, WikiModeCopy.lookback],
                        maintenance.form.fields.map(\.label))
-        XCTAssertEqual([WikiModeCopy.workspaceNote, WikiModeCopy.providerNote, WikiModeCopy.dailyLimitNote],
+        XCTAssertEqual([WikiModeCopy.workspaceNote, WikiModeCopy.providerNote, WikiModeCopy.dailyLimitNote,
+                        WikiModeCopy.lookbackNote],
                        maintenance.form.fields.map(\.note))
         XCTAssertEqual(WikiModeCopy.runsADayUnit, maintenance.form.unit)
         XCTAssertEqual([WikiModeCopy.cancel, WikiModeCopy.turnOn, WikiModeCopy.save],
@@ -318,10 +335,29 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         XCTAssertEqual(WikiMaintenanceSettings.default.provider, maintenance.form.defaults.provider)
         XCTAssertEqual(WikiMaintenanceSettings.default.dailyRunLimit, maintenance.form.defaults.dailyRunLimit)
         XCTAssertEqual(WikiMaintenanceSettings.dailyRunLimitRange, maintenance.form.defaults.min...maintenance.form.defaults.max)
-        XCTAssertEqual([WikiModeCopy.status, WikiModeCopy.workspace, WikiModeCopy.provider, WikiModeCopy.dailyLimit],
+        XCTAssertEqual([WikiModeCopy.status, WikiModeCopy.workspace, WikiModeCopy.provider, WikiModeCopy.dailyLimit,
+                        WikiModeCopy.lookback],
                        maintenance.rows)
         XCTAssertEqual([WikiModeCopy.maintenanceEdit, WikiModeCopy.turnOff], [maintenance.edit, maintenance.turnOff])
         for row in maintenance.runsADay { XCTAssertEqual(WikiModeCopy.runsADay(row.runs), row.says) }
+        // The look-back: from now on, some days, all of history — the form opening on the contract's 14 days.
+        let lookback = maintenance.form.lookback
+        XCTAssertEqual(WikiModeLogic.LookbackChoice.allCases.map(\.rawValue), lookback.choices)
+        XCTAssertEqual(WikiModeLogic.LookbackChoice.allCases.map {
+            WikiModeCopy.lookbackLabel(WikiModeLogic.lookbackDays($0, days: lookback.defaultDays))
+        }, lookback.says)
+        XCTAssertEqual(WikiModeCopy.lookbackUnit, lookback.unit)
+        XCTAssertEqual(WikiMaintenanceSettings.default.lookbackDays, lookback.defaultDays)
+        XCTAssertEqual(WikiMaintenanceSettings.lookbackDaysRange, lookback.min...lookback.max)
+        for row in maintenance.lookbacks {
+            let named = String(describing: row.days)
+            XCTAssertEqual(WikiModeCopy.lookbackLabel(row.days), row.says, named)
+            XCTAssertEqual(WikiModeLogic.lookbackChoice(row.days).rawValue, row.choice, named)
+            XCTAssertEqual(WikiModeLogic.lookbackDaysOffered(row.days), row.offered, named)
+            // What the picker opens on writes back the setting it was read from.
+            XCTAssertEqual(WikiModeLogic.lookbackDays(WikiModeLogic.lookbackChoice(row.days),
+                                                      days: WikiModeLogic.lookbackDaysOffered(row.days)), row.days, named)
+        }
         for row in maintenance.workspaceLabels {
             let runner = row.workspace.runner.flatMap { $0.displayName ?? $0.name }
             XCTAssertEqual(WikiModeLogic.workspaceLabel(name: row.workspace.name, runner: runner), row.says)
@@ -476,6 +512,11 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
             ("WIKI_DAILY_LIMIT", WikiModeCopy.dailyLimit),
             ("WIKI_RUNS_A_DAY", WikiModeCopy.runsADayUnit),
             ("WIKI_DAILY_LIMIT_NOTE", WikiModeCopy.dailyLimitNote),
+            ("WIKI_LOOKBACK", WikiModeCopy.lookback),
+            ("WIKI_LOOKBACK_NOTE", WikiModeCopy.lookbackNote),
+            ("WIKI_LOOKBACK_NOW", WikiModeCopy.lookbackNow),
+            ("WIKI_LOOKBACK_ALL", WikiModeCopy.lookbackAll),
+            ("WIKI_LOOKBACK_UNIT", WikiModeCopy.lookbackUnit),
             ("WIKI_CANCEL", WikiModeCopy.cancel),
             ("WIKI_TURN_ON", WikiModeCopy.turnOn),
             ("WIKI_TURN_OFF", WikiModeCopy.turnOff),
@@ -535,6 +576,9 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         assertSays(lib, "export const WIKI_SETTINGS_SECTIONS = [WIKI_REVIEW_MODE, WIKI_MAINTENANCE] as const;", in: Self.lib)
         // The sentences built around a value.
         assertSays(lib, "(runs === 1 ? '1 run a day' : `${runs} ${WIKI_RUNS_A_DAY}`)", in: Self.lib)
+        assertSays(lib, "days === null ? WIKI_LOOKBACK_ALL : days === 0 ? WIKI_LOOKBACK_NOW : days === 1 ? 'Last 1 day' : `Last ${days} ${WIKI_LOOKBACK_UNIT}`",
+                   in: Self.lib)
+        assertSays(lib, "export const WIKI_LOOKBACK_CHOICES = ['now', 'days', 'all'] as const;", in: Self.lib)
         assertSays(lib, "`Applied ${count} change${count === 1 ? '' : 's'}`", in: Self.lib)
         assertSays(lib, "`${count} rejected by the check`", in: Self.lib)
         assertSays(lib, "`${count} to review`", in: Self.lib)
@@ -557,13 +601,17 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
                                  "{WIKI_SPOT_CHECK_NOTE}", "{WIKI_FLOORS_LEAD}"], "the web's Review mode card")
         assertSays(reviewMode, "disabled={mode !== 'automatic' || write.isPending}", in: Self.settingsPage)
         let on = try slice(page, from: "function MaintenanceOn(", to: "function MaintenanceSetUp(")
-        assertOrder(on, ["{WIKI_STATUS}", "{WIKI_WORKSPACE}", "{WIKI_PROVIDER}", "{WIKI_DAILY_LIMIT}",
-                         "{WIKI_MAINTENANCE_EDIT}", "{WIKI_TURN_OFF}"], "the web's maintenance rows")
+        assertOrder(on, ["{WIKI_STATUS}", "{WIKI_WORKSPACE}", "{WIKI_PROVIDER}", "{WIKI_DAILY_LIMIT}", "{WIKI_LOOKBACK}",
+                         "{wikiLookbackLabel(maintenance.lookbackDays)}", "{WIKI_MAINTENANCE_EDIT}", "{WIKI_TURN_OFF}"],
+                    "the web's maintenance rows")
         let form = try slice(page, from: "function MaintenanceSetUp(", to: "</Modal>")
         assertOrder(form, ["{WIKI_MAINTENANCE_NOTE}", "{WIKI_WORKSPACE}", "{WIKI_WORKSPACE_NOTE}", "{WIKI_PROVIDER}",
-                           "{WIKI_PROVIDER_NOTE}", "{WIKI_DAILY_LIMIT}", "{WIKI_RUNS_A_DAY}", "{WIKI_DAILY_LIMIT_NOTE}"],
+                           "{WIKI_PROVIDER_NOTE}", "{WIKI_DAILY_LIMIT}", "{WIKI_RUNS_A_DAY}", "{WIKI_DAILY_LIMIT_NOTE}",
+                           "{WIKI_LOOKBACK}", "WIKI_LOOKBACK_CHOICES.map(", "{lookback === 'days' && (",
+                           "<span>{WIKI_LOOKBACK_UNIT}</span>", "{WIKI_LOOKBACK_NOTE}"],
                     "the web's Set up form")
         assertSays(form, "okText={maintenance.enabled ? WIKI_SAVE : WIKI_TURN_ON}", in: Self.settingsPage)
+        assertSays(form, "lookbackDays: wikiLookbackDays(lookback, days)", in: Self.settingsPage)
 
         let native = try self.native("Views/WikiSettingsView.swift")
         let nativePage = try slice(native, from: "struct WikiSettingsPage: View {", to: "struct WikiPickerOption")
@@ -574,7 +622,8 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         assertOrder(arms, ["case .reviewMode:", "ForEach(WikiModeLogic.modes, id: \\.self)", "Text(WikiModeCopy.spotCheck)",
                            "Text(WikiModeCopy.spotCheckNote)", ".disabled(mode != .automatic)", "Text(WikiModeCopy.floorsLead)",
                            "case .maintenance:", "WikiModeCopy.status", "WikiModeCopy.workspace", "WikiModeCopy.provider",
-                           "WikiModeCopy.dailyLimit", "WikiModeCopy.maintenanceName", "WikiModeCopy.setUp",
+                           "WikiModeCopy.dailyLimit", "WikiModeCopy.lookbackLabel(maintenance.lookbackDays)",
+                           "WikiModeCopy.maintenanceName", "WikiModeCopy.setUp",
                            "WikiModeCopy.maintenanceEdit + \"…\"", "WikiModeCopy.turnOff"], "the native page's sections")
         let row = try slice(nativePage, from: "private func modeRow(", to: "private func fallbackBanner(")
         assertOrder(row, ["WikiModeCopy.modeLabel(value)", "WikiModeCopy.modeDefault", "WikiModeCopy.modeNote(value)",
@@ -582,9 +631,17 @@ final class WikiReviewModeCopyParityTests: XCTestCase {
         let nativeForm = try slice(native, from: "struct WikiMaintenanceForm: View {", to: "struct WikiSettingsView: View {")
         assertOrder(nativeForm, ["Text(WikiModeCopy.maintenanceNote)", "Text(WikiModeCopy.workspace)", "Text(WikiModeCopy.workspaceNote)",
                                  "Text(WikiModeCopy.provider)", "Text(WikiModeCopy.providerNote)", "WikiModeCopy.runsADay(",
-                                 "Text(WikiModeCopy.dailyLimitNote)"], "the native Set up form")
+                                 "Text(WikiModeCopy.dailyLimitNote)", "Picker(WikiModeCopy.lookback, selection: $choice.lookback)",
+                                 "ForEach(WikiModeLogic.LookbackChoice.allCases", "if choice.lookback == .days {",
+                                 "Text(WikiModeCopy.lookback)", "Text(WikiModeCopy.lookbackNote)"], "the native Set up form")
         assertSays(nativeForm, "Button(enabled ? WikiModeCopy.save : WikiModeCopy.turnOn)", in: "WikiSettingsView.swift")
         assertSays(nativeForm, "Stepper(value: $choice.dailyRunLimit, in: WikiMaintenanceSettings.dailyRunLimitRange)",
+                   in: "WikiSettingsView.swift")
+        assertSays(nativeForm, "Stepper(value: $choice.lookbackDays, in: 1...WikiMaintenanceSettings.lookbackDaysRange.upperBound)",
+                   in: "WikiSettingsView.swift")
+        // All of history goes out as null: a key left out would leave the look-back as it was.
+        let screen = try slice(native, from: "struct WikiSettingsView: View {", to: "private func actions(")
+        assertSays(screen, "lookbackDays: .some(WikiModeLogic.lookbackDays(choice.lookback, days: choice.lookbackDays))",
                    in: "WikiSettingsView.swift")
     }
 

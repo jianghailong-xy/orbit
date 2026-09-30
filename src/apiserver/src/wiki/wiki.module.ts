@@ -9,6 +9,7 @@ import { WikiHealth } from './wiki-health';
 import { WikiHealthController } from './wiki-health.controller';
 import { WikiMaintenance } from './wiki-maintenance';
 import { WikiMaintenanceTrigger } from './wiki-maintenance-run';
+import { WikiPlanJobFacts } from './wiki-plan-job';
 import { WikiPlans } from './wiki-plan';
 import { WikiPlanController } from './wiki-plan.controller';
 import { WikiRetrieval } from './wiki-retrieval';
@@ -44,8 +45,10 @@ import { WikiService } from './wiki.service';
   // RealtimeService, and reads and writes rows through Prisma alone.
   // WikiRunReads answers one run's page from the same rows, through Prisma alone, and WikiHealth the
   // Wiki home's status line. WikiPlans keeps the plan and its gate (contract `plan`) for both doors, the
-  // same way, and WikiDocs the documents written from it (contract `docs`).
-  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiMaintenanceTrigger, WikiRunReads, WikiHealth, WikiPlans, WikiDocs],
+  // same way, and WikiDocs the documents written from it (contract `docs`). WikiPlanJobFacts moves the
+  // plan's jobs on when a task of the owner's changes (contract `plan.jobs.trigger`), from the same
+  // published events as the maintenance trigger.
+  providers: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiMaintenanceTrigger, WikiRunReads, WikiHealth, WikiPlans, WikiPlanJobFacts, WikiDocs],
   exports: [WikiService, WikiRetrieval, WikiMaintenance, WikiArticles, WikiPlans, WikiDocs],
 })
 export class WikiModule {}

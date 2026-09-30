@@ -129,6 +129,7 @@ import {
   livePinnedModel,
   modelOptionsForProvider,
   newSessionEffortForProvider,
+  newSessionModelForProvider,
   normalizeEffortForProvider,
   providerIdentityResolved,
   runtimeForProvider,
@@ -230,6 +231,7 @@ import {
   SessionDecisionStrip,
   decisionRowKey,
   revealCriteriaCard,
+  revealSettlementCard,
   type PendingDecisionRow,
 } from './DecisionRail';
 import {
@@ -266,6 +268,7 @@ import {
 } from './AcceptanceConfirmationCard';
 import {
   READY_TO_START,
+  START_PROJECT_INTENT,
   confirmedChangesProjectKey,
   type SettlementQuestion,
 } from '../lib/projectStart';
@@ -1550,6 +1553,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const prevDraftKey = useRef(draftKey);
   const [mode, setMode] = useState('Auto');
   const [model, setModel] = useState(DEFAULT_MODEL);
+  const modelPreferenceMut = useMutation({
+    // Keep rapid picks in order, including across a composer remount.
+    scope: { id: 'model-preferences' },
+    mutationFn: ({ provider, model }: { provider: string; model: string }) =>
+      api('/users/me/preferences', {
+        method: 'PATCH',
+        body: { defaultModels: { [provider]: model } },
+      }),
+  });
   // Runtime catalogs and configured providers arrive asynchronously. Track whether the user has
   // touched Model within the current draft/session context so a late default can fill an untouched
   // picker without overwriting an explicit choice. Context changes deliberately reset dirty.
@@ -2718,8 +2730,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   }, [selected?.id, live]);
 
   const pickedModelDefault = pickedWorkspace
-    ? defaultModelForProvider(
+    ? newSessionModelForProvider(
         pickedProvider,
+        me.data?.preferences?.defaultModels,
         runner.modelCatalog,
         configuredProviders,
         runner.runtimeDefaultModels,
@@ -2912,22 +2925,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   useEffect(() => {
     if (selectedId) return;
     const provider = pickedProvider;
-    // A picked provider owns its own model space, so its default model — not the workspace's, which
-    // belongs to the provider being switched away from — is what the effort must be legal for.
-    const selectedModel = draftProvider
-      ? defaultModelForProvider(provider, runner.modelCatalog, configuredProviders)
-      : (livePinnedModel(
-          pickedWorkspace?.model,
-          provider,
-          runner.modelCatalog,
-          configuredProviders,
-          runner.runtimeDefaultModels,
-        ) ?? defaultModelForProvider(provider, runner.modelCatalog, configuredProviders));
     const seed = newSessionEffortForProvider(
       provider,
       me.data?.preferences?.defaultEffort,
       pickedWorkspace?.effort,
-      selectedModel,
+      pickedModelDefault,
       runner.modelCatalog,
       configuredProviders,
     );
@@ -2938,8 +2940,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     selectedId,
     effortContextKey,
     pickedProvider,
-    draftProvider,
-    pickedWorkspace?.model,
+    pickedModelDefault,
     pickedWorkspace?.effort,
     me.data?.preferences?.defaultEffort,
     runner.modelCatalog,
@@ -4370,6 +4371,22 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     },
     [selectedId],
   );
+  // Arriving from the project page's "Review" on a request to start (`?intent=start-project`): once
+  // this conversation's start card is on screen it is scrolled to and marked, as the pinned strip's
+  // press does, and the intent goes, so a refresh does not scroll there again.
+  const startIntent = Boolean(selectedId) && searchParams.get('intent') === START_PROJECT_INTENT;
+  const startCardShown = openSettlementIn?.sessionId === selectedId && openSettlementIn?.question === 'START';
+  useEffect(() => {
+    if (!startIntent || !startCardShown || !revealSettlementCard()) return;
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('intent');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [startIntent, startCardShown, setSearchParams]);
   // The start card's "View tasks": the tasks this conversation filed are the strip above the
   // composer, so it is opened there rather than navigating away from the card being read. The same
   // read the strip is drawn from says whether there is one; without it the card links to the
@@ -6692,7 +6709,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     }
   };
   const pickModel = (v: string): void => {
-    if (v === shownModel) return;
+    // A re-selection is still a preference, even when the session config already matches it.
+    qc.setQueryData<Me>(meQuery().queryKey, (prev) =>
+      prev ? {
+        ...prev,
+        preferences: {
+          ...prev.preferences,
+          defaultModels: { ...prev.preferences?.defaultModels, [shownProvider]: v },
+        },
+      } : prev,
+    );
+    modelPreferenceMut.mutate({ provider: shownProvider, model: v });
+    if (v === shownModel) {
+      modelSeedState.current = dirtyContextSeed(modelContextKey);
+      return;
+    }
     // Switching to a model that can't do Auto while Auto is selected would send a mode claude
     // rejects — snap back to Default.
     const drop = shownMode === 'Auto' && !supportsAuto(v, shownProvider, configuredProviders, runner.modelCatalog);

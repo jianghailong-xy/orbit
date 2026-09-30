@@ -419,7 +419,7 @@ struct ComposerView: View {
                 PlanUsageIndicator(usage: usage,
                                    account: console.accountLabel.map {
                                        PlanUsageAccount(label: $0, note: console.accountNote)
-                                   })
+                                   }, resetConsole: console)
             }
             // Context stays visible even before the first turn reports tokens — a New Session
             // reads 0%. Rightmost gauge, next to Send.
@@ -608,6 +608,7 @@ struct ComposerView: View {
                         catalog: console.modelCatalog, configured: console.configuredProviders)
                     let resetEffort = nextEffort != console.effort
                     let clampedPermissionMode = console.selectModel(m.id)
+                    app.rememberDefaultModel(m.id, for: console.provider)
                     let permissionMode = clampedPermissionMode
                         ? console.permissionMode.rawValue
                         : nil
@@ -1249,6 +1250,7 @@ private struct PlanUsageAccount {
 private struct PlanUsageIndicator: View {
     let usage: PlanUsageSnapshot
     var account: PlanUsageAccount?
+    let resetConsole: ConsoleModel?
     @State private var showDetail = false
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -1279,7 +1281,8 @@ private struct PlanUsageIndicator: View {
             .buttonStyle(.plain)
             .help("Plan usage \(pct)%")
             .accessibilityLabel("Plan usage \(pct)%")
-            .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage, account: account))
+            .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage,
+                                                   account: account, resetConsole: resetConsole))
         }
     }
 }
@@ -1470,6 +1473,7 @@ private struct PlanUsageDetailPresentation: ViewModifier {
     @Binding var isPresented: Bool
     let usage: PlanUsageSnapshot
     let account: PlanUsageAccount?
+    let resetConsole: ConsoleModel?
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
@@ -1480,6 +1484,12 @@ private struct PlanUsageDetailPresentation: ViewModifier {
         guard let account else { return 0 }
         return account.note == nil ? 50 : 70
     }
+
+    #if os(iOS)
+    private var resetHeight: Int {
+        resetConsole?.codexResetCardVisible == true ? 238 : 0
+    }
+    #endif
 
     func body(content: Content) -> some View {
         #if os(macOS)
@@ -1503,6 +1513,9 @@ private struct PlanUsageDetailPresentation: ViewModifier {
                     Text("Plan usage").font(.headline)
                     if let account { PlanUsageAccountRow(account: account) }
                     PlanUsageDetailRows(rows: usage.rows)
+                    if let resetConsole, resetConsole.codexResetCardVisible {
+                        CodexResetCreditCard(console: resetConsole)
+                    }
                 }
                 .padding(16)
                 .frame(width: ComposerFooterDetailLayout.popoverWidth)
@@ -1520,13 +1533,17 @@ private struct PlanUsageDetailPresentation: ViewModifier {
                         PlanUsageAccountRow(account: account).padding(.bottom, 18)
                     }
                     PlanUsageDetailRows(rows: usage.rows)
+                    if let resetConsole, resetConsole.codexResetCardVisible {
+                        CodexResetCreditCard(console: resetConsole)
+                            .padding(.top, 18)
+                    }
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 24)
                 .padding(.bottom, 20)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .presentationDetents([.height(CGFloat(120 + usage.rows.count * 66 + accountHeight))])
+                .presentationDetents([.height(CGFloat(120 + usage.rows.count * 66 + accountHeight + resetHeight))])
                 .presentationDragIndicator(.visible)
             }
         }

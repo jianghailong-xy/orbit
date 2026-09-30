@@ -245,7 +245,7 @@ const detail = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('ProjectsPage', () => {
-  it('reads exactly GET /projects, GET /projects/<id>, the project DELETE, the status and Automatic PATCHes, the coordinator status GET, its three writes, the two task-page levels and the per-row prerequisite read — no other endpoint', () => {
+  it('reads exactly GET /projects, GET /projects/<id>, the project DELETE, the status PATCH, the coordinator status GET, its three writes, the two task-page levels and the per-row prerequisite read — no other endpoint', () => {
     // Negative control: a static render never invokes queryFn (nothing to observe at runtime —
     // see the module comment), so this asserts on the one place the real endpoints are decided.
     // Fails if any call grows extra args or a query string, if a path changes, or if a tenth
@@ -286,12 +286,10 @@ describe('ProjectsPage', () => {
       // the project's to decide, and a `workspaceId` here would be a move wearing a replacement's
       // name (the rebind below is the move).
       "`/projects/${encodeURIComponent(projectId)}/coordinator/replace`, { method: 'POST' }",
-      // The project's OTHER owner-only write: its Automatic switch, which is `coordinatorEnabled`
-      // and the two fields that field cannot be written without. The same PATCH door as the status
-      // write above, and the body is held in `automaticBody` rather than spelled out here — what
-      // it carries is asserted at runtime, over the request that leaves the client, in
-      // ProjectsPage.automatic.test.tsx.
-      "`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: automaticBody(next, configRevision) }",
+      // No Automatic PATCH here any more: the switch moved off the coordinator card into How it
+      // runs (`ProjectRunSettings`), which writes `automatic` with the rest of the settings the
+      // start card set — asserted over the requests that leave the client in
+      // ProjectRunSettings.test.tsx and ProjectsPage.automatic.test.tsx.
       // The verb behind every COORDINATOR_UNAVAILABLE. Held as literally as the path above,
       // `workspaceId` included: this endpoint has no `null` spelling, and a body that could send
       // one would be a way to REACH the state it exists to leave.
@@ -2029,6 +2027,36 @@ describe('ProjectsPage — badges', () => {
     ]);
   });
 
+  it('puts a project its coordinator asked to start in Needs attention: Needs you · Ready to start', () => {
+    // Mock board3 ①: the fifth thing a row can be waiting on its owner for, in the words the
+    // coordinator's session row says it, and how long it has waited. Asked is the whole condition:
+    // the same project with nobody asking stays where its work puts it — nobody is waiting on you.
+    const quiet = {
+      userBlockers: 0, coordinatorBlockers: 0, systemBlockers: 0,
+      maxSeverity: null, attentionSinceAt: null, nextCheckAt: null,
+      ownerItems: [], coordinatorItems: null,
+    };
+    const rows = render([
+      listRow(P1, 'Runner redesign', {
+        buckets: { ready: 1, blocked: 4 },
+        lastActivityAt: ago(2 * 60 * 1000),
+        attention: { ...quiet, startRequest: { waitingSince: ago(2 * 60 * 1000 + 5_000) } },
+      }),
+      listRow(P2, 'Nobody asked yet', {
+        buckets: { ready: 1, blocked: 4 },
+        lastActivityAt: ago(2 * 60 * 1000),
+        attention: { ...quiet, startRequest: null },
+      }),
+    ]);
+
+    expect(rowFor(rows, 'Runner redesign')).toMatchObject({
+      section: 'attention',
+      chip: 'Needs you · Ready to start · 2m',
+      tone: 'warning',
+    });
+    expect(rowFor(rows, 'Nobody asked yet')).toMatchObject({ section: 'ready', chip: null });
+  });
+
   it('spells its colours as theme tokens, never as a hex', () => {
     // Both badge tones are named in index.css off --warning-*/--brand-*, so they follow the
     // palette into dark mode. A hex on either badge would be light-mode-only styling.
@@ -2190,7 +2218,9 @@ describe('ProjectDetailPage — integration', () => {
       'project/bg-jobs · 7 commits ahead of main · synced with main 12m ago'
       + ' · Integrating 1 · Queued 1 · Merge check ✓ passing on the branch tip',
     );
-    expect(out).toContain('Integration settings');
+    // The settings that decide the line are How it runs' now, not a disclosure behind this row:
+    // one place per question.
+    expect(out).not.toContain('Integration settings');
   });
 
   it('reads the integration line from its own key, not from the project document', () => {
@@ -2214,18 +2244,22 @@ describe('ProjectDetailPage — integration', () => {
     const out = text(renderDetail(qc, encodeId(P1)));
 
     expect(out).toContain('main · Integrating 1 · Queued 1 · Merge check ✓ passing');
-    expect(out).toContain('Integration settings');
+    expect(out).not.toContain('Integration settings');
     // A project that lands straight into main is neither ahead of main nor syncing from it, so
     // the two facts that only mean something on a branch are not printed as zeroes.
     expect(out).not.toContain('commits ahead of main');
     expect(out).not.toContain('synced with main');
   });
 
-  it('offers the three integration settings behind the row', () => {
-    // §7.2 V4 / mock 6 ③. A native disclosure, so what it holds is in the markup either way and
-    // a reader with no pointer can reach it.
+  it('offers the integration settings under How it runs, in the right rail', () => {
+    // §7.2 V4 / mock board3 ④: the line, the merge check and the escalation window, with Automatic
+    // and the rest of what the start card set, in the one block — not behind the row above.
     const { html } = withIntegration();
-    const out = html();
+    const page = html();
+    const at = page.indexOf('data-project-block="run-settings"');
+    expect(at).toBeGreaterThan(-1);
+    // The block itself, up to the next one: what is asserted below is said IN How it runs.
+    const out = page.slice(at, page.indexOf('data-project-block=', at + 1));
 
     expect(out).toContain('Tasks land on');
     expect(out).toContain('A project branch');
@@ -2234,6 +2268,7 @@ describe('ProjectDetailPage — integration', () => {
     expect(out).toContain('cd src/runner-go &amp;&amp; go test -count=1 ./...');
     expect(out).toContain('Escalate after');
     expect(out).toContain('2 hours');
+    expect(out).toContain('Automatic');
     // The line is locked, so the choice cannot be re-made — and the card says why rather than
     // presenting a control that would be refused 409 INTEGRATION_LINE_LOCKED (L4).
     expect(out).toContain('started integrating');
@@ -2351,5 +2386,176 @@ describe('ProjectDetailPage — integration', () => {
     expect(out).not.toContain('landed on the default branch');
     // The absence of evidence keeps saying exactly that.
     expect(out).toContain('no merge receipt either way');
+  });
+});
+
+// Mock board3 ② and ④: a project nobody has started says so on its page — the tag, the Open items
+// row that asks for the start, where its tasks will land, and what its ready work is waiting for —
+// and has no How it runs until it is started, because the start card is what sets it.
+describe('ProjectDetailPage — a project nobody has started', () => {
+  const id = encodeId(P1);
+  const key = (...rest: string[]) => ['project', id, ...rest];
+  const text = (html: string): string =>
+    html.replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+  /** What the coordinator suggests, as `project_request_start` filed it. */
+  const request = {
+    settings: {
+      line: 'PROJECT_BRANCH',
+      automatic: true,
+      maxConcurrentTasks: 3,
+      mergeCheckCommand: null,
+    },
+    why: 'B and C both build on A.',
+    criteriaDigest: 'c'.repeat(64),
+    planDigest: 'p'.repeat(64),
+    repository: null,
+    warnings: [],
+  };
+  const startRow = {
+    itemId: 'item-start',
+    kind: 'START_REQUEST',
+    title: 'Start this project?',
+    detailLine: 'project/34WzvgkHWbY1VwXmSPUZi · Automatic on · 3 tasks at a time · no merge check',
+    assignee: 'OWNER',
+    assigneeReason: 'DEFAULT',
+    waitingSince: new Date(Date.now() - 2 * 60 * 1000).toISOString(),
+    escalateAt: null,
+    escalatedAt: null,
+    taskId: null,
+    sessionId: null,
+    promotionId: null,
+    fuseEpisodeId: null,
+    delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null },
+    actions: [],
+    question: null,
+    facts: null,
+    startRequest: request,
+  };
+  const undecided = {
+    line: null,
+    lineAbsentReason: 'NOT_DECIDED',
+    ref: null,
+    upstreamRef: null,
+    source: null,
+    locked: false,
+    startedAt: null,
+    mergeCheckCommand: null,
+    mergeCheckCommandAbsentReason: 'NOT_CONFIGURED',
+    mergeCheckTimeoutSeconds: null,
+    escalationSeconds: 7200,
+    commitsAheadOfUpstream: null,
+    commitsAheadOfUpstreamAbsentReason: 'NO_LANDING_YET',
+    lastUpstreamSyncAt: null,
+    lastUpstreamSyncAbsentReason: 'NEVER_SYNCED',
+    integratingCount: 0,
+    queuedCount: 0,
+    mergeCheckOnTip: 'UNKNOWN',
+    inFlight: null,
+  };
+  const panorama = {
+    buckets: { running: 0, ready: 1, blocked: 4, awaitingVerification: 0, done: 0, failed: 0, cancelled: 0 },
+    shape: { taskCount: 5, edgeCount: 5, ratio: 1, maxDepth: 3, form: 'mesh' },
+  };
+
+  function page(over: Record<string, unknown>, items: Record<string, unknown> | null) {
+    const qc = newClient();
+    qc.setQueryData(key(), detail({
+      coordinatorEnabled: false,
+      maxConcurrentTasks: 3,
+      configRevision: '1',
+      ...over,
+    }));
+    qc.setQueryData(key('integration'), undecided);
+    qc.setQueryData(key('panorama'), panorama);
+    if (items) qc.setQueryData(key('open-items'), items);
+    return renderDetail(qc, id);
+  }
+  const openItemsOf = (html: string): string => {
+    const at = html.indexOf('data-project-block="open-items"');
+    return html.slice(at, html.indexOf('data-project-block=', at + 1));
+  };
+
+  it('tags it Not started, where a started project reads Open', () => {
+    const unstarted = page({ startedAt: null }, null);
+    expect(unstarted).toContain('>Not started</span>');
+    expect(unstarted).not.toContain('>Open</span>');
+
+    const started = page({ startedAt: '2026-09-29T08:26:00.000Z' }, null);
+    expect(started).toContain('>Open</span>');
+    expect(started).not.toContain('>Not started</span>');
+  });
+
+  it('leads Open items with the coordinator’s request: Start this project?, what it suggests, and Review', () => {
+    const html = page({ startedAt: null }, { needsYou: [], withCoordinator: [], startRequest: startRow });
+    const items = text(openItemsOf(html));
+
+    expect(items).toContain('Needs you');
+    expect(items).toContain('Start this project?');
+    // The row's own sentence for the suggestion, in the mock's words.
+    expect(items).toContain('The coordinator asked · a project branch · Automatic on · at most 3 at a time');
+    expect(items).toContain('You waiting 2m');
+    expect(openItemsOf(html)).toMatch(/<button[^>]*class="project-open-item-action is-primary"[^>]*>Review<\/button>/);
+    // Counted with what needs you, because somebody is waiting on you.
+    expect(items).toContain('1 need you · 0 with the coordinator');
+    expect(items).not.toContain('not asked yet');
+  });
+
+  it('offers Start… — not asked yet — while nobody has asked', () => {
+    const html = page({ startedAt: null }, { needsYou: [], withCoordinator: [], startRequest: null });
+    const items = openItemsOf(html);
+
+    expect(items).toMatch(/<button[^>]*class="project-open-item-title project-open-item-start"[^>]*>Start…<\/button>/);
+    expect(text(items)).toContain('not asked yet');
+    expect(text(items)).not.toContain('Start this project?');
+    // Nobody is waiting on the owner for it, so it is not counted as something that needs them.
+    expect(text(items)).toContain('0 need you · 0 with the coordinator');
+  });
+
+  it('draws neither row once the project is started', () => {
+    const html = page(
+      { startedAt: '2026-09-29T08:26:00.000Z' },
+      { needsYou: [], withCoordinator: [], startRequest: startRow },
+    );
+    expect(html).not.toContain('Start this project?');
+    expect(html).not.toContain('not asked yet');
+  });
+
+  it('says where tasks land is decided at the start, and what the coordinator suggests', () => {
+    const asked = text(page({ startedAt: null }, { needsYou: [], withCoordinator: [], startRequest: startRow }));
+    expect(asked).toContain('Tasks land on: decided when you start — the coordinator suggests a project branch');
+
+    const notAsked = text(page({ startedAt: null }, { needsYou: [], withCoordinator: [], startRequest: null }));
+    expect(notAsked).toContain('Tasks land on: decided when you start');
+    expect(notAsked).not.toContain('the coordinator suggests');
+  });
+
+  it('says ready work starts when you start, and no dispatch warning over it', () => {
+    const unstarted = text(page({ startedAt: null }, null));
+    expect(unstarted).toContain('starts when you start');
+    expect(unstarted).not.toContain('can start now');
+    expect(unstarted).not.toContain('Dispatch needs attention');
+
+    const started = text(page({ startedAt: '2026-09-29T08:26:00.000Z' }, null));
+    expect(started).toContain('can start now');
+    expect(started).not.toContain('starts when you start');
+  });
+
+  it('has no How it runs until it is started — and then Automatic is there, not on the coordinator card', () => {
+    const unstarted = page({ startedAt: null }, null);
+    expect(unstarted).not.toContain('data-project-block="run-settings"');
+    expect(unstarted).not.toContain('How it runs');
+
+    const started = page({ startedAt: '2026-09-29T08:26:00.000Z', coordinatorEnabled: true }, null);
+    const at = started.indexOf('data-project-block="run-settings"');
+    expect(at).toBeGreaterThan(-1);
+    expect(started).toContain('How it runs');
+    // In the right rail, after the coordinator.
+    expect(started.indexOf('data-project-block="coordinator"')).toBeLessThan(at);
+    expect(started.indexOf('class="project-command-rail"')).toBeLessThan(at);
+    // The switch is How it runs', and the coordinator card carries none.
+    const block = started.slice(at, started.indexOf('data-project-block=', at + 1));
+    expect(block).toMatch(/role="switch"[^>]*aria-checked="true"|aria-checked="true"[^>]*role="switch"/);
+    expect(started.slice(0, at)).not.toContain('role="switch"');
   });
 });

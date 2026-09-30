@@ -1,8 +1,10 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import {
   toUuid,
+  WIKI_DOC_DISPOSITION_ACTIONS,
+  WIKI_DOC_FOOTNOTE_KINDS,
   WIKI_DOC_RECORD_KINDS,
   WIKI_DOC_REPO_KINDS,
   WIKI_DOC_RULES,
@@ -10,8 +12,11 @@ import {
   type WikiAnchorState,
   type WikiDocBlockKind,
   type WikiDocChecker,
+  type WikiDocDisposition,
+  type WikiDocDispositionAction,
   type WikiDocFootnoteKind,
   type WikiDocFootnoteView,
+  type WikiDocMaterial,
   type WikiDocRecordKind,
   type WikiDocRepoKind,
   type WikiDocSchemaLevel,
@@ -43,6 +48,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { markersOf, splitSentences, wikiRepoPath, withoutMarkers } from './wiki-articles';
 import { docWithdrawReason } from './wiki-doc-withdrawal';
+import { conditionView, gatherDocMaterial, type StoredSessionCondition } from './wiki-docs-material';
 import { ownerEnvLiterals } from './wiki-dossier';
 import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
 import { requireConfirmedPlan } from './wiki-plan';
@@ -80,6 +86,10 @@ type Tx = Prisma.TransactionClient;
 
 const REPO_KINDS = new Set<string>(WIKI_DOC_REPO_KINDS);
 const RECORD_KINDS = new Set<string>(WIKI_DOC_RECORD_KINDS);
+const FOOTNOTE_KINDS = new Set<string>(WIKI_DOC_FOOTNOTE_KINDS);
+const DISPOSITION_ACTIONS = new Set<string>(WIKI_DOC_DISPOSITION_ACTIONS);
+/** A material's id in its section, as the runner gives it: `D1`, `C12`, `S3`. */
+const MATERIAL_ID = /^[A-Za-z][A-Za-z0-9_-]{0,15}$/u;
 const HEX64 = /^[0-9a-f]{64}$/u;
 const SHA = /^[0-9a-f]{7,64}$/u;
 /** A full commit: what origin/main names, and what a section's `repoSha` is compared with. */
@@ -117,6 +127,8 @@ interface SectionWrite {
   materialSha256: string;
   markdown: string;
   footnotes: Footnote[];
+  /** What became of each piece of its material (contract `docs.dispositions`), as the write sent it. */
+  dispositions: WikiDocDisposition[];
   /** Where it is in the request, for the errors that name it. */
   at: string;
 }
@@ -262,9 +274,62 @@ function parseWrite(body: unknown, planKeys: ReadonlySet<string>, slug: string, 
         if (footnote) footnotes.push(footnote);
       });
     }
-    write.sections.push({ key: key ?? '', materialSha256: material, markdown, footnotes, at });
+    const dispositions = parseDispositions(value.dispositions, `${at}.dispositions`, problems);
+    write.sections.push({ key: key ?? '', materialSha256: material, markdown, footnotes, dispositions, at });
   });
   return write;
+}
+
+/**
+ * A section's material ledger (contract `docs.dispositions`): optional, at most
+ * `rules.dispositionsPerSection`, every piece named once, a merge into another piece of the same ledger.
+ */
+function parseDispositions(value: unknown, at: string, problems: Problems): WikiDocDisposition[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || value.length > WIKI_DOC_RULES.dispositionsPerSection) {
+    problems.fail(at, `must be a list of at most ${WIKI_DOC_RULES.dispositionsPerSection} dispositions`);
+    return [];
+  }
+  const out: WikiDocDisposition[] = [];
+  const named = new Set<string>();
+  value.forEach((raw, i) => {
+    const path = `${at}[${i}]`;
+    if (!isObject(raw)) {
+      problems.fail(path, 'must be an object: { material, kind, ref, action, into, reason }');
+      return;
+    }
+    problems.fields(raw, path, 'disposition');
+    const material = typeof raw.material === 'string' ? raw.material.trim() : '';
+    if (!MATERIAL_ID.test(material)) problems.fail(`${path}.material`, 'is the id the runner gave the material in its section: a letter, then up to 15 letters, digits, _ or -');
+    else if (named.has(material)) problems.fail(`${path}.material`, `${material} is named twice: each piece of material has one disposition`);
+    named.add(material);
+    const kind = raw.kind;
+    if (typeof kind !== 'string' || !FOOTNOTE_KINDS.has(kind)) problems.fail(`${path}.kind`, `must be one of ${WIKI_DOC_FOOTNOTE_KINDS.join(', ')}`);
+    const ref = problems.text(raw.ref, `${path}.ref`, WIKI_DOC_RULES.textMaxChars);
+    const action = raw.action;
+    if (typeof action !== 'string' || !DISPOSITION_ACTIONS.has(action)) problems.fail(`${path}.action`, `must be one of ${WIKI_DOC_DISPOSITION_ACTIONS.join(', ')}`);
+    let into: string | null = null;
+    if (raw.into !== undefined && raw.into !== null) {
+      if (typeof raw.into !== 'string' || !MATERIAL_ID.test(raw.into.trim())) problems.fail(`${path}.into`, 'must name a material of this section, or be null');
+      else into = raw.into.trim();
+    }
+    if (action === 'merge' && into === null) problems.fail(`${path}.into`, 'is required for a merge: the material it was merged into');
+    if (action !== 'merge' && into !== null) problems.fail(`${path}.into`, 'is only for a merge: null otherwise');
+    if (into !== null && into === material) problems.fail(`${path}.into`, 'names the material itself: a piece is merged into another');
+    const reason = problems.text(raw.reason, `${path}.reason`, WIKI_DOC_RULES.reasonMaxChars);
+    if (MATERIAL_ID.test(material) && typeof kind === 'string' && FOOTNOTE_KINDS.has(kind) && ref !== null && typeof action === 'string'
+      && DISPOSITION_ACTIONS.has(action) && reason !== null) {
+      out.push({ material, kind: kind as WikiDocFootnoteKind, ref, action: action as WikiDocDispositionAction, into, reason });
+    }
+  });
+  // A merge names another piece of the same ledger.
+  value.forEach((raw, i) => {
+    const into = isObject(raw) && typeof raw.into === 'string' ? raw.into.trim() : '';
+    if (into !== '' && MATERIAL_ID.test(into) && !named.has(into)) {
+      problems.fail(`${at}[${i}].into`, `${into} is not a material of this section's dispositions`);
+    }
+  });
+  return out;
 }
 
 function parseFootnote(value: unknown, at: string, problems: Problems): Footnote | null {
@@ -756,6 +821,7 @@ interface PreparedSection {
   key: string;
   planSectionId: string;
   materialSha256: string;
+  dispositions: WikiDocDisposition[];
   blocks: BodyBlock[];
   sentences: Array<BodySentence & { status: WikiDocSentenceStatus; newTokens: string[] }>;
   footnotes: FootnoteRow[];
@@ -912,6 +978,47 @@ export class WikiDocs {
   }
 
   /**
+   * One document as it is written, for a maintenance run of the space (contract `docs.reads.writerDoc`):
+   * the owner's read, on the runner door, so a run can write an overview over sections it left unchanged.
+   */
+  async writerDoc(principal: WikiPrincipal, spaceId: string, slug: string): Promise<WikiDocView> {
+    await this.assertWriter(principal, spaceId);
+    return this.doc(principal.ownerId, spaceId, slug);
+  }
+
+  /**
+   * The server's half of one section's material (contract `docs.reads.material`, `docs.material`): the
+   * section's session condition as the confirmed plan states it, the entries it picks, and the records
+   * found through them or by its projects, window and keywords — each read through the one reader a
+   * record has, redacted as a footnote's check reads it, and placed.
+   */
+  async material(principal: WikiPrincipal, spaceId: string, slug: string, key: string | undefined): Promise<WikiDocMaterial> {
+    await this.assertWriter(principal, spaceId);
+    const { ownerId } = principal;
+    const sectionKey = (key ?? '').trim();
+    if (sectionKey === '') {
+      throw new BadRequestException('section is required: ?section=<key>, a section of the document in the space\'s confirmed plan');
+    }
+    const confirmed = await requireConfirmedPlan(this.prisma, { ownerId, spaceId });
+    const section = await this.prisma.wikiPlanSection.findFirst({
+      where: { ownerId, key: sectionKey, doc: { ownerId, slug, planId: confirmed.id } },
+      select: { sources: true },
+    });
+    if (!section) throw new NotFoundException(`no section ${sectionKey} of document ${slug} in the space's confirmed plan`);
+    const condition = ((section.sources as unknown as { sessions?: StoredSessionCondition | null }) ?? {}).sessions ?? null;
+    const literals = await ownerEnvLiterals(this.prisma, ownerId);
+    const gathered = await gatherDocMaterial(this.prisma, this.wiki, { ownerId, spaceId, condition, literals });
+    return {
+      spaceId,
+      slug,
+      section: sectionKey,
+      planVersion: confirmed.version,
+      condition: await conditionView(this.prisma, ownerId, condition),
+      ...gathered,
+    };
+  }
+
+  /**
    * Write sections of one document (contract `docs.routes.write`, `docs.regeneration`).
    *
    * In order: the caller is a writer of the space; the space has a confirmed plan (`requireConfirmedPlan`,
@@ -978,6 +1085,7 @@ export class WikiDocs {
         key: section.key,
         planSectionId: sectionOf.get(section.key)!.id,
         materialSha256: section.materialSha256,
+        dispositions: section.dispositions.map((disposition) => ({ ...disposition, reason: redacted(disposition.reason, literals)! })),
         blocks: parsedBody.blocks.map((block) => (block.text === undefined ? block : { ...block, text: redacted(block.text, literals)! })),
         sentences: parsedBody.sentences.map((sentence) => ({
           ...sentence,
@@ -1204,6 +1312,7 @@ export class WikiDocs {
           repoSha: request.repoSha,
           model: request.model,
           stats: section.stats as unknown as Prisma.InputJsonValue,
+          dispositions: section.dispositions as unknown as Prisma.InputJsonValue,
           generatedAt: now,
           staleAt: stale ? now : null,
         },
@@ -1354,6 +1463,7 @@ export class WikiDocs {
             blocks: true,
             repoSha: true,
             model: true,
+            dispositions: true,
             generatedAt: true,
             staleAt: true,
             sentences: {
@@ -1441,6 +1551,7 @@ export class WikiDocs {
         generatedAt: section?.generatedAt.toISOString() ?? null,
         repoSha: section?.repoSha ?? null,
         model: section?.model ?? null,
+        dispositions: (section?.dispositions as unknown as WikiDocDisposition[] | undefined) ?? [],
         blocks,
       };
     });

@@ -8726,17 +8726,21 @@ button.chat-jump-start:hover {
   background: var(--bg-raised);
 }
 /* The two lines, one under the other; the class makes these rules outrank antd's own
-   `.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. */
-.start-card-settings .start-card-lines {
+   `.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. How it runs
+   (`.project-run-settings`) draws the same two. */
+.start-card-settings .start-card-lines,
+.project-run-settings .project-run-lines {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-.start-card-settings .start-card-lines .ant-radio-wrapper {
+.start-card-settings .start-card-lines .ant-radio-wrapper,
+.project-run-settings .project-run-lines .ant-radio-wrapper {
   align-items: flex-start;
   margin-inline-end: 0;
 }
-.start-card-settings .start-card-lines .ant-radio {
+.start-card-settings .start-card-lines .ant-radio,
+.project-run-settings .project-run-lines .ant-radio {
   align-self: flex-start;
   margin-top: 3px;
 }
@@ -8759,7 +8763,8 @@ button.chat-jump-start:hover {
   font-size: 13px;
   color: var(--text-1);
 }
-.start-card-settings .start-card-count {
+.start-card-settings .start-card-count,
+.project-run-settings .start-card-count {
   width: 72px;
 }
 /* The merge check row when Automatic would merge the branch into main with nothing run on the
@@ -14352,14 +14357,17 @@ button.chat-jump-start:hover {
   margin-inline-end: 0;
 }
 
-/* The integration line, directly under the title metadata (contract §7.2 V3, mock 2 ①), with its
-   three settings behind the same row. A native <details>, so what it holds is reachable with a
-   keyboard and present in the document either way. */
+/* The integration line, directly under the title metadata (contract §7.2 V3, mock 2 ①). Its
+   settings are the project's How it runs block (`.project-run-settings`), not a disclosure here. */
 .project-integration {
   margin-top: 10px;
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
+}
+/* On the project page the card under the line keeps its distance from it (mock board3 ④). */
+[data-project-block='integration-line'] > .project-integration {
+  margin-bottom: 14px;
 }
 .project-integration-row {
   display: flex;
@@ -14369,12 +14377,6 @@ button.chat-jump-start:hover {
   padding: 7px 10px;
   font-size: 12.5px;
   color: var(--text-2);
-  cursor: pointer;
-  list-style: none;
-}
-/* The default disclosure triangle would sit in front of a branch name and read as part of it. */
-.project-integration-row::-webkit-details-marker {
-  display: none;
 }
 .project-integration-facts {
   display: flex;
@@ -14387,20 +14389,26 @@ button.chat-jump-start:hover {
   color: var(--text-1);
   font-weight: 600;
 }
+/* A project nobody has started: one sentence beside the mark, wrapping under itself on a phone. */
+.project-integration-undecided {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+.project-integration-undecided > svg {
+  margin-top: 3px;
+}
+.project-integration-undecided b {
+  color: var(--text-1);
+  font-weight: 600;
+}
 .project-integration-branch {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   color: var(--text-1);
   font-weight: 600;
-}
-.project-integration-settings-entry {
-  margin-inline-start: auto;
-  color: var(--brand);
-}
-.project-integration-settings-card {
-  padding: 4px 12px 14px;
-  border-top: 1px solid var(--border-subtle);
 }
 .project-integration-setting {
   display: grid;
@@ -14764,6 +14772,58 @@ button.chat-jump-start:hover {
   .project-command-center {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+/* The rail: the coordinator, and How it runs under it once the project is started. Alone, the
+   coordinator fills the rail to the overview's height, as it always has. With How it runs the rail
+   is the taller column, so the overview keeps its own height instead of stretching into a card of
+   blank space. */
+.project-command-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.project-command-rail > .project-command-coordinator {
+  flex: 1 1 auto;
+}
+.project-command-center.has-run-settings {
+  align-items: start;
+}
+.project-command-center.has-run-settings > .project-work-overview {
+  height: auto !important;
+}
+
+/* How it runs (mock board3 ④): the Open items shell, the integration settings' rows. In the 352px
+   rail each row stacks, label over control, so the controls get the rail's width; once the rail is
+   the page's width (≤920px) the label column comes back, until every setting stacks at 640px. */
+.project-run-settings {
+  margin-bottom: 0;
+}
+.project-run-settings .project-integration-setting {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+.project-run-settings .project-integration-setting-label {
+  padding-top: 0;
+}
+@media (max-width: 920px) and (min-width: 641px) {
+  .project-run-settings .project-integration-setting {
+    grid-template-columns: 132px minmax(0, 1fr);
+    gap: 12px;
+  }
+  .project-run-settings .project-integration-setting-label {
+    padding-top: 4px;
+  }
+}
+.project-run-settings .project-run-pause {
+  margin-inline-start: auto;
+}
+.project-run-settings-loading {
+  padding: 16px 0 8px;
+  text-align: center;
+}
+.project-run-settings-error {
+  margin-top: 10px;
 }
 
 /* A task row has flexible copy followed by a fixed count and, sometimes, a disclosure. AntD's
@@ -17034,6 +17094,36 @@ button.chat-jump-start:hover {
   font-size: 11.5px;
   color: var(--text-3);
 }
+/* A phone has no 210px to give the who column beside the item: who has it and for how long go under
+   what it is, the press stays beside both, and the item's own words wrap rather than cut to "Start …". */
+@media (max-width: 640px) {
+  .project-open-item-row {
+    grid-template-columns: 10px minmax(0, 1fr) auto;
+    row-gap: 2px;
+  }
+  .project-open-item-dot {
+    grid-row: 1;
+  }
+  .project-open-item-main {
+    grid-column: 2;
+  }
+  .project-open-item-who {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .project-open-item-press {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+  .project-open-item-age {
+    display: inline;
+    margin-inline-start: 6px;
+  }
+  .project-open-item-title,
+  .project-open-item-line {
+    white-space: normal;
+  }
+}
 .project-open-item-press {
   text-align: right;
 }
@@ -17064,6 +17154,35 @@ button.chat-jump-start:hover {
   background: var(--brand-strong);
   border-color: var(--brand-strong);
   color: #fff;
+}
+/* A press drawn as a button rather than a link — Review on the request to start — in the same box. */
+button.project-open-item-action {
+  font-family: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+button.project-open-item-action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+/* The owner's own "Start…" while no coordinator has asked: the row's title is the press, and the
+   dot is quiet, because nobody is waiting on it (mock board3 ②). */
+.project-open-item-row.is-own-start .project-open-item-dot {
+  background: var(--text-4);
+}
+.project-open-item-start {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  text-align: start;
+  color: var(--brand);
+  cursor: pointer;
+}
+.project-open-item-start:hover {
+  text-decoration: underline;
 }
 /* The action row's third weight (mock 7, 方案 B): the doors that only look and only stop read as text
    links instead of boxes as heavy as the press the card is asking for — no border, no fill,
@@ -17676,6 +17795,7 @@ button.chat-jump-start:hover {
 .wk-setup-d { margin-top: 5px; font-size: 12px; line-height: 1.5; color: var(--text-3); }
 .wk-setup-limit { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
 .wk-setup-limit .ant-input-number { width: 72px; }
+.wk-setup-days { margin-top: 8px; }
 .wk-setup-refusal { margin: 14px 0 0; }
 @media (max-width: 600px) {
   .wk-maint-off { grid-template-columns: minmax(0, 1fr) auto; }

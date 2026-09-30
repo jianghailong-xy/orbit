@@ -27,6 +27,7 @@ import {
   WIKI_LIMITS,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
   WIKI_MAINTENANCE_LIST_TITLE,
+  WIKI_MAINTENANCE_LOOKBACK_DAYS,
   WIKI_MAINTENANCE_RULES,
   WIKI_MAINTENANCE_RUN,
   WIKI_MAINTENANCE_RUN_V1,
@@ -81,12 +82,17 @@ import {
   WIKI_MAINTENANCE_JOB,
   wikiMaintenanceCheckCommand,
   wikiMaintenanceRunSessions,
+  type WikiMaintenanceReport,
 } from './wikiMaintain';
 import { WIKI_MAINTENANCE_HEALTH, WIKI_MAINTENANCE_LOOKS, wikiMaintenanceLook } from './wikiHealth';
 import {
   WIKI_DOC_BLOCK_KINDS,
+  WIKI_DOC_BUILD_RULES,
   WIKI_DOC_CHECKERS,
+  WIKI_DOC_DISPOSITION_ACTIONS,
   WIKI_DOC_FOOTNOTE_KINDS,
+  WIKI_DOC_MATERIAL_RULES,
+  WIKI_DOC_MATERIAL_WEIGHTS,
   WIKI_DOC_RECORD_KINDS,
   WIKI_DOC_REPO_KINDS,
   WIKI_DOC_RULES,
@@ -99,6 +105,13 @@ import {
 import {
   WIKI_PLAN_FACT_KINDS,
   WIKI_PLAN_GATE_CHECKS,
+  WIKI_PLAN_JOB_HELD_REASONS,
+  WIKI_PLAN_JOB_KINDS,
+  WIKI_PLAN_JOB_OUTCOMES,
+  WIKI_PLAN_JOB_RULES,
+  WIKI_PLAN_JOB_STATES,
+  WIKI_PLAN_JOB_STORED_STATES,
+  WIKI_PLAN_JOB_TRIGGERS,
   WIKI_PLAN_NEW_FIELD_LEVELS,
   WIKI_PLAN_ORIGINS,
   WIKI_PLAN_PROPOSAL_ACTIONS,
@@ -504,6 +517,41 @@ describe('wiki contract', () => {
     expect(CONTRACT.agentSurface.verify.unreadable).toMatch(/is not a verdict/u);
   });
 
+  it('hands what ended sessions left waiting to the next maintenance run, and to nobody else', () => {
+    // The 71 ops three failed runs left waiting: no proposer is left to verify them, so the space's
+    // maintenance run adopts them — on routes of its own, beside the proposer's.
+    const verification = CONTRACT.reviewModes.verification;
+    const adoption = verification.adoption;
+    const runner = CONTRACT.agentSurface.doors.runner;
+    for (const route of Object.values(adoption.routes) as string[]) {
+      expect(runner.maintenanceRoutes).toContain(route);
+      expect(runner.verificationRoutes).not.toContain(route);
+    }
+    expect(CONTRACT.maintenance.job.routes.adoptions).toBe(adoption.routes.list);
+    expect(CONTRACT.maintenance.job.routes.adopt).toBe(adoption.routes.report);
+    expect(verification.who.maintenance).toMatch(/adoption/u);
+    expect(adoption.who).toMatch(/WIKI_NOT_MAINTENANCE_SESSION/u);
+    expect(adoption.who).toMatch(/another owner's space a plain 404/u);
+    expect(adoption.who).toMatch(/SUCCEEDED, FAILED or CANCELLED, or it was completed or deleted/u);
+    // At most so many a run — one page of the list — and one left without a verdict waits for the next.
+    expect(WIKI_MAINTENANCE_JOB.adoptOpsMax).toBe(50);
+    expect(WIKI_MAINTENANCE_JOB.adoptOpsMax).toBeLessThanOrEqual(WIKI_REVIEW_RULES.verificationListMax);
+    expect(adoption.run).toMatch(/rules\.adoptOpsMax/u);
+    expect(adoption.run).toMatch(/does not fail the run/u);
+    expect(CONTRACT.maintenance.job.run.steps.find((step: string) => step.startsWith('verify:'))).toMatch(/adoption/u);
+    // What a later op made live is offered as a duplicate, and never goes live twice.
+    expect(adoption.list).toMatch(/neighbours its draft has now/u);
+    expect(adoption.twin).toMatch(/same kind, title and summary/u);
+    expect(adoption.twin).toMatch(/No verdict makes a second live copy/u);
+    // Every floor as it was.
+    for (const floor of [/nothing applies without a verdict/u, /never more than unreviewed/u, /counts toward the fallback/u]) {
+      expect(adoption.floors).toMatch(floor);
+    }
+    // The report counts them apart from the run's own ops.
+    const adopted: NonNullable<NonNullable<WikiMaintenanceReport['verification']>['adopted']> = { ops: 0, verified: 0, failed: 0 };
+    expect(CONTRACT.maintenance.job.report).toMatch(new RegExp(`adopted \\{${Object.keys(adopted).join(', ')}\\}`, 'u'));
+  });
+
   it.each(['entry', 'op', 'changeset', 'source'])('has a consistent %s state machine', (name) => {
     const sm = name === 'source' ? CONTRACT.sourceStates : CONTRACT.states[name];
     const values: string[] = sm.values;
@@ -567,7 +615,7 @@ describe('wiki contract', () => {
     expect(wikiSpaceSettings({ maintenance: { enabled: 'yes', dailyRunLimit: -1, provider: '' } }).maintenance)
       .toEqual(WIKI_DEFAULT_MAINTENANCE_SETTINGS);
     expect(wikiMaintenanceSettings({ enabled: true, workspaceId: 'w', listId: 'l', dailyRunLimit: 5 }))
-      .toEqual({ enabled: true, workspaceId: 'w', provider: 'local-vllm', dailyRunLimit: 5, listId: 'l' });
+      .toEqual({ enabled: true, workspaceId: 'w', provider: 'local-vllm', dailyRunLimit: 5, lookbackDays: 14, listId: 'l' });
     // A day's runs are counted, not its tokens: 8 by default, 1 to 48, and anything else reads as the default —
     // a value out of bounds, one that is not a whole number, and the token budget this setting replaced.
     expect(WIKI_DEFAULT_MAINTENANCE_SETTINGS.dailyRunLimit).toBe(8);
@@ -578,6 +626,20 @@ describe('wiki contract', () => {
     }
     expect(wikiMaintenanceSettings({ dailyTokenBudget: 2_000_000 })).toEqual(WIKI_DEFAULT_MAINTENANCE_SETTINGS);
     expect(setting.channel).toMatch(/dailyRunLimit/u);
+    // How far back a cursor starts when maintenance is turned on: 14 days by default, 0 to 365, and null —
+    // all of history — kept as the choice it is, where an absent or malformed value reads as the default.
+    expect(WIKI_DEFAULT_MAINTENANCE_SETTINGS.lookbackDays).toBe(14);
+    expect(setting.bounds.lookbackDays).toEqual(WIKI_MAINTENANCE_LOOKBACK_DAYS);
+    expect(WIKI_MAINTENANCE_LOOKBACK_DAYS).toEqual({ min: 0, max: 365 });
+    for (const [stored, reads] of [[0, 0], [1, 1], [365, 365], [null, null], [-1, 14], [366, 14], [2.5, 14], ['7', 14], [undefined, 14]] as const) {
+      expect(wikiMaintenanceSettings({ lookbackDays: stored }).lookbackDays, String(stored)).toBe(reads);
+    }
+    expect(setting.channel).toMatch(/lookbackDays null is a value \(all history\)/u);
+    // The start is written once, where the cursor has no position, and moves no cursor that has one.
+    const start: string = CONTRACT.maintenance.cursor.start;
+    expect(start).toMatch(/turns maintenance on \(enabled false to true\) and the space's cursor has no position yet/u);
+    expect(start).toMatch(/lookbackDays null writes nothing/u);
+    expect(start).toMatch(/A cursor that has a position is never moved by it/u);
 
     const maintenance = CONTRACT.maintenance;
     expect(maintenance.rules).toEqual(WIKI_MAINTENANCE_RULES);
@@ -862,6 +924,79 @@ describe('wiki contract', () => {
     // No tool: confirming and deciding are the owner's (hard constraint 2).
     expect(plan.tool).toMatch(/^none/u);
     for (const tool of CONTRACT.agentSurface.tools) expect(tool).not.toMatch(/plan/u);
+
+    // A draft under an idempotency key (0339): the same draft landing again is answered with the version
+    // it stored, before WIKI_PLAN_STALE could refuse it; another request under the key is a 409.
+    expect(plan.requests.draft).toContain('idempotencyKey?');
+    expect(plan.versions).toMatch(/plan\.idempotency/u);
+    expect(plan.idempotency.replay).toMatch(/replayed: true/u);
+    expect(plan.idempotency.replay).toMatch(/before WIKI_PLAN_STALE/u);
+    expect(plan.idempotency.reused).toMatch(/WIKI_IDEMPOTENCY_KEY_REUSED \(409\)/u);
+    expect(status('WIKI_IDEMPOTENCY_KEY_REUSED')).toBe(409);
+    expect(plan.idempotency.runner).toMatch(/wikiRecordsOnce/u);
+    const keyed = readFileSync(path.join(ROOT, plan.idempotency.migration), 'utf8').replace(/\s+/gu, ' ');
+    expect(plan.idempotency.migration).toMatch(/0339_wiki_plan_idempotency/u);
+    expect(keyed).toContain('CREATE UNIQUE INDEX IF NOT EXISTS "wiki_plan_owner_idempotency_key" ON "wiki_plan" ("owner_id", "idempotency_key")');
+    expect(keyed).toContain('CHECK (("idempotency_key" IS NULL) = ("request_sha256" IS NULL)');
+  });
+
+  it('ships the plan\'s jobs the contract states: kinds, triggers, states, held reasons, rules, routes and CLI', () => {
+    // Criterion 11: a draft or a revision of a space's plan, run as a task of its maintenance list.
+    const jobs = CONTRACT.plan.jobs;
+    expect(jobs.phase).toBe(2);
+    expect(jobs.tables).toEqual(['wiki_plan_job']);
+    expect(jobs.migration).toMatch(/0338_wiki_plan_job/u);
+    expect(keysOf(jobs.kinds)).toEqual([...WIKI_PLAN_JOB_KINDS]);
+    expect(keysOf(jobs.triggers)).toEqual([...WIKI_PLAN_JOB_TRIGGERS]);
+    expect(keysOf(jobs.states)).toEqual([...WIKI_PLAN_JOB_STATES]);
+    expect(jobs.storedStates).toEqual([...WIKI_PLAN_JOB_STORED_STATES]);
+    expect(jobs.held.reasons).toEqual([...WIKI_PLAN_JOB_HELD_REASONS]);
+    for (const reason of WIKI_PLAN_JOB_HELD_REASONS) expect(jobs.held[reason]).toBeTruthy();
+    expect(jobs.rules).toEqual(WIKI_PLAN_JOB_RULES);
+    // Three rounds: the first, and two more with every error handed back.
+    expect(WIKI_PLAN_JOB_RULES.attemptsMax).toBe(3);
+    // The build is kept for the task that writes the documents; this one drafts and revises.
+    expect(jobs.kinds.build).toMatch(/task that writes them/u);
+    // A fact asks for a job, and what moves it on is a fact too — never a clock.
+    expect(jobs.means).toMatch(/never a clock/u);
+    expect(jobs.trigger).toMatch(/No clock asks anything/u);
+    expect(jobs.notAMaintenanceRun).toMatch(/wikiMaintenanceRunsToday/u);
+    expect(jobs.task.list).toMatch(/Wiki maintenance list/u);
+    expect(jobs.task.acceptanceCommand).toBe('orbit wiki plan check --space <id> --job <id>');
+    expect(jobs.task.completionCriterion).toBe('EXECUTABLE');
+
+    // The migration's CHECKs are these closed sets.
+    const sql = readFileSync(path.join(ROOT, jobs.migration), 'utf8');
+    const quoted = (values: readonly string[]) => values.map((v) => `'${v}'`).join(', ');
+    expect(sql).toContain(`"kind" IN (${quoted(WIKI_PLAN_JOB_KINDS)})`);
+    expect(sql).toContain(`"trigger" IN (${quoted(WIKI_PLAN_JOB_TRIGGERS)})`);
+    expect(sql).toContain(`"state" IN (${quoted(WIKI_PLAN_JOB_STORED_STATES)})`);
+    expect(sql).toContain(`"held_reason" IN (${quoted(WIKI_PLAN_JOB_HELD_REASONS)})`);
+    expect(sql).toContain(`"outcome" IN (${quoted(WIKI_PLAN_JOB_OUTCOMES)})`);
+    expect(sql).toContain(`char_length("instructions") <= ${WIKI_PLAN_JOB_RULES.instructionsMaxChars}`);
+    expect(sql).toContain(`char_length("error") <= ${WIKI_PLAN_JOB_RULES.errorMaxChars}`);
+    // One draft or revision of a space that has not ended.
+    expect(sql.replace(/\s+/gu, ' ')).toContain(
+      `"wiki_plan_job_space_id_open_draft_key" ON "wiki_plan_job" ("space_id") WHERE "kind" IN ('draft', 'revise') AND "state" IN ('queued', 'held', 'made')`,
+    );
+
+    // The owner's route is on the user door; the run's five are maintenance routes of the runner door.
+    const user: string[] = CONTRACT.agentSurface.doors.user.routes;
+    const maintenanceRoutes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
+    expect(CONTRACT.plan.routes.redraft).toBe(jobs.routes.redraft);
+    expect(user).toContain(jobs.routes.redraft);
+    for (const name of ['context', 'progress', 'finish', 'check', 'materials']) {
+      expect(maintenanceRoutes).toContain(jobs.routes[name]);
+      expect(jobs.routes[name]).not.toMatch(/confirm|decide/u);
+    }
+    expect(jobs.who.redraft).toMatch(/WIKI_OWNER_CHANNEL_ONLY/u);
+    expect(jobs.who.runner).toMatch(/WIKI_PLAN_NO_JOB/u);
+    const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code)?.httpStatus;
+    expect(status('WIKI_PLAN_NO_JOB')).toBe(409);
+    expect(jobs.cli.tool).toMatch(/^none/u);
+    expect(jobs.cli.draft).toMatch(/^orbit wiki plan draft --space <id>/u);
+    expect(jobs.cli.revise).toMatch(/^orbit wiki plan revise --space <id> \[--instructions <file>\]/u);
+    expect(jobs.cli.check).toBe('orbit wiki plan check --space <id> --job <id> [--json]');
   });
 
   it('ships the documents the contract states: their closed sets, rules and schema, their tables, the withdrawal and their doors', () => {
@@ -882,6 +1017,22 @@ describe('wiki contract', () => {
     expect(keysOf(docs.blockKinds)).toEqual([...WIKI_DOC_BLOCK_KINDS]);
     expect(docs.rules).toEqual(WIKI_DOC_RULES);
     expect(docs.schema).toEqual(Object.fromEntries(Object.entries(WIKI_DOC_SCHEMA).map(([level, keys]) => [level, [...keys]])));
+    // What became of each piece of a section's material is written with it, and kept (migration 0337).
+    expect(keysOf(docs.dispositionActions)).toEqual([...WIKI_DOC_DISPOSITION_ACTIONS]);
+    expect(WIKI_DOC_SCHEMA.section).toContain('dispositions');
+    expect(docs.requests.write).toMatch(/dispositions\?: \[\{ material, kind, ref, action, into, reason \}\]/u);
+    expect(docs.dispositionsMigration).toMatch(/0337_wiki_doc_dispositions/u);
+    expect(existsSync(path.join(ROOT, docs.dispositionsMigration))).toBe(true);
+    expect(readFileSync(path.join(ROOT, docs.dispositionsMigration), 'utf8')).toContain(`CHECK (jsonb_typeof("dispositions") = 'array')`);
+    // The server's half of a section's material, and the runner's build over both halves.
+    expect(keysOf(docs.material.weights)).toEqual([...WIKI_DOC_MATERIAL_WEIGHTS]);
+    expect(docs.material.rules).toEqual(WIKI_DOC_MATERIAL_RULES);
+    expect(docs.material.records).toMatch(/sourceText/u);
+    expect(docs.material.records).toMatch(/redacted/u);
+    expect(docs.build.rules).toEqual(WIKI_DOC_BUILD_RULES);
+    expect(docs.build.cli).toMatch(/^orbit wiki docs build --space <id> \[--doc <slug>\] \[--section <key>\]/u);
+    expect(docs.build.tool).toMatch(/^none/u);
+    expect(docs.build.templates).toMatch(/Orbit has not recorded it done/u);
     // More than 5% marks a document; a whole document fits one write.
     expect(WIKI_DOC_RULES.needsReviewAbove).toBe(0.05);
     expect(WIKI_DOC_RULES.sectionsPerWrite).toBe(CONTRACT.plan.rules.sectionsMax);
@@ -924,7 +1075,7 @@ describe('wiki contract', () => {
     const user: string[] = CONTRACT.agentSurface.doors.user.routes;
     const maintenanceRoutes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
     for (const read of [routes.directory, routes.doc, routes.index]) expect(user).toContain(read);
-    for (const route of [routes.writerState, routes.write]) expect(maintenanceRoutes).toContain(route);
+    for (const route of [routes.writerState, routes.writerDoc, routes.material, routes.write]) expect(maintenanceRoutes).toContain(route);
     expect(user.some((route) => route.startsWith('POST') && route.includes('/docs'))).toBe(false);
     expect(docs.who.write).toMatch(/isWikiMaintenanceSession/u);
     expect(docs.who.write).toMatch(/WIKI_PLAN_UNCONFIRMED/u);

@@ -116,12 +116,13 @@ func wikiMaintenanceSystemPrompt(orbitExe string, maxTurns int) string {
 		cli = "the Orbit CLI at `" + shellQuote(exe) + "` (run it by that path)"
 	}
 	return "You are a Wiki maintenance run of Orbit: an unattended run that keeps one space's wiki up to date " +
-		"from what happened in it since the last run. Your task says which space. Do exactly this: run `orbit wiki " +
-		"maintain` with " + cli + " as your task says, with the Bash tool; it does the whole run and prints what it did. " +
-		"Then report it: task_progress_report for where the run ended, and one task_comment with the outcome, what was " +
-		"proposed and applied, and the token spend it printed; if it failed, its last lines. Run nothing else, write " +
-		"no files, and do not retry a failed run more than once. You have " + strconv.Itoa(maxTurns) + " turns; a run " +
-		"cut short by them counts as failed."
+		"from what happened in it since the last run, or drafts the space's plan. Your task says which space, and which " +
+		"one command. Do exactly this: run the command your task names — `orbit wiki maintain`, or `orbit wiki plan " +
+		"draft` or `orbit wiki plan revise` — with " + cli + " as your task says, with the Bash tool; it does the whole " +
+		"run and prints what it did. Then report it: task_progress_report for where the run ended, and one task_comment " +
+		"with the outcome, what it printed of what was done, and the token spend it printed; if it failed, its last " +
+		"lines. Run nothing else, write no files, and do not retry a failed run more than once. You have " +
+		strconv.Itoa(maxTurns) + " turns; a run cut short by them counts as failed."
 }
 
 // wikiMaintenanceDirs are the session's own HOME and CLAUDE_CONFIG_DIR, beside its other scratch.

@@ -39,10 +39,11 @@ import {
   ProjectCoordinatorCard,
   type CoordinatorAction,
   type CoordinatorCardLayout,
-  type CoordinatorIntegration,
 } from '../components/ProjectCoordinatorCard';
 import { BranchMark, ProjectIntegrationLine } from '../components/ProjectIntegrationLine';
 import { ProjectOpenItems } from '../components/ProjectProgressStatus';
+import { ProjectRunSettings } from '../components/ProjectRunSettings';
+import { ProjectStartDialog } from '../components/StartProjectCard';
 import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
 import { ProjectGoalCard } from '../components/ProjectGoalCard';
 import { ProjectPageBlock } from '../components/ProjectPageBlocks';
@@ -54,7 +55,6 @@ import {
   PANORAMA_BUCKETS,
   ProjectPanoramaHeader,
   panoramaBucketValue,
-  projectPanoramaQuery,
   type ProjectPanoramaBuckets,
 } from '../components/ProjectPanoramaHeader';
 import {
@@ -64,6 +64,7 @@ import {
   type OpenProjectView,
 } from '../components/ProjectsToolbar';
 import { encodeId, routeId } from '../lib/idCodec';
+import { NOT_STARTED, START_PROJECT_INTENT, projectStarted } from '../lib/projectStart';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { markdownToPlainText } from '../lib/markdownText';
 import { firstOpenableWorkspace, workspaceRunnerId } from '../lib/workspaceOrder';
@@ -145,15 +146,20 @@ interface ProjectCriterionStanding extends AcceptanceCriterionItem {
 interface ProjectDetail extends Omit<Project, 'integration'> {
   instructions?: string | null;
   tasksByStatus?: Record<string, number>;
-  /** The off switch: whether this project dispatches its own ready tasks AND wakes a judgment
-   *  session when one of six producers has something to decide. Already in the payload — the
-   *  endpoint reads the project with `include`, so every scalar column comes back — and simply had
-   *  no reader here until the Automatic switch. */
+  /** Automatic: whether the coordinator runs the project for its owner. Already in the payload — the
+   *  endpoint reads the project with `include`, so every scalar column comes back — and read by the
+   *  How it runs block. */
   coordinatorEnabled: boolean;
+  /** How many of its tasks may be in flight at once, beside Automatic in How it runs. */
+  maxConcurrentTasks: number;
   /** The revision every write of the authorization set is fenced against. A `bigint` column, and a
    *  decimal STRING on the wire (main.ts gives BigInt a `toJSON`), which is also how the DTO wants
    *  it back: `expectedConfigRevision` is compared as text, never parsed. */
   configRevision: string;
+  /** When the project was started, or null for one nobody has started (`projectStarted`). */
+  startedAt?: string | null;
+  /** When its owner paused it, or null: while set, nothing starts or merges by itself. */
+  pausedAt?: string | null;
   /** The project's stated criteria, carrying settlement and landing per criterion. The acceptance
    *  card draws its rows from this same document; the status press reads it for the evidence it
    *  puts in front of somebody about to claim the goal is met. */
@@ -1014,6 +1020,19 @@ export function ProjectDetailPage() {
       navigate(projectsReturnPath(location.state), { replace: true });
     },
   });
+  // Whether anybody has started this project: an unstarted one is "Not started", asks its start in
+  // Open items, and has no How it runs yet — the start card sets what that block would change.
+  const started = p ? projectStarted(p) : null;
+  // "Review" on the coordinator's request to start: into the coordinator conversation, where the
+  // card is — resolved first, like every other way into it, because the pointer can be stale — and
+  // onto the card itself (`START_PROJECT_INTENT`).
+  const reviewStart = useMutation({
+    mutationFn: () => openProjectCoordinator(id!),
+    onSuccess: (result) => navigate(coordinatorIntentPath(result.sessionId, START_PROJECT_INTENT)),
+    onError: (error) => toast.error(error.message),
+  });
+  // "Start…" while nobody has asked: the same card, over this page.
+  const [starting, setStarting] = useState(false);
 
   return (
     // 1040 rather than the list page's 900: the panorama's middle row is two cards side by side,
@@ -1059,7 +1078,12 @@ export function ProjectDetailPage() {
               {p.title}
             </Typography.Title>
             <div className="project-detail-meta">
-              <Tag color={STATUS_COLOR[p.status]}>{STATUS_LABEL[p.status]}</Tag>
+              {/* An open project nobody has started says so rather than reading like one that runs. */}
+              {p.status === 'OPEN' && started === false ? (
+                <Tag color="default">{NOT_STARTED}</Tag>
+              ) : (
+                <Tag color={STATUS_COLOR[p.status]}>{STATUS_LABEL[p.status]}</Tag>
+              )}
               <span>
                 {p._count.tasks} task{p._count.tasks === 1 ? '' : 's'}
               </span>
@@ -1099,11 +1123,11 @@ export function ProjectDetailPage() {
 
           {/* Where this project's finished work goes, directly under the title that names it: the
               branch, how far ahead of main it is, when main last came in, what the queue has in
-              flight, and whether the tip is green — with the three settings that decide all of it
-              behind the same row (§7.2 V3 / V4). A project with no integration line draws nothing
-              here at all. */}
+              flight, and whether the tip is green (§7.2 V3). The settings that decide it are How
+              it runs', below. A project nobody has started says the start decides the line; a
+              started one with no line draws nothing here at all. */}
           <ProjectPageBlock name="integration-line">
-            <ProjectIntegrationLine projectId={id!} />
+            <ProjectIntegrationLine projectId={id!} started={started} />
           </ProjectPageBlock>
 
           {/* A refused delete, in the server's own words. 409 here is a downstream reference — the
@@ -1124,11 +1148,29 @@ export function ProjectDetailPage() {
               expected to act (mock 2 ②): what waits for the reader in person, and what its
               coordinator is handling — each with how long it has waited and when it stops being
               the coordinator's. The same question the blockers answer — what is standing in the
-              way — answered from the exceptions rather than from the platform's own guards. It
+              way — answered from the exceptions rather than from the platform's own guards. A
+              project nobody has started leads it with the start (mock board3 ②); otherwise it
               draws nothing while nothing is open. */}
           <ProjectPageBlock name="open-items">
-            <ProjectOpenItems projectId={id} />
+            <ProjectOpenItems
+              projectId={id}
+              started={p.status === 'OPEN' ? started : null}
+              onReviewStart={() => reviewStart.mutate()}
+              reviewingStart={reviewStart.isPending}
+              onStartProject={() => setStarting(true)}
+            />
           </ProjectPageBlock>
+          <ProjectStartDialog
+            projectId={id!}
+            open={starting && started === false}
+            onClose={() => setStarting(false)}
+            onViewTasks={() => {
+              setStarting(false);
+              document
+                .querySelector('[data-project-block="tasks"]')
+                ?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+            }}
+          />
 
           {/* The one merge nobody but the reader may make (mock 4): what it would put on main, what
               the checks came to on the combined tree, and the two presses that answer it. Here
@@ -1149,22 +1191,33 @@ export function ProjectDetailPage() {
           {/* One command centre, two responsibilities: the work account establishes context on
               the left, then the coordinator offers the primary human action on the right. On
               narrow screens they remain in this reading/focus order and stack full-width. */}
-          <div className="project-command-center">
+          <div
+            className={
+              started !== false ? 'project-command-center has-run-settings' : 'project-command-center'
+            }
+          >
             <ProjectPanoramaHeader
               projectId={id}
               projectStatus={p.status}
               integrationLine={p.integration?.line ?? null}
+              started={started}
             />
-            {/* A grouped tally omits zero-valued statuses. Preserve "payload absent" as unknown,
-                but turn a present map with no OPEN row into the honest zero the card can say. */}
-            <ProjectCoordinatorSection
-              projectId={id}
-              layout={narrow ? 'narrow' : 'desktop'}
-              openTaskCount={p.tasksByStatus ? (p.tasksByStatus.OPEN ?? 0) : undefined}
-              automatic={p.coordinatorEnabled}
-              integration={p.integration}
-              configRevision={p.configRevision}
-            />
+            {/* The right rail: the coordinator, and — once the project is started — How it runs,
+                every setting the start card set, Automatic among them. */}
+            <div className="project-command-rail">
+              {/* A grouped tally omits zero-valued statuses. Preserve "payload absent" as unknown,
+                  but turn a present map with no OPEN row into the honest zero the card can say. */}
+              <ProjectCoordinatorSection
+                projectId={id}
+                layout={narrow ? 'narrow' : 'desktop'}
+                openTaskCount={p.tasksByStatus ? (p.tasksByStatus.OPEN ?? 0) : undefined}
+              />
+              {started !== false ? (
+                <ProjectPageBlock name="run-settings">
+                  <ProjectRunSettings projectId={id} project={p} />
+                </ProjectPageBlock>
+              ) : null}
+            </div>
           </div>
 
           {/* The stable definition of the project follows the changing execution state and its
@@ -1362,27 +1415,6 @@ export function replaceProjectCoordinator(projectId: string): Promise<Coordinato
 }
 
 /**
- * What flipping a project's Automatic switch WRITES — held here rather than at the call site,
- * because the body is the unit and the path is not.
- *
- * The switch is the whole body on the way on: `coordinatorEnabled: true` is now the entire write,
- * because the level of automation that used to have to be named beside it — without which the
- * server refused the bare request with a 400 — is gone from the contract. Turning it off names the
- * same field with `false`: "stop" was never anything else.
- *
- * `expectedConfigRevision` is the compare-and-swap. This field is edited from the user API and a
- * coordinator's own session as well as from here, and last-write-wins between them is one person
- * silently undoing another's revoke — so the write states the revision the switch was drawn from,
- * and a project that moved since answers 409 `STALE_CONFIG_REVISION` with nothing written.
- */
-function automaticBody(next: boolean, configRevision: string | undefined) {
-  return {
-    coordinatorEnabled: next,
-    expectedConfigRevision: configRevision,
-  };
-}
-
-/**
  * The Coordinator, as the project header's right-hand column.
  *
  * Self-contained on the same terms as every other card on this page: it runs its own read, draws
@@ -1398,25 +1430,12 @@ export function ProjectCoordinatorSection({
   projectId,
   layout,
   openTaskCount,
-  automatic,
-  integration,
-  configRevision,
 }: {
   projectId: string;
   layout: CoordinatorCardLayout;
   /** Open tasks in this project — the card says what the conversation is FOR, and the status
    *  payload deliberately carries no task tally. */
   openTaskCount?: number;
-  /** The project's `coordinatorEnabled` and the revision it was read at, both from the project
-   *  document this section is drawn beside. Passed in rather than read again here: the page holds
-   *  that document already, and a second copy could disagree with the one the reader is looking at
-   *  — which for the revision means fencing the write against a number nothing on screen came
-   *  from. Omitted, the switch is not drawn. */
-  automatic?: boolean;
-  /** Where this project's finished tasks land, from the same document: what Automatic means
-   *  depends on it (§7.2 V8). */
-  integration?: CoordinatorIntegration;
-  configRevision?: string;
 }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -1449,17 +1468,6 @@ export function ProjectCoordinatorSection({
   // proposed: `COORDINATOR_UNAVAILABLE` is a refusal ABOUT the workspace this project is tied to,
   // and on `WORKSPACE_FORGOTTEN` there is no id left to send anyone to.
   const boundWorkspaceId = status.data?.coordination.workspaceId ?? null;
-
-  // The same query the panorama header on this page already ran, by the same key — React Query
-  // answers this from that entry rather than putting a second request on the wire. Read here so
-  // the switch's Off state can say what is standing still, in the number the meter above it shows.
-  const panorama = useQuery(projectPanoramaQuery(projectId));
-
-  const setAutomatic = useMutation({
-    mutationFn: (next: boolean) =>
-      api(`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: automaticBody(next, configRevision) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['project', projectId] }),
-  });
 
   const restore = useMutation({
     mutationFn: async () => {
@@ -1570,24 +1578,8 @@ export function ProjectCoordinatorSection({
             status={status.data}
             layout={layout}
             openTaskCount={openTaskCount}
-            automatic={automatic}
-            integration={integration}
-            readyTaskCount={panorama.data?.buckets.ready}
-            automaticPending={setAutomatic.isPending}
             onAction={act}
-            onAutomaticChange={(next) => setAutomatic.mutate(next)}
           />
-          {/* A refused flip, in the server's own words. 409 STALE_CONFIG_REVISION is not a Retry:
-              the settings changed under the reader, and the sentence names both revisions so they
-              can see the project again before deciding a second time. */}
-          {setAutomatic.error ? (
-            <Alert
-              type="error"
-              showIcon
-              message="Automatic could not be changed"
-              description={setAutomatic.error.message}
-            />
-          ) : null}
           {/* A press that was refused. `COORDINATOR_UNAVAILABLE` is a property of committed rows,
               so the same press returns the same 409 forever — it gets the two writes that can
               actually change the answer instead of a Retry that cannot. */}

@@ -1,4 +1,4 @@
-import { IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsBoolean, IsEmail, IsEnum, IsIn, IsOptional, IsString, MaxLength, MinLength, ValidateBy } from 'class-validator';
 import { PermissionMode } from '@orbit/shared';
 
 export class CreateUserDto {
@@ -47,6 +47,19 @@ export class UpdatePreferencesDto {
   @IsOptional()
   @IsString()
   defaultModel?: string;
+
+  /** Last-picked model per provider; a patch updates only the named providers. */
+  @IsOptional()
+  @ValidateBy({
+    name: 'defaultModels',
+    validator: {
+      validate: (value: unknown) =>
+        typeof value === 'object' && value !== null && !Array.isArray(value) &&
+        Object.values(value).every((model) => typeof model === 'string'),
+      defaultMessage: () => 'defaultModels must map provider names to model strings',
+    },
+  })
+  defaultModels?: Record<string, string>;
 
   @IsOptional()
   @IsEnum(PermissionMode)
