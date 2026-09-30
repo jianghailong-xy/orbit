@@ -79,8 +79,13 @@ public struct WikiPlanCategory: Codable, Equatable, Sendable {
 }
 
 public struct WikiPlanRange: Codable, Equatable, Sendable {
-    public let min: Int
-    public let max: Int
+    public var min: Int
+    public var max: Int
+
+    public init(min: Int, max: Int) {
+        self.min = min
+        self.max = max
+    }
 }
 
 /// A section's session condition: where its original words are looked for.
