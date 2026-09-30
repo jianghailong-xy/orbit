@@ -895,17 +895,17 @@ struct ComposerView: View {
     }
 
     /// Keep every option's text on one left edge and reserve the same trailing checkmark slot on
-    /// every row. An image that only exists on the selected row makes SwiftUI measure that row
-    /// differently on iOS, so its text shifts when the selection changes. The transparent image is
-    /// intentional: it preserves the geometry while the visible check remains the only accent in
-    /// the menu (web parity: `.scope-menu-row`'s check sits in a trailing slot).
+    /// every row. iOS treats any Image inside a Menu label as its leading system icon, even when
+    /// it is transparent, so the slot is a Text glyph instead; that keeps the check at the trailing
+    /// edge and prevents an unselected row from rendering a check (web parity: `.scope-menu-row`'s
+    /// check sits in a trailing slot).
     @ViewBuilder
     private func menuItemLabel(_ text: String, selected: Bool) -> some View {
         HStack(spacing: 8) {
             Text(text).lineLimit(1)
             Spacer(minLength: 8)
-            Image(systemName: "checkmark")
-                .foregroundStyle(selected ? Color.accentColor : Color.clear)
+            Text(selected ? "✓" : " ")
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 20, alignment: .trailing)
                 .accessibilityHidden(!selected)
         }
@@ -913,9 +913,16 @@ struct ComposerView: View {
     }
 
     /// The two-level settings rows stay on one baseline: the title owns the left edge, the current
-    /// value sits in a muted trailing column, and the nested Menu supplies its disclosure chevron.
-    /// Keeping the chevron native avoids drawing a second indicator on macOS and iOS.
+    /// value follows it in a muted run, and the nested Menu supplies its disclosure chevron. iOS
+    /// keeps only one text label for a submenu, so a single concatenated Text is used there; two
+    /// sibling Text views make the current value disappear from the native menu row.
+    @ViewBuilder
     private func menuSubmenuLabel(_ title: String, value: String) -> some View {
+        #if os(iOS)
+        (Text(title) + Text("    ") + Text(value).foregroundStyle(Color.secondary))
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        #else
         HStack(spacing: 8) {
             Text(title)
             Spacer(minLength: 12)
@@ -924,6 +931,7 @@ struct ComposerView: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        #endif
     }
 
     // MARK: `/` autocomplete menu
