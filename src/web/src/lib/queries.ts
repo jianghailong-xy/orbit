@@ -1107,7 +1107,15 @@ export const wikiDocIndexQuery = (spaceId: string | null) =>
 export const wikiPlanQuery = (spaceId: string | null) =>
   queryOptions({
     queryKey: ['wiki', 'space', spaceId, 'plan'] as const,
-    queryFn: () => api<WikiPlanState>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/plan`),
+    queryFn: async (): Promise<WikiPlanState | null> => {
+      try {
+        return wikiPlanStateOf(await api<unknown>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/plan`));
+      } catch (error) {
+        // A server from before the plan (no such route) has none to show: an answer, not a failure.
+        if (error instanceof ApiError && error.status === 404 && !isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
     enabled: spaceId !== null,
     staleTime: 15_000,
     refetchInterval: (query) => {
@@ -1115,6 +1123,23 @@ export const wikiPlanQuery = (spaceId: string | null) =>
       return state === 'queued' || state === 'running' ? 30_000 : false;
     },
   });
+
+/**
+ * The plan's read as the pages use it, or null for an answer that is not one (a server from before the
+ * plan, a stub): the lists and the job filled in when a field is left out, so no page reads a hole.
+ */
+export function wikiPlanStateOf(raw: unknown): WikiPlanState | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const read = raw as Partial<WikiPlanState>;
+  if (typeof read.spaceId !== 'string') return null;
+  return {
+    spaceId: read.spaceId,
+    confirmed: read.confirmed ?? null,
+    draft: read.draft ?? null,
+    proposals: Array.isArray(read.proposals) ? read.proposals : [],
+    job: read.job ?? null,
+  };
+}
 
 /** Every version of the plan, newest first: the version menu. */
 export const wikiPlanVersionsQuery = (spaceId: string | null) =>

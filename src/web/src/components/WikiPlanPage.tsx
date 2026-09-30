@@ -254,6 +254,8 @@ export function WikiPlanRoute({
 }) {
   const page = usePlanPage(spaceId);
   if (page.state.isError) return <div className="wk-empty">The plan couldn’t be loaded. Check the connection, then try again.</div>;
+  // A server from before the plan answers none: there is nothing to show or to ask for.
+  if (page.state.data === null) return <div className="wk-empty">{WIKI_PLAN_NONE}</div>;
   if (!page.plan || page.loading) return <div className="wk-pl-page" aria-busy />;
   if (docSlug && page.shown) {
     const doc = page.shown.docs.find((row) => row.slug === docSlug);
