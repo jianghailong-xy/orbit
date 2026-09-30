@@ -17,6 +17,7 @@
 import {
   WIKI_PLAN_GATE_CHECKS,
   WIKI_PLAN_JOB_RULES,
+  WIKI_PLAN_RULES,
   type WikiDocsDirectory,
   type WikiPlanCategoryInput,
   type WikiPlanDoc,
@@ -27,6 +28,7 @@ import {
   type WikiPlanGateReport,
   type WikiPlanJob,
   type WikiPlanJobHeldReason,
+  type WikiPlanJobReport,
   type WikiPlanProposal,
   type WikiPlanRepoCheck,
   type WikiPlanSection,
@@ -37,7 +39,7 @@ import {
   type WikiPlanVersion,
   type WikiPlanVersionSummary,
 } from '@orbit/shared';
-import { WIKI_PATH, shortSha } from './wiki';
+import { WIKI_HISTORY_MAINTENANCE, WIKI_PATH, shortSha } from './wiki';
 import { wikiCount } from './wikiArticles';
 import { wikiMonthDayTime, wikiSectionKindLabel } from './wikiDocs';
 import { wikiAgo } from './wikiHealth';
@@ -89,7 +91,7 @@ export const WIKI_PLAN_EMPTY_TITLE = 'No plan yet';
 export function wikiPlanEmptyText(provider: string | null): string {
   return (
     'A plan lays out this wiki’s documents: the categories, the documents in each, who each one is for and what it covers, '
-    + `and where each section’s material comes from. ${provider ?? 'Wiki maintenance'} drafts it; nothing is written until you confirm it.`
+    + `and where each section’s material comes from. ${provider ?? WIKI_HISTORY_MAINTENANCE} drafts it; nothing is written until you confirm it.`
   );
 }
 /** Where a draft runs and how long it takes, under Draft plan: `on orbit · wikova with local-vllm`. */
@@ -284,9 +286,18 @@ export function wikiPlanFromVersion(version: WikiPlanVersion): WikiPlanShown {
   };
 }
 
+/**
+ * A draft's or a revision's report — the gate's rounds, the references checked, the spend — or null: a
+ * build reports what it wrote (`WikiPlanBuildReport`), which says nothing of a draft.
+ */
+export function wikiPlanDraftReport(job: WikiPlanJob | null | undefined): WikiPlanJobReport | null {
+  return job && job.kind !== 'build' ? ((job.report as WikiPlanJobReport | null) ?? null) : null;
+}
+
 /** The draft a failed job last had, as the page draws it — numbered as the version it would have been. */
 export function wikiPlanFromFailedJob(job: WikiPlanJob, number: number, baseVersion: number | null): WikiPlanShown | null {
   const draft: WikiPlanDraftInput | null = job.draft;
+  const report = wikiPlanDraftReport(job);
   if (!draft || !Array.isArray(draft.docs) || !Array.isArray(draft.categories)) return null;
   const { categories, docs } = numbered(
     draft.categories.map((category) => ({ ...category, title: category.title ?? category.key })),
@@ -336,10 +347,10 @@ export function wikiPlanFromFailedJob(job: WikiPlanJob, number: number, baseVers
     proposalId: null,
     categories,
     docs,
-    target: job.report?.target ?? { min: 20, max: 35 },
+    target: report?.target ?? { min: WIKI_PLAN_RULES.docsMin, max: WIKI_PLAN_RULES.docsMax },
     gate: null,
-    repoCheck: job.report?.repo ? { sha: job.report.repo.sha, checked: job.report.repo.checked, missing: [] } : null,
-    model: job.report?.model ?? job.provider,
+    repoCheck: report?.repo ? { sha: report.repo.sha, checked: report.repo.checked, missing: [] } : null,
+    model: report?.model ?? job.provider,
     createdAt: job.endedAt,
     confirmedAt: null,
     errors: job.errors,
@@ -462,21 +473,74 @@ export function wikiPlanVersionRows(
 /** Why a job cannot go on: the server's two held reasons, and the runner that is offline (owner's call 2026-09-29). */
 export type WikiPlanHeld = WikiPlanJobHeldReason | 'runner_offline';
 
+/** Why a draft or a revision is held (mock 21 ⑨, 22 ⑩). */
 export const WIKI_PLAN_HELD_TEXT: Record<WikiPlanHeld, string> = {
   no_maintenance_workspace: 'No maintenance workspace is set up — a draft runs where maintenance runs.',
   maintenance_provider_unusable: 'No usable maintenance provider is set up — a draft runs on the provider maintenance uses.',
   runner_offline: 'The maintenance runner is offline — the draft starts once it’s back.',
 };
 
+/** Why the documents of a confirmed version are held: the same two reasons, said of the writing. */
+export const WIKI_PLAN_BUILD_HELD_TEXT: Record<WikiPlanHeld, string> = {
+  no_maintenance_workspace: 'No maintenance workspace is set up — documents are written where maintenance runs.',
+  maintenance_provider_unusable: 'No usable maintenance provider is set up — documents are written on the provider maintenance uses.',
+  runner_offline: 'The maintenance runner is offline — writing starts once it’s back.',
+};
+
+/** A held job's sentence, by what it does. */
+export const wikiPlanHeldText = (job: Pick<WikiPlanJob, 'kind'>, held: WikiPlanHeld): string =>
+  (job.kind === 'build' ? WIKI_PLAN_BUILD_HELD_TEXT : WIKI_PLAN_HELD_TEXT)[held];
+
 /**
- * Why a job is held, if it is: what the server stored — or a task made and not yet started, whose
- * runner is offline (`runnerOnline`, read from the maintenance workspace's runner; null when unknown).
+ * Why a job is held, if it is: what the server stored — or a job whose run has not started while the
+ * maintenance workspace's runner is offline (`runnerOnline`, read from that runner; null when unknown).
+ * Never the daily limit: the owner's draft and the build their confirmation asks for are not counted
+ * against maintenance's runs a day (owner's call 2026-09-29).
  */
 export function wikiPlanHeld(job: WikiPlanJob | null, runnerOnline: boolean | null): WikiPlanHeld | null {
   if (!job) return null;
   if (job.state === 'held') return job.held?.reason ?? 'no_maintenance_workspace';
   if ((job.state === 'running' || job.state === 'queued') && !job.startedAt && runnerOnline === false) return 'runner_offline';
   return null;
+}
+
+/**
+ * The space's build — the documents of the version the owner confirmed, being written (contract
+ * `plan.jobs`, kind `build`) — while it has not ended: queued behind the maintenance run that is going,
+ * held with why, or running with how far it has got.
+ */
+export function wikiPlanBuildJob(state: Pick<WikiPlanState, 'job'>): WikiPlanJob | null {
+  const job = state.job;
+  return job && job.kind === 'build' && (job.state === 'queued' || job.state === 'held' || job.state === 'running') ? job : null;
+}
+
+/** A build of the version in force that ended failed, and nothing asked since: its documents are not all written. */
+export function wikiPlanFailedBuild(state: Pick<WikiPlanState, 'job' | 'confirmed'>): WikiPlanJob | null {
+  const job = state.job;
+  return job && job.kind === 'build' && job.state === 'failed' && state.confirmed && job.version === state.confirmed.version ? job : null;
+}
+
+/**
+ * How far the writing has got: the build's own count while it reports one (`progress`), else what the
+ * directory counts as written of the version in force.
+ */
+export function wikiPlanBuildCounts(
+  build: Pick<WikiPlanJob, 'progress'> | null,
+  docs: { written: number; total: number } | null | undefined,
+): { done: number; total: number } | null {
+  if (build?.progress) return { done: build.progress.docs.done, total: build.progress.docs.total };
+  return docs ? { done: docs.written, total: docs.total } : null;
+}
+
+/** The document a build is writing now, as the plan numbers it: `3.4 会话搜索`. */
+export function wikiPlanWritingDoc(build: Pick<WikiPlanJob, 'progress'> | null, directory: WikiDocsDirectory | null | undefined): string | null {
+  const current = build?.progress?.current;
+  if (!current) return null;
+  for (const category of directory?.categories ?? []) {
+    const doc = category.docs.find((row) => row.slug === current.slug);
+    if (doc) return `${doc.number} ${current.title || doc.title}`;
+  }
+  return current.title || current.slug;
 }
 
 export type WikiPlanJobLook = 'queued' | 'drafting' | 'held' | 'failed' | 'writing';
@@ -488,8 +552,8 @@ export interface WikiPlanJobCard {
   text: string;
   /** run: the session of the run it waits for or runs; settings: the space's Maintenance; runners: the Runners page. */
   link: { label: string; to: 'run' | 'settings' | 'runners'; sessionId: string | null } | null;
-  /** Writing: how far, and the document next. */
-  progress: { done: number; total: number; next: string | null } | null;
+  /** Writing: how far, and the document being written now. */
+  progress: { done: number; total: number; now: string | null } | null;
 }
 
 export const WIKI_PLAN_QUEUED = 'Queued';
@@ -499,16 +563,26 @@ export const WIKI_PLAN_FAILED = 'Didn’t pass the plan check';
 export const WIKI_PLAN_PASSED = 'Passed the plan check';
 export const WIKI_PLAN_WRITING = 'Writing documents';
 export const WIKI_PLAN_JOB_FAILED = 'The draft didn’t finish';
+export const WIKI_PLAN_BUILD_FAILED = 'Writing documents didn’t finish';
+/** What stands after a queued job's title: it waits for the maintenance run that is going. */
+export const WIKI_PLAN_QUEUED_TEXT = 'starts after the Wiki maintenance run that’s going now';
 
-const attemptsOf = (job: WikiPlanJob): number => job.attempt ?? job.report?.attempts.length ?? job.attemptsMax;
+const attemptsOf = (job: WikiPlanJob): number => job.attempt ?? wikiPlanDraftReport(job)?.attempts.length ?? job.attemptsMax;
 
 /** How many of the gate's four checks a failed draft's errors fall under. */
 export const wikiPlanFailedChecks = (errors: readonly WikiPlanGateError[]): number => new Set(errors.map((error) => error.check)).size;
 
+/** The run a job's card opens: the run it waits for while queued, its own once it has one. */
+const runLink = (sessionId: string | null | undefined): WikiPlanJobCard['link'] =>
+  sessionId ? { label: WIKI_PLAN_VIEW_RUN, to: 'run', sessionId } : null;
+
 /**
  * The job's card (mock 21 ⑨, 22 ⑩): queued behind the maintenance run that is going, drafting with the
- * round it is on, held with why and what to do, failed with how, or — once a version is in force and
- * documents remain unwritten — writing them.
+ * round it is on, held with why and what to do, failed with how — and, on the version in force, its
+ * documents being written, with how many and the one being written now (the build its confirmation asked
+ * for), or that the writing stopped short.
+ *
+ * `job` is the plan's job as read; `failed` the failed draft the page shows, if it shows one.
  */
 export function wikiPlanJobCard(
   job: WikiPlanJob | null,
@@ -516,54 +590,50 @@ export function wikiPlanJobCard(
     now: number;
     runnerOnline: boolean | null;
     failed?: WikiPlanJob | null;
-    docs?: { written: number; total: number; next: string | null } | null;
+    /** The version shown is the one in force: its writing is what the card says. */
     inForce?: boolean;
-    maintenance?: { sessionId: string | null; startedAt: string } | null;
+    directory?: WikiDocsDirectory | null;
   },
 ): WikiPlanJobCard | null {
-  const held = wikiPlanHeld(job, context.runnerOnline);
-  if (job && held) {
+  const draft = job && job.kind !== 'build' && (job.state === 'queued' || job.state === 'held' || job.state === 'running') ? job : null;
+  const build = context.inForce ? wikiPlanBuildJob({ job }) : null;
+  const open = draft ?? build;
+  const held = wikiPlanHeld(open, context.runnerOnline);
+  if (open && held) {
     return {
       look: 'held',
       title: WIKI_PLAN_HELD,
-      text: WIKI_PLAN_HELD_TEXT[held],
+      text: wikiPlanHeldText(open, held),
       link: held === 'runner_offline' ? { label: WIKI_PLAN_VIEW_RUNNERS, to: 'runners', sessionId: null } : { label: WIKI_PLAN_SET_UP, to: 'settings', sessionId: null },
       progress: null,
     };
   }
-  if (job?.state === 'queued') {
-    const started = job.waitingFor?.startedAt ? ` (started ${wikiAgo(job.waitingFor.startedAt, context.now)})` : '';
-    return {
-      look: 'queued',
-      title: WIKI_PLAN_QUEUED,
-      text: `starts after the Wiki maintenance run that’s going now${started}`,
-      link: job.waitingFor?.sessionId ? { label: WIKI_PLAN_VIEW_RUN, to: 'run', sessionId: job.waitingFor.sessionId } : null,
-      progress: null,
-    };
+  if (open?.state === 'queued') {
+    const started = open.waitingFor?.startedAt ? ` (started ${wikiAgo(open.waitingFor.startedAt, context.now)})` : '';
+    return { look: 'queued', title: WIKI_PLAN_QUEUED, text: `${WIKI_PLAN_QUEUED_TEXT}${started}`, link: runLink(open.waitingFor?.sessionId), progress: null };
   }
-  if (job?.state === 'running') {
-    const who = job.provider ?? 'Wiki maintenance';
-    const text = job.startedAt
-      ? `${who} · attempt ${job.attempt ?? 1} of ${job.attemptsMax} · started ${wikiAgo(job.startedAt, context.now)}`
+  if (draft?.state === 'running') {
+    const who = draft.provider ?? WIKI_HISTORY_MAINTENANCE;
+    const text = draft.startedAt
+      ? `${who} · attempt ${draft.attempt ?? 1} of ${draft.attemptsMax} · started ${wikiAgo(draft.startedAt, context.now)}`
       : `${who} · waiting for its run to start`;
+    return { look: 'drafting', title: WIKI_PLAN_DRAFTING, text, link: runLink(draft.sessionId), progress: null };
+  }
+  if (build?.state === 'running') {
+    const counts = wikiPlanBuildCounts(build, context.directory?.plan ? context.directory.docs : null);
+    const written = counts ? `${wikiCount(counts.done)} of ${wikiCount(counts.total)} written` : WIKI_PLAN_WRITING_SOON;
     return {
-      look: 'drafting',
-      title: WIKI_PLAN_DRAFTING,
-      text,
-      link: job.sessionId ? { label: WIKI_PLAN_VIEW_RUN, to: 'run', sessionId: job.sessionId } : null,
-      progress: null,
+      look: 'writing',
+      title: WIKI_PLAN_WRITING,
+      text: build.startedAt ? `${written} · started ${wikiAgo(build.startedAt, context.now)}` : written,
+      link: runLink(build.sessionId),
+      progress: counts ? { done: counts.done, total: counts.total, now: wikiPlanWritingDoc(build, context.directory) } : null,
     };
   }
   const failed = context.failed ?? null;
   if (failed) {
     if (failed.errors.length === 0) {
-      return {
-        look: 'failed',
-        title: WIKI_PLAN_JOB_FAILED,
-        text: failed.error ?? 'Its run ended without a draft.',
-        link: failed.sessionId ? { label: WIKI_PLAN_VIEW_RUN, to: 'run', sessionId: failed.sessionId } : null,
-        progress: null,
-      };
+      return { look: 'failed', title: WIKI_PLAN_JOB_FAILED, text: failed.error ?? 'Its run ended without a draft.', link: runLink(failed.sessionId), progress: null };
     }
     return {
       look: 'failed',
@@ -573,29 +643,22 @@ export function wikiPlanJobCard(
       progress: null,
     };
   }
-  const docs = context.docs;
-  if (context.inForce && docs && docs.written < docs.total) {
-    const running = context.maintenance ?? null;
-    return {
-      look: 'writing',
-      title: WIKI_PLAN_WRITING,
-      text: `${wikiCount(docs.written)} of ${wikiCount(docs.total)} written${running ? ` · started ${wikiAgo(running.startedAt, context.now)}` : ''}`,
-      link: running?.sessionId ? { label: WIKI_PLAN_VIEW_RUN, to: 'run', sessionId: running.sessionId } : null,
-      progress: { done: docs.written, total: docs.total, next: docs.next },
-    };
+  const stopped = context.inForce && job && job.kind === 'build' && job.state === 'failed' ? job : null;
+  if (stopped) {
+    return { look: 'failed', title: WIKI_PLAN_BUILD_FAILED, text: wikiPlanBuildFailedText(stopped), link: runLink(stopped.sessionId), progress: null };
   }
   return null;
 }
 
-/** The document a writing run comes to next: the first unwritten one, in the plan's order. */
-export function wikiPlanNextDoc(directory: WikiDocsDirectory | null | undefined): string | null {
-  for (const category of directory?.categories ?? []) {
-    for (const doc of category.docs) if (!doc.written) return `${doc.number} ${doc.title}`;
-  }
-  return null;
-}
+/** A build whose run has not reported a count yet. */
+export const WIKI_PLAN_WRITING_SOON = 'waiting for its run to start';
 
-export const wikiPlanWritingNext = (next: string): string => `Next: ${next}`;
+/** Why the writing stopped short, and what writes the rest. */
+export const wikiPlanBuildFailedText = (job: Pick<WikiPlanJob, 'error'>): string =>
+  `${job.error ? `${job.error} · ` : ''}Wiki maintenance writes what’s left on its next run`;
+
+/** The line under a writing card's bar, before the document being written: `Writing now: 3.4 会话搜索`. */
+export const WIKI_PLAN_WRITING_NOW = 'Writing now:';
 
 /**
  * The head of a job that has no version to show yet (mock 21 ⑨ B–D): `First draft · you asked Sep 29, 00:41`.
@@ -806,7 +869,7 @@ export function wikiPlanGate(
     const { where } = wikiPlanErrorWhere(shown, error.path);
     return { where, kind, ref: valueAt(shown, error.path) ?? error.path, why: error.message };
   });
-  const checked = context.job?.report?.repo?.checked ?? null;
+  const checked = wikiPlanDraftReport(context.job)?.repo?.checked ?? null;
   const job = context.job;
   const rows = WIKI_PLAN_GATE_ORDER.map((check): WikiPlanGateRow => {
     const errors = byCheck.get(check) ?? [];
@@ -832,7 +895,7 @@ export function wikiPlanGate(
     passed: false,
     title: WIKI_PLAN_FAILED,
     line: `${failedChecks} of ${WIKI_PLAN_GATE_CHECKS.length} checks failed${at}`,
-    aside: job ? `${shown.model ?? job.provider ?? 'Wiki maintenance'} tried ${plural(attemptsOf(job), 'time', 'times')}` : null,
+    aside: job ? `${shown.model ?? job.provider ?? WIKI_HISTORY_MAINTENANCE} tried ${plural(attemptsOf(job), 'time', 'times')}` : null,
     rows,
     refKinds: [...kinds.entries()].sort((a, b) => b[1] - a[1]).map(([many, count]) => `${wikiCount(count)} ${count === 1 ? many.replace(/ies$/u, 'y').replace(/s$/u, '') : many}`),
     refs,
@@ -1159,7 +1222,7 @@ export const WIKI_PLAN_REDRAFT_PLACEHOLDER = 'What should change: what to merge,
 export function wikiPlanRedraftNote(provider: string | null, from: { version: number; inForce: boolean } | null): string {
   const base = from ? (from.inForce ? ` from v${from.version}, the plan in force,` : ` from draft v${from.version},`) : '';
   return (
-    `${provider ?? 'Wiki maintenance'} drafts it again${base} with what you write here. A draft that doesn’t pass the plan check is `
+    `${provider ?? WIKI_HISTORY_MAINTENANCE} drafts it again${base} with what you write here. A draft that doesn’t pass the plan check is `
     + `redrafted with its errors, up to ${WIKI_PLAN_JOB_RULES.attemptsMax} times.`
   );
 }
@@ -1338,30 +1401,29 @@ export const WIKI_PLAN_LOOKS: readonly WikiPlanLook[] = ['held', 'draftFailed', 
 
 /**
  * The plan's look on the home (owner's call 2026-09-29: the card tops the desktop's right rail, the
- * phone's second banner): amber while something waits on the owner — a held draft, a draft that failed,
- * a draft to confirm, changes to review — blue while a draft is on its way or documents are being
- * written, an invitation while there is no plan. Null: a plan in force, all written, nothing waiting.
+ * phone's second banner): amber while something waits on the owner — a draft or the writing held, a
+ * draft that failed, a draft to confirm, changes to review — blue while a draft is on its way or the
+ * documents of the version in force are being written, an invitation while there is no plan. Null: a
+ * plan in force, nothing waiting and nothing being written.
  */
-export function wikiPlanLook(
-  state: WikiPlanState,
-  context: { docs: { written: number; total: number } | null; runnerOnline: boolean | null },
-): WikiPlanLook | null {
+export function wikiPlanLook(state: WikiPlanState, context: { runnerOnline: boolean | null }): WikiPlanLook | null {
   const open = wikiPlanOpenJob(state);
-  if (open && wikiPlanHeld(open, context.runnerOnline)) return 'held';
+  const build = wikiPlanBuildJob(state);
+  if (wikiPlanHeld(open ?? build, context.runnerOnline)) return 'held';
   if (wikiPlanFailedJob(state)) return 'draftFailed';
   if (state.draft) return 'draftReady';
   if (state.proposals.length > 0) return 'changes';
   if (open?.state === 'running') return 'drafting';
   if (open?.state === 'queued') return 'queued';
-  if (state.confirmed && context.docs && context.docs.written < context.docs.total) return 'writing';
-  if (!state.confirmed) return 'noPlan';
+  if (build && state.confirmed) return 'writing';
+  if (!state.confirmed && !open) return 'noPlan';
   return null;
 }
 
 /** How many things of the plan wait on the owner: the directory's amber count beside Plan. */
 export function wikiPlanPending(state: WikiPlanState, runnerOnline: boolean | null): number {
-  const open = wikiPlanOpenJob(state);
-  return (open && wikiPlanHeld(open, runnerOnline) ? 1 : 0) + (wikiPlanFailedJob(state) ? 1 : 0) + (state.draft ? 1 : 0) + state.proposals.length;
+  const held = wikiPlanHeld(wikiPlanOpenJob(state) ?? wikiPlanBuildJob(state), runnerOnline) ? 1 : 0;
+  return held + (wikiPlanFailedJob(state) ? 1 : 0) + (state.draft ? 1 : 0) + state.proposals.length;
 }
 
 /** A phone's banner (mock 26 ③): one line in the look's colour, pressed into the plan — or into Maintenance, held. */
@@ -1371,11 +1433,24 @@ export interface WikiPlanBanner {
   to: 'plan' | 'settings';
 }
 
-export function wikiPlanBanner(look: WikiPlanLook, state: WikiPlanState, context: { now: number; docs: { written: number; total: number } | null }): WikiPlanBanner {
+/** The documents of the version in force, written of how many: the build's count, else the directory's. */
+const writingCounts = (state: WikiPlanState, docs: { written: number; total: number } | null): { done: number; total: number } =>
+  wikiPlanBuildCounts(wikiPlanBuildJob(state), docs) ?? { done: 0, total: 0 };
+
+export function wikiPlanBanner(
+  look: WikiPlanLook,
+  state: WikiPlanState,
+  context: { now: number; docs: { written: number; total: number } | null; runnerOnline: boolean | null },
+): WikiPlanBanner {
   const job = wikiPlanOpenJob(state);
   switch (look) {
-    case 'held':
-      return { text: 'Plan draft held — set up maintenance', tone: 'amber', to: 'settings' };
+    case 'held': {
+      const held = wikiPlanHeld(job ?? wikiPlanBuildJob(state), context.runnerOnline);
+      const what = job ? 'Plan draft held' : 'Writing documents held';
+      return held === 'runner_offline'
+        ? { text: `${what} — the runner is offline`, tone: 'amber', to: 'plan' }
+        : { text: `${what} — set up maintenance`, tone: 'amber', to: 'settings' };
+    }
     case 'draftFailed':
       return { text: 'Plan draft didn’t pass the check', tone: 'amber', to: 'plan' };
     case 'draftReady':
@@ -1386,8 +1461,10 @@ export function wikiPlanBanner(look: WikiPlanLook, state: WikiPlanState, context
       return { text: `Drafting the plan${job?.startedAt ? ` · started ${wikiAgo(job.startedAt, context.now)}` : ''}`, tone: 'blue', to: 'plan' };
     case 'queued':
       return { text: 'Plan draft queued', tone: 'blue', to: 'plan' };
-    case 'writing':
-      return { text: `Writing documents · ${wikiCount(context.docs?.written ?? 0)} of ${wikiCount(context.docs?.total ?? 0)}`, tone: 'blue', to: 'plan' };
+    case 'writing': {
+      const counts = writingCounts(state, context.docs);
+      return { text: `Writing documents · ${wikiCount(counts.done)} of ${wikiCount(counts.total)}`, tone: 'blue', to: 'plan' };
+    }
     case 'noPlan':
     default:
       return { text: 'No plan yet — draft one', tone: 'blue', to: 'plan' };
@@ -1417,13 +1494,14 @@ export function wikiPlanCard(
   const planButton = { label: WIKI_PLAN_OPEN, to: 'plan' as const };
   switch (look) {
     case 'held': {
-      const held = wikiPlanHeld(open, context.runnerOnline) ?? 'no_maintenance_workspace';
-      const text = WIKI_PLAN_HELD_TEXT[held];
+      const job = open ?? wikiPlanBuildJob(state);
+      const held = wikiPlanHeld(job, context.runnerOnline) ?? 'no_maintenance_workspace';
+      const text = job ? wikiPlanHeldText(job, held) : WIKI_PLAN_HELD_TEXT[held];
       return {
         dot: 'amber',
         count: 1,
         sub: null,
-        text: `Draft held · ${text.charAt(0).toLowerCase()}${text.slice(1)}`,
+        text: `${open ? 'Draft held' : 'Writing held'} · ${text.charAt(0).toLowerCase()}${text.slice(1)}`,
         primary: { label: held === 'runner_offline' ? WIKI_PLAN_OPEN : WIKI_PLAN_SET_UP, to: held === 'runner_offline' ? 'plan' : 'settings' },
         secondary: held === 'runner_offline' ? null : { label: WIKI_PLAN_OPEN, to: 'plan' },
         note: null,
@@ -1471,7 +1549,7 @@ export function wikiPlanCard(
         dot: 'blue',
         count: null,
         sub: null,
-        text: `Drafting the plan · ${open?.provider ?? 'Wiki maintenance'} · attempt ${open?.attempt ?? 1} of ${open?.attemptsMax ?? WIKI_PLAN_JOB_RULES.attemptsMax}${
+        text: `Drafting the plan · ${open?.provider ?? WIKI_HISTORY_MAINTENANCE} · attempt ${open?.attempt ?? 1} of ${open?.attemptsMax ?? WIKI_PLAN_JOB_RULES.attemptsMax}${
           open?.startedAt ? ` · started ${wikiAgo(open.startedAt, context.now)}` : ''
         }.${topicArticles}`,
         primary: planButton,
@@ -1483,21 +1561,23 @@ export function wikiPlanCard(
         dot: 'grey',
         count: null,
         sub: null,
-        text: 'Draft queued · starts after the Wiki maintenance run that’s going now.',
+        text: `Draft queued · ${WIKI_PLAN_QUEUED_TEXT}.`,
         primary: planButton,
         secondary: null,
         note: null,
       };
-    case 'writing':
+    case 'writing': {
+      const counts = writingCounts(state, context.docs);
       return {
         dot: 'blue',
         count: null,
         sub: null,
-        text: `${inForce} confirmed ${wikiMonthDay(state.confirmed?.confirmedAt ?? '') ?? ''} by you · Wiki maintenance is writing the documents: ${wikiCount(context.docs?.written ?? 0)} of ${wikiCount(context.docs?.total ?? 0)} written.`,
+        text: `${inForce} confirmed ${wikiMonthDay(state.confirmed?.confirmedAt ?? '') ?? ''} by you · ${WIKI_HISTORY_MAINTENANCE} is writing the documents: ${wikiCount(counts.done)} of ${wikiCount(counts.total)} written.`,
         primary: planButton,
         secondary: null,
         note: null,
       };
+    }
     case 'noPlan':
     default:
       return {
@@ -1507,7 +1587,7 @@ export function wikiPlanCard(
         text: 'No plan yet. A plan lays out this wiki’s documents; until you confirm one, the Wiki shows its topic articles.',
         primary: { label: WIKI_PLAN_DRAFT, to: 'draft' },
         secondary: null,
-        note: `${context.provider ?? 'Wiki maintenance'} · about 1–2 hours`,
+        note: `${context.provider ?? WIKI_HISTORY_MAINTENANCE} · about 1–2 hours`,
       };
   }
 }

@@ -38,15 +38,15 @@ function usePlanLook(space: WikiSpace) {
   const docs = useQuery(wikiDocsQuery(space.id));
   const maintenance = useWikiMaintenanceWhere(space);
   const counts = docs.data?.plan ? docs.data.docs : null;
-  const look: WikiPlanLook | null = plan.data ? wikiPlanLook(plan.data, { docs: counts, runnerOnline: maintenance.runnerOnline }) : null;
+  const look: WikiPlanLook | null = plan.data ? wikiPlanLook(plan.data, { runnerOnline: maintenance.runnerOnline }) : null;
   return { plan: plan.data, look, counts, maintenance };
 }
 
 /** The phone's banner: one line, pressed into the plan page — or, held, into the space's Maintenance. */
 export function WikiPlanBanner({ space }: { space: WikiSpace }) {
-  const { plan, look, counts } = usePlanLook(space);
+  const { plan, look, counts, maintenance } = usePlanLook(space);
   if (!plan || !look) return null;
-  const banner = wikiPlanBanner(look, plan, { now: Date.now(), docs: counts });
+  const banner = wikiPlanBanner(look, plan, { now: Date.now(), docs: counts, runnerOnline: maintenance.runnerOnline });
   return (
     <Link className={`wk-banner wk-plan-banner ${banner.tone}`} to={banner.to === 'settings' ? wikiSettingsPath(space.slug) : wikiPlanPath(space.slug)}>
       <WikiDot tone={banner.tone === 'amber' ? 'amber' : 'blue'} />

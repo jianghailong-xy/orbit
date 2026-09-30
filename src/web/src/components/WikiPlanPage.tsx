@@ -26,7 +26,6 @@ import { WikiSourceCard } from './WikiSources';
 import {
   wikiDocsQuery,
   wikiEntriesQuery,
-  wikiHealthQuery,
   wikiPlanQuery,
   wikiPlanVersionQuery,
   wikiPlanVersionsQuery,
@@ -143,7 +142,6 @@ import {
   wikiPlanMeta,
   wikiPlanMovedTo,
   wikiPlanNewest,
-  wikiPlanNextDoc,
   wikiPlanNextVersion,
   wikiPlanOpenJob,
   wikiPlanPath,
@@ -164,7 +162,7 @@ import {
   wikiPlanTime,
   wikiPlanVersionLabel,
   wikiPlanVersionRows,
-  wikiPlanWritingNext,
+  WIKI_PLAN_WRITING_NOW,
   type WikiPlanDocForm,
   type WikiPlanJob,
   type WikiPlanJobCard,
@@ -211,7 +209,6 @@ function usePlanPage(spaceId: string) {
   const versions = useQuery(wikiPlanVersionsQuery(spaceId));
   const directory = useQuery(wikiDocsQuery(spaceId));
   const space = useQuery(wikiSpaceQuery(spaceId));
-  const health = useQuery(wikiHealthQuery(spaceId));
   const maintenance = useWikiMaintenanceWhere(space.data);
   const plan = state.data;
   const failed = plan ? wikiPlanFailedJob(plan) : null;
@@ -239,8 +236,8 @@ function usePlanPage(spaceId: string) {
     return null;
   }, [plan, shown]);
 
-  const docs = directory.data?.plan ? { ...directory.data.docs, next: wikiPlanNextDoc(directory.data) } : null;
-  return { asked, state, plan, versions, directory, docs, space, health, maintenance, failed, failedNumber, shown, base, loading: state.isPending || (stored !== null && other.isPending) };
+  const docs = directory.data?.plan ? directory.data.docs : null;
+  return { asked, state, plan, versions, directory, docs, space, maintenance, failed, failedNumber, shown, base, loading: state.isPending || (stored !== null && other.isPending) };
 }
 
 export function WikiPlanRoute({
@@ -286,13 +283,12 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
   const open = wikiPlanOpenJob(plan);
   const now = Date.now();
   const inForce = shown?.status === 'confirmed' && plan.confirmed?.version === shown.version;
-  const card = wikiPlanJobCard(open, {
+  const card = wikiPlanJobCard(plan.job, {
     now,
     runnerOnline: page.maintenance.runnerOnline,
     failed: shown?.status === 'failed' ? page.failed : null,
-    docs: page.docs,
     inForce,
-    maintenance: page.health.data?.maintenance.running ?? null,
+    directory: page.directory.data,
   });
   const confirm = useWikiWrite(({ version }: { version: number }) => confirmWikiPlan(spaceId, version));
   const draft = useWikiWrite(() => redraftWikiPlan(spaceId, null));
@@ -496,7 +492,11 @@ function PlanJobCard({ card, spaceSlug, solo }: { card: WikiPlanJobCard; spaceSl
           <div className="bar">
             <i style={{ width: `${Math.round((card.progress.done / Math.max(1, card.progress.total)) * 100)}%` }} />
           </div>
-          {card.progress.next && <div className="next">{wikiPlanWritingNext(card.progress.next)}</div>}
+          {card.progress.now && (
+            <div className="next">
+              {WIKI_PLAN_WRITING_NOW} <b>{card.progress.now}</b>
+            </div>
+          )}
         </div>
       )}
     </section>
