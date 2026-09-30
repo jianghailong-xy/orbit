@@ -205,6 +205,19 @@ func (e *wikiVerifyAuthError) Error() string {
 		"injected; nothing more was verified. " + e.detail
 }
 
+// wikiVerifyDoor is where a verification reads the ops it verifies and reports the verdicts: the list
+// and the report on one route after the space, and the command an error there is said to have failed in.
+type wikiVerifyDoor struct {
+	route, command string
+}
+
+// The two doors: the ops the calling session proposed (`orbit wiki verify`), and the ops ended sessions
+// left waiting in the space, which a maintenance run of it adopts (contract `reviewModes.verification.adoption`).
+var (
+	wikiOwnVerifications     = wikiVerifyDoor{route: "verifications", command: "orbit wiki verify"}
+	wikiAdoptedVerifications = wikiVerifyDoor{route: "maintenance/verifications", command: "orbit wiki maintain"}
+)
+
 // runWikiVerify verifies the ops the calling session proposed into spaceID, one at a time, and
 // reports each verdict as soon as it is read. Progress lines go to progress as they happen.
 func runWikiVerify(t *Transport, sessionID, spaceID string, cfg wikiVerifyConfig, max int, progress io.Writer) (wikiVerifySummary, error) {
@@ -216,15 +229,23 @@ func runWikiVerify(t *Transport, sessionID, spaceID string, cfg wikiVerifyConfig
 	if err := wikiVerifyEndpointUp(cfg.baseURL); err != nil {
 		return summary, err
 	}
+	err = verifyWikiOps(t, wikiOwnVerifications, sessionID, spaceID, cfg, claude, max, &summary, progress)
+	return summary, err
+}
+
+// verifyWikiOps verifies the ops door lists, page by page, at most max of them (0: every one), and
+// reports each verdict through the same door as soon as it is read. The model's endpoint and the Claude
+// Code to ask it through are the caller's to have made sure of.
+func verifyWikiOps(t *Transport, door wikiVerifyDoor, sessionID, spaceID string, cfg wikiVerifyConfig, claude string, max int, summary *wikiVerifySummary, progress io.Writer) error {
 	after := ""
 	for {
-		raw, err := t.listWikiVerifications(sessionID, spaceID, after, wikiVerifyPageSize)
+		raw, err := t.listWikiVerifications(door.route, sessionID, spaceID, after, wikiVerifyPageSize)
 		if err != nil {
-			return summary, wikiCallError("orbit wiki verify", err)
+			return wikiCallError(door.command, err)
 		}
 		var page wikiVerificationPage
 		if err := json.Unmarshal(raw, &page); err != nil {
-			return summary, fmt.Errorf("orbit wiki verify: the server's list is not the shape this build reads: %w", err)
+			return fmt.Errorf("%s: the server's list is not the shape this build reads: %w", door.command, err)
 		}
 		summary.Mode = page.Mode
 		if page.Mode != "automatic" {
@@ -232,23 +253,23 @@ func runWikiVerify(t *Transport, sessionID, spaceID string, cfg wikiVerifyConfig
 				summary.Stopped = fmt.Sprintf("the space is %s now, not automatic: its ops keep waiting for their verification "+
 					"until the owner makes it automatic again", page.Mode)
 			}
-			return summary, nil
+			return nil
 		}
 		for _, item := range page.Items {
 			if max > 0 && summary.Looked >= max {
-				return summary, nil
+				return nil
 			}
 			summary.Looked++
-			stop, err := verifyOneWikiOp(t, sessionID, spaceID, cfg, claude, item, &summary, progress)
+			stop, err := verifyOneWikiOp(t, door, sessionID, spaceID, cfg, claude, item, summary, progress)
 			if err != nil {
-				return summary, err
+				return err
 			}
 			if stop {
-				return summary, nil
+				return nil
 			}
 		}
 		if page.Next == "" {
-			return summary, nil
+			return nil
 		}
 		after = page.Next
 	}
@@ -256,7 +277,7 @@ func runWikiVerify(t *Transport, sessionID, spaceID string, cfg wikiVerifyConfig
 
 // verifyOneWikiOp asks the model about one op and reports what it said. It answers stop when the
 // server says the space left Automatic, and an error only for what ends the whole run.
-func verifyOneWikiOp(t *Transport, sessionID, spaceID string, cfg wikiVerifyConfig, claude string, item wikiVerificationItem, summary *wikiVerifySummary, progress io.Writer) (bool, error) {
+func verifyOneWikiOp(t *Transport, door wikiVerifyDoor, sessionID, spaceID string, cfg wikiVerifyConfig, claude string, item wikiVerificationItem, summary *wikiVerifySummary, progress io.Writer) (bool, error) {
 	label := fmt.Sprintf("op %s (%s)", item.OpID, item.Entry.Title)
 	fail := func(why string) {
 		summary.Failed++
@@ -287,17 +308,17 @@ func verifyOneWikiOp(t *Transport, sessionID, spaceID string, cfg wikiVerifyConf
 	if verdict.Verdict == "duplicate" {
 		body["duplicateOf"] = verdict.DuplicateOf
 	}
-	raw, err := t.reportWikiVerifications(sessionID, spaceID, map[string]interface{}{"verdicts": []interface{}{body}})
+	raw, err := t.reportWikiVerifications(door.route, sessionID, spaceID, map[string]interface{}{"verdicts": []interface{}{body}})
 	var report wikiVerificationReport
 	if err != nil {
 		// A refused verdict is an ANSWER: the door answers the first refusal's status with every
 		// outcome in the body, as a refused proposal does.
 		var httpErr *transportHTTPError
 		if !errors.As(err, &httpErr) || json.Unmarshal([]byte(httpErr.body), &report) != nil || report.Outcomes == nil {
-			return false, wikiCallError("orbit wiki verify", err)
+			return false, wikiCallError(door.command, err)
 		}
 	} else if err := json.Unmarshal(raw, &report); err != nil {
-		return false, fmt.Errorf("orbit wiki verify: the server's answer is not the shape this build reads: %w", err)
+		return false, fmt.Errorf("%s: the server's answer is not the shape this build reads: %w", door.command, err)
 	}
 	if len(report.Outcomes) == 0 {
 		fail("the server recorded nothing for it")
@@ -355,10 +376,17 @@ func describeWikiVerdictOutcome(outcome map[string]interface{}, verdict wikiVerd
 	case "rejected":
 		return "rejected: " + verdict.Reason
 	case "reinforced":
-		if added, ok := outcome["reinforced"].(bool); ok && !added {
-			return "a duplicate of " + verdict.DuplicateOf + "; the space reviews every reinforce, so its sources were not added"
+		// An adopted add whose very content a later op made live is that entry's duplicate whatever the
+		// verdict said: the server names the entry (contract `reviewModes.verification.adoption.twin`).
+		of := verdict.DuplicateOf
+		if of == "" {
+			of, _ = outcome["entryId"].(string)
+			of = "the live entry " + of + ", which holds its very content"
 		}
-		return "a duplicate of " + verdict.DuplicateOf + ": its sources were added there"
+		if added, ok := outcome["reinforced"].(bool); ok && !added {
+			return "a duplicate of " + of + "; the space reviews every reinforce, so its sources were not added"
+		}
+		return "a duplicate of " + of + ": its sources were added there"
 	case "conflict":
 		return "nothing applied: its entry moved, or passed into the owner's hands, since it was proposed"
 	}

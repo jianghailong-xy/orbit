@@ -1391,7 +1391,8 @@ export interface WikiVerificationItem {
    *  verdict would be about the claim alone: the server records whatever it says as no more than
    *  Unreviewed and keeps it out of the fallback's count. */
   evidence: WikiVerificationEvidence;
-  /** The neighbours recorded with the op, each as it reads now: what a duplicate may name. */
+  /** The neighbours recorded with the op, each as it reads now: what a duplicate may name. An op a
+   *  maintenance run adopted adds the neighbours its draft has now (`verification.adoption`). */
   similar: WikiSimilar[];
 }
 

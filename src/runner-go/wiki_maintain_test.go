@@ -42,11 +42,18 @@ type fakeMaintainDoor struct {
 	propose       func(ops []interface{}, dryRun bool) (int, string)
 	verifications string
 	check         func(expect string) (int, string)
+	// adoptable is what ended sessions left waiting, as the adoption list pages it; a verdict reported for one
+	// takes it off the list, and adoptOutcome answers it (nil: applied as Auto). adoptMissing is a server that
+	// predates the adoption routes.
+	adoptable    []map[string]interface{}
+	adoptOutcome func(verdict map[string]interface{}) map[string]interface{}
+	adoptMissing bool
+	verified     map[string]bool
 }
 
 func newFakeMaintainDoor(t *testing.T) *fakeMaintainDoor {
 	t.Helper()
-	d := &fakeMaintainDoor{pages: map[string]string{}}
+	d := &fakeMaintainDoor{pages: map[string]string{}, verified: map[string]bool{}}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		request := maintainRequest{method: r.Method, path: r.URL.Path, query: r.URL.Query(), session: r.Header.Get("X-Orbit-Session-Id")}
 		if raw, _ := io.ReadAll(r.Body); len(raw) > 0 {
@@ -85,6 +92,26 @@ func newFakeMaintainDoor(t *testing.T) *fakeMaintainDoor {
 			}
 			raw, _ := json.Marshal(map[string]interface{}{"mode": "automatic", "outcomes": outcomes})
 			status, body = http.StatusOK, string(raw)
+		case path == "maintenance/verifications" && d.adoptMissing:
+			status, body = http.StatusNotFound, `{"message":"Cannot `+r.Method+` `+r.URL.Path+`","error":"Not Found","statusCode":404}`
+		case r.Method == http.MethodGet && path == "maintenance/verifications":
+			status, body = http.StatusOK, d.adoptionPage(r.URL.Query())
+		case r.Method == http.MethodPost && path == "maintenance/verifications":
+			verdicts, _ := request.body["verdicts"].([]interface{})
+			outcomes := []interface{}{}
+			for _, v := range verdicts {
+				verdict, _ := v.(map[string]interface{})
+				outcome := map[string]interface{}{"opId": verdict["opId"], "status": "applied", "trust": "auto", "verdict": verdict["verdict"]}
+				if d.adoptOutcome != nil {
+					outcome = d.adoptOutcome(verdict)
+				}
+				d.mu.Lock()
+				d.verified[fmt.Sprint(verdict["opId"])] = true
+				d.mu.Unlock()
+				outcomes = append(outcomes, outcome)
+			}
+			raw, _ := json.Marshal(map[string]interface{}{"mode": "automatic", "outcomes": outcomes})
+			status, body = http.StatusOK, string(raw)
 		case r.Method == http.MethodGet && path == "anchors":
 			status, body = http.StatusOK, `{"spaceId":"space-1","repo":null,"entries":[],"next":null}`
 		case r.Method == http.MethodPost && path == "article-plan":
@@ -107,6 +134,33 @@ func newFakeMaintainDoor(t *testing.T) *fakeMaintainDoor {
 	t.Cleanup(srv.Close)
 	d.URL = srv.URL
 	return d
+}
+
+// adoptionPage is the adoption list as the server pages it: the ops still waiting after `after`, oldest first,
+// at most `limit`, and the last one's id as next when more wait.
+func (d *fakeMaintainDoor) adoptionPage(query url.Values) string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	limit, _ := strconv.Atoi(query.Get("limit"))
+	after, started := query.Get("after"), query.Get("after") == ""
+	items, next := []map[string]interface{}{}, ""
+	for _, item := range d.adoptable {
+		id := fmt.Sprint(item["opId"])
+		if !started {
+			started = id == after
+			continue
+		}
+		if d.verified[id] {
+			continue
+		}
+		if len(items) == limit {
+			next = fmt.Sprint(items[len(items)-1]["opId"])
+			break
+		}
+		items = append(items, item)
+	}
+	raw, _ := json.Marshal(map[string]interface{}{"spaceId": "space-1", "mode": "automatic", "items": items, "next": next})
+	return string(raw)
 }
 
 func (d *fakeMaintainDoor) calls() []maintainRequest {
@@ -368,8 +422,8 @@ func TestWikiMaintainRunsThePipelineAndAdvancesTheCursor(t *testing.T) {
 	if r.Ops.Proposed != 2 || r.Ops.Recorded != 2 || r.Ops.Waiting != 2 || r.Ops.Refused != 0 {
 		t.Errorf("ops = %+v", r.Ops)
 	}
-	if r.Verification == nil || r.Verification.Verified != 2 || r.Verification.Failed != 0 {
-		t.Errorf("verification = %+v, want both ops verified", r.Verification)
+	if r.Verification == nil || r.Verification.Verified != 2 || r.Verification.Failed != 0 || r.Verification.Adopted != nil {
+		t.Errorf("verification = %+v, want both ops verified and nothing adopted", r.Verification)
 	}
 	if r.Anchors == nil || r.Articles == nil || r.Articles.Failed != 0 {
 		t.Errorf("anchors %+v, articles %+v: both steps ran", r.Anchors, r.Articles)
@@ -390,8 +444,9 @@ func TestWikiMaintainRunsThePipelineAndAdvancesTheCursor(t *testing.T) {
 			steps = append(steps, step)
 		}
 	}
+	// After its own ops, the run asks what ended sessions left waiting: nothing, here.
 	want := []string{"GET maintenance/run", "GET dossiers", "POST maintenance/changesets", "GET verifications",
-		"POST verifications", "GET anchors", "POST article-plan", "POST maintenance/finish"}
+		"POST verifications", "GET maintenance/verifications", "GET anchors", "POST article-plan", "POST maintenance/finish"}
 	if !reflect.DeepEqual(steps, want) {
 		t.Errorf("the run went %v\nwant %v", steps, want)
 	}
@@ -477,6 +532,238 @@ func TestWikiMaintainRunsThePipelineAndAdvancesTheCursor(t *testing.T) {
 		if !strings.Contains(prompt, want) {
 			t.Errorf("the extraction prompt does not say %q", want)
 		}
+	}
+}
+
+// ── What ended sessions left waiting ────────────────────────────────────────────────────────────
+
+// ownOps is the adoption tests' run's own two ops, as the proposer's verification list hands them.
+const ownOps = `{"spaceId":"space-1","mode":"automatic","items":[` +
+	`{"opId":"op-0","op":"add","entryId":"e-0","entry":{"kind":"convention","title":"fixture 不写死端口","summary":"s","fields":{}},"sources":[{"kind":"turn","ref":"turn-1","quote":"以后 fixture 里不要写死端口","text":"以后 fixture 里不要写死端口，一律从 fixture 的返回值里取。","truncated":false}],"similar":[]},` +
+	`{"opId":"op-1","op":"add","entryId":"e-1","entry":{"kind":"pitfall","title":"PORT","summary":"s","fields":{}},"sources":[{"kind":"tool_call","ref":"call-2","quote":null,"text":"connect ECONNREFUSED 127.0.0.1:9000","truncated":false}],"similar":[]}` +
+	`],"next":""}`
+
+// adoptedItem is op n of those ended sessions left waiting, as the adoption list hands it: its record's text,
+// and among its neighbours the entry a later op made of the same knowledge, live since.
+func adoptedItem(n int) map[string]interface{} {
+	id := fmt.Sprintf("left-%02d", n)
+	return map[string]interface{}{
+		"opId": id, "changesetId": "cs-failed-run", "op": "add", "entryId": nil,
+		"entry": map[string]interface{}{"kind": "pitfall", "title": fmt.Sprintf("Adopted claim %d", n), "summary": "s", "fields": map[string]interface{}{}},
+		"sources": []interface{}{map[string]interface{}{"kind": "event", "ref": "event-" + id, "quote": nil,
+			"text": fmt.Sprintf("what the failed run's session %d observed", n), "truncated": false}},
+		"similar": []interface{}{map[string]interface{}{"id": "entry-later", "kind": "pitfall", "title": "The same claim, live since", "status": "active", "trust": "auto"}},
+	}
+}
+
+// adoptionAnswers answers as the model would: the run's own ops and most adopted ones supported, adopted op 3 a
+// duplicate of the later live entry it was offered, and adopted op 7 no verdict at all.
+func adoptionAnswers(prompt string) (int, string) {
+	switch {
+	case strings.Contains(prompt, "==== CASE FILE ===="):
+		return extractorAnswers(prompt)
+	case strings.Contains(prompt, "Adopted claim 3\n"):
+		return http.StatusOK, `{"verdict":"duplicate","reason":"the live entry says this","duplicateOf":"entry-later"}`
+	case strings.Contains(prompt, "Adopted claim 7\n"):
+		return http.StatusOK, "I cannot tell."
+	}
+	return http.StatusOK, `{"verdict":"supported","reason":"the cited record says exactly this"}`
+}
+
+// adoptedVerdicts is every verdict reported on the adoption route, in the order the run reported them.
+func adoptedVerdicts(t *testing.T, door *fakeMaintainDoor) []map[string]interface{} {
+	t.Helper()
+	var out []map[string]interface{}
+	for _, call := range door.calls() {
+		if call.method == http.MethodPost && strings.HasSuffix(call.path, "/maintenance/verifications") {
+			verdicts, _ := call.body["verdicts"].([]interface{})
+			for _, v := range verdicts {
+				out = append(out, v.(map[string]interface{}))
+			}
+		}
+	}
+	return out
+}
+
+// Three failed runs left 71 ops waiting in the owner's space, and only a proposer verifies its own. The next
+// run verifies its own ops first, then adopts theirs — at most the contract's number a run, oldest first, on
+// the adoption routes — and one left without a verdict waits for the run after, which takes the rest.
+func TestWikiMaintainAdoptsWhatEndedSessionsLeftWaitingAfterItsOwnOps(t *testing.T) {
+	f := newMaintainFixture(t)
+	door := newFakeMaintainDoor(t)
+	door.context = maintainContext(f, "automatic", 0, "tok-expect")
+	door.pages[""] = maintainPage("tok-expect", false, portDossier("session-a"))
+	door.propose = pendingForVerification
+	door.verifications = ownOps
+	for n := 1; n <= wikiMaintainAdoptOpsMax+10; n++ {
+		door.adoptable = append(door.adoptable, adoptedItem(n))
+	}
+	vllm := newFakeVLLM(t, adoptionAnswers)
+	spawns := fakeVerifyClaude(t)
+	wikiMaintainSession(t, door.URL, vllm)
+
+	summary, err := runMaintainCLI(t)
+	if err != nil {
+		t.Fatalf("orbit wiki maintain: %v\n%+v", err, summary)
+	}
+	// The one adopted op the model gave no verdict for fails nothing: the run succeeded and moved the cursor.
+	if summary.Outcome != "succeeded" || !summary.Advanced || summary.Cursor != "tok-expect" {
+		t.Errorf("summary = %+v, want a run that succeeded and advanced the cursor", summary)
+	}
+	v := summary.Report.Verification
+	if v == nil || v.Verified != 2 || v.Failed != 0 || v.Adopted == nil || *v.Adopted != (wikiMaintainAdopted{Ops: wikiMaintainAdoptOpsMax, Verified: wikiMaintainAdoptOpsMax - 1, Failed: 1}) {
+		t.Fatalf("verification = %+v (adopted %+v), want its own two verified, and %d adopted: all but one verified", v, v.Adopted, wikiMaintainAdoptOpsMax)
+	}
+
+	// Its own ops first; then the adopted ones, oldest first and no more than the cap, each on the adoption
+	// route — as the maintenance session, and with the verdict the model gave.
+	var order []string
+	for _, call := range door.calls() {
+		if call.method != http.MethodPost {
+			continue
+		}
+		switch call.path {
+		case "/api/runner/wiki/spaces/space-1/verifications":
+			order = append(order, "own")
+		case "/api/runner/wiki/spaces/space-1/maintenance/verifications":
+			order = append(order, "adopted")
+			if call.session != "maintenance-session" {
+				t.Errorf("an adopted op's verdict went as session %q", call.session)
+			}
+		}
+	}
+	if len(order) != 2+wikiMaintainAdoptOpsMax-1 || order[0] != "own" || order[1] != "own" || order[2] != "adopted" {
+		t.Errorf("verdicts went %v: want the run's own two first, then the adopted ones", order)
+	}
+	adopted := adoptedVerdicts(t, door)
+	for i, verdict := range adopted {
+		n := i + 1
+		if n >= 7 {
+			n++ // op 7 had no verdict to report
+		}
+		if verdict["opId"] != fmt.Sprintf("left-%02d", n) || verdict["model"] != "qwen3.8-27b-fp8" {
+			t.Fatalf("adopted verdict %d = %v, want left-%02d's, by the model", i, verdict, n)
+		}
+	}
+	if duplicate := adopted[2]; duplicate["verdict"] != "duplicate" || duplicate["duplicateOf"] != "entry-later" {
+		t.Errorf("the adopted op a later op made live = %v: want a duplicate of the live entry it was offered", duplicate)
+	}
+	for _, verdict := range adopted {
+		if verdict["opId"] == fmt.Sprintf("left-%02d", wikiMaintainAdoptOpsMax+1) {
+			t.Errorf("the run went past its cap: %v", verdict)
+		}
+	}
+	// What the model was handed for an adopted op: its record, and the later live entry to name as a duplicate.
+	var third string
+	for _, spawn := range spawns() {
+		if strings.Contains(spawn.Prompt, "Adopted claim 3\n") {
+			third = spawn.Prompt
+		}
+	}
+	for _, part := range []string{"what the failed run's session 3 observed", "- id entry-later: [pitfall] The same claim, live since"} {
+		if !strings.Contains(third, part) {
+			t.Errorf("the adopted op's prompt does not carry %q:\n%s", part, third)
+		}
+	}
+	// The list: one op first, to know whether there is anything to adopt, then page after page from the oldest.
+	var pages []string
+	for _, call := range door.of(http.MethodGet, "maintenance/verifications") {
+		pages = append(pages, call.query.Get("after")+"/"+call.query.Get("limit"))
+	}
+	if want := []string{"/1", "/20", "left-20/20", "left-40/20"}; !reflect.DeepEqual(pages, want) {
+		t.Errorf("the adoption list was read %v, want %v", pages, want)
+	}
+
+	// The report the server kept counts them apart, and every verdict's model call in the spend.
+	report, _ := finished(t, door)["report"].(map[string]interface{})
+	verification, _ := report["verification"].(map[string]interface{})
+	if !reflect.DeepEqual(verification["adopted"], map[string]interface{}{"ops": float64(wikiMaintainAdoptOpsMax), "verified": float64(wikiMaintainAdoptOpsMax - 1), "failed": float64(1)}) {
+		t.Errorf("the report's verification = %v", verification)
+	}
+	if tokens := summary.Report.Tokens; tokens.Calls != 2+2+wikiMaintainAdoptOpsMax {
+		t.Errorf("tokens = %+v: want an extraction, its retry, two verdicts of its own and %d adopted", tokens, wikiMaintainAdoptOpsMax)
+	}
+
+	// The next run takes the rest: the ten past the cap, and the one the model gave no verdict for.
+	var out strings.Builder
+	if err := cmdWikiCLI([]string{"maintain", "--space", "space-1"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("the next run: %v\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "- adopted: 11 ops ended sessions left waiting for their verification, 10 verified, 1 without a verdict") {
+		t.Errorf("the next run said:\n%s", out.String())
+	}
+	if got := len(adoptedVerdicts(t, door)); got != wikiMaintainAdoptOpsMax-1+10 {
+		t.Errorf("%d adopted verdicts over two runs, want %d", got, wikiMaintainAdoptOpsMax-1+10)
+	}
+}
+
+// A run that had nothing to extract still adopts: it sets the model up for what ended sessions left waiting.
+func TestWikiMaintainAdoptsWhenItHasNothingOfItsOwn(t *testing.T) {
+	f := newMaintainFixture(t)
+	door := newFakeMaintainDoor(t)
+	door.context = maintainContext(f, "automatic", 0, "tok-expect")
+	door.propose = func(ops []interface{}, dryRun bool) (int, string) {
+		t.Errorf("the run proposed %v with no dossier to extract from", ops)
+		return pendingForVerification(ops, dryRun)
+	}
+	door.adoptable = []map[string]interface{}{adoptedItem(1), adoptedItem(2)}
+	vllm := newFakeVLLM(t, adoptionAnswers)
+	spawns := fakeVerifyClaude(t)
+	wikiMaintainSession(t, door.URL, vllm)
+
+	summary, err := runMaintainCLI(t)
+	if err != nil {
+		t.Fatalf("orbit wiki maintain: %v\n%+v", err, summary)
+	}
+	r := summary.Report
+	if summary.Outcome != "succeeded" || r.Dossiers != 0 || r.Ops.Recorded != 0 || summary.Model != "qwen3.8-27b-fp8" {
+		t.Errorf("summary = %+v", summary)
+	}
+	if r.Verification == nil || r.Verification.Adopted == nil || *r.Verification.Adopted != (wikiMaintainAdopted{Ops: 2, Verified: 2}) {
+		t.Errorf("verification = %+v, want both adopted ops verified", r.Verification)
+	}
+	if n := len(spawns()); n != 2 {
+		t.Errorf("%d model calls, want one per adopted op", n)
+	}
+	for _, call := range door.calls() {
+		if call.path == "/api/runner/wiki/spaces/space-1/verifications" {
+			t.Errorf("a run that recorded nothing asked for its own ops: %s %s", call.method, call.path)
+		}
+	}
+}
+
+// A server older than the adoption routes answers them 404 with no code: the run adopts nothing, and its own
+// work stands. A Tiered space's run never asks at all: nothing waits for a verification there.
+func TestWikiMaintainAdoptsNothingWhereThereIsNothingToAdoptFrom(t *testing.T) {
+	for _, c := range []struct {
+		name, mode string
+		missing    bool
+		asked      int
+	}{
+		{"a server that predates adoption", "automatic", true, 1},
+		{"a tiered space", "tiered", false, 0},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f := newMaintainFixture(t)
+			door := newFakeMaintainDoor(t)
+			door.context = maintainContext(f, c.mode, 0, "tok-expect")
+			door.adoptable = []map[string]interface{}{adoptedItem(1)}
+			door.adoptMissing = c.missing
+			vllm := newFakeVLLM(t, adoptionAnswers)
+			spawns := fakeVerifyClaude(t)
+			wikiMaintainSession(t, door.URL, vllm)
+
+			summary, err := runMaintainCLI(t)
+			if err != nil || summary.Outcome != "succeeded" || !summary.Advanced {
+				t.Fatalf("orbit wiki maintain = %v, %+v: want its own work to stand", err, summary)
+			}
+			if summary.Report.Verification != nil || len(spawns()) != 0 || len(adoptedVerdicts(t, door)) != 0 {
+				t.Errorf("verification %+v, %d model calls: want nothing adopted", summary.Report.Verification, len(spawns()))
+			}
+			if got := len(door.of(http.MethodGet, "maintenance/verifications")); got != c.asked {
+				t.Errorf("the adoption list was asked %d times, want %d", got, c.asked)
+			}
+		})
 	}
 }
 
@@ -1048,7 +1335,7 @@ func TestWikiMaintainIsTheContractsCommand(t *testing.T) {
 	rules := job["rules"].(map[string]interface{})
 	for name, value := range map[string]int{
 		"runSessionsMax": wikiMaintainRunSessionsMax, "entriesPerSessionMax": wikiMaintainEntriesPerSession,
-		"extractConcurrency": wikiMaintainExtractConcurrency,
+		"extractConcurrency": wikiMaintainExtractConcurrency, "adoptOpsMax": wikiMaintainAdoptOpsMax,
 	} {
 		if int(rules[name].(float64)) != value {
 			t.Errorf("rules.%s = %v, this build has %d", name, rules[name], value)
@@ -1076,7 +1363,9 @@ func TestWikiMaintainIsTheContractsCommand(t *testing.T) {
 	maintenance := wikiContract(t)["agentSurface"].(map[string]interface{})["doors"].(map[string]interface{})["runner"].(map[string]interface{})["maintenanceRoutes"].([]interface{})
 	for name, path := range map[string]string{
 		"context": "GET /api/runner/wiki/spaces/:id/maintenance/run", "propose": "POST /api/runner/wiki/spaces/:id/maintenance/changesets",
-		"finish": "POST /api/runner/wiki/spaces/:id/maintenance/finish", "check": "GET /api/runner/wiki/spaces/:id/maintenance/check",
+		"adoptions": "GET /api/runner/wiki/spaces/:id/" + wikiAdoptedVerifications.route,
+		"adopt":     "POST /api/runner/wiki/spaces/:id/" + wikiAdoptedVerifications.route,
+		"finish":    "POST /api/runner/wiki/spaces/:id/maintenance/finish", "check": "GET /api/runner/wiki/spaces/:id/maintenance/check",
 	} {
 		if routes[name] != path {
 			t.Errorf("routes.%s = %v, this build calls %s", name, routes[name], path)
