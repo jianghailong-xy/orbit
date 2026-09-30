@@ -1088,6 +1088,10 @@ type TurnCompleteRequest struct {
 	TurnID     string `json:"turnId"`
 	Status     string `json:"status"`
 	Result     string `json:"result,omitempty"`
+	// Error is what a failed turn failed with, when the runtime reports that as the turn's error
+	// rather than as a reply (Codex). Result is then whatever the turn said before it died, so
+	// without this the control plane recorded the agent's last sentence as the failure's reason.
+	Error string `json:"error,omitempty"`
 	// ShellExitCode/ShellOutput are populated for synchronous shell turns. Pointers preserve
 	// the difference between a real zero/empty result and an older runner that sent neither.
 	ShellExitCode *int                   `json:"shellExitCode,omitempty"`

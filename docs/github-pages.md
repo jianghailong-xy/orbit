@@ -3,11 +3,14 @@
 The public entrance is a curated, static pointer to Orbit's first-use path. It is intentionally smaller than the
 internal documentation tree and keeps the canonical copy in [docs/messaging-brief.md](messaging-brief.md).
 
-Live URL: <https://jianghailong-xy.github.io/orbit/>
+Live URLs: <https://jianghailong-xy.github.io/orbit/> (English) ·
+<https://jianghailong-xy.github.io/orbit/zh/> (简体中文)
 
 ## Information architecture
 
-site/index.html keeps the launch path in this order:
+`site/index.html` (English) and `site/zh/index.html` (简体中文) keep the same launch path and section IDs in this
+order. Every page has an explicit 中文 / English switch; the Chinese page labels repository documentation links as
+英文 rather than implying that those linked documents have been translated.
 
 1. First screen — **Orbit — Agent Mission Control**, the category line, the core promise, Quick Start CTA, and
    a 90-second demo CTA.
@@ -21,7 +24,8 @@ site/index.html keeps the launch path in this order:
 7. Community/contribution — Discussions, Issues, contribution guide, and private vulnerability reporting.
 8. Version and roadmap — pre-1.0 release language, tagged-release guidance, and direction without date promises.
 
-The page links back to the repository for detail; it does not mirror the complete docs/ directory.
+The pages link back to the repository for detail; they do not mirror the complete docs/ directory. The two 404 pages
+(`site/404.html` and `site/zh/404.html`) carry the same language switch, recovery links, and accessible text.
 
 ## Build and deploy contract
 
@@ -31,9 +35,11 @@ The site has no package or bundler dependency:
 ./scripts/build-pages.sh --output dist/pages
 ~~~
 
-The script copies site/, creates an empty .nojekyll, checks required copy/assets, validates local links and
-fragments, and writes dist/pages/build-report.md. A failed command emits a GitHub ::error annotation, appends
-the command and line to GITHUB_STEP_SUMMARY, and writes dist/pages-build-diagnostics.txt for the workflow artifact.
+The script copies site/, creates an empty .nojekyll, checks the four HTML entry points (`index.html`, `404.html`,
+`zh/index.html`, and `zh/404.html`), validates language metadata, language switches, equivalent section IDs, local
+links and fragments, and writes dist/pages/build-report.md. A failed command emits a GitHub ::error annotation,
+appends the command and line to GITHUB_STEP_SUMMARY, and writes dist/pages-build-diagnostics.txt for the workflow
+artifact.
 
 .github/workflows/pages.yml runs on main and supports workflow_dispatch. It publishes the generated tree to
 the existing gh-pages branch with peaceiris/actions-gh-pages@v4 and keep_files: true. The existing release
@@ -41,9 +47,10 @@ workflow publishes Sparkle's appcast.xml to that same branch; keep_files is a re
 Do not replace it with a deployment that prunes the branch or switches Pages to an artifact-only source
 without carrying the appcast forward.
 
-The deployment summary records both URLs:
+The deployment summary records the public entry points and the preserved release feed:
 
 - <https://jianghailong-xy.github.io/orbit/>
+- <https://jianghailong-xy.github.io/orbit/zh/>
 - <https://jianghailong-xy.github.io/orbit/appcast.xml>
 
 ## Brand and media interface
@@ -89,12 +96,22 @@ test -f /tmp/orbit-pages/.nojekyll
 test -f /tmp/orbit-pages/404.html
 ~~~
 
-After a successful Pages workflow, check from both a desktop and a narrow/mobile viewport:
+After a successful Pages workflow, check both language URLs from a desktop and a narrow/mobile viewport:
 
-- first screen, nav anchors, Quick Start and repository links;
-- all external links and the branded 404 route;
+- first screen, nav anchors, language switch, Quick Start and repository links;
+- all external links and both branded 404 routes (including a deep-link refresh);
+- `<html lang>`, title/description, canonical, hreflang, social metadata, image alt text, and equivalent section IDs;
 - the exact pre-1.0/security-boundary wording;
 - curl -I https://jianghailong-xy.github.io/orbit/ returns 200;
+- curl -I https://jianghailong-xy.github.io/orbit/zh/ returns 200;
 - curl -I https://jianghailong-xy.github.io/orbit/appcast.xml returns 200 and application/xml.
 
 A release must continue to seed the current appcast before generate_appcast and publish with keep_files: true.
+
+## Reused onboarding evidence
+
+The public copy links to the dated [clean-host install and runner smoke test](evidence/clean-install-2026-09-29.md)
+instead of claiming an unmeasured setup time. That record establishes Compose boot, installer/register, runner
+heartbeat online, and workspace/worktree checks. It explicitly does **not** establish a successful first real agent
+task: the provider weekly quota blocked that step. The README task record likewise treats “runner online” and “first
+task completed” as separate funnel milestones; a later evidence revision must not collapse them.

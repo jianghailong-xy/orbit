@@ -6,7 +6,10 @@ import { readWaitingOwnerConfirmations } from '../tasks/owner-confirmation-read'
 import { CRITERIA_WEAKENING_EFFECT_CLASS } from './criteria-weakening-intent';
 import { stillUnanswered } from './criteria-pending-decisions';
 import { ownerItemKind } from './project-open-item';
-import { projectsAwaitingStandardSetConfirmation } from './standard-set-awaiting-confirmation';
+import {
+  projectsAwaitingStandardSetConfirmation,
+  projectsReadyToStart,
+} from './standard-set-awaiting-confirmation';
 
 /**
  * How many decisions only the ACCOUNT OWNER can take are waiting on each of their conversations,
@@ -79,8 +82,17 @@ import { projectsAwaitingStandardSetConfirmation } from './standard-set-awaiting
  * reason `PROJECT_DECISION` does: that is where the card is drawn. An item still with the
  * coordinator is not counted at all — somebody is already on it, and a badge about it would be
  * telling the owner to go do work that is being done (owner decision 10).
+ *
+ * `START_REQUEST` is a project that has not been started and whose coordinator has asked to start
+ * it (`project_request_start`): the "Start this project?" card in the coordinator conversation. Kept
+ * apart from `PROJECT_DECISION` because the row says it in words of its own — "Ready to start" — and
+ * apart from the four owner items because it is none of them: nothing escalated, and nothing pushes.
  */
-export type OwnerDecisionKind = 'PROJECT_DECISION' | 'OWNER_CONFIRMATION' | 'OWNER_ITEM';
+export type OwnerDecisionKind =
+  | 'PROJECT_DECISION'
+  | 'OWNER_CONFIRMATION'
+  | 'OWNER_ITEM'
+  | 'START_REQUEST';
 
 export interface OwnerDecisionSignal {
   /** The conversation to open: the project's bound coordinator, or the waiting task's own session.
@@ -191,17 +203,34 @@ async function readProjectDecisionSignals(
     byProject.set(projectId, (byProject.get(projectId) ?? 0) + 1);
   }
 
+  // And the start card's question, for a project nobody has started yet: one per project, on its
+  // own kind, because the row names it in words of its own.
+  const readyToStart = await projectsReadyToStart(
+    tx,
+    ownerId,
+    coordinated.map((project) => project.id),
+  );
+
   const signals: OwnerDecisionSignal[] = [];
   for (const project of coordinated) {
     const count = byProject.get(project.id) ?? 0;
     // The `!` the filter above already proved: a project reached by `coordinatorSessionId: in/not
     // null` has one. Spelled as a guard so the claim is checked rather than asserted.
-    if (count > 0 && project.coordinatorSessionId != null) {
+    if (project.coordinatorSessionId == null) continue;
+    if (count > 0) {
       signals.push({
         sessionId: project.coordinatorSessionId,
         projectId: project.id,
         count,
         kind: 'PROJECT_DECISION',
+      });
+    }
+    if (readyToStart.has(project.id)) {
+      signals.push({
+        sessionId: project.coordinatorSessionId,
+        projectId: project.id,
+        count: 1,
+        kind: 'START_REQUEST',
       });
     }
   }
@@ -362,7 +391,7 @@ export type { SessionWaitingKind };
 
 /**
  * What a session row's `pendingApprovals` is counting, when one word says it better than
- * "approval". Two of the three kinds do:
+ * "approval". Three of the four kinds do:
  *
  *   * `OWNER_CONFIRMATION` — everything counted is an OWNER_CONFIRMED task's run waiting for its
  *     owner to confirm it done, and the row says so in the confirmation card's words. Nobody is
@@ -373,6 +402,9 @@ export type { SessionWaitingKind };
  *     list and the card in the conversation use. On a switched-off coordinator this is the row that
  *     matters most: the item is the owner's precisely because nobody else will take it, so
  *     "Waiting for approval" described the one thing that was certainly not happening.
+ *   * `START_REQUEST` — everything counted is a project waiting to be started on its coordinator's
+ *     request, and the row says "Ready to start": the card it opens is "Start this project?", and
+ *     nothing about it is an approval.
  *
  * Null otherwise — a blocked tool call on the same row, which holds a turn open and is the more
  * urgent thing to say; a kind with no words of its own (`PROJECT_DECISION` really is a proposal
@@ -386,5 +418,7 @@ export function sessionWaitingKind(
   if (approvals > 0 || !decisions || decisions.count === 0) return null;
   if (decisions.kinds.size !== 1) return null;
   const [only] = decisions.kinds;
-  return only === 'OWNER_CONFIRMATION' || only === 'OWNER_ITEM' ? only : null;
+  return only === 'OWNER_CONFIRMATION' || only === 'OWNER_ITEM' || only === 'START_REQUEST'
+    ? only
+    : null;
 }
