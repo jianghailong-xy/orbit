@@ -89,6 +89,17 @@ public enum NavNode: Hashable, Sendable {
     case wikiBrowse
     /// Every article A to Z, pushed from the Contents sheet.
     case wikiIndex
+    /// One document of the plan the owner confirmed (criterion 10 revised, mock 24), pushed from the
+    /// Contents sheet, Browse by category or the A–Z index — at one of its sections when `section` is a key.
+    case wikiDoc(slug: String, section: String?)
+    /// The plan (mock 22): the version shown — nil for the one the page shows first — its job, the gate's
+    /// report, the changes proposed and its documents. Pushed from the Contents sheet's Plan row and the
+    /// home's plan banner.
+    case wikiPlan(version: Int?)
+    /// A document of a plan version, a page of its own on a phone (mock 22 ③).
+    case wikiPlanDoc(slug: String, version: Int?)
+    /// One of its sections — what it covers and where its material comes from (mock 22 ④⑤): 0-based.
+    case wikiPlanSection(slug: String, index: Int, version: Int?)
 }
 
 /// Which section is showing, and every section's stack.
@@ -243,6 +254,22 @@ public struct NavState: Equatable, Sendable {
         return false
     }
 
+    /// The document the Wiki pane shows, when a document is on top: its slug and the section asked for.
+    public var selectedWikiDoc: WikiDocAddress? {
+        guard case .wikiDoc(let slug, let section) = path.last else { return nil }
+        return WikiDocAddress(slug: slug, section: section)
+    }
+
+    /// The plan page the Wiki pane shows, when one is on top: the version, and the document and section asked for.
+    public var selectedWikiPlan: WikiPlanAddress? {
+        switch path.last {
+        case .wikiPlan(let version)?: return WikiPlanAddress(version: version, doc: nil, section: nil)
+        case .wikiPlanDoc(let slug, let version)?: return WikiPlanAddress(version: version, doc: slug, section: nil)
+        case .wikiPlanSection(let slug, let index, let version)?: return WikiPlanAddress(version: version, doc: slug, section: index)
+        default: return nil
+        }
+    }
+
     /// `AppModel.selectedUserID` — the account the Admin pane shows.
     public var selectedUserID: String? {
         guard case .userDetail(let id) = path.last else { return nil }
@@ -364,5 +391,30 @@ public struct WikiArticleAddress: Hashable, Sendable {
     public init(topic: String, part: Int) {
         self.topic = topic
         self.part = part
+    }
+}
+
+/// A document of the confirmed plan, by its slug, opened at one of its sections when `section` is a key.
+public struct WikiDocAddress: Hashable, Sendable {
+    public let slug: String
+    public let section: String?
+
+    public init(slug: String, section: String? = nil) {
+        self.slug = slug
+        self.section = section
+    }
+}
+
+/// A page of the plan: the version (nil for the one shown first), a document of it, a section of that.
+public struct WikiPlanAddress: Hashable, Sendable {
+    public let version: Int?
+    public let doc: String?
+    /// 0-based.
+    public let section: Int?
+
+    public init(version: Int? = nil, doc: String? = nil, section: Int? = nil) {
+        self.version = version
+        self.doc = doc
+        self.section = section
     }
 }

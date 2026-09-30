@@ -284,6 +284,38 @@ export function App() {
               }
             />
             <Route
+              path="wiki/:space/d/:doc"
+              element={
+                <DocView>
+                  <WikiPage route="doc" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/plan"
+              element={
+                <DocView>
+                  <WikiPage route="plan" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/plan/d/:doc"
+              element={
+                <DocView>
+                  <WikiPage route="planDoc" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/plan/d/:doc/:section"
+              element={
+                <DocView>
+                  <WikiPage route="planSection" />
+                </DocView>
+              }
+            />
+            <Route
               path="wiki/:space/browse"
               element={
                 <DocView>
