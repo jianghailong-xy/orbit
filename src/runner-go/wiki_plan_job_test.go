@@ -705,6 +705,71 @@ func TestWikiPlanResumesAtTheShaItsEarlierRunDraftedFrom(t *testing.T) {
 	}
 }
 
+// ── The door's transient failures ───────────────────────────────────────────────────────────────
+
+// A plan job's calls go through Transport.doWiki: a read, the round a run is on and the run's end are sent again
+// after a 502, a reset stream or an answer cut on its way back — the end may land twice, the server answering the
+// same end with what it kept — and a draft is sent once.
+func TestWikiPlanJobCallsWaitOutTheDoorsTransientFailures(t *testing.T) {
+	f := newPlanFixture(t)
+	door := newFakePlanDoor(t, f)
+	vllm := newFakeVLLM(t, (&planModel{}).answer)
+	planSession(t, door.URL, vllm)
+	fakeVerifyClaude(t)
+	clock := withFakeWikiRetry(t)
+	flaky := withFlakyWikiTransport(t, map[string][]wikiFault{
+		"GET plan/job":           {{status: http.StatusBadGateway}},
+		"GET plan/materials":     {{lost: wikiStreamReset}},
+		"POST plan/job/progress": {{lost: wikiAnswerCut}},
+		"POST plan/job/finish":   {{lost: wikiAnswerCut}},
+		"GET plan/check":         {{status: http.StatusBadGateway}},
+	})
+
+	summary, printed, err := runPlanCLI(t, t.TempDir(), "draft", "--target", "3-3")
+	if err != nil || summary.Outcome != "succeeded" {
+		t.Fatalf("a run whose calls failed on their way was not carried through: %v\n%s", err, printed)
+	}
+	for route, want := range map[string]int{"GET plan/job": 2, "GET plan/materials": 2, "POST plan/job/progress": 2, "POST plan/job/finish": 2, "POST plan/drafts": 1} {
+		if got := flaky.sent(route); got != want {
+			t.Errorf("%s was sent %d times, want %d", route, got, want)
+		}
+	}
+	// The cut answers were the second landings' only loss: both sends of the end reached the door.
+	if ends := door.of(http.MethodPost, "plan/job/finish"); len(ends) != 2 || !reflect.DeepEqual(ends[0].body, ends[1].body) {
+		t.Errorf("the end landed %d times, or differently", len(ends))
+	}
+	door.check = func(job string) (int, string) {
+		return http.StatusOK, `{"spaceId":"space-1","jobId":"job-1","kind":"draft","outcome":"succeeded","version":1,"ok":true,"problems":[]}`
+	}
+	if _, err := NewTransport(door.URL, "runner-token").checkWikiPlanJob("space-1", "job-1"); err != nil || flaky.sent("GET plan/check") != 2 {
+		t.Errorf("the check after a 502: %v, sent %d times", err, flaky.sent("GET plan/check"))
+	}
+	if lines := clock.lines(); len(lines) != 5 {
+		t.Errorf("each retry is one line on stderr: %q", lines)
+	}
+}
+
+func TestWikiPlanSendsADraftOnce(t *testing.T) {
+	f := newPlanFixture(t)
+	door := newFakePlanDoor(t, f)
+	vllm := newFakeVLLM(t, (&planModel{}).answer)
+	planSession(t, door.URL, vllm)
+	fakeVerifyClaude(t)
+	withFakeWikiRetry(t)
+	flaky := withFlakyWikiTransport(t, map[string][]wikiFault{"POST plan/drafts": {{lost: wikiAnswerCut}}})
+
+	summary, printed, err := runPlanCLI(t, t.TempDir(), "draft", "--target", "3-3")
+	if err == nil || summary.Outcome != "failed" {
+		t.Fatalf("a draft whose answer was lost was taken as stored: %s", printed)
+	}
+	if n := flaky.sent("POST plan/drafts"); n != 1 {
+		t.Errorf("the draft was sent %d times: a second landing is refused WIKI_PLAN_STALE, so it goes once", n)
+	}
+	if end := planFinish(t, door); end["outcome"] != "failed" || !strings.Contains(fmt.Sprint(end["error"]), "EOF") {
+		t.Errorf("the job's end: %v", end)
+	}
+}
+
 // ── References, and a round with the gate's errors ──────────────────────────────────────────────
 
 func TestWikiPlanChecksRepositoryAndCrossReferencesAndRedoesWithTheErrors(t *testing.T) {

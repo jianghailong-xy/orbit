@@ -1225,7 +1225,8 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
   report?, draft?, attempt? }`；成功时 `version` 必须是本会话存下的本 space 的草稿；报告至多 16,000 字节，草稿至多 1,000,000 字节）、
   `GET …/plan/materials`（owner 的项目及任务数、会话数；本 space 的 workspace 近 90 天的会话标题、月份、是否任务会话、所属项目、
   引擎；条目按 kind 与状态的分布；主题及 active 条目数、最近六条。标题出门前先脱敏）——这四条只对本 space 的维护会话开放；本会话的任务
-  不是作业、或作业已结束时 `WIKI_PLAN_NO_JOB`（409）。`GET …/plan/check?jobId=<id>`：任务的验收命令，无会话头时认本 owner 的 runner。
+  不是作业、或作业已结束时 `WIKI_PLAN_NO_JOB`（409）——只有一种例外：作业只结束一次，同一个运行把同样的结局再报一遍（第一次送到了、回答在
+  路上丢了，runner 会重发），答它记下的、什么也不改；别的结局照样 409。`GET …/plan/check?jobId=<id>`：任务的验收命令，无会话头时认本 owner 的 runner。
 
 ### 21.8 起草作业怎么跑（`orbit wiki plan draft / revise / check`）
 
@@ -1240,6 +1241,8 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
 - **修订**：模型先出新目录（每篇写明由上一版哪些篇组成，以及移到给 agent 的大类的节），只重写合并或新增的篇；只由上一版一篇组成的，
   沿用它的大纲、去掉移出的节。受保护的篇原样带过去。
 - **结束**：`POST …/plan/job/finish`；`orbit wiki plan check` 读作业：结束且成功、版本还在，才退出 0。
+- **门的瞬时故障**：这些调用和 wiki 的其他调用一样走 `Transport.doWiki`：遇到网关 502/503/504、连接或流被重置、回答在路上丢了，
+  读、`progress` 与 `finish` 再发（结局可以落两次，见 21.7），草稿只发一次——它第二次落下会因底版不再是最新而被 `WIKI_PLAN_STALE` 拒绝。
 
 ## 22. 文档：按确认的 plan 逐节写，脚注引一手原文（判据 9 第 2 版）
 

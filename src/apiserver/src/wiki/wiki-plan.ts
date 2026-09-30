@@ -1611,7 +1611,15 @@ export class WikiPlans {
   async jobFinish(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiPlanJob> {
     await this.assertMaintainer(principal, spaceId);
     const row = await this.jobOfRun(principal, spaceId);
-    if (row.state !== 'made') throw jobEnded();
+    if (row.state !== 'made') {
+      // The same end said again by the run that said it — its first send landed and the answer was lost on
+      // the way back (the runner sends it again, `Transport.doWiki`) — is answered with what was kept. Any
+      // other word to an ended job is refused.
+      if (row.sessionId === principal.sessionId && sameJobEnd(row, body)) {
+        return (await wikiPlanJobById(this.prisma, principal.ownerId, row.id))!;
+      }
+      throw jobEnded();
+    }
     const end = jobEndOf(body);
     if (end.outcome === 'succeeded') {
       const stored = await this.prisma.wikiPlan.findFirst({
@@ -1663,6 +1671,16 @@ export class WikiPlans {
 /** A malformed request of the plan's jobs. */
 function schemaRefusal(message: string): WikiRefusalError {
   return new WikiRefusalError({ code: 'WIKI_SCHEMA', message });
+}
+
+/** Whether body says the end an ended job has: the same outcome, and for a success the same version. */
+function sameJobEnd(row: WikiPlanJobRow, body: unknown): boolean {
+  try {
+    const end = jobEndOf(body);
+    return end.outcome === row.outcome && (end.version ?? null) === (row.version ?? null);
+  } catch {
+    return false;
+  }
 }
 
 /** A job that ended already is told so, whichever way it ended. */

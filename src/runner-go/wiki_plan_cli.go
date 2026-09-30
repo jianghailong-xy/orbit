@@ -176,7 +176,7 @@ func (t *Transport) wikiPlanJobContext(sessionID, spaceID string) (json.RawMessa
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodGet, wikiPlanPath(spaceID)+"/job", nil, &out, wikiPlanTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodGet, wikiPlanPath(spaceID)+"/job", nil, &out, wikiPlanTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
@@ -185,7 +185,8 @@ func (t *Transport) progressWikiPlanJob(sessionID, spaceID string, body interfac
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodPost, wikiPlanPath(spaceID)+"/job/progress", body, &out, wikiPlanTimeout, sessionHeader(sessionID))
+	// The round the run is on, said again, changes nothing: it may land twice.
+	_, err := t.doWiki(http.MethodPost, wikiPlanPath(spaceID)+"/job/progress", body, &out, wikiPlanTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
@@ -194,7 +195,8 @@ func (t *Transport) finishWikiPlanJob(sessionID, spaceID string, body interface{
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodPost, wikiPlanPath(spaceID)+"/job/finish", body, &out, wikiPlanTimeout, sessionHeader(sessionID))
+	// The job ends once; the same end said again by its run is answered with what was kept: it may land twice.
+	_, err := t.doWiki(http.MethodPost, wikiPlanPath(spaceID)+"/job/finish", body, &out, wikiPlanTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
@@ -203,7 +205,7 @@ func (t *Transport) wikiPlanMaterials(sessionID, spaceID string) (json.RawMessag
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodGet, wikiPlanPath(spaceID)+"/materials", nil, &out, wikiPlanReadTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodGet, wikiPlanPath(spaceID)+"/materials", nil, &out, wikiPlanReadTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
@@ -213,7 +215,7 @@ func (t *Transport) checkWikiPlanJob(spaceID, jobID string) (json.RawMessage, er
 		return nil, err
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodGet, wikiPlanPath(spaceID)+"/check?jobId="+url.QueryEscape(jobID), nil, &out, wikiPlanTimeout, nil)
+	_, err := t.doWiki(http.MethodGet, wikiPlanPath(spaceID)+"/check?jobId="+url.QueryEscape(jobID), nil, &out, wikiPlanTimeout, nil, true)
 	return out, err
 }
 

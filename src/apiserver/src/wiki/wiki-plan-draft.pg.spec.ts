@@ -780,8 +780,12 @@ test('a run reports its rounds and how it ended; the check passes only for a dra
   checked = await check();
   assert.equal(checked.body.ok, false);
   assert.match(checked.body.problems.join(' '), /ended failed.*2 errors/u);
-  // Ended once: a second end, and a later round, are refused.
-  expectRefusal(await call(h, maintainer, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, { outcome: 'failed' }), 409, 'WIKI_PLAN_NO_JOB', 'a second end');
+  // Ended once. The same end said again — the runner sends it again when the answer to its first send was
+  // lost — is answered with what was kept, and changes none of it; another end, and a later round, are refused.
+  const again = await call(h, maintainer, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, { outcome: 'failed' });
+  expectStatus(again, 200, 'the same end again');
+  assert.deepEqual([again.body.state, again.body.attempt, again.body.errors, again.body.draft.docs.length], ['failed', 3, errors, 40]);
+  expectRefusal(await call(h, maintainer, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, { outcome: 'succeeded', version: 1 }), 409, 'WIKI_PLAN_NO_JOB', 'another end');
   expectRefusal(await call(h, maintainer, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/progress`, { attempt: 1 }), 409, 'WIKI_PLAN_NO_JOB', 'a round after the end');
 
   // The next job succeeds: it drafts, the gate lets it through, and the check passes.
