@@ -73,6 +73,44 @@ final class ProjectStartedCopyParityTests: XCTestCase {
         try expect(web, ">\(ProjectStartedCard.undelivered)<")
     }
 
+    /// The line of settings a start recorded, under the project's title: both cards draw it from
+    /// the card's own settings, mark what the owner changed from the coordinator's suggestion, and
+    /// say that mark aloud in the same words. The words of the line itself are `lib/projectStart.ts`'s
+    /// (`StartProjectCardCopyParityTests`); what is held here is that the Project started card
+    /// carries it at both ends.
+    func testTheSettingsLineIsDrawnFromTheCardsOwnSettingsAtBothEnds() throws {
+        let web = try webSource()
+        try expect(web, "settings={card.settings}")
+        try expect(web, "differs={card.differsFromRequest ?? []}")
+        // The summary the web card draws says a changed setting aloud as this end's spoken line does.
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        var summary: String?
+        for _ in 0..<12 {
+            let url = dir.appendingPathComponent("src/web/src/components/RunSettingsSummary.tsx")
+            if FileManager.default.fileExists(atPath: url.path) {
+                summary = try String(contentsOf: url, encoding: .utf8)
+                break
+            }
+            dir = dir.deletingLastPathComponent()
+        }
+        let words = try XCTUnwrap(summary, "RunSettingsSummary.tsx was not found; if it moved, move "
+                                      + "this check with it rather than deleting it")
+        XCTAssertTrue(words.contains("{` (${RUN_SETTING_DIFFERS})`}"),
+                      "the web no longer says a changed setting aloud as `(Not what the coordinator "
+                          + "suggested)`")
+        XCTAssertTrue(words.contains("{index > 0 ? ' · ' : null}"),
+                      "the web no longer separates the settings with ' · '")
+
+        // And this end draws the same parts from the same payload.
+        let card = ProjectStarted(by: .confirmation, projectId: "p", projectTitle: "t",
+                                  settings: ProjectStartSettings(line: .main, automatic: true,
+                                                                 maxConcurrentTasks: 3),
+                                  differsFromRequest: [.line])
+        XCTAssertEqual(card.settings.map { RunSettings.spokenLine($0, differs: card.differsFromRequest) },
+                       "\(RunSettings.lineMain) (\(RunSettings.settingDiffers)) · Automatic on · 3 tasks at a "
+                           + "time · \(RunSettings.summaryNoMergeCheck)")
+    }
+
     func testTheSentencesWithANumberInThemMatchWhole() throws {
         let web = try webSource()
         let sentinel = 23
