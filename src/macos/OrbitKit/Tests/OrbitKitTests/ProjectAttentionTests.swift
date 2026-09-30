@@ -415,6 +415,97 @@ final class ProjectAttentionTests: XCTestCase {
                        ["Escalated", "Merge", "Question", "Paused", "Blocker"])
     }
 
+    // MARK: a coordinator asking to start the project
+
+    /// Mock board3 ①: a coordinator asking its owner to start the project is the fifth thing a row
+    /// can be waiting on the owner for — in the same tier as the four, in the words the session row
+    /// uses, with how long it has waited. A project nobody has asked about is waiting on nobody.
+    private func asking(_ waited: TimeInterval, ownerItems: [ProjectListOwnerItem] = [],
+                        userBlockers: Int = 0) -> ProjectListAttention {
+        ProjectListAttention(userBlockers: userBlockers, ownerItems: ownerItems,
+                             startRequest: ProjectListStartRequest(waitingSince: at(waited)))
+    }
+
+    func testAStartRequestIsNeedsYouReadyToStartWithHowLongItHasWaited() {
+        let ready = project(ready: 1, blocked: 4, lastActivityAt: .some(at(2 * Self.minute)),
+                            attention: asking(2 * Self.minute))
+        XCTAssertEqual(ProjectAttention.readyToStartSays, "Needs you · Ready to start")
+        XCTAssertEqual(reason(ready), .readyToStart)
+        XCTAssertEqual(section(ready), .attention)
+        XCTAssertEqual(chip(ready), ProjectAttentionChip(tone: .warning, text: "Needs you · Ready to start · 2m"))
+    }
+
+    func testAProjectNobodyAskedToStartStaysWhereItsWorkPutsIt() {
+        let quiet = project(ready: 1, blocked: 4, lastActivityAt: .some(at(2 * Self.minute)),
+                            attention: ProjectListAttention())
+        XCTAssertNil(reason(quiet))
+        XCTAssertEqual(section(quiet), .ready)
+        XCTAssertNil(chip(quiet))
+    }
+
+    func testAClosedProjectIsAskedNothingWhateverItCarries() {
+        let closed = project(status: .done, done: 3, attention: asking(Self.hour))
+        XCTAssertNil(reason(closed))
+        XCTAssertEqual(section(closed), .completed)
+        XCTAssertEqual(ProjectAttention.needsYouItemCount(closed), 0)
+    }
+
+    func testAStartRequestIsNamedOverOneOfTheFourOnlyWhenItHasWaitedLonger() {
+        let question = ownerItem(.coordinatorQuestion, 1, waited: 35 * Self.minute)
+        let olderStart = project(attention: asking(3 * Self.hour, ownerItems: [question]))
+        let olderQuestion = project(attention: asking(10 * Self.minute, ownerItems: [question]))
+        XCTAssertEqual(chip(olderStart)?.text, "Needs you · Ready to start · 3h")
+        XCTAssertEqual(chip(olderQuestion)?.text, "Needs you · 1 question from coordinator · 35m")
+    }
+
+    func testAStartRequestSitsInTheOwnerTierByItsWaitAboveAUserBlocker() {
+        let blocker = project(title: "Blocker", attention: ProjectListAttention(
+            userBlockers: 1, maxSeverity: .critical, attentionSinceAt: at(9 * Self.quiet)))
+        let merge = project(title: "Merge", attention: ProjectListAttention(
+            ownerItems: [ownerItem(.promotionApproval, 1, waited: 2 * Self.hour)]))
+        let start = project(title: "Start", attention: asking(35 * Self.minute))
+        let paused = project(title: "Paused", attention: ProjectListAttention(
+            ownerItems: [ownerItem(.fusePaused, 1, waited: 20 * Self.minute)]))
+        XCTAssertEqual(ProjectAttention.ordered([blocker, paused, start, merge], in: .attention, now: Self.now)
+                        .map(\.title), ["Merge", "Start", "Paused", "Blocker"])
+    }
+
+    func testAStartRequestOutranksFreshRunningWorkAsTheFourDo() {
+        let busy = project(running: 2, lastActivityAt: .some(at(Self.minute)), attention: asking(5 * Self.minute))
+        XCTAssertEqual(section(busy), .attention)
+    }
+
+    /// The drawer counts it as one more thing waiting on the reader, and orders it by its wait as
+    /// it orders the four — web's `projectNeedsYouCount` and `sidebarProjects`.
+    func testTheDrawerCountsAStartRequestAsOneMoreThingWaitingOnYou() {
+        let start = project(title: "Start", attention: asking(2 * Self.hour))
+        let merge = project(title: "Merge", attention: ProjectListAttention(
+            ownerItems: [ownerItem(.promotionApproval, 1, waited: Self.hour)]))
+        let both = project(title: "Both", attention: asking(Self.minute, ownerItems: [
+            ownerItem(.coordinatorQuestion, 1, waited: Self.minute)]))
+        let recent = project(title: "Recent", running: 1, lastActivityAt: .some(at(Self.minute)))
+
+        XCTAssertEqual(ProjectAttention.drawerMark(start), .needsYou(1))
+        XCTAssertEqual(ProjectAttention.drawerMark(both), .needsYou(2))
+        XCTAssertEqual(ProjectAttention.drawerProjects([recent, both, merge, start]).map(\.title),
+                       ["Start", "Merge", "Both", "Recent"],
+                       "longest wait first, the start request's wait counted as the four's are")
+        XCTAssertEqual(ProjectAttention.needsYouCount([recent, both, merge, start]), 3)
+        XCTAssertEqual(ProjectAttention.needsYouItemCount(project(status: .done, attention: asking(Self.hour))), 0,
+                       "a closed project asks nothing, whatever it still carries")
+    }
+
+    func testAnIndexFromAServerThatPredatesStartRequestsDecodesWithoutOne() throws {
+        let older = try JSONDecoder().decode(ProjectListAttention.self, from: Data(#"{"userBlockers":0}"#.utf8))
+        XCTAssertNil(older.startRequest)
+        let unreadable = try JSONDecoder().decode(ProjectListAttention.self,
+                                                  from: Data(#"{"startRequest":{"since":1}}"#.utf8))
+        XCTAssertNil(unreadable.startRequest, "a request this build cannot read is a row that names none")
+        let asked = try JSONDecoder().decode(ProjectListAttention.self, from: Data(
+            #"{"ownerItems":[],"startRequest":{"waitingSince":"2026-09-30T02:00:00.000Z"}}"#.utf8))
+        XCTAssertEqual(asked.startRequest, ProjectListStartRequest(waitingSince: "2026-09-30T02:00:00.000Z"))
+    }
+
     // MARK: integration line
 
     func testIntegrationChipNamesTheBranchAndMarksOnlyAProjectBranch() {

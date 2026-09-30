@@ -105,9 +105,9 @@ final class ProjectsWiringTests: XCTestCase {
     func testTheProjectPageDrawsTheWebsSectionsInTheWebsOrder() throws {
         let view = code(try appSource("Views/ProjectsView.swift"))
         let page = try slice(view, from: "private func page(", to: ".projectPageListStyle()")
-        let order = ["openItemsSection(", "overviewSection(", "coordinatorSection(", "goalSection(", "graphSection(",
-                     "blockersSection(", "runQueueSection(", "criteriaSection(", "instructionsSection(",
-                     "tasksSection("]
+        let order = ["openItemsSection(", "overviewSection(", "coordinatorSection(", "runSettingsSection(",
+                     "goalSection(", "graphSection(", "blockersSection(", "runQueueSection(", "criteriaSection(",
+                     "instructionsSection(", "tasksSection("]
         let positions = order.map { page.range(of: $0)?.lowerBound }
         XCTAssertFalse(positions.contains(nil), "the page lost one of \(order)")
         XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),
@@ -115,6 +115,138 @@ final class ProjectsWiringTests: XCTestCase {
         let overview = try slice(view, from: "private func overviewSection(", to: "private func overviewCell(")
         XCTAssertTrue(overview.contains("model.selectedSection = .runners"),
                       "the stalled banner's press goes where an engine signs in")
+    }
+
+    /// A project nobody has started (mock board3 ②) says so in its header, and its Open items lead
+    /// with the start: the coordinator's request — whose Review lands on the card in the coordinator
+    /// conversation, by Answer's own door and origin, rather than a second copy drawn here — or,
+    /// while nobody has asked, the owner's own Start…, which opens that same card over the page.
+    func testANotStartedProjectLeadsItsOpenItemsWithTheStart() throws {
+        let view = code(try appSource("Views/ProjectsView.swift"))
+        XCTAssertTrue(view.contains(
+            "if document.status == .open && document.started == false { return StartProject.notStarted }"),
+                      "the status tag says Not started for an open project nobody has started")
+        let items = try slice(view, from: "private func openItemsSection(", to: "private func startItem(")
+        XCTAssertTrue(items.contains("StartProject.pageRow(status: document.status, started: document.started,"))
+        XCTAssertTrue(items.contains("if let start { startItem(start, store: store, now: now) }"))
+        XCTAssertTrue(items.contains("ProjectPage.openItemsHint(needsYou: needsYou.count + asking,"),
+                      "the request needs you and is counted; the owner's own Start… is not")
+
+        let row = try slice(view, from: "private func startItem(", to: "private func reviewStart(")
+        XCTAssertTrue(row.contains("case .asked(let row):"))
+        XCTAssertTrue(row.contains("StartProject.requestSummary($0.settings)"))
+        XCTAssertTrue(row.contains("reviewStart(store)"))
+        XCTAssertTrue(row.contains("case .own:"))
+        XCTAssertTrue(row.contains("pageSheet = .start"))
+        XCTAssertFalse(row.contains("StartProjectCard("),
+                       "a request is answered on its card in the conversation; the page draws no second copy")
+
+        // Review is Answer's door with the start card as where it lands — one door, one origin.
+        let review = try slice(view, from: "private func reviewStart(", to: "\n    }")
+        XCTAssertTrue(review.contains("openCoordinator(store, focus: nil, startCard: true)"))
+        let open = try slice(view, from: "private func openCoordinator(", to: "private func replaceCoordinator(")
+        XCTAssertTrue(open.contains("focus: item, focusStartCard: startCard)"))
+        let app = code(try appSource("AppModel.swift"))
+        let door = try slice(app, from: "func openProjectCoordinator(", to: "\n    }\n")
+        XCTAssertTrue(door.contains(
+            "if focusStartCard { consoleRegistry?.model(for: id, agentID: agent).focusStartCard() }"))
+        XCTAssertEqual(door.components(separatedBy: "origin: ").count - 1, 1,
+                       "Review opens the conversation through Answer's entrance and its origin, not one of its own")
+        let console = code(try appSource("ConsoleModel.swift"))
+        let focus = try slice(console, from: "func focusStartCard() {", to: "\n    }")
+        XCTAssertTrue(focus.contains("pendingStartCard = true"))
+        XCTAssertTrue(focus.contains("await refreshRulerQuestions(force: true)"),
+                      "spent by the read, like an owner item's press: the console is not on screen yet")
+        let spend = try slice(console, from: "private func scrollToPendingOwnerItem() {",
+                              to: "guard let item = pendingOwnerItem")
+        XCTAssertTrue(spend.contains("if case .startProject = $0.kind { return true }"))
+        XCTAssertTrue(spend.contains("requestScroll(to: card.id)"))
+
+        // Start… opens the same card, set by the default rule, saying nothing a coordinator said.
+        let sheet = try slice(view, from: "private struct OwnerStartProjectSheet: View {",
+                              to: "private struct MergeCheckEditor: View {")
+        XCTAssertTrue(sheet.contains("StartProjectCard("))
+        XCTAssertTrue(sheet.contains("askedAt: nil,"))
+        XCTAssertTrue(sheet.contains("StartProject.defaultSettings(view: store.integration,"))
+        XCTAssertTrue(sheet.contains("StartProject.ownerRequest(settings: settings,"))
+        XCTAssertTrue(sheet.contains("StartProject.body(request: request, draft: draft,"))
+        XCTAssertTrue(sheet.contains("requestId: nil"))
+        XCTAssertFalse(sheet.contains("onChatAbout"), "there is no conversation to talk in over the page")
+        let cards = code(try appSource("Views/ApprovalCards.swift"))
+        let card = try slice(cards, from: "struct StartProjectCard: View {",
+                             to: "private struct CriteriaChangeCardView: View")
+        XCTAssertTrue(card.contains("aside: asked ? StartProject.suggestedByCoordinator : nil)"))
+        XCTAssertTrue(card.contains("if asked {"), "Orbit checked the plan only where a ready check ran")
+        XCTAssertTrue(card.contains("if let onChatAbout { chatButton(onChatAbout) }"))
+        let conversation = try slice(cards, from: "private struct StartProjectCardView: View {",
+                                     to: "struct StartProjectCard: View {")
+        XCTAssertTrue(conversation.contains("StartProjectCard("),
+                      "the conversation's card and the page's are one card")
+    }
+
+    /// How it runs (mock board3 ③): once the project is started, one block holds every setting the
+    /// start card set — Automatic among them, gone from the coordinator card — each written as it is
+    /// changed at the door that owns it, and Pause project beside them.
+    func testHowItRunsIsOneBlockAndAutomaticLeftTheCoordinatorCard() throws {
+        let view = code(try appSource("Views/ProjectsView.swift"))
+        let coordinator = try slice(view, from: "private func coordinatorSection(", to: "private func color(")
+        XCTAssertFalse(coordinator.contains("Toggle("), "Automatic is How it runs', not the coordinator card's")
+        XCTAssertFalse(coordinator.contains("Automatic"))
+
+        let block = try slice(view, from: "private func runSettingsSection(", to: "private func lineSetting(")
+        XCTAssertTrue(block.contains("if RunSettings.shown(started: document.started) {"))
+        XCTAssertTrue(block.contains("sectionHeader(StartProject.howItRuns, detail: RunSettings.appliesFromNextTask)"))
+        XCTAssertTrue(block.contains("Text(RunSettings.notLoaded)"))
+        let order = ["lineSetting(", "automaticSetting(", "atMostSetting(", "mergeCheckSetting(",
+                     "escalationSetting(", "pauseSetting("]
+        let positions = order.map { block.range(of: $0)?.lowerBound }
+        XCTAssertFalse(positions.contains(nil), "the block lost one of \(order)")
+        XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted(),
+                       "the rows read in the web's order (ProjectRunSettingsCopyParityTests holds the web's)")
+
+        let line = try slice(view, from: "private func lineSetting(", to: "private func lineOption(")
+        XCTAssertTrue(line.contains("if view.locked {"))
+        XCTAssertTrue(line.contains("systemImage: \"lock.fill\")"), "a locked line is drawn locked")
+        XCTAssertTrue(line.contains("RunSettings.lineLocked(since:"), "and says why it can no longer move")
+        let option = try slice(view, from: "private func lineOption(", to: "private func automaticSetting(")
+        XCTAssertTrue(option.contains("store.updateIntegration(RunSettings.lineWrite(view, to: line))"))
+        let automatic = try slice(view, from: "private func automaticSetting(", to: "private func atMostSetting(")
+        XCTAssertTrue(automatic.contains("store.updateAuthorization(automatic: next)"))
+        XCTAssertTrue(automatic.contains("RunSettings.automaticHint("))
+        let atMost = try slice(view, from: "private func atMostSetting(", to: "private func mergeCheckSetting(")
+        XCTAssertTrue(atMost.contains("Stepper(RunSettings.atMost"))
+        XCTAssertTrue(atMost.contains("store.stepConcurrency(to: next)"))
+        let check = try slice(view, from: "private func mergeCheckSetting(", to: "private func escalationSetting(")
+        XCTAssertTrue(check.contains("RunSettings.mergeCheckMissing(onLine: view.line,"))
+        XCTAssertTrue(check.contains("pageSheet = .mergeCheck"))
+        // Its editor keeps a refused save on the sheet — the door's words under the command as typed —
+        // and closes only on one that went through: an alert raised on the page while the sheet went
+        // down would be lost with it.
+        let editor = try slice(view, from: "private struct MergeCheckEditor: View {", to: "private extension View {")
+        XCTAssertTrue(editor.contains("if let refused {"))
+        let save = try slice(editor, from: "private func save() {", to: "\n    }\n")
+        XCTAssertTrue(save.contains("if let failure = await store.updateIntegration(write) {"))
+        XCTAssertFalse(try slice(save, from: "if let failure", to: "} else {").contains("dismiss()"),
+                       "a refused save keeps the sheet up")
+        XCTAssertTrue(save.components(separatedBy: "} else {").last?.contains("dismiss()") == true)
+        let escalate = try slice(view, from: "private func escalationSetting(", to: "private func pauseSetting(")
+        XCTAssertTrue(escalate.contains(".pickerStyle(.menu)"))
+        XCTAssertTrue(escalate.contains("RunSettings.escalationOptions(current: seconds)"))
+        XCTAssertTrue(escalate.contains("store.updateIntegration(RunSettings.escalationWrite(view, to: next))"))
+        let pause = try slice(view, from: "private func pauseSetting(", to: "private func goalSection(")
+        XCTAssertTrue(pause.contains("Button(paused ? RunSettings.resume : RunSettings.pause)"))
+        XCTAssertTrue(pause.contains("store.setPaused(!paused)"))
+        XCTAssertTrue(pause.contains("RunSettings.pauseFootnote(pausedAt: document.pausedAt, now: now)"))
+
+        // The writes: the integration door, now written from this client too, and the project's own
+        // with `automatic` — never `coordinatorEnabled`, whose off the server also reads as a pause.
+        let model = code(try appSource("ProjectsModel.swift"))
+        XCTAssertTrue(model.contains("api.updateProjectAuthorization("))
+        XCTAssertTrue(model.contains("UpdateProjectAuthorizationRequest(automatic: automatic,"))
+        XCTAssertTrue(model.contains("api.updateProjectIntegration(self.projectID, body)"))
+        XCTAssertTrue(model.contains("api.pauseProject(self.projectID)"))
+        XCTAssertTrue(model.contains("api.resumeProject(self.projectID)"))
+        XCTAssertFalse(model.contains("coordinatorEnabled:"), "Automatic is written as `automatic`")
     }
 
     func testAnOwnerItemOpensItsCardInTheCoordinatorConversation() throws {

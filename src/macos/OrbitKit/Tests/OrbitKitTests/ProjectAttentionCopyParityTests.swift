@@ -80,6 +80,27 @@ final class ProjectAttentionCopyParityTests: XCTestCase {
                       "the question chip's template drifted")
     }
 
+    /// The fifth thing a row can wait on the owner for: its coordinator asking to start the project.
+    /// Its reason is keyed and ranked the web's way, and it says the web's words — the same two the
+    /// coordinator's session row says (`READY_TO_START` in `lib/projectStart.ts`).
+    func testTheStartRequestChipIsTheWebsOwn() throws {
+        let web = try web()
+        XCTAssertTrue(web.contains("| '\(ProjectAttentionReason.readyToStart.rawValue)'"),
+                      "the web no longer has a reason keyed \(ProjectAttentionReason.readyToStart.rawValue)")
+        XCTAssertTrue(web.contains("'\(ProjectAttentionReason.readyToStart.rawValue)': 1,"),
+                      "the web no longer ranks a start request in the owner tier")
+        XCTAssertTrue(web.contains("export const READY_TO_START_SAYS = `Needs you · ${READY_TO_START}`;"),
+                      "the start request's chip drifted from the web's")
+        XCTAssertEqual(ProjectAttention.readyToStartSays, "Needs you · \(StartProject.readyToStart)")
+        XCTAssertTrue(web.contains("text: [READY_TO_START_SAYS, age].filter(Boolean).join(' · ')"),
+                      "the chip says how long the request has waited, as the four do")
+
+        let start = try String(contentsOf: try repoRoot().appendingPathComponent("src/web/src/lib/projectStart.ts"),
+                               encoding: .utf8)
+        XCTAssertTrue(start.contains("export const READY_TO_START = '\(StartProject.readyToStart)';"),
+                      "READY_TO_START drifted from \(StartProject.readyToStart.debugDescription)")
+    }
+
     func testCoordinatorAndBlockerWordsAreTheWebsOwn() throws {
         let web = try web()
         let phrases: [(String, String)] = [
