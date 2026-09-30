@@ -790,6 +790,15 @@ test('review modes · the five floors hold in Automatic, each with a counter-exa
     const cited = await toolCall(h, recordsOf, 'Bash', 'compiled from the dossier');
     const full = await modeSpace(h, importOwner, 'automatic');
     await activeEntries(h, importOwner.id, full, WIKI_REVIEW_RULES.breakerMinActiveEntries);
+    // A dry run says what the changeset may change, and refuses what is past it as the proposal will.
+    const rehearsal = await h.service.submitChangeset(importer(importOwner.id), full, {
+      rationale: 'twelve adds into a space of a hundred, rehearsed',
+      ops: importOps(12, cited, 'rehearsed'),
+      idempotencyKey: `rehearsed-${randomUUID()}`,
+      dryRun: true,
+    });
+    assert.deepEqual(rehearsal.breaker, { scope: 'changeset', activeAtStart: 100, changed: 0, remaining: 10 });
+    assert.deepEqual((rehearsal.ops as Outcome[]).map((op) => op.waitsFor ?? op.status), [...Array(10).fill('verification'), 'refused', 'refused']);
     const tripped = await h.service.submitChangeset(importer(importOwner.id), full, {
       rationale: 'twelve adds into a space of a hundred',
       ops: importOps(12, cited, 'breaker'),

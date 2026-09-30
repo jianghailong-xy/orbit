@@ -14,7 +14,8 @@
  *   5. a truncated run does not move the cursor — it is one more consecutive failure, and its check fails;
  *   6. the circuit breaker — a maintenance run's changesets are one run to it: what the earlier ones
  *      changed through the mode is spent, so the run stops at ten percent of the active entries it began
- *      with, where the same ops in one changeset each would have passed;
+ *      with, where the same ops in one changeset each would have passed; a dry run says what remains, and
+ *      the proposal is refused exactly past it; a run that held back the rest ends succeeded before it;
  *
  * and beside them: the daily limit holds a due space and says so in its health; the task is made pinned,
  * at once, with `orbit wiki check --expect-cursor` as its one criterion; the run proposes as `maintenance`
@@ -327,17 +328,28 @@ async function runSession(h: Harness, s: Space, taskId: string): Promise<string>
   return session(h, s.owner.id, { workspaceId: s.workspaceId, runnerId: s.machine.id, taskId, status: 'RUNNING', lastTurnAt: minutesAgo(1) });
 }
 
-/** Page the dossiers a run covers, from the cursor up to what its task expects, as `orbit wiki maintain` does. */
-async function pageToExpected(h: Harness, s: Space, sessionId: string, expect: string): Promise<{ token: string; sessions: string[] }> {
+/**
+ * Page the dossiers a run covers, from the cursor up to what its task expects, as `orbit wiki maintain` does:
+ * the last page's token, and where the first page starts.
+ */
+async function pageToExpected(
+  h: Harness,
+  s: Space,
+  sessionId: string,
+  expect: string,
+): Promise<{ token: string; from: string; sessions: string[] }> {
   let after = '';
+  let from = '';
   const sessions: string[] = [];
   for (let n = 0; n < 100; n += 1) {
     const query = new URLSearchParams({ until: expect, limit: '5', ...(after ? { after } : {}) });
     const page = await call(h, { runner: s.machine.token, session: sessionId }, 'GET', `/runner/wiki/spaces/${s.spaceId}/dossiers?${query}`);
     expectStatus(page, 200, 'the run reads a page');
+    if (after) assert.equal(page.body.from, after, 'a page starts where the one before it ended');
+    from ||= page.body.from as string;
     for (const dossier of page.body.dossiers as Array<{ sessionId: string }>) sessions.push(toUuid(dossier.sessionId));
     after = page.body.cursor as string;
-    if (!page.body.more) return { token: after, sessions };
+    if (!page.body.more) return { token: after, from, sessions };
   }
   throw new Error('the pages never ended');
 }
@@ -670,44 +682,73 @@ test('the circuit breaker counts a whole maintenance run: its changesets stop at
   const run = await runSession(h, s, made.taskId);
   const propose = (ops: unknown[], dryRun = false) => call(h, { runner: s.machine.token, session: run }, 'POST',
     `/runner/wiki/spaces/${s.spaceId}/maintenance/changesets`, { ops, rationale: 'what the run learned', idempotencyKey: randomUUID(), dryRun });
+  type Outcome = { status: string; reasons?: Array<{ code: string; message: string }> };
+  const statusesOf = (answer: Answer) => (answer.body.ops as Outcome[]).map((op) => op.status);
+
+  // Before anything is recorded, a dry run says what the run may change: ten of the hundred it began with.
+  const fresh = await propose(adds(1, cite, 'fresh'), true);
+  expectStatus(fresh, 200, 'a dry run answers');
+  assert.deepEqual(fresh.body.breaker, { scope: 'run', activeAtStart: 100, changed: 0, remaining: 10 });
 
   // Eight adds the Tiered mode applies: eight of the hundred.
   const first = await propose(adds(8, cite, 'first'));
   expectStatus(first, 200, 'the first changeset is recorded');
-  assert.deepEqual((first.body.ops as Array<{ status: string }>).map((op) => op.status), Array(8).fill('applied'));
+  assert.deepEqual(statusesOf(first), Array(8).fill('applied'));
   const origin = await h.sql.query<{ origin: string }>(`SELECT "origin" FROM "wiki_changeset" WHERE "id" = $1`, [toUuid(first.body.changesetId)]);
   assert.equal(origin.rows[0]!.origin, 'maintenance', 'a maintenance run proposes as maintenance');
 
   // Five more: the space holds 108 active entries now, and five is nowhere near a changeset's 10% of them —
-  // but the run began with 100, and has changed eight: the ninth and tenth pass, the eleventh trips.
-  const second = await propose(adds(5, cite, 'second'));
+  // but the run began with 100, and has changed eight. The dry run says so, whatever a later attempt of the run
+  // counts for itself: two remain, and it passes the first two of the five and refuses the rest.
+  const five = adds(5, cite, 'second');
+  const rehearsal = await propose(five, true);
+  expectStatus(rehearsal, 200, 'a dry run answers');
+  assert.deepEqual(rehearsal.body.breaker, { scope: 'run', activeAtStart: 100, changed: 8, remaining: 2 });
+  assert.deepEqual(statusesOf(rehearsal), ['applied', 'applied', 'refused', 'refused', 'refused']);
+  // The same five recorded are held to exactly what the dry run said remains: the ninth and tenth pass, the
+  // eleventh trips.
+  const second = await propose(five);
   expectStatus(second, 200, 'what fits is recorded');
-  const statuses = (second.body.ops as Array<{ status: string; reasons?: Array<{ code: string; message: string }> }>);
-  assert.deepEqual(statuses.map((op) => op.status), ['applied', 'applied', 'refused', 'refused', 'refused']);
+  const statuses = second.body.ops as Outcome[];
+  assert.deepEqual(statusesOf(second), statusesOf(rehearsal), 'the proposal refuses what its dry run refused, and nothing else');
+  assert.equal(statuses.filter((op) => op.status === 'applied').length, rehearsal.body.breaker.remaining);
   assert.equal(statuses[2]!.reasons![0]!.code, 'WIKI_QUOTA');
   assert.match(statuses[2]!.reasons![0]!.message, /circuit breaker: this Wiki maintenance run has already changed 10 of the 100 entries/u);
-  // A dry run of the same says the same, before anything is recorded.
+  // Spent: the dry run says nothing remains, and refuses the next.
   const dry = await propose(adds(1, cite, 'dry'), true);
-  assert.equal((dry.body.ops as Array<{ status: string }>)[0]!.status, 'refused', 'the run is spent');
+  assert.deepEqual(dry.body.breaker, { scope: 'run', activeAtStart: 100, changed: 10, remaining: 0 });
+  assert.equal((dry.body.ops as Outcome[])[0]!.status, 'refused', 'the run is spent');
+  assert.equal(await h.prisma.wikiChangeset.count({ where: { sessionId: run } }), 2, 'no dry run recorded anything');
 
-  // The run stops: it ends failed, the cursor stays, and its check fails.
-  const { token } = await pageToExpected(h, s, run, made.expect);
-  const failed = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/finish`, {
-    to: token,
-    outcome: 'failed',
-    error: 'circuit breaker: the run would change more than 10% of the active entries',
-    report: { stoppedAt: 'propose', ops: { proposed: 13, recorded: 10, refused: 3 }, tokens: { input: 1, output: 1, calls: 1 } },
+  // What the run held back is the next run's: it ends succeeded at the start of the page it held back — here the
+  // first, where the cursor stands — so the cursor stays, nothing counts as a failure, and the page is handed out
+  // again, not as processed. Its task's check still says the cursor did not reach what the task expected.
+  const { from, sessions: covered } = await pageToExpected(h, s, run, made.expect);
+  assert.ok(covered.length > 0, 'the run read a dossier');
+  const held = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/finish`, {
+    to: from,
+    outcome: 'succeeded',
+    report: { ops: { proposed: 13, recorded: 10, refused: 0, heldBackByBreaker: 1 }, tokens: { input: 1, output: 1, calls: 1 } },
   });
-  expectStatus(failed, 200, 'a failed run is recorded');
-  assert.equal(failed.body.advanced, false);
+  expectStatus(held, 200, 'a run the breaker held back ends');
+  assert.equal(held.body.advanced, false);
+  assert.equal(held.body.outcome, 'succeeded');
   const cursor = await cursorRow(h, s);
-  assert.equal(cursor.position_at, null, 'a tripped run moves no cursor');
-  assert.equal(cursor.consecutive_failures, 1);
+  assert.equal(cursor.position_at, null, 'the cursor stays before what the run held back');
+  assert.equal(cursor.consecutive_failures, 0);
+  assert.equal(cursor.last_outcome, 'succeeded');
   const row = await h.prisma.wikiMaintenanceRun.findUniqueOrThrow({ where: { taskId: made.taskId } });
-  assert.equal(row.outcome, 'failed');
-  assert.equal(row.opsRefused, 3);
+  assert.equal(row.outcome, 'succeeded');
+  assert.equal(row.opsRefused, 0);
+  const again = await pageToExpected(h, s, run, made.expect);
+  assert.deepEqual(again.sessions, covered, 'the next read hands out the same dossiers');
+  const reread = await call(h, { runner: s.machine.token, session: run }, 'GET',
+    `/runner/wiki/spaces/${s.spaceId}/dossiers?${new URLSearchParams({ until: made.expect, limit: '5' })}`);
+  const handedOut = reread.body.dossiers as Array<{ unchanged: boolean }>;
+  assert.ok(handedOut.length > 0 && handedOut.every((dossier) => !dossier.unchanged), 'none of them as processed');
   const check = await call(h, { runner: s.machine.token }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/check?expect=${encodeURIComponent(made.expect)}`);
   assert.equal(check.body.ok, false);
+  assert.equal(check.body.reached, false);
 
   // Below a hundred active entries there is no breaker: a space's first batch goes in whole.
   const young = await maintainedSpace(h, 'young');
@@ -718,6 +759,9 @@ test('the circuit breaker counts a whole maintenance run: its changesets stop at
   assert.equal(youngTask.made, true);
   if (!youngTask.made) return;
   const youngRun = await runSession(h, young, youngTask.taskId);
+  const unbounded = await call(h, { runner: young.machine.token, session: youngRun }, 'POST', `/runner/wiki/spaces/${young.spaceId}/maintenance/changesets`,
+    { ops: adds(1, youngCite, 'dry'), rationale: 'the first batch', dryRun: true });
+  assert.deepEqual(unbounded.body.breaker, { scope: 'run', activeAtStart: 99, changed: 0, remaining: null }, 'no breaker: nothing remains to count');
   for (const prefix of ['one', 'two']) {
     const answer = await call(h, { runner: young.machine.token, session: youngRun }, 'POST', `/runner/wiki/spaces/${young.spaceId}/maintenance/changesets`,
       { ops: adds(12, youngCite, prefix), rationale: 'the first batch', idempotencyKey: randomUUID() });
