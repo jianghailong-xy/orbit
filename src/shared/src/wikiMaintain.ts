@@ -116,10 +116,48 @@ export interface WikiMaintenanceReport {
     adopted?: { ops: number; verified: number; failed: number };
   };
   anchors?: { entries: number; changed: number; missing: number };
+  /** The topic articles a run before criterion 3's revision 3 rewrote; a run now writes the plan's sections (docs). */
   articles?: { written: number; unchanged: number; failed: number };
+  docs?: WikiMaintenanceDocsReport;
   tokens: { input: number; output: number; calls: number };
   seconds: number;
 }
+
+/**
+ * What a run did to the space's documents (contract `maintenance.job.docs`): the sections it took up and
+ * why — the entries that changed and fit them, the repository material they cite that changed on
+ * origin/main, a withdrawn sentence, or a section no build wrote — what became of them, the files whose
+ * disappearance withdrew sentences, and the one plan proposal it made at most. With no confirmed plan it
+ * writes nothing and says so (skipped).
+ */
+export interface WikiMaintenanceDocsReport {
+  planVersion: number | null;
+  skipped?: WikiMaintenanceDocsSkipped;
+  repoSha?: string;
+  affected: { byEntries: number; byRepo: number; stale: number; unwritten: number; total: number };
+  withdrawn: { paths: number; sentences: number };
+  sections: { written: number; unchanged: number; failed: number };
+  /** Design documents new on origin/main that no section cites, and entries that fit no section. */
+  unplaced: { designDocs: number; entries: number };
+  proposal: { outcome: 'proposed' | 'failed'; id?: string; doc?: string; newDoc?: boolean; facts?: number; rounds?: number; error?: string; reason?: string } | null;
+  /** What the step spent: its model calls — the sections' and the proposal's — and its time. */
+  tokens: { input: number; output: number; calls: number };
+  seconds: number;
+  /** What stopped the step, when something did: the run still succeeds, and the next run takes it up. */
+  error?: string;
+}
+
+/** The numbers a run's documents step goes by (contract `maintenance.job.docs.rules`). */
+export const WIKI_MAINTENANCE_DOCS_RULES = {
+  /** The gate rounds a plan proposal has: the first, and two more with every error handed back. */
+  proposalRoundsMax: 3,
+  /** The most pieces of knowledge with no place one proposal is asked about; the rest wait for the next run. */
+  proposalItemsMax: 12,
+} as const;
+
+/** Why a run wrote no document: the space has no confirmed plan, or its server writes none yet. */
+export const WIKI_MAINTENANCE_DOCS_SKIPPED = ['no_confirmed_plan', 'no_server_support'] as const;
+export type WikiMaintenanceDocsSkipped = (typeof WIKI_MAINTENANCE_DOCS_SKIPPED)[number];
 
 /** `GET /api/runner/wiki/spaces/:id/maintenance/check`: `orbit wiki check`'s verdict. */
 export interface WikiMaintenanceCheck {

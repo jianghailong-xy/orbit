@@ -35,6 +35,11 @@ type docsBuildDoor struct {
 	sessions []string
 	writes   []wikiDocWriteRequest
 	raw      []string
+	// job answers `GET …/plan/job` (nil: the Nest 404 of a server with no plan jobs); jobCode, a refusal
+	// instead. jobPosts is every progress and finish the run sent, by route.
+	job      map[string]interface{}
+	jobCode  string
+	jobPosts []map[string]interface{}
 }
 
 func newDocsBuildDoor(t *testing.T) *docsBuildDoor {
@@ -62,6 +67,17 @@ func newDocsBuildDoor(t *testing.T) *docsBuildDoor {
 			_, _ = w.Write(out)
 		}
 		switch {
+		case r.Method == http.MethodGet && path == "plan/job" && door.jobCode != "":
+			reply(http.StatusConflict, map[string]string{"code": door.jobCode, "message": "this maintenance run runs no job of this space's plan"})
+		case r.Method == http.MethodGet && path == "plan/job" && door.job != nil:
+			reply(http.StatusOK, door.job)
+		case r.Method == http.MethodPost && (path == "plan/job/progress" || path == "plan/job/finish") && door.job != nil:
+			var body map[string]interface{}
+			raw, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(raw, &body)
+			body["_route"] = path
+			door.jobPosts = append(door.jobPosts, body)
+			reply(http.StatusOK, door.job["job"])
 		case r.Method == http.MethodGet && path == "plan":
 			if door.planCode != 0 {
 				w.WriteHeader(door.planCode)
@@ -391,10 +407,11 @@ func TestWikiArticleBuildWritesEachSectionThroughACleanClaudeCodeAndTheOverviewL
 		t.Errorf("summary = %+v", summary)
 	}
 
-	// The door: the plan, what is written, s3's material, a write per section — the overview's last — all as
-	// the maintenance session.
+	// The door: whether the session runs a build job (this server has none), the plan, what is written, s3's
+	// material, a write per section — the overview's last — all as the maintenance session.
 	calls := door.Calls()
 	want := []string{
+		"GET /api/runner/wiki/spaces/space-1/plan/job",
 		"GET /api/runner/wiki/spaces/space-1/plan",
 		"GET /api/runner/wiki/spaces/space-1/docs",
 		"GET /api/runner/wiki/spaces/space-1/docs/session-runtime/material?section=s3",
@@ -1112,5 +1129,92 @@ func TestWikiArticleBuildWritesASectionWithNoMaterialAsEmptyLists(t *testing.T) 
 	}
 	if got := door.written(t, "s4"); got.Markdown != "本篇只讲会话怎么运转，任务怎么派发另有专篇。" {
 		t.Errorf("the section = %q", got.Markdown)
+	}
+}
+
+// ── A build job ─────────────────────────────────────────────────────────────────────────────────
+
+// A build job's session (contract `plan.jobs.run.build`): the run says how far it got as it takes each
+// document up, and how it ended, with the confirmed version it wrote and its report — and nothing of the
+// kind for a session that runs no build.
+func TestWikiArticleBuildReportsTheBuildJobItRuns(t *testing.T) {
+	door, _, _, _, repo := docsBuildSetup(t)
+	door.job = map[string]interface{}{
+		"job":   map[string]interface{}{"id": "job-7", "spaceId": "space-1", "kind": "build", "trigger": "owner", "state": "running", "version": 3, "attemptsMax": 3},
+		"space": map[string]interface{}{"id": "space-1", "title": "orbit", "repo": map[string]interface{}{"urlNorm": nil, "rootCommitSha": nil}, "workspace": nil},
+	}
+	summary, _, err := docsBuildRun(t, repo.checkout)
+	if err != nil {
+		t.Fatalf("the build: %v", err)
+	}
+	if summary.Job == nil || summary.Job.ID != "job-7" || summary.Job.Outcome != "succeeded" || summary.Job.Version != 3 {
+		t.Fatalf("the job's end = %+v, want job-7 succeeded with version 3", summary.Job)
+	}
+	var routes []string
+	for _, post := range door.jobPosts {
+		routes = append(routes, post["_route"].(string))
+	}
+	if !reflect.DeepEqual(routes, []string{"plan/job/progress", "plan/job/progress", "plan/job/finish"}) {
+		t.Fatalf("the run told the job %v, want progress as it took the document up and at the end, then how it ended", routes)
+	}
+	first, _ := json.Marshal(door.jobPosts[0])
+	if !strings.Contains(string(first), `"current":{"slug":"session-runtime","title":"会话运行模型"}`) || !strings.Contains(string(first), `"docs":{"done":0,"total":1}`) {
+		t.Errorf("the first progress = %s", first)
+	}
+	done, _ := json.Marshal(door.jobPosts[1])
+	if !strings.Contains(string(done), `"current":null`) || !strings.Contains(string(done), `"docs":{"done":1,"total":1}`) {
+		t.Errorf("the last progress = %s", done)
+	}
+	finish := door.jobPosts[2]
+	report, _ := finish["report"].(map[string]interface{})
+	if finish["outcome"] != "succeeded" || finish["version"] != float64(3) || report["planVersion"] != float64(3) || report["repoSha"] != summary.RepoSha {
+		t.Errorf("the finish = %v", finish)
+	}
+	sections, _ := report["sections"].(map[string]interface{})
+	if sections["written"] != float64(summary.Written) || sections["failed"] != float64(0) {
+		t.Errorf("the report's sections = %v, the run wrote %d", sections, summary.Written)
+	}
+	// A build job writes every document: --doc is a maintenance run's.
+	if _, _, err := docsBuildRun(t, repo.checkout, "--doc", "session-runtime"); err == nil || !strings.Contains(err.Error(), "build job job-7") {
+		t.Errorf("--doc in a build job's session: %v", err)
+	}
+}
+
+// A session whose task was made for no plan job builds as it always has, and tells no job anything.
+func TestWikiArticleBuildTellsNoJobWhenItRunsNone(t *testing.T) {
+	door, _, _, _, repo := docsBuildSetup(t)
+	door.jobCode = "WIKI_PLAN_NO_JOB"
+	summary, _, err := docsBuildRun(t, repo.checkout)
+	if err != nil || summary.Job != nil || summary.Written == 0 {
+		t.Fatalf("a run of no job: %v, job %+v, %d written", err, summary.Job, summary.Written)
+	}
+	door.jobCode = ""
+	door.job = map[string]interface{}{"job": map[string]interface{}{"id": "job-8", "kind": "draft", "state": "running"}, "space": map[string]interface{}{"id": "space-1"}}
+	if summary, _, err := docsBuildRun(t, repo.checkout); err != nil || summary.Job != nil || len(door.jobPosts) != 0 {
+		t.Errorf("a draft job's session is no build's: %v, job %+v, posts %v", err, summary.Job, door.jobPosts)
+	}
+}
+
+func TestWikiArticleBuildTakesTheHeadingASectionNamesBeforeOneItsNameContains(t *testing.T) {
+	f := newDocsFixture(t, map[string]string{"docs/contract.md": "# Contract\n\n## 2. Space\n\nOne space a repository.\n\n" +
+		"## 19. 维护作业：由事实建任务\n\nThe trigger.\n\n### 19.4 `orbit wiki maintain --space <id> [--json]`\n\nThe run's steps.\n\n" +
+		"### 19.5 `orbit wiki check --space <id>`\n\nThe check.\n"})
+	repo := newWikiDocRepo(f.checkout, f.first)
+	for cited, want := range map[string]string{
+		// Its number names it, though a shorter heading's words («space») are in the name as well.
+		"19.4 `orbit wiki maintain --space <id> [--model MODEL] [--json]`": "19.4 `orbit wiki maintain --space <id> [--json]`",
+		"§19.5 `orbit wiki check --space <id> --expect-cursor <token>`":    "19.5 `orbit wiki check --space <id>`",
+		"2. Space": "2. Space",
+		// With no heading of that name or number, one whose words contain the name still answers.
+		"维护作业": "19. 维护作业：由事实建任务",
+	} {
+		piece, ok := repo.docSection("docs/contract.md", cited)
+		if !ok || piece.section != want {
+			got := "nothing"
+			if ok {
+				got = piece.section
+			}
+			t.Errorf("§ %q read %q, want %q", cited, got, want)
+		}
 	}
 }

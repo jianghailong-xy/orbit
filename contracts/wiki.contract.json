@@ -1045,11 +1045,11 @@
           "propose: each batch through POST …/maintenance/changesets, origin maintenance; an op the server refuses now fails the run",
           "verify: in an Automatic space, orbit wiki verify's verification of the run's own ops, and one more pass for those left without a verdict; then the ops ended sessions left waiting (reviewModes.verification.adoption), at most rules.adoptOpsMax a run, the model set up for them when the run extracted nothing — one of them left without a verdict waits for the next run and fails nothing",
           "anchors: orbit wiki anchors verify with --repo the checkout",
-          "articles: orbit wiki articles, which rewrites only the topics whose entry set changed",
+          "docs: with the confirmed plan, only the sections the run's facts touched are written again (maintenance.job.docs): the ones an entry changed since they were written fits, or a withdrawn sentence left stale (GET …/maintenance/docs); the ones whose design documents, code or contracts changed on origin/main since their repoSha, compared file by file and section by section in the checkout — a cited file deleted or renamed there withdraws the sentences citing it (POST …/maintenance/docs/withdrawals) — and, with no build of the space waiting, the ones never written; each through orbit wiki docs build's writer, a section whose fingerprint is the stored one left as it is. What fits no section — entries, and design documents new under docs/ that no section cites — makes one plan proposal at most, gated here and on the server (POST …/plan/proposals). With no confirmed plan nothing is written, and the report says so (docs.skipped no_confirmed_plan). The topic articles are no longer written",
           "finish: POST …/maintenance/finish with the last page's token — or, when the breaker held ops back, the from of the first page it held back — outcome succeeded and the report"
         ],
         "failure": "A step that fails or a run cut short ends the run with outcome failed through the same finish route (truncated, through the cursor route, when the turn limit cut it): the cursor does not move, the space's consecutive failures go up by one, and the report says where it stopped. A breaker that holds ops back fails nothing: the run succeeds, and its cursor stops where the pages it held back start.",
-        "tokens": "The report's tokens are every model call the run made — extraction, verification and articles — as Claude Code reported them."
+        "tokens": "The report's tokens are every model call the run made — extraction, verification, the documents' sections and the plan proposal — as Claude Code reported them."
       },
       "offTopic": "A session in the space's workspaces that is not about the space's repository yields no entry: the extraction prompt names the repository and what it is, and asks for {\"offTopic\": true} for such a session; and an entry whose code anchors none exist in the repository is dropped. Both are counted in the report (offTopic, entries.foreign).",
       "citation": {
@@ -1058,7 +1058,25 @@
         "strip": "A quote the server does not find is taken off its source with its locator, and the op checked again (run.steps, self-check)."
       },
       "breaker": "The circuit breaker over a run (wiki-maintenance-breaker.ts): a maintenance run's changeset counts reviewModes.floors.circuitBreaker over the whole run — every entry its earlier changesets changed through the mode is spent, those of an earlier attempt in the same session included, and the active entries are counted as they stood when the run began. A dry run answers with that reading (refusalRules.dryRun), and orbit wiki maintain holds its batches to it rather than counting anything of its own (run.steps, breaker).",
-      "report": "What a run reports when it ends (WikiMaintenanceReport): sessions, dossiers, unchanged, offTopic, entries {extracted, kept, dropped, foreign, principles}, ops {proposed, recorded, refused, selfCheckDropped, heldBack, heldBackByBreaker, applied, waiting} (heldBack what the review queue's quotas held back, heldBackByBreaker what the run's breaker did), verification {verified, failed, and adopted {ops, verified, failed} when the run adopted any}, anchors, articles, tokens {input, output, calls}, seconds, and stoppedAt when it did not succeed. At most 16,000 bytes of JSON, kept on the run's row with ops.refused as a column of its own.",
+      "report": "What a run reports when it ends (WikiMaintenanceReport): sessions, dossiers, unchanged, offTopic, entries {extracted, kept, dropped, foreign, principles}, ops {proposed, recorded, refused, selfCheckDropped, heldBack, heldBackByBreaker, applied, waiting} (heldBack what the review queue's quotas held back, heldBackByBreaker what the run's breaker did), verification {verified, failed, and adopted {ops, verified, failed} when the run adopted any}, anchors, docs (maintenance.job.docs.report), tokens {input, output, calls}, seconds, and stoppedAt when it did not succeed; a run before criterion 3's revision 3 reported articles instead of docs. At most 16,000 bytes of JSON, kept on the run's row with ops.refused as a column of its own.",
+      "docs": {
+        "criterion": "3, revision 3 (2026-09-28), and the owner's 2026-09-29 word that the wiki follows what agents write into docs/",
+        "byEntries": "The written sections of the confirmed plan that an entry changed after they were generated fits (docs.affected.fit) — the run's own ops and every op applied since, so a failed run or the owner's later acceptance loses nothing — and the stale ones, from which a sentence was withdrawn (docs.reads.affected).",
+        "byRepo": "The written sections whose repository material changed on origin/main since their repoSha: the files their design-document, code and contract sources name (a directory, the files under it), compared by git between the two commits, and for a changed file the pieces the section takes of it — a design document's section, a symbol's definition, a file's head and the declarations its words match, a contract — read at both commits and compared. Only those files and sections are read, never the whole repository. A cited file deleted or renamed there withdraws the sentences whose footnotes cite it (docs.withdrawal.paths), which leaves their section stale; a section whose repoSha the checkout does not have is taken as changed.",
+        "unwritten": "With no build of the space waiting or running (docs.reads.affected build), the sections of the confirmed plan never written are written too: a build that failed half way leaves nothing behind.",
+        "write": "Each section taken up is written by orbit wiki docs build's writer at the commit the comparison was made at: a section whose material's fingerprint is the stored one is left as it is and asks no model; one written again carries that commit as its repoSha, and its repository footnotes that commit as their sha. A document an affected section is in has its overview taken up too: it is written again when one of its sections is.",
+        "unplaced": "Knowledge the plan has no place for: the entries docs.reads.affected lists as unplaced, and the design documents under docs/ — Markdown, outside docs/mocks and docs/evidence — that origin/main added (or renamed into place) since the commit the plan's references were last checked at (docs.reads.affected plan.repoSha), that no section of the confirmed plan cites and no proposal names.",
+        "proposal": "One plan proposal a run at most (plan.proposals): the local model is handed the confirmed plan's catalogue, the knowledge with no place, and the documents it may go in, and answers which document it belongs in — one of the plan's, rewritten with new sections, or a new one — for one group of that knowledge that belongs together (one subject, one place; never a catch-all document), with each new section's sources in the plan's line format; the run checks the sources on origin/main, then the server's gate, and hands what either found back to the model, rules.proposalRoundsMax rounds in all. Its facts are the entries it places ({ kind: entry, id }) and the commits that added the design documents ({ kind: commit, id: the full sha }). The plan does not change until the owner accepts it and confirms the draft that makes; what the proposal leaves out waits for the next run. A proposal that did not pass fails nothing: the report says why.",
+        "noPlan": "A space with no confirmed plan writes no document and proposes nothing: the run writes its entries, and reports docs { planVersion: null, skipped: no_confirmed_plan }.",
+        "rules": {
+          "proposalRoundsMax": 3,
+          "proposalItemsMax": 12
+        },
+        "rulesNote": "proposalRoundsMax is the gate rounds a proposal has: the first, and two more with every error handed back to the model. proposalItemsMax is the most pieces of knowledge with no place one proposal is asked about: design documents first, then entries, newest first; the rest wait for the next run.",
+        "skipped": ["no_confirmed_plan", "no_server_support"],
+        "skippedNote": "no_confirmed_plan: the space has no plan its owner confirmed. no_server_support: the Orbit server predates GET …/maintenance/docs, so the run cannot tell which sections to write, and writes none.",
+        "report": "docs { planVersion, skipped?, repoSha, affected { byEntries, byRepo, stale, unwritten, total }, withdrawn { paths, sentences }, sections { written, unchanged, failed }, unplaced { designDocs, entries }, proposal: { outcome: proposed | failed, id, doc, newDoc, facts, rounds, reason, error } | null, tokens { input, output, calls }, seconds, error? } (WikiMaintenanceDocsReport): the step's own model calls and time are counted apart, and in the run's tokens too."
+      },
       "check": {
         "route": "GET /api/runner/wiki/spaces/:id/maintenance/check",
         "who": "The space's owner's runner with no session — a task's acceptance command runs with none — or a maintenance run of the space; any other session WIKI_NOT_MAINTENANCE_SESSION, another owner's space a 404. It reads and writes nothing.",
@@ -1070,6 +1088,8 @@
         "propose": "POST /api/runner/wiki/spaces/:id/maintenance/changesets",
         "adoptions": "GET /api/runner/wiki/spaces/:id/maintenance/verifications",
         "adopt": "POST /api/runner/wiki/spaces/:id/maintenance/verifications",
+        "docs": "GET /api/runner/wiki/spaces/:id/maintenance/docs",
+        "withdraw": "POST /api/runner/wiki/spaces/:id/maintenance/docs/withdrawals",
         "finish": "POST /api/runner/wiki/spaces/:id/maintenance/finish",
         "check": "GET /api/runner/wiki/spaces/:id/maintenance/check"
       },
@@ -1308,7 +1328,7 @@
       "schema": "Every field is one the schema has at its level (schema), or one declared as needing adding (newFields), of the right type and within rules; a section's kind is one of sectionKinds; category keys, document slugs and a document's section keys are unique.",
       "docCount": "The plan has target.min to target.max documents: rules.docsMin to rules.docsMax unless the request names its own target.",
       "protected": "A document the revised version protects is in the new version exactly as it was: the same slug, category and fields, and the same sections in the same order (their keys aside). Only the owner protects a document, so a draft or a proposal that protects one is refused. The owner's own edit is not checked: protecting is theirs.",
-      "references": "Every project a session condition names is one of the owner's (by id, or by an exact title only one project has), every topic a topic of the space, every entry kind one of the entry kinds; every document's category is one of the plan's categories, and every document a scope leaves something to (scopeOut[].docs) one of the plan's documents. A proposal's facts are an entry of the space or a session of the owner.",
+      "references": "Every project a session condition names is one of the owner's (by id, or by an exact title only one project has), every topic a topic of the space, every entry kind one of the entry kinds; every document's category is one of the plan's categories, and every document a scope leaves something to (scopeOut[].docs) one of the plan's documents. A proposal's facts are an entry of the space or a session of the owner, or a commit named by its full sha (plan.proposals.factKindsNote).",
       "repo": "Files, docs sections, symbols and contracts exist only in a checkout, which the server has none of: the drafting job checks them on the runner at a commit and reports repoCheck { sha, checked, missing: [{ kind, ref, at }] } with the draft (kind one of file, docSection, symbol, contract). The server keeps the report and its sha beside the version (repo_sha, repo_check) and does not judge it; a version the owner made carries none.",
       "errors": "A request the gate refuses is WIKI_PLAN_GATE with errors[]: everything it found, each { check, path, message }, the path from the request's root (a draft's plan.docs[3].sections[2].sources.sessions.projects[0], an edit's doc. or section., a proposal's change.doc.) — and for what an edit or a proposal would make of the whole plan, from that plan's (plan.docs[20].protected) — the first rules.errorsMax listed. Nothing is stored, so the drafting job hands the list to the model and asks again.",
       "report": "A version the gate let through keeps its report: { checkedAt, checks (each passed, or skipped for protected on an owner's edit), docs, target, needsNewFields: [{ at, name, why, values }] }."
@@ -1321,7 +1341,8 @@
         "rejected": "the owner rejected it; the plan is as it was"
       },
       "actions": ["accept", "reject"],
-      "factKinds": ["entry", "session"],
+      "factKinds": ["entry", "session", "commit"],
+      "factKindsNote": "A fact is an entry of the space, a session of the owner, or — for a design document that landed on origin/main and that no section cites — the commit that added it, named by its full sha (40 hex characters). The server has no checkout: it holds a commit to its shape, and the maintenance run found it on origin/main.",
       "accept": "Applies the document to the plan's newest version — in place of the document of its slug, or after the last document of its category — and gates the result again, protection included, since the plan may have moved since it was proposed: a result the gate refuses is WIKI_PLAN_GATE and the proposal stays pending. Otherwise the new draft and the proposal's settling are one transaction.",
       "reject": "Settles the proposal, with the owner's note if there is one; no version changes."
     },
@@ -1358,25 +1379,26 @@
     "tool": "none: no MCP tool reads, confirms or decides anything of the plan (hard constraint 2). The drafting job's verbs are the CLI's.",
     "jobs": {
       "phase": 2,
-      "doc": "docs/wiki-contract.md sections 21.7 and 21.8; criterion 11",
+      "doc": "docs/wiki-contract.md sections 21.7 to 21.9; criterion 11",
       "migration": "src/apiserver/prisma/migrations/0338_wiki_plan_job/migration.sql",
+      "buildMigration": "src/apiserver/prisma/migrations/0340_wiki_maintenance_docs/migration.sql",
       "tables": ["wiki_plan_job"],
       "means": "A space's plan is drafted, revised and built by jobs the server runs as tasks of the space's hidden Wiki maintenance list (maintenance.list), so the session that runs one is a maintenance session (isWikiMaintenanceSession) and the plan's runner door is open to it and to nothing else. A fact asks for a job — the space's creation, or its owner — never a clock.",
       "kinds": {
         "draft": "orbit wiki plan draft: a whole plan drafted from the repository at origin/main and what the space already knows, keeping every document the version it revises protects",
         "revise": "orbit wiki plan revise: the space's newest version revised with the owner's instructions; a space with no version yet is drafted with the instructions as the owner's guidance",
-        "build": "the documents written from a confirmed version: kept for the task that writes them, which makes its own jobs"
+        "build": "orbit wiki docs build: the documents of a confirmed version written section by section, which the owner's confirmation asks for; a section whose material did not change since it was written is left as it is, so after a small change only what changed is written again"
       },
       "triggers": {
         "space_created": "the space was created: through POST /api/wiki/spaces, or on the first proposal of a session whose workspace's repository had no space yet",
-        "owner": "the owner asked on the plan page: POST /api/wiki/spaces/:id/plan/redraft"
+        "owner": "the owner asked on the plan page: for a draft or a revision, POST /api/wiki/spaces/:id/plan/redraft; for a build, by confirming a version, POST /api/wiki/spaces/:id/plan/versions/:version/confirm"
       },
       "storedStates": ["queued", "held", "made", "ended"],
       "states": {
         "queued": "the space's maintenance list has a task that has not ended; the job is made when a task of the owner's ends",
         "held": "the space's maintenance names no workspace, or a provider no run could start on (held.reason); the job is made when the owner's next change to the maintenance settings, or their next request, finds that settled",
-        "running": "its task is made: dispatched, or running, with the gate round it is on",
-        "succeeded": "its run stored a draft the gate let through (version)",
+        "running": "its task is made: dispatched, or running, with the gate round it is on — a build with how far it has got (progress)",
+        "succeeded": "its run stored a draft the gate let through (version); a build's wrote the documents of a confirmed version (version) and left no section unwritten",
         "failed": "its run ended without one — errors are the gate's on its last round — or its task ended before the run said how it went"
       },
       "held": {
@@ -1396,24 +1418,24 @@
         "materialsSessionsMax": 5000,
         "materialsProjectsMax": 500
       },
-      "request": "A request asks for a draft, or with instructions a revision. The space's draft or revision that has not ended answers it (one open a space, a partial unique index) and is asked again whether it may be made now; a made job whose task already ended, or is gone, without its run saying how is ended failed first, so it cannot stand in the way. Otherwise a job is recorded and asked at once: held when the settings say so; queued when the list has a task that has not ended; else made.",
+      "request": "A request asks for a draft, or with instructions a revision. The space's draft or revision that has not ended answers it (one open a space, a partial unique index) and is asked again whether it may be made now; a made job whose task already ended, or is gone, without its run saying how is ended failed first, so it cannot stand in the way. Otherwise a job is recorded and asked at once: held when the settings say so; queued when the list has a task that has not ended; else made. A build is asked for by the owner's confirmation of a version, after it commits and never failing it: the space's build that waits (queued or held, one a space, a partial unique index) answers it, pointed at the newer version, and is asked again; a build already made does not stand in the way — it writes the version it was made for, and the waiting one the next, behind its task. A build names its version from the start (version), and keeps it when it fails.",
       "trigger": "WikiPlanJobFacts takes every task change this replica publishes (task.changed): the made jobs of the tasks it names are ended failed when their task ended before the run said how it went, and the owner's queued jobs are asked again, since the list may have just been freed. The owner's change to a space's maintenance settings asks its queued and held jobs again. No clock asks anything.",
       "staggered": "A job and the space's maintenance runs share its list, one task at a time: the maintenance trigger makes no task while the list has one that has not ended (maintenance.job.trigger.notMade), and a job waits behind one the same way, so the local model is never asked by both at once.",
       "notAMaintenanceRun": "A job's task is not a maintenance run: it is not counted against settings.maintenance.dailyRunLimit (wikiMaintenanceRunsToday counts the list's other tasks), the day's limit does not hold it back, and it runs whether or not maintenance is turned on — the list is made for it when the space has none, and the claim does not refuse its session for maintenance being off (maintenance.run).",
       "task": {
         "list": "the space's hidden Wiki maintenance list (maintenance.list), made for the job when the space has none",
-        "title": "Wiki plan draft: <space title>, or Wiki plan redraft: <space title> for a revision",
+        "title": "Wiki plan draft: <space title>, Wiki plan redraft: <space title> for a revision, or Wiki documents: <space title> for a build",
         "assignee": "settings.maintenance.workspaceId",
         "provider": "settings.maintenance.provider, pinned: the session is claimed as maintenance.run says",
         "runAt": "the moment it is made: the dispatcher's next scan starts it",
         "creator": "USER, the space's owner",
-        "description": "the run's instructions: run `orbit wiki plan draft --space <id>` (or `revise`) once, and report the documents, the gate rounds with their errors, the token spend and the time it printed; a revision's instructions are quoted below them",
+        "description": "the run's instructions: run `orbit wiki plan draft --space <id>` (or `revise`) once, and report the documents, the gate rounds with their errors, the token spend and the time it printed; a revision's instructions are quoted below them. A build's: run `orbit wiki docs build --space <id>` once, and report the documents and sections written, unchanged and failed, the token spend and the time",
         "completionCriterion": "EXECUTABLE",
         "acceptanceCommand": "orbit wiki plan check --space <id> --job <id>",
         "acceptanceExpectedExitCode": 0,
         "acceptanceTimeoutSeconds": "rules.checkTimeoutSeconds"
       },
-      "read": "The plan's read (plan.reads.state) carries the space's job that has not ended, else the one that ended last: { id, spaceId, kind, trigger, state, instructions, requestedAt, held, waitingFor: { taskId, title, sessionId, startedAt } for a queued one, taskId, provider, sessionId, madeAt, startedAt, endedAt, attempt, attemptsMax, version, errors, error, report, draft } — draft being the last draft of a failed job, as its run sent it to the gate.",
+      "read": "The plan's read (plan.reads.state) carries the space's job that has not ended, else the one that ended last: { id, spaceId, kind, trigger, state, instructions, requestedAt, held, waitingFor: { taskId, title, sessionId, startedAt } for a queued one, taskId, provider, sessionId, madeAt, startedAt, endedAt, attempt, attemptsMax, progress, version, errors, error, report, draft } — draft being the last draft of a failed job, as its run sent it to the gate, and progress a build's { docs: { done, total }, current: { slug, title } | null }, null for a draft.",
       "routes": {
         "redraft": "POST /api/wiki/spaces/:id/plan/redraft",
         "context": "GET /api/runner/wiki/spaces/:id/plan/job",
@@ -1427,14 +1449,15 @@
         "runner": "context, progress, finish and materials are a maintenance run's of the space alone, as the plan's other runner routes are: any other session WIKI_NOT_MAINTENANCE_SESSION, a headless call 400, another owner's space a plain 404. context, progress and finish answer a maintenance run whose task no job was made for WIKI_PLAN_NO_JOB, and progress a job that has ended the same way, as finish does any end but the one the job ended with. check answers the space's owner's runner with no session too — a task's acceptance command runs with none."
       },
       "context": "{ job, space: { id, title, repo: { urlNorm, rootCommitSha }, workspace: { id, workDir } } }: the job the calling session's task was made for and where its run starts; records the session and the time it first started.",
-      "progress": "{ attempt }: the gate round the run is on, 1 to rules.attemptsMax — what the plan page shows while it runs.",
-      "finish": "{ outcome: succeeded | failed, version?, errors?, error?, report?, draft?, attempt? }: a run that succeeded names the version its draft became, a draft of the space this very session stored; one that failed carries the gate's errors on its last round (at most plan.rules.errorsMax), what went wrong in words (redacted, at most rules.errorMaxChars), and the last draft it had (at most rules.draftMaxBytes of JSON). The report is at most rules.reportMaxBytes of JSON. The job is ended with it, once: the same end said again by the run that said it (the runner sends it again when the answer to its first send was lost) is answered with what was kept and changes nothing; any other end is refused WIKI_PLAN_NO_JOB.",
+      "progress": "{ attempt }: the gate round a draft's or a revision's run is on, 1 to rules.attemptsMax; a build's { docs: { done, total }, current: { slug, title } | null }: the documents of the confirmed version it went through, and the one it writes now — what the plan page shows while it runs.",
+      "finish": "{ outcome: succeeded | failed, version?, errors?, error?, report?, draft?, attempt? }: a run that succeeded names the version its draft became, a draft of the space this very session stored; one that failed carries the gate's errors on its last round (at most plan.rules.errorsMax), what went wrong in words (redacted, at most rules.errorMaxChars), and the last draft it had (at most rules.draftMaxBytes of JSON). The report is at most rules.reportMaxBytes of JSON. A build that succeeded names the confirmed version it wrote, one the owner confirmed; one that failed keeps the version it was made for, and its report is WikiPlanBuildReport (buildReport). The job is ended with it, once: the same end said again by the run that said it (the runner sends it again when the answer to its first send was lost) is answered with what was kept and changes nothing; any other end is refused WIKI_PLAN_NO_JOB.",
       "check": {
-        "passes": "The job ended succeeded, and the version it names is one of the space's.",
+        "passes": "The job ended succeeded, and the version it names is one of the space's — for a build, one its owner confirmed.",
         "exit": "0 when it passes; 1 otherwise, with each reason a sentence: the run did not say how it ended, it failed (with its error and how many errors the gate's last round found), or the version it names is missing."
       },
       "materials": "{ spaceId, title, asOf, repo, workspace, projects: [{ id, title, status, createdAt, tasks, sessions }], sessions: { days, total, items: [{ title, month, task, project, provider }] }, entries: [{ kind, status, count }], topics: [{ slug, title, category, pathPrefixes, active, recent: [{ kind, title }] }] }: the owner's projects (at most rules.materialsProjectsMax, oldest first), the sessions of the space's workspaces of the last rules.materialsSessionDays days (at most rules.materialsSessionsMax, newest first, with the total), and how the space's entries and topics are spread. Every title is redacted before it leaves the server; the runner counts and clusters.",
       "report": "What a run reports when it ends (WikiPlanJobReport): categories, docs, sections, target, attempts [{ attempt, local, server, checks }] — each gate round's errors found by the runner's own gate and by the server's, by check — repo { sha, checked, missing }, tokens { input, output, calls }, seconds, model, and rulesDraft: the fourth step's draft of the rules, cut to fit.",
+      "buildReport": "What a build's run reports when it ends (WikiPlanBuildReport): planVersion, repoSha, docs { total, written }, sections { written, unchanged, failed }, tokens { input, output, calls }, seconds, model.",
       "run": {
         "steps": [
           "context: GET …/plan/job — the job, the space, its repository and the maintenance workspace's checkout; and GET …/plan — the version it revises and the documents that version protects",
@@ -1446,16 +1469,18 @@
           "finish: POST …/plan/job/finish with the version the draft became, or the last round's errors"
         ],
         "revise": "A revision asks the model for the new catalogue — each document with the documents of the version it revises that it is made from, and the sections it moves into a category for agents — then writes again only the documents that merge or are new; one made from a single document of the version keeps its outline, less the sections moved out. A protected document is carried as it is, and a move out of one, or of a section of any kind but conventions, is refused by the runner's gate.",
-        "model": "Every call is a clean Claude Code (agentSurface.verify.cleanClaudeCode) on the model this session's provider names, thinking off, its answer streamed to a file as it arrives; the run waits for the endpoint's /health before its first call and stops at the first 401."
+        "model": "Every call is a clean Claude Code (agentSurface.verify.cleanClaudeCode) on the model this session's provider names, thinking off, its answer streamed to a file as it arrives; the run waits for the endpoint's /health before its first call and stops at the first 401.",
+        "build": "A build's run is orbit wiki docs build in the job's session: GET …/plan/job first — which records it started — then every document of the confirmed version, section by section (docs.build), POST …/plan/job/progress as each document is taken up, and POST …/plan/job/finish with the version it wrote and its report: succeeded when no section was left unwritten, failed with why otherwise."
       },
       "cli": {
         "draft": "orbit wiki plan draft --space <id> [--target MIN-MAX] [--model MODEL] [--concurrency N] [--work-dir DIR] [--json]",
         "revise": "orbit wiki plan revise --space <id> [--instructions <file>] [--target MIN-MAX] [--model MODEL] [--concurrency N] [--work-dir DIR] [--json]",
         "check": "orbit wiki plan check --space <id> --job <id> [--json]",
+        "build": "orbit wiki docs build --space <id> [--json] (docs.build.cli), run in the build's session",
         "tool": "none: all three are CLI only. draft and revise are the plan job's run alone, and check is its task's acceptance command, which runs where there is no session.",
         "draftPrecondition": "Run this only as the plan job of the space, once, and let it finish: it drafts as the space's maintenance run, and only a draft that passed the plan's gate is stored — three rounds at most, each handing every error back to the model.",
         "revisePrecondition": "Run this only as the plan job the owner's redraft made, once, and let it finish: it revises the plan's newest version with the owner's instructions, and only a draft that passed the plan's gate is stored — three rounds at most, each handing every error back to the model.",
-        "checkPrecondition": "Judge a plan job only by what this reads: it passes when the job's run stored a draft that passed the plan's gate, and a run cannot pass it by saying it finished."
+        "checkPrecondition": "Judge a plan job only by what this reads: it passes when the job's run stored a draft that passed the plan's gate — or, a build's, wrote the documents of the confirmed version it was made for — and a run cannot pass it by saying it finished."
       }
     }
   },
@@ -1465,6 +1490,7 @@
     "doc": "docs/wiki-contract.md section 22; criterion 9 (revised 2026-09-28)",
     "migration": "src/apiserver/prisma/migrations/0326_wiki_docs/migration.sql",
     "dispositionsMigration": "src/apiserver/prisma/migrations/0337_wiki_doc_dispositions/migration.sql",
+    "withdrawalMigration": "src/apiserver/prisma/migrations/0340_wiki_maintenance_docs/migration.sql",
     "tables": ["wiki_doc", "wiki_doc_section", "wiki_doc_sentence", "wiki_doc_footnote"],
     "means": "A space's documents, written section by section from the plan its owner confirmed (plan.guard): a document is a plan document, named by its slug, and a section a plan section, named by its key. Every footnote points at a first-hand original — a design-document section, code or a contract at a commit, or one of Orbit's own records — with its verbatim quote, and the entry it was found through is kept as the via entry: an entry is the way in, never the source. What each sentence is, and how each footnote was checked, is stored sentence by sentence. A document is a view for people: never pushed, never a source, and never returned by wiki_search or wiki_get. The topic articles (articles, wiki_topic_summary) stay, readable as they are, until the clients have moved to the documents.",
     "statuses": {
@@ -1476,7 +1502,7 @@
       "transition": "it carries no footnote and brings no new fact: every fact token in it (factTokens) is already in a sourced sentence or a heading of the same document",
       "unsourced": "it carries no footnote and states a fact no sourced sentence or heading of the document carries; the tokens that are new are stored with it",
       "unverified": "it carries footnotes, and none of them passed its check",
-      "withdrawn": "a footnote of it came through an entry since rejected, retired or superseded, or whose anchor changed or went missing (withdrawal); it stays, struck through, until its section is written again"
+      "withdrawn": "a footnote of it came through an entry since rejected, retired or superseded, or whose anchor changed or went missing, or cites a repository file deleted or renamed on origin/main (withdrawal); it stays, struck through, until its section is written again"
     },
     "footnoteKinds": {
       "design_doc": "a section of a design document in the repository: path@sha#Lstart-end, and the section's heading",
@@ -1555,6 +1581,17 @@
     "repoSha": "Every section is stored with the origin/main commit it was generated at (repoSha, from the write that wrote it), and a document with its last write's. A maintenance run compares a section's repoSha with origin/main as it stands, and writes again a section whose design documents, code or contracts changed since (owner 2026-09-29: the wiki follows what agents write into docs/); that comparison is the run's, and the server only keeps the sha and hands it back (reads.writerState, reads.doc).",
     "regeneration": "A section whose stored materialSha256 is the one a write names, and from which nothing was withdrawn (stale_at null), is not written again: its outcome is unchanged and its rows are left as they are. Every other section a write names is replaced whole, its sentences and footnotes with it. A write names the confirmed plan version it was written from (planVersion); one that is not the confirmed version is WIKI_PLAN_STALE and writes nothing. A section the confirmed plan's document no longer has is dropped when the document is next written. No clock rewrites anything (hard constraint 5): the maintenance run writes after facts arrived.",
     "withdrawal": "When an entry is rejected, retired or superseded, or its anchor state becomes changed or missing, every sentence with a footnote that came through it (via entry) is withdrawn — status withdrawn, with when, why (withdrawReasons) and the entry — and its section is marked stale (stale_at), so the next maintenance run writes it again. It happens in the entry's own transaction, at its single state writer (WikiService.recomputeFlags, which every applyOp branch ends in; storage.singleWriter), so no path that moves an entry can forget it. A write with a footnote that comes through such an entry stores that sentence withdrawn, and its section stale, at once; and it takes its via entries FOR SHARE before anything else, so a rejection racing it waits for it and then withdraws what it wrote.",
+    "withdrawalPaths": "A repository file a section's footnotes cite that a maintenance run found deleted or renamed on origin/main (maintenance.job.docs.byRepo) withdraws every sentence of the space's documents with a footnote citing it — status withdrawn, anchor_missing, with when and the path (withdrawn_path) in place of an entry — and marks its section stale (routes.withdraw). A sentence names the entry or the path that withdrew it, one of the two (migration 0340's CHECK). The documents are taken in id order as a write and an entry's withdrawal take them.",
+    "affected": {
+      "means": "What a maintenance run writes again because of the entries, and what it may propose (reads.affected): the server's half of maintenance.job.docs. The repository's half is the run's, in its checkout.",
+      "fit": "An entry fits a section's session condition when a keyword is in its title, summary, fields or aliases, one of its anchors' paths is under one of anchorPaths, or — when it is of one of entryKinds, or the condition names none — one of its topics is one of topics, or one of its live sources is a record of a session or a task of one of projects (a session of one of the project's tasks, or its coordinator's; the task, or a comment on it). It scores 3 a keyword, 2 a path, 1 a topic, 1 a kind, 1 a project. material.entries picks a section's entries by the same rule.",
+      "sections": "A written section of the confirmed plan is written again when an entry that fits it had an op applied to it after the section was generated, or when it is stale.",
+      "unplaced": "An entry an op applied to since the space's first plan version was made, live and with its anchors standing, that fits no section of the confirmed plan and that no proposal of the space names, whatever became of the proposal — newest first, at most rules.unplacedMax, unplacedMore counting the rest.",
+      "rules": {
+        "unplacedMax": 50,
+        "withdrawPathsMax": 500
+      }
+    },
     "links": {
       "sessionRecord": "A footnote on a turn, an event or a tool call carries the record's id (recordId) and the session it is in (sessionId), both read when the write checked it: wiki_source keeps a record's id alone, and the page needs the pair to link the record — web sessionRecordHref(sessionId, recordId), iOS SessionRecordLink.url(session:record:), which open the session at it through GET /api/sessions/:id/events/page?around=<recordId>. Any other record carries what it is in: an approval or a merge receipt its session (sessionId), a task comment its task (taskId), an owner decision its project (projectId), a note its path (notePath).",
       "repository": "A repository footnote carries its path, sha and lines (path@sha#Lstart-end): the page links that file at that commit in the space's repository."
@@ -1576,22 +1613,26 @@
       "writerState": "GET /api/runner/wiki/spaces/:id/docs",
       "writerDoc": "GET /api/runner/wiki/spaces/:id/docs/:slug",
       "material": "GET /api/runner/wiki/spaces/:id/docs/:slug/material",
-      "write": "POST /api/runner/wiki/spaces/:id/docs/:slug"
+      "write": "POST /api/runner/wiki/spaces/:id/docs/:slug",
+      "affected": "GET /api/runner/wiki/spaces/:id/maintenance/docs",
+      "withdraw": "POST /api/runner/wiki/spaces/:id/maintenance/docs/withdrawals"
     },
     "reads": {
       "directory": "{ spaceId, plan: { version, confirmedAt } | null, docs: { total, written }, categories }: the confirmed plan's categories in its order (number from 1), each with its documents (number <category>.<n>, title, question, written, status, updatedAt, planVersion) and each document's sections (number, title, kind, written, stale). A space with no confirmed plan has none.",
-      "doc": "One document of the confirmed plan: its number, title, question, audience, scope (scopeOut's documents with their number and title), category, length, status, and when, from which plan version and at which origin/main commit (repoSha) it was written; its sections in the plan's order, each with the commit it was generated at and its blocks, a block's sentences each with its status, its footnote numbers, its new tokens and, once withdrawn, why, when and through which entry; its footnotes, numbered by first appearance — the same original and quote cited twice is one number — each with its kind, verdict, who checked it, its quote, its location (path@sha#Lstart-end, or <kind>:<record id>#c<start>-<end>) and what the page links to (links): a repository original's path, sha, lines, section, symbol and excerpt; a record's id (recordId), character range, session (sessionId, with recordId the pair a turn's, an event's or a tool call's deep link needs) and its title, number, time and label, task and project and their titles, a note's path; and its via entry; and the via entries as they stand now, with the footnotes each carried. A document of the plan not written yet is written false with its sections unwritten; one the plan does not have is a 404. counts and unsourcedShare are its sentences' as they stand.",
+      "doc": "One document of the confirmed plan: its number, title, question, audience, scope (scopeOut's documents with their number and title), category, length, status, and when, from which plan version and at which origin/main commit (repoSha) it was written; its sections in the plan's order, each with the commit it was generated at and its blocks, a block's sentences each with its status, its footnote numbers, its new tokens and, once withdrawn, why, when, and through which entry or for which repository file (entryId, path — one of the two); its footnotes, numbered by first appearance — the same original and quote cited twice is one number — each with its kind, verdict, who checked it, its quote, its location (path@sha#Lstart-end, or <kind>:<record id>#c<start>-<end>) and what the page links to (links): a repository original's path, sha, lines, section, symbol and excerpt; a record's id (recordId), character range, session (sessionId, with recordId the pair a turn's, an event's or a tool call's deep link needs) and its title, number, time and label, task and project and their titles, a note's path; and its via entry; and the via entries as they stand now, with the footnotes each carried. A document of the plan not written yet is written false with its sections unwritten; one the plan does not have is a 404. counts and unsourcedShare are its sentences' as they stand.",
       "index": "Every document of the confirmed plan, and every section whose title no other document of the plan shares — the ones every document has (known pitfalls, conventions, overview) are left out — each with its document's number and title, its category and whether it is written, in title order.",
       "writerState": "{ spaceId, planVersion, docs: [{ slug, planVersion, status, repoSha, updatedAt, sections: [{ key, materialSha256, repoSha, stale, generatedAt }] }] }: what is written, for a run to tell which sections to write again — a stale one, one whose material changed, or one whose repoSha origin/main has moved past in what it cites.",
       "writerDoc": "One document as it is written, for a maintenance run of the space: the same answer as reads.doc, on the runner door. A run reads it to write a document's overview when the sections it summarizes were left unchanged, their sentences and footnotes as they stand.",
-      "material": "?section=<key>, a section of the document in the confirmed plan: { spaceId, slug, section, planVersion, condition, entries, records, unresolved } — the server's half of the section's material (material): the section's session condition as the plan states it (null when it has none, and then nothing else), the entries it picked as the way in, and every record found through them or by the condition's projects, window and keywords, each redacted and placed. A section the confirmed plan's document does not have is a 404."
+      "material": "?section=<key>, a section of the document in the confirmed plan: { spaceId, slug, section, planVersion, condition, entries, records, unresolved } — the server's half of the section's material (material): the section's session condition as the plan states it (null when it has none, and then nothing else), the entries it picked as the way in, and every record found through them or by the condition's projects, window and keywords, each redacted and placed. A section the confirmed plan's document does not have is a 404.",
+      "affected": "{ spaceId, plan: { version, confirmedAt, repoSha, draftedAt } | null, build: { jobId, state, version } | null, sections: [{ doc, key, repoSha, generatedAt, stale, entryIds }], unplaced: [{ id, kind, title, summary, topics, anchorPaths, changedAt }], unplacedMore, proposed: { entryIds, commits, paths } } (WikiDocsAffected, affected): the confirmed plan (null with none: the run writes no document), the space's build that has not ended, the written sections to write again with the entries that fit them, the entries no section fits, and what the space's proposals already name — their entries, commits and the design documents their changes cite. repoSha is the commit the plan's references were last checked at: the confirmed version's, or the newest of the versions it was made from. A maintenance run's alone."
     },
     "requests": {
-      "write": "{ planVersion, repoSha, model?, sections: [{ key, materialSha256, markdown, footnotes: [{ kind, path, sha, lines, section?, symbol?, quote?, excerpt?, verified, viaEntryId? } | { kind, ref, chars?, quote?, viaEntryId? }], dispositions?: [{ material, kind, ref, action, into, reason }] }] }"
+      "write": "{ planVersion, repoSha, model?, sections: [{ key, materialSha256, markdown, footnotes: [{ kind, path, sha, lines, section?, symbol?, quote?, excerpt?, verified, viaEntryId? } | { kind, ref, chars?, quote?, viaEntryId? }], dispositions?: [{ material, kind, ref, action, into, reason }] }] }",
+      "withdraw": "{ repoSha, paths: [{ path, change: deleted | renamed, to? }] }: the origin/main commit the paths are gone at (40 hex), and at most affected.rules.withdrawPathsMax paths. Answered { spaceId, withdrawn, sections: [{ doc, key }] }: the sentences withdrawn now, and the sections they are in. Malformed is WIKI_DOC_INVALID with every error."
     },
     "material": {
       "means": "The server's half of a section's material (reads.material): what only the database has. The repository's half — design-document sections, code and contracts at origin/main — is read by the runner in its checkout (build.repository).",
-      "entries": "The space's live entries (status active, anchor state neither changed nor missing) that the section's session condition finds, best first: an entry scores 3 for each keyword in its title, summary, fields or aliases, 2 when one of its anchors' paths is under one of anchorPaths, 1 when one of its topics is one of topics, and 1 when its kind is one of entryKinds; only one a keyword or a path found is taken, the newest first among equal scores, at most rules.entriesPerSection. Each is the way in to the records its current revision cites (at most rules.sourcesPerEntry of its live sources, in the order it cites them): an entry is never the material itself.",
+      "entries": "The space's live entries (status active, anchor state neither changed nor missing) that fit the section's session condition (affected.fit), best first: an entry scores 3 for each keyword in its title, summary, fields or aliases, 2 when one of its anchors' paths is under one of anchorPaths, 1 when one of its topics is one of topics, 1 when its kind is one of entryKinds, and 1 when it was taken from one of projects; only one that fits is taken — a keyword or a path found it, or, of the condition's kinds, a topic or a project did — the newest first among equal scores, at most rules.entriesPerSection. Each is the way in to the records its current revision cites (at most rules.sourcesPerEntry of its live sources, in the order it cites them): an entry is never the material itself.",
       "search": "With projects and keywords both named, the owner's own words in them (a message or a steer isOwnerTurn reads as the owner's, in a project's coordinator session or a session of one of its tasks) and the comments on their tasks, within since..until (days, until included) and carrying one of the keywords, case aside: the ones carrying the most keywords first, the newest among equal, at most rules.ownerTurnsPerSection turns and rules.commentsPerSection comments.",
       "records": "Every record is read through the one reader a record has (WikiService.sourceText) and redacted with the shared redactor and the owner's workspace.env values, as a footnote's check reads it (verification.records). It is returned whole when it is at most rules.excerptChars long, and otherwise the rules.excerptChars around what found it — its entry source's quote, or the first keyword — with chars { start, end }: where the text is in the record's redacted text, in code points (a record footnote's chars). A record met twice is returned once, the first time. A source whose record is not one of this account's any more is listed under unresolved, never read.",
       "weights": {
@@ -1766,7 +1807,9 @@
           "GET /api/runner/wiki/spaces/:id/docs",
           "GET /api/runner/wiki/spaces/:id/docs/:slug",
           "GET /api/runner/wiki/spaces/:id/docs/:slug/material",
-          "POST /api/runner/wiki/spaces/:id/docs/:slug"
+          "POST /api/runner/wiki/spaces/:id/docs/:slug",
+          "GET /api/runner/wiki/spaces/:id/maintenance/docs",
+          "POST /api/runner/wiki/spaces/:id/maintenance/docs/withdrawals"
         ],
         "maintenanceNote": "phase 2; any other session is refused WIKI_NOT_MAINTENANCE_SESSION. The maintenance job's check (maintenance.job.check) also answers the space's owner's runner with no session, since a task's acceptance command runs with none.",
         "verificationRoutes": [
@@ -1826,7 +1869,7 @@
       "pending ops expired or were withdrawn",
       "a topic's articles were written, or a space's topics seeded, after the transaction commits",
       "a version of a space's plan was stored or confirmed, or a change to it proposed or decided, after the transaction commits",
-      "a document's sections were written, after the transaction commits"
+      "a document's sections were written, or sentences of it withdrawn for a repository file gone from origin/main, after the transaction commits"
     ],
     "notPublishedWhen": ["an idempotent replay", "a dryRun", "a request that recorded nothing"],
     "correctness": "Nothing depends on it. Dropping every announcement changes only how long a client waits: clients re-read on focus and on reconnect.",
