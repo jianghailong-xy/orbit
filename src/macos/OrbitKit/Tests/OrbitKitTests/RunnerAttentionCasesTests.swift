@@ -125,6 +125,16 @@ final class RunnerAttentionCasesTests: XCTestCase {
 
     // MARK: what an item says beyond the case file
 
+    func testMultiAccountQuotaKeepsTheAvailableAccountsOwnWindowAndReset() throws {
+        let quota = try XCTUnwrap(try items(
+            "all Claude accounts near their limits: the account with most room supplies its own fullest window"
+        ).first)
+        XCTAssertEqual(quota.params, [
+            "engine": .string("claude"), "window": .string("5-hour limit"), "percent": .int(94),
+            "resetsAt": .string("2026-09-29T03:00:00Z"), "workspaces": .array([.string("app")]),
+        ])
+    }
+
     func testWikovasQuotaNamesTheWorkspaceThatSpendsItAndKeepsTheResetTimeRaw() throws {
         let found = try items("real wikova: Claude weekly 98% and a 95% full disk")
         guard found.count == 2 else { return XCTFail("expected a quota and a disk item, got \(found)") }

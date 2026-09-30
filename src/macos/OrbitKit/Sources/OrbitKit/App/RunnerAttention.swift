@@ -493,16 +493,34 @@ public enum RunnerAttention {
         return codexWindows.first { row.label.hasSuffix($0.label) }?.window ?? RunnerPageCopy.RUNNER_QUOTA_OTHER
     }
 
-    /// One item per engine: its fullest window among those at or past `PlanUsageRow.nearLimit`.
+    /// Warn only when every candidate account is near its limit. Show the fullest window of the
+    /// account with the most room; an unread account cannot establish an engine-wide shortage.
     private static func quotaItems(_ runner: RunnerAttentionRunner,
-                                   _ workspaces: [RunnerAttentionWorkspace]) -> [RunnerAttentionItem] {
+                                   _ workspaces: [RunnerAttentionWorkspace], nowMs: Int64) -> [RunnerAttentionItem] {
         LoginEngine.allCases.compactMap { engine in
             let users = workspacesOn(workspaces, engine)
             guard !users.isEmpty else { return nil }
-            let near = runner.planUsage?.snapshot(for: engine.rawValue)?.rows.filter(\.nearLimit) ?? []
-            // The first of the fullest, as the web's reduce keeps it.
-            guard var fullest = near.first else { return nil }
-            for row in near.dropFirst() where row.percent > fullest.percent { fullest = row }
+            let usage = runner.planUsage?.snapshot(for: engine.rawValue)
+            let accounts = runner.engines?.first(where: { $0.engine == engine.rawValue })?.accounts
+            let snapshots: [PlanUsageSnapshot?]
+            if RunnerPageFormat.keepsAccounts(engine.rawValue), let accounts, !accounts.isEmpty {
+                snapshots = accounts.filter { $0.auth != "no" }.map {
+                    CodexAccounts.snapshot(usage, account: $0.id)
+                }
+            } else {
+                snapshots = [usage]
+            }
+            var fullest: PlanUsageRow?
+            for snapshot in snapshots {
+                let near = snapshot?.rows.filter {
+                    $0.nearLimit && !(epochMs($0.window.resetsAt).map { $0 <= nowMs } ?? false)
+                } ?? []
+                // The first of the fullest, as the web's reduce keeps it.
+                guard var accountFullest = near.first else { return nil }
+                for row in near.dropFirst() where row.percent > accountFullest.percent { accountFullest = row }
+                if fullest.map({ accountFullest.percent < $0.percent }) ?? true { fullest = accountFullest }
+            }
+            guard let fullest else { return nil }
             let name = loginName(engine)
             let window = quotaWindow(fullest)
             return RunnerAttentionItem(
@@ -600,7 +618,7 @@ public enum RunnerAttention {
         } else {
             items += signedOutItems(runner, input.workspaces)
             items += checkoutItems(input.workspaces)
-            items += quotaItems(runner, input.workspaces)
+            items += quotaItems(runner, input.workspaces, nowMs: input.nowMs)
             if let disk = diskItem(runner, input.workspaces) { items.append(disk) }
         }
         if let cannotUpdate = cannotSelfUpdateItem(runner, input.latestVersion) { items.append(cannotUpdate) }

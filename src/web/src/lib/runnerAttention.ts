@@ -1,5 +1,7 @@
 import type { LoginEngine, ReportedEngine, RunnerRepoHealth } from '@orbit/shared';
+import { codexAccountSnapshot } from '@orbit/shared';
 import type { Runner } from '../components/TasksSidePanel';
+import { engineKeepsAccounts } from './engineAccounts';
 import { planUsageRows, planUsageSnapshotForProvider, type PlanUsageDisplayRow } from './planUsage';
 import { ago, ENGINE_CLI_NAME, updateNoteOf } from './runnerEngines';
 import {
@@ -422,18 +424,36 @@ function quotaWindow(row: PlanUsageDisplayRow): string {
   return CODEX_WINDOW.find(([label]) => row.label.endsWith(label))?.[1] ?? RUNNER_QUOTA_OTHER;
 }
 
-/** One item per engine: its fullest window among those at or past planUsageRows' nearLimit. */
+/** Warn only when every candidate account is near its limit. Show the fullest window of the
+ *  account with the most room; an unread account cannot establish an engine-wide shortage. */
 function quotaItems(
   runner: AttentionRunner,
   workspaces: ReadonlyArray<AttentionWorkspace>,
+  nowMs: number,
 ): AttentionItem[] {
   return LOGIN_ENGINES.flatMap((engine): AttentionItem[] => {
     const users = workspacesOn(workspaces, engine);
     if (users.length === 0) return [];
     const usage = planUsageSnapshotForProvider(runner.planUsage, engine);
-    const near = usage ? planUsageRows(usage).filter((row) => row.nearLimit) : [];
-    if (near.length === 0) return [];
-    const fullest = near.reduce((top, row) => (row.percent > top.percent ? row : top));
+    const accounts = runner.engines?.find((e) => e.engine === engine)?.accounts;
+    const snapshots =
+      engineKeepsAccounts(engine) && accounts?.length
+        ? accounts
+            .filter((account) => account.auth !== 'no')
+            .map((account) => usage && codexAccountSnapshot(usage, account.id))
+        : [usage];
+    let fullest: PlanUsageDisplayRow | undefined;
+    for (const snapshot of snapshots) {
+      const near = snapshot
+        ? planUsageRows(snapshot).filter(
+            (row) => row.nearLimit && !(Date.parse(row.window.resetsAt ?? '') <= nowMs),
+          )
+        : [];
+      if (near.length === 0) return [];
+      const accountFullest = near.reduce((top, row) => (row.percent > top.percent ? row : top));
+      if (!fullest || accountFullest.percent < fullest.percent) fullest = accountFullest;
+    }
+    if (!fullest) return [];
     const name = LOGIN_NAME[engine];
     const window = quotaWindow(fullest);
     return [
@@ -545,7 +565,7 @@ export function runnerAttention(input: RunnerAttentionInput): AttentionItem[] {
     items.push(offlineItem(runner, nowMs));
   } else {
     items.push(...signedOutItems(runner, workspaces), ...checkoutItems(workspaces));
-    items.push(...quotaItems(runner, workspaces));
+    items.push(...quotaItems(runner, workspaces, nowMs));
     const disk = diskItem(runner, workspaces);
     if (disk) items.push(disk);
   }
