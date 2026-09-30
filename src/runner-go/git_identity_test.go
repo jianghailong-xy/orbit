@@ -33,7 +33,7 @@ func TestGitWritesUseUserIdentity(t *testing.T) {
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	for _, scope := range []string{"repository", "global", "environment"} {
-		for _, operation := range []string{"baseline", "commit", "finalize", "checkpoint", "rescue", "merge", "integration merge", "integration rebase"} {
+		for _, operation := range []string{"baseline", "commit", "finalize", "checkpoint", "rescue", "merge", "integration merge", "integration rebase", "recovery"} {
 			t.Run(scope+"/"+operation, func(t *testing.T) {
 				t.Setenv("ORBIT_HOME", t.TempDir())
 				repo := initRepo(t)
@@ -48,6 +48,10 @@ func TestGitWritesUseUserIdentity(t *testing.T) {
 					t.Setenv("GIT_COMMITTER_NAME", "Environment User")
 					t.Setenv("GIT_COMMITTER_EMAIL", "environment@example.invalid")
 					identity = "Environment User <environment@example.invalid>"
+				}
+				if operation == "recovery" {
+					addOriginBare(t, repo)
+					advanceOriginMain(t, repo, "remote.txt", "remote advanced\n")
 				}
 				configPath := filepath.Join(repo, ".git", "config")
 				configBefore, err := os.ReadFile(configPath)
@@ -85,7 +89,7 @@ func TestGitWritesUseUserIdentity(t *testing.T) {
 					if err != nil || ref == "" {
 						t.Fatalf("rescue = %q, %v", ref, err)
 					}
-				case "merge", "integration merge", "integration rebase":
+				case "merge", "integration merge", "integration rebase", "recovery":
 					mustGit(t, wt.Path, "add", "-A")
 					env := append(os.Environ(), "GIT_AUTHOR_NAME=Original Writer", "GIT_AUTHOR_EMAIL=original@example.invalid")
 					if _, err := gitEnv(wt.Path, env, "commit", "-m", "original work"); err != nil {
@@ -106,6 +110,15 @@ func TestGitWritesUseUserIdentity(t *testing.T) {
 						author = identity
 					case "integration rebase":
 						ref, _, err = integrationRebase(wt.Path, "main", base, source)
+					case "recovery":
+						out := mergeToMain(MergeCommand{WorkDir: repo, SessionID: wt.Session, Branch: wt.Branch, BaseSha: base, RecoveryAction: "preview"})
+						if out.Recovery == nil || out.Recovery.Code != "READY" {
+							t.Fatalf("recovery = %+v", out)
+						}
+						ref = out.Recovery.CandidateSha
+						if got := mustGit(t, repo, "show", "-s", "--format=%an <%ae>|%cn <%ce>", out.Recovery.RebaseBaseSha); got != identity+"|"+identity {
+							t.Fatalf("recovery merge identity = %q, want %q", got, identity+"|"+identity)
+						}
 					}
 					if err != nil {
 						t.Fatal(err)
