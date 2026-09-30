@@ -21,6 +21,7 @@ import {
   WIKI_CURSOR_OUTCOMES,
   WIKI_DECIDE_ACTIONS,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
+  WIKI_MAINTENANCE_LOOKBACK_DAYS,
   WIKI_REJECT_REASONS,
   WIKI_REVIEW_MODES,
   type WikiCursorOutcome,
@@ -42,7 +43,7 @@ import { IsPublicId } from '../common/public-id';
 
 /**
  * `maintenance` in PATCH /api/wiki/spaces/:id, and in POST /api/wiki/spaces (contract
- * `space.settings.maintenance`): any of the four the owner sets. Declared before the two bodies that
+ * `space.settings.maintenance`): any of the five the owner sets. Declared before the two bodies that
  * carry it, whose decorator metadata names it as they are defined. `listId` is the server's and is not a field here — the whitelist drops it.
  */
 export class WikiMaintenanceSettingsDto {
@@ -68,6 +69,14 @@ export class WikiMaintenanceSettingsDto {
   @Min(WIKI_MAINTENANCE_DAILY_RUN_LIMIT.min)
   @Max(WIKI_MAINTENANCE_DAILY_RUN_LIMIT.max)
   dailyRunLimit?: number;
+
+  /** How many days back the cursor starts when maintenance is turned on; null is all of history. */
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsInt()
+  @Min(WIKI_MAINTENANCE_LOOKBACK_DAYS.min)
+  @Max(WIKI_MAINTENANCE_LOOKBACK_DAYS.max)
+  lookbackDays?: number | null;
 }
 
 /** POST /api/wiki/spaces — the owner's own space, for a codebase or for nothing in particular. */

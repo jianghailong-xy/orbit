@@ -27,6 +27,7 @@ import {
   WIKI_LIMITS,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
   WIKI_MAINTENANCE_LIST_TITLE,
+  WIKI_MAINTENANCE_LOOKBACK_DAYS,
   WIKI_MAINTENANCE_RULES,
   WIKI_MAINTENANCE_RUN,
   WIKI_MAINTENANCE_RUN_V1,
@@ -610,7 +611,7 @@ describe('wiki contract', () => {
     expect(wikiSpaceSettings({ maintenance: { enabled: 'yes', dailyRunLimit: -1, provider: '' } }).maintenance)
       .toEqual(WIKI_DEFAULT_MAINTENANCE_SETTINGS);
     expect(wikiMaintenanceSettings({ enabled: true, workspaceId: 'w', listId: 'l', dailyRunLimit: 5 }))
-      .toEqual({ enabled: true, workspaceId: 'w', provider: 'local-vllm', dailyRunLimit: 5, listId: 'l' });
+      .toEqual({ enabled: true, workspaceId: 'w', provider: 'local-vllm', dailyRunLimit: 5, lookbackDays: 14, listId: 'l' });
     // A day's runs are counted, not its tokens: 8 by default, 1 to 48, and anything else reads as the default —
     // a value out of bounds, one that is not a whole number, and the token budget this setting replaced.
     expect(WIKI_DEFAULT_MAINTENANCE_SETTINGS.dailyRunLimit).toBe(8);
@@ -621,6 +622,20 @@ describe('wiki contract', () => {
     }
     expect(wikiMaintenanceSettings({ dailyTokenBudget: 2_000_000 })).toEqual(WIKI_DEFAULT_MAINTENANCE_SETTINGS);
     expect(setting.channel).toMatch(/dailyRunLimit/u);
+    // How far back a cursor starts when maintenance is turned on: 14 days by default, 0 to 365, and null —
+    // all of history — kept as the choice it is, where an absent or malformed value reads as the default.
+    expect(WIKI_DEFAULT_MAINTENANCE_SETTINGS.lookbackDays).toBe(14);
+    expect(setting.bounds.lookbackDays).toEqual(WIKI_MAINTENANCE_LOOKBACK_DAYS);
+    expect(WIKI_MAINTENANCE_LOOKBACK_DAYS).toEqual({ min: 0, max: 365 });
+    for (const [stored, reads] of [[0, 0], [1, 1], [365, 365], [null, null], [-1, 14], [366, 14], [2.5, 14], ['7', 14], [undefined, 14]] as const) {
+      expect(wikiMaintenanceSettings({ lookbackDays: stored }).lookbackDays, String(stored)).toBe(reads);
+    }
+    expect(setting.channel).toMatch(/lookbackDays null is a value \(all history\)/u);
+    // The start is written once, where the cursor has no position, and moves no cursor that has one.
+    const start: string = CONTRACT.maintenance.cursor.start;
+    expect(start).toMatch(/turns maintenance on \(enabled false to true\) and the space's cursor has no position yet/u);
+    expect(start).toMatch(/lookbackDays null writes nothing/u);
+    expect(start).toMatch(/A cursor that has a position is never moved by it/u);
 
     const maintenance = CONTRACT.maintenance;
     expect(maintenance.rules).toEqual(WIKI_MAINTENANCE_RULES);

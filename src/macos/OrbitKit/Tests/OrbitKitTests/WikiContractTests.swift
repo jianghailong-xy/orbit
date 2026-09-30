@@ -352,5 +352,33 @@ final class WikiContractTests: XCTestCase {
             XCTAssertEqual(try JSONDecoder().decode(WikiMaintenanceSettings.self, from: json).dailyRunLimit, reads,
                            "dailyRunLimit \(stored)")
         }
+        // How far back a cursor starts when maintenance is turned on: 14 days by default, 0 to 365, and null —
+        // all of history — kept as the choice it is, where a value left out or malformed reads as the default.
+        let lookbackBounds = try object(try object(maintenance["bounds"], "space.settings.maintenance.bounds")["lookbackDays"],
+                                        "space.settings.maintenance.bounds.lookbackDays")
+        XCTAssertEqual(lookbackBounds["min"] as? Int, WikiMaintenanceSettings.lookbackDaysRange.lowerBound)
+        XCTAssertEqual(lookbackBounds["max"] as? Int, WikiMaintenanceSettings.lookbackDaysRange.upperBound)
+        XCTAssertEqual(WikiMaintenanceSettings.default.lookbackDays, 14)
+        let lookbacks: [(String, Int?)] = [("0", 0), ("1", 1), ("365", 365), ("null", nil), ("-1", 14), ("366", 14),
+                                           ("2.5", 14), (#""7""#, 14)]
+        for (stored, reads) in lookbacks {
+            let json = Data(#"{"lookbackDays":\#(stored)}"#.utf8)
+            XCTAssertEqual(try JSONDecoder().decode(WikiMaintenanceSettings.self, from: json).lookbackDays, reads,
+                           "lookbackDays \(stored)")
+        }
+        XCTAssertEqual(try JSONDecoder().decode(WikiMaintenanceSettings.self, from: Data("{}".utf8)).lookbackDays, 14,
+                       "a look-back left out is the default, not all of history")
+        // All of history survives a round trip, and an update sends it as null: a key left out changes nothing.
+        let all = WikiMaintenanceSettings(enabled: true, workspaceId: "w", provider: "local-vllm", dailyRunLimit: 8,
+                                          lookbackDays: nil, listId: "l")
+        XCTAssertEqual(try JSONDecoder().decode(WikiMaintenanceSettings.self, from: JSONEncoder().encode(all)), all)
+        func sent(_ update: WikiMaintenanceUpdate) throws -> [String: Any] {
+            try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(update)) as? [String: Any])
+        }
+        XCTAssertTrue(try sent(WikiMaintenanceUpdate(lookbackDays: .some(nil)))["lookbackDays"] is NSNull,
+                      "all of history is sent as null")
+        XCTAssertEqual(try sent(WikiMaintenanceUpdate(lookbackDays: 0))["lookbackDays"] as? Int, 0)
+        XCTAssertEqual(try sent(WikiMaintenanceUpdate(lookbackDays: 30))["lookbackDays"] as? Int, 30)
+        XCTAssertNil(try sent(WikiMaintenanceUpdate(enabled: false))["lookbackDays"], "Turn off sends no look-back")
     }
 }

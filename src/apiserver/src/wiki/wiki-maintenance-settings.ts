@@ -1,9 +1,17 @@
+import { randomUUID } from 'node:crypto';
 import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AgentProvider, WIKI_MAINTENANCE_LIST_TITLE, wikiMaintenanceSettings, type WikiMaintenanceSettings } from '@orbit/shared';
+import {
+  AgentProvider,
+  WIKI_CURSOR_FACT_KINDS,
+  WIKI_MAINTENANCE_LIST_TITLE,
+  wikiMaintenanceSettings,
+  type WikiMaintenanceSettings,
+} from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import type { PrismaService } from '../prisma/prisma.service';
 import { execRuntime, isBuiltinProvider } from '../providers/custom-provider';
+import type { FactPosition } from './wiki-maintenance';
 
 /**
  * Who a Wiki maintenance session is, and the owner's maintenance settings of a space (design §8.2,
@@ -114,6 +122,27 @@ export interface WikiMaintenanceInput {
   workspaceId?: string | null;
   provider?: string;
   dailyRunLimit?: number;
+  /** Null is a value — all of history — and left out is none. */
+  lookbackDays?: number | null;
+}
+
+/** With a time, the position before every fact at it: the first kind in the order facts are read in, and the nil id. */
+const START_KIND = [...WIKI_CURSOR_FACT_KINDS].sort()[0]!;
+const START_REF = '00000000-0000-0000-0000-000000000000';
+
+/** In the start's upsert: the row's furthest issued position is behind the start, or there is none. */
+const issuedBehind = Prisma.sql`("wiki_cursor"."issued_at" IS NULL
+  OR ("wiki_cursor"."issued_at", "wiki_cursor"."issued_kind", "wiki_cursor"."issued_ref")
+   < (EXCLUDED."issued_at", EXCLUDED."issued_kind", EXCLUDED."issued_ref"))`;
+
+/**
+ * Where a cursor with no position starts when maintenance is turned on (contract `maintenance.cursor.start`):
+ * `lookbackDays` days before `now`, as the position before every fact of that moment — so a fact is
+ * after it exactly when it is no older — or null for all of history, which reads from the earliest fact.
+ */
+function wikiCursorStart(lookbackDays: number | null, now: Date): FactPosition | null {
+  if (lookbackDays === null) return null;
+  return { at: new Date(now.getTime() - lookbackDays * 86_400_000), kind: START_KIND, ref: START_REF };
 }
 
 /**
@@ -126,14 +155,20 @@ export interface WikiMaintenanceInput {
  * locked — the user row's key (rank 10) and the list (20) before the wiki row (60) — so the
  * transaction takes its locks in the order docs/postgres-lock-order.md gives them. A list made by the
  * loser of two concurrent first enables is deleted again before it commits.
+ *
+ * THE WRITE THAT TURNS MAINTENANCE ON STARTS THE CURSOR, when it has no position yet: `lookbackDays` days
+ * back (`wikiCursorStart`), in the same transaction, so no fact finds the space on with its cursor still
+ * at the earliest fact. Once — a cursor that has a position is never moved by it, and changing
+ * `lookbackDays` alone moves nothing. `now` is for a spec to hold still.
  */
 export function setWikiMaintenance(
   prisma: PrismaService,
   ownerId: string,
   spaceId: string,
   input: WikiMaintenanceInput,
+  now: Date = new Date(),
 ): Promise<WikiMaintenanceSettings> {
-  return new MaintenanceSettingsWriter(prisma).setWikiMaintenance(ownerId, spaceId, input);
+  return new MaintenanceSettingsWriter(prisma).setWikiMaintenance(ownerId, spaceId, input, now);
 }
 
 /**
@@ -173,7 +208,7 @@ class MaintenanceSettingsWriter {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async setWikiMaintenance(ownerId: string, spaceId: string, input: WikiMaintenanceInput): Promise<WikiMaintenanceSettings> {
+  async setWikiMaintenance(ownerId: string, spaceId: string, input: WikiMaintenanceInput, now: Date): Promise<WikiMaintenanceSettings> {
     if (input.workspaceId) {
       const workspace = await this.prisma.workspace.findFirst({
         where: { id: input.workspaceId, ownerId, deletedAt: null },
@@ -211,7 +246,8 @@ class MaintenanceSettingsWriter {
         const [locked] = await tx.$queryRaw<Array<{ settings: unknown }>>`
           SELECT "settings" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR UPDATE`;
         if (!locked) throw new NotFoundException('no such wiki space');
-        const next = merged(storedMaintenance(locked.settings), input);
+        const was = storedMaintenance(locked.settings);
+        const next = merged(was, input);
         needsWorkspace(next);
         if (next.enabled && !next.listId && made) next.listId = made.id;
         else if (made) await tx.taskList.delete({ where: { id: made.id } });
@@ -219,6 +255,25 @@ class MaintenanceSettingsWriter {
         await tx.$executeRaw`
           UPDATE "wiki_space" SET "settings" = "settings" || ${change}::jsonb, "updated_at" = now()
            WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid`;
+        // Turned on by this write: the cursor starts where the owner's look-back says, if it has no position
+        // yet. The furthest issued position is never moved back: it becomes the later of what it was and the start.
+        const start = next.enabled && !was.enabled ? wikiCursorStart(next.lookbackDays, now) : null;
+        if (start) {
+          const at = start.at.toISOString();
+          await tx.$executeRaw`
+            INSERT INTO "wiki_cursor" ("id", "space_id", "owner_id", "source", "position_at", "position_kind", "position_ref",
+                                       "issued_at", "issued_kind", "issued_ref")
+            VALUES (${randomUUID()}::uuid, ${spaceId}::uuid, ${ownerId}::uuid, 'facts', ${at}::timestamptz, ${start.kind}, ${start.ref},
+                    ${at}::timestamptz, ${start.kind}, ${start.ref})
+            ON CONFLICT ("space_id", "source") DO UPDATE
+               SET "position_at" = EXCLUDED."position_at", "position_kind" = EXCLUDED."position_kind",
+                   "position_ref" = EXCLUDED."position_ref",
+                   "issued_at" = CASE WHEN ${issuedBehind} THEN EXCLUDED."issued_at" ELSE "wiki_cursor"."issued_at" END,
+                   "issued_kind" = CASE WHEN ${issuedBehind} THEN EXCLUDED."issued_kind" ELSE "wiki_cursor"."issued_kind" END,
+                   "issued_ref" = CASE WHEN ${issuedBehind} THEN EXCLUDED."issued_ref" ELSE "wiki_cursor"."issued_ref" END,
+                   "updated_at" = now()
+             WHERE "wiki_cursor"."position_at" IS NULL`;
+        }
         return next;
       },
       loggedRetry(this.logger, 'wiki.setMaintenance'),
@@ -264,6 +319,7 @@ function merged(current: WikiMaintenanceSettings, input: WikiMaintenanceInput): 
     workspaceId: input.workspaceId === undefined ? current.workspaceId : input.workspaceId,
     provider: input.provider?.trim() || current.provider,
     dailyRunLimit: input.dailyRunLimit ?? current.dailyRunLimit,
+    lookbackDays: input.lookbackDays === undefined ? current.lookbackDays : input.lookbackDays,
     listId: current.listId,
   };
 }

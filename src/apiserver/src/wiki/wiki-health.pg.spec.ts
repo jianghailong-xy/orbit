@@ -384,8 +384,12 @@ test('the status line\'s read: every active entry of the space, and maintenance 
   const cursors = await h.sql.query(`SELECT 1 FROM "wiki_cursor" WHERE "space_id" = $1`, [s.spaceId]);
   assert.equal(cursors.rowCount, 0, 'the read writes nothing, not even the cursor row');
 
-  // On, and never run: the one fact is the backlog, counted as the read is made.
+  // On, and never run: the one fact is the backlog, counted as the read is made. Turning maintenance on
+  // started the cursor (fourteen days back, by default); the reads below leave that row as it was.
   await turnOn(h, s);
+  const cursorRow = async () => (await h.sql.query(`SELECT * FROM "wiki_cursor" WHERE "space_id" = $1`, [s.spaceId])).rows;
+  const started = await cursorRow();
+  assert.equal(started.length, 1, 'turning maintenance on started the cursor');
   const on = await readHealth(h, s);
   assert.equal(on.maintenance.look, 'ok');
   assert.equal(on.maintenance.enabled, true);
@@ -400,8 +404,7 @@ test('the status line\'s read: every active entry of the space, and maintenance 
   assert.equal(behind.maintenance.look, 'behind');
   assert.equal(behind.maintenance.backlog, 2);
   assert.ok(behind.maintenance.lagSeconds >= (WIKI_MAINTENANCE_RULES.maxPendingAgeHours + 2) * 3600 - 60);
-  assert.equal((await h.sql.query(`SELECT 1 FROM "wiki_cursor" WHERE "space_id" = $1`, [s.spaceId])).rowCount, 0,
-    'still nothing written');
+  assert.deepEqual(await cursorRow(), started, 'still nothing written');
 });
 
 test('a run under way reads as running, and a day whose runs are used up says so', { skip }, async () => {

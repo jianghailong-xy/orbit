@@ -167,7 +167,7 @@ describe('Wiki settings', () => {
     expect(text()).not.toContain('switched itself back');
   });
 
-  it('sets maintenance up: the workspace named for the space, local-vllm, 8 runs a day', async () => {
+  it('sets maintenance up: the workspace named for the space, local-vllm, 8 runs a day, the last 14 days', async () => {
     await mount(space());
     expect(text()).toContain('Wiki maintenance');
     expect(container.querySelector('.wk-maint-state')?.textContent).toContain('Off');
@@ -176,27 +176,78 @@ describe('Wiki settings', () => {
     const dialog = document.querySelector<HTMLElement>('.ant-modal')!;
     expect(dialog.textContent).toContain('Set up maintenance');
     const fields = [...dialog.querySelectorAll('.wk-setup-k')].map((node) => node.textContent);
-    expect(fields).toEqual(['Workspace', 'Provider', 'Daily limit']);
+    expect(fields).toEqual(['Workspace', 'Provider', 'Daily limit', 'Look back']);
     expect(dialog.textContent).toContain('orbit · wikova');
     expect(dialog.textContent).toContain('local-vllm');
     expect(dialog.textContent).toContain('runs a day');
+    expect(dialog.textContent).toContain('Last 14 days');
+    expect(dialog.querySelector<HTMLInputElement>('input[aria-label="days"]')?.value).toBe('14');
     await act(async () => button('Turn on', dialog).click());
     await settle();
     expect(patches).toEqual([
-      { maintenance: { enabled: true, workspaceId: WORKSPACE_ID, provider: 'local-vllm', dailyRunLimit: 8 } },
+      { maintenance: { enabled: true, workspaceId: WORKSPACE_ID, provider: 'local-vllm', dailyRunLimit: 8, lookbackDays: 14 } },
     ]);
   });
 
-  it('shows maintenance on — where, on what, how often — and turns it off', async () => {
+  it('looks back as far as the owner picks: all of history, from now on, or days they type', async () => {
+    await mount(space());
+    const setUp = async (): Promise<HTMLElement> => {
+      await act(async () => button('Set up…', container).click());
+      await settle();
+      return document.querySelector<HTMLElement>('.ant-modal-wrap:not([style*="display: none"]) .ant-modal')!;
+    };
+    const pick = async (label: string): Promise<void> => {
+      await act(async () => {
+        document.getElementById('wk-setup-lookback')?.closest('.ant-select')?.querySelector('.ant-select-content')
+          ?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      });
+      await settle();
+      const options = [...document.body.querySelectorAll<HTMLElement>('.ant-select-item-option')];
+      expect(options.map((option) => option.textContent)).toEqual(['From now on', 'Last 14 days', 'All history']);
+      await act(async () => options.find((option) => option.textContent === label)!.click());
+      await settle();
+    };
+
+    let dialog = await setUp();
+    await pick('All history');
+    expect(dialog.querySelector('input[aria-label="days"]'), 'no days to type for all of history').toBeNull();
+    await act(async () => button('Turn on', dialog).click());
+    await settle();
+
+    dialog = await setUp();
+    await pick('From now on');
+    await act(async () => button('Turn on', dialog).click());
+    await settle();
+
+    dialog = await setUp();
+    const days = dialog.querySelector<HTMLInputElement>('input[aria-label="days"]')!;
+    await act(async () => {
+      days.focus();
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(days, '30');
+      days.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => days.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+    await settle();
+    expect(dialog.textContent).toContain('Last 30 days');
+    await act(async () => button('Turn on', dialog).click());
+    await settle();
+
+    expect(patches.map((body) => (body.maintenance as { lookbackDays?: unknown }).lookbackDays)).toEqual([null, 0, 30]);
+  });
+
+  it('shows maintenance on — where, on what, how often, how far back — and turns it off', async () => {
     await mount(
-      space({ maintenance: { enabled: true, workspaceId: WORKSPACE_ID, provider: 'local-vllm', dailyRunLimit: 6, listId: 'list' } }),
+      space({
+        maintenance: { enabled: true, workspaceId: WORKSPACE_ID, provider: 'local-vllm', dailyRunLimit: 6, lookbackDays: 30, listId: 'list' },
+      }),
     );
     const rows = [...container.querySelectorAll('.wk-maint-rows > .k')].map((node) => node.textContent);
-    expect(rows).toEqual(['Status', 'Workspace', 'Provider', 'Daily limit']);
+    expect(rows).toEqual(['Status', 'Workspace', 'Provider', 'Daily limit', 'Look back']);
     const page = text();
     expect(page).toContain('orbit · wikova');
     expect(page).toContain('local-vllm · pinned, no fallback');
     expect(page).toContain('6 runs a day');
+    expect(page).toContain('Last 30 days');
     await act(async () => button('Turn off', container).click());
     await settle();
     expect(patches).toEqual([{ maintenance: { enabled: false } }]);

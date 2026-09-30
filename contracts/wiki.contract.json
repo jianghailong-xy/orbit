@@ -106,16 +106,17 @@
       "maintenance": {
         "type": "object",
         "phase": 2,
-        "default": { "enabled": false, "workspaceId": null, "provider": "local-vllm", "dailyRunLimit": 8, "listId": null },
+        "default": { "enabled": false, "workspaceId": null, "provider": "local-vllm", "dailyRunLimit": 8, "lookbackDays": 14, "listId": null },
         "keys": {
           "enabled": "boolean. Off by default: in a space whose maintenance is off, no fact starts a maintenance task.",
           "workspaceId": "The owner's workspace the maintenance task runs in, which decides the runner. Maintenance cannot be turned on without one.",
           "provider": "The provider the run is pinned to, with no fallback (design section 8.2, maintenance.run): a configured provider on the Claude Code runtime. The door refuses a built-in engine, a provider on another runtime and an account pool (400); a name no provider has yet is taken, and a run that finds it still missing is refused when it is claimed.",
           "dailyRunLimit": "How many maintenance tasks the space may make in one UTC day: a whole number within bounds.dailyRunLimit. Counted as the tasks of the space's maintenance list made since midnight UTC, however they ended, but the plan's jobs (plan.jobs.notAMaintenanceRun); the maintenance job reads the count (wikiMaintenanceRunsToday) before it makes one.",
+          "lookbackDays": "How far back the cursor starts when maintenance is turned on (maintenance.cursor.start): a whole number of days within bounds.lookbackDays — 0 reads only the facts from then on — or null, which reads from the earliest fact. 14 by default: before it, a space's first run read from its oldest fact, and orbit's cursor was started 14 days back by hand (2026-09-28). It starts a cursor that has no position once, and never moves one that has.",
           "listId": "Server-written and never taken from a request: the space's hidden Wiki maintenance task list (maintenance.list), made the first time maintenance is turned on, or by the space's first plan job (plan.jobs.task), and kept when it is turned off."
         },
-        "bounds": { "dailyRunLimit": { "min": 1, "max": 48 } },
-        "channel": "The owner's alone: PATCH /api/wiki/spaces/:id on the user door with no session header — or POST /api/wiki/spaces, whose maintenance is checked before the space is made and then written as the PATCH writes it (plan.jobs.trigger) — and WIKI_OWNER_CHANNEL_ONLY otherwise. A request names any of enabled, workspaceId, provider and dailyRunLimit; what it leaves out stays as it was. A stored value out of bounds, or of a key this contract no longer has, reads as the default."
+        "bounds": { "dailyRunLimit": { "min": 1, "max": 48 }, "lookbackDays": { "min": 0, "max": 365 } },
+        "channel": "The owner's alone: PATCH /api/wiki/spaces/:id on the user door with no session header — or POST /api/wiki/spaces, whose maintenance is checked before the space is made and then written as the PATCH writes it (plan.jobs.trigger) — and WIKI_OWNER_CHANNEL_ONLY otherwise. A request names any of enabled, workspaceId, provider, dailyRunLimit and lookbackDays; what it leaves out stays as it was, and lookbackDays null is a value (all history), not a key left out. A stored value out of bounds, or of a key this contract no longer has, reads as the default."
       },
       "reservedForPhase2": ["embedding"]
     }
@@ -931,6 +932,7 @@
       "scope": "An ordinary session is the space's when it ran in one of the space's workspaces. A session that speaks for a project — the project's coordinator session, or a judgment session one of its coordinator wakes opened — is the space's only when one of its projects works here: the coordinator's workspace says where it was set up, not what the project works on. A project works here when one of its task sessions ran in one of the space's workspaces, one of its tasks is assigned to one, or its codebase is the space's repository; a project that says nothing of where it works — no task assigned or run anywhere, no codebase — goes by its coordinator's workspace. Nothing outside the scope is a fact, a dossier or part of an error cluster.",
       "excluded": "Nothing of a maintenance session or of a task in the maintenance list is a fact: a run does not feed its own backlog.",
       "order": "Facts are ordered by their time to the millisecond, then kind, then id. The watermark is one such position; a fact is after it or not.",
+      "start": "Where a cursor starts, written once: when a PATCH on the owner's channel turns maintenance on (enabled false to true) and the space's cursor has no position yet, the cursor starts space.settings.maintenance.lookbackDays days before that moment — its watermark set to the start position (that time, the first kind in the order, and the nil id: before every fact at that moment) and its furthest issued position to the later of that and what it was — in the same transaction as the settings. lookbackDays null writes nothing, and a cursor with no position reads from the earliest fact. A cursor that has a position is never moved by it: neither a later turn-on nor a change of lookbackDays touches it. Only that one write reads the clock for it; no clock starts anything.",
       "backlog": "Every fact after the watermark is one: each of the five kinds adds one. Counted from the facts themselves whenever the cursor is read, so no fact is missed for want of an event.",
       "token": "Opaque: the position of the last fact a page covered and the space it belongs to.",
       "advance": {
