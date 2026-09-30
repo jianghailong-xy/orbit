@@ -1478,6 +1478,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // creates no function, trigger, enum or type — so it is not another writer of the DONE fence. No
       // INSERT, UPDATE or DELETE: nothing is backfilled.
       '0336_session_account_choice',
+      // What became of a document section's material: one JSONB column, `dispositions`, added to
+      // `wiki_doc_section` with a default and a CHECK that it is an array. Read against every claim above:
+      // no `task`, `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair and
+      // every stored task and criterion row are out of its reach. No function, trigger or type is created,
+      // replaced or dropped — its one DO block only adds the CHECK when it is missing — so it is not another
+      // writer of the DONE fence and names none of the six preserved objects. No INSERT, UPDATE or DELETE.
+      '0337_wiki_doc_dispositions',
       // The wiki plan's jobs: one new table, `wiki_plan_job` (a draft, revision or build of a space's plan,
       // run as a task of the space's maintenance list), reaching `wiki_space` through (space_id, owner_id),
       // with its own CHECKs, one unique index, one partial unique index and two indexes. Its task_id and

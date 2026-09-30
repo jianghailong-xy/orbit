@@ -5,7 +5,7 @@
 // the contract JSON.
 
 import type { WikiAnchorState, WikiEntryKind, WikiEntryStatus, WikiTrust } from './wiki';
-import type { WikiPlanSectionKind } from './wikiPlan';
+import type { WikiPlanSectionKind, WikiPlanSessionCondition } from './wikiPlan';
 
 /** `needs_review`: more than `rules.needsReviewAbove` of its sentences are unsourced or unverified. */
 export const WIKI_DOC_STATUSES = ['ok', 'needs_review'] as const;
@@ -57,6 +57,38 @@ export type WikiDocChecker = (typeof WIKI_DOC_CHECKERS)[number];
 export const WIKI_DOC_WITHDRAW_REASONS = ['rejected', 'retired', 'superseded', 'anchor_changed', 'anchor_missing'] as const;
 export type WikiDocWithdrawReason = (typeof WIKI_DOC_WITHDRAW_REASONS)[number];
 
+/**
+ * What became of one piece of a section's material (contract `docs.dispositionActions`): the model's
+ * merge adopted it, folded it into another piece, or dropped it; or the runner never handed it over —
+ * the section's material was full, or a rule took it out (a platform template, a repeated text).
+ */
+export const WIKI_DOC_DISPOSITION_ACTIONS = ['adopt', 'merge', 'drop', 'over_cap', 'filtered'] as const;
+export type WikiDocDispositionAction = (typeof WIKI_DOC_DISPOSITION_ACTIONS)[number];
+
+/**
+ * The evidence weight the merge reads a record with (contract `docs.material.weights`), heaviest first:
+ * the owner's decision, a record of what was merged or delivered, a command's output, an error.
+ */
+export const WIKI_DOC_MATERIAL_WEIGHTS = ['decision', 'merge', 'output', 'error', 'other'] as const;
+export type WikiDocMaterialWeight = (typeof WIKI_DOC_MATERIAL_WEIGHTS)[number];
+
+/** The numbers the server's half of a section's material is gathered by (contract `docs.material.rules`). */
+export const WIKI_DOC_MATERIAL_RULES = {
+  entriesPerSection: 6,
+  sourcesPerEntry: 3,
+  ownerTurnsPerSection: 6,
+  commentsPerSection: 4,
+  /** A longer record is returned as this many characters around what found it. */
+  excerptChars: 1_100,
+} as const;
+
+/** The numbers `orbit wiki docs build` holds a section to (contract `docs.build.rules`). */
+export const WIKI_DOC_BUILD_RULES = {
+  materialMaxChars: 22_000,
+  materialHeaderChars: 120,
+  parallel: 4,
+} as const;
+
 /** A section's blocks: paragraphs and list items hold sentences; a heading or a code block its text. */
 export const WIKI_DOC_BLOCK_KINDS = ['paragraph', 'item', 'heading', 'code'] as const;
 export type WikiDocBlockKind = (typeof WIKI_DOC_BLOCK_KINDS)[number];
@@ -78,6 +110,9 @@ export const WIKI_DOC_RULES = {
   textMaxChars: 1_000,
   /** The most errors one refusal lists; the message counts them all. */
   errorsMax: 200,
+  /** The pieces of material one section's ledger lists, and the longest reason one gives. */
+  dispositionsPerSection: 200,
+  reasonMaxChars: 500,
 } as const;
 
 /**
@@ -86,11 +121,12 @@ export const WIKI_DOC_RULES = {
  */
 export const WIKI_DOC_SCHEMA = {
   write: ['planVersion', 'repoSha', 'model', 'sections'],
-  section: ['key', 'materialSha256', 'markdown', 'footnotes'],
+  section: ['key', 'materialSha256', 'markdown', 'footnotes', 'dispositions'],
   repoFootnote: ['kind', 'path', 'sha', 'lines', 'section', 'symbol', 'quote', 'excerpt', 'verified', 'viaEntryId'],
   recordFootnote: ['kind', 'ref', 'chars', 'quote', 'viaEntryId'],
   lines: ['start', 'end'],
   chars: ['start', 'end'],
+  disposition: ['material', 'kind', 'ref', 'action', 'into', 'reason'],
 } as const;
 export type WikiDocSchemaLevel = keyof typeof WIKI_DOC_SCHEMA;
 
@@ -130,6 +166,19 @@ export interface WikiDocRecordFootnoteInput {
 
 export type WikiDocFootnoteInput = WikiDocRepoFootnoteInput | WikiDocRecordFootnoteInput;
 
+/** What became of one piece of a section's material (contract `docs.dispositions`). */
+export interface WikiDocDisposition {
+  /** The id the runner gave it in the section: `D1`, `C2`, `K1`, `S3`. */
+  material: string;
+  kind: WikiDocFootnoteKind;
+  /** A repository path with its lines (`path#L12-40`), or a record's id. */
+  ref: string;
+  action: WikiDocDispositionAction;
+  /** The piece it was merged into: set exactly for `merge`. */
+  into: string | null;
+  reason: string;
+}
+
 export interface WikiDocSectionInput {
   /** The plan section's key. */
   key: string;
@@ -138,6 +187,8 @@ export interface WikiDocSectionInput {
   /** The section's body: Markdown with footnote markers `[n]`, n naming `footnotes[n-1]`. */
   markdown: string;
   footnotes: WikiDocFootnoteInput[];
+  /** What became of each piece of its material; stored with the section as it came. */
+  dispositions?: WikiDocDisposition[];
 }
 
 /** `POST /api/runner/wiki/spaces/:id/docs/:slug`. */
@@ -279,6 +330,8 @@ export interface WikiDocSectionView {
   /** The origin/main commit it was generated at. */
   repoSha: string | null;
   model: string | null;
+  /** What became of each piece of its material when it was written (none for a section not written yet). */
+  dispositions: WikiDocDisposition[];
   blocks: WikiDocBlockView[];
 }
 
@@ -379,4 +432,60 @@ export interface WikiDocsIndex {
   spaceId: string;
   plan: { version: number; confirmedAt: string } | null;
   items: WikiDocsIndexItem[];
+}
+
+// ── The server's half of a section's material ──────────────────────────────────────────────────
+
+/** An entry a section's session condition picked: the way in to the records it cites, never the material. */
+export interface WikiDocMaterialEntry {
+  id: string;
+  kind: WikiEntryKind;
+  title: string;
+  summary: string;
+  /** 3 per keyword, 2 for a path under an anchor path, 1 for a topic, 1 for a kind (contract `docs.material.entries`). */
+  score: number;
+  recordedAt: string;
+}
+
+/** One record of a section's material, redacted and placed. */
+export interface WikiDocMaterialRecord {
+  kind: WikiDocRecordKind;
+  /** The record's id: a record footnote's `ref`. */
+  ref: string;
+  /** Through one of `entries` (its via entry), or by the condition's projects, window and keywords. */
+  found: 'entry' | 'search';
+  via: { entryId: string; title: string; kind: WikiEntryKind; quote: string | null } | null;
+  weight: WikiDocMaterialWeight;
+  /** The owner's own words (`isOwnerTurn`, an answered question, an owner's comment or decision). */
+  ownerWords: boolean;
+  /** A turn's kind, an event's type, a tool's name, a comment's author, a receipt's result. */
+  label: string | null;
+  at: string | null;
+  sessionId: string | null;
+  sessionTitle: string | null;
+  taskId: string | null;
+  taskTitle: string | null;
+  projectId: string | null;
+  projectTitle: string | null;
+  notePath: string | null;
+  /** Redacted: the whole record, or `docs.material.rules.excerptChars` of it around what found it. */
+  text: string;
+  /** Where `text` is in the record's redacted text, in code points, end exclusive: a record footnote's `chars`. */
+  chars: { start: number; end: number };
+  /** The redacted record's length, in code points. */
+  length: number;
+}
+
+/** `GET /api/runner/wiki/spaces/:id/docs/:slug/material?section=<key>` (contract `docs.reads.material`). */
+export interface WikiDocMaterial {
+  spaceId: string;
+  slug: string;
+  section: string;
+  planVersion: number;
+  /** The section's session condition as the confirmed plan states it; null when it has none. */
+  condition: WikiPlanSessionCondition | null;
+  entries: WikiDocMaterialEntry[];
+  records: WikiDocMaterialRecord[];
+  /** Sources the picked entries cite whose records are not this account's any more: never read. */
+  unresolved: Array<{ kind: string; ref: string; entryId: string }>;
 }
