@@ -17,9 +17,9 @@ import { Transcript, type RunEvent } from './Transcript';
  * was the owner's own bubble, several screens long. The card is the task as fields, with the brief
  * folded at its foot.
  *
- * What holds this in place is the pair. With the payload the card is drawn and the brief is folded
- * behind it; without one the turn is exactly the bubble it always was, because a brief that carries
- * no card must never be half-recognised from its words.
+ * What holds this in place is the recorded pair. With the payload the opening card is drawn and the
+ * brief is folded behind it; an exact retry after a failed turn reuses that pair, while a brief with
+ * no card or retry context remains the owner's bubble and is never recognised from its words alone.
  */
 
 let container: HTMLDivElement;
@@ -236,6 +236,44 @@ describe('the turn that starts a task run', () => {
       'A clock never starts agent work',
       'Piping a test run into grep hides its exit code',
     ]);
+  });
+
+  it('keeps a retried task brief as the same card after a provider failure', async () => {
+    await mount([
+      started(CARD),
+      {
+        seq: 2,
+        type: 'assistant',
+        payload: {
+          text: "API Error: Request rejected (429) · This request would exceed your account's rate limit. Please try again later.",
+        },
+      },
+      {
+        seq: 3,
+        type: 'user',
+        turnId: 'retry-1',
+        payload: { text: BRIEF },
+      },
+    ]);
+
+    expect(container.querySelectorAll('.tsc')).toHaveLength(2);
+    expect(container.querySelectorAll('.chat-user')).toHaveLength(0);
+    expect(container.querySelectorAll('.tsc-title')[1]?.textContent).toBe(CARD.title);
+  });
+
+  it('does not promote an ordinary repeated brief without a failed turn', async () => {
+    await mount([
+      started(CARD),
+      {
+        seq: 2,
+        type: 'user',
+        turnId: 'typed-2',
+        payload: { text: BRIEF },
+      },
+    ]);
+
+    expect(container.querySelectorAll('.tsc')).toHaveLength(1);
+    expect(container.querySelectorAll('.chat-user')).toHaveLength(1);
   });
 
   // The negative control. Same conversation, same brief, nothing recorded beside it: the turn is the

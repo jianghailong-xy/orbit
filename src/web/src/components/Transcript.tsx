@@ -336,8 +336,9 @@ type TextNode = {
   // `delivery` above, which is how far a message got on its way into the engine.
   itemCard?: OpenItemDelivery;
   // The turn that starts a task's run, when the control plane recorded the task its brief was built
-  // from beside the echo (`taskStart`, lib/taskStartCard). Drawn as the task instead of a bubble, with
-  // `text` — the brief written for the agent — folded inside it.
+  // from beside the echo (`taskStart`, lib/taskStartCard), or the same snapshot carried onto an
+  // exact retry. Drawn as the task instead of a bubble, with `text` — the brief written for the
+  // agent — folded inside it.
   taskStart?: TaskStart;
   // The message telling the coordinator its project was started, when the control plane recorded
   // the facts beside the echo (`projectStarted`, lib/projectStarted). Nobody's message either.
@@ -453,11 +454,32 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
     }
     return roots;
   };
+  // A task retry re-sends the exact brief that opened the run, but its new user event has no
+  // `taskStart` payload of its own. Keep the control-plane snapshot from that run only while a
+  // retryable failure is waiting, so the re-sent brief keeps the same card shape without treating
+  // an arbitrary message that happens to contain the brief as a task start.
+  type TaskStartReplay = { text: string; card: TaskStart };
+  const taskStartByParent = new Map<string, TaskStartReplay>();
+  const taskStartRetryByParent = new Map<string, TaskStartReplay>();
+  const parentKey = (parentId?: string): string => parentId ?? '';
+  const armTaskStartRetry = (parentId?: string) => {
+    const start = taskStartByParent.get(parentKey(parentId));
+    if (start) taskStartRetryByParent.set(parentKey(parentId), start);
+  };
+  const taskStartForRetry = (parentId: string | undefined, text: string): TaskStart | undefined => {
+    const key = parentKey(parentId);
+    const retry = taskStartRetryByParent.get(key);
+    // Any next user turn closes the retry window. Only an exact replay of the recorded brief gets
+    // the card; a new message remains an ordinary user bubble.
+    taskStartRetryByParent.delete(key);
+    return retry?.text === text ? retry.card : undefined;
+  };
   // A sign-in failure is reported once per dispatch, so a session that is picked up again
   // reports the identical one seconds later. That card is a remedy, not a log line: stacking
   // two says nothing new and puts two live copies of a sign-in there is only one of — with two
   // codes to read and two Cancels for the same relay. A repeat folds into the card above it.
   const authError = (parentId: string | undefined, seq: number, message: string) => {
+    armTaskStartRetry(parentId);
     const list = into(parentId);
     const prev = list[list.length - 1];
     if (prev?.kind === 'authError' && prev.message === message) return;
@@ -475,6 +497,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
     message: string,
     variant: AutoRetryVariant,
   ) => {
+    armTaskStartRetry(parentId);
     if (liveRetry) liveRetry.stale = true;
     const list = into(parentId);
     // A quota is usually spent on the message that just went out, which puts that bubble
@@ -569,8 +592,12 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // lib/openItemDelivery). Read off the event rather than out of the text, so a delivery that
         // carries no card keeps the reading it has always had.
         const itemCard = parseOpenItemDelivery(p) ?? undefined;
-        // The same for a task run's opening turn (lib/taskStartCard): the payload, never the brief.
-        const taskStart = parseTaskStartCard(p) ?? undefined;
+        // The same for a task run's opening turn (lib/taskStartCard): use the payload, or the
+        // opening payload's snapshot for an exact retry, never infer a new card from text alone.
+        const text = recorded ? recorded.text : p.text ? String(p.text) : '';
+        const taskStartFromPayload = parseTaskStartCard(p);
+        const retriedTaskStart = taskStartForRetry(parent, text);
+        const taskStart = taskStartFromPayload ?? retriedTaskStart;
         const startedCard = parseProjectStarted(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
@@ -588,7 +615,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           const node: TextNode = {
             kind: 'user',
             seq: ev.seq,
-            text: recorded ? recorded.text : p.text ? String(p.text) : '',
+            text,
             note: recorded?.note,
             itemCard,
             taskStart,
@@ -599,6 +626,9 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             delivery: typeof p.delivery === 'string' ? p.delivery : undefined,
             steer: p.steer === true,
           };
+          if (taskStart) {
+            taskStartByParent.set(parentKey(parent), { text, card: taskStart });
+          }
           if (ev.turnId) userByTurn.set(ev.turnId, node);
           into(parent).push(node);
         }
@@ -704,6 +734,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // other way.
         const subtype = typeof p.subtype === 'string' ? p.subtype : '';
         const failed = subtype !== '' && !TURN_FINISHED_SUBTYPES.has(subtype) && !turnAccountedFor;
+        if (failed) armTaskStartRetry(parent);
         roots.push(
           failed
             ? { kind: 'error', seq: ev.seq, message: TURN_ENDED_WITHOUT_REPLY }
