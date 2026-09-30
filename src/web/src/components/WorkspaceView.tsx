@@ -107,6 +107,7 @@ import {
   projectMergedPromotionsQuery,
   projectOpenItemsQuery,
   projectPromotionQuery,
+  sessionCreatedTasksQuery,
   watchesQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
@@ -256,12 +257,18 @@ import {
   sendEvidenceDecision,
 } from './EvidenceDecisionCard';
 import {
-  ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER,
   ACCEPTANCE_PLAN_CHANGE_PREFIX,
   AcceptanceConfirmationReceipt,
   SessionAcceptanceConfirmationCard,
   acceptancePlanChangeContext,
+  acceptancePlanChangePlaceholder,
+  type SettlementPlanChat,
 } from './AcceptanceConfirmationCard';
+import {
+  READY_TO_START,
+  confirmedChangesKey,
+  type SettlementQuestion,
+} from '../lib/projectStart';
 import { SessionProjectSettlementCard } from './ProjectSettlementCard';
 import {
   OWNER_SEND_BACK_LABEL,
@@ -903,14 +910,18 @@ const ownerItemWord = (s: any): string | null => {
 
 // What a row that is waiting on you says. The server names the kind when everything it counted is
 // one kind with words of its own (`waitingKind`), and the row says it: an OWNER_CONFIRMED task's run
-// in the confirmation card's words, and one of the four owner items in the words the bar and the
-// card share — a row reading "Waiting for approval" over an escalated exception describes the one
-// thing that is certainly not happening. Anything else waiting on you keeps the approval wording.
+// in the confirmation card's words, one of the four owner items in the words the bar and the card
+// share — a row reading "Waiting for approval" over an escalated exception describes the one thing
+// that is certainly not happening — and a project waiting to be started, "Ready to start". Anything
+// else waiting on you keeps the approval wording.
 // Only the words change — the row still carries no button: the one place to answer is the card in
 // the session.
 const waitingLabel = (s: any): string => {
   if (s.waitingKind === 'OWNER_CONFIRMATION') return WAITING_FOR_CONFIRMATION;
   if (s.waitingKind === 'OWNER_ITEM') return ownerItemWord(s) ?? 'Waiting for approval';
+  // A project its coordinator asked to start: the row says what the card in it asks, not an
+  // approval nobody is being asked for.
+  if (s.waitingKind === 'START_REQUEST') return READY_TO_START;
   return 'Waiting for approval';
 };
 
@@ -4066,6 +4077,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     ...acceptanceConfirmationQuery(coordinatedProjectId ?? ''),
     enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
   });
+  // What a re-confirmation pressed in this window changed — "1 new, 1 stricter" — which only the
+  // change card knew at the press (`confirmedChangesKey`). Never fetched: once a set is confirmed
+  // nothing is left changed, so there is nothing to ask the server for, and a receipt drawn
+  // without it says the seal and the count.
+  const confirmedChanges = useQuery({
+    queryKey: confirmedChangesKey(
+      coordinatedProjectId ?? '',
+      acceptanceConfirmation.data?.confirmation?.criteriaDigest ?? '',
+    ),
+    queryFn: (): string | null => null,
+    enabled: false,
+    staleTime: Infinity,
+  });
 
   // The merges this project has already made, for the record each one leaves where it happened
   // (`ProjectPromotionReceipt` below). NOT the read the strip's card is drawn from: that one is the
@@ -4212,7 +4236,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               anchor,
               moment: confirmation.confirmedAt,
               key: `acceptance-receipt:${confirmation.confirmedAt}`,
-              element: <AcceptanceConfirmationReceipt confirmation={confirmation} />,
+              element: (
+                <AcceptanceConfirmationReceipt
+                  confirmation={confirmation}
+                  changed={confirmedChanges.data ?? null}
+                />
+              ),
             }];
       }),
       // And the merges this project has made, each at the moment it made it. The strip draws only
@@ -4239,6 +4268,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     ],
     [
       acceptanceConfirmation.data,
+      confirmedChanges.data,
       criteriaDecisions.data,
       criteriaReplies,
       mergedPromotions.data,
@@ -4327,16 +4357,31 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // delivered and put down are the card's own state, so the strip is told rather than left to work
   // out a second answer. Kept with the conversation it was reported in, because this view outlives
   // navigation and the conversation just left must not answer for the next one.
-  const [openSettlementIn, setOpenSettlementIn] = useState<string | null>(null);
+  const [openSettlementIn, setOpenSettlementIn] = useState<{
+    sessionId: string;
+    question: SettlementQuestion;
+  } | null>(null);
   const reportSettlementQuestion = useCallback(
-    (open: boolean) => {
+    (question: SettlementQuestion | null) => {
       if (!selectedId) return;
       setOpenSettlementIn((current) =>
-        open ? selectedId : current === selectedId ? null : current,
+        question
+          ? { sessionId: selectedId, question }
+          : current?.sessionId === selectedId ? null : current,
       );
     },
     [selectedId],
   );
+  // The start card's "View tasks": the tasks this conversation filed are the strip above the
+  // composer, so it is opened there rather than navigating away from the card being read. The same
+  // read the strip is drawn from says whether there is one; without it the card links to the
+  // project instead.
+  const [createdTasksOpenRequest, setCreatedTasksOpenRequest] = useState(0);
+  const viewCreatedTasks = useCallback(() => setCreatedTasksOpenRequest((n) => n + 1), []);
+  const createdTasks = useQuery({
+    ...sessionCreatedTasksQuery(selectedId ?? ''),
+    enabled: Boolean(selectedId) && !selectedTrashed,
+  });
 
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
@@ -6154,16 +6199,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // change about the plan, with the plan itself carried in front of it. Unlike the three above it
   // answers nothing — the agent has finished writing the criteria and is waiting — so no door is
   // named here. The card stays until then, with its own Start the project still live.
-  const startPlanChangeChat = (plan: {
-    projectId: string;
-    criteriaDigest: string;
-    projectTitle: string;
-    criteria: string[];
-  }): void => {
+  const startPlanChangeChat = (plan: SettlementPlanChat): void => {
     setReplyTo({
       target: { kind: 'planChange', projectId: plan.projectId, criteriaDigest: plan.criteriaDigest },
       banner: ACCEPTANCE_PLAN_CHANGE_PREFIX + plan.projectTitle,
-      placeholder: ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER,
+      // What the composer asks for follows the card that armed it: the start card's "before it
+      // starts", the change card's "about these".
+      placeholder: acceptancePlanChangePlaceholder(plan.question),
       context: acceptancePlanChangeContext(plan),
     });
     setTimeout(() => taRef.current?.focus(), 0);
@@ -7622,7 +7664,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             sessionId={selectedId}
             projectId={selectedSession?.projectId ?? null}
             cards={decisionCards}
-            confirmation={openSettlementIn === selectedId}
+            confirmation={
+              openSettlementIn?.sessionId === selectedId ? openSettlementIn.question : false
+            }
             // Named in the card's own words, with how long the run has waited — never a number
             // first. Only when the card below is drawn in this session, so a press always arrives.
             ownerConfirmation={
@@ -7832,19 +7876,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 />
               )}
               {/* The settlement question — whether this project's criteria, together, are what
-                  done means — asked while the plan is written and nothing has run: drawn from the
-                  confirmation standing and the project, and pressed straight at the confirmation
-                  door, which is also what starts the project. Keyed by the session like the two
-                  cards above, because whether it was delivered belongs to this conversation, and by
-                  a key neither of them carries, for the reason the evidence card's note gives. It
-                  reports whether it is on screen and the project is still unstarted, and that report
-                  is what the pinned strip points at. */}
+                  done means — as whichever of its three cards is asking: "Start this project?" once
+                  the coordinator asks to start it, "Confirm the new criteria?" once a started
+                  project's criteria move, or the older confirmation card for a started project
+                  nobody ever confirmed. Pressed straight at the start door or the confirmation
+                  door. Keyed by the session like the two cards above, because whether it was
+                  delivered belongs to this conversation, and by a key neither of them carries, for
+                  the reason the evidence card's note gives. It reports which question is on screen
+                  and still asking, and that report is what the pinned strip points at. */}
               {selected && selectedId && !selectedTrashed && (
                 <SessionAcceptanceConfirmationCard
                   key={`confirmation:${selectedId}`}
                   projectId={selectedSession?.projectId ?? null}
                   onOpenQuestion={reportSettlementQuestion}
                   onChatAbout={startPlanChangeChat}
+                  onViewTasks={(createdTasks.data?.total ?? 0) > 0 ? viewCreatedTasks : undefined}
                 />
               )}
               {/* The other end of that question: the work filed under this project has met every
@@ -8149,7 +8195,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         )}
         {/* The tasks this session's agent created, beside the branch below: the conversation's two
             kinds of output next to each other. Hidden until it has created one. */}
-        {selectedId && !selectedTrashed && <SessionCreatedTasksStrip sessionId={selectedId} />}
+        {selectedId && !selectedTrashed && (
+          <SessionCreatedTasksStrip sessionId={selectedId} openRequest={createdTasksOpenRequest} />
+        )}
         <SessionOutputs
           // Only the open session has a worktree to show. With nothing selected (new-session
           // draft, empty list) `keepPreviousData` still holds the previously-open session's

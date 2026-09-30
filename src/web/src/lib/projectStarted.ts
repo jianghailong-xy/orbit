@@ -1,4 +1,8 @@
-import type { ProjectStartedCard } from '@orbit/shared';
+import {
+  PROJECT_START_SETTING_KEYS,
+  type ProjectStartSettings,
+  type ProjectStartedCard,
+} from '@orbit/shared';
 
 /**
  * The message telling a coordinator its project was started, as the control plane recorded it
@@ -22,6 +26,9 @@ export function parseProjectStarted(payload: unknown): ProjectStartedCard | null
     return null;
   }
   const held = Array.isArray(card.held) ? card.held.flatMap(taskOf) : [];
+  // What the start left the project running with, when it recorded it. A settings object this
+  // build cannot read is left off whole — the card is still the card — rather than drawn half.
+  const settings = settingsOf(card.settings);
   return {
     by: card.by,
     projectId: card.projectId,
@@ -30,6 +37,38 @@ export function parseProjectStarted(payload: unknown): ProjectStartedCard | null
     held,
     // Never fewer than it lists: a count that says so is not one a reader can act on.
     heldCount: Math.max(count(card.heldCount) ?? 0, held.length),
+    ...(settings
+      ? {
+          settings,
+          differsFromRequest: Array.isArray(card.differsFromRequest)
+            ? PROJECT_START_SETTING_KEYS.filter((key) =>
+                (card.differsFromRequest as unknown[]).includes(key),
+              )
+            : [],
+        }
+      : {}),
+  };
+}
+
+function settingsOf(value: unknown): ProjectStartSettings | null {
+  if (!value || typeof value !== 'object') return null;
+  const settings = value as Record<string, unknown>;
+  if (
+    (settings.line !== 'PROJECT_BRANCH' && settings.line !== 'MAIN')
+    || typeof settings.automatic !== 'boolean'
+    || count(settings.maxConcurrentTasks) === null
+    || (settings.mergeCheckCommand !== null && typeof settings.mergeCheckCommand !== 'string')
+  ) {
+    return null;
+  }
+  return {
+    line: settings.line,
+    ...(typeof settings.projectBranchName === 'string'
+      ? { projectBranchName: settings.projectBranchName }
+      : {}),
+    automatic: settings.automatic,
+    maxConcurrentTasks: settings.maxConcurrentTasks as number,
+    mergeCheckCommand: (settings.mergeCheckCommand as string | null) ?? null,
   };
 }
 

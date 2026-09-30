@@ -52,12 +52,14 @@
  *       coordinator whichever run submitted or answered, it is asked for once a write has
  *       committed and never for a refused one, and a send that throws takes nothing back.
  *
- *   (7) Its own fixture: a project whose plan is written and whose confirmation nobody has given is
- *       the FOURTH kind, and it is counted exactly while its card is drawn — the paired negative is
- *       the same project before a single task is filed under it, which is the state `Start the
- *       project` would have started nothing in. Confirming the set at the door puts the row back;
- *       an edit that moves the digest asks again; and a press the door refuses leaves the count
- *       standing, because a count is not a credential.
+ *   (7) Its own fixture: a project waiting on its owner's word about its criteria is counted exactly
+ *       while its card is drawn. Before the project is started that card is "Start this project?",
+ *       drawn only once the coordinator has ASKED (`project_request_start`) — so the paired
+ *       negatives are the same project before a single task is filed under it, and then with a task
+ *       and no request, which is the state the card used to be inferred from. The request lights the
+ *       row as `START_REQUEST` ("Ready to start"). Starting it at the door puts the row back; an edit
+ *       that moves the digest of the started project asks again, as a project decision; and a press
+ *       the door refuses leaves the count standing, because a count is not a credential.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/needs-you-owner-decision.pg.spec.ts
  *
@@ -87,6 +89,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { readOwnerDecisionSignals } from '../projects/owner-decision-signal';
+import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { criterionKeyOf } from '../projects/project-acceptance';
 import { ProjectAcceptanceService } from '../projects/project-acceptance.service';
 import { ProjectsService } from '../projects/projects.service';
@@ -780,8 +783,9 @@ test('the badge counts the standard set waiting to be confirmed, and falls when 
     return response.acceptanceCriteriaHold ?? null;
   }
 
-  /** One task filed under the project — the fourth fact the confirmation card turns on. */
-  function fileTask(label: string) {
+  /** One task filed under the project, serving `criterionDefinitionId` — work a start could hand
+   *  out, and a plan the coordinator's start request passes the readiness check on. */
+  function fileTask(label: string, criterionDefinitionId: string) {
     return db.task.create({
       data: {
         ownerId: f.ownerId,
@@ -791,11 +795,32 @@ test('the badge counts the standard set waiting to be confirmed, and falls when 
         creatorId: f.ownerId,
         assigneeId: f.workspaceId,
         status: TaskStatus.OPEN,
+        criterionDefinitionId,
         // The narrowed work is not what this case is about: it is here so the project holds
         // something a press on `Start the project` could hand out.
         completionCriterion: 'OWNER_CONFIRMED',
       },
     });
+  }
+
+  /** The coordinator asks its owner to start the project, through the request door itself. */
+  function requestStart() {
+    return new ProjectOpenItemService(db as unknown as PrismaService, stack.sessions).requestStart(
+      f.ownerId,
+      f.projectId,
+      f.coordinatorSessionId,
+      { line: 'MAIN', automatic: true, maxConcurrentTasks: 3, mergeCheckCommand: null, why: 'the plan is filed' },
+    );
+  }
+
+  /** The coordinator conversation's row, whole: what it lights off and the word it says. */
+  async function rowOf(sessionId: string) {
+    const rows = await stack.sessions.list(f.ownerId, {}) as unknown as Array<{
+      id: string; pendingApprovals: number; status: string; waitingKind?: string | null;
+    }>;
+    const row = rows.find((s) => s.id === sessionId);
+    assert.ok(row, 'the conversation is in this owner’s Open list');
+    return row;
   }
 
   /** The coordinator conversation's row as the session list serves it: what the row lights off. */
@@ -829,31 +854,40 @@ test('the badge counts the standard set waiting to be confirmed, and falls when 
     where: { projectId: f.projectId }, orderBy: { ordinal: 'asc' }, select: { id: true },
   });
 
-  // ── the paired negative, first, and it is the CARD's own fourth fact ───────────────────────────
-  // A plan with nothing filed under it is one nobody can start — `Start the project` would start
-  // nothing — so no card is drawn and the row is dark. The positive comes next on one more task.
+  // ── the paired negatives, first: the card is drawn on a request, and on nothing less ──────────
+  // A plan with nothing filed under it is one nobody can start, so no card is drawn and the row is
+  // dark.
   assert.equal(await countOn(f.coordinatorSessionId), 0,
     'a plan nothing is filed under is not a question anybody can answer, so nothing is waiting');
-  await fileTask('first');
+  await fileTask('first', first!.id);
+  // …and a plan with work filed under it is still not a question until the coordinator says it is
+  // ready: the start card is drawn on a request and never inferred from a task count, so the row
+  // stays dark with it.
+  assert.equal(await countOn(f.coordinatorSessionId), 0,
+    'a plan nobody asked to start lit the row — the card is drawn only on a start request');
+  assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), []);
 
-  await t.test('(7a) a written plan nobody has confirmed lights the coordinator’s row', async () => {
-    const row = (await stack.sessions.list(f.ownerId, {}) as unknown as Array<{
-      id: string; pendingApprovals: number; status: string;
-    }>).find((s) => s.id === f.coordinatorSessionId)!;
+  await t.test('(7a) the coordinator asking to start it lights the row, as Ready to start', async () => {
+    const filed = await requestStart();
+    assert.equal(filed.state, 'OPEN', 'the request was filed');
+    const row = await rowOf(f.coordinatorSessionId);
     // The count is the whole of what the row lights off: a positive `pendingApprovals` is the amber
     // "needs you" tone on the session list and the disc on a coordinator card
     // (`ProjectCoordinatorCard.tsx`), and a zero is a row that reads as an ordinary idle reply.
     assert.equal(row.pendingApprovals, 1,
       'the PARKED coordinator row says somebody is waiting on it — the state this card left dark');
     assert.equal(row.status, RunStatus.AWAITING_INPUT, 'and it is parked, not generating');
+    assert.equal(row.waitingKind, 'START_REQUEST', 'and it names what is waiting: a start');
     assert.equal(await needsYou(), 1, 'and the workspace tally lights with it');
 
     assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), [{
-      sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'PROJECT_DECISION',
-    }], 'and it lands on the conversation the card is drawn in, as a project decision');
+      sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'START_REQUEST',
+    }], 'and it lands on the conversation the card is drawn in, as a start');
   });
 
-  await t.test('(7b) confirming the set puts the count back', async () => {
+  await t.test('(7b) starting the project puts the count back', async () => {
+    // The older door starts a project nobody has started, with the default settings, and answers
+    // the request as the start does.
     const recorded = await confirm();
     assert.equal(recorded.state, 'CONFIRMED', 'the door recorded the version that stood');
     assert.equal(await countOn(f.coordinatorSessionId), 0, 'and the question the row was lit for is answered');
@@ -861,10 +895,11 @@ test('the badge counts the standard set waiting to be confirmed, and falls when 
     assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), []);
   });
 
-  await t.test('(7c) an edit after it asks again — the same card, the same row', async () => {
+  await t.test('(7c) an edit after the start asks again — the change card, the same row', async () => {
     // Adding a criterion is ADDITIVE, so it takes effect at once and moves the digest of the set
     // the confirmation named. The confirmation stops counting by that alone: neither the row nor
-    // the card is told anything, and both re-derive it from the same two tables.
+    // the card is told anything, and both re-derive it from the same two tables. The project is
+    // started now, so what asks is "Confirm the new criteria?" — a project decision.
     assert.equal(await state([{ id: first!.id, text: RULER }, { text: ADDED }]), null,
       'adding a criterion is not a loosening, so it is applied rather than held');
     assert.equal(await countOn(f.coordinatorSessionId), 1,
