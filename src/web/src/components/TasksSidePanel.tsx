@@ -775,6 +775,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                   <span className="tp-account-profile-content">
                     <Avatar
                       size={36}
+                      src={avatar.data}
                       icon={<UserOutlined />}
                       style={{ background: 'var(--brand)', flex: 'none' }}
                     />
