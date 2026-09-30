@@ -131,6 +131,17 @@ public struct ProjectListCoordinatorItems: Codable, Equatable, Sendable {
     }
 }
 
+/// The coordinator's open request to start a project nobody has started (`START_REQUEST`), as the
+/// index carries it: only since when it has been asking. The request itself is the open-items
+/// read's (`ProjectOpenItemsView.startRequest`).
+public struct ProjectListStartRequest: Codable, Equatable, Sendable {
+    public let waitingSince: String
+
+    public init(waitingSince: String) {
+        self.waitingSince = waitingSince
+    }
+}
+
 /// Who must act on a project, and how long they have had to (`ProjectListAttention`).
 public struct ProjectListAttention: Codable, Equatable, Sendable {
     public let userBlockers: Int
@@ -141,11 +152,17 @@ public struct ProjectListAttention: Codable, Equatable, Sendable {
     public let nextCheckAt: String?
     public let ownerItems: [ProjectListOwnerItem]
     public let coordinatorItems: ProjectListCoordinatorItems?
+    /// The coordinator asking to start this project, while nobody has — the fifth thing a row names
+    /// as waiting on the owner ("Needs you · Ready to start"). Kept out of `ownerItems` because it
+    /// is none of those four: nothing escalated, and nothing pushes. Nil from a server that
+    /// predates start requests, and for a project nobody asked to start.
+    public let startRequest: ProjectListStartRequest?
 
     public init(userBlockers: Int = 0, coordinatorBlockers: Int = 0, systemBlockers: Int = 0,
                 maxSeverity: ProjectAttentionSeverity? = nil, attentionSinceAt: String? = nil,
                 nextCheckAt: String? = nil, ownerItems: [ProjectListOwnerItem] = [],
-                coordinatorItems: ProjectListCoordinatorItems? = nil) {
+                coordinatorItems: ProjectListCoordinatorItems? = nil,
+                startRequest: ProjectListStartRequest? = nil) {
         self.userBlockers = userBlockers
         self.coordinatorBlockers = coordinatorBlockers
         self.systemBlockers = systemBlockers
@@ -154,6 +171,7 @@ public struct ProjectListAttention: Codable, Equatable, Sendable {
         self.nextCheckAt = nextCheckAt
         self.ownerItems = ownerItems
         self.coordinatorItems = coordinatorItems
+        self.startRequest = startRequest
     }
 
     public init(from decoder: Decoder) throws {
@@ -167,6 +185,9 @@ public struct ProjectListAttention: Codable, Equatable, Sendable {
         ownerItems = try c.decodeIfPresent([ProjectListOwnerItem].self, forKey: .ownerItems) ?? []
         coordinatorItems = try c.decodeIfPresent(ProjectListCoordinatorItems.self,
                                                  forKey: .coordinatorItems)
+        // Read with `try?`: a request this build cannot read is a row that names none, rather than
+        // an index that fails to load.
+        startRequest = (try? c.decodeIfPresent(ProjectListStartRequest.self, forKey: .startRequest)) ?? nil
     }
 }
 
