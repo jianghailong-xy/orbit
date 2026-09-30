@@ -29,7 +29,8 @@ const wikiPlanRevisePrecondition = "Run this only as the plan job the owner's re
 	"stored — three rounds at most, each handing every error back to the model."
 
 const wikiPlanCheckPrecondition = "Judge a plan job only by what this reads: it passes when the job's run stored a draft " +
-	"that passed the plan's gate, and a run cannot pass it by saying it finished."
+	"that passed the plan's gate — or, a build's, wrote the documents of the confirmed version it was made for — and a run " +
+	"cannot pass it by saying it finished."
 
 var wikiPlanDraftDescription = wikiPlanDraftPrecondition + " This is a plan job's run, whole: it reads the job and the " +
 	"plan as it stands, fetches the maintenance workspace's checkout, reads the repository at origin/main and what the " +
@@ -420,7 +421,8 @@ type wikiPlanCheckRead struct {
 	Problems []string `json:"problems"`
 }
 
-// cliWikiPlanCheck is a plan job's acceptance command: no session, and non-zero unless the job stored a draft.
+// cliWikiPlanCheck is a plan job's acceptance command: no session, and non-zero unless the job stored a draft
+// — or, a build, wrote the documents of the confirmed version it was made for.
 func cliWikiPlanCheck(args []string, out io.Writer) error {
 	fs := newCLIFlagSet("orbit wiki plan check")
 	space := fs.String("space", "", "the space the plan job drafts for")
@@ -461,6 +463,13 @@ func cliWikiPlanCheck(args []string, out io.Writer) error {
 	if *jsonOut {
 		if err := writeCLIRawJSON(out, raw, true); err != nil {
 			return err
+		}
+	} else if check.Kind == "build" && check.OK && check.Version != nil {
+		fmt.Fprintf(out, "Space %s: build job %s wrote the documents of confirmed version %d.\n", spaceID, jobID, *check.Version)
+	} else if check.Kind == "build" {
+		fmt.Fprintf(out, "Space %s: build job %s did not write the documents of the version it was made for.\n", spaceID, jobID)
+		for _, problem := range check.Problems {
+			fmt.Fprintf(out, "  %s\n", problem)
 		}
 	} else if check.OK && check.Version != nil {
 		fmt.Fprintf(out, "Space %s: plan job %s stored version %d, which passed the plan's gate.\n", spaceID, jobID, *check.Version)

@@ -1357,6 +1357,19 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space when a section was written (nothing depends on it).',
     answer: 'Typed 503 from the global boundary; the maintenance run writes the document again, and a section still changed is written then.',
   },
+  // What cites a repository file gone from origin/main (contracts/wiki.contract.json `docs.withdrawal.paths`,
+  // migration 0340): a maintenance run names the paths, and every sentence citing one is withdrawn.
+  {
+    at: 'wiki/wiki-docs.ts#withdrawPaths',
+    shape: 'TX_RETRIED',
+    locks: 'The space\'s documents whose sentences cite one of the paths, wiki_doc (rank 60) by SELECT … FOR NO KEY UPDATE in id order — the lock wiki.writeDoc and the entry withdrawal take a document by, in the same order; then their wiki_doc_sentence rows (60) by one UPDATE to withdrawn and their wiki_doc_section rows (60) by one UPDATE of stale_at. No entry is locked: a path withdraws through no entry.',
+    identity: 'The sentences citing the paths that are not withdrawn yet: a re-run finds them withdrawn and withdraws nothing more.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The documents and sentences are read again inside the closure, and the UPDATE matches only sentences not withdrawn, so a re-run of a committed withdrawal writes nothing.',
+    effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space when a sentence was withdrawn (nothing depends on it).',
+    answer: 'Typed 503 from the global boundary; the maintenance run fails, and the next one names the paths again.',
+  },
 ];
 
 export interface TransactionParticipant {
@@ -1537,6 +1550,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'wiki/wiki.service.ts#reopenRejectedOp', under: 'wiki.reopenVerifications — an add\'s lineage proposed again through applyOp, then the op\'s verdict moved into its history by one UPDATE predicated on the rejection still standing, then its changeset opened again' },
   { at: 'wiki/wiki.service.ts#verifyTaintedOp', under: 'wiki.reopenVerifications — the op by one UPDATE predicated on it still waiting for the owner, after the unlocked reads of the space and an amend\'s entry that decide whether Automatic takes it' },
   // The documents' write (0326): the one transaction `wiki.writeDoc` states, in its order.
+  { at: 'wiki/wiki-docs-affected.ts#withdrawDocSentencesByPath', under: 'wiki.withdrawDocPaths — the documents citing the paths locked in id order, then their sentences withdrawn and their sections marked stale, in the order that unit states; it takes no lock above rank 60 and none its caller did not state' },
   { at: 'wiki/wiki-docs.ts#store', under: 'wiki.writeDoc — the via entries FOR SHARE, the document row made and locked, its sections replaced, its sentences classified again, all in the order that unit states; it takes no lock above rank 60 and none its caller did not state' },
   // The wiki's opening context, appended to what `dequeueTurn` is about to deliver (design §7.1).
   // It runs inside that unit's rank-30 Session transaction and reads unlocked: the session's
@@ -1855,11 +1869,13 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'wiki/wiki-maintenance-run.ts#noteWikiMaintenanceRunEnd', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'How the run ended — outcome, error, report and the ops the server refused — written onto the run row by id after the cursor was advanced or refused. A later end of the same run overwrites it; `orbit wiki check` reads what is there.' },
   { at: 'wiki/wiki-articles.ts#plan', class: 'INSERT', statements: 1, note: 'A space with no topic is given the default ones (contracts/wiki.contract.json `articles.seeding`): one INSERT of the batch, ON CONFLICT DO NOTHING on (space_id, slug), so two first plans leave one set. Only when a count found none; a space that has topics is never written. Outside a transaction on purpose: the rows are names and path prefixes, nothing reads them as a fact about anything else, and a plan that loses the race simply reads the winner\'s.' },
   { at: 'wiki/wiki-plan-job.ts#requestWikiPlanJob', class: 'INSERT', statements: 1, note: 'A plan job a fact asked for (contracts/wiki.contract.json `plan.jobs`): one INSERT, queued, when the space has no draft or revision that has not ended. Outside a transaction on purpose: the partial unique index on the space\'s open drafts is the fence, and the loser of two requests at once reads the winner\'s job and answers with it.' },
+  { at: 'wiki/wiki-plan-job.ts#requestWikiPlanBuild', class: 'INSERT', statements: 3, note: 'The build of a confirmed version\'s documents (contracts/wiki.contract.json `plan.jobs`, kind build, migration 0340): one INSERT, queued, when the space has no build that waits — or, when it has one, one UPDATE of that row by id, only while it still waits, pointing it at the newer version (a second statement of the same UPDATE when two confirmations raced and the loser reads the winner\'s row). Outside a transaction on purpose: the partial unique index on the space\'s waiting builds is the fence, and the loser of two requests at once reads the winner\'s job and answers with it.' },
   { at: 'wiki/wiki-plan-job.ts#holdJob', class: 'ONE_ROW_CAS', statements: 1, note: 'Why a job was not made (contract `plan.jobs.held`), written onto its row by id and only while it is still queued or held, and only when the reason is not the one it already holds, so the time it first held for that reason is kept. The task made clears it.' },
   { at: 'wiki/wiki-plan-job.ts#queueJob', class: 'ONE_ROW_CAS', statements: 1, note: 'A job that waits behind an unended task of its list: its row by id, only while it is still queued or held, its held reason cleared.' },
   { at: 'wiki/wiki-plan-job.ts#endJobWhoseTaskIsOver', class: 'ONE_ROW_CAS', statements: 1, note: 'A made job whose task ended or is gone before its run said how it went: its row by id, only while it is still made, ended failed with why. A job its run ended already is not matched and keeps what the run said.' },
   { at: 'wiki/wiki-plan-job.ts#startWikiPlanJob', class: 'ONE_ROW_CAS', statements: 1, note: 'A job\'s run started (contract `plan.jobs.context`): the calling session, and the first time it said so (coalesce), on its row by id while it is made. A retried session of the same task overwrites the session and keeps the time.' },
   { at: 'wiki/wiki-plan-job.ts#progressWikiPlanJob', class: 'ONE_ROW_CAS', statements: 1, note: 'The gate round a job\'s run is on (contract `plan.jobs.progress`), on its row by id while it is made; a later round overwrites it. A job ended meanwhile is not matched, and the door answers WIKI_PLAN_NO_JOB.' },
+  { at: 'wiki/wiki-plan-job.ts#progressWikiPlanBuild', class: 'ONE_ROW_CAS', statements: 1, note: 'How far a build\'s run has got (contract `plan.jobs.progress`): the documents it went through and the one it writes now, on its row by id while it is made and a build; a later report overwrites it. A job ended meanwhile is not matched, and the door answers WIKI_PLAN_NO_JOB.' },
   { at: 'wiki/wiki-plan-job.ts#finishWikiPlanJob', class: 'ONE_ROW_CAS', statements: 1, note: 'How a job\'s run ended (contract `plan.jobs.finish`): its row by id while it is made, ended with the outcome, the version or the gate\'s errors, the report and the last draft. A job ended already is not matched, so a second end keeps the first.' },
   { at: 'wiki/wiki-plan.ts#propose', class: 'INSERT', statements: 1, note: 'A maintenance run\'s proposed change to the plan (contracts/wiki.contract.json `plan.proposals`): one INSERT, pending, after the gate passed it against the confirmed version. Outside a transaction on purpose: it changes no version, and the owner\'s acceptance gates it again against the plan as it stands then.' },
 ];

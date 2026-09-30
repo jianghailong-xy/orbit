@@ -562,14 +562,19 @@ struct ComposerView: View {
             if console.providerSwitchChoices.count > 1 || console.accountRowsOffered {
                 Menu {
                     ForEach(console.providerSwitchChoices) { choice in
-                        // With its accounts listed under it, the tick is on the account (or on
-                        // Automatic) rather than on the engine.
-                        let listsAccounts = choice.slug == console.accountEngine && console.accountRowsOffered
                         // A choice this runner can't run stays listed and carries its reason
                         // (web parity): hiding it turns "not signed in on this machine" into
                         // "Orbit lost my provider". The running one is exempt — it is the row's
                         // own caption, and a parenthetical there would sit under every turn.
                         let blocked = choice.unavailable != nil && choice.slug != console.provider
+                        // Each built-in engine's accounts under it, as the new-session picker lists
+                        // them (web parity): on the engine the session is on, the ones it moves
+                        // between; under another, the ones a switch onto that engine lands on.
+                        let here = choice.slug == console.accountEngine
+                        let elsewhere = here || blocked ? [] : console.accountChoices(for: choice.slug)
+                        // With its accounts listed under it, the tick is on the account (or on
+                        // Automatic) rather than on the engine.
+                        let listsAccounts = (here && console.accountRowsOffered) || !elsewhere.isEmpty
                         // An account pool the server says cannot run at all: no runner fixes
                         // that, so it is greyed out with its reason instead.
                         let fixable = blocked && choice.fixEngine != nil
@@ -590,7 +595,11 @@ struct ComposerView: View {
                                 selected: choice.slug == console.provider && !listsAccounts)
                         }
                         .disabled(blocked && !fixable)
-                        if listsAccounts { accountItems(choice.slug) }
+                        if here && console.accountRowsOffered {
+                            accountItems(choice.slug)
+                        } else if !elsewhere.isEmpty {
+                            switchAccountItems(choice.slug, elsewhere)
+                        }
                     }
                 } label: {
                     Text("Provider")
@@ -851,6 +860,36 @@ struct ComposerView: View {
                     account.unavailable.map { "\(account.label) — \($0), sign in →" }
                         ?? account.quota.map { "\(account.label) · \($0)" } ?? account.label,
                     selected: !console.sessionAutomatic && account.id == console.account(for: engine))
+            }
+        }
+    }
+
+    /// Another built-in engine's accounts under it in the Provider submenu (web parity): Automatic where
+    /// the workspace leaves the account to Orbit, then each account with its own quota. A pick moves the
+    /// session onto that engine and lands it there (`ConsoleModel.selectProvider(_:account:)`); nothing
+    /// is ticked, because the session is not on this engine. A signed-out account is a request for its
+    /// sign-in, as in `accountItems`.
+    @ViewBuilder
+    private func switchAccountItems(_ engine: String, _ rows: [AccountChoice]) -> some View {
+        if console.automaticOffered(engine) {
+            Button {
+                Task { await console.selectProvider(engine, account: CodexAccounts.automaticID) }
+            } label: {
+                menuItemLabel("Automatic · Resets soonest", selected: false)
+            }
+        }
+        ForEach(rows) { account in
+            Button {
+                if account.unavailable != nil {
+                    if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                } else {
+                    Task { await console.selectProvider(engine, account: account.id) }
+                }
+            } label: {
+                menuItemLabel(
+                    account.unavailable.map { "\(account.label) — \($0), sign in →" }
+                        ?? account.quota.map { "\(account.label) · \($0)" } ?? account.label,
+                    selected: false)
             }
         }
     }

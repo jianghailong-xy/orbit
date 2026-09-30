@@ -53,7 +53,10 @@ export type WikiDocVerdict = (typeof WIKI_DOC_VERDICTS)[number];
 export const WIKI_DOC_CHECKERS = ['server', 'runner'] as const;
 export type WikiDocChecker = (typeof WIKI_DOC_CHECKERS)[number];
 
-/** Why a sentence was withdrawn: what happened to the entry it came through. */
+/**
+ * Why a sentence was withdrawn: what happened to the entry it came through — or, as anchor_missing, that
+ * the repository file it cites was deleted or renamed on origin/main.
+ */
 export const WIKI_DOC_WITHDRAW_REASONS = ['rejected', 'retired', 'superseded', 'anchor_changed', 'anchor_missing'] as const;
 export type WikiDocWithdrawReason = (typeof WIKI_DOC_WITHDRAW_REASONS)[number];
 
@@ -307,7 +310,8 @@ export interface WikiDocSentenceView {
   notes: number[];
   /** An unsourced sentence's fact tokens no sourced sentence or heading carries. */
   newTokens: string[];
-  withdrawn: { reason: WikiDocWithdrawReason; entryId: string; at: string } | null;
+  /** Once withdrawn: why and when, and what withdrew it — the entry it came through, or the file it cited. */
+  withdrawn: { reason: WikiDocWithdrawReason; entryId: string | null; path: string | null; at: string } | null;
 }
 
 export interface WikiDocBlockView {
@@ -488,4 +492,72 @@ export interface WikiDocMaterial {
   records: WikiDocMaterialRecord[];
   /** Sources the picked entries cite whose records are not this account's any more: never read. */
   unresolved: Array<{ kind: string; ref: string; entryId: string }>;
+}
+
+// ── What a maintenance run writes again (criterion 3, revision 3) ───────────────────────────────
+
+/** The numbers the affected read and the path withdrawal go by (contract `docs.affected.rules`). */
+export const WIKI_DOCS_AFFECTED_RULES = {
+  /** The most entries that fit no section the read lists; `unplacedMore` counts the rest. */
+  unplacedMax: 50,
+  /** The most repository paths one withdrawal names. */
+  withdrawPathsMax: 500,
+} as const;
+
+/** An entry the confirmed plan has no place for: what a plan proposal is made of. */
+export interface WikiDocsUnplacedEntry {
+  id: string;
+  kind: string;
+  title: string;
+  summary: string;
+  topics: string[];
+  anchorPaths: string[];
+  /** When it last changed: the op that last applied to it. */
+  changedAt: string;
+}
+
+/**
+ * `GET /api/runner/wiki/spaces/:id/docs/affected` (contract `docs.reads.affected`): what a maintenance run
+ * of the space writes again because of the entries — every written section of the confirmed plan that an
+ * entry changed since it was written fits (`docs.affected.fit`), and every stale one — and what it may
+ * propose: the entries changed since the plan was first drafted that fit no section, less those a proposal
+ * already names. The repository's half — sections whose design documents, code or contracts changed on
+ * origin/main since their repoSha — is the run's to find, in its checkout.
+ */
+export interface WikiDocsAffected {
+  spaceId: string;
+  /**
+   * The confirmed plan, or null: with none, a maintenance run writes no document. repoSha is the commit the
+   * plan's references were last checked at — the confirmed version's, or the newest of the versions it
+   * was made from — from which a run looks for design documents that are new.
+   */
+  plan: { version: number; confirmedAt: string; repoSha: string | null; draftedAt: string } | null;
+  /** The space's build that has not ended: it writes the sections not written yet, so a run leaves them to it. */
+  build: { jobId: string; state: 'queued' | 'held' | 'running'; version: number } | null;
+  /** The written sections to write again, and why: the entries that fit them, stale for a withdrawn sentence. */
+  sections: Array<{ doc: string; key: string; repoSha: string; generatedAt: string; stale: boolean; entryIds: string[] }>;
+  /** Entries that fit no section of the confirmed plan and that no proposal names, newest first. */
+  unplaced: WikiDocsUnplacedEntry[];
+  /** How many more such entries there are than `unplaced` lists. */
+  unplacedMore: number;
+  /** What the space's proposals, whatever became of them, already name: its entries, commits and design documents. */
+  proposed: { entryIds: string[]; commits: string[]; paths: string[] };
+}
+
+/**
+ * `POST /api/runner/wiki/spaces/:id/docs/withdrawals` (contract `docs.withdrawal.paths`): repository files a
+ * maintenance run found deleted or renamed on origin/main at repoSha, among those the plan's sections cite.
+ * Every sentence with a footnote citing one is withdrawn as anchor_missing, naming the path, and its
+ * section marked stale.
+ */
+export interface WikiDocsPathWithdrawalRequest {
+  repoSha: string;
+  paths: Array<{ path: string; change: 'deleted' | 'renamed'; to?: string | null }>;
+}
+
+export interface WikiDocsPathWithdrawalResult {
+  spaceId: string;
+  /** Sentences withdrawn now; one withdrawn already is not counted again. */
+  withdrawn: number;
+  sections: Array<{ doc: string; key: string }>;
 }

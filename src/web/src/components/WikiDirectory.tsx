@@ -7,11 +7,22 @@ import {
   CloseOutlined,
   DownOutlined,
   HomeOutlined,
+  ProfileOutlined,
   SortAscendingOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons';
-import { wikiArticlesQuery } from '../lib/queries';
+import { wikiArticlesQuery, wikiDocsQuery, wikiPlanQuery, wikiSpaceQuery } from '../lib/queries';
+import { useWikiMaintenanceWhere } from '../lib/useWikiMaintenanceWhere';
 import { wikiSpacePath } from '../lib/wiki';
+import {
+  WIKI_DIRECTORY_PLAN,
+  wikiDocDirectoryGroups,
+  wikiDocPath,
+  wikiDocSectionPath,
+  wikiReadsByDocs,
+  type WikiDocDirectoryGroup,
+} from '../lib/wikiDocs';
+import { wikiPlanPath, wikiPlanPending } from '../lib/wikiPlan';
 import {
   WIKI_AZ_INDEX,
   WIKI_BROWSE,
@@ -25,8 +36,14 @@ import {
 } from '../lib/wikiArticles';
 
 /**
- * The category directory (criterion 10, mocks 11 ③, 12 ③, 13 ①, 15 ①③): Home, Browse by category and
- * the A–Z index, then every category's topics with the entries each one's article was written from.
+ * The category directory (criterion 10, mocks 11 ③, 12 ③, 13 ①, 15 ①③; by the plan since its second
+ * revision, mocks 25 ①, 23 ①, 27 ①): Home, Browse by category, the A–Z index and the Plan, then — once
+ * the space has a confirmed plan — the plan's categories and documents, a document open to its sections
+ * while it is the page; before one, every category's topics with their articles, as it was.
+ *
+ * THE PLAN ROW'S AMBER COUNT is what of the plan waits on the owner (`wikiPlanPending`): a draft to
+ * confirm, one that failed, one held, the changes proposed. A document's amber dot is a document past the
+ * threshold (Needs review); a grey one is not written yet.
  *
  * ONE LIST, TWO PLACES. On a desktop it is the column left of every reading page; below the app's
  * own mobile width it is the Contents drawer, opened from the page head's list button — the app
@@ -43,13 +60,42 @@ export type WikiDirectoryAt =
   | { view: 'home' }
   | { view: 'browse' }
   | { view: 'index' }
-  | { view: 'topic'; topic: string; part: number };
+  | { view: 'topic'; topic: string; part: number }
+  | { view: 'doc'; slug: string }
+  | { view: 'plan' };
+
+/** The section a document's page has on screen, as it announces it (`wk-doc-section`): the directory lights it. */
+export const WIKI_DOC_SECTION_EVENT = 'wk-doc-section';
+
+function useDocSection(slug: string | null): string | null {
+  const [key, setKey] = useState<string | null>(null);
+  useEffect(() => {
+    setKey(null);
+    if (!slug) return;
+    const on = (event: Event) => {
+      const detail = (event as CustomEvent<{ slug: string; key: string }>).detail;
+      if (detail?.slug === slug) setKey(detail.key);
+    };
+    window.addEventListener(WIKI_DOC_SECTION_EVENT, on);
+    return () => window.removeEventListener(WIKI_DOC_SECTION_EVENT, on);
+  }, [slug]);
+  return key;
+}
 
 export function WikiDirectory({ spaceId, spaceSlug, at }: { spaceId: string; spaceSlug: string; at: WikiDirectoryAt }) {
   const directory = useQuery(wikiArticlesQuery(spaceId));
-  const groups = useMemo(() => (directory.data ? wikiDirectoryGroups(directory.data) : []), [directory.data]);
+  const docs = useQuery(wikiDocsQuery(spaceId));
+  const plan = useQuery(wikiPlanQuery(spaceId));
+  const space = useQuery(wikiSpaceQuery(spaceId));
+  const maintenance = useWikiMaintenanceWhere(space.data);
+  const byDocs = wikiReadsByDocs(docs.data);
+  const groups = useMemo(() => (directory.data && !byDocs ? wikiDirectoryGroups(directory.data) : []), [directory.data, byDocs]);
+  const docGroups = useMemo(() => (docs.data && byDocs ? wikiDocDirectoryGroups(docs.data) : []), [docs.data, byDocs]);
+  const pending = plan.data ? wikiPlanPending(plan.data, maintenance.runnerOnline) : 0;
   const topic = at.view === 'topic' ? at.topic : null;
   const part = at.view === 'topic' ? at.part : 0;
+  const openDoc = at.view === 'doc' ? at.slug : null;
+  const section = useDocSection(openDoc);
 
   return (
     <nav className="wk-toc" aria-label={WIKI_CONTENTS}>
@@ -71,7 +117,17 @@ export function WikiDirectory({ spaceId, spaceSlug, at }: { spaceId: string; spa
         </span>
         <span className="lb">{WIKI_AZ_INDEX}</span>
       </Link>
+      <Link className={`wk-toc-item plan${at.view === 'plan' ? ' active' : ''}`} to={wikiPlanPath(spaceSlug)}>
+        <span className="tp-ico">
+          <ProfileOutlined />
+        </span>
+        <span className="lb">{WIKI_DIRECTORY_PLAN}</span>
+        {pending > 0 && <span className="tp-count needs-you">{pending}</span>}
+      </Link>
       <div className="wk-toc-sep" />
+      {docGroups.map((group) => (
+        <WikiDocGroupRows key={group.key} group={group} spaceSlug={spaceSlug} openDoc={openDoc} section={section} />
+      ))}
       {groups.map((group) => (
         <div className="wk-toc-group" key={group.key}>
           <div className="wk-toc-cat">{group.title}</div>
@@ -105,6 +161,52 @@ export function WikiDirectory({ spaceId, spaceSlug, at }: { spaceId: string; spa
         </div>
       ))}
     </nav>
+  );
+}
+
+/** One category of the plan: its documents, the open one with its sections under it. */
+function WikiDocGroupRows({
+  group,
+  spaceSlug,
+  openDoc,
+  section,
+}: {
+  group: WikiDocDirectoryGroup;
+  spaceSlug: string;
+  openDoc: string | null;
+  section: string | null;
+}) {
+  return (
+    <div className="wk-toc-group">
+      <div className="wk-toc-cat">{group.title}</div>
+      {group.docs.map((doc) => {
+        const open = doc.slug === openDoc;
+        return (
+          <div key={doc.slug}>
+            <Link
+              className={`wk-toc-item doc${open ? ' active' : ''}${doc.written ? '' : ' todo'}`}
+              to={wikiDocPath(spaceSlug, doc.slug)}
+              aria-current={open ? 'page' : undefined}
+            >
+              <span className="no">{doc.number}</span>
+              <span className="lb">{doc.title}</span>
+              {doc.needsReview && <span className="st" aria-label="Needs review" />}
+            </Link>
+            {open &&
+              doc.sections.map((row) => (
+                <Link
+                  key={row.key}
+                  className={`wk-toc-item sec${section === row.key ? ' active' : ''}${row.written ? '' : ' todo'}`}
+                  to={wikiDocSectionPath(spaceSlug, doc.slug, row.key)}
+                >
+                  <span className="no">{row.number}</span>
+                  <span className="lb">{row.title}</span>
+                </Link>
+              ))}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

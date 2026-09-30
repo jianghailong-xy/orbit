@@ -2619,6 +2619,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const [endedProviderPick, setEndedProviderPick] = useState<{
     sessionId: string;
     provider: string;
+    /** The account of the engine `provider` moves it onto, picked under it in the Provider menu. */
+    account?: string;
   } | null>(null);
   // Gated on `live` rather than cleared: once the resume lands the session is live and carries
   // the new provider itself, so the pick simply stops applying — and a later switch through the
@@ -2627,6 +2629,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     selected && !live && endedProviderPick?.sessionId === selected.id
       ? endedProviderPick?.provider
       : null;
+  const pendingResumeAccount = pendingResumeProvider ? (endedProviderPick?.account ?? null) : null;
   // The provider this composer talks to: a live session's own, an ended session's pending pick,
   // else the one picked for the draft. Declared here (not next to its other consumers) because
   // the `/` autocomplete memo below needs it.
@@ -4610,6 +4613,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               effort: wireEffort,
               fastMode,
               ...(pendingResumeProvider ? { provider: pendingResumeProvider } : {}),
+              ...(pendingResumeAccount ? { account: pendingResumeAccount } : {}),
             },
             attachmentIds,
             shell ? 'shell' : undefined,
@@ -5521,6 +5525,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       effort?: string;
       fastMode?: boolean;
       provider?: string;
+      account?: string;
     }) => updateSessionConfig(selected!.id, cfg),
     onMutate: async (cfg) => {
       await qc.cancelQueries({ queryKey: sessionsKey });
@@ -6306,16 +6311,33 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const claudeAutoAccount = claudeAutoOffered
     ? accountToStartOn('claude', accountsOf(runner, 'claude'), runner.planUsage, new Date())
     : null;
+  // Where an ended session's held switch onto `engine` resumes, as the server decides it
+  // (accountOnProviderSwitch): the account it names; else, unless the session is pinned there,
+  // Automatic's pick; else where it already was.
+  const pendingEngineAccount = (engine: AccountEngine): string | null | undefined => {
+    if (pendingResumeAccount && pendingResumeAccount !== AUTOMATIC_ACCOUNT) return pendingResumeAccount;
+    const own = engine === 'claude' ? detailForSelected?.claudeAccount : detailForSelected?.codexAccount;
+    const pinned = engine === 'claude' ? detailForSelected?.claudeAccountPinned : detailForSelected?.codexAccountPinned;
+    if (pinned && pendingResumeAccount !== AUTOMATIC_ACCOUNT) return own;
+    const workspace = workspacesForRunner.find((w) => w.id === selected?.workspace?.id);
+    return automaticOfferedOn(engine, workspace)
+      ? accountToStartOn(engine, accountsOf(runner, engine), runner.planUsage, new Date())
+      : (own ?? (engine === 'claude' ? detailForSelected?.workspace?.claudeAccount : detailForSelected?.workspace?.codexAccount));
+  };
   const shownCodexAccount = accountOnThisRunner(
     'codex',
     selectedId
-      ? (detailForSelected?.codexAccount ?? detailForSelected?.workspace?.codexAccount)
+      ? pendingResumeProvider === 'codex'
+        ? pendingEngineAccount('codex')
+        : (detailForSelected?.codexAccount ?? detailForSelected?.workspace?.codexAccount)
       : (draftCodexAccount ?? pickedWorkspace?.codexAccount ?? codexAutoAccount),
   );
   const shownClaudeAccount = accountOnThisRunner(
     'claude',
     selectedId
-      ? (detailForSelected?.claudeAccount ?? detailForSelected?.workspace?.claudeAccount)
+      ? pendingResumeProvider === 'claude'
+        ? pendingEngineAccount('claude')
+        : (detailForSelected?.claudeAccount ?? detailForSelected?.workspace?.claudeAccount)
       : (draftClaudeAccount ?? pickedWorkspace?.claudeAccount ?? claudeAutoAccount),
   );
   const shownAccount =
@@ -6644,12 +6666,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       return;
     }
     if (!selected) return;
+    // An ended session whose switch onto this engine is still held: nothing on the server is on the
+    // engine yet, so the account rides along with the switch, on the message that revives it.
+    if (pendingResumeProvider && endedProviderPick) {
+      setEndedProviderPick({ ...endedProviderPick, account });
+      return;
+    }
     // Nothing moves: Automatic picked again, or the account the session is already pinned to.
     if (account === AUTOMATIC_ACCOUNT ? sessionAutomatic : account === shownAccount && !sessionAutomatic) return;
     accountMut.mutate({ id: selected.id, account });
   };
-  const pickProvider = (v: string): void => {
-    if (v === shownProvider) return;
+  // `account`, when the pick was one of the engine's accounts listed under it rather than the engine's
+  // own row: the switch lands the session there (SessionConfigDto.account) — Automatic's pick otherwise.
+  const pickProvider = (v: string, account?: string): void => {
+    if (v === shownProvider) {
+      if (account !== undefined) pickAccount(account, false);
+      return;
+    }
     // A provider this runner can't run isn't a switch — it's a request for the sign-in (or
     // install) that would make it one. Go straight to that engine's row on the Providers page, as
     // the New Session picker's row does — or, for a choice that names its own fix (an account
@@ -6683,6 +6716,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (live) {
       configMut.mutate({
         provider: v,
+        ...(account !== undefined ? { account } : {}),
         ...(nextModel !== shownModel ? { model: nextModel } : {}),
         ...(drop ? { permissionMode: 'default' } : {}),
         ...(nextEffort !== currentEffort ? { effort: nextEffort } : {}),
@@ -6692,7 +6726,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // Ended: hold the pick until the resume carries it, and move the values that depend on it now
     // — marking their seeds dirty, exactly as a manual Model or Mode edit does, so the seeding
     // effect doesn't put the old values back.
-    setEndedProviderPick({ sessionId: selected!.id, provider: v });
+    setEndedProviderPick({ sessionId: selected!.id, provider: v, ...(account !== undefined ? { account } : {}) });
     // A pick that may mean stopping a run is not a settled question any more: whatever the last
     // answer was, it was about the provider before this one.
     setRunConflict(null);
@@ -6808,7 +6842,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const automaticHere = !!shownAccountEngine && automaticOfferedOn(shownAccountEngine, shownWorkspaceRow);
   const sessionAutomatic =
     automaticHere &&
-    !(shownAccountEngine === 'claude' ? detailForSelected?.claudeAccountPinned : detailForSelected?.codexAccountPinned);
+    (pendingResumeProvider
+      ? !pendingResumeAccount || pendingResumeAccount === AUTOMATIC_ACCOUNT
+      : !(shownAccountEngine === 'claude' ? detailForSelected?.claudeAccountPinned : detailForSelected?.codexAccountPinned));
+  // Another built-in engine's accounts, listed under it as the New Session picker lists them: a switch
+  // onto that engine can land on any of them. On a runner that carries a conversation between them.
+  const accountRowsFor = (engine: AccountEngine) => {
+    const rows = runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[engine])
+      ? (providerSwitchChoices.find((choice) => choice.slug === engine)?.accounts ?? [])
+      : [];
+    return rows.length > 1 ? rows : [];
+  };
   const modelMenuItems: MenuProps['items'] = [
     // Only when there is somewhere to go: a second account with the same vendor, another endpoint on
     // the same CLI, or another of the runner's Codex accounts. One entry means no switch is possible,
@@ -6831,8 +6875,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               // the New Session picker's behaviour for the same row. The running provider is
               // exempt: it is the chip's own provider, and needs no parenthetical.
               const blocked = !!choice.unavailable && choice.slug !== shownProvider;
-              const accounts = choice.slug === shownAccountEngine && accountsOffered ? accountRows : [];
-              const automatic = accounts.length > 0 && automaticHere;
+              // Each built-in engine's accounts under it, as the New Session picker lists them: on the
+              // engine the session is on, the ones it moves between (switchAccount); under another,
+              // the ones a switch onto that engine lands on (pickProvider with the account).
+              const here = choice.slug === shownAccountEngine;
+              const engine: AccountEngine | null =
+                choice.slug === 'codex' || choice.slug === 'claude' ? choice.slug : null;
+              const accounts = here ? (accountsOffered ? accountRows : []) : engine && !blocked ? accountRowsFor(engine) : [];
+              const automatic =
+                accounts.length > 0 && (here ? automaticHere : !!engine && automaticOfferedOn(engine, shownWorkspaceRow));
+              const pick = (account: string, signedOut: boolean) => {
+                if (here) return pickAccount(account, signedOut);
+                if (signedOut) {
+                  navigate(`/providers?runner=${encodeId(runner.id)}&engine=${engine}`);
+                  return;
+                }
+                pickProvider(engine!, account);
+              };
               return [
                 {
                   key: `provider:${choice.slug}`,
@@ -6853,21 +6912,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 ...(automatic
                   ? [
                       {
-                        key: 'codex-account:automatic',
+                        key: `${choice.slug}-account:automatic`,
                         className: 'composer-account-row',
                         label: (
                           <span className="scope-menu-row">
                             <span className="composer-account-row-name">Automatic</span>
                             {menuValue('Resets soonest')}
-                            {checkSlot(sessionAutomatic)}
+                            {checkSlot(here && sessionAutomatic)}
                           </span>
                         ),
-                        onClick: () => pickAccount(AUTOMATIC_ACCOUNT, false),
+                        onClick: () => pick(AUTOMATIC_ACCOUNT, false),
                       },
                     ]
                   : []),
                 ...accounts.map((account) => ({
-                  key: `codex-account:${account.id}`,
+                  key: `${choice.slug}-account:${account.id}`,
                   className: `composer-account-row${account.nearLimit ? ' near-limit' : ''}${
                     account.unavailable ? ' composer-provider-fix' : ''
                   }`,
@@ -6877,10 +6936,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         {account.unavailable ? `${account.label} — ${account.unavailable}, sign in →` : account.label}
                       </span>
                       {!account.unavailable && account.quota && menuValue(account.quota)}
-                      {checkSlot(account.id === shownAccount && !sessionAutomatic)}
+                      {checkSlot(here && account.id === shownAccount && !sessionAutomatic)}
                     </span>
                   ),
-                  onClick: () => pickAccount(account.id, !!account.unavailable),
+                  onClick: () => pick(account.id, !!account.unavailable),
                 })),
               ];
             }),

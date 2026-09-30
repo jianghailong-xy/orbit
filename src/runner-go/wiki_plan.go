@@ -26,7 +26,7 @@ var (
 	wikiPlanStatuses         = []string{"draft", "confirmed", "superseded"}
 	wikiPlanSectionKinds     = []string{"overview", "concepts", "flow", "interface", "data", "ops", "pitfalls", "decisions", "conventions", "other"}
 	wikiPlanProposalStatuses = []string{"pending", "accepted", "rejected"}
-	wikiPlanFactKinds        = []string{"entry", "session"}
+	wikiPlanFactKinds        = []string{"entry", "session", "commit"}
 	wikiPlanGateChecks       = []string{"schema", "docCount", "protected", "references"}
 	wikiPlanNewFieldLevels   = []string{"category", "doc", "section"}
 	wikiPlanRepoRefKinds     = []string{"file", "docSection", "symbol", "contract"}

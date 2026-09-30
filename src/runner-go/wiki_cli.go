@@ -54,12 +54,14 @@ which 'orbit wiki verify' runs with the local model — so never report one as s
 articles', 'orbit wiki docs build' and 'orbit wiki maintain' are a Wiki maintenance run's, and no
 other session's: the run reads what happened in its space since the cursor, proposes what it
 learned citing the records behind it, re-verifies the anchors of its space's entries on
-origin/main, advances the cursor once it has processed a page, has the local model write the
-articles of the topics whose entries changed, and writes the documents of the plan its owner
-confirmed, section by section. 'orbit wiki maintain' does all of it in one run; 'orbit wiki check'
+origin/main, advances the cursor once it has processed a page, and writes again the sections of the
+documents of the plan its owner confirmed that its entries and origin/main's changes touched,
+proposing a change to the plan for what fits no section. 'orbit wiki maintain' does all of it in one
+run ('orbit wiki articles' is the topic articles' command, which it no longer runs); 'orbit wiki check'
 is its task's acceptance command, and needs no session. 'orbit wiki plan draft' and 'orbit wiki
 plan revise' are a plan job's run — the task the server makes for a draft of the space's plan — and
-'orbit wiki plan check' is that task's acceptance command.
+'orbit wiki plan check' is that task's acceptance command; 'orbit wiki docs build' is also the run of
+the build job the owner's confirmation of a plan version makes.
 
 These commands act for the session they run in (ORBIT_SESSION_ID): what it may read is what that
 session's workspace is bound to, and its proposal is recorded against it.
@@ -94,9 +96,14 @@ its quote copied from that line) and the checkout (anchors that exist on origin/
 about something else than the repository gives none. The entries are proposed by topic, with dryRun
 first; the ops the review mode would apply may change at most the circuit breaker's share of the
 active entries. Then, in an automatic space, the run's ops are verified; the anchors are
-re-verified; the articles of the topics whose entries changed are rewritten; and the cursor
-advances. Any step that fails ends the run failed and moves nothing. It prints what it did, the
-token spend included, and exits non-zero when the run failed.
+re-verified; only the sections of the confirmed plan's documents that the run touched are written
+again — the ones an entry that changed fits, the ones whose design documents, code or contracts
+changed on origin/main (a cited file gone withdraws the sentences citing it), and, with no build
+waiting, the ones never written — and one change to the plan is proposed at most for what fits no
+section, a new design document under docs/ among it; with no confirmed plan no document is written;
+and the cursor advances. Any step before the documents that fails ends the run failed and moves
+nothing; the documents' step reports what it could not do and fails nothing. It prints what it did,
+the token spend included, and exits non-zero when the run failed.
 `,
 	"check": `orbit wiki check — whether a Wiki maintenance run did what its task expected
 

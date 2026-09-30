@@ -20,6 +20,12 @@
  *      (`reviewModes.verification.adoption`): it reads them and its verdicts apply, a later op's live entry
  *      of the same content is never joined by a second copy, every floor holds, and nobody but a
  *      maintenance run of the space reads them;
+ *   8. the documents follow what changed (criterion 3 revision 3, criterion 11): the owner's confirmation
+ *      of a plan version makes one build task — a second confirmation while it runs records one build
+ *      that waits, never two, and the build's task ending makes it; the entries a run wrote make only the
+ *      sections they fit to be written again; what fits no section is one plan proposal, and the plan does
+ *      not change until the owner confirms; a space with no confirmed plan writes no document; and a
+ *      repository file gone from origin/main withdraws the sentences citing it;
  *
  * and beside them: the daily limit holds a due space and says so in its health; the task is made pinned,
  * at once, with `orbit wiki check --expect-cursor` as its one criterion; the run proposes as `maintenance`
@@ -55,20 +61,31 @@ import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { encryptSecret } from '../providers/provider-crypto';
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
+import { RunnerWikiDocsController } from '../runner-api/runner-wiki-docs.controller';
 import { RunnerWikiMaintainController } from '../runner-api/runner-wiki-maintain.controller';
 import { RunnerWikiMaintenanceController } from '../runner-api/runner-wiki-maintenance.controller';
+import { RunnerWikiPlanController } from '../runner-api/runner-wiki-plan.controller';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
 import { WikiController } from './wiki.controller';
+import { WikiDocs } from './wiki-docs';
+import { WikiDocsController } from './wiki-docs.controller';
 import { WikiMaintenance } from './wiki-maintenance';
 import { considerWikiMaintenance, WikiMaintenanceTrigger, wikiMaintenanceHintFor, type WikiMaintenanceHint } from './wiki-maintenance-run';
+import { wikiMaintenanceRunsToday } from './wiki-maintenance-session';
+import { WikiPlans } from './wiki-plan';
+import { WikiPlanJobFacts } from './wiki-plan-job';
+import { WikiPlanController } from './wiki-plan.controller';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService } from './wiki.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
+// The providers the plan's cases configure keep their keys encrypted, as every provider does.
+process.env.PROVIDER_SECRET_KEY ??= 'wiki-maintenance-spec';
 
 interface Harness {
   base: string;
@@ -84,6 +101,8 @@ interface Harness {
   trigger: WikiMaintenanceTrigger;
   /** Every notification that a space's verification sent it back to Tiered. */
   fellBack: Array<{ ownerId: string; spaceId: string; unsupported: number }>;
+  /** The plan jobs' task facts, taken by hand: what a task's end asks of them. */
+  facts: WikiPlanJobFacts;
 }
 
 let harness: Promise<Harness> | undefined;
@@ -113,12 +132,26 @@ function boot(): Promise<Harness> {
     const maintenance = new WikiMaintenance(prisma as unknown as PrismaService);
     const trigger = new WikiMaintenanceTrigger(prisma as unknown as PrismaService, hub);
     trigger.onModuleInit();
+    const plans = new WikiPlans(prisma as unknown as PrismaService, hub);
+    const docs = new WikiDocs(prisma as unknown as PrismaService, service, hub);
+    const facts = new WikiPlanJobFacts(prisma as unknown as PrismaService);
 
     @Module({
-      controllers: [WikiController, RunnerWikiController, RunnerWikiMaintenanceController, RunnerWikiMaintainController],
+      controllers: [
+        WikiController,
+        RunnerWikiController,
+        RunnerWikiMaintenanceController,
+        RunnerWikiMaintainController,
+        WikiPlanController,
+        RunnerWikiPlanController,
+        WikiDocsController,
+        RunnerWikiDocsController,
+      ],
       providers: [
         { provide: WikiService, useValue: service },
         { provide: WikiMaintenance, useValue: maintenance },
+        { provide: WikiPlans, useValue: plans },
+        { provide: WikiDocs, useValue: docs },
         { provide: WikiRetrieval, useValue: new WikiRetrieval(prisma as unknown as PrismaService) },
         { provide: PrismaService, useValue: prisma },
         RunnerAuthGuard,
@@ -143,7 +176,7 @@ function boot(): Promise<Harness> {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
     app.useGlobalInterceptors(new PublicIdInterceptor());
     await app.listen(0, '127.0.0.1');
-    return { base: await app.getUrl(), sql, prisma, app, service, maintenance, bearers, announced, published, trigger, fellBack };
+    return { base: await app.getUrl(), sql, prisma, app, service, maintenance, bearers, announced, published, trigger, fellBack, facts };
   })();
   return harness;
 }
@@ -1128,4 +1161,501 @@ test('an adopted op\'s unsupported verdict counts toward the fallback as any doe
   // Out of Automatic, the adoption list says so before a model is asked anything.
   const list = await call(h, { runner: s.machine.token, session: next }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`);
   assert.equal(list.body.mode, 'tiered');
+});
+
+// ── 8. the documents follow what changed ─────────────────────────────────────────────────────────
+
+/** A configured provider of the owner's on the Claude Code runtime: what a plan job's task may be pinned to. */
+async function localModel(h: Harness, ownerId: string): Promise<string> {
+  const slug = `local-vllm-${randomUUID().slice(0, 8)}`;
+  await h.prisma.modelProvider.create({
+    data: {
+      slug,
+      label: 'Local vLLM',
+      runtime: 'claude',
+      baseUrl: 'http://127.0.0.1:8000',
+      apiKeyEnc: encryptSecret(`vllm-key-${randomUUID()}`),
+      models: [{ value: 'qwen3.8-27b-fp8', label: 'Qwen3.8 27B', contextWindow: 131072 }],
+      defaultModel: 'qwen3.8-27b-fp8',
+      enabled: true,
+      ownerId,
+    },
+  });
+  return slug;
+}
+
+/** A project of the owner's with one task, a session of that task, and something the owner said in it. */
+async function projectTurn(h: Harness, s: Space, words: string): Promise<{ projectId: string; turnId: string }> {
+  const projectId = randomUUID();
+  await h.sql.query(`INSERT INTO "project"("id","title","owner_id","updated_at") VALUES ($1,$2,$3,now())`, [projectId, `Plan-first docs ${projectId.slice(0, 6)}`, s.owner.id]);
+  const taskId = await task(h, s.owner.id, { status: 'DONE', assigneeId: s.workspaceId });
+  await h.sql.query(`UPDATE "task" SET "project_id" = $2 WHERE "id" = $1`, [taskId, projectId]);
+  const sessionId = await session(h, s.owner.id, { workspaceId: s.workspaceId, taskId });
+  return { projectId, turnId: await turn(h, sessionId, words) };
+}
+
+const DESIGN_DOC = 'docs/wiki-design.md';
+
+/** Two documents: an overview, a convention, a pitfall; a mechanism from a design document, and a decision by project. */
+function docsPlan(projectId: string): Record<string, unknown> {
+  return {
+    categories: [
+      { key: 'ops', title: 'Operations', question: 'How the runner is run' },
+      { key: 'dev', title: 'Development conventions', question: 'How agents work in this repository', forAgents: true },
+    ],
+    docs: [
+      {
+        category: 'ops',
+        slug: 'runner-ops',
+        title: 'Runner 运维',
+        question: 'Runner 在宿主上怎么跑、坑在哪？',
+        audience: ['运维的人：读完能在宿主上跑通'],
+        scopeIn: ['宿主上跑测试', '数据库的坑'],
+        scopeOut: [],
+        length: { min: 800, max: 3000 },
+        sections: [
+          { title: '总览', kind: 'overview', covers: '这篇讲什么。', length: 300, sources: {} },
+          {
+            title: '宿主上跑测试',
+            kind: 'conventions',
+            covers: '全量测试在 runner 宿主上跑。',
+            length: 400,
+            sources: { sessions: { keywords: ['runner 宿主'], anchorPaths: [], entryKinds: ['convention'], topics: [], projects: [], evidence: 'owner 说测试在哪跑' } },
+          },
+          {
+            title: '数据库的坑',
+            kind: 'pitfalls',
+            covers: '长查询被 statement_timeout 打断。',
+            length: 400,
+            sources: { sessions: { keywords: ['statement_timeout'], anchorPaths: ['docker-compose.yml'], entryKinds: ['pitfall'], topics: [], projects: [], evidence: '踩坑的原话' } },
+          },
+        ],
+      },
+      {
+        category: 'dev',
+        slug: 'plan-flow',
+        title: 'Plan 流程',
+        question: '文档为什么先有 plan？',
+        audience: ['写 wiki 的 agent：读完知道先起草 plan'],
+        scopeIn: ['怎么起草', '为什么先有 plan'],
+        scopeOut: [],
+        length: { min: 800, max: 3000 },
+        sections: [
+          { title: '怎么起草', kind: 'flow', covers: '起草的四步。', length: 500, sources: { docs: [{ path: DESIGN_DOC, section: '8.2 维护作业' }] } },
+          {
+            title: '为什么先有 plan',
+            kind: 'decisions',
+            covers: 'owner 定的方向。',
+            length: 400,
+            sources: { sessions: { keywords: [], anchorPaths: [], entryKinds: ['decision'], topics: ['plans'], projects: [projectId], evidence: 'owner 的决定' } },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+interface PlannedSpace extends Space {
+  slug: string;
+  projectId: string;
+  projectTurnId: string;
+  version: number;
+}
+
+/**
+ * A space whose maintenance runs on a provider a run can start on, whose first draft job has run: the draft
+ * stored through the runner door by the job's own session, the job finished, its task done — so the list is
+ * free and the space has a draft for its owner to confirm.
+ */
+async function plannedSpace(h: Harness, name: string): Promise<PlannedSpace> {
+  const owner = await account(h, name);
+  const machine = await runner(h, owner.id);
+  const workspaceId = await workspace(h, owner.id, '~/orbit');
+  const slug = await localModel(h, owner.id);
+  const made = await call(h, { bearer: owner.bearer }, 'POST', '/wiki/spaces', {
+    title: `${name} space`,
+    repoUrl: `https://github.com/spec/${name}-${randomUUID().slice(0, 8)}`,
+    maintenance: { workspaceId, provider: slug },
+  });
+  expectStatus(made, 201, 'the owner creates a space');
+  const spaceId = toUuid(made.body.id as string);
+  expectStatus(await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/workspaces`, { workspaceId }), 200, 'the owner binds the workspace');
+  const on = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { enabled: true, workspaceId, provider: slug } });
+  expectStatus(on, 200, 'the owner turns maintenance on');
+  const s: Space = { owner, machine, spaceId, workspaceId, listId: toUuid(on.body.settings.maintenance.listId as string) };
+  await h.sql.query(`INSERT INTO "wiki_topic"("id","space_id","owner_id","slug","title") VALUES ($1,$2,$3,'plans','Plans')`, [randomUUID(), spaceId, owner.id]);
+  const { projectId, turnId } = await projectTurn(h, s, '文档先有 plan，owner 确认后再逐节写。');
+  // The draft the space's creation asked for: made at once, run by its own session.
+  const [draftJob] = (await h.sql.query<{ id: string; state: string; task_id: string }>(
+    `SELECT "id","state","task_id" FROM "wiki_plan_job" WHERE "space_id" = $1 AND "kind" = 'draft'`, [spaceId])).rows;
+  assert.equal(draftJob?.state, 'made', 'the new space\'s draft job is made');
+  const draftRun = await runSession(h, s, draftJob.task_id);
+  const drafted = await call(h, { runner: machine.token, session: draftRun }, 'POST', `/runner/wiki/spaces/${spaceId}/plan/drafts`, {
+    baseVersion: null,
+    target: { min: 1, max: 10 },
+    plan: docsPlan(projectId),
+    repoCheck: { sha: 'a'.repeat(40), checked: 3, missing: [] },
+    model: 'qwen3.8-27b-fp8',
+  });
+  expectStatus(drafted, 200, 'the draft job stores its draft');
+  expectStatus(await call(h, { runner: machine.token, session: draftRun }, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, {
+    outcome: 'succeeded', version: drafted.body.version,
+  }), 200, 'the draft job says it succeeded');
+  await h.sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1`, [draftJob.task_id]);
+  await taskEnded(h, s, [draftJob.task_id]);
+  return { ...s, slug, projectId, projectTurnId: turnId, version: drafted.body.version as number };
+}
+
+/** A task change the tasks module would publish, taken by the plan jobs' facts and waited for. */
+async function taskEnded(h: Harness, s: Space, taskIds: string[]): Promise<void> {
+  h.facts.take(`user:${s.owner.id}`, { seq: 0, type: RunEventType.TASK_CHANGED, ts: new Date().toISOString(), payload: { taskIds, resync: false } });
+  await h.facts.idle();
+}
+
+interface BuildRow {
+  id: string;
+  state: string;
+  version: number | null;
+  trigger: string;
+  task_id: string | null;
+  outcome: string | null;
+}
+
+async function builds(h: Harness, spaceId: string): Promise<BuildRow[]> {
+  return (await h.sql.query<BuildRow>(
+    `SELECT "id","state","version","trigger","task_id","outcome" FROM "wiki_plan_job" WHERE "space_id" = $1 AND "kind" = 'build' ORDER BY "created_at","id"`,
+    [spaceId],
+  )).rows;
+}
+
+async function confirm(h: Harness, s: Space, version: number): Promise<void> {
+  expectStatus(await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/spaces/${s.spaceId}/plan/versions/${version}/confirm`), 200, `the owner confirms version ${version}`);
+}
+
+/** The owner's edit of one section's covers: a new draft on the newest version. */
+async function edit(h: Harness, s: Space, base: number, words: string): Promise<number> {
+  const plan = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
+  const doc = (plan.body.draft ?? plan.body.confirmed).docs.find((d: { slug: string }) => d.slug === 'runner-ops');
+  const section = doc.sections.find((one: { title: string }) => one.title === '总览');
+  const edited = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/spaces/${s.spaceId}/plan/edits`, {
+    baseVersion: base,
+    docSlug: 'runner-ops',
+    sectionKey: section.key,
+    section: { key: section.key, title: '总览', kind: 'overview', covers: words, length: 300, sources: {} },
+  });
+  expectStatus(edited, 200, 'the owner edits the plan');
+  return edited.body.version as number;
+}
+
+test('the owner\'s confirmation makes one build task; a second waits and is never two; the build\'s end makes it', { skip }, async () => {
+  const h = await boot();
+  const s = await plannedSpace(h, 'build');
+  const before = Date.now();
+  await confirm(h, s, s.version);
+
+  // One build of the confirmed version, made at once as a task of the maintenance list — pinned, due now, judged by its check.
+  const [first, ...others] = await builds(h, s.spaceId);
+  assert.equal(others.length, 0, 'one confirmation, one build');
+  assert.deepEqual([first.state, first.version, first.trigger, first.outcome], ['made', s.version, 'owner', null]);
+  const made = await h.prisma.task.findUniqueOrThrow({ where: { id: first.task_id! } });
+  assert.equal(made.listId, s.listId, 'in the space\'s maintenance list');
+  assert.deepEqual([made.assigneeId, made.provider], [s.workspaceId, s.slug], 'pinned to the maintenance workspace and provider');
+  assert.ok(made.runAt && made.runAt.getTime() >= before - 1_000, 'runAt is now');
+  assert.deepEqual([made.creatorType, made.creatorId, made.status], ['USER', s.owner.id, 'OPEN']);
+  assert.equal(made.title, 'Wiki documents: build space');
+  assert.equal(made.completionCriterion, 'EXECUTABLE');
+  assert.equal(made.acceptanceCommand, `orbit wiki plan check --space ${uuidToBase62(s.spaceId)} --job ${uuidToBase62(first.id)}`);
+  assert.match(made.description ?? '', new RegExp(`orbit wiki docs build --space ${uuidToBase62(s.spaceId)}`));
+  assert.ok(h.announced.some((a) => a.ownerId === s.owner.id && JSON.stringify(a.change).includes(first.task_id!)), 'the task made is published');
+  const state = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
+  expectStatus(state, 200, 'the owner reads the plan');
+  assert.deepEqual([state.body.job.kind, state.body.job.state, state.body.job.version, state.body.job.progress], ['build', 'running', s.version, null],
+    'the plan page reads the build as writing the documents');
+
+  // Not a maintenance run: not counted against the day, and while it runs no maintenance task is made.
+  assert.equal((await wikiMaintenanceRunsToday(h.prisma as unknown as PrismaService, s.owner.id, s.spaceId)).used, 0, 'plan jobs are not the day\'s runs');
+  const facts = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  assert.deepEqual(await consider(h, s, hintOf(facts)), { made: false, spaceId: s.spaceId, why: 'unfinished' }, 'the list is the build\'s');
+
+  // A second confirmation while the build runs: one build waits behind it — and a third points that one at the newer version.
+  const v2 = await edit(h, s, s.version, '这篇讲 runner 的运维，第二稿。');
+  await confirm(h, s, v2);
+  let rows = await builds(h, s.spaceId);
+  assert.deepEqual(rows.map((row) => [row.state, row.version]), [['made', s.version], ['queued', v2]], 'the list is busy: the second waits');
+  const v3 = await edit(h, s, v2, '这篇讲 runner 的运维，第三稿。');
+  await confirm(h, s, v3);
+  rows = await builds(h, s.spaceId);
+  assert.deepEqual(rows.map((row) => [row.state, row.version]), [['made', s.version], ['queued', v3]], 'still one waiting build, now of the newest version');
+  const waiting = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
+  assert.deepEqual([waiting.body.job.kind, waiting.body.job.state, waiting.body.job.version], ['build', 'queued', v3]);
+  assert.equal(toUuid(waiting.body.job.waitingFor.taskId as string), first.task_id, 'it waits for the running build');
+
+  // The running build's session: its job and progress on the runner door; the plan moved on, so it fails.
+  const run = await runSession(h, s, first.task_id!);
+  const context = await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/plan/job`);
+  expectStatus(context, 200, 'the build\'s run reads its job');
+  assert.deepEqual([context.body.job.kind, context.body.job.version], ['build', s.version]);
+  const progressed = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/job/progress`, {
+    docs: { done: 1, total: 2 }, current: { slug: 'plan-flow', title: 'Plan 流程' },
+  });
+  expectStatus(progressed, 200, 'the build says how far it got');
+  assert.deepEqual(progressed.body.progress, { docs: { done: 1, total: 2 }, current: { slug: 'plan-flow', title: 'Plan 流程' } });
+  const badProgress = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/job/progress`, { docs: { done: 3, total: 2 } });
+  expectStatus(badProgress, 400, 'more documents done than there are is refused');
+  expectStatus(await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/job/finish`, {
+    outcome: 'failed', error: `the plan moved on to version ${v3} while this wrote version ${s.version}`,
+  }), 200, 'the build of the superseded version ends failed');
+  await h.sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = $1`, [first.task_id]);
+  await taskEnded(h, s, [first.task_id!]);
+  rows = await builds(h, s.spaceId);
+  assert.deepEqual(rows.map((row) => [row.state, row.version, row.outcome]), [['ended', s.version, 'failed'], ['made', v3, null]],
+    'the failed build keeps its version, and the task\'s end made the waiting one');
+
+  // The build of the newest version: it may only name a version the owner confirmed, and then its check passes.
+  const next = await runSession(h, s, rows[1].task_id!);
+  const v4 = await edit(h, s, v3, '这篇讲 runner 的运维，未确认的第四稿。');
+  const unconfirmed = await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/job/finish`, {
+    outcome: 'succeeded', version: v4,
+  });
+  expectStatus(unconfirmed, 400, 'a build cannot say it wrote a version nobody confirmed');
+  const report = { planVersion: v3, repoSha: 'b'.repeat(40), docs: { total: 2, written: 2 }, sections: { written: 5, unchanged: 0, failed: 0 }, tokens: { input: 900, output: 300, calls: 6 }, seconds: 61, model: 'qwen3.8-27b-fp8' };
+  expectStatus(await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/job/finish`, {
+    outcome: 'succeeded', version: v3, report,
+  }), 200, 'the build of the confirmed version succeeds');
+  const check = await call(h, { runner: s.machine.token }, 'GET', `/runner/wiki/spaces/${s.spaceId}/plan/check?jobId=${uuidToBase62(rows[1].id)}`);
+  expectStatus(check, 200, 'the build task\'s acceptance command, with no session');
+  assert.deepEqual([check.body.ok, check.body.kind, check.body.version], [true, 'build', v3]);
+  const failedCheck = await call(h, { runner: s.machine.token }, 'GET', `/runner/wiki/spaces/${s.spaceId}/plan/check?jobId=${uuidToBase62(rows[0].id)}`);
+  assert.equal(failedCheck.body.ok, false, 'the failed build\'s check does not pass');
+  const after_ = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
+  assert.deepEqual([after_.body.job.kind, after_.body.job.state, after_.body.job.version, after_.body.job.report], ['build', 'succeeded', v3, report]);
+  assert.equal((await wikiMaintenanceRunsToday(h.prisma as unknown as PrismaService, s.owner.id, s.spaceId)).used, 0, 'no build counted against the day');
+});
+
+/** A section of a write: one sentence citing the design document at a commit. */
+function writtenSection(key: string, material: string, words: string): Record<string, unknown> {
+  return {
+    key,
+    materialSha256: createHash('sha256').update(material).digest('hex'),
+    markdown: `${words}[1]。`,
+    footnotes: [{ kind: 'design_doc', path: DESIGN_DOC, sha: 'b'.repeat(40), lines: { start: 1, end: 3 }, section: '8.2 维护作业', quote: '维护作业按 plan 重写', verified: true }],
+  };
+}
+
+async function sectionRows(h: Harness, spaceId: string): Promise<Map<string, { generatedAt: Date; staleAt: Date | null }>> {
+  const rows = await h.sql.query<{ slug: string; key: string; generated_at: Date; stale_at: Date | null }>(
+    `SELECT d."slug", x."key", x."generated_at", x."stale_at" FROM "wiki_doc_section" x JOIN "wiki_doc" d ON d."id" = x."doc_id"
+      WHERE d."space_id" = $1`, [spaceId]);
+  return new Map(rows.rows.map((row) => [`${row.slug}#${row.key}`, { generatedAt: row.generated_at, staleAt: row.stale_at }]));
+}
+
+test('the entries a run wrote make only the sections they fit to be written; what fits none is one proposal; the plan waits for the owner', { skip }, async () => {
+  const h = await boot();
+  const s = await plannedSpace(h, 'affected');
+  await confirm(h, s, s.version);
+  const [build] = await builds(h, s.spaceId);
+  const plan = (await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`)).body.confirmed;
+  const keyOf = (slug: string, title: string): string =>
+    plan.docs.find((d: { slug: string }) => d.slug === slug).sections.find((x: { title: string }) => x.title === title).key;
+  const convention = keyOf('runner-ops', '宿主上跑测试');
+  const pitfall = keyOf('runner-ops', '数据库的坑');
+  const flow = keyOf('plan-flow', '怎么起草');
+  const decision = keyOf('plan-flow', '为什么先有 plan');
+
+  // The build writes the documents: every section with a session condition or a design document.
+  const writer = await runSession(h, s, build.task_id!);
+  for (const [slug, sections] of [
+    ['runner-ops', [writtenSection(convention, 'c1', '全量测试在 runner 宿主上跑'), writtenSection(pitfall, 'p1', '长迁移会被打断')]],
+    ['plan-flow', [writtenSection(flow, 'f1', '起草分四步'), writtenSection(decision, 'd1', '先有 plan 再写文档')]],
+  ] as const) {
+    const wrote = await call(h, { runner: s.machine.token, session: writer }, 'POST', `/runner/wiki/spaces/${s.spaceId}/docs/${slug}`, {
+      planVersion: s.version, repoSha: 'b'.repeat(40), model: 'qwen3.8-27b-fp8', sections,
+    });
+    expectStatus(wrote, 200, `the build writes ${slug}`);
+  }
+  expectStatus(await call(h, { runner: s.machine.token, session: writer }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/job/finish`, {
+    outcome: 'succeeded', version: s.version,
+  }), 200, 'the build is done');
+  await h.sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1`, [build.task_id]);
+  await taskEnded(h, s, [build.task_id!]);
+  const written = await sectionRows(h, s.spaceId);
+
+  // A maintenance run writes three entries: a pitfall a keyword of the pitfalls section finds, a decision taken from
+  // a session of the decisions section's project, and a concept nothing in the plan is about.
+  const run = await maintenanceRun(h, s);
+  const cite = await turn(h, await session(h, s.owner.id, { workspaceId: s.workspaceId }), 'what this space learned, in its record\'s words');
+  const [timeout, decided, stray] = await proposeAsRun(h, s, run, [
+    { op: 'add', entry: { kind: 'pitfall', title: 'statement_timeout 打断长迁移', summary: '生产库 statement_timeout 30 秒，长迁移要先 SET。', fields: { trigger: { paths: ['docker-compose.yml'], commands: [] }, symptom: '迁移被取消', cause: 'statement_timeout 30s', fix: 'SET statement_timeout=0' } }, sources: [{ kind: 'turn', ref: cite }] },
+    { op: 'add', entry: { kind: 'decision', title: '文档先有 plan', summary: 'owner 定：先起草 plan，确认后逐节写。', fields: { context: '文章不连贯', decision: '先有 plan', alternatives: [{ option: '按主题拼接', whyRejected: '不连贯' }], consequences: '多一步确认', decidedAt: '2026-09-28' } }, sources: [{ kind: 'turn', ref: s.projectTurnId }] },
+    { op: 'add', entry: concept('Codex 账号由服务器代管'), sources: [{ kind: 'turn', ref: cite }] },
+  ]);
+  for (const op of [timeout, decided, stray]) assert.equal(op.status, 'applied', `the space's mode applies it: ${JSON.stringify(op)}`);
+
+  const affected = await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs`);
+  expectStatus(affected, 200, 'the run asks what to write again');
+  assert.equal(affected.body.plan.version, s.version);
+  assert.equal(affected.body.plan.repoSha, 'a'.repeat(40), 'the commit the plan\'s references were checked at');
+  assert.equal(affected.body.build, null, 'no build of the space waits');
+  const listed = (affected.body.sections as Array<{ doc: string; key: string; stale: boolean; entryIds: string[] }>)
+    .map((one) => [`${one.doc}#${one.key}`, one.stale, one.entryIds.map(toUuid)]);
+  assert.deepEqual(listed, [
+    [`runner-ops#${pitfall}`, false, [toUuid(timeout.entryId)]],
+    [`plan-flow#${decision}`, false, [toUuid(decided.entryId)]],
+  ], 'each entry makes only the section it fits: not the convention, not the design document\'s, not the overview');
+  assert.deepEqual((affected.body.unplaced as Array<{ id: string }>).map((one) => toUuid(one.id)), [toUuid(stray.entryId)], 'the concept fits no section');
+
+  // The run writes the pitfalls section again, and nothing else is touched.
+  const rewrote = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/docs/runner-ops`, {
+    planVersion: s.version, repoSha: 'c'.repeat(40), model: 'qwen3.8-27b-fp8', sections: [writtenSection(pitfall, 'p2', '长迁移会被 statement_timeout 打断')],
+  });
+  expectStatus(rewrote, 200, 'the run writes the pitfalls section again');
+  assert.deepEqual(rewrote.body.sections.map((one: { key: string; outcome: string }) => [one.key, one.outcome]), [[pitfall, 'written']]);
+  const now = await sectionRows(h, s.spaceId);
+  for (const key of [`runner-ops#${convention}`, `plan-flow#${flow}`, `plan-flow#${decision}`]) {
+    assert.equal(now.get(key)!.generatedAt.getTime(), written.get(key)!.generatedAt.getTime(), `${key} is left as it was`);
+  }
+  assert.ok(now.get(`runner-ops#${pitfall}`)!.generatedAt > written.get(`runner-ops#${pitfall}`)!.generatedAt, 'the pitfalls section was written again');
+  const again = await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs`);
+  assert.deepEqual((again.body.sections as Array<{ doc: string; key: string }>).map((one) => `${one.doc}#${one.key}`), [`plan-flow#${decision}`],
+    'a section written since its entry changed is no longer to write');
+
+  // What fits no section becomes one proposal: the concept, and a design document new on origin/main.
+  const versions = async () => (await h.sql.query(`SELECT "version","status" FROM "wiki_plan" WHERE "space_id" = $1 ORDER BY "version"`, [s.spaceId])).rows;
+  const standing = await versions();
+  const confirmedBefore = (await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`)).body.confirmed;
+  const commit = 'e'.repeat(40);
+  const malformed = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/proposals`, {
+    reason: 'a commit named by less than its sha', change: { doc: { ...(docsPlan(s.projectId).docs as unknown[])[1] as object } }, facts: [{ kind: 'commit', id: 'abc123' }],
+  });
+  assert.equal(malformed.status, 422, 'a commit fact is its full sha');
+  assert.equal(malformed.body.code, 'WIKI_PLAN_GATE');
+  const proposed = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/proposals`, {
+    reason: '新知识：Codex 账号由服务器代管（条目），以及新设计文档 docs/codex-accounts.md；plan 里没有一节讲账号，建议在「Development conventions」下新增一篇。',
+    change: {
+      doc: {
+        category: 'dev',
+        slug: 'codex-accounts',
+        title: 'Codex 账号',
+        question: 'Codex 账号怎么管？',
+        audience: ['跑 Codex 的 agent：读完知道账号在哪'],
+        scopeIn: ['账号由服务器代管'],
+        scopeOut: [],
+        length: { min: 600, max: 2000 },
+        sections: [
+          { title: '账号怎么管', kind: 'concepts', covers: '服务器代管账号。', length: 500, sources: { docs: [{ path: 'docs/codex-accounts.md', section: null }] } },
+          { title: '已知的坑', kind: 'pitfalls', covers: '换号的坑。', length: 300, sources: { sessions: { keywords: ['Codex 账号'], anchorPaths: [], entryKinds: [], topics: [], projects: [], evidence: '原话' } } },
+        ],
+      },
+    },
+    facts: [{ kind: 'entry', id: stray.entryId }, { kind: 'commit', id: commit }],
+  });
+  expectStatus(proposed, 200, 'the run proposes a change to the plan');
+  assert.equal(proposed.body.status, 'pending');
+  assert.deepEqual(
+    (proposed.body.facts as Array<{ kind: string; id: string }>).map((fact) => [fact.kind, fact.kind === 'entry' ? toUuid(fact.id) : fact.id]),
+    [['entry', toUuid(stray.entryId)], ['commit', commit]],
+    'the facts it came from: the entry, and the commit that added the design document',
+  );
+  // The plan does not change: the same versions, the same confirmed one, word for word; the proposal waits for the owner.
+  assert.deepEqual(await versions(), standing, 'no version was written');
+  const stateNow = (await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`)).body;
+  assert.deepEqual(stateNow.confirmed, confirmedBefore, 'the confirmed plan is as it was');
+  assert.equal(stateNow.proposals.length, 1);
+  // What the proposal names is not proposed again.
+  const named = await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs`);
+  assert.deepEqual(named.body.unplaced, [], 'the concept is the proposal\'s now');
+  assert.deepEqual(named.body.proposed.commits, [commit]);
+  assert.ok((named.body.proposed.paths as string[]).includes('docs/codex-accounts.md'), 'the design document the proposal cites');
+  assert.deepEqual((named.body.proposed.entryIds as string[]).map(toUuid), [toUuid(stray.entryId)]);
+  // The owner accepts it: a new draft; the confirmed version stays until the owner confirms that one.
+  const accepted = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/plan-proposals/${proposed.body.id}/decide`, { action: 'accept' });
+  expectStatus(accepted, 200, 'the owner accepts the proposal');
+  const afterAccept = (await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`)).body;
+  assert.equal(afterAccept.confirmed.version, s.version, 'accepting is not confirming');
+  assert.equal(afterAccept.draft.docs.length, 3, 'the draft has the proposed document');
+  await confirm(h, s, afterAccept.draft.version);
+  let rows = await builds(h, s.spaceId);
+  assert.deepEqual(rows.map((row) => [row.state, row.version]), [['ended', s.version], ['queued', afterAccept.draft.version]],
+    'confirming the accepted change asks for its build, which waits for the maintenance run still in the list');
+  const runTask = (await h.sql.query<{ task_id: string }>(`SELECT "task_id" FROM "session" WHERE "id" = $1`, [run])).rows[0].task_id;
+  await h.sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = $1`, [runTask]);
+  await taskEnded(h, s, [runTask]);
+  rows = await builds(h, s.spaceId);
+  assert.deepEqual(rows.map((row) => [row.state, row.version]), [['ended', s.version], ['made', afterAccept.draft.version]],
+    'the run\'s end makes the build: the documents are written from the version the owner confirmed');
+});
+
+test('a space with no confirmed plan writes no document: the run is told so, and a write is refused', { skip }, async () => {
+  const h = await boot();
+  const s = await plannedSpace(h, 'unplanned');
+  // A draft stands, and nobody confirmed it.
+  const run = await maintenanceRun(h, s);
+  const affected = await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs`);
+  expectStatus(affected, 200, 'the run asks what to write');
+  assert.deepEqual([affected.body.plan, affected.body.sections, affected.body.unplaced, affected.body.build], [null, [], [], null]);
+  const write = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/docs/runner-ops`, {
+    planVersion: s.version, repoSha: 'b'.repeat(40), sections: [writtenSection('s2', 'c1', '全量测试在 runner 宿主上跑')],
+  });
+  expectStatus(write, 409, 'no document is written from a plan nobody confirmed');
+  assert.equal(write.body.code, 'WIKI_PLAN_UNCONFIRMED');
+  assert.equal((await h.sql.query(`SELECT 1 FROM "wiki_doc" WHERE "space_id" = $1`, [s.spaceId])).rowCount, 0);
+  assert.equal((await builds(h, s.spaceId)).length, 0, 'no confirmation, no build');
+  // Only a maintenance run of the space asks.
+  const ordinary = await session(h, s.owner.id, { workspaceId: s.workspaceId, runnerId: s.machine.id, status: 'RUNNING' });
+  const refused = await call(h, { runner: s.machine.token, session: ordinary }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs`);
+  expectStatus(refused, 403, 'another session of the owner is not a maintenance run');
+  assert.equal(refused.body.code, 'WIKI_NOT_MAINTENANCE_SESSION');
+});
+
+test('a repository file gone from origin/main withdraws the sentences citing it, names it, and leaves their sections stale', { skip }, async () => {
+  const h = await boot();
+  const s = await plannedSpace(h, 'withdraw');
+  await confirm(h, s, s.version);
+  const [build] = await builds(h, s.spaceId);
+  const plan = (await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`)).body.confirmed;
+  const flow = plan.docs[1].sections[0].key as string;
+  const writer = await runSession(h, s, build.task_id!);
+  expectStatus(await call(h, { runner: s.machine.token, session: writer }, 'POST', `/runner/wiki/spaces/${s.spaceId}/docs/plan-flow`, {
+    planVersion: s.version, repoSha: 'b'.repeat(40), sections: [writtenSection(flow, 'f1', '起草分四步')],
+  }), 200, 'the build writes the flow section');
+  const bad = await call(h, { runner: s.machine.token, session: writer }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs/withdrawals`, {
+    repoSha: 'short', paths: [],
+  });
+  assert.equal(bad.status, 422, 'a withdrawal names a full commit and at least one path');
+  assert.equal(bad.body.code, 'WIKI_DOC_INVALID');
+  const withdrawn = await call(h, { runner: s.machine.token, session: writer }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs/withdrawals`, {
+    repoSha: 'c'.repeat(40), paths: [{ path: DESIGN_DOC, change: 'deleted' }, { path: 'docs/nobody-cites.md', change: 'renamed', to: 'docs/elsewhere.md' }],
+  });
+  expectStatus(withdrawn, 200, 'the run names the files gone');
+  assert.deepEqual([withdrawn.body.withdrawn, withdrawn.body.sections], [1, [{ doc: 'plan-flow', key: flow }]]);
+  const [sentence] = (await h.sql.query<{ status: string; withdrawn_reason: string; withdrawn_path: string; withdrawn_entry_id: string | null }>(
+    `SELECT s."status", s."withdrawn_reason", s."withdrawn_path", s."withdrawn_entry_id" FROM "wiki_doc_sentence" s
+       JOIN "wiki_doc_section" x ON x."id" = s."section_id" JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1`, [s.spaceId])).rows;
+  assert.deepEqual(sentence, { status: 'withdrawn', withdrawn_reason: 'anchor_missing', withdrawn_path: DESIGN_DOC, withdrawn_entry_id: null });
+  assert.ok((await sectionRows(h, s.spaceId)).get(`plan-flow#${flow}`)!.staleAt, 'the section waits to be written again');
+  // Said again, it withdraws nothing more.
+  const twice = await call(h, { runner: s.machine.token, session: writer }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs/withdrawals`, {
+    repoSha: 'c'.repeat(40), paths: [{ path: DESIGN_DOC, change: 'deleted' }],
+  });
+  assert.deepEqual([twice.body.withdrawn, twice.body.sections], [0, []]);
+  // The run is told to write it again, and the owner's page says why the sentence went.
+  const affected = await call(h, { runner: s.machine.token, session: writer }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs`);
+  assert.deepEqual((affected.body.sections as Array<{ doc: string; key: string; stale: boolean }>).map((one) => [one.doc, one.key, one.stale]), [['plan-flow', flow, true]]);
+  const page = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/docs/plan-flow`);
+  expectStatus(page, 200, 'the owner reads the document');
+  const shown = page.body.sections.find((x: { key: string }) => x.key === flow).blocks[0].sentences[0].withdrawn;
+  assert.deepEqual([shown.reason, shown.path, shown.entryId], ['anchor_missing', DESIGN_DOC, null]);
+  // Nobody else withdraws anything.
+  const ordinary = await session(h, s.owner.id, { workspaceId: s.workspaceId, runnerId: s.machine.id, status: 'RUNNING' });
+  const refused = await call(h, { runner: s.machine.token, session: ordinary }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs/withdrawals`, {
+    repoSha: 'c'.repeat(40), paths: [{ path: DESIGN_DOC, change: 'deleted' }],
+  });
+  expectStatus(refused, 403, 'another session is not a maintenance run');
+  // The migration keeps a withdrawal to one of its two causes, and a path to anchor_missing.
+  await assert.rejects(h.sql.query(`UPDATE "wiki_doc_sentence" SET "withdrawn_reason" = 'rejected'
+     WHERE "withdrawn_path" IS NOT NULL AND "section_id" IN (SELECT x."id" FROM "wiki_doc_section" x JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1)`, [s.spaceId]),
+    /wiki_doc_sentence_withdrawn_path_chk/);
+  await assert.rejects(h.sql.query(`UPDATE "wiki_doc_sentence" SET "withdrawn_entry_id" = $2
+     WHERE "withdrawn_path" IS NOT NULL AND "section_id" IN (SELECT x."id" FROM "wiki_doc_section" x JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1)`, [s.spaceId, randomUUID()]),
+    /wiki_doc_sentence_withdrawn_chk/);
 });

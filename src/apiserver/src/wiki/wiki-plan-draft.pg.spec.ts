@@ -989,21 +989,33 @@ test('the migration\'s CHECKs are the contract\'s closed sets, a space has one o
   ).then(() => null, (e: Error) => e);
   assert.ok(second, 'a second open draft of one space was stored');
   assert.match(second.message, /wiki_plan_job_space_id_open_draft_key/u);
-  // A revision with no instructions, a held job with no reason, and a success with no version are refused
-  // by their CHECKs — each row wrong in that one way alone.
+  // A revision with no instructions, a held job with no reason, a success with no version, a build naming no
+  // version (0340) and a draft carrying a build's progress (0340) are refused by their CHECKs — each row wrong
+  // in that one way alone.
   for (const [values, constraint] of [
-    [`'revise','owner',NULL,'ended',NULL,gen_random_uuid(),now(),now(),'failed',NULL`, /wiki_plan_job_instructions_chk/u],
-    [`'build','owner',NULL,'held',NULL,NULL,NULL,NULL,NULL,NULL`, /wiki_plan_job_held_chk/u],
-    [`'build','owner',NULL,'ended',NULL,gen_random_uuid(),now(),now(),'succeeded',NULL`, /wiki_plan_job_ended_chk/u],
+    [`'revise','owner',NULL,'ended',NULL,gen_random_uuid(),now(),now(),'failed',NULL,NULL`, /wiki_plan_job_instructions_chk/u],
+    [`'build','owner',NULL,'held',NULL,NULL,NULL,NULL,NULL,1,NULL`, /wiki_plan_job_held_chk/u],
+    [`'draft','owner',NULL,'ended',NULL,gen_random_uuid(),now(),now(),'succeeded',NULL,NULL`, /wiki_plan_job_ended_chk/u],
+    [`'build','owner',NULL,'queued',NULL,NULL,NULL,NULL,NULL,NULL,NULL`, /wiki_plan_job_build_version_chk/u],
+    [`'draft','owner',NULL,'ended',NULL,gen_random_uuid(),now(),now(),'failed',NULL,'{"docs":{"done":0,"total":1}}'`, /wiki_plan_job_progress_chk/u],
   ] as const) {
     const refused = await h.sql.query(
-      `INSERT INTO "wiki_plan_job"("id","space_id","owner_id","kind","trigger","instructions","state","held_reason","task_id","made_at","ended_at","outcome","version")
+      `INSERT INTO "wiki_plan_job"("id","space_id","owner_id","kind","trigger","instructions","state","held_reason","task_id","made_at","ended_at","outcome","version","progress")
        VALUES ($1,$2,$3,${values})`,
       [randomUUID(), spaceId, w.owner.id],
     ).then(() => null, (e: Error) => e);
     assert.ok(refused, `${constraint} let a row through`);
     assert.match(refused.message, constraint);
   }
+  // At most one build of a space waits (0340): a second queued one, written past the service, is refused by its index.
+  await h.sql.query(`INSERT INTO "wiki_plan_job"("id","space_id","owner_id","kind","trigger","state","version") VALUES ($1,$2,$3,'build','owner','queued',1)`,
+    [randomUUID(), spaceId, w.owner.id]);
+  const waiting = await h.sql.query(
+    `INSERT INTO "wiki_plan_job"("id","space_id","owner_id","kind","trigger","state","version") VALUES ($1,$2,$3,'build','owner','queued',2)`,
+    [randomUUID(), spaceId, w.owner.id],
+  ).then(() => null, (e: Error) => e);
+  assert.ok(waiting, 'a second waiting build of one space was stored');
+  assert.match(waiting.message, /wiki_plan_job_space_id_waiting_build_key/u);
   await h.sql.query(`DELETE FROM "wiki_space" WHERE "id" = $1`, [spaceId]);
   assert.equal((await jobs(h, spaceId)).length, 0, 'the space\'s delete left its jobs');
 });
