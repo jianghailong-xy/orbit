@@ -171,15 +171,6 @@ final class StartProjectWiringTests: XCTestCase {
         XCTAssertTrue(start.contains("Menu {"), "Tasks land on is picked from a menu")
         XCTAssertTrue(start.contains("Toggle(isOn: lineBinding(.projectBranch, draft))"))
         XCTAssertTrue(start.contains("Toggle(isOn: lineBinding(.main, draft))"))
-        // Each option's second line is what choosing it means, and on iOS 26 a fixed-size menu
-        // draws a long second line empty — the card's own first screenshots, 2026-09-30. So the
-        // menu is fixed-size on macOS only, where its button would otherwise stretch.
-        let lineRow = try section(file, from: "private func lineRow(", to: "private func lineBinding(")
-        let lines = lineRow.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
-        for (at, line) in lines.enumerated() where line == ".fixedSize()" {
-            XCTAssertEqual(at > 0 ? lines[at - 1] : "", "#if os(macOS)",
-                           "the Tasks land on menu is fixed-size on iOS, which blanks its subtitles")
-        }
         XCTAssertTrue(start.contains("Text(RunSettings.automaticHint(draft.line))"),
                       "the Automatic sentence follows the line chosen")
         XCTAssertTrue(start.contains("in: 1...StartProject.maxConcurrentTasks)"),

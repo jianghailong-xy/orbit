@@ -1980,8 +1980,9 @@ private struct StartProjectCardView: View {
                     .foregroundStyle(Color.blue)
                 }
                 .borderlessMenuStyle()
-                // Not on iOS: a fixed-size menu there draws a long subtitle's lines empty (measured on
-                // iOS 26.5 — the items keep their height and lose their second line).
+                // Held to its label's size on macOS, as the window probe drew it; on iOS the row
+                // lays it out beside the Spacer. (On iOS 26 the options' second lines arrive a moment
+                // after the menu opens: a screenshot taken too soon shows them empty.)
                 #if os(macOS)
                 .fixedSize()
                 #endif
