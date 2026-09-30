@@ -1480,7 +1480,7 @@
         "tool": "none: all three are CLI only. draft and revise are the plan job's run alone, and check is its task's acceptance command, which runs where there is no session.",
         "draftPrecondition": "Run this only as the plan job of the space, once, and let it finish: it drafts as the space's maintenance run, and only a draft that passed the plan's gate is stored — three rounds at most, each handing every error back to the model.",
         "revisePrecondition": "Run this only as the plan job the owner's redraft made, once, and let it finish: it revises the plan's newest version with the owner's instructions, and only a draft that passed the plan's gate is stored — three rounds at most, each handing every error back to the model.",
-        "checkPrecondition": "Judge a plan job only by what this reads: it passes when the job's run stored a draft that passed the plan's gate, and a run cannot pass it by saying it finished."
+        "checkPrecondition": "Judge a plan job only by what this reads: it passes when the job's run stored a draft that passed the plan's gate — or, a build's, wrote the documents of the confirmed version it was made for — and a run cannot pass it by saying it finished."
       }
     }
   },
