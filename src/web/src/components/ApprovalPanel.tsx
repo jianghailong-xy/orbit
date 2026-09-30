@@ -7,7 +7,7 @@ import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { buildBatchGraph, describeShape, shouldDraw } from '../lib/batchGraph';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
-import { markdownToPlainText } from '../lib/markdownText';
+import { markdownToPlainLines } from '../lib/markdownText';
 import {
   OWNER_CONFIRMATION_SHOW_ALL,
   OWNER_CONFIRMATION_SHOW_LESS,
@@ -510,10 +510,11 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
   const noun = createFoldNoun(input);
   const detail = createDetail(input);
   // A task's criteria is one prose block written as a prompt for the agent that will run it — the
-  // field that turns into a wall. Flattened and folded at the ceiling the owner-confirmation card
-  // folds a run's report at, which is the same kind of field read by the same person. A project's
-  // criteria are a declared list of assertions, and the list is what makes them readable.
-  const said = markdownToPlainText(input.criteria);
+  // field that turns into a wall. Its marks taken off, its lines kept, and folded at the ceiling the
+  // owner-confirmation card folds a run's report at, which is the same kind of field read by the
+  // same person. A project's criteria are a declared list of assertions, and the list is what
+  // makes them readable.
+  const said = markdownToPlainLines(input.criteria);
   const long = said.length > REPORT_CLAMP;
   return (
     <div className="dag-approval">
@@ -557,7 +558,7 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
           ) : (
             <>
               <p className="dag-approval-criteria">
-                {long && !criteriaOpen ? `${said.slice(0, REPORT_CLAMP)}…` : said}
+                {long && !criteriaOpen ? `${said.slice(0, REPORT_CLAMP).trimEnd()}…` : said}
               </p>
               {long && (
                 <button
