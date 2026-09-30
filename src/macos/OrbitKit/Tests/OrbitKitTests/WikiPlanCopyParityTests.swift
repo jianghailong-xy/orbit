@@ -44,6 +44,25 @@ final class WikiPlanCopyParityTests: XCTestCase {
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
     }
 
+    private static let page = "src/web/src/components/WikiPlanPage.tsx"
+    private static let home = "src/web/src/components/WikiHome.tsx"
+    private static let app = "src/macos/OrbitApp/Sources/OrbitApp/"
+
+    /// A native page's source without its comment lines, whitespace kept.
+    private func native(_ file: String) throws -> String {
+        try String(contentsOf: find(Self.app + file), encoding: .utf8)
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+    }
+
+    private func assertOrder(_ text: String, _ literals: [String], _ what: String, line: UInt = #line) {
+        let positions = literals.map { text.range(of: $0)?.lowerBound }
+        XCTAssertFalse(positions.contains(nil), "\(what): lost \(literals.filter { text.range(of: $0) == nil })", line: line)
+        let found = positions.compactMap { $0 }
+        XCTAssertEqual(found, found.sorted(), "\(what) is no longer in the order \(literals)", line: line)
+    }
+
     private func assertSays(_ text: String, _ literal: String, in file: String, line: UInt = #line) {
         XCTAssertTrue(text.contains(literal), "\(file) no longer says \(literal)", line: line)
     }
@@ -692,5 +711,153 @@ final class WikiPlanCopyParityTests: XCTestCase {
         assertSays(lib, "WIKI_PLAN_SECTION_SECTIONS = ['crumb', 'title', 'meta', 'covers', 'sources'] as const", in: Self.lib)
         assertSays(lib, "WIKI_PLAN_CHANGE_PARTS = ['head', 'title', 'why', 'change', 'sources', 'from', 'check', 'actions'] as const",
                    in: Self.lib)
+    }
+    // MARK: the pages, block for block
+
+    /// The plan page: crumb, title and version, where it came from, Confirm plan and Redraft…, a failed
+    /// draft's hint, the job, the gate, the changes, the documents — the web page's order and the native arms.
+    func testThePlanPageIsTheWebPhonesInItsOrder() throws {
+        let page = try web(Self.page)
+        let webPage = try slice(page, from: "function WikiPlanPage({ page, spaceId, spaceSlug }", to: "function PlanVersionMenu(")
+        assertOrder(webPage, ["<div className=\"wk-art-crumbrow\">", "<h1 className=\"t-title\">{WIKI_PLAN_TITLE}</h1>", "<div className=\"wk-pl-meta\">",
+                              "<div className=\"wk-pl-acts\">", "wikiPlanFailedHint(", "<PlanJobCard", "<PlanGateReport", "<PlanChanges",
+                              "<PlanDocuments"], "the web plan page")
+        assertSays(webPage, "disabled={shown.status === 'failed' || confirm.isPending}", in: Self.page)
+        let view = try native("Views/WikiPlanView.swift")
+        let nativePage = try slice(view, from: "struct WikiPlanPage: View {", to: "struct WikiPlanJobCardView: View {")
+        assertSays(nativePage, "ForEach(WikiPlanLogic.PageSection.allCases, id: \\.self) { section in", in: "WikiPlanView.swift")
+        let arms = try slice(nativePage, from: "switch section {", to: "private var changesBase")
+        assertOrder(arms, ["case .crumb:", "case .title:", "case .meta:", "case .actions:", "case .hint:", "case .job:", "case .gate:",
+                           "case .changes:", "case .documents:"], "the native plan page")
+        assertOrder(arms, ["Text(WikiPlanCopy.confirm)", "Label(WikiPlanCopy.redraft"], "Confirm plan, then Redraft…")
+        assertSays(arms, ".disabled(shown.status == .failed || busy)", in: "WikiPlanView.swift")
+        // The empty page: what a plan is, Draft plan, where and how long it runs.
+        let webEmpty = try slice(page, from: "function PlanEmpty(", to: "function PlanGateReport(")
+        assertOrder(webEmpty, ["{WIKI_PLAN_EMPTY_TITLE}", "{wikiPlanEmptyText(provider)}", "{WIKI_PLAN_DRAFT}", "{wikiPlanEmptyNote(where, provider)}"],
+                    "the web's empty plan")
+        let nativeEmpty = try slice(nativePage, from: "private var empty: some View {", to: "private func docRow(")
+        assertOrder(nativeEmpty, ["Text(WikiPlanCopy.emptyTitle)", "Text(WikiPlanCopy.emptyText(provider: provider))", "Text(WikiPlanCopy.draft)",
+                                  "Text(WikiPlanCopy.emptyNote(where: whereItRuns, provider: provider))"], "the native empty plan")
+    }
+
+    /// The job's card, the gate's report and a change's card, part by part.
+    func testTheCardsAreTheWebsInTheirOrder() throws {
+        let page = try web(Self.page)
+        let webJob = try slice(page, from: "function PlanJobCard(", to: "function PlanEmpty(")
+        assertOrder(webJob, ["<b>{card.title}</b>", "{card.text}", "{link.label}", "{WIKI_PLAN_WRITING_NOW} <b>{card.progress.now}</b>"], "the web job card")
+        let view = try native("Views/WikiPlanView.swift")
+        let nativeJob = try slice(view, from: "struct WikiPlanJobCardView: View {", to: "struct WikiPlanGateView: View {")
+        assertOrder(nativeJob, ["Text(card.title)", "Text(card.text)", "Button(link.label)", "Text(WikiPlanCopy.writingNow)"], "the native job card")
+
+        let webGate = try slice(page, from: "function PlanGateReport(", to: "function PlanChanges(")
+        assertOrder(webGate, ["<b>{gate.title}</b>", "{gate.line}", "{row.title}", "{row.text}", "<span className=\"at\">{ref.where}</span>",
+                              "wikiShowMore(hidden)"], "the web gate report")
+        let nativeGate = try slice(view, from: "struct WikiPlanGateView: View {", to: "struct WikiPlanChangeCard: View {")
+        assertOrder(nativeGate, ["Label(gate.title", "Text(([gate.line]", "Text(row.title)", "Text(row.text)", "Text(ref.where_)",
+                                 "WikiArticleCopy.showMore(gate.refs.count - shown.count)"], "the native gate report")
+
+        let webChange = try slice(page, from: "function PlanChangeCard(", to: "function PlanDocuments(")
+        assertOrder(webChange, ["{WIKI_PLAN_OP_LABELS[change.op]}", "{change.title}", "{WIKI_PLAN_WHY}", "{WIKI_PLAN_CHANGE}", "{WIKI_PLAN_SOURCES}",
+                                "{WIKI_PLAN_FROM}", "{WIKI_PLAN_CHECK}", "{WIKI_PLAN_ACCEPT}", "{WIKI_PLAN_EDIT}", "{WIKI_PLAN_REJECT}",
+                                "{wikiPlanAcceptNote(plan, change.op)}"], "the web change card")
+        let nativeChange = try slice(view, from: "struct WikiPlanChangeCard: View {", to: "private func field<Content: View>")
+        assertSays(nativeChange, "ForEach(WikiPlanLogic.ChangePart.allCases, id: \\.self) { part in", in: "WikiPlanView.swift")
+        assertOrder(nativeChange, ["case .head:", "Text(change.op.label)", "case .title:", "Text(change.title)", "case .why:", "field(WikiPlanCopy.why)",
+                                   "case .change:", "field(WikiPlanCopy.change)", "case .sources:", "field(WikiPlanCopy.sources)", "case .from:",
+                                   "field(WikiPlanCopy.from)", "case .check:", "field(WikiPlanCopy.check)", "case .actions:", "Text(WikiPlanCopy.accept)",
+                                   "Text(WikiPlanCopy.edit)", "Text(WikiPlanCopy.reject)", "Text(acceptNote)"], "the native change card")
+    }
+
+    /// A plan document's page and a section's page, and the Redraft and Edit sheets.
+    func testTheDocumentAndSectionPagesAreTheWebsInTheirOrder() throws {
+        let page = try web(Self.page)
+        let webDoc = try slice(page, from: "function WikiPlanDocPage(", to: "function WikiPlanSectionPage(")
+        assertOrder(webDoc, ["<PlanSubCrumb", "<h1 className=\"t-title\">", "<div className=\"wk-pl-meta\">", "<PlanDocFields",
+                             "<div className=\"wk-pl-secs phone\">"], "the web plan document page")
+        let webFields = try slice(page, from: "function PlanDocFields(", to: "function PlanSections(")
+        assertOrder(webFields, ["{WIKI_PLAN_QUESTION}", "{WIKI_PLAN_WRITTEN_FOR}", "{WIKI_PLAN_COVERS}", "{WIKI_PLAN_NOT_COVERED}", "{WIKI_PLAN_LENGTH}",
+                                "{WIKI_PLAN_PROTECTED}", "{WIKI_PLAN_DRAWS_ON}"], "the web document fields")
+        let webSection = try slice(page, from: "function WikiPlanSectionPage(", to: "function PlanRedraftModal(")
+        assertOrder(webSection, ["<PlanSubCrumb", "<h1 className=\"t-title\">", "wikiPlanSectionMeta(shown, section)", "{WIKI_PLAN_COVERS}", "<PlanSources"],
+                    "the web plan section page")
+        let webSources = try slice(page, from: "function PlanSources(", to: "function PlanSubCrumb(")
+        assertOrder(webSources, ["{WIKI_PLAN_SOURCE_DOCS}", "{WIKI_PLAN_SOURCE_CODE}", "{WIKI_PLAN_SOURCE_CONTRACTS}", "WIKI_PLAN_SOURCE_SESSIONS_SHORT",
+                                 "{WIKI_PLAN_SESSION_PROJECTS}", "{WIKI_PLAN_SESSION_TIME}", "{WIKI_PLAN_SESSION_KEYWORDS}", "{WIKI_PLAN_SESSION_ANCHORS}",
+                                 "{WIKI_PLAN_SESSION_KINDS}", "{WIKI_PLAN_SESSION_TOPICS}", "{WIKI_PLAN_SESSION_EVIDENCE}"], "the web section sources")
+
+        let view = try native("Views/WikiPlanView.swift")
+        let nativeDoc = try slice(view, from: "struct WikiPlanDocPage: View {", to: "struct WikiPlanSectionPage: View {")
+        assertSays(nativeDoc, "ForEach(WikiPlanLogic.DocSection.allCases, id: \\.self) { section in", in: "WikiPlanView.swift")
+        assertOrder(nativeDoc, ["case .crumb:", "case .title:", "case .meta:", "case .fields:", "field(WikiPlanCopy.question)",
+                                "field(WikiPlanCopy.writtenFor)", "field(WikiPlanCopy.covers)", "field(WikiPlanCopy.notCovered)",
+                                "field(WikiPlanCopy.length)", "field(WikiPlanCopy.protected)", "field(WikiPlanCopy.drawsOn)", "case .sections:"],
+                    "the native plan document page")
+        assertSays(nativeDoc, "WikiPlanCopy.protectedMovePhone(movedTo: row.movedTo, number: doc.number)", in: "WikiPlanView.swift")
+        let nativeSection = try slice(view, from: "struct WikiPlanSectionPage: View {", to: "struct WikiPlanRedraftSheet: View {")
+        assertSays(nativeSection, "ForEach(WikiPlanLogic.SectionSection.allCases, id: \\.self) { part in", in: "WikiPlanView.swift")
+        assertOrder(nativeSection, ["case .crumb:", "case .title:", "case .meta:", "WikiPlanLogic.sectionMeta(shown, section: section)", "case .covers:",
+                                    "Section(WikiPlanCopy.covers)", "case .sources:", "Section(WikiPlanCopy.sourceDocs)", "Section(WikiPlanCopy.sourceCode)",
+                                    "Section(WikiPlanCopy.sourceContracts)", "Section(WikiPlanCopy.sourceSessions)",
+                                    "condition(WikiPlanCopy.sessionProjects)", "condition(WikiPlanCopy.sessionTime)",
+                                    "condition(WikiPlanCopy.sessionKeywords)", "condition(WikiPlanCopy.sessionAnchors)",
+                                    "condition(WikiPlanCopy.sessionKinds)", "condition(WikiPlanCopy.sessionTopics)",
+                                    "condition(WikiPlanCopy.sessionEvidence)"], "the native plan section page")
+
+        // Redraft…: the note, the owner's words, the protected documents kept, Cancel and Redraft.
+        let webRedraft = try slice(page, from: "function PlanRedraftModal(", to: "const KIND_OPTIONS")
+        for literal in ["okText={WIKI_PLAN_REDRAFT_GO}", "{wikiPlanRedraftNote(provider,", "placeholder={WIKI_PLAN_REDRAFT_PLACEHOLDER}",
+                        "{wikiPlanProtectedKept(protectedDocs)}", "{WIKI_PLAN_REDRAFT_TITLE}"] {
+            assertSays(webRedraft, literal, in: Self.page)
+        }
+        let nativeRedraft = try slice(view, from: "struct WikiPlanRedraftSheet: View {", to: "struct WikiPlanEditSheet: View {")
+        for literal in ["TextEditor(text: $words)", "Text(WikiPlanCopy.redraftPlaceholder)", "Text(WikiPlanCopy.protectedKept(protectedDocs))",
+                        ".navigationTitle(WikiPlanCopy.redraftTitle)", "Button(WikiPlanCopy.cancel)", "Button(WikiPlanCopy.redraftGo)"] {
+            assertSays(nativeRedraft, literal, in: "WikiPlanView.swift")
+        }
+        let screens = try native("Views/WikiDocScreens.swift")
+        assertSays(screens, "WikiPlanCopy.redraftNote(provider: model.wikiMaintenanceProvider,", in: "WikiDocScreens.swift")
+        // Edit: title, question, length, protected, the sections with Add section, and Save draft.
+        let webEdit = try slice(page, from: "function PlanEditDrawer(", to: "function PlanSectionEditModal(")
+        assertOrder(webEdit, ["{WIKI_PLAN_EDIT_TITLE_FIELD}", "{WIKI_PLAN_QUESTION}", "{WIKI_PLAN_LENGTH}", "{WIKI_PLAN_PROTECTED}", "{WIKI_PLAN_SECTIONS}",
+                              "{WIKI_PLAN_ADD_SECTION}"], "the web edit drawer")
+        assertSays(webEdit, "wikiPlanDocEdit(doc.stored!, form)", in: Self.page)
+        let nativeEdit = try slice(view, from: "struct WikiPlanEditSheet: View {", to: "struct WikiPlanSectionEditSheet: View {")
+        assertOrder(nativeEdit, ["LabeledContent(WikiPlanCopy.editTitleField)", "Text(WikiPlanCopy.question)", "Text(WikiPlanCopy.length)",
+                                 "Text(WikiPlanCopy.protected)", "Label(WikiPlanCopy.addSection", "Text(WikiPlanCopy.sections)",
+                                 "Text(WikiPlanCopy.saveNote(nextVersion))", "Button(WikiPlanCopy.saveDraft)"], "the native edit sheet")
+        assertSays(nativeEdit, "WikiPlanLogic.docEdit(stored, form: form)", in: "WikiPlanView.swift")
+    }
+
+    /// The home's plan banner, the second under Review's at both ends — and its changes only on the plan page.
+    func testThePlanBannerIsTheHomesSecond() throws {
+        let home = try web(Self.home)
+        assertOrder(home, ["{wikiProposalsToReview(pending.length)}", "<WikiPlanBanner space={space} />", "<div className=\"wk-cols\">",
+                           "<WikiPlanCard space={space} />", "<ReviewCard"], "the web home")
+        let view = try native("Views/WikiView.swift")
+        let band = try slice(view, from: "case .reviewBanner:", to: "case .principles:")
+        assertOrder(band, ["reviewBanner", "WikiPlanBannerRow(banner: planBanner) { actions.openPlan(planBanner.to) }"], "the native home's banners")
+        let screens = try native("Views/WikiScreens.swift")
+        assertSays(screens, "openPlan: { to in open(to == .settings ? .wikiSettings : .wikiPlan(version: nil)) })", in: "WikiScreens.swift")
+        assertSays(screens, "planBanner: planBanner(wiki, now: context.date))", in: "WikiScreens.swift")
+    }
+
+    /// Accept: with no other draft waiting, accept and then confirm the draft it made — two requests, the
+    /// second only once the gate passed the first — on the owner's door, never an agent's.
+    func testAcceptIsTwoRequestsOnTheOwnersDoor() throws {
+        let model = try native("WikiModel.swift")
+        let accept = try slice(model, from: "func acceptPlanProposal(", to: "private func planWrite(")
+        assertOrder(accept, ["api.decideWikiPlanProposal(id, WikiPlanDecideRequest(action: .accept))",
+                             "if let errors = WikiPlanLogic.gateErrors(error) { return (.refused(errors), false) }", "guard confirm else {",
+                             "api.confirmWikiPlan(spaceID: space.id, version: draft.version)"], "the native acceptance")
+        let screens = try native("Views/WikiDocScreens.swift")
+        assertSays(screens, "confirm: WikiPlanLogic.acceptConfirms(state) && !edit", in: "WikiDocScreens.swift")
+        // Every plan request is the user door's (`/api/wiki/...`, a JWT), none the runner door's.
+        let client = try String(contentsOf: find("src/macos/OrbitKit/Sources/OrbitKit/Net/APIClient.swift"), encoding: .utf8)
+        let plan = try slice(client, from: "// MARK: wiki documents and the plan", to: "/// Control-plane–configured model providers")
+        for path in ["\"wiki/spaces/\\(spaceID)/plan\"", "\"wiki/spaces/\\(spaceID)/plan/redraft\"", "\"wiki/plan-proposals/\\(id)/decide\"",
+                     "\"wiki/spaces/\\(spaceID)/plan/edits\"", "\"wiki/spaces/\\(spaceID)/docs/\\(slug)\""] {
+            assertSays(plan, path, in: "APIClient.swift")
+        }
+        XCTAssertFalse(plan.contains("runner/"), "a plan read or write went to the runner door")
     }
 }

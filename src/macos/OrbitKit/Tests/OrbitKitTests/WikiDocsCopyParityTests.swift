@@ -587,4 +587,143 @@ final class WikiDocsCopyParityTests: XCTestCase {
                    in: Self.lib)
         assertSays(lib, "WIKI_FOOTNOTE_CARD_PARTS = ['head', 'quote', 'problem', 'place', 'via', 'open'] as const", in: Self.lib)
     }
+    // MARK: the pages, block for block
+
+    /// A document's page: crumb, title, tags, when it was written, the banner, the reader and scope, the text,
+    /// the footnotes, the entries — the web page's order, the fixture's, and the native page's arms.
+    func testADocumentPageIsTheWebPhonesInItsOrder() throws {
+        let page = try web(Self.docPage)
+        let webDoc = try slice(page, from: "export function WikiDocPage(", to: "function WikiDocReviewBanner(")
+        assertOrder(webDoc, ["<div className=\"wk-art-crumbrow\">", "<h1 className=\"t-title wk-art-title\">{doc.title}</h1>",
+                             "<div className=\"wk-tags\">", "{updated.join(' · ')}", "<WikiDocReviewBanner doc={doc} />", "<WikiDocScope",
+                             "<WikiDocSectionText", "<WikiDocFootnoteList", "<WikiDocEntries"], "the web document's blocks")
+        let view = try native("Views/WikiDocView.swift")
+        let nativePage = try slice(view, from: "struct WikiDocPage: View {", to: "struct WikiDocMarkLabel: View {")
+        assertSays(nativePage, "ForEach(WikiDocLogic.Section.allCases, id: \\.self) { section in", in: "WikiDocView.swift")
+        let arms = try slice(nativePage, from: "switch section {", to: "private var updated: some View {")
+        assertOrder(arms, ["case .crumb:", "case .title:", "case .tags:", "case .updated:", "case .review:", "case .scope:", "case .body:",
+                           "case .footnotes:", "case .entries:"], "the native document's blocks")
+        // The same words at both ends: the head, the banner, the scope folded on a phone, the section marks.
+        assertSays(webDoc, "wikiDocTags(doc)", in: Self.docPage)
+        assertSays(nativePage, "WikiDocLogic.tags(doc)", in: "WikiDocView.swift")
+        assertSays(page, "{WIKI_DOC_NEEDS_REVIEW}</b> · {wikiDocNeedsReviewText(doc)}", in: Self.docPage)
+        assertSays(nativePage, "Text(WikiDocCopy.needsReview).bold().foregroundColor(.orange) + Text(\" · \") + Text(WikiDocLogic.needsReviewText(doc))",
+                   in: "WikiDocView.swift")
+        assertSays(page, "<span>{WIKI_DOC_SCOPE_FOLDED}</span>", in: Self.docPage)
+        assertSays(nativePage, "Text(WikiDocCopy.scopeFolded)", in: "WikiDocView.swift")
+        assertSays(page, "{WIKI_REWRITE_PENDING}", in: Self.docPage)
+        assertSays(nativePage, "Label(WikiDocCopy.rewritePending", in: "WikiDocView.swift")
+        assertSays(page, "{WIKI_MARK_LABELS[mark]}", in: Self.docPage)
+        assertSays(nativePage, "AttributedString(\" \\(mark.label) \")", in: "WikiDocView.swift")
+        assertSays(page, "{wikiFootnotesSummary(doc.footnotes)}", in: Self.docPage)
+        assertSays(nativePage, "header(WikiDocCopy.footnotes, hint: WikiDocLogic.footnotesSummary(footnotes))", in: "WikiDocView.swift")
+        assertSays(page, "{WIKI_DOC_ENTRIES} <small>{wikiDocEntriesHint(doc.entries.length)}</small>", in: Self.docPage)
+        assertSays(nativePage, "header(WikiDocCopy.entries, hint: WikiDocCopy.entriesHint(entries.count))", in: "WikiDocView.swift")
+        // A footnote on a phone is a sheet from the bottom, at both ends.
+        assertSays(page, "<Drawer placement=\"bottom\"", in: Self.docPage)
+        assertSays(nativePage, ".presentationDetents([.medium, .large])", in: "WikiDocView.swift")
+    }
+
+    /// A footnote's card: its head, the words or the lines, what went wrong, where, the entry it came
+    /// through as one row, and the one button that opens the original (owner's call 2026-09-29).
+    func testTheFootnoteCardIsTheWebsInItsOrder() throws {
+        let page = try web(Self.docPage)
+        let card = try slice(page, from: "export function WikiDocFootnoteCard(", to: "function WikiDocFootnoteList(")
+        assertOrder(card, ["<span className=\"num\">[{note.n}]</span>", "{WIKI_FOOTNOTE_KIND_LABELS[note.kind]}", "{WIKI_VERDICT_CARD[note.verdict]}",
+                           "{wikiQuoted(note.quote)}", "<div className=\"xnote\">{problem}</div>", "{wikiFootnotePlace(note)}", "{WIKI_VIA_ENTRY}",
+                           "{open.label}"], "the web's footnote card")
+        let view = try native("Views/WikiDocView.swift")
+        let sheet = try slice(view, from: "struct WikiDocFootnoteSheet: View {", to: "static func glyph(")
+        assertSays(sheet, "ForEach(WikiDocLogic.CardPart.allCases, id: \\.self) { part in", in: "WikiDocView.swift")
+        assertOrder(sheet, ["case .head:", "WikiDocCopy.footnoteKind(footnote.kind)", "WikiDocCopy.verdictCard(footnote.verdict)", "case .quote:",
+                            "WikiDocLogic.quoted(quote)", "case .problem:", "WikiDocLogic.footnoteProblem(footnote)", "case .place:",
+                            "WikiDocLogic.footnotePlace(footnote)", "case .via:", "Text(WikiDocCopy.viaEntry)", "case .open:", "Text(open.label)"],
+                    "the native footnote sheet")
+        // The button opens the original, never the entry: the entry is the Via entry row above it.
+        assertSays(sheet, "Button { openSource(open.target) } label: {", in: "WikiDocView.swift")
+        let screens = try native("Views/WikiDocScreens.swift")
+        assertSays(screens, "model.openOrbitLink(SessionRecordLink.url(session: session, record: record))", in: "WikiDocScreens.swift")
+        assertSays(screens, "case .external(let url): model.openExternal(url)", in: "WikiDocScreens.swift")
+    }
+
+    /// The Contents sheet: Home, Browse, the A–Z index and the Plan with its count, then the plan's
+    /// categories and documents — the web column and drawer, the native sheet.
+    func testTheContentsListThePlanAndItsDocuments() throws {
+        let directory = try web(Self.directory)
+        assertOrder(directory, ["{WIKI_DIRECTORY_HOME}", "{WIKI_BROWSE}", "{WIKI_AZ_INDEX}", "{WIKI_DIRECTORY_PLAN}", "<WikiDocGroupRows"],
+                    "the web directory")
+        assertSays(directory, "wikiPlanPending(plan.data, maintenance.runnerOnline)", in: Self.directory)
+        let view = try native("Views/WikiArticleView.swift")
+        let sheet = try slice(view, from: "struct WikiContentsSheet: View {", to: "struct WikiArticleActions {")
+        assertOrder(sheet, ["row(WikiArticleCopy.home", "row(WikiArticleCopy.browse", "row(WikiArticleCopy.azIndex", "planRow",
+                            "WikiDocContentsRows(groups: docGroups"], "the native Contents sheet")
+        assertSays(sheet, "Text(WikiDocCopy.plan)", in: "WikiArticleView.swift")
+        let screens = try native("Views/WikiScreens.swift")
+        assertSays(screens, "planPending: wiki.plan.map { WikiPlanLogic.pending($0, runnerOnline: model.wikiMaintenanceRunnerOnline) } ?? 0",
+                   in: "WikiScreens.swift")
+        let rows = try slice(try native("Views/WikiDocView.swift"), from: "struct WikiDocContentsRows: View {", to: "struct WikiDocsBrowsePage: View {")
+        assertOrder(rows, ["Text(group.title)", "Text(doc.number)", "Text(doc.title)", "if doc.needsReview {"], "the native document rows")
+    }
+
+    /// Browse and the index by document: title, the line under it, then the categories or the letters.
+    func testBrowseAndTheIndexByDocumentAreTheWebsInTheirOrder() throws {
+        let browse = try web(Self.browsePage)
+        let webBrowse = try slice(browse, from: "function WikiDocsBrowse(", to: "function BrowseDoc(")
+        assertOrder(webBrowse, ["<div className=\"wk-art-crumbrow\">", "<h1 className=\"t-title\">{WIKI_BROWSE}</h1>",
+                                "wikiDocsBrowseSummary(directory)", "wikiDocsCategoryLine(category)", "<BrowseDoc"], "the web's Browse")
+        let webDoc = try slice(browse, from: "function BrowseDoc(", to: "wikiMoreSections(hidden)")
+        assertOrder(webDoc, ["{doc.number}", "{doc.title}", "{line.sections}", "{doc.question}", "wikiSectionKindLabel(section.kind)"],
+                    "the web's Browse document")
+        let index = try web(Self.indexPage)
+        let webIndex = try slice(index, from: "function WikiDocsIndexPage(", to: "wikiDocsIndexMeta(item)")
+        assertOrder(webIndex, ["{WIKI_AZ_INDEX}</h1>", "wikiDocsIndexSummary(items)", "<nav className=\"wk-az-bar\"", "<section className=\"wk-az-g\""],
+                    "the web's index")
+        let view = try native("Views/WikiDocView.swift")
+        let nativeBrowse = try slice(view, from: "struct WikiDocsBrowsePage: View {", to: "struct WikiDocsIndexPage: View {")
+        assertOrder(nativeBrowse, ["Text(WikiArticleCopy.browse)", "WikiDocLogic.browseSummary(directory)", "WikiDocLogic.categoryLine(category)",
+                                   "Text(doc.number ?? \"\")", "Text(doc.title)", "Text(line.sections)", "if let question = doc.question",
+                                   "WikiDocCopy.moreSections("], "the native Browse")
+        let nativeIndex = try slice(view, from: "struct WikiDocsIndexPage: View {", to: "private struct WikiDocIndexLetter")
+        assertOrder(nativeIndex, ["Text(WikiArticleCopy.azIndex)", "WikiDocLogic.indexSummary(items)", "ForEach(groups) { group in",
+                                  "Text(group.letter)", "WikiDocLogic.indexMeta(item)"], "the native index")
+        assertSays(view, "content.sectionIndexLabel(Text(letter))", in: "WikiDocView.swift")
+        // A space with a confirmed plan reads by its documents; before one, by its topic articles — at both ends.
+        assertSays(browse, "if (docs.data && wikiReadsByDocs(docs.data)) return <WikiDocsBrowse", in: Self.browsePage)
+        assertSays(index, "if (docIndex.data?.plan) return <WikiDocsIndexPage", in: Self.indexPage)
+        let screens = try native("Views/WikiScreens.swift")
+        assertSays(screens, "if let directory = wiki.docsDirectory, WikiDocLogic.readsByDocs(directory) {", in: "WikiScreens.swift")
+        assertSays(screens, "if let index = wiki.docIndex, index.plan != nil {", in: "WikiScreens.swift")
+    }
+
+    /// The document pages on the phone's stack and in the wide shells' detail pane, and every press through
+    /// the section's own stack.
+    func testTheDocumentPagesAreWiredToTheStack() throws {
+        let screens = try native("Views/WikiScreens.swift")
+        assertSays(screens, "case .doc(let slug, let section):   open(.wikiDoc(slug: slug, section: section))", in: "WikiScreens.swift")
+        assertSays(screens, "case .doc(let slug, let section):   model.push(.wikiDoc(slug: slug, section: section))", in: "WikiScreens.swift")
+        assertSays(screens, "case .plan:                         model.push(.wikiPlan(version: nil))", in: "WikiScreens.swift")
+        let pane = try slice(screens, from: "struct WikiDetailPane: View {", to: "struct WikiContentsScreen: View {")
+        assertOrder(pane, ["model.nav.wikiIndexOnTop", "model.nav.selectedWikiDoc", "WikiDocScreen(address: doc).id(doc)",
+                           "model.nav.selectedWikiPlan", "WikiPlanScreen(address: plan).id(plan)"], "the wide shells' detail pane")
+        let shell = try native("Views/CompactShell.swift")
+        let stack = try slice(shell, from: "case .wiki:\n            NavigationStack(path: $model.nav.path) {",
+                              to: "default:                      EmptyView()")
+        for arm in ["case .wikiDoc(let slug, let section):", "WikiDocScreen(address: WikiDocAddress(slug: slug, section: section))",
+                    "case .wikiPlan(let version):", "WikiPlanScreen(address: WikiPlanAddress(version: version))",
+                    "case .wikiPlanDoc(let slug, let version):", "WikiPlanScreen(address: WikiPlanAddress(version: version, doc: slug))",
+                    "case .wikiPlanSection(let slug, let index, let version):",
+                    "WikiPlanScreen(address: WikiPlanAddress(version: version, doc: slug, section: index))"] {
+            assertSays(stack, arm, in: "CompactShell.swift")
+        }
+        // The stack's own projections, not a second copy of it.
+        var nav = NavState(section: .wiki)
+        nav.push(.wikiDoc(slug: "session-runtime", section: "s3"))
+        XCTAssertEqual(nav.selectedWikiDoc, WikiDocAddress(slug: "session-runtime", section: "s3"))
+        XCTAssertNil(nav.selectedWikiPlan)
+        nav.push(.wikiPlan(version: 2))
+        XCTAssertEqual(nav.selectedWikiPlan, WikiPlanAddress(version: 2))
+        XCTAssertNil(nav.selectedWikiDoc)
+        nav.push(.wikiPlanSection(slug: "session-runtime", index: 2, version: nil))
+        XCTAssertEqual(nav.selectedWikiPlan, WikiPlanAddress(version: nil, doc: "session-runtime", section: 2))
+    }
 }
