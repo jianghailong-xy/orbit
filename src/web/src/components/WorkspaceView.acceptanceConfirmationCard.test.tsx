@@ -14,24 +14,30 @@ import {
   type StandardSetConfirmationStanding,
 } from '../lib/acceptanceConfirmation';
 import { pendingCriteriaDecisionsQuery } from '../lib/queries';
-import {
-  ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER,
-  ACCEPTANCE_PLAN_CHANGE_PREFIX,
-  ACCEPTANCE_START_LABEL,
-} from './AcceptanceConfirmationCard';
+import { ACCEPTANCE_PLAN_CHANGE_PREFIX } from './AcceptanceConfirmationCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { SETTLEMENT_DELEGATE_ACTION } from './ProjectSettlementCard';
+import type { ProjectOpenItemRow } from '@orbit/shared';
+import {
+  CRITERIA_CHANGE_TITLE,
+  READY_TO_START,
+  START_CHAT_PLACEHOLDER,
+  START_PROJECT_ACTION,
+  criteriaChangeConfirmLabel,
+} from '../lib/projectStart';
 
 /**
- * The settlement confirmation card where the owner meets it: the real WorkspaceView, on a
- * coordinator conversation that stays open while the conversation moves on and the card's reads
- * come round again — and on a conversation that coordinates nothing.
+ * The settlement card where the owner meets it: the real WorkspaceView, on a coordinator
+ * conversation that stays open while the conversation moves on and the card's reads come round
+ * again — and on a conversation that coordinates nothing. The project here has not been started and
+ * its coordinator has asked to start it, so the card the conversation draws is "Start this project?".
  *
- * The component's own spec settles WHEN the card is drawn. What only the view can show is where
- * the card's project comes from (`selectedSession.projectId` at the mount) and that the card lives
- * beside the other cards Orbit draws into the pane without costing any of them its identity: the
+ * The components' own specs settle WHEN each card is drawn. What only the view can show is where
+ * the card's project comes from (`selectedSession.projectId` at the mount), that the card lives
+ * beside the other cards Orbit draws into the pane without costing any of them its identity — the
  * pane re-renders on every event, and a sibling sharing a key is how a card was once left behind as
- * copies nobody re-derived (`WorkspaceView.criteriaDecisionCard.test.tsx`).
+ * copies nobody re-derived (`WorkspaceView.criteriaDecisionCard.test.tsx`) — and that a press
+ * leaves its record in the conversation, and the row and the pinned line say what is waiting.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -113,6 +119,35 @@ const STANDING: StandardSetConfirmationStanding = {
 };
 const CRITERIA = [1, 2].map((n) => ({ id: `c${n}`, ordinal: n, text: `condition ${n} holds`, satisfied: false }));
 
+/** The coordinator's request to start it, as the open items serve it beside the rest. */
+const START_ROW: ProjectOpenItemRow = {
+  itemId: '2SXZNKDyOUtFL540SQ0oz9',
+  kind: 'START_REQUEST',
+  title: 'Start this project?',
+  detailLine: 'project/x · Automatic on · 3 tasks at a time · no merge check',
+  assignee: 'OWNER',
+  assigneeReason: 'DEFAULT',
+  waitingSince: '2026-09-11T03:09:00.000Z',
+  escalateAt: null,
+  escalatedAt: null,
+  taskId: null,
+  sessionId: null,
+  promotionId: null,
+  fuseEpisodeId: null,
+  delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null },
+  actions: [],
+  question: null,
+  facts: null,
+  startRequest: {
+    settings: { line: 'PROJECT_BRANCH', automatic: true, maxConcurrentTasks: 3, mergeCheckCommand: 'npm test' },
+    why: 'B builds on A, so one branch checks them together',
+    criteriaDigest: SEAL,
+    planDigest: 'p'.repeat(64),
+    repository: 'https://github.com/example/orbit.git',
+    warnings: [],
+  },
+};
+
 /** A weakening held against the same project, so the criteria card shares the pane. */
 const PROPOSALS: PendingCriteriaDecisionQueue = (() => {
   const wording = { text: 'the pg spec may be skipped', verificationMethod: 'EXECUTABLE', completionCriterionOverrideReason: null };
@@ -170,6 +205,14 @@ let settlementHeld = false;
 /** The standing the confirmation door serves: `UNCONFIRMED` for most cases, and a case that is
  *  about the RECORD sets one with a confirmation on it. Reset per case like every other stub. */
 let confirmationStanding: StandardSetConfirmationStanding = STANDING;
+/** When the project was started, or null while it is waiting to be — and the request that is
+ *  waiting, while one is. A start moves both. */
+let projectStartedAt: string | null = null;
+let startRow: ProjectOpenItemRow | null = START_ROW;
+/** Whether a weakening is held against the project, which the pinned line names ahead of the rest. */
+let proposalsHeld = true;
+/** Every start the page pressed, as its body. */
+const starts: Array<Record<string, unknown>> = [];
 let confirmationReads = 0;
 let criteriaReads = 0;
 let navigateTo: NavigateFunction | null = null;
@@ -196,6 +239,10 @@ beforeEach(() => {
   settlementHeld = false;
   unstubbed.length = 0;
   confirmationStanding = STANDING;
+  projectStartedAt = null;
+  startRow = START_ROW;
+  proposalsHeld = true;
+  starts.length = 0;
   confirmationReads = 0;
   criteriaReads = 0;
   navigateTo = null;
@@ -228,9 +275,57 @@ beforeEach(() => {
     kind: 'message',
     placement: 'accepted',
   }));
-  apiMock.mockImplementation(((path: string) => {
+  apiMock.mockImplementation(((path: string, init?: { method?: string; body?: Record<string, unknown> }) => {
     const reply = (value: unknown) => Promise.resolve(value) as Promise<never>;
     requested.push(path);
+    // The start door: it confirms the set, starts the project and answers the request, and the
+    // reads say so from then on — which is what the conversation draws the record from.
+    if (init?.method === 'POST' && path === `/projects/${PROJECT_PUBLIC}/start`) {
+      const body = init.body ?? {};
+      starts.push(body);
+      const at = '2026-09-11T03:10:30.000Z';
+      const settings = {
+        line: body.line,
+        projectBranchName: `refs/heads/project/${PROJECT_PUBLIC}`,
+        automatic: body.automatic,
+        maxConcurrentTasks: body.maxConcurrentTasks,
+        mergeCheckCommand: body.mergeCheckCommand,
+      };
+      projectStartedAt = at;
+      startRow = null;
+      confirmationStanding = {
+        state: 'CONFIRMED',
+        confirmed: true,
+        currentVersion: STANDING.currentVersion,
+        confirmation: {
+          criteriaDigest: SEAL,
+          criteriaMaterial: STANDING.currentVersion.material,
+          confirmedAt: at,
+          confirmedById: 'user-1',
+          startedWith: { settings: settings as never, differsFromRequest: ['maxConcurrentTasks'] },
+        },
+      };
+      return reply({ projectId: PROJECT_PUBLIC, startedAt: at, criteriaDigest: SEAL, criteriaCount: 2, lineLocked: false, settings, differsFromRequest: ['maxConcurrentTasks'] });
+    }
+    // The confirmation door, pressed from the change card: it confirms the version named, and the
+    // read says so from then on.
+    if (init?.method === 'POST' && path === `/projects/${PROJECT_PUBLIC}/acceptance/confirmation`) {
+      confirmationStanding = {
+        state: 'CONFIRMED',
+        confirmed: true,
+        currentVersion: confirmationStanding.currentVersion,
+        confirmation: {
+          criteriaDigest: confirmationStanding.currentVersion.digest,
+          criteriaMaterial: confirmationStanding.currentVersion.material,
+          confirmedAt: '2026-09-11T03:10:40.000Z',
+          confirmedById: 'user-1',
+          startedWith: null,
+        },
+        changesSinceConfirmed: { added: [], stricter: [], revised: [], removed: [], unchanged: [1, 2] },
+        changesSinceConfirmedAbsentReason: null,
+      };
+      return reply(confirmationStanding);
+    }
     if (path === `/projects/${PROJECT_PUBLIC}/acceptance/confirmation`) {
       confirmationReads += 1;
       return reply(confirmationStanding);
@@ -243,6 +338,8 @@ beforeEach(() => {
         title: 'the criteria seal',
         status: 'OPEN',
         coordinatorEnabled: false,
+        // Not started until the start door says so: the start card is this project's question.
+        startedAt: projectStartedAt,
         _count: { tasks: 1 },
         acceptanceCriteriaItems: CRITERIA,
         // A project LOOKING finished while the derivation still withholds: every criterion met,
@@ -269,11 +366,24 @@ beforeEach(() => {
           : {}),
       });
     }
-    // The open items the coordinator question card reads (§5.2). Empty: no question is open in any
-    // of these cases, and the card draws nothing — what is asserted here is the strip and the cards
-    // beside it, which an unstubbed read would break by being unstubbed rather than by being wrong.
+    // The open items the coordinator question card reads (§5.2): no question is open in any of these
+    // cases, and the start request the start card is drawn from is served beside them.
     if (path === `/projects/${PROJECT_PUBLIC}/open-items`) {
-      return reply({ needsYou: [], withCoordinator: [] });
+      return reply({ needsYou: [], withCoordinator: [], startRequest: startRow });
+    }
+    // The plan the start card sums up in a line: two tasks, the second after the first.
+    if (path === `/projects/${PROJECT_PUBLIC}/dependency-graph`) {
+      return reply({
+        marks: [
+          { kind: 'TASK', id: 'task-a', taskId: 'task-a', title: 'A · the seal', status: 'OPEN', parentTaskId: null },
+          { kind: 'TASK', id: 'task-b', taskId: 'task-b', title: 'B · the card', status: 'OPEN', parentTaskId: null },
+        ],
+        edges: [{ sourceMarkId: 'task-a', targetMarkId: 'task-b' }],
+        taskCount: 2,
+        folded: false,
+        truncated: false,
+        limits: { maxTasks: 500, maxMarks: 500 },
+      });
     }
     // Nothing is waiting to be merged into main either: the promotion card reads this door
     // wherever a conversation coordinates a project, and null is the ordinary answer —
@@ -288,7 +398,7 @@ beforeEach(() => {
     }
     if (path === `/projects/${PROJECT_PUBLIC}/acceptance/criteria-decisions/pending`) {
       criteriaReads += 1;
-      return reply(PROPOSALS);
+      return reply(proposalsHeld ? PROPOSALS : { ...PROPOSALS, count: 0, oldestAgeSeconds: null, decidableCount: 0, pending: [] });
     }
     if (path === '/users/me') {
       return reply({ id: 'user-1', email: 'reader@example.com', name: 'Reader', createdAt: '2026-01-01T00:00:00Z', preferences: {} });
@@ -412,11 +522,11 @@ async function note(sessionId: string, round: number): Promise<void> {
   });
 }
 
-describe('the settlement confirmation card in WorkspaceView', { timeout: 60_000 }, () => {
+describe('the start card in WorkspaceView', { timeout: 60_000 }, () => {
   it('is drawn once in a coordinator conversation, beside the criteria card, through every re-read', async () => {
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
-      expect(count('.settlement-card')).toBeGreaterThan(0);
+      expect(count('.settlement-card.start-card')).toBeGreaterThan(0);
       expect(count('.criteria-decision')).toBeGreaterThan(0);
     });
     expect([...new Set(unstubbed)], 'every endpoint the page reads is stubbed').toEqual([]);
@@ -453,6 +563,146 @@ describe('the settlement confirmation card in WorkspaceView', { timeout: 60_000 
       expect(count('.settlement-card')).toBe(1);
     });
   });
+
+  it('is drawn on the coordinator’s request only: a plan with work and no request draws nothing', async () => {
+    startRow = null;
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(count('.criteria-decision')).toBeGreaterThan(0);
+    });
+    await reread(['project', PROJECT_PUBLIC, 'open-items'], () => requested.filter((path) => path.endsWith('/open-items')).length);
+    expect(count('.settlement-card'), 'a card was inferred from the project holding a task').toBe(0);
+
+    startRow = START_ROW;
+    await reread(['project', PROJECT_PUBLIC, 'open-items'], () => requested.filter((path) => path.endsWith('/open-items')).length);
+    await waitForUi(() => {
+      expect(count('.settlement-card.start-card')).toBe(1);
+    });
+  });
+
+  /** What the row and the header say, and what the pinned line names the card by: "Ready to start",
+   *  the start card's own status word, rather than an approval nobody is asking for. */
+  it('is named Ready to start on the pinned line', async () => {
+    proposalsHeld = false;
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(count('.settlement-card.start-card')).toBe(1);
+      expect(mounted().querySelector('.decision-strip-title')?.textContent).toBe(READY_TO_START);
+    });
+  });
+
+  it('starts the project with the settings on the card, and leaves the record — with them — where it happened', async () => {
+    proposalsHeld = false;
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(count('.settlement-card.start-card')).toBe(1);
+    });
+    const card = (): HTMLElement => mounted().querySelector<HTMLElement>('.start-card')!;
+    // The plan in one line, off the dependency graph.
+    expect(card().querySelector('.start-card-plan')?.textContent).toContain('A starts now · B after A');
+    // One setting changed on the card before the press: at most 5 tasks, not the suggested 3.
+    const count5 = card().querySelector<HTMLInputElement>('.start-card-count input')!;
+    await act(async () => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(count5, '5');
+      count5.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await waitForUi(() => {
+      expect(card().querySelector<HTMLInputElement>('.start-card-count input')?.value).toBe('5');
+    });
+    const start = [...card().querySelectorAll<HTMLButtonElement>('.settlement-card-actions button')]
+      .find((button) => labelOf(button) === START_PROJECT_ACTION)!;
+    await act(async () => {
+      start.click();
+    });
+    await waitForUi(() => {
+      expect(starts).toHaveLength(1);
+    });
+    expect(starts[0]).toMatchObject({
+      criteriaDigest: SEAL,
+      line: 'PROJECT_BRANCH',
+      automatic: true,
+      maxConcurrentTasks: 5,
+      mergeCheckCommand: 'npm test',
+      requestId: START_ROW.itemId,
+    });
+    // The question is answered: the card goes, and the record of the start is drawn in the
+    // conversation — "You started", and what it was started with.
+    await waitForUi(() => {
+      expect(count('.settlement-card')).toBe(0);
+      expect(count('.settlement-receipt')).toBe(1);
+    });
+    const receipt = mounted().querySelector<HTMLElement>('.settlement-receipt')!;
+    expect(receipt.querySelector('.settlement-receipt-line')?.textContent)
+      .toBe('You started the project on 2 criteria at seal 4fc57753a6ec');
+    expect(receipt.querySelector('.settlement-receipt-settings')?.textContent)
+      .toContain('Automatic on');
+    expect(receipt.querySelector('.run-settings-changed')?.textContent).toContain('5 tasks at a time');
+  });
+});
+
+/**
+ * A started project whose criteria moved: the change card, not the start card and not the older
+ * confirmation card — and the record of the press says "You confirmed", with what the confirmed
+ * version changed, which only the card that pressed it knew.
+ */
+describe('the change card in WorkspaceView', { timeout: 60_000 }, () => {
+  it('confirms the new criteria, and the record says what the confirmation changed', async () => {
+    projectStartedAt = '2026-09-11T03:00:00.000Z';
+    startRow = null;
+    proposalsHeld = false;
+    const [first] = STANDING.currentVersion.material;
+    confirmationStanding = {
+      state: 'STALE',
+      confirmed: false,
+      currentVersion: STANDING.currentVersion,
+      confirmation: {
+        criteriaDigest: `0ld${'0'.repeat(61)}`,
+        criteriaMaterial: [first!],
+        confirmedAt: '2026-09-11T03:00:00.000Z',
+        confirmedById: 'user-1',
+        startedWith: null,
+      },
+      changesSinceConfirmed: {
+        added: [{ key: 'k2', ordinal: 2, text: 'condition 2 holds' }],
+        stricter: [],
+        revised: [],
+        removed: [],
+        unchanged: [1],
+      },
+      changesSinceConfirmedAbsentReason: null,
+    };
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(count('.criteria-change-card')).toBe(1);
+      expect(mounted().querySelector('.decision-strip-title')?.textContent).toBe(CRITERIA_CHANGE_TITLE);
+    });
+    expect(count('.settlement-card'), 'the moved set was asked about by two cards').toBe(1);
+
+    const confirm = [...mounted().querySelectorAll<HTMLButtonElement>('.criteria-change-card .settlement-card-actions button')]
+      .find((button) => labelOf(button) === criteriaChangeConfirmLabel(2))!;
+    await act(async () => {
+      confirm.click();
+    });
+    await waitForUi(() => {
+      expect(count('.settlement-card')).toBe(0);
+      expect(mounted().querySelector('.settlement-receipt .settlement-receipt-line')?.textContent)
+        .toBe('You confirmed 2 criteria at seal 4fc57753a6ec — 1 new');
+    });
+    // A confirmation that started nothing carries no settings.
+    expect(count('.settlement-receipt-settings')).toBe(0);
+  });
+});
+
+describe('what a session row and its header say while the start card waits', () => {
+  it('says Ready to start, not Waiting for approval', async () => {
+    const { sessionLine, statusLabel } = await import('./WorkspaceView');
+    const waiting = { ...COORDINATOR, status: 'AWAITING_INPUT', runStatus: 'AWAITING_INPUT', runState: 'AWAITING_INPUT', engineTurnActive: false, pendingApprovals: 1, waitingKind: 'START_REQUEST' };
+    expect(sessionLine(waiting, true)).toEqual({ text: READY_TO_START, tone: 'approval' });
+    expect(statusLabel(waiting)).toBe(READY_TO_START);
+    // The same count with no kind of its own keeps the approval wording.
+    expect(sessionLine({ ...waiting, waitingKind: null }, true).text).toBe('Waiting for approval');
+  });
 });
 
 /**
@@ -482,6 +732,12 @@ describe('the record a confirmation leaves, in the conversation it was made in',
       confirmedAt: at,
       confirmedById: 'user-1',
     },
+  });
+
+  beforeEach(() => {
+    // A signed set belongs to a project that has been started, which has no request left open.
+    projectStartedAt = SIGNED_AT;
+    startRow = null;
   });
 
   it('is drawn among the events, above what came after it, and not at the pane’s tail', async () => {
@@ -573,7 +829,7 @@ const labelOf = (button: HTMLButtonElement): string => {
   return (hint?.textContent ? text.replace(hint.textContent, '') : text).trim();
 };
 
-describe('Chat about this on the settlement card', { timeout: 60_000 }, () => {
+describe('Chat about this on the start card', { timeout: 60_000 }, () => {
   it('arms the composer with this plan, keeps the card up with Start the project live, and reaches no door', async () => {
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
@@ -584,7 +840,7 @@ describe('Chat about this on the settlement card', { timeout: 60_000 }, () => {
       ...card().querySelectorAll<HTMLButtonElement>('.settlement-card-actions button'),
     ];
     // Exactly two, and it is the second one that hands the reply over.
-    expect(actions().map(labelOf)).toEqual([ACCEPTANCE_START_LABEL, OWNER_SEND_BACK_ACTION]);
+    expect(actions().map(labelOf)).toEqual([START_PROJECT_ACTION, OWNER_SEND_BACK_ACTION]);
     expect(count('.composer-replyto'), 'the composer was already armed').toBe(0);
     const requestedBefore = requested.length;
 
@@ -600,14 +856,15 @@ describe('Chat about this on the settlement card', { timeout: 60_000 }, () => {
       .toBe(`${ACCEPTANCE_PLAN_CHANGE_PREFIX}the criteria seal`);
     expect(
       [...mounted().querySelectorAll('textarea')].map((box) => box.getAttribute('placeholder')),
-      'the armed composer does not ask for what should change',
-    ).toContain(ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER);
+      'the armed composer does not ask what should change before it starts',
+    ).toContain(START_CHAT_PLACEHOLDER);
 
     // The card is still there and its own way out is still live.
     expect(count('.settlement-card'), 'the card went away when it handed the reply over').toBe(1);
     expect(actions()[0]!.disabled, 'Start the project went dead with the handoff').toBe(false);
-    // No box grew inside the card, and nothing was written anywhere.
-    expect(card().querySelectorAll('textarea, input')).toHaveLength(0);
+    // No text box grew inside the card — the sentence is typed in the one composer at the bottom —
+    // and nothing was written anywhere.
+    expect(card().querySelectorAll('textarea')).toHaveLength(0);
     expect(requested.slice(requestedBefore), 'arming the composer asked the server for something')
       .toEqual([]);
   });

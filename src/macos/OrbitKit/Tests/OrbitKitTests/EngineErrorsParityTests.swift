@@ -133,6 +133,16 @@ final class EngineErrorsParityTests: XCTestCase {
                            + "and the other hands back.")
     }
 
+    /// A runtime's own wording for the same outage. A prefix only one end knows is a Codex overload
+    /// the server is already re-sending while this client draws it as a dead end.
+    func testRetryableEngineErrorPrefixesAreTheSameOnBothEnds() throws {
+        XCTAssertEqual(EngineErrors.retryableEngineErrorPrefixes.sorted(),
+                       try sharedStrings("RETRYABLE_ENGINE_ERROR_PREFIXES").sorted(),
+                       "the engine-error prefixes drifted — first is "
+                           + "EngineErrors.retryableEngineErrorPrefixes (this client), second is "
+                           + "RETRYABLE_ENGINE_ERROR_PREFIXES in events.ts.")
+    }
+
     /// The quota sentences. One end knowing a phrasing the other does not is a spent quota shown as
     /// a card here and as the agent apparently saying it there.
     func testUsageLimitMarkersAreTheSameOnBothEnds() throws {

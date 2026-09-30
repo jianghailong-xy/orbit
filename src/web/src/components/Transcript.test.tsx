@@ -108,6 +108,28 @@ describe('transient provider error card', () => {
     expect(html).not.toContain('chat-error');
   });
 
+  // Codex reports a model at capacity as the turn's error, not as a reply, and the server arms the
+  // same re-send for it — as a bare red line it read as a dead end while the retry was on its way.
+  it("turns Codex's model-at-capacity error event into the same card, and no other error event", () => {
+    const CAPACITY = 'Selected model is at capacity. Please try a different model.';
+    const html = renderToStaticMarkup(
+      <AutoRetryCtx.Provider
+        value={{ provider: 'codex', retryAt: new Date(Date.now() + 30_000).toISOString(), attempts: 0 }}
+      >
+        <Transcript events={[errorEvent(1, CAPACITY)]} />
+      </AutoRetryCtx.Provider>,
+    );
+
+    expect(html).toContain('Provider unavailable');
+    expect(html).toContain(CAPACITY);
+    expect(html).toContain('Retrying');
+    expect(html).not.toContain('chat-error');
+
+    const other = renderToStaticMarkup(<Transcript events={[errorEvent(1, 'stream disconnected')]} />);
+    expect(other).toContain('chat-error');
+    expect(other).not.toContain('Provider unavailable');
+  });
+
   it('leaves an error a re-send would reproduce as a plain error line', () => {
     const html = render(TOO_LONG);
 

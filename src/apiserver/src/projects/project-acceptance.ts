@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import {
   type CriteriaChangesSinceConfirmed,
   type CriteriaChangesSinceConfirmedAbsentReason,
+  type ProjectStartRecord,
   uuidToBase62,
 } from '@orbit/shared';
 import { classifyCriteriaEdit } from './criteria-edit-classification';
@@ -192,6 +193,14 @@ export interface RecordedStandardSetConfirmation {
   criteriaMaterial: ConfirmedCriterionVersion[];
   confirmedAt: Date;
   confirmedById: string;
+  /**
+   * What the start this confirmation was part of left the project running with
+   * (`started_with`), or null for a confirmation that started nothing — a re-confirmation, or one
+   * made before starts recorded their settings. Only the confirmation read carries it: it is what
+   * the receipt of a start says the project was started with, and whether a receipt says "started"
+   * or "confirmed" at all.
+   */
+  startedWith?: ProjectStartRecord | null;
 }
 
 export interface StandardSetConfirmationStanding {

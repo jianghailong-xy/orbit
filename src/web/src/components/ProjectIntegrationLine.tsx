@@ -3,6 +3,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Input, Radio, Select } from 'antd';
 import type { ProjectIntegrationView } from '@orbit/shared';
 import { api } from '../api';
+import {
+  RUN_LINE_MAIN,
+  RUN_LINE_MAIN_HINT,
+  RUN_LINE_PROJECT_BRANCH,
+  RUN_LINE_PROJECT_BRANCH_HINT,
+} from '../lib/projectStart';
 import { projectIntegrationQuery } from '../lib/queries';
 import { ago } from '../lib/watches';
 
@@ -179,19 +185,16 @@ function ProjectIntegrationSettingsCard({
           disabled={view.locked}
           onChange={(event) => setLine(event.target.value)}
         >
+          {/* The start card's own words for the two lines (`lib/projectStart.ts`). This one used to
+              say merging into main asks every time, which Automatic contradicts: a project branch
+              whose merge check passes is merged by the coordinator, with a receipt. */}
           <Radio value="PROJECT_BRANCH" style={{ display: 'block', marginBottom: 8 }}>
-            <b>A project branch</b> · <code>{branch}</code>
-            <div className="project-integration-setting-hint">
-              Recommended when tasks depend on each other. Tasks land here by themselves; merging
-              into main asks you every time.
-            </div>
+            <b>{RUN_LINE_PROJECT_BRANCH}</b> · <code>{branch}</code>
+            <div className="project-integration-setting-hint">{RUN_LINE_PROJECT_BRANCH_HINT}</div>
           </Radio>
           <Radio value="MAIN" style={{ display: 'block' }}>
-            <b>Directly into main</b>
-            <div className="project-integration-setting-hint">
-              For a single task or an urgent fix. Each task still lands only after the merge check
-              passes.
-            </div>
+            <b>{RUN_LINE_MAIN}</b>
+            <div className="project-integration-setting-hint">{RUN_LINE_MAIN_HINT}</div>
           </Radio>
         </Radio.Group>
       </div>

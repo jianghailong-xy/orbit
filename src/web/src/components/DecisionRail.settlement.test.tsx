@@ -1,6 +1,17 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { ACCEPTANCE_CONFIRMATION_TITLE, ACCEPTANCE_START_LABEL } from './AcceptanceConfirmationCard';
+import {
+  ACCEPTANCE_CONFIRMATION_TITLE,
+  ACCEPTANCE_CONFIRM_LABEL,
+  ACCEPTANCE_START_LABEL,
+} from './AcceptanceConfirmationCard';
+import {
+  CRITERIA_CHANGE_TITLE,
+  READY_TO_START,
+  START_PROJECT_ACTION,
+  START_PROJECT_TITLE,
+  criteriaChangeConfirmLabel,
+} from '../lib/projectStart';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { CRITERIA_DECISION_HEADING, type PendingCriteriaDecisionQueue } from './CriteriaDecisionCard';
 import {
@@ -165,6 +176,34 @@ describe('the settlement question on the line', () => {
     expect(html).toContain(wayPosition(1, 3));
   });
 
+  /**
+   * Which question it is decides what the line calls it. A project waiting to be started is named
+   * the way its session row and header name it — "Ready to start" — and a started project whose
+   * criteria moved by its card's own heading; the older confirmation card keeps its own. The card
+   * says which (`SessionAcceptanceConfirmationCard`'s report), and `true` is a card that said only
+   * that it was there.
+   */
+  it.each<[string, true | 'START' | 'CRITERIA_CHANGE' | 'CONFIRMATION', string]>([
+    ['a project waiting to be started', 'START', READY_TO_START],
+    ['a started project whose criteria moved', 'CRITERIA_CHANGE', CRITERIA_CHANGE_TITLE],
+    ['a started project nobody ever confirmed', 'CONFIRMATION', ACCEPTANCE_CONFIRMATION_TITLE],
+    ['a card that said only that it was there', true, ACCEPTANCE_CONFIRMATION_TITLE],
+  ])('names %s in the words it is asked in', (_, question, words) => {
+    const html = render({ queue: NOTHING, confirmation: question });
+    expect(named(html)).toBe(words);
+    expect(html).toContain(needsDecisionCount(1));
+    // Still last, behind every question that has an age, and still one more in the count.
+    const behind = render({ queue: queue(), hasCard: EVERY_CARD, confirmation: question });
+    expect(named(behind)).toBe('the decision door');
+    expect(behind).toContain(needsDecisionCount(3));
+  });
+
+  it('draws nothing for a card that is not there, whichever question it would have asked', () => {
+    for (const nothing of [false, null, undefined]) {
+      expect(render({ queue: NOTHING, confirmation: nothing })).toBe('');
+    }
+  });
+
   it('draws the line on its own, in its card’s own words and with no age', () => {
     // Nothing waiting and no settlement question: no strip at all, the state this is the opposite of.
     expect(render({ queue: NOTHING })).toBe('');
@@ -201,7 +240,24 @@ describe('nothing the settlement question puts in the strip answers it', () => {
   it('never carries the card’s own actions as words', () => {
     for (const html of everyState()) {
       expect(html).not.toContain(ACCEPTANCE_START_LABEL);
+      expect(html).not.toContain(ACCEPTANCE_CONFIRM_LABEL);
       expect(html).not.toContain(OWNER_SEND_BACK_ACTION);
+    }
+    // Nor the start card's, nor the change card's: the line is a way to the card, never an answer
+    // — and the start card's own question is its heading, not the line's word for it.
+    for (const question of ['START', 'CRITERIA_CHANGE'] as const) {
+      for (const html of [
+        render({ queue: NOTHING, confirmation: question }),
+        render({ queue: queue(), criteria: proposals(), open: true, hasCard: EVERY_CARD, confirmation: question, onOpenCriteria: () => {} }),
+        render({ queue: NOTHING, phone: true, confirmation: question }),
+      ]) {
+        expect(html).toContain('decision-strip-line');
+        expect(strayControls(html)).toEqual([]);
+        expect(html).not.toContain(START_PROJECT_ACTION);
+        expect(html).not.toContain(START_PROJECT_TITLE);
+        expect(html).not.toContain(criteriaChangeConfirmLabel(2));
+        expect(html).not.toContain(OWNER_SEND_BACK_ACTION);
+      }
     }
   });
 });

@@ -48,7 +48,8 @@ jobs:
           {
             echo "### GitHub Pages deployed"
             echo
-            echo "- URL: https://jianghailong-xy.github.io/orbit/"
+            echo "- English URL: https://jianghailong-xy.github.io/orbit/"
+            echo "- Simplified Chinese URL: https://jianghailong-xy.github.io/orbit/zh/"
             echo "- Appcast: https://jianghailong-xy.github.io/orbit/appcast.xml"
             echo "- Deployment branch: \`gh-pages\`"
             echo "- Preservation: \`keep_files=true\`; the Sparkle release workflow's appcast.xml is retained"
