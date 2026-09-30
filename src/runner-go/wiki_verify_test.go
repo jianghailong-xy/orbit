@@ -1053,6 +1053,27 @@ func TestWikiVerifyOffersTheModelOnlyLiveNeighboursAndTheAmendsOwnEntry(t *testi
 	}
 }
 
+// An adopted add whose very content a later op made live is judged that entry's duplicate by the server,
+// whatever the model said (contract `reviewModes.verification.adoption.twin`): the line names the entry the
+// server found, where a duplicate verdict names the one the model did.
+func TestWikiVerifySaysWhichLiveEntryAnAdoptedOpTurnedOutToDuplicate(t *testing.T) {
+	twin := describeWikiVerdictOutcome(map[string]interface{}{"status": "reinforced", "entryId": "entry-later", "reinforced": true},
+		wikiVerdict{Verdict: "supported", Reason: "The record says so."})
+	if twin != "a duplicate of the live entry entry-later, which holds its very content: its sources were added there" {
+		t.Errorf("an adopted twin reads %q", twin)
+	}
+	held := describeWikiVerdictOutcome(map[string]interface{}{"status": "reinforced", "entryId": "entry-later", "reinforced": false},
+		wikiVerdict{Verdict: "partial", Reason: "Some of it."})
+	if !strings.HasPrefix(held, "a duplicate of the live entry entry-later") || !strings.Contains(held, "its sources were not added") {
+		t.Errorf("an adopted twin in a space that reviews every reinforce reads %q", held)
+	}
+	named := describeWikiVerdictOutcome(map[string]interface{}{"status": "reinforced", "entryId": "entry-named", "reinforced": true},
+		wikiVerdict{Verdict: "duplicate", Reason: "Said already.", DuplicateOf: "entry-named"})
+	if named != "a duplicate of entry-named: its sources were added there" {
+		t.Errorf("a duplicate verdict reads %q", named)
+	}
+}
+
 // ── The real Claude Code, where this machine has one ────────────────────────────────────────────
 
 // The fake above does what the clean launch should make the real one do. This holds the real one

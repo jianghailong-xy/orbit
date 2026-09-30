@@ -87,6 +87,8 @@ const (
 	wikiMaintainRunSessionsMax     = 20
 	wikiMaintainEntriesPerSession  = 6
 	wikiMaintainExtractConcurrency = 4
+	// The most ops ended sessions left waiting that one run adopts and verifies: the rest wait for the next.
+	wikiMaintainAdoptOpsMax = 50
 )
 
 const (
@@ -250,6 +252,16 @@ type wikiMaintainReport struct {
 }
 
 type wikiMaintainVerification struct {
+	Verified int `json:"verified"`
+	Failed   int `json:"failed"`
+	// What the run adopted of the ops ended sessions left waiting, counted apart from its own.
+	Adopted *wikiMaintainAdopted `json:"adopted,omitempty"`
+}
+
+// wikiMaintainAdopted is the report's count of the adopted ops (contract `reviewModes.verification.adoption`):
+// how many the run took over, and how many of them it got a verdict for.
+type wikiMaintainAdopted struct {
+	Ops      int `json:"ops"`
 	Verified int `json:"verified"`
 	Failed   int `json:"failed"`
 }
@@ -1439,12 +1451,22 @@ func (r *wikiMaintainRun) send(topic string, ops []wikiMaintainOp, dryRun bool) 
 
 // ── Verification, anchors, articles ─────────────────────────────────────────────────────────────
 
-// verify has the local model verify the run's own ops in an automatic space (`orbit wiki verify`), and
-// gives the ones left without a verdict one more pass.
+// verify has the local model verify the run's own ops in an automatic space (`orbit wiki verify`), gives
+// the ones left without a verdict one more pass, and then adopts what ended sessions left waiting.
 func (r *wikiMaintainRun) verify() error {
-	if r.context.ReviewMode != "automatic" || r.report.Ops.Recorded == 0 {
+	if r.context.ReviewMode != "automatic" {
 		return nil
 	}
+	if r.report.Ops.Recorded > 0 {
+		if err := r.verifyOwn(); err != nil {
+			return err
+		}
+	}
+	return r.adopt()
+}
+
+// verifyOwn verifies the ops this run proposed, in two passes at most.
+func (r *wikiMaintainRun) verifyOwn() error {
 	result := &wikiMaintainVerification{}
 	r.report.Verification = result
 	for pass := 0; pass < 2; pass++ {
@@ -1463,6 +1485,50 @@ func (r *wikiMaintainRun) verify() error {
 	}
 	return fmt.Errorf("%s left without a verdict after two passes: they keep waiting, and the run did not finish",
 		wikiCount(result.Failed, "op was", "ops were"))
+}
+
+// adopt verifies what ended sessions left waiting for their verification in the space — a failed run's
+// ops, a session that ended before it verified its own — which nobody else is left to verify (contract
+// `reviewModes.verification.adoption`): at most wikiMaintainAdoptOpsMax of them, oldest first, after the
+// run's own, so that one a later op of the same knowledge is live beside is offered it as a duplicate.
+// One left without a verdict waits for the next run and fails nothing; the report counts them apart.
+func (r *wikiMaintainRun) adopt() error {
+	raw, err := r.t.listWikiVerifications(wikiAdoptedVerifications.route, r.sessionID, r.spaceID, "", 1)
+	if err != nil {
+		if wikiMaintenanceDoorMissing(err) {
+			r.say("This Orbit server predates adopting what ended sessions left waiting for their verification: none was adopted.")
+			return nil
+		}
+		return wikiMaintenanceCallError("orbit wiki maintain", r.spaceID, "--space", err)
+	}
+	var page wikiVerificationPage
+	if err := json.Unmarshal(raw, &page); err != nil {
+		return fmt.Errorf("the server's list of what ended sessions left waiting is not the shape this build reads: %w", err)
+	}
+	if page.Mode != "automatic" || len(page.Items) == 0 {
+		return nil
+	}
+	// A run that extracted nothing has not asked the model anything yet.
+	if r.claude == "" {
+		if err := r.model(); err != nil {
+			return err
+		}
+	}
+	summary := wikiVerifySummary{SpaceID: r.spaceID, Model: r.cfg.model, Failures: []wikiVerifyFailure{}}
+	err = verifyWikiOps(r.t, wikiAdoptedVerifications, r.sessionID, r.spaceID, r.cfg, r.claude, wikiMaintainAdoptOpsMax, &summary, r.progress)
+	r.report.Tokens.Calls += summary.Looked
+	r.report.Tokens.Input += summary.Usage.InputTokens
+	r.report.Tokens.Output += summary.Usage.OutputTokens
+	if r.report.Verification == nil {
+		r.report.Verification = &wikiMaintainVerification{}
+	}
+	r.report.Verification.Adopted = &wikiMaintainAdopted{Ops: summary.Looked, Verified: summary.Verified, Failed: summary.Failed}
+	if err != nil {
+		return err
+	}
+	r.say("Adopted %s ended sessions left waiting for their verification: %d verified, %d without a verdict, which wait for the next run.",
+		wikiCount(summary.Looked, "op", "ops"), summary.Verified, summary.Failed)
+	return nil
 }
 
 // anchors re-verifies the space's anchors in the run's checkout (`orbit wiki anchors verify --repo`).
@@ -1662,6 +1728,10 @@ func describeWikiMaintainSummary(s wikiMaintainSummary) string {
 		r.Ops.Proposed, r.Ops.Recorded, r.Ops.Applied, r.Ops.Waiting, r.Ops.Refused, r.Ops.SelfCheckDropped, r.Ops.HeldBack, r.Ops.HeldBackByBreaker)
 	if r.Verification != nil {
 		fmt.Fprintf(&b, "\n- verification: %d verified, %d without a verdict", r.Verification.Verified, r.Verification.Failed)
+		if a := r.Verification.Adopted; a != nil {
+			fmt.Fprintf(&b, "\n- adopted: %d ops ended sessions left waiting for their verification, %d verified, %d without a verdict",
+				a.Ops, a.Verified, a.Failed)
+		}
 	}
 	if r.Anchors != nil {
 		fmt.Fprintf(&b, "\n- anchors: %d entries re-verified, %d changed, %d missing", r.Anchors.Entries, r.Anchors.Changed, r.Anchors.Missing)
