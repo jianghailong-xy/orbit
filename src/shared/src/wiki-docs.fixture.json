@@ -2779,7 +2779,7 @@
           "category": null
         },
         "facts": [
-          {"kind":"commit","id":"648791225aaaabbbbccccddddeeeeffff00001111"},
+          {"kind":"commit","id":"648791225aaabbbbccccddddeeeeffff00001111"},
           {"kind":"entry","id":"e90"},
           {"kind":"session","id":"se90"},
           {"kind":"entry","id":"e91"}
@@ -2852,7 +2852,7 @@
           },
           "category": null
         },
-        "facts": [{"kind":"commit","id":"90ea44d1aaaabbbbccccddddeeeeffff000011112"}],
+        "facts": [{"kind":"commit","id":"90ea44d1aaaabbbbccccddddeeeeffff00001111"}],
         "gate": {
           "checkedAt": "2026-09-27T12:00:00.000Z",
           "checks": {
@@ -4705,7 +4705,7 @@
           "Code src/apiserver/src/providers/codex-login.service.ts · CodexLoginService.start",
           "Sessions in 「Codex 账号代管」 since 2026-09-28 · ChatGPT 登录 · 设备码"
         ],
-        "facts": ["648791225aaaabbbbccccddddeeeeffff00001111","e90"],
+        "facts": ["648791225aaabbbbccccddddeeeeffff00001111","e90"],
         "more": "and 2 more",
         "acceptNote": "Accepting confirms plan v2 · Wiki maintenance writes the section next",
         "acceptNoteWithDraft": "Draft v2 is waiting for you — accepting adds this change to a new draft, v3, for you to confirm"
@@ -4725,7 +4725,7 @@
           "Design doc docs/wiki-docs-follow-changes.md § 1. 问题",
           "Design doc docs/wiki-docs-follow-changes.md § 3. 之后"
         ],
-        "facts": ["90ea44d1aaaabbbbccccddddeeeeffff000011112"],
+        "facts": ["90ea44d1aaaabbbbccccddddeeeeffff00001111"],
         "more": null,
         "acceptNote": "Accepting confirms plan v2 · Wiki maintenance writes the document next",
         "acceptNoteWithDraft": "Draft v2 is waiting for you — accepting adds this change to a new draft, v3, for you to confirm"
