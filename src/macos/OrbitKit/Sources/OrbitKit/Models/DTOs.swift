@@ -168,6 +168,8 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     public let enrolledAt: String?
     public let minFreeDiskMb: Int?
     public let reposRoot: String?
+    /// The heartbeat lease that owns runner-side reset-credit commands. Nil on older runners.
+    public let heartbeatLeaseOwner: String?
     public let heartbeatDraining: Bool?
     // Reported on the GET /runners payload (renamed from availableSkills/availableCommands).
     public let skills: [SlashCommandInfo]?

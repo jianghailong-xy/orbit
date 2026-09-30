@@ -6,6 +6,29 @@ import XCTest
 /// own model and effort choices.
 final class AgentDefaultsTests: XCTestCase {
 
+    func testNewSessionRemembersTheModelForItsProvider() {
+        let catalog = RunnerModelCatalog(claude: nil, codex: [
+            RunnerModelInfo(value: "gpt-5.6-sol", label: "GPT-5.6-Sol"),
+            RunnerModelInfo(value: "gpt-6.1-sol", label: "GPT-6.1-Sol"),
+        ])
+        let remembered = ["codex": "gpt-6.1-sol", "claude": "claude-sonnet-5"]
+        XCTAssertEqual(AgentDefaults.newSessionModel(
+            for: "codex", accountModels: remembered, fallback: "gpt-5.6-sol",
+            catalog: catalog, configured: nil), "gpt-6.1-sol")
+        XCTAssertEqual(AgentDefaults.newSessionModel(
+            for: "codex", accountModels: ["claude": "claude-sonnet-5"], fallback: "gpt-5.6-sol",
+            catalog: catalog, configured: nil), "gpt-5.6-sol")
+        XCTAssertEqual(AgentDefaults.newSessionModel(
+            for: "codex", accountModels: ["codex": "gpt-retired"], fallback: "gpt-5.6-sol",
+            catalog: catalog, configured: nil), "gpt-5.6-sol")
+        XCTAssertEqual(AgentDefaults.newSessionModel(
+            for: "codex", accountModels: remembered, fallback: "gpt-5.6-sol",
+            catalog: nil, configured: nil), "gpt-6.1-sol")
+        XCTAssertEqual(AgentDefaults.newSessionModel(
+            for: "opencode", accountModels: ["opencode": ""], fallback: "some/model",
+            catalog: nil, configured: nil), "")
+    }
+
     func testModelsForProvider() {
         // Codex models come exclusively from the runner catalog; no static fallback.
         let codex = AgentDefaults.models(for: "codex").map(\.id)

@@ -1081,6 +1081,10 @@ struct NewSessionView: View {
             draft.adoptDraftProviderContext(
                 configuredProviders, loaded: configuredProvidersLoaded, defaultModel: model)
         }
+        .onChange(of: app.defaultModels, initial: true) { _, _ in
+            draft.adoptDraftProviderContext(
+                configuredProviders, loaded: configuredProvidersLoaded, defaultModel: defaultModel)
+        }
         // Re-resolve the effort pill when the account preference lands after the draft was built
         // (async `user` prime on a restored-token launch). The model owns the edit revision, so this
         // account-last-picked refill cannot overwrite a picker action made while it was loading.

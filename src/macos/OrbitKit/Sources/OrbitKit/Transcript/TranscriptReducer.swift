@@ -1137,6 +1137,12 @@ public struct TranscriptReducer: Sendable, Codable {
         // model in the loop yet — it never got to spawn), but the remedy is the same human action,
         // so it earns the same card instead of a bare error line (web parity).
         if EngineAuth.isAuthErrorText(msg) { appendAuthError(msg); return }
+        // Codex reports quota failures as `error` events. Give them the same card as quota
+        // assistant text so they carry the session's pending retry (web parity).
+        if EngineErrors.isUsageLimitErrorText(msg) {
+            appendAutoRetry(msg, variant: .quota, seq: ev.seq)
+            return
+        }
         // A provider too busy to answer is the same pause here as in a reply (Codex reports it as
         // the turn's error): the server has armed the re-send, so it earns the card that says so.
         if EngineErrors.isRetryableApiErrorText(msg) {
