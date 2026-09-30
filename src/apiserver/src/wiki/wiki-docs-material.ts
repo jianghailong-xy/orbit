@@ -21,10 +21,12 @@ import { isOwnerTurn, type WikiPrincipal, type WikiService } from './wiki.servic
  * The repository's half — design-document sections, code and contracts at origin/main — is read by the
  * runner in its checkout; this file never names a path.
  *
- * TWO WAYS IN, BOTH BY THE SECTION'S SESSION CONDITION. The space's live entries that its keywords and
- * anchor paths find are the way in to the first-hand records their current revisions cite: an entry is
- * the via entry of what it leads to, never the material itself. And with projects and keywords named,
- * the owner's own words in those projects' sessions and the comments on their tasks, in the time window.
+ * TWO WAYS IN, BOTH BY THE SECTION'S SESSION CONDITION. The space's live entries that fit it
+ * (`sectionFit`: its keywords or anchor paths find them, or — of its entry kinds — its topics or projects
+ * do) are the way in to the first-hand records their current revisions cite: an entry is the via entry of
+ * what it leads to, never the material itself. A maintenance run places an entry in the plan by the same
+ * rule (wiki-docs-affected.ts). And with projects and keywords named, the owner's own words in those
+ * projects' sessions and the comments on their tasks, in the time window.
  *
  * ONE TEXT PER RECORD. Every record is read through the one reader a record has (`WikiService.sourceText`)
  * and redacted with the owner's workspace.env values, exactly as a footnote's check reads it
@@ -99,12 +101,125 @@ function keywordHits(text: string, keywords: readonly string[]): number {
   return keywords.filter((keyword) => low.includes(keyword.toLowerCase())).length;
 }
 
-function anchorPathsOf(anchors: unknown): string[] {
+/** An entry's anchor paths: the `path` of each anchor that has one. */
+export function anchorPathsOf(anchors: unknown): string[] {
   if (!Array.isArray(anchors)) return [];
   return anchors.flatMap((anchor) => {
     const path = anchor !== null && typeof anchor === 'object' ? (anchor as Record<string, unknown>).path : undefined;
     return typeof path === 'string' && path !== '' ? [path] : [];
   });
+}
+
+// ── Where an entry belongs ──────────────────────────────────────────────────────────────────────
+
+const UUID_TEXT = '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
+
+/** An entry as the fit reads it: its words, kind, topics, anchor paths, and the projects its sources are in. */
+export interface FitCandidate {
+  id: string;
+  kind: string;
+  /** Title, summary, fields and aliases, as one text. */
+  blob: string;
+  topics: readonly string[];
+  anchorPaths: readonly string[];
+  projects: ReadonlySet<string>;
+}
+
+/**
+ * Whether an entry fits a section's session condition, and how well (contract `docs.affected.fit`): 3 a
+ * keyword, 2 an anchor path under the condition's, 1 a topic, 1 a kind, 1 a project. It fits by a keyword
+ * or an anchor path, or — of one of the condition's kinds, when it names any — by a topic or a project.
+ */
+export function sectionFit(condition: StoredSessionCondition, entry: FitCandidate): { fits: boolean; score: number } {
+  const keywords = conditionKeywords(condition);
+  const paths = conditionPaths(condition);
+  const hits = keywordHits(entry.blob, keywords);
+  const path = entry.anchorPaths.some((anchor) => paths.some((prefix) => anchor === prefix || anchor.startsWith(prefix)));
+  const kinds = new Set(condition.entryKinds ?? []);
+  const kind = kinds.has(entry.kind);
+  const kindAllowed = kinds.size === 0 || kind;
+  const topics = new Set(condition.topics ?? []);
+  const topic = entry.topics.some((slug) => topics.has(slug));
+  const project = (condition.projects ?? []).some((id) => entry.projects.has(id));
+  const fits = hits > 0 || path || (kindAllowed && (topic || project));
+  return { fits, score: 3 * hits + (path ? 2 : 0) + (topic ? 1 : 0) + (kind ? 1 : 0) + (project ? 1 : 0) };
+}
+
+/**
+ * The projects each entry was taken from: the projects of the sessions its current revision's live sources
+ * are records of — a session of one of a project's tasks, or its coordinator's — and of the tasks and task
+ * comments it cites. Only the owner's rows; a source that names no row of theirs names no project.
+ */
+export async function entryProjects(db: Pick<Reader, '$queryRaw'>, ownerId: string, entryIds: readonly string[]): Promise<Map<string, Set<string>>> {
+  const out = new Map<string, Set<string>>();
+  if (entryIds.length === 0) return out;
+  const rows = await db.$queryRaw<Array<{ entryId: string; projectId: string }>>(Prisma.sql`
+    WITH "src" AS (
+      SELECT e."id" AS "entryId", s."kind" AS "kind",
+             CASE WHEN s."ref" ~ ${UUID_TEXT} THEN s."ref"::uuid END AS "rid"
+        FROM "wiki_entry" e
+        JOIN "wiki_entry_revision" r ON r."entry_id" = e."id" AND r."owner_id" = e."owner_id" AND r."revision" = e."current_revision"
+        JOIN "wiki_source" s ON s."revision_id" = r."id" AND s."owner_id" = r."owner_id" AND s."state" = 'live'
+       WHERE e."owner_id" = ${ownerId}::uuid AND e."id" = ANY(${[...entryIds]}::uuid[])
+    ), "sess" AS (
+      SELECT src."entryId", t."session_id" AS "sessionId" FROM "src" JOIN "conversation_turn" t ON t."id" = src."rid" WHERE src."kind" = 'turn'
+      UNION SELECT src."entryId", x."id" FROM "src" JOIN "session" x ON x."id" = src."rid" WHERE src."kind" = 'turn'
+      UNION SELECT src."entryId", v."session_id" FROM "src" JOIN "run_event" v ON v."id" = src."rid" WHERE src."kind" = 'event'
+      UNION SELECT src."entryId", c."session_id" FROM "src" JOIN "tool_call" c ON c."id" = src."rid" WHERE src."kind" = 'tool_call'
+    )
+    SELECT DISTINCT z."entryId"::text AS "entryId", z."projectId"::text AS "projectId" FROM (
+      SELECT sess."entryId", k."project_id" AS "projectId"
+        FROM "sess" JOIN "session" x ON x."id" = sess."sessionId" AND x."owner_id" = ${ownerId}::uuid
+        JOIN "task" k ON k."id" = x."task_id" AND k."owner_id" = ${ownerId}::uuid
+      UNION SELECT sess."entryId", p."id" FROM "sess" JOIN "project" p ON p."coordinator_session_id" = sess."sessionId" AND p."owner_id" = ${ownerId}::uuid
+      UNION SELECT src."entryId", k."project_id" FROM "src" JOIN "task" k ON k."id" = src."rid" AND k."owner_id" = ${ownerId}::uuid WHERE src."kind" = 'task'
+      UNION SELECT src."entryId", k."project_id" FROM "src" JOIN "task_comment" c ON c."id" = src."rid"
+        JOIN "task" k ON k."id" = c."task_id" AND k."owner_id" = ${ownerId}::uuid WHERE src."kind" = 'task_comment'
+    ) z
+    WHERE z."projectId" IS NOT NULL`);
+  for (const row of rows) {
+    if (!out.has(row.entryId)) out.set(row.entryId, new Set());
+    out.get(row.entryId)!.add(row.projectId);
+  }
+  return out;
+}
+
+/**
+ * The space's live entries — of one of `kinds`, when any is named — taken from a session or a task of one of
+ * the projects: the way in a section's projects give to its material (`sectionFit`).
+ */
+export async function entriesOfProjects(
+  db: Pick<Reader, '$queryRaw'>,
+  input: { ownerId: string; spaceId: string; projects: readonly string[]; kinds: readonly string[] },
+): Promise<string[]> {
+  if (input.projects.length === 0) return [];
+  const { ownerId, spaceId } = input;
+  const rows = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    WITH "ps" AS (
+      SELECT p."coordinator_session_id" AS "id" FROM "project" p
+       WHERE p."owner_id" = ${ownerId}::uuid AND p."id" = ANY(${[...input.projects]}::uuid[]) AND p."coordinator_session_id" IS NOT NULL
+      UNION
+      SELECT s."id" FROM "session" s JOIN "task" k ON k."id" = s."task_id"
+       WHERE s."owner_id" = ${ownerId}::uuid AND k."owner_id" = ${ownerId}::uuid AND k."project_id" = ANY(${[...input.projects]}::uuid[])
+    ), "pt" AS (
+      SELECT k."id" FROM "task" k WHERE k."owner_id" = ${ownerId}::uuid AND k."project_id" = ANY(${[...input.projects]}::uuid[])
+    ), "src" AS (
+      SELECT e."id" AS "entryId", s."kind" AS "kind", CASE WHEN s."ref" ~ ${UUID_TEXT} THEN s."ref"::uuid END AS "rid"
+        FROM "wiki_entry" e
+        JOIN "wiki_entry_revision" r ON r."entry_id" = e."id" AND r."owner_id" = e."owner_id" AND r."revision" = e."current_revision"
+        JOIN "wiki_source" s ON s."revision_id" = r."id" AND s."owner_id" = r."owner_id" AND s."state" = 'live'
+       WHERE e."owner_id" = ${ownerId}::uuid AND e."space_id" = ${spaceId}::uuid
+         AND e."status" = 'active' AND e."anchor_state" NOT IN ('changed', 'missing')
+         AND (cardinality(${[...input.kinds]}::text[]) = 0 OR e."kind" = ANY(${[...input.kinds]}::text[]))
+    )
+    SELECT DISTINCT src."entryId"::text AS "id" FROM "src"
+     WHERE (src."kind" = 'turn' AND (src."rid" IN (SELECT "id" FROM "ps")
+              OR EXISTS (SELECT 1 FROM "conversation_turn" t WHERE t."id" = src."rid" AND t."session_id" IN (SELECT "id" FROM "ps"))))
+        OR (src."kind" = 'event' AND EXISTS (SELECT 1 FROM "run_event" v WHERE v."id" = src."rid" AND v."session_id" IN (SELECT "id" FROM "ps")))
+        OR (src."kind" = 'tool_call' AND EXISTS (SELECT 1 FROM "tool_call" c WHERE c."id" = src."rid" AND c."session_id" IN (SELECT "id" FROM "ps")))
+        OR (src."kind" = 'task' AND src."rid" IN (SELECT "id" FROM "pt"))
+        OR (src."kind" = 'task_comment' AND EXISTS (SELECT 1 FROM "task_comment" c WHERE c."id" = src."rid" AND c."task_id" IN (SELECT "id" FROM "pt")))`);
+  return rows.map((row) => row.id);
 }
 
 /** Day bounds of the window: since at 00:00, until through the end of its day (UTC); open either side. */
@@ -119,15 +234,21 @@ function windowOf(condition: StoredSessionCondition): { from: Date; to: Date } {
 }
 
 /**
- * The entries the condition picks (contract `docs.material.entries`): live ones a keyword or an anchor path
- * finds, scored 3 per keyword, 2 for a path, 1 for a topic, 1 for a kind; best first, the newest among equal.
+ * The entries the condition picks (contract `docs.material.entries`): the live ones that fit it
+ * (`sectionFit`) — a keyword or an anchor path finds them, or, of one of its kinds, one of its topics or
+ * projects does — scored 3 per keyword, 2 for a path, 1 for a topic, 1 for a kind, 1 for a project; best
+ * first, the newest among equal.
  */
 async function pickEntries(db: Reader, ownerId: string, spaceId: string, condition: StoredSessionCondition): Promise<Array<CandidateEntry & { score: number }>> {
   const keywords = conditionKeywords(condition);
   const paths = conditionPaths(condition);
-  if (keywords.length === 0 && paths.length === 0) return [];
+  const topics = [...new Set(condition.topics ?? [])];
+  const kinds = [...new Set(condition.entryKinds ?? [])];
+  const projects = [...new Set(condition.projects ?? [])];
+  if (keywords.length === 0 && paths.length === 0 && topics.length === 0 && projects.length === 0) return [];
   const likes = keywords.map(containsPattern);
   const unders = paths.map(underPattern);
+  const byProject = await entriesOfProjects(db, { ownerId, spaceId, projects, kinds });
   const rows = await db.$queryRaw<Array<{
     id: string; kind: string; title: string; summary: string; blob: string; topics: string[]; anchors: unknown;
     currentRevision: number; recordedAt: Date;
@@ -140,14 +261,20 @@ async function pickEntries(db: Reader, ownerId: string, spaceId: string, conditi
        AND e."status" = 'active' AND e."anchor_state" NOT IN ('changed', 'missing')
        AND ((e."title" || ' ' || e."summary" || ' ' || e."fields"::text || ' ' || array_to_string(e."aliases", ' ')) ILIKE ANY(${likes}::text[])
             OR EXISTS (SELECT 1 FROM jsonb_array_elements(CASE WHEN jsonb_typeof(e."anchors") = 'array' THEN e."anchors" ELSE '[]'::jsonb END) a
-                        WHERE a->>'path' LIKE ANY(${unders}::text[])))`);
-  const topics = new Set(condition.topics ?? []);
-  const kinds = new Set(condition.entryKinds ?? []);
+                        WHERE a->>'path' LIKE ANY(${unders}::text[]))
+            OR (e."topics" && ${topics}::text[] AND (cardinality(${kinds}::text[]) = 0 OR e."kind" = ANY(${kinds}::text[])))
+            OR e."id" = ANY(${byProject}::uuid[]))`);
+  const projectsOf = await entryProjects(db, ownerId, rows.map((row) => row.id));
   const scored = rows.map((row) => {
-    const kw = keywordHits(row.blob, keywords);
-    const path = anchorPathsOf(row.anchors).some((anchor) => paths.some((prefix) => anchor === prefix || anchor.startsWith(prefix)));
-    const topic = (row.topics ?? []).some((slug) => topics.has(slug));
-    return { ...row, score: 3 * kw + (path ? 2 : 0) + (topic ? 1 : 0) + (kinds.has(row.kind) ? 1 : 0), found: kw > 0 || path };
+    const fit = sectionFit(condition, {
+      id: row.id,
+      kind: row.kind,
+      blob: row.blob,
+      topics: row.topics ?? [],
+      anchorPaths: anchorPathsOf(row.anchors),
+      projects: projectsOf.get(row.id) ?? new Set<string>(),
+    });
+    return { ...row, score: fit.score, found: fit.fits };
   });
   return scored
     .filter((row) => row.found)

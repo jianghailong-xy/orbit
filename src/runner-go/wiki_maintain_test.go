@@ -49,6 +49,15 @@ type fakeMaintainDoor struct {
 	adoptOutcome func(verdict map[string]interface{}) map[string]interface{}
 	adoptMissing bool
 	verified     map[string]bool
+	// The documents (wiki_maintain_docs_test.go). docs answers `GET …/maintenance/docs` (nil: a space with no
+	// confirmed plan); plan and docsState `GET …/plan` and `GET …/docs`; material a section's material by
+	// "slug#key"; withdraw and proposals the withdrawal and a plan proposal. Every document write is kept.
+	docs      func() (int, string)
+	plan      string
+	docsState string
+	material  map[string]string
+	withdraw  func(body map[string]interface{}) (int, string)
+	proposals func(body map[string]interface{}) (int, string)
 }
 
 func newFakeMaintainDoor(t *testing.T) *fakeMaintainDoor {
@@ -114,10 +123,33 @@ func newFakeMaintainDoor(t *testing.T) *fakeMaintainDoor {
 			status, body = http.StatusOK, string(raw)
 		case r.Method == http.MethodGet && path == "anchors":
 			status, body = http.StatusOK, `{"spaceId":"space-1","repo":null,"entries":[],"next":null}`
-		case r.Method == http.MethodPost && path == "article-plan":
-			raw, _ := json.Marshal(map[string]interface{}{"spaceId": "space-1", "seeded": 0, "entries": 2, "unassigned": 0,
-				"topics": []interface{}{planTopic("testing", 2, false)}})
+		case r.Method == http.MethodGet && path == "maintenance/docs":
+			status, body = http.StatusOK, `{"spaceId":"space-1","plan":null,"build":null,"sections":[],"unplaced":[],"unplacedMore":0,`+
+				`"proposed":{"entryIds":[],"commits":[],"paths":[]}}`
+			if d.docs != nil {
+				status, body = d.docs()
+			}
+		case r.Method == http.MethodGet && path == "plan" && d.plan != "":
+			status, body = http.StatusOK, d.plan
+		case r.Method == http.MethodGet && path == "docs" && d.docsState != "":
+			status, body = http.StatusOK, d.docsState
+		case r.Method == http.MethodGet && strings.HasPrefix(path, "docs/") && strings.HasSuffix(path, "/material"):
+			slug := strings.TrimSuffix(strings.TrimPrefix(path, "docs/"), "/material")
+			status, body = http.StatusOK, firstNonEmpty(d.material[slug+"#"+r.URL.Query().Get("section")], `{"records":[],"unresolved":[]}`)
+		case r.Method == http.MethodPost && strings.HasPrefix(path, "docs/") && strings.Count(path, "/") == 1:
+			var sections []interface{}
+			written, _ := request.body["sections"].([]interface{})
+			for _, item := range written {
+				section, _ := item.(map[string]interface{})
+				sections = append(sections, map[string]interface{}{"key": section["key"], "outcome": "written", "stats": map[string]int{"sentences": 1}})
+			}
+			raw, _ := json.Marshal(map[string]interface{}{"spaceId": "space-1", "slug": strings.TrimPrefix(path, "docs/"), "status": "ok",
+				"sections": sections, "counts": map[string]int{"sentences": 1, "sourced": 1}})
 			status, body = http.StatusOK, string(raw)
+		case r.Method == http.MethodPost && path == "maintenance/docs/withdrawals" && d.withdraw != nil:
+			status, body = d.withdraw(request.body)
+		case r.Method == http.MethodPost && path == "plan/proposals" && d.proposals != nil:
+			status, body = d.proposals(request.body)
 		case r.Method == http.MethodPost && path == "maintenance/finish":
 			outcome, _ := request.body["outcome"].(string)
 			advanced := outcome == "succeeded"
@@ -425,8 +457,9 @@ func TestWikiMaintainRunsThePipelineAndAdvancesTheCursor(t *testing.T) {
 	if r.Verification == nil || r.Verification.Verified != 2 || r.Verification.Failed != 0 || r.Verification.Adopted != nil {
 		t.Errorf("verification = %+v, want both ops verified and nothing adopted", r.Verification)
 	}
-	if r.Anchors == nil || r.Articles == nil || r.Articles.Failed != 0 {
-		t.Errorf("anchors %+v, articles %+v: both steps ran", r.Anchors, r.Articles)
+	// With no confirmed plan the run writes no document, says so, and the topic articles are written no more.
+	if r.Anchors == nil || r.Docs == nil || r.Docs.Skipped != "no_confirmed_plan" || r.Docs.PlanVersion != nil {
+		t.Errorf("anchors %+v, documents %+v: both steps ran, and no document was written without a confirmed plan", r.Anchors, r.Docs)
 	}
 	// Two extraction calls, a retry, and two verdicts: each counted, with what the endpoint said it cost.
 	if r.Tokens.Calls != 5 || r.Tokens.Input != 5*50 || r.Tokens.Output != 5*20 {
@@ -446,7 +479,7 @@ func TestWikiMaintainRunsThePipelineAndAdvancesTheCursor(t *testing.T) {
 	}
 	// After its own ops, the run asks what ended sessions left waiting: nothing, here.
 	want := []string{"GET maintenance/run", "GET dossiers", "POST maintenance/changesets", "GET verifications",
-		"POST verifications", "GET maintenance/verifications", "GET anchors", "POST article-plan", "POST maintenance/finish"}
+		"POST verifications", "GET maintenance/verifications", "GET anchors", "GET maintenance/docs", "POST maintenance/finish"}
 	if !reflect.DeepEqual(steps, want) {
 		t.Errorf("the run went %v\nwant %v", steps, want)
 	}
@@ -861,7 +894,7 @@ func TestWikiMaintainMovesNothingWhenTheServerRefusesAnOp(t *testing.T) {
 	if len(summary.Refused) != 1 || !strings.Contains(summary.Refused[0], "WIKI_SOURCE_UNRESOLVED") {
 		t.Errorf("refused = %v", summary.Refused)
 	}
-	if len(door.of(http.MethodGet, "anchors")) != 0 || len(door.of(http.MethodPost, "article-plan")) != 0 {
+	if len(door.of(http.MethodGet, "anchors")) != 0 || len(door.of(http.MethodGet, "maintenance/docs")) != 0 {
 		t.Error("the run went on past the step that failed")
 	}
 }

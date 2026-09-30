@@ -18,6 +18,7 @@ import {
   WIKI_PLAN_SECTION_KINDS,
   WIKI_SLUG_PATTERN,
   type WikiEntryKind,
+  type WikiPlanBuildProgress,
   type WikiPlanCategory,
   type WikiPlanDecisionResult,
   type WikiPlanDoc,
@@ -53,7 +54,9 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
 import {
   finishWikiPlanJob,
+  progressWikiPlanBuild,
   progressWikiPlanJob,
+  requestWikiPlanBuild,
   requestWikiPlanJob,
   startWikiPlanJob,
   wikiPlanJobById,
@@ -1311,6 +1314,11 @@ export class WikiPlans {
   /**
    * The owner's confirmation of the space's draft (contract `plan.routes.confirm`): it becomes the
    * version in force, and the one that was is superseded. The owner channel's alone.
+   *
+   * A confirmation is a fact, and it asks for the build of the version's documents (contract
+   * `plan.jobs.request`, criterion 11): a job of kind build, made at once as a task of the space's
+   * maintenance list, queued behind the list's unfinished task, or held with why — after the
+   * confirmation committed, and never failing it.
    */
   async confirm(ownerId: string, spaceId: string, version: number, actingSessionId: string | null): Promise<WikiPlanVersion> {
     ownerChannel(actingSessionId, 'confirming the plan');
@@ -1332,8 +1340,21 @@ export class WikiPlans {
       },
       loggedRetry(this.logger, 'wiki.confirmPlan'),
     );
+    await this.buildAfterConfirmation(ownerId, spaceId, version);
     this.realtime?.publishWikiChanged(ownerId, spaceId);
     return this.version(ownerId, spaceId, version);
+  }
+
+  /** The build a confirmation asks for; the task it made published. Logged, never thrown: the confirmation stands. */
+  private async buildAfterConfirmation(ownerId: string, spaceId: string, version: number): Promise<void> {
+    try {
+      const answer = await requestWikiPlanBuild(this.prisma, { ownerId, spaceId, version, requestedByUserId: ownerId });
+      if (answer.madeTaskId && typeof this.realtime?.publishForUser === 'function') {
+        this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [answer.madeTaskId], resync: false });
+      }
+    } catch (error) {
+      this.logger.warn(`the build of version ${version} of a space's plan was not asked for: ${(error as Error).message}`);
+    }
   }
 
   /**
@@ -1394,7 +1415,9 @@ export class WikiPlans {
 
   private factsOf(walk: Walk, value: unknown): Array<{ kind: WikiPlanFactKind; id: string }> {
     const items = Array.isArray(value) ? value : [];
-    if (!Array.isArray(value) || value.length === 0) walk.fail('schema', 'facts', 'must name at least one fact: the entries and sessions this change comes from');
+    if (!Array.isArray(value) || value.length === 0) {
+      walk.fail('schema', 'facts', 'must name at least one fact: the entries, sessions and commits this change comes from');
+    }
     if (items.length > WIKI_PLAN_RULES.factsMax) walk.fail('schema', 'facts', `names at most ${WIKI_PLAN_RULES.factsMax} facts`);
     return items.slice(0, WIKI_PLAN_RULES.factsMax).flatMap((item, i) => {
       const at = `facts[${i}]`;
@@ -1408,6 +1431,16 @@ export class WikiPlans {
         walk.fail('schema', `${at}.kind`, `a fact is one of ${WIKI_PLAN_FACT_KINDS.join(', ')}`);
         return [];
       }
+      if (fact.kind === 'commit') {
+        // A commit is named by its full sha, which the maintenance run found on origin/main: the server has
+        // no checkout to look it up in (contract `plan.proposals.factKinds`).
+        const sha = String(fact.id ?? '').trim().toLowerCase();
+        if (!/^[0-9a-f]{40}$/u.test(sha)) {
+          walk.fail('schema', `${at}.id`, "a commit is named by its full sha: 40 hex characters, as origin/main has it");
+          return [];
+        }
+        return [{ kind: 'commit' as WikiPlanFactKind, id: sha }];
+      }
       let id: string;
       try {
         id = toUuid(String(fact.id ?? '').trim());
@@ -1419,7 +1452,7 @@ export class WikiPlans {
     });
   }
 
-  /** A fact is an entry of this space or a session of its owner. */
+  /** A fact is an entry of this space or a session of its owner; a commit the runner found is taken as it named it. */
   private async checkFacts(walk: Walk, ownerId: string, spaceId: string, facts: ReadonlyArray<{ kind: WikiPlanFactKind; id: string }>): Promise<void> {
     const of = (kind: WikiPlanFactKind): string[] => facts.filter((fact) => fact.kind === kind).map((fact) => fact.id);
     const [entries, sessions] = await Promise.all([
@@ -1428,6 +1461,7 @@ export class WikiPlans {
     ]);
     const found = new Set([...entries, ...sessions].map((row) => row.id));
     facts.forEach((fact, i) => {
+      if (fact.kind === 'commit') return;
       if (!found.has(fact.id)) walk.fail('references', `facts[${i}].id`, fact.kind === 'entry' ? 'no entry of this space has this id' : 'no session of this account has this id');
     });
   }
@@ -1587,13 +1621,21 @@ export class WikiPlans {
     };
   }
 
-  /** The gate round a job's run is on (contract `plan.jobs.progress`): what the plan page shows as it runs. */
+  /**
+   * The gate round a job's run is on, or how far a build's has got (contract `plan.jobs.progress`): what the
+   * plan page shows as it runs.
+   */
   async jobProgress(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiPlanJob> {
     await this.assertMaintainer(principal, spaceId);
     const row = await this.jobOfRun(principal, spaceId);
     const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
-    const attempt = raw.attempt;
     if (row.state !== 'made') throw jobEnded();
+    if (row.kind === 'build') {
+      if (!(await progressWikiPlanBuild(this.prisma, row.id, principal.sessionId!, buildProgressOf(raw)))) throw jobEnded();
+      this.realtime?.publishWikiChanged(principal.ownerId, spaceId);
+      return (await wikiPlanJobById(this.prisma, principal.ownerId, row.id))!;
+    }
+    const attempt = raw.attempt;
     if (typeof attempt !== 'number' || !Number.isInteger(attempt) || attempt < 1 || attempt > WIKI_PLAN_JOB_RULES.attemptsMax) {
       throw schemaRefusal(`attempt is the gate round the run is on, from 1 to ${WIKI_PLAN_JOB_RULES.attemptsMax}`);
     }
@@ -1621,7 +1663,17 @@ export class WikiPlans {
       throw jobEnded();
     }
     const end = jobEndOf(body);
-    if (end.outcome === 'succeeded') {
+    if (end.outcome === 'succeeded' && row.kind === 'build') {
+      // A build that succeeded wrote the documents of a version the owner confirmed: the one it was made for,
+      // or — confirmed while it waited — a newer one.
+      const written = await this.prisma.wikiPlan.findFirst({
+        where: { ownerId: principal.ownerId, spaceId, version: end.version!, confirmedAt: { not: null } },
+        select: { id: true },
+      });
+      if (!written) {
+        throw schemaRefusal(`version ${end.version} is not a version of this space its owner confirmed: a build that succeeded names the confirmed version it wrote`);
+      }
+    } else if (end.outcome === 'succeeded') {
       const stored = await this.prisma.wikiPlan.findFirst({
         where: { ownerId: principal.ownerId, spaceId, version: end.version!, authorSessionId: principal.sessionId },
         select: { id: true },
@@ -1630,7 +1682,7 @@ export class WikiPlans {
         throw schemaRefusal(`version ${end.version} is not a draft of this space this run stored: a run that succeeded names the version its draft became`);
       }
     }
-    if (!(await finishWikiPlanJob(this.prisma, row.id, principal.sessionId!, end))) throw jobEnded();
+    if (!(await finishWikiPlanJob(this.prisma, row.id, principal.sessionId!, end, new Date(), row.kind as WikiPlanJob['kind']))) throw jobEnded();
     this.realtime?.publishWikiChanged(principal.ownerId, spaceId);
     return (await wikiPlanJobById(this.prisma, principal.ownerId, row.id))!;
   }
@@ -1673,11 +1725,37 @@ function schemaRefusal(message: string): WikiRefusalError {
   return new WikiRefusalError({ code: 'WIKI_SCHEMA', message });
 }
 
-/** Whether body says the end an ended job has: the same outcome, and for a success the same version. */
+/** A build's progress as its run said it, checked (contract `plan.jobs.progress`). */
+function buildProgressOf(raw: Record<string, unknown>): WikiPlanBuildProgress {
+  for (const key of Object.keys(raw)) {
+    if (!['docs', 'current'].includes(key)) throw schemaRefusal(`${key} is not a field of a build's progress: docs, current`);
+  }
+  const docs = raw.docs && typeof raw.docs === 'object' && !Array.isArray(raw.docs) ? (raw.docs as Record<string, unknown>) : null;
+  const count = (value: unknown): number | null => (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 100_000 ? value : null);
+  const done = count(docs?.done);
+  const total = count(docs?.total);
+  if (done === null || total === null || done > total) {
+    throw schemaRefusal("docs is { done, total }: the documents the build went through, of the confirmed version's, done not above total");
+  }
+  let current: WikiPlanBuildProgress['current'] = null;
+  if (raw.current !== undefined && raw.current !== null) {
+    const at = typeof raw.current === 'object' && !Array.isArray(raw.current) ? (raw.current as Record<string, unknown>) : null;
+    if (!at || typeof at.slug !== 'string' || !SLUG.test(at.slug) || typeof at.title !== 'string' || at.title.trim() === '') {
+      throw schemaRefusal('current is { slug, title }: the document the build is writing now, or null');
+    }
+    current = { slug: at.slug, title: at.title.trim().slice(0, WIKI_PLAN_RULES.titleMaxChars) };
+  }
+  return { docs: { done, total }, current };
+}
+
+/**
+ * Whether body says the end an ended job has: the same outcome, and for a success the same version (a
+ * build that failed keeps the version it was made for, whatever its run named).
+ */
 function sameJobEnd(row: WikiPlanJobRow, body: unknown): boolean {
   try {
     const end = jobEndOf(body);
-    return end.outcome === row.outcome && (end.version ?? null) === (row.version ?? null);
+    return end.outcome === row.outcome && (end.outcome === 'failed' || (end.version ?? null) === (row.version ?? null));
   } catch {
     return false;
   }

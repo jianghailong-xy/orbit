@@ -370,10 +370,12 @@ function maintenanceTaskPrompt(input: {
     `    orbit wiki maintain --space ${input.spaceRef}`,
     '',
     'It reads the dossiers since the cursor, has the local model extract entries from them, checks and proposes '
-      + 'them, has them verified when the space is Automatic, re-verifies the anchors, rewrites the articles of the '
-      + 'topics whose entries changed, and advances the cursor. Then report it: task_progress_report with where the '
-      + 'run ended, and one task_comment with the summary it printed, its token spend included; if it failed, its '
-      + 'last lines. Run nothing else, and do not retry a failed run more than once.',
+      + 'them, has them verified when the space is Automatic, re-verifies the anchors, rewrites only the sections of '
+      + "the confirmed plan's documents that the new entries and the repository's changes on origin/main touched — "
+      + 'proposing a change to the plan for what fits no section — and advances the cursor. With no confirmed plan it '
+      + 'writes no document. Then report it: task_progress_report with where the run ended, and one task_comment with '
+      + 'the summary it printed, its token spend included; if it failed, its last lines. Run nothing else, and do not '
+      + 'retry a failed run more than once.',
   ].join('\n');
 }
 

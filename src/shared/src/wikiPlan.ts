@@ -37,8 +37,13 @@ export type WikiPlanProposalStatus = (typeof WIKI_PLAN_PROPOSAL_STATUSES)[number
 export const WIKI_PLAN_PROPOSAL_ACTIONS = ['accept', 'reject'] as const;
 export type WikiPlanProposalAction = (typeof WIKI_PLAN_PROPOSAL_ACTIONS)[number];
 
-/** The facts a proposal names as what led to it: entries of the space and sessions of its owner. */
-export const WIKI_PLAN_FACT_KINDS = ['entry', 'session'] as const;
+/**
+ * The facts a proposal names as what led to it: entries of the space, sessions of its owner, and — for a
+ * design document that landed on origin/main and no section of the plan cites — the commit that added it
+ * (its id the commit's full sha, which the maintenance run found at origin/main; the server has no
+ * checkout to look it up in).
+ */
+export const WIKI_PLAN_FACT_KINDS = ['entry', 'session', 'commit'] as const;
 export type WikiPlanFactKind = (typeof WIKI_PLAN_FACT_KINDS)[number];
 
 /** The gate's four checks, in the order it runs them (contract `plan.gate.checks`). */
@@ -384,13 +389,16 @@ export interface WikiPlanDecisionResult {
 
 /**
  * What a job does: draft a plan (`orbit wiki plan draft`), revise the newest version with the owner's
- * words (`orbit wiki plan revise`), or build the documents from a confirmed version — the last is kept
- * for the task that writes them, which makes its own.
+ * words (`orbit wiki plan revise`), or build the documents from a confirmed version (`orbit wiki docs
+ * build`), which the owner's confirmation asks for.
  */
 export const WIKI_PLAN_JOB_KINDS = ['draft', 'revise', 'build'] as const;
 export type WikiPlanJobKind = (typeof WIKI_PLAN_JOB_KINDS)[number];
 
-/** The fact that asked for a job: the space was created, or its owner asked on the plan page. */
+/**
+ * The fact that asked for a job: the space was created, or its owner asked on the plan page — for a draft,
+ * or, by confirming a version, for the build of its documents.
+ */
 export const WIKI_PLAN_JOB_TRIGGERS = ['space_created', 'owner'] as const;
 export type WikiPlanJobTrigger = (typeof WIKI_PLAN_JOB_TRIGGERS)[number];
 
@@ -438,7 +446,7 @@ export const WIKI_PLAN_JOB_RULES = {
   materialsProjectsMax: 500,
 } as const;
 
-/** What a run reports when it ends (contract `plan.jobs.report`), kept as it was said. */
+/** What a draft's or a revision's run reports when it ends (contract `plan.jobs.report`), kept as it was said. */
 export interface WikiPlanJobReport {
   categories: number;
   docs: number;
@@ -452,6 +460,30 @@ export interface WikiPlanJobReport {
   model: string | null;
   /** The fourth step's draft of the rules the documents are written by, cut to fit. */
   rulesDraft?: string;
+}
+
+/**
+ * What a build's run reports when it ends (contract `plan.jobs.buildReport`), kept as it was said: the
+ * version it wrote, at which commit, its documents and sections by what became of them, the spend and the
+ * time. A section whose material did not change is `unchanged` — not written again, and asked no model.
+ */
+export interface WikiPlanBuildReport {
+  planVersion: number;
+  repoSha: string;
+  docs: { total: number; written: number };
+  sections: { written: number; unchanged: number; failed: number };
+  tokens: { input: number; output: number; calls: number };
+  seconds: number;
+  model: string | null;
+}
+
+/**
+ * A build's progress while it runs (contract `plan.jobs.progress`): the documents it went through of the
+ * confirmed version's, and the one it is writing now — the plan page's «Writing documents».
+ */
+export interface WikiPlanBuildProgress {
+  docs: { done: number; total: number };
+  current: { slug: string; title: string } | null;
 }
 
 /** A space's plan job, as the plan's read gives it. */
@@ -478,12 +510,15 @@ export interface WikiPlanJob {
   /** The gate round the run is on, or ended on, of `attemptsMax`. */
   attempt: number | null;
   attemptsMax: number;
-  /** Succeeded: the version it stored. */
+  /** A build's, while it runs: the documents written of how many, and the one being written. */
+  progress: WikiPlanBuildProgress | null;
+  /** Succeeded: the version it stored. A build's, from the start: the confirmed version it writes. */
   version: number | null;
   /** Failed: the gate's errors on the last round, and what went wrong in words. */
   errors: WikiPlanGateError[];
   error: string | null;
-  report: WikiPlanJobReport | null;
+  /** A draft's or a revision's report, or a build's (`kind` says which). */
+  report: WikiPlanJobReport | WikiPlanBuildReport | null;
   /** Failed: the last draft it had, as it was sent to the gate. */
   draft: WikiPlanDraftInput | null;
 }
@@ -513,10 +548,8 @@ export interface WikiPlanJobContext {
   };
 }
 
-/** `POST …/plan/job/progress`: the gate round the run is on. */
-export interface WikiPlanJobProgressRequest {
-  attempt: number;
-}
+/** `POST …/plan/job/progress`: the gate round a draft's run is on, or how far a build's has got. */
+export type WikiPlanJobProgressRequest = { attempt: number } | WikiPlanBuildProgress;
 
 /** `POST …/plan/job/finish`: how the run ended. */
 export interface WikiPlanJobFinishRequest {
@@ -524,7 +557,7 @@ export interface WikiPlanJobFinishRequest {
   version?: number | null;
   errors?: WikiPlanGateError[];
   error?: string | null;
-  report?: WikiPlanJobReport | null;
+  report?: WikiPlanJobReport | WikiPlanBuildReport | null;
   draft?: WikiPlanDraftInput | null;
 }
 
