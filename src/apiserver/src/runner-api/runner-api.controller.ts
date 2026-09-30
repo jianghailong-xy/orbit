@@ -4211,8 +4211,14 @@ export class RunnerApiController {
       // below `pendingExecutable` — a follow-up queued while this turn ran counts only once the
       // requeues above have run — which is why the read is hoisted out of the block that uses it
       // first.
+      //
+      // Only a turn the ACK above ANSWERED asks either. One it put back in the queue (`unanswered`)
+      // has not finished the work it asked for: it is delivered again, and the completion that
+      // answers it is the one that asks.
       const completedMessageTurn =
-        completedTurn?.kind === 'message' && dto.status === RunStatus.SUCCEEDED ? completedTurn : null;
+        completedTurn?.kind === 'message' && dto.status === RunStatus.SUCCEEDED && !unanswered
+          ? completedTurn
+          : null;
       const completedTask =
         completedMessageTurn && current.taskId
           ? await tx.task.findUnique({
@@ -4229,6 +4235,14 @@ export class RunnerApiController {
       // turn in this same transaction. The message ACK and unique clientTurnId are the idempotency
       // boundary: either both commit or neither does, so retrying /turn-complete cannot run the
       // command twice. Tasks without the pair do not enter this branch.
+      //
+      // The key is still looked up before it is inserted: a build that queued the round on the
+      // completion that put its turn back in the queue left rounds standing for turns that were
+      // not answered yet, and the answering completion met each as a unique violation that rolled
+      // the whole ACK back — a 500 the runner re-posted every two seconds over a turn left
+      // IN_FLIGHT (2026-09-29). Found, it is this turn's round. Not `skipDuplicates`: ON CONFLICT
+      // DO NOTHING would swallow a `(session_id, seq)` conflict too, and lose the round in silence.
+      // Every writer of this key holds the Session lock taken above, so nothing races the lookup.
       if (
         completedMessageTurn != null
         && completedTask != null
@@ -4237,23 +4251,30 @@ export class RunnerApiController {
         && completedTask.acceptanceCommand != null
         && completedTask.acceptanceExpectedExitCode != null
       ) {
-        const last = await tx.conversationTurn.aggregate({
-          where: { sessionId },
-          _max: { seq: true },
+        const clientTurnId = taskAcceptanceClientTurnId(
+          completedMessageTurn.id,
+          completedTask.acceptanceExpectedExitCode,
+        );
+        const queued = await tx.conversationTurn.findUnique({
+          where: { sessionId_clientTurnId: { sessionId, clientTurnId } },
+          select: { id: true },
         });
-        await tx.conversationTurn.create({
-          data: {
-            sessionId,
-            seq: (last._max.seq ?? 0) + 1,
-            clientTurnId: taskAcceptanceClientTurnId(
-              completedMessageTurn.id,
-              completedTask.acceptanceExpectedExitCode,
-            ),
-            kind: 'shell',
-            content: completedTask.acceptanceCommand,
-            status: 'PENDING',
-          },
-        });
+        if (queued == null) {
+          const last = await tx.conversationTurn.aggregate({
+            where: { sessionId },
+            _max: { seq: true },
+          });
+          await tx.conversationTurn.create({
+            data: {
+              sessionId,
+              seq: (last._max.seq ?? 0) + 1,
+              clientTurnId,
+              kind: 'shell',
+              content: completedTask.acceptanceCommand,
+              status: 'PENDING',
+            },
+          });
+        }
       }
       // A `!`-shell turn runs on the runner, not in claude, so it must NOT advance numTurns:
       // that counter gates --resume on respawn (queue.buildSession). Counting a shell turn
