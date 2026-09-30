@@ -165,7 +165,7 @@ final class AcceptanceConfirmationCopyParityTests: XCTestCase {
     func testTheMetaLineMatchesTheWebCardWhole() throws {
         let web = try flatWebCard()
 
-        // Where the PROJECT stands, off `coordinatorEnabled` — three words, because a read that did
+        // Where the PROJECT stands, off its own `startedAt` — three words, because a read that did
         // not answer is neither of the other two.
         assertDeclares(web, "ACCEPTANCE_NOT_STARTED", AcceptanceConfirmations.notStarted,
                        "where a project nobody has started stands")
@@ -256,6 +256,44 @@ final class AcceptanceConfirmationCopyParityTests: XCTestCase {
                        "the same line for a confirmation the criteria have since moved under")
     }
 
+    /// …and what every OTHER confirmation leaves: the project was running already, so the record
+    /// says it was confirmed rather than started — with what the version changed after the seal,
+    /// when the pressing console knows it. Which of the two a record says is the record's own
+    /// `startedWith`, at both ends.
+    func testTheLineAReConfirmationLeavesMatchesTheWebCard() throws {
+        let web = try flatWebCard()
+        let line = AcceptanceConfirmations.reconfirmedLine(recorded(.confirmed))
+        assertTemplate(web, line, [(currentSeal, "${seal}"), (count, "${count}")],
+                       "the line a re-confirmation leaves")
+        assertTemplate(web, AcceptanceConfirmations.reconfirmedLine(recorded(.confirmed),
+                                                                    changed: "CHANGED"),
+                       [(line, "${line}"), ("CHANGED", "${changed}")],
+                       "the same line with what the version changed after it")
+        XCTAssertEqual(AcceptanceConfirmations.reconfirmedLine(recorded(.confirmed), changed: ""),
+                       line, "nothing known to have changed adds nothing")
+
+        XCTAssertTrue(web.contains("return confirmation.startedWith"),
+                      "the web no longer picks the receipt's line off the record's own start")
+        XCTAssertTrue(web.contains("? acceptanceConfirmedLine(confirmation)"))
+        XCTAssertTrue(web.contains(": acceptanceReconfirmedLine(confirmation, changed);"))
+        XCTAssertEqual(AcceptanceConfirmations.receiptLine(recorded(.confirmed)), line,
+                       "a record that started nothing says confirmed")
+        let start = RecordedStandardSetConfirmation(
+            criteriaDigest: Self.current, criteriaMaterial: recorded(.confirmed).criteriaMaterial,
+            confirmedAt: "2026-09-11T03:00:00.000Z", confirmedById: "u1",
+            startedWith: ProjectStartRecord(settings: ProjectStartSettings(
+                line: .main, automatic: true, maxConcurrentTasks: 3)))
+        XCTAssertEqual(AcceptanceConfirmations.receiptLine(start, changed: "CHANGED"),
+                       AcceptanceConfirmations.confirmedLine(start),
+                       "and one that started the project says started, whatever else is known")
+
+        // A start's record carries the settings it left, the owner's changes marked, at both ends.
+        XCTAssertTrue(web.contains("settings={started.settings}"),
+                      "the web receipt no longer draws the settings a start recorded")
+        XCTAssertTrue(web.contains("differs={started.differsFromRequest}"),
+                      "or no longer marks which of them the owner changed")
+    }
+
     /// The record itself: what it is headed, and the stamp under it saying who signed it and when.
     func testTheReceiptAConfirmationLeavesMatchesTheWebCard() throws {
         let web = try flatWebCard()
@@ -335,6 +373,38 @@ final class AcceptanceConfirmationCopyParityTests: XCTestCase {
                         ("1", "${plan.criteria.length}"),
                         (priorSeal, "${shortSeal(plan.criteriaDigest)}")],
                        "the plan the next send carries")
+    }
+
+    /// What the composer asks for depends on which card armed it, and what the next send carries
+    /// for the change card says the project keeps running — the same three words for the three
+    /// questions at both ends.
+    func testTheWordsEachSettlementCardHandsTheComposerMatchTheWebCard() throws {
+        let web = try flatWebCard()
+        XCTAssertTrue(web.contains("if (question === 'START') return START_CHAT_PLACEHOLDER;"))
+        XCTAssertTrue(web.contains(
+            "if (question === 'CRITERIA_CHANGE') return CRITERIA_CHANGE_CHAT_PLACEHOLDER;"))
+        XCTAssertTrue(web.contains("return ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER;"))
+        XCTAssertEqual(AcceptanceConfirmations.planChangePlaceholder(for: .start),
+                       StartProject.chatPlaceholder)
+        XCTAssertEqual(AcceptanceConfirmations.planChangePlaceholder(for: .criteriaChange),
+                       CriteriaChanges.chatPlaceholder)
+        XCTAssertEqual(AcceptanceConfirmations.planChangePlaceholder(for: .confirmation),
+                       AcceptanceConfirmations.planChangePlaceholder)
+        XCTAssertTrue(web.contains("if (plan.question === 'CRITERIA_CHANGE') {"))
+        let carried = AcceptanceConfirmations.planChangeContext(
+            projectTitle: Self.project, criteriaDigest: Self.prior, criteria: ["alpha"],
+            question: .criteriaChange)
+        assertTemplate(web, carried,
+                       [(Self.project, "${plan.projectTitle}"),
+                        ("\n\n1. alpha", "\\n\\n${numbered}"),
+                        ("1", "${plan.criteria.length}"),
+                        (priorSeal, "${shortSeal(plan.criteriaDigest)}")],
+                       "the criteria a started project is running on, as the next send carries them")
+        // The three questions, in the web's own spelling.
+        let words = try source("src/web/src/lib/projectStart.ts")
+        XCTAssertTrue(words.contains("export type SettlementQuestion = '\(SettlementQuestion.start.rawValue)' | "
+                                     + "'\(SettlementQuestion.criteriaChange.rawValue)' | "
+                                     + "'\(SettlementQuestion.confirmation.rawValue)';"))
     }
 
     // MARK: the word the native card keeps outside OrbitKit

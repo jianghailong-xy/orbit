@@ -343,6 +343,14 @@ private struct CompactSections: View {
                             WikiArticleScreen(address: WikiArticleAddress(topic: topic, part: part))
                         case .wikiBrowse:             WikiBrowseScreen()
                         case .wikiIndex:              WikiIndexScreen()
+                        case .wikiDoc(let slug, let section):
+                            WikiDocScreen(address: WikiDocAddress(slug: slug, section: section))
+                        case .wikiPlan(let version):
+                            WikiPlanScreen(address: WikiPlanAddress(version: version))
+                        case .wikiPlanDoc(let slug, let version):
+                            WikiPlanScreen(address: WikiPlanAddress(version: version, doc: slug))
+                        case .wikiPlanSection(let slug, let index, let version):
+                            WikiPlanScreen(address: WikiPlanAddress(version: version, doc: slug, section: index))
                         default:                      EmptyView()
                         }
                     }

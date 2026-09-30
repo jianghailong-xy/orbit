@@ -441,13 +441,31 @@ public struct RecordedStandardSetConfirmation: Codable, Equatable, Sendable {
     public let criteriaMaterial: [ConfirmedCriterionVersion]
     public let confirmedAt: String
     public let confirmedById: String
+    /// What the start this confirmation was part of left the project running with, or nil for one
+    /// that started nothing — a re-confirmation, or one made before starts recorded their settings.
+    /// The receipt reads it: a start says "started" and what with, anything else says "confirmed".
+    public let startedWith: ProjectStartRecord?
 
     public init(criteriaDigest: String, criteriaMaterial: [ConfirmedCriterionVersion],
-                confirmedAt: String, confirmedById: String) {
+                confirmedAt: String, confirmedById: String,
+                startedWith: ProjectStartRecord? = nil) {
         self.criteriaDigest = criteriaDigest
         self.criteriaMaterial = criteriaMaterial
         self.confirmedAt = confirmedAt
         self.confirmedById = confirmedById
+        self.startedWith = startedWith
+    }
+
+    /// Decoded by hand for `startedWith`: absent from a server older than this build, and settings
+    /// this build cannot read are a record without them — the receipt still names the seal — rather
+    /// than a confirmation read that fails to decode.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        criteriaDigest = try c.decode(String.self, forKey: .criteriaDigest)
+        criteriaMaterial = try c.decode([ConfirmedCriterionVersion].self, forKey: .criteriaMaterial)
+        confirmedAt = try c.decode(String.self, forKey: .confirmedAt)
+        confirmedById = try c.decode(String.self, forKey: .confirmedById)
+        startedWith = (try? c.decodeIfPresent(ProjectStartRecord.self, forKey: .startedWith)) ?? nil
     }
 }
 
@@ -465,13 +483,33 @@ public struct StandardSetConfirmationStanding: Codable, Equatable, Sendable {
     public let confirmed: Bool
     public let currentVersion: StandardSetVersion
     public let confirmation: RecordedStandardSetConfirmation?
+    /// What changed since the confirmation on record — the "Confirm the new criteria?" card's list,
+    /// computed by the server off the material that confirmation stored (`CriteriaChange.swift`).
+    /// Nil when nothing was ever confirmed, and absent from a server that predates it; all
+    /// `unchanged` once the set that stands is the one confirmed.
+    public let changesSinceConfirmed: CriteriaChangesSinceConfirmed?
 
     public init(state: State, confirmed: Bool, currentVersion: StandardSetVersion,
-                confirmation: RecordedStandardSetConfirmation? = nil) {
+                confirmation: RecordedStandardSetConfirmation? = nil,
+                changesSinceConfirmed: CriteriaChangesSinceConfirmed? = nil) {
         self.state = state
         self.confirmed = confirmed
         self.currentVersion = currentVersion
         self.confirmation = confirmation
+        self.changesSinceConfirmed = changesSinceConfirmed
+    }
+
+    /// Decoded by hand for the list of changes, which a server older than this build does not send
+    /// and a shape this build cannot read is none of — the older confirmation card asks instead.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        state = try c.decode(State.self, forKey: .state)
+        confirmed = try c.decode(Bool.self, forKey: .confirmed)
+        currentVersion = try c.decode(StandardSetVersion.self, forKey: .currentVersion)
+        confirmation = try c.decodeIfPresent(RecordedStandardSetConfirmation.self,
+                                             forKey: .confirmation)
+        changesSinceConfirmed = (try? c.decodeIfPresent(CriteriaChangesSinceConfirmed.self,
+                                                        forKey: .changesSinceConfirmed)) ?? nil
     }
 }
 
@@ -503,12 +541,17 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
     /// The status the confirmation card's own condition turns on — a project that is not OPEN is
     /// not one anybody is about to start.
     public let status: String?
-    /// Whether Orbit is handing this project's tasks out: the one column that decides it, and what
-    /// the confirmation card's meta line reads "started" off. This read is `GET /projects/:id`,
-    /// which carries the column already, so that field costs the card no request of its own.
-    /// Optional — a read that did not say is not a "no", which is the one thing it must never be
-    /// read as.
+    /// Automatic, as the same read carries it: how a started project runs — whether its
+    /// coordinator runs it for the owner — and no longer whether it runs at all. "Started" is
+    /// `startedAt` below. Optional — a read that did not say is not a "no".
     public let coordinatorEnabled: Bool?
+    /// When the project was started — the one write of the start card, or the backfill for a
+    /// project that was running before starts were recorded — or nil for one nobody has started.
+    /// What "started" means on all three settlement cards (`started`).
+    public let startedAt: String?
+    /// Whether the read carried `startedAt` at all, which is what separates "never started" (a
+    /// null) from "this server did not say" (no key) — the two answers `started` must not merge.
+    public let startedAtRead: Bool
     /// The endpoint's own `_count`, decoded under the name the other payloads give it.
     public let counts: ProjectTaskCounts?
     /// How many tasks the project holds — what the confirmation card's condition asks before it
@@ -522,19 +565,54 @@ public struct ProjectCriteriaDocument: Codable, Equatable, Sendable {
     /// the same rule `AcceptanceConfirmations.answerable` keeps for a standing it does not have.
     public var taskCount: Int { counts?.tasks ?? 0 }
 
+    /// Whether the project has been started, read off `startedAt` and off nothing else — not off
+    /// Automatic, which is how a started project runs rather than whether it does. Nil for a read
+    /// that did not carry the field: a third answer, which labels a project "start not read" rather
+    /// than guessing, and which no condition reads as either of the other two. Web's
+    /// `projectStarted`.
+    public var started: Bool? {
+        startedAtRead ? startedAt != nil : nil
+    }
+
     public init(id: String, acceptanceCriteriaItems: [Item]? = nil,
                 title: String? = nil, status: String? = nil,
-                coordinatorEnabled: Bool? = nil, counts: ProjectTaskCounts? = nil) {
+                coordinatorEnabled: Bool? = nil, counts: ProjectTaskCounts? = nil,
+                startedAt: String? = nil, startedAtRead: Bool = false) {
         self.id = id
         self.acceptanceCriteriaItems = acceptanceCriteriaItems
         self.title = title
         self.status = status
         self.coordinatorEnabled = coordinatorEnabled
         self.counts = counts
+        self.startedAt = startedAt
+        self.startedAtRead = startedAtRead || startedAt != nil
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        acceptanceCriteriaItems = try c.decodeIfPresent([Item].self, forKey: .acceptanceCriteriaItems)
+        title = try c.decodeIfPresent(String.self, forKey: .title)
+        status = try c.decodeIfPresent(String.self, forKey: .status)
+        coordinatorEnabled = try c.decodeIfPresent(Bool.self, forKey: .coordinatorEnabled)
+        counts = try c.decodeIfPresent(ProjectTaskCounts.self, forKey: .counts)
+        startedAtRead = c.contains(.startedAt)
+        startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encodeIfPresent(acceptanceCriteriaItems, forKey: .acceptanceCriteriaItems)
+        try c.encodeIfPresent(title, forKey: .title)
+        try c.encodeIfPresent(status, forKey: .status)
+        try c.encodeIfPresent(coordinatorEnabled, forKey: .coordinatorEnabled)
+        try c.encodeIfPresent(counts, forKey: .counts)
+        if startedAtRead { try c.encode(startedAt, forKey: .startedAt) }
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, acceptanceCriteriaItems, title, status, coordinatorEnabled
+        case id, acceptanceCriteriaItems, title, status, coordinatorEnabled, startedAt
         case counts = "_count"
     }
 }
@@ -1082,9 +1160,10 @@ public enum AcceptanceConfirmations {
     public static let showLessLabel = "Show less"
 
     /// What the primary action says, for the project the card is actually about: `started`, read
-    /// off `coordinatorEnabled` and never inferred from the standing. A nil — a project document
-    /// that did not answer — keeps the card's own word rather than guessing a tense for a project
-    /// nobody has read, which is the rule the meta line's third field is under.
+    /// off `startedAt` (`ProjectCriteriaDocument.started`) and never inferred from the standing. A
+    /// nil — a project document that did not answer — keeps the card's own word rather than
+    /// guessing a tense for a project nobody has read, which is the rule the meta line's third
+    /// field is under.
     public static func actionLabel(started: Bool?) -> String {
         started == true ? confirmLabel : startLabel
     }
@@ -1095,11 +1174,10 @@ public enum AcceptanceConfirmations {
         "Read all \(count) in full"
     }
 
-    /// Where the project stands, as the meta line's third field says it: read off
-    /// `coordinatorEnabled` — the column that decides whether Orbit hands this project's tasks out,
-    /// and which the confirmation door writes by no other hand — and off nothing else. Confirming
-    /// turns it on for a project started since that was wired, and says nothing whatever about one
-    /// that was already dispatching work when it landed.
+    /// Where the project stands, as the meta line's third field says it: read off the project's own
+    /// `startedAt` — the fact a start writes, backfilled for the projects that were running before
+    /// starts were recorded — and off nothing else. Not off Automatic (`coordinatorEnabled`), which
+    /// is how a started project runs rather than whether it does.
     public static let notStarted = "not started"
     public static let started = "started"
     /// …and what that field says when the project itself could not be read. A failed read is not an
@@ -1223,7 +1301,7 @@ public enum AcceptanceConfirmations {
         return out
     }
 
-    /// What a confirmation records: the count it was given over, and the seal it locked.
+    /// What a START records: the count it was given over, and the seal it locked.
     ///
     /// Read off the RECORD and never off the version standing now. Those are the same version
     /// exactly while the confirmation counts, and the whole point of the record is what it says when
@@ -1234,6 +1312,30 @@ public enum AcceptanceConfirmations {
         let count = confirmation.criteriaMaterial.count
         let seal = CriteriaDecisions.shortSeal(confirmation.criteriaDigest)
         return "You started the project on \(count) criteria at seal \(seal)"
+    }
+
+    /// …and what every other confirmation records: the project was running already, and the press
+    /// confirmed a version of its criteria rather than starting it. `changed` is what that version
+    /// changed — "1 new, 1 stricter" — when this console pressed it and so knows; the read says only
+    /// the seal, because once a set is confirmed nothing is left changed. Web's
+    /// `acceptanceReconfirmedLine`.
+    public static func reconfirmedLine(_ confirmation: RecordedStandardSetConfirmation,
+                                       changed: String? = nil) -> String {
+        let count = confirmation.criteriaMaterial.count
+        let seal = CriteriaDecisions.shortSeal(confirmation.criteriaDigest)
+        let line = "You confirmed \(count) criteria at seal \(seal)"
+        guard let changed, !changed.isEmpty else { return line }
+        return "\(line) — \(changed)"
+    }
+
+    /// Which of the two a record says: a confirmation that started the project carries what the
+    /// start left it with (`startedWith`), and one that started nothing does not. Web's
+    /// `acceptanceReceiptLine`.
+    public static func receiptLine(_ confirmation: RecordedStandardSetConfirmation,
+                                   changed: String? = nil) -> String {
+        confirmation.startedWith != nil
+            ? confirmedLine(confirmation)
+            : reconfirmedLine(confirmation, changed: changed)
     }
 
     /// The record's heading: the two words the receipts Orbit already draws into a conversation use
@@ -1289,6 +1391,17 @@ public enum AcceptanceConfirmations {
     /// What the armed composer asks for. A message, not an answer: no door is waiting on it.
     public static let planChangePlaceholder = "What should done mean instead?"
 
+    /// What the armed composer asks for, by the card that armed it: the start card asks what should
+    /// change before the project starts, the change card what should change about the new criteria,
+    /// and this card what done should mean instead. Web's `acceptancePlanChangePlaceholder`.
+    public static func planChangePlaceholder(for question: SettlementQuestion) -> String {
+        switch question {
+        case .start:          return StartProject.chatPlaceholder
+        case .criteriaChange: return CriteriaChanges.chatPlaceholder
+        case .confirmation:   return planChangePlaceholder
+        }
+    }
+
     /// What the next send carries ahead of the typed message: the plan as it stands, named by its
     /// seal.
     ///
@@ -1297,17 +1410,35 @@ public enum AcceptanceConfirmations {
     /// none of it — so the version being discussed rides with the message rather than being looked
     /// up, and the seal is in it so a reply about a set that has since moved can be told apart from
     /// one about this one.
+    ///
+    /// A started project's criteria are being worked against while the change card asks about them,
+    /// so ITS context does not say that no work has started — it says the project keeps running.
     public static func planChangeContext(projectTitle: String, criteriaDigest: String,
-                                         criteria: [String]) -> String {
+                                         criteria: [String],
+                                         question: SettlementQuestion = .confirmation) -> String {
         let numbered = criteria.enumerated()
             .map { "\($0.offset + 1). \($0.element)" }
             .joined(separator: "\n")
         let seal = CriteriaDecisions.shortSeal(criteriaDigest)
         var out = "About the acceptance criteria of “\(projectTitle)” — the \(criteria.count) that "
+        if question == .criteriaChange {
+            out += "stand now, at seal \(seal), which changed after the owner "
+            out += "confirmed them while the project keeps running:\n\n\(numbered)"
+            return out
+        }
         out += "stand now, at seal \(seal), which nobody has confirmed and which "
         out += "no work has started against:\n\n\(numbered)"
         return out
     }
+}
+
+/// Which of the three questions a coordinator conversation's settlement card is asking: start this
+/// project, confirm the criteria that changed since it started, or — for a started project nobody
+/// ever confirmed — confirm them at all. Web's `SettlementQuestion`.
+public enum SettlementQuestion: String, Equatable, Sendable {
+    case start = "START"
+    case criteriaChange = "CRITERIA_CHANGE"
+    case confirmation = "CONFIRMATION"
 }
 
 /// The confirmation door's body: the version being confirmed, and nothing else.

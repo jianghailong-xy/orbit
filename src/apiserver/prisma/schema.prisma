@@ -1245,6 +1245,8 @@ model Session {
   // (mergeError carries git's message / the failed precondition). All null until asked.
   mergeStatus          String?   @map("merge_status")
   mergeError           String?   @map("merge_error")
+  mergeRecovery        Json?     @map("merge_recovery")
+  mergeRecoveryAction  String?   @map("merge_recovery_action")
   mergeRequestedAt     DateTime? @map("merge_requested_at")
   // Fresh for every queued attempt. Runner results must echo this UUID, so a
   // delayed result from an attempt cleared by Resume cannot complete a later one.
@@ -6378,7 +6380,8 @@ model WikiPlanJob {
   endedAt      DateTime? @map("ended_at") @db.Timestamptz(3)
   /// `succeeded` | `failed`.
   outcome      String?
-  /// The plan version a job that succeeded stored.
+  /// The plan version a job that succeeded stored — or, for a build, the confirmed version it writes,
+  /// from the moment it is asked for (0340).
   version      Int?
   /// The gate's errors on the last round of a job that failed: `[{ check, path, message }, …]`.
   errors       Json?
@@ -6387,6 +6390,8 @@ model WikiPlanJob {
   report       Json?
   /// The last draft a job that failed had, for its owner to read.
   draft        Json?
+  /// A build's progress while it runs: `{ docs: { done, total }, current: { slug, title } | null }` (0340).
+  progress     Json?
   requestedByUserId String?  @map("requested_by_user_id") @db.Uuid
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -6474,6 +6479,8 @@ model WikiDocSentence {
   /// The entry it came through, whose rejection, retirement or broken anchor withdrew it. No foreign key.
   withdrawnEntryId String?        @map("withdrawn_entry_id") @db.Uuid
   withdrawnReason  String?        @map("withdrawn_reason")
+  /// Or the repository file it cited, deleted or renamed on origin/main (anchor_missing; 0340).
+  withdrawnPath    String?        @map("withdrawn_path")
 
   footnotes WikiDocFootnote[]
 

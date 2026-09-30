@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -33,6 +32,11 @@ import (
 // cursor — and calls the local model only where a model is needed, each time through its own clean
 // Claude Code (wiki_verify.go's launch, allowlist and apiKeyHelper; thinking off). The session's own model
 // only starts it and reports what it printed.
+//
+// THE DOCUMENTS FOLLOW WHAT CHANGED (criterion 3, revision 3). After the anchors the run writes again only
+// the sections of the confirmed plan's documents that its facts touched — the entries that fit them, the
+// repository material they cite that changed on origin/main — and proposes a change to the plan for what
+// fits no section (wiki_maintain_docs.go). The topic articles are no longer written.
 //
 // A RUN THAT DID NOT FINISH MOVES NOTHING. Any step that fails, a model endpoint that refuses the token,
 // or an op the server refuses ends the run `failed`: the space's cursor stays where it was, its
@@ -72,9 +76,10 @@ var wikiMaintainDescription = wikiMaintainPrecondition + " This is a Wiki mainte
 	" entries from each, checks every entry against its dossier and the checkout, proposes them by topic with dryRun " +
 	"first and then as the space's maintenance run — holding back, for the next run, the dossiers whose entries the " +
 	"run's circuit breaker has no room for — has them verified in an automatic space, re-verifies the anchors, " +
-	"rewrites the articles of the topics whose entries changed, and advances the cursor. It prints what it did, the " +
-	"token spend included, and exits non-zero when the run failed. Any session but a maintenance run of the space is " +
-	"refused WIKI_NOT_MAINTENANCE_SESSION."
+	"writes again only the sections of the confirmed plan's documents that the entries and origin/main's changes " +
+	"touched (proposing a change to the plan for what fits no section, and writing no document when no plan is " +
+	"confirmed), and advances the cursor. It prints what it did, the token spend included, and exits non-zero when " +
+	"the run failed. Any session but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION."
 
 var wikiCheckDescription = wikiCheckPrecondition + " This is a Wiki maintenance task's acceptance command: it asks the " +
 	"server whether --space's cursor is at or past the position --expect-cursor names, and whether the run of the task " +
@@ -242,7 +247,7 @@ type wikiMaintainReport struct {
 	} `json:"ops"`
 	Verification *wikiMaintainVerification `json:"verification,omitempty"`
 	Anchors      *wikiMaintainAnchors      `json:"anchors,omitempty"`
-	Articles     *wikiMaintainArticles     `json:"articles,omitempty"`
+	Docs         *wikiMaintainDocsReport   `json:"docs,omitempty"`
 	Tokens       struct {
 		Input  int `json:"input"`
 		Output int `json:"output"`
@@ -270,12 +275,6 @@ type wikiMaintainAnchors struct {
 	Entries int `json:"entries"`
 	Changed int `json:"changed"`
 	Missing int `json:"missing"`
-}
-
-type wikiMaintainArticles struct {
-	Written   int `json:"written"`
-	Unchanged int `json:"unchanged"`
-	Failed    int `json:"failed"`
 }
 
 // wikiMaintainSummary is what the command prints, and what --json writes.
@@ -422,8 +421,8 @@ func (r *wikiMaintainRun) steps() *wikiMaintainStop {
 	if err := r.anchors(); err != nil {
 		return fail("anchors", err)
 	}
-	if err := r.articles(); err != nil {
-		return fail("articles", err)
+	if err := r.docs(); err != nil {
+		return fail("docs", err)
 	}
 	return nil
 }
@@ -598,27 +597,7 @@ func (e *wikiMaintainAuthError) Error() string {
 // ask is one clean Claude Code call to the local model, counted: wiki_verify.go's launch through
 // askWikiModel, with the extraction's system prompt and thinking off.
 func (r *wikiMaintainRun) ask(prompt string) (string, error) {
-	var last error
-	for _, wait := range wikiArticleRetryWaits {
-		time.Sleep(wait)
-		ctx, cancel := context.WithTimeout(context.Background(), wikiArticleCallTimeout)
-		text, usage, err := askWikiModel(ctx, r.claude, r.cfg, wikiMaintainSystemPrompt, prompt)
-		cancel()
-		r.mu.Lock()
-		r.report.Tokens.Calls++
-		r.report.Tokens.Input += usage.InputTokens
-		r.report.Tokens.Output += usage.OutputTokens
-		r.mu.Unlock()
-		if err == nil {
-			return text, nil
-		}
-		var auth *wikiArticleAuthError
-		if errors.As(err, &auth) {
-			return "", &wikiMaintainAuthError{detail: auth.detail}
-		}
-		last = err
-	}
-	return "", last
+	return r.askAs(wikiMaintainSystemPrompt, prompt)
 }
 
 // ── The dossiers ────────────────────────────────────────────────────────────────────────────────
@@ -1449,7 +1428,7 @@ func (r *wikiMaintainRun) send(topic string, ops []wikiMaintainOp, dryRun bool) 
 	return answer, nil
 }
 
-// ── Verification, anchors, articles ─────────────────────────────────────────────────────────────
+// ── Verification and anchors ────────────────────────────────────────────────────────────────────
 
 // verify has the local model verify the run's own ops in an automatic space (`orbit wiki verify`), gives
 // the ones left without a verdict one more pass, and then adopts what ended sessions left waiting.
@@ -1543,23 +1522,6 @@ func (r *wikiMaintainRun) anchors() error {
 			wikiCount(summary.Failed, "anchor", "anchors"), wikiCount(summary.Refused, "entry", "entries"))
 	}
 	r.say("Re-verified the anchors of %s: %d changed, %d missing.", wikiCount(summary.Entries, "entry", "entries"), summary.Changed, summary.Missing)
-	return nil
-}
-
-// articles rewrites the articles of the topics whose entry set changed (`orbit wiki articles`).
-func (r *wikiMaintainRun) articles() error {
-	summary, err := runWikiArticles(r.t, r.sessionID, r.spaceID, "", r.opts.model, r.progress)
-	r.report.Articles = &wikiMaintainArticles{Written: summary.Written, Unchanged: summary.Unchanged, Failed: summary.Failed}
-	r.report.Tokens.Calls += summary.Calls
-	r.report.Tokens.Input += summary.Usage.InputTokens
-	r.report.Tokens.Output += summary.Usage.OutputTokens
-	if err != nil {
-		return err
-	}
-	if summary.Failed > 0 {
-		return fmt.Errorf("%s left unwritten", wikiCount(summary.Failed, "topic was", "topics were"))
-	}
-	r.say("Articles: %s written, %s unchanged.", wikiCount(summary.Written, "topic", "topics"), wikiCount(summary.Unchanged, "topic", "topics"))
 	return nil
 }
 
@@ -1736,8 +1698,8 @@ func describeWikiMaintainSummary(s wikiMaintainSummary) string {
 	if r.Anchors != nil {
 		fmt.Fprintf(&b, "\n- anchors: %d entries re-verified, %d changed, %d missing", r.Anchors.Entries, r.Anchors.Changed, r.Anchors.Missing)
 	}
-	if r.Articles != nil {
-		fmt.Fprintf(&b, "\n- articles: %d topics written, %d unchanged, %d failed", r.Articles.Written, r.Articles.Unchanged, r.Articles.Failed)
+	if d := r.Docs; d != nil {
+		b.WriteString(describeWikiMaintainDocs(d))
 	}
 	fmt.Fprintf(&b, "\n- tokens: %d in, %d out, over %d model calls to %s; %d seconds", r.Tokens.Input, r.Tokens.Output, r.Tokens.Calls,
 		firstNonEmpty(s.Model, "the local model"), r.Seconds)

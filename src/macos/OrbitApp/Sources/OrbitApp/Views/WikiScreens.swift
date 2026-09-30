@@ -17,13 +17,21 @@ struct WikiHomeView: View {
         if let wiki = model.wiki {
             TimelineView(.periodic(from: .now, by: 60)) { context in
                 if let home = wiki.home {
-                    WikiHomePage(content: home, now: context.date, actions: actions(wiki))
+                    WikiHomePage(content: home, now: context.date, actions: actions(wiki),
+                                 planBanner: planBanner(wiki, now: context.date))
                 } else {
                     WikiHomePlaceholder(wiki: wiki)
                 }
             }
-            .task { await wiki.loadHome() }
-            .refreshable { await wiki.loadHome() }
+            .task {
+                await wiki.loadHome()
+                await wiki.loadPlan()
+                await wiki.loadDocsDirectory()
+            }
+            .refreshable {
+                await wiki.loadHome()
+                await wiki.loadPlan()
+            }
             .sheet(isPresented: $contentsShown) {
                 WikiContentsScreen(at: .home) { pick in go(pick) }
             }
@@ -38,8 +46,19 @@ struct WikiHomeView: View {
         case .home:                         break
         case .browse:                       open(.wikiBrowse)
         case .index:                        open(.wikiIndex)
+        case .plan:                         open(.wikiPlan(version: nil))
         case .article(let topic, let part): open(.wikiArticle(topic: topic, part: part))
+        case .doc(let slug, let section):   open(.wikiDoc(slug: slug, section: section))
         }
+    }
+
+    /// The plan's banner, the phone's second (owner's call 2026-09-29): what the plan has to say, if anything.
+    private func planBanner(_ wiki: WikiModel, now: Date) -> WikiPlanLogic.Banner? {
+        guard let plan = wiki.plan else { return nil }
+        let online = model.wikiMaintenanceRunnerOnline
+        guard let look = WikiPlanLogic.look(plan, runnerOnline: online) else { return nil }
+        let written = wiki.docsDirectory.flatMap { directory in directory.plan != nil ? directory.docs.map { (written: $0.written, total: $0.total) } : nil }
+        return WikiPlanLogic.banner(look, state: plan, now: now, docs: written, runnerOnline: online)
     }
 
     private func actions(_ wiki: WikiModel) -> WikiHomeActions {
@@ -54,7 +73,8 @@ struct WikiHomeView: View {
             openSettings: { open(.wikiSettings) },
             openRun: { id in open(.wikiRun(changesetID: id)) },
             openContents: { contentsShown = true },
-            openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) })
+            openSession: { id in model.openFromConversation(.session(PublicID.toPublic(id)), overConsole: false) },
+            openPlan: { to in open(to == .settings ? .wikiSettings : .wikiPlan(version: nil)) })
     }
 
     /// A phone pushes the page; the three-column shells put it in the detail pane beside the list.
@@ -108,6 +128,10 @@ struct WikiDetailPane: View {
             WikiBrowseScreen()
         } else if model.nav.wikiIndexOnTop {
             WikiIndexScreen()
+        } else if let doc = model.nav.selectedWikiDoc {
+            WikiDocScreen(address: doc).id(doc)
+        } else if let plan = model.nav.selectedWikiPlan {
+            WikiPlanScreen(address: plan).id(plan)
         } else {
             ContentUnavailableView(WikiCopy.title, systemImage: AppSection.wiki.systemImage,
                                    description: Text("Pick an entry, or open Review."))
@@ -125,21 +149,33 @@ struct WikiContentsScreen: View {
 
     var body: some View {
         if let wiki = model.wiki {
-            WikiContentsSheet(groups: wiki.directory.map(WikiArticleLogic.directoryGroups) ?? [], at: at, pick: pick)
-                .task { await wiki.loadDirectory() }
+            // A space with a confirmed plan reads by its documents; before one, by its topic articles.
+            let docGroups = WikiDocLogic.readsByDocs(wiki.docsDirectory) ? wiki.docsDirectory.map(WikiDocLogic.directoryGroups) ?? [] : []
+            WikiContentsSheet(groups: docGroups.isEmpty ? wiki.directory.map(WikiArticleLogic.directoryGroups) ?? [] : [], at: at,
+                              docGroups: docGroups,
+                              planPending: wiki.plan.map { WikiPlanLogic.pending($0, runnerOnline: model.wikiMaintenanceRunnerOnline) } ?? 0,
+                              pick: pick)
+                .task {
+                    await wiki.loadDocsDirectory()
+                    await wiki.loadDirectory()
+                    await wiki.loadPlan()
+                }
         } else {
             ProgressView()
         }
     }
 }
 
-/// The article pages push what they open onto the section's stack; Contents' Home goes back to the root.
-@MainActor private func wikiGo(_ model: AppModel, _ pick: WikiContentsPick) {
+/// The article and document pages push what they open onto the section's stack; Contents' Home goes back
+/// to the root.
+@MainActor func wikiGo(_ model: AppModel, _ pick: WikiContentsPick) {
     switch pick {
     case .home:                         model.nav.popToRoot()
     case .browse:                       model.push(.wikiBrowse)
     case .index:                        model.push(.wikiIndex)
+    case .plan:                         model.push(.wikiPlan(version: nil))
     case .article(let topic, let part): model.push(.wikiArticle(topic: topic, part: part))
+    case .doc(let slug, let section):   model.push(.wikiDoc(slug: slug, section: section))
     }
 }
 
@@ -260,15 +296,30 @@ struct WikiBrowseScreen: View {
 
     var body: some View {
         if let wiki = model.wiki {
-            WikiBrowsePage(categories: wiki.directory.map(WikiArticleLogic.browseCategories) ?? [],
-                           actions: WikiArticleActions(
-                               openArticle: { topic, part in model.push(.wikiArticle(topic: topic, part: part)) },
-                               openContents: { contentsShown = true }))
-                .task { await wiki.loadDirectory() }
-                .refreshable { await wiki.loadDirectory() }
-                .sheet(isPresented: $contentsShown) {
-                    WikiContentsScreen(at: .browse) { pick in wikiGo(model, pick) }
+            Group {
+                if let directory = wiki.docsDirectory, WikiDocLogic.readsByDocs(directory) {
+                    WikiDocsBrowsePage(directory: directory,
+                                       actions: WikiDocActions(openDoc: { slug in model.push(.wikiDoc(slug: slug, section: nil)) },
+                                                               openContents: { contentsShown = true }),
+                                       openSection: { slug, key in model.push(.wikiDoc(slug: slug, section: key)) })
+                } else {
+                    WikiBrowsePage(categories: wiki.directory.map(WikiArticleLogic.browseCategories) ?? [],
+                                   actions: WikiArticleActions(
+                                       openArticle: { topic, part in model.push(.wikiArticle(topic: topic, part: part)) },
+                                       openContents: { contentsShown = true }))
                 }
+            }
+            .task {
+                await wiki.loadDocsDirectory()
+                await wiki.loadDirectory()
+            }
+            .refreshable {
+                await wiki.loadDocsDirectory()
+                await wiki.loadDirectory()
+            }
+            .sheet(isPresented: $contentsShown) {
+                WikiContentsScreen(at: .browse) { pick in wikiGo(model, pick) }
+            }
         } else {
             ProgressView()
         }
@@ -282,16 +333,31 @@ struct WikiIndexScreen: View {
 
     var body: some View {
         if let wiki = model.wiki {
-            let items = wiki.articleIndex?.items ?? []
-            WikiIndexPage(groups: WikiArticleLogic.indexGroups(items), count: items.count,
-                          actions: WikiArticleActions(
-                              openArticle: { topic, part in model.push(.wikiArticle(topic: topic, part: part)) },
-                              openContents: { contentsShown = true }))
-                .task { await wiki.loadArticleIndex() }
-                .refreshable { await wiki.loadArticleIndex() }
-                .sheet(isPresented: $contentsShown) {
-                    WikiContentsScreen(at: .index) { pick in wikiGo(model, pick) }
+            Group {
+                if let index = wiki.docIndex, index.plan != nil {
+                    WikiDocsIndexPage(items: index.items,
+                                      actions: WikiDocActions(openDoc: { slug in model.push(.wikiDoc(slug: slug, section: nil)) },
+                                                              openContents: { contentsShown = true }),
+                                      openSection: { slug, key in model.push(.wikiDoc(slug: slug, section: key)) })
+                } else {
+                    let items = wiki.articleIndex?.items ?? []
+                    WikiIndexPage(groups: WikiArticleLogic.indexGroups(items), count: items.count,
+                                  actions: WikiArticleActions(
+                                      openArticle: { topic, part in model.push(.wikiArticle(topic: topic, part: part)) },
+                                      openContents: { contentsShown = true }))
                 }
+            }
+            .task {
+                await wiki.loadDocIndex()
+                await wiki.loadArticleIndex()
+            }
+            .refreshable {
+                await wiki.loadDocIndex()
+                await wiki.loadArticleIndex()
+            }
+            .sheet(isPresented: $contentsShown) {
+                WikiContentsScreen(at: .index) { pick in wikiGo(model, pick) }
+            }
         } else {
             ProgressView()
         }

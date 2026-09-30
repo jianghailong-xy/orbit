@@ -1,3 +1,4 @@
+import { SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryReady, type MergeRecoveryAction } from '@orbit/shared';
 import {
   BadRequestException,
   ConflictException,
@@ -555,6 +556,43 @@ interface ResolvedProviderSwitch {
  * and one of them silently discards a real failure. Still a 409 with the same text on the wire.
  */
 export class SessionNotSendable extends ConflictException {}
+
+/**
+ * The account Automatic starts a session moved onto the built-in `engine` on (accountOnProviderSwitch):
+ * automaticAccount, when its workspace leaves the account to Orbit. Null leaves the session's own
+ * column as it was.
+ *
+ * A session that has already said something has a conversation to take along, so only a runner that
+ * carries one to another account is handed a new one (the capability switchAccount asks for too);
+ * an older runner resumes it where it was, as before.
+ */
+function automaticAccountOnSwitch(
+  session: {
+    numTurns: number;
+    workspace: { env: unknown; codexAccount: string | null; claudeAccount: string | null } | null;
+    assignedRunner: { engines: unknown; planUsage: unknown; capabilities: string[] } | null;
+  },
+  engine: AccountEngine,
+  now: Date,
+): string | null {
+  const runner = session.assignedRunner;
+  if (!runner) return null;
+  if (session.numTurns > 0 && !runnerCarriesAccounts(runner, engine)) return null;
+  return automaticAccount(engine, session.workspace, runner.engines, runner.planUsage, now);
+}
+
+/** Whether `runner` carries a conversation from one of its `engine` accounts to another. */
+function runnerCarriesAccounts(runner: { capabilities: string[] }, engine: AccountEngine): boolean {
+  return runner.capabilities.includes(engine === AgentProvider.CODEX ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1);
+}
+
+/** The account columns a provider switch writes (accountOnProviderSwitch); empty writes none. */
+interface AccountSwitchWrite {
+  codexAccount?: string;
+  codexAccountPinned?: boolean;
+  claudeAccount?: string;
+  claudeAccountPinned?: boolean;
+}
 
 @Injectable()
 export class SessionsService {
@@ -3010,7 +3048,7 @@ export class SessionsService {
       include: {
         workspace: true,
         assignedRunner: {
-          select: { id: true, name: true, status: true, lastHeartbeatAt: true },
+          select: { id: true, name: true, status: true, lastHeartbeatAt: true, capabilities: true },
         },
         tagLinks: {
           include: {
@@ -3076,6 +3114,7 @@ export class SessionsService {
       .sort((a, b) => Number(b.isSystem) - Number(a.isSystem) || a.position - b.position);
     return withSessionCapabilities({
       ...rest,
+      mergeRecoverySupported: session.assignedRunner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1) ?? false,
       tags,
       // Both shapes of the same fact, because the two faces of the API have always differed here:
       // the row's `runningBgJobs`/`runningBgShells` arrays ride along in the spread above, and a
@@ -5355,8 +5394,11 @@ export class SessionsService {
     id: string,
     targetBranch?: string,
     waitSeconds?: number,
-    options: { rememberTarget?: boolean } = {},
+    options: { rememberTarget?: boolean; recoveryAction?: MergeRecoveryAction; previewId?: string } = {},
   ) {
+    if (options.recoveryAction && !['preview', 'apply', 'sync-local'].includes(options.recoveryAction)) {
+      throw new BadRequestException('invalid merge recovery action');
+    }
     const wait = SessionsService.mergeWaitSeconds(waitSeconds);
     const target = targetBranch?.trim() || null;
     // The operation this call is about, for a caller that asked to wait on it. Assigned inside the
@@ -5401,6 +5443,29 @@ export class SessionsService {
       ) {
         throw new ConflictException('wait for the current turn to finish before merging');
       }
+      if (options.recoveryAction) {
+        const runner = await tx.runner.findUnique({
+          where: { id: session.assignedRunnerId }, select: { capabilities: true },
+        });
+        if (!runner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1)) {
+          throw new ConflictException('upgrade this runner to check and repair target branches');
+        }
+        const recovery = readMergeRecovery(session.mergeRecovery);
+        if (options.recoveryAction !== 'preview') {
+          if (!recovery || !options.previewId || recovery.previewId !== options.previewId ||
+              (target && recovery.targetBranch !== target)) {
+            throw new ConflictException('the recovery preview is no longer current; check again');
+          }
+          const retry = session.mergeRecoveryAction === 'apply' &&
+            ['PUSH_FAILED', 'REMOTE_NOT_VERIFIED'].includes(recovery.code);
+          if (options.recoveryAction === 'apply' && !mergeRecoveryReady(recovery) && !retry) {
+            throw new ConflictException('review a ready candidate before applying it');
+          }
+          if (options.recoveryAction === 'sync-local' && recovery.code !== 'LOCAL_SYNC_PENDING') {
+            throw new ConflictException('no landed candidate is waiting for local sync');
+          }
+        }
+      }
       // `[K6]` §7, the dispatch gate: everything that can be decided before a repository is
       // touched. Two questions, and the ORDER is the point.
       //
@@ -5423,8 +5488,8 @@ export class SessionsService {
         taskId: session.taskId,
         targetBranch: target ?? session.mergeTarget ?? '',
       });
-      if (gate.decision === 'ALREADY_LANDED') return { alreadyLanded: gate };
-      if (gate.decision !== 'ALLOWED') {
+      if (gate.decision === 'ALREADY_LANDED' && !options.recoveryAction) return { alreadyLanded: gate };
+      if (gate.decision !== 'ALLOWED' && gate.decision !== 'ALREADY_LANDED' && options.recoveryAction !== 'sync-local') {
         throw new ConflictException(`${gate.decision}: ${gate.detail}`);
       }
 
@@ -5433,7 +5498,9 @@ export class SessionsService {
         where: { id },
         data: {
           mergeStatus: 'pending',
-          mergeTarget: target,
+          mergeTarget: target ?? (options.recoveryAction ? readMergeRecovery(session.mergeRecovery)?.targetBranch ?? null : null),
+          mergeRecoveryAction: options.recoveryAction ?? null,
+          ...(!options.recoveryAction ? { mergeRecovery: Prisma.DbNull } : {}),
           mergeRequestedAt: new Date(),
           mergeOperationId: operationId,
           // `[K6]` §7: which checkpoint THIS operation was authorised for, persisted with the
@@ -5441,12 +5508,14 @@ export class SessionsService {
           // commit against this rather than against anything the runner sent — a gate that only
           // holds when the client cooperates is not a gate. Null for unmanaged work, which is
           // almost every merge, and which is then unaffected by all of this.
-          mergeCheckpointId: gate.checkpointId,
+          mergeCheckpointId: options.recoveryAction === 'apply' || options.recoveryAction === 'sync-local' || gate.decision !== 'ALLOWED' ? session.mergeCheckpointId : gate.checkpointId,
           mergeOperationOwner: null,
           mergeError: null,
-          mergedAt: null,
-          mergedSourceSha: null,
-          branchMerged: null,
+          ...(!['preview', 'sync-local'].includes(options.recoveryAction ?? '') ? {
+            mergedAt: null,
+            mergedSourceSha: null,
+            branchMerged: null,
+          } : {}),
         },
       });
       return session.workspaceId;
@@ -6843,6 +6912,10 @@ export class SessionsService {
       // the environment from it, which is also why a model the new provider doesn't serve is
       // simply cleared — claim re-resolves an unset model against the provider it is claiming for.
       const next = await this.resolveProviderSwitch(tx, current, dto.provider);
+      // …and onto one of the runner's accounts when it moves onto the built-in Codex or Claude engine,
+      // as a live switch does (updateConfig). The claim that picks the revive up carries the
+      // conversation there.
+      const accounts = await this.accountOnProviderSwitch(tx, id, next, dto.account);
       const normalizedEffort =
         dto.effort !== undefined
           ? normalizeEffortForProvider(
@@ -6901,6 +6974,7 @@ export class SessionsService {
           ...(next.changed
             ? { provider: next.provider, providerBuiltin: next.providerBuiltin }
             : {}),
+          ...accounts,
           ...(opts?.batch !== undefined
             ? {
                 batchId: opts.batch?.id ?? null,
@@ -7077,6 +7151,84 @@ export class SessionsService {
    * Caller holds the Session row lock — both call sites (updateConfig, resume) decide and persist
    * under it, so a concurrent switch cannot interleave with a model write.
    */
+  /**
+   * Which of its runner's accounts a session moving onto the built-in Codex or Claude engine runs on
+   * there — the live switch (updateConfig) and the revive (resume) alike. The Provider menu lists each
+   * engine's accounts under it, as the New Session picker does, so a switch can name one:
+   *
+   * - `automatic`: the account Automatic picks, unpinned — where the workspace leaves it to Orbit.
+   * - an account id: that one, pinned, as picking it in the menu of a session already there does
+   *   (switchAccount) — refused when the runner does not report it, it is signed out, or the runner
+   *   cannot carry the conversation there.
+   * - omitted: Automatic's pick, unless the session is pinned to one of that engine's accounts. Left
+   *   to follow its workspace instead, a session moved off an API key onto Claude ran on Default
+   *   whatever Default had left — straight into a spent weekly window while two accounts had room.
+   *
+   * The columns to write; empty when the switch lands on no such engine, or nothing moves.
+   */
+  private async accountOnProviderSwitch(
+    tx: Prisma.TransactionClient,
+    id: string,
+    next: ResolvedProviderSwitch,
+    account: string | undefined,
+  ): Promise<AccountSwitchWrite> {
+    const engine: AccountEngine | null =
+      next.changed &&
+      next.providerBuiltin &&
+      (next.provider === AgentProvider.CODEX || next.provider === AgentProvider.CLAUDE)
+        ? next.provider
+        : null;
+    if (account !== undefined && !engine) {
+      throw new BadRequestException(
+        "an account goes with a switch onto the built-in Codex or Claude engine — a session already there moves with PATCH /sessions/:id/account",
+      );
+    }
+    if (!engine) return {};
+    if (account !== undefined && account !== AUTOMATIC_ACCOUNT && !ACCOUNT_ID_PATTERN.test(account)) {
+      throw new BadRequestException('account must be "automatic", "default" or the id of one of the runner\'s accounts');
+    }
+    const session = await tx.session.findUniqueOrThrow({
+      where: { id },
+      select: {
+        numTurns: true,
+        codexAccountPinned: true,
+        claudeAccountPinned: true,
+        workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
+        assignedRunner: { select: { engines: true, planUsage: true, capabilities: true } },
+      },
+    });
+    const write = (to: string, pinned: boolean): AccountSwitchWrite =>
+      engine === AgentProvider.CODEX
+        ? { codexAccount: to, codexAccountPinned: pinned }
+        : { claudeAccount: to, claudeAccountPinned: pinned };
+    const runner = session.assignedRunner;
+    if (account === undefined || account === AUTOMATIC_ACCOUNT) {
+      if (account === AUTOMATIC_ACCOUNT && !workspaceLeavesAccountToOrbit(engine, session.workspace, runner?.engines)) {
+        throw new BadRequestException("this session's workspace decides its account");
+      }
+      const pinned = engine === AgentProvider.CODEX ? session.codexAccountPinned : session.claudeAccountPinned;
+      if (account === undefined && pinned) return {};
+      const to = automaticAccountOnSwitch(session, engine, new Date());
+      if (to) return write(to, false);
+      // Asked for by name, Automatic unpins even when it has nowhere to move the session yet.
+      if (account === AUTOMATIC_ACCOUNT) {
+        return engine === AgentProvider.CODEX ? { codexAccountPinned: false } : { claudeAccountPinned: false };
+      }
+      return {};
+    }
+    const row = sanitizeRunnerEngines(runner?.engines)
+      ?.find((entry) => entry.engine === engine)
+      ?.accounts?.find((entry) => entry.id === account);
+    if (!runner || !row) throw new BadRequestException("that account is not one this session's runner reports");
+    if (row.auth === 'no') throw new ConflictException("that account is signed out on this session's runner");
+    if (session.numTurns > 0 && !runnerCarriesAccounts(runner, engine)) {
+      throw new ConflictException(
+        "this session's runner cannot move a conversation to another account yet — it updates itself when no turn is running",
+      );
+    }
+    return write(account, true);
+  }
+
   private async resolveProviderSwitch(
     tx: Prisma.TransactionClient,
     session: {
@@ -7188,7 +7340,8 @@ export class SessionsService {
       dto.permissionMode === undefined &&
       dto.effort === undefined &&
       dto.fastMode === undefined &&
-      dto.provider === undefined
+      dto.provider === undefined &&
+      dto.account === undefined
     ) {
       throw new BadRequestException('nothing to update');
     }
@@ -7219,6 +7372,7 @@ export class SessionsService {
         throw new ConflictException('the session has ended');
       }
       const next = await this.resolveProviderSwitch(tx, session, dto.provider);
+      const accounts = await this.accountOnProviderSwitch(tx, id, next, dto.account);
       const exec = resolveProviderExec({
         declaredProvider: next.provider,
         declaredProviderBuiltin: next.providerBuiltin,
@@ -7229,8 +7383,8 @@ export class SessionsService {
         workspaceModel: session.workspace?.model,
         modelCatalog: session.assignedRunner?.modelCatalog,
         workspaceEnv: session.workspace?.env as Record<string, string> | null,
-        codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
-        claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
+        codexAccount: accounts.codexAccount ?? session.codexAccount ?? session.workspace?.codexAccount,
+        claudeAccount: accounts.claudeAccount ?? session.claudeAccount ?? session.workspace?.claudeAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
       const requestedPermissionMode =
@@ -7291,6 +7445,7 @@ export class SessionsService {
           ...(next.changed
             ? { provider: next.provider, providerBuiltin: next.providerBuiltin }
             : {}),
+          ...accounts,
         },
       });
 

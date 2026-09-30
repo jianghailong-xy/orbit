@@ -7,6 +7,8 @@ import {
   wikiMaintenanceSettings,
   type NormalizedRunEvent,
   type WikiMaintenanceSettings,
+  type WikiPlanBuildProgress,
+  type WikiPlanBuildReport,
   type WikiPlanDraftInput,
   type WikiPlanGateError,
   type WikiPlanJob,
@@ -28,18 +30,24 @@ import { spaceScope } from './wiki-maintenance';
 import { ensureWikiMaintenanceList, wikiMaintenanceProviderProblem } from './wiki-maintenance-settings';
 
 /**
- * The plan's jobs (criterion 11; contracts/wiki.contract.json `plan.jobs`, migration 0338): a draft, a
- * revision or — for the task that writes the documents — a build of a space's plan, each run as a task of
- * the space's hidden «Wiki maintenance» list, so its session is a maintenance session
- * (`isWikiMaintenanceSession`) and the plan's runner door, which only such a session may use, is open to it.
+ * The plan's jobs (criterion 11; contracts/wiki.contract.json `plan.jobs`, migrations 0338 and 0340): a
+ * draft, a revision or a build of a space's plan — the last writing the documents of a version its owner
+ * confirmed — each run as a task of the space's hidden «Wiki maintenance» list, so its session is a
+ * maintenance session (`isWikiMaintenanceSession`) and the plan's runner door, which only such a session
+ * may use, is open to it.
  *
  * A FACT ASKS FOR A JOB, NEVER A CLOCK (hard constraint 5): the space was created (`space_created`), or its
- * owner asked on the plan page (`owner`, POST /api/wiki/spaces/:id/plan/redraft). What moves a job on is a
- * fact too — its request, a change to the space's maintenance settings, a task of the owner's that
- * changed — and nothing is waited for.
+ * owner asked on the plan page (`owner`) — for a draft (POST /api/wiki/spaces/:id/plan/redraft), or, by
+ * confirming a version (POST …/plan/versions/:version/confirm), for the build of its documents. What moves
+ * a job on is a fact too — its request, a change to the space's maintenance settings, a task of the
+ * owner's that changed — and nothing is waited for.
  *
- * ONE DRAFT AT A TIME. A space has at most one draft or revision that has not ended (a partial unique
- * index): a second request is answered with the first. And the job shares the maintenance list with the
+ * ONE DRAFT AT A TIME, ONE BUILD WAITING. A space has at most one draft or revision that has not ended, and
+ * at most one build that waits to be made (two partial unique indexes): a second request is answered with
+ * the first, and a second confirmation points the waiting build at the newer version. A build already made
+ * does not stand in the way: it writes the version it was made for, and the waiting one the next — a
+ * section whose material did not change is left as it is, so after a small edit only what changed is
+ * written again. And the job shares the maintenance list with the
  * maintenance runs, one task of it at a time: a job whose list has a task that has not ended waits
  * (`queued`) and is made when a task of the owner's ends — the maintenance trigger, for its part, makes no
  * task while the list has one, so the local model is never asked by both at once. A job is not a
@@ -52,9 +60,10 @@ import { ensureWikiMaintenanceList, wikiMaintenanceProviderProblem } from './wik
  * The list itself is made for it if the space has none yet: a job does not need maintenance turned on.
  *
  * JUDGED BY WHAT IT DID. The task's one criterion is EXECUTABLE — `orbit wiki plan check --space <id>
- * --job <id>`, which passes only when the run reported a draft the gate let through — and the run reports
- * how it ended (POST …/plan/job/finish). A task that ended before its run said anything leaves its job
- * failed, with why.
+ * --job <id>`, which passes only when the run reported a draft the gate let through, or, for a build, the
+ * documents of a confirmed version written with no section left unwritten — and the run reports how it
+ * ended (POST …/plan/job/finish). A task that ended before its run said anything leaves its job failed,
+ * with why.
  *
  * The functions here take the Prisma client and inject nothing, so the space's creation (WikiService),
  * its settings, and the plan's doors can each call them without a service between them.
@@ -65,6 +74,7 @@ import { ensureWikiMaintenanceList, wikiMaintenanceProviderProblem } from './wik
 type Db = PrismaService;
 
 const OPEN_STATES = ['queued', 'held', 'made'] as const;
+const WAITING_STATES = ['queued', 'held'] as const;
 const DRAFT_KINDS = ['draft', 'revise'] as const;
 const UNFINISHED_TASK = ['OPEN', 'IN_PROGRESS'] as const;
 
@@ -90,6 +100,7 @@ const JOB_SELECT = {
   error: true,
   report: true,
   draft: true,
+  progress: true,
   createdAt: true,
 } satisfies Prisma.WikiPlanJobSelect;
 
@@ -110,6 +121,14 @@ async function openDraftJob(prisma: Db, ownerId: string, spaceId: string): Promi
   });
 }
 
+/** The space's build that waits to be made, queued or held, if it has one. */
+async function waitingBuildJob(prisma: Db, ownerId: string, spaceId: string): Promise<WikiPlanJobRow | null> {
+  return prisma.wikiPlanJob.findFirst({
+    where: { ownerId, spaceId, kind: 'build', state: { in: [...WAITING_STATES] } },
+    select: JOB_SELECT,
+  });
+}
+
 // ── Asking for a job ────────────────────────────────────────────────────────────────────────────
 
 export interface WikiPlanJobAsk {
@@ -119,6 +138,14 @@ export interface WikiPlanJobAsk {
   /** A revision's: the owner's words. */
   instructions: string | null;
   trigger: WikiPlanJobTrigger;
+  requestedByUserId: string | null;
+}
+
+/** A build's request: the confirmed version whose documents are written. */
+export interface WikiPlanBuildAsk {
+  ownerId: string;
+  spaceId: string;
+  version: number;
   requestedByUserId: string | null;
 }
 
@@ -167,6 +194,56 @@ export async function requestWikiPlanJob(prisma: Db, ask: WikiPlanJobAsk, now: D
 }
 
 /**
+ * Ask for the build of a confirmed version's documents (contract `plan.jobs.request`, kind build): what the
+ * owner's confirmation asks for. The space's build that waits already answers it, pointed at this version
+ * when it is the newer one, and is asked again whether it may be made now; otherwise a build is recorded
+ * and asked at once. A made build whose task already ended — or is gone — without its run saying how is
+ * ended first, as a draft's is, so that its row does not read as running for ever. A build already made
+ * and running is left to write the version it was made for: this one waits behind its task.
+ */
+export async function requestWikiPlanBuild(prisma: Db, ask: WikiPlanBuildAsk, now: Date = new Date()): Promise<WikiPlanJobAnswer> {
+  const made = await prisma.wikiPlanJob.findMany({
+    where: { ownerId: ask.ownerId, spaceId: ask.spaceId, kind: 'build', state: 'made' },
+    select: { id: true, taskId: true },
+  });
+  for (const job of made) await endJobWhoseTaskIsOver(prisma, job, now);
+  const waiting = await waitingBuildJob(prisma, ask.ownerId, ask.spaceId);
+  if (waiting) {
+    if ((waiting.version ?? 0) < ask.version) {
+      await prisma.wikiPlanJob.updateMany({ where: { id: waiting.id, state: { in: [...WAITING_STATES] } }, data: { version: ask.version } });
+    }
+    return { created: false, jobId: waiting.id, madeTaskId: await advanceWikiPlanJob(prisma, ask.ownerId, waiting.id, now) };
+  }
+  let jobId: string;
+  try {
+    const created = await prisma.wikiPlanJob.create({
+      data: {
+        spaceId: ask.spaceId,
+        ownerId: ask.ownerId,
+        kind: 'build',
+        trigger: 'owner',
+        instructions: null,
+        state: 'queued',
+        version: ask.version,
+        requestedByUserId: ask.requestedByUserId,
+      },
+      select: { id: true },
+    });
+    jobId = created.id;
+  } catch (error) {
+    // Two confirmations at the same moment: the partial unique index kept one waiting build, and it answers both.
+    if ((error as { code?: string }).code !== 'P2002') throw error;
+    const other = await waitingBuildJob(prisma, ask.ownerId, ask.spaceId);
+    if (!other) throw error;
+    if ((other.version ?? 0) < ask.version) {
+      await prisma.wikiPlanJob.updateMany({ where: { id: other.id, state: { in: [...WAITING_STATES] } }, data: { version: ask.version } });
+    }
+    return { created: false, jobId: other.id, madeTaskId: null };
+  }
+  return { created: true, jobId, madeTaskId: await advanceWikiPlanJob(prisma, ask.ownerId, jobId, now) };
+}
+
+/**
  * Ask a queued or held job whether it may be made now, and make it when it may: its task in the list,
  * or why not on its row. Answers the task it made, or null.
  */
@@ -189,20 +266,27 @@ export async function advanceWikiPlanJob(prisma: Db, ownerId: string, jobId: str
   }
   const listId = settings.listId ?? (await ensureWikiMaintenanceList(prisma, ownerId, space.id));
   if (!listId) return null;
+  const build = job.kind === 'build';
   const made = await new PlanJobTaskWriter(prisma).make({
     ownerId,
     jobId: job.id,
     listId,
     now,
     task: {
-      title: `${job.kind === 'revise' ? 'Wiki plan redraft' : 'Wiki plan draft'}: ${space.title}`,
-      description: planJobPrompt({
-        kind: job.kind as 'draft' | 'revise',
-        spaceRef: uuidToBase62(space.id),
-        title: space.title,
-        trigger: job.trigger as WikiPlanJobTrigger,
-        instructions: job.instructions,
-      }),
+      title: `${build ? 'Wiki documents' : job.kind === 'revise' ? 'Wiki plan redraft' : 'Wiki plan draft'}: ${space.title}`,
+      description: build
+        ? buildJobPrompt({ spaceRef: uuidToBase62(space.id), title: space.title, version: job.version ?? 0 })
+        : planJobPrompt({
+          kind: job.kind as 'draft' | 'revise',
+          spaceRef: uuidToBase62(space.id),
+          title: space.title,
+          trigger: job.trigger as WikiPlanJobTrigger,
+          instructions: job.instructions,
+        }),
+      acceptanceCriteria: build
+        ? 'The run wrote the documents of the confirmed plan version it was made for, and left no section of them unwritten '
+          + '(`orbit wiki plan check` exits 0).'
+        : "The run stored a draft of the space's plan that passed the plan's gate (`orbit wiki plan check` exits 0).",
       acceptanceCommand: wikiPlanCheckCommand(uuidToBase62(space.id), uuidToBase62(job.id)),
       workspaceId: workspace.id,
       provider: settings.provider,
@@ -253,7 +337,7 @@ class PlanJobTaskWriter {
     jobId: string;
     listId: string;
     now: Date;
-    task: { title: string; description: string; acceptanceCommand: string; workspaceId: string; provider: string };
+    task: { title: string; description: string; acceptanceCriteria: string; acceptanceCommand: string; workspaceId: string; provider: string };
   }): Promise<{ taskId: string } | { why: 'no_list' | 'moved' | 'unfinished' }> {
     const { ownerId, jobId, listId, now } = input;
     return withTransactionRetry(
@@ -281,8 +365,7 @@ class PlanJobTaskWriter {
             provider: input.task.provider,
             runAt: now,
             dispatchHold: list.paused,
-            acceptanceCriteria:
-              "The run stored a draft of the space's plan that passed the plan's gate (`orbit wiki plan check` exits 0).",
+            acceptanceCriteria: input.task.acceptanceCriteria,
             acceptanceCommand: input.task.acceptanceCommand,
             acceptanceExpectedExitCode: 0,
             acceptanceTimeoutSeconds: WIKI_PLAN_JOB_RULES.checkTimeoutSeconds,
@@ -338,6 +421,26 @@ function planJobPrompt(input: {
     lines.push('', "The owner's instructions, as they were given:", '', ...input.instructions.split('\n').map((line) => `> ${line}`));
   }
   return lines.join('\n');
+}
+
+/** What a build job's session reads as its task. */
+function buildJobPrompt(input: { spaceRef: string; title: string; version: number }): string {
+  return [
+    `A Wiki documents build of the space «${input.title}» (${input.spaceRef}): its owner confirmed version ${input.version} of the `
+      + "space's plan, and its documents are written from it.",
+    '',
+    'Run this once, with the Bash tool, and let it finish — it takes a while, and it prints what it did:',
+    '',
+    `    orbit wiki docs build --space ${input.spaceRef}`,
+    '',
+    'It writes every document of the confirmed plan section by section with the local model — the material each section '
+      + 'names gathered from origin/main and from what the space knows, every footnote with its verbatim quote — and leaves a '
+      + 'section whose material did not change since it was written as it is, so after a small change only what changed is '
+      + 'written again.',
+    'Then report it: task_progress_report with where the run ended, and one task_comment with the summary it printed — the '
+      + 'documents and sections written, unchanged and failed, the token spend and the time; if it failed, its last lines. '
+      + 'Run nothing else, and do not run it again if it fails.',
+  ].join('\n');
 }
 
 // ── Facts that move a job on ────────────────────────────────────────────────────────────────────
@@ -536,6 +639,7 @@ export async function wikiPlanJobView(prisma: Db, row: WikiPlanJobRow): Promise<
     }
   }
   const task = row.taskId ? await prisma.task.findFirst({ where: { id: row.taskId }, select: { provider: true } }) : null;
+  const build = row.kind === 'build';
   return {
     id: row.id,
     spaceId: row.spaceId,
@@ -554,10 +658,11 @@ export async function wikiPlanJobView(prisma: Db, row: WikiPlanJobRow): Promise<
     endedAt: row.endedAt?.toISOString() ?? null,
     attempt: row.attempt,
     attemptsMax: WIKI_PLAN_JOB_RULES.attemptsMax,
+    progress: build ? ((row.progress as unknown as WikiPlanBuildProgress | null) ?? null) : null,
     version: row.version,
     errors: (row.errors as unknown as WikiPlanGateError[] | null) ?? [],
     error: row.error,
-    report: (row.report as unknown as WikiPlanJobReport | null) ?? null,
+    report: (row.report as unknown as WikiPlanJobReport | WikiPlanBuildReport | null) ?? null,
     draft: row.outcome === 'failed' ? ((row.draft as unknown as WikiPlanDraftInput | null) ?? null) : null,
   };
 }
@@ -721,6 +826,22 @@ export async function progressWikiPlanJob(prisma: Db, jobId: string, sessionId: 
   return moved > 0;
 }
 
+/** How far a build's run has got (contract `plan.jobs.progress`), on its job while it is made. Answers whether it was. */
+export async function progressWikiPlanBuild(
+  prisma: Db,
+  jobId: string,
+  sessionId: string,
+  progress: WikiPlanBuildProgress,
+  now: Date = new Date(),
+): Promise<boolean> {
+  const value = JSON.stringify(progress);
+  const moved = await prisma.$executeRaw`
+    UPDATE "wiki_plan_job"
+       SET "progress" = ${value}::jsonb, "session_id" = ${sessionId}::uuid, "started_at" = coalesce("started_at", ${now}), "updated_at" = now()
+     WHERE "id" = ${jobId}::uuid AND "state" = 'made' AND "kind" = 'build'`;
+  return moved > 0;
+}
+
 /** How a run ended, as it said it, checked by the door before it is kept. */
 export interface WikiPlanJobEnd {
   outcome: WikiPlanJobOutcome;
@@ -734,9 +855,20 @@ export interface WikiPlanJobEnd {
 
 /**
  * The run ended (contract `plan.jobs.finish`): its made job is ended with what it said. Answers whether
- * it was — a job ended already, by its run or by its task, is left as it is.
+ * it was — a job ended already, by its run or by its task, is left as it is. A build keeps the version it
+ * was made for when it failed, and names the one it wrote when it succeeded.
  */
-export async function finishWikiPlanJob(prisma: Db, jobId: string, sessionId: string, end: WikiPlanJobEnd, now: Date = new Date()): Promise<boolean> {
+export async function finishWikiPlanJob(
+  prisma: Db,
+  jobId: string,
+  sessionId: string,
+  end: WikiPlanJobEnd,
+  now: Date = new Date(),
+  kind: WikiPlanJobKind = 'draft',
+): Promise<boolean> {
+  const version = kind === 'build'
+    ? (end.outcome === 'succeeded' && end.version !== null ? { version: end.version } : {})
+    : { version: end.outcome === 'succeeded' ? end.version : null };
   const ended = await prisma.wikiPlanJob.updateMany({
     where: { id: jobId, state: 'made' },
     data: {
@@ -744,7 +876,7 @@ export async function finishWikiPlanJob(prisma: Db, jobId: string, sessionId: st
       outcome: end.outcome,
       endedAt: now,
       sessionId,
-      version: end.outcome === 'succeeded' ? end.version : null,
+      ...version,
       errors: end.errors.length > 0 ? (end.errors as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
       error: end.error,
       report: end.report === null ? Prisma.DbNull : (end.report as Prisma.InputJsonValue),
@@ -780,8 +912,13 @@ export async function wikiPlanJobCheck(
     problems.push(`The run ended failed${job.error ? `: ${job.error}` : ''}${count > 0 ? ` (the gate's last round found ${count} error${count === 1 ? '' : 's'})` : ''}.`);
   } else if (job.version === null) {
     problems.push('The run said it succeeded and named no version it stored.');
-  } else if (!(await prisma.wikiPlan.findFirst({ where: { ownerId, spaceId, version: job.version }, select: { id: true } }))) {
-    problems.push(`The version the run stored, ${job.version}, is not one of the space's.`);
+  } else {
+    const version = await prisma.wikiPlan.findFirst({ where: { ownerId, spaceId, version: job.version }, select: { confirmedAt: true } });
+    if (!version) {
+      problems.push(`The version the run ${job.kind === 'build' ? 'wrote' : 'stored'}, ${job.version}, is not one of the space's.`);
+    } else if (job.kind === 'build' && version.confirmedAt === null) {
+      problems.push(`The version the run wrote, ${job.version}, was never confirmed by the owner: documents are written only from a confirmed plan.`);
+    }
   }
   return {
     kind: job.kind as WikiPlanJobKind,

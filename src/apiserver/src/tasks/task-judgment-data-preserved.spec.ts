@@ -1501,7 +1501,24 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // and every stored task and criterion row are out of its reach. No function, trigger or type is
       // created, replaced or dropped — so it is not another writer of the DONE fence and names none of the
       // six preserved objects. No INSERT, UPDATE or DELETE: nothing is backfilled.
-      '0339_wiki_plan_idempotency'],
+      '0339_wiki_plan_idempotency',
+      // The documents follow what changed (criterion 3 revision 3, criterion 11): one nullable JSONB
+      // column, `progress`, added to `wiki_plan_job` with no default, two CHECKs on it that every stored
+      // row satisfies (no build job is stored before this ships), and one partial unique index; one
+      // nullable TEXT column, `withdrawn_path`, added to `wiki_doc_sentence` with no default, its
+      // withdrawal CHECK dropped and added back widened to admit a path in place of an entry, one CHECK
+      // on the new column, and one partial index on `wiki_doc_footnote`. Read against every claim above:
+      // no `task`, `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair and
+      // every stored task and criterion row are out of its reach. No function, trigger or type is created,
+      // replaced or dropped — the only DROPs are its own CHECKs restated in the same file — so it is not
+      // another writer of the DONE fence and names none of the six preserved objects. No INSERT, UPDATE or
+      // DELETE: nothing is backfilled.
+      '0340_wiki_maintenance_docs',
+      // Two nullable columns with no default on `session`, `merge_recovery` (JSONB) and
+      // `merge_recovery_action` (TEXT). Pure addition: no stored row is backfilled, no column,
+      // constraint, type, trigger or function is dropped or replaced. The preserved task data,
+      // criterion labels, project acceptance objects and DONE writer fence are untouched.
+      '0341_session_merge_recovery'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

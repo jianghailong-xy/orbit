@@ -98,7 +98,7 @@ export function WikiSourceList({ sources }: { sources: readonly WikiSource[] }) 
  * without the other and the view asks the server about nothing, or asks and draws the answer to
  * nobody: either way the card sits at its loading skeleton forever.
  */
-function WikiSourceCard({ kind, id }: { kind: 'task' | 'session'; id: string }) {
+export function WikiSourceCard({ kind, id }: { kind: 'task' | 'session'; id: string }) {
   const cards = useContext(OrbitLinkCardsCtx);
   const link = useMemo(
     () => ({ target: { kind, id: decodeId(id) ?? id }, source: { kind: 'ref' as const, ref: id } }),

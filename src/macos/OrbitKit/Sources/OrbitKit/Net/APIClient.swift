@@ -508,6 +508,15 @@ public final class APIClient: @unchecked Sendable {
         try await get("projects/\(projectID)")
     }
 
+    /// Start the project: the criteria confirmed by the seal the owner read, and the settings on the
+    /// card, in one write (`StartProject.body`). The owner's own credential and no acting session —
+    /// the door refuses one. A seal that moved, or a project already started, is a 409 and nothing
+    /// is written. The answer is not read here: what the start left is drawn from the reads that
+    /// follow it (the receipt, the project), as the browser does.
+    public func startProject(projectID: String, _ body: StartProjectRequestBody) async throws {
+        try await postRaw("projects/\(projectID)/start", body: body)
+    }
+
     // MARK: a project's owner items — the merge to confirm, and the coordinator's question
 
     /// What this project still owes somebody a decision about, split by who is expected to act
@@ -638,13 +647,32 @@ public final class APIClient: @unchecked Sendable {
         try await patch("projects/\(projectID)", body: UpdateProjectStatusRequest(status: status))
     }
 
-    /// Flip the Automatic switch, fenced on the revision the page read — a write racing another
-    /// edit of the project's authorisation set is refused rather than applied over it.
-    public func setProjectAutomatic(_ projectID: String, enabled: Bool,
-                                    expectedConfigRevision: String) async throws -> ProjectDocument {
-        try await patch("projects/\(projectID)",
-                        body: SetProjectAutomaticRequest(coordinatorEnabled: enabled,
-                                                         expectedConfigRevision: expectedConfigRevision))
+    /// How it runs' half of the authorization set — Automatic and the concurrency limit — fenced on
+    /// the revision the page read: a write racing another edit of the set is refused 409
+    /// `STALE_CONFIG_REVISION` rather than applied over it.
+    public func updateProjectAuthorization(_ projectID: String,
+                                           _ body: UpdateProjectAuthorizationRequest) async throws -> ProjectDocument {
+        try await patch("projects/\(projectID)", body: body)
+    }
+
+    /// The line, the merge check and the escalation window (§1.2 L5). A line that started
+    /// integrating is 409 `INTEGRATION_LINE_LOCKED`; the other two change for the life of the
+    /// project.
+    public func updateProjectIntegration(_ projectID: String,
+                                         _ body: UpdateProjectIntegrationRequest) async throws -> ProjectIntegrationView {
+        try await patch("projects/\(projectID)/integration", body: body)
+    }
+
+    /// Pause project: nothing starts its tasks or merges it into main by itself until it is resumed;
+    /// runs already going finish. The owner's own credential and no acting session — the door
+    /// refuses one.
+    public func pauseProject(_ projectID: String) async throws -> ProjectPauseState {
+        try await postEmpty("projects/\(projectID)/pause")
+    }
+
+    /// Resume project: the pause lifted.
+    public func resumeProject(_ projectID: String) async throws -> ProjectPauseState {
+        try await postEmpty("projects/\(projectID)/resume")
     }
 
     /// Remove an EMPTY project; one that still holds tasks is a 409 naming how many.
@@ -941,6 +969,54 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("wiki/changesets/\(id)/revert")
     }
 
+    // MARK: wiki documents and the plan (criteria 9–11) — the user door, JWT only
+
+    /// `GET /wiki/spaces/:id/docs`: the confirmed plan's categories → documents → sections, each saying
+    /// whether it is written yet. `plan` is nil while no plan is confirmed: the Wiki reads by topic then.
+    public func wikiDocs(spaceID: String) async throws -> WikiDocsDirectory {
+        try await get("wiki/spaces/\(spaceID)/docs")
+    }
+    /// `GET /wiki/spaces/:id/docs/:slug`: one document, its sentences' marks and its footnotes resolved.
+    /// A 404 is a document the confirmed plan does not have.
+    public func wikiDoc(spaceID: String, slug: String) async throws -> WikiDoc {
+        try await get("wiki/spaces/\(spaceID)/docs/\(slug)")
+    }
+    /// `GET /wiki/spaces/:id/doc-index`: every document, and every section title no other document shares.
+    public func wikiDocIndex(spaceID: String) async throws -> WikiDocsIndex {
+        try await get("wiki/spaces/\(spaceID)/doc-index")
+    }
+    /// `GET /wiki/spaces/:id/plan`: the version in force, the draft waiting, the proposals and the job.
+    /// The owner's door only: a request with a session header is refused, and this client sends none.
+    public func wikiPlan(spaceID: String) async throws -> WikiPlanState {
+        try await get("wiki/spaces/\(spaceID)/plan")
+    }
+    /// `GET /wiki/spaces/:id/plan/versions`: every version, newest first — the version menu.
+    public func wikiPlanVersions(spaceID: String) async throws -> WikiPlanVersions {
+        try await get("wiki/spaces/\(spaceID)/plan/versions")
+    }
+    /// `GET /wiki/spaces/:id/plan/versions/:version`: one version, whole, whatever its status.
+    public func wikiPlanVersion(spaceID: String, version: Int) async throws -> WikiPlanVersion {
+        try await get("wiki/spaces/\(spaceID)/plan/versions/\(version)")
+    }
+    /// `POST /wiki/spaces/:id/plan/redraft`: ask for a draft — with instructions, a revision of the newest
+    /// version. A draft that has not ended answers a second press.
+    public func redraftWikiPlan(spaceID: String, instructions: String?) async throws -> WikiPlanRedraftResult {
+        try await post("wiki/spaces/\(spaceID)/plan/redraft", body: WikiPlanRedraftRequest(instructions: instructions))
+    }
+    /// `POST /wiki/spaces/:id/plan/versions/:version/confirm`: the owner's confirmation of the draft.
+    public func confirmWikiPlan(spaceID: String, version: Int) async throws -> WikiPlanVersion {
+        try await post("wiki/spaces/\(spaceID)/plan/versions/\(version)/confirm", body: [String: String]())
+    }
+    /// `POST /wiki/spaces/:id/plan/edits`: one document or section as the owner rewrote it, in the draft's
+    /// shape — a new draft, which goes through the gate again (422 `WIKI_PLAN_GATE` with every error).
+    public func editWikiPlan(spaceID: String, _ req: WikiPlanEditRequest) async throws -> WikiPlanVersion {
+        try await post("wiki/spaces/\(spaceID)/plan/edits", body: req)
+    }
+    /// `POST /wiki/plan-proposals/:id/decide`: accept (a new draft, over the newest version) or reject.
+    public func decideWikiPlanProposal(_ id: String, _ req: WikiPlanDecideRequest) async throws -> WikiPlanDecisionResult {
+        try await post("wiki/plan-proposals/\(id)/decide", body: req)
+    }
+
     /// Control-plane–configured model providers (GET /api/providers): enabled only, de-sensitized
     /// (no key/baseUrl). Merged into the composer and agent Runtime picker alongside built-ins.
     public func providers() async throws -> [ConfiguredProvider] { try await get("providers") }
@@ -1165,8 +1241,8 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("sessions/\(sessionID)/commit", body: Optional<Empty>.none)
     }
 
-    public func merge(sessionID: String, targetBranch: String?) async throws {
-        _ = try await postRaw("sessions/\(sessionID)/merge", body: MergeRequest(targetBranch: targetBranch))
+    public func merge(sessionID: String, targetBranch: String?, recoveryAction: String? = nil, previewId: String? = nil) async throws {
+        _ = try await postRaw("sessions/\(sessionID)/merge", body: MergeRequest(targetBranch: targetBranch, recoveryAction: recoveryAction, previewId: previewId))
     }
 
     /// Adopt the worktree's actual HEAD branch (after an in-worktree `git checkout -b`) as the
