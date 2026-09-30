@@ -15,22 +15,54 @@
 export function markdownToPlainText(markdown: string | null | undefined): string {
   if (!markdown) return '';
 
+  // Every run of whitespace — the blank line between two paragraphs included — becomes the one
+  // space that separates them on a single line.
+  return withoutMarks(markdown, false).replace(/\s+/g, ' ').trim();
+}
+
+/** `markdown` as plain text that keeps its lines: the same marks removed, but each paragraph and
+ *  list item stays on a line of its own — a bullet drawn as `•`, an ordered item keeping its
+ *  number — with at most one blank line between them. For a box that shows the whole field rather
+ *  than a snippet of it: a report written as a lead and a list, flattened onto one line, is a
+ *  run-on sentence that has lost the list. Shown with `white-space: pre-wrap`. Returns '' for
+ *  null/undefined/blank input. */
+export function markdownToPlainLines(markdown: string | null | undefined): string {
+  if (!markdown) return '';
+
   return (
-    markdown
-      // Fence lines only. The code between them is text a reader would still recognise — a row
-      // whose goal is mostly a command should show the command, not an empty string.
-      .replace(/^[ \t]*(?:`{3,}|~{3,}).*$/gm, '')
-      // Thematic breaks before the list rule below, which would otherwise read `- - -` as a
-      // bullet; setext underlines before it too, for the `---` spelling they share.
-      .replace(/^[ \t]*(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/gm, '')
-      .replace(/^[ \t]*=+[ \t]*$/gm, '')
-      // ATX headings: the opening run, and the optional closing one that mirrors it.
-      .replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, '')
-      .replace(/[ \t]+#+[ \t]*$/gm, '')
-      // Blockquote markers, however deeply nested (`> > quoted`).
-      .replace(/^[ \t]*(?:>[ \t]?)+/gm, '')
+    withoutMarks(markdown.replace(/\r\n?/g, '\n'), true)
+      // Trailing whitespace goes, and so does a stack of blank lines — most of them the rows a
+      // fence or a thematic break used to take up.
+      .replace(/[ \t]+$/gm, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+  );
+}
+
+/** The marks taken off, line by line, with every line left where it was. `keepLines` is only
+ *  about the list markers: a single line has no use for them, kept lines do. */
+function withoutMarks(markdown: string, keepLines: boolean): string {
+  const blocks = markdown
+    // Fence lines only. The code between them is text a reader would still recognise — a row
+    // whose goal is mostly a command should show the command, not an empty string.
+    .replace(/^[ \t]*(?:`{3,}|~{3,}).*$/gm, '')
+    // Thematic breaks before the list rule below, which would otherwise read `- - -` as a
+    // bullet; setext underlines before it too, for the `---` spelling they share.
+    .replace(/^[ \t]*(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$/gm, '')
+    .replace(/^[ \t]*=+[ \t]*$/gm, '')
+    // ATX headings: the opening run, and the optional closing one that mirrors it.
+    .replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm, '')
+    .replace(/[ \t]+#+[ \t]*$/gm, '')
+    // Blockquote markers, however deeply nested (`> > quoted`).
+    .replace(/^[ \t]*(?:>[ \t]?)+/gm, '');
+
+  return (
+    (keepLines
+      // A bullet keeps its place as `•` at its own indent, so a nested item still reads as one;
+      // an ordered item keeps its number, which is text a reader counts by.
+      ? blocks.replace(/^([ \t]*)[-*+][ \t]+/gm, '$1• ')
       // List markers, bulleted and ordered alike, at any indent.
-      .replace(/^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+/gm, '')
+      : blocks.replace(/^[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+/gm, ''))
       // Images before links: `![alt](src)` is a link whose text is its alt, and taking the link
       // syntax first would leave the `!` behind with nothing attached to it.
       .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
@@ -53,9 +85,5 @@ export function markdownToPlainText(markdown: string | null | undefined): string
       .replace(/(^|[^\p{L}\p{N}_])(_{1,2})(\S(?:[^_]*\S)?)\2(?![\p{L}\p{N}_])/gu, '$1$3')
       // Whatever backticks are left are an unpaired mark, never punctuation someone meant.
       .replace(/`/g, '')
-      // Every run of whitespace — the blank line between two paragraphs included — becomes the
-      // one space that separates them on a single line.
-      .replace(/\s+/g, ' ')
-      .trim()
   );
 }

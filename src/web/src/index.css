@@ -8441,6 +8441,8 @@ button.chat-jump-start:hover {
   line-height: 1.55;
   color: var(--text-1);
   overflow-wrap: anywhere;
+  /* The text keeps its paragraphs and list items on lines of their own (`markdownToPlainLines`). */
+  white-space: pre-wrap;
 }
 /* The line under the buttons on both cards whose second answer is a composer handoff: where the
    next message goes, and what pressing does not do. One rule, two cards — the sentence is the
@@ -9332,6 +9334,7 @@ button.chat-jump-start:hover {
   margin: 0;
   color: var(--text-2);
   line-height: 1.6;
+  white-space: pre-wrap;
 }
 .approval-input {
   white-space: pre-wrap;
