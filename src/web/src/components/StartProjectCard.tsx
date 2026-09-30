@@ -1,7 +1,8 @@
 import { useEffect, useId, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Input, InputNumber, Radio, Switch } from 'antd';
+import { Alert, Input, InputNumber, Modal, Radio, Spin, Switch } from 'antd';
 import type {
+  ProjectIntegrationView,
   ProjectOpenItemRow,
   ProjectStartRequest,
   ProjectStartSettings,
@@ -9,7 +10,12 @@ import type {
 } from '@orbit/shared';
 import { api } from '../api';
 import { acceptanceConfirmationKey, acceptanceConfirmationQuery } from '../lib/acceptanceConfirmation';
-import { projectDependencyGraphQuery, projectOpenItemsQuery } from '../lib/queries';
+import { markStatus, type ProjectDependencyGraphResponse } from '../lib/projectDependencyGraph';
+import {
+  projectDependencyGraphQuery,
+  projectIntegrationQuery,
+  projectOpenItemsQuery,
+} from '../lib/queries';
 import {
   RUN_AT_MOST,
   RUN_AUTOMATIC,
@@ -194,13 +200,19 @@ export function StartProjectCard({
   projectHref: string;
   onDraft: (next: StartSettingsDraft) => void;
   onStart: () => void;
-  onChatAbout: () => void;
+  /** Arms a conversation's composer. Absent where there is no conversation to talk in — the card
+   *  opened over the project page — and then the press is not drawn. */
+  onChatAbout?: () => void;
   /** Opens the tasks this conversation created, below the card. */
   onViewTasks?: () => void;
 }): JSX.Element {
   const listId = useId();
   const [criteriaOpen, setCriteriaOpen] = useState(false);
   const items = [...(criteria ?? [])].sort((a, b) => a.ordinal - b.ordinal);
+  // A card nobody asked for — the owner's own "Start…" on the project page — carries the default
+  // rule's settings rather than a suggestion, and no ready check ran on its plan, so it claims
+  // neither.
+  const asked = askedAt !== null;
   const startable = !busy && stale === null && startDraftComplete(draft);
   const editable = !busy && stale === null;
   const missingCheck = runMergeCheckMissing(draft);
@@ -265,7 +277,7 @@ export function StartProjectCard({
             suggestion and the owner's to change before the press. */}
         <div className="start-card-section">
           <span>{START_HOW_IT_RUNS}</span>
-          <span className="start-card-section-aside">{START_SUGGESTED_BY_COORDINATOR}</span>
+          {asked ? <span className="start-card-section-aside">{START_SUGGESTED_BY_COORDINATOR}</span> : null}
         </div>
         <div className="start-card-settings">
           <div className="project-integration-setting">
@@ -341,10 +353,12 @@ export function StartProjectCard({
         </div>
         {request.why ? <p className="start-card-note">{startCoordinatorSays(request.why)}</p> : null}
 
-        <p className="start-card-checked">
-          <span className="start-card-tick" aria-hidden="true">✓</span>
-          <span>{startCheckedLine(request.repository)}</span>
-        </p>
+        {asked ? (
+          <p className="start-card-checked">
+            <span className="start-card-tick" aria-hidden="true">✓</span>
+            <span>{startCheckedLine(request.repository)}</span>
+          </p>
+        ) : null}
         <p className="settlement-card-explains">{startExplanation(items.length)}</p>
         {error ? (
           <Alert
@@ -361,10 +375,12 @@ export function StartProjectCard({
           {START_PROJECT_ACTION}
           {keys && startable && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
-        <CardActionButton tone="secondary" disabled={criteria === null} onClick={onChatAbout}>
-          {OWNER_SEND_BACK_ACTION}
-          {keys && criteria !== null && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
-        </CardActionButton>
+        {onChatAbout ? (
+          <CardActionButton tone="secondary" disabled={criteria === null} onClick={onChatAbout}>
+            {OWNER_SEND_BACK_ACTION}
+            {keys && criteria !== null && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
+          </CardActionButton>
+        ) : null}
       </CardActions>
     </div>
   );
@@ -552,5 +568,161 @@ export function SessionStartProjectCard({
       onChatAbout={talkAbout}
       onViewTasks={onViewTasks}
     />
+  );
+}
+
+/**
+ * The settings a start takes when nobody suggested any — the rule the older confirmation door
+ * starts a project by (`defaultStartLine`), read off what the project page holds: the line the
+ * project is already on or its owner chose, else a project branch when its tasks wait on one
+ * another and main when they do not; Automatic on; the concurrency it has; the merge check it has.
+ *
+ * The line half is the page's reading of that rule — over the dependency graph, where the server
+ * counts its code tasks — and where the two differ (a project with no repository, where no branch
+ * can exist) the start door says so, on the card, and the owner picks again.
+ */
+export function defaultStartSettings(
+  view: Pick<ProjectIntegrationView, 'line' | 'ref' | 'mergeCheckCommand'>,
+  project: { maxConcurrentTasks?: number },
+  graph: Pick<ProjectDependencyGraphResponse, 'marks' | 'edges'> | null,
+): ProjectStartSettings {
+  const line = view.line ?? (graph && planHasDependencies(graph) ? 'PROJECT_BRANCH' : 'MAIN');
+  return {
+    line,
+    ...(view.line === 'PROJECT_BRANCH' && view.ref ? { projectBranchName: `refs/heads/${view.ref}` } : {}),
+    automatic: true,
+    maxConcurrentTasks: project.maxConcurrentTasks ?? 1,
+    mergeCheckCommand: view.mergeCheckCommand ?? null,
+  };
+}
+
+/** Whether any live task of the plan waits on another. A run the server folded is a chain. */
+function planHasDependencies(graph: Pick<ProjectDependencyGraphResponse, 'marks' | 'edges'>): boolean {
+  const live = new Set(
+    graph.marks.filter((mark) => markStatus(mark) !== 'CANCELLED').map((mark) => mark.id),
+  );
+  return graph.marks.some((mark) => mark.kind === 'RUN')
+    || graph.edges.some((edge) => live.has(edge.sourceMarkId) && live.has(edge.targetMarkId));
+}
+
+/** The project document, as the owner's own start reads it. */
+interface OwnerStartDocument extends ConfirmationProjectDocument {
+  maxConcurrentTasks?: number;
+}
+
+/**
+ * "Start…" — the start card over the project page, for a project whose coordinator has not asked
+ * (D2): the same card, set by the default rule (`defaultStartSettings`), pressed at the same door
+ * with no request to answer. Its criteria, seal and plan are read here as the conversation's card
+ * reads them; a press that the door refuses is said on the card, over its words, and the reads come
+ * round again.
+ */
+function OwnerStartProjectCard({
+  projectId,
+  onStarted,
+  onViewTasks,
+}: {
+  projectId: string;
+  onStarted: () => void;
+  onViewTasks?: () => void;
+}): JSX.Element | null {
+  const qc = useQueryClient();
+  const standingRead = useQuery(acceptanceConfirmationQuery(projectId));
+  const documentRead = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: () => api<OwnerStartDocument>(`/projects/${encodeURIComponent(projectId)}`),
+  });
+  const integrationRead = useQuery(projectIntegrationQuery(projectId));
+  const graphRead = useQuery(projectDependencyGraphQuery(projectId));
+  const standing = standingRead.isError ? null : (standingRead.data ?? null);
+  const document = documentRead.isError ? null : (documentRead.data ?? null);
+  const view = integrationRead.isError ? null : (integrationRead.data ?? null);
+  const graph = graphRead.data ?? null;
+
+  const defaults = view && document ? defaultStartSettings(view, document, graph) : null;
+  const request: ProjectStartRequest | null = defaults && standing
+    ? {
+      settings: defaults,
+      why: '',
+      criteriaDigest: standing.currentVersion.digest,
+      planDigest: '',
+      repository: null,
+      warnings: [],
+    }
+    : null;
+  // The owner's edits, once there are any; until then the defaults, as the reads resolve them.
+  const [edited, setEdited] = useState<StartSettingsDraft | null>(null);
+  const draft = edited ?? (defaults ? startDraftOf(defaults) : null);
+
+  const reread = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['project', projectId] }),
+      qc.invalidateQueries({ queryKey: ['projects'] }),
+    ]);
+  const start = useMutation({
+    mutationFn: (body: StartProjectRequestBody) => startProject(projectId, body),
+    onSuccess: async () => {
+      await reread();
+      onStarted();
+    },
+    onError: () => reread(),
+  });
+
+  const unread = standingRead.isError || documentRead.isError || integrationRead.isError;
+  const stale = unread ? CONFIRMATION_UNREAD_EXPLANATION : null;
+  if (!request || !draft) {
+    return unread ? (
+      <Alert type="error" showIcon message={CONFIRMATION_UNREAD_EXPLANATION} />
+    ) : (
+      <div className="start-card-dialog-loading">
+        <Spin />
+      </div>
+    );
+  }
+  const criteria = document?.acceptanceCriteriaItems ?? null;
+  const branchRef = request.settings.projectBranchName ?? `refs/heads/project/${projectId}`;
+  return (
+    <StartProjectCard
+      projectTitle={document?.title || projectId}
+      askedAt={null}
+      request={request}
+      criteria={criteria}
+      plan={startPlanView(graph, request, document?._count?.tasks ?? 0)}
+      branch={branchRef.replace(/^refs\/heads\//u, '')}
+      draft={draft}
+      stale={stale}
+      busy={start.isPending}
+      error={start.isError ? start.error : null}
+      projectHref={`/projects/${encodeURIComponent(projectId)}`}
+      onDraft={setEdited}
+      onStart={() => {
+        if (stale !== null || !startDraftComplete(draft)) return;
+        start.mutate(startBody(request, draft, null));
+      }}
+      onViewTasks={onViewTasks}
+    />
+  );
+}
+
+/** The owner's "Start…", as a dialog over the project page. Mounted only while open, so a page nobody
+ *  starts from never reads the plan's graph for it. */
+export function ProjectStartDialog({
+  projectId,
+  open,
+  onClose,
+  onViewTasks,
+}: {
+  projectId: string;
+  open: boolean;
+  onClose: () => void;
+  /** Where the card's "View tasks" goes: the page's own task list, under the dialog. */
+  onViewTasks?: () => void;
+}): JSX.Element {
+  return (
+    <Modal open={open} onCancel={onClose} footer={null} width={640} className="start-card-dialog">
+      {open ? (
+        <OwnerStartProjectCard projectId={projectId} onStarted={onClose} onViewTasks={onViewTasks} />
+      ) : null}
+    </Modal>
   );
 }

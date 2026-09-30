@@ -1,10 +1,9 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { DownOutlined } from '@ant-design/icons';
-import { Button, Dropdown, Space, Switch } from 'antd';
+import { Button, Dropdown, Space } from 'antd';
 import {
   type CoordinatorFuseUsage,
   type CoordinatorWakeups,
-  type IntegrationLine,
   SessionLifecycleState,
   SessionRunState,
 } from '@orbit/shared';
@@ -22,9 +21,12 @@ import { CoordinatorProgressRows } from './ProjectProgressStatus';
  *
  * Reads `GET /projects/:id/coordinator/status`, whose shape is frozen in
  * `docs/project-coordinator-status-contract.md`. Every field this card renders comes from that
- * payload; the exceptions are the task tallies (`openTaskCount`, `readyTaskCount`), which the
- * payload deliberately does not carry, and `automatic`, which is the project's own
- * `coordinatorEnabled` — all three are passed in by the page.
+ * payload; the exception is the task tally (`openTaskCount`), which the payload deliberately does
+ * not carry and the page passes in.
+ *
+ * Automatic is not on this card any more: it is how the project runs, not a property of the
+ * conversation, and it lives in the project's "How it runs" block (`ProjectRunSettings`) with the
+ * other settings the start card set.
  *
  * PRESENTATIONAL, ON PURPOSE. It issues no request and performs no navigation: it reports one
  * `CoordinatorAction` and lets the caller decide what that means. A static render cannot press a
@@ -359,33 +361,14 @@ export function ProjectCoordinatorCard({
   status,
   layout = 'desktop',
   openTaskCount,
-  automatic,
-  integration,
-  readyTaskCount,
-  automaticPending,
   onAction,
-  onAutomaticChange,
 }: {
   status: CoordinatorStatus;
   layout?: CoordinatorCardLayout;
   /** Open tasks in this project. Not in the payload — the card is told, so it can say what the
    *  conversation is FOR. Omitted while the page's own tally is still loading. */
   openTaskCount?: number;
-  /** The project's `coordinatorEnabled`, from its own document rather than from the status read.
-   *  Omitted while that document is still loading, and then the switch is not drawn at all — an
-   *  Off-looking switch on an unread project is a lie about the project. */
-  automatic?: boolean;
-  /** This project's integration line, from the same document — what Automatic means depends on
-   *  where work lands (§7.2 V8). Omitted, the sentence falls back to the one it always said. */
-  integration?: CoordinatorIntegration;
-  /** Tasks that could start now, for the consequence Off has to state. Omitted while the tally is
-   *  loading, which costs the warning line and nothing else. */
-  readyTaskCount?: number;
-  automaticPending?: boolean;
   onAction?: (action: CoordinatorAction) => void;
-  /** Separate from `onAction` because this press CARRIES a value: which way the switch was moved
-   *  is the whole message, and the eight actions above are each a verb with no argument. */
-  onAutomaticChange?: (next: boolean) => void;
 }) {
   const { coordination } = status;
   const session = coordination.session;
@@ -459,136 +442,7 @@ export function ProjectCoordinatorCard({
       ) : (
         <Unavailable status={status} onAction={onAction} />
       )}
-
-      {typeof automatic === 'boolean' ? (
-        <Automatic
-          automatic={automatic}
-          integration={integration}
-          readyTaskCount={readyTaskCount}
-          pending={automaticPending}
-          onChange={onAutomaticChange}
-        />
-      ) : null}
     </section>
-  );
-}
-
-/** Where this project's finished tasks land, as far as this card is concerned: enough to say what
- *  Automatic now means, and nothing more (§7.2 V8). Absent while the project document is loading,
- *  or on a project that has no code to land. */
-export interface CoordinatorIntegration {
-  line: IntegrationLine | null;
-  /** The branch, for the `PROJECT_BRANCH` sentence that names it. */
-  ref: string | null;
-}
-
-/**
- * What Automatic means now that the platform lands the work (§7.2 V8).
- *
- * The old sentence — "starts ready tasks on its own, and opens a judgment session when a criterion
- * needs a decision" — described a platform that no longer exists: judgment sessions are not opened
- * for a failed task any more (§8.4 C4), and what a ready task waits for is its prerequisites to
- * LAND rather than merely to be marked done. The new one says both halves of the deal.
- *
- * AND WHAT THE SWITCH NOW ALSO AUTHORIZES (owner decision 2026-09-23, contract §3.3 M-T11). On a
- * project that integrates on a branch of its own, this same switch is what lets the platform merge
- * that branch into main without asking, whenever its check comes back clean. It used to be the
- * promise "merging into main always asks you"; for a PROJECT_BRANCH project that promise is gone,
- * and a switch whose sentence still made it would be widening what the owner authorized without
- * telling them. So the sentence says the merge happens by itself and that a receipt is left to undo
- * it. A MAIN-line project keeps the promise, because for it the promise still holds.
- *
- * A project that has not decided a line keeps the old sentence, because for it the old sentence is
- * still true — nothing lands by itself until there is a line to land on — plus the one clause that
- * will become true the moment its line turns out to be a branch of its own.
- */
-function automaticCopy(integration?: CoordinatorIntegration): ReactNode {
-  if (integration?.line === 'PROJECT_BRANCH' && integration.ref) {
-    return (
-      <>
-        Tasks land on <b style={{ color: 'var(--text-1)' }}>{integration.ref}</b> by themselves and
-        start once their prerequisites land. It also merges{' '}
-        <b style={{ color: 'var(--text-1)' }}>{integration.ref}</b> into main by itself when the
-        checks pass cleanly, and leaves you a receipt with the commit to revert.
-      </>
-    );
-  }
-  if (integration?.line === 'MAIN') {
-    return (
-      <>
-        Tasks are checked on main by themselves and start once their prerequisites land. Merging
-        into main always asks you.
-      </>
-    );
-  }
-  return (
-    <>
-      Starts ready tasks on its own, and opens a judgment session when a criterion needs a decision.
-      If its work lands on a branch of its own, it also merges that branch into main by itself when
-      the checks pass cleanly.
-    </>
-  );
-}
-
-/**
- * The project's off switch — `coordinatorEnabled`, which until now had no control anywhere.
- *
- * Called *Automatic* and not *Auto-dispatch*, because the field gates more than dispatch: turning it
- * off also stops all six producers that wake a judgment session when a criterion is ready, a task's
- * attempt ends unsettled, or a budget runs out — and, on a project with a branch of its own, it is
- * the authorization to merge that branch into main without asking (M-T11), which `automaticCopy`
- * says in so many words. A label naming only the first would read as "it still asks me things",
- * which is exactly what it stops doing.
- *
- * Off states its consequence WITH the work standing behind it. "Nothing starts on its own" is a
- * setting; "nothing starts on its own and four tasks are waiting" is the reason twelve projects in
- * production have been silent without the page ever being able to say why.
- */
-function Automatic({
-  automatic,
-  integration,
-  readyTaskCount,
-  pending,
-  onChange,
-}: {
-  automatic: boolean;
-  integration?: CoordinatorIntegration;
-  readyTaskCount?: number;
-  pending?: boolean;
-  onChange?: (next: boolean) => void;
-}) {
-  return (
-    <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
-      <div
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}
-      >
-        <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-1)' }}>Automatic</span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
-          <Switch
-            size="small"
-            checked={automatic}
-            loading={pending}
-            aria-label="Automatic"
-            onChange={(next) => onChange?.(next)}
-          />
-          <span style={{ color: 'var(--text-2)' }}>{automatic ? 'On' : 'Off'}</span>
-        </span>
-      </div>
-
-      {automatic ? (
-        <p style={{ ...MUTED, margin: '6px 0 0' }}>{automaticCopy(integration)}</p>
-      ) : (
-        <>
-          <p style={{ ...MUTED, margin: '6px 0 0' }}>Nothing here starts or asks on its own.</p>
-          {typeof readyTaskCount === 'number' && readyTaskCount > 0 ? (
-            <p style={{ ...MUTED, margin: '4px 0 0', color: 'var(--warning)' }}>
-              ⚠ {readyTaskCount} ready task{readyTaskCount === 1 ? ' is' : 's are'} waiting for
-              someone to press Run.
-            </p>
-          ) : null}
-        </>
-      )}
-    </div>
   );
 }
 

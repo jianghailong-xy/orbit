@@ -9,6 +9,7 @@ import type {
   CoordinatorWakeups,
   OpenItemFacts,
   ProjectOpenItemRow,
+  ProjectOpenItemsView,
 } from '@orbit/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -18,6 +19,12 @@ import {
   exceptionCardRows,
 } from './ProjectProgressStatus';
 import { projectOpenItemsQuery } from '../lib/queries';
+import {
+  START_PROJECT_TITLE,
+  START_ROW_NOT_ASKED,
+  START_ROW_OWN,
+  startRequestSummary,
+} from '../lib/projectStart';
 
 /**
  * What a project still owes somebody, on the project page and in its coordinator's own conversation
@@ -235,7 +242,7 @@ const PROMOTION = item({
   facts: null,
 });
 
-function client(items: { needsYou: ProjectOpenItemRow[]; withCoordinator: ProjectOpenItemRow[] }) {
+function client(items: ProjectOpenItemsView) {
   const qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -244,7 +251,7 @@ function client(items: { needsYou: ProjectOpenItemRow[]; withCoordinator: Projec
 }
 
 function paint(
-  items: { needsYou: ProjectOpenItemRow[]; withCoordinator: ProjectOpenItemRow[] },
+  items: ProjectOpenItemsView,
   ui: (qc: QueryClient) => JSX.Element,
 ): string {
   const qc = client(items);
@@ -348,6 +355,141 @@ describe('ProjectOpenItems — the project page’s Open items card', () => {
       { needsYou: [], withCoordinator: [] },
       () => <ProjectOpenItems projectId={PROJECT_ID} now={NOW} />,
     )).toBe('');
+  });
+});
+
+/**
+ * The start, in a project nobody has started (mock board3 ②): the coordinator's request as the first
+ * row of Needs you — what it suggests, and Review, which the page answers by opening the card in the
+ * coordinator conversation — or, while nobody has asked, the owner's own "Start…", quiet, which
+ * opens the same card over the page.
+ */
+describe('ProjectOpenItems — the start of a project nobody has started', () => {
+  const START = item({
+    itemId: '5sTrtReQuEsT0000000001',
+    kind: 'START_REQUEST',
+    title: 'Start this project?',
+    detailLine: 'project/34Wvw… · Automatic on · 3 tasks at a time · merge check set',
+    assignee: 'OWNER',
+    assigneeReason: 'DEFAULT',
+    waitingSince: at(2 * MINUTE),
+    escalateAt: null,
+    escalatedAt: null,
+    taskId: null,
+    sessionId: null,
+    delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null },
+    // The server lists no door for it: the page's Review is the way to the card.
+    actions: [],
+    facts: null,
+    startRequest: {
+      settings: {
+        line: 'PROJECT_BRANCH',
+        automatic: true,
+        maxConcurrentTasks: 3,
+        mergeCheckCommand: 'npm test',
+      },
+      why: 'B and C both build on A.',
+      criteriaDigest: 'c'.repeat(64),
+      planDigest: 'p'.repeat(64),
+      repository: null,
+      warnings: [],
+    },
+  });
+  const asked = { needsYou: [QUESTION], withCoordinator: [], startRequest: START };
+  const openItems = (
+    items: ProjectOpenItemsView,
+    props: Partial<Parameters<typeof ProjectOpenItems>[0]> = {},
+  ): string =>
+    paint(items, () => (
+      <ProjectOpenItems
+        projectId={PROJECT_ID}
+        now={NOW}
+        started={false}
+        onReviewStart={() => {}}
+        onStartProject={() => {}}
+        {...props}
+      />
+    ));
+
+  it('leads Needs you with Start this project?, the settings it suggests, how long it has waited, and Review', () => {
+    const html = openItems(asked);
+
+    expect(html).toContain(START_PROJECT_TITLE);
+    expect(START_PROJECT_TITLE).toBe('Start this project?');
+    // The row's sentence is the request's own settings, in the mock's words.
+    const summary = startRequestSummary(START.startRequest!.settings);
+    expect(summary).toBe('The coordinator asked · a project branch · Automatic on · at most 3 at a time');
+    expect(html).toContain(summary);
+    expect(html).toContain('waiting 2m');
+    expect(html).toMatch(/<button[^>]*class="project-open-item-action is-primary"[^>]*>Review<\/button>/);
+    // First in the group, ahead of an older question: nothing else here runs until it is answered.
+    expect(html.indexOf(START_PROJECT_TITLE)).toBeLessThan(html.indexOf('Coordinator asks: start t4 first'));
+    // Somebody is waiting on the owner for it, so it counts with what needs them.
+    expect(html).toContain('2 need you · 0 with the coordinator · oldest first');
+    expect(html).not.toContain(START_ROW_NOT_ASKED);
+  });
+
+  it('draws the request only while the page knows the project is not started', () => {
+    for (const started of [true, null, undefined]) {
+      const html = openItems(asked, { started });
+      expect(html, String(started)).not.toContain(START_PROJECT_TITLE);
+      expect(html, String(started)).not.toContain(START_ROW_OWN);
+      expect(html, String(started)).toContain('1 need you · 0 with the coordinator · oldest first');
+    }
+  });
+
+  it('offers the owner’s own Start… — not asked yet — while nobody has asked, even with nothing else open', () => {
+    const html = openItems({ needsYou: [], withCoordinator: [], startRequest: null });
+
+    expect(html).toContain('Open items');
+    expect(html).toMatch(/<button[^>]*class="project-open-item-title project-open-item-start"[^>]*>Start…<\/button>/);
+    expect(START_ROW_OWN).toBe('Start…');
+    expect(html).toContain(START_ROW_NOT_ASKED);
+    expect(START_ROW_NOT_ASKED).toBe('not asked yet');
+    // Quiet: nobody is waiting on it, so it is not counted, and it carries no wait.
+    expect(html).toContain('0 need you · 0 with the coordinator · oldest first');
+    expect(html).not.toContain('waiting');
+    expect(html).not.toContain(START_PROJECT_TITLE);
+  });
+
+  it('draws no Start… where the page offers no way to open the card', () => {
+    expect(openItems({ needsYou: [], withCoordinator: [], startRequest: null }, { onStartProject: undefined }))
+      .toBe('');
+  });
+
+  it('hands Review and Start… to the page — the card is answered in one place', async () => {
+    const reviewed: string[] = [];
+    const started: string[] = [];
+    const press = async (items: ProjectOpenItemsView, label: string): Promise<void> => {
+      const qc = client(items);
+      await mount(
+        <MemoryRouter>
+          <QueryClientProvider client={qc}>
+            <ProjectOpenItems
+              projectId={PROJECT_ID}
+              now={NOW}
+              started={false}
+              onReviewStart={() => reviewed.push('review')}
+              onStartProject={() => started.push('start')}
+            />
+          </QueryClientProvider>
+        </MemoryRouter>,
+      );
+      const found = button(label);
+      expect(found, label).toBeTruthy();
+      await act(async () => found!.click());
+      const mounted = root;
+      root = null;
+      if (mounted) await act(async () => mounted.unmount());
+      container?.remove();
+    };
+    apiMock.mockImplementation(() => new Promise(() => {}));
+
+    await press(asked, 'Review');
+    await press({ needsYou: [], withCoordinator: [], startRequest: null }, START_ROW_OWN);
+
+    expect(reviewed).toEqual(['review']);
+    expect(started).toEqual(['start']);
   });
 });
 
