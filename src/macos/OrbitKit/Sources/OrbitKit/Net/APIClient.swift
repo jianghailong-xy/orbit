@@ -950,6 +950,54 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("wiki/changesets/\(id)/revert")
     }
 
+    // MARK: wiki documents and the plan (criteria 9–11) — the user door, JWT only
+
+    /// `GET /wiki/spaces/:id/docs`: the confirmed plan's categories → documents → sections, each saying
+    /// whether it is written yet. `plan` is nil while no plan is confirmed: the Wiki reads by topic then.
+    public func wikiDocs(spaceID: String) async throws -> WikiDocsDirectory {
+        try await get("wiki/spaces/\(spaceID)/docs")
+    }
+    /// `GET /wiki/spaces/:id/docs/:slug`: one document, its sentences' marks and its footnotes resolved.
+    /// A 404 is a document the confirmed plan does not have.
+    public func wikiDoc(spaceID: String, slug: String) async throws -> WikiDoc {
+        try await get("wiki/spaces/\(spaceID)/docs/\(slug)")
+    }
+    /// `GET /wiki/spaces/:id/doc-index`: every document, and every section title no other document shares.
+    public func wikiDocIndex(spaceID: String) async throws -> WikiDocsIndex {
+        try await get("wiki/spaces/\(spaceID)/doc-index")
+    }
+    /// `GET /wiki/spaces/:id/plan`: the version in force, the draft waiting, the proposals and the job.
+    /// The owner's door only: a request with a session header is refused, and this client sends none.
+    public func wikiPlan(spaceID: String) async throws -> WikiPlanState {
+        try await get("wiki/spaces/\(spaceID)/plan")
+    }
+    /// `GET /wiki/spaces/:id/plan/versions`: every version, newest first — the version menu.
+    public func wikiPlanVersions(spaceID: String) async throws -> WikiPlanVersions {
+        try await get("wiki/spaces/\(spaceID)/plan/versions")
+    }
+    /// `GET /wiki/spaces/:id/plan/versions/:version`: one version, whole, whatever its status.
+    public func wikiPlanVersion(spaceID: String, version: Int) async throws -> WikiPlanVersion {
+        try await get("wiki/spaces/\(spaceID)/plan/versions/\(version)")
+    }
+    /// `POST /wiki/spaces/:id/plan/redraft`: ask for a draft — with instructions, a revision of the newest
+    /// version. A draft that has not ended answers a second press.
+    public func redraftWikiPlan(spaceID: String, instructions: String?) async throws -> WikiPlanRedraftResult {
+        try await post("wiki/spaces/\(spaceID)/plan/redraft", body: WikiPlanRedraftRequest(instructions: instructions))
+    }
+    /// `POST /wiki/spaces/:id/plan/versions/:version/confirm`: the owner's confirmation of the draft.
+    public func confirmWikiPlan(spaceID: String, version: Int) async throws -> WikiPlanVersion {
+        try await post("wiki/spaces/\(spaceID)/plan/versions/\(version)/confirm", body: [String: String]())
+    }
+    /// `POST /wiki/spaces/:id/plan/edits`: one document or section as the owner rewrote it, in the draft's
+    /// shape — a new draft, which goes through the gate again (422 `WIKI_PLAN_GATE` with every error).
+    public func editWikiPlan(spaceID: String, _ req: WikiPlanEditRequest) async throws -> WikiPlanVersion {
+        try await post("wiki/spaces/\(spaceID)/plan/edits", body: req)
+    }
+    /// `POST /wiki/plan-proposals/:id/decide`: accept (a new draft, over the newest version) or reject.
+    public func decideWikiPlanProposal(_ id: String, _ req: WikiPlanDecideRequest) async throws -> WikiPlanDecisionResult {
+        try await post("wiki/plan-proposals/\(id)/decide", body: req)
+    }
+
     /// Control-plane–configured model providers (GET /api/providers): enabled only, de-sensitized
     /// (no key/baseUrl). Merged into the composer and agent Runtime picker alongside built-ins.
     public func providers() async throws -> [ConfiguredProvider] { try await get("providers") }
