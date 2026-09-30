@@ -1668,6 +1668,10 @@ export interface TurnCompleteRequest {
   /** Turn outcome: SUCCEEDED | INTERRUPTED | FAILED. */
   status: RunStatus;
   result?: string;
+  /** What a FAILED turn failed with, when the runtime reported it as the turn's error rather than
+   *  as a reply (Codex). `result` is then the reply the turn got to before it died. Omitted by older
+   *  runners, which put the error in `result` only when there was no reply. */
+  error?: string;
   /** Present for a completed shell turn. The control plane consults it only for a
    *  server-generated taskAcceptance delivery. */
   shellExitCode?: number;

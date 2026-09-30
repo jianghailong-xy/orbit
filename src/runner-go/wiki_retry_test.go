@@ -339,8 +339,9 @@ func TestWikiRetryWritesAnArticleWhoseStreamTheEdgeReset(t *testing.T) {
 
 // ── The budget ──────────────────────────────────────────────────────────────────────────────────
 
-// A failure that does not clear is sent again from 2 seconds, doubling to 30, for 5 minutes, and then comes
-// back to the caller exactly as the transport returned it: the caller fails as it did before.
+// A failure that does not clear is sent again from 2 seconds, doubling to 30, for 5 minutes — a retry only
+// while the budget has time left for it after its wait — and then comes back to the caller exactly as the
+// transport returned it: the caller fails as it did before.
 func TestWikiRetryGivesUpOnceTheBudgetIsSpentWithTheOriginalError(t *testing.T) {
 	tr, sends := retryDoor(t, func(int) (int, string, string) { return http.StatusBadGateway, "", "error code: 502" })
 	clock := withFakeWikiRetry(t)
@@ -352,19 +353,20 @@ func TestWikiRetryGivesUpOnceTheBudgetIsSpentWithTheOriginalError(t *testing.T) 
 	}
 	waits := clock.waited()
 	want := []time.Duration{2 * time.Second, 4 * time.Second, 8 * time.Second, 16 * time.Second}
-	for len(want) < 13 {
+	for len(want) < 12 {
 		want = append(want, 30*time.Second)
 	}
 	var total time.Duration
 	for _, wait := range waits {
 		total += wait
 	}
-	if !reflect.DeepEqual(waits, want) || total != 5*time.Minute || sends() != 14 {
-		t.Errorf("waited %v (%s in all) over %d sends: want %v, 5m0s, 14 sends", waits, total, sends(), want)
+	// The thirteenth send fails with 30 seconds of the budget left, which the next wait would take whole.
+	if !reflect.DeepEqual(waits, want) || total != 4*time.Minute+30*time.Second || sends() != 13 {
+		t.Errorf("waited %v (%s in all) over %d sends: want %v, 4m30s, 13 sends", waits, total, sends(), want)
 	}
 	lines := clock.lines()
-	if len(lines) != 14 || !strings.Contains(lines[12], "retry 13 in 30s, 30s of the 5m0s budget left") ||
-		lines[13] != "orbit wiki: POST /runner/wiki/spaces/space-1/articles/ui-design failed (502 Bad Gateway) on send 14; the 5m0s retry budget is spent, so the failure stands" {
+	if len(lines) != 13 || !strings.Contains(lines[11], "retry 12 in 30s, 1m0s of the 5m0s budget left") ||
+		lines[12] != "orbit wiki: POST /runner/wiki/spaces/space-1/articles/ui-design failed (502 Bad Gateway) on send 13; the 5m0s retry budget is spent, so the failure stands" {
 		t.Errorf("the retries said:\n%s", strings.Join(lines, "\n"))
 	}
 

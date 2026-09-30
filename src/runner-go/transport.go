@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -179,6 +180,10 @@ type Transport struct {
 	token      string
 	client     *http.Client
 	leaseOwner string
+	// wiki is the client the wiki door's calls go out on (wiki_conn.go): made by the first of them, and
+	// made again when one fails on its way.
+	wikiMu sync.Mutex
+	wiki   *http.Client
 }
 
 func isTransportHTTPStatus(err error, status int) bool {
@@ -239,6 +244,11 @@ func (t *Transport) do(ctx context.Context, method, path string, body, out inter
 }
 
 func (t *Transport) doHeaders(ctx context.Context, method, path string, body, out interface{}, timeout time.Duration, headers map[string]string) error {
+	return t.doVia(ctx, t.client, method, path, body, out, timeout, headers)
+}
+
+// doVia is doHeaders sent through client: t.client for every call but the wiki door's (wiki_conn.go).
+func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path string, body, out interface{}, timeout time.Duration, headers map[string]string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -267,7 +277,7 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := t.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}

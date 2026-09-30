@@ -14,6 +14,10 @@ import { Prisma } from '@prisma/client';
  *
  * The run is its session: a maintenance task's run is one session, and every changeset it records names
  * it. No clock and no run row is read, so the count is the same whoever asks and whenever.
+ *
+ * A dry run answers with this count (`breakerReading`, contract `refusalRules.dryRun`): the entries the run
+ * began with, what it has spent — a retry of `orbit wiki maintain` in the same session included — and what
+ * remains. The runner holds its batches to that answer rather than counting anything of its own.
  */
 export interface WikiMaintenanceRunChanges {
   /** The distinct entries the run's earlier changesets changed through the review mode. */

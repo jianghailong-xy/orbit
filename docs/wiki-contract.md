@@ -523,7 +523,11 @@ Review 只列还有 op 等 owner 的变更集，时间线列的是 op、不说�
   `base_revision` 恰好出现在这三种 op 上，`entry_id` 恰好不出现在 add 上。
 - op 按它在请求 `ops` 里的位置从 0 编号（`seq`），所有回答都按这个编号指认它。
 - 每个 op 独立判定：通过的 op 在一个事务里一起记录，被拒的 op 什么都不写。一个都没记录的请求，用第一个拒绝的 HTTP 状态回，
-  正文里带每个 op 的结果；记录了东西的请求回 200。`dryRun` 只校验、照常回答，不记录也不发事件。
+  正文里带每个 op 的结果；记录了东西的请求回 200。`dryRun` 只校验、照常回答，不记录也不发事件；回答里另带 `breaker`：
+  请求开始时（还没算它的任何 op）熔断的读数 `{scope, activeAtStart, changed, remaining}`——`scope` 对维护运行的 changeset 是
+  `run`（整次运行，§19.4 第 6 步），否则是 `changeset`；`activeAtStart` 是熔断按的 active 基数；`changed` 是已经经模式改动的条目；
+  `remaining` 是模式还能再改动几个不同条目，越过它的 op 会被拒。没有 op 受熔断约束时（Manual、owner 自己写、active 少于 100）
+  `remaining` 为 null。同样的 op 马上正式提交，被拒的正好是超出 `remaining` 的那些。
 - **幂等**：幂等键属于 owner。同一个键加同样的规范化请求是重放，返回记下的回答（`replayed: true`），不写也不发事件；
   同一个键配不同的请求被拒 `WIKI_IDEMPOTENCY_KEY_REUSED`。为此变更集上同时存 `idempotency_key` 和 `request_sha256`，两者同在同缺。
 
@@ -761,7 +765,8 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
 
 - `GET /api/runner/wiki/spaces/:id/dossiers?after=<token>&limit=N`：只对该 space 的维护会话开放；headless 回 400，别的会话
   `WIKI_NOT_MAINTENANCE_SESSION`，别的 owner 的 space 是普通 404。页从「after 与水位中较后的那个」之后开始，只取已过 120 秒
-  宽限的事实（给事务留提交时间），按顺序取到 N 个会话为止（默认 20、最多 50）；返回的 `cursor` 是本页覆盖到的最后一个事实。
+  宽限的事实（给事务留提交时间），按顺序取到 N 个会话为止（默认 20、最多 50）；返回的 `cursor` 是本页覆盖到的最后一个事实，
+  `from` 是本页开始之前的位置：推进到 `from` 等于本页一条都不算处理过，下次从这里翻页会把它重新发出来。
 - 内容照设计 §8.2 第 1 步，外加 agent 自己的轨迹：头部（会话、任务、验收标准、污染标记）；任务会话的开场 prompt（去掉任务模板尾巴）、
   owner 的消息和 steer、打断；AskUserQuestion 问答、ExitPlanMode、带理由的 DENIED；agent 的回复、thinking 里命中信号的句子、
   压缩的工具时间线（命令首行 + 结果首尾行，连续的读 / 改折成一行）；已结算任务最新 3 条 agent 评论和 owner 评论；merge receipt 的 sha；
@@ -1029,7 +1034,7 @@ JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端�
 
 ### 19.4 `orbit wiki maintain --space <id> [--model MODEL] [--concurrency N] [--json]`
 
-只有维护会话能跑（其余 `WIKI_NOT_MAINTENANCE_SESSION`），一次跑完以下各步，任何一步失败、被截断或熔断都不推进游标：
+只有维护会话能跑（其余 `WIKI_NOT_MAINTENANCE_SESSION`），一次跑完以下各步，任何一步失败或被截断都不推进游标；熔断扣下 op 不算失败，游标停在被扣下的案卷之前：
 
 1. **起点**：`GET …/maintenance/run` 拿 space 与仓库、维护 workspace 的工作目录、主题表、护栏数字和期望位置，同时记下运行开始、是哪个会话。
 2. **checkout**：维护 workspace 的工作目录（`~` 按 runner 账号的家目录展开——会话里 HOME 是干净目录），先 fetch；它的 origin 与 space
@@ -1040,19 +1045,24 @@ JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端�
    `extract.py` 校验：种类与字段、出处必须是案卷里的行且引文逐字出自该行、锚点必须在 origin/main 上存在；没过的整批再问一次。
    代码锚点全都不在本仓库的条目丢弃（计 `entries.foreign`），离题的会话计 `offTopic`。principle 只有 owner 能写，抽到的丢弃并计数。
 5. **自检**：按主题分批（每批最多 `limits.opsPerChangeset` 个 op；Manual 最多 `limits.opsPerTurn`），逐批 `dryRun`：服务端找不到的
-   引文从出处上去掉再查一次，仍被拒的 op 丢掉（`selfCheckDropped`），被审阅配额挡住的不提议（`heldBack`）。
-6. **熔断**：space 有 ≥100 个 active 条目时，各批 dryRun 里会被模式直接生效或等核实的 op 合计不得超过 active 的 10%，超过就熔断，
-   一条都不写。服务端对维护运行的 changeset 也按整次运行计熔断（`wiki-maintenance-breaker.ts`）：本次运行先前各 changeset 经
-   模式改动的条目都算已用，active 数按运行开始时算（现在的 active 减去本次运行自己加出来且仍 active 的）。
+   引文从出处上去掉再查一次，仍被拒的 op 丢掉（`selfCheckDropped`），被审阅配额挡住的不提议（`heldBack`），被熔断拒的留给第 6 步，
+   和别的批一起算。
+6. **熔断**：服务端对维护运行的 changeset 按整次运行计熔断（`wiki-maintenance-breaker.ts`）：本次运行先前各 changeset 经模式改动的
+   条目都算已用——同一会话里前一次没跑完的 `orbit wiki maintain` 也算——active 数按运行开始时算（现在的 active 减去本次运行自己
+   加出来且仍 active 的）。runner 不自己算：还能改动几个条目，以 dryRun 回答里的 `breaker.remaining` 为准（旧服务端的 dryRun 不带它时，
+   退回按起点的 active 取 10%）。按读到的顺序逐页收下，直到某一页的 op（模式会直接生效或等核实的，含 dryRun 里被熔断拒的）放不下；
+   从这一页起的 op 全部扣下不提议（`heldBackByBreaker`），一个会话出现在几页时按最后一页算；游标只推进到这一页的 `from`，下一次运行
+   重读这些案卷，扣下的知识不丢，已提议的也不会被重读。这一步不写任何东西，也不让运行失败。
 7. **提议**：`POST …/maintenance/changesets`，origin 为 `maintenance`；此时还有 op 被拒就判失败。
 8. **核实**：Automatic 下走 `orbit wiki verify` 对本次运行自己的 op 的核实，没拿到结论的再核一遍。
 9. **锚点**：`orbit wiki anchors verify`，`--repo` 取上面的 checkout。
 10. **文章**：`orbit wiki articles`，只重写条目集合变了的主题。
-11. **收尾**：`POST …/maintenance/finish`，带最后一页的 token、outcome 与运行报告；失败时 outcome 为 failed、带原因，游标不动、连续失败加一。
+11. **收尾**：`POST …/maintenance/finish`，带最后一页的 token（熔断扣下过 op 时，是第一个被扣下的页的 `from`）、outcome 与运行报告；
+    失败时 outcome 为 failed、带原因，游标不动、连续失败加一。
     被 maxTurns 截断时由 runner 在游标路由上报 truncated（§16.5），同样记到运行上。
 
 运行报告（`WikiMaintenanceReport`）：会话、案卷、跳过、离题数，条目（抽到 / 保留 / 丢弃 / 锚点在库外 / principle），
-op（提议 / 记下 / 被拒 / 自检丢弃 / 被配额挡住 / 直接生效 / 等待），核实、锚点、文章各自的结果，**token（输入、输出、调用次数，含抽取、
+op（提议 / 记下 / 被拒 / 自检丢弃 / 被配额挡住 / 被熔断扣下 / 直接生效 / 等待），核实、锚点、文章各自的结果，**token（输入、输出、调用次数，含抽取、
 核实、文章三处）**与耗时，失败时 `stoppedAt`。最多 16,000 字节 JSON，存在运行那一行上，`ops.refused` 单独成列。
 
 ### 19.5 `orbit wiki check --space <id> --expect-cursor <token> [--json]`

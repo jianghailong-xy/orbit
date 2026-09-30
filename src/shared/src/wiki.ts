@@ -799,12 +799,28 @@ export type WikiOpOutcome =
     }
   | { seq: number; status: 'refused'; reasons: WikiRefusal[] };
 
+/**
+ * The circuit breaker's reading as a request begins (contract `refusalRules.dryRun`): the active entries it is
+ * counted against — a changeset's, or for a maintenance run's changeset the run's (`maintenance.job.breaker`) —
+ * the entries already changed through the review mode, and how many more distinct entries the mode may change
+ * before an op is refused. `remaining` is null where no op is held to the breaker: in a Manual space, for the
+ * owner's own write, and in a space holding fewer than `breakerMinActiveEntries` active entries.
+ */
+export interface WikiBreakerReading {
+  scope: 'changeset' | 'run';
+  activeAtStart: number;
+  changed: number;
+  remaining: number | null;
+}
+
 export interface WikiProposeResult {
   /** Null when nothing was recorded: a dry run, or every op refused. */
   changesetId: string | null;
   /** The recorded answer to an earlier request under the same idempotency key. */
   replayed: boolean;
   ops: WikiOpOutcome[];
+  /** A dry run's: the breaker as the request found it, before any of its ops. */
+  breaker?: WikiBreakerReading;
 }
 
 /** `wiki_search` returns entries, and nothing else (contract `agentSurface.toolSpecs.wiki_search`
@@ -1097,6 +1113,8 @@ export interface WikiCursorState {
 /** `GET /api/runner/wiki/spaces/:id/dossiers`. */
 export interface WikiDossierPage {
   spaceId: string;
+  /** Where the page starts: advancing to this keeps none of the page, and it is read again. */
+  from: string;
   /** Advance to this once every dossier of the page was processed. */
   cursor: string;
   /** Facts past this page remain. */

@@ -50,12 +50,23 @@ public enum EngineErrors {
         "^\\s*api error:?\\s*request rejected \\((\\d{3})\\)",
     ].compactMap { try? NSRegularExpression(pattern: $0) }
 
+    /// The same transient failure in a runtime's own words, with no `API Error` prefix to key on —
+    /// Codex reports what it gives up on as the turn's error (an `error` event) and words it itself.
+    /// Matched at the start of the text: the runtime's sentence is the whole message, and a reply
+    /// that merely mentions one is not one.
+    static let retryableEngineErrorPrefixes = [
+        "selected model is at capacity",  // Codex's serverOverloaded: OpenAI shedding load on one model
+    ]
+
     /// Is this the transient kind — the provider briefly unable to answer, rather than anything
     /// about the message? Such a failure says nothing about the work, which is what makes it safe to
     /// re-send on the user's behalf. Default is NOT retryable: guessing wrong means an automatic
     /// loop re-sending into a wall.
     public static func isRetryableApiErrorText(_ text: String?) -> Bool {
-        guard let text, isApiErrorText(text) else { return false }
+        guard let text else { return false }
+        let opening = text.drop(while: { $0.isWhitespace }).lowercased()
+        if retryableEngineErrorPrefixes.contains(where: { opening.hasPrefix($0) }) { return true }
+        guard isApiErrorText(text) else { return false }
         let lower = text.lowercased()
         // The status, when there is one, is authoritative: a 400 whose message happens to contain
         // the word "timeout" is still a 400.

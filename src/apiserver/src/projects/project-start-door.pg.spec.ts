@@ -533,6 +533,10 @@ test('the owner starts a project in one write, once', {
     assert.equal(after.confirmations[0].criteria_digest, digest, 'of the seal the owner read');
     assert.deepEqual(after.confirmations[0].started_with, { settings, differsFromRequest: [] },
       'and the confirmation records what the start left the project with');
+    // And the owner's read of the confirmation carries it, for the receipt of the start.
+    const read = await acceptance.standardSetConfirmation(ownerId, started.id);
+    assert.deepEqual(read.confirmation?.startedWith, { settings, differsFromRequest: [] },
+      'the confirmation read does not say what the start left the project with');
     const { rows: [same] } = await sql.query<{ same: boolean }>(
       `SELECT (c."confirmed_at" AT TIME ZONE 'UTC') = p."started_at" AS "same"
          FROM "project_standard_set_confirmation" c JOIN "project" p ON p."id" = c."project_id"
@@ -758,6 +762,8 @@ test('the owner starts a project in one write, once', {
     const after = await world(byRule.id, byRule.sessionId);
     assert.equal(after.confirmations.length, 2, 'a second confirmation, appended');
     assert.equal(after.confirmations[1].started_with, null, 'which started nothing');
+    assert.equal(standing.confirmation?.startedWith, null,
+      'and the read of it says so: a re-confirmation is not a start');
     assert.deepEqual(after.project, before.project,
       'and nothing on the project moved: not the start, not Automatic, not the revision');
     assert.deepEqual(after.bindings, before.bindings);

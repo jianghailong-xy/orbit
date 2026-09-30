@@ -13,6 +13,7 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Read the private multi-runtime article | [A control plane for private, multi-runtime agent work](article-private-multi-runtime-control-plane.md) |
 | Reuse the approved public positioning and launch copy | [GitHub launch messaging brief](messaging-brief.md) |
 | Prepare a launch announcement | [First-launch copy pack](launch-copy.md) |
+| Tag launch links per channel and write the 30-day review | [First-launch tracking and 30-day review](launch-tracking.md) |
 | Collect a design-partner story | [Design partner case-study template](design-partner-case-study-template.md) |
 | Follow project direction | [Public roadmap](../ROADMAP.md) |
 | Run Orbit on your own server | [Self-hosting](self-hosting.md) |
