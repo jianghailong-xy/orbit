@@ -855,20 +855,26 @@ struct ComposerView: View {
         }
     }
 
-    /// Keep every option's text on one left edge and reserve the same trailing checkmark slot on
-    /// every row. iOS treats any Image inside a Menu label as its leading system icon, even when
-    /// it is transparent, so the slot is a Text glyph instead; that keeps the check at the trailing
-    /// edge and prevents an unselected row from rendering a check (web parity: `.scope-menu-row`'s
-    /// check sits in a trailing slot).
+    /// Keep every option's text on one left edge and show a check only on the selected row. iOS
+    /// treats an Image inside a Menu label as its native leading icon, so the selected row must own
+    /// the image and unselected rows must omit it; transparent placeholders are still rendered as
+    /// checks by the native menu (web parity: `.scope-menu-row` has one selected check).
     @ViewBuilder
     private func menuItemLabel(_ text: String, selected: Bool) -> some View {
         HStack(spacing: 8) {
             Text(text).lineLimit(1)
             Spacer(minLength: 8)
-            Text(selected ? "✓" : " ")
-                .foregroundStyle(Color.accentColor)
+            #if os(iOS)
+            if selected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(Color.accentColor)
+            }
+            #else
+            Image(systemName: "checkmark")
+                .foregroundStyle(selected ? Color.accentColor : Color.clear)
                 .frame(width: 20, alignment: .trailing)
                 .accessibilityHidden(!selected)
+            #endif
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
