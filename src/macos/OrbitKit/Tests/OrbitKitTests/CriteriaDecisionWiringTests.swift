@@ -165,22 +165,25 @@ final class CriteriaDecisionWiringTests: XCTestCase {
                        "a card that spells the word itself has stopped sharing it")
     }
 
-    /// THE CARD WAITS UNTIL THERE IS SOMETHING TO START.
+    /// THE CARD IS FOR A PROJECT THAT IS RUNNING, AND ONE WITH WORK.
     ///
-    /// `project_create` returns before the coordinator has filed anything: the plan is written, the
-    /// project is OPEN, nobody has confirmed it — every fact the condition asked for held, and none
-    /// of them is about whether there is any work. So the card arrived into the middle of the
-    /// sentence that was still deciding how to split the work and offered to start a project whose
-    /// every press would have started nothing. Reading the count off the project document is half
-    /// the wire and reading a document that did not say it as none is the other: a property nothing
-    /// assigns is zero forever, which fails the same way as the clause going missing.
+    /// The count was once this condition's guess at when a plan was ready to START, and it put
+    /// `Start the project` in front of a coordinator still deciding how to split the work. Starting
+    /// is the start card's now, asked on the coordinator's request (`StartProjectWiringTests`), so
+    /// this card waits for a project that has been started — read off `startedAt`, never off the
+    /// count — and still for one with work under it. Reading the count off the project document is
+    /// half the wire and reading a document that did not say it as none is the other: a property
+    /// nothing assigns is zero forever, which fails the same way as the clause going missing.
     func testTheConfirmationCardWaitsUntilTheProjectHoldsATask() throws {
         let console = try source(Self.consolePath)
         let held = try body(console, of: "private var settlementHeldOnConfirmation: Bool {")
 
         XCTAssertTrue(held.contains("projectTaskCount > 0"),
-                      "the card must wait for at least one task: the press starts the project, and a "
-                          + "project with nothing filed under it has nothing to start")
+                      "the card must wait for at least one task: a project with nothing filed under "
+                          + "it is not running a plan anybody could confirm")
+        XCTAssertTrue(held.contains("guard projectStarted == true, !criteriaChangeHeld else { return false }"),
+                      "and for a project that has been started — an unstarted one is the start "
+                          + "card's, and a started one whose set moved is the change card's")
         XCTAssertTrue(console.contains("projectTaskCount = document.taskCount"),
                       "and that count is read off the project document, not remembered — "
                           + "`ProjectCriteriaDocument.taskCount` is where a read that did not say "

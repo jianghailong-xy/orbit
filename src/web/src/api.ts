@@ -638,6 +638,8 @@ export const resumeSession = (
     effort?: string;
     fastMode?: boolean;
     provider?: string;
+    /** As updateSessionConfig's: the account of the engine `provider` moves the session onto. */
+    account?: string;
   },
   attachmentIds?: string[],
   kind?: 'message' | 'shell',
@@ -742,6 +744,9 @@ export const updateSessionConfig = (
     effort?: string;
     fastMode?: boolean;
     provider?: string;
+    /** With `provider` naming the built-in Codex or Claude engine: which of the runner's accounts
+     *  of it — `automatic`, `default` or a slot id (SessionConfigDto.account). */
+    account?: string;
   },
 ) => api(`/sessions/${sessionId}/config`, { method: 'PATCH', body: config });
 
