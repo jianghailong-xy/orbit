@@ -43,15 +43,44 @@ public struct ProjectStarted: Sendable, Equatable, Codable {
     public let held: [ProjectStartedTask]
     /// How many wait in all — never fewer than `held` lists.
     public let heldCount: Int
+    /// The settings the start left the project running with, as it recorded them — nil for a start
+    /// that recorded none (the Automatic switch, and every confirmation made before starts carried
+    /// their settings), and for settings this build cannot read, which are left off whole rather
+    /// than drawn half.
+    public let settings: ProjectStartSettings?
+    /// Which of `settings` are not what the start was asked for, in card order — what the settings
+    /// line marks, so the coordinator reading its own conversation can see what it did not ask for.
+    public let differsFromRequest: [ProjectStartSettingKey]
 
     public init(by: ProjectStartedBy, projectId: String, projectTitle: String,
-                criteriaCount: Int? = nil, held: [ProjectStartedTask] = [], heldCount: Int? = nil) {
+                criteriaCount: Int? = nil, held: [ProjectStartedTask] = [], heldCount: Int? = nil,
+                settings: ProjectStartSettings? = nil,
+                differsFromRequest: [ProjectStartSettingKey] = []) {
         self.by = by
         self.projectId = projectId
         self.projectTitle = projectTitle
         self.criteriaCount = criteriaCount
         self.held = held
         self.heldCount = max(heldCount ?? 0, held.count)
+        self.settings = settings
+        self.differsFromRequest = settings == nil ? [] : differsFromRequest
+    }
+
+    /// Decoded by hand so that a card a build older than this one wrote into the transcript cache —
+    /// with no settings and no list of differences — reads back as the card it was, rather than
+    /// taking the cached bubble down with it.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(by: try c.decode(ProjectStartedBy.self, forKey: .by),
+                  projectId: try c.decode(String.self, forKey: .projectId),
+                  projectTitle: try c.decode(String.self, forKey: .projectTitle),
+                  criteriaCount: try c.decodeIfPresent(Int.self, forKey: .criteriaCount),
+                  held: try c.decodeIfPresent([ProjectStartedTask].self, forKey: .held) ?? [],
+                  heldCount: try c.decodeIfPresent(Int.self, forKey: .heldCount),
+                  settings: (try? c.decodeIfPresent(ProjectStartSettings.self,
+                                                    forKey: .settings)) ?? nil,
+                  differsFromRequest: (try? c.decodeIfPresent([ProjectStartSettingKey].self,
+                                                              forKey: .differsFromRequest)) ?? [])
     }
 
     /// The card a `user` event's payload carries, or nil for every other turn.
@@ -77,9 +106,15 @@ public struct ProjectStarted: Sendable, Equatable, Codable {
                 return ProjectStartedTask(id: id, title: title)
             }
         }
+        var differs: [String] = []
+        if case .array(let keys)? = card["differsFromRequest"] {
+            differs = keys.compactMap(\.stringValue)
+        }
         return ProjectStarted(by: by, projectId: projectId, projectTitle: projectTitle,
                               criteriaCount: count(card["criteriaCount"]), held: held,
-                              heldCount: count(card["heldCount"]))
+                              heldCount: count(card["heldCount"]),
+                              settings: ProjectStartSettings.parse(card["settings"]),
+                              differsFromRequest: ProjectStartSettingKey.known(differs))
     }
 
     private static func count(_ value: JSONValue?) -> Int? {

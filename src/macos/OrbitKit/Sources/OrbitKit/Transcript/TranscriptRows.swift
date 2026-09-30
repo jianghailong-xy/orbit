@@ -56,6 +56,14 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case criteriaDecisionReceipt(settled: SettledCriteriaDecision)
         /// The one confirmation question a project has. There is never more than one.
         case acceptanceConfirmation
+        /// "Start this project?" — asked of a project nobody has started, by the coordinator's
+        /// request to start it (`START_REQUEST`), whose open item is the address: a new request is a
+        /// new question, with its own suggestions, and replaces the card drawn for the old one.
+        case startProject(itemID: String)
+        /// "Confirm the new criteria?" — a started project whose criteria moved since the owner
+        /// confirmed them. One per project, like the confirmation it re-asks, and re-derived from the
+        /// confirmation read on every render: it lists what moved in the version standing NOW.
+        case criteriaChange
         /// One recorded confirmation of a project's standard set, drawn where it was made. Not a
         /// question: nothing on it is pressable, and it stays for as long as the read publishes the
         /// record — the version somebody signed, which is not always the version standing now.
@@ -149,6 +157,8 @@ public struct DeliveredDecisionCard: Identifiable, Equatable, Sendable {
         case .criteriaDecisionReceipt(let settled):
             return "criteria-decision-receipt-\(settled.intentId)"
         case .acceptanceConfirmation:         return "acceptance-confirmation"
+        case .startProject(let itemID):       return "start-project-\(itemID)"
+        case .criteriaChange:                 return "criteria-change"
         // Beside the question's id rather than equal to it for `criteriaDecisionReceipt`'s reason:
         // for one confirmation both rows can be on screen at once — the record of the version that
         // was signed, and the card asking about the version standing now — and a duplicate id costs
@@ -326,8 +336,12 @@ public enum DeliveryAnchor {
         // would go — and none of them is delivered that way. The last of them arrived here first,
         // and the owner's iOS screenshot of 2026-09-20 is what that cost: three records stacked
         // under the newest row.
+        //
+        // The start card and the change card anchor where they arrived too: both are delivered by
+        // the read that follows the coordinator's turn, and what they ask about — the plan it asked
+        // to start, the criteria it changed — is in that turn, above them.
         case .criteriaDecision, .criteriaDecisionReceipt, .acceptanceConfirmation,
-             .acceptanceConfirmationReceipt,
+             .startProject, .criteriaChange, .acceptanceConfirmationReceipt,
              .evidenceDecision, .ownerDecisionReceipt, .evidenceDecisionReceipt,
              .promotionApproval, .promotionReceipt, .coordinatorQuestion, .escalatedItem,
              .fusePause:

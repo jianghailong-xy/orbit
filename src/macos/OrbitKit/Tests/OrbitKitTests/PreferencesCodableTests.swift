@@ -101,4 +101,15 @@ final class PreferencesCodableTests: XCTestCase {
         let cleared = try jsonObject(UpdatePreferencesRequest(defaultEffort: ""))
         XCTAssertEqual(cleared["defaultEffort"] as? String, "")
     }
+
+    func testModelPreferencesRoundTripAndRemainOptional() throws {
+        let json = #"{"preferences":{"defaultModels":{"codex":"gpt-6.1-sol","claude":"claude-sonnet-5"}},"id":"u1","email":"a@b.com"}"#
+        let user = try JSONDecoder().decode(User.self, from: Data(json.utf8))
+        XCTAssertEqual(user.preferences?.defaultModels?["codex"], "gpt-6.1-sol")
+        let old = try JSONDecoder().decode(UserPreferences.self, from: Data("{}".utf8))
+        XCTAssertNil(old.defaultModels)
+        let patch = try jsonObject(UpdatePreferencesRequest(defaultModels: ["codex": "gpt-6.1-sol"]))
+        XCTAssertEqual(patch["defaultModels"] as? [String: String], ["codex": "gpt-6.1-sol"])
+        XCTAssertEqual(patch.count, 1)
+    }
 }

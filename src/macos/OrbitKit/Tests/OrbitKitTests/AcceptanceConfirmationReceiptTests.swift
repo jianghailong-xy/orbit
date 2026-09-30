@@ -274,15 +274,20 @@ final class AcceptanceConfirmationReceiptTests: XCTestCase {
                                    to: "case .ownerConfirmation(")
         XCTAssertTrue(dispatch.contains("case .acceptanceConfirmationReceipt(let confirmed):"),
                       "the delivered-card switch draws nothing for a confirmation's record")
-        XCTAssertTrue(dispatch.contains("AcceptanceConfirmationReceiptCard(confirmed: confirmed)"),
+        XCTAssertTrue(dispatch.contains("AcceptanceConfirmationReceiptCard(confirmed: confirmed,"),
                       "and what it draws must be handed the record it is about")
+        XCTAssertTrue(dispatch.contains("changed: console.confirmedChanges(confirmed))"),
+                      "with what a re-confirmation pressed here changed, which the read cannot say")
 
         let view = try section(card, from: "private struct AcceptanceConfirmationReceiptCard: View",
                                to: "\n// MARK: -")
         XCTAssertTrue(view.contains("AcceptanceConfirmations.receiptHeading"),
                       "the record draws OrbitKit's heading rather than one composed here")
-        XCTAssertTrue(view.contains("AcceptanceConfirmations.confirmedLine(confirmed)"),
-                      "and OrbitKit's line, which is the one naming the seal that was signed")
+        XCTAssertTrue(view.contains("AcceptanceConfirmations.receiptLine(confirmed, changed: changed)"),
+                      "and OrbitKit's line, which is the one naming the seal that was signed — "
+                          + "started for a start, confirmed for anything else")
+        XCTAssertTrue(view.contains("RunSettingsSummaryText(settings: started.settings,"),
+                      "and a start's record says what the project was started with")
         XCTAssertTrue(view.contains("AcceptanceConfirmations.receiptStamp("),
                       "and the stamp saying who signed it, and when")
         XCTAssertFalse(view.contains("Button"),

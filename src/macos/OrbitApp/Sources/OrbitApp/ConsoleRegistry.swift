@@ -32,6 +32,7 @@ final class ConsoleRegistry {
     /// reason: a `ConsoleModel` needn't know about `AppModel`.
     @ObservationIgnored var accountDefaultPermissionMode: () -> String? = { nil }
     @ObservationIgnored var rememberDefaultPermissionMode: (String) -> Void = { _ in }
+    @ObservationIgnored var accountDefaultModels: () -> [String: String] = { [:] }
 
     private var models: [String: ConsoleModel] = [:]
     /// The one session whose SSE stream is currently running (at most one), or nil when no console is
@@ -83,7 +84,11 @@ final class ConsoleRegistry {
                     modelCatalog: RunnerModelCatalog? = nil,
                     accountDefaultEffort: String? = nil,
                     onCreated: @escaping (Session) -> Void) -> ConsoleModel {
-        let model = ConsoleModel(draftFor: agent, defaultModel: defaultModel,
+        let seed = AgentDefaults.newSessionModel(
+            for: agent.defaultProvider, accountModels: accountDefaultModels(), fallback: defaultModel,
+            catalog: modelCatalog, configured: configuredProviders
+                + ProviderPools.asProviders(SharedPools.asProviderPools(sharedPools) + providerPools))
+        let model = ConsoleModel(draftFor: agent, defaultModel: seed,
                                  configuredProviders: configuredProviders,
                                  configuredProvidersLoaded: configuredProvidersLoaded,
                                  providerPools: providerPools,
@@ -186,6 +191,7 @@ final class ConsoleRegistry {
     /// Hand a console the account's permission default (read late — the `user` payload primes
     /// asynchronously) and the write-back for a Mode picked when starting a session.
     private func wireAccountDefaults(_ model: ConsoleModel) {
+        model.accountDefaultModels = { [weak self] in self?.accountDefaultModels() ?? [:] }
         model.accountDefaultPermissionMode = { [weak self] in
             guard let self else { return nil }
             return self.accountDefaultPermissionMode()

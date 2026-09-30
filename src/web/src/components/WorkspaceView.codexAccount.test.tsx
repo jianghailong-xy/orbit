@@ -28,6 +28,8 @@ vi.mock('../api', async (importOriginal) => {
     createInteractiveSession: vi.fn(),
     // So does the account PATCH.
     switchSessionAccount: vi.fn(),
+    // …and the config PATCH a provider switch goes out as.
+    updateSessionConfig: vi.fn(),
   };
 });
 vi.mock('../lib/transcriptStore', () => ({
@@ -43,6 +45,7 @@ const {
   getSessionRetryMessage,
   listQueuedTurns,
   switchSessionAccount,
+  updateSessionConfig,
 } = await import('../api');
 const apiMock = vi.mocked(api);
 const { WorkspaceView } = await import('./WorkspaceView');
@@ -476,6 +479,53 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await settlesOn('Plan usage 100%');
     // Codex alone, and no account to move to: there is no Provider row to open at all.
     expect(await providerMenuRows()).toBeNull();
+  });
+
+  it("on an API key, the Provider menu lists Claude's accounts under Claude, and one of them is a switch that lands there", async () => {
+    const claudeWork = { id: WORK, name: 'Work', home: '/root/.orbit/claude-accounts/3fa91c2e', auth: 'yes' };
+    runner = {
+      ...RUNNER,
+      capabilities: ['claude-account-move/v1'],
+      engines: [
+        { engine: 'claude', installed: true, auth: 'yes', accounts: [{ id: 'default', home: '/root/.claude', auth: 'yes' }, claudeWork] },
+      ],
+      planUsage: {
+        claude: {
+          provider: 'claude',
+          fiveHour: { utilization: 0, resetsAt: RESETS },
+          sevenDay: { utilization: 100, resetsAt: RESETS },
+          accounts: { [WORK]: { provider: 'claude', fiveHour: { utilization: 30, resetsAt: RESETS } } },
+        },
+      },
+    } as unknown as Runner;
+    detail = {
+      ...session(null, null),
+      provider: 'orbitd',
+      providerBuiltin: false,
+      model: 'claude-opus-5',
+      claudeAccount: null,
+      claudeAccountPinned: false,
+      workspace: { id: WORKSPACE, codexAccount: null, claudeAccount: null },
+    };
+    // An API key of the owner's own, on the claude runtime.
+    const served = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(((p: string, ...rest: unknown[]) =>
+      p === '/providers'
+        ? (Promise.resolve([
+            { slug: 'orbitd', label: 'orbitd@Claude', runtime: 'claude', models: [{ value: 'claude-opus-5', label: 'Opus 5' }] },
+          ]) as Promise<never>)
+        : (served as (...args: unknown[]) => Promise<never>)(p, ...rest)) as never);
+    vi.mocked(updateSessionConfig).mockResolvedValue({ ok: true } as never);
+    await mount(`/sessions/${SESSION}`, '.composer-box textarea');
+    await act(async () => {
+      await vi.waitFor(() => expect(vi.mocked(getSession)).toHaveBeenCalled(), { timeout: 20_000, interval: 20 });
+    });
+    const rows = (await providerMenuRows())!;
+    // As the New Session picker lists them — and no tick among them: the session is on the key.
+    expect(rows.map(rowText)).toEqual(['Claude', 'AutomaticResets soonest', 'DefaultWeekly 100%', 'Work5h 30%', 'orbitd@Claude ✓']);
+    await click(rows.find((row) => row.textContent?.startsWith('Work')));
+    expect(vi.mocked(updateSessionConfig)).toHaveBeenCalledWith(SESSION, expect.objectContaining({ provider: 'claude', account: WORK }));
+    expect(vi.mocked(switchSessionAccount)).not.toHaveBeenCalled();
   });
 
   it("a live Claude session lists its runner's Claude accounts under Claude", async () => {

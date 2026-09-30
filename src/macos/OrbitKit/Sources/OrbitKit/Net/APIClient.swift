@@ -508,6 +508,15 @@ public final class APIClient: @unchecked Sendable {
         try await get("projects/\(projectID)")
     }
 
+    /// Start the project: the criteria confirmed by the seal the owner read, and the settings on the
+    /// card, in one write (`StartProject.body`). The owner's own credential and no acting session —
+    /// the door refuses one. A seal that moved, or a project already started, is a 409 and nothing
+    /// is written. The answer is not read here: what the start left is drawn from the reads that
+    /// follow it (the receipt, the project), as the browser does.
+    public func startProject(projectID: String, _ body: StartProjectRequestBody) async throws {
+        try await postRaw("projects/\(projectID)/start", body: body)
+    }
+
     // MARK: a project's owner items — the merge to confirm, and the coordinator's question
 
     /// What this project still owes somebody a decision about, split by who is expected to act
@@ -1019,6 +1028,20 @@ public final class APIClient: @unchecked Sendable {
 
     public func runners() async throws -> [Runner] { try await get("runners") }
     public func runner(_ id: String) async throws -> Runner { try await get("runners/\(id)") }
+    /// The active and latest Codex reset-credit operations for a runner.
+    public func codexRateLimitResetOperations(runnerID: String) async throws -> CodexRateLimitResetOperations {
+        try await get("runners/\(runnerID)/codex-rate-limit-reset")
+    }
+    /// Read one reset-credit operation while the runner carries it through consume/refresh.
+    public func codexRateLimitResetOperation(runnerID: String,
+                                             operationID: String) async throws -> CodexRateLimitResetOperation {
+        try await get("runners/\(runnerID)/codex-rate-limit-reset/\(operationID)")
+    }
+    /// Confirm one earned reset credit for the runner's default Codex account.
+    public func createCodexRateLimitReset(runnerID: String,
+                                          _ request: CreateCodexRateLimitResetRequest) async throws -> CreateCodexRateLimitResetResponse {
+        try await post("runners/\(runnerID)/codex-rate-limit-reset", body: request)
+    }
     public func updateRunner(_ id: String, _ req: UpdateRunnerRequest) async throws -> Runner { try await patch("runners/\(id)", body: req) }
     /// Persist the list's drag order: `ids` is every runner, in order. Answers with the list as the
     /// server now orders it (omitted runners appended, foreign ids dropped).

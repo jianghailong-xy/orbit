@@ -17,6 +17,10 @@
  *       account's reset goes at once.
  *   (6) A Claude session on Automatic whose reply is its account's usage limit moves to the account
  *       with room, is re-sent at once, and gets the reload that moves its resident engine.
+ *   (7) A session moved off an API key onto the built-in Claude engine starts on the account Automatic
+ *       picks — not on Default because it followed its workspace — unless it is pinned, or its runner
+ *       cannot carry the conversation it already has; a switch that names an account lands there
+ *       pinned (or on Automatic, unpinned), live or with the message that revives an ended session.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-account-choice.pg.spec.ts
  *
@@ -312,5 +316,81 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     assert.ok(after.retry_ms !== null && after.retry_ms >= before - 1_000 && after.retry_ms <= Date.now() + 1_000,
       `not re-sent now: ${after.retry_ms}`);
     assert.deepEqual(await reloads(id), [{ content: JSON.stringify({ provider: 'claude' }), status: 'PENDING' }]);
+  });
+  await t.test('(7) moved off an API key onto Claude, a session starts on the account Automatic picks', async () => {
+    /** A configured provider on the claude runtime — an API key of the owner's own. */
+    async function apiKey(ownerId: string) {
+      const slug = `key-${randomUUID()}`;
+      await db.modelProvider.create({
+        data: { slug, label: 'An API key', runtime: 'claude', baseUrl: 'https://api.anthropic.com', apiKeyEnc: 'x', ownerId },
+      });
+      return slug;
+    }
+    const onKey = async (m: { ownerId: string; runnerId: string; workspaceId: string }, slug: string, extra = {}) =>
+      sessionOn(m, 'claude', RunStatus.AWAITING_INPUT, {
+        provider: slug,
+        providerBuiltin: false,
+        claudeAccount: null,
+        model: 'claude-opus-5-5',
+        ...extra,
+      });
+
+    const m = await machine('switch');
+    const id = await onKey(m, await apiKey(m.ownerId));
+    await sessions.updateConfig(m.ownerId, id, { provider: 'claude' });
+    // Default's weekly window is spent, so Work — not Default, where following the workspace ran it.
+    assert.deepEqual(
+      { account: (await row(id)).claude_account, pinned: (await row(id)).claude_account_pinned },
+      { account: WORK, pinned: false },
+    );
+    // The switch re-spawns the engine, which reads the account off the row (as in (2)).
+    assert.equal((await reloads(id)).length, 1);
+
+    // Pinned to Default by hand before, it stays there: Automatic is not the session's to take back.
+    const pinned = await onKey(m, await apiKey(m.ownerId), { claudeAccount: 'default', claudeAccountPinned: true });
+    await sessions.updateConfig(m.ownerId, pinned, { provider: 'claude' });
+    assert.equal((await row(pinned)).claude_account, 'default');
+
+    // On a runner that cannot carry a conversation to another account, one that has said something
+    // resumes where it was; one that has said nothing has nothing to carry.
+    const old = await machine('switch-old', []);
+    const talked = await onKey(old, await apiKey(old.ownerId));
+    await sessions.updateConfig(old.ownerId, talked, { provider: 'claude' });
+    assert.equal((await row(talked)).claude_account, null);
+    const fresh = await onKey(old, await apiKey(old.ownerId), { numTurns: 0 });
+    await sessions.updateConfig(old.ownerId, fresh, { provider: 'claude' });
+    assert.equal((await row(fresh)).claude_account, WORK);
+
+    // The menu lists each engine's accounts under it, so the switch can name one: that one, pinned —
+    // even Default, whose weekly window is spent, because somebody picked it.
+    const named = await onKey(m, await apiKey(m.ownerId));
+    await sessions.updateConfig(m.ownerId, named, { provider: 'claude', account: 'default' });
+    assert.deepEqual(
+      { account: (await row(named)).claude_account, pinned: (await row(named)).claude_account_pinned },
+      { account: 'default', pinned: true },
+    );
+    // …or Automatic, which takes a pin back.
+    const again = await onKey(m, await apiKey(m.ownerId), { claudeAccount: 'default', claudeAccountPinned: true });
+    await sessions.updateConfig(m.ownerId, again, { provider: 'claude', account: 'automatic' });
+    assert.deepEqual(
+      { account: (await row(again)).claude_account, pinned: (await row(again)).claude_account_pinned },
+      { account: WORK, pinned: false },
+    );
+    // Refused: an account the runner does not report, one a runner too old to carry the conversation
+    // there would lose it for, and an account with no switch onto the engine to go with.
+    await refused(sessions.updateConfig(m.ownerId, await onKey(m, await apiKey(m.ownerId)), { provider: 'claude', account: 'c0ffee42' }), 400, 'an unknown account');
+    await refused(sessions.updateConfig(old.ownerId, await onKey(old, await apiKey(old.ownerId)), { provider: 'claude', account: WORK }), 409, 'a runner too old to carry it');
+    await refused(sessions.updateConfig(m.ownerId, await onKey(m, await apiKey(m.ownerId)), { account: WORK }), 400, 'an account with no switch');
+
+    // An ended session takes the same pick with the message that revives it.
+    const ended = await onKey(m, await apiKey(m.ownerId), { status: RunStatus.FAILED, finishedAt: new Date() });
+    await sessions.resume(m.ownerId, ended, { content: 'go on', clientTurnId: randomUUID(), provider: 'claude', account: WORK });
+    assert.deepEqual(
+      { account: (await row(ended)).claude_account, pinned: (await row(ended)).claude_account_pinned },
+      { account: WORK, pinned: true },
+    );
+    const endedAuto = await onKey(m, await apiKey(m.ownerId), { status: RunStatus.FAILED, finishedAt: new Date() });
+    await sessions.resume(m.ownerId, endedAuto, { content: 'go on', clientTurnId: randomUUID(), provider: 'claude' });
+    assert.equal((await row(endedAuto)).claude_account, WORK);
   });
 });

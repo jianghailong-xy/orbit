@@ -24,6 +24,7 @@ vi.mock('../api', async (importOriginal) => {
     listQueuedTurns: vi.fn(),
     getSession: vi.fn(),
     updateSessionConfig: vi.fn(),
+    createInteractiveSession: vi.fn(),
   };
 });
 vi.mock('../lib/transcriptStore', () => ({
@@ -31,7 +32,7 @@ vi.mock('../lib/transcriptStore', () => ({
   saveTranscript: async () => {},
 }));
 
-const { api, getSession, getSessionEventPage, getSessionRetryMessage, listQueuedTurns, updateSessionConfig } =
+const { api, getSession, getSessionEventPage, getSessionRetryMessage, listQueuedTurns, updateSessionConfig, createInteractiveSession } =
   await import('../api');
 const apiMock = vi.mocked(api);
 const { WorkspaceView } = await import('./WorkspaceView');
@@ -92,7 +93,7 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     return container;
   };
 
-  const mount = async (chipText = 'Opus 5.5Max'): Promise<void> => {
+  const mount = async (chipText = 'Opus 5.5Max', route = `/sessions/${SESSION}`, runner = RUNNER): Promise<void> => {
     client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
     container = document.createElement('div');
     root = createRoot(container);
@@ -102,10 +103,10 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     await act(async () => {
       nextRoot.render(
         <QueryClientProvider client={nextClient}>
-          <MemoryRouter initialEntries={[`/sessions/${SESSION}`]}>
+          <MemoryRouter initialEntries={[route]}>
             <AntApp>
               <Routes>
-                <Route path="*" element={<WorkspaceView runner={RUNNER} />} />
+                <Route path="*" element={<WorkspaceView runner={runner} />} />
               </Routes>
             </AntApp>
           </MemoryRouter>
@@ -193,6 +194,8 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     vi.mocked(getSession).mockImplementation(async () => DETAIL as never);
     vi.mocked(updateSessionConfig).mockReset();
     vi.mocked(updateSessionConfig).mockResolvedValue({} as never);
+    vi.mocked(createInteractiveSession).mockReset();
+    vi.mocked(createInteractiveSession).mockResolvedValue({ id: SESSION });
     apiMock.mockReset();
     apiMock.mockImplementation((p: string, options?: { method?: string }) => {
       const reply = (value: unknown) => Promise.resolve(value) as Promise<never>;
@@ -257,6 +260,130 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     }
   });
 
+  const codexRunner = {
+    ...RUNNER,
+    engines: [{ engine: 'codex', installed: true, auth: 'yes' }],
+    runtimeDefaultModels: { codex: 'gpt-5.6-sol' },
+    modelCatalog: {
+      codex: [
+        { value: 'gpt-5.6-sol', label: 'GPT-5.6-Sol', reasoningLevels: ['medium', 'max'] },
+        { value: 'gpt-6.1-sol', label: 'GPT-6.1-Sol', reasoningLevels: ['high', 'ultra'] },
+      ],
+    },
+  } as unknown as Runner;
+
+  const serveCodexDraft = (preferences: Record<string, unknown> = {}) => {
+    const served = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(async (p, options) => {
+      if (p === '/users/me/preferences' && options?.method === 'PATCH') {
+        const patch = options.body as { defaultModels?: Record<string, string> };
+        preferences = { ...preferences, defaultModels: {
+          ...(preferences.defaultModels as Record<string, string> | undefined), ...patch.defaultModels,
+        } };
+        return {} as never;
+      }
+      if (p === '/workspaces') {
+        return [{ id: WORKSPACE, name: 'orbit', runnerId: RUNNER_ID, lastProvider: 'codex', model: 'gpt-5.6-sol' }] as never;
+      }
+      if (p === '/users/me') {
+        return { id: 'user-1', email: 'r@example.com', preferences } as never;
+      }
+      return served(p, options);
+    });
+  };
+
+  it('starts a new Codex session with the remembered model and clamps effort for that model', async () => {
+    serveCodexDraft({ defaultModels: { codex: 'gpt-6.1-sol', claude: 'claude-sonnet-5' }, defaultEffort: 'max' });
+    await mount('GPT-6.1-SolDefault', `/workspaces/${WORKSPACE}/new`, codexRunner);
+    expect(chip()?.querySelector('.composer-model-name')?.textContent).toBe('GPT-6.1-Sol');
+    expect(configCalls()).toHaveLength(0);
+    const box = mounted().querySelector<HTMLTextAreaElement>('.composer-box textarea')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box, 'Use the remembered model');
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await click(mounted().querySelector<HTMLButtonElement>('button[aria-label="Send"]') ?? undefined, 'Send');
+    await settle();
+    expect(vi.mocked(createInteractiveSession).mock.calls[0]?.[0]).toMatchObject({ model: 'gpt-6.1-sol', effort: '' });
+  });
+
+  it('remembers an explicit draft model pick and uses it when opening the next new session', async () => {
+    serveCodexDraft();
+    await mount('GPT-5.6-SolDefault', `/workspaces/${WORKSPACE}/new`, codexRunner);
+    await click(chip(), 'the model control');
+    await act(async () => {
+      await vi.waitFor(() => expect(row('model:gpt-6.1-sol')).toBeDefined());
+    });
+    await click(row('model:gpt-6.1-sol'), 'GPT-6.1-Sol');
+    await settle();
+    expect(chip()?.textContent).toBe('GPT-6.1-SolDefault');
+    expect(client?.getQueryData<{ preferences: unknown }>(['user', 'me'])?.preferences)
+      .toMatchObject({ defaultModels: { codex: 'gpt-6.1-sol' } });
+    expect(apiMock.mock.calls.filter(([p]) => p === '/users/me/preferences').map(([, o]) => o?.body))
+      .toEqual([{ defaultModels: { codex: 'gpt-6.1-sol' } }]);
+
+    await act(async () => {
+      root!.render(
+        <QueryClientProvider client={client!}>
+          <MemoryRouter initialEntries={[`/workspaces/${WORKSPACE}/new`]}>
+            <AntApp><Routes>
+              <Route path="*" element={<WorkspaceView key="next-draft" runner={codexRunner} />} />
+            </Routes></AntApp>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+    });
+    await settle();
+    await act(async () => {
+      await vi.waitFor(() => expect(chip()?.textContent).toBe('GPT-6.1-SolDefault'));
+    });
+  });
+
+  it('falls back to the runner default when the remembered Codex model has been retired', async () => {
+    serveCodexDraft({ defaultModels: { codex: 'gpt-retired' } });
+    await mount('GPT-5.6-SolDefault', `/workspaces/${WORKSPACE}/new`, codexRunner);
+  });
+
+  it('adopts late model preferences only while the new-session picker is untouched', async () => {
+    serveCodexDraft();
+    const served = apiMock.getMockImplementation()!;
+    let reply!: (value: never) => void;
+    const me = new Promise<never>((resolve) => { reply = resolve; });
+    apiMock.mockImplementation((p, options) => p === '/users/me' ? me : served(p, options));
+    await mount('GPT-5.6-SolDefault', `/workspaces/${WORKSPACE}/new`, codexRunner);
+    await act(async () => {
+      reply({ id: 'user-1', email: 'r@example.com', preferences: { defaultModels: { codex: 'gpt-6.1-sol' } } } as never);
+      await me;
+    });
+    await settle();
+    expect(client?.getQueryData<{ preferences: unknown }>(['user', 'me'])?.preferences)
+      .toMatchObject({ defaultModels: { codex: 'gpt-6.1-sol' } });
+    await act(async () => {
+      await vi.waitFor(() => expect(chip()?.textContent).toBe('GPT-6.1-SolDefault'));
+    });
+    await click(chip(), 'the model control');
+    await act(async () => {
+      await vi.waitFor(() => expect(row('model:gpt-5.6-sol')).toBeDefined());
+    });
+    await click(row('model:gpt-5.6-sol'), 'a manual model choice');
+    await act(async () => {
+      client!.setQueryData(['user', 'me'], {
+        id: 'user-1', preferences: { defaultModels: { codex: 'gpt-6.1-sol' } },
+      });
+    });
+    expect(chip()?.textContent).toBe('GPT-5.6-SolDefault');
+  });
+
+  it('remembers a model picked in an existing session without changing the model of other sessions', async () => {
+    await mount();
+    await open();
+    await click(row('model:claude-sonnet-5'), 'another model');
+    await settle();
+    expect(apiMock.mock.calls.filter(([p]) => p === '/users/me/preferences').map(([, o]) => o?.body))
+      .toEqual([{ defaultModels: { 'anthropic-2': 'claude-sonnet-5' } }]);
+    expect(configCalls()).toHaveLength(1);
+  });
+
   it('writes the model and its effort as one control, with the provider and the effort a level down', async () => {
     await mount();
     expect(chip()?.querySelector('.composer-model-name')?.textContent).toBe('Opus 5.5');
@@ -282,7 +409,7 @@ describe('the composer model control', { timeout: 60_000 }, () => {
     expect(row('provider:deepseek')?.textContent).toContain('DeepSeek');
   });
 
-  it('asks nothing of the server when the pick is what is already running, and one PATCH when it is not', async () => {
+  it('leaves the session config alone when the pick is already running, and PATCHes a change once', async () => {
     await mount();
 
     // Unlike a Select, a menu reports a click on the row already chosen. Re-picking the running
