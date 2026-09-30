@@ -35,17 +35,18 @@ import (
 // only starts it and reports what it printed.
 //
 // A RUN THAT DID NOT FINISH MOVES NOTHING. Any step that fails, a model endpoint that refuses the token,
-// an op the server refuses, or a run that would change more than the breaker allows ends the run
-// `failed`: the space's cursor stays where it was, its consecutive failures go up by one, and the report
-// says where it stopped. Only a run that got through every step advances the cursor, to the last page it
-// read — the position its task expects, which is what `orbit wiki check` holds it to.
+// or an op the server refuses ends the run `failed`: the space's cursor stays where it was, its
+// consecutive failures go up by one, and the report says where it stopped. Only a run that got through
+// every step advances the cursor, to the last page it read — the position its task expects, which is what
+// `orbit wiki check` holds it to — or, when the breaker held ops back, to where their pages start.
 //
 // WHAT THE MODEL SAYS IS CHECKED BEFORE IT IS PROPOSED, and proposed only as the space's maintenance run.
 // Each entry is held to its dossier the way the demo's extract.py held it: a known kind with its fields,
 // every source a line of the dossier and its quote copied from that line, every anchor something that
 // exists on the checkout's origin/main. Then each batch is proposed with dryRun first, so what the server
-// would refuse is dropped rather than recorded, and the ops the review mode would apply are counted
-// against the circuit breaker before a single one is written.
+// would refuse is dropped rather than recorded, and the ops the review mode would apply are held to what
+// the dry runs say the run's circuit breaker has left before a single one is written: what does not fit
+// is held back, with its dossiers, for the next run.
 //
 // A QUOTE IS THE RECORD'S OWN WORDS, AT THE PLACE THE LINE NAMES (criterion 2, revision 2). A dossier line
 // is the dossier's writing — a tool call as `$ command → ok: first line … last line`, a message cut short —
@@ -58,7 +59,7 @@ import (
 // holds them equal.
 const wikiMaintainPrecondition = "Run this only as a Wiki maintenance run of the space, once, and let it finish: it " +
 	"proposes as the space's maintenance run, and it moves the cursor only when every step succeeded — a run that " +
-	"failed, was cut short or tripped the breaker moves nothing."
+	"failed or was cut short moves nothing, and one whose breaker held ops back stops it where their dossiers start."
 
 const wikiCheckPrecondition = "Judge a maintenance run only by what this reads: it passes when the space's cursor " +
 	"reached the position the task expects and the server refused none of the run's ops, and a run cannot pass it by " +
@@ -69,7 +70,8 @@ var wikiMaintainDescription = wikiMaintainPrecondition + " This is a Wiki mainte
 	"the dossiers since the space's cursor up to the position its task expects, has the local model — this session's " +
 	"provider's, through a clean Claude Code with thinking off — extract at most " + strconv.Itoa(wikiMaintainEntriesPerSession) +
 	" entries from each, checks every entry against its dossier and the checkout, proposes them by topic with dryRun " +
-	"first and then as the space's maintenance run, has them verified in an automatic space, re-verifies the anchors, " +
+	"first and then as the space's maintenance run — holding back, for the next run, the dossiers whose entries the " +
+	"run's circuit breaker has no room for — has them verified in an automatic space, re-verifies the anchors, " +
 	"rewrites the articles of the topics whose entries changed, and advances the cursor. It prints what it did, the " +
 	"token spend included, and exits non-zero when the run failed. Any session but a maintenance run of the space is " +
 	"refused WIKI_NOT_MAINTENANCE_SESSION."
@@ -230,9 +232,11 @@ type wikiMaintainReport struct {
 		Recorded         int `json:"recorded"`
 		Refused          int `json:"refused"`
 		SelfCheckDropped int `json:"selfCheckDropped"`
-		HeldBack         int `json:"heldBack"`
-		Applied          int `json:"applied"`
-		Waiting          int `json:"waiting"`
+		// HeldBack is what the review queue's quotas held back, HeldBackByBreaker what the run's circuit breaker did.
+		HeldBack          int `json:"heldBack"`
+		HeldBackByBreaker int `json:"heldBackByBreaker"`
+		Applied           int `json:"applied"`
+		Waiting           int `json:"waiting"`
 	} `json:"ops"`
 	Verification *wikiMaintainVerification `json:"verification,omitempty"`
 	Anchors      *wikiMaintainAnchors      `json:"anchors,omitempty"`
@@ -306,9 +310,20 @@ type wikiMaintainRun struct {
 	about   string
 	cursor  string
 
+	// The pages read, in order, and the last of them each session's dossier was on.
+	pages  []wikiMaintainPageRead
+	pageOf map[string]int
+	// What the dry runs said of the run's circuit breaker, the least room of them; nil until one says it.
+	breakerRead *wikiMaintainBreakerReading
+
 	mu      sync.Mutex
 	report  wikiMaintainReport
 	refused []string
+}
+
+// wikiMaintainPageRead is one page the run read, as the server's tokens name it: where it starts and where it ends.
+type wikiMaintainPageRead struct {
+	from, cursor string
 }
 
 func (r *wikiMaintainRun) say(format string, args ...interface{}) {
@@ -385,9 +400,7 @@ func (r *wikiMaintainRun) steps() *wikiMaintainStop {
 	if err != nil {
 		return fail("self-check", err)
 	}
-	if err := r.breaker(batches); err != nil {
-		return fail("breaker", err)
-	}
+	batches = r.breaker(batches)
 	if err := r.propose(batches); err != nil {
 		return fail("propose", err)
 	}
@@ -604,6 +617,7 @@ func (r *wikiMaintainRun) dossiers() ([]wikiDossier, error) {
 	var out []wikiDossier
 	after := ""
 	sessions := 0
+	r.pageOf = map[string]int{}
 	for pages := 0; ; pages++ {
 		limit := wikiMaintainPageSessions
 		if r.context.Expect == "" {
@@ -624,11 +638,14 @@ func (r *wikiMaintainRun) dossiers() ([]wikiDossier, error) {
 			return nil, fmt.Errorf("the server's page is not the shape this build reads: %w", err)
 		}
 		r.cursor = page.Cursor
+		// Where the page starts is the token it was read after, to a server whose pages do not say it.
+		r.pages = append(r.pages, wikiMaintainPageRead{from: firstNonEmpty(page.From, after), cursor: page.Cursor})
 		for _, batch := range page.Batches {
 			sessions += batch.Sessions
 		}
 		for _, dossier := range page.Dossiers {
 			sessions++
+			r.pageOf[dossier.SessionID] = len(r.pages) - 1
 			if dossier.Unchanged {
 				r.report.Unchanged++
 				continue
@@ -1146,13 +1163,15 @@ func wikiMaintainRetrySuffix(answer string, parsed bool, built wikiMaintainBuilt
 type wikiMaintainBatch struct {
 	topic string
 	ops   []wikiMaintainOp
-	// wouldChange counts the ops the review mode would apply, now or on a verdict: what the breaker counts.
-	wouldChange int
+	// changes says of each op whether the review mode would change an entry with it, now or on a verdict — or
+	// would have, had the batch left the breaker room for it: what the breaker counts.
+	changes []bool
 }
 
 // selfCheck groups the ops by topic into batches and proposes each with dryRun: a quote the server does not
 // find is taken off its source and the op checked again, an op still refused is dropped, and one the review
-// queue holds back is left out. A breaker's refusal ends the run.
+// queue holds back is left out. One the breaker refuses stays, for the breaker step to hold to what every
+// batch would change together.
 func (r *wikiMaintainRun) selfCheck(ops []wikiMaintainOp) ([]wikiMaintainBatch, error) {
 	size := wikiMaintainOpsPerChangeset
 	if r.context.ReviewMode == "manual" {
@@ -1194,6 +1213,7 @@ func (r *wikiMaintainRun) dryRun(topic string, ops []wikiMaintainOp) (wikiMainta
 		if err != nil {
 			return wikiMaintainBatch{}, err
 		}
+		r.noteBreaker(answer.Breaker)
 		batch := wikiMaintainBatch{topic: topic}
 		stripped := false
 		for i, op := range ops {
@@ -1202,7 +1222,10 @@ func (r *wikiMaintainRun) dryRun(topic string, ops []wikiMaintainOp) (wikiMainta
 			code, message := wikiImportReason(outcome)
 			switch {
 			case status == "refused" && code == "WIKI_QUOTA" && strings.HasPrefix(message, "circuit breaker"):
-				return wikiMaintainBatch{}, fmt.Errorf("the circuit breaker tripped on the dry run: %s", message)
+				// Past what the run may still change, counted over this batch alone: the breaker step counts it
+				// with every other batch's.
+				batch.ops = append(batch.ops, op)
+				batch.changes = append(batch.changes, true)
 			case status == "refused" && code == "WIKI_QUOTE_NOT_FOUND" && round == 0:
 				// A quote is the record's words where the dossier placed them, but a server can read a record
 				// otherwise — one from before a tool call's text held its input finds no command in it. Cite the
@@ -1210,6 +1233,7 @@ func (r *wikiMaintainRun) dryRun(topic string, ops []wikiMaintainOp) (wikiMainta
 				wikiMaintainStripQuotes(op.body)
 				stripped = true
 				batch.ops = append(batch.ops, op)
+				batch.changes = append(batch.changes, false)
 			case status == "refused" && (code == "WIKI_QUOTA" || code == "WIKI_REVIEW_QUEUE_FULL"):
 				r.report.Ops.HeldBack++
 			case status == "refused" || status == "conflict" || status == "":
@@ -1217,9 +1241,7 @@ func (r *wikiMaintainRun) dryRun(topic string, ops []wikiMaintainOp) (wikiMainta
 				r.say("  dropped by the self-check: %q (%s)", op.title, firstNonEmpty(message, status, "no answer"))
 			default:
 				batch.ops = append(batch.ops, op)
-				if status == "applied" || outcome["waitsFor"] == "verification" {
-					batch.wouldChange++
-				}
+				batch.changes = append(batch.changes, status == "applied" || outcome["waitsFor"] == "verification")
 			}
 		}
 		if !stripped || round > 0 {
@@ -1240,22 +1262,88 @@ func wikiMaintainStripQuotes(body map[string]interface{}) {
 	}
 }
 
-// breaker counts, before anything is written, what every batch would change through the review mode
-// against the active entries the run began with (contract `maintenance.job.run.steps`, the breaker).
-func (r *wikiMaintainRun) breaker(batches []wikiMaintainBatch) error {
+// breaker holds back, before anything is written, what the run may not change (contract
+// `maintenance.job.run.steps`, the breaker). How much more the run may change through the review mode is the
+// server's to say: its dry runs answer with the run's circuit breaker as it stands — the entries the run
+// began with, and what it has spent, an earlier attempt in this session included. The pages are kept in the
+// order they were read while what their ops would change fits; from the first page that does not fit, every
+// op is held back and the cursor stops where that page starts. The next run reads those dossiers again, so
+// what is held back is not lost, and what was proposed is not read twice: a session on more than one page
+// goes with the last of them, the one a stopped cursor leaves it on.
+func (r *wikiMaintainRun) breaker(batches []wikiMaintainBatch) []wikiMaintainBatch {
+	remaining, bounded := r.remaining()
+	if !bounded {
+		return batches
+	}
+	need := make([]int, len(r.pages))
+	for _, batch := range batches {
+		for i, op := range batch.ops {
+			if batch.changes[i] {
+				need[r.pageOf[op.session]]++
+			}
+		}
+	}
+	stop, used := len(r.pages), 0
+	for page := range r.pages {
+		if used+need[page] > remaining {
+			stop = page
+			break
+		}
+		used += need[page]
+	}
+	if stop == len(r.pages) {
+		return batches
+	}
+	var kept []wikiMaintainBatch
+	for _, batch := range batches {
+		left := wikiMaintainBatch{topic: batch.topic}
+		for i, op := range batch.ops {
+			if r.pageOf[op.session] >= stop {
+				r.report.Ops.HeldBackByBreaker++
+				continue
+			}
+			left.ops = append(left.ops, op)
+			left.changes = append(left.changes, batch.changes[i])
+		}
+		if len(left.ops) > 0 {
+			kept = append(kept, left)
+		}
+	}
+	r.cursor = r.pages[stop].from
+	r.say("The breaker held back %s from page %d on, past the %s the run may still change: the cursor stops where "+
+		"that page starts, and the next run reads its dossiers again.",
+		wikiCount(r.report.Ops.HeldBackByBreaker, "op", "ops"), stop+1, wikiCount(remaining, "entry", "entries"))
+	return kept
+}
+
+// noteBreaker keeps what a dry run said of the run's circuit breaker. Every dry run is answered before anything
+// of the run is recorded, so they agree unless something else changed the space in between: then the least room
+// is the one to hold to.
+func (r *wikiMaintainRun) noteBreaker(reading *wikiMaintainBreakerReading) {
+	if reading == nil {
+		return
+	}
+	held := r.breakerRead
+	if held == nil || (reading.Remaining != nil && (held.Remaining == nil || *reading.Remaining < *held.Remaining)) {
+		r.breakerRead = reading
+	}
+}
+
+// remaining is how many more entries the run may change through the review mode, and whether anything bounds
+// it: what the dry runs said — or, from a server whose dry runs say nothing of the breaker, the share of the
+// active entries the run's context counted, as this command held its batches to before they did.
+func (r *wikiMaintainRun) remaining() (int, bool) {
+	if reading := r.breakerRead; reading != nil {
+		if reading.Remaining == nil {
+			return 0, false
+		}
+		return *reading.Remaining, true
+	}
 	active, min, percent := r.context.ActiveEntries, r.context.Breaker.MinActiveEntries, r.context.Breaker.MaxChangedPercent
 	if min <= 0 || percent <= 0 || active < min {
-		return nil
+		return 0, false
 	}
-	would := 0
-	for _, batch := range batches {
-		would += batch.wouldChange
-	}
-	if would*100 > active*percent {
-		return fmt.Errorf("circuit breaker: the run would change %d of the space's %d active entries, more than %d%% of "+
-			"them, so nothing was proposed", would, active, percent)
-	}
-	return nil
+	return active * percent / 100, true
 }
 
 // propose records each batch as the space's maintenance run. An op the server refuses now — after it
@@ -1283,9 +1371,10 @@ func (r *wikiMaintainRun) propose(batches []wikiMaintainBatch) error {
 			}
 		}
 	}
-	r.say("Proposed %s: %d applied, %d waiting, %d refused (%d dropped by the self-check, %d held back by the review queue).",
+	r.say("Proposed %s: %d applied, %d waiting, %d refused (%d dropped by the self-check, %d held back by the review queue, "+
+		"%d held back by the breaker).",
 		wikiCount(r.report.Ops.Proposed, "op", "ops"), r.report.Ops.Applied, r.report.Ops.Waiting, r.report.Ops.Refused,
-		r.report.Ops.SelfCheckDropped, r.report.Ops.HeldBack)
+		r.report.Ops.SelfCheckDropped, r.report.Ops.HeldBack, r.report.Ops.HeldBackByBreaker)
 	if r.report.Ops.Refused > 0 {
 		return fmt.Errorf("the server refused %s the dry run had passed: %s", wikiCount(r.report.Ops.Refused, "op", "ops"),
 			strings.Join(r.refused, "; "))
@@ -1297,6 +1386,18 @@ func (r *wikiMaintainRun) propose(batches []wikiMaintainBatch) error {
 type wikiMaintainAnswer struct {
 	ChangesetID string                   `json:"changesetId"`
 	Ops         []map[string]interface{} `json:"ops"`
+	// Breaker is a dry run's reading of the circuit breaker before the batch's ops (contract `refusalRules.dryRun`).
+	Breaker *wikiMaintainBreakerReading `json:"breaker"`
+}
+
+// wikiMaintainBreakerReading is the circuit breaker as a dry run found it: for a maintenance run's changeset, the
+// whole run's — the active entries it began with, those it has changed through the review mode, and how many more
+// it may change. Remaining is nil where no op is held to the breaker.
+type wikiMaintainBreakerReading struct {
+	Scope         string `json:"scope"`
+	ActiveAtStart int    `json:"activeAtStart"`
+	Changed       int    `json:"changed"`
+	Remaining     *int   `json:"remaining"`
 }
 
 // send proposes one batch — dryRun or not — and reads every op's outcome, a refused request included.
@@ -1557,8 +1658,8 @@ func describeWikiMaintainSummary(s wikiMaintainSummary) string {
 		r.Sessions, r.Dossiers, r.Unchanged, r.OffTopic)
 	fmt.Fprintf(&b, "\n- entries: %d extracted, %d kept, %d dropped by the checks, %d anchored outside the repository, %d principles set aside",
 		r.Entries.Extracted, r.Entries.Kept, r.Entries.Dropped, r.Entries.Foreign, r.Entries.Principles)
-	fmt.Fprintf(&b, "\n- ops: %d proposed, %d recorded (%d applied, %d waiting), %d refused, %d dropped by the self-check, %d held back by the review queue",
-		r.Ops.Proposed, r.Ops.Recorded, r.Ops.Applied, r.Ops.Waiting, r.Ops.Refused, r.Ops.SelfCheckDropped, r.Ops.HeldBack)
+	fmt.Fprintf(&b, "\n- ops: %d proposed, %d recorded (%d applied, %d waiting), %d refused, %d dropped by the self-check, %d held back by the review queue, %d held back by the breaker",
+		r.Ops.Proposed, r.Ops.Recorded, r.Ops.Applied, r.Ops.Waiting, r.Ops.Refused, r.Ops.SelfCheckDropped, r.Ops.HeldBack, r.Ops.HeldBackByBreaker)
 	if r.Verification != nil {
 		fmt.Fprintf(&b, "\n- verification: %d verified, %d without a verdict", r.Verification.Verified, r.Verification.Failed)
 	}
@@ -1580,6 +1681,9 @@ func describeWikiMaintainSummary(s wikiMaintainSummary) string {
 		b.WriteString("\nThe cursor already stood there: nothing new was covered.")
 	default:
 		b.WriteString("\nThe cursor did not move: the next run reads the same dossiers again.")
+	}
+	if s.Outcome == "succeeded" && r.Ops.HeldBackByBreaker > 0 {
+		b.WriteString(" The breaker held back what the run had no room for: the next run reads those dossiers again.")
 	}
 	return b.String()
 }

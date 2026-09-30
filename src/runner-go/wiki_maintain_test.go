@@ -63,11 +63,12 @@ func newFakeMaintainDoor(t *testing.T) *fakeMaintainDoor {
 		case r.Method == http.MethodGet && path == "maintenance/run" && d.context != nil:
 			status, body = d.context()
 		case r.Method == http.MethodGet && path == "dossiers":
-			page, ok := d.pages[r.URL.Query().Get("after")]
+			after := r.URL.Query().Get("after")
+			page, ok := d.pages[after]
 			if !ok {
-				page = maintainPage(r.URL.Query().Get("after"), false)
+				page = maintainPage(after, false)
 			}
-			status, body = http.StatusOK, page
+			status, body = http.StatusOK, maintainPageFrom(page, after)
 		case r.Method == http.MethodPost && path == "maintenance/changesets" && d.propose != nil:
 			ops, _ := request.body["ops"].([]interface{})
 			dry, _ := request.body["dryRun"].(bool)
@@ -135,6 +136,18 @@ func maintainPage(cursor string, more bool, dossiers ...map[string]interface{}) 
 		"dossiers": dossiers, "batches": []interface{}{}, "errorClusters": []interface{}{},
 		"state": map[string]interface{}{"position": nil, "backlog": len(dossiers), "consecutiveFailures": 0},
 	})
+	return string(raw)
+}
+
+// maintainPageFrom is a page as the server serves it, saying where it starts: after the token it was read
+// after, or, for the first page, at the watermark — `tok-watermark` here.
+func maintainPageFrom(page, after string) string {
+	var body map[string]interface{}
+	if json.Unmarshal([]byte(page), &body) != nil {
+		return page
+	}
+	body["from"] = firstNonEmpty(after, "tok-watermark")
+	raw, _ := json.Marshal(body)
 	return string(raw)
 }
 
@@ -566,45 +579,232 @@ func TestWikiMaintainMovesNothingWhenTheServerRefusesAnOp(t *testing.T) {
 	}
 }
 
-func TestWikiMaintainTripsTheBreakerBeforeProposingAnything(t *testing.T) {
+// ── The breaker ─────────────────────────────────────────────────────────────────────────────────
+
+// fakeRunBreaker answers proposals as the server's circuit breaker over a run does (wiki-maintenance-breaker.ts):
+// the run began with `began` active entries and may change ten percent of them, `spent` of which its earlier
+// changesets — an earlier attempt in the same session — already changed. A dry run answers with that reading
+// and refuses, op by op, what is past it; a proposal records what fits, spends it, and refuses the rest.
+type fakeRunBreaker struct {
+	mu                      sync.Mutex
+	began                   int
+	spent                   int
+	recorded                []string
+	refusedDry, refusedLive int
+}
+
+func (b *fakeRunBreaker) propose(ops []interface{}, dryRun bool) (int, string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	allowed := b.began * 10 / 100
+	changed := b.spent
+	outcomes := []interface{}{}
+	for i, raw := range ops {
+		if changed+1 > allowed {
+			outcomes = append(outcomes, map[string]interface{}{"seq": i, "status": "refused", "reasons": []interface{}{map[string]interface{}{
+				"code": "WIKI_QUOTA",
+				"message": fmt.Sprintf("circuit breaker: this Wiki maintenance run has already changed %d of the %d entries the space held "+
+					"active when it began, and one run may change at most 10%% of them — what is past that is the next run's", changed, b.began),
+			}}})
+			if dryRun {
+				b.refusedDry++
+			} else {
+				b.refusedLive++
+			}
+			continue
+		}
+		changed++
+		outcome := map[string]interface{}{"seq": i, "status": "pending", "waitsFor": "verification", "entryId": fmt.Sprintf("e-%d", changed)}
+		if !dryRun {
+			outcome["opId"] = fmt.Sprintf("op-%d", changed)
+			entry, _ := raw.(map[string]interface{})["entry"].(map[string]interface{})
+			b.recorded = append(b.recorded, fmt.Sprint(entry["title"]))
+		}
+		outcomes = append(outcomes, outcome)
+	}
+	body := map[string]interface{}{"changesetId": "cs-1", "ops": outcomes}
+	if dryRun {
+		body["changesetId"], body["dryRun"] = nil, true
+		body["breaker"] = map[string]interface{}{"scope": "run", "activeAtStart": b.began, "changed": b.spent, "remaining": max(0, allowed-b.spent)}
+	} else {
+		b.spent = changed
+	}
+	raw, _ := json.Marshal(body)
+	return http.StatusOK, string(raw)
+}
+
+// ruleDossier is a session whose case the model answers with three conventions of its own (ruleAnswers).
+func ruleDossier(session string) map[string]interface{} {
+	return maintainDossier(session, "规则 "+session, []string{"owner: 以后 fixture 里不要写死端口，一律从 fixture 的返回值里取。"},
+		[]string{"turn:turn-" + session}, nil, false)
+}
+
+// ruleAnswers answers a rule dossier's case with three conventions named after its session: session-b's and
+// session-d's about the runner, the others' about testing, so a run's ops go into more than one batch.
+func ruleAnswers(prompt string) (int, string) {
+	_, rest, found := strings.Cut(prompt, "SESSION: 规则 ")
+	if !found {
+		return http.StatusOK, `{"verdict":"supported","reason":"the cited turn says exactly this"}`
+	}
+	session, _, _ := strings.Cut(rest, "\n")
+	topic := map[bool]string{true: "runner", false: "testing"}[session == "session-b" || session == "session-d"]
+	var entries []string
+	for i := 1; i <= 3; i++ {
+		entries = append(entries, fmt.Sprintf(`{"kind":"convention","title":"%s 的规则 %d","summary":"照做。","topic":%q,`+
+			`"rule":"照做","scope":["全部"],"exceptions":"","anchors":{"paths":[],"commits":[]},`+
+			`"sources":[{"ref":"L1","quote":"以后 fixture 里不要写死端口"}],"verified":false}`, session, i, topic))
+	}
+	return http.StatusOK, "[" + strings.Join(entries, ",") + "]"
+}
+
+// The run of 2026-09-28 14:32 (wiki_maintenance_run 01a0e868): a retry in the session of an attempt that had
+// applied fourteen entries. Its context counted 229 active entries, the fourteen among them, and its own count
+// let fifteen more through; the server counts the run by its session — from the 215 it began with, fourteen
+// spent — and refused eight at the proposal, failing the run. Held to what the dry runs say instead, the run
+// proposes the page that fits, holds back the page that does not, has nothing refused, and succeeds; its cursor
+// stops where the page it held back starts.
+func TestWikiMaintainHoldsItsBatchesToTheBreakerTheServerCounts(t *testing.T) {
 	f := newMaintainFixture(t)
 	door := newFakeMaintainDoor(t)
-	door.context = maintainContext(f, "tiered", 100, "tok-expect")
-	door.pages[""] = maintainPage("tok-expect", false, portDossier("session-a"), portDossier("session-b"))
-	door.propose = func(ops []interface{}, dryRun bool) (int, string) {
-		if !dryRun {
-			t.Errorf("the run proposed %d ops past the breaker", len(ops))
-		}
-		outcomes := []interface{}{}
-		for i := range ops {
-			outcomes = append(outcomes, map[string]interface{}{"seq": i, "status": "applied", "entryId": fmt.Sprintf("e-%d", i)})
-		}
-		raw, _ := json.Marshal(map[string]interface{}{"changesetId": nil, "dryRun": true, "ops": outcomes})
-		return http.StatusOK, string(raw)
-	}
-	counter := 0
-	var mu sync.Mutex
-	vllm := newFakeVLLM(t, func(prompt string) (int, string) {
-		mu.Lock()
-		counter++
-		n := counter
-		mu.Unlock()
-		// Six conventions a case, each its own: twelve the mode would apply, of a hundred active entries.
-		var entries []string
-		for i := 0; i < 6; i++ {
-			entries = append(entries, fmt.Sprintf(`{"kind":"convention","title":"规则 %d-%d","summary":"照做。","topic":"testing","rule":"照做","scope":["全部"],"exceptions":"","anchors":{"paths":[],"commits":[]},"sources":[{"ref":"L1","quote":"以后 fixture 里不要写死端口"}]}`, n, i))
-		}
-		return http.StatusOK, "[" + strings.Join(entries, ",") + "]"
-	})
+	door.context = maintainContext(f, "automatic", 229, "tok-expect")
+	door.pages[""] = maintainPage("tok-1", true, ruleDossier("session-a"), ruleDossier("session-b"))
+	door.pages["tok-1"] = maintainPage("tok-expect", false, ruleDossier("session-c"))
+	breaker := &fakeRunBreaker{began: 215, spent: 14}
+	door.propose = breaker.propose
 	fakeVerifyClaude(t)
-	wikiMaintainSession(t, door.URL, vllm)
-	_, err := runMaintainCLI(t)
-	if err == nil {
-		t.Fatal("a run past the breaker succeeded")
+	wikiMaintainSession(t, door.URL, newFakeVLLM(t, ruleAnswers))
+
+	summary, err := runMaintainCLI(t)
+	if err != nil {
+		t.Fatalf("orbit wiki maintain: %v\n%+v", err, summary)
+	}
+	// Each batch alone fits in what the run has left, as each of that run's did: a dry run passing one changeset
+	// says nothing of the run.
+	if breaker.refusedDry != 0 {
+		t.Errorf("a dry run refused %d ops: the batches are meant to fit one at a time", breaker.refusedDry)
+	}
+	// Seven more the run may change: the first page's six fit, and the second page's three do not.
+	ops := summary.Report.Ops
+	if ops.Proposed != 6 || ops.Recorded != 6 || ops.Refused != 0 || ops.HeldBackByBreaker != 3 || ops.SelfCheckDropped != 0 {
+		t.Errorf("ops = %+v, want six proposed and recorded, none refused, three held back by the breaker", ops)
+	}
+	// The self-check and the proposal agree: the server refused nothing the run proposed.
+	if breaker.refusedLive != 0 || breaker.spent != 20 || len(breaker.recorded) != 6 {
+		t.Errorf("the server refused %d of the run's ops and recorded %v: the self-check and the proposal disagree", breaker.refusedLive, breaker.recorded)
+	}
+	for _, title := range breaker.recorded {
+		if strings.HasPrefix(title, "session-c") {
+			t.Errorf("the run proposed %q, from the page it held back", title)
+		}
 	}
 	end := finished(t, door)
 	report, _ := end["report"].(map[string]interface{})
-	if end["outcome"] != "failed" || report["stoppedAt"] != "breaker" || !strings.Contains(fmt.Sprint(end["error"]), "circuit breaker") {
+	held, _ := report["ops"].(map[string]interface{})
+	if end["outcome"] != "succeeded" || end["to"] != "tok-1" || held["heldBackByBreaker"] != float64(3) || report["stoppedAt"] != nil {
+		t.Errorf("the run ended %v, want succeeded at the start of the page it held back", end)
+	}
+	if summary.Outcome != "succeeded" {
+		t.Errorf("summary = %+v", summary)
+	}
+	if text := describeWikiMaintainSummary(summary); !strings.Contains(text, "3 held back by the breaker") ||
+		!strings.Contains(text, "the next run reads those dossiers again") {
+		t.Errorf("the summary does not say what the breaker held back:\n%s", text)
+	}
+}
+
+// A session on more than one page goes with the last of them, and from the first page that does not fit no
+// page is proposed — not even one that would: the cursor cannot pass a page the run did not keep, so every
+// page after it is read again, and what was proposed from one would be proposed twice.
+func TestWikiMaintainHoldsBackEveryPageFromTheFirstThatDoesNotFit(t *testing.T) {
+	f := newMaintainFixture(t)
+	door := newFakeMaintainDoor(t)
+	door.context = maintainContext(f, "automatic", 150, "tok-expect")
+	door.pages[""] = maintainPage("tok-1", true, ruleDossier("session-a"), ruleDossier("session-b"))
+	door.pages["tok-1"] = maintainPage("tok-2", true, ruleDossier("session-b"), ruleDossier("session-c"))
+	door.pages["tok-2"] = maintainPage("tok-expect", false, ruleDossier("session-d"))
+	breaker := &fakeRunBreaker{began: 150, spent: 8}
+	door.propose = breaker.propose
+	fakeVerifyClaude(t)
+	wikiMaintainSession(t, door.URL, newFakeVLLM(t, ruleAnswers))
+
+	summary, err := runMaintainCLI(t)
+	if err != nil {
+		t.Fatalf("orbit wiki maintain: %v\n%+v", err, summary)
+	}
+	// Seven more: session-a's three fit; the second page, where session-b is too, would take six more; the
+	// third page's three would fit after the first, and are held back with the second.
+	ops := summary.Report.Ops
+	if ops.Proposed != 3 || ops.Refused != 0 || ops.HeldBackByBreaker != 9 {
+		t.Errorf("ops = %+v, want session-a's three proposed and nine held back", ops)
+	}
+	for _, title := range breaker.recorded {
+		if !strings.HasPrefix(title, "session-a ") {
+			t.Errorf("the run proposed %q, which the page it held back or a later one hands out again", title)
+		}
+	}
+	if end := finished(t, door); end["outcome"] != "succeeded" || end["to"] != "tok-1" {
+		t.Errorf("the run ended %v, want succeeded at the start of the second page", end)
+	}
+}
+
+// A retry after an attempt that spent everything the run may change: nothing fits, nothing is proposed, and the
+// run succeeds where the cursor stands — the first page's start — so the next run, with a breaker of its own,
+// reads every dossier again.
+func TestWikiMaintainHeldBackFromItsFirstPageSucceedsWhereTheCursorStands(t *testing.T) {
+	f := newMaintainFixture(t)
+	door := newFakeMaintainDoor(t)
+	door.context = maintainContext(f, "automatic", 236, "tok-expect")
+	door.pages[""] = maintainPage("tok-expect", false, ruleDossier("session-a"))
+	breaker := &fakeRunBreaker{began: 215, spent: 21}
+	door.propose = breaker.propose
+	fakeVerifyClaude(t)
+	wikiMaintainSession(t, door.URL, newFakeVLLM(t, ruleAnswers))
+
+	summary, err := runMaintainCLI(t)
+	if err != nil {
+		t.Fatalf("orbit wiki maintain: %v\n%+v", err, summary)
+	}
+	if ops := summary.Report.Ops; ops.Proposed != 0 || ops.Refused != 0 || ops.HeldBackByBreaker != 3 {
+		t.Errorf("ops = %+v, want nothing proposed and three held back", ops)
+	}
+	for _, proposal := range door.of(http.MethodPost, "maintenance/changesets") {
+		if proposal.body["dryRun"] != true {
+			t.Errorf("the run proposed %v with nothing left to change", proposal.body["ops"])
+		}
+	}
+	if end := finished(t, door); end["outcome"] != "succeeded" || end["to"] != "tok-watermark" {
+		t.Errorf("the run ended %v, want succeeded where the cursor stands", end)
+	}
+}
+
+// A server whose dry runs say nothing of the breaker: the run holds its batches to the share of the active
+// entries its context counted, as it did before they said it — held back, not failed.
+func TestWikiMaintainHoldsBackByTheContextWhenTheDryRunsSayNothing(t *testing.T) {
+	f := newMaintainFixture(t)
+	door := newFakeMaintainDoor(t)
+	door.context = maintainContext(f, "tiered", 100, "tok-expect")
+	door.pages[""] = maintainPage("tok-1", true, ruleDossier("session-a"), ruleDossier("session-b"))
+	door.pages["tok-1"] = maintainPage("tok-expect", false, ruleDossier("session-c"), ruleDossier("session-d"))
+	door.propose = func(ops []interface{}, dryRun bool) (int, string) {
+		outcomes := []interface{}{}
+		for i := range ops {
+			outcomes = append(outcomes, map[string]interface{}{"seq": i, "status": "applied", "entryId": fmt.Sprintf("e-%d", i), "opId": fmt.Sprintf("op-%d", i)})
+		}
+		raw, _ := json.Marshal(map[string]interface{}{"changesetId": map[bool]interface{}{true: nil, false: "cs-1"}[dryRun], "dryRun": dryRun, "ops": outcomes})
+		return http.StatusOK, string(raw)
+	}
+	fakeVerifyClaude(t)
+	wikiMaintainSession(t, door.URL, newFakeVLLM(t, ruleAnswers))
+
+	summary, err := runMaintainCLI(t)
+	if err != nil {
+		t.Fatalf("orbit wiki maintain: %v\n%+v", err, summary)
+	}
+	// Ten of the hundred: the first page's six fit, the second page's six more do not.
+	if ops := summary.Report.Ops; ops.Proposed != 6 || ops.Applied != 6 || ops.HeldBackByBreaker != 6 {
+		t.Errorf("ops = %+v, want six proposed and six held back", ops)
+	}
+	if end := finished(t, door); end["outcome"] != "succeeded" || end["to"] != "tok-1" {
 		t.Errorf("the run ended %v", end)
 	}
 }
