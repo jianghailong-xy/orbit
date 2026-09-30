@@ -478,44 +478,44 @@ struct ProjectDetailView: View {
 
     private func page(_ store: ProjectDetailModel, _ document: ProjectDocument, now: Date) -> some View {
         ScrollViewReader { proxy in
-        List {
-            Section {
-                header(store, document, now: now)
-                    .onAppear { headerOnScreen = true }
-                    .onDisappear { headerOnScreen = false }
+            List {
+                Section {
+                    header(store, document, now: now)
+                        .onAppear { headerOnScreen = true }
+                        .onDisappear { headerOnScreen = false }
+                }
+                .listRowBackground(Color.clear)
+                openItemsSection(store, document, now: now)
+                overviewSection(store, document)
+                coordinatorSection(store, document, now: now)
+                runSettingsSection(store, document, now: now)
+                goalSection(document)
+                graphSection(store)
+                blockersSection(store, document, now: now)
+                runQueueSection(store)
+                criteriaSection(document)
+                instructionsSection(document)
+                tasksSection(store, document)
             }
-            .listRowBackground(Color.clear)
-            openItemsSection(store, document, now: now)
-            overviewSection(store, document)
-            coordinatorSection(store, document, now: now)
-            runSettingsSection(store, document, now: now)
-            goalSection(document)
-            graphSection(store)
-            blockersSection(store, document, now: now)
-            runQueueSection(store)
-            criteriaSection(document)
-            instructionsSection(document)
-            tasksSection(store, document)
-        }
-        .projectPageListStyle()
-        .sheet(item: $pageSheet) { sheet in
-            switch sheet {
-            case .start:
-                // The card's "View tasks ›": the page's own task list, under the card.
-                OwnerStartProjectSheet(store: store) {
-                    pageSheet = nil
-                    let anchor = ProjectDetailView.tasksAnchor(ProjectPage.taskGroups(store.tasks))
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        withAnimation { proxy.scrollTo(anchor, anchor: .top) }
+            .projectPageListStyle()
+            .sheet(item: $pageSheet) { sheet in
+                switch sheet {
+                case .start:
+                    // The card's "View tasks ›": the page's own task list, under the card.
+                    OwnerStartProjectSheet(store: store) {
+                        pageSheet = nil
+                        let anchor = ProjectDetailView.tasksAnchor(ProjectPage.taskGroups(store.tasks))
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            withAnimation { proxy.scrollTo(anchor, anchor: .top) }
+                        }
+                    }
+                case .mergeCheck:
+                    if let view = store.integration {
+                        MergeCheckEditor(store: store, view: view,
+                                         automatic: store.document?.coordinatorEnabled ?? false) { notice = $0 }
                     }
                 }
-            case .mergeCheck:
-                if let view = store.integration {
-                    MergeCheckEditor(store: store, view: view,
-                                     automatic: store.document?.coordinatorEnabled ?? false) { notice = $0 }
-                }
             }
-        }
         }
         // Held on the list rather than beside the page's own alert: one view, one alert.
         .alert(ProjectPage.resolveBlockerTitle, isPresented: Binding(get: { blockerToResolve != nil },
@@ -1841,9 +1841,12 @@ private struct OwnerStartProjectSheet: View {
         .task { await store.loadStartCard() }
     }
 
+    /// Drawn once the three reads it is set from have answered — the document, the seal, and the
+    /// line the project may already be on, which the default rule keeps: a card set before the line
+    /// was read would suggest one over it.
     @ViewBuilder
     private var card: some View {
-        if let document = store.document, let standing = store.confirmation {
+        if let document = store.document, let standing = store.confirmation, store.integration != nil {
             let settings = StartProject.defaultSettings(view: store.integration,
                                                         maxConcurrentTasks: document.maxConcurrentTasks,
                                                         graph: store.graph)
@@ -1869,7 +1872,7 @@ private struct OwnerStartProjectSheet: View {
                 onStart: { await start(request, draft) },
                 onViewTasks: onViewTasks,
                 error: error)
-        } else if store.confirmationUnread {
+        } else if store.confirmationUnread || store.integrationUnread {
             Text(AcceptanceConfirmations.staleExplanation(nil) ?? "")
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
