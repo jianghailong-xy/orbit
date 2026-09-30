@@ -1486,7 +1486,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // task and criterion row are out of its reach. No function, trigger or type is created, replaced or
       // dropped — no `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names
       // none of the six preserved objects. No INSERT, UPDATE or DELETE: the new table starts empty.
-      '0338_wiki_plan_job'],
+      '0338_wiki_plan_job',
+      // A plan draft's idempotency key: two nullable `ADD COLUMN`s with no default on `wiki_plan`
+      // (`idempotency_key`, `request_sha256`, catalog-only), one CHECK every stored version satisfies as
+      // both read NULL, and one unique index on (owner_id, idempotency_key). Read against every claim
+      // above: no `task`, `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair
+      // and every stored task and criterion row are out of its reach. No function, trigger or type is
+      // created, replaced or dropped — so it is not another writer of the DONE fence and names none of the
+      // six preserved objects. No INSERT, UPDATE or DELETE: nothing is backfilled.
+      '0339_wiki_plan_idempotency'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

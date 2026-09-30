@@ -1132,7 +1132,8 @@ runner-go 在 `wiki_plan.go`，OrbitKit 在 `Models/WikiPlan.swift`。起草作�
 - **已确认的版本不再改动**：篇和节只插入；起草、编辑、接受建议都产生新版本，在 space 行的锁（`FOR NO KEY UPDATE`）下一个事务写完。
   一个版本唯一会被更新的是它自己那一行 `wiki_plan` 的状态（被确认、被取代）。所以 owner 确认的那一版，就是文档据以写的那一版，一字不差。
 - 草稿和编辑都要写明它建在哪一版上（`baseVersion`，首个草稿为 null），而且必须是当前最新的未取代版本（有草稿就是草稿，否则是已确认版）；
-  否则 `WIKI_PLAN_STALE`（409），什么都不写。接受建议建在它找到的最新版本上，写入期间 plan 变了也同样 409。
+  否则 `WIKI_PLAN_STALE`（409），什么都不写——同一份草稿带着存下它的幂等键再落一次除外（见 21.6）。接受建议建在它找到的最新版本上，
+  写入期间 plan 变了也同样 409。
 
 ### 21.2 plan 的形状（`plan.schema`）
 
@@ -1190,8 +1191,14 @@ runner-go 在 `wiki_plan.go`，OrbitKit 在 `Models/WikiPlan.swift`。起草作�
 - **runner 门**（`maintenanceRoutes`）：只对本 space 的维护会话（`isWikiMaintenanceSession`）开放；别的会话 `WIKI_NOT_MAINTENANCE_SESSION`，
   不带会话头 400，别的 owner 的 space 404。
   - `GET /api/runner/wiki/spaces/:id/plan`：当前已确认版本、草稿、待定建议；
-  - `POST /api/runner/wiki/spaces/:id/plan/drafts`：`{ baseVersion, target?, plan, repoCheck, model? }`，过闸存为新草稿；
+  - `POST /api/runner/wiki/spaces/:id/plan/drafts`：`{ baseVersion, target?, plan, repoCheck, model?, idempotencyKey? }`，过闸存为新草稿；
   - `POST /api/runner/wiki/spaces/:id/plan/proposals`：`{ reason, change, facts }`，过闸存为待定建议。
+  - **草稿的幂等键**（`plan.idempotency`，迁移 `0339_wiki_plan_idempotency`）：草稿可以带 `idempotencyKey`（至多 200 字），和变更集的一样
+    属于 owner。存下的版本记着键和请求摘要（请求 JSON 按键排序、连同 space id，`request_sha256`），一个键只存一个版本
+    （`UNIQUE (owner_id, idempotency_key)`）。同一个键加同样的请求是重放：在读 plan 之前就回答这个键存下的那一版（按它现在的样子），
+    带 `replayed: true`，不写、不发事件、不过闸，也不报 `WIKI_PLAN_STALE`；两次同时落下时，第二次在 space 行的锁下找到第一次存的那一版，
+    同样作答。同一个键配不同的请求被拒 `WIKI_IDEMPOTENCY_KEY_REUSED`（409），什么都不写。草稿的回答是整版外加 `replayed`，本次存下的为 false。
+    owner 的编辑和接受的建议不带键。
 - **user 门**：只认 JWT，owner 本人；带会话头的请求（任何角色）一律 `WIKI_OWNER_CHANNEL_ONLY`，读也一样，在读任何东西之前拒。
   别的 owner 的 space、版本、建议一律 404。runner 门没有任何确认或决定的路由，也不做 MCP 工具（硬约束 2）。
   - `GET /api/wiki/spaces/:id/plan`：`{ spaceId, confirmed, draft, proposals, job }`（`job` 见 21.7）；
@@ -1252,7 +1259,9 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
   沿用它的大纲、去掉移出的节。受保护的篇原样带过去。
 - **结束**：`POST …/plan/job/finish`；`orbit wiki plan check` 读作业：结束且成功、版本还在，才退出 0。
 - **门的瞬时故障**：这些调用和 wiki 的其他调用一样走 `Transport.doWiki`：遇到网关 502/503/504、连接或流被重置、回答在路上丢了，
-  读、`progress` 与 `finish` 再发（结局可以落两次，见 21.7），草稿只发一次——它第二次落下会因底版不再是最新而被 `WIKI_PLAN_STALE` 拒绝。
+  读、`progress` 与 `finish` 再发（结局可以落两次，见 21.7）。草稿带一个由作业、会话和草稿本身派生的幂等键（21.6），所以也再发
+  （`wikiRecordsOnce`）：第一次已经存下、回答丢了时，第二次拿到那一版（`replayed: true`），运行照常成功，只有一个版本；
+  下一轮改过的草稿是另一个键。
 
 ## 22. 文档：按确认的 plan 逐节写，脚注引一手原文（判据 9 第 2 版）
 

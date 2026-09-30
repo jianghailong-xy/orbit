@@ -869,6 +869,20 @@ describe('wiki contract', () => {
     // No tool: confirming and deciding are the owner's (hard constraint 2).
     expect(plan.tool).toMatch(/^none/u);
     for (const tool of CONTRACT.agentSurface.tools) expect(tool).not.toMatch(/plan/u);
+
+    // A draft under an idempotency key (0339): the same draft landing again is answered with the version
+    // it stored, before WIKI_PLAN_STALE could refuse it; another request under the key is a 409.
+    expect(plan.requests.draft).toContain('idempotencyKey?');
+    expect(plan.versions).toMatch(/plan\.idempotency/u);
+    expect(plan.idempotency.replay).toMatch(/replayed: true/u);
+    expect(plan.idempotency.replay).toMatch(/before WIKI_PLAN_STALE/u);
+    expect(plan.idempotency.reused).toMatch(/WIKI_IDEMPOTENCY_KEY_REUSED \(409\)/u);
+    expect(status('WIKI_IDEMPOTENCY_KEY_REUSED')).toBe(409);
+    expect(plan.idempotency.runner).toMatch(/wikiRecordsOnce/u);
+    const keyed = readFileSync(path.join(ROOT, plan.idempotency.migration), 'utf8').replace(/\s+/gu, ' ');
+    expect(plan.idempotency.migration).toMatch(/0339_wiki_plan_idempotency/u);
+    expect(keyed).toContain('CREATE UNIQUE INDEX IF NOT EXISTS "wiki_plan_owner_idempotency_key" ON "wiki_plan" ("owner_id", "idempotency_key")');
+    expect(keyed).toContain('CHECK (("idempotency_key" IS NULL) = ("request_sha256" IS NULL)');
   });
 
   it('ships the plan\'s jobs the contract states: kinds, triggers, states, held reasons, rules, routes and CLI', () => {
