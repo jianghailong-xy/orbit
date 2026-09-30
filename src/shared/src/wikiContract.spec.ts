@@ -81,6 +81,7 @@ import {
   WIKI_MAINTENANCE_JOB,
   wikiMaintenanceCheckCommand,
   wikiMaintenanceRunSessions,
+  type WikiMaintenanceReport,
 } from './wikiMaintain';
 import { WIKI_MAINTENANCE_HEALTH, WIKI_MAINTENANCE_LOOKS, wikiMaintenanceLook } from './wikiHealth';
 import {
@@ -502,6 +503,41 @@ describe('wiki contract', () => {
     expect(CONTRACT.agentSurface.verify.cli).toBe('orbit wiki verify');
     expect(CONTRACT.agentSurface.verify.cleanClaudeCode).toMatch(/--bare --tools "" --strict-mcp-config/u);
     expect(CONTRACT.agentSurface.verify.unreadable).toMatch(/is not a verdict/u);
+  });
+
+  it('hands what ended sessions left waiting to the next maintenance run, and to nobody else', () => {
+    // The 71 ops three failed runs left waiting: no proposer is left to verify them, so the space's
+    // maintenance run adopts them — on routes of its own, beside the proposer's.
+    const verification = CONTRACT.reviewModes.verification;
+    const adoption = verification.adoption;
+    const runner = CONTRACT.agentSurface.doors.runner;
+    for (const route of Object.values(adoption.routes) as string[]) {
+      expect(runner.maintenanceRoutes).toContain(route);
+      expect(runner.verificationRoutes).not.toContain(route);
+    }
+    expect(CONTRACT.maintenance.job.routes.adoptions).toBe(adoption.routes.list);
+    expect(CONTRACT.maintenance.job.routes.adopt).toBe(adoption.routes.report);
+    expect(verification.who.maintenance).toMatch(/adoption/u);
+    expect(adoption.who).toMatch(/WIKI_NOT_MAINTENANCE_SESSION/u);
+    expect(adoption.who).toMatch(/another owner's space a plain 404/u);
+    expect(adoption.who).toMatch(/SUCCEEDED, FAILED or CANCELLED, or it was completed or deleted/u);
+    // At most so many a run — one page of the list — and one left without a verdict waits for the next.
+    expect(WIKI_MAINTENANCE_JOB.adoptOpsMax).toBe(50);
+    expect(WIKI_MAINTENANCE_JOB.adoptOpsMax).toBeLessThanOrEqual(WIKI_REVIEW_RULES.verificationListMax);
+    expect(adoption.run).toMatch(/rules\.adoptOpsMax/u);
+    expect(adoption.run).toMatch(/does not fail the run/u);
+    expect(CONTRACT.maintenance.job.run.steps.find((step: string) => step.startsWith('verify:'))).toMatch(/adoption/u);
+    // What a later op made live is offered as a duplicate, and never goes live twice.
+    expect(adoption.list).toMatch(/neighbours its draft has now/u);
+    expect(adoption.twin).toMatch(/same kind, title and summary/u);
+    expect(adoption.twin).toMatch(/No verdict makes a second live copy/u);
+    // Every floor as it was.
+    for (const floor of [/nothing applies without a verdict/u, /never more than unreviewed/u, /counts toward the fallback/u]) {
+      expect(adoption.floors).toMatch(floor);
+    }
+    // The report counts them apart from the run's own ops.
+    const adopted: NonNullable<NonNullable<WikiMaintenanceReport['verification']>['adopted']> = { ops: 0, verified: 0, failed: 0 };
+    expect(CONTRACT.maintenance.job.report).toMatch(new RegExp(`adopted \\{${Object.keys(adopted).join(', ')}\\}`, 'u'));
   });
 
   it.each(['entry', 'op', 'changeset', 'source'])('has a consistent %s state machine', (name) => {
