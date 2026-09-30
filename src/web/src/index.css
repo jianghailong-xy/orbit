@@ -1051,13 +1051,9 @@ body {
   font-weight: 600;
 }
 .tp-account-detail,
-.tp-account-profile-chevron,
 .tp-account-current-theme {
   color: var(--text-2);
   font-size: 12px;
-}
-.tp-account-profile-chevron {
-  flex: none;
 }
 .tp-account-appearance-label {
   display: flex;

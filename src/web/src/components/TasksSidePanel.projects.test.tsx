@@ -175,6 +175,7 @@ describe('the sidebar’s Projects group', () => {
 
     expect(document.querySelector('.tp-account-profile img')?.getAttribute('src')).toBe(photo);
     expect(document.querySelector('.tp-account-detail')?.textContent).toBe('me@example.com');
+    expect(document.querySelector('.tp-account-profile-chevron')).toBeNull();
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
     expect(vi.mocked(fetchAvatarDataUrl)).toHaveBeenCalledTimes(1);
   });
