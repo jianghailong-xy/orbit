@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import { Alert } from 'antd';
 import { useLocation } from 'react-router-dom';
 import { api } from '../api';
-import { markdownToPlainText } from '../lib/markdownText';
+import { markdownToPlainLines } from '../lib/markdownText';
 import { ownerConfirmationQuery } from '../lib/queries';
 import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, SHORTCUT_HINT, useDecisionCardKeys } from './CardHotkey';
@@ -239,8 +239,8 @@ function OwnerConfirmationBoxes({
   report: OwnerConfirmationReport | null;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
-  const criteria = markdownToPlainText(acceptanceCriteria);
-  const said = markdownToPlainText(report?.text);
+  const criteria = markdownToPlainLines(acceptanceCriteria);
+  const said = markdownToPlainLines(report?.text);
   const long = said.length > REPORT_CLAMP;
   return (
     <>
@@ -260,7 +260,7 @@ function OwnerConfirmationBoxes({
           {said === '' ? (
             <span className="decision-ask-quiet">{OWNER_CONFIRMATION_NO_REPORT}</span>
           ) : long && !open ? (
-            `${said.slice(0, REPORT_CLAMP)}…`
+            `${said.slice(0, REPORT_CLAMP).trimEnd()}…`
           ) : (
             said
           )}

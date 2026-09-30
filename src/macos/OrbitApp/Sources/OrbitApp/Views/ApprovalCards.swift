@@ -1110,7 +1110,8 @@ private struct OwnerConfirmationBoxes: View {
     @State private var reportOpen = false
 
     private var criteria: String { OwnerConfirmations.plainText(acceptanceCriteria) }
-    private var said: (text: String, folded: Bool) {
+    private var said: String { OwnerConfirmations.plainText(report?.text) }
+    private var folded: (text: String, folded: Bool) {
         OwnerConfirmations.foldedBody(report?.text)
     }
 
@@ -1123,8 +1124,8 @@ private struct OwnerConfirmationBoxes: View {
             // whose time is missing is still a report.
             box(OwnerConfirmations.reportHeading(
                     report, time: report.flatMap { OwnerConfirmations.receiptTime($0.reportedAt) })) {
-                quietOrText(said.text.isEmpty ? "" : said.text, OwnerConfirmations.noReport)
-                if said.folded {
+                quietOrText(reportOpen ? said : folded.text, OwnerConfirmations.noReport)
+                if folded.folded {
                     // The rest of it, one press away — never dropped: a report the owner cannot
                     // finish reading is a report they cannot decide from.
                     DisclosureToggle(open: reportOpen,

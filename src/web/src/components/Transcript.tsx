@@ -725,6 +725,9 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         const msg = stripAnsi(String(p.message ?? 'error'));
         turnAccountedFor = true;
         if (isAuthErrorText(msg)) authError(parent, ev.seq, msg);
+        // A provider too busy to answer is the same pause here as in a reply (Codex reports it as
+        // the turn's error): the server has armed the re-send, so it earns the card that says so.
+        else if (isRetryableApiErrorText(msg)) autoRetry(parent, ev.seq, msg, 'apiError');
         else into(parent).push({ kind: 'error', seq: ev.seq, message: msg });
         break;
       }
