@@ -51,6 +51,17 @@ final class EngineErrorsTests: XCTestCase {
                        "not an API error at all")
     }
 
+    /// Codex words its own overload and reports it as the turn's error, with no `API Error` prefix.
+    /// Only the whole message counts: a reply quoting it mid-sentence is an ordinary reply.
+    func testRetryableInARuntimeSOwnWords() {
+        XCTAssertTrue(EngineErrors.isRetryableApiErrorText(
+            "Selected model is at capacity. Please try a different model."))
+        XCTAssertTrue(EngineErrors.isRetryableApiErrorText(
+            "  Selected model is at capacity. Please try a different model."))
+        XCTAssertFalse(EngineErrors.isRetryableApiErrorText(
+            "The run died on \"Selected model is at capacity\" — retrying."))
+    }
+
     /// The reply must OPEN with the provider's sentence. An answer that investigates a quota quotes
     /// one mid-paragraph, and rendering that as the provider refusing to answer would replace the
     /// reply with a card saying the opposite of what it says.

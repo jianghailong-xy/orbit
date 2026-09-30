@@ -442,6 +442,54 @@ final class OwnerConfirmationDoorTests: XCTestCase {
                        "a run that said nothing still gets the box, and the box still has a heading")
     }
 
+    /// The boxes keep the lines they were written in, and lose their marks on every one of them. A
+    /// real report, which the phone showed as one run-on line with every list dash after the first
+    /// line still in it: without `(?m)`, `^` is the start of the whole text.
+    func testTheBoxesKeepTheirLinesAndLoseTheirMarksOnEveryLine() {
+        let report = [
+            "冷启动做完了，第一批条目和文章都已上线。判据 6 要的数字都写在任务评论 `34XUSjYR0mkLkLx8VCFeT` 里。",
+            "",
+            "- **第一批条目上线**：2026-09-28T13:33:18.670Z，来自维护回填的第一次运行。",
+            "- **文章**：139 篇，覆盖 22 个主题。",
+            "",
+            "有几处要你留意：",
+            "- **每日上限**：设置里维护每天是 8 次，你批准时说的是 16。",
+        ].joined(separator: "\n")
+        XCTAssertEqual(OwnerConfirmations.plainText(report), [
+            "冷启动做完了，第一批条目和文章都已上线。判据 6 要的数字都写在任务评论 34XUSjYR0mkLkLx8VCFeT 里。",
+            "",
+            "• 第一批条目上线：2026-09-28T13:33:18.670Z，来自维护回填的第一次运行。",
+            "• 文章：139 篇，覆盖 22 个主题。",
+            "",
+            "有几处要你留意：",
+            "• 每日上限：设置里维护每天是 8 次，你批准时说的是 16。",
+        ].joined(separator: "\n"))
+
+        // The cases the browser's `markdownToPlainLines` is held to, so the two ends show one text.
+        XCTAssertEqual(OwnerConfirmations.plainText("# Title\n\n## Section\n> quoted\n- **bold** and `code`"),
+                       "Title\n\nSection\nquoted\n• bold and code")
+        XCTAssertEqual(OwnerConfirmations.plainText("1. one\n2) two\n  - under two"),
+                       "1. one\n2) two\n  • under two",
+                       "an ordered item keeps its number, a nested bullet its indent")
+        XCTAssertEqual(OwnerConfirmations.plainText("a\r\n\r\n\r\n```sh\nnpm test\n```\n\n---\n\nb  "),
+                       "a\n\nnpm test\n\nb",
+                       "at most one blank line, and none where a fence or a break stood")
+        XCTAssertEqual(OwnerConfirmations.plainText("   \n\n  "), "")
+        XCTAssertEqual(OwnerConfirmations.plainText(nil), "")
+    }
+
+    /// The fold drops the whitespace it lands on, so its `…` never sits alone on the next line.
+    func testTheFoldDropsTheWhitespaceItLandsOn() {
+        let edge = String(repeating: "x", count: OwnerConfirmations.reportClamp - 1)
+        let folded = OwnerConfirmations.foldedBody(edge + "\n\nthe rest")
+        XCTAssertEqual(folded.text, edge + "…")
+        XCTAssertTrue(folded.folded)
+
+        let short = OwnerConfirmations.foldedBody("short\n\n- list")
+        XCTAssertEqual(short.text, "short\n\n• list")
+        XCTAssertFalse(short.folded)
+    }
+
     /// The moment, as the receipts render it: a clock time on the same day, and the day prefixed on
     /// any other.
     func testReceiptTimePrefersTheClockAndNamesTheDayOnlyWhenItDiffers() throws {

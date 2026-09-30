@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApprovalPanel, decliningPrefix } from './ApprovalPanel';
+import { ApprovalPanel, CREATE_CRITERIA_CONFIRMED_AT_START, decliningPrefix } from './ApprovalPanel';
 import type { ApprovalInfo } from '../api';
 import { decisionRowKey, type PendingDecisionQueue, type PendingDecisionRow } from './DecisionRail';
 import { DECISION_CONFIRM_ACTION } from './EvidenceDecisionCard';
@@ -157,6 +157,32 @@ describe('single create approval', () => {
     // A project's criteria are a declared list of assertions, and the list is what makes them
     // readable, so they are not flattened into the sentence a task's criteria becomes.
     expect(html).toContain('<li>p95 under 1s</li>');
+  });
+
+  /**
+   * Approving the create is not confirming the criteria: the start card asks that, with the plan in
+   * front of the owner. So the card says so right under them — and only on a project, since a
+   * task's criteria are confirmed by nobody at start.
+   */
+  it('says under a project’s criteria that they are confirmed when the project starts, and not on a task', () => {
+    const html = render(
+      create('orbit_project_create', {
+        title: 'Checkout rewrite',
+        goal: 'One-page checkout',
+        acceptanceCriteriaItems: [{ text: 'p95 under 1s', verificationMethod: 'dashboard' }],
+      }),
+    );
+    expect(CREATE_CRITERIA_CONFIRMED_AT_START).toBe('You’ll confirm these when the project starts.');
+    expect(html).toContain(`<p class="create-criteria-note">${CREATE_CRITERIA_CONFIRMED_AT_START}</p>`);
+    // Right under the list, not somewhere else on the card.
+    expect(html.indexOf(CREATE_CRITERIA_CONFIRMED_AT_START)).toBeGreaterThan(html.indexOf('<li>p95 under 1s</li>'));
+
+    const task = render(create('orbit_task_create', { title: 't', acceptanceCriteria: 'Signing in lands on /home' }));
+    expect(task).toContain('Signing in lands on /home');
+    expect(task).not.toContain(CREATE_CRITERIA_CONFIRMED_AT_START);
+    // A project with no criteria says nothing about confirming them.
+    expect(render(create('orbit_project_create', { title: 'Empty', goal: 'g' })))
+      .not.toContain(CREATE_CRITERIA_CONFIRMED_AT_START);
   });
 
   it('offers no standing yes', () => {
