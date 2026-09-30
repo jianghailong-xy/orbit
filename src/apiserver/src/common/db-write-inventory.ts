@@ -1312,13 +1312,13 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'wiki/wiki-plan.ts#store',
     shape: 'TX_RETRIED',
-    locks: 'The space\'s wiki_space row (rank 60) by SELECT … FOR NO KEY UPDATE — the one writer of a space\'s plan at a time — then its wiki_plan rows (60): the newest number read, the space\'s draft UPDATEd to superseded, one INSERT of the new version (its foreign key takes KEY SHARE on the space row this transaction holds), one INSERT of its wiki_plan_doc rows and one of their wiki_plan_section rows (60, KEY SHARE on the version and the documents just written); and, for an accepted proposal, one UPDATE of that wiki_plan_proposal row by id and status (60).',
-    identity: 'The version the caller built on. Under the lock the newest draft or confirmed version is read again; any other one means the plan moved, and the closure throws WIKI_PLAN_STALE having written nothing. So of two writers built on the same version the second finds the first\'s and is refused.',
+    locks: 'The space\'s wiki_space row (rank 60) by SELECT … FOR NO KEY UPDATE — the one writer of a space\'s plan at a time — then its wiki_plan rows (60): for a draft under an idempotency key, the version its key stored read first; the newest number read, the space\'s draft UPDATEd to superseded, one INSERT of the new version (its foreign key takes KEY SHARE on the space row this transaction holds), one INSERT of its wiki_plan_doc rows and one of their wiki_plan_section rows (60, KEY SHARE on the version and the documents just written); and, for an accepted proposal, one UPDATE of that wiki_plan_proposal row by id and status (60).',
+    identity: 'A draft\'s idempotency key, then the version the caller built on. Under the lock a version the key stored already is read first: the same request\'s is the answer, replayed, and the closure writes nothing (another request\'s is WIKI_IDEMPOTENCY_KEY_REUSED). Then the newest draft or confirmed version is read again; any other one means the plan moved, and the closure throws WIKI_PLAN_STALE having written nothing. So of two writers built on the same version the second finds the first\'s and is refused — or, the same draft under its key, answered with it.',
     isolation: '',
     attempts: 4,
-    replay: 'Everything written is computed before the closure from the request and the version it was built on, and the newest version and the next number are re-read under the space lock inside it, so a re-run writes the same version or finds the plan moved and writes nothing.',
-    effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space (nothing depends on it).',
-    answer: 'Typed 503 from the global boundary; the drafting job, the owner or the acceptance sends it again, and a plan that moved meanwhile is WIKI_PLAN_STALE then.',
+    replay: 'Everything written is computed before the closure from the request and the version it was built on, and the key\'s version, the newest version and the next number are re-read under the space lock inside it, so a re-run writes the same version, finds its key\'s version, or finds the plan moved and writes nothing.',
+    effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space (nothing depends on it), and none for a replay.',
+    answer: 'Typed 503 from the global boundary; the drafting job, the owner or the acceptance sends it again: a draft under its key that was stored meanwhile is answered with its version, and a plan that moved otherwise is WIKI_PLAN_STALE then.',
   },
   // The owner's confirmation of a space's draft.
   {

@@ -6243,11 +6243,17 @@ model WikiPlan {
   confirmedAt       DateTime? @map("confirmed_at") @db.Timestamptz(3)
   supersededAt      DateTime? @map("superseded_at") @db.Timestamptz(3)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// The key a drafting job's draft was stored under, and the digest of its request (migration 0339,
+  /// contract `plan.idempotency`): the same key with the same request is answered with this version.
+  /// Set and left NULL together; NULL for a version the owner made.
+  idempotencyKey    String?   @map("idempotency_key")
+  requestSha256     String?   @map("request_sha256") @db.Char(64)
 
   docs WikiPlanDoc[]
 
   @@unique([id, ownerId], map: "wiki_plan_id_owner_id_key")
   @@unique([spaceId, version], map: "wiki_plan_space_id_version_key")
+  @@unique([ownerId, idempotencyKey], map: "wiki_plan_owner_idempotency_key")
   @@map("wiki_plan")
 }
 

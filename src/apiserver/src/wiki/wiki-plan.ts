@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   RunEventType,
   toUuid,
@@ -22,6 +22,7 @@ import {
   type WikiPlanDecisionResult,
   type WikiPlanDoc,
   type WikiPlanDocInput,
+  type WikiPlanDraftAnswer,
   type WikiPlanFactKind,
   type WikiPlanGateCheck,
   type WikiPlanGateError,
@@ -825,6 +826,64 @@ interface NewVersion {
   model: string | null;
   authorSessionId: string | null;
   authorUserId: string | null;
+  /** A drafting job's draft under an idempotency key; nothing else has one. */
+  idempotency?: DraftIdempotency;
+}
+
+/**
+ * A draft's idempotency key, and the digest of the request it came with (contract `plan.idempotency`):
+ * what tells the same draft landing again — sent again after its first answer was lost on the way
+ * back — from a key reused for another. The digest is of the request's JSON with its keys sorted, so
+ * the same draft digests the same however it was spelled, and it names the space: the key is the
+ * owner's, as a changeset's is.
+ */
+interface DraftIdempotency {
+  key: string;
+  requestSha256: string;
+}
+
+/** The longest idempotency key a draft carries, as a changeset's. */
+const IDEMPOTENCY_KEY_MAX_CHARS = 200;
+
+/** A draft's key: null when it carries none, or one the schema refuses — the refusal is in the walk. */
+function keyOf(walk: Walk, value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const refused = walk.errors.length;
+  const key = walk.text(value, 'idempotencyKey', IDEMPOTENCY_KEY_MAX_CHARS, true);
+  return walk.errors.length === refused ? key : null;
+}
+
+function draftIdempotency(spaceId: string, key: string, raw: Record<string, unknown>): DraftIdempotency {
+  const request = {
+    spaceId,
+    baseVersion: raw.baseVersion ?? null,
+    target: raw.target ?? null,
+    plan: raw.plan ?? null,
+    repoCheck: raw.repoCheck ?? null,
+    model: raw.model ?? null,
+  };
+  return { key, requestSha256: createHash('sha256').update(JSON.stringify(canonical(request))).digest('hex') };
+}
+
+/**
+ * The version the same draft stored under this key, or null when the key stored none: a replay is
+ * answered with it and writes nothing. The key with another request is WIKI_IDEMPOTENCY_KEY_REUSED.
+ */
+async function storedUnder(db: PlanReader, ownerId: string, idempotency: DraftIdempotency): Promise<number | null> {
+  const earlier = await db.wikiPlan.findFirst({
+    where: { ownerId, idempotencyKey: idempotency.key },
+    select: { version: true, requestSha256: true },
+  });
+  if (!earlier) return null;
+  if (earlier.requestSha256 !== idempotency.requestSha256) {
+    throw new WikiRefusalError({
+      code: 'WIKI_IDEMPOTENCY_KEY_REUSED',
+      message:
+        'this idempotency key was used for a different draft: the same draft under the same key replays the version it '
+          + 'stored, and another draft needs another key',
+    });
+  }
+  return earlier.version;
 }
 
 @Injectable()
@@ -1093,7 +1152,9 @@ export class WikiPlans {
    * Store a version under the space row's lock (contract `plan.versions`): it is numbered after every
    * version the space has had, it supersedes the draft there was, and its documents and sections are
    * inserted with it. `expectLatest` is the version the caller built it on; another one found under the
-   * lock is WIKI_PLAN_STALE, and nothing is written.
+   * lock is WIKI_PLAN_STALE, and nothing is written. A draft under an idempotency key that the same
+   * request stored already — committed while this one waited for the lock — is answered with that
+   * version first, replayed, and nothing is written (contract `plan.idempotency`).
    */
   private async store(
     ownerId: string,
@@ -1101,12 +1162,16 @@ export class WikiPlans {
     expectLatest: number | null,
     next: NewVersion,
     after?: (tx: Prisma.TransactionClient, version: number) => Promise<void>,
-  ): Promise<number> {
-    const version = await withTransactionRetry(
+  ): Promise<{ version: number; replayed: boolean }> {
+    const stored = await withTransactionRetry(
       this.prisma,
       async (tx) => {
         await tx.$queryRaw(Prisma.sql`
           SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`);
+        if (next.idempotency) {
+          const earlier = await storedUnder(tx, ownerId, next.idempotency);
+          if (earlier !== null) return { version: earlier, replayed: true };
+        }
         const latest = await tx.wikiPlan.findFirst({
           where: { ownerId, spaceId, status: { in: ['draft', 'confirmed'] } },
           orderBy: { version: 'desc' },
@@ -1143,6 +1208,8 @@ export class WikiPlans {
             model: next.model,
             authorSessionId: next.authorSessionId,
             authorUserId: next.authorUserId,
+            idempotencyKey: next.idempotency?.key ?? null,
+            requestSha256: next.idempotency?.requestSha256 ?? null,
           },
           select: { id: true },
         });
@@ -1182,33 +1249,43 @@ export class WikiPlans {
           if (sections.length > 0) await tx.wikiPlanSection.createMany({ data: sections });
         }
         if (after) await after(tx, number);
-        return number;
+        return { version: number, replayed: false };
       },
       loggedRetry(this.logger, 'wiki.storePlanVersion'),
     );
-    this.realtime?.publishWikiChanged(ownerId, spaceId);
-    return version;
+    // A replay changed nothing to announce (contract `realtime.notPublishedWhen`).
+    if (!stored.replayed) this.realtime?.publishWikiChanged(ownerId, spaceId);
+    return stored;
   }
 
   /**
    * A draft from a maintenance run's drafting job (contract `plan.routes.draft`): the whole plan, the
    * target it was drafted to, and what the runner found when it checked the repository references. It
    * is gated as a whole — the protection check included, since the model wrote it — and stored as the
-   * space's new draft, or refused WIKI_PLAN_GATE with every error.
+   * space's new draft, or refused WIKI_PLAN_GATE with every error. Under an idempotency key, the same
+   * draft landing again is answered with the version it stored (contract `plan.idempotency`).
    */
-  async submitDraft(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiPlanVersion> {
+  async submitDraft(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiPlanDraftAnswer> {
     await this.assertMaintainer(principal, spaceId);
     const { ownerId } = principal;
     const envelope = new Walk(new Map());
     const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
-    if (!raw) throw gateRefusal([{ check: 'schema', path: '', message: 'the body is an object: { baseVersion, target, plan, repoCheck, model }' }], 'The draft');
+    if (!raw) throw gateRefusal([{ check: 'schema', path: '', message: 'the body is an object: { baseVersion, target, plan, repoCheck, model, idempotencyKey }' }], 'The draft');
     for (const key of Object.keys(raw)) {
-      if (!['baseVersion', 'target', 'plan', 'repoCheck', 'model'].includes(key)) envelope.fail('schema', key, `${key} is not a field of a draft: baseVersion, target, plan, repoCheck, model`);
+      if (!['baseVersion', 'target', 'plan', 'repoCheck', 'model', 'idempotencyKey'].includes(key)) envelope.fail('schema', key, `${key} is not a field of a draft: baseVersion, target, plan, repoCheck, model, idempotencyKey`);
     }
     const baseVersion = raw.baseVersion === null || raw.baseVersion === undefined ? null : envelope.integer(raw.baseVersion, 'baseVersion', 1, 2_147_483_647);
     const target = targetOf(envelope, raw.target);
     const repoCheck = repoCheckOf(envelope, raw.repoCheck);
     const model = raw.model === undefined || raw.model === null ? null : envelope.text(raw.model, 'model', 200, true);
+    // The same draft landing again under its key is answered before the plan is read: the version it
+    // stored is the newest now, so its base no longer is, and it is no STALE draft but the same one.
+    const key = keyOf(envelope, raw.idempotencyKey);
+    const idempotency = key === null ? undefined : draftIdempotency(spaceId, key, raw);
+    if (idempotency) {
+      const earlier = await storedUnder(this.prisma, ownerId, idempotency);
+      if (earlier !== null) return { ...(await this.version(ownerId, spaceId, earlier)), replayed: true };
+    }
 
     const base = await this.latest(this.prisma, ownerId, spaceId);
     if ((base?.version ?? null) !== baseVersion) {
@@ -1225,7 +1302,7 @@ export class WikiPlans {
     checkProtected(walk, plan, baseContent, 'plan.');
     if (walk.errors.length > 0) throw gateRefusal(walk.errors, 'The draft');
     assignKeys(plan, baseContent);
-    const number = await this.store(ownerId, spaceId, base?.version ?? null, {
+    const stored = await this.store(ownerId, spaceId, base?.version ?? null, {
       origin: 'maintenance',
       baseVersion: base?.version ?? null,
       proposalId: null,
@@ -1236,8 +1313,9 @@ export class WikiPlans {
       model,
       authorSessionId: principal.sessionId,
       authorUserId: null,
+      idempotency,
     });
-    return this.version(ownerId, spaceId, number);
+    return { ...(await this.version(ownerId, spaceId, stored.version)), replayed: stored.replayed };
   }
 
   /**
@@ -1293,7 +1371,7 @@ export class WikiPlans {
     checkDocCount(walk, plan, target, 'plan.docs');
     if (walk.errors.length > 0) throw gateRefusal(walk.errors, 'The edit');
     assignKeys(plan, baseContent);
-    const number = await this.store(ownerId, spaceId, base.version, {
+    const { version: number } = await this.store(ownerId, spaceId, base.version, {
       origin: 'owner',
       baseVersion: base.version,
       proposalId: null,
@@ -1489,7 +1567,7 @@ export class WikiPlans {
     checkProtected(check, plan, baseContent, 'plan.');
     if (check.errors.length > 0 || !doc) throw gateRefusal(check.errors, `This proposal, applied to version ${base.version},`);
     assignKeys(plan, baseContent);
-    const number = await this.store(
+    const { version: number } = await this.store(
       ownerId,
       spaceId,
       base.version,

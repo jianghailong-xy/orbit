@@ -508,6 +508,11 @@ func wikiEffectOf(route string, body map[string]interface{}, landing int) string
 			return once(key) // UNIQUE (owner_id, idempotency_key): a second landing is answered from the first
 		}
 		return each() // with no key, each landing is another changeset
+	case strings.HasSuffix(route, "plan/drafts"):
+		if key := str("idempotencyKey"); key != "" {
+			return once(key) // UNIQUE (owner_id, idempotency_key): a second landing is answered with the version the first stored
+		}
+		return each() // with no key, a second landing is WIKI_PLAN_STALE, its base no longer the newest
 	case strings.HasSuffix(route, "verifications"):
 		verdicts, _ := body["verdicts"].([]interface{})
 		verdict, _ := verdicts[0].(map[string]interface{})
@@ -547,8 +552,8 @@ func (l *wikiLedger) counts() (landings, effects int) {
 }
 
 // Every write lands once, and its answer is cut on the way back. The ones the server records at most once
-// are sent again, and record once; the rest — a failed or truncated run's report, a proposal with no key —
-// are sent once, and their failure is the caller's, as before.
+// are sent again, and record once; the rest — a failed or truncated run's report, a proposal or a plan draft
+// with no key — are sent once, and their failure is the caller's, as before.
 func TestWikiRetryResendsOnlyTheWritesTheServerRecordsOnce(t *testing.T) {
 	proposal := func(extra map[string]interface{}) map[string]interface{} {
 		body := map[string]interface{}{"ops": []interface{}{map[string]interface{}{"op": "add"}}, "rationale": "why"}
@@ -582,6 +587,14 @@ func TestWikiRetryResendsOnlyTheWritesTheServerRecordsOnce(t *testing.T) {
 		}},
 		{"an import's proposal", "POST imports", true, 1, func(tr *Transport) error {
 			_, err := tr.importWikiChangeset("s", "space-1", proposal(map[string]interface{}{"idempotencyKey": "wiki-import:1"}))
+			return err
+		}},
+		{"a plan draft under its key", "POST plan/drafts", true, 1, func(tr *Transport) error {
+			_, err := tr.submitWikiPlanDraft("s", "space-1", wikiPlanDraftRequest{Plan: wikiPlanDraft{}, IdempotencyKey: "wiki-plan-1"})
+			return err
+		}},
+		{"a plan draft with no key", "POST plan/drafts", false, 0, func(tr *Transport) error {
+			_, err := tr.submitWikiPlanDraft("s", "space-1", wikiPlanDraftRequest{Plan: wikiPlanDraft{}})
 			return err
 		}},
 		{"a verdict", "POST verifications", true, 1, func(tr *Transport) error {

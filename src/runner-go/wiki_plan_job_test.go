@@ -709,7 +709,7 @@ func TestWikiPlanResumesAtTheShaItsEarlierRunDraftedFrom(t *testing.T) {
 
 // A plan job's calls go through Transport.doWiki: a read, the round a run is on and the run's end are sent again
 // after a 502, a reset stream or an answer cut on its way back — the end may land twice, the server answering the
-// same end with what it kept — and a draft is sent once.
+// same end with what it kept. A draft is sent again under its key (the next test).
 func TestWikiPlanJobCallsWaitOutTheDoorsTransientFailures(t *testing.T) {
 	f := newPlanFixture(t)
 	door := newFakePlanDoor(t, f)
@@ -749,24 +749,100 @@ func TestWikiPlanJobCallsWaitOutTheDoorsTransientFailures(t *testing.T) {
 	}
 }
 
-func TestWikiPlanSendsADraftOnce(t *testing.T) {
+// fakePlanVersions stores drafts as the server does (contract `plan.versions`, `plan.idempotency`): a draft
+// built on the newest version becomes the next one, and one built on another is WIKI_PLAN_STALE; under an
+// idempotency key, the same draft landing again is answered with the version it stored, replayed, and
+// another draft under the key is WIKI_IDEMPOTENCY_KEY_REUSED.
+type fakePlanVersions struct {
+	mu     sync.Mutex
+	stored int
+	// byKey is the version each key stored, and the request it came with (its JSON, less the key).
+	byKey map[string]fakePlanKeyed
+}
+
+type fakePlanKeyed struct {
+	version int
+	request string
+}
+
+func (s *fakePlanVersions) draft(_ int, body map[string]interface{}) (int, string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key, _ := body["idempotencyKey"].(string)
+	fields := map[string]interface{}{}
+	for name, value := range body {
+		if name != "idempotencyKey" {
+			fields[name] = value
+		}
+	}
+	request, _ := json.Marshal(fields)
+	if earlier, ok := s.byKey[key]; ok {
+		if earlier.request != string(request) {
+			return http.StatusConflict, `{"code":"WIKI_IDEMPOTENCY_KEY_REUSED","message":"this idempotency key was used for a different draft"}`
+		}
+		return http.StatusOK, fmt.Sprintf(`{"version":%d,"status":"draft","replayed":true}`, earlier.version)
+	}
+	var newest interface{}
+	if s.stored > 0 {
+		newest = float64(s.stored)
+	}
+	if body["baseVersion"] != newest {
+		return http.StatusConflict, fmt.Sprintf(`{"code":"WIKI_PLAN_STALE","message":"this draft revises %v, and the plan stands at %v"}`, body["baseVersion"], newest)
+	}
+	s.stored++
+	if key != "" {
+		if s.byKey == nil {
+			s.byKey = map[string]fakePlanKeyed{}
+		}
+		s.byKey[key] = fakePlanKeyed{version: s.stored, request: string(request)}
+	}
+	return http.StatusOK, fmt.Sprintf(`{"version":%d,"status":"draft","replayed":false}`, s.stored)
+}
+
+func (s *fakePlanVersions) versions() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.stored
+}
+
+// The draft lands and is stored, and its answer is cut on the way back: the run sends it again under its key,
+// the server answers with the version the first landing stored, and the run succeeds with that one version —
+// where before, the second landing was refused WIKI_PLAN_STALE and a run whose draft was stored said it failed.
+func TestWikiPlanResendsADraftWhoseAnswerWasLostAndStoresOneVersion(t *testing.T) {
 	f := newPlanFixture(t)
 	door := newFakePlanDoor(t, f)
+	versions := &fakePlanVersions{}
+	door.drafts = versions.draft
 	vllm := newFakeVLLM(t, (&planModel{}).answer)
 	planSession(t, door.URL, vllm)
 	fakeVerifyClaude(t)
-	withFakeWikiRetry(t)
+	clock := withFakeWikiRetry(t)
 	flaky := withFlakyWikiTransport(t, map[string][]wikiFault{"POST plan/drafts": {{lost: wikiAnswerCut}}})
 
 	summary, printed, err := runPlanCLI(t, t.TempDir(), "draft", "--target", "3-3")
-	if err == nil || summary.Outcome != "failed" {
-		t.Fatalf("a draft whose answer was lost was taken as stored: %s", printed)
+	if err != nil || summary.Outcome != "succeeded" || summary.Version == nil || *summary.Version != 1 {
+		t.Fatalf("a run whose draft was stored and whose answer was lost = %v, %s, version %v: want it succeeded with version 1\n%s",
+			err, summary.Outcome, summary.Version, printed)
 	}
-	if n := flaky.sent("POST plan/drafts"); n != 1 {
-		t.Errorf("the draft was sent %d times: a second landing is refused WIKI_PLAN_STALE, so it goes once", n)
+	if n := flaky.sent("POST plan/drafts"); n != 2 {
+		t.Errorf("the draft was sent %d times: want it sent again after its answer was cut", n)
 	}
-	if end := planFinish(t, door); end["outcome"] != "failed" || !strings.Contains(fmt.Sprint(end["error"]), "EOF") {
-		t.Errorf("the job's end: %v", end)
+	if n := versions.versions(); n != 1 {
+		t.Errorf("the server stored %d versions: the draft landed twice and must be one version", n)
+	}
+	landed := door.of(http.MethodPost, "plan/drafts")
+	if len(landed) != 2 || !reflect.DeepEqual(landed[0].body, landed[1].body) {
+		t.Fatalf("the draft landed %d times, or differently the second time", len(landed))
+	}
+	key, _ := landed[0].body["idempotencyKey"].(string)
+	if !strings.HasPrefix(key, "wiki-plan-") || len(key) > 200 {
+		t.Errorf("the draft was sent under the key %q: want the run's key, at most 200 characters", key)
+	}
+	if end := planFinish(t, door); end["outcome"] != "succeeded" || end["version"] != float64(1) {
+		t.Errorf("the job's end: %v, want succeeded with version 1", end)
+	}
+	if lines := clock.lines(); len(lines) != 1 || !strings.Contains(lines[0], "POST /runner/wiki/spaces/space-1/plan/drafts failed (EOF); retry 1 in 2s") {
+		t.Errorf("the retry's line: %q", lines)
 	}
 }
 
