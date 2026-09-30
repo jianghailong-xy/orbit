@@ -471,6 +471,12 @@ final class ProjectAPIClientTests: XCTestCase {
                 return (200, #"{"projectId":"p1","state":"NEVER_OPENED","coordination":{},"openability":{"canOpen":true}}"#)
             case ("POST", "/api/projects/p1/coordinator"):
                 return (201, #"{"sessionId":"s1","created":true,"workspaceId":"w1"}"#)
+            case ("PATCH", "/api/projects/p1/integration"):
+                return (200, #"{"line":"MAIN","locked":false,"mergeCheckCommand":null,"escalationSeconds":3600}"#)
+            case ("POST", "/api/projects/p1/pause"):
+                return (201, #"{"projectId":"p1","startedAt":"s","pausedAt":"p","pausedReason":"OWNER"}"#)
+            case ("POST", "/api/projects/p1/resume"):
+                return (201, #"{"projectId":"p1","startedAt":"s","pausedAt":null,"pausedReason":null}"#)
             case ("DELETE", "/api/projects/p1"): return (200, "{}")
             default: return (404, "")
             }
@@ -489,12 +495,24 @@ final class ProjectAPIClientTests: XCTestCase {
         let status = try await api.projectCoordinatorStatus("p1")
         let opened = try await api.openProjectCoordinator("p1")
         _ = try await api.updateProjectStatus("p1", to: .done)
-        _ = try await api.setProjectAutomatic("p1", enabled: true, expectedConfigRevision: "7")
+        _ = try await api.updateProjectAuthorization(
+            "p1", UpdateProjectAuthorizationRequest(automatic: true, expectedConfigRevision: "7"))
+        _ = try await api.updateProjectAuthorization(
+            "p1", UpdateProjectAuthorizationRequest(maxConcurrentTasks: 4, expectedConfigRevision: "8"))
+        let line = try await api.updateProjectIntegration(
+            "p1", UpdateProjectIntegrationRequest(line: .main, mergeCheckCommand: .some(nil),
+                                                  exceptionEscalationSeconds: 3600))
+        let paused = try await api.pauseProject("p1")
+        let resumed = try await api.resumeProject("p1")
         try await api.deleteProject("p1")
 
         XCTAssertEqual(listed.map(\.id), ["p1"])
         XCTAssertEqual(status.state, .neverOpened)
         XCTAssertEqual(opened, ProjectCoordinatorOpened(sessionId: "s1", created: true, workspaceId: "w1"))
+        XCTAssertEqual(line.line, .main)
+        XCTAssertEqual(line.escalationSeconds, 3600)
+        XCTAssertEqual(paused.pausedAt, "p")
+        XCTAssertNil(resumed.pausedAt)
         XCTAssertEqual(log.all, [
             "GET /api/projects",
             "GET /api/projects?status=OPEN",
@@ -505,7 +523,12 @@ final class ProjectAPIClientTests: XCTestCase {
             "GET /api/projects/p1/coordinator/status",
             "POST /api/projects/p1/coordinator",
             #"PATCH /api/projects/p1 {"status":"DONE"}"#,
-            #"PATCH /api/projects/p1 {"coordinatorEnabled":true,"expectedConfigRevision":"7"}"#,
+            // `automatic`, never `coordinatorEnabled`, whose off the server also reads as a pause.
+            #"PATCH /api/projects/p1 {"automatic":true,"expectedConfigRevision":"7"}"#,
+            #"PATCH /api/projects/p1 {"expectedConfigRevision":"8","maxConcurrentTasks":4}"#,
+            #"PATCH /api/projects/p1/integration {"exceptionEscalationSeconds":3600,"line":"MAIN","mergeCheckCommand":null}"#,
+            "POST /api/projects/p1/pause",
+            "POST /api/projects/p1/resume",
             "DELETE /api/projects/p1",
         ])
     }

@@ -85,6 +85,9 @@ final class ProjectDetailModel {
     private(set) var document: ProjectDocument?
     private(set) var panorama: ProjectPanorama?
     private(set) var integration: ProjectIntegrationView?
+    /// The integration read failed and there is no earlier answer to draw — what How it runs says
+    /// instead of a spinner that never ends.
+    private(set) var integrationUnread = false
     private(set) var openItems: ProjectOpenItemsView?
     private(set) var coordinator: ProjectCoordinatorStatus?
     private(set) var graph: ProjectDependencyGraph?
@@ -101,6 +104,14 @@ final class ProjectDetailModel {
     private(set) var busy = false
     /// Whether a page is showing this project — what a nudge refreshes.
     var isVisible = false
+    /// The criteria's standing — the seal a start confirms — read when the owner's own Start… opens,
+    /// and whether that read failed: a card that cannot name the version it confirms offers no press.
+    private(set) var confirmation: StandardSetConfirmationStanding?
+    private(set) var confirmationUnread = false
+    /// At most, as the Stepper has it while the write it will make waits for the presses to stop:
+    /// each press moves the number at once, and one write carries where it stopped.
+    private(set) var pendingConcurrency: Int?
+    @ObservationIgnored private var concurrencyWrite: Task<Void, Never>?
 
     private let api: APIClient
     /// Tell the list a write changed what its row says.
@@ -136,7 +147,12 @@ final class ProjectDetailModel {
             loadState.fail()
         }
         panorama = (try? await panoramaRead) ?? panorama
-        integration = (try? await integrationRead) ?? integration
+        if let view = try? await integrationRead {
+            integration = view
+            integrationUnread = false
+        } else {
+            integrationUnread = integration == nil
+        }
         openItems = (try? await openItemsRead) ?? openItems
         coordinator = (try? await coordinatorRead) ?? coordinator
         graph = (try? await graphRead) ?? graph
@@ -165,14 +181,78 @@ final class ProjectDetailModel {
         }
     }
 
-    /// Flip the Automatic switch, fenced on the revision the page read.
-    func setAutomatic(_ enabled: Bool) async -> String? {
+    // MARK: How it runs
+
+    /// Automatic, or the concurrency limit — How it runs' half of the authorization set, fenced on
+    /// the revision the page read. `automatic`, never `coordinatorEnabled`: the server reads an
+    /// older client's off as a pause too, and switching Automatic off no longer stops the project.
+    func updateAuthorization(automatic: Bool? = nil, maxConcurrentTasks: Int? = nil) async -> String? {
         guard let revision = document?.configRevision else {
-            return "Couldn't change Automatic: reload the project and try again."
+            return "\(RunSettings.notSaved) — reload the project and try again."
         }
-        return await write("change Automatic") {
-            self.document = try await self.api.setProjectAutomatic(self.projectID, enabled: enabled,
-                                                                   expectedConfigRevision: revision)
+        return await runWrite(RunSettings.notSaved) {
+            self.document = try await self.api.updateProjectAuthorization(
+                self.projectID, UpdateProjectAuthorizationRequest(automatic: automatic,
+                                                                  maxConcurrentTasks: maxConcurrentTasks,
+                                                                  expectedConfigRevision: revision))
+        }
+    }
+
+    /// One press of At most's Stepper: the number moves now, and the write goes once the presses
+    /// stop — one write for a run of presses, rather than a write per press racing the revision the
+    /// one before it moved.
+    func stepConcurrency(to count: Int, onFailure: @escaping (String) -> Void) {
+        pendingConcurrency = count
+        concurrencyWrite?.cancel()
+        concurrencyWrite = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 700_000_000)
+            guard let self, !Task.isCancelled else { return }
+            if count != self.document?.maxConcurrentTasks,
+               let failure = await self.updateAuthorization(maxConcurrentTasks: count) {
+                onFailure(failure)
+            }
+            if self.pendingConcurrency == count { self.pendingConcurrency = nil }
+        }
+    }
+
+    /// The line, the merge check or the escalation window (`PATCH /projects/:id/integration`). Nil
+    /// when there is nothing to send.
+    func updateIntegration(_ body: UpdateProjectIntegrationRequest?) async -> String? {
+        guard let body, !body.isEmpty else { return nil }
+        return await runWrite(RunSettings.notSaved) {
+            self.integration = try await self.api.updateProjectIntegration(self.projectID, body)
+        }
+    }
+
+    /// Pause project, or Resume project — the owner's, and a press rather than a setting: it stops
+    /// the project moving at once, and resuming undoes it.
+    func setPaused(_ paused: Bool) async -> String? {
+        await runWrite(paused ? RunSettings.notPaused : RunSettings.notResumed) {
+            if paused {
+                _ = try await self.api.pauseProject(self.projectID)
+            } else {
+                _ = try await self.api.resumeProject(self.projectID)
+            }
+        }
+    }
+
+    // MARK: the owner's own start
+
+    /// What the owner's own Start… card needs beyond the page's reads: the seal a press confirms.
+    func loadStartCard() async {
+        do {
+            confirmation = try await api.acceptanceConfirmation(projectID: projectID)
+            confirmationUnread = false
+        } catch {
+            confirmationUnread = true
+        }
+    }
+
+    /// Start the project from the owner's own card — the same door the conversation's card presses,
+    /// with no request to answer. Nil when it went through; otherwise what the card says.
+    func startProject(_ body: StartProjectRequestBody) async -> String? {
+        await runWrite(StartProject.notRecorded) {
+            try await self.api.startProject(projectID: self.projectID, body)
         }
     }
 
@@ -241,6 +321,23 @@ final class ProjectDetailModel {
         } catch {
             return .failure(ProjectActionError(
                 message: "Couldn't open the coordinator: \(APIClient.failureReason(error))."))
+        }
+    }
+
+    /// `write`, for the presses whose refusal the browser says in a sentence of its own — "These
+    /// settings were not saved", "The project was not paused" — over the door's own message.
+    private func runWrite(_ refused: String, _ body: @escaping () async throws -> Void) async -> String? {
+        guard !busy else { return nil }
+        busy = true
+        defer { busy = false }
+        do {
+            try await body()
+            onChanged()
+            await load()
+            return nil
+        } catch {
+            await load()
+            return "\(refused) — \(APIClient.failureReason(error))."
         }
     }
 

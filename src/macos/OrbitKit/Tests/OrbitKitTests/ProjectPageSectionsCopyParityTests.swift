@@ -53,6 +53,10 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
         let stalled = ProjectPage.stalledSentence(ready: 7)
         assertSays(web, "ready, but nothing is running.", in: Self.panorama)
         assertSays(web, String(stalled.drop { $0 != "C" }), in: Self.panorama)
+        // Ready work on a project nobody has started is waiting for the start, not for dispatch.
+        assertSays(web, "const stalled = stalledOnReady(loaded) && !notStarted;", in: Self.panorama)
+        XCTAssertFalse(ProjectPage.stalledOnReady(ProjectPanoramaBuckets(ready: 2), started: false))
+        XCTAssertTrue(ProjectPage.stalledOnReady(ProjectPanoramaBuckets(ready: 2), started: true))
         assertSays(web, ProjectPage.wrapUpTitle, in: Self.panorama)
         assertSays(web, "settled. The project stays open until its outcome is confirmed.", in: Self.panorama)
     }
@@ -199,14 +203,21 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
         assertSays(lib, "const SETTLED_MIN_MEMBERS = 2;", in: Self.graphLib)
     }
 
-    /// The native page draws the web's sections in the web's order.
+    /// The native page draws the web's sections in the web's order: what waits on the reader first,
+    /// then where the work stands, who coordinates it and — once the project is started — How it
+    /// runs, beside the coordinator in the web's right rail and after it on a phone.
     func testTheWebPageStillOrdersItsSectionsTheWayTheNativePageDoes() throws {
         let web = try source(Self.page)
-        let order = ["<ProjectPanoramaHeader", "<ProjectCoordinatorSection", "<ProjectGoalCard",
+        let order = ["<ProjectOpenItems", "<ProjectPanoramaHeader", "<ProjectCoordinatorSection",
+                     "<ProjectRunSettings", "<ProjectGoalCard",
                      "<ProjectTasksGraph", "<ProjectBlockersCard", "<ProjectReadyToRun",
                      "<ProjectAcceptanceCard", "<Field label=\"Instructions\"", "<ProjectTasks projectId"]
         let positions = order.map { web.range(of: $0)?.lowerBound }
         XCTAssertFalse(positions.contains(nil), "the web page lost one of \(order)")
         XCTAssertEqual(positions.compactMap { $0 }, positions.compactMap { $0 }.sorted())
+        // How it runs only on a started project — or one whose read does not say — on both clients.
+        assertSays(web, "{started !== false ? ( <ProjectPageBlock name=\"run-settings\">", in: Self.page)
+        XCTAssertFalse(RunSettings.shown(started: false))
+        XCTAssertTrue(RunSettings.shown(started: nil))
     }
 }

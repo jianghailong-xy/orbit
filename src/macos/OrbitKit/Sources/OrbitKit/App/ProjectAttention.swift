@@ -53,6 +53,9 @@ public enum ProjectAttentionReason: String, Sendable {
     case coordinatorQuestion = "coordinator-question"
     case escalatedToYou = "escalated-to-you"
     case fusePaused = "fuse-paused"
+    /// The fifth: its coordinator has asked the owner to start it (`project_request_start`), and
+    /// nobody has. A project whose coordinator has not asked is waiting on nobody, and has no reason.
+    case readyToStart = "ready-to-start"
     /// The coordinator is working an exception: the project is moving, so it explains a chip and
     /// never moves a row.
     case coordinatorHandling = "coordinator-handling"
@@ -69,11 +72,18 @@ public enum ProjectAttentionReason: String, Sendable {
         }
     }
 
-    /// One tier for the four owner items — which of them is asked is a fact about the project,
-    /// the reader's queue is that they are asked at all.
+    /// Whether the owner is being asked for something in person: one of the four items, or a
+    /// coordinator's request to start the project. One tier, and one lane — Needs attention.
+    public var isNeedsYou: Bool {
+        self == .readyToStart || isOwnerItem
+    }
+
+    /// One tier, not five: which of the four items — or a request to start — an owner is asked
+    /// about is a fact about the project, the reader's queue is that they are asked at all.
     fileprivate var rank: Int {
         switch self {
-        case .approveMergeToMain, .coordinatorQuestion, .escalatedToYou, .fusePaused: return 1
+        case .approveMergeToMain, .coordinatorQuestion, .escalatedToYou, .fusePaused, .readyToStart:
+            return 1
         case .needsUser: return 2
         case .autoRemediation: return 3
         case .noActivityRunning: return 4
@@ -130,8 +140,9 @@ public struct ProjectAttentionGroup: Equatable, Sendable, Identifiable {
 
 /// How a project reads as one line of the navigation drawer.
 public enum ProjectDrawerMark: Equatable, Sendable {
-    /// One of the four owner items is waiting on the reader, with how many items wait — the four
-    /// kinds together. The row's amber count, as a Workspace row counts its sessions waiting on you.
+    /// Something is waiting on the reader, with how many things wait — the four owner items and a
+    /// coordinator asking to start the project, together. The row's amber count, as a Workspace row
+    /// counts its sessions waiting on you.
     case needsYou(Int)
     /// Tasks are running, or its coordinator is working.
     case running
@@ -255,6 +266,28 @@ public enum ProjectAttention {
         return lead
     }
 
+    /// The coordinator's open request to start this project, when the read carries one. The server
+    /// sends it only for a project nobody has started, so its presence is the whole answer.
+    private static func startRequest(_ project: ProjectSummary) -> ProjectListStartRequest? {
+        project.attention?.startRequest
+    }
+
+    /// Whether the row leads with the start request rather than with one of the four: the one that
+    /// has waited longest, as between the four — and on a tie the four, which come first in the
+    /// fixed order for the reason `leadOwnerItem` gives.
+    private static func startRequestLeads(_ project: ProjectSummary) -> Bool {
+        guard let start = startRequest(project) else { return false }
+        guard let lead = leadOwnerItem(project) else { return true }
+        return byInstantAsc(start.waitingSince, lead.oldestWaitingSince) < 0
+    }
+
+    /// Since when the owner has been asked for what the row names: the lead's own instant.
+    private static func needsYouSince(_ project: ProjectSummary) -> String? {
+        startRequestLeads(project)
+            ? startRequest(project)?.waitingSince
+            : leadOwnerItem(project)?.oldestWaitingSince
+    }
+
     private static func reason(for kind: OwnerItemKind) -> ProjectAttentionReason? {
         switch kind {
         case .promotionApproval: return .approveMergeToMain
@@ -269,7 +302,10 @@ public enum ProjectAttention {
     public static func reason(of project: ProjectSummary, now: Date) -> ProjectAttentionReason? {
         guard project.status == .open else { return nil }
 
-        // An item sitting on the OWNER outranks everything else the row could say.
+        // An item sitting on the OWNER outranks everything else the row could say. A coordinator
+        // asking to start the project is the fifth, in the same tier: whichever has waited longest
+        // is the one named.
+        if startRequestLeads(project) { return .readyToStart }
         if let lead = leadOwnerItem(project), let reason = reason(for: lead.kind) { return reason }
 
         if autoRemediationBlockerCount(project) > 0 { return .autoRemediation }
@@ -300,7 +336,7 @@ public enum ProjectAttention {
         // Work Orbit already routed to its coordinator/system, or an item waiting on a person, is
         // stronger than fresh activity in the same project.
         if reason == .autoRemediation { return .attention }
-        if let reason, reason.isOwnerItem { return .attention }
+        if let reason, reason.isNeedsYou { return .attention }
 
         let quietRunning = b.running > 0 && quietDays(project.lastActivityAt, now: now) != nil
         if b.running > 0, !quietRunning { return .running }
@@ -348,9 +384,8 @@ public enum ProjectAttention {
             let right = reason(of: b, now: now)
             let byReason = (left?.rank ?? Int.max) - (right?.rank ?? Int.max)
             if byReason != 0 { return byReason < 0 ? -1 : 1 }
-            if let left, let right, left.isOwnerItem, right.isOwnerItem {
-                let byWait = byInstantAsc(leadOwnerItem(a)?.oldestWaitingSince,
-                                          leadOwnerItem(b)?.oldestWaitingSince)
+            if let left, let right, left.isNeedsYou, right.isNeedsYou {
+                let byWait = byInstantAsc(needsYouSince(a), needsYouSince(b))
                 if byWait != 0 { return byWait }
             }
             if (left == .needsUser && right == .needsUser)
@@ -411,6 +446,10 @@ public enum ProjectAttention {
         }
     }
 
+    /// The fifth, in the words the coordinator's session row and its pinned strip say it
+    /// (`StartProject.readyToStart`): its coordinator has asked to start the project.
+    public static let readyToStartSays = "Needs you · \(StartProject.readyToStart)"
+
     private static func joined(_ parts: [String?]) -> String {
         parts.compactMap { $0 }.joined(separator: " · ")
     }
@@ -421,6 +460,12 @@ public enum ProjectAttention {
         let b = project.buckets
 
         switch reason {
+        // The coordinator asked to start the project, and has been waiting this long for the owner.
+        case .readyToStart:
+            return ProjectAttentionChip(
+                tone: .warning,
+                text: joined([readyToStartSays, elapsedLabel(startRequest(project)?.waitingSince, now: now)]))
+
         case .approveMergeToMain, .coordinatorQuestion, .escalatedToYou, .fusePaused:
             guard let item = leadOwnerItem(project), let says = ownerItemSays(item) else { return nil }
             return ProjectAttentionChip(
@@ -484,10 +529,36 @@ public enum ProjectAttention {
 
     // MARK: the drawer
 
-    /// Whether one of the four owner items is waiting on the reader in this project.
+    /// The four owner items this project is waiting on the reader for, of the kinds this build names.
+    private static func waitingOwnerItems(_ project: ProjectSummary) -> [ProjectListOwnerItem] {
+        guard project.status == .open else { return [] }
+        return (project.attention?.ownerItems ?? []).filter { $0.kind != .unknown && $0.count > 0 }
+    }
+
+    /// The coordinator's request to start this project, while it is open and waiting on the reader.
+    private static func waitingStartRequest(_ project: ProjectSummary) -> ProjectListStartRequest? {
+        project.status == .open ? startRequest(project) : nil
+    }
+
+    /// How many things wait on the reader in this project — a merge to approve, a question, an
+    /// escalation, a pause, and a coordinator asking to start it — together: the row's amber count.
+    public static func needsYouItemCount(_ project: ProjectSummary) -> Int {
+        waitingOwnerItems(project).reduce(0) { $0 + $1.count } + (waitingStartRequest(project) != nil ? 1 : 0)
+    }
+
+    /// Whether anything is waiting on the reader in this project: one of the four owner items, or
+    /// its coordinator asking to start it.
     public static func needsYou(_ project: ProjectSummary) -> Bool {
-        project.status == .open
-            && (project.attention?.ownerItems ?? []).contains { $0.kind != .unknown && $0.count > 0 }
+        needsYouItemCount(project) > 0
+    }
+
+    /// When the reader was first asked — the oldest of the things waiting on them.
+    private static func oldestWait(_ project: ProjectSummary) -> String? {
+        var oldest = waitingStartRequest(project)?.waitingSince
+        for item in waitingOwnerItems(project) where oldest == nil || byInstantAsc(item.oldestWaitingSince, oldest) < 0 {
+            oldest = item.oldestWaitingSince
+        }
+        return oldest
     }
 
     /// How many projects have something waiting on the reader in person — the drawer's count.
@@ -499,10 +570,8 @@ public enum ProjectAttention {
 
     public static func drawerMark(_ project: ProjectSummary,
                                   coordinator: ProjectCoordinatorPulse? = nil) -> ProjectDrawerMark {
-        if needsYou(project) {
-            let items = (project.attention?.ownerItems ?? []).filter { $0.kind != .unknown }
-            return .needsYou(items.reduce(0) { $0 + $1.count })
-        }
+        let waiting = needsYouItemCount(project)
+        if waiting > 0 { return .needsYou(waiting) }
         if project.buckets.running > 0 || coordinator?.working == true { return .running }
         return .idle
     }
@@ -542,8 +611,7 @@ public enum ProjectAttention {
             let aNeeds = needsYou(a), bNeeds = needsYou(b)
             if aNeeds != bNeeds { return aNeeds }
             if aNeeds {
-                let byWait = byInstantAsc(leadOwnerItem(a)?.oldestWaitingSince,
-                                          leadOwnerItem(b)?.oldestWaitingSince)
+                let byWait = byInstantAsc(oldestWait(a), oldestWait(b))
                 if byWait != 0 { return byWait < 0 }
             }
             let byActivity = byInstantDesc(latestActivity(a, coordinators), latestActivity(b, coordinators))
