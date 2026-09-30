@@ -115,7 +115,8 @@ export class UsersController {
   /**
    * Patch the current user's own preferences. The body is a partial set of keys
    * (theme / new-workspace defaults); each present key is shallow-merged into the
-   * stored JSON, so omitted keys keep their value. Returns the same shape as `me`.
+   * stored JSON, so omitted keys keep their value. `defaultModels` also merges its provider
+   * entries, keeping choices for other providers. Returns the same shape as `me`.
    */
   @UseGuards(JwtAuthGuard)
   @Patch('me/preferences')
@@ -127,6 +128,12 @@ export class UsersController {
     const merged = { ...((current?.preferences ?? {}) as Record<string, unknown>) };
     if (dto.theme !== undefined) merged.theme = dto.theme;
     if (dto.defaultModel !== undefined) merged.defaultModel = dto.defaultModel;
+    if (dto.defaultModels !== undefined) {
+      merged.defaultModels = {
+        ...((merged.defaultModels ?? {}) as Record<string, string>),
+        ...dto.defaultModels,
+      };
+    }
     if (dto.defaultPermissionMode !== undefined) merged.defaultPermissionMode = dto.defaultPermissionMode;
     if (dto.defaultEffort !== undefined) merged.defaultEffort = dto.defaultEffort;
     if (dto.notifySessionFinished !== undefined)

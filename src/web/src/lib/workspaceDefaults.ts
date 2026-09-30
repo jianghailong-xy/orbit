@@ -298,6 +298,17 @@ export const livePinnedModel = (
     : model;
 };
 
+/** A new interactive session remembers the last explicit model pick for this provider. */
+export const newSessionModelForProvider = (
+  provider: string,
+  accountModels?: Record<string, string> | null,
+  modelCatalog?: RunnerModelCatalog | null,
+  configured?: ConfiguredProvider[] | null,
+  runtimeDefaultModels?: RuntimeDefaultModels,
+): string =>
+  livePinnedModel(accountModels?.[provider], provider, modelCatalog, configured, runtimeDefaultModels) ??
+  defaultModelForProvider(provider, modelCatalog, configured, runtimeDefaultModels);
+
 /** Match the server's session dispatch precedence without treating OpenCode's empty sentinel as
  * missing: a session override wins, then its owning workspace, then the provider-managed default.
  * A retired pin on either drops out, exactly as it does at dispatch. */

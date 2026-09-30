@@ -209,6 +209,7 @@ final class ConsoleModel {
     /// asynchronously, so a console built before it lands must still read the current one.
     @ObservationIgnored var accountDefaultPermissionMode: () -> String? = { nil }
     @ObservationIgnored var rememberDefaultPermissionMode: (String) -> Void = { _ in }
+    @ObservationIgnored var accountDefaultModels: () -> [String: String] = { [:] }
     var effort: Effort = .default
     /// Account preferences can arrive after a restored-token launch has already presented the
     /// draft. They may refine the legacy workspace seed only until the user touches the picker;
@@ -654,8 +655,8 @@ final class ConsoleModel {
     /// Draft (pre-session) console backing the "new session" composer. There's no session yet, so it
     /// runs no stream; the first `send()` calls `createSession` for `agent` and hands the new session
     /// to `onSessionCreated`, after which the caller opens its live console. The model pill is
-    /// seeded from the owning runner's Runtime heartbeat; permission and effort remain agent/account
-    /// settings.
+    /// seeded from the account's remembered choice or the owning runner's Runtime heartbeat;
+    /// permission and effort remain agent/account settings.
     init(draftFor agent: Agent, defaultModel: String,
          configuredProviders: [ConfiguredProvider] = [],
          configuredProvidersLoaded: Bool = false,
@@ -1625,15 +1626,15 @@ final class ConsoleModel {
 
     /// Pick a provider for this draft (the new-session hero). Each provider owns its own model
     /// space, so the model can't survive the switch — it is re-seeded from the incoming provider's
-    /// default, and the mode/effort pills are re-clamped to what that provider accepts. The seed is
+    /// remembered model or default, and the mode/effort pills are re-clamped to what it accepts. The seed is
     /// marked pristine again on purpose: a model chosen for the outgoing provider is not a choice
     /// about this one, and keeping it would pin an id the new provider may not even offer.
     func pickDraftProvider(_ slug: String) {
         guard isDraft, slug != provider else { return }
         draftProviderOverride = slug
         provider = slug
-        modelID = AgentDefaults.defaultModel(for: slug, catalog: modelCatalog,
-                                             configured: configuredProviders)
+        modelID = draftModelSeed(AgentDefaults.defaultModel(
+            for: slug, catalog: modelCatalog, configured: configuredProviders))
         modelSelectionRevision = ModelSelectionRevision()
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
@@ -1700,10 +1701,11 @@ final class ConsoleModel {
             // `defaultModel` is the parent's, computed for the AGENT's provider. Once this draft
             // has been pointed somewhere else, that value belongs to a different model space —
             // resolve the picked provider's own default instead of dragging the agent's back in.
-            modelID = draftProviderOverride == nil
+            let fallback = draftProviderOverride == nil
                 ? defaultModel
                 : AgentDefaults.defaultModel(for: provider, catalog: modelCatalog,
                                              configured: configuredProviders)
+            modelID = draftModelSeed(fallback)
         }
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(
@@ -1714,6 +1716,12 @@ final class ConsoleModel {
         effort = AgentDefaults.normalizedEffort(
             effort, for: provider, model: modelID, catalog: modelCatalog,
             configured: configuredProviders)
+    }
+
+    private func draftModelSeed(_ fallback: String, runtimeDefaults: [String: String]? = nil) -> String {
+        AgentDefaults.newSessionModel(
+            for: provider, accountModels: accountDefaultModels(), fallback: fallback,
+            catalog: modelCatalog, configured: configuredProviders, runtimeDefaults: runtimeDefaults)
     }
 
     /// A picker change on a LIVE session is pushed to the server immediately (PATCH /config,
@@ -2385,11 +2393,12 @@ final class ConsoleModel {
         // AgentsModel resolves the seed from its cached runner snapshot so the composer is correct
         // immediately. Re-resolve only while no explicit picker action has ever occurred.
         if draftAgent != nil, modelSelectionRevision.isPristine {
-            modelID = AgentDefaults.refreshedDefaultModel(
+            let fallback = AgentDefaults.refreshedDefaultModel(
                 currentModel: modelID, for: provider, catalog: modelCatalog,
                 configured: configuredProviders, runtimeDefaults: runtimeDefaults,
                 runnerSnapshotLoaded: runnerSnapshotLoaded,
                 configuredProvidersLoaded: configuredProvidersLoaded)
+            modelID = draftModelSeed(fallback, runtimeDefaults: runtimeDefaults)
         }
         if providerCapabilitiesResolved {
             permissionMode = AgentDefaults.clampPermissionMode(

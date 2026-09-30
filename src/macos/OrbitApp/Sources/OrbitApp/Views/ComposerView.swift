@@ -608,6 +608,7 @@ struct ComposerView: View {
                         catalog: console.modelCatalog, configured: console.configuredProviders)
                     let resetEffort = nextEffort != console.effort
                     let clampedPermissionMode = console.selectModel(m.id)
+                    app.rememberDefaultModel(m.id, for: console.provider)
                     let permissionMode = clampedPermissionMode
                         ? console.permissionMode.rawValue
                         : nil
