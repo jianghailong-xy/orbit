@@ -19,6 +19,8 @@ Use these destinations consistently:
 - Security: [security policy](../SECURITY.md)
 - Community: [community guide](../COMMUNITY.md)
 
+Each channel posts its own link from the [launch tracking plan](launch-tracking.md#channel-link-identifiers).
+
 ## Canonical opening and boundary
 
 > **Orbit is self-hosted mission control for coding agents.**
