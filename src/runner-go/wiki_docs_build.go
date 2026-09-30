@@ -54,7 +54,12 @@ import (
 // allowlist and the apiKeyHelper, thinking off. The run waits for the endpoint's /health first, and stops
 // at the first 401: every call after it would be refused the same way.
 //
-// NO CLOCK. Nothing here schedules itself: a maintenance run calls it after facts arrived.
+// WHO CALLS IT. A build job (contract `plan.jobs`, kind build) — the task the owner's confirmation of a
+// version makes — runs it whole in its session, and says how far it got and how it ended on its job; a
+// maintenance run calls it for the sections its facts touched alone (wiki_maintain_docs.go), at the commit
+// it compared them at.
+//
+// NO CLOCK. Nothing here schedules itself: a maintenance run and a build job call it after facts arrived.
 
 // wikiDocsBuildPrecondition is contracts/wiki.contract.json `docs.build.precondition`, word for word, and
 // wiki_docs_build_test.go holds the two equal.
@@ -271,6 +276,16 @@ type wikiDocsBuildSummary struct {
 	Usage       wikiModelUsage        `json:"usage"`
 	Seconds     float64               `json:"seconds"`
 	Stopped     string                `json:"stopped,omitempty"`
+	// Job is the build job this run was, and how it told the server it ended; nil for any other run.
+	Job *wikiDocsBuildJobEnd `json:"job,omitempty"`
+}
+
+// wikiDocsBuildJobEnd is a build job's end, as the run said it (contract `plan.jobs.finish`).
+type wikiDocsBuildJobEnd struct {
+	ID      string `json:"id"`
+	Version int    `json:"version"`
+	Outcome string `json:"outcome"`
+	Error   string `json:"error,omitempty"`
 }
 
 type wikiDocsBuildDocRun struct {
@@ -306,6 +321,13 @@ type wikiDocsBuildSectionRun struct {
 
 type wikiDocsBuildOptions struct {
 	spaceID, doc, section, repo, model string
+	// only is the sections to take up, by document slug: a maintenance run's, what its facts touched (nil: every
+	// section). A document's overview is taken up with any other section of it.
+	only map[string]map[string]bool
+	// sha is the origin/main commit to read the repository at, fetched already by the caller; empty: fetch it here.
+	sha string
+	// onDoc hears of each document as it is taken up — done of total, and the document — and of the end (doc nil).
+	onDoc func(done, total int, doc *wikiDocsPlanDoc)
 }
 
 // wikiDocsBuildRun is one run's state: where it reads and reports, the model it asks, and what it spent.
@@ -370,6 +392,15 @@ func runWikiDocsBuild(t *Transport, sessionID string, opts wikiDocsBuildOptions,
 			}
 		}
 	}
+	if opts.only != nil {
+		var taken []wikiDocsPlanDoc
+		for _, doc := range docs {
+			if len(opts.only[doc.Slug]) > 0 {
+				taken = append(taken, doc)
+			}
+		}
+		docs = taken
+	}
 	raw, err = t.wikiDocsState(sessionID, opts.spaceID)
 	if err != nil {
 		return summary, wikiDocsBuildCallError(opts.spaceID, err)
@@ -389,9 +420,11 @@ func runWikiDocsBuild(t *Transport, sessionID string, opts wikiDocsBuildOptions,
 	if err != nil {
 		return summary, err
 	}
-	sha, err := fetchWikiDocsRef(root)
-	if err != nil {
-		return summary, err
+	sha := opts.sha
+	if sha == "" {
+		if sha, err = fetchWikiDocsRef(root); err != nil {
+			return summary, err
+		}
 	}
 	summary.RepoSha = sha
 	fmt.Fprintf(progress, "Space %s: plan version %d, %s; the repository at origin/main %s in %s.\n", opts.spaceID,
@@ -406,8 +439,11 @@ func runWikiDocsBuild(t *Transport, sessionID string, opts wikiDocsBuildOptions,
 		summary.Usage = run.usage
 		summary.Seconds = time.Since(started).Seconds()
 	}()
-	for _, doc := range docs {
-		result := run.document(doc, stored[doc.Slug], opts.section)
+	for i, doc := range docs {
+		if opts.onDoc != nil {
+			opts.onDoc(i, len(docs), &docs[i])
+		}
+		result := run.document(doc, stored[doc.Slug], opts.section, opts.only[doc.Slug])
 		summary.Docs = append(summary.Docs, result)
 		for _, section := range result.Sections {
 			switch section.Outcome {
@@ -423,6 +459,9 @@ func runWikiDocsBuild(t *Transport, sessionID string, opts wikiDocsBuildOptions,
 			summary.Stopped = stop.Error()
 			return summary, stop
 		}
+	}
+	if opts.onDoc != nil {
+		opts.onDoc(len(docs), len(docs), nil)
 	}
 	return summary, nil
 }
@@ -519,8 +558,9 @@ type wikiDocWrittenSection struct {
 	footnotes []wikiDocFootnote
 }
 
-// document writes one document: its sections (all, or --section), then its overview, last.
-func (r *wikiDocsBuildRun) document(doc wikiDocsPlanDoc, stored map[string]wikiDocStored, only string) wikiDocsBuildDocRun {
+// document writes one document: its sections (all, --section, or those `take` names), then its overview,
+// last — taken up with any other section of the document, since it summarizes them.
+func (r *wikiDocsBuildRun) document(doc wikiDocsPlanDoc, stored map[string]wikiDocStored, only string, take map[string]bool) wikiDocsBuildDocRun {
 	result := wikiDocsBuildDocRun{Slug: doc.Slug, Sections: []wikiDocsBuildSectionRun{}}
 	if stored == nil {
 		stored = map[string]wikiDocStored{}
@@ -532,9 +572,18 @@ func (r *wikiDocsBuildRun) document(doc wikiDocsPlanDoc, stored map[string]wikiD
 		}
 		if section.Kind == "overview" {
 			overviews = append(overviews, i)
-		} else {
+		} else if take == nil || take[section.Key] {
 			body = append(body, i)
 		}
+	}
+	if take != nil && len(body) == 0 {
+		var named []int
+		for _, i := range overviews {
+			if take[doc.Sections[i].Key] {
+				named = append(named, i)
+			}
+		}
+		overviews = named
 	}
 	runs := make([]wikiDocsBuildSectionRun, len(doc.Sections))
 	written := make([]*wikiDocWrittenSection, len(doc.Sections))
@@ -1001,8 +1050,10 @@ func (p *wikiDocPiece) dispositionRef() string {
 	return p.ref
 }
 
-// gather reads a section's material: the repository's half here, the server's half from its door.
-func (r *wikiDocsBuildRun) gather(doc wikiDocsPlanDoc, section wikiDocsPlanSection) ([]*wikiDocPiece, []string, error) {
+// wikiDocRepoPieces is the repository's half of a section's material at the commit `repo` reads: its design
+// documents' sections, its code and its contracts, each numbered in its kind (D1, C1, K1), and what the
+// commit does not have. A maintenance run reads it at two commits to tell whether what a section cites changed.
+func wikiDocRepoPieces(repo *wikiDocRepo, section wikiDocsPlanSection) ([]*wikiDocPiece, []string) {
 	var pieces []*wikiDocPiece
 	var missing []string
 	count := map[string]int{}
@@ -1017,7 +1068,7 @@ func (r *wikiDocsBuildRun) gather(doc wikiDocsPlanDoc, section wikiDocsPlanSecti
 		if source.Section != nil {
 			heading = *source.Section
 		}
-		piece, ok := r.repo.docSection(source.Path, heading)
+		piece, ok := repo.docSection(source.Path, heading)
 		if !ok {
 			missing = append(missing, strings.TrimSpace(source.Path+" § "+heading))
 			continue
@@ -1031,19 +1082,31 @@ func (r *wikiDocsBuildRun) gather(doc wikiDocsPlanDoc, section wikiDocsPlanSecti
 		}
 	}
 	for _, source := range section.Sources.Code {
-		got, miss := r.repo.codePieces(source.Path, source.Symbols, words)
+		got, miss := repo.codePieces(source.Path, source.Symbols, words)
 		missing = append(missing, miss...)
 		for _, piece := range got {
 			add("C", piece)
 		}
 	}
 	for _, source := range section.Sources.Contracts {
-		piece, ok := r.repo.contract(source.Path)
+		piece, ok := repo.contract(source.Path)
 		if !ok {
 			missing = append(missing, source.Path)
 			continue
 		}
 		add("K", piece)
+	}
+	return pieces, missing
+}
+
+// gather reads a section's material: the repository's half here, the server's half from its door.
+func (r *wikiDocsBuildRun) gather(doc wikiDocsPlanDoc, section wikiDocsPlanSection) ([]*wikiDocPiece, []string, error) {
+	pieces, missing := wikiDocRepoPieces(r.repo, section)
+	count := map[string]int{}
+	add := func(prefix string, piece *wikiDocPiece) {
+		count[prefix]++
+		piece.id = fmt.Sprintf("%s%d", prefix, count[prefix])
+		pieces = append(pieces, piece)
 	}
 	if section.Sources.Sessions != nil {
 		raw, err := r.t.wikiDocMaterialOf(r.sessionID, r.spaceID, doc.Slug, section.Key)
@@ -1324,14 +1387,20 @@ func (r *wikiDocRepo) docSection(path, section string) (*wikiDocPiece, bool) {
 	if strings.TrimSpace(section) != "" {
 		want := wikiDocHeadingKey(section)
 		number := wikiDocNumbered.FindStringSubmatch(section)
+		// The heading named — by its words or its number — before one whose words only contain the name or
+		// are contained in it: a short heading («2. Space») is contained in many a longer one's name.
 		found := false
-		for _, h := range headings {
-			key := wikiDocHeadingKey(h.text)
-			numbered := number != nil && regexp.MustCompile(`^\s*§?\s*`+regexp.QuoteMeta(number[1])+`(?:[.\s:：、)]|$)`).MatchString(h.text)
-			if key == want || numbered || (utf8.RuneCountInString(want) >= 4 && strings.Contains(key, want)) ||
-				(utf8.RuneCountInString(key) >= 4 && strings.Contains(want, key)) {
-				start, level, title, found = h.line, h.level, h.text, true
-				break
+		for pass := 0; pass < 2 && !found; pass++ {
+			for _, h := range headings {
+				key := wikiDocHeadingKey(h.text)
+				named := key == want ||
+					(number != nil && regexp.MustCompile(`^\s*§?\s*`+regexp.QuoteMeta(number[1])+`(?:[.\s:：、)]|$)`).MatchString(h.text))
+				near := (utf8.RuneCountInString(want) >= 4 && strings.Contains(key, want)) ||
+					(utf8.RuneCountInString(key) >= 4 && strings.Contains(want, key))
+				if (pass == 0 && named) || (pass == 1 && near) {
+					start, level, title, found = h.line, h.level, h.text, true
+					break
+				}
 			}
 		}
 		if !found {
@@ -2444,7 +2513,35 @@ func cliWikiDocsBuild(args []string, out io.Writer, ctx cliOrchestrationContext)
 	if *jsonOut {
 		progress = io.Discard
 	}
-	summary, runErr := runWikiDocsBuild(t, ctx.sessionID, wikiDocsBuildOptions{spaceID: spaceID, doc: slug, section: key, repo: *repo, model: *model}, progress)
+	opts := wikiDocsBuildOptions{spaceID: spaceID, doc: slug, section: key, repo: *repo, model: *model}
+	job, err := wikiDocsBuildJobOf(t, ctx.sessionID, spaceID)
+	if err != nil {
+		return err
+	}
+	if job != nil {
+		if slug != "" {
+			return fmt.Errorf("orbit wiki docs build: this session runs build job %s, which writes every document of the confirmed "+
+				"plan: --doc and --section are a maintenance run's, not a build's", job.ID)
+		}
+		fmt.Fprintf(progress, "Build job %s: the documents of the confirmed plan (version %d when it was asked for).\n", job.ID, derefInt(job.Version))
+		opts.onDoc = func(done, total int, doc *wikiDocsPlanDoc) {
+			body := map[string]interface{}{"docs": map[string]int{"done": done, "total": total}, "current": nil}
+			if doc != nil {
+				body["current"] = map[string]string{"slug": doc.Slug, "title": doc.Title}
+			}
+			if _, err := t.progressWikiPlanJob(ctx.sessionID, spaceID, body); err != nil {
+				fmt.Fprintf(progress, "The server did not take the build's progress (%v); the build goes on.\n", err)
+			}
+		}
+	}
+	summary, runErr := runWikiDocsBuild(t, ctx.sessionID, opts, progress)
+	if job != nil {
+		end, finishErr := finishWikiDocsBuildJob(t, ctx.sessionID, spaceID, *job, summary, runErr)
+		summary.Job = &end
+		if finishErr != nil && runErr == nil {
+			runErr = finishErr
+		}
+	}
 	if *jsonOut {
 		raw, err := json.Marshal(summary)
 		if err != nil {
@@ -2465,10 +2562,96 @@ func cliWikiDocsBuild(args []string, out io.Writer, ctx cliOrchestrationContext)
 	return nil
 }
 
+// wikiDocsBuildJobOf is the build job the calling session runs (contract `plan.jobs.run.build`), read — and
+// recorded as started — through GET …/plan/job; nil for a session whose task was made for no job, or for
+// another kind of job, and for a server that has no plan jobs.
+func wikiDocsBuildJobOf(t *Transport, sessionID, spaceID string) (*wikiPlanJobRead, error) {
+	raw, err := t.wikiPlanJobContext(sessionID, spaceID)
+	if err != nil {
+		var httpErr *transportHTTPError
+		if errors.As(err, &httpErr) && (httpErr.code() == wikiPlanNoJobCode || wikiMaintenanceDoorMissing(err)) {
+			return nil, nil
+		}
+		return nil, wikiDocsBuildCallError(spaceID, err)
+	}
+	var context wikiPlanJobContextRead
+	if err := json.Unmarshal(raw, &context); err != nil {
+		return nil, fmt.Errorf("orbit wiki docs build: the server's plan job is not the shape this build reads: %w", err)
+	}
+	if context.Job.Kind != "build" {
+		return nil, nil
+	}
+	return &context.Job, nil
+}
+
+// finishWikiDocsBuildJob tells the server how the build job ended (contract `plan.jobs.finish`): succeeded,
+// with the confirmed version it wrote and its report, when no section it took up was left unwritten; failed,
+// with why, otherwise.
+func finishWikiDocsBuildJob(t *Transport, sessionID, spaceID string, job wikiPlanJobRead, summary wikiDocsBuildSummary, runErr error) (wikiDocsBuildJobEnd, error) {
+	version := summary.PlanVersion
+	if version == 0 {
+		version = derefInt(job.Version)
+	}
+	end := wikiDocsBuildJobEnd{ID: job.ID, Version: version, Outcome: "succeeded"}
+	switch {
+	case runErr != nil:
+		end.Outcome, end.Error = "failed", runErr.Error()
+	case summary.Failed > 0:
+		end.Outcome, end.Error = "failed", wikiCount(summary.Failed, "section was", "sections were")+" left unwritten"
+	}
+	written := 0
+	for _, doc := range summary.Docs {
+		complete := len(doc.Sections) > 0
+		for _, section := range doc.Sections {
+			complete = complete && section.Outcome != "failed"
+		}
+		if complete {
+			written++
+		}
+	}
+	report := map[string]interface{}{
+		"planVersion": version,
+		"repoSha":     summary.RepoSha,
+		"docs":        map[string]int{"total": len(summary.Docs), "written": written},
+		"sections":    map[string]int{"written": summary.Written, "unchanged": summary.Unchanged, "failed": summary.Failed},
+		"tokens":      map[string]int{"input": summary.Usage.InputTokens, "output": summary.Usage.OutputTokens, "calls": summary.Calls},
+		"seconds":     int(summary.Seconds),
+		"model":       nil,
+	}
+	if summary.Model != "" {
+		report["model"] = summary.Model
+	}
+	body := map[string]interface{}{"outcome": end.Outcome, "report": report}
+	if version > 0 {
+		body["version"] = version
+	}
+	if end.Error != "" {
+		body["error"] = cutRunes(end.Error, 2000)
+	}
+	if _, err := t.finishWikiPlanJob(sessionID, spaceID, body); err != nil {
+		return end, fmt.Errorf("orbit wiki docs build: the build ended %s, and the server could not be told: %w", end.Outcome, wikiDocsBuildCallError(spaceID, err))
+	}
+	return end, nil
+}
+
+func derefInt(n *int) int {
+	if n == nil {
+		return 0
+	}
+	return *n
+}
+
 func describeWikiDocsBuildSummary(s wikiDocsBuildSummary) string {
 	sections := s.Written + s.Unchanged + s.Failed
 	if sections == 0 {
-		return fmt.Sprintf("Space %s: no section of the confirmed plan (version %d) was taken up.", s.SpaceID, s.PlanVersion)
+		line := fmt.Sprintf("Space %s: no section of the confirmed plan (version %d) was taken up.", s.SpaceID, s.PlanVersion)
+		if s.Stopped != "" {
+			line += " Stopped: " + s.Stopped
+		}
+		if s.Job != nil {
+			line += fmt.Sprintf(" Build job %s ended %s (version %d).", s.Job.ID, s.Job.Outcome, s.Job.Version)
+		}
+		return line
 	}
 	line := fmt.Sprintf("Space %s, plan version %d, repository at %s: %s written, %s unchanged, %s failed", s.SpaceID,
 		s.PlanVersion, shortWikiHash(s.RepoSha), wikiCount(s.Written, "section", "sections"), wikiCount(s.Unchanged, "section", "sections"),
@@ -2488,6 +2671,9 @@ func describeWikiDocsBuildSummary(s wikiDocsBuildSummary) string {
 	}
 	if s.Stopped != "" {
 		line += " Stopped: " + s.Stopped
+	}
+	if s.Job != nil {
+		line += fmt.Sprintf(" Build job %s ended %s (version %d).", s.Job.ID, s.Job.Outcome, s.Job.Version)
 	}
 	return line
 }

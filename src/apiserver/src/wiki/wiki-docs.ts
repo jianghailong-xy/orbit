@@ -9,6 +9,7 @@ import {
   WIKI_DOC_REPO_KINDS,
   WIKI_DOC_RULES,
   WIKI_DOC_SCHEMA,
+  WIKI_DOCS_AFFECTED_RULES,
   type WikiAnchorState,
   type WikiDocBlockKind,
   type WikiDocChecker,
@@ -31,9 +32,11 @@ import {
   type WikiDocViaEntry,
   type WikiDocWithdrawReason,
   type WikiDocWriteResult,
+  type WikiDocsAffected,
   type WikiDocsDirectory,
   type WikiDocsIndex,
   type WikiDocsIndexItem,
+  type WikiDocsPathWithdrawalResult,
   type WikiDocsWriterState,
   type WikiEntryKind,
   type WikiEntryStatus,
@@ -48,6 +51,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { markersOf, splitSentences, wikiRepoPath, withoutMarkers } from './wiki-articles';
 import { docWithdrawReason } from './wiki-doc-withdrawal';
+import { wikiDocsAffected, withdrawDocSentencesByPath } from './wiki-docs-affected';
 import { conditionView, gatherDocMaterial, type StoredSessionCondition } from './wiki-docs-material';
 import { ownerEnvLiterals } from './wiki-dossier';
 import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
@@ -987,6 +991,61 @@ export class WikiDocs {
   }
 
   /**
+   * What a maintenance run of the space writes again because of the entries, and what it may propose
+   * (contract `docs.reads.affected`): the written sections an entry that changed since they were written
+   * fits, and the stale ones; the entries that fit no section and no proposal names; and what the
+   * proposals already name. With no confirmed plan, plan is null and the run writes no document.
+   */
+  async affected(principal: WikiPrincipal, spaceId: string): Promise<WikiDocsAffected> {
+    await this.assertWriter(principal, spaceId);
+    return wikiDocsAffected(this.prisma, principal.ownerId, spaceId);
+  }
+
+  /**
+   * Repository files a maintenance run found deleted or renamed on origin/main (contract
+   * `docs.withdrawal.paths`): every sentence of the space's documents citing one is withdrawn as its anchor
+   * gone missing, naming the path, and its section marked stale, in one transaction.
+   */
+  async withdrawPaths(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiDocsPathWithdrawalResult> {
+    await this.assertWriter(principal, spaceId);
+    const { ownerId } = principal;
+    const problems = new Problems();
+    const raw = isObject(body) ? body : null;
+    if (!raw) throw invalid([{ path: '', message: 'the body is an object: { repoSha, paths: [{ path, change, to? }] }' }]);
+    for (const key of Object.keys(raw)) {
+      if (!['repoSha', 'paths'].includes(key)) problems.fail(key, `${key} is not a field of a withdrawal: repoSha, paths`);
+    }
+    if (typeof raw.repoSha !== 'string' || !COMMIT.test(raw.repoSha)) {
+      problems.fail('repoSha', 'is the origin/main commit the paths are gone at: 40 lowercase hex characters');
+    }
+    const listed = Array.isArray(raw.paths) ? raw.paths : [];
+    if (!Array.isArray(raw.paths) || raw.paths.length === 0) problems.fail('paths', 'names at least one repository path that is gone');
+    if (listed.length > WIKI_DOCS_AFFECTED_RULES.withdrawPathsMax) problems.fail('paths', `names at most ${WIKI_DOCS_AFFECTED_RULES.withdrawPathsMax} paths`);
+    const paths: string[] = [];
+    listed.slice(0, WIKI_DOCS_AFFECTED_RULES.withdrawPathsMax).forEach((item, i) => {
+      const at = `paths[${i}]`;
+      if (!isObject(item)) {
+        problems.fail(at, 'is an object: { path, change, to? }');
+        return;
+      }
+      for (const key of Object.keys(item)) if (!['path', 'change', 'to'].includes(key)) problems.fail(`${at}.${key}`, `${key} is not a field of a path: path, change, to`);
+      const path = typeof item.path === 'string' ? item.path.trim().replace(/^\.\//u, '') : '';
+      if (path === '' || chars(path) > WIKI_DOC_RULES.textMaxChars) problems.fail(`${at}.path`, `is a repository path, at most ${WIKI_DOC_RULES.textMaxChars} characters`);
+      if (item.change !== 'deleted' && item.change !== 'renamed') problems.fail(`${at}.change`, 'is deleted or renamed');
+      if (item.to !== undefined && item.to !== null && typeof item.to !== 'string') problems.fail(`${at}.to`, 'is the path it was renamed to, or null');
+      if (path !== '') paths.push(path);
+    });
+    if (problems.list.length > 0) throw invalid(problems.list);
+    const outcome = await withTransactionRetry(
+      this.prisma,
+      (tx) => withdrawDocSentencesByPath(tx, ownerId, spaceId, [...new Set(paths)]),
+      loggedRetry(this.logger, 'wiki.withdrawDocPaths'),
+    );
+    if (outcome.withdrawn > 0) this.realtime?.publishWikiChanged(ownerId, spaceId);
+    return { spaceId, ...outcome };
+  }
+
+  /**
    * The server's half of one section's material (contract `docs.reads.material`, `docs.material`): the
    * section's session condition as the confirmed plan states it, the entries it picks, and the records
    * found through them or by its projects, window and keywords — each read through the one reader a
@@ -1475,6 +1534,7 @@ export class WikiDocs {
                 newTokens: true,
                 withdrawnAt: true,
                 withdrawnEntryId: true,
+                withdrawnPath: true,
                 withdrawnReason: true,
                 footnotes: {
                   orderBy: { position: 'asc' },
@@ -1536,7 +1596,12 @@ export class WikiDocs {
           notes: [...new Set(sentence.footnotes.map(noteOf))],
           newTokens: sentence.newTokens,
           withdrawn: sentence.withdrawnAt
-            ? { reason: sentence.withdrawnReason as WikiDocWithdrawReason, entryId: sentence.withdrawnEntryId!, at: sentence.withdrawnAt.toISOString() }
+            ? {
+              reason: sentence.withdrawnReason as WikiDocWithdrawReason,
+              entryId: sentence.withdrawnEntryId,
+              path: sentence.withdrawnPath,
+              at: sentence.withdrawnAt.toISOString(),
+            }
             : null,
         });
       }

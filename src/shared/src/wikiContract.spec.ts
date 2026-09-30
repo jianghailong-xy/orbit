@@ -77,6 +77,8 @@ import {
   type WikiArticleView,
 } from './wikiArticles';
 import {
+  WIKI_MAINTENANCE_DOCS_RULES,
+  WIKI_MAINTENANCE_DOCS_SKIPPED,
   WIKI_MAINTENANCE_DUE,
   WIKI_MAINTENANCE_HELD_REASONS,
   WIKI_MAINTENANCE_JOB,
@@ -101,6 +103,7 @@ import {
   WIKI_DOC_STATUSES,
   WIKI_DOC_VERDICTS,
   WIKI_DOC_WITHDRAW_REASONS,
+  WIKI_DOCS_AFFECTED_RULES,
 } from './wikiDocs';
 import {
   WIKI_PLAN_FACT_KINDS,
@@ -724,6 +727,22 @@ describe('wiki contract', () => {
     expect(job.check.route).toBe(job.routes.check);
     expect(CONTRACT.maintenance.dossier.query.until).toMatch(/does not go past/u);
     expect(job.tables).toEqual(['wiki_maintenance_run']);
+    // Criterion 3, revision 3: the run writes only the plan's sections its facts touched, and no topic article.
+    const steps: string[] = job.run.steps;
+    expect(steps.some((step) => step.startsWith('articles:'))).toBe(false);
+    const docsStep = steps.find((step) => step.startsWith('docs:'));
+    expect(docsStep).toMatch(/only the sections the run's facts touched/u);
+    expect(docsStep).toMatch(/no_confirmed_plan/u);
+    expect(steps.indexOf(docsStep!)).toBe(steps.findIndex((step) => step.startsWith('anchors:')) + 1);
+    expect(job.docs.rules).toEqual(WIKI_MAINTENANCE_DOCS_RULES);
+    expect(job.docs.skipped).toEqual([...WIKI_MAINTENANCE_DOCS_SKIPPED]);
+    expect(job.docs.byRepo).toMatch(/never the whole repository/u);
+    expect(job.docs.unplaced).toMatch(/docs\/mocks and docs\/evidence/u);
+    expect(job.docs.proposal).toMatch(/One plan proposal a run at most/u);
+    expect(job.docs.report).toMatch(/WikiMaintenanceDocsReport/u);
+    expect(job.report).toMatch(/docs \(maintenance\.job\.docs\.report\)/u);
+    expect(job.routes.docs).toBe(CONTRACT.docs.routes.affected);
+    expect(job.routes.withdraw).toBe(CONTRACT.docs.routes.withdraw);
     // A run's size fits its guardrails at six entries a session.
     const size = (mode: 'manual' | 'tiered' | 'automatic', activeEntries: number, pendingInSpace = 0) =>
       wikiMaintenanceRunSessions({ mode, activeEntries, pendingInSpace });
@@ -955,8 +974,18 @@ describe('wiki contract', () => {
     expect(jobs.rules).toEqual(WIKI_PLAN_JOB_RULES);
     // Three rounds: the first, and two more with every error handed back.
     expect(WIKI_PLAN_JOB_RULES.attemptsMax).toBe(3);
-    // The build is kept for the task that writes the documents; this one drafts and revises.
-    expect(jobs.kinds.build).toMatch(/task that writes them/u);
+    // The build writes the documents of a confirmed version; the owner's confirmation asks for it.
+    expect(jobs.kinds.build).toMatch(/^orbit wiki docs build:/u);
+    expect(jobs.triggers.owner).toMatch(/plan\/versions\/:version\/confirm/u);
+    expect(jobs.request).toMatch(/A build is asked for by the owner's confirmation/u);
+    expect(jobs.progress).toMatch(/\{ docs: \{ done, total \}, current: \{ slug, title \} \| null \}/u);
+    expect(jobs.buildReport).toMatch(/WikiPlanBuildReport/u);
+    expect(jobs.cli.build).toMatch(/^orbit wiki docs build --space <id>/u);
+    expect(jobs.check.passes).toMatch(/for a build, one its owner confirmed/u);
+    // One build of a space waits at a time, and a build names its version from the start (migration 0340).
+    const buildSql = readFileSync(path.join(ROOT, jobs.buildMigration), 'utf8').replace(/\s+/gu, ' ');
+    expect(buildSql).toContain(`"wiki_plan_job_space_id_waiting_build_key" ON "wiki_plan_job" ("space_id") WHERE "kind" = 'build' AND "state" IN ('queued', 'held')`);
+    expect(buildSql).toContain(`CHECK ("kind" <> 'build' OR "version" IS NOT NULL)`);
     // A fact asks for a job, and what moves it on is a fact too — never a clock.
     expect(jobs.means).toMatch(/never a clock/u);
     expect(jobs.trigger).toMatch(/No clock asks anything/u);
@@ -1056,6 +1085,18 @@ describe('wiki contract', () => {
     // The withdrawal hangs on the entry's single state writer, not on a writer of its own.
     expect(docs.withdrawal).toMatch(/recomputeFlags/u);
     expect(docs.withdrawal).toMatch(/applyOp/u);
+    // A repository file gone from origin/main withdraws what cites it, as its anchor gone missing, naming the path.
+    expect(docs.withdrawalPaths).toMatch(/anchor_missing/u);
+    expect(WIKI_DOC_WITHDRAW_REASONS).toContain('anchor_missing');
+    const withdrawalSql = readFileSync(path.join(ROOT, docs.withdrawalMigration), 'utf8').replace(/\s+/gu, ' ');
+    expect(withdrawalSql).toContain(`"withdrawn_path" IS NULL OR ("withdrawn_reason" = 'anchor_missing'`);
+    expect(withdrawalSql).toContain(`("withdrawn_entry_id" IS NULL OR "withdrawn_path" IS NULL)`);
+    // What a maintenance run writes again: the sections an entry that fits them changed since, by the rule the material picks by.
+    expect(docs.affected.rules).toEqual(WIKI_DOCS_AFFECTED_RULES);
+    expect(docs.affected.fit).toMatch(/material\.entries picks a section's entries by the same rule/u);
+    expect(docs.material.entries).toMatch(/affected\.fit/u);
+    expect(docs.reads.affected).toMatch(/WikiDocsAffected/u);
+    expect(docs.requests.withdraw).toMatch(/withdrawPathsMax/u);
 
     // The migration's CHECKs are the contract's closed sets.
     const sql = readFileSync(path.join(ROOT, docs.migration), 'utf8');
@@ -1075,7 +1116,9 @@ describe('wiki contract', () => {
     const user: string[] = CONTRACT.agentSurface.doors.user.routes;
     const maintenanceRoutes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
     for (const read of [routes.directory, routes.doc, routes.index]) expect(user).toContain(read);
-    for (const route of [routes.writerState, routes.writerDoc, routes.material, routes.write]) expect(maintenanceRoutes).toContain(route);
+    for (const route of [routes.writerState, routes.writerDoc, routes.material, routes.write, routes.affected, routes.withdraw]) {
+      expect(maintenanceRoutes).toContain(route);
+    }
     expect(user.some((route) => route.startsWith('POST') && route.includes('/docs'))).toBe(false);
     expect(docs.who.write).toMatch(/isWikiMaintenanceSession/u);
     expect(docs.who.write).toMatch(/WIKI_PLAN_UNCONFIRMED/u);

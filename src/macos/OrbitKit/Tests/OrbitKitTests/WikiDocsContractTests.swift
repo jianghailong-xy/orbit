@@ -106,6 +106,13 @@ final class WikiDocsContractTests: XCTestCase {
         let sentences = try XCTUnwrap(section.blocks?.first?.sentences)
         XCTAssertEqual(sentences.map(\.status), [.sourced, .withdrawn, .unsourced])
         XCTAssertEqual(sentences[1].withdrawn?.reason, .rejected)
+        XCTAssertNil(sentences[1].withdrawn?.path, "an entry withdrew it, not a file")
+        // A sentence citing a repository file gone from origin/main names the file, and no entry.
+        let gone = #"{"text":"见设计文档。","status":"withdrawn","notes":[1],"newTokens":[],"withdrawn":{"reason":"anchor_missing","entryId":null,"path":"docs/old.md","at":"2026-09-30T03:00:00.000Z"}}"#
+        let byPath = try JSONDecoder().decode(WikiDocSentence.self, from: Data(gone.utf8))
+        XCTAssertEqual(byPath.withdrawn?.reason, .anchorMissing)
+        XCTAssertEqual(byPath.withdrawn?.path, "docs/old.md")
+        XCTAssertNil(byPath.withdrawn?.entryId)
         XCTAssertEqual(sentences[2].newTokens, ["rollbackclaim"])
         XCTAssertEqual(section.blocks?.last?.kind, .code)
         let footnotes = try XCTUnwrap(doc.footnotes)

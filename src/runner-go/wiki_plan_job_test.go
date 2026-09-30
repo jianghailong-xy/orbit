@@ -1505,6 +1505,33 @@ func TestWikiPlanCheckExitsNonZeroUnlessTheJobStoredADraft(t *testing.T) {
 	}
 }
 
+func TestWikiPlanCheckSaysWhatABuildJobWrote(t *testing.T) {
+	f := newPlanFixture(t)
+	door := newFakePlanDoor(t, f)
+	ok := true
+	door.check = func(job string) (int, string) {
+		if ok {
+			return http.StatusOK, `{"spaceId":"space-1","jobId":"job-1","kind":"build","outcome":"succeeded","version":3,"ok":true,"problems":[]}`
+		}
+		return http.StatusOK, `{"spaceId":"space-1","jobId":"job-1","kind":"build","outcome":"failed","version":3,"ok":false,` +
+			`"problems":["The run ended failed (2 sections were left unwritten)."]}`
+	}
+	planSession(t, door.URL, nil)
+	t.Setenv("ORBIT_SESSION_ID", "")
+	var out strings.Builder
+	if err := cmdWikiCLI([]string{"plan", "check", "--space", "space-1", "--job", "job-1"}, strings.NewReader(""), &out); err != nil ||
+		!strings.Contains(out.String(), "build job job-1 wrote the documents of confirmed version 3") || strings.Contains(out.String(), "gate") {
+		t.Errorf("a build that wrote its version: %v %q", err, out.String())
+	}
+	ok = false
+	out.Reset()
+	err := cmdWikiCLI([]string{"plan", "check", "--space", "space-1", "--job", "job-1"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(out.String(), "did not write the documents of the version it was made for") ||
+		!strings.Contains(out.String(), "2 sections were left unwritten") {
+		t.Errorf("a failed build passed its check, or said nothing of why: %v %q", err, out.String())
+	}
+}
+
 func TestWikiPlanRunsOnlyAsItsJob(t *testing.T) {
 	f := newPlanFixture(t)
 	door := newFakePlanDoor(t, f)

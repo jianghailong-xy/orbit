@@ -207,6 +207,37 @@ final class WikiPlanContractTests: XCTestCase {
                        ["unknown", "unknown", "unknown", "unknown"])
     }
 
+    /// A build's job, as the plan page's «Writing documents» draws it: its version from the start, how far it
+    /// got while it runs, and its report when it ended — counts by outcome where a draft's report has totals.
+    func testABuildJobDecodes() throws {
+        let running = #"""
+        {"id":"34WJob","kind":"build","trigger":"owner","state":"running","version":3,
+         "progress":{"docs":{"done":12,"total":49},"current":{"slug":"session-search","title":"会话搜索"}},"report":null}
+        """#
+        let job = try JSONDecoder().decode(WikiPlanJob.self, from: Data(running.utf8))
+        XCTAssertEqual(job.kind, .build)
+        XCTAssertEqual(job.version, 3)
+        XCTAssertEqual(job.progress?.docs.done, 12)
+        XCTAssertEqual(job.progress?.docs.total, 49)
+        XCTAssertEqual(job.progress?.current?.title, "会话搜索")
+
+        let ended = #"""
+        {"id":"34WJob","kind":"build","state":"succeeded","version":3,"progress":{"docs":{"done":49,"total":49},"current":null},
+         "report":{"planVersion":3,"repoSha":"4e4bb4781aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","docs":{"total":49,"written":49},
+                   "sections":{"written":12,"unchanged":359,"failed":0},"tokens":{"input":900000,"output":150000,"calls":40},"seconds":5400,"model":"qwen3.8-27b-fp8"}}
+        """#
+        let built = try JSONDecoder().decode(WikiPlanJob.self, from: Data(ended.utf8))
+        XCTAssertEqual(built.report?.planVersion, 3)
+        XCTAssertEqual(built.report?.builtDocs?.written, 49)
+        XCTAssertEqual(built.report?.builtSections?.unchanged, 359)
+        XCTAssertNil(built.report?.docs, "a build's documents are counts by outcome, not a draft's total")
+        XCTAssertNil(built.progress?.current)
+        // What it decodes is what it encodes: the build's counts go back under the same keys.
+        let again = try JSONDecoder().decode(WikiPlanJob.self, from: try JSONEncoder().encode(built))
+        XCTAssertEqual(again.report, built.report)
+        XCTAssertEqual(again.progress, built.progress)
+    }
+
     /// The history, and a refusal of the gate: every error with its check, where it is and why.
     func testTheHistoryAndTheGatesErrorsDecode() throws {
         let history = #"""

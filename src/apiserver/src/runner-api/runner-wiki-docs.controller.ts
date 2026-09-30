@@ -13,7 +13,9 @@ import { RunnerAuthGuard } from './runner-auth.guard';
  * The documents, on the runner door (contracts/wiki.contract.json `docs.routes`,
  * `agentSurface.doors.runner.maintenanceRoutes`): what a maintenance run's writer asks — what is written
  * already, one document as it is written, the server's half of a section's material, and the write of
- * one document's sections.
+ * one document's sections — and what a maintenance run asks of them after its entries (criterion 3,
+ * revision 3): the sections to write again and the knowledge with no place in the plan, and the
+ * withdrawal of what cites a repository file that is gone.
  *
  * ONLY A MAINTENANCE RUN OF THE SPACE. The calling session (`X-Orbit-Session-Id`, one this runner hosts
  * for its owner) is the principal, and `WikiDocs.assertWriter` asks it the one test criterion 2 exported
@@ -29,6 +31,31 @@ export class RunnerWikiDocsController {
     private readonly prisma: PrismaService,
     private readonly docs: WikiDocs,
   ) {}
+
+  /**
+   * What a maintenance run writes again because of the entries, and what it may propose: the sections an
+   * entry changed since they were written fits, the stale ones, and the entries no section fits.
+   */
+  @Get('spaces/:id/maintenance/docs')
+  async affected(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+  ) {
+    return this.docs.affected(await this.maintainer(runner, callingSessionId), id);
+  }
+
+  /** Repository files gone from origin/main: every sentence citing one withdrawn, its section stale. */
+  @Post('spaces/:id/maintenance/docs/withdrawals')
+  @HttpCode(HttpStatus.OK)
+  async withdraw(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() body: Record<string, unknown>,
+  ) {
+    return this.docs.withdrawPaths(await this.maintainer(runner, callingSessionId), id, body);
+  }
 
   /** Every written document of the space with its sections' fingerprints, and the confirmed plan's version. */
   @Get('spaces/:id/docs')

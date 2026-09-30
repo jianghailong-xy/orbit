@@ -349,7 +349,8 @@ public struct WikiPlanJob: Codable, Equatable, Sendable {
         public let startedAt: String?
     }
 
-    /// What the run reported (contract `plan.jobs.report`).
+    /// What the run reported: a draft's or a revision's (contract `plan.jobs.report`), or a build's
+    /// (`plan.jobs.buildReport`), whose `docs` and `sections` are counts by outcome rather than totals.
     public struct Report: Codable, Equatable, Sendable {
         public struct Attempt: Codable, Equatable, Sendable {
             public let attempt: Int
@@ -364,6 +365,19 @@ public struct WikiPlanJob: Codable, Equatable, Sendable {
             public let calls: Int?
         }
 
+        /// A build's documents: how many the version has, and how many it wrote whole.
+        public struct BuiltDocs: Codable, Equatable, Sendable {
+            public let total: Int?
+            public let written: Int?
+        }
+
+        /// A build's sections by what became of them.
+        public struct BuiltSections: Codable, Equatable, Sendable {
+            public let written: Int?
+            public let unchanged: Int?
+            public let failed: Int?
+        }
+
         public let categories: Int?
         public let docs: Int?
         public let sections: Int?
@@ -371,6 +385,60 @@ public struct WikiPlanJob: Codable, Equatable, Sendable {
         public let tokens: Tokens?
         public let seconds: Int?
         public let model: String?
+        /// A build's: the confirmed version it wrote, at which origin/main commit, and what became of it.
+        public let planVersion: Int?
+        public let repoSha: String?
+        public let builtDocs: BuiltDocs?
+        public let builtSections: BuiltSections?
+
+        private enum CodingKeys: String, CodingKey {
+            case categories, docs, sections, attempts, tokens, seconds, model, planVersion, repoSha
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            categories = try? c.decode(Int.self, forKey: .categories)
+            docs = try? c.decode(Int.self, forKey: .docs)
+            sections = try? c.decode(Int.self, forKey: .sections)
+            attempts = try? c.decode([Attempt].self, forKey: .attempts)
+            tokens = try? c.decode(Tokens.self, forKey: .tokens)
+            seconds = try? c.decode(Int.self, forKey: .seconds)
+            model = try? c.decode(String.self, forKey: .model)
+            planVersion = try? c.decode(Int.self, forKey: .planVersion)
+            repoSha = try? c.decode(String.self, forKey: .repoSha)
+            builtDocs = try? c.decode(BuiltDocs.self, forKey: .docs)
+            builtSections = try? c.decode(BuiltSections.self, forKey: .sections)
+        }
+
+        public func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encodeIfPresent(categories, forKey: .categories)
+            if let builtDocs { try c.encode(builtDocs, forKey: .docs) } else { try c.encodeIfPresent(docs, forKey: .docs) }
+            if let builtSections { try c.encode(builtSections, forKey: .sections) } else { try c.encodeIfPresent(sections, forKey: .sections) }
+            try c.encodeIfPresent(attempts, forKey: .attempts)
+            try c.encodeIfPresent(tokens, forKey: .tokens)
+            try c.encodeIfPresent(seconds, forKey: .seconds)
+            try c.encodeIfPresent(model, forKey: .model)
+            try c.encodeIfPresent(planVersion, forKey: .planVersion)
+            try c.encodeIfPresent(repoSha, forKey: .repoSha)
+        }
+    }
+
+    /// A build's progress while it runs (contract `plan.jobs.progress`): the plan page's «Writing documents».
+    public struct Progress: Codable, Equatable, Sendable {
+        public struct Docs: Codable, Equatable, Sendable {
+            public let done: Int
+            public let total: Int
+        }
+
+        public struct Current: Codable, Equatable, Sendable {
+            public let slug: String
+            public let title: String
+        }
+
+        public let docs: Docs
+        /// The document being written now; nil at the end.
+        public let current: Current?
     }
 
     public let id: String
@@ -390,7 +458,9 @@ public struct WikiPlanJob: Codable, Equatable, Sendable {
     /// The gate round the run is on, or ended on, of `attemptsMax`.
     public let attempt: Int?
     public let attemptsMax: Int?
-    /// A job that succeeded: the version it stored.
+    /// A build's, while it runs: the documents written of how many, and the one being written.
+    public let progress: Progress?
+    /// A job that succeeded: the version it stored. A build's, from the start: the confirmed version it writes.
     public let version: Int?
     /// A job that failed: the gate's errors on its last round, and what went wrong in words.
     public let errors: [WikiPlanGateError]?
