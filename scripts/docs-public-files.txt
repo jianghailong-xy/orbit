@@ -20,3 +20,4 @@ docs/project-maturity.md
 docs/release-process.md
 docs/runner-cli.md
 docs/runner-troubleshooting.md
+docs/self-hosting.md
