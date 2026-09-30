@@ -165,6 +165,29 @@ final class WorktreeModel {
         await loadDetail()
     }
 
+    func recoverMerge(action: String, previewID: String?) async {
+        guard let recovery = detail?.mergeRecovery else { return }
+        busy = true
+        defer { busy = false }
+        do {
+            try await api.merge(sessionID: sessionID, targetBranch: recovery.targetBranch,
+                                recoveryAction: action, previewId: previewID)
+        } catch { onOutcome(Self.failure("Could not start recovery", error: error)); return }
+        await loadDetail()
+    }
+
+    func repairRecovery(preparePR: Bool) async -> String? {
+        guard let recovery = detail?.mergeRecovery,
+              let workspaceID = (detail?.workspace ?? detail?.agent)?.id else { return nil }
+        busy = true
+        defer { busy = false }
+        do {
+            let session = try await api.createSession(CreateSessionRequest(
+                prompt: recovery.repairPrompt(preparePR: preparePR), agentId: workspaceID))
+            return session.id
+        } catch { onOutcome(Self.failure("Could not start repair session", error: error)); return nil }
+    }
+
     /// Adopt the worktree's actual HEAD branch (after an in-worktree `git checkout -b`) as the
     /// session's tracked branch, so Merge/diff act on the real work instead of a stale "In main".
     /// Pure server-side re-point; reload so the bar re-derives (the divergence flag clears).
@@ -235,6 +258,11 @@ final class WorktreeModel {
         }
         if old.commitStatus == "error", new.commitStatus == "pending" {
             onOutcome(ToastRequest(message: "Committing…", tone: .info))
+            return
+        }
+        if old.mergeStatus == "pending", new.mergeStatus != "pending", let recovery = new.mergeRecovery {
+            onOutcome(ToastRequest(message: recovery.title,
+                                   tone: recovery.code == "READY" ? .info : .warning))
             return
         }
         let target = new.mergeTarget ?? "main"

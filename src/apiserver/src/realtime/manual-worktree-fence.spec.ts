@@ -84,6 +84,8 @@ test('a terminal merge is claimed by the heartbeat owner with an operation CAS',
         branch: true,
         baseSha: true,
         mergeTarget: true,
+        mergeRecovery: true,
+        mergeRecoveryAction: true,
         mergeOperationId: true,
         mergeOperationOwner: true,
         status: true,
@@ -110,6 +112,37 @@ test('a terminal merge is claimed by the heartbeat owner with an operation CAS',
       data: { mergeOperationOwner: NEW_OWNER, mergeRequestedAt: restampedAt },
     },
   ]);
+});
+
+test('old runner heartbeats cannot claim recovery commands', async () => {
+  let where: Record<string, unknown> = {};
+  await service({ session: { findMany: async (args: { where: Record<string, unknown> }) => {
+    where = args.where;
+    return [];
+  } } }).drainMergeRequests(RUNNER_ID, NEW_OWNER, false);
+  assert.equal(where.mergeRecoveryAction, null);
+});
+
+test('recovery redelivery carries the saved candidate, checks, and the same operation identity', async () => {
+  const recovery = { code: 'PUSH_FAILED', targetBranch: 'develop', previewId: 'reviewed', candidateSha: 'd'.repeat(40) };
+  const [command] = await service({
+    session: {
+      findMany: async () => [{
+        id: SESSION_ID, branch: 'orbit/session', baseSha: 'a'.repeat(40), mergeTarget: 'develop',
+        mergeRecoveryAction: 'apply', mergeRecovery: recovery,
+        mergeOperationId: OPERATION_ID, status: RunStatus.SUCCEEDED, taskId: 'task',
+        workspace: { workDir: '/repo' },
+      }],
+      updateMany: async () => ({ count: 1 }),
+    },
+    task: { findUnique: async () => ({ project: { codebases: [{ mergeCheckCommand: 'npm test', mergeCheckTimeoutSeconds: 45 }] } }) },
+    $queryRaw: async () => [],
+  }).drainMergeRequests(RUNNER_ID, NEW_OWNER, true);
+  assert.equal(command.operationId, OPERATION_ID);
+  assert.equal(command.leaseOwner, NEW_OWNER);
+  assert.equal(command.recoveryAction, 'apply');
+  assert.deepEqual(command.recovery, { ...recovery, code: 'READY' });
+  assert.deepEqual(command.check, { command: 'npm test', timeoutSeconds: 45 });
 });
 
 test('`[K6]` §7: the command carries the commit the checkpoint verified, and only then', async (t) => {

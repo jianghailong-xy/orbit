@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Orbit · 目标分支同步恢复原型</title>
+<style>
+  :root{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif;color:#252b35;background:#f6f7fa;font-size:14px;line-height:1.6;color-scheme:light}
+  *{box-sizing:border-box}body{margin:0}button,select{font:inherit}button{cursor:pointer}button:disabled{cursor:default;opacity:.58}button:focus-visible,select:focus-visible,summary:focus-visible,a:focus-visible{outline:3px solid #a4b9ff;outline-offset:3px}
+  a{color:#435baf;text-decoration:none}button{border:1px solid #dde1e8;border-radius:9px;background:white;color:inherit;padding:8px 14px;font-weight:560}button:hover:enabled{background:#f5f6fa}.primary{background:#465ddd;border-color:#465ddd;color:white}.primary:hover:enabled{background:#384fca}.quiet{background:transparent;border-color:transparent;color:#667082}
+  .demo{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:13px 30px;background:#eef0f6;border-bottom:1px solid #e0e4ed;color:#667082;font-size:12px}.demo strong{color:#414a5b;font-weight:600}.demo label{display:flex;gap:10px;align-items:center}select{border:1px solid #d7dce6;border-radius:7px;background:white;padding:5px 8px;color:#414a5b;max-width:100%}
+  header{display:flex;align-items:center;gap:10px;max-width:1120px;margin:auto;padding:25px 28px;color:#77818f}.brand{font-size:18px;font-weight:650;letter-spacing:-.6px;color:#2b3240}.orbit{display:inline-block;width:20px;height:20px;border:2px solid #6974dc;border-radius:50%;transform:rotate(-30deg);box-shadow:inset 3px 0 #6974dc}header .divider{margin:0 10px;color:#ccd0d8}header a{margin-left:auto;font-size:12px}
+  main{max-width:1120px;margin:0 auto;padding:20px 28px 70px}.eyebrow{color:#7c8495;font-size:12px;letter-spacing:.03em;margin-bottom:8px}h1{font-size:26px;font-weight:630;letter-spacing:-.7px;line-height:1.3;margin:0 0 9px}h2{font-size:19px;line-height:1.4;margin:0 0 8px;font-weight:625}p{margin:0}.subtitle{color:#7c8495;font-size:13px}.session{margin-top:28px;border:1px solid #e1e4eb;border-radius:14px;background:#fff;overflow:hidden}.work{padding:25px 25px 28px}.avatar{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:#eff1ff;color:#5a69c5;font-size:13px;float:left;margin-right:12px}.work .name{font-weight:600;font-size:13px;line-height:30px}.work p{margin:13px 0 0 42px;color:#747e8e;font-size:13px}.work .done{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:#697c70;background:#f2f7f3;border-radius:5px;padding:1px 6px;margin-left:8px}
+  .branchbar{border-top:1px solid #e9ebf0;display:flex;align-items:center;gap:14px;padding:16px 22px;background:#fcfcfd}.branch{font:12px ui-monospace,SFMono-Regular,Consolas,monospace;color:#697384;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}.stats{white-space:nowrap;font-size:12px;color:#8a91a1}.add{color:#51906b;margin-right:5px}.del{color:#bf655e}.status{font-size:12px;color:#a17827;white-space:nowrap}.status.success{color:#477961}
+  .notice{margin:0 20px 20px;padding:18px 20px;border:1px solid #efdfb6;background:#fffbf2;border-radius:10px;display:flex;gap:13px}.notice.success{background:#f3f9f5;border-color:#d3e8d9}.notice.neutral{background:#f7f8fc;border-color:#e0e4ee}.notice .icon{color:#b38b38;font-size:18px;line-height:24px}.notice.success .icon{color:#4e8665}.notice.neutral .icon{color:#7585c7}.notice h2{font-size:15px;margin:0 0 5px}.notice p{color:#7d7769;font-size:13px;max-width:730px}.notice.neutral p{color:#737b8a}.notice.success p{color:#6d7e72}.actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:15px}.meta{font-size:11px;color:#8a919f;margin-top:10px}.notice .primary{padding:6px 12px;font-size:12px}.notice .quiet{padding:6px 10px;font-size:12px}
+  .panel{margin-top:22px;border:1px solid #e1e4eb;border-radius:14px;background:white;overflow:hidden}.panel-head{padding:22px 24px 17px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;border-bottom:1px solid #eceef3}.panel-head p{color:#7b8494;font-size:12px}.pill{display:inline-flex;align-items:center;gap:5px;border:1px solid #d7e6dc;color:#508266;background:#f3f9f5;font-size:11px;padding:3px 9px;border-radius:20px;white-space:nowrap}.pill.warning{border-color:#eddfbd;color:#a78236;background:#fffbf2}.panel-content{padding:22px 24px}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.metric{border:1px solid #e5e8ef;border-radius:9px;padding:15px}.metric .label{color:#7b8595;font-size:12px}.metric .value{font-size:23px;font-weight:600;margin:4px 0}.metric .value span{font-size:12px;font-weight:400;color:#9299a6;margin-left:7px}.metric .label strong{color:#4b5668;font-weight:500}details{border-top:1px solid #eaecf1;padding-top:10px;margin-top:10px}summary{cursor:pointer;font-size:12px;color:#56627b}ul{margin:10px 0 0;padding-left:18px;font-size:12px;color:#6c7587}li+li{margin-top:7px}.commit{list-style:none;padding-left:0}.commit small{display:block;color:#929baa;font-size:11px;margin-top:2px}.scope{margin-top:18px;border:1px solid #e3e6ef;border-radius:9px;padding:14px 16px;background:#fafbfe;font-size:12px;color:#737d8f}.scope strong{display:block;font-size:13px;color:#4d586d;margin-bottom:5px}.scope a{display:inline-block;margin-top:8px}.note{margin-top:15px;color:#8a929f;font-size:11px}.panel-foot{padding:18px 24px;background:#fafbfc;border-top:1px solid #e8ebf1;display:flex;align-items:center;justify-content:space-between;gap:16px}.panel-foot p{font-size:11px;color:#7d8594;max-width:640px}.buttons{display:flex;gap:8px;flex-shrink:0}.steps{display:flex;gap:10px;margin-top:18px;font-size:12px;color:#949bab;flex-wrap:wrap}.steps span{padding:5px 10px;border:1px solid #e3e7ef;border-radius:6px}.steps .active{color:#5266cc;border-color:#bac5ef;background:#f0f3ff}.steps .finished{color:#5d806c;border-color:#d6e6dc;background:#f4f9f6}.files{padding:12px 15px;background:#f8f9fc;border:1px solid #e5e8f0;border-radius:8px;line-height:2;font:12px/2 ui-monospace,monospace;margin-top:14px;color:#5e687b}.files span{color:#b97e4c;font-family:inherit}.footer{font-size:11px;color:#99a0ae;margin-top:22px;display:flex;justify-content:space-between;gap:12px}.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);border:1px solid #dfe3ed;background:white;color:#697387;box-shadow:0 6px 25px #28365615;padding:10px 18px;border-radius:9px;font-size:12px;max-width:90vw;text-align:center}
+  @media(max-width:680px){.demo{padding:12px 16px;align-items:flex-start;flex-direction:column;gap:8px}.demo label{width:100%}select{flex:1;min-width:0}header{padding:20px 16px;font-size:12px}.brand{font-size:17px}header .divider{margin:0 2px}header a{display:none}main{padding:14px 16px 40px}h1{font-size:23px}.work{padding:19px 18px 21px}.work p{margin-left:0}.branchbar{padding:13px 16px;flex-wrap:wrap;gap:8px}.branch{flex-basis:100%}.stats{flex:1}.notice{margin:0 12px 12px;padding:15px 13px;gap:9px}.notice p{font-size:12px}.panel{margin-top:16px}.panel-head{padding:18px 16px}.panel-head h2{font-size:17px}.panel-content{padding:16px}.grid{grid-template-columns:1fr}.metric .value{font-size:21px}.panel-foot{padding:16px;flex-direction:column;align-items:stretch}.buttons{width:100%;flex-direction:column-reverse}.buttons button{width:100%}.footer{flex-direction:column;gap:3px}.scope{font-size:12px}.pill{font-size:10px;padding:3px 7px}.notice .actions{gap:4px}}
+  @media(prefers-reduced-motion:no-preference){.panel{animation:appear .18s ease-out}@keyframes appear{from{opacity:.4;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}}
+</style>
+<div class="demo"><div><strong>产品方案 · 可点击原型</strong>　所有提交、数量和检查结果为演示数据；操作仅模拟。</div><label for="scenario">切换场景<select id="scenario"><option value="clean">分叉 · 无冲突</option><option value="target-conflict">分叉 · 目标同步冲突</option><option value="source-conflict">分叉 · 本次改动重放冲突</option><option value="policy">目标要求 PR / 线性历史</option><option value="drift">预览后分支更新</option><option value="partial">远端已合入 · 本机待同步</option></select></label></div>
+<header><span class="orbit" aria-hidden="true"></span><span class="brand">Orbit</span><span class="divider">/</span><span>会话</span><a href="../../target-branch-divergence-design.md">查看设计文档 ↗</a></header>
+<main><div class="eyebrow">DORADO DEVTOOLS</div><h1>Titan Passport ID</h1><p class="subtitle">查看本次改动，合入 develop</p><div id="app" aria-live="polite"></div><div class="footer"><span>原型范围：分叉诊断 → 内容预览 → 恢复合入</span><span>Web 面板 · 手机单列布局</span></div></main>
+<script>
+  let scenario='clean',phase='blocked',step=0,repairReady=false,timer;
+  const app=document.querySelector('#app');
+  const btn=(action,label,kind='primary',disabled=false)=>`<button type="button" data-action="${action}" class="${kind}" ${disabled?'disabled':''}>${label}</button>`;
+  const notice=(title,body,actions='',kind='',meta='')=>`<div class="notice ${kind}"><span class="icon" aria-hidden="true">${kind==='success'?'✓':kind==='neutral'?'↻':'↔'}</span><div><h2>${title}</h2><p>${body}</p>${actions?`<div class="actions">${actions}</div>`:''}${meta?`<div class="meta">${meta}</div>`:''}</div></div>`;
+  const panel=(title,subtitle,badge,body,foot,buttons,warning=false)=>`<section class="panel"><div class="panel-head"><div><h2>${title}</h2><p>${subtitle}</p></div><span class="pill ${warning?'warning':''}">${badge}</span></div><div class="panel-content">${body}</div><div class="panel-foot"><p>${foot}</p><div class="buttons">${buttons}</div></div></section>`;
+  const remoteCount=()=>scenario==='drift'&&repairReady?6:5;
+  const metrics=()=>`<div class="grid"><div class="metric"><div class="label">本地 <strong>develop</strong> 独有</div><div class="value">2<span>个提交 · 将额外推送</span></div><details open><summary>查看将带入的本地提交</summary><ul class="commit"><li>修正开发环境配置<small>示例开发者 · 昨天 · <a href="#" data-action="commit">查看 diff</a></small></li><li>补充开发分支文档<small>示例开发者 · 昨天 · <a href="#" data-action="commit">查看 diff</a></small></li></ul></details></div><div class="metric"><div class="label">远端 <strong>origin/develop</strong> 独有</div><div class="value">${remoteCount()}<span>个提交 · 同步到本机</span></div><details><summary>查看远端新增提交</summary><ul><li>更新接口定义</li><li>补充接口回归</li><li>调整依赖配置</li><li>更新类型声明</li><li>更新开发说明</li>${remoteCount()===6?'<li>预览后新增的开发说明</li>':''}</ul></details></div></div>`;
+  const scope=()=>`<div class="scope"><strong>本次合入的完整范围</strong>保留双方提交历史，新增 1 个合并提交。本地额外的 2 个提交会与本次会话的改动一起推送到 origin/develop。<br><a href="#" data-action="diff">查看最终候选内容相对 origin/develop 的完整 diff →</a></div>`;
+  function render(){
+    let n='',p='';
+    const finished=['merged','partial','local-blocked'].includes(phase);
+    if(phase==='blocked')n=notice('develop 需要同步','本地 develop 与 origin/develop 都有独有提交。先检查这些提交，再继续合入本次改动。',btn('inspect','检查并修复')+btn('details','查看详情','quiet'));
+    if(phase==='checking')n=notice('正在检查 develop','正在读取远端，并预演目标同步与本次改动合入。',btn('inspect','检查中…','primary',true),'neutral');
+    if(phase==='preview'){
+      n=notice('develop 需要同步',`已检查：本地 2 个、远端 ${remoteCount()} 个独有提交。请 review 本次将带入的完整内容。`,btn('close','收起预览','quiet'),'','刚刚检查 · 演示数据');
+      p=panel('同步并继续合入','develop ↔ origin/develop','✓ 预演无冲突',metrics()+scope()+`<p class="note">目标同步、本次改动重放均无冲突。示例仓库已配置的合入检查通过，执行前会再核对分支版本。</p>`,'点击即批准上方预览的完整范围，并推送到 origin/develop。',btn('close','暂不处理','quiet')+btn('confirm','同步 develop 并合入'));
+    }
+    if(phase==='target-conflict'){
+      n=notice('develop 同步时存在冲突','本地与远端的 develop 修改了相同内容，需要先解决目标分支的冲突。');
+      p=panel('在修复会话中处理','冲突阶段：目标分支同步','2 个文件需要处理',metrics()+`<div class="files">config/development.json <span>· 双方修改</span><br>docs/development.md <span>· 双方修改</span></div><div class="scope"><strong>下一步</strong>在独立修复分支保留双方内容并处理冲突。完成后返回这里 review 合入预览。</div>`,'目前尚未推进 develop 或推送远端。',btn('close','暂不处理','quiet')+btn('repair','在修复会话中处理'),true);
+    }
+    if(phase==='source-conflict'){
+      n=notice('本次改动与同步后的 develop 冲突','develop 同步预演成功；本次会话的改动重放时需要处理冲突。');
+      p=panel('在当前会话中处理','冲突阶段：本次改动合入','1 个文件需要处理',`<div class="files">src/passport.ts <span>· 本次改动与目标修改重叠</span></div><div class="scope"><strong>下一步</strong>恢复当前会话，基于同步后的目标处理本次改动。完成检查后重新生成合入预览。</div>`,'正式目标分支尚未推进，远端尚未推送。',btn('close','暂不处理','quiet')+btn('repair','在当前会话中处理'),true);
+    }
+    if(phase==='policy'){
+      n=notice('develop 需要通过 PR 合入','仓库要求线性历史，并通过 PR 审核。请先准备可审查的候选分支。');
+      p=panel('准备可审查的候选分支','已有分叉内容需要保留与整理','需要 PR',metrics()+`<div class="scope"><strong>下一步</strong>在独立分支整理需保留的本地提交和本次改动，运行仓库已有检查，再 review 完整 diff 并准备 PR。</div>`,'候选准备完成不等于已合入，落地后会更新合入状态。',btn('close','暂不处理','quiet')+btn('pr','准备 PR'),true);
+    }
+    if(phase==='drift'){
+      n=notice('分支已更新，请重新检查','origin/develop 在预览后有新的提交。需要更新合入预览。',btn('recheck','重新检查'),'','旧预览已失效');
+    }
+    if(phase==='running'){
+      const labels=['核对分支版本','推送已批准内容','确认远端落地','同步本机'];
+      n=notice('正在同步并合入 develop',labels[step]+'…',btn('confirm','处理中…','primary',true),'neutral');
+      p=panel('同步并继续合入','已批准的候选内容','处理中',scope()+`<div class="steps">${labels.map((v,i)=>`<span class="${i<step?'finished':i===step?'active':''}">${i<step?'✓ ':''}${v}</span>`).join('')}</div>`,'可以离开此页，操作状态将持续显示。',btn('confirm','处理中…','primary',true));
+    }
+    if(phase==='merged')n=notice('已合入 develop','origin/develop 已包含本次内容，本机 develop 已同步。',btn('receipt','查看合入记录','quiet'),'success','已保留本地与远端原有提交 · 演示结果');
+    if(phase==='partial')n=notice('已合入 origin/develop；本机待同步','远端已接受本次内容，本机 checkout 的未提交文件阻止了同步。先处理这些文件，再同步本机。',btn('local','同步本机')+btn('details','查看受影响文件','quiet'),'','再次同步只更新本机，无需重复合入或推送');
+    if(phase==='local-blocked'){
+      n=notice('已合入 origin/develop；本机待同步','本机仍有未提交修改。处理受影响文件后，可以再次同步本机。');
+      p=panel('处理本机 checkout','仅影响本机同步','1 个文件需要处理',`<div class="files">config/development.json · 未提交修改</div><div class="scope"><strong>下一步</strong>先在文件所属的 checkout 提交或保存这份修改，再同步本机 develop。</div>`,'远端已合入，本次恢复不会重新合入或推送。',btn('partial','返回','quiet')+btn('local-ready','模拟已处理，再同步'),true);
+    }
+    if(phase==='repair'){
+      n=notice('修复会话入口','这里演示进入会话后的上下文。正式产品会关联同一个仓库恢复操作。','','neutral');
+      p=panel(scenario==='source-conflict'?'继续当前会话':'独立修复会话','输入：双方提交、目标位置、冲突文件和用户批准的范围','演示',`<div class="scope"><strong>修复范围</strong>在独立分支处理需要保留的内容，完成检查后返回合入预览。修改后的候选内容需要重新 review。</div>`,'原型不会实际创建会话或修改仓库。',btn('close','返回','quiet')+btn('repaired','模拟修复完成'));
+    }
+    if(phase==='pr'){
+      n=notice('准备 PR','已转入候选准备流程，整理需保留的本地提交与本次改动。','','neutral');
+      p=panel('候选准备流程','独立分支 → 检查 → review diff → PR','演示',`<div class="scope"><strong>PR 的完整范围</strong>包括经 review 需保留的本地独有提交，以及本次改动；遵循目标分支的线性历史要求。</div>`,'原型不会实际创建 PR。PR 合入前仍显示等待落地。',btn('close','返回','quiet')+btn('prready','模拟候选准备完成'));
+    }
+    if(phase==='prready')n=notice('候选已就绪，等待 PR 合入','候选分支已准备好，可 review 完整 diff 并在托管平台创建 PR。',btn('prlink','查看候选与 PR 入口')+btn('close','返回','quiet'),'neutral','本次工作尚未合入 develop · 演示状态');
+    app.innerHTML=`<section class="session"><div class="work"><div class="avatar" aria-hidden="true">O</div><span class="name">本次改动</span><span class="done">已提交</span><p>查看 diff，然后将本次工作合入 develop。</p></div><div class="branchbar"><span class="branch">⎇ orbit/titan-passport-id-dorado-devtools-applic-981ef4</span><span class="stats"><span class="add">+504</span><span class="del">−92</span> · 6 files</span><span class="status ${finished?'success':''}">${finished?(phase==='merged'?'✓ 已合入':'远端已合入'):'→ develop'}</span></div>${n}</section>${p}`;
+  }
+  function toast(message){document.querySelector('.toast')?.remove();const el=document.createElement('div');el.className='toast';el.setAttribute('role','status');el.textContent=message;document.body.append(el);setTimeout(()=>el.remove(),3000)}
+  function inspect(){clearTimeout(timer);phase='checking';render();timer=setTimeout(()=>{phase=repairReady?'preview':['target-conflict','source-conflict','policy'].includes(scenario)?scenario:'preview';render()},400)}
+  document.querySelector('#scenario').addEventListener('change',e=>{clearTimeout(timer);scenario=e.target.value;phase=scenario==='partial'?'partial':'blocked';repairReady=false;render()});
+  document.addEventListener('click',e=>{
+    const target=e.target.closest('[data-action]');if(!target)return;e.preventDefault();const action=target.dataset.action;
+    if(action==='inspect'||action==='recheck'){if(action==='recheck')repairReady=true;inspect();return}
+    if(action==='close'){clearTimeout(timer);phase='blocked';render();return}
+    if(action==='confirm'){
+      if(scenario==='drift'&&!repairReady){phase='drift';render();return}
+      phase='running';step=0;render();const advance=()=>{if(step<3){step++;render();timer=setTimeout(advance,430)}else{phase='merged';render()}};timer=setTimeout(advance,430);return;
+    }
+    if(action==='repair'){phase='repair';render();return}
+    if(action==='repaired'){repairReady=true;phase='preview';render();return}
+    if(action==='pr'){phase='pr';render();return}
+    if(action==='prready'){phase='prready';render();return}
+    if(action==='local'){phase='local-blocked';render();return}
+    if(action==='partial'){phase='partial';render();return}
+    if(action==='local-ready'){phase='merged';render();toast('演示：阻塞文件已处理，仅同步本机 develop。');return}
+    if(action==='details'){
+      app.insertAdjacentHTML('beforeend',panel('诊断详情','原因、受影响范围与手工入口','演示',phase==='partial'?'<div class="files">config/development.json · 本机有未提交修改</div><p class="note">远端已合入。处理该文件后，仅重新同步本机。</p>':'<div class="scope"><strong>目标历史分叉</strong>双方都有独有提交。影响此仓库在本机向 develop 合入的会话。</div><p class="note">正式产品会展示已验证的目标 checkout 位置及适用的手工命令。</p>','信息来自 runner 检查；原型中的路径、文件为示例。',btn('backpreview','收起','quiet')));return;
+    }
+    if(action==='diff'||action==='commit'){
+      app.insertAdjacentHTML('beforeend',panel(action==='commit'?'本地提交 diff':'最终候选 diff','演示摘要 · 正式产品展示实际完整 diff','预览',`<div class="files">config/development.json · 本地提交修改<br>docs/development.md · 本地提交修改${action==='commit'?'':'<br>本次会话 · 6 个文件的改动'}</div><p class="note">本原型用于 review 操作语义，未连接实际仓库。</p>`,'关闭预览不会推进实际目标分支。',btn('backpreview','返回合入预览','quiet')));return;
+    }
+    if(action==='backpreview'){render();return}
+    toast(action==='receipt'?'演示：打开包含远端落地及本机同步结果的合入记录。':'演示：打开候选分支及托管平台的 PR 创建入口。');
+  });
+  const requested=new URLSearchParams(location.search).get('state');
+  if(['preview','target-conflict','source-conflict','policy','drift','partial','merged'].includes(requested)){phase=requested;scenario=['target-conflict','source-conflict','policy','drift','partial'].includes(requested)?requested:'clean';document.querySelector('#scenario').value=scenario}
+  render();
+</script>
+</html>

@@ -11,6 +11,7 @@ export * from './dbConflict';
 export * from './link-preview';
 export * from './realtime';
 export * from './models';
+export * from './mergeRecovery';
 export * from './planUsage';
 export * from './project-progress';
 export * from './project-start';

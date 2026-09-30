@@ -118,6 +118,8 @@ export interface SessionAccountDto {
 }
 
 export interface MergeToMainDto {
+  recoveryAction?: import('@orbit/shared').MergeRecoveryAction;
+  previewId?: string;
   /** The branch to merge this session's worktree branch INTO, picked from the status bar's
    *  branch dropdown. Omitted → the default: the runner auto-detects main, else master. */
   targetBranch?: string;

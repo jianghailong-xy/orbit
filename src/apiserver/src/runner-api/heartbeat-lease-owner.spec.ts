@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BadRequestException } from '@nestjs/common';
-import { RunnerStatus } from '@orbit/shared';
+import { RunnerStatus, SESSION_MERGE_RECOVERY_V1 } from '@orbit/shared';
 import { RunnerApiController, SESSION_WORKTREE_OPS_V1 } from './runner-api.controller';
 
 const RUNNER_ID = '11111111-1111-4111-8111-111111111111';
@@ -191,10 +191,21 @@ test('heartbeat drains manual worktree operations only with capability and proce
     // The abandoned-operation sweep shares the drains' fencing: it may only run for
     // a capable runner that advertised its process owner.
     assert.deepEqual(h.abandonedSweeps, [[RUNNER_ID, OWNER]]);
-    assert.deepEqual(h.mergeDrainCalls, [[RUNNER_ID, OWNER]]);
+    assert.deepEqual(h.mergeDrainCalls, [[RUNNER_ID, OWNER, false]]);
     assert.deepEqual(h.commitDrainCalls, [[RUNNER_ID, OWNER]]);
     assert.deepEqual(response.mergeRequests, [merge]);
     assert.deepEqual(response.commitRequests, [commit]);
+  });
+
+  await t.test('recovery commands require the additional runner capability', async () => {
+    const h = harness();
+    await h.controller.heartbeat(
+      { id: RUNNER_ID, version: null },
+      { status: RunnerStatus.ONLINE, idleCapacity: 1, leaseOwner: OWNER },
+      `${SESSION_WORKTREE_OPS_V1},${SESSION_MERGE_RECOVERY_V1}`,
+    );
+    assert.deepEqual(h.mergeDrainCalls, [[RUNNER_ID, OWNER, true]]);
+    assert.deepEqual(h.commitDrainCalls, [[RUNNER_ID, OWNER]]);
   });
 
   for (const tc of [

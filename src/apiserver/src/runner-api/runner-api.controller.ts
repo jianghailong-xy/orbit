@@ -1,3 +1,4 @@
+import { SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryReady, type MergeRecovery } from '@orbit/shared';
 import {
   BadRequestException,
   Body,
@@ -1174,7 +1175,7 @@ export class RunnerApiController {
         // that is about to be replaced, which is what the staleness backstop then has to
         // clean up minutes later — the successor process claims these instead.
         if (!dto?.draining) {
-          mergeRequests = await this.realtime.drainMergeRequests(runner.id, heartbeatLeaseOwner);
+          mergeRequests = await this.realtime.drainMergeRequests(runner.id, heartbeatLeaseOwner, runnerSupportsCapability(capabilities, SESSION_MERGE_RECOVERY_V1));
           commitRequests = await this.realtime.drainCommitRequests(runner.id, heartbeatLeaseOwner);
         }
       }
@@ -5875,6 +5876,8 @@ export class RunnerApiController {
           branch: string | null;
           mergeTarget: string | null;
           mergeCheckpointId: string | null;
+          mergeRecoveryAction: string | null;
+          mergeRecovery: unknown;
         }>
       >`
         SELECT status, "inbox_lease_owner" AS "inboxLeaseOwner",
@@ -5883,7 +5886,9 @@ export class RunnerApiController {
                "merge_operation_owner" AS "mergeOperationOwner",
                "owner_id" AS "ownerId", "task_id" AS "taskId",
                "branch", "merge_target" AS "mergeTarget",
-               "merge_checkpoint_id" AS "mergeCheckpointId"
+               "merge_checkpoint_id" AS "mergeCheckpointId",
+               "merge_recovery_action" AS "mergeRecoveryAction",
+               "merge_recovery" AS "mergeRecovery"
         FROM "session"
         WHERE id = ${sessionId}::uuid AND "assigned_runner_id" = ${runner.id}::uuid
         FOR UPDATE
@@ -5919,6 +5924,23 @@ export class RunnerApiController {
         });
         return;
       }
+      const approved = readMergeRecovery(current.mergeRecovery);
+      const recovery = readMergeRecovery(dto.recovery);
+      if (current.mergeRecoveryAction === 'preview' && merged) {
+        throw new ConflictException('a read-only recovery preview cannot report a landing');
+      }
+      if (dto.recovery && (!recovery ||
+          JSON.stringify(dto.recovery).length > 1_200_000)) {
+        throw new BadRequestException('invalid or oversized merge recovery result');
+      }
+      if (merged && current.mergeRecoveryAction &&
+          (!approved || !recovery || !['DONE', 'LOCAL_SYNC_PENDING'].includes(recovery.code) ||
+           !mergeRecoveryReady({ ...approved, code: 'READY' }) || !/^[0-9a-f]{40}$/.test(dto.mergedSha ?? '') ||
+           dto.sourceSha !== approved.sourceSha || dto.targetBranch !== approved.targetBranch ||
+           !['previewId', 'repoRoot', 'sourceSha', 'localSha', 'remoteSha', 'candidateSha', 'candidateTreeSha', 'rebaseBaseSha', 'targetBranch']
+             .every((key) => recovery[key as keyof MergeRecovery] === approved[key as keyof MergeRecovery]))) {
+        throw new ConflictException('the reported landing differs from the approved recovery candidate');
+      }
       // `[K6]` §7, fail-closed, and deliberately BEFORE every write below.
       //
       // The runner is handed `requiredSourceSha` and is the only party that can compare it against
@@ -5953,8 +5975,9 @@ export class RunnerApiController {
         where: { id: sessionId },
         data: {
           mergeStatus: dto.status,
-          mergeError: merged ? null : (dto.message ?? null),
-          mergedAt: merged ? new Date() : null,
+          mergeRecovery: recovery && recovery.code !== 'DONE' ? recovery as unknown as Prisma.InputJsonValue : Prisma.DbNull,
+          mergeError: merged && recovery?.code !== 'LOCAL_SYNC_PENDING' ? null : (dto.message ?? null),
+          ...(!['preview', 'sync-local'].includes(current.mergeRecoveryAction ?? '') ? { mergedAt: merged ? new Date() : null } : {}),
           // A successful merge is authoritative even when ancestry/patch-id heuristics cannot
           // recognize its conflict-adapted replay.
           ...(merged
@@ -5964,7 +5987,7 @@ export class RunnerApiController {
               }
             : {}),
           // On a successful merge, advance the recorded fork point to the merge tip.
-          ...(merged && dto.mergedSha ? { baseSha: dto.mergedSha } : {}),
+          ...(merged && dto.mergedSha && current.mergeRecoveryAction !== 'sync-local' ? { baseSha: dto.mergedSha } : {}),
         },
       });
 
@@ -5986,7 +6009,7 @@ export class RunnerApiController {
       // failing the merge-result write over it would turn a completed merge into an error the
       // runner retries forever. It is the same rule as the missing source tip: no checkable row,
       // no receipt.
-      const checkable = sourceSha !== null && targetBranch !== '' && sourceBranch !== ''
+      const checkable = current.mergeRecoveryAction !== 'preview' && current.mergeRecoveryAction !== 'sync-local' && sourceSha !== null && targetBranch !== '' && sourceBranch !== ''
         && (!merged || mergedSha !== null);
       if (checkable && sourceSha) {
         const task = current.taskId

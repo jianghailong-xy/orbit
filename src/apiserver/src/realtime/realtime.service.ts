@@ -1,3 +1,4 @@
+import { readMergeRecovery, type MergeRecoveryAction } from '@orbit/shared';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
@@ -1028,11 +1029,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * heartbeat until the runner reports an outcome that flips mergeStatus off 'pending'. The
    * workDir comes from the session's workspace; the runner resolves the repo root from it.
    */
-  async drainMergeRequests(runnerId: string, leaseOwner: string): Promise<MergeCommand[]> {
+  async drainMergeRequests(runnerId: string, leaseOwner: string, supportsRecovery = true): Promise<MergeCommand[]> {
     const sessions = await this.prisma.session.findMany({
       where: {
         assignedRunnerId: runnerId,
         mergeStatus: 'pending',
+        ...(!supportsRecovery ? { mergeRecoveryAction: null } : {}),
         mergeOperationId: { not: null },
         branch: { not: null },
         AND: [
@@ -1055,6 +1057,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         branch: true,
         baseSha: true,
         mergeTarget: true,
+        mergeRecovery: true,
+        mergeRecoveryAction: true,
         mergeOperationId: true,
         mergeOperationOwner: true,
         status: true,
@@ -1084,7 +1088,16 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             data: { mergeOperationOwner: leaseOwner, mergeRequestedAt: new Date() },
           });
           if (claim.count === 0) return null;
+          const recovery = readMergeRecovery(s.mergeRecovery);
+          const recoveryFields = s.mergeRecoveryAction ? {
+            recoveryAction: s.mergeRecoveryAction as MergeRecoveryAction,
+            ...(recovery ? { recovery: s.mergeRecoveryAction === 'apply' &&
+              ['PUSH_FAILED', 'REMOTE_NOT_VERIFIED'].includes(recovery.code)
+                ? { ...recovery, code: 'READY' } : recovery } : {}),
+            ...(await this.mergeRecoveryCheck(s.taskId)),
+          } : {};
           return {
+            ...recoveryFields,
             sessionId: s.id,
             operationId: s.mergeOperationId!,
             leaseOwner,
@@ -1104,6 +1117,19 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         }),
     );
     return claimed.filter((command): command is MergeCommand => command !== null);
+  }
+
+  private async mergeRecoveryCheck(taskId: string | null) {
+    if (!taskId) return {};
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      select: { project: { select: { codebases: { where: { slot: 'primary' }, take: 1, select: { mergeCheckCommand: true, mergeCheckTimeoutSeconds: true } } } } },
+    });
+    const codebase = task?.project?.codebases[0];
+    return codebase?.mergeCheckCommand ? {
+      check: { command: codebase.mergeCheckCommand,
+        timeoutSeconds: codebase.mergeCheckTimeoutSeconds ?? 3600 },
+    } : {};
   }
 
   /** `[K6]`: the accepted checkpoint's commit, spread into the command when there is one. */

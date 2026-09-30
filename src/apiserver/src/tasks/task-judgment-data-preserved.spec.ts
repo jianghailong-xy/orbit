@@ -1513,7 +1513,12 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // replaced or dropped — the only DROPs are its own CHECKs restated in the same file — so it is not
       // another writer of the DONE fence and names none of the six preserved objects. No INSERT, UPDATE or
       // DELETE: nothing is backfilled.
-      '0340_wiki_maintenance_docs'],
+      '0340_wiki_maintenance_docs',
+      // Two nullable columns with no default on `session`, `merge_recovery` (JSONB) and
+      // `merge_recovery_action` (TEXT). Pure addition: no stored row is backfilled, no column,
+      // constraint, type, trigger or function is dropped or replaced. The preserved task data,
+      // criterion labels, project acceptance objects and DONE writer fence are untouched.
+      '0341_session_merge_recovery'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -1,3 +1,4 @@
+import type { MergeRecovery, MergeRecoveryAction } from '@orbit/shared';
 import type {
   BgShell,
   ConversationTurnKind,
@@ -794,10 +795,10 @@ export const endSession = (sessionId: string) => api(`/sessions/${sessionId}/end
 /** Ask the runner that ran this session to merge its worktree branch into `targetBranch`
  *  (omitted → the default: the runner auto-detects main, else master). Async: the outcome
  *  lands on SessionDetail.mergeStatus within a heartbeat (~30s). */
-export const mergeSessionToMain = (sessionId: string, targetBranch?: string) =>
+export const mergeSessionToMain = (sessionId: string, targetBranch?: string, recoveryAction?: MergeRecoveryAction, previewId?: string) =>
   api(`/sessions/${sessionId}/merge`, {
     method: 'POST',
-    body: targetBranch ? { targetBranch } : {},
+    body: { targetBranch, recoveryAction, previewId },
   });
 
 /** Ask the runner to commit a live session's uncommitted worktree changes onto its branch.
@@ -1296,6 +1297,9 @@ export interface SessionDetail {
   // until the user clicks merge.
   mergeStatus?: 'pending' | 'merged' | 'conflict' | 'error' | null;
   mergeError?: string | null;
+  mergeRecovery?: MergeRecovery | null;
+  mergeRecoveryAction?: MergeRecoveryAction | null;
+  mergeRecoverySupported?: boolean;
   mergedAt?: string | null;
   // The branch the user chose to merge into (status bar's branch dropdown). Null = the
   // default (runner auto-detects main, else master). Shown on the merged ✓ chip + used by

@@ -1,3 +1,4 @@
+import { mergeRecoveryPrompt, type MergeRecoveryAction } from '@orbit/shared';
 import {
   ArrowDownOutlined,
   ArrowLeftOutlined,
@@ -2283,8 +2284,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             sessionId: operation.id,
             sessionTitle: operation.title,
             event: 'merge-result',
-            headline: `Merged into ${target}`,
-            tone: 'success',
+            headline: d.mergeRecovery?.code === 'LOCAL_SYNC_PENDING' ? `Merged into origin/${target}; local sync pending` : `Merged into ${target}`,
+            detail: d.mergeRecovery?.code === 'LOCAL_SYNC_PENDING' ? d.mergeError ?? 'Sync the local checkout from the recovery panel.' : undefined,
+            tone: d.mergeRecovery?.code === 'LOCAL_SYNC_PENDING' ? 'warning' : 'success',
             icon: 'check',
           });
         } else if (status === 'conflict') {
@@ -5337,14 +5339,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // runner merges on its next heartbeat and the outcome lands on sessionDetail.mergeStatus
   // (the status bar polls while pending). Invalidate detail so 'pending' shows immediately.
   const mergeMut = useMutation({
-    mutationFn: (vars: SessionToastTarget & { target?: string }) =>
-      mergeSessionToMain(vars.id, vars.target),
+    mutationFn: (vars: SessionToastTarget & { target?: string; recoveryAction?: MergeRecoveryAction; previewId?: string }) =>
+      mergeSessionToMain(vars.id, vars.target, vars.recoveryAction, vars.previewId),
     onSuccess: (_d, vars) => {
       qc.setQueryData<any>(['session', vars.id], (old: any) =>
         old
           ? { ...old, mergeStatus: 'pending', mergeTarget: vars.target ?? old.mergeTarget, mergeError: null }
           : old,
       );
+      if (vars.recoveryAction === 'preview') {
+        void qc.invalidateQueries({ queryKey: ['session', vars.id] });
+        return;
+      }
       const token = ++pendingOperationSeq.current;
       setPendingSessionOperations((current) => ({
         ...current,
@@ -5361,6 +5367,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         detail: e.message,
         tone: 'error',
       }),
+  });
+  const repairRecoveryMut = useMutation({
+    mutationFn: (preparePr: boolean) => {
+      if (!detailForSelected?.mergeRecovery || !detailForSelected.workspace?.id) throw new Error('No repair context');
+      return createInteractiveSession({
+        workspaceId: detailForSelected.workspace.id,
+        assignedRunnerId: detailForSelected.assignedRunnerId ?? undefined,
+        provider: detailForSelected.provider ?? undefined,
+        prompt: mergeRecoveryPrompt(detailForSelected.mergeRecovery, preparePr),
+      });
+    },
+    onSuccess: (session) => {
+      message.sessionNotice({ sessionId: session.id, sessionTitle: 'Merge repair', event: 'merge-repair',
+        headline: 'Repair session started', detail: 'Return to the original session to check and review the completed repair.', tone: 'info' });
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+    },
+    onError: (e: Error) => message.error(e.message),
   });
   // Resolve a merge conflict in-session: revive the session so its own workspace rebases the branch
   // onto the target that conflicted and fixes the conflicts (it has the context for its own
@@ -8303,7 +8326,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               ? () => askEnableIsolation(detailForSelected.workspace!.id)
               : undefined
           }
-          merging={mergeMut.isPending}
+          merging={mergeMut.isPending || repairRecoveryMut.isPending}
           onMergeToMain={
             selectedId && detailForSelected?.branch
               ? (target?: string) =>
@@ -8314,6 +8337,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   })
               : undefined
           }
+          onRecoverMerge={selectedId ? (recoveryAction, previewId) => mergeMut.mutate({
+            id: selectedId, title: selectedSession?.title ?? 'Untitled session',
+            target: detailForSelected?.mergeRecovery?.targetBranch ?? detailForSelected?.mergeTarget ?? undefined,
+            recoveryAction, previewId,
+          }) : undefined}
+          onRepairRecovery={(preparePr) => repairRecoveryMut.mutate(preparePr)}
           resolving={resolveMut.isPending}
           onResolveInSession={
             selectedId && detailForSelected?.branch
