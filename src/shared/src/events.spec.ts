@@ -142,6 +142,22 @@ describe('isRetryableApiErrorText', () => {
     ).toBe(false);
   });
 
+  // Codex words its own and reports it as the turn's error, with no `API Error` prefix.
+  it('flags a runtime naming the overload in its own words', () => {
+    expect(
+      isRetryableApiErrorText('Selected model is at capacity. Please try a different model.'),
+    ).toBe(true);
+    expect(
+      isRetryableApiErrorText('  Selected model is at capacity. Please try a different model.'),
+    ).toBe(true);
+    // Only as the whole message: a reply that investigates one quotes it mid-paragraph.
+    expect(
+      isRetryableApiErrorText(
+        'The run died on "Selected model is at capacity. Please try a different model." — retrying.',
+      ),
+    ).toBe(false);
+  });
+
   it('does not retry what it cannot place', () => {
     expect(isRetryableApiErrorText('API Error: something new nobody has seen')).toBe(false);
     expect(isRetryableApiErrorText('all good')).toBe(false);

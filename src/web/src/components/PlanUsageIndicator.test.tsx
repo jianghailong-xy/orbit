@@ -337,13 +337,13 @@ describe('the Plan usage pill', () => {
     new FakeResetApi();
     await mount(resetRunner(new Date()), false, {
       label: 'kxugfvukxczwl@mail.com',
-      note: 'Automatic — the account with the most room right now',
+      note: 'Automatic — the account whose quota resets soonest',
     });
     await openUsage();
     const account = usagePanel()!.querySelector('.cu-account')!;
     expect(usagePanel()!.firstElementChild).toBe(account);
     expect(account.querySelector('.cu-head')?.textContent).toBe('Accountkxugfvukxczwl@mail.com');
-    expect(account.querySelector('.cu-reset')?.textContent).toBe('Automatic — the account with the most room right now');
+    expect(account.querySelector('.cu-reset')?.textContent).toBe('Automatic — the account whose quota resets soonest');
     expect(panelText()).toContain('5h limit92%');
     await unmount();
 

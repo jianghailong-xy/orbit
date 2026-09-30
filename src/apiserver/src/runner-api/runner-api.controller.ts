@@ -36,7 +36,8 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
-import { codexAccountAfterUsageLimit, codexAccountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
+import { accountAfterUsageLimit, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
+import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
 import { accountEnvVar } from '../providers/account';
 import { dispatchCodexResetCommand, receiveCodexResetResult } from './codex-reset-relay';
 import {
@@ -390,11 +391,7 @@ export const CODEX_ACCOUNT_REMOVE_V1 = 'codex-account-remove/v1';
  *  a Claude account named by the control plane rather than the machine's one login. */
 export const CLAUDE_ACCOUNT_LOGIN_V1 = 'claude-account-login/v1';
 export const CLAUDE_ACCOUNT_REMOVE_V1 = 'claude-account-remove/v1';
-/** Runner carries a Codex session's thread onto the account its claim names when that is not the one
- *  the thread lives in (runner codex_account_move.go). One that does not keeps the session where its
- *  thread is, whatever the claim says — so a session is only moved off a spent account on one that
- *  declares it. */
-export const CODEX_ACCOUNT_MOVE_V1 = 'codex-account-move/v1';
+export { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
 /** Runner guarantees a durable compaction boundary before the next Claude top-level turn. */
 export const SESSION_CLAUDE_COORDINATOR_CONTEXT_V1 =
   'session-claude-coordinator-context-v1';
@@ -2136,7 +2133,7 @@ export class RunnerApiController {
           modelCatalog: s.assignedRunner?.modelCatalog,
           workspaceEnv: workspace?.env as Record<string, string> | null,
           codexAccount: s.codexAccount ?? workspace?.codexAccount,
-          claudeAccount: workspace?.claudeAccount,
+          claudeAccount: s.claudeAccount ?? workspace?.claudeAccount,
           runnerEngines: s.assignedRunner?.engines,
         });
       let exec = resolveExec(s.model);
@@ -3066,7 +3063,8 @@ export class RunnerApiController {
             coordinatorForProject: { select: { id: true, coordinatorEnabled: true } },
             // What the wiki context below is decided from: which space this session's workspace is
             // bound to, and the three things about a run that take it out of the push entirely —
-            // a verifier, a foreman, or a judgment session (design §7.3).
+            // a verifier, a foreman, or a judgment session (design §7.3). The fourth, coordinating
+            // a project, is `coordinatorForProject` above.
             workspaceId: true,
             dispatchOrigin: true,
             task: { select: { verifiesTaskId: true, isForeman: true } },
@@ -3208,7 +3206,9 @@ export class RunnerApiController {
           // codebase it works in (design §7.1). Beside the coordinator block and on the same rule —
           // delivery-time context, appended to what the person wrote and never written over it, so
           // `turn.content` and the task start card built from it are untouched. Said once per engine
-          // process rather than once per turn, which is why it asks the lease generation.
+          // process rather than once per turn, which is why it asks the lease generation. A project's
+          // coordinator is handed none (the owner, 2026-09-29), decided from the same
+          // `coordinatorForProject` its standing role above is appended from.
           //
           // Best-effort, exactly like the list conditions and the background jobs above: a note
           // ABOUT the work must never be the reason the turn carrying it fails to be delivered.
@@ -3223,6 +3223,7 @@ export class RunnerApiController {
                 taskId: owned[0].taskId,
                 task: sessionContext.task,
                 dispatchOrigin: sessionContext.dispatchOrigin,
+                coordinatorForProject: sessionContext.coordinatorForProject,
                 content,
               })) ?? content;
             } catch (e) {
@@ -3321,6 +3322,7 @@ export class RunnerApiController {
         poolCodexAccountId: true,
         usesRuntimeDefaultModel: true,
         codexAccount: true,
+        claudeAccount: true,
         workspace: { select: { model: true, env: true, codexAccount: true, claudeAccount: true } },
         assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
       },
@@ -3348,7 +3350,7 @@ export class RunnerApiController {
       modelCatalog: session.assignedRunner?.modelCatalog,
       workspaceEnv: session.workspace?.env as Record<string, string> | null,
       codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
-      claudeAccount: session.workspace?.claudeAccount,
+      claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
       runnerEngines: session.assignedRunner?.engines,
     });
     // A built-in engine authenticates itself, so moving onto one injects nothing — but the
@@ -3711,9 +3713,10 @@ export class RunnerApiController {
           // Which shared pool's key a failed turn may have ended on — see `keyRetryAt` below.
           provider: true,
           poolKeyId: true,
-          // Which of the runner's Codex accounts a turn its usage limit ended ran on — see
-          // `codexUsageLimit` below.
+          // Which of the runner's Codex accounts a turn its usage limit ended ran on, and whether it
+          // was picked by hand — see `codexUsageLimit` below.
           codexAccount: true,
+          codexAccountPinned: true,
           // What the run still has of its own in flight, for the OWNER_CONFIRMED question below:
           // work that will report back and wake this session again, which is what makes a turn the
           // run ends not the end of the run (`runStoppedWorking`). Read with the row.
@@ -3952,6 +3955,11 @@ export class RunnerApiController {
       // A reserved L0 turn that cannot produce a comparison is unsettled, not a guessed task
       // failure. An ordinary failed model/shell turn retains the existing FAILED behaviour.
       const failTask = failSession && !!current.taskId && !taskAcceptanceTurn;
+      // What the turn failed with. A runtime that reports its failure as the turn's error rather
+      // than as a reply (Codex) has it sent on its own; an older runner puts the reply in its place,
+      // which for a turn that said anything before it died is the agent's last sentence — recorded
+      // as the "reason" on the session and on its task, it named something that was not a failure.
+      const failureText = dto.error || dto.result;
       // Keep this formerly post-transaction cleanup behind the same process fence. It is
       // valid for duplicate completions too, so apply it before the idempotent ack check.
       let branchMerged = dto.branchMerged;
@@ -4042,18 +4050,19 @@ export class RunnerApiController {
           : null;
       // A built-in Codex session whose account's usage limit ended the turn. Codex says so as the
       // turn's error, never as a reply, so the events path — which reads replies (`retryPlanFor`) —
-      // never armed it, and the session sat FAILED for good. It moves to another of the runner's
-      // accounts with room when its workspace leaves the account to Orbit (Automatic), and is re-sent
-      // there at once — its thread moves with it (runner codex_account_move.go) — else it waits for
-      // this account's reset. A task's run is not: its failure settles the task, as it always has.
+      // never armed it, and the session sat FAILED for good. On Automatic — nobody picked its account
+      // by hand, and its workspace leaves the account to Orbit — it moves to another of the runner's
+      // accounts with room and is re-sent there at once (its thread moves with it: runner
+      // codex_account_move.go); else it waits for this account's reset. A task's run is not: its
+      // failure settles the task, as it always has.
       const codexUsageLimit =
         failSession
         && completedTurn?.kind === 'message'
         && current.retryAt == null
         && !current.taskId
         && current.provider === AgentProvider.CODEX
-        && isUsageLimitErrorText(dto.result)
-          ? await this.codexUsageLimitRetry(tx, runner.id, current, dto.result!)
+        && isUsageLimitErrorText(failureText)
+          ? await this.codexUsageLimitRetry(tx, runner.id, current, failureText!)
           : null;
       const retryArmAt = keyRetryAt
         ? new Date(keyRetryAt.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS))
@@ -4202,8 +4211,14 @@ export class RunnerApiController {
       // below `pendingExecutable` — a follow-up queued while this turn ran counts only once the
       // requeues above have run — which is why the read is hoisted out of the block that uses it
       // first.
+      //
+      // Only a turn the ACK above ANSWERED asks either. One it put back in the queue (`unanswered`)
+      // has not finished the work it asked for: it is delivered again, and the completion that
+      // answers it is the one that asks.
       const completedMessageTurn =
-        completedTurn?.kind === 'message' && dto.status === RunStatus.SUCCEEDED ? completedTurn : null;
+        completedTurn?.kind === 'message' && dto.status === RunStatus.SUCCEEDED && !unanswered
+          ? completedTurn
+          : null;
       const completedTask =
         completedMessageTurn && current.taskId
           ? await tx.task.findUnique({
@@ -4220,6 +4235,14 @@ export class RunnerApiController {
       // turn in this same transaction. The message ACK and unique clientTurnId are the idempotency
       // boundary: either both commit or neither does, so retrying /turn-complete cannot run the
       // command twice. Tasks without the pair do not enter this branch.
+      //
+      // The key is still looked up before it is inserted: a build that queued the round on the
+      // completion that put its turn back in the queue left rounds standing for turns that were
+      // not answered yet, and the answering completion met each as a unique violation that rolled
+      // the whole ACK back — a 500 the runner re-posted every two seconds over a turn left
+      // IN_FLIGHT (2026-09-29). Found, it is this turn's round. Not `skipDuplicates`: ON CONFLICT
+      // DO NOTHING would swallow a `(session_id, seq)` conflict too, and lose the round in silence.
+      // Every writer of this key holds the Session lock taken above, so nothing races the lookup.
       if (
         completedMessageTurn != null
         && completedTask != null
@@ -4228,23 +4251,30 @@ export class RunnerApiController {
         && completedTask.acceptanceCommand != null
         && completedTask.acceptanceExpectedExitCode != null
       ) {
-        const last = await tx.conversationTurn.aggregate({
-          where: { sessionId },
-          _max: { seq: true },
+        const clientTurnId = taskAcceptanceClientTurnId(
+          completedMessageTurn.id,
+          completedTask.acceptanceExpectedExitCode,
+        );
+        const queued = await tx.conversationTurn.findUnique({
+          where: { sessionId_clientTurnId: { sessionId, clientTurnId } },
+          select: { id: true },
         });
-        await tx.conversationTurn.create({
-          data: {
-            sessionId,
-            seq: (last._max.seq ?? 0) + 1,
-            clientTurnId: taskAcceptanceClientTurnId(
-              completedMessageTurn.id,
-              completedTask.acceptanceExpectedExitCode,
-            ),
-            kind: 'shell',
-            content: completedTask.acceptanceCommand,
-            status: 'PENDING',
-          },
-        });
+        if (queued == null) {
+          const last = await tx.conversationTurn.aggregate({
+            where: { sessionId },
+            _max: { seq: true },
+          });
+          await tx.conversationTurn.create({
+            data: {
+              sessionId,
+              seq: (last._max.seq ?? 0) + 1,
+              clientTurnId,
+              kind: 'shell',
+              content: completedTask.acceptanceCommand,
+              status: 'PENDING',
+            },
+          });
+        }
       }
       // A `!`-shell turn runs on the runner, not in claude, so it must NOT advance numTurns:
       // that counter gates --resume on respawn (queue.buildSession). Counting a shell turn
@@ -4359,7 +4389,7 @@ export class RunnerApiController {
           // tear that process down and reclaim the slot (mirrors reaper forceFinalize).
           ...(failSession
             ? {
-                error: (acceptanceFailureReason ?? dto.result) || 'run failed',
+                error: (acceptanceFailureReason ?? failureText) || 'run failed',
                 finishedAt: new Date(),
                 cancelRequestedAt: new Date(),
                 // FAILED is where this session stops being live, so whatever it had running
@@ -4492,15 +4522,20 @@ export class RunnerApiController {
         });
       }
       let taskReclaimed = false;
-      if (failTask) {
+      // A run with a retry armed has not ended — the same session goes on in seconds or at the
+      // quota's reset — so the task is told nothing yet, as the coordinator is not
+      // (attempt-ended-unsettled). A failure comment here read as "re-run this task" beside a run
+      // already resuming. Once the retries are spent the failing turn comes back with none armed.
+      const retryPending = (retryArmAt ?? current.retryAt) != null;
+      if (failTask && !retryPending) {
         // Surface the abandoned task for a human, and open its project's exception item in this same
         // transaction (contract §4.3 B).
         taskReclaimed = await reclaimStalledTask(tx, current.taskId!, TaskStatus.FAILED, {
           sessionId,
           how: 'RUN_FAILED',
-          error: dto.result || 'run failed',
+          error: failureText || 'run failed',
         });
-        await postRunFailureComment(tx, current.taskId!, dto.result || 'run failed');
+        await postRunFailureComment(tx, current.taskId!, failureText || 'run failed');
       }
       taskReclaimed = taskReclaimed || acceptanceTaskChanged;
       // Last, because it reads which turns are still live and everything above is what settled
@@ -4891,6 +4926,21 @@ export class RunnerApiController {
           if (!text) return acc;
           return !acc || e.seq > acc.seq ? { seq: e.seq, text, turnId: e.turnId ?? null } : acc;
         }, null);
+      // The same provider outage when a runtime reports it as the turn's error instead of as a reply
+      // — Codex's "Selected model is at capacity". Only an error the retry would re-send past counts:
+      // every other error line is the runtime narrating its own reconnects or a failure a re-send
+      // reproduces, and neither is an answer, which is what a reply here would clear the streak for.
+      const lastRetryableError = durable
+        .filter(
+          (e) =>
+            e.type === RunEventType.ERROR &&
+            !(e.payload as { parentToolUseId?: string } | null)?.parentToolUseId,
+        )
+        .reduce<{ seq: number; text: string; turnId: string | null } | null>((acc, e) => {
+          const text = (e.payload as { message?: string } | null)?.message?.trim();
+          if (!text || !isRetryableApiErrorText(text)) return acc;
+          return !acc || e.seq > acc.seq ? { seq: e.seq, text, turnId: e.turnId ?? null } : acc;
+        }, null);
       // Denormalize the "frontier" activity for the sidebar's live status line. The
       // highest-seq durable event is the workspace's latest known state: a tool_use means a
       // tool is in flight (its tool_result hasn't landed yet) → surface its name; any
@@ -4988,9 +5038,13 @@ export class RunnerApiController {
       // quota spent, or the API overloaded — is the failure that fixes itself: the same
       // message succeeds once the window rolls over or the far side recovers. Arm a retry for
       // that moment. Detected here rather than in the runner so it also covers runners too old
-      // to know about this — they self-update on their own schedule and outlive a release.
-      const retry = lastAssistant
-        ? await this.retryPlanFor(tx, sessionId, runner.id, lastAssistant.text, lastAssistant.turnId != null)
+      // to know about this — they self-update on their own schedule and outlive a release. The
+      // engine's last word decides: a reply after an outage error means the provider answered.
+      const lastWord = lastRetryableError && (!lastAssistant || lastRetryableError.seq > lastAssistant.seq)
+        ? lastRetryableError
+        : lastAssistant;
+      const retry = lastWord
+        ? await this.retryPlanFor(tx, sessionId, runner.id, lastWord.text, lastWord.turnId != null)
         : {};
       // Whether the engine is generating right now — see Session.engineTurnActive. Tracked
       // separately from the frontier above because it must survive a tool_result (a tool
@@ -5310,9 +5364,31 @@ export class RunnerApiController {
       if (Object.keys(sessionData).length > 0) {
         await tx.session.update({ where: { id: sessionId }, data: sessionData });
       }
-      return { session, currentWorkAcknowledged, abandonedApprovals };
+      // A Claude session its account's usage limit just moved (retryPlanFor) still has its engine up on
+      // the old account. A reload naming the provider re-spawns it with the new account's
+      // CLAUDE_CONFIG_DIR (reloadProviderEnv), and the inbox hands it out ahead of the re-send.
+      const accountReload = retry.claudeAccount !== undefined;
+      if (accountReload) {
+        const last = await tx.conversationTurn.findFirst({
+          where: { sessionId },
+          orderBy: { seq: 'desc' },
+          select: { seq: true },
+        });
+        await tx.conversationTurn.create({
+          data: {
+            sessionId,
+            seq: (last?.seq ?? 0) + 1,
+            kind: 'reload',
+            content: JSON.stringify({ provider: AgentProvider.CLAUDE }),
+            clientTurnId: `account-switch:${randomUUID()}`,
+            status: 'PENDING',
+          },
+        });
+      }
+      return { session, currentWorkAcknowledged, abandonedApprovals, accountReload };
     }, loggedRetry(this.logger, 'runnerApi.events', { transaction: { timeout: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS, maxWait: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS } }));
 
+    if (eventOutcome.accountReload) this.realtime.notifyInbox(sessionId);
     // One frame per collected card, as a takeover sends: the clients re-read the conversation's
     // count on it, and one still drawing the card drops it.
     for (const id of eventOutcome.abandonedApprovals) {
@@ -6258,9 +6334,11 @@ export class RunnerApiController {
    *  - an exhausted quota → arm for the moment it resets (below), leaving the attempt count
    *    alone: the sweeper counts against it while the snapshot keeps reporting the quota spent.
    *  - a transient provider error → arm for one backoff step out, or hand back once the steps
-   *    are spent. Task-bound sessions are excluded: such a turn also fails their task, which
-   *    has its own retry budget (tasks.service AUTO_RUN_RETRY_BACKOFF_MS), and two schedulers
-   *    reviving one task is how you get two runs of it.
+   *    are spent. A task's run is armed like any other. Resuming this session keeps its checkout
+   *    and its conversation, where the task's own retry starts a new session from nothing — and
+   *    left to that, a run started by hand was not retried at all: its owner had to send
+   *    "continue" themselves. The task's retry waits while this one is armed (tasks.service
+   *    RUN_RETRY_ARMED), and the attempt is not over until it is spent (attempt-ended-unsettled).
    *  - anything else, including an error a re-send would reproduce → the run of failures is
    *    over, so clear the count. This is the ONLY thing that clears it: doing it when a retry
    *    is dispatched instead would restart the backoff at every attempt, and a provider that
@@ -6280,7 +6358,7 @@ export class RunnerApiController {
     runnerId: string,
     text: string,
     delivered = true,
-  ): Promise<{ retryAt?: Date | null; retryAttempts?: number }> {
+  ): Promise<{ retryAt?: Date | null; retryAttempts?: number; claudeAccount?: string; poolSwitchNotice?: string }> {
     const quotaSpent = isUsageLimitErrorText(text);
     if (!quotaSpent && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
     if (!delivered) return {};
@@ -6292,13 +6370,39 @@ export class RunnerApiController {
         taskId: true,
         retryAttempts: true,
         codexAccount: true,
+        claudeAccount: true,
+        claudeAccountPinned: true,
         workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
       },
     });
     if (!session) return {};
-    if (!quotaSpent) {
-      if (session.taskId) return {};
-      return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
+    if (!quotaSpent) return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
+    // A built-in Claude session on Automatic — nobody picked its account by hand, and its workspace
+    // leaves the account to Orbit — moves to another of the runner's accounts with room and is re-sent
+    // at once: the events path queues the reload that re-spawns its engine there, and the runner
+    // carries the conversation across (CLAUDE_ACCOUNT_MOVE_V1). Not a task's run, as for Codex.
+    if (session.provider === AgentProvider.CLAUDE && !session.taskId) {
+      const runner = await tx.runner.findUnique({
+        where: { id: runnerId },
+        select: { planUsage: true, engines: true, capabilities: true },
+      });
+      const move = runner?.capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)
+        ? accountAfterUsageLimit(
+            'claude',
+            { account: session.claudeAccount, pinned: session.claudeAccountPinned },
+            session.workspace,
+            runner.engines,
+            runner.planUsage,
+            new Date(),
+          )
+        : null;
+      if (move) {
+        return {
+          retryAt: new Date(),
+          claudeAccount: move.to,
+          poolSwitchNotice: accountSwitchNotice('claude', move, runner?.engines),
+        };
+      }
     }
     const at = await this.quotaRetryAt(tx, runnerId, session, text, session.workspace);
     // No defensible moment → leave any earlier arming standing rather than replacing it with
@@ -6316,7 +6420,13 @@ export class RunnerApiController {
   private async codexUsageLimitRetry(
     tx: CodexUsageLimitTransaction,
     runnerId: string,
-    session: { ownerId: string; provider: string; codexAccount: string | null; workspaceId: string | null },
+    session: {
+      ownerId: string;
+      provider: string;
+      codexAccount: string | null;
+      codexAccountPinned: boolean;
+      workspaceId: string | null;
+    },
     text: string,
   ): Promise<{ retryAt: Date; move?: { to: string; notice: string } } | null> {
     const now = new Date();
@@ -6331,9 +6441,16 @@ export class RunnerApiController {
         })
       : null;
     const move = runner?.capabilities.includes(CODEX_ACCOUNT_MOVE_V1)
-      ? codexAccountAfterUsageLimit(session, workspace, runner.engines, runner.planUsage, now)
+      ? accountAfterUsageLimit(
+          'codex',
+          { account: session.codexAccount, pinned: session.codexAccountPinned },
+          workspace,
+          runner.engines,
+          runner.planUsage,
+          now,
+        )
       : null;
-    if (move) return { retryAt: now, move: { to: move.to, notice: codexAccountSwitchNotice(move, runner?.engines) } };
+    if (move) return { retryAt: now, move: { to: move.to, notice: accountSwitchNotice('codex', move, runner?.engines) } };
     const at = await this.quotaRetryAt(tx, runnerId, session, text, workspace);
     return at ? { retryAt: at } : null;
   }
@@ -6364,7 +6481,7 @@ export class RunnerApiController {
   private async quotaRetryAt(
     tx: QuotaRetryTransaction,
     runnerId: string,
-    session: { ownerId: string; provider: string; codexAccount: string | null },
+    session: { ownerId: string; provider: string; codexAccount: string | null; claudeAccount?: string | null },
     text: string,
     workspace: { env: unknown; codexAccount: string | null; claudeAccount: string | null } | null | undefined,
   ): Promise<Date | null> {
@@ -6387,7 +6504,10 @@ export class RunnerApiController {
         runAccount(
           session.provider,
           workspace?.env,
-          { codexAccount: session.codexAccount ?? workspace?.codexAccount, claudeAccount: workspace?.claudeAccount },
+          {
+            codexAccount: session.codexAccount ?? workspace?.codexAccount,
+            claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
+          },
           runner?.engines,
         ),
       );

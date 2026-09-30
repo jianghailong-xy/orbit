@@ -15,6 +15,7 @@
  *   (4) A failure that is not a usage limit arms nothing and moves nothing.
  *   (5) A runner too old to carry a thread to another account (no codex-account-move/v1) would resume
  *       the session where its thread is, whatever the claim said: it is not moved, and waits.
+ *   (6) An account somebody picked for the session by hand is where it stays: it waits for the reset.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/codex-usage-limit-switch.pg.spec.ts
  *
@@ -115,7 +116,8 @@ async function fixture(
     workspaceAccount = null,
     workUsed = 3,
     capabilities = [CODEX_ACCOUNT_MOVE_V1],
-  }: { workspaceAccount?: string | null; workUsed?: number; capabilities?: string[] } = {},
+    pinned = false,
+  }: { workspaceAccount?: string | null; workUsed?: number; capabilities?: string[]; pinned?: boolean } = {},
 ): Promise<Fixture> {
   const ownerId = randomUUID();
   const runnerId = randomUUID();
@@ -152,6 +154,7 @@ async function fixture(
       prompt: 'fix the flaky test',
       provider: 'codex',
       codexAccount: 'default',
+      codexAccountPinned: pinned,
       status: RunStatus.RUNNING,
       engineTurnActive: true,
       dispatchOrigin: SessionDispatchOrigin.USER,
@@ -287,6 +290,15 @@ test('a Codex session its account’s usage limit stopped goes on — on another
 
   await t.test('(5) a runner that cannot carry the thread keeps the session where it is, re-sent at the reset', async () => {
     const f = await fixture(db, 'old-runner', { capabilities: [] });
+    await api.turnComplete({ id: f.runnerId }, f.sessionId, failed(f));
+    const after = await row(f.sessionId);
+    assert.equal(after.codex_account, 'default');
+    assert.equal(after.pool_switch_notice, null);
+    assert.ok(withinJitterOf(after.retry_at, DEFAULT_RESET), `not armed for Default's reset: ${after.retry_at?.toISOString()}`);
+  });
+
+  await t.test('(6) an account picked by hand keeps the session, re-sent at its reset', async () => {
+    const f = await fixture(db, 'pinned', { pinned: true });
     await api.turnComplete({ id: f.runnerId }, f.sessionId, failed(f));
     const after = await row(f.sessionId);
     assert.equal(after.codex_account, 'default');

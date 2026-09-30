@@ -312,6 +312,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			TurnID:           snapshot.orbitTurnID,
 			Status:           result.Status,
 			Result:           result.Result,
+			Error:            codexTurnError(result),
 			Subtype:          result.Subtype,
 			NumTurns:         1,
 			CostUsd:          0,

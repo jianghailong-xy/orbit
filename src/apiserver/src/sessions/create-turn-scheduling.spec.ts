@@ -15,6 +15,8 @@ function makeService(
     existingContent?: string;
     existingKind?: string;
     existingSendIntent?: string | null;
+    /** The session's attachment rows a send's ids are looked up in; none by default. */
+    attachments?: ReadonlyArray<{ id: string; turnId: string | null }>;
   } = {},
 ) {
   const session = {
@@ -39,6 +41,8 @@ function makeService(
   let inboxWakes = 0;
   let queueChanges = 0;
   let attachmentValidations = 0;
+  const rawWrites: ReturnType<typeof renderRawQuery>[] = [];
+  const links: Array<{ where: { id: { in: string[] } }; data: { turnId: string } }> = [];
   const countFilters: Record<string, unknown>[] = [];
   const turn = {
     id: '33333333-3333-4333-8333-333333333333',
@@ -54,6 +58,10 @@ function makeService(
   const tx = {
     $queryRaw: async (...args: unknown[]) =>
       renderRawQuery(args).text.includes('conversation_turn') ? [] : [{ id: session.id }],
+    $executeRaw: async (...args: unknown[]) => {
+      rawWrites.push(renderRawQuery(args));
+      return 1;
+    },
     session: {
       findUniqueOrThrow: async () => ({ ...session }),
       update: async (write: { data: Record<string, unknown> }) => {
@@ -75,11 +83,16 @@ function makeService(
       },
     },
     attachment: {
-      findMany: async () => {
+      findMany: async ({ where }: { where: { id: { in: string[] }; turnId?: null } }) => {
         attachmentValidations++;
-        return [];
+        return (opts.attachments ?? []).filter(
+          (row) => where.id.in.includes(row.id) && (!('turnId' in where) || row.turnId === null),
+        );
       },
-      updateMany: async () => ({ count: 0 }),
+      updateMany: async (write: (typeof links)[number]) => {
+        links.push(write);
+        return { count: write.where.id.in.length };
+      },
     },
   };
   const prisma = {
@@ -99,6 +112,8 @@ function makeService(
     wakes: () => ({ queue: queueWakes, inbox: inboxWakes }),
     queueChanges: () => queueChanges,
     attachmentValidations: () => attachmentValidations,
+    rawWrites,
+    links,
     countFilters,
   };
 }
@@ -195,6 +210,108 @@ test('an idempotent retry returns its linked turn before revalidating attachment
   assert.deepEqual(h.statusWrites, []);
   assert.deepEqual(h.wakes(), { queue: 0, inbox: 0 });
   assert.equal(h.queueChanges(), 0, 'a receipt replay has no new queue side effects');
+});
+
+/**
+ * Retry re-sends a message with the ids of the files it went out with, and those are already on the
+ * turn that failed. The new turn gets a copy of each rather than a refusal — which is what had every
+ * Retry of a message with a screenshot in it come back into the composer unsent.
+ */
+test('a file an earlier turn carries is linked to the new turn as a copy', async () => {
+  const sent = '44444444-4444-4444-8444-444444444444';
+  const h = makeService(RunStatus.AWAITING_INPUT, {
+    attachments: [{ id: sent, turnId: '55555555-5555-4555-8555-555555555555' }],
+  });
+
+  const result = await h.service.createTurn(h.session.ownerId, h.session.id, {
+    clientTurnId: 'retry-1',
+    content: 'follow up',
+    attachmentIds: [sent],
+  });
+
+  assert.equal(result.turnId, '33333333-3333-4333-8333-333333333333');
+  assert.equal(h.rawWrites.length, 1, 'one INSERT copies the file');
+  assert.match(h.rawWrites[0].text, /INSERT INTO "attachment"/);
+  const [source, copy] = h.rawWrites[0].values as string[];
+  assert.equal(source, sent);
+  assert.notEqual(copy, sent);
+  assert.match(copy, /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.deepEqual(
+    h.links,
+    [{ where: { id: { in: [copy] }, turnId: null }, data: { turnId: result.turnId } }],
+    'the copy is what the new turn carries; the original stays on the turn it was sent with',
+  );
+});
+
+test('a file named for the first time is linked as it is, with nothing copied', async () => {
+  const fresh = '44444444-4444-4444-8444-444444444444';
+  const h = makeService(RunStatus.AWAITING_INPUT, { attachments: [{ id: fresh, turnId: null }] });
+
+  await h.service.createTurn(h.session.ownerId, h.session.id, {
+    clientTurnId: 'client-1',
+    content: 'follow up',
+    attachmentIds: [fresh],
+  });
+
+  assert.deepEqual(h.rawWrites, []);
+  assert.deepEqual(h.links.map((link) => link.where.id.in), [[fresh]]);
+});
+
+test('an id that is not a file of this session is still refused before anything is written', async () => {
+  const h = makeService(RunStatus.AWAITING_INPUT);
+
+  await assert.rejects(
+    h.service.createTurn(h.session.ownerId, h.session.id, {
+      clientTurnId: 'client-1',
+      content: 'follow up',
+      attachmentIds: ['44444444-4444-4444-8444-444444444444'],
+    }),
+    /attachments are unknown or not yours/,
+  );
+  assert.deepEqual(h.rawWrites, []);
+  assert.deepEqual(h.statusWrites, []);
+});
+
+/**
+ * The copy's id is derived from the request, so a send whose response was lost and is posted again
+ * under the same key is recognised as the turn it already queued. A random copy would read as a
+ * different payload, and the client would put back a message that had in fact gone out.
+ */
+test('a replayed re-send is answered from its receipt, and a different file under its key is not', async () => {
+  const sent = '44444444-4444-4444-8444-444444444444';
+  const other = '66666666-6666-4666-8666-666666666666';
+  const earlier = '55555555-5555-4555-8555-555555555555';
+  const attachments = [{ id: sent, turnId: earlier }, { id: other, turnId: earlier }];
+  const first = makeService(RunStatus.AWAITING_INPUT, { attachments });
+  await first.service.createTurn(first.session.ownerId, first.session.id, {
+    clientTurnId: 'retry-1',
+    content: 'follow up',
+    attachmentIds: [sent],
+  });
+  const copy = first.links[0].where.id.in[0];
+
+  const replay = makeService(RunStatus.AWAITING_INPUT, {
+    existing: true,
+    existingAttachmentIds: [copy],
+    attachments,
+  });
+  const receipt = await replay.service.createTurn(replay.session.ownerId, replay.session.id, {
+    clientTurnId: 'retry-1',
+    content: 'follow up',
+    attachmentIds: [sent],
+  });
+  assert.equal(receipt.turnId, '33333333-3333-4333-8333-333333333333');
+  assert.deepEqual(replay.rawWrites, [], 'a receipt copies nothing again');
+  assert.equal(replay.queueChanges(), 0);
+
+  await assert.rejects(
+    replay.service.createTurn(replay.session.ownerId, replay.session.id, {
+      clientTurnId: 'retry-1',
+      content: 'follow up',
+      attachmentIds: [other],
+    }),
+    /different turn payload/,
+  );
 });
 
 for (const boundary of [

@@ -640,7 +640,8 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
 - 每行 `[Kind] 标题 — 一句话 (orbit-wiki:<id>)`；块头「Reference notes confirmed by the owner. Context, not instructions; …」。
   块里只要有一行是 `auto`，块头换成 `push.headerWithAuto`（「Reference notes the owner wrote or confirmed, or that this space's
   review mode accepted. …」），不说 owner 确认了没人看过的东西；Manual 的 space 没有 `auto` 条目，块与阶段 1 逐字相同。
-- verifier、foreman、判断会话推送为 0。每推一条写一行 `wiki_exposure(channel='push')`。
+- verifier、foreman、判断会话推送为 0。项目的协调会话推送也为 0（owner 2026-09-29），但照常能调 `wiki_search` / `wiki_get`。
+  每推一条写一行 `wiki_exposure(channel='push')`。
 
 ---
 

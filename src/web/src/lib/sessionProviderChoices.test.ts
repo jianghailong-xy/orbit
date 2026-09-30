@@ -214,6 +214,34 @@ describe('the runner’s Codex accounts, under the Codex choice', () => {
     expect(blocked.find((choice) => choice.slug === 'codex')?.unavailable).toBe('Not signed in');
     expect(accountsOf(blocked)).toBeUndefined();
   });
+
+  it("lists a Claude login's accounts under Claude too, each by the window that stops it", () => {
+    const claudeHome = (id: string) => `/root/.orbit/claude-accounts/${id}`;
+    const engines = [
+      {
+        engine: 'claude' as const,
+        installed: true,
+        auth: 'yes' as const,
+        accounts: [
+          { id: 'default', home: '/root/.claude', auth: 'yes' as const },
+          { id: 'fad98727', name: 'jianghailong.rd', home: claudeHome('fad98727'), auth: 'yes' as const },
+        ],
+      },
+    ];
+    const claudeUsage = {
+      claude: {
+        provider: 'claude',
+        fiveHour: { utilization: 0 },
+        sevenDay: { utilization: 100 },
+        accounts: { fad98727: { provider: 'claude', fiveHour: { utilization: 19 }, sevenDay: { utilization: 28 } } },
+      },
+    } as never;
+    expect(accountsOf(providerChoices([], catalog, undefined, engines, [], claudeUsage), 'claude')).toEqual([
+      // Its 5-hour window reads 0% but its weekly one is spent: the row says what stops it.
+      { id: 'default', label: 'Default', quota: 'Weekly 100%', nearLimit: true },
+      { id: 'fad98727', label: 'jianghailong.rd', quota: 'Weekly 28%' },
+    ]);
+  });
 });
 
 describe('brandForProvider', () => {

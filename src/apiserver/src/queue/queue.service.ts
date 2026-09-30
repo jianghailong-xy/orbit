@@ -438,7 +438,7 @@ export class QueueService {
         workspaceEnv: workspace?.env as Record<string, string> | null,
         // The account picked for this session, else its workspace's.
         codexAccount: session.codexAccount ?? workspace?.codexAccount,
-        claudeAccount: workspace?.claudeAccount,
+        claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
     let exec = resolveExec(session.model);

@@ -220,6 +220,7 @@ import {
   sessionEventsUrl,
   unpinSession,
   updateSessionConfig,
+  switchSessionAccount,
   uploadAttachment,
 } from '../api';
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
@@ -290,13 +291,14 @@ import type {
 } from '@orbit/shared';
 import {
   accountOfEnv,
+  accountToStartOn,
   AgentProvider,
   derivePermissionSemantics,
   fastModeAvailable,
   MAX_PROMPT_CHARS,
   permissionModeAvailableOnRunner,
-  roomiestCodexAccount,
   TRASH_RETENTION_DAYS,
+  type AccountEngine,
 } from '@orbit/shared';
 import { lastTypedUserMessage } from '../lib/deliveredMessage';
 import { planUsageRows } from '../lib/planUsage';
@@ -532,6 +534,14 @@ const MODE_OPTIONS = Object.keys(MODE_TO_PERMISSION);
 const IS_MAC =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
 const NEW_SESSION_HINT = IS_MAC ? '⌘N' : 'Ctrl N';
+/** A runner that carries a session's conversation onto another of its accounts (runner
+ *  codex_account_move.go, claude_account_move.go) — the one kind the composer offers the move on. */
+const ACCOUNT_MOVE_CAPABILITY: Record<AccountEngine, string> = {
+  codex: 'codex-account-move/v1',
+  claude: 'claude-account-move/v1',
+};
+/** What the composer sends to put a session back on Automatic (PATCH /sessions/:id/account). */
+const AUTOMATIC_ACCOUNT = 'automatic';
 
 // 94_000 → "94k", 1_000_000 → "1M". Compact token count for the context gauge.
 const fmtTokens = (n: number): string =>
@@ -2569,14 +2579,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // deprecated alias of the same derived value, still served for older native builds.
   const pickedProvider: string =
     draftProvider ?? pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? 'claude';
-  // The Codex account picked for the draft on the New Session hero, scoped to its workspace like the
-  // provider pick. Without one a new session runs on its workspace's account (Workspace.codexAccount).
+  // The Codex or Claude account picked for the draft on the New Session hero, scoped to its workspace
+  // like the provider pick. Without one a new session starts where Automatic or its workspace says.
   const [draftAccountPick, setDraftAccountPick] = useState<{
     workspaceId?: string;
+    engine: string;
     account: string;
   } | null>(null);
-  const draftCodexAccount =
-    draftAccountPick && draftAccountPick.workspaceId === workspaceId ? draftAccountPick.account : null;
+  const draftPickHere = draftAccountPick && draftAccountPick.workspaceId === workspaceId ? draftAccountPick : null;
+  const draftCodexAccount = draftPickHere?.engine === 'codex' ? draftPickHere.account : null;
+  const draftClaudeAccount = draftPickHere?.engine === 'claude' ? draftPickHere.account : null;
 
   // A provider switch made on an ENDED session, scoped to that session for the same reason the
   // draft pick is scoped to its workspace. There is nothing to PATCH while a session is ended, so
@@ -2794,7 +2806,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // provider, it binds the session being drafted and rewrites no workspace setting.
   const pickDraftAccount = (slug: string, account: string | null): void => {
     if (slug !== pickedProvider) pickDraftProvider(slug);
-    setDraftAccountPick(account === null ? null : { workspaceId, account });
+    setDraftAccountPick(account === null ? null : { workspaceId, engine: slug, account });
   };
 
   // The provider is part of the draft's seed context: picking a different one has to re-seed
@@ -4612,8 +4624,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // Only when it is on. Off is the server's default and the engine's, so saying it is the
         // one way this could disagree with either of them later.
         ...(fastMode ? { fastMode: true } : {}),
-        // Only an explicit pick, as with the provider: none keeps the workspace's account.
+        // Only an explicit pick, as with the provider: none is Automatic, or the workspace's account.
         ...(draftCodexAccount && pickedProvider === 'codex' ? { codexAccount: draftCodexAccount } : {}),
+        ...(draftClaudeAccount && pickedProvider === 'claude' ? { claudeAccount: draftClaudeAccount } : {}),
         attachmentIds,
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
@@ -5461,6 +5474,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   });
+  // Move a session to another of its runner's accounts, or back onto Automatic (switchAccount). The
+  // gauge, its popover and the menu read the session's detail, so that is re-read with the list.
+  const accountMut = useMutation({
+    mutationFn: ({ id, account }: { id: string; account: string }) => switchSessionAccount(id, account),
+    onError: (e: Error) => {
+      message.error(e.message);
+    },
+    onSettled: (_result, _error, vars) => {
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      void qc.invalidateQueries({ queryKey: ['session', vars.id] });
+    },
+  });
 
   // Drag the divider between the session list and the conversation to resize the
   // left column. Listeners live on `document` so a fast drag that outruns the 1px
@@ -6199,21 +6224,28 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     shownPool && (!selectedId || detailForSelected)
       ? sessionPoolAccount(shownPool, selectedId ? shownPoolMemberId : null)
       : null;
-  // Which of the runner's accounts a built-in session spends — for Codex the draft's pick, or the one
-  // picked for the session, else its workspace's; for Claude its workspace's — and Default for an id
-  // this runner does not report, as dispatch resolves it (providers/account.ts accountOnRunner).
-  const accountOnThisRunner = (engine: 'codex' | 'claude', wanted: string | null | undefined): string =>
+  // Which of the runner's accounts a built-in Codex or Claude session spends — the draft's pick, or the
+  // one picked for the session, else its workspace's — and Default for an id this runner does not
+  // report, as dispatch resolves it (providers/account.ts accountOnRunner).
+  const accountOnThisRunner = (engine: AccountEngine, wanted: string | null | undefined): string =>
     wanted && accountsOf(runner, engine).some((account) => account.id === wanted) ? wanted : 'default';
-  // A new session on a workspace that picked no Codex account (and whose env selects no other CODEX_HOME
-  // or key of its own) starts on the runner's account with the most room: the choice the server makes
-  // when it creates the session (automaticCodexAccount), asked here of the same numbers to say which.
+  // Automatic is on offer for an engine where the workspace leaves its account to Orbit: it picked none,
+  // and its env selects no other config directory and no key of its own — with two accounts or more
+  // to choose between. A new session there starts on the runner's account whose quota resets soonest:
+  // the choice the server makes when it creates the session (automaticAccount), asked of the same numbers.
+  const automaticOfferedOn = (
+    engine: AccountEngine,
+    workspace: { env?: Record<string, string> | null; codexAccount?: string | null; claudeAccount?: string | null } | null | undefined,
+  ): boolean =>
+    !(engine === 'claude' ? workspace?.claudeAccount : workspace?.codexAccount) &&
+    accountsOf(runner, engine).length >= 2 &&
+    accountOfEnv(engine, workspace?.env ?? null, accountsOf(runner, engine)) === 'default';
   const codexAccountsHere = accountsOf(runner, 'codex');
-  const codexAutoOffered =
-    !pickedWorkspace?.codexAccount &&
-    codexAccountsHere.length >= 2 &&
-    accountOfEnv('codex', pickedWorkspace?.env ?? null, codexAccountsHere) === 'default';
-  const codexAutoAccount = codexAutoOffered
-    ? roomiestCodexAccount(codexAccountsHere, runner.planUsage, new Date())
+  const codexAutoOffered = automaticOfferedOn('codex', pickedWorkspace);
+  const claudeAutoOffered = automaticOfferedOn('claude', pickedWorkspace);
+  const codexAutoAccount = codexAutoOffered ? accountToStartOn('codex', codexAccountsHere, runner.planUsage, new Date()) : null;
+  const claudeAutoAccount = claudeAutoOffered
+    ? accountToStartOn('claude', accountsOf(runner, 'claude'), runner.planUsage, new Date())
     : null;
   const shownCodexAccount = accountOnThisRunner(
     'codex',
@@ -6223,19 +6255,25 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   );
   const shownClaudeAccount = accountOnThisRunner(
     'claude',
-    selectedId ? detailForSelected?.workspace?.claudeAccount : pickedWorkspace?.claudeAccount,
+    selectedId
+      ? (detailForSelected?.claudeAccount ?? detailForSelected?.workspace?.claudeAccount)
+      : (draftClaudeAccount ?? pickedWorkspace?.claudeAccount ?? claudeAutoAccount),
   );
   const shownAccount =
     shownProvider === 'codex' ? shownCodexAccount : shownProvider === 'claude' ? shownClaudeAccount : 'default';
-  // The Codex account named in the quota gauge's popover, once the runner has more than one to tell apart.
-  const shownCodexAccountRow =
-    shownProvider === 'codex' && codexAccountsHere.length >= 2
-      ? (codexAccountsHere.find((account) => account.id === shownCodexAccount) ?? { id: 'default', name: undefined })
+  // The engine whose account the composer names — built-in Codex or Claude, not an account pool — and the
+  // account it names in the quota gauge's popover, once the runner has more than one to tell apart.
+  const shownAccountEngine: AccountEngine | null =
+    !shownPool && (shownProvider === 'codex' || shownProvider === 'claude') ? shownProvider : null;
+  const shownAccountsHere = shownAccountEngine ? accountsOf(runner, shownAccountEngine) : [];
+  const shownAccountRow =
+    shownAccountsHere.length >= 2
+      ? (shownAccountsHere.find((account) => account.id === shownAccount) ?? { id: 'default', name: undefined })
       : null;
-  const shownCodexAccountLabel = shownCodexAccountRow
-    ? shownCodexAccountRow.id === 'default'
+  const shownAccountLabel = shownAccountRow
+    ? shownAccountRow.id === 'default'
       ? 'Default'
-      : shownCodexAccountRow.name || `Account ${shownCodexAccountRow.id}`
+      : shownAccountRow.name || `Account ${shownAccountRow.id}`
     : null;
   const shownPlanUsage = shownPool
     ? (shownPoolAccount?.member.planUsage ?? null)
@@ -6536,6 +6574,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // the session list's scope menu does. Each pick runs what its pill's onChange did. A menu
   // (unlike a Select) also fires for the value already chosen, and re-picking the running provider
   // would PATCH a reload for nothing — so every pick first checks that it changes something.
+  // Another of the runner's accounts for this session, or Automatic: the server stores it — and on a
+  // live session re-spawns the engine there, the runner carrying the conversation across; an ended one
+  // takes it with its next resume. One the CLI says is signed out is a request for its sign-in, as a
+  // provider row in that state is.
+  const pickAccount = (account: string, signedOut: boolean): void => {
+    if (!shownAccountEngine) return;
+    if (signedOut) {
+      navigate(`/providers?runner=${encodeId(runner.id)}&engine=${shownAccountEngine}`);
+      return;
+    }
+    if (!selected) return;
+    // Nothing moves: Automatic picked again, or the account the session is already pinned to.
+    if (account === AUTOMATIC_ACCOUNT ? sessionAutomatic : account === shownAccount && !sessionAutomatic) return;
+    accountMut.mutate({ id: selected.id, account });
+  };
   const pickProvider = (v: string): void => {
     if (v === shownProvider) return;
     // A provider this runner can't run isn't a switch — it's a request for the sign-in (or
@@ -6666,11 +6719,29 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       <span className="scope-menu-value-text">{value}</span>
     </span>
   );
+  // The runner's accounts of the session's engine, listed under it in the Provider submenu for a
+  // session on built-in Codex or Claude to move between — each with its own quota, as the New Session
+  // picker lists them. Only with two or more (one is nothing to choose), and only on a runner that
+  // carries a conversation from one account to another: an older one would resume it where it was.
+  const accountRows =
+    shownAccountEngine && runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[shownAccountEngine])
+      ? (providerSwitchChoices.find((choice) => choice.slug === shownAccountEngine)?.accounts ?? [])
+      : [];
+  const accountsOffered = accountRows.length > 1;
+  // Automatic above them — Orbit keeps the session on an account with room, and moves it when the one
+  // it is on hits its limit — where its workspace leaves the account to Orbit, as for a new session.
+  // The session is on it unless an account was picked for it by hand.
+  const shownWorkspaceRow = workspacesForRunner.find((w) => w.id === shownWorkspaceId) ?? null;
+  const automaticHere = !!shownAccountEngine && automaticOfferedOn(shownAccountEngine, shownWorkspaceRow);
+  const sessionAutomatic =
+    automaticHere &&
+    !(shownAccountEngine === 'claude' ? detailForSelected?.claudeAccountPinned : detailForSelected?.codexAccountPinned);
   const modelMenuItems: MenuProps['items'] = [
-    // Only when there is somewhere to go: a second account with the same vendor, or another
-    // endpoint on the same CLI. One entry means no switch is possible, and the row is left out
-    // rather than shown inert — the common case, one Claude sign-in and no configured providers.
-    ...(providerSwitchChoices.length > 1
+    // Only when there is somewhere to go: a second account with the same vendor, another endpoint on
+    // the same CLI, or another of the runner's Codex accounts. One entry means no switch is possible,
+    // and the row is left out rather than shown inert — the common case, one Claude sign-in and no
+    // configured providers.
+    ...(providerSwitchChoices.length > 1 || accountsOffered
       ? [
           {
             key: 'provider',
@@ -6680,28 +6751,65 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 {menuValue(providerSwitchChoices.find((c) => c.slug === shownProvider)?.label ?? shownProvider)}
               </span>
             ),
-            children: providerSwitchChoices.map((choice) => {
+            children: providerSwitchChoices.flatMap((choice) => {
               // Carry the reason on the row itself, where it answers the question being asked
               // ("why can't I pick Claude?"). It stays pickable rather than greyed because picking
               // it does something useful — it goes where the fix is (see pickProvider), which is
               // the New Session picker's behaviour for the same row. The running provider is
               // exempt: it is the chip's own provider, and needs no parenthetical.
               const blocked = !!choice.unavailable && choice.slug !== shownProvider;
-              return {
-                key: `provider:${choice.slug}`,
-                // Distinguishable at a glance from a provider that is ready to run, without being
-                // inert: the identity is dimmed, the call to action is not.
-                className: blocked ? 'composer-provider-fix' : undefined,
-                label: (
-                  <span className="scope-menu-row">
-                    {blocked
-                      ? `${choice.label} — ${choice.unavailable}, ${choice.fixHref ? 'fix it' : 'sign in'} →`
-                      : choice.label}
-                    {checkSlot(choice.slug === shownProvider)}
-                  </span>
-                ),
-                onClick: () => pickProvider(choice.slug),
-              };
+              const accounts = choice.slug === shownAccountEngine && accountsOffered ? accountRows : [];
+              const automatic = accounts.length > 0 && automaticHere;
+              return [
+                {
+                  key: `provider:${choice.slug}`,
+                  // Distinguishable at a glance from a provider that is ready to run, without being
+                  // inert: the identity is dimmed, the call to action is not.
+                  className: blocked ? 'composer-provider-fix' : undefined,
+                  label: (
+                    <span className="scope-menu-row">
+                      {blocked
+                        ? `${choice.label} — ${choice.unavailable}, ${choice.fixHref ? 'fix it' : 'sign in'} →`
+                        : choice.label}
+                      {/* With its accounts listed, the tick is on the account the session runs on. */}
+                      {checkSlot(choice.slug === shownProvider && accounts.length === 0)}
+                    </span>
+                  ),
+                  onClick: () => pickProvider(choice.slug),
+                },
+                ...(automatic
+                  ? [
+                      {
+                        key: 'codex-account:automatic',
+                        className: 'composer-account-row',
+                        label: (
+                          <span className="scope-menu-row">
+                            <span className="composer-account-row-name">Automatic</span>
+                            {menuValue('Resets soonest')}
+                            {checkSlot(sessionAutomatic)}
+                          </span>
+                        ),
+                        onClick: () => pickAccount(AUTOMATIC_ACCOUNT, false),
+                      },
+                    ]
+                  : []),
+                ...accounts.map((account) => ({
+                  key: `codex-account:${account.id}`,
+                  className: `composer-account-row${account.nearLimit ? ' near-limit' : ''}${
+                    account.unavailable ? ' composer-provider-fix' : ''
+                  }`,
+                  label: (
+                    <span className="scope-menu-row">
+                      <span className="composer-account-row-name">
+                        {account.unavailable ? `${account.label} — ${account.unavailable}, sign in →` : account.label}
+                      </span>
+                      {!account.unavailable && account.quota && menuValue(account.quota)}
+                      {checkSlot(account.id === shownAccount && !sessionAutomatic)}
+                    </span>
+                  ),
+                  onClick: () => pickAccount(account.id, !!account.unavailable),
+                })),
+              ];
             }),
           },
           { key: 'provider-divider', type: 'divider' as const },
@@ -7979,8 +8087,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 current={currentProviderChoiceForDraft}
                 choices={providerChoicesForRunner}
                 onPick={pickDraftProvider}
-                currentAccount={shownCodexAccount}
-                automatic={codexAutoOffered ? !draftCodexAccount : undefined}
+                currentAccount={pickedProvider === 'claude' ? shownClaudeAccount : shownCodexAccount}
+                automatic={{
+                  ...(codexAutoOffered ? { codex: !draftCodexAccount } : {}),
+                  ...(claudeAutoOffered ? { claude: !draftClaudeAccount } : {}),
+                }}
                 onPickAccount={pickDraftAccount}
                 runnerId={runner.id}
                 // Nothing to choose until we know which workspace (and so which project) this runs in.
@@ -8686,8 +8797,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   shownPoolAccount.current
                     ? `${shownPool.label} is running this session on ${shownPoolAccount.member.label}`
                     : `A session on ${shownPool.label} starts on ${shownPoolAccount.member.label} — ${
-                        shownPool.shared ? 'the key it picks for you' : 'the account with the most room'
-                      } right now`
+                        shownPool.shared ? 'the key it picks for you right now' : 'the account whose quota resets soonest'
+                      }`
                 }
               >
                 <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>
@@ -8698,16 +8809,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             {shownPlanUsage && (
               <PlanUsageIndicator
                 usage={shownPlanUsage}
-                // Which of the runner's Codex accounts this quota is, named inside the popover rather
-                // than beside the gauge, where a phone's toolbar has no room for an email. A draft
-                // names the one it would start on.
+                // Which of the runner's Codex or Claude accounts this quota is, named inside the popover
+                // rather than beside the gauge, where a phone's toolbar has no room for an email. A
+                // draft names the one it would start on.
                 account={
-                  !shownPool && shownCodexAccountLabel
+                  shownAccountEngine && shownAccountLabel
                     ? {
-                        label: shownCodexAccountLabel,
-                        ...(!selectedId && !draftCodexAccount && !pickedWorkspace?.codexAccount
-                          ? { note: 'Automatic — the account with the most room right now' }
-                          : {}),
+                        label: shownAccountLabel,
+                        ...(!selectedId &&
+                        !(shownAccountEngine === 'claude' ? draftClaudeAccount : draftCodexAccount) &&
+                        automaticOfferedOn(shownAccountEngine, pickedWorkspace)
+                          ? { note: 'Automatic — the account whose quota resets soonest' }
+                          : selectedId && sessionAutomatic && accountsOffered
+                            ? { note: 'Automatic — moves to another account when this one hits its limit' }
+                            : {}),
                       }
                     : undefined
                 }

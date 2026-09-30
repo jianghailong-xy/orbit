@@ -169,6 +169,21 @@ final class RetrySendWiringTests: XCTestCase {
         }
     }
 
+    /// A failed send's "Couldn't send" line is taken down by the next send that goes through —
+    /// from both paths a message can go out on, and only once the server has accepted it: cleared
+    /// before the POST, a send that then failed too would have had its own line wiped with it.
+    func testAnAcceptedSendTakesDownTheLineAFailedOneLeft() throws {
+        let clear = "statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)"
+        let accepted = try section(try sendBody(), from: "try await postTurn(", to: "} catch {")
+        XCTAssertTrue(accepted.contains(clear), "send(): between the accepted POST and its catch")
+        let interrupt = try section(try source(Self.consolePath),
+                                    from: "func interruptAndSend() async {",
+                                    to: "func cancelQueued")
+        XCTAssertTrue(try section(interrupt, from: "try await api.interruptAndSend(", to: "} catch {")
+                          .contains(clear),
+                      "interruptAndSend(): between the accepted POST and its catch")
+    }
+
     // MARK: the sentence neither end says any more
 
     /// The copy fence over a sentence that was DELETED.

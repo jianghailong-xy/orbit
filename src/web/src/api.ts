@@ -11,6 +11,7 @@ import type {
 import type { ProjectPanoramaBuckets, ProjectPanoramaShape } from './components/ProjectPanoramaHeader';
 import type { ProjectDependencyGraphResponse } from './lib/projectDependencyGraph';
 import { clearTranscriptStore, setTranscriptUser } from './lib/transcriptStore';
+import type { Me } from './lib/queries';
 import { compatibleUuid as uuid } from './lib/uuid';
 
 const TOKEN_KEY = 'orbit_token';
@@ -354,8 +355,10 @@ export const createInteractiveSession = (body: {
   /** Start the session in Claude Code's fast lane (`/fast`). Omitted → off. */
   fastMode?: boolean;
   /** Which of the runner's Codex accounts the session runs on (`default` or a slot id), picked on
-   *  the New Session screen. Omitted follows the workspace's account. */
+   *  the New Session screen — which pins it there. Omitted is Automatic, or the workspace's account. */
   codexAccount?: string;
+  /** The same for a session on the built-in Claude engine: one of the runner's Claude accounts. */
+  claudeAccount?: string;
   /** Ids of images uploaded unscoped on the compose page; the server scopes them to the
    *  new session and links them to its seeded first turn. */
   attachmentIds?: string[];
@@ -559,6 +562,34 @@ export const fetchAttachmentDataUrl = async (id: string): Promise<string> => {
   });
 };
 
+/** Set the signed-in account's profile photo (`PUT /users/me/avatar`): a square JPEG the page has
+ *  already cut and scaled (`squareJpeg` in lib/avatar). Multipart, like `uploadAttachment`.
+ *  Answers with the account, whose `avatarUpdatedAt` is then the new photo's version. */
+export const setAvatar = async (photo: Blob): Promise<Me> => {
+  const form = new FormData();
+  form.append('file', photo, 'avatar.jpg');
+  const res = await authedFetch('/api/users/me/avatar', { method: 'PUT', body: form });
+  if (!res.ok) {
+    const msg = (await res.json().catch(() => ({ message: res.statusText }))) as { message?: string };
+    throw new Error(msg.message || res.statusText);
+  }
+  return (await res.json()) as Me;
+};
+
+/** The account's profile photo as a data URL. The endpoint is bearer-guarded, so an `<img src>`
+ *  pointing at it would 401; a data URL, unlike an object URL, needs no revoking when it changes. */
+export const fetchAvatarDataUrl = async (): Promise<string> => {
+  const res = await authedFetch('/api/users/me/avatar');
+  if (!res.ok) throw new Error(`profile photo: ${res.status}`);
+  const blob = await res.blob();
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error('read failed'));
+    reader.readAsDataURL(blob);
+  });
+};
+
 /** Withdraw a still-queued message (only works before the runner picks it up). */
 export const cancelQueuedTurn = (sessionId: string, turnId: string) =>
   api(`/sessions/${sessionId}/turns/${turnId}`, { method: 'DELETE' });
@@ -713,6 +744,13 @@ export const updateSessionConfig = (
     provider?: string;
   },
 ) => api(`/sessions/${sessionId}/config`, { method: 'PATCH', body: config });
+
+/** Move a session on the built-in Codex or Claude engine to another of its runner's accounts — which
+ *  pins it there — or back onto `automatic`. Spawn-only, like a provider: a live session's engine
+ *  re-spawns on the new account once no turn is in flight, and an ended one takes it on its next
+ *  resume. */
+export const switchSessionAccount = (sessionId: string, account: string) =>
+  api(`/sessions/${sessionId}/account`, { method: 'PATCH', body: { account } });
 
 /** Rename a session's display title. Works on any session (live or ended) and never
  *  touches the runner — purely a metadata update. */
@@ -1217,6 +1255,13 @@ export interface SessionDetail {
   /** The Codex account picked for this session on the New Session screen; null follows the
    *  workspace's (`workspace.codexAccount`). */
   codexAccount?: string | null;
+  /** That account was picked by hand, and the session stays on it: its usage limit waits for the
+   *  reset. False is Automatic — Orbit moves the session to an account with room when it hits one. */
+  codexAccountPinned?: boolean;
+  /** The Claude account picked or chosen for this session; null follows the workspace's. */
+  claudeAccount?: string | null;
+  /** See codexAccountPinned. */
+  claudeAccountPinned?: boolean;
   // When the armed auto-retry fires (null = nothing armed), and how many attempts this run of
   // failures has already spent. Drives the transcript's quota / provider-error card.
   retryAt?: string | null;

@@ -8,7 +8,7 @@ public enum ProvidersOverview {
     public static let onYourRunners = "On your runners"
     public static let onYourRunnersDetail = "Signed in on the machine itself — a session spends that subscription, nothing to paste."
     public static let accountPools = "Account pools"
-    public static let accountPoolsDetail = "Several keys under one name — each session starts on the one with the most room, and moves on when it runs out."
+    public static let accountPoolsDetail = "Several keys under one name — each session starts on one with room, and moves on when it runs out."
     public static let apiKeys = "Your API keys"
     public static let apiKeysDetail = "On your account and usable from every runner — billed per token."
     public static let noKeys = "No keys yet"

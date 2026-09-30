@@ -1098,8 +1098,10 @@ struct NewSessionView: View {
             // the machine this draft would run on, and the one whose Engines section fixes a row.
             ProviderSwitchSheet(
                 choices: providerChoices, currentSlug: draft.provider, agentName: agent.name,
-                currentAccount: draft.codexAccount,
-                automatic: draft.codexAutomaticOffered ? draft.codexAutomatic : nil,
+                currentAccount: draft.provider == "claude" ? draft.account(for: "claude") : draft.codexAccount,
+                automatic: ["codex", "claude"].reduce(into: [String: Bool]()) { offered, engine in
+                    if draft.automaticOffered(engine) { offered[engine] = draft.draftAutomatic(engine) }
+                },
                 onSelect: { slug in draft.pickDraftProvider(slug) },
                 onSelectAccount: { slug, account in draft.pickDraftAccount(slug, account) },
                 onFixRunner: agent.runnerId.map { rid in { app.route(to: .runner(rid)) } })
