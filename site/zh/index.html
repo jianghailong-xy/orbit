@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Orbit — Agent Mission Control</title>
+    <meta name="description" content="面向编码代理的自托管任务控制台。在自己的机器上运行代理，把计划、历史和控制权放在一个地方。">
+    <meta name="theme-color" content="#0a1020">
+    <meta property="og:locale" content="zh_CN">
+    <link rel="canonical" href="https://jianghailong-xy.github.io/orbit/zh/">
+    <link rel="alternate" hreflang="en" href="https://jianghailong-xy.github.io/orbit/">
+    <link rel="alternate" hreflang="zh-CN" href="https://jianghailong-xy.github.io/orbit/zh/">
+    <link rel="alternate" hreflang="x-default" href="https://jianghailong-xy.github.io/orbit/">
+    <link rel="icon" href="../assets/brand/favicon.svg" type="image/svg+xml">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Orbit">
+    <meta property="og:title" content="Orbit — Agent Mission Control">
+    <meta property="og:description" content="面向编码代理的自托管任务控制台。">
+    <meta property="og:url" content="https://jianghailong-xy.github.io/orbit/zh/">
+    <meta property="og:image" content="https://jianghailong-xy.github.io/orbit/assets/social/og-image.svg">
+    <meta property="og:image:type" content="image/svg+xml">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Orbit — Agent Mission Control">
+    <meta name="twitter:description" content="面向编码代理的自托管任务控制台。">
+    <meta name="twitter:image" content="https://jianghailong-xy.github.io/orbit/assets/social/og-image.svg">
+    <link rel="stylesheet" href="../assets/site.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <header class="site-header">
+      <div class="wrap header-row">
+        <a class="brand" href="./" aria-label="Orbit 中文首页" data-funnel="home">
+          <img src="../assets/brand/logo.svg" width="142" height="38" alt="Orbit 标志">
+        </a>
+        <nav class="nav" aria-label="主导航">
+          <a href="#scenarios">场景</a>
+          <a href="#demo">演示</a>
+          <a href="#quick-start">快速开始</a>
+          <a href="#boundaries">边界</a>
+          <a href="#faq">FAQ</a>
+          <a href="https://github.com/jianghailong-xy/orbit?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=nav-zh" class="nav-cta" data-funnel="github">GitHub</a>
+          <div class="language-switch" aria-label="语言"><a href="../" lang="en">English</a><span aria-hidden="true"> / </span><a href="./" lang="zh-CN" aria-current="page">中文</a></div>
+        </nav>
+        <div class="mobile-language-switch language-switch" aria-label="语言"><a href="../" lang="en">English</a><span aria-hidden="true"> / </span><a href="./" lang="zh-CN" aria-current="page">中文</a></div>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="wrap hero-grid">
+          <div>
+            <p class="eyebrow">Orbit — Agent Mission Control</p>
+            <h1>面向编码代理的自托管任务控制台。</h1>
+            <p class="hero-copy">在自己的机器上运行编码代理，把计划、历史和控制权放在一个自托管的地方。</p>
+            <div class="hero-meta" aria-label="项目状态">
+              <span class="pill">Pre-1.0，持续开发中</span>
+              <span class="pill">MIT 许可</span>
+              <span class="pill">Web + macOS + iPhone/iPad</span>
+            </div>
+            <div class="hero-actions">
+              <a class="button" href="#quick-start" data-funnel="quick-start">从快速开始入手 <span aria-hidden="true">→</span></a>
+              <a class="button secondary" href="#demo">查看 90 秒演示</a>
+            </div>
+            <p class="hero-note">控制平面、runner、凭据、TLS、备份和访问控制由你负责。Orbit 不是托管 SaaS，也不是无需设置即可自治的编码服务。</p>
+          </div>
+          <figure class="hero-art" data-asset-slot="product-screenshot">
+            <img src="../assets/product/hero-preview.svg" width="760" height="520" alt="Orbit 产品预览插图，展示持久任务图、在线 runner 和审批卡片">
+            <figcaption class="asset-caption">产品预览插图 · 可按<a href="../assets/README.md">公开站点资产契约</a>替换</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section" id="scenarios">
+        <div class="wrap">
+          <div class="section-heading">
+            <div>
+              <p class="kicker">三个首发场景</p>
+              <h2>让代理工作持续推进，同时不丢失人的上下文。</h2>
+            </div>
+            <p>以下名称和顺序是首发文案的标准版本。每个场景都需要验证，不承诺代理无需审查就能完成工作。</p>
+          </div>
+          <div class="scenario-grid">
+            <article class="card">
+              <span class="number" aria-hidden="true">1</span>
+              <h3>让工作超越一次聊天</h3>
+              <p>把持续数天的迁移、重构或测试救火变成持久任务图。依赖、评论和会话历史可以跨越上下文限制、重启和关闭的浏览器继续存在。</p>
+              <p class="show-line"><strong>演示</strong><br>任务列表 → 依赖 → 可恢复会话 → 结果与评论历史</p>
+            </article>
+            <article class="card">
+              <span class="number" aria-hidden="true">2</span>
+              <h3>并行代理，避免 checkout 冲突</h3>
+              <p>把待办拆给多个 runner，并为每个会话启用独立 git worktree。审查差异后再决定合并；worktree 只隔离文件冲突，不是安全边界。</p>
+              <p class="show-line"><strong>演示</strong><br>分派两个任务 → 隔离 worktree → 审查差异 → 人工决定合并</p>
+            </article>
+            <article class="card">
+              <span class="number" aria-hidden="true">3</span>
+              <h3>访问私有基础设施</h3>
+              <p>把 runner 放在它所需的代码仓库、内部 CLI、VPN 或集群旁边。runner 向外轮询，风险命令可以在执行前停在审批卡片处。</p>
+              <p class="show-line"><strong>演示</strong><br>私有网络 runner → 命令审批 → transcript 与结果</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section tight" id="demo">
+        <div class="wrap">
+          <div class="section-heading">
+            <div>
+              <p class="kicker">90 秒演示</p>
+              <h2>三个场景，一个清晰的人工介入点。</h2>
+            </div>
+            <p>使用带标签或明确写出的 commit。录制前请遮盖仓库名、主机名、token、cookie、内部 URL 和 provider 细节。</p>
+          </div>
+          <div class="demo-layout">
+            <div class="demo-intro" data-asset-slot="demo-gif">
+              <h3>查看演示脚本</h3>
+              <p>公开录制准备好前，以仓库中的 storyboard 作为事实来源。画面应持续展示 runner、仓库、审批卡和人工合并决定。</p>
+              <div class="button-row">
+                <a class="button" href="https://github.com/jianghailong-xy/orbit/blob/main/docs/90-second-demo.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=demo-zh">打开完整脚本（英文） <span aria-hidden="true">↗</span></a>
+                <a class="button text" href="https://github.com/jianghailong-xy/orbit/blob/main/docs/messaging-brief.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=messaging-zh">阅读 messaging brief（英文） <span aria-hidden="true">↗</span></a>
+              </div>
+              <p class="hero-note">预留媒体槽位：可将经过批准的短 GIF 放入 <code>site/assets/product/demo.gif</code>，并配上事实准确的说明。</p>
+            </div>
+            <div class="timeline" aria-label="演示时间线">
+              <div class="timeline-item"><span class="time">0:00–0:08</span><div><strong>开场</strong><span>项目页面 + 在线 runner。说出产品类别和核心承诺。</span></div></div>
+              <div class="timeline-item"><span class="time">0:08–0:32</span><div><strong>让工作超越一次聊天</strong><span>任务依赖、可恢复会话、结果与评论历史。</span></div></div>
+              <div class="timeline-item"><span class="time">0:32–0:56</span><div><strong>并行代理，避免 checkout 冲突</strong><span>两个隔离 worktree、差异和人工合并审查动作。</span></div></div>
+              <div class="timeline-item"><span class="time">0:56–1:18</span><div><strong>访问私有基础设施</strong><span>runner 心跳、内部工具、审批卡、transcript 和结果。</span></div></div>
+              <div class="timeline-item"><span class="time">1:18–1:30</span><div><strong>收尾</strong><span>Pre-1.0 边界、带标签的 release、加固指南和限制。</span></div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="quick-start">
+        <div class="wrap">
+          <div class="section-heading">
+            <div>
+              <p class="kicker">快速开始</p>
+              <h2>从可信主机到第一个在线 runner。</h2>
+            </div>
+            <p>完整的操作路径保留在仓库 README 和 self-hosting 指南中。本页只保留关键决策，让它继续成为小而清晰的公开入口。</p>
+          </div>
+          <div class="quick-grid">
+            <div class="steps">
+              <div class="step"><span class="step-index">1</span><div><h3>启动控制平面</h3><p>克隆仓库，固定一个经过审查的 tag，创建两个独立 secret，并在你控制的主机上运行 Docker Compose。</p></div></div>
+              <div class="step"><span class="step-index">2</span><div><h3>添加 runner</h3><p>在拥有 checkout、工具、VPN 和 agent 凭据的机器上打开 <strong>Runners → Add a runner</strong>，然后批准浏览器注册。</p></div></div>
+              <div class="step"><span class="step-index">3</span><div><h3>创建 workspace 和第一个任务</h3><p>将 workspace 指向 checkout；如有需要先使用小型 demo fixture，然后检查 transcript、审批和结果。</p></div></div>
+              <div class="button-row"><a class="button" href="https://github.com/jianghailong-xy/orbit?utm_source=github&amp;utm_medium=website&amp;utm_campaign=launch&amp;utm_content=quick-start-zh#quick-start" data-funnel="readme-quick-start">阅读操作步骤（英文） <span aria-hidden="true">↗</span></a><a class="button secondary" href="https://github.com/jianghailong-xy/orbit/blob/main/docs/self-hosting.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=self-hosting-zh">自托管加固（英文）</a></div>
+            </div>
+            <div>
+              <div class="code-panel">
+                <header><span>可信主机 · shell</span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span></header>
+                <pre><code><span class="code-comment"># 部署前固定一个经过审查的 release</span>
+git clone https://github.com/jianghailong-xy/orbit.git
+cd orbit
+git checkout &lt;release-tag&gt;
+cp .env.example .env
+<span class="code-comment"># 在 .env 中设置唯一的 JWT_SECRET 和 PROVIDER_SECRET_KEY</span>
+docker compose up -d --build
+docker compose ps</code></pre>
+              </div>
+              <p class="quick-note">内置 gateway 只有 HTTP，适合作为起点。暴露到网络前请先配置 HTTPS 和访问控制；备份、监控、主机加固和最小权限凭据由 operator 负责。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="boundaries">
+        <div class="wrap">
+          <div class="section-heading">
+            <div>
+              <p class="kicker">架构与安全边界</p>
+              <h2>本地执行、可见控制、诚实的限制。</h2>
+            </div>
+            <p>Orbit 负责协调和监督 agent，但不会把 operator 管理的 runner 变成 sandbox，也不提供托管可靠性服务。</p>
+          </div>
+          <div class="boundary-grid">
+            <article class="architecture">
+              <h3>组件如何连接</h3>
+              <div class="diagram" aria-label="架构图">Web / macOS / iOS ── REST + SSE ──▶ 控制平面 + PostgreSQL
+  任务 · 历史 · 审批             队列 · 审计 · 用量
+                                      ▲
+                                      │ 向外轮询
+                                      │
+                               Runner + 本地 agent runtime
+                               可选 git worktree</div>
+              <ul>
+                <li>控制平面负责用户、workspace、项目、任务、会话、审批、runner 和历史记录。</li>
+                <li>runner 主动向外连接；控制平面不要求向 runner 开放入站访问。</li>
+                <li>worktree 减少 checkout 冲突，但进程仍继承 runner 操作系统账号的权限。</li>
+              </ul>
+            </article>
+            <article class="boundary">
+              <h3>连接敏感基础设施前</h3>
+              <p class="callout"><strong>重要：</strong>worktree 不是安全边界；如果没有审查、审批或人工合并决定，也不能保证 agent 正确完成工作。</p>
+              <ul>
+                <li>使用最小权限的 runner 账号和凭据；需要时隔离主机以满足信任边界。</li>
+                <li>暴露到网络前使用 HTTPS，保护唯一 secret，限制 gateway，并测试异地备份和恢复。</li>
+                <li>这不是托管服务、HA 保证、零数据丢失承诺、SLA、合规认证或企业支持合同。</li>
+                <li>provider 计费、模型能力、恢复行为和用量数据因 engine 而异；以 provider 账单为准。</li>
+              </ul>
+              <div class="button-row"><a class="button secondary" href="https://github.com/jianghailong-xy/orbit/blob/main/SECURITY.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=security-zh">安全政策（英文）</a><a class="button secondary" href="https://github.com/jianghailong-xy/orbit/blob/main/docs/architecture.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=architecture-zh">架构说明（英文）</a></div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section tight" id="faq">
+        <div class="wrap">
+          <div class="section-heading">
+            <div><p class="kicker">常见问题 FAQ</p><h2>先了解你正在运行什么。</h2></div>
+            <p>这里回答首次访问时最重要的问题。仓库文档提供配置和故障排查细节（英文）。</p>
+          </div>
+          <div class="faq-grid">
+            <details><summary>Orbit 是替我托管的吗？</summary><p>不是。你运行控制平面和 PostgreSQL，决定它在哪里可访问；将内置 HTTP gateway 暴露到网络前，请配置 TLS 和访问控制。</p></details>
+            <details><summary>凭据会离开 runner 吗？</summary><p>支持的 agent CLI 使用 runner 本地配置和凭据。控制平面保存协调所需的元数据和 transcript；provider 行为与计费仍由 provider 负责。</p></details>
+            <details><summary>worktree 是安全 sandbox 吗？</summary><p>不是。它只减少 checkout 冲突。进程以 runner 操作系统账号运行，可以访问该账号能够访问的内容。</p></details>
+            <details><summary>runner 或浏览器断开后怎么办？</summary><p>任务图和会话历史保存在控制平面中。失去心跳的 runner 会被视为离线；具体恢复行为因 engine 和 provider 而异，请验证你需要的行为。</p></details>
+            <details><summary>支持哪些 runtime？</summary><p>控制平面和 runner 认识 Claude Code、Codex、Kimi Code、OpenCode 以及已配置的兼容 provider。请在 runner 上安装并登录 runtime，再从 <code>orbit doctor</code> 开始。</p></details>
+            <details><summary>生产环境应该运行什么版本？</summary><p>Orbit 仍处于 Pre-1.0。部署时固定带标签的 release，阅读升级说明和加固指南；把 <code>main</code> 当作开发分支，而不是受支持的 release。</p></details>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="community">
+        <div class="wrap">
+          <div class="section-heading">
+            <div><p class="kicker">社区与贡献</p><h2>带着真实的部署问题来交流。</h2></div>
+            <p>社区支持由维护者尽力提供。请清理日志，绝不要公开 token、cookie、API key、私有主机名、仓库内容或 runner 配置。</p>
+          </div>
+          <div class="community-grid">
+            <a class="link-card" href="https://github.com/jianghailong-xy/orbit/discussions?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=community-zh"><strong>Discussions ↗</strong><span>提问并分享部署经验。</span></a>
+            <a class="link-card" href="https://github.com/jianghailong-xy/orbit/issues?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=issues-zh"><strong>Issues ↗</strong><span>报告可复现的 bug 或范围明确的提案。</span></a>
+            <a class="link-card" href="https://github.com/jianghailong-xy/orbit/blob/main/CONTRIBUTING.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=contributing-zh"><strong>参与贡献 ↗</strong><span>阅读贡献指南和行为准则（英文）。</span></a>
+            <a class="link-card" href="https://github.com/jianghailong-xy/orbit/security?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=security-report-zh"><strong>私下报告 ↗</strong><span>使用 Security 页报告漏洞。</span></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section tight" id="roadmap">
+        <div class="wrap">
+          <div class="section-heading">
+            <div><p class="kicker">版本与路线图</p><h2>在做出更大承诺前先通过采用门槛。</h2></div>
+            <p>路线图方向公开，但不暗示交付日期或生产保证。</p>
+          </div>
+          <div class="roadmap">
+            <article class="roadmap-card">
+              <h3>当前 release 状态</h3>
+              <ul>
+                <li>Orbit 是一个处于 Pre-1.0、持续开发中的开源项目。</li>
+                <li>部署时固定带标签的 release，升级前阅读升级说明。</li>
+                <li>最新发布版本以尽力而为的方式接收安全修复；<code>main</code> 是开发分支，旧版本不受支持。</li>
+              </ul>
+              <p class="version-note">请查看仓库的 <a href="https://github.com/jianghailong-xy/orbit/releases?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=releases-zh">Releases ↗</a> 获取准确 tag、校验和、已知限制及验证说明。</p>
+            </article>
+            <article class="roadmap-card">
+              <h3>方向，不是日期</h3>
+              <ul>
+                <li><strong>现在：</strong>可重复的 clean-install 证据和一致的版本叙事。</li>
+                <li><strong>下一步：</strong>以截图为主的 onboarding、operator 配置参考、公开 changelog 和更强的社区运营。</li>
+                <li><strong>之后：</strong>定时任务与入站任务源目前只完成设计、尚未实现；v1.0 兼容性取决于证据门槛。</li>
+              </ul>
+              <p class="version-note">查看 <a href="https://github.com/jianghailong-xy/orbit/blob/main/ROADMAP.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=roadmap-zh">完整路线图（英文）↗</a> 和 <a href="https://github.com/jianghailong-xy/orbit/blob/main/docs/project-maturity.md?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=maturity-zh">成熟度门槛（英文）↗</a>。</p>
+            </article>
+          </div>
+          <p class="hero-note">下一步会衡量的漏斗：访问 → 点击快速开始 → runner 上线 → 首次任务。本页不植入 tracking pixel；使用 GitHub/Pages 流量、带标签链接和经过清理的 operator 证据。</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap">
+        <div class="footer-row">
+          <div><a class="footer-brand" href="./">Orbit — Agent Mission Control</a><p class="footer-copy">面向编码代理的自托管任务控制台。把计划、历史和控制权放在一个自托管的地方。</p></div>
+          <div class="footer-links" aria-label="页脚导航"><a href="#quick-start">快速开始</a><a href="#boundaries">安全边界</a><a href="#community">社区</a><a href="https://github.com/jianghailong-xy/orbit?utm_source=github&utm_medium=website&utm_campaign=launch&utm_content=footer-zh">仓库 ↗</a><a href="../appcast.xml">macOS 更新</a><span class="footer-language"><a href="../" lang="en">English</a> / <a href="./" lang="zh-CN" aria-current="page">中文</a></span></div>
+        </div>
+        <p class="footer-legal">MIT 许可 · Pre-1.0 · 本公开入口是仓库文档的精选指引，不是内部文档集合的复制品。</p>
+      </div>
+    </footer>
+  </body>
+</html>
