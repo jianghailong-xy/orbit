@@ -1184,11 +1184,11 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'wiki/wiki.service.ts#recordVerifications',
     shape: 'TX_RETRIED',
-    locks: 'Per verdict, wiki rows alone and in the order `wiki.decide` takes them: the entry the verdict applies to by plain UPDATE (FOR NO KEY UPDATE) — an add\'s proposed lineage promoted or rejected, an amend\'s entry written, a duplicate\'s named entry reinforced — with the revision (60) and sources (60) that brings and the ops withdrawn behind an entry that left active; then the op itself (60) by one UPDATE, its changeset (60) when that settles it, and — when an unsupported verdict takes the space\'s rate over the line — the wiki_space row (60) by one UPDATE whose WHERE is the compare-and-set on its mode. Reads of the space, the op, its sources and its neighbours are unlocked and come first.',
+    locks: 'Per verdict, wiki rows alone and in the order `wiki.decide` takes them: the entry the verdict applies to by plain UPDATE (FOR NO KEY UPDATE) — an add\'s proposed lineage promoted or rejected, an amend\'s entry written, a duplicate\'s named entry reinforced (for an op a maintenance run adopted, the live entry holding its very content when there is one: `reviewModes.verification.adoption`) — with the revision (60) and sources (60) that brings and the ops withdrawn behind an entry that left active; then the op itself (60) by one UPDATE, its changeset (60) when that settles it, and — when an unsupported verdict takes the space\'s rate over the line — the wiki_space row (60) by one UPDATE whose WHERE is the compare-and-set on its mode. Reads of the space, the op, its sources and its neighbours — and for an adopted op the session that proposed it and its live twin — are unlocked and come first.',
     identity: 'The op and its decision: the op is written by one UPDATE predicated on `decision = verifying`, so of two verdicts for one op only one lands — the other matches no row, and its whole transaction (the entry writes before it included) rolls back and answers 409. A verdict sent again for an op already verified the same way reads the recorded verdict and writes nothing.',
     isolation: '',
     attempts: 4,
-    replay: 'Everything is re-read inside the closure: the op and whether it still waits, the space\'s mode and settings, the entry an amend names and its revision, the entry a duplicate names, and the verdicts the fallback counts. A retried attempt decides against the committed world, and the first attempt\'s writes roll back with it, so a verdict cannot apply twice.',
+    replay: 'Everything is re-read inside the closure: the op and whether it still waits, the space\'s mode and settings, the entry an amend names and its revision, the entry a duplicate names, an adopted op\'s proposing session and live twin, and the verdicts the fallback counts. A retried attempt decides against the committed world, and the first attempt\'s writes roll back with it, so a verdict cannot apply twice.',
     effects: 'After the commit and outside the closure: one `wiki.changed` for the space once any verdict of the request was recorded, and — only for the verdict whose compare-and-set moved the space to Tiered — one push notification to the owner (`PushService.notifyWikiVerificationTripped`). Neither is inside a closure, so a retried attempt sends neither twice.',
     answer: 'Typed 503 from the global boundary; the verifier reports again, and a verdict already recorded answers with itself.',
   },
@@ -1237,11 +1237,11 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'wiki/wiki-maintenance-settings.ts#setWikiMaintenance',
     shape: 'TX_RETRIED',
-    locks: 'When maintenance is being turned on and the space has no list yet: the task_list INSERT first, whose owner foreign key takes the user row FOR KEY SHARE (rank 10) and which creates the list row (rank 20); then the wiki_space row FOR UPDATE (rank 60), read again under that lock; then, only for the loser of two first enables, the DELETE of the list it just made (the same rank-20 row, its own); then one UPDATE of that wiki_space row, merging the maintenance key alone. Ascending throughout: the list is written before the space row is locked, never after.',
-    identity: 'The space and its owner. The list is recorded in the settings only when the locked row has none, so two first enables leave one list: the second finds the first one\'s and deletes its own.',
+    locks: 'When maintenance is being turned on and the space has no list yet: the task_list INSERT first, whose owner foreign key takes the user row FOR KEY SHARE (rank 10) and which creates the list row (rank 20); then the wiki_space row FOR UPDATE (rank 60), read again under that lock; then, only for the loser of two first enables, the DELETE of the list it just made (the same rank-20 row, its own); then one UPDATE of that wiki_space row, merging the maintenance key alone; then, only when this write turns maintenance on and the look-back is a number of days, one INSERT … ON CONFLICT (space_id, source) DO UPDATE … WHERE position_at IS NULL of the space\'s wiki_cursor row (rank 60, a child of the space row this transaction already holds, whose foreign key re-check therefore waits on nothing). Ascending throughout: the list is written before the space row is locked, never after, and the cursor after the space.',
+    identity: 'The space and its owner. The list is recorded in the settings only when the locked row has none, so two first enables leave one list: the second finds the first one\'s and deletes its own. The cursor starts only where it has no position — the upsert\'s WHERE — and only for the write whose locked row read maintenance off, so of two enables racing one starts it and the other finds maintenance on; a cursor that has a position is never moved by it.',
     isolation: '',
     attempts: 4,
-    replay: 'The settings are re-read under the row lock inside the closure, and the merge and the list decision are re-derived from them, so a re-run after a conflict reaches what the committed row says. A rolled-back attempt takes the list it made with it.',
+    replay: 'The settings are re-read under the row lock inside the closure, and the merge, the list decision and whether this write turns maintenance on are re-derived from them, so a re-run after a conflict reaches what the committed row says. A rolled-back attempt takes the list it made, and the cursor start it wrote, with it; the start\'s moment is the request\'s, taken before the closure, so a re-run writes the same start.',
     effects: 'None inside, and none after: the list is hidden, so no list-index event is owed.',
     answer: 'Typed 503 from the global boundary; the owner saves the setting again.',
   },
@@ -1269,6 +1269,31 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside. After the commit and outside the closure: one `task.changed` for the task made (nothing depends on it; the dispatcher reads runAt).',
     answer: 'Typed 503 from the global boundary is never reached: the trigger runs off the request path, logs the failure, and the next fact of the space asks again.',
   },
+  // The plan's jobs (contracts/wiki.contract.json `plan.jobs`, migration 0338): the space's hidden
+  // maintenance list a job needs, made when maintenance was never turned on, and the job's task, made
+  // under that list's lock like a maintenance task.
+  {
+    at: 'wiki/wiki-maintenance-settings.ts#ensureList',
+    shape: 'TX_RETRIED',
+    locks: 'The task_list INSERT first, whose owner foreign key takes the user row FOR KEY SHARE (rank 10) and which creates the list row (rank 20); then the wiki_space row FOR UPDATE (rank 60), read again under that lock; then either the DELETE of the list it just made (the same rank-20 row, its own) when the locked row names one already, or one UPDATE of that wiki_space row merging the maintenance key alone. Ascending throughout, as `setWikiMaintenance`: the list is written before the space row is locked, never after.',
+    identity: 'The space and its owner. The list is recorded only when the locked row names none, so two first asks leave one list: the second finds the first one\'s and deletes its own.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The settings are re-read under the row lock inside the closure and the decision is re-derived from them, so a re-run reaches what the committed row says. A rolled-back attempt takes the list it made with it.',
+    effects: 'None inside, and none after: the list is hidden, so no list-index event is owed.',
+    answer: 'Typed 503 from the global boundary; the plan job stays queued or held, and the owner\'s next request or settings change asks again.',
+  },
+  {
+    at: 'wiki/wiki-plan-job.ts#make',
+    shape: 'TX_RETRIED',
+    locks: 'The space\'s maintenance task_list row (rank 20) by SELECT … FOR NO KEY UPDATE — the lock the maintenance trigger takes, so a job and a maintenance run make their tasks one at a time — before any task of it is read or written; then the job (read, not locked) and the list\'s unended tasks are read under it; then one task INSERT (its foreign keys take the user, the list this transaction already holds and the workspace FOR KEY SHARE) and one UPDATE of the wiki_plan_job row by id (rank 60, reaching wiki_space through (space_id, owner_id) FOR KEY SHARE). Ascending throughout: the list before the task, the task before the wiki row.',
+    identity: 'The job and the space\'s maintenance list. Under the list lock a job no longer queued or held, or a task of the list that has not ended, makes the closure write nothing and answer why, so of two facts asking together one makes the task and the other finds it.',
+    isolation: '',
+    attempts: 4,
+    replay: 'The job\'s state and the unended task are re-read under the list lock inside the closure, and the task written is built before it from reads that do not change with a retry, so a re-run either finds its own committed task (and writes nothing) or writes the same task and job update.',
+    effects: 'None inside. After the commit and outside the closure: one `task.changed` for the task made, published by the caller (nothing depends on it; the dispatcher reads runAt).',
+    answer: 'Typed 503 from the global boundary; the job stays queued or held and the next fact asks again.',
+  },
   // The articles (contracts/wiki.contract.json `articles`, migration 0317): one topic's articles
   // replaced together, by a maintenance run of the space or the server's own import.
   {
@@ -1287,13 +1312,13 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
   {
     at: 'wiki/wiki-plan.ts#store',
     shape: 'TX_RETRIED',
-    locks: 'The space\'s wiki_space row (rank 60) by SELECT … FOR NO KEY UPDATE — the one writer of a space\'s plan at a time — then its wiki_plan rows (60): the newest number read, the space\'s draft UPDATEd to superseded, one INSERT of the new version (its foreign key takes KEY SHARE on the space row this transaction holds), one INSERT of its wiki_plan_doc rows and one of their wiki_plan_section rows (60, KEY SHARE on the version and the documents just written); and, for an accepted proposal, one UPDATE of that wiki_plan_proposal row by id and status (60).',
-    identity: 'The version the caller built on. Under the lock the newest draft or confirmed version is read again; any other one means the plan moved, and the closure throws WIKI_PLAN_STALE having written nothing. So of two writers built on the same version the second finds the first\'s and is refused.',
+    locks: 'The space\'s wiki_space row (rank 60) by SELECT … FOR NO KEY UPDATE — the one writer of a space\'s plan at a time — then its wiki_plan rows (60): for a draft under an idempotency key, the version its key stored read first; the newest number read, the space\'s draft UPDATEd to superseded, one INSERT of the new version (its foreign key takes KEY SHARE on the space row this transaction holds), one INSERT of its wiki_plan_doc rows and one of their wiki_plan_section rows (60, KEY SHARE on the version and the documents just written); and, for an accepted proposal, one UPDATE of that wiki_plan_proposal row by id and status (60).',
+    identity: 'A draft\'s idempotency key, then the version the caller built on. Under the lock a version the key stored already is read first: the same request\'s is the answer, replayed, and the closure writes nothing (another request\'s is WIKI_IDEMPOTENCY_KEY_REUSED). Then the newest draft or confirmed version is read again; any other one means the plan moved, and the closure throws WIKI_PLAN_STALE having written nothing. So of two writers built on the same version the second finds the first\'s and is refused — or, the same draft under its key, answered with it.',
     isolation: '',
     attempts: 4,
-    replay: 'Everything written is computed before the closure from the request and the version it was built on, and the newest version and the next number are re-read under the space lock inside it, so a re-run writes the same version or finds the plan moved and writes nothing.',
-    effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space (nothing depends on it).',
-    answer: 'Typed 503 from the global boundary; the drafting job, the owner or the acceptance sends it again, and a plan that moved meanwhile is WIKI_PLAN_STALE then.',
+    replay: 'Everything written is computed before the closure from the request and the version it was built on, and the key\'s version, the newest version and the next number are re-read under the space lock inside it, so a re-run writes the same version, finds its key\'s version, or finds the plan moved and writes nothing.',
+    effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space (nothing depends on it), and none for a replay.',
+    answer: 'Typed 503 from the global boundary; the drafting job, the owner or the acceptance sends it again: a draft under its key that was stored meanwhile is answered with its version, and a plan that moved otherwise is WIKI_PLAN_STALE then.',
   },
   // The owner's confirmation of a space's draft.
   {
@@ -1829,6 +1854,13 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'wiki/wiki-maintenance-run.ts#wikiMaintenanceRunContext', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The run started: the calling session and the time, written onto the run row by id. A later start of the same task (a retried session) overwrites both.' },
   { at: 'wiki/wiki-maintenance-run.ts#noteWikiMaintenanceRunEnd', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'How the run ended — outcome, error, report and the ops the server refused — written onto the run row by id after the cursor was advanced or refused. A later end of the same run overwrites it; `orbit wiki check` reads what is there.' },
   { at: 'wiki/wiki-articles.ts#plan', class: 'INSERT', statements: 1, note: 'A space with no topic is given the default ones (contracts/wiki.contract.json `articles.seeding`): one INSERT of the batch, ON CONFLICT DO NOTHING on (space_id, slug), so two first plans leave one set. Only when a count found none; a space that has topics is never written. Outside a transaction on purpose: the rows are names and path prefixes, nothing reads them as a fact about anything else, and a plan that loses the race simply reads the winner\'s.' },
+  { at: 'wiki/wiki-plan-job.ts#requestWikiPlanJob', class: 'INSERT', statements: 1, note: 'A plan job a fact asked for (contracts/wiki.contract.json `plan.jobs`): one INSERT, queued, when the space has no draft or revision that has not ended. Outside a transaction on purpose: the partial unique index on the space\'s open drafts is the fence, and the loser of two requests at once reads the winner\'s job and answers with it.' },
+  { at: 'wiki/wiki-plan-job.ts#holdJob', class: 'ONE_ROW_CAS', statements: 1, note: 'Why a job was not made (contract `plan.jobs.held`), written onto its row by id and only while it is still queued or held, and only when the reason is not the one it already holds, so the time it first held for that reason is kept. The task made clears it.' },
+  { at: 'wiki/wiki-plan-job.ts#queueJob', class: 'ONE_ROW_CAS', statements: 1, note: 'A job that waits behind an unended task of its list: its row by id, only while it is still queued or held, its held reason cleared.' },
+  { at: 'wiki/wiki-plan-job.ts#endJobWhoseTaskIsOver', class: 'ONE_ROW_CAS', statements: 1, note: 'A made job whose task ended or is gone before its run said how it went: its row by id, only while it is still made, ended failed with why. A job its run ended already is not matched and keeps what the run said.' },
+  { at: 'wiki/wiki-plan-job.ts#startWikiPlanJob', class: 'ONE_ROW_CAS', statements: 1, note: 'A job\'s run started (contract `plan.jobs.context`): the calling session, and the first time it said so (coalesce), on its row by id while it is made. A retried session of the same task overwrites the session and keeps the time.' },
+  { at: 'wiki/wiki-plan-job.ts#progressWikiPlanJob', class: 'ONE_ROW_CAS', statements: 1, note: 'The gate round a job\'s run is on (contract `plan.jobs.progress`), on its row by id while it is made; a later round overwrites it. A job ended meanwhile is not matched, and the door answers WIKI_PLAN_NO_JOB.' },
+  { at: 'wiki/wiki-plan-job.ts#finishWikiPlanJob', class: 'ONE_ROW_CAS', statements: 1, note: 'How a job\'s run ended (contract `plan.jobs.finish`): its row by id while it is made, ended with the outcome, the version or the gate\'s errors, the report and the last draft. A job ended already is not matched, so a second end keeps the first.' },
   { at: 'wiki/wiki-plan.ts#propose', class: 'INSERT', statements: 1, note: 'A maintenance run\'s proposed change to the plan (contracts/wiki.contract.json `plan.proposals`): one INSERT, pending, after the gate passed it against the confirmed version. Outside a transaction on purpose: it changes no version, and the owner\'s acceptance gates it again against the plan as it stands then.' },
 ];
 

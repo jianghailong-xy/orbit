@@ -2876,6 +2876,9 @@ func buildCLICapabilities(executable string) cliCapabilitiesDocument {
 	if wikiEnabledFromEnv() {
 		specs = append(specs, wikiCLICapabilities...)
 		specs = append(specs, wikiImportCLICapabilities...)
+		// The plan job's verbs (wiki_plan_cli.go): draft and revise are the job's run, SessionOnly; check
+		// is its task's acceptance command, which runs with no session.
+		specs = append(specs, wikiPlanCLICapabilities...)
 	}
 	if includeOrchestration {
 		specs = append(specs, sessionCLICapabilities...)

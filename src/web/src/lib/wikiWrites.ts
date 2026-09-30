@@ -160,7 +160,7 @@ export function revertWikiChangeset(changesetId: string): Promise<WikiRevertAnsw
 export interface WikiSpaceUpdate {
   reviewMode?: WikiReviewMode;
   automaticSpotChecks?: boolean;
-  maintenance?: Partial<Pick<WikiMaintenanceSettings, 'enabled' | 'workspaceId' | 'provider' | 'dailyRunLimit'>>;
+  maintenance?: Partial<Pick<WikiMaintenanceSettings, 'enabled' | 'workspaceId' | 'provider' | 'dailyRunLimit' | 'lookbackDays'>>;
 }
 
 /** `PATCH /api/wiki/spaces/:id` — the owner's settings; refused to every session. */

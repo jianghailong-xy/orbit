@@ -274,13 +274,134 @@ public struct WikiPlanProposal: Codable, Equatable, Sendable {
     public let createdAt: String?
 }
 
-/// `GET /api/wiki/spaces/:id/plan`: the version in force, the draft waiting for the owner, and the
-/// pending proposals.
+/// `GET /api/wiki/spaces/:id/plan`: the version in force, the draft waiting for the owner, the pending
+/// proposals, and the space's plan job.
 public struct WikiPlanState: Codable, Equatable, Sendable {
     public let spaceId: String?
     public let confirmed: WikiPlanVersion?
     public let draft: WikiPlanVersion?
     public let proposals: [WikiPlanProposal]?
+    /// The space's job that has not ended, else the one that ended last; nil when it never had one.
+    public let job: WikiPlanJob?
+}
+
+// MARK: - jobs
+
+/// What a plan job does (contract `plan.jobs.kinds`): draft a plan, revise it with the owner's words, or
+/// build the documents from a confirmed version.
+public enum WikiPlanJobKind: String, Codable, Sendable, CaseIterable {
+    case draft, revise, build
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = WikiPlanJobKind(rawValue: raw) ?? .unknown
+    }
+}
+
+/// The fact that asked for a job (contract `plan.jobs.triggers`): the space was created, or its owner asked.
+public enum WikiPlanJobTrigger: String, Codable, Sendable, CaseIterable {
+    case spaceCreated = "space_created"
+    case owner
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = WikiPlanJobTrigger(rawValue: raw) ?? .unknown
+    }
+}
+
+/// Where a job stands (contract `plan.jobs.states`): the plan page's status card.
+public enum WikiPlanJobState: String, Codable, Sendable, CaseIterable {
+    case queued, held, running, succeeded, failed
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = WikiPlanJobState(rawValue: raw) ?? .unknown
+    }
+}
+
+/// Why a job was not made (contract `plan.jobs.held.reasons`).
+public enum WikiPlanJobHeldReason: String, Codable, Sendable, CaseIterable {
+    case noMaintenanceWorkspace = "no_maintenance_workspace"
+    case maintenanceProviderUnusable = "maintenance_provider_unusable"
+    case unknown
+
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = WikiPlanJobHeldReason(rawValue: raw) ?? .unknown
+    }
+}
+
+/// A space's plan job, as the plan's read gives it (contract `plan.jobs.read`).
+public struct WikiPlanJob: Codable, Equatable, Sendable {
+    public struct Held: Codable, Equatable, Sendable {
+        public let reason: WikiPlanJobHeldReason
+        public let at: String?
+    }
+
+    /// A queued job's: the unfinished task of the maintenance list it waits for, and that task's run.
+    public struct WaitingFor: Codable, Equatable, Sendable {
+        public let taskId: String
+        public let title: String?
+        public let sessionId: String?
+        public let startedAt: String?
+    }
+
+    /// What the run reported (contract `plan.jobs.report`).
+    public struct Report: Codable, Equatable, Sendable {
+        public struct Attempt: Codable, Equatable, Sendable {
+            public let attempt: Int
+            public let local: Int?
+            public let server: Int?
+            public let checks: [String: Int]?
+        }
+
+        public struct Tokens: Codable, Equatable, Sendable {
+            public let input: Int?
+            public let output: Int?
+            public let calls: Int?
+        }
+
+        public let categories: Int?
+        public let docs: Int?
+        public let sections: Int?
+        public let attempts: [Attempt]?
+        public let tokens: Tokens?
+        public let seconds: Int?
+        public let model: String?
+    }
+
+    public let id: String
+    public let kind: WikiPlanJobKind
+    public let trigger: WikiPlanJobTrigger?
+    public let state: WikiPlanJobState
+    /// A revision's: the owner's words, as they were given.
+    public let instructions: String?
+    public let requestedAt: String?
+    public let held: Held?
+    public let waitingFor: WaitingFor?
+    public let taskId: String?
+    public let provider: String?
+    public let sessionId: String?
+    public let startedAt: String?
+    public let endedAt: String?
+    /// The gate round the run is on, or ended on, of `attemptsMax`.
+    public let attempt: Int?
+    public let attemptsMax: Int?
+    /// A job that succeeded: the version it stored.
+    public let version: Int?
+    /// A job that failed: the gate's errors on its last round, and what went wrong in words.
+    public let errors: [WikiPlanGateError]?
+    public let error: String?
+    public let report: Report?
+}
+
+/// `POST /api/wiki/spaces/:id/plan/redraft`'s answer: the job made, or the space's draft that had not ended.
+public struct WikiPlanRedraftResult: Codable, Equatable, Sendable {
+    public let created: Bool
+    public let job: WikiPlanJob
 }
 
 /// One thing the gate found: which check, where, and why (contract `plan.gate.errors`).

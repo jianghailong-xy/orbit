@@ -1477,7 +1477,31 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // names no `project_acceptance_*` object and none of the six preserved triggers/functions, and
       // creates no function, trigger, enum or type — so it is not another writer of the DONE fence. No
       // INSERT, UPDATE or DELETE: nothing is backfilled.
-      '0336_session_account_choice'],
+      '0336_session_account_choice',
+      // What became of a document section's material: one JSONB column, `dispositions`, added to
+      // `wiki_doc_section` with a default and a CHECK that it is an array. Read against every claim above:
+      // no `task`, `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair and
+      // every stored task and criterion row are out of its reach. No function, trigger or type is created,
+      // replaced or dropped — its one DO block only adds the CHECK when it is missing — so it is not another
+      // writer of the DONE fence and names none of the six preserved objects. No INSERT, UPDATE or DELETE.
+      '0337_wiki_doc_dispositions',
+      // The wiki plan's jobs: one new table, `wiki_plan_job` (a draft, revision or build of a space's plan,
+      // run as a task of the space's maintenance list), reaching `wiki_space` through (space_id, owner_id),
+      // with its own CHECKs, one unique index, one partial unique index and two indexes. Its task_id and
+      // session_id are history references with no foreign key. Read against every claim above: no `task`,
+      // `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored
+      // task and criterion row are out of its reach. No function, trigger or type is created, replaced or
+      // dropped — no `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names
+      // none of the six preserved objects. No INSERT, UPDATE or DELETE: the new table starts empty.
+      '0338_wiki_plan_job',
+      // A plan draft's idempotency key: two nullable `ADD COLUMN`s with no default on `wiki_plan`
+      // (`idempotency_key`, `request_sha256`, catalog-only), one CHECK every stored version satisfies as
+      // both read NULL, and one unique index on (owner_id, idempotency_key). Read against every claim
+      // above: no `task`, `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair
+      // and every stored task and criterion row are out of its reach. No function, trigger or type is
+      // created, replaced or dropped — so it is not another writer of the DONE fence and names none of the
+      // six preserved objects. No INSERT, UPDATE or DELETE: nothing is backfilled.
+      '0339_wiki_plan_idempotency'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

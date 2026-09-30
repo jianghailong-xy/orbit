@@ -13,6 +13,9 @@ type Headers = { headers: Record<string, string | string[] | undefined> };
  * force, its draft, its history and the changes proposed to it; edits a document or a section into a
  * new draft; confirms the draft; and accepts or rejects a proposal.
  *
+ * And the owner asks for a draft, or a revision with their instructions (`redraft`): a job of the plan
+ * the server runs as a task of the space's maintenance list (contract `plan.jobs`).
+ *
  * THE OWNER CHANNEL, EVERY ROUTE. A request carrying a session header is refused
  * WIKI_OWNER_CHANNEL_ONLY before anything is read, whatever the session's role — the plan is what every
  * document is written from, and a session reporting a person's answer is not a person answering. The
@@ -67,6 +70,17 @@ export class WikiPlanController {
     @Req() request: Headers,
   ) {
     return this.plans.confirm(user.userId, id, version, actingSession(request.headers));
+  }
+
+  /**
+   * Ask for a draft of the plan — with `instructions`, a revision of its newest version (contract
+   * `plan.routes.redraft`): made as a task of the space's maintenance list, queued behind its unfinished
+   * task, or held with why. The space's draft that has not ended answers a second request.
+   */
+  @Post('spaces/:id/plan/redraft')
+  @HttpCode(HttpStatus.OK)
+  redraft(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string, @Body() body: Record<string, unknown>, @Req() request: Headers) {
+    return this.plans.redraft(user.userId, id, body, actingSession(request.headers));
   }
 
   /** Accept a proposal, which makes a new draft, or reject it, which changes nothing but the proposal. */

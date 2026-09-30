@@ -5736,6 +5736,7 @@ model WikiSpace {
   /// Its plan's versions and the changes proposed to it (0325).
   plans           WikiPlan[]
   planProposals   WikiPlanProposal[]
+  planJobs        WikiPlanJob[]
   /// Its documents, written section by section from the confirmed plan (0326).
   docs            WikiDoc[]
 
@@ -6242,11 +6243,17 @@ model WikiPlan {
   confirmedAt       DateTime? @map("confirmed_at") @db.Timestamptz(3)
   supersededAt      DateTime? @map("superseded_at") @db.Timestamptz(3)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// The key a drafting job's draft was stored under, and the digest of its request (migration 0339,
+  /// contract `plan.idempotency`): the same key with the same request is answered with this version.
+  /// Set and left NULL together; NULL for a version the owner made.
+  idempotencyKey    String?   @map("idempotency_key")
+  requestSha256     String?   @map("request_sha256") @db.Char(64)
 
   docs WikiPlanDoc[]
 
   @@unique([id, ownerId], map: "wiki_plan_id_owner_id_key")
   @@unique([spaceId, version], map: "wiki_plan_space_id_version_key")
+  @@unique([ownerId, idempotencyKey], map: "wiki_plan_owner_idempotency_key")
   @@map("wiki_plan")
 }
 
@@ -6341,6 +6348,53 @@ model WikiPlanProposal {
   @@map("wiki_plan_proposal")
 }
 
+/// A job of a space's plan (migration 0338, contract `plan.jobs`): a draft, a revision or a build, run as
+/// a task of the space's hidden «Wiki maintenance» list, which the server makes from a fact — the space's
+/// creation, or its owner asking — and never from a clock. At most one draft or revision of a space is
+/// not ended (a partial unique index the migration makes).
+model WikiPlanJob {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  spaceId      String    @map("space_id") @db.Uuid
+  ownerId      String    @map("owner_id") @db.Uuid
+  space        WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_plan_job_space_fkey")
+  /// `draft` | `revise` | `build`.
+  kind         String
+  /// `space_created` | `owner`: the fact that asked for it.
+  trigger      String
+  /// A revision's instructions: the owner's words.
+  instructions String?
+  /// `queued` (behind an unfinished task of the list) | `held` | `made` (its task exists) | `ended`.
+  state        String
+  /// `no_maintenance_workspace` | `maintenance_provider_unusable`, since `heldAt`; set while held.
+  heldReason   String?   @map("held_reason")
+  heldAt       DateTime? @map("held_at") @db.Timestamptz(3)
+  /// The task it made. A history reference with no foreign key, as a maintenance run's is.
+  taskId       String?   @unique(map: "wiki_plan_job_task_id_key") @map("task_id") @db.Uuid
+  madeAt       DateTime? @map("made_at") @db.Timestamptz(3)
+  /// The session that runs it, when it started, and the gate round it is on.
+  sessionId    String?   @map("session_id") @db.Uuid
+  startedAt    DateTime? @map("started_at") @db.Timestamptz(3)
+  attempt      Int?
+  endedAt      DateTime? @map("ended_at") @db.Timestamptz(3)
+  /// `succeeded` | `failed`.
+  outcome      String?
+  /// The plan version a job that succeeded stored.
+  version      Int?
+  /// The gate's errors on the last round of a job that failed: `[{ check, path, message }, …]`.
+  errors       Json?
+  error        String?
+  /// What the run reported: documents, rounds, tokens, seconds.
+  report       Json?
+  /// The last draft a job that failed had, for its owner to read.
+  draft        Json?
+  requestedByUserId String?  @map("requested_by_user_id") @db.Uuid
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@index([spaceId, createdAt], map: "wiki_plan_job_space_id_created_at_idx")
+  @@map("wiki_plan_job")
+}
+
 /// A document of a space (migration 0326, contract `docs`, criterion 9): written section by section from
 /// the plan its owner confirmed, every footnote pointing at a first-hand original with its verbatim quote.
 /// Named by the plan document's slug, stable from version to version. A view: never pushed, never a
@@ -6389,6 +6443,8 @@ model WikiDocSection {
   repoSha        String   @map("repo_sha")
   model          String?
   stats          Json     @default("{}")
+  /// `[{ material, kind, ref, action, into, reason }, …]`: what became of each piece of its material (0337).
+  dispositions   Json     @default("[]")
   generatedAt    DateTime @default(now()) @map("generated_at") @db.Timestamptz(3)
   /// A sentence of it was withdrawn: the next maintenance run writes it again.
   staleAt        DateTime? @map("stale_at") @db.Timestamptz(3)

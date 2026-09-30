@@ -17721,6 +17721,7 @@ button.project-open-item-action:disabled {
 .wk-setup-d { margin-top: 5px; font-size: 12px; line-height: 1.5; color: var(--text-3); }
 .wk-setup-limit { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
 .wk-setup-limit .ant-input-number { width: 72px; }
+.wk-setup-days { margin-top: 8px; }
 .wk-setup-refusal { margin: 14px 0 0; }
 @media (max-width: 600px) {
   .wk-maint-off { grid-template-columns: minmax(0, 1fr) auto; }
