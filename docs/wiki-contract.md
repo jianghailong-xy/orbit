@@ -1271,10 +1271,10 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
 
 ## 22. 文档：按确认的 plan 逐节写，脚注引一手原文（判据 9 第 2 版）
 
-JSON 里是 `docs`；迁移 `0326_wiki_docs`；服务端在 `src/apiserver/src/wiki/wiki-docs.ts`（写入、核对、分类、读）与
-`wiki-doc-withdrawal.ts`（撤句），user 门在 `wiki/wiki-docs.controller.ts`，runner 门在 `runner-api/runner-wiki-docs.controller.ts`；
-共享类型在 `src/shared/src/wikiDocs.ts`，runner-go 在 `wiki_docs.go`，OrbitKit 在 `Models/WikiDocs.swift`。按节取材与写作
-（`orbit wiki docs build`）和客户端各有自己的任务，照本节写。
+JSON 里是 `docs`；迁移 `0326_wiki_docs` 与 `0337_wiki_doc_dispositions`；服务端在 `src/apiserver/src/wiki/wiki-docs.ts`（写入、
+核对、分类、读）、`wiki-docs-material.ts`（一节的服务端材料）与 `wiki-doc-withdrawal.ts`（撤句），user 门在 `wiki/wiki-docs.controller.ts`，
+runner 门在 `runner-api/runner-wiki-docs.controller.ts`；共享类型在 `src/shared/src/wikiDocs.ts`，runner-go 在 `wiki_docs.go`（类型与
+门）和 `wiki_docs_build.go`（`orbit wiki docs build`，22.11），OrbitKit 在 `Models/WikiDocs.swift`。客户端有自己的任务，照本节写。
 
 ### 22.1 四张表
 
@@ -1294,7 +1294,8 @@ JSON 里是 `docs`；迁移 `0326_wiki_docs`；服务端在 `src/apiserver/src/w
   别的会话 `WIKI_NOT_MAINTENANCE_SESSION`，不带会话头 400，别的 owner 的 space 404。user 门没有写文档的路由。
 - **次序**：写入者 → `requireConfirmedPlan`（没有已确认的 plan 就 `WIKI_PLAN_UNCONFIRMED`，只有草稿也算没有）→ 这一篇在已确认的
   plan 里（否则 404）→ 请求的 `planVersion` 就是已确认的版本（否则 `WIKI_PLAN_STALE`）→ 形状 → 核对 → 一个事务写入。
-- **请求**：`{ planVersion, repoSha, model?, sections: [{ key, materialSha256, markdown, footnotes }] }`。一次最多 20 节（整篇）。
+- **请求**：`{ planVersion, repoSha, model?, sections: [{ key, materialSha256, markdown, footnotes, dispositions? }] }`。一次最多 20 节（整篇）。
+  `dispositions` 是这一节材料的处置留痕（22.9）。
   - `repoSha`：这次读仓库时 origin/main 的提交，40 位小写 hex，必填；写到的每一节都记下它。
   - 仓库脚注（`design_doc` / `code` / `contract`）：`{ kind, path, sha, lines: { start, end }, section?, symbol?, quote?, excerpt?, verified, viaEntryId? }`，
     `sha` 必填（7–64 位 hex），`verified` 是 runner 在那个 sha 上自己核对的结果。
@@ -1387,3 +1388,76 @@ JSON 里是 `docs`；迁移 `0326_wiki_docs`；服务端在 `src/apiserver/src/w
 - 不能当出处：没有任何出处种类指向文档、节、句子或脚注，引用它们一律 `WIKI_SOURCE_UNRESOLVED`；脚注的种类（`design_doc` 等）本身
   也不是出处种类，写进条目的出处是 `WIKI_SCHEMA`。
 - agent 的 `wiki_search` / `wiki_get` 只返回条目。没有读写文档的 MCP 工具。
+
+### 22.9 处置留痕：每条材料最后怎样了（迁移 0337）
+
+- 写入的每一节可以带 `dispositions`（契约 `docs.dispositions`，最多 `rules.dispositionsPerSection` = 200 条），逐条是
+  `{ material, kind, ref, action, into, reason }`：
+  - `material`：runner 给这条材料在本节里的编号（`D1` 设计文档章节、`C2` 代码、`K1` 契约、`S3` 记录），字母开头、最多 16 个字符，本节内不重复；
+  - `kind`：仓库种类或记录种类（与脚注相同的闭集）；`ref`：仓库材料是 `path#L起-止`，记录是记录 id；
+  - `action`（`docs.dispositionActions`）：`adopt` 归并时采用、交给写作；`merge` 归并时并到本节另一条（`into` 必填，指本节留痕里的另一条）、
+    和它一起交给写作；`drop` 归并时舍弃、写作看不到；`over_cap` runner 没交给模型——本节材料满了；`filtered` runner 按规则拿掉——平台模板消息、
+    或与本节另一条原文相同；
+  - `reason`：理由，不能为空，最多 `rules.reasonMaxChars` = 500 字；`into` 只有 `merge` 才有，其余为 null。
+- 形状不对同样是 `WIKI_DOC_INVALID`，错误路径到 `sections[i].dispositions[j].<字段>`，一次列全。
+- 存在 `wiki_doc_section.dispositions`（JSONB 数组，CHECK 为数组），理由和其他文字一样先过脱敏器；节被重写时随新行一起换，节不变时原样留着。
+  读文档（user 门与 runner 门）时每节带回 `dispositions`；还没写的节是空数组。
+
+### 22.10 runner 门的两个读：一节的服务端材料，和写成的文档
+
+- **`GET /api/runner/wiki/spaces/:id/docs/:slug/material?section=<key>`**（`docs.reads.material`，维护会话）：`{ spaceId, slug, section,
+  planVersion, condition, entries, records, unresolved }`，是这一节材料里只有数据库才有的那一半（`docs.material`）。
+  - 没有 `section` 400；plan 这篇没有这一节、或没有这篇 404；没有已确认的 plan `WIKI_PLAN_UNCONFIRMED`；别的会话 `WIKI_NOT_MAINTENANCE_SESSION`，
+    不带会话头 400，别的 owner 的 space 404。
+  - `condition`：已确认 plan 里这一节的会话条件，项目带现在的标题；没有会话条件时为 null，其余都空。
+  - **条目引路**：space 里 active、锚点既非 changed 也非 missing 的条目，关键词（标题、摘要、字段、别名里出现，每个 3 分）或锚点路径（在
+    `anchorPaths` 之下，2 分）命中了才要；主题再加 1，种类再加 1；分高的在前，同分取新，最多 `entriesPerSection` = 6 条。每条取当前修订的
+    live 出处，按引用顺序最多 `sourcesPerEntry` = 3 条：条目只引路，材料是它引的一手记录（`via` 带条目 id、标题、种类和出处的引文）。
+  - **按条件检索**：同时有项目和关键词时，这些项目的协调会话与其任务的会话里、时间窗（`since` 当天起，`until` 当天止）内、含任一关键词（不分
+    大小写）的 owner 原话（`isOwnerTurn`），和这些项目的任务评论；命中关键词多的在前、同样多取新，最多 `ownerTurnsPerSection` = 6 条和
+    `commentsPerSection` = 4 条。
+  - **每条记录**都经 `WikiService.sourceText` 读出，用共享脱敏器加 owner 的 workspace.env 值脱敏——和脚注核对读到的是同一段文字（22.3）。
+    不超过 `excerptChars` = 1100 字的整条给出；更长的给出它周围的 1100 字（以出处引文的位置为准，没有就以第一个关键词为准，前面留三分之一），
+    `chars` 是这段文字在脱敏后全文里的码点区间——正是记录脚注的 `chars`，所以从这段里原样抄的引文，服务端核对时找得到。另带 `length`
+    （全文码点数）、证据分量 `weight`（`docs.material.weights`：`decision` owner 原话 / 回答 / 决定 / 评论，`merge` 合并回执与交付评论，`output`
+    命令与工具输出，`error` 报错，`other` 其余）、`ownerWords`、时间、所在会话 / 任务 / 项目的标题、note 的路径。同一条记录只给一次。
+  - 条目引的出处若已不是本账号的记录（被删、或别人的），不读、不给，列在 `unresolved`。
+- **`GET /api/runner/wiki/spaces/:id/docs/:slug`**（`docs.reads.writerDoc`，维护会话）：和 user 门的文档页是同一个回答。维护作业写概述时，
+  没重写的节从这里读它们写成的样子。
+
+### 22.11 `orbit wiki docs build`：逐节取材、归并、写作、核对仓库引文
+
+```
+orbit wiki docs build --space <id> [--doc <slug>] [--section <key>] [--repo <path>] [--model MODEL] [--json]
+```
+
+维护会话的命令，没有对应的 MCP 工具（`docs.build`）。前置条件照 `docs.build.precondition` 逐字写在描述开头。
+
+1. **读**：已确认的 plan（`GET …/plan`）与已写的状态（`GET …/docs`）；在 `--repo`（默认当前目录的 checkout）里 `git fetch origin main`，
+   此后一律读 origin/main 这时指向的提交（`repoSha`）。fetch 失败什么都不写。
+2. **取材**（`docs.build.repository`）：设计文档章节——从匹配的标题行到下一个同级或更高级标题；代码符号——定义连同上面的注释，到花括号合上
+   为止（Go 方法按接收者、TS 方法按所在类找）；没列符号的代码文件——文件头注释和与本节字眼匹配的至多 3 个声明；目录——其下前 4 个文件；契约
+   ——整个文件。都在行边界上截到限额，带文件、行号。有会话条件的节再取 22.10 的服务端材料。
+3. **机械清理**：项目结算卡片发出的复查模板消息（以 `About “` 开头、含 `Orbit has not recorded it done` 的 turn）不是 owner 原话，拿掉；与本节
+   另一条原文相同的只留第一条。二者在留痕里记为 `filtered`。
+4. **上限**：一节交给模型的材料至多 `materialMaxChars` = 22000 字（每条另算 120 字的标题）；讲机制的节（概念、流程、接口、数据、运维）先取
+   设计文档与代码，其余节先取记录；第一条不论多长都给。放不下的记为 `over_cap`。
+5. **指纹**：对本节在 plan 里的定义（标题、类别、covers、篇幅、来源条件——项目只按 id）和取到的全部材料（含被拿掉的）算 sha256；不含提交本身，
+   所以没动到本节所读内容的新提交不改指纹。和 `GET …/docs` 里存的相同且没被撤句，就跳过，不调模型。
+6. **归并**（一次干净调用）：模型对交给它的每条写「采用 / 合并到 x / 舍弃」和理由，再写 3–8 条现状要点；证据分量决定 > 合并记录 > 命令输出 >
+   报错，同级取最新；讲机制以代码为准。没写处置的按采用，并到不存在的条目按采用，都在理由里说明。
+7. **写作**（一次干净调用）：只喂采用和合并的材料。每个事实句各自在句末标材料编号，决策、坑、约定段也逐句标；契约与设计文档的缩写第一次
+   出现先说明；每个编号都要附一行逐字引文（不翻译、不拼接、不加省略号）。只在段末标一次、前面有事实句没标的段落，带着问题再问一次，新稿
+   更好才用。编号换成按首次出现的 `[n]`，不属于本节材料的编号去掉。
+8. **核对引文**：仓库引文在该提交的文件里找（折叠规则同 22.3，只是 runner 不做 NFC），先在材料那几行里找，找不到再在全文件找；`lines` 是找到的行、
+   `excerpt` 是那几行，`verified` 如实写；记录引文在服务端给的那段文字里先找一遍（服务端会再核）。有编号的引文缺了或找不到，就只问这几个
+   编号一次，补上的引文再核一遍。
+9. **提交**：每写完一节就提交一次（带 `dispositions`），写入是逐节的检查点；一篇的写入一次只发一个。门的每个调用都经
+   `Transport.doWiki`（`wiki_retry.go`）：读随时可以重发；写也可以——同一节同一指纹落两次，第二次是 `unchanged`，什么都不多记。
+10. **概述最后写**：其余节写完后再写概述节。它的材料是这些节写成的正文（本轮写的用本地结果，没重写的从 22.10 的文档读），脚注换成
+    `[F1]`…，模型只能沿用这些编号；概述的脚注照抄被引那条的原文与引文，仓库引文在本轮的提交上再核一遍。概述的指纹是它的定义加其余各节
+    现在的指纹，所以任何一节重写，概述就跟着重写；它没有归并，留痕为空。
+11. **模型**：一律经 `askWikiModel`——`wiki_verify.go` 的干净启动（`--bare`、空 HOME 与配置目录、不挂工具和 MCP、不存会话、环境白名单、
+    apiKeyHelper），不开 thinking（`CLAUDE_CODE_EFFORT_LEVEL=unset` 加 `MAX_THINKING_TOKENS=0`）；开写前等 `/health` 返回 200（至多 3 分钟）；
+    失败的调用隔 10 秒、30 秒各重试一次；碰到第一个 401 就停，不再发任何调用。一篇的节至多 4 个同时在写。
+12. **退出码**：有节没写成就非 0，下次运行再试；`--json` 输出每节的结果、材料处置计数、脚注数、本地找到引文的数、调用数、token 与耗时。
