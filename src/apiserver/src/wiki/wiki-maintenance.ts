@@ -574,7 +574,8 @@ export class WikiMaintenance {
    * One page of dossiers: the facts after the start — the later of `after` and the watermark — that
    * are at least the grace old, oldest first, until the page holds `limit` sessions. Each session they
    * name gets its dossier, or, for a batch project, a share of the batch's counts; the page's token is
-   * the position of the last fact it covered. What it hands out is recorded: the furthest position
+   * the position of the last fact it covered, and its `from` the position it started after — where a run
+   * that keeps none of the page leaves the cursor. What it hands out is recorded: the furthest position
    * (what an advance may reach) and each dossier's sources and hash.
    */
   async dossierPage(ownerId: string, spaceId: string, options: DossierPageOptions = {}): Promise<WikiDossierPage> {
@@ -630,6 +631,7 @@ export class WikiMaintenance {
 
     return {
       spaceId,
+      from: encodeCursorToken(spaceId, start),
       cursor: encodeCursorToken(spaceId, end),
       more,
       facts: covered,
