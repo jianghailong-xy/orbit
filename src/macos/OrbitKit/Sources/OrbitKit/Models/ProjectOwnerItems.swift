@@ -181,6 +181,10 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     public let actions: [ProjectOpenItemAction]
     /// What was asked, for a `COORDINATOR_QUESTION`; nil for every other kind.
     public let question: CoordinatorQuestion?
+    /// The request a `START_REQUEST` carries — what the "Start this project?" card is drawn from
+    /// (`StartProject.swift`) — and nil for every other kind, for a server that predates start
+    /// requests, and for a request this build cannot read.
+    public let startRequest: ProjectStartRequest?
     /// What the item's payload holds, as the rows its card draws (§7.5); nil when the payload is
     /// not a shape this build reads — an item an older build opened, a pause, a question — which
     /// leaves the card drawing the server's own sentence, as it did before the rows existed.
@@ -195,7 +199,7 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                 sessionId: String? = nil, promotionId: String? = nil,
                 fuseEpisodeId: String? = nil, delivery: Delivery? = nil,
                 actions: [ProjectOpenItemAction] = [], question: CoordinatorQuestion? = nil,
-                facts: OpenItemFacts? = nil) {
+                startRequest: ProjectStartRequest? = nil, facts: OpenItemFacts? = nil) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
@@ -212,6 +216,7 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         self.delivery = delivery
         self.actions = actions
         self.question = question
+        self.startRequest = startRequest
         self.facts = facts
     }
 
@@ -234,6 +239,10 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         delivery = try c.decodeIfPresent(Delivery.self, forKey: .delivery)
         actions = try c.decodeIfPresent([ProjectOpenItemAction].self, forKey: .actions) ?? []
         question = try c.decodeIfPresent(CoordinatorQuestion.self, forKey: .question)
+        // Read with `try?`: a request this build cannot read is an item without one — the card it
+        // would have drawn is not drawn — rather than an open-items read that fails to decode.
+        startRequest = (try? c.decodeIfPresent(ProjectStartRequest.self,
+                                               forKey: .startRequest)) ?? nil
         facts = try c.decodeIfPresent(OpenItemFacts.self, forKey: .facts)
     }
 }
@@ -327,16 +336,24 @@ public struct OpenItemFacts: Codable, Equatable, Sendable {
 public struct ProjectOpenItemsView: Codable, Equatable, Sendable {
     public let needsYou: [ProjectOpenItemRow]
     public let withCoordinator: [ProjectOpenItemRow]
+    /// The coordinator's open request to start the project (`START_REQUEST`), or nil — a project
+    /// holds at most one. Served beside the two groups rather than in `needsYou`, because a build
+    /// that predates the kind draws every owner row it cannot name as an escalation. Absent from a
+    /// server that predates start requests.
+    public let startRequest: ProjectOpenItemRow?
 
-    public init(needsYou: [ProjectOpenItemRow] = [], withCoordinator: [ProjectOpenItemRow] = []) {
+    public init(needsYou: [ProjectOpenItemRow] = [], withCoordinator: [ProjectOpenItemRow] = [],
+                startRequest: ProjectOpenItemRow? = nil) {
         self.needsYou = needsYou
         self.withCoordinator = withCoordinator
+        self.startRequest = startRequest
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         needsYou = try c.decodeIfPresent([ProjectOpenItemRow].self, forKey: .needsYou) ?? []
         withCoordinator = try c.decodeIfPresent([ProjectOpenItemRow].self, forKey: .withCoordinator) ?? []
+        startRequest = (try? c.decodeIfPresent(ProjectOpenItemRow.self, forKey: .startRequest)) ?? nil
     }
 }
 

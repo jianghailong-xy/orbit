@@ -1525,6 +1525,16 @@ final class ConsoleModel {
         guard let session, session.id == sessionID else { return }
         serverStatus = session.effectiveRunStatus
         serverCapabilities = session.capabilities
+        // What this row says it is waiting on the owner for moves before any card here does: a
+        // coordinator asking to start its project lands on its row as a count (`waitingKind`
+        // START_REQUEST), and the card that asks it is drawn from the read this kicks.
+        let waiting = "\(session.pendingApprovals ?? 0)|\(session.waitingKind?.rawValue ?? "")"
+        if waiting != waitingSignal {
+            waitingSignal = waiting
+            if projectID != nil {
+                Task { [weak self] in await self?.refreshRulerQuestions(force: true) }
+            }
+        }
         // A run ending its turn moves this SESSION's row, not the task, so no task event re-reads
         // the confirmation. Web re-reads when the row moves for exactly this reason, and the same
         // change is what makes a report arrive: without it the card would wait for the next poll.
@@ -2834,15 +2844,23 @@ final class ConsoleModel {
     /// turn saying what should change, with the plan carried in front of it. Unlike the three above
     /// it answers nothing — the agent has finished writing the criteria and is waiting — so no door
     /// is named here. The card stays until then, with `Start the project` still live.
-    func startPlanChangeReply(_ standing: StandardSetConfirmationStanding) {
+    func startPlanChangeReply(_ standing: StandardSetConfirmationStanding,
+                              question: SettlementQuestion = .confirmation) {
+        startPlanChangeReply(criteriaDigest: standing.currentVersion.digest, question: question)
+    }
+
+    /// The same, for the version a card names by its seal — the start card talks about the criteria
+    /// the coordinator asked to start on — and in the words of the card that armed it: what should
+    /// change before it starts, about the new criteria, or what done should mean instead.
+    func startPlanChangeReply(criteriaDigest: String, question: SettlementQuestion) {
         let criteria = projectCriteria.sorted { $0.ordinal < $1.ordinal }.map(\.text)
         replyContext = QuestionReply(
             target: .planChange(context: AcceptanceConfirmations.planChangeContext(
                 projectTitle: projectTitle,
-                criteriaDigest: standing.currentVersion.digest,
-                criteria: criteria)),
+                criteriaDigest: criteriaDigest,
+                criteria: criteria, question: question)),
             banner: AcceptanceConfirmations.planChangePrefix + projectTitle,
-            placeholder: AcceptanceConfirmations.planChangePlaceholder)
+            placeholder: AcceptanceConfirmations.planChangePlaceholder(for: question))
     }
 
     /// Talk about an item that became the owner's rather than pressing anything: the next composer
@@ -2933,16 +2951,40 @@ final class ConsoleModel {
     /// The project's status, as the same read publishes it: one of the three facts the card's
     /// condition turns on.
     private var projectStatus: String?
-    /// Whether Orbit is handing this project's tasks out, as the same read publishes it: what the
-    /// card's meta line says "started" off, and nil while no read has answered — which the line
-    /// says rather than guessing "not started" at a project that is dispatching work.
+    /// Whether the project has been started — its own `startedAt`, as the same read publishes it
+    /// (`ProjectCriteriaDocument.started`), and not Automatic, which is how a started project runs
+    /// rather than whether it does. The one fact the three settlement cards turn on: an unstarted
+    /// project is asked by the start card, a started one by the confirmation cards. Nil while no
+    /// read has answered, which the meta line says rather than guessing "not started".
     private(set) var projectStarted: Bool?
     /// How many tasks the same read says the project holds, and the fourth fact the card's
     /// condition turns on: a plan with nothing filed under it yet is one nobody can start. None
     /// until a document answers, which cannot hold the card up — a project whose status nobody has
     /// read is not OPEN either — and `ProjectCriteriaDocument.taskCount` is where a document that
     /// did not say the count is read as none.
-    private var projectTaskCount = 0
+    private(set) var projectTaskCount = 0
+    /// The coordinator's request the start card in this conversation is drawn for — kept while the
+    /// card is on screen, so a request that stops standing leaves its card stale in place rather
+    /// than blank (web's `delivered`), and let go of once the project is started.
+    private(set) var startRequestRow: ProjectOpenItemRow?
+    /// The project's plan, as the start card says it in one line (`StartProject.planView`). Read only
+    /// while a start card is on screen.
+    private(set) var projectGraph: ProjectDependencyGraph?
+    /// The owner's edits to the start card's settings, by the request they were made on — a new
+    /// request arrives with its own suggestions (web's `edited`). Kept here rather than in the
+    /// card: a row the List recycles is a new view, and edits it held would be gone.
+    private var startDrafts: [String: StartSettingsDraft] = [:]
+    /// What a press on the change card confirmed — "1 new, 1 stricter" — by the seal it signed, for
+    /// the receipt of that confirmation. Kept by this console only: once a set is confirmed nothing
+    /// is left changed, so the read cannot say it afterwards (web's `confirmedChangesKey`).
+    private var confirmedChangeSummaries: [String: String] = [:]
+    /// Bumped to open this conversation's "Tasks created here" list from elsewhere on screen — the
+    /// start card's "View tasks ›" (web's `openRequest`).
+    private(set) var createdTasksOpenTick = 0
+    /// What this session's row last said about waiting on the owner (`pendingApprovals` and
+    /// `waitingKind`): a change is what makes the project's cards worth reading again — a
+    /// coordinator asking to start its project lands on this row as a count before anything else.
+    private var waitingSignal: String?
 
     /// The task whose run this conversation is, adopted from the session payload. Nil for an
     /// ordinary conversation, and then nothing below ever asks about a confirmation: the card is
@@ -3020,6 +3062,13 @@ final class ConsoleModel {
                 return nil
             case .acceptanceConfirmation:
                 return waiting(AcceptanceConfirmations.isOpen(acceptanceConfirmation), question: true)
+            // The start card while its request stands, and the change card while the set it lists
+            // is unconfirmed: each by its own standing, so a card left on screen to explain itself
+            // is not pointed at.
+            case .startProject(let itemID):
+                return waiting(StartProject.isOpen(startStanding(itemID)), question: true)
+            case .criteriaChange:
+                return waiting(CriteriaChanges.isOpen(acceptanceConfirmation), question: true)
             case .evidenceDecision(let taskID, let evidenceRevision):
                 return waiting(EvidenceDecisions.isOpen(evidenceStanding(taskID, evidenceRevision)),
                                question: true)
@@ -3178,7 +3227,7 @@ final class ConsoleModel {
             projectCriteria = document.acceptanceCriteriaItems ?? []
             projectDocumentTitle = document.title
             projectStatus = document.status
-            projectStarted = document.coordinatorEnabled
+            projectStarted = document.started
             projectTaskCount = document.taskCount
         }
         // The project's two owner cards. Same rule as the four above: each is independent, a read
@@ -3242,6 +3291,19 @@ final class ConsoleModel {
         if let merged = try? await api.mergedPromotions(projectID: projectID) {
             adoptPromotionReceipts(merged)
         }
+        // The start card: asked only once the coordinator has asked to start this project and the
+        // plan passed Orbit's ready check — the open START_REQUEST the open-items read above serves
+        // — and never inferred from the project holding a task.
+        adoptStartRequest()
+        if startRequestRow != nil, let graph = try? await api.projectDependencyGraph(projectID) {
+            projectGraph = graph
+        }
+        // And the two a STARTED project is asked by: what changed since the owner confirmed its
+        // criteria, where the server can say — and the whole set, for one nobody ever confirmed.
+        if criteriaChangeHeld {
+            reopenConfirmationForANewVersion()
+            deliver(.criteriaChange)
+        }
         if settlementHeldOnConfirmation {
             reopenConfirmationForANewVersion()
             deliver(.acceptanceConfirmation)
@@ -3251,26 +3313,106 @@ final class ConsoleModel {
         lastRulerRead = Date()
     }
 
-    /// Whether this project is waiting to be started on a plan nobody has confirmed.
+    /// Whether this project is waiting to be started — the coordinator's request to start it,
+    /// adopted from the open-items read (`StartProject.live`): an unstarted project with an open
+    /// `START_REQUEST` this build can read.
     ///
-    /// Four facts and no fifth: the project is OPEN, it states criteria, it holds at least one
-    /// task, and the set standing now has not been confirmed. `satisfied` is deliberately absent —
+    /// The card is delivered by the request's own item, so a newer request replaces the card drawn
+    /// for an older one, with its own suggestions. A request that stops standing leaves its card —
+    /// the reader may be halfway through it — stale in place (`startStanding`). A project started,
+    /// here or at another end, takes it away: what happened is the receipt the confirmation read
+    /// draws where it happened, and there is nothing left to press.
+    private func adoptStartRequest() {
+        if let live = StartProject.live(openItems: openItems, started: projectStarted) {
+            if let old = startRequestRow, old.itemId != live.itemId {
+                let id = DeliveredDecisionCard(kind: .startProject(itemID: old.itemId)).id
+                decisionCards.removeAll { $0.id == id }
+            }
+            startRequestRow = live
+            deliver(.startProject(itemID: live.itemId))
+        } else if projectStarted == true, let old = startRequestRow {
+            let id = DeliveredDecisionCard(kind: .startProject(itemID: old.itemId)).id
+            decisionCards.removeAll { $0.id == id }
+            startRequestRow = nil
+            projectGraph = nil
+        }
+    }
+
+    /// Where the start card drawn for `itemID` stands right now, re-derived from the reads on every
+    /// call — live, gone, or unread (`StartProject.standing`).
+    func startStanding(_ itemID: String) -> StartProject.Standing {
+        guard let row = startRequestRow, row.itemId == itemID, let request = row.startRequest
+        else { return .gone }
+        return StartProject.standing(itemID: itemID, request: request, openItems: openItems,
+                                     confirmation: acceptanceConfirmation, started: projectStarted)
+    }
+
+    /// The start card's settings as the owner has left them: their edits on this request, or the
+    /// coordinator's suggestion untouched.
+    func startDraft(for row: ProjectOpenItemRow) -> StartSettingsDraft {
+        if let draft = startDrafts[row.itemId] { return draft }
+        guard let request = row.startRequest else {
+            return StartSettingsDraft(line: .projectBranch, automatic: true, maxConcurrentTasks: 3)
+        }
+        return StartSettingsDraft(request.settings)
+    }
+
+    func setStartDraft(_ draft: StartSettingsDraft, for itemID: String) {
+        startDrafts[itemID] = draft
+    }
+
+    /// Whether a STARTED project's criteria moved since the owner confirmed them, and the server
+    /// can say what moved — the change card's question (`CriteriaChanges.held`), read off the same
+    /// two documents as the card below.
+    private var criteriaChangeHeld: Bool {
+        CriteriaChanges.held(acceptanceConfirmation, projectStatus: projectStatus,
+                             criteriaCount: projectCriteria.count, taskCount: projectTaskCount,
+                             started: projectStarted)
+    }
+
+    /// Open this conversation's "Tasks created here" list — the start card's "View tasks ›" — and
+    /// say whether there was one to open.
+    @discardableResult
+    func openCreatedTasks() -> Bool {
+        guard let tasks = createdTasks.snapshot, SessionCreatedTasksCopy.line(tasks) != .hidden
+        else { return false }
+        createdTasksOpenTick &+= 1
+        return true
+    }
+
+    /// What a press on the change card confirmed, for the receipt of the confirmation it made — nil
+    /// for any other record, whose read says only the seal.
+    func confirmedChanges(_ confirmation: RecordedStandardSetConfirmation) -> String? {
+        confirmedChangeSummaries[confirmation.criteriaDigest]
+    }
+
+    /// Whether a STARTED project is running on a plan nobody has confirmed — the older confirmation
+    /// card's question, which is all it asks now.
+    ///
+    /// A project nobody has started is not asked here. It used to be, as soon as it held one task:
+    /// the count was this condition's guess at when a plan was ready, and it put `Start the
+    /// project` in front of a coordinator still deciding how to split the work. It is asked by the
+    /// start card now, and only once its coordinator says the plan is ready (`adoptStartRequest`).
+    /// And a started project whose set moved is asked by the change card while the server can say
+    /// what moved (`criteriaChangeHeld`) — this card is what is left for one it cannot.
+    ///
+    /// The facts: the project is OPEN, it states criteria, it holds at least one task, it has been
+    /// started, and the set standing now has not been confirmed. `satisfied` is deliberately absent —
     /// waiting for every criterion to be met by its work put the question at the moment it could
-    /// only be agreed with, because answering "no" then annuls work already done; asked here the
-    /// answer is cheap, the plan is written and nothing has run. Web reads the same four off the
-    /// same two documents (`settlementHeldOnConfirmation` in `AcceptanceConfirmationCard.tsx`).
+    /// only be agreed with, because answering "no" then annuls work already done. Web reads the same
+    /// facts off the same two documents (`settlementHeldOnConfirmation` in
+    /// `AcceptanceConfirmationCard.tsx`).
     ///
-    /// THE TASK COUNT IS THE FOURTH BECAUSE "START" IS A VERB THAT NEEDS AN OBJECT. `project_create`
-    /// returns before the coordinator has filed anything, and this condition used to hold from that
-    /// moment: the plan is written and there is nothing to hand out, so the card offered to start a
-    /// project whose every press would have started nothing. `projectTaskCount` is read off the same
-    /// document (`_count.tasks`), and a document that did not say it is read as none for the same
-    /// reason `AcceptanceConfirmations.answerable` refuses a standing it does not have: a gate that
-    /// cannot establish its fact stays shut.
+    /// The task count stays among them: a project with nothing filed under it is not one whose plan
+    /// anybody is running. `projectTaskCount` is read off the same document (`_count.tasks`), and a
+    /// document that did not say it is read as none for the same reason
+    /// `AcceptanceConfirmations.answerable` refuses a standing it does not have: a gate that cannot
+    /// establish its fact stays shut.
     private var settlementHeldOnConfirmation: Bool {
         guard AcceptanceConfirmations.answerable(acceptanceConfirmation) else { return false }
         guard projectStatus == "OPEN" else { return false }
         guard !projectCriteria.isEmpty else { return false }
+        guard projectStarted == true, !criteriaChangeHeld else { return false }
         return projectTaskCount > 0
     }
 
@@ -3288,6 +3430,8 @@ final class ConsoleModel {
               standing != signed else { return }
         confirmedHereDigest = nil
         closedCards.remove(DeliveredDecisionCard(kind: .acceptanceConfirmation).id)
+        // The change card is the same question about a started project's newer version.
+        closedCards.remove(DeliveredDecisionCard(kind: .criteriaChange).id)
     }
 
     /// Put a question into this conversation once, anchored where OrbitKit's rule puts it: where it
@@ -3382,8 +3526,15 @@ final class ConsoleModel {
     private func adoptAcceptanceReceipt() {
         guard let receipt = AcceptanceConfirmations.receipt(standing: acceptanceConfirmation)
         else { return }
-        guard !closedCards.contains(receipt.id),
-              !decisionCards.contains(where: { $0.id == receipt.id }) else { return }
+        guard !closedCards.contains(receipt.id) else { return }
+        // One record, the newest — the one the read publishes, as the browser draws it. A later
+        // confirmation (the new criteria confirmed after the start) takes the older record's place
+        // at its own moment, rather than being left undrawn behind it.
+        if let drawn = decisionCards.firstIndex(where: { $0.id == receipt.id }) {
+            guard case .acceptanceConfirmationReceipt(let confirmed) = decisionCards[drawn].kind,
+                  confirmed != receipt.confirmation else { return }
+            decisionCards.remove(at: drawn)
+        }
         decisionCards.append(DeliveredDecisionCard(
             kind: .acceptanceConfirmationReceipt(confirmed: receipt.confirmation),
             placement: .at(receipt.moment)))
@@ -3570,6 +3721,53 @@ final class ConsoleModel {
             acceptanceConfirmation = standing
             confirmedHereDigest = digest
             close(.acceptanceConfirmation)
+        } catch {
+            statusMessage = "That confirmation was not recorded — \(APIClient.failureReason(error))."
+        }
+        await refreshRulerQuestions(force: true)
+    }
+
+    /// Start the project on the request the start card was drawn for: the criteria confirmed by the
+    /// seal the coordinator asked about, and every setting as the card shows it, in one write
+    /// (`POST /projects/:id/start`, `StartProject.body`).
+    ///
+    /// Sent only while the request still stands: a seal that moved, or a request replaced, starts
+    /// nothing a reader agreed to — and the door refuses the same things with a 409 that writes
+    /// nothing, which the re-read below explains on the card. What the start leaves is drawn from
+    /// the reads that follow it — the receipt, with the settings it recorded, and the project now
+    /// started — and not written here.
+    func startProject(itemID: String) async {
+        guard let projectID, let row = startRequestRow, row.itemId == itemID,
+              let request = row.startRequest, startStanding(itemID) == .live else { return }
+        let draft = startDraft(for: row)
+        guard draft.complete else { return }
+        do {
+            try await api.startProject(projectID: projectID,
+                                       StartProject.body(request: request, draft: draft,
+                                                         requestId: itemID))
+            close(.startProject(itemID: itemID))
+        } catch {
+            statusMessage = "\(StartProject.notRecorded) — \(APIClient.failureReason(error))."
+        }
+        await refreshRulerQuestions(force: true)
+    }
+
+    /// Confirm the criteria a started project moved to — the change card's press. The same door as
+    /// the confirmation above, which for a started project only confirms; what this press adds is
+    /// what the version changed, kept for the receipt under the seal it signed, because the read
+    /// can no longer say it once the set is confirmed.
+    func confirmCriteriaChange() async {
+        guard let projectID, let standing = acceptanceConfirmation,
+              CriteriaChanges.answerable(standing),
+              let changes = standing.changesSinceConfirmed else { return }
+        let digest = standing.currentVersion.digest
+        do {
+            let next = try await api.confirmAcceptanceCriteria(projectID: projectID,
+                                                               criteriaDigest: digest)
+            confirmedChangeSummaries[digest] = CriteriaChanges.counts(changes)
+            acceptanceConfirmation = next
+            confirmedHereDigest = digest
+            close(.criteriaChange)
         } catch {
             statusMessage = "That confirmation was not recorded — \(APIClient.failureReason(error))."
         }
