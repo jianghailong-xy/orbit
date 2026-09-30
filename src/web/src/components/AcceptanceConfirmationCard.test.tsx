@@ -27,8 +27,11 @@ import {
   acceptanceConfirmationStaleExplanation,
   acceptanceConfirmedLine,
   acceptanceReadLabel,
+  acceptanceReceiptLine,
+  acceptanceReconfirmedLine,
   type ConfirmationCriterion,
 } from './AcceptanceConfirmationCard';
+import { RUN_SETTING_DIFFERS } from '../lib/projectStart';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { ENTER_HINT, SHORTCUT_HINT } from './CardHotkey';
 import { shortSeal } from './CriteriaDecisionCard';
@@ -37,14 +40,16 @@ import { shortSeal } from './CriteriaDecisionCard';
  * The settlement confirmation card, wired to its two reads and its door, in the states a coordinator
  * conversation meets it in.
  *
- * What is asserted is what the native console does (`ConsoleModel.settlementHeldOnConfirmation`,
- * OrbitKit `AcceptanceConfirmations`): a card exactly when an OPEN project states criteria, holds at
- * least one task and has nobody's confirmation on that set — whether or not any criterion is met by
- * its work, which is the move this card was rewritten for — and none otherwise; a delivered card
- * stays, and goes stale in place; a press sends the version standing now, and a refusal re-reads
- * before the button comes back. Every "none" is asserted on a fixture that goes on to draw the card
- * once the one fact under test changes, so an empty pane is never a card that was not going to draw
- * anyway.
+ * What is asserted is the card's share of the settlement question now that there are three cards:
+ * a card exactly when a STARTED, OPEN project states criteria, holds at least one task and has
+ * nobody's confirmation on that set — whether or not any criterion is met by its work — and none
+ * otherwise. A project nobody has started is the start card's (`StartProjectCard.test.tsx`), asked
+ * only on its coordinator's request, and a started set that moved in a way the server can list is
+ * the change card's (`CriteriaChangeCard.test.tsx`); both "none"s are asserted here, beside the
+ * fixture that draws this card. A delivered card stays, and goes stale in place; a press sends the
+ * version standing now, and a refusal re-reads before the button comes back. Every "none" is
+ * asserted on a fixture that goes on to draw the card once the one fact under test changes, so an
+ * empty pane is never a card that was not going to draw anyway.
  */
 
 vi.mock('../api', () => ({ api: vi.fn() }));
@@ -90,16 +95,20 @@ function criteriaOf(...met: Array<boolean | undefined>): ConfirmationCriterion[]
 const NONE_MET = criteriaOf(false, false, false);
 
 const TITLE = 'move the confirmation to the start';
+/** When the fixtures' project was started: this card is asked of started projects only. */
+const STARTED_AT = '2026-09-10T08:00:00.000Z';
 
-/** The project document, as much of it as the card reads. `coordinatorEnabled` is left out by
- *  default because that is how a new project reads: off. The task count is not left out: a project
- *  whose plan is written holds work, and the empty count is the shape the card was taught to wait
- *  through — so it is a case of its own below rather than what every fixture here happens to be. */
+/** The project document, as much of it as the card reads. Started — the only projects this card is
+ *  drawn for — and with Automatic OFF, because whether a project runs itself says nothing about
+ *  whether it was started. The task count is not left out: a project whose plan is written holds
+ *  work, and the empty count is the shape the card was taught to wait through — so it is a case of
+ *  its own below rather than what every fixture here happens to be. */
 function documentOf(criteria: ConfirmationCriterion[] | undefined, status = 'OPEN'): ProjectDocument {
   return {
     title: TITLE,
     status,
     coordinatorEnabled: false,
+    startedAt: STARTED_AT,
     _count: { tasks: 1 },
     acceptanceCriteriaItems: criteria,
   };
@@ -109,6 +118,8 @@ type ProjectDocument = {
   title?: string;
   status?: string;
   coordinatorEnabled?: boolean;
+  /** When it was started, or null for a project nobody has started (`project.started_at`). */
+  startedAt?: string | null;
   /** How many tasks the project holds — `_count.tasks`, as `/projects/:id` serves it. */
   _count?: { tasks?: number };
   acceptanceCriteriaItems?: ConfirmationCriterion[];
@@ -165,6 +176,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  for (const cleanup of cleanups.splice(0)) await cleanup();
   const mounted = root;
   root = null;
   if (mounted) await act(async () => mounted.unmount());
@@ -194,6 +206,27 @@ async function mountReceipt(confirmation: RecordedStandardSetConfirmation): Prom
   });
   return node;
 }
+
+/** A second record beside the first, for a case that compares two of them in one document. */
+async function mountReceiptAgain(
+  confirmation: RecordedStandardSetConfirmation,
+  changed: string | null,
+): Promise<HTMLElement> {
+  const node = document.createElement('div');
+  document.body.appendChild(node);
+  const tree = createRoot(node);
+  await act(async () => {
+    tree.render(<AcceptanceConfirmationReceipt confirmation={confirmation} changed={changed} />);
+  });
+  cleanups.push(async () => {
+    await act(async () => tree.unmount());
+    node.remove();
+  });
+  return node;
+}
+
+/** What a case mounted beyond the one root the hooks above know about. */
+const cleanups: Array<() => Promise<void>> = [];
 
 /** A pane per conversation, each holding the card for the project it coordinates — `null` for a
  *  conversation that coordinates none. */
@@ -336,8 +369,8 @@ async function delivered(): Promise<{ node: HTMLElement; qc: QueryClient; card: 
     if (!only) throw new Error('the card is not on the page');
     return only;
   };
-  // The primary action, whichever word it carries for this project: `Start the project` for one
-  // that is not running, `Confirm the criteria` for one that is.
+  // The primary action, whichever word it carries for this project: `Confirm the criteria` for the
+  // started projects this card is drawn for.
   expect(actionsOf(card())[0]?.disabled, 'the delivered card cannot be answered').toBe(false);
   return { node, qc, card };
 }
@@ -389,7 +422,7 @@ describe('whether a coordinator conversation is drawn the card', () => {
     // A read that did not say is read as none, unlike `coordinatorEnabled` beside it: this one
     // GATES an action rather than labelling the project, and a gate nobody can establish stays shut.
     ['does not say how many tasks it holds',
-      { title: TITLE, status: 'OPEN', coordinatorEnabled: false, acceptanceCriteriaItems: NONE_MET }],
+      { title: TITLE, status: 'OPEN', coordinatorEnabled: false, startedAt: STARTED_AT, acceptanceCriteriaItems: NONE_MET }],
   ])('draws none while the project %s, and one once a task is filed', async (_, document) => {
     server.standing = standingOf('UNCONFIRMED');
     server.document = document;
@@ -428,11 +461,59 @@ describe('whether a coordinator conversation is drawn the card', () => {
       .toEqual([]);
   });
 
+  /**
+   * A PROJECT NOBODY HAS STARTED IS NOT THIS CARD'S. It used to be, the moment it held one task —
+   * `Start the project`, dropped into the middle of a coordinator still splitting the work. It is
+   * asked by the start card now, and only on the coordinator's request; so the same written plan,
+   * the same task and the same unconfirmed set draw nothing here until the project is started.
+   * Automatic is ON in the negative, so it is `startedAt` that decides and not the switch.
+   */
+  it('draws none on a project nobody has started, however ready its plan looks, and one once it is started', async () => {
+    server.standing = standingOf('UNCONFIRMED');
+    server.document = { ...documentOf(NONE_MET), coordinatorEnabled: true, startedAt: null };
+    const { node, qc } = await mount(PROJECT);
+    await readsLanded(qc);
+    expect(cardsIn(node), 'an unstarted project was offered this card instead of the start card')
+      .toHaveLength(0);
+    expect(presses()).toEqual([]);
+
+    server.document = documentOf(NONE_MET);
+    await reread(qc);
+    expect(cardsIn(node)).toHaveLength(1);
+  });
+
+  /** The other card's half: a set that moved under a confirmation, which the server can list, is
+   *  asked about as what changed (`CriteriaChangeCard`) — and only a set it cannot list falls to
+   *  this card. */
+  it('leaves a moved set the server can list to the change card, and asks about one it cannot', async () => {
+    server.standing = {
+      ...standingOf('STALE'),
+      changesSinceConfirmed: {
+        added: [{ key: 'k4', ordinal: 4, text: 'condition 4 holds' }],
+        stricter: [],
+        revised: [],
+        removed: [],
+        unchanged: [1, 2, 3],
+      },
+      changesSinceConfirmedAbsentReason: null,
+    };
+    const { node, qc } = await mount(PROJECT);
+    await until(() => node.querySelector('.criteria-change-card') !== null, 'the change card to be drawn');
+    expect(cardsIn(node), 'the moved set was asked about twice').toHaveLength(1);
+    expect(labelsOf(cardsIn(node)[0]!)[0]).not.toBe(ACCEPTANCE_CONFIRM_LABEL);
+
+    server.standing = standingOf('STALE');
+    await reread(qc);
+    await until(() => node.querySelector('.criteria-change-card') === null, 'the change card to go');
+    expect(cardsIn(node)).toHaveLength(1);
+    expect(labelsOf(cardsIn(node)[0]!)[0]).toBe(ACCEPTANCE_CONFIRM_LABEL);
+  });
+
   it.each<[string, ProjectDocument]>([
     ['states no criteria', documentOf([])],
     ['carries no criteria at all', documentOf(undefined)],
     ['is no longer OPEN', documentOf(NONE_MET, 'DONE')],
-    ['does not say where it stands', { title: TITLE, acceptanceCriteriaItems: NONE_MET }],
+    ['does not say where it stands', { title: TITLE, startedAt: STARTED_AT, acceptanceCriteriaItems: NONE_MET }],
   ])('draws none while the project %s, and one once it is an OPEN project stating criteria', async (_, document) => {
     server.document = document;
     const { node, qc } = await mount(PROJECT);
@@ -448,16 +529,17 @@ describe('whether a coordinator conversation is drawn the card', () => {
 /**
  * The meta line's two middle fields, which are two facts and are read off two documents.
  *
- * Every fixture above builds a project made a moment ago, and in one of those "nobody has confirmed
- * it" and "nobody has started it" are the same sentence — which is exactly why the card could say
- * one while meaning the other for as long as it did. Only a project that was already here separates
- * them, and on 2026-09-18 seven OPEN projects were in that state: the coordinator handing work out,
- * and not one confirmation ever recorded. The card called every one of them "not started".
+ * "Nobody has confirmed it" and "nobody has started it" are the same sentence for a project made a
+ * moment ago — which is exactly why the card could say one while meaning the other for as long as
+ * it did. On 2026-09-18 seven OPEN projects were handing work out with not one confirmation ever
+ * recorded, and the card called every one of them "not started". The project's own `startedAt` is
+ * what says started now, and Automatic — how a started project runs — says nothing about it.
  */
 describe('where the meta line says the project stands', () => {
   it('says started — not "not started" — for a started project whose criteria nobody ever confirmed', async () => {
     server.standing = standingOf('UNCONFIRMED');
-    server.document = { ...documentOf(NONE_MET), coordinatorEnabled: true };
+    // Started, and with Automatic OFF: the word is read off `startedAt`, not off the switch.
+    server.document = documentOf(NONE_MET);
     const { qc, card } = await delivered();
 
     expect(metaOf(card()), 'a project that is handing work out was called not started')
@@ -467,9 +549,9 @@ describe('where the meta line says the project stands', () => {
     // in its own field rather than being folded into the one above.
     expect(metaFieldsOf(card())[3]).toBe(ACCEPTANCE_NOBODY_SAID_DONE);
 
-    // The same unconfirmed standing with the coordinator off is a new project's normal state. So
-    // the word moved with `coordinatorEnabled` and with nothing else: the standing never changed.
-    server.document = documentOf(NONE_MET);
+    // The delivered card, over a read that says nobody started the project and Automatic is on:
+    // the word moved with `startedAt` and with nothing else — the standing never changed.
+    server.document = { ...documentOf(NONE_MET), coordinatorEnabled: true, startedAt: null };
     await reread(qc);
     expect(metaFieldsOf(card())[2]).toBe(ACCEPTANCE_NOT_STARTED);
     expect(metaFieldsOf(card())[3]).toBe(ACCEPTANCE_NOBODY_SAID_DONE);
@@ -483,7 +565,7 @@ describe('where the meta line says the project stands', () => {
     ['STALE', ACCEPTANCE_CHANGED_SINCE_CONFIRMED],
     ['CONFIRMED', ACCEPTANCE_CONFIRMED],
   ])('says a %s set as "%s" while the project stays started throughout', async (state, asked) => {
-    server.document = { ...documentOf(NONE_MET), coordinatorEnabled: true };
+    server.document = documentOf(NONE_MET);
     const { qc, card } = await delivered();
     server.standing = standingOf(state);
     await reread(qc);
@@ -497,7 +579,7 @@ describe('where the meta line says the project stands', () => {
    *  answer, which is the rule the rest of this card already keeps. */
   it('says neither once the project document stops answering', async () => {
     const { qc, card } = await delivered();
-    expect(metaFieldsOf(card())[2]).toBe(ACCEPTANCE_NOT_STARTED);
+    expect(metaFieldsOf(card())[2]).toBe(ACCEPTANCE_STARTED);
 
     server.document = new Error('503 on the document');
     await reread(qc);
@@ -533,13 +615,13 @@ describe('when a read fails', () => {
     await reread(qc);
     expect(cardsIn(node), 'the delivered card went away with the read').toHaveLength(1);
     expect(staleOf(card())).toBe(CONFIRMATION_UNREAD_EXPLANATION);
-    expect(action(card(), ACCEPTANCE_START_LABEL).disabled, 'an unread card still offers a confirmation')
+    expect(action(card(), ACCEPTANCE_CONFIRM_LABEL).disabled, 'an unread card still offers a confirmation')
       .toBe(true);
 
     // The failed read was the reason: the next read that answers gives the button back.
     server.standing = standingOf('UNCONFIRMED');
     await reread(qc);
-    expect(action(card(), ACCEPTANCE_START_LABEL).disabled).toBe(false);
+    expect(action(card(), ACCEPTANCE_CONFIRM_LABEL).disabled).toBe(false);
   });
 });
 
@@ -568,7 +650,7 @@ describe('a delivered card that can no longer be answered', () => {
     expect(cardsIn(node)).toHaveLength(1);
     expect(staleOf(card())).toBe(acceptanceConfirmationStaleExplanation(standingOf('CONFIRMED')));
     expect(staleOf(card())).toContain(shortSeal(CURRENT));
-    const confirm = action(card(), ACCEPTANCE_START_LABEL);
+    const confirm = action(card(), ACCEPTANCE_CONFIRM_LABEL);
     expect(confirm.disabled, 'a set confirmed elsewhere is still offered for confirming').toBe(true);
     await act(async () => {
       confirm.click();
@@ -596,7 +678,7 @@ describe('a delivered card that can no longer be answered', () => {
     const readsBefore = standingReads();
 
     await act(async () => {
-      action(card(), ACCEPTANCE_START_LABEL).click();
+      action(card(), ACCEPTANCE_CONFIRM_LABEL).click();
     });
     await until(() => presses().length === 1, 'the press to reach the door');
     // The version standing when the card was drawn — not the one a stale confirmation named.
@@ -607,13 +689,13 @@ describe('a delivered card that can no longer be answered', () => {
     // on record before React Query has handed the card the press at all. A turn first: the button
     // read is then the card that has been handed everything the press set off.
     await turn();
-    expect(action(card(), ACCEPTANCE_START_LABEL).disabled, 'the button came back before the re-read did')
+    expect(action(card(), ACCEPTANCE_CONFIRM_LABEL).disabled, 'the button came back before the re-read did')
       .toBe(true);
 
     await act(async () => {
       release(standingOf('UNCONFIRMED', MOVED));
     });
-    await until(() => !action(card(), ACCEPTANCE_START_LABEL).disabled, 'the re-read to give the button back');
+    await until(() => !action(card(), ACCEPTANCE_CONFIRM_LABEL).disabled, 'the re-read to give the button back');
     expect(card().querySelector('.settlement-card-meta')?.textContent).toContain(shortSeal(MOVED));
     const refusal = card().querySelector('.settlement-card-error')?.textContent ?? '';
     expect(refusal).toContain(CONFIRMATION_NOT_RECORDED);
@@ -622,24 +704,24 @@ describe('a delivered card that can no longer be answered', () => {
     server.standing = standingOf('UNCONFIRMED', MOVED);
     server.door = async () => standingOf('CONFIRMED', MOVED);
     await act(async () => {
-      action(card(), ACCEPTANCE_START_LABEL).click();
+      action(card(), ACCEPTANCE_CONFIRM_LABEL).click();
     });
     await until(() => presses().length === 2, 'the second press to reach the door');
     expect(presses()[1]).toBe(`POST ${STANDING_PATH} ${MOVED}`);
   });
 });
 
-describe('the two actions, reading the set, and starting the project', () => {
+describe('the two actions, reading the set, and confirming it', () => {
   /**
    * Two, and the reading toggle is neither of them. There was a third — the one that put the
-   * question down — which meant "ask me once the work settles" at the end of a project and means
-   * waiting for nothing before one has begun. The equality below is what keeps it from growing back
-   * under any name: it names both labels and their order, so a third action of any wording fails.
+   * question down — which meant "ask me once the work settles" at the end of a project. The equality
+   * below is what keeps it from growing back under any name: it names both labels and their order,
+   * so a third action of any wording fails.
    */
-  it('offers exactly two actions — start, and the one word every card uses for handing a reply to the composer', async () => {
+  it('offers exactly two actions — confirm, and the one word every card uses for handing a reply to the composer', async () => {
     const { card } = await delivered();
     expect(labelsOf(card()), 'the card grew a third answer').toEqual([
-      ACCEPTANCE_START_LABEL,
+      ACCEPTANCE_CONFIRM_LABEL,
       OWNER_SEND_BACK_ACTION,
     ]);
     expect(actionsOf(card())).toHaveLength(2);
@@ -690,10 +772,10 @@ describe('the two actions, reading the set, and starting the project', () => {
 
   /**
    * Chat about this hands the plan to the bottom composer and presses nothing. What separates it
-   * from the card going away is the point: the card stays, and starting the project is still the
-   * other way out of it.
+   * from the card going away is the point: the card stays, and confirming is still the other way
+   * out of it.
    */
-  it('hands the plan to the composer, leaves the card up with start still live, and writes nothing', async () => {
+  it('hands the plan to the composer, leaves the card up with confirm still live, and writes nothing', async () => {
     const { node, card } = await delivered();
     await act(async () => {
       action(card(), OWNER_SEND_BACK_ACTION).click();
@@ -705,9 +787,10 @@ describe('the two actions, reading the set, and starting the project', () => {
       criteriaDigest: CURRENT,
       projectTitle: TITLE,
       criteria: NONE_MET.map((item) => item.text),
+      question: 'CONFIRMATION',
     });
     expect(cardsIn(node), 'the card went away when it handed the reply over').toHaveLength(1);
-    expect(action(card(), ACCEPTANCE_START_LABEL).disabled, 'starting the project went dead with it')
+    expect(action(card(), ACCEPTANCE_CONFIRM_LABEL).disabled, 'confirming went dead with it')
       .toBe(false);
     expect(presses(), 'handing a reply to the composer reached the door').toEqual([]);
     // No box grew inside the card: the sentence is typed in the one composer at the bottom.
@@ -717,7 +800,7 @@ describe('the two actions, reading the set, and starting the project', () => {
   it('sends the version it is drawn from and reaches the door with nothing else on the way', async () => {
     const { node, qc, card } = await delivered();
     await act(async () => {
-      action(card(), ACCEPTANCE_START_LABEL).click();
+      action(card(), ACCEPTANCE_CONFIRM_LABEL).click();
     });
     // What the press leaves on THIS page: the question answered and the standing the door wrote,
     // which is the same read the conversation draws the record from.
@@ -727,12 +810,12 @@ describe('the two actions, reading the set, and starting the project', () => {
     expect(qc.getQueryData(acceptanceConfirmationKey(PROJECT))).toEqual(standingOf('CONFIRMED'));
   });
 
-  it('takes the keyboard: the bare key starts the project and the chord is the button that talks', async () => {
+  it('takes the keyboard: the bare key confirms and the chord is the button that talks', async () => {
     const { node, card } = await delivered();
 
     // One card asking, so it holds the keys — and each control says which key presses it, on the
     // control itself: a shortcut nobody can see is a shortcut nobody has.
-    expect(hintOn(action(card(), ACCEPTANCE_START_LABEL))).toBe(ENTER_HINT);
+    expect(hintOn(action(card(), ACCEPTANCE_CONFIRM_LABEL))).toBe(ENTER_HINT);
     expect(hintOn(action(card(), OWNER_SEND_BACK_ACTION))).toBe(SHORTCUT_HINT);
 
     // The chord first, because it leaves the card standing: it hands the plan over and reaches no
@@ -744,6 +827,7 @@ describe('the two actions, reading the set, and starting the project', () => {
       criteriaDigest: CURRENT,
       projectTitle: TITLE,
       criteria: NONE_MET.map((item) => item.text),
+      question: 'CONFIRMATION',
     });
     expect(presses(), 'the chord reached the door').toEqual([]);
     expect(cardsIn(node), 'the card went away when the chord talked').toHaveLength(1);
@@ -810,7 +894,7 @@ describe('the record a confirmation leaves', () => {
   it('goes when the press was made HERE, and is kept when it was not', async () => {
     const { node, card } = await delivered();
     await act(async () => {
-      action(card(), ACCEPTANCE_START_LABEL).click();
+      action(card(), ACCEPTANCE_CONFIRM_LABEL).click();
     });
     await until(() => cardsIn(node).length === 0, 'the answered card to go');
 
@@ -825,7 +909,7 @@ describe('the record a confirmation leaves', () => {
     // session's row said so ("Waiting for approval") while this pane had nothing left to press.
     const { node, qc, card } = await delivered();
     await act(async () => {
-      action(card(), ACCEPTANCE_START_LABEL).click();
+      action(card(), ACCEPTANCE_CONFIRM_LABEL).click();
     });
     await until(() => cardsIn(node).length === 0, 'the answered card to go');
 
@@ -849,9 +933,59 @@ describe('the record a confirmation leaves', () => {
     const [receipt] = receiptsIn(node);
     expect(receipt?.querySelector('.settlement-card-heading')?.textContent)
       .toBe(ACCEPTANCE_RECEIPT_HEADING);
-    expect(receiptLineOf(receipt!)).toBe(acceptanceConfirmedLine(standingOf('CONFIRMED').confirmation!));
+    expect(receiptLineOf(receipt!)).toBe(acceptanceReceiptLine(standingOf('CONFIRMED').confirmation!));
     expect(receiptStampOf(receipt!)).toContain('by you at');
     expect(receipt!.querySelectorAll('button'), 'a record is not a question').toHaveLength(0);
+  });
+
+  /**
+   * "You started", only for the confirmation that started the project — the one carrying what the
+   * start left it with (`startedWith`) — and under it the settings it was started with, the one the
+   * owner changed from the coordinator's suggestion marked. Every other confirmation confirmed a
+   * version of the criteria of a project already running, and its record says so; it used to say
+   * "You started" for every one of them.
+   */
+  it('says You started, with the settings, for the confirmation that started the project', async () => {
+    const started = {
+      ...standingOf('CONFIRMED').confirmation!,
+      startedWith: {
+        settings: {
+          line: 'PROJECT_BRANCH' as const,
+          projectBranchName: 'refs/heads/project/34WvwUS8YMXfOfWbMqVuu',
+          automatic: true,
+          maxConcurrentTasks: 3,
+          mergeCheckCommand: 'npm test',
+        },
+        differsFromRequest: ['maxConcurrentTasks' as const],
+      },
+    };
+    const node = await mountReceipt(started);
+    const [receipt] = receiptsIn(node);
+    expect(receiptLineOf(receipt!)).toBe(acceptanceConfirmedLine(started));
+    expect(receiptLineOf(receipt!)).toBe(`You started the project on 3 criteria at seal ${shortSeal(CURRENT)}`);
+    const settings = receipt!.querySelector('.settlement-receipt-settings');
+    expect(settings?.textContent?.replace(` (${RUN_SETTING_DIFFERS})`, ''))
+      .toBe('project/34Wvw… · Automatic on · 3 tasks at a time · merge check set');
+    // What the owner changed is marked where it stands, and nothing else is.
+    const changed = [...receipt!.querySelectorAll('.run-settings-changed')];
+    expect(changed.map((part) => part.getAttribute('title'))).toEqual([RUN_SETTING_DIFFERS]);
+    expect(changed[0]?.textContent).toContain('3 tasks at a time');
+  });
+
+  it('says You confirmed for every other confirmation — with what it changed when this window pressed it', async () => {
+    const confirmed = standingOf('CONFIRMED').confirmation!;
+    const node = await mountReceipt({ ...confirmed, startedWith: null });
+    const [receipt] = receiptsIn(node);
+    expect(receiptLineOf(receipt!)).toBe(`You confirmed 3 criteria at seal ${shortSeal(CURRENT)}`);
+    expect(receiptLineOf(receipt!)).not.toContain('started');
+    expect(receipt!.querySelector('.settlement-receipt-settings'), 'a confirmation that started nothing has no settings')
+      .toBeNull();
+
+    expect(acceptanceReconfirmedLine(confirmed, '1 new, 1 stricter'))
+      .toBe(`You confirmed 3 criteria at seal ${shortSeal(CURRENT)} — 1 new, 1 stricter`);
+    const pressedHere = await mountReceiptAgain({ ...confirmed, startedWith: null }, '1 new, 1 stricter');
+    expect(receiptLineOf(receiptsIn(pressedHere)[0]!))
+      .toBe(`You confirmed 3 criteria at seal ${shortSeal(CURRENT)} — 1 new, 1 stricter`);
   });
 });
 
@@ -862,12 +996,12 @@ describe('the record a confirmation leaves', () => {
  * handing work out before this card arrived, and what the press does is re-confirm the plan it is
  * running on. The same fact decides the paragraph under it — "Once this starts" describes a
  * beginning that happened some other day — and the meta line's third field, which is why all three
- * move together or not at all. `coordinatorEnabled` is the whole of it, read off the project.
+ * move together or not at all. `startedAt` is the whole of it, read off the project.
  */
 describe('a project that is already handing work out', () => {
   it('is asked to confirm rather than to start, and is never called unstarted', async () => {
     server.standing = standingOf('STALE');
-    server.document = { ...documentOf(NONE_MET), coordinatorEnabled: true };
+    server.document = documentOf(NONE_MET);
     const { node, qc, card } = await delivered();
 
     expect(labelsOf(card()), 'a running project was offered a start').toEqual([
@@ -875,8 +1009,8 @@ describe('a project that is already handing work out', () => {
       OWNER_SEND_BACK_ACTION,
     ]);
     expect(labelsOf(card())).not.toContain(ACCEPTANCE_START_LABEL);
-    // The meta line says where the PROJECT stands off `coordinatorEnabled`, and where the
-    // CONFIRMATION stands off the standing. Both are said, and neither is inferred from the other.
+    // The meta line says where the PROJECT stands off `startedAt`, and where the CONFIRMATION
+    // stands off the standing. Both are said, and neither is inferred from the other.
     expect(metaFieldsOf(card())[2]).toBe(ACCEPTANCE_STARTED);
     expect(metaOf(card())).not.toContain(ACCEPTANCE_NOT_STARTED);
     expect(metaFieldsOf(card())[3]).toBe(ACCEPTANCE_CHANGED_SINCE_CONFIRMED);
@@ -885,9 +1019,9 @@ describe('a project that is already handing work out', () => {
     expect(explains).not.toContain('Once this starts');
     expect(explains).toContain('Once this is confirmed');
 
-    // And the same standing on a project that is NOT running still says start — the word follows
-    // the project and not the confirmation.
-    server.document = documentOf(NONE_MET);
+    // And the same delivered card over a project that is NOT started still says start — the word
+    // follows the project and not the confirmation.
+    server.document = { ...documentOf(NONE_MET), startedAt: null };
     await reread(qc);
     expect(labelsOf(card())[0]).toBe(ACCEPTANCE_START_LABEL);
     expect(metaFieldsOf(card())[2]).toBe(ACCEPTANCE_NOT_STARTED);
@@ -897,6 +1031,7 @@ describe('a project that is already handing work out', () => {
    *  stopped: the card keeps its own word rather than guessing a tense for a project nobody read. */
   it('keeps the card’s own word for a project nobody could read', async () => {
     const { qc, card } = await delivered();
+    expect(labelsOf(card())[0]).toBe(ACCEPTANCE_CONFIRM_LABEL);
     server.document = new Error('503 on the document');
     await reread(qc);
     expect(metaFieldsOf(card())[2]).toBe(ACCEPTANCE_START_NOT_READ);

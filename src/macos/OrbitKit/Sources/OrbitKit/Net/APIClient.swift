@@ -88,6 +88,28 @@ public final class APIClient: @unchecked Sendable {
     public func updatePreferences(_ req: UpdatePreferencesRequest) async throws -> User {
         try await patch("users/me/preferences", body: req)
     }
+    /// Rename the signed-in account; answers with the account as `me` reads it.
+    public func updateProfile(_ req: UpdateProfileRequest) async throws -> User {
+        try await patch("users/me", body: req)
+    }
+    /// Set the account's profile photo (`PUT /users/me/avatar`, multipart `file`): a square JPEG the
+    /// app has already cropped and scaled. Answers with the account, whose `avatarUpdatedAt` is then
+    /// the new photo's version.
+    public func setAvatar(jpeg: Data) async throws -> User {
+        let boundary = "orbit.\(UUID().uuidString)"
+        var req = try makeRequest("users/me/avatar", method: "PUT", body: Optional<Empty>.none)
+        req.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        req.httpBody = Multipart.body(boundary: boundary, fieldName: "file", filename: "avatar.jpg",
+                                      mimeType: "image/jpeg", fileData: jpeg)
+        return try decoder.decode(User.self, from: try await send(req))
+    }
+    /// Remove the account's profile photo (`DELETE /users/me/avatar`); answers with the account.
+    public func removeAvatar() async throws -> User { try await delete("users/me/avatar") }
+    /// The account's profile photo, as its bytes (`GET /users/me/avatar`). Bearer-guarded, so the
+    /// app fetches it and draws it itself.
+    public func avatar() async throws -> Data {
+        try await send(makeRequest("users/me/avatar", method: "GET", body: Optional<Empty>.none))
+    }
     public func changePassword(_ req: ChangePasswordRequest) async throws {
         _ = try await postRaw("auth/change-password", body: req)
     }
@@ -137,6 +159,11 @@ public final class APIClient: @unchecked Sendable {
     }
 
     public func session(_ id: String) async throws -> Session { try await get("sessions/\(id)") }
+
+    /// Per-workspace Open-session tallies used by the runner page's workspace rows.
+    public func sessionCounts() async throws -> [WorkspaceSessionCounts] {
+        try await get("sessions/counts")
+    }
 
     /// Cross-scope session search for the ⌘K palette — spans every agent, runner and lifecycle
     /// scope (Open, Completed, Trash) and reaches into conversation text, none of which
@@ -993,10 +1020,42 @@ public final class APIClient: @unchecked Sendable {
     public func runners() async throws -> [Runner] { try await get("runners") }
     public func runner(_ id: String) async throws -> Runner { try await get("runners/\(id)") }
     public func updateRunner(_ id: String, _ req: UpdateRunnerRequest) async throws -> Runner { try await patch("runners/\(id)", body: req) }
+    /// Persist the list's drag order: `ids` is every runner, in order. Answers with the list as the
+    /// server now orders it (omitted runners appended, foreign ids dropped).
+    @discardableResult
+    public func reorderRunners(_ ids: [String]) async throws -> [Runner] {
+        try await post("runners/reorder", body: ReorderRunnersRequest(ids: ids))
+    }
     public func rotateRunnerToken(_ id: String) async throws -> RotateTokenResponse { try await postEmpty("runners/\(id)/rotate-token") }
     public func deleteRunner(_ id: String) async throws { try await deleteRaw("runners/\(id)") }
     public func createEnrollmentToken(_ req: CreateEnrollmentTokenRequest) async throws -> EnrollmentTokenInfo { try await post("runners/enrollment-tokens", body: req) }
     public func enrollmentTokens() async throws -> [EnrollmentTokenInfo] { try await get("runners/enrollment-tokens") }
+
+    /// The runner release the instance publishes, from `<instance>/dl/version.json` — the manifest a
+    /// runner's own updater reads (selfupdate.go). `baseURL` is the instance address without `/api`
+    /// (`makeRequest` appends `api/…` to it), so the manifest sits directly under it, beside `api/`.
+    /// A missing or unreadable manifest is ordinary — the fleet's own versions still say what the
+    /// latest is (`RunnerAttention.latestRunnerVersion`) — so every failure is nil, never a throw.
+    public func runnerReleaseVersion() async -> String? {
+        var request = URLRequest(url: baseURL.appendingPathComponent("dl/version.json"))
+        request.httpMethod = "GET"
+        request.setValue(Self.clientHeader, forHTTPHeaderField: "X-Orbit-Client")
+        guard let (data, status) = try? await rawSend(request, cancellationAware: true),
+              (200..<300).contains(status),
+              let manifest = try? decoder.decode(RunnerReleaseManifest.self, from: data),
+              let version = manifest.version?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !version.isEmpty else { return nil }
+        return version
+    }
+
+    public func startEngineUpdate(_ id: String) async throws -> RunnerInstallState {
+        try await postEmpty("runners/\(id)/engine-update")
+    }
+
+    @discardableResult
+    public func refreshRunnerModels(_ id: String) async throws -> RunnerModelRefresh {
+        try await postEmpty("runners/\(id)/refresh-models")
+    }
 
     // MARK: engine sign-in relay
 
@@ -1006,8 +1065,12 @@ public final class APIClient: @unchecked Sendable {
     public func runnerLoginState(_ id: String) async throws -> RunnerLoginState {
         try await get("runners/\(id)/login")
     }
-    public func startRunnerLogin(_ id: String, engine: LoginEngine) async throws -> RunnerLoginState {
-        try await post("runners/\(id)/login", body: StartLoginRequest(engine: engine))
+    public func startRunnerLogin(_ id: String, engine: LoginEngine,
+                                 account: String? = nil,
+                                 accountName: String? = nil) async throws -> RunnerLoginState {
+        try await post("runners/\(id)/login",
+                       body: StartLoginRequest(engine: engine, account: account,
+                                               accountName: accountName))
     }
     /// Hand the runner the authorization code the sign-in page gave the user (claude's paste-back
     /// flow). Useless without the PKCE verifier that never leaves the runner process.
@@ -1016,6 +1079,11 @@ public final class APIClient: @unchecked Sendable {
     }
     public func cancelRunnerLogin(_ id: String) async throws -> RunnerLoginState {
         try await delete("runners/\(id)/login")
+    }
+
+    public func removeRunnerAccount(_ id: String, engine: LoginEngine,
+                                    account: String) async throws -> RunnerAccountRemoveState {
+        try await delete("runners/\(id)/accounts/\(engine.rawValue)/\(account)")
     }
 
     // MARK: runner enrollment (Phase 4 — one-app device flow)
@@ -1036,6 +1104,15 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("runners/device/\(userCode)/approve", body: Optional<Empty>.none)
     }
 
+    public func deviceEnrollment(userCode: String) async throws -> DeviceInfo {
+        try await get("runners/device/\(userCode)")
+    }
+
+    /// Ask the runner that owns this workspace to rescue and clean its shared checkout.
+    public func repoCleanup(workspaceId: String) async throws -> Agent {
+        try await postEmpty("workspaces/\(workspaceId)/repo-cleanup")
+    }
+
     // MARK: turns / lifecycle (Phase 2)
 
     public func withdrawTurn(sessionID: String, turnId: String) async throws {
@@ -1049,6 +1126,15 @@ public final class APIClient: @unchecked Sendable {
 
     public func updateConfig(sessionID: String, _ req: ConfigUpdateRequest) async throws {
         _ = try await send(makeRequest("sessions/\(sessionID)/config", method: "PATCH", body: req))
+    }
+
+    /// Move a session on the built-in Codex or Claude engine to another of its runner's accounts —
+    /// `default` or a slot id, which pins it there — or back onto `automatic`. Spawn-only, like a
+    /// provider: a live session's engine re-spawns on the new account once no turn is in flight, and
+    /// an ended one takes it on its next resume.
+    public func switchAccount(sessionID: String, account: String) async throws {
+        _ = try await send(makeRequest("sessions/\(sessionID)/account", method: "PATCH",
+                                       body: SessionAccountRequest(account: account)))
     }
 
     // MARK: worktree
@@ -1177,6 +1263,7 @@ public final class APIClient: @unchecked Sendable {
     }
 
     private struct Empty: Codable {}
+    private struct RunnerReleaseManifest: Decodable { let version: String? }
 
     private func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
         let data = try await send(makeRequest(path, method: "GET", query: query, body: Optional<Empty>.none))

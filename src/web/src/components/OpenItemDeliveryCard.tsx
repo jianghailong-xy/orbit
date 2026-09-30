@@ -24,7 +24,9 @@ import { relTime } from './Transcript';
 /** How many conflicting files the card lists before folding the rest away. */
 const FILES_SHOWN = 3;
 
-const KIND_LABEL: Record<OpenItemKind, string> = {
+/** The kinds a delivery can be about. Partial: a start request (`START_REQUEST`) is the owner's and is
+ *  never delivered to a coordinator, and a kind the table lacks is called 'Exception item'. */
+const KIND_LABEL: Partial<Record<OpenItemKind, string>> = {
   INTEGRATION_CONFLICT: 'Merge conflict',
   INTEGRATION_CHECK_FAILED: 'Checks failed',
   INTEGRATION_ERROR: 'Integration error',

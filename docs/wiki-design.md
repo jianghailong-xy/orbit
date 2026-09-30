@@ -439,8 +439,11 @@ orbit wiki import --from <dir|file> --space <id>            # 阶段 2：CLAUDE.
 
 **何时发**
 - 每个 lease generation 的第一次交付，也就是 spawn 或 resume 时。
-- 适用范围：绑定 space 且 push 打开的会话，包括任务会话、自由会话和协调会话。
+- 适用范围：绑定 space 且 push 打开的会话，包括任务会话和自由会话。
 - **不发**：verifier（`task.verifiesTaskId`）、foreman（`task.isForeman`）、判断会话。依据：`tasks.service.ts:419-420` 对 list instructions 的同一条抑制，理由是 "launders a failure into a pass"。
+- **也不发**：项目的协调会话（owner 2026-09-29 定：协调会话不需要 wiki 上下文；推送按 lease generation 发，协调会话的引擎每被回收一次，下一条消息就又附一次）。
+  - 判定与 `dequeueTurn` 追加「协调者常驻角色」块用同一个信号：`Project.coordinatorSessionId` 指向这个会话（`session.coordinatorForProject`）。
+  - 只去掉推送：协调会话仍可以用 `wiki_search` / `wiki_get` 按需拉取，工具准入（`runner-wiki.controller.ts` 的 `assertNotExcluded`）不变。
 
 **发什么**（≤1,500 token，约 6k 字符）
 1. 可推送条件：`trust ∈ {owner, confirmed}`，且没有被污染、没有 challenge、有出处支撑，且 `anchor_state ∉ {changed, missing}`；

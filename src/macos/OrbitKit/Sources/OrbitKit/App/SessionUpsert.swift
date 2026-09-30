@@ -163,6 +163,10 @@ public extension Session {
                 // Both read off this row like the fields above: the list's summaries and every
                 // event never carry which account or key a claim chose.
                 poolMemberProviderId: poolMemberProviderId,
-                poolKeyId: poolKeyId)
+                poolKeyId: poolKeyId,
+                codexAccount: codexAccount,
+                codexAccountPinned: codexAccountPinned,
+                claudeAccount: claudeAccount,
+                claudeAccountPinned: claudeAccountPinned)
     }
 }

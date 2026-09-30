@@ -12,6 +12,9 @@ public struct User: Codable, Equatable, Sendable, Identifiable {
     // `GET /users/me` also returns these; login's user payload omits them (→ nil).
     public let createdAt: String?
     public let preferences: UserPreferences?
+    /// When the account's profile photo was set — the version it is fetched and cached by
+    /// (`GET /users/me/avatar`). Nil while there is none, and in login's user payload.
+    public let avatarUpdatedAt: String?
 }
 
 public struct LoginRequest: Codable, Sendable {
@@ -78,6 +81,73 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let env: [String: String]?
     public let enabled: Bool?
     public let autoInitGit: Bool?
+    /// Which of its runner's Codex accounts a session here runs on: a slot id or `default`. Nil is
+    /// Automatic — a new session starts on the account whose quota resets soonest (`CodexAccounts.toStartOn`).
+    public let codexAccount: String?
+    /// The same for its Claude sessions: one of the runner's Claude accounts, or nil for Automatic.
+    public let claudeAccount: String?
+
+    public let enableWorktree: Bool?
+    public let workDirExists: Bool?
+    public let workDirIsGit: Bool?
+    /// BIGINT columns are serialized as strings by the control plane; numeric fixtures and older
+    /// servers are accepted too.
+    public let workDirFreeBytes: Int64?
+    public let workDirTotalBytes: Int64?
+    public let repoHealth: RunnerRepoHealth?
+    public let repoCleanup: RunnerRepoCleanup?
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, lastProvider, provider, model, permissionMode, effort, workDir
+        case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
+        case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
+        case autoInitGit, codexAccount, claudeAccount, enableWorktree, workDirExists, workDirIsGit
+        case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        lastProvider = try c.decodeIfPresent(String.self, forKey: .lastProvider)
+        provider = try c.decodeIfPresent(String.self, forKey: .provider)
+        model = try c.decodeIfPresent(String.self, forKey: .model)
+        permissionMode = try c.decodeIfPresent(String.self, forKey: .permissionMode)
+        effort = try c.decodeIfPresent(String.self, forKey: .effort)
+        workDir = try c.decodeIfPresent(String.self, forKey: .workDir)
+        description = try c.decodeIfPresent(String.self, forKey: .description)
+        appendSystemPrompt = try c.decodeIfPresent(String.self, forKey: .appendSystemPrompt)
+        systemPrompt = try c.decodeIfPresent(String.self, forKey: .systemPrompt)
+        allowedTools = try c.decodeIfPresent([String].self, forKey: .allowedTools)
+        disallowedTools = try c.decodeIfPresent([String].self, forKey: .disallowedTools)
+        maxTurns = try c.decodeIfPresent(Int.self, forKey: .maxTurns)
+        maxBudgetUsd = try c.decodeIfPresent(Double.self, forKey: .maxBudgetUsd)
+        targetRunnerId = try c.decodeIfPresent(String.self, forKey: .targetRunnerId)
+        targetLabels = try c.decodeIfPresent([String].self, forKey: .targetLabels)
+        runnerId = try c.decodeIfPresent(String.self, forKey: .runnerId)
+        env = try c.decodeIfPresent([String: String].self, forKey: .env)
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled)
+        autoInitGit = try c.decodeIfPresent(Bool.self, forKey: .autoInitGit)
+        codexAccount = try c.decodeIfPresent(String.self, forKey: .codexAccount)
+        claudeAccount = try c.decodeIfPresent(String.self, forKey: .claudeAccount)
+        enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
+        workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
+        workDirIsGit = try c.decodeIfPresent(Bool.self, forKey: .workDirIsGit)
+        workDirFreeBytes = c.flexibleInt64(forKey: .workDirFreeBytes)
+        workDirTotalBytes = c.flexibleInt64(forKey: .workDirTotalBytes)
+        repoHealth = try c.decodeIfPresent(RunnerRepoHealth.self, forKey: .repoHealth)
+        repoCleanup = try c.decodeIfPresent(RunnerRepoCleanup.self, forKey: .repoCleanup)
+    }
+}
+
+extension KeyedDecodingContainer {
+    /// A BIGINT column: the control plane sends it as a string (main.ts BigInt.toJSON), a number
+    /// is read too, and anything else is unknown rather than a failed row.
+    func flexibleInt64(forKey key: Key) -> Int64? {
+        if let value = try? decodeIfPresent(Int64.self, forKey: key) { return value }
+        guard let string = try? decodeIfPresent(String.self, forKey: key) else { return nil }
+        return Int64(string)
+    }
 }
 
 extension Agent {
@@ -93,6 +163,12 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     public let version: String?
     public let maxConcurrent: Int?
     public let displayName: String?
+    public let hostname: String?
+    public let labels: [String]?
+    public let enrolledAt: String?
+    public let minFreeDiskMb: Int?
+    public let reposRoot: String?
+    public let heartbeatDraining: Bool?
     // Reported on the GET /runners payload (renamed from availableSkills/availableCommands).
     public let skills: [SlashCommandInfo]?
     public let commands: [SlashCommandInfo]?
@@ -111,6 +187,14 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// runner too old to report it, which stays unrestricted — an unknown must not withdraw a mode
     /// that works (see `AgentDefaults.isRunnable`).
     public let runsAsRoot: Bool?
+    /// What the runner declared it can do on its last poll — `codex-account-move/v1` and
+    /// `claude-account-move/v1` say it carries a session's conversation to another of its accounts.
+    /// Nil from an older server, which claims nothing.
+    public var capabilities: [String]? = nil
+    /// Engine install/update relay and account-removal relay. Their string-valued states stay raw
+    /// so a newer control plane cannot make the runner list undecodable.
+    public let install: RunnerInstallState?
+    public let accountRemove: RunnerAccountRemoveState?
 
     /// This runner's last probe of one engine, if it reported that engine at all.
     public func engineHealth(_ engine: LoginEngine) -> RunnerEngineHealth? {
@@ -202,6 +286,16 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// On a shared pool: the key its last claim chose (nil before the first, or when none could
     /// run) — the same read as above, in the shared pool's own field.
     public let poolKeyId: String?
+    /// Which of the runner's Codex accounts this session runs on (`default` or a slot id): picked on
+    /// New Session, or the one Automatic chose when it was created. Nil follows its workspace's
+    /// (`Agent.codexAccount`). Carried by the detail payload, like the two above.
+    public let codexAccount: String?
+    /// That account was picked by hand, and the session stays on it: its usage limit waits for the
+    /// reset. False or nil is Automatic — Orbit moves it to an account with room when it hits one.
+    public let codexAccountPinned: Bool?
+    /// The same pair for a session on the built-in Claude engine: one of the runner's Claude accounts.
+    public let claudeAccount: String?
+    public let claudeAccountPinned: Bool?
     public let pendingApprovals: Int?
     /// What `pendingApprovals` is counting, when one word says it better than "approval":
     /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -362,6 +456,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         provider = try values.decodeIfPresent(String.self, forKey: .provider)
         poolMemberProviderId = try values.decodeIfPresent(String.self, forKey: .poolMemberProviderId)
         poolKeyId = try values.decodeIfPresent(String.self, forKey: .poolKeyId)
+        codexAccount = try values.decodeIfPresent(String.self, forKey: .codexAccount)
+        codexAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .codexAccountPinned)
+        claudeAccount = try values.decodeIfPresent(String.self, forKey: .claudeAccount)
+        claudeAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .claudeAccountPinned)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
@@ -415,7 +513,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 pinnedAt: String? = nil, createdAt: String? = nil, lastTurnAt: String? = nil,
                 currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
-                poolMemberProviderId: String? = nil, poolKeyId: String? = nil) {
+                poolMemberProviderId: String? = nil, poolKeyId: String? = nil,
+                codexAccount: String? = nil, codexAccountPinned: Bool? = nil,
+                claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -431,6 +531,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.provider = provider
         self.poolMemberProviderId = poolMemberProviderId
         self.poolKeyId = poolKeyId
+        self.codexAccount = codexAccount
+        self.codexAccountPinned = codexAccountPinned
+        self.claudeAccount = claudeAccount
+        self.claudeAccountPinned = claudeAccountPinned
         self.pendingApprovals = pendingApprovals
         self.waitingKind = waitingKind
         self.ownerItems = ownerItems
@@ -500,6 +604,14 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     public let provider: String?
     public let model: String?
     public let effort: String?
+    /// The workspace's Codex account (`Agent.codexAccount`): what a session that stored none of its
+    /// own runs on. Carried by the detail payload's workspace row.
+    public var codexAccount: String? = nil
+    /// Its Claude account, the same way (`Agent.claudeAccount`).
+    public var claudeAccount: String? = nil
+    /// Its environment, which can decide the account too — a config directory or a key of its own
+    /// (`CodexAccounts.automaticOffered`). Carried by the detail payload's workspace row.
+    public var env: [String: String]? = nil
 }
 
 /// A personal colored label (Files.app-style tag) the owner applies to their sessions. The library
@@ -692,11 +804,18 @@ public struct CreateSessionRequest: Codable, Sendable {
     /// of a normal message; nil/false → a normal prompt.
     public let shell: Bool?
     public let attachmentIds: [String]?
+    /// Which of the runner's Codex accounts the session runs on (`default` or a slot id), picked on
+    /// the new-session screen — which pins it there. Nil omits it: the server then uses the
+    /// workspace's, or Automatic.
+    public let codexAccount: String?
+    /// The same for a session on the built-in Claude engine: one of the runner's Claude accounts.
+    public let claudeAccount: String?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
                 provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
-                shell: Bool? = nil, attachmentIds: [String]? = nil) {
+                shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
+                claudeAccount: String? = nil) {
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
@@ -708,6 +827,8 @@ public struct CreateSessionRequest: Codable, Sendable {
         self.fastMode = fastMode
         self.shell = shell
         self.attachmentIds = attachmentIds
+        self.codexAccount = codexAccount
+        self.claudeAccount = claudeAccount
     }
 }
 
@@ -1053,6 +1174,13 @@ public struct ConfigUpdateRequest: Codable, Sendable {
         self.fastMode = fastMode
         self.provider = provider
     }
+}
+
+/// `PATCH /sessions/:id/account`: another of the session's runner's accounts (`default` or a slot id),
+/// or `automatic` (`CodexAccounts.automaticID`).
+public struct SessionAccountRequest: Codable, Sendable {
+    public let account: String
+    public init(account: String) { self.account = account }
 }
 
 /// POST /sessions/:id/merge — merge the session branch into `targetBranch` (default when nil).

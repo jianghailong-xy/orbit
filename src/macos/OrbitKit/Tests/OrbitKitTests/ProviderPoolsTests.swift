@@ -191,7 +191,7 @@ final class ProviderPoolsTests: XCTestCase {
         XCTAssertEqual(ProviderPools.accountHelp(pool: claude, account: PoolAccount(member: work, current: true)),
                        "Claude accounts is running this session on Work")
         XCTAssertEqual(ProviderPools.accountHelp(pool: claude, account: PoolAccount(member: home, current: false)),
-                       "A session on Claude accounts starts on Home — the account with the most room right now")
+                       "A session on Claude accounts starts on Home — the account whose quota resets soonest")
     }
 
     // MARK: - when the picker greys a pool out, and when it only says it is spent

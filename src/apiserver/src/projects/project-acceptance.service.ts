@@ -8,19 +8,34 @@ import {
   Optional,
 } from '@nestjs/common';
 import { Prisma, ProjectStatus } from '@prisma/client';
+import {
+  type ProjectStartRecord,
+  type ProjectStartRequest,
+  type ProjectStartSettings,
+  type StartProjectRequestBody,
+  type StartProjectResponse,
+  differingStartSettings,
+} from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { SessionsService } from '../sessions/sessions.service';
 import {
+  ConfirmedCriterionVersion,
   RecordedStandardSetConfirmation,
   StandardSetConfirmationStanding,
+  StandardSetConfirmationView,
+  StandardSetVersion,
   StatedAcceptanceCriterion,
+  criteriaChangesSinceConfirmed,
   criteriaFromDefinitions,
   standardSetConfirmationStanding,
   standardSetVersion,
 } from './project-acceptance';
 import { refuseSessionAuthoredConfirmation } from './coordinator-authority';
+import { VERIFICATION_METHOD_RUNGS } from './criteria-edit-classification';
 import { storeDerivedProjectStatus } from './project-done-derived';
+import { defaultStartLine, startProjectLine } from './project-integration-line';
 import { tellCoordinatorProjectStarted } from './project-started';
+import { START_REQUEST_KIND, answerStartRequests } from './project-start-request';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 /** One stated criterion, as every read surface reports it. */
@@ -44,6 +59,43 @@ export interface RecordMergeEvidenceInput {
   contentHash: string;
   source?: string;
   detail?: Record<string, unknown>;
+}
+
+/** What one start wrote, for its answer and for the two edges after its commit. */
+interface ProjectStartOutcome {
+  confirmationId: string;
+  at: Date;
+  version: StandardSetVersion;
+  record: ProjectStartRecord;
+  lineLocked: boolean;
+}
+
+/** The 409 a start gets on a project that has been started already, before anything is written. */
+function projectAlreadyStarted(startedAt: Date | null): ConflictException {
+  return new ConflictException({
+    code: 'PROJECT_ALREADY_STARTED',
+    startedAt: startedAt?.toISOString() ?? null,
+    message:
+      'This project has already been started, and a project is started once: nothing was written. '
+      + 'Change how it runs from its settings instead.',
+  });
+}
+
+function isProjectAlreadyStarted(error: unknown): boolean {
+  return error instanceof ConflictException
+    && (error.getResponse() as { code?: unknown }).code === 'PROJECT_ALREADY_STARTED';
+}
+
+/** The 409 a confirmation or a start gets when the criteria moved after the caller read them. */
+function criteriaVersionMoved(currentDigest: string): ConflictException {
+  return new ConflictException({
+    code: 'PROJECT_CRITERIA_CONFIRMATION_VERSION_MOVED',
+    currentDigest,
+    message:
+      'The acceptance criteria changed after the version being confirmed was read. Read them '
+      + 'again and confirm the set that stands now: a confirmation carried over an edit would '
+      + 'say a person approved wording they never saw.',
+  });
 }
 
 /**
@@ -134,27 +186,31 @@ export class ProjectAcceptanceService {
    * now, the newest confirmation on record, and whether the second names the first. That is the
    * whole of "a confirmation stops counting once the criteria move" — there is no flag an edit
    * has to remember to clear, so there is no way for an edit to forget.
+   *
+   * What changed since that confirmation is taken from the same two reads (`confirmationView`), so
+   * a CONFIRMED standing never has a change beside it.
    */
   async standardSetConfirmation(
     ownerId: string,
     projectId: string,
-  ): Promise<StandardSetConfirmationStanding> {
+  ): Promise<StandardSetConfirmationView> {
     await this.assertProject(ownerId, projectId);
     const stated = await ProjectAcceptanceService.statedCriteria(
       this.prisma as unknown as Prisma.TransactionClient,
       projectId,
     );
-    return standardSetConfirmationStanding(
+    return this.confirmationView(stated, standardSetConfirmationStanding(
       standardSetVersion(stated),
       await this.latestConfirmation(projectId),
-    );
+    ));
   }
 
   /**
    * `CONFIRM_ACCEPTANCE_CRITERIA`: the account owner says this exact version of the standard set
-   * expresses the goal. The one door this HUMAN_ONLY action has; the only other writer of its rows
-   * is `ProjectsService.decideCriteriaChange`, carrying a confirmation over an edit the owner
-   * approved there.
+   * expresses the goal — the older card's "Start the project". The one door this HUMAN_ONLY action
+   * has besides `startProject`; the only other writer of its rows is
+   * `ProjectsService.decideCriteriaChange`, carrying a confirmation over an edit the owner approved
+   * there.
    *
    * Two rules, in the order a caller can act on them.
    *
@@ -168,39 +224,67 @@ export class ProjectAcceptanceService {
    *    the move this tier exists to refuse, so a digest that is no longer current is a 409 telling
    *    the caller to read the set again — not a confirmation of something else.
    *
-   * Deliberately not in a transaction and deliberately taking no project lock. An edit landing
-   * between the comparison and the INSERT can only make the row it writes non-current, which the
-   * read above already reports honestly: the row says which version was confirmed, and it is the
-   * read, never the write, that decides whether that version is the one standing. The same holds
-   * for the second statement, which starts the project: each is idempotent on its own, so the two
-   * being non-atomic with each other costs a re-issued request nothing.
+   * What the press does after that depends on whether the project has been started.
+   *
+   * NOT STARTED: it starts it, as `startProject` would with the settings the start card offers when
+   * nobody chose any — the line the project is already on or the owner already chose, else the
+   * default rule over its tasks and dependencies as they stand; Automatic on; the concurrency limit
+   * and merge check it already has. The card this door was built for never showed a setting, and a
+   * press on it has always started the project, so it goes on doing that; what it starts with is now
+   * written down like any other start's.
+   *
+   * STARTED: it confirms and does nothing else. One INSERT, deliberately not in a transaction and
+   * taking no project lock: an edit landing between the comparison and the INSERT can only make the
+   * row it writes non-current, which the read already reports honestly — the row says which version
+   * was confirmed, and it is the read, never the write, that decides whether that version is the one
+   * standing. It no longer turns Automatic on: that is a setting of how the project runs, and
+   * re-confirming criteria after an edit is not a decision about it.
    */
   async confirmStandardSet(
     ownerId: string,
     projectId: string,
     input: { criteriaDigest: string },
     actingSessionId?: string,
-  ): Promise<StandardSetConfirmationStanding> {
+  ): Promise<StandardSetConfirmationView> {
     const refusal = refuseSessionAuthoredConfirmation(actingSessionId);
     if (refusal) throw new ForbiddenException(refusal);
-    await this.assertProject(ownerId, projectId);
+    const { startedAt } = await this.assertProject(ownerId, projectId);
 
-    const currentVersion = standardSetVersion(await ProjectAcceptanceService.statedCriteria(
+    const stated = await ProjectAcceptanceService.statedCriteria(
       this.prisma as unknown as Prisma.TransactionClient,
       projectId,
-    ));
+    );
+    const currentVersion = standardSetVersion(stated);
     if (input.criteriaDigest !== currentVersion.digest) {
-      throw new ConflictException({
-        code: 'PROJECT_CRITERIA_CONFIRMATION_VERSION_MOVED',
-        currentDigest: currentVersion.digest,
-        message:
-          'The acceptance criteria changed after the version being confirmed was read. Read them '
-          + 'again and confirm the set that stands now: a confirmation carried over an edit would '
-          + 'say a person approved wording they never saw.',
-      });
+      throw criteriaVersionMoved(currentVersion.digest);
     }
 
-    const confirmation = await this.prisma.projectStandardSetConfirmation.create({
+    if (!startedAt) {
+      const started = await this.start(
+        ownerId,
+        projectId,
+        input.criteriaDigest,
+        async (tx, project) => ({
+          ...(await defaultStartLine(tx, ownerId, projectId)),
+          automatic: true,
+          maxConcurrentTasks: project.maxConcurrentTasks,
+        }),
+      ).catch((error: unknown) => {
+        // Started by another press between the read above and the start's lock: this one is then a
+        // press on a started project, and confirms like one.
+        if (isProjectAlreadyStarted(error)) return null;
+        throw error;
+      });
+      if (started) {
+        await this.afterStart(ownerId, projectId, started);
+        return this.confirmationView(stated, standardSetConfirmationStanding(
+          currentVersion,
+          await this.latestConfirmation(projectId),
+        ));
+      }
+    }
+
+    await this.prisma.projectStandardSetConfirmation.create({
       data: {
         projectId,
         // The credentialed actor. On the owner door this is the same row as `ownerId` — the
@@ -216,33 +300,6 @@ export class ProjectAcceptanceService {
       },
     });
 
-    // And the same act STARTS the project. Saying what would settle this project is what
-    // authorizes work on it, so `coordinatorEnabled` — which `create` no longer writes — is turned
-    // on here, by the one person who may answer the question. Nothing about the gate moves: the
-    // refusal above is still the whole authority check, so a call that cannot record a
-    // confirmation cannot reach this line either.
-    //
-    // ONE statement, and deliberately outside any transaction for this method's stated reason. It
-    // is a compare-and-set on the value rather than a blind write because writing `true` over
-    // `true` is not a change and must not be recorded as one: the predicate is what makes a second
-    // confirmation — of a set that moved, or a re-issued request — match no row, bump no
-    // `configRevision`, and not fire the one trigger an UPDATE of this column still carries — the
-    // completion contract being re-derived. (0290 retired the other, `project_dispatch_authority_
-    // fanout`, which rewrote every task's dispatch authority under this project's row lock; the CAS
-    // is still the right shape, and the off→on transition it does allow no longer costs anything
-    // proportional to how many tasks the project has.) The bump is not optional when it DOES
-    // change: this column is one of `ProjectsService.AUTHORIZATION_FIELDS`, and every write of one
-    // of those bumps the revision by one so that an action racing an authorization change stays a
-    // comparison rather than an archaeology.
-    //
-    // A throw here leaves a confirmation on record with the project still not started, which is
-    // the failure this order is chosen for: the caller is told the authorization did not land, and
-    // confirming again is safe — the INSERT appends, and this statement is the same statement.
-    const started = await this.prisma.project.updateMany({
-      where: { id: projectId, ownerId, coordinatorEnabled: false },
-      data: { coordinatorEnabled: true, configRevision: { increment: 1 } },
-    });
-
     // The confirmation is one of the two inputs `project-done-derived.ts` projects `status` from,
     // and it is the one that changes here — so the projection is recomputed on the spot rather
     // than waiting for the project's next task write. Deliberately after the INSERT and outside
@@ -254,39 +311,229 @@ export class ProjectAcceptanceService {
         (error as { message?: string })?.message ?? String(error)}`),
     );
 
-    // The switch lets Orbit start the tasks opted into auto-run; the ones a coordinator filed to
-    // start by hand wait on that coordinator, which the press above never reached. So it is told
-    // — on the off→on transition the CAS made and on no other, so a re-confirmation says nothing
-    // twice — and, like the projection, a telling that failed must not undo a start that happened.
-    if (this.sessions && started.count === 1) {
+    // The same document the read answers, because the web writes this answer straight into the
+    // read's cache: a confirmation answered with less would take the card's changes away until the
+    // next poll.
+    return this.confirmationView(stated, standardSetConfirmationStanding(
+      currentVersion,
+      await this.latestConfirmation(projectId),
+    ));
+  }
+
+  /**
+   * `POST /projects/:id/start`: the account owner starts the project, on the "Start this project?"
+   * card, in one write.
+   *
+   * The same authority as `confirmStandardSet`, because a start IS a confirmation — of the criteria
+   * the card showed, named by their seal — and of how the project is to run besides: its integration
+   * line, Automatic, its concurrency limit and its merge check. Refused whole for a request carrying
+   * an acting session, before anything is read; a seal that is not the current one is a 409 and
+   * nothing is written; so is a project that has been started already, which is what makes a second
+   * press, or a re-sent request, a refusal instead of a second start.
+   *
+   * `requestId` names the coordinator's start request the card was drawn from, when there was one
+   * (`project-start-request.ts`): the settings it suggested are then what the start records as asked
+   * for, so the receipt and the coordinator's "Project started" card mark every setting the owner
+   * changed on the card. Without one, what was asked for is what the owner sent. Either way the start
+   * answers whichever request is open — a started project has nothing left to ask.
+   */
+  async startProject(
+    ownerId: string,
+    projectId: string,
+    input: StartProjectRequestBody,
+    actingSessionId?: string,
+  ): Promise<StartProjectResponse> {
+    const refusal = refuseSessionAuthoredConfirmation(actingSessionId);
+    if (refusal) throw new ForbiddenException(refusal);
+    if (input.line === 'MAIN' && input.projectBranchName !== undefined) {
+      throw new BadRequestException(
+        'a project that lands directly into main has no project branch to name',
+      );
+    }
+    await this.assertProject(ownerId, projectId);
+
+    const asked: ProjectStartSettings = {
+      line: input.line,
+      ...(input.projectBranchName !== undefined ? { projectBranchName: input.projectBranchName } : {}),
+      automatic: input.automatic,
+      maxConcurrentTasks: input.maxConcurrentTasks,
+      mergeCheckCommand: input.mergeCheckCommand ?? null,
+    };
+    const started = await this.start(
+      ownerId,
+      projectId,
+      input.criteriaDigest,
+      async () => asked,
+      input.requestId ?? null,
+    );
+    await this.afterStart(ownerId, projectId, started);
+    return {
+      projectId,
+      startedAt: started.at.toISOString(),
+      criteriaDigest: started.version.digest,
+      criteriaCount: started.version.material.length,
+      lineLocked: started.lineLocked,
+      settings: started.record.settings,
+      differsFromRequest: started.record.differsFromRequest,
+    };
+  }
+
+  /**
+   * The start itself: one transaction, in the canonical lock order (docs/postgres-lock-order.md).
+   *
+   *   1. The project row, FOR NO KEY UPDATE (rank 40) — the lock `ProjectsService.update` takes
+   *      before it writes the same columns. A project that has a `started_at` is refused here,
+   *      409 `PROJECT_ALREADY_STARTED`, and so is a seal that is not the one standing now, read
+   *      under that lock so no criteria edit can land between the comparison and the writes.
+   *   2. The line and the merge check, under the binding's lock (rank 55): written as the owner's
+   *      choice, unless the line has started integrating — then it is left where it is, and the
+   *      answer says so (`startProjectLine`).
+   *   3. Automatic and the concurrency limit — `coordinator_enabled` and `max_concurrent_tasks`,
+   *      written only where they change, with the one `configRevision` bump every write of
+   *      `ProjectsService.AUTHORIZATION_FIELDS` owes — and `started_at`, in the same statement, as a
+   *      compare-and-set on its still being null.
+   *   4. The confirmation (rank 60), naming the version confirmed and carrying what the start left
+   *      the project with and which of that is not what it was asked for (`started_with`), at the
+   *      same instant as `started_at`. What it was asked for is the coordinator's request when the
+   *      start names one (`requestId`), and otherwise the settings the start was given.
+   *   5. The open start request, if any (rank 60), resolved APPROVED at that instant
+   *      (`answerStartRequests`).
+   *
+   * Every refusal comes before the first write, so a refused start writes nothing, and a retried
+   * attempt re-reads every one of those facts under its own locks.
+   */
+  private async start(
+    ownerId: string,
+    projectId: string,
+    criteriaDigest: string,
+    settingsFor: (
+      tx: Prisma.TransactionClient,
+      project: { maxConcurrentTasks: number },
+    ) => Promise<ProjectStartSettings>,
+    requestId: string | null = null,
+  ): Promise<ProjectStartOutcome> {
+    return withTransactionRetry(this.prisma, async (tx) => {
+      const [project] = await tx.$queryRaw<Array<{
+        startedAt: Date | null;
+        coordinatorEnabled: boolean;
+        maxConcurrentTasks: number;
+      }>>(Prisma.sql`
+        SELECT "started_at" AS "startedAt", "coordinator_enabled" AS "coordinatorEnabled",
+               "max_concurrent_tasks" AS "maxConcurrentTasks"
+          FROM "project"
+         WHERE "id" = ${projectId}::uuid AND "owner_id" = ${ownerId}::uuid
+           FOR NO KEY UPDATE`);
+      if (!project) throw new NotFoundException('project not found');
+      if (project.startedAt) throw projectAlreadyStarted(project.startedAt);
+      const version = standardSetVersion(
+        await ProjectAcceptanceService.statedCriteria(tx, projectId),
+      );
+      if (criteriaDigest !== version.digest) throw criteriaVersionMoved(version.digest);
+      // The request the card was drawn from, whatever has become of it since: its settings are
+      // what the card showed as suggested, which is what the owner's changes are measured against.
+      const request = requestId === null ? null : await tx.projectOpenItem.findFirst({
+        where: { id: requestId, projectId, kind: START_REQUEST_KIND },
+        select: { payload: true },
+      });
+      if (requestId !== null && !request) throw new NotFoundException('start request not found');
+
+      const asked = await settingsFor(tx, project);
+      const line = await startProjectLine(tx, { ownerId, projectId, settings: asked });
+      const settings: ProjectStartSettings = {
+        line: line.line,
+        ...(line.projectBranchName !== undefined ? { projectBranchName: line.projectBranchName } : {}),
+        automatic: asked.automatic,
+        maxConcurrentTasks: asked.maxConcurrentTasks,
+        mergeCheckCommand: line.mergeCheckCommand,
+      };
+
+      const at = new Date();
+      const authorization = {
+        ...(asked.automatic !== project.coordinatorEnabled
+          ? { coordinatorEnabled: asked.automatic }
+          : {}),
+        ...(asked.maxConcurrentTasks !== project.maxConcurrentTasks
+          ? { maxConcurrentTasks: asked.maxConcurrentTasks }
+          : {}),
+      };
+      const written = await tx.project.updateMany({
+        where: { id: projectId, ownerId, startedAt: null },
+        data: {
+          ...authorization,
+          ...(Object.keys(authorization).length > 0 ? { configRevision: { increment: 1 } } : {}),
+          startedAt: at,
+        },
+      });
+      if (written.count !== 1) throw projectAlreadyStarted(null);
+
+      const suggested = (request?.payload as unknown as ProjectStartRequest | undefined)?.settings;
+      const record: ProjectStartRecord = {
+        settings,
+        differsFromRequest: differingStartSettings(suggested ?? asked, settings),
+      };
+      const confirmation = await tx.projectStandardSetConfirmation.create({
+        data: {
+          projectId,
+          ownerId,
+          confirmedById: ownerId,
+          criteriaDigest: version.digest,
+          criteriaMaterial: version.material as unknown as Prisma.InputJsonValue,
+          confirmedAt: at,
+          startedWith: record as unknown as Prisma.InputJsonValue,
+        },
+        select: { id: true },
+      });
+      await answerStartRequests(tx, { ownerId, projectId, at });
+      return { confirmationId: confirmation.id, at, version, record, lineLocked: line.locked };
+    }, loggedRetry(this.logger, 'projectAcceptance.start'));
+  }
+
+  /**
+   * What follows a start's commit, outside it, and never at the cost of the start: the coordinator
+   * conversation is told, with the settings the start left — its tasks opted into auto-run start by
+   * themselves from now on, and the ones it filed to start by hand wait on it — and then `status`
+   * is re-projected, the confirmation being one of the two inputs `project-done-derived.ts` reads.
+   */
+  private async afterStart(
+    ownerId: string,
+    projectId: string,
+    started: ProjectStartOutcome,
+  ): Promise<void> {
+    if (this.sessions) {
       await tellCoordinatorProjectStarted(this.prisma, this.sessions, {
         ownerId,
         projectId,
         start: {
           by: 'CONFIRMATION',
-          confirmationId: confirmation.id,
-          criteriaCount: currentVersion.material.length,
-          at: confirmation.confirmedAt,
+          confirmationId: started.confirmationId,
+          criteriaCount: started.version.material.length,
+          at: started.at,
+          record: started.record,
+          lineLocked: started.lineLocked,
         },
       }).catch((error) =>
         this.logger.warn(`coordinator not told project ${projectId} was started: ${
           (error as { message?: string })?.message ?? String(error)}`),
       );
     }
-
-    return standardSetConfirmationStanding(
-      currentVersion,
-      await this.latestConfirmation(projectId),
+    await storeDerivedProjectStatus(this.prisma, ownerId, projectId).catch((error) =>
+      this.logger.warn(`derived project status not re-projected after the start: ${
+        (error as { message?: string })?.message ?? String(error)}`),
     );
   }
 
-  /** This project, or a 404. Tenancy, before either half of the confirmation path reads anything. */
-  private async assertProject(ownerId: string, projectId: string): Promise<void> {
+  /** This project, or a 404 — and whether it has been started. Tenancy, before either half of the
+   *  confirmation path reads anything. */
+  private async assertProject(
+    ownerId: string,
+    projectId: string,
+  ): Promise<{ startedAt: Date | null }> {
     const project = await this.prisma.project.findFirst({
       where: { id: projectId, ownerId },
-      select: { id: true },
+      select: { startedAt: true },
     });
     if (!project) throw new NotFoundException('project not found');
+    return project;
   }
 
   /** The newest confirmation on record — current or not; deciding which is the caller's read. */
@@ -303,6 +550,7 @@ export class ProjectAcceptanceService {
         criteriaMaterial: true,
         confirmedAt: true,
         confirmedById: true,
+        startedWith: true,
       },
     });
     return row === null ? null : {
@@ -310,7 +558,70 @@ export class ProjectAcceptanceService {
       criteriaMaterial: row.criteriaMaterial as unknown as RecordedStandardSetConfirmation['criteriaMaterial'],
       confirmedAt: row.confirmedAt,
       confirmedById: row.confirmedById,
+      // What a start left the project with, for the receipt of it; null on a confirmation that
+      // started nothing, which is how a receipt tells the two apart.
+      startedWith: (row.startedWith as unknown as ProjectStartRecord | null) ?? null,
     };
+  }
+
+  /** A standing, with what changed since the confirmation it names: `stated` against that
+   *  confirmation's stored material (`criteriaChangesSinceConfirmed`). */
+  private async confirmationView(
+    stated: StatedAcceptanceCriterion[],
+    standing: StandardSetConfirmationStanding,
+  ): Promise<StandardSetConfirmationView> {
+    if (standing.confirmation === null) {
+      return {
+        ...standing,
+        changesSinceConfirmed: null,
+        changesSinceConfirmedAbsentReason: 'NEVER_CONFIRMED',
+      };
+    }
+    const confirmed = standing.confirmation.criteriaMaterial;
+    return {
+      ...standing,
+      changesSinceConfirmed: criteriaChangesSinceConfirmed(
+        stated,
+        confirmed,
+        await this.confirmedVerificationMethods(stated, confirmed),
+      ),
+      changesSinceConfirmedAbsentReason: null,
+    };
+  }
+
+  /**
+   * For each criterion whose content moved since the confirmation, the verification method it was
+   * confirmed with — when its words are the ones it has now and that method was a rung of the
+   * ladder, the only shape a tightening that landed on its own can have.
+   *
+   * Asked of PostgreSQL because the content hash is PostgreSQL's: the definition trigger writes it
+   * with `project_acceptance_definition_content_hash` over the words AND the method, the
+   * confirmation stored it, and nothing in TypeScript reproduces it. So the question is put the
+   * other way round — which rung, beside the words stored on the row, hashes to what was confirmed
+   * — and a criterion whose words moved, or whose confirmed method was prose, gets no answer.
+   */
+  private async confirmedVerificationMethods(
+    stated: StatedAcceptanceCriterion[],
+    confirmed: ConfirmedCriterionVersion[],
+  ): Promise<Map<string, string>> {
+    const current = new Map(stated.map((criterion) => [criterion.definitionId, criterion.contentHash]));
+    const moved = confirmed.filter((item) =>
+      current.has(item.definitionId) && current.get(item.definitionId) !== item.contentHash);
+    if (moved.length === 0) return new Map();
+    const rows = await this.prisma.$queryRaw<Array<{
+      definitionId: string;
+      verificationMethod: string;
+    }>>(Prisma.sql`
+      SELECT d."id"::text AS "definitionId", ladder."rung" AS "verificationMethod"
+        FROM unnest(
+               ${moved.map((item) => item.definitionId)}::uuid[],
+               ${moved.map((item) => item.contentHash)}::text[]
+             ) AS confirmed("definitionId", "contentHash")
+        JOIN "project_acceptance_criterion_definition" d ON d."id" = confirmed."definitionId"
+       CROSS JOIN unnest(${[...VERIFICATION_METHOD_RUNGS]}::text[]) AS ladder("rung")
+       WHERE project_acceptance_definition_content_hash(d."text", ladder."rung")
+             = confirmed."contentHash"`);
+    return new Map(rows.map((row) => [row.definitionId, row.verificationMethod]));
   }
 
   /** Refresh the two digest lanes of `project_completion_contract` under the database's Project-row

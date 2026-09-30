@@ -23,6 +23,7 @@ import {
   OWNER_SEND_BACK_LABEL,
   OWNER_SENT_BACK_HEADING,
   OWNER_SHOW_WHAT_SETTLED_IT,
+  REPORT_CLAMP,
   WAITING_FOR_CONFIRMATION,
   WHAT_SETTLES_IT,
   WHAT_THE_RUN_REPORTED,
@@ -271,6 +272,23 @@ describe('the confirmation card', () => {
     const bare = card({ view: view({ acceptanceCriteria: null }), waiting: waiting({ report: null }) });
     expect(bare).toContain(OWNER_CONFIRMATION_NO_CRITERIA);
     expect(bare).toContain(OWNER_CONFIRMATION_NO_REPORT);
+  });
+
+  it('keeps the paragraphs and list items of both boxes on lines of their own', () => {
+    // Flattened, a report written as a lead and a list read as one run-on line — on the phone with
+    // the list's dashes still in it.
+    const html = card({
+      view: view({ acceptanceCriteria: '## Done when\n\n- all filed\n- totals match' }),
+      waiting: waiting({ report: { text: 'Done.\n\n- **renamed**: 38\n- **moved**: 2', reportedAt: '2026-09-13T10:39:00.000Z' } }),
+    });
+    expect(html).toContain('>Done when\n\n• all filed\n• totals match<');
+    expect(html).toContain('>Done.\n\n• renamed: 38\n• moved: 2<');
+  });
+
+  it('folds at the ceiling without leaving the … on a line of its own', () => {
+    const text = `${'x'.repeat(REPORT_CLAMP - 1)}\n\nthe rest`;
+    const html = card({ waiting: waiting({ report: { text, reportedAt: '2026-09-13T10:39:00.000Z' } }) });
+    expect(html).toContain(`>${'x'.repeat(REPORT_CLAMP - 1)}…<`);
   });
 });
 

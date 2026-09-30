@@ -1,3 +1,8 @@
+import type {
+  CriteriaChangesSinceConfirmed,
+  CriteriaChangesSinceConfirmedAbsentReason,
+  ProjectStartRecord,
+} from '@orbit/shared';
 import { api } from '../api';
 
 /**
@@ -32,6 +37,10 @@ export interface RecordedStandardSetConfirmation {
   criteriaMaterial: ConfirmedCriterionVersion[];
   confirmedAt: string;
   confirmedById: string;
+  /** What the start this confirmation was part of left the project running with, or null for one
+   *  that started nothing — a re-confirmation, or one made before starts recorded their settings.
+   *  The receipt reads it: a start says "started" and what with, anything else says "confirmed". */
+  startedWith?: ProjectStartRecord | null;
 }
 
 /**
@@ -47,6 +56,12 @@ export interface StandardSetConfirmationStanding {
   confirmed: boolean;
   currentVersion: StandardSetVersion;
   confirmation: RecordedStandardSetConfirmation | null;
+  /** What changed since the confirmation on record — the "Confirm the new criteria?" card's list,
+   *  computed by the server off the material that confirmation stored. Null when nothing was ever
+   *  confirmed (`changesSinceConfirmedAbsentReason` says so); all `unchanged` once the set that
+   *  stands is the one confirmed. Absent from a server that predates it. */
+  changesSinceConfirmed?: CriteriaChangesSinceConfirmed | null;
+  changesSinceConfirmedAbsentReason?: CriteriaChangesSinceConfirmedAbsentReason | null;
 }
 
 /** Kept off `['project', id]` on purpose: the standing is a second document with its own

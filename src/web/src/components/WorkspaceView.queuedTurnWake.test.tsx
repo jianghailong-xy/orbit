@@ -377,7 +377,7 @@ describe('turns nobody typed, taken off the queue unrun', { timeout: 60_000 }, (
 
     await click(cancelIn(bubbleSaying(`!${ACCEPTANCE}`)));
     await waitForUi(() => expect(cancelMock).toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-acceptance'));
-    await click(cancelIn(mounted().querySelector('.bgwake-wrap') ?? undefined));
+    await click(cancelIn(mounted().querySelector('.bgwake') ?? undefined));
     await waitForUi(() => expect(cancelMock).toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-bg-wake'));
     await click(cancelIn(bubbleSaying('请开始执行任务')));
     await waitForUi(() => expect(cancelMock).toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-brief'));

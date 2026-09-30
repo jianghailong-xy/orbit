@@ -164,6 +164,86 @@ describe('providerChoices', () => {
   });
 });
 
+describe('the runner’s Codex accounts, under the Codex choice', () => {
+  const home = (id: string) => `/root/.orbit/codex-accounts/${id}`;
+  const codex = (accounts: Array<{ id: string; name?: string; auth: 'yes' | 'no' | 'unknown' }>) => [
+    { engine: 'claude' as const, installed: true, auth: 'yes' as const },
+    {
+      engine: 'codex' as const,
+      installed: true,
+      auth: 'yes' as const,
+      accounts: accounts.map((account) => ({ ...account, home: home(account.id), codexHome: home(account.id) })),
+    },
+  ];
+  const usage = {
+    codex: {
+      provider: 'codex',
+      primary: { utilization: 100, windowDurationMins: 300 },
+      accounts: {
+        '3fa91c2e': { provider: 'codex', primary: { utilization: 0, windowDurationMins: 10080 } },
+      },
+    },
+  } as never;
+  const accountsOf = (choices: ReturnType<typeof providerChoices>, slug = 'codex') =>
+    choices.find((choice) => choice.slug === slug)?.accounts;
+
+  it('lists each account with its own quota once the runner has signed in two', () => {
+    const choices = providerChoices(
+      [],
+      catalog,
+      undefined,
+      codex([{ id: 'default', auth: 'yes' }, { id: '3fa91c2e', name: 'Work', auth: 'yes' }, { id: 'c0ffee42', auth: 'no' }]),
+      [],
+      usage,
+    );
+    expect(accountsOf(choices)).toEqual([
+      { id: 'default', label: 'Default', quota: '5h 100%', nearLimit: true },
+      { id: '3fa91c2e', label: 'Work', quota: 'Weekly 0%' },
+      // Unnamed, unread, and signed out: it is listed, and says why it can't take a session.
+      { id: 'c0ffee42', label: 'Account c0ffee42', unavailable: 'Not signed in' },
+    ]);
+    expect(accountsOf(choices, 'claude')).toBeUndefined();
+  });
+
+  it('lists none for a single account, or for an engine that cannot run', () => {
+    expect(accountsOf(providerChoices([], catalog, undefined, codex([{ id: 'default', auth: 'yes' }]), [], usage)))
+      .toBeUndefined();
+    const signedOut = codex([{ id: 'default', auth: 'no' }, { id: '3fa91c2e', auth: 'yes' }]);
+    signedOut[1].auth = 'no' as never;
+    const blocked = providerChoices([], catalog, undefined, signedOut, [], usage);
+    expect(blocked.find((choice) => choice.slug === 'codex')?.unavailable).toBe('Not signed in');
+    expect(accountsOf(blocked)).toBeUndefined();
+  });
+
+  it("lists a Claude login's accounts under Claude too, each by the window that stops it", () => {
+    const claudeHome = (id: string) => `/root/.orbit/claude-accounts/${id}`;
+    const engines = [
+      {
+        engine: 'claude' as const,
+        installed: true,
+        auth: 'yes' as const,
+        accounts: [
+          { id: 'default', home: '/root/.claude', auth: 'yes' as const },
+          { id: 'fad98727', name: 'jianghailong.rd', home: claudeHome('fad98727'), auth: 'yes' as const },
+        ],
+      },
+    ];
+    const claudeUsage = {
+      claude: {
+        provider: 'claude',
+        fiveHour: { utilization: 0 },
+        sevenDay: { utilization: 100 },
+        accounts: { fad98727: { provider: 'claude', fiveHour: { utilization: 19 }, sevenDay: { utilization: 28 } } },
+      },
+    } as never;
+    expect(accountsOf(providerChoices([], catalog, undefined, engines, [], claudeUsage), 'claude')).toEqual([
+      // Its 5-hour window reads 0% but its weekly one is spent: the row says what stops it.
+      { id: 'default', label: 'Default', quota: 'Weekly 100%', nearLimit: true },
+      { id: 'fad98727', label: 'jianghailong.rd', quota: 'Weekly 28%' },
+    ]);
+  });
+});
+
 describe('brandForProvider', () => {
   it('gives a built-in engine the same mark as its vendor', () => {
     expect(brandForProvider('claude', 'Claude').glyphKey).toBe('anthropic');

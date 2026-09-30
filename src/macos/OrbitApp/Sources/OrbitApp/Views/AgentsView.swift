@@ -1098,7 +1098,12 @@ struct NewSessionView: View {
             // the machine this draft would run on, and the one whose Engines section fixes a row.
             ProviderSwitchSheet(
                 choices: providerChoices, currentSlug: draft.provider, agentName: agent.name,
+                currentAccount: draft.provider == "claude" ? draft.account(for: "claude") : draft.codexAccount,
+                automatic: ["codex", "claude"].reduce(into: [String: Bool]()) { offered, engine in
+                    if draft.automaticOffered(engine) { offered[engine] = draft.draftAutomatic(engine) }
+                },
                 onSelect: { slug in draft.pickDraftProvider(slug) },
+                onSelectAccount: { slug, account in draft.pickDraftAccount(slug, account) },
                 onFixRunner: agent.runnerId.map { rid in { app.route(to: .runner(rid)) } })
         }
     }
@@ -1118,7 +1123,8 @@ struct NewSessionView: View {
         SessionProviderChoices.choices(configured: draft.configuredProviders,
                                        catalog: draft.modelCatalog,
                                        engines: draft.runnerEngines,
-                                       pools: draft.allPools)
+                                       pools: draft.allPools,
+                                       planUsage: draft.runnerPlanUsage)
     }
 
     private var currentProviderChoice: ProviderChoice {
@@ -1131,6 +1137,7 @@ struct NewSessionView: View {
     /// for a configured provider it's a constant the user already set and isn't actionable here, so
     /// the credential earns a line only when it's broken — matching web, where it surfaces solely as
     /// the provider's `unavailable` warning (not yet modelled on the native ProviderChoice).
+    /// No account either (web parity): the composer's quota gauge names it in its detail.
     private var heroSubtitle: String {
         draft.providerCapabilitiesResolved
             ? AgentDefaults.friendlyName(draft.modelID, for: draft.provider,

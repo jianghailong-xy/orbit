@@ -5,6 +5,7 @@ import {
   standardSetVersion,
   type AcceptanceCriterionDefinitionLike,
 } from './project-acceptance';
+import { START_REQUEST_KIND } from './project-start-request';
 
 /**
  * WHICH OF THESE PROJECTS ARE WAITING FOR THEIR OWNER TO CONFIRM THE STANDARD SET.
@@ -15,12 +16,16 @@ import {
  * hole the criteria decision had before it was counted there, and the same one the file's header
  * records ("it stayed dark while a real criteria decision sat").
  *
- * IT COUNTS EXACTLY THE CARDS THE CONFIRMATION CARD DRAWS. The four facts are the card's own
+ * IT COUNTS EXACTLY THE CARDS THE CONFIRMATION CARD DRAWS. The facts are the card's own
  * (`settlementHeldOnConfirmation`, in `AcceptanceConfirmationCard.tsx` and `ConsoleModel.swift`):
- * the project is OPEN, it states criteria, it holds at least one task, and the set standing now has
- * not been confirmed. Anything else is a question with no card to answer it, and a badge that opens
+ * the project is OPEN and STARTED, it states criteria, it holds at least one task, and the set
+ * standing now has not been confirmed — the "Confirm the new criteria?" card once it moved, the
+ * older confirmation card for a project nobody ever confirmed. A project that has not been started
+ * is asked by its start card instead, and only once its coordinator has asked
+ * (`projectsReadyToStart` below): a plan with tasks and no request draws no card any more, so it
+ * lights nothing. Anything else is a question with no card to answer it, and a badge that opens
  * nothing is worse than a dark one. `satisfied` is deliberately absent for the card's reason: the
- * question is asked before the work, so what the criteria currently hold has no bearing on it.
+ * question is not about what the criteria currently hold.
  *
  * The digest is computed here rather than read off a stored flag, for the reason `project-acceptance
  * .ts` gives for the standing itself: a confirmation counts while, and only while, it names the
@@ -36,8 +41,10 @@ export async function projectsAwaitingStandardSetConfirmation(
 ): Promise<Set<string>> {
   if (projectIds.length === 0) return new Set();
 
+  // Started ones only: an unstarted project's criteria are confirmed by the start itself, on the
+  // start card, which `projectsReadyToStart` counts.
   const open = await tx.project.findMany({
-    where: { id: { in: [...projectIds] }, ownerId, status: 'OPEN' },
+    where: { id: { in: [...projectIds] }, ownerId, status: 'OPEN', startedAt: { not: null } },
     select: { id: true },
   });
   const ids = open.map((project) => project.id);
@@ -99,4 +106,34 @@ export async function projectsAwaitingStandardSetConfirmation(
     awaiting.add(projectId);
   }
   return awaiting;
+}
+
+/**
+ * WHICH OF THESE PROJECTS ARE READY TO START: not started, OPEN, and holding the request its
+ * coordinator filed (`START_REQUEST`, `project_request_start`) — exactly the projects whose
+ * coordinator conversation draws the "Start this project?" card. The row says so in words of its
+ * own ("Ready to start", `sessionWaitingKind`), which is why these are counted apart from the
+ * confirmations above rather than folded into them.
+ *
+ * One read. A request whose plan has since moved is still OPEN here until the next read of the
+ * open items supersedes it (`supersedeStaleStartRequest`) — the read that puts the card in front of
+ * the owner, so a badge that outlives its request does so only until the conversation is opened.
+ */
+export async function projectsReadyToStart(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  projectIds: readonly string[],
+): Promise<Set<string>> {
+  if (projectIds.length === 0) return new Set();
+  const requests = await tx.projectOpenItem.findMany({
+    where: {
+      ownerId,
+      projectId: { in: [...projectIds] },
+      kind: START_REQUEST_KIND,
+      state: 'OPEN',
+      project: { status: 'OPEN', startedAt: null },
+    },
+    select: { projectId: true },
+  });
+  return new Set(requests.map((request) => request.projectId));
 }

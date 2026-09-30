@@ -32,12 +32,25 @@ export function probeReportsSignedIn(
   runnerId: string,
   engine: LoginEngine,
   account?: string,
+  accountName?: string,
 ): boolean {
   const health = runners
     ?.find((r) => r.id === runnerId)
     ?.engines?.find((e) => e.engine === engine);
-  if (account && health?.accounts) {
-    return health.accounts.some((a) => a.id === account && a.auth === 'yes');
+  if (account || accountName) {
+    const accounts = health?.accounts;
+    if (accounts) {
+      return accounts.some(
+        (a) =>
+          a.auth === 'yes' &&
+          (account ? a.id === account : a.name?.trim() === accountName?.trim()),
+      );
+    }
+    // A named account must appear in the account list before this wait can end. Falling back to
+    // the engine's auth bit here is wrong for a new account (or a non-Default slot): that bit
+    // answers for Default, which may already be signed in while the target is absent from the
+    // heartbeat. Default is the one exception because the engine bit is its own answer.
+    if (accountName || account !== 'default') return false;
   }
   return health?.auth === 'yes';
 }
@@ -214,9 +227,13 @@ export function RunnerSignIn({
   useEffect(() => {
     if (status !== 'done') return;
     setAwaitingProbe(true);
+    // The runners query is usually already mounted by the Providers page. Mark it stale when the
+    // relay finishes so that this transition always starts a fresh list read; merely mounting a
+    // second observer can otherwise reuse a just-read cache entry and leave the account rows old.
+    void qc.invalidateQueries({ queryKey: runnersQuery().queryKey });
     const stop = setTimeout(() => setAwaitingProbe(false), PROBE_WAIT_MS);
     return () => clearTimeout(stop);
-  }, [status]);
+  }, [qc, status]);
   useQuery({
     ...runnersQuery(),
     enabled: awaitingProbe,
@@ -227,6 +244,10 @@ export function RunnerSignIn({
         engine,
         // A new account's slot is the one the runner reported adding for this sign-in.
         account ?? (adding ? (s?.account ?? undefined) : undefined),
+        // Until the runner reports the new slot, its login state may not have an account id yet.
+        // The name is still known locally and keeps the poll from mistaking Default's auth for the
+        // new account's sign-in.
+        adding ? accountName : undefined,
       )
         ? false
         : PROBE_POLL_MS,

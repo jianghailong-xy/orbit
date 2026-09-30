@@ -1,6 +1,4 @@
 import {
-  CheckOutlined,
-  CopyOutlined,
   DeleteOutlined,
   EditOutlined,
   HolderOutlined,
@@ -8,6 +6,7 @@ import {
   MoreOutlined,
   PlusOutlined,
   RightOutlined,
+  WarningFilled,
 } from '@ant-design/icons';
 import {
   DndContext,
@@ -31,9 +30,17 @@ import { App as AntdApp, Button, Dropdown, Input, Modal, Spin, type MenuProps } 
 import { useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
-import { copyText } from '../lib/clipboard';
 import { encodeId } from '../lib/idCodec';
 import type { Runner } from '../components/TasksSidePanel';
+import { useRunnerTokenRotation } from '../components/RunnerTokenRotation';
+import {
+  latestRunnerVersion,
+  listAttentionLine,
+  runnerAttention,
+  type AttentionItem,
+  type AttentionWorkspace,
+} from '../lib/runnerAttention';
+import { publishedRunnerVersionQuery, workspacesQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
 
 // Compact relative time for heartbeats (which arrive every ~30s, so seconds matter).
@@ -70,13 +77,18 @@ export function RunnersPage() {
     refetchInterval: 15_000,
   });
   const list = runners.data ?? [];
+  // What the third line is read from: each runner's workspaces, and the newest release anyone can see.
+  const workspaces = (useQuery(workspacesQuery()).data ?? []) as Array<
+    AttentionWorkspace & { runnerId?: string | null }
+  >;
+  const publishedVersion = useQuery(publishedRunnerVersionQuery()).data;
+  const latestVersion = latestRunnerVersion(publishedVersion, list);
+  const nowMs = Date.now();
 
   const [renaming, setRenaming] = useState<Runner | null>(null);
   const [renameVal, setRenameVal] = useState('');
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
-  // The freshly minted token from a rotation, shown exactly once.
-  const [revealed, setRevealed] = useState<{ name: string; token: string } | null>(null);
-  const [copied, setCopied] = useState(false);
+  const rotation = useRunnerTokenRotation();
 
   const renameMut = useMutation({
     mutationFn: ({ id, displayName }: { id: string; displayName: string }) =>
@@ -92,16 +104,6 @@ export function RunnersPage() {
     mutationFn: (id: string) => api(`/runners/${id}`, { method: 'DELETE' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['runners'] }),
     onError: (e: Error) => message.error(e.message || 'Delete failed'),
-  });
-
-  const rotateMut = useMutation({
-    mutationFn: ({ id }: { id: string; name: string }) =>
-      api<{ token: string }>(`/runners/${id}/rotate-token`, { method: 'POST' }),
-    onSuccess: (data, vars) => {
-      setCopied(false);
-      setRevealed({ name: vars.name, token: data.token });
-    },
-    onError: (e: Error) => message.error(e.message || 'Rotate failed'),
   });
 
   const reorderMut = useMutation({
@@ -137,15 +139,6 @@ export function RunnersPage() {
     if (renaming) renameMut.mutate({ id: renaming.id, displayName: renameVal.trim() });
   };
 
-  const copyToken = () => {
-    if (!revealed) return;
-    void copyText(revealed.token).then((ok) => {
-      if (!ok) return;
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
-    });
-  };
-
   const open = (r: Runner) => navigate(`/runners/${encodeId(r.id)}`);
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
@@ -173,14 +166,7 @@ export function RunnersPage() {
       label: 'Rotate token',
       onClick: ({ domEvent }) => {
         domEvent.stopPropagation();
-        modal.confirm({
-          title: `Rotate token for “${r.displayName || r.name}”?`,
-          content:
-            'This immediately invalidates the runner’s current credential. The runner will go offline until you set the new token as runnerToken in its ~/.orbit/config.json and restart it.',
-          okText: 'Rotate token',
-          cancelText: 'Cancel',
-          onOk: () => rotateMut.mutateAsync({ id: r.id, name: r.displayName || r.name }),
-        });
+        rotation.confirmRotate(r);
       },
     },
     { type: 'divider' },
@@ -237,6 +223,12 @@ export function RunnersPage() {
                 <SortableRunnerCard
                   key={runner.id}
                   runner={runner}
+                  attention={runnerAttention({
+                    runner,
+                    workspaces: workspaces.filter((workspace) => workspace.runnerId === runner.id),
+                    nowMs,
+                    latestVersion,
+                  })}
                   menuItems={menu(runner)}
                   menuOpen={menuOpenId === runner.id}
                   dragDisabled={reorderMut.isPending}
@@ -272,36 +264,14 @@ export function RunnersPage() {
         </div>
       </Modal>
 
-      <Modal
-        title="New runner token"
-        open={revealed !== null}
-        onCancel={() => setRevealed(null)}
-        footer={[
-          <Button key="done" type="primary" onClick={() => setRevealed(null)}>
-            Done
-          </Button>,
-        ]}
-        destroyOnClose
-      >
-        <div style={{ color: 'var(--text-3)', fontSize: 13, marginBottom: 12 }}>
-          Copy this token now — it won’t be shown again. Set it as <code>runnerToken</code> in{' '}
-          <code>~/.orbit/config.json</code> on <b>{revealed?.name}</b>, then restart the runner.
-        </div>
-        <div className="runner-token-box">{revealed?.token}</div>
-        <Button
-          icon={copied ? <CheckOutlined /> : <CopyOutlined />}
-          onClick={copyToken}
-          style={{ marginTop: 12 }}
-        >
-          {copied ? 'Copied' : 'Copy token'}
-        </Button>
-      </Modal>
+      {rotation.tokenModal}
     </>
   );
 }
 
 function SortableRunnerCard({
   runner,
+  attention,
   menuItems,
   menuOpen,
   dragDisabled,
@@ -309,6 +279,7 @@ function SortableRunnerCard({
   onMenuOpenChange,
 }: {
   runner: Runner;
+  attention: AttentionItem[];
   menuItems: MenuProps['items'];
   menuOpen: boolean;
   dragDisabled: boolean;
@@ -347,6 +318,10 @@ function SortableRunnerCard({
   const tags = [runner.hostname, runner.labels?.length ? runner.labels.join(', ') : null]
     .filter(Boolean)
     .join(' · ');
+  const attentionLine = listAttentionLine(attention);
+  const attentionTone = attention.slice(0, 2).some((item) => item.tone === 'bad')
+    ? 'bad'
+    : 'warn';
 
   return (
     <div
@@ -390,6 +365,12 @@ function SortableRunnerCard({
           </div>
         )}
         {tags && <div className="runner-tags">{tags}</div>}
+        {attentionLine && (
+          <div className={`runner-attention ${attentionTone}`}>
+            <WarningFilled />
+            <span>{attentionLine}</span>
+          </div>
+        )}
       </div>
       {runner.version && <span className="runner-version">{runner.version}</span>}
       <Dropdown

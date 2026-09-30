@@ -26,6 +26,29 @@ priority order or an escalation chain:
   confirm or send back, a coordinator included: every
   such call is refused `OWNER_CONFIRMATION_REQUIRES_ACCOUNT_OWNER`.
 
+  In an Automatic project (`coordinatorEnabled`) no session can declare it either, unless the
+  project criterion the task serves asks for the owner: that criterion's `verificationMethod`
+  starts with `OWNER_CONFIRMED` (leading whitespace aside). A single create, a batch create, or an
+  update that carries a session header (`X-Orbit-Session-Id`) and would leave an `OWNER_CONFIRMED`
+  task in such a project serving any other criterion, or none, is refused whole with
+  `409 OWNER_CONFIRMATION_NOT_DELEGATED` (`requiredAction:
+  DECLARE_A_CRITERION_THE_COORDINATOR_SETTLES`) and nothing is written — a batch writes none of its
+  items. Turning Automatic on is the owner saying the coordinator settles the work from here, yet
+  from 2026-09-14 to 2026-09-29 agents declared this criterion on 35 tasks in Automatic projects:
+  the owner confirmed all 35 by hand, and about ten needed them at all. The owner's say over "done"
+  comes in through the ruler instead. Work the coordinator settles declares `EVIDENCE_JUDGMENT`
+  (decided with `task_evidence_decide`) or `EXECUTABLE`; a trade-off only the owner can make is a
+  question for `ask_owner`, and a release or an irreversible step is authorised in advance the same
+  way; a result the owner has to judge in person is a criterion whose `verificationMethod` is
+  rewritten to start with `OWNER_CONFIRMED` — a criteria edit, so it waits for the owner's decision.
+  An update is judged as the row it leaves, and only when it moves the task's criterion, its
+  project or the criterion it serves: rows that already exist are not rewritten, and an edit that
+  declares nothing new (a rename, a `FAILED` report, re-declaring the key it already serves) passes.
+  Writes with no session header — the owner in the app, the user API, the CLI in the owner's own
+  terminal — projects with Automatic off, and tasks in no project are unaffected. The rule is in the
+  task service (`src/apiserver/src/tasks/owner-confirmed-automatic-delegation.ts`), so the user
+  door, the runner door and a direct call meet the same check.
+
 Runner CLI, MCP, and runner REST creates require `completionCriterion` explicitly on every task
 and batch item. Command, policy, or verifier-relation fields do not stand in for that declaration;
 old runner clients fail loudly instead of silently creating a human obligation. The legacy

@@ -70,6 +70,15 @@ import {
 import { docWithdrawReason, withdrawDocSentences } from './wiki-doc-withdrawal';
 import { mergeReceiptText, ownerResolutionText } from './wiki-dossier';
 import { wikiMaintenanceRunChanges } from './wiki-maintenance-breaker';
+import {
+  ChangesetNeighbours,
+  neighbourText,
+  similarOf,
+  verificationRejections,
+  type NeighbourDraft,
+  type NeighbourLookups,
+  type NeighbourRow,
+} from './wiki-neighbours';
 import { setWikiMaintenance, type WikiMaintenanceInput } from './wiki-maintenance-settings';
 import { isOrbitAuthoredTurn } from '../sessions/orbit-authored-turn';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -387,6 +396,18 @@ interface ChangesetBudget {
 
 /** A revert's restorations, by entry: the sources of the revision each amend puts back. */
 type Restorations = ReadonlyMap<string, readonly ResolvedSource[]>;
+
+/**
+ * How long a submission's transaction may stay open, and wait for a connection to open in: 15 s and
+ * 5 s, where Prisma's defaults are 5 s and 2 s.
+ *
+ * Thirty adds are some three hundred statements, and on this host at a load of 30 each can take 10–25 ms:
+ * that is how the default closed a maintenance run's changeset under it (P2028, 2026-09-29) and threw the
+ * run's work away. What grew with the space — the near neighbours — is read before the transaction opens
+ * (`ChangesetNeighbours`); this is the margin for what cannot move out, not room for a slow query:
+ * wiki-scale.pg.spec.ts holds the transaction well under the old 5 s without it.
+ */
+const CHANGESET_TRANSACTION = { timeout: 15_000, maxWait: 5_000 };
 
 /** What a spot-check rejection did to the space's mode, for the one notification it earns. */
 interface ReviewModeTrip {
@@ -1058,6 +1079,9 @@ export class WikiService {
       ? sha256(canonicalJson({ spaceId, ops, rationale: input.rationale }))
       : null;
     const literals = await this.envLiterals(this.prisma, principal.ownerId);
+    // Every draft's near neighbours, read before the transaction opens and re-checked inside it: the one
+    // step of an add whose cost grows with the space (wiki-neighbours.ts).
+    const neighbours = await ChangesetNeighbours.read(this.prisma, principal.ownerId, space.id, this.neighbourDrafts(ops, literals));
     const answer = await withTransactionRetry(
       this.prisma,
       async (tx) => {
@@ -1065,9 +1089,9 @@ export class WikiService {
           const replay = await this.replayIdempotent(tx, principal.ownerId, input.idempotencyKey, requestSha256!);
           if (replay) return replay;
         }
-        return this.recordChangeset(tx, principal, space, ops, input, requestSha256, literals);
+        return this.recordChangeset(tx, principal, space, ops, input, requestSha256, literals, null, neighbours);
       },
-      loggedRetry(this.logger, 'wiki.submitChangeset'),
+      loggedRetry(this.logger, 'wiki.submitChangeset', { transaction: CHANGESET_TRANSACTION }),
     );
     // AFTER the commit, never inside the closure above: a retried transaction would announce the same
     // write once per attempt, and this announcement is what a client's re-read hangs off — it may
@@ -1109,11 +1133,37 @@ export class WikiService {
   }
 
   /**
+   * The drafts whose neighbours a submission looks up, as `prepareOp` will: every add and supersede
+   * within the changeset's size whose shape holds, redacted, with the content its lineage is written
+   * with. An op refused later simply never uses what was read for it.
+   */
+  private neighbourDrafts(ops: unknown[], literals: readonly string[]): NeighbourDraft[] {
+    const drafts: NeighbourDraft[] = [];
+    for (let seq = 0; seq < Math.min(ops.length, WIKI_LIMITS.opsPerChangeset); seq += 1) {
+      const op = (ops[seq] ?? {}) as Record<string, unknown>;
+      if ((op.op !== 'add' && op.op !== 'supersede') || shapeErrors(ops[seq], seq).length > 0) continue;
+      const draft = (redactOp(op, literals).value.entry ?? {}) as Record<string, unknown>;
+      const written = preparedDraft(draft);
+      drafts.push({
+        seq,
+        text: neighbourText(draft),
+        // shapeErrors has established that a supersede's entryId decodes.
+        exclude: op.op === 'supersede' ? toUuid(op.entryId as string) : null,
+        written: { title: written.title, summary: written.summary, aliases: written.aliases, fields: written.fields },
+      });
+    }
+    return drafts;
+  }
+
+  /**
    * One submission, inside one transaction: every op processed in the contract's order, the ones that
    * passed written, and the answer assembled from what each one became.
    *
    * A dry run takes the whole path and writes nothing — no changeset, no op, no entry — which is what
    * lets a maintenance run check a batch before it proposes it.
+   *
+   * `neighbours` is what `submitChangeset` read before the transaction; without it, as for the owner's
+   * own changesets a decision or a revert records, every draft is looked up here.
    */
   private async recordChangeset(
     tx: Tx,
@@ -1124,8 +1174,10 @@ export class WikiService {
     requestSha256: string | null,
     literals: readonly string[],
     restorations: Restorations | null = null,
+    neighbours: ChangesetNeighbours | null = null,
   ): Promise<Record<string, unknown>> {
     const dryRun = input.dryRun === true;
+    const lookups = neighbours ? await neighbours.recheck(tx, principal.ownerId) : null;
     const settings = wikiSpaceSettings(space.settings);
     const mode = settings.reviewMode;
     // A Wiki maintenance run's changesets are one run to the circuit breaker: what its earlier ones
@@ -1206,7 +1258,7 @@ export class WikiService {
             `a changeset holds at most ${WIKI_LIMITS.opsPerChangeset} ops: submit the rest in another one`,
           );
         }
-        const prepared = await this.prepareOp(tx, principal, space.id, seq, ops[seq], budget, literals);
+        const prepared = await this.prepareOp(tx, principal, space.id, seq, ops[seq], budget, literals, lookups);
         if (prepared.byMode?.mode === 'tiered') {
           // Tiered's spot check (`reviewModes.spotChecks`): one in every block of the ops it applies at
           // once, drawn by position. Automatic applies nothing here — its verdicts draw theirs, when the
@@ -1215,6 +1267,7 @@ export class WikiService {
           budget.appliedByModeBefore += 1;
         }
         outcome = await this.recordOp(tx, principal, space.id, changesetId, seq, prepared, dryRun, restorations);
+        if (!dryRun) lookups?.recorded(prepared);
         // What keeps the changeset open is the OP's decision, not its outcome: a challenge takes effect
         // at once and still waits for the owner's answer, and so does a spot check; an op waiting for
         // its verification keeps it open too, without being anybody's queue.
@@ -1270,6 +1323,7 @@ export class WikiService {
     raw: unknown,
     budget: ChangesetBudget,
     literals: readonly string[],
+    lookups: NeighbourLookups | null,
   ): Promise<PreparedOp> {
     const op = (raw ?? {}) as Record<string, unknown>;
     const opName = op.op as WikiOp;
@@ -1394,9 +1448,11 @@ export class WikiService {
       );
     }
 
-    // 8. Near neighbours, for the agent and for the review card. Never a refusal (§4.1 step 8).
+    // 8. Near neighbours, for the agent and for the review card. Never a refusal (§4.1 step 8). As read
+    //    before the transaction while nothing since can have changed them, and looked up here otherwise.
     const similar = draft
-      ? await this.nearNeighbours(tx, principal.ownerId, spaceId, draft, target?.id ?? null)
+      ? (lookups?.answer(seq, neighbourText(draft), target?.id ?? null)
+        ?? await this.nearNeighbours(tx, principal.ownerId, spaceId, draft, target?.id ?? null))
       : [];
 
     return {
@@ -3847,9 +3903,7 @@ export class WikiService {
     draft: Record<string, unknown>,
     exclude: string | null,
   ): Promise<WikiSimilar[]> {
-    const title = typeof draft.title === 'string' ? draft.title : '';
-    const summary = typeof draft.summary === 'string' ? draft.summary : '';
-    const text = `${title} ${summary}`.trim();
+    const text = neighbourText(draft);
     if (text === '') return [];
     // The five first, and a rejection's reason only for them: the reason is a lookup per row, and it
     // belongs to what is returned, not to every entry the trigram index lets through to its recheck.
@@ -3859,17 +3913,7 @@ export class WikiService {
     // the index expression's statistics — a hundred and more trigram extractions, 10–30 ms of
     // planning per op on production — to arrive at the plan it chooses anyway once migration 0313
     // has priced the test: the trigram index.
-    const rows = await tx.$queryRaw<
-      Array<{
-        id: string;
-        kind: string;
-        title: string;
-        status: string;
-        trust: string;
-        score: number;
-        rejectedReason: string | null;
-      }>
-    >(Prisma.sql`
+    const rows = await tx.$queryRaw<NeighbourRow[]>(Prisma.sql`
       SELECT n."id" AS "id",
              n."kind" AS "kind",
              n."title" AS "title",
@@ -3897,37 +3941,8 @@ export class WikiService {
     // A neighbour a verification rejected says why in the verifier's own words as well (contract
     // `reviewModes.verification.verdicts.unsupported`): read beside the query above rather than inside
     // it, over the few rows it returned, so what it costs does not grow with the space.
-    const because = new Map<string, string>();
-    const rejected = rows.filter((row) => row.rejectedReason !== null).map((row) => row.id);
-    if (rejected.length > 0) {
-      // Only a verdict that rejected it: an op its verification found supported, which the owner then
-      // rejected, carries the verifier's reason for the opposite answer.
-      const verdicts = await tx.wikiChangesetOp.findMany({
-        where: {
-          ownerId,
-          resultEntryId: { in: rejected },
-          decision: 'rejected',
-          verificationVerdict: { in: ['unsupported', 'duplicate'] },
-        },
-        orderBy: { decidedAt: 'desc' },
-        select: { resultEntryId: true, verificationReason: true },
-      });
-      for (const verdict of verdicts) {
-        if (verdict.resultEntryId && verdict.verificationReason && !because.has(verdict.resultEntryId)) {
-          because.set(verdict.resultEntryId, verdict.verificationReason);
-        }
-      }
-    }
-    return rows.map((row) => ({
-      id: row.id,
-      kind: row.kind as WikiEntryKind,
-      title: row.title,
-      status: row.status as WikiEntryStatus,
-      trust: row.trust as WikiTrust,
-      score: Number(row.score),
-      ...(row.rejectedReason ? { rejectedReason: row.rejectedReason as WikiRejectReason } : {}),
-      ...(because.has(row.id) ? { rejectedBecause: because.get(row.id) } : {}),
-    }));
+    const because = await verificationRejections(tx, ownerId, rows.filter((row) => row.rejectedReason !== null).map((row) => row.id));
+    return similarOf(rows, because);
   }
 
   /** A revision's live sources, as the revision that puts its content back cites them again. */

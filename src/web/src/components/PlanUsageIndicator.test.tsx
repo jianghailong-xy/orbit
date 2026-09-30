@@ -26,7 +26,7 @@ import {
   resetOperation,
   resetRunner,
 } from '../lib/codexResetCredit.fixtures';
-import { PlanUsageIndicator } from './PlanUsageIndicator';
+import { PlanUsageIndicator, type PlanUsageAccount } from './PlanUsageIndicator';
 
 /**
  * The Plan usage pill and its Codex reset credit, pressed in a real DOM: the popover's keyboard path,
@@ -170,7 +170,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function mount(runner: CodexResetRunner, reset = true): Promise<void> {
+async function mount(runner: CodexResetRunner, reset = true, account?: PlanUsageAccount): Promise<void> {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -185,6 +185,7 @@ async function mount(runner: CodexResetRunner, reset = true): Promise<void> {
               <PlanUsageIndicator
                 usage={runner.planUsage!.codex!}
                 reset={reset ? { runner, workspaceId: 'Workspace1' } : undefined}
+                account={account}
               />
             </MemoryRouter>
           </AntApp>
@@ -330,6 +331,30 @@ describe('the Plan usage pill', () => {
     expect(text).toContain('Updated 2 min ago');
     const section = usagePanel()!.querySelector('section.cu-rc')!;
     expect(document.getElementById(section.getAttribute('aria-labelledby')!)?.textContent).toBe('Reset credit');
+  });
+
+  it('names the account the windows belong to above them, and how a new session came to it', async () => {
+    new FakeResetApi();
+    await mount(resetRunner(new Date()), false, {
+      label: 'kxugfvukxczwl@mail.com',
+      note: 'Automatic — the account whose quota resets soonest',
+    });
+    await openUsage();
+    const account = usagePanel()!.querySelector('.cu-account')!;
+    expect(usagePanel()!.firstElementChild).toBe(account);
+    expect(account.querySelector('.cu-head')?.textContent).toBe('Accountkxugfvukxczwl@mail.com');
+    expect(account.querySelector('.cu-reset')?.textContent).toBe('Automatic — the account whose quota resets soonest');
+    expect(panelText()).toContain('5h limit92%');
+    await unmount();
+
+    // A picked account has no note, and a runner with one account (or a session off Codex) no line.
+    await mount(resetRunner(new Date()), false, { label: 'Default' });
+    await openUsage();
+    expect(usagePanel()!.querySelector('.cu-account')?.textContent).toBe('AccountDefault');
+    await unmount();
+    await mount(resetRunner(new Date()), false);
+    await openUsage();
+    expect(usagePanel()!.querySelector('.cu-account')).toBeNull();
   });
 });
 

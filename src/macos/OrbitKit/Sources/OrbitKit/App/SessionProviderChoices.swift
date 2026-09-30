@@ -4,7 +4,7 @@ import Foundation
 /// this account's account pools, then its configured (BYOK) providers. Grouped, because they differ
 /// in the one way a user cares about — an engine spends the subscription signed into on that
 /// machine, a configured provider spends the API key you pasted, and a pool spends whichever of
-/// its accounts has the most room.
+/// its accounts' quota resets soonest.
 ///
 /// Mirrors web's `lib/sessionProviderChoices.ts`; keep the two in sync.
 public struct ProviderChoice: Equatable, Sendable, Identifiable {
@@ -45,11 +45,16 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
     /// accounts that can run are all spent, and when the first frees up (`ProviderPools.spentNote`).
     /// Nil for anything else.
     public let note: String?
+    /// The runner's own accounts of this engine, when it has signed in more than one: offered under
+    /// its row, so a session can start on another account than its workspace's. Codex and Claude —
+    /// the engines whose CLI keeps a login per directory (`Session.codexAccount`, `.claudeAccount`).
+    public let accounts: [AccountChoice]?
     public var id: String { slug }
 
     public init(slug: String, label: String, kind: Kind, brandKey: String?, modelLabel: String,
                 unavailable: String? = nil, fixEngine: String? = nil, poolSize: Int? = nil,
-                poolUnit: String? = nil, inPool: Bool = false, note: String? = nil) {
+                poolUnit: String? = nil, inPool: Bool = false, note: String? = nil,
+                accounts: [AccountChoice]? = nil) {
         self.slug = slug
         self.label = label
         self.kind = kind
@@ -61,10 +66,65 @@ public struct ProviderChoice: Equatable, Sendable, Identifiable {
         self.poolUnit = poolUnit
         self.inPool = inPool
         self.note = note
+        self.accounts = accounts
+    }
+}
+
+/// One of the runner's accounts of an engine, as a row under that engine in the picker (web
+/// `AccountChoice`).
+public struct AccountChoice: Equatable, Sendable, Identifiable {
+    /// `default`, or the id of a slot the runner added — what the session is created with.
+    public let id: String
+    public let label: String
+    /// Its own quota's tightest window — the one closest to its limit, which is the one that stops it —
+    /// compactly: "5h 100%", "Weekly 0%". Nil when none is reported.
+    public let quota: String?
+    /// That window is at least 90% spent — where the composer's quota gauge turns amber too.
+    public let nearLimit: Bool
+    /// Why it can't take a session: the CLI says it is signed out.
+    public let unavailable: String?
+
+    public init(id: String, label: String, quota: String? = nil, nearLimit: Bool = false,
+                unavailable: String? = nil) {
+        self.id = id
+        self.label = label
+        self.quota = quota
+        self.nearLimit = nearLimit
+        self.unavailable = unavailable
     }
 }
 
 public enum SessionProviderChoices {
+    /// The runner's accounts of an engine as picker rows, each with its own quota — nil unless it has
+    /// signed in more than one (web `providerChoices`).
+    public static func accountChoices(_ accounts: [RunnerEngineAccount]?, usage: PlanUsageSnapshot?) -> [AccountChoice]? {
+        guard let accounts, accounts.count >= 2 else { return nil }
+        return accounts.map { account in
+            // The window closest to its limit: a Claude login's 5-hour window can read 0% while its
+            // weekly one is spent, and the first window alone would say it has room.
+            let rows = account.auth == "yes" ? (CodexAccounts.snapshot(usage, account: account.id)?.rows ?? []) : []
+            let row = rows.reduce(nil as PlanUsageRow?) { tightest, row in
+                tightest.map { row.percent > $0.percent ? row : $0 } ?? row
+            }
+            return AccountChoice(
+                id: account.id,
+                label: account.id == CodexAccounts.defaultID ? "Default" : (account.name ?? "Account \(account.id)"),
+                quota: row.map { r in "\(compactWindowLabel(r.label)) \(r.percent)%" },
+                nearLimit: (row?.window.utilization ?? 0) >= 90,
+                unavailable: account.auth == "no" ? "Not signed in" : nil)
+        }
+    }
+
+    /// A window's name short enough for a row beside an account's: "5h", "Weekly", "Weekly Opus" —
+    /// Codex's "5h limit" and Claude's "5-hour limit" and "Weekly · all models" alike (web
+    /// `compactWindowLabel`).
+    static func compactWindowLabel(_ label: String) -> String {
+        var short = label.hasSuffix(" limit") ? String(label.dropLast(" limit".count)) : label
+        if short == "5-hour" { short = "5h" }
+        if short.hasSuffix(" · all models") { short = String(short.dropLast(" · all models".count)) }
+        return short.replacingOccurrences(of: " · ", with: " ")
+    }
+
     /// Exactly the slugs a runner can sign into (`LoginEngine` in @orbit/shared). `opencode` is a
     /// fourth built-in provider but not a login engine, so it is never offered — it only appears
     /// as the current pick when an agent is already set to it.
@@ -113,6 +173,7 @@ public enum SessionProviderChoices {
                                catalog: RunnerModelCatalog? = nil,
                                engines: [RunnerEngineHealth]? = nil,
                                pools: [ProviderPool] = [],
+                               planUsage: PlanUsage? = nil,
                                now: Date = Date()) -> [ProviderChoice] {
         let health = { (engine: String) in engines?.first { $0.engine == engine } }
         let engineChoices = engineSlugs.map { slug in
@@ -124,7 +185,10 @@ public enum SessionProviderChoices {
                 brandKey: enginePreset[slug],
                 modelLabel: modelLabel(for: slug, configured: configured, catalog: catalog),
                 unavailable: blocker,
-                fixEngine: blocker == nil ? nil : slug)
+                fixEngine: blocker == nil ? nil : slug,
+                accounts: (slug == "codex" || slug == "claude") && blocker == nil
+                    ? accountChoices(health(slug)?.accounts, usage: planUsage?.snapshot(for: slug))
+                    : nil)
         }
         // Like a configured provider, a pool needs the CLI it runs on and nothing signed in: each run
         // carries one of its members' credentials. A missing CLI outranks the members, because it is

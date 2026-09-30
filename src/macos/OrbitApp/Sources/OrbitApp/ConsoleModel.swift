@@ -102,6 +102,25 @@ final class ConsoleModel {
     /// own. Non-nil means the create request carries it AND the pick is remembered on the agent
     /// once the session exists — so the next draft here opens on it without the override.
     private(set) var draftProviderOverride: String?
+    /// Draft only: a Codex account picked under Codex in the new-session picker (`default` or a slot
+    /// id). Nil leaves it to the workspace: its own pick, else Automatic — the account with the most
+    /// room, which the server chooses when it creates the session.
+    private(set) var draftCodexAccount: String?
+    /// Draft only: the same for a Claude account picked under Claude. At most one of the two is set —
+    /// a pick is made under one engine.
+    private(set) var draftClaudeAccount: String?
+    /// Which Codex account this session runs on, from its detail: its own (`Session.codexAccount`),
+    /// and its workspace's for a session that stored none. Only a detail read sets them.
+    private(set) var sessionCodexAccount: String?
+    private(set) var workspaceCodexAccount: String?
+    /// The same pair for Claude, whether each of the session's own accounts was picked by hand
+    /// (pinned — otherwise it is on Automatic where its workspace leaves the account to Orbit), and
+    /// the workspace's env, which can decide the account too. Only a detail read sets them.
+    private(set) var sessionClaudeAccount: String?
+    private(set) var workspaceClaudeAccount: String?
+    private(set) var sessionCodexAccountPinned = false
+    private(set) var sessionClaudeAccountPinned = false
+    private(set) var workspaceEnv: [String: String]?
     /// A provider switch made while this session was ENDED. There is nothing to PATCH then, so it
     /// rides along with the resume that revives it — the route Model/Mode/Effort already take.
     /// Nil unless the user picked one here: the session's own provider must never be re-asserted
@@ -235,14 +254,100 @@ final class ConsoleModel {
     /// and none at all while no account can be named.
     var planUsage: PlanUsageSnapshot? {
         if currentPool != nil { return poolAccount?.member.planUsage }
+        // A built-in Codex or Claude session spends one of the runner's accounts — the one it runs on.
+        if let engine = accountEngine, account(for: engine) != CodexAccounts.defaultID {
+            return CodexAccounts.snapshot(runnerPlanUsage?.snapshot(for: engine), account: account(for: engine))
+        }
         return AgentDefaults.planUsage(for: provider, runner: runnerPlanUsage,
                                        configured: configuredProviders)
+    }
+    /// The engine whose account this draft or session names: the built-in Codex or Claude engine, not
+    /// an account pool. Nil for everything else.
+    var accountEngine: String? {
+        currentPool == nil && (provider == "codex" || provider == "claude") ? provider : nil
+    }
+    /// The runner's accounts of `engine`, as its heartbeat reports them.
+    func engineAccounts(_ engine: String) -> [RunnerEngineAccount] {
+        runnerEngines?.first { $0.engine == engine }?.accounts ?? []
+    }
+    /// The runner's Codex accounts, as its heartbeat reports them.
+    var codexAccounts: [RunnerEngineAccount] { engineAccounts("codex") }
+    /// Automatic is on offer for `engine` (`CodexAccounts.automaticOffered`): the workspace picked
+    /// none of its accounts, its env selects no other config directory and no key of its own, and the
+    /// runner has more than one to choose between — a draft's workspace, or a session's.
+    func automaticOffered(_ engine: String) -> Bool {
+        if isDraft {
+            return CodexAccounts.automaticOffered(engine: engine, agent: draftAgent, accounts: engineAccounts(engine))
+        }
+        return CodexAccounts.automaticOffered(engine: engine,
+                                              pick: engine == "claude" ? workspaceClaudeAccount : workspaceCodexAccount,
+                                              env: workspaceEnv, accounts: engineAccounts(engine))
+    }
+    /// The account picked for this draft under `engine`, if any.
+    func draftAccount(_ engine: String) -> String? { engine == "claude" ? draftClaudeAccount : draftCodexAccount }
+    /// This draft starts `engine` on Automatic: it is on offer and no account is picked.
+    func draftAutomatic(_ engine: String) -> Bool { isDraft && automaticOffered(engine) && draftAccount(engine) == nil }
+    /// This session is on Automatic: nobody picked its account by hand, and its workspace leaves the
+    /// account to Orbit — so it moves to an account with room when the one it is on hits its limit.
+    var sessionAutomatic: Bool {
+        guard !isDraft, let engine = accountEngine else { return false }
+        return automaticOffered(engine) && !(engine == "claude" ? sessionClaudeAccountPinned : sessionCodexAccountPinned)
+    }
+    /// The `engine` account this draft or session runs on, as far as its runner reports it: a draft's
+    /// pick, else its workspace's, else the one Automatic would choose now; a session's own, else its
+    /// workspace's. Default when the runner lists no such account, as dispatch resolves it.
+    func account(for engine: String) -> String {
+        let wanted: String?
+        if isDraft {
+            wanted = draftAccount(engine) ?? (engine == "claude" ? draftAgent?.claudeAccount : draftAgent?.codexAccount)
+                ?? (draftAutomatic(engine)
+                    ? CodexAccounts.toStartOn(engineAccounts(engine), usage: runnerPlanUsage?.snapshot(for: engine))
+                    : nil)
+        } else {
+            wanted = engine == "claude"
+                ? (sessionClaudeAccount ?? workspaceClaudeAccount)
+                : (sessionCodexAccount ?? workspaceCodexAccount)
+        }
+        return CodexAccounts.onRunner(wanted, accounts: engineAccounts(engine))
+    }
+    /// The Codex account this draft or session runs on (`account(for:)`).
+    var codexAccount: String { account(for: "codex") }
+    /// Which of the runner's accounts this session spends, named in the quota gauge's detail. Nil
+    /// unless it is on the built-in Codex or Claude engine and the runner has several.
+    var accountLabel: String? {
+        guard let engine = accountEngine, engineAccounts(engine).count >= 2 else { return nil }
+        return CodexAccounts.label(account(for: engine), accounts: engineAccounts(engine))
+    }
+    /// The line under that name: on a draft nothing picked an account for, how it came to that one;
+    /// on a session on Automatic whose runner can move it, that it moves.
+    var accountNote: String? {
+        guard accountLabel != nil, let engine = accountEngine else { return nil }
+        if isDraft { return draftAutomatic(engine) ? "Automatic — the account whose quota resets soonest" : nil }
+        return sessionAutomatic && accountRowsOffered
+            ? "Automatic — moves to another account when this one hits its limit" : nil
+    }
+    /// Whether the model menu's Provider submenu lists the runner's accounts of this session's engine
+    /// to move between (web parity): a session, not a draft — the new-session picker offers them there
+    /// — on a runner with two or more that carries a conversation from one to another.
+    var accountRowsOffered: Bool {
+        guard !isDraft, let engine = accountEngine, engineAccounts(engine).count >= 2 else { return false }
+        let capability = engine == "claude" ? "claude-account-move/v1" : "codex-account-move/v1"
+        return runnerCapabilities?.contains(capability) ?? false
+    }
+    /// Those rows, each with its own quota (`SessionProviderChoices.accountChoices`).
+    var accountChoices: [AccountChoice] {
+        guard accountRowsOffered, let engine = accountEngine else { return [] }
+        return SessionProviderChoices.accountChoices(engineAccounts(engine),
+                                                     usage: runnerPlanUsage?.snapshot(for: engine)) ?? []
     }
     private(set) var modelCatalog: RunnerModelCatalog?
     /// What the session's runner last reported about each engine CLI it can host. A provider
     /// choice is a claim about that machine, so the picker greys out what it says can't run there.
     /// Nil until the runner read lands (and from an older server), which claims nothing.
     private(set) var runnerEngines: [RunnerEngineHealth]?
+    /// What the session's runner declared it can do (`Runner.capabilities`): whether it carries a
+    /// conversation to another of its accounts. Nil claims nothing.
+    private(set) var runnerCapabilities: [String]?
     /// Whether this session's runner is deployed as root, which withdraws one permission mode from
     /// the composer's Mode menu (`AgentDefaults.isRunnable`). Same nil semantics as the engines
     /// above: not reported claims nothing, so no mode is withdrawn on a guess.
@@ -1061,6 +1166,13 @@ final class ConsoleModel {
         provider = s.provider ?? "claude"
         poolMemberProviderID = s.poolMemberProviderId
         poolKeyID = s.poolKeyId
+        sessionCodexAccount = s.codexAccount
+        workspaceCodexAccount = s.agent?.codexAccount
+        sessionClaudeAccount = s.claudeAccount
+        workspaceClaudeAccount = s.agent?.claudeAccount
+        sessionCodexAccountPinned = s.codexAccountPinned ?? false
+        sessionClaudeAccountPinned = s.claudeAccountPinned ?? false
+        workspaceEnv = s.agent?.env
 
         // A historical Session.model is authoritative and can be adopted immediately. If the user
         // already touched the picker while the session request was in flight, their explicit value
@@ -1101,11 +1213,13 @@ final class ConsoleModel {
                 runnerPlanUsage = r.planUsage
                 modelCatalog = r.modelCatalog
                 runnerEngines = r.engines
+                runnerCapabilities = r.capabilities
                 runnerRunsAsRoot = r.runsAsRoot
             } else {
                 runnerPlanUsage = nil
                 modelCatalog = nil
                 runnerEngines = nil
+                runnerCapabilities = nil
                 runnerRunsAsRoot = nil
             }
         }
@@ -1195,6 +1309,13 @@ final class ConsoleModel {
         adoptServerSnapshot(s)
         poolMemberProviderID = s.poolMemberProviderId
         poolKeyID = s.poolKeyId
+        sessionCodexAccount = s.codexAccount
+        workspaceCodexAccount = s.agent?.codexAccount
+        sessionClaudeAccount = s.claudeAccount
+        workspaceClaudeAccount = s.agent?.claudeAccount
+        sessionCodexAccountPinned = s.codexAccountPinned ?? false
+        sessionClaudeAccountPinned = s.claudeAccountPinned ?? false
+        workspaceEnv = s.agent?.env
         return true
     }
 
@@ -1302,6 +1423,34 @@ final class ConsoleModel {
         effort = AgentDefaults.normalizedEffort(effort, for: slug, model: modelID,
                                                 catalog: modelCatalog,
                                                 configured: configuredProviders)
+    }
+
+    /// Pick one of the runner's accounts of `slug` for this draft — or Automatic (`nil`) — from the rows
+    /// under that engine in the new-session picker. Picks the engine too, when it isn't the one
+    /// picked. Like the provider, it binds the session being drafted and rewrites no workspace setting.
+    func pickDraftAccount(_ slug: String, _ account: String?) {
+        guard isDraft else { return }
+        if slug != provider { pickDraftProvider(slug) }
+        draftCodexAccount = slug == "codex" ? account : nil
+        draftClaudeAccount = slug == "claude" ? account : nil
+    }
+
+    /// Move this session to another of its runner's accounts — which pins it there — or back onto
+    /// Automatic (`CodexAccounts.automaticID`), from the model menu's Provider submenu. The server
+    /// re-spawns a live engine on it once no turn is in flight, and the runner carries the
+    /// conversation across; an ended session takes it with its next resume.
+    func switchAccount(_ account: String) async {
+        guard !isDraft, let engine = accountEngine else { return }
+        // Nothing moves: Automatic picked again, or the account the session is already pinned to.
+        if account == CodexAccounts.automaticID ? sessionAutomatic : account == self.account(for: engine) && !sessionAutomatic {
+            return
+        }
+        do {
+            try await api.switchAccount(sessionID: sessionID, account: account)
+            _ = await refreshServerStatus()
+        } catch {
+            statusMessage = "Couldn't move this session — \(APIClient.failureReason(error))."
+        }
     }
 
     /// Adopt a provider catalogue with the pools folded in, each resolved like a key: a shared pool
@@ -1634,6 +1783,8 @@ final class ConsoleModel {
         do {
             let accepted = try await postTurn(resuming: resuming, clientTurnId: clientTurnId,
                                               text: text, shell: shell, attachmentIds: attachmentIds)
+            // An earlier send's "Couldn't send" is not true any more.
+            statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
             if resuming {
                 // The session is revived (back to PENDING/RUNNING); drop the stale terminal
                 // snapshot so the stream drives status again and a quick follow-up doesn't
@@ -1958,12 +2109,18 @@ final class ConsoleModel {
                 // explicit false the server would have to remember anyway.
                 fastMode: fastMode ? true : nil,
                 shell: shell ? true : nil,
-                attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
+                attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds,
+                // Only an explicit pick, as with the provider: none leaves it to the workspace's
+                // account, or to Automatic, which the server resolves when it creates the session.
+                codexAccount: provider == "codex" ? draftCodexAccount : nil,
+                claudeAccount: provider == "claude" ? draftClaudeAccount : nil))
             composerText = ""
             pendingAttachments = []
             // The pick was this session's binding; nothing to write back. The next draft here
             // opens on it anyway, because the default is read from what the project last ran.
             draftProviderOverride = nil
+            draftCodexAccount = nil
+            draftClaudeAccount = nil
             // The Mode pick is different: without a write-back it lived on this one session, while
             // the runs nobody starts from a composer — task-launched, MCP-created — keep resolving
             // the ACCOUNT default server-side. Web parity, and best-effort: a failed write costs a
@@ -1991,11 +2148,13 @@ final class ConsoleModel {
                 runtimeDefaults = r.runtimeDefaultModels
                 runnerSnapshotLoaded = true
                 runnerEngines = r.engines
+                runnerCapabilities = r.capabilities
                 runnerRunsAsRoot = r.runsAsRoot
             } else {
                 runnerPlanUsage = nil
                 modelCatalog = nil
                 runnerEngines = nil
+                runnerCapabilities = nil
                 runnerRunsAsRoot = nil
             }
         }
@@ -2076,6 +2235,7 @@ final class ConsoleModel {
                 sessionID: sessionID,
                 SessionInterruptRequest(clientTurnId: clientTurnId, content: text,
                                         attachmentIds: attachmentIds.isEmpty ? nil : attachmentIds))
+            statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
             if let tid = accepted.turnId {
                 reducer.setOptimisticTurnId(clientTurnId: clientTurnId, turnId: tid)
             }

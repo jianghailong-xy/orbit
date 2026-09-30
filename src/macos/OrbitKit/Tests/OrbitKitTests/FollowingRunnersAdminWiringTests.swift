@@ -80,6 +80,11 @@ final class FollowingRunnersAdminWiringTests: XCTestCase {
             XCTAssertFalse(section.contains("navigationDestination(isPresented:"),
                            "\(c.name): no boolean push left on this section's stack")
         }
+
+        // A runner's record pushes two pages of its own, frames of the same stack.
+        let runners = code(try slice(shell, from: "case .runners:", to: "// FOLLOWING"))
+        XCTAssertTrue(runners.contains("case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)"))
+        XCTAssertTrue(runners.contains("case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)"))
     }
 
     /// One row, two containers — for each of the three lists. The row view is built once; what
@@ -156,6 +161,11 @@ final class FollowingRunnersAdminWiringTests: XCTestCase {
                                      to: "struct RunnerDetailContent: View {"))
         XCTAssertTrue(runners.contains("var runnerID: String? = nil"))
         XCTAssertTrue(runners.contains("let id = runnerID ?? model.selectedRunnerID"))
+        // The three-column detail has no stack of its own, so a page the record pushed (an engine's,
+        // its name's) is read off the section's stack too, and fills the pane in the record's place.
+        XCTAssertTrue(runners.contains("switch runnerID == nil ? model.nav.path.last : nil {"))
+        XCTAssertTrue(runners.contains("RunnerEnginePage(runnerID: id, engine: engine)"))
+        XCTAssertTrue(runners.contains("RunnerNamePage(runnerID: id)"))
 
         let admin = code(try slice(try appSource("Views/SettingsAdminView.swift"),
                                    from: "struct AdminUserDetailView: View {", to: "struct NewUserSheet: View {"))

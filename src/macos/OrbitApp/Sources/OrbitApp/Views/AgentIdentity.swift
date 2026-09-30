@@ -96,8 +96,8 @@ private struct PoolCountBadge: View {
 
 /// Provider picker opened from the new-session hero — who runs this session, as opposed to the
 /// agent switcher below (where it runs). Sectioned by whose money a row spends: an engine spends the
-/// subscription signed into on that machine, an account pool whichever of its subscriptions has the
-/// most room, a configured provider the API key you pasted. Each row previews the model it would
+/// subscription signed into on that machine, an account pool whichever of its subscriptions' quota
+/// resets soonest, a configured provider the API key you pasted. Each row previews the model it would
 /// switch to, so the consequence is visible before the tap. The order is web's one flat list —
 /// engines, pools, keys — and a pool's own accounts fold away at the end of the keys, behind "Pin a
 /// specific account", as web's `NewSessionProviderHero` folds them.
@@ -106,6 +106,14 @@ struct ProviderSwitchSheet: View {
     let currentSlug: String
     let agentName: String
     let onSelect: (String) -> Void
+    /// Which of the current engine's accounts the session would start on (`ProviderChoice.accounts`).
+    var currentAccount: String?
+    /// Per engine that lists accounts: whether Automatic is its pick — present only where Automatic is
+    /// on offer (the workspace leaves that engine's account to Orbit). On the current engine's pick,
+    /// `currentAccount` is the account it would start on (web `automatic`).
+    var automatic: [String: Bool]
+    /// An account row under an engine was picked — nil for Automatic. Nil lists no account rows.
+    var onSelectAccount: ((String, String?) -> Void)?
     /// Where to send a row this machine can't run: the runner whose Engines section holds its
     /// install / Sign in. Nil leaves such a row inert, which is all an unknown runner allows.
     var onFixRunner: (() -> Void)?
@@ -115,11 +123,17 @@ struct ProviderSwitchSheet: View {
     @State private var pinOpen: Bool
 
     init(choices: [ProviderChoice], currentSlug: String, agentName: String,
-         onSelect: @escaping (String) -> Void, onFixRunner: (() -> Void)? = nil) {
+         currentAccount: String? = nil, automatic: [String: Bool] = [:],
+         onSelect: @escaping (String) -> Void,
+         onSelectAccount: ((String, String?) -> Void)? = nil,
+         onFixRunner: (() -> Void)? = nil) {
         self.choices = choices
         self.currentSlug = currentSlug
         self.agentName = agentName
+        self.currentAccount = currentAccount
+        self.automatic = automatic
         self.onSelect = onSelect
+        self.onSelectAccount = onSelectAccount
         self.onFixRunner = onFixRunner
         _pinOpen = State(initialValue: choices.contains { $0.inPool && $0.slug == currentSlug })
     }
@@ -134,7 +148,23 @@ struct ProviderSwitchSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                section("Engines", engines, footer: "Signed in on this runner.")
+                Section {
+                    ForEach(engines) { choice in
+                        row(choice)
+                        // The engine's own accounts, right under it: Automatic first when the
+                        // workspace picked none, then each account with its own quota (web parity).
+                        if let accounts = choice.accounts, onSelectAccount != nil {
+                            if automatic[choice.slug] != nil { automaticRow(choice) }
+                            ForEach(accounts) { accountRow(choice, $0) }
+                        }
+                    }
+                } header: {
+                    Text("Engines")
+                } footer: {
+                    Text(!automatic.isEmpty
+                         ? "Signed in on this runner. Automatic starts each new session on the account whose quota resets soonest, so none of it goes unused, and moves it when that account hits its limit."
+                         : "Signed in on this runner.")
+                }
                 if !pools.isEmpty {
                     section(ProviderPools.sectionTitle, pools, footer: ProviderPools.sectionFooter)
                 }
@@ -219,7 +249,8 @@ struct ProviderSwitchSheet: View {
                     .foregroundStyle(choice.unavailable == nil || greyed ? AnyShapeStyle(.secondary)
                                                                          : AnyShapeStyle(Color.accentColor))
                     .lineLimit(1)
-                if choice.slug == currentSlug {
+                // An engine whose accounts are listed ticks the account instead.
+                if choice.slug == currentSlug, choice.accounts == nil || onSelectAccount == nil {
                     Image(systemName: "checkmark")
                         .font(.body.weight(.semibold)).foregroundStyle(Color.accentColor)
                 }
@@ -229,6 +260,66 @@ struct ProviderSwitchSheet: View {
         }
         .buttonStyle(.plain)
         .disabled(greyed && choice.slug != currentSlug)
+    }
+
+    /// Above an engine's accounts, when the workspace picked none: start on whichever has the most
+    /// room. Ticked while it is the pick. Indented to the engine's name, like the accounts below it.
+    private func automaticRow(_ choice: ProviderChoice) -> some View {
+        let picked = choice.slug == currentSlug && automatic[choice.slug] == true
+        return Button {
+            dismiss()
+            if !picked { onSelectAccount?(choice.slug, nil) }
+        } label: {
+            HStack(spacing: 12) {
+                Text("Automatic").foregroundStyle(.primary).lineLimit(1)
+                Spacer(minLength: 8)
+                Text("Resets soonest").font(.orbitListSubtitle).foregroundStyle(.secondary).lineLimit(1)
+                if picked {
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold)).foregroundStyle(Color.accentColor)
+                }
+            }
+            .padding(.leading, 40)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Automatic: the \(choice.label) account whose quota resets soonest")
+    }
+
+    /// One of an engine's accounts: its name and its own quota — amber once a window is nearly spent.
+    /// One the CLI says is signed out goes to the runner, where its sign-in is, rather than picking.
+    private func accountRow(_ choice: ProviderChoice, _ account: AccountChoice) -> some View {
+        let picked = choice.slug == currentSlug && automatic[choice.slug] != true && account.id == currentAccount
+        return Button {
+            dismiss()
+            if account.unavailable != nil {
+                onFixRunner?()
+            } else if !picked {
+                onSelectAccount?(choice.slug, account.id)
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Text(account.label).foregroundStyle(.primary).lineLimit(1)
+                    .opacity(account.unavailable == nil ? 1 : 0.5)
+                Spacer(minLength: 8)
+                if let reason = account.unavailable {
+                    Text("\(reason), sign in →").font(.orbitListSubtitle)
+                        .foregroundStyle(Color.accentColor).lineLimit(1)
+                } else if let quota = account.quota {
+                    Text(quota).font(.orbitListSubtitle)
+                        .foregroundStyle(account.nearLimit ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
+                        .lineLimit(1)
+                }
+                if picked {
+                    Image(systemName: "checkmark")
+                        .font(.body.weight(.semibold)).foregroundStyle(Color.accentColor)
+                }
+            }
+            .padding(.leading, 40)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(account.unavailable != nil && onFixRunner == nil)
     }
 
     private func trailing(_ choice: ProviderChoice, greyed: Bool) -> String {

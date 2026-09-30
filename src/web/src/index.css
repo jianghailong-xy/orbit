@@ -1725,6 +1725,28 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* The third line: what this machine needs a person for. When it wraps on a narrow screen, the
+   triangle stays with its first line. */
+.runner-attention {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+.runner-attention.bad {
+  color: var(--error);
+}
+.runner-attention.warn {
+  color: var(--warning);
+}
+.runner-attention .anticon {
+  flex: none;
+  margin-top: 2.5px;
+  font-size: 11px;
+}
 .runner-version {
   font-size: 12px;
   color: var(--text-3);
@@ -1969,44 +1991,166 @@ body {
 .rd-meta-ok {
   color: var(--success);
 }
-.rd-details-toggle {
-  margin-left: 4px;
-  color: var(--brand);
-  cursor: pointer;
-  user-select: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-.rd-details-toggle:hover {
-  color: var(--brand-strong);
-}
-.rd-details-caret {
-  font-size: 10px;
-  transition: transform 0.18s ease;
-}
-.rd-details-toggle.open .rd-details-caret {
-  transform: rotate(180deg);
-}
-.rd-overview {
-  margin: 14px 0 0 19px;
+/* Needs Attention: one card per item, under the title and across both columns — two abreast on a
+   desktop, one alone taking the row. Amber for a warning, red for what already stops sessions, grey
+   for an offline machine (a state, not a fault). */
+.rd-attention {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 14px 24px;
-  padding: 16px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+}
+.rd-attention-card {
+  display: flex;
+  gap: 11px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+}
+.rd-attention-card:only-child {
+  grid-column: 1 / -1;
+}
+.rd-attention-card.bad {
+  background: var(--error-bg);
+  border-color: var(--error-border);
+}
+.rd-attention-card.idle {
+  background: var(--bg-subtle);
+  border-color: var(--border-subtle);
+}
+.rd-attention-icon {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: rgba(250, 140, 22, 0.16);
+  color: var(--warning);
+  font-size: 14px;
+}
+.rd-attention-card.bad .rd-attention-icon {
+  background: rgba(245, 74, 69, 0.14);
+  color: var(--error);
+}
+.rd-attention-card.idle .rd-attention-icon {
+  background: var(--fill-muted);
+  color: var(--text-3);
+}
+.rd-attention-main {
+  min-width: 0;
+}
+.rd-attention-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.rd-attention-detail {
+  margin-top: 3px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.rd-attention-action {
+  margin-top: 9px;
+}
+/* The machine's contents on the left, its settings and facts in a narrower column on the right. */
+.rd-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  gap: 0 24px;
+  align-items: start;
+}
+.rd-col {
+  min-width: 0;
+}
+/* A settings panel: label left, value or control right, hairlines between rows — Capacity and
+   About. */
+.rd-box {
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   background: var(--bg-raised);
 }
-.rd-field-label {
+.rd-box > * + * {
+  border-top: 1px solid var(--border-subtle);
+}
+.rd-kv,
+.rd-kv-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+.rd-kv {
+  min-height: 42px;
+  padding: 7px 14px;
+}
+.rd-kv-label {
+  flex: none;
+  color: var(--text-2);
+}
+.rd-kv-value {
+  min-width: 0;
+  color: var(--text-1);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.rd-kv-value small {
+  margin-left: 5px;
   font-size: 12px;
   color: var(--text-3);
 }
-.rd-field-value {
-  font-size: 14px;
-  color: var(--text-1);
-  margin-top: 2px;
-  word-break: break-word;
+.rd-kv-value small.warn {
+  color: var(--warning);
+  font-weight: 500;
+}
+.rd-inline-link {
+  margin-left: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--brand);
+  cursor: pointer;
+}
+.rd-inline-link:hover {
+  color: var(--brand-strong);
+}
+.rd-max-concurrent {
+  width: 72px;
+}
+.rd-keep-free {
+  min-width: 96px;
+}
+.rd-disk {
+  padding: 11px 14px 12px;
+}
+.rd-disk-bar {
+  height: 6px;
+  margin-top: 8px;
+  border-radius: 3px;
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+.rd-disk-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--brand);
+}
+.rd-disk-bar.warn > span {
+  background: var(--warning-solid);
+}
+/* The footnote under a panel. */
+.rd-hint {
+  margin: 8px 2px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
 }
 .rd-empty {
   color: var(--text-3);
@@ -2031,10 +2175,24 @@ body {
 }
 .rd-engine-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1.3fr);
+  grid-template-columns: 24px minmax(0, 1.1fr) minmax(0, 1fr) 190px 12px;
+  grid-template-areas: 'mark main auth quota chevron';
   gap: 12px;
-  align-items: baseline;
-  padding: 12px 16px;
+  align-items: center;
+  padding: 11px 14px;
+  color: inherit;
+  transition: background 0.12s ease;
+}
+.rd-engine-row:hover {
+  color: inherit;
+  background: var(--bg-hover);
+}
+.rd-engine-row > .provider-tile {
+  grid-area: mark;
+}
+.rd-engine-main {
+  grid-area: main;
+  min-width: 0;
 }
 .rd-engine-name {
   font-size: 14px;
@@ -2042,6 +2200,7 @@ body {
   color: var(--text-1);
 }
 .rd-engine-version {
+  margin-top: 1px;
   font-size: 12.5px;
   color: var(--text-3);
   overflow: hidden;
@@ -2051,12 +2210,85 @@ body {
 /* Same amber as the Providers row's note, for the same reason: drift needs a person eventually,
    which is not the same as being down. */
 .rd-engine-note {
-  font-size: 12.5px;
   color: var(--text-4);
 }
 .rd-engine-note.warn {
   color: var(--warning);
   font-weight: 500;
+}
+.rd-engine-auth {
+  grid-area: auth;
+  font-size: 12.5px;
+}
+.rd-engine-auth.ok {
+  color: var(--success);
+}
+.rd-engine-auth.warn {
+  color: var(--warning);
+  font-weight: 500;
+}
+.rd-engine-auth.muted,
+.rd-engine-muted {
+  color: var(--text-3);
+}
+.rd-engine-quota {
+  grid-area: quota;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12.5px;
+}
+.rd-quota-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.rd-quota.near .rd-quota-pct {
+  color: var(--warning);
+  font-weight: 600;
+}
+.rd-quota-bar {
+  height: 4px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+.rd-quota-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--brand);
+}
+.rd-quota.near .rd-quota-bar > span {
+  background: var(--warning-solid);
+}
+.rd-engine-chevron {
+  grid-area: chevron;
+  font-size: 11px;
+  color: var(--text-4);
+}
+/* An engine row needs about 560px for its five columns. Narrower — a phone, or the left column
+   beside Capacity on a tablet — its quota takes a line of its own, and a quota line that would only
+   hold "—" is left out. Measured on the section, not the viewport: the column it sits in is what
+   runs out of room. */
+.rd-engines {
+  container: rd-engines / inline-size;
+}
+@container rd-engines (max-width: 560px) {
+  .rd-engine-row {
+    grid-template-columns: 24px minmax(0, 1fr) auto 12px;
+    grid-template-areas:
+      'mark main auth chevron'
+      '. quota quota .';
+    row-gap: 8px;
+  }
+  .rd-engine-quota.empty {
+    display: none;
+  }
 }
 /* The run's report sits above the rows it summarizes, not inside any one of them. */
 .rd-engine-relay {
@@ -2164,6 +2396,16 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Sessions of this workspace running right now — the sidebar's own count. */
+.rd-workspace-running {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--brand-tint);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 500;
 }
 .rd-form-field {
   margin-bottom: 14px;
@@ -2426,6 +2668,34 @@ body {
 @media (max-width: 600px) {
   .rd-form-grid {
     grid-template-columns: 1fr;
+  }
+}
+/* A phone's width: one column, in the order the iPhone's runner page reads — Needs Attention,
+   Capacity, Engines, Workspaces, About. The two column boxes step aside (display: contents) so
+   their sections can be ordered as one list. */
+@media (max-width: 640px) {
+  .rd-attention {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rd-cols {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .rd-col {
+    display: contents;
+  }
+  .rd-capacity {
+    order: 1;
+  }
+  .rd-engines {
+    order: 2;
+  }
+  .rd-workspaces {
+    order: 3;
+  }
+  .rd-about {
+    order: 4;
   }
 }
 /* Edit-in-place: the clicked row stays as a header and the editor expands below
@@ -5409,6 +5679,24 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 12px;
   color: var(--text-4);
 }
+/* Whose quota the windows below are, ruled off from them. Account names are often emails: the name
+   gives way with an ellipsis, the label never does. */
+.cu-account {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.cu-account .cu-head {
+  margin-bottom: 0;
+}
+.cu-account-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-1);
+}
 /* The pill is a button now — it opens a popover that can hold an action — so it sheds the UA button
    chrome and keeps the look the span had, with a ring for keyboard focus only. */
 button.composer-usage {
@@ -8153,6 +8441,8 @@ button.chat-jump-start:hover {
   line-height: 1.55;
   color: var(--text-1);
   overflow-wrap: anywhere;
+  /* The text keeps its paragraphs and list items on lines of their own (`markdownToPlainLines`). */
+  white-space: pre-wrap;
 }
 /* The line under the buttons on both cards whose second answer is a composer handoff: where the
    next message goes, and what pressing does not do. One rule, two cards — the sentence is the
@@ -8284,6 +8574,239 @@ button.chat-jump-start:hover {
   margin: 4px 0 0;
   font-size: 12px;
   color: var(--text-3);
+}
+/* The settings a start left the project running with, under the receipt's line and the "Project
+   started" card's title (`RunSettingsSummary`): one quiet line, with what the owner changed from the
+   coordinator's suggestion set in bold where it stands. */
+.settlement-receipt-settings {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.run-settings-changed {
+  font-weight: 600;
+  color: var(--text-1);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+/* ── Start this project? ─────────────────────────────────────────────────────────────────
+   `StartProjectCard.tsx`: the settlement card's shell, with three sections under it — the
+   criteria, the plan, and How it runs, drawn with the integration settings card's own rows
+   (`.project-integration-setting`) in a raised panel. Mock: start-mock/board2-start-web.html. */
+.start-card-section {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 14px 0 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.start-card-section + .settlement-card-criteria {
+  margin-top: 4px;
+}
+.start-card-section-aside {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--brand);
+}
+.start-card-plan {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-1);
+}
+.start-card-link {
+  margin-left: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--brand);
+  text-decoration: none;
+  cursor: pointer;
+}
+.start-card-plan > .start-card-link:first-child {
+  margin-left: 0;
+}
+.start-card-link:hover {
+  text-decoration: underline;
+}
+.start-card-warn {
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--warning);
+}
+.start-card-settings {
+  padding: 0 12px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+/* The two lines, one under the other; the class makes these rules outrank antd's own
+   `.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. */
+.start-card-settings .start-card-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.start-card-settings .start-card-lines .ant-radio-wrapper {
+  align-items: flex-start;
+  margin-inline-end: 0;
+}
+.start-card-settings .start-card-lines .ant-radio {
+  align-self: flex-start;
+  margin-top: 3px;
+}
+.start-card-branch,
+.start-card-mono,
+.start-card-mono input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.start-card-branch {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  overflow-wrap: anywhere;
+}
+.start-card-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.start-card-settings .start-card-count {
+  width: 72px;
+}
+/* The merge check row when Automatic would merge the branch into main with nothing run on the
+   combined tree: its label in the warning colour, and the sentence saying why under the box. */
+.project-integration-setting.is-warn .project-integration-setting-label {
+  color: var(--warning);
+}
+.start-card-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.start-card-checked {
+  display: flex;
+  gap: 7px;
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.start-card-tick {
+  flex: none;
+  font-weight: 700;
+  color: var(--success);
+}
+/* 443px and the like: the settings rows go to one column at the integration card's own 640px
+   breakpoint, and the lines keep their names and lose their descriptions. */
+@media (max-width: 640px) {
+  .start-card-option-hint {
+    display: none;
+  }
+}
+
+/* ── Confirm the new criteria? ───────────────────────────────────────────────────────────
+   `CriteriaChangeCard.tsx`: only what changed, one row each — a mark, which criterion and what
+   happened to it, and its words (a stricter check's old one quieter under the new).
+   Mock: start-mock/board4-criteria-change.html. */
+.criteria-change-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.criteria-change-list li {
+  display: grid;
+  grid-template-columns: 22px 100px minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-1);
+}
+.criteria-change-list li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+.criteria-change-mark {
+  font-weight: 700;
+  text-align: center;
+  border-radius: 4px;
+}
+.criteria-change-kind {
+  padding-top: 1px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.criteria-change-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.criteria-change-was {
+  display: block;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.criteria-change-list .is-new .criteria-change-mark {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.criteria-change-list .is-new .criteria-change-kind {
+  color: var(--success);
+}
+.criteria-change-list .is-stricter .criteria-change-mark,
+.criteria-change-list .is-revised .criteria-change-mark {
+  color: var(--brand);
+  background: var(--brand-tint);
+}
+.criteria-change-list .is-stricter .criteria-change-kind,
+.criteria-change-list .is-revised .criteria-change-kind {
+  color: var(--brand);
+}
+.criteria-change-rest {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.criteria-change-rest .settlement-card-read {
+  margin-top: 0;
+}
+@media (max-width: 640px) {
+  .criteria-change-list li {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+  .criteria-change-text {
+    grid-column: 2;
+  }
+}
+/* Two short answers stay side by side on a phone: the stacked action sheet below 600px exists for
+   the approval card's third, long label, and these cards have none. */
+@media (max-width: 600px) {
+  .start-card .card-actions,
+  .criteria-change-card .card-actions {
+    flex-direction: row;
+    align-items: center;
+  }
+  .start-card .card-action,
+  .criteria-change-card .card-action {
+    width: auto;
+  }
 }
 
 /* ── Why is this project not done ────────────────────────────────────────────────────────
@@ -8739,6 +9262,12 @@ button.chat-jump-start:hover {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+/* Under a new project's criteria on its create card: approving the create does not confirm them. */
+.create-criteria-note {
+  margin: 2px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
 .dag-approval-ops,
 .dag-approval-changes {
   list-style: none;
@@ -8805,6 +9334,7 @@ button.chat-jump-start:hover {
   margin: 0;
   color: var(--text-2);
   line-height: 1.6;
+  white-space: pre-wrap;
 }
 .approval-input {
   white-space: pre-wrap;
@@ -13589,6 +14119,25 @@ button.chat-jump-start:hover {
 .ant-dropdown-menu-item.composer-provider-fix .scope-menu-row {
   color: var(--text-3);
 }
+/* A Codex account under Codex in that submenu: indented under its engine, its own quota on the right
+   where the other rows say their value, orange once a window is nearly spent. Names are often emails,
+   so the name gives way before the quota does. */
+.ant-dropdown-menu-item.composer-account-row .scope-menu-row {
+  padding-left: 14px;
+}
+.composer-account-row-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-account-row .scope-menu-value-text {
+  max-width: none;
+}
+.composer-account-row.near-limit .scope-menu-value {
+  color: var(--warning);
+}
 .np-row.on {
   background: var(--brand-tint);
   color: var(--text-1);
@@ -13665,6 +14214,25 @@ button.chat-jump-start:hover {
 }
 .np-pinned {
   padding-left: 14px;
+}
+/* An engine's own accounts on this runner, under its row: which one this session spends. The tick
+   takes the mark's column, so the account names line up with the engine's. */
+.np-account-tick {
+  flex: none;
+  width: 20px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--brand);
+}
+.np-account.picked {
+  color: var(--text-1);
+}
+.np-account .np-row-model.near-limit {
+  color: var(--warning);
+}
+/* Account names are often emails, so the list makes room for one beside its quota. */
+.np-list.with-accounts {
+  width: 280px;
 }
 /* The composer's account pill: which of a pool's accounts this session is spending. */
 .composer-account {
@@ -15562,40 +16130,104 @@ button.chat-jump-start:hover {
   white-space: normal;
 }
 /* The turn the control plane opened for a background job's news, or for a wakeup coming due
-   (BackgroundWakeCard). Same shape and the same two tones as a watch's wake — brand for a job that
-   finished, warning for one that failed or was killed, as Watch triggered and Watch expired take
-   them — so the transcript reads one way whoever queued the turn. Each job gets a raised row of its
-   own: one wake can carry six. Its wrap carries its own margin for the same reason a watch's does:
-   two wakes in a row have no message bubble between them to lend one. */
-.bgwake-wrap {
-  display: flex;
-  justify-content: flex-end;
-  margin: 8px 0;
-}
+   (BackgroundWakeCard): one event line in the agent's stream, in the grammar `⊘ interrupted`
+   (.chat-note) already uses, rather than a card on the reader's side of the conversation — which is
+   where their own messages sit, in their tint, so a run of wakes read as somebody cutting in. A
+   job that failed or was killed takes the error tone and keeps its tail out of the fold. */
 .bgwake {
-  width: min(560px, 88%);
-  padding: 10px 12px;
-  border: 1px solid var(--brand-border);
-  border-radius: 12px;
-  background: var(--brand-tint);
-  color: var(--text-1);
+  margin: 6px 0;
+  font-size: 13px;
+  color: var(--text-3);
 }
-.bgwake.is-failed {
-  border-color: var(--warning-border);
-  background: var(--warning-bg);
+.bgwake-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 4px;
+  border-radius: 6px;
+  list-style: none;
+  cursor: pointer;
+}
+.bgwake-row::-webkit-details-marker {
+  display: none;
+}
+.bgwake-row:hover {
+  background: var(--bg-sunken);
+}
+.bgwake-mark {
+  flex: none;
+  align-self: center;
+  display: inline-flex;
+  color: var(--success-solid);
+}
+.bgwake.is-failed .bgwake-mark {
+  color: var(--error-solid);
+}
+.bgwake-mark.is-pending {
+  color: var(--text-3);
 }
 .bgwake-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--brand);
-  font-weight: 600;
+  flex: none;
 }
 .bgwake.is-failed .bgwake-title {
-  color: var(--warning);
+  color: var(--error);
 }
-.bgwake-why {
-  margin: 3px 0 8px;
+/* The one line gives way here: the title, how it came out and when stay whole, and all of the name
+   is in the fold. */
+.bgwake-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--text-2);
+}
+.bgwake-name.is-command {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+}
+/* A phone leaves the name a few letters beside the title, so there it takes a line of its own,
+   lined up under the title. */
+@media (max-width: 600px) {
+  .bgwake-row {
+    flex-wrap: wrap;
+  }
+  .bgwake-name {
+    order: 1;
+    flex-basis: 100%;
+    padding-left: 20px;
+  }
+}
+.bgwake-status {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 5px;
+  background: var(--fill-muted);
+  color: var(--text-2);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+}
+.bgwake-time {
+  flex: none;
+  font-size: 12px;
+}
+.bgwake-caret {
+  flex: none;
+  align-self: center;
+  color: var(--text-4);
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+.bgwake-fold[open] > .bgwake-row .bgwake-caret {
+  transform: rotate(90deg);
+}
+/* What the line carried, opened: hung under its title, off a rule, like a tool card's detail. */
+.bgwake-body {
+  margin: 2px 0 6px 22px;
+  padding: 6px 10px;
+  border-left: 2px solid var(--border-subtle);
+  font-size: 12px;
 }
 .bgwake-jobs,
 .bgwake-wakeups {
@@ -15603,20 +16235,15 @@ button.chat-jump-start:hover {
   padding: 0;
   list-style: none;
 }
-.bgwake-job,
-.bgwake-wakeup {
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: var(--bg-raised);
-}
 .bgwake-job + .bgwake-job,
 .bgwake-wakeup + .bgwake-wakeup {
-  margin-top: 6px;
+  margin-top: 8px;
 }
 .bgwake-job-head {
   display: flex;
   align-items: baseline;
   gap: 6px;
+  color: var(--text-2);
 }
 .bgwake-job-mark {
   flex: none;
@@ -15644,55 +16271,33 @@ button.chat-jump-start:hover {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px;
 }
-/* The command and the id line up under the description that named the row, not under its icon. */
 .bgwake-job-cmd,
 .bgwake-job-meta {
-  padding-left: 22px;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 11px;
   overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 .bgwake-job-cmd {
   margin-top: 2px;
   color: var(--text-2);
 }
 .bgwake-job-meta {
-  margin-top: 4px;
+  margin-top: 2px;
   color: var(--text-3);
-}
-.bgwake-job .chat-pre-wrap {
-  margin: 6px 0 0 22px;
 }
 .bgwake-wakeup-reason {
   margin-bottom: 2px;
-}
-.bgwake-wakeup-meta {
   color: var(--text-2);
-  font-size: 12px;
 }
 .bgwake-wakeup .chat-pre-wrap {
   margin-top: 6px;
 }
 .bgwake-meta {
-  color: var(--text-2);
-  font-size: 12px;
-}
-.bgwake-undelivered {
-  margin-top: 4px;
-  color: var(--warning);
-  font-size: 12px;
+  color: var(--text-3);
 }
 .bgwake-raw {
-  margin-top: 6px;
-  font-size: 12px;
-}
-/* Whatever else the same note carried, folded inside the card rather than in a bubble of its own. */
-.bgwake > .chat-injected {
-  margin-top: 8px;
-  border-top-color: var(--brand-border);
-}
-.bgwake.is-failed > .chat-injected {
-  border-top-color: var(--warning-border);
+  margin-top: 4px;
 }
 .bgwake-raw summary {
   color: var(--text-2);
@@ -15709,13 +16314,30 @@ button.chat-jump-start:hover {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* Whatever else the same note carried, folded in with the rest of what the line carried. */
+.bgwake-body > .chat-injected {
+  margin-top: 8px;
+}
+.bgwake-tail {
+  margin: 2px 0 6px 22px;
+}
+.bgwake-tail-name {
+  margin-bottom: 2px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.bgwake-undelivered {
+  margin: 2px 0 0 22px;
+  color: var(--warning);
+  font-size: 12px;
+}
 /* Still waiting behind the running turn (WorkspaceView's queued tail): dashed like a queued
-   message, with the queue's own status line at its foot. */
-.bgwake.is-queued {
-  border-style: dashed;
+   message, with the queue's own status line under it. */
+.bgwake.is-queued .bgwake-row {
+  border: 1px dashed var(--border);
 }
 .bgwake-queued {
-  margin-top: 6px;
+  margin: 4px 0 0 22px;
 }
 .bgwake-queued .chat-queued-meta {
   flex-wrap: wrap;
@@ -15723,7 +16345,7 @@ button.chat-jump-start:hover {
   row-gap: 2px;
 }
 /* An exception item's delivery to the coordinator (components/OpenItemDeliveryCard.tsx): the same
-   card shape as the wake above — right-aligned, control-plane-owned — with the item's own fields
+   card shape as a watch's wake — right-aligned, control-plane-owned — with the item's own fields
    drawn instead of the paragraph they were rendered into. Amber rather than brand: an exception
    item is something nobody's work is waiting behind, and every one of them is somebody's to decide. */
 .oic-wrap {
@@ -16115,6 +16737,12 @@ button.chat-jump-start:hover {
 .psc-title {
   margin: 4px 0 2px;
   font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.psc-settings {
+  margin: 0 0 2px;
+  font-size: 12.5px;
+  color: var(--text-2);
   overflow-wrap: anywhere;
 }
 .psc-lead {

@@ -725,6 +725,9 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         const msg = stripAnsi(String(p.message ?? 'error'));
         turnAccountedFor = true;
         if (isAuthErrorText(msg)) authError(parent, ev.seq, msg);
+        // A provider too busy to answer is the same pause here as in a reply (Codex reports it as
+        // the turn's error): the server has armed the re-send, so it earns the card that says so.
+        else if (isRetryableApiErrorText(msg)) autoRetry(parent, ev.seq, msg, 'apiError');
         else into(parent).push({ kind: 'error', seq: ev.seq, message: msg });
         break;
       }
@@ -1140,11 +1143,13 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
       }
       // A turn the control plane opened for a background job's news, or for a wakeup coming due, is
       // nobody's message either: the block IS the turn, so it is read off the recorded note rather
-      // than the person's words, which are empty. Only the wake blocks become the card — anything
-      // else the same note carried (the inventory a returning engine is handed, a coordinator's
-      // standing role) is a folded entry in the same card, because it is the control plane's too.
-      // It used to be an entry in a user bubble under the card, which drew an empty bubble: a
-      // message with no words in it, in the reader's own name.
+      // than the person's words, which are empty. It is drawn as one event line in the agent's
+      // stream, not as a card on the reader's side — the agent is carrying on with the answer, not
+      // being asked something new. Only the wake blocks become the line — anything else the same
+      // note carried (the inventory a returning engine is handed, a coordinator's standing role) is
+      // a folded entry in the line's own fold, because it is the control plane's too. It used to be
+      // an entry in a user bubble under the card, which drew an empty bubble: a message with no
+      // words in it, in the reader's own name.
       const background = parseBackgroundWake(node.note);
       if (background) {
         return (

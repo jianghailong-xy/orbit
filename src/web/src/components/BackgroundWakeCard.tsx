@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
-import { CheckCircleFilled, ClockCircleOutlined, CloseCircleFilled, CodeOutlined } from '@ant-design/icons';
+import { CheckCircleFilled, ClockCircleOutlined, CloseCircleFilled, RightOutlined } from '@ant-design/icons';
 import type { BackgroundWake, BackgroundWakeJob } from '../lib/backgroundWake';
 import { formatSpan } from '../lib/watches';
 import { Pre, relTime } from './Transcript';
 
-/** How much of a failed job's output the card shows before folding the rest away. */
+/** How much of a failed job's output the line shows before folding the rest away. */
 const TAIL_LINES = 8;
 
 const isFailed = (job: BackgroundWakeJob) => job.status === 'failed' || job.status === 'killed';
@@ -15,11 +15,11 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-/** What became of one job, in the words the result line ends with. */
-function outcome(job: BackgroundWakeJob): string {
-  if (!job.ended) return 'has new output';
-  if (job.status === 'killed') return job.killReason ? `was killed: ${job.killReason}` : 'was killed';
-  return job.exitCode === null ? `ended ${job.status}` : `exited ${job.exitCode}`;
+/** How one job came out, as the word its row closes on — null while it has only written something. */
+function status(job: BackgroundWakeJob): string | null {
+  if (job.status === 'killed') return job.killReason ? `killed: ${job.killReason}` : 'killed';
+  if (job.exitCode !== null) return `exit ${job.exitCode}`;
+  return job.ended ? job.status : null;
 }
 
 /** What happened, at a glance. */
@@ -31,42 +31,45 @@ function title(wake: BackgroundWake): string {
   return isFailed(jobs[0]) ? 'Background job failed' : 'Background job finished';
 }
 
-/** The one line under it that says how it came out, in words — which is also what the sticky bar at
- *  the top of the transcript names this turn with, so the two say the same thing. */
-function summaryText(wake: BackgroundWake): string {
+/** What the line names after its title: the one job, or why the wakeup was asked for. Several jobs
+ *  are counted by the title and named in the fold. */
+function lineName(wake: BackgroundWake): string | null {
   const { jobs } = wake;
-  if (jobs.length === 0) return wake.wakeups[0]?.reason ?? 'It came due.';
-  if (jobs.length === 1) return `${jobs[0].description || jobs[0].command} ${outcome(jobs[0])}.`;
-  const failed = jobs.filter(isFailed);
-  if (failed.length > 0) return `${failed.length} of ${jobs.length} failed.`;
-  return jobs.every((job) => job.exitCode === 0)
-    ? `All ${jobs.length} exited 0.`
-    : `All ${jobs.length} finished.`;
+  if (jobs.length === 1) return jobs[0].description || jobs[0].command;
+  if (jobs.length === 0) return wake.wakeups[0]?.reason ?? null;
+  return null;
 }
 
-/** That same line as the card draws it, with the lone job's name in bold. */
-function summary(wake: BackgroundWake): ReactNode {
+/** The word the line closes on: the one job's, or how many of several failed. */
+function lineStatus(wake: BackgroundWake): string | null {
   const { jobs } = wake;
-  if (jobs.length !== 1) return summaryText(wake);
-  return (
-    <>
-      <strong>{jobs[0].description || jobs[0].command}</strong> {outcome(jobs[0])}.
-    </>
-  );
+  if (jobs.length === 1) return status(jobs[0]);
+  const failed = jobs.filter(isFailed);
+  return failed.length > 0 ? `${failed.length} of ${jobs.length} failed` : null;
+}
+
+function JobMark({ job }: { job: BackgroundWakeJob }) {
+  if (isFailed(job)) return <CloseCircleFilled />;
+  return job.ended ? <CheckCircleFilled /> : <ClockCircleOutlined />;
 }
 
 /**
  * A turn the control plane opened because a background job had news, or a wakeup came due
- * (lib/backgroundWake `parseBackgroundWake`) — drawn as the control plane's rather than as a message
- * the user typed, which is what it looked like while the whole block sat unrecognised in a bubble.
+ * (lib/backgroundWake `parseBackgroundWake`), drawn as one event line in the agent's stream — the
+ * grammar `⊘ interrupted` already uses — rather than as a card on the reader's side of the
+ * conversation. The card it replaced sat where the person's own messages sit, in their tint, so a
+ * run of wakes read as somebody cutting in and split one answer into pieces; a quarter of the turns
+ * on that side of this deployment's transcripts were wakes, and after nearly all of them the agent
+ * simply carried on with the same work.
  *
- * Built like the card a watch's wake gets (WatchWakeCard), down to the two tones: the brand tint for
- * a job that finished, the warning tint for one that failed or was killed, as Watch triggered and
- * Watch expired take them. What the agent actually read stays one native disclosure away, so it
- * still opens in a static export.
+ * It is no anchor for the sticky bar (no `data-sticky-label`): the bar keeps naming the question the
+ * answer around it belongs to. The command, the ids, who queued it and what the agent read open
+ * beneath it, behind a native disclosure so they still open in a static export. A failure stays
+ * loud: the line takes the error tone and the output's tail stays out of the fold, since that is
+ * what woke anybody.
  *
- * The queued tail draws the same card while the wake waits behind the running turn, with the queue's
- * status line at its foot, so it keeps its shape when a runner takes it.
+ * The queued tail draws the same line while the wake waits behind the running turn, dashed, with
+ * the queue's status line under it, so it keeps its shape when a runner takes it.
  */
 export function BackgroundWakeCard({
   wake,
@@ -87,86 +90,100 @@ export function BackgroundWakeCard({
   /**
    * Whatever else the same note carried, as its own folded entry.
    *
-   * It rides in the card because nobody typed this turn: delivery appends to a turn whose content
+   * It rides in the fold because nobody typed this turn: delivery appends to a turn whose content
    * is empty, so putting the leftover block back in a user bubble drew an empty bubble under the
-   * card — a message with no words in it, signed with the reader's own name.
+   * wake — a message with no words in it, signed with the reader's own name.
    */
   attached?: ReactNode;
 }) {
   const failed = wake.jobs.some(isFailed);
-  // A wakeup's own reason is already the result line when it is all this turn carries.
-  const showReason = wake.jobs.length > 0 || wake.wakeups.length > 1;
+  // A wakeup, or a job that has only written something: nothing has come out either way yet.
+  const pending = !failed && (wake.jobs.length === 0 || wake.jobs.some((job) => !job.ended));
+  const several = wake.jobs.length > 1;
+  const name = lineName(wake);
+  // A job started without a description is named by its command: one line of it here, all of it
+  // in the fold.
+  const nameIsCommand = wake.jobs.length === 1 && !wake.jobs[0].description;
+  const closing = lineStatus(wake);
   return (
-    <div className="bgwake-wrap">
-      {/* The sticky bar at the top of the transcript names this turn off these two attributes: it
-          scans for user bubbles and would otherwise either skip the wake (naming an earlier
-          question instead, and scrolling to it) or, as iOS did, call it the person's own. */}
-      <div
-        className={`bgwake ${failed ? 'is-failed' : 'is-ok'}${queued ? ' is-queued' : ''}`}
-        data-seq={seq}
-        data-sticky-label={title(wake)}
-        data-sticky-text={summaryText(wake)}
-      >
-        <div className="bgwake-title">
-          {wake.jobs.length === 0 ? <ClockCircleOutlined /> : <CodeOutlined />} {title(wake)}
+    <div className={`bgwake ${failed ? 'is-failed' : 'is-ok'}${queued ? ' is-queued' : ''}`} data-seq={seq}>
+      <details className="bgwake-fold">
+        <summary className="bgwake-row">
+          <span className={`bgwake-mark${pending ? ' is-pending' : ''}`}>
+            {failed ? <CloseCircleFilled /> : pending ? <ClockCircleOutlined /> : <CheckCircleFilled />}
+          </span>
+          <span className="bgwake-title">{title(wake)}</span>
+          {name && <span className={`bgwake-name${nameIsCommand ? ' is-command' : ''}`}>{name}</span>}
+          {closing && <span className="bgwake-status">{closing}</span>}
+          {ts && <span className="bgwake-time">{relTime(ts)}</span>}
+          <RightOutlined className="bgwake-caret" />
+        </summary>
+        <div className="bgwake-body">
+          {wake.jobs.length > 0 && (
+            <ul className="bgwake-jobs">
+              {wake.jobs.map((job) => (
+                <li className="bgwake-job" key={job.id}>
+                  {/* A lone job is the line itself, so its row here only names it in full where a
+                      description did the naming; several each name themselves, with how they ended. */}
+                  {(several || job.description) && (
+                    <div className="bgwake-job-head">
+                      {several && (
+                        <span className={`bgwake-job-mark ${isFailed(job) ? 'is-failed' : job.ended ? 'is-ok' : 'is-running'}`}>
+                          <JobMark job={job} />
+                        </span>
+                      )}
+                      <span className="bgwake-job-name">{job.description || job.command}</span>
+                      {several && status(job) && <span className="bgwake-job-exit">{status(job)}</span>}
+                    </div>
+                  )}
+                  {/* The command, whenever the row above did not already spell it out. */}
+                  {(job.description || !several) && <div className="bgwake-job-cmd">{job.command}</div>}
+                  <div className="bgwake-job-meta">
+                    {job.id}
+                    {job.outputTo !== null &&
+                      ` · ${job.outputTo === 0 ? 'no output' : `${formatBytes(job.outputTo)} of output`}`}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {wake.wakeups.length > 0 && (
+            <ul className="bgwake-wakeups">
+              {wake.wakeups.map((wakeup, i) => (
+                <li className="bgwake-wakeup" key={`${wakeup.dueAt ?? ''}:${i}`}>
+                  {wakeup.reason && <div className="bgwake-wakeup-reason">{wakeup.reason}</div>}
+                  <div className="bgwake-wakeup-meta">
+                    {wakeup.delaySeconds !== null && `Asked for ${formatSpan(wakeup.delaySeconds * 1000)} out`}
+                    {wakeup.delaySeconds !== null && wakeup.dueAt && ' · '}
+                    {wakeup.dueAt && `came due ${relTime(wakeup.dueAt)}`}
+                  </div>
+                  {wakeup.prompt !== '' && <Pre text={wakeup.prompt} threshold={TAIL_LINES} />}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="bgwake-meta">
+            {wake.jobs.length > 0
+              ? 'Queued by a background job, not typed by you'
+              : 'Queued by a scheduled wakeup, not typed by you'}
+          </div>
+          <details className="bgwake-raw">
+            <summary>What the agent received</summary>
+            <pre>{wake.text}</pre>
+          </details>
+          {attached}
         </div>
-        <div className="bgwake-why">{summary(wake)}</div>
-        {wake.jobs.length > 0 && (
-          <ul className="bgwake-jobs">
-            {wake.jobs.map((job) => (
-              <li className="bgwake-job" key={job.id}>
-                <div className="bgwake-job-head">
-                  <span className={`bgwake-job-mark ${isFailed(job) ? 'is-failed' : job.ended ? 'is-ok' : 'is-running'}`}>
-                    {isFailed(job) ? <CloseCircleFilled /> : job.ended ? <CheckCircleFilled /> : <ClockCircleOutlined />}
-                  </span>
-                  <span className="bgwake-job-name">{job.description || job.command}</span>
-                  {job.exitCode !== null && <span className="bgwake-job-exit">exit {job.exitCode}</span>}
-                </div>
-                {/* The command, when the description already named the row — otherwise the row is it. */}
-                {job.description && <div className="bgwake-job-cmd">{job.command}</div>}
-                {/* Why it failed is the whole reason this turn woke anybody: the tail comes out of
-                    the fold, collapsed past a few lines like any other block of output. */}
-                {isFailed(job) && job.outputTail !== '' && <Pre text={job.outputTail} threshold={TAIL_LINES} />}
-                <div className="bgwake-job-meta">
-                  {job.id}
-                  {job.outputTo !== null &&
-                    ` · ${job.outputTo === 0 ? 'no output' : `${formatBytes(job.outputTo)} of output`}`}
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-        {wake.wakeups.length > 0 && (
-          <ul className="bgwake-wakeups">
-            {wake.wakeups.map((wakeup, i) => (
-              <li className="bgwake-wakeup" key={`${wakeup.dueAt ?? ''}:${i}`}>
-                {showReason && wakeup.reason && <div className="bgwake-wakeup-reason">{wakeup.reason}</div>}
-                <div className="bgwake-wakeup-meta">
-                  {wakeup.delaySeconds !== null && `Asked for ${formatSpan(wakeup.delaySeconds * 1000)} out`}
-                  {wakeup.delaySeconds !== null && wakeup.dueAt && ' · '}
-                  {wakeup.dueAt && `came due ${relTime(wakeup.dueAt)}`}
-                </div>
-                {wakeup.prompt !== '' && <Pre text={wakeup.prompt} threshold={TAIL_LINES} />}
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="bgwake-meta">
-          {wake.jobs.length > 0
-            ? 'Queued by a background job, not typed by you'
-            : 'Queued by a scheduled wakeup, not typed by you'}
-          {ts ? ` · ${relTime(ts)}` : ''}
+      </details>
+      {/* Why it failed is the whole reason this turn woke anybody: the tail stays out of the fold,
+          collapsed past a few lines like any other block of output. */}
+      {wake.jobs.filter((job) => isFailed(job) && job.outputTail !== '').map((job) => (
+        <div className="bgwake-tail" key={job.id}>
+          {several && <div className="bgwake-tail-name">{job.description || job.command}</div>}
+          <Pre text={job.outputTail} threshold={TAIL_LINES} />
         </div>
-        {undelivered && (
-          <div className="bgwake-undelivered">The session has not confirmed it received this.</div>
-        )}
-        <details className="bgwake-raw">
-          <summary>What the agent received</summary>
-          <pre>{wake.text}</pre>
-        </details>
-        {attached}
-        {queued && <div className="bgwake-queued">{queued}</div>}
-      </div>
+      ))}
+      {undelivered && <div className="bgwake-undelivered">The session has not confirmed it received this.</div>}
+      {queued && <div className="bgwake-queued">{queued}</div>}
     </div>
   );
 }

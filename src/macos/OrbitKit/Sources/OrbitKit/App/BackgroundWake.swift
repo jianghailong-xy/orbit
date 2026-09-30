@@ -125,6 +125,28 @@ public enum BackgroundWakeText {
     private static let wakeupReason = Pattern(wakeupReasonPattern)
     private static let wakeupPrompt = Pattern(wakeupPromptPattern)
 
+    /// Whether a note carries a wake the transcript draws as a line — `parse(note) != nil`, answered
+    /// once per distinct note. The sticky bar asks it of every turn above the fold, on every publish
+    /// and every step of a scroll (`StickySummary.isAnchor`), and a full reading costs the better part
+    /// of a millisecond a note; a recorded note never changes, so the answer is kept.
+    public static func carriesWake(_ note: String?) -> Bool {
+        // No block can open without its tag, so every other note is answered without a reading.
+        guard let note, note.contains("<background-job-wake>") || note.contains("<scheduled-wakeup>") else {
+            return false
+        }
+        let key = note as NSString
+        if let known = readings.object(forKey: key) { return known.boolValue }
+        let found = parse(note) != nil
+        readings.setObject(NSNumber(value: found), forKey: key)
+        return found
+    }
+
+    private static let readings: NSCache<NSString, NSNumber> = {
+        let cache = NSCache<NSString, NSNumber>()
+        cache.countLimit = 1024
+        return cache
+    }()
+
     /// The wake blocks in a control plane note, or nil for a note carrying none.
     ///
     /// `rest` hands back everything else the note held, so a note that carries a wake and something
@@ -237,15 +259,22 @@ public enum BackgroundWakeText {
 }
 
 /// What the wake reads as on screen: web's `BackgroundWakeCard.tsx`, in the same words and the same
-/// order — what happened, how it came out, a row per job or wakeup, and the text the agent actually
-/// received, folded away rather than dropped.
+/// order — one line in the agent's stream saying what happened, which job, how it came out and when,
+/// and folded under it a row per job or wakeup, who queued the turn, and the text the agent actually
+/// received.
 public enum BackgroundWakeCard {
-    /// How much of a failed job's output the card shows before folding the rest away.
+    /// How much of a failed job's output the line shows before folding the rest away.
     public static let tailLines = 8
 
-    /// A job the card draws in its warning tone rather than its brand tint.
+    /// A job the line draws in its error tone.
     public static func isFailed(_ job: BackgroundWakeJob) -> Bool {
         job.status == "failed" || job.status == "killed"
+    }
+
+    /// Whether the line's mark is the clock: a wakeup, or a job that has only written something —
+    /// nothing has come out either way yet.
+    public static func isPending(_ wake: BackgroundWake) -> Bool {
+        !wake.jobs.contains(where: isFailed) && (wake.jobs.isEmpty || wake.jobs.contains { !$0.ended })
     }
 
     /// What happened, at a glance.
@@ -256,37 +285,35 @@ public enum BackgroundWakeCard {
         return isFailed(only) ? "Background job failed" : "Background job finished"
     }
 
-    /// What became of one job, in the words the result line ends with.
-    public static func outcome(_ job: BackgroundWakeJob) -> String {
-        if !job.ended { return "has new output" }
+    /// How one job came out, as the word its row closes on — nil while it has only written something.
+    public static func status(_ job: BackgroundWakeJob) -> String? {
         if job.status == "killed" {
-            guard let reason = job.killReason else { return "was killed" }
-            return "was killed: \(reason)"
+            guard let reason = job.killReason, !reason.isEmpty else { return "killed" }
+            return "killed: \(reason)"
         }
-        guard let code = job.exitCode else { return "ended \(job.status)" }
-        return "exited \(code)"
+        if let code = job.exitCode { return "exit \(code)" }
+        return job.ended ? job.status : nil
     }
 
-    /// The one line under the title that says how it came out.
-    public static func summary(_ wake: BackgroundWake) -> String {
-        guard let only = wake.jobs.first else { return wake.wakeups.first?.reason ?? "It came due." }
-        if wake.jobs.count == 1 { return "\(name(only)) \(outcome(only))." }
+    /// What the line names after its title: the one job, or why the wakeup was asked for. Several
+    /// jobs are counted by the title and named in the fold.
+    public static func lineName(_ wake: BackgroundWake) -> String? {
+        if wake.jobs.count == 1, let only = wake.jobs.first { return name(only) }
+        guard wake.jobs.isEmpty, let reason = wake.wakeups.first?.reason, !reason.isEmpty else { return nil }
+        return reason
+    }
+
+    /// The word the line closes on: the one job's, or how many of several failed.
+    public static func lineStatus(_ wake: BackgroundWake) -> String? {
+        if wake.jobs.count == 1, let only = wake.jobs.first { return status(only) }
         let failed = wake.jobs.filter(isFailed)
-        if !failed.isEmpty { return "\(failed.count) of \(wake.jobs.count) failed." }
-        return wake.jobs.allSatisfy { $0.exitCode == 0 }
-            ? "All \(wake.jobs.count) exited 0."
-            : "All \(wake.jobs.count) finished."
+        return failed.isEmpty ? nil : "\(failed.count) of \(wake.jobs.count) failed"
     }
 
     /// What a job's row is called: what it was for, or the command itself where it was started
     /// without a description.
     public static func name(_ job: BackgroundWakeJob) -> String {
         job.description.flatMap { $0.isEmpty ? nil : $0 } ?? job.command
-    }
-
-    /// "exit 0", beside the row's name. Nil for a job that named no exit code.
-    public static func exitLabel(_ job: BackgroundWakeJob) -> String? {
-        job.exitCode.map { "exit \($0)" }
     }
 
     /// "bgj_13c53745a88a · 16.2 KB of output".
@@ -318,13 +345,12 @@ public enum BackgroundWakeCard {
         return parts.joined(separator: " · ")
     }
 
-    /// "Queued by a background job, not typed by you · 4m ago" — the line the card exists for.
-    public static func meta(_ wake: BackgroundWake, ts: String? = nil, now: Date = Date()) -> String {
-        var line = wake.jobs.isEmpty
+    /// "Queued by a background job, not typed by you" — who queued the turn, said in the fold. When is
+    /// on the line itself.
+    public static func meta(_ wake: BackgroundWake) -> String {
+        wake.jobs.isEmpty
             ? "Queued by a scheduled wakeup, not typed by you"
             : "Queued by a background job, not typed by you"
-        if let ts, let relative = RelativeTime.format(ts, now: now) { line += " · \(relative)" }
-        return line
     }
 
     /// The runner never confirmed the engine received the turn.
@@ -333,13 +359,13 @@ public enum BackgroundWakeCard {
     /// The fold the original text stays behind.
     public static let rawSummary = "What the agent received"
 
-    /// Whether the turn this card draws is also somebody's message.
+    /// Whether the turn this line draws is also somebody's message.
     ///
     /// A wake turn's own content is empty — the block IS the turn — so anything else the same note
     /// carried (the inventory a returning engine is handed, a coordinator's standing role) used to
     /// be handed back to a user bubble, which drew a bubble with no words in it under the card,
-    /// signed with the reader's own name. The leftover is the card's now (`attached`), and a bubble
-    /// is drawn only where somebody actually typed something. Web parity: `Transcript.tsx` draws the
+    /// signed with the reader's own name. The leftover is the line's fold's now (`attached`), and a
+    /// bubble is drawn only where somebody actually typed something. Web parity: `Transcript.tsx` draws the
     /// bubble on `node.text.trim() !== ''` alone.
     public static func drawsBubble(text: String) -> Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

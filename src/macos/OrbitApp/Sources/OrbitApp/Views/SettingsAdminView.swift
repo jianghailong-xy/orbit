@@ -1,5 +1,8 @@
 import SwiftUI
 import OrbitKit
+#if os(macOS)
+import UniformTypeIdentifiers
+#endif
 
 // Batch E (2/2): Settings (preferences + change password, on the current user) and the Admin
 // user-management area (role-gated). SwiftUI is parse-checked only — verify on a Mac.
@@ -25,13 +28,44 @@ struct SettingsView: View {
     @State private var newPw = ""
     @State private var pwMessage: String?
 
+    /// The account's name as it is being edited; written only by Save.
+    @State private var name = ""
+    @State private var choosingPhoto = false
+    /// What the last photo or name write went wrong with, under the account's rows.
+    @State private var accountMessage: String?
+
     var body: some View {
         Form {
+            // The account as the web Profile page has it: the photo, the name (the two things its
+            // owner changes here), the email and the role.
             Section("Account") {
                 if let u = model.user {
+                    LabeledContent("Photo") {
+                        HStack(spacing: 8) {
+                            AccountAvatar(name: u.name ?? u.email, diameter: 40)
+                            Button(SettingsCopy.choosePhoto + "…") { choosingPhoto = true }
+                            if u.avatarUpdatedAt != nil {
+                                Button(SettingsCopy.removePhoto) {
+                                    Task { accountMessage = await model.removeAvatar() }
+                                }
+                            }
+                        }
+                    }
+                    LabeledContent(SettingsCopy.nameLabel) {
+                        HStack(spacing: 8) {
+                            TextField(SettingsCopy.nameLabel, text: $name, prompt: Text(SettingsCopy.namePlaceholder))
+                                .labelsHidden()
+                                .frame(maxWidth: 220)
+                                .onSubmit(saveName)
+                            Button("Save", action: saveName)
+                                .disabled(!ProfileEdit.canSave(name, saved: u.name))
+                        }
+                    }
                     LabeledContent("Email", value: u.email)
-                    if let name = u.name, !name.isEmpty { LabeledContent("Name", value: name) }
                     if let role = u.role { LabeledContent("Role", value: role) }
+                    Text(accountMessage ?? SettingsCopy.nameCaption)
+                        .font(.orbitLabel)
+                        .foregroundStyle(accountMessage == nil ? Color.secondary : Color.red)
                 }
             }
 
@@ -82,6 +116,18 @@ struct SettingsView: View {
         .orbitRevealSurface()   // reveal the unified `orbitSurface` behind the grouped form
         .formStyle(.grouped)
         .navigationTitle("Settings")
+        // The photo is cut to its middle square and scaled down here, then sent at once — a form
+        // takes effect as it is used, as the web Profile page's photo does.
+        .fileImporter(isPresented: $choosingPhoto, allowedContentTypes: [.image]) { result in
+            guard case .success(let url) = result else { return }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let jpeg = NSImage(contentsOf: url)?.orbitAvatarJPEG() else {
+                accountMessage = SettingsCopy.photoNotSaved("that file isn't an image this Mac can read")
+                return
+            }
+            Task { accountMessage = await model.saveAvatar(jpeg) }
+        }
         // Persisted the moment it flips: the Save button lives in another section, and a capability
         // switch that looks set but was never written is the one kind of lie this screen cannot
         // afford.
@@ -96,6 +142,16 @@ struct SettingsView: View {
             permMode = PermissionMode(rawValue: p?.defaultPermissionMode ?? "")
                 ?? AgentDefaults.defaultPermissionMode
             orchestration = p?.enableOrchestration ?? true
+            name = model.user?.name ?? ""
+        }
+        .onChange(of: name) { accountMessage = nil }
+    }
+
+    private func saveName() {
+        guard ProfileEdit.canSave(name, saved: model.user?.name) else { return }
+        Task {
+            accountMessage = await model.saveName(name)
+            if accountMessage == nil { name = ProfileEdit.name(name) }
         }
     }
 

@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type JSX } from 'react';
+import { useCallback, useEffect, useId, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import { api } from '../api';
@@ -9,6 +9,12 @@ import {
   type RecordedStandardSetConfirmation,
   type StandardSetConfirmationStanding,
 } from '../lib/acceptanceConfirmation';
+import {
+  CRITERIA_CHANGE_CHAT_PLACEHOLDER,
+  START_CHAT_PLACEHOLDER,
+  projectStarted,
+  type SettlementQuestion,
+} from '../lib/projectStart';
 import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, SHORTCUT_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL, receiptClock, shortSeal } from './CriteriaDecisionCard';
@@ -17,18 +23,31 @@ import { PROVENANCE_LABEL, receiptClock, shortSeal } from './CriteriaDecisionCar
 // through `DecisionRail`, and a top-level alias would be evaluated while that binding is still in
 // its temporal dead zone depending on which of the three a bundle enters first.
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
+import { SessionCriteriaChangeCard, criteriaChangeHeld } from './CriteriaChangeCard';
+import { RunSettingsSummary } from './RunSettingsSummary';
+import { SessionStartProjectCard } from './StartProjectCard';
 
 /**
  * The settlement question, asked in the conversation it was delivered to, at the moment it can
- * still change something: this is the plan — these N conditions — so shall the project start?
+ * still change something: are these N conditions what done means for this project?
+ *
+ * THREE CARDS, ONE QUESTION, AND WHICH ONE IS ASKED IS THE PROJECT'S STATE
+ * -----------------------------------------------------------------------
+ * A project nobody has started is asked by "Start this project?" (`StartProjectCard.tsx`), and only
+ * once its coordinator has asked: the criteria, the plan and how it runs, confirmed and started by
+ * one press. A started project whose criteria moved since the owner confirmed them is asked by
+ * "Confirm the new criteria?" (`CriteriaChangeCard.tsx`), which lists what moved. This card is the
+ * third: a started project whose criteria nobody ever confirmed — the projects that were running
+ * before confirming them was how a project started. `SessionAcceptanceConfirmationCard` below is
+ * the one mount that draws whichever of the three is asking; "started" is the project's own
+ * `startedAt` (`projectStarted`), and nothing else.
  *
  * WHY IT IS A CARD IN THE COORDINATOR CONVERSATION
  * ------------------------------------------------
- * `CONFIRM_ACCEPTANCE_CRITERIA` is HUMAN_ONLY, and the same press that records the confirmation
- * turns the project on (`project-acceptance.service.ts`: `coordinatorEnabled` is written by no
- * other hand). Its door refuses any request that carries an acting session and takes the browser's
- * own credential, so the answer is pressed here, straight at
- * `POST /projects/:id/acceptance/confirmation`, with no agent between the press and the door. This
+ * `CONFIRM_ACCEPTANCE_CRITERIA` is HUMAN_ONLY, and on a started project the press confirms and
+ * writes nothing else (`project-acceptance.service.ts`). Its door refuses any request that carries
+ * an acting session and takes the browser's own credential, so the answer is pressed here, straight
+ * at `POST /projects/:id/acceptance/confirmation`, with no agent between the press and the door. This
  * is the browser's half of what iOS and macOS draw as `AcceptanceConfirmationCard`
  * (`ApprovalCards.swift`), and it carries the provenance mark the other two cards Orbit draws into
  * a conversation carry, for their reason: a transcript is where an agent's words appear.
@@ -42,7 +61,8 @@ import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
  * nothing has run — so `satisfied` no longer enters the condition at all: an OPEN project, a set
  * that is not empty, at least one task filed under it, and a standing nobody has confirmed. The
  * criteria are on the card unfolded, because a digest can prove WHICH version was signed and never
- * that it was read.
+ * that it was read. That moment belongs to the start card now; this card keeps the same rule for a
+ * started project nobody ever confirmed.
  *
  * The sentences are OrbitKit's `AcceptanceConfirmations`, copied by hand, and
  * `AcceptanceConfirmationCopyParityTests.swift` reads them back out of this file: the two clients
@@ -83,16 +103,16 @@ import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 /** The card's heading: what the card is about, not whether it has been answered
  *  (`AcceptanceConfirmations.title`). */
 export const ACCEPTANCE_CONFIRMATION_TITLE = 'When is this project done?';
-/** The primary action for the project this card is normally asked about: one that is not running
- *  yet. One press records the confirmation AND starts it, because saying what would settle a
- *  project is what authorises work on it. */
+/** The primary action for a project that is not running yet. This card is no longer drawn for one
+ *  — the start card asks that, with the settings the start writes — and the word stays for a card
+ *  delivered over a project whose read says so, and for the native card that shares it. */
 export const ACCEPTANCE_START_LABEL = 'Start the project';
 /** …and what the SAME control says when the project is already handing work out. Two different
  *  facts are being answered here, and the verb has to follow the fact: a project already running on
  *  an older version of its plan is not being started by this press, it is being re-confirmed —
  *  saying "start" to it would name an act that is not available and imply a state it is not in
  *  (2026-09-18: seven OPEN projects were handing work out, and the card offered to start every one
- *  of them). Read off `coordinatorEnabled` like the meta line's own field, and off nothing else. */
+ *  of them). Read off `startedAt` like the meta line's own field, and off nothing else. */
 export const ACCEPTANCE_CONFIRM_LABEL = 'Confirm the criteria';
 /** The reading toggle once the criteria are shown whole. */
 export const ACCEPTANCE_SHOW_LESS_LABEL = 'Show less';
@@ -106,11 +126,9 @@ export const CONFIRMATION_CHANGED_SINCE =
   'The criteria changed after they were confirmed, so that confirmation no longer stands.';
 export const CONFIRMATION_EDIT_ENDS_IT =
   'Editing any criterion ends this confirmation and Orbit will ask again.';
-/** Where the project stands, as the meta line's third field says it: read off `coordinatorEnabled`
- *  — the column that decides whether Orbit hands this project's tasks out, and which
- *  `project-acceptance.service.ts` writes by no other hand — and off nothing else. Confirming turns
- *  it on for a project started since that was wired, and says nothing whatever about one that was
- *  already dispatching work when it landed. */
+/** Where the project stands, as the meta line's third field says it: read off the project's own
+ *  `startedAt` (`projectStarted`) and off nothing else — not off Automatic, which is how a started
+ *  project runs rather than whether it does. */
 export const ACCEPTANCE_NOT_STARTED = 'not started';
 export const ACCEPTANCE_STARTED = 'started';
 /** …and what that field says when the project itself could not be read. A failed read is not an
@@ -127,6 +145,15 @@ export const ACCEPTANCE_NOBODY_SAID_DONE = 'nobody has said what done means';
 export const ACCEPTANCE_PLAN_CHANGE_PREFIX = 'Talking about this plan: ';
 /** What the armed composer asks for. A message, not an answer: no door is waiting on it. */
 export const ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER = 'What should done mean instead?';
+
+/** What the armed composer asks for, by the card that armed it: the start card asks what should
+ *  change before the project starts, the change card what should change about the new criteria. */
+export function acceptancePlanChangePlaceholder(question?: SettlementQuestion): string {
+  if (question === 'START') return START_CHAT_PLACEHOLDER;
+  if (question === 'CRITERIA_CHANGE') return CRITERIA_CHANGE_CHAT_PLACEHOLDER;
+  return ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER;
+}
+
 export const CONFIRMATION_UNREAD_EXPLANATION =
   'This card could not be re-read just now, so the version it would confirm cannot be named — and '
   + 'a confirmation that names no version is not one. The criteria themselves are untouched by this.';
@@ -153,13 +180,33 @@ export function acceptancePlanChangeContext(plan: {
   projectTitle: string;
   criteriaDigest: string;
   criteria: string[];
+  question?: SettlementQuestion;
 }): string {
   const numbered = plan.criteria.map((text, index) => `${index + 1}. ${text}`).join('\n');
+  // A started project's criteria are being worked against while it is asked, so its context does
+  // not say that no work has started.
+  if (plan.question === 'CRITERIA_CHANGE') {
+    return (
+      `About the acceptance criteria of “${plan.projectTitle}” — the ${plan.criteria.length} that `
+      + `stand now, at seal ${shortSeal(plan.criteriaDigest)}, which changed after the owner `
+      + `confirmed them while the project keeps running:\n\n${numbered}`
+    );
+  }
   return (
     `About the acceptance criteria of “${plan.projectTitle}” — the ${plan.criteria.length} that `
     + `stand now, at seal ${shortSeal(plan.criteriaDigest)}, which nobody has confirmed and which `
     + `no work has started against:\n\n${numbered}`
   );
+}
+
+/** What a card hands the composer when its reader wants to talk about the plan first: which plan,
+ *  by its seal, and which card asked — the start card, the change card, or this one. */
+export interface SettlementPlanChat {
+  projectId: string;
+  criteriaDigest: string;
+  projectTitle: string;
+  criteria: string[];
+  question?: SettlementQuestion;
 }
 
 /** One stated criterion, as much of it as this card reads — the narrow view OrbitKit's
@@ -178,16 +225,14 @@ export interface ConfirmationCriterion {
 export interface ConfirmationProjectDocument {
   title?: string;
   status?: string;
-  /** Whether Orbit is handing this project's tasks out. `/projects/:id` carries it already —
-   *  `withCoordination` spreads the column through in `...rest` — so the meta line's "started"
-   *  costs this card no request of its own. Absent from a read that did not say, which is not a
-   *  "no": it is the one thing this field must never be read as. */
-  coordinatorEnabled?: boolean;
+  /** When the project was started — the one write of the start card, or the backfill for a
+   *  project that was running before starts were recorded — or null for one nobody has started.
+   *  What "started" means on all three settlement cards (`projectStarted`). */
+  startedAt?: string | null;
   /** How many tasks this project holds, off the same read's own `_count.tasks` — the total the
-   *  project list shows, not a second count of this card's. Absent is read as none, which is where
-   *  this field parts company with the one above: `coordinatorEnabled` LABELS the project and has a
-   *  third word for a read that did not answer, while this one GATES an action, and a gate nobody
-   *  can establish stays shut (`acceptanceConfirmationAnswerable` above, for the same reason). */
+   *  project list shows, not a second count of this card's. Absent is read as none: this field
+   *  GATES an action, and a gate nobody can establish stays shut (`acceptanceConfirmationAnswerable`
+   *  above, for the same reason). */
   _count?: { tasks?: number };
   acceptanceCriteriaItems?: ConfirmationCriterion[];
 }
@@ -264,7 +309,7 @@ export function acceptanceStartExplanation(
 }
 
 /** What the primary action says, for the project the card is actually about: `started`, read off
- *  `coordinatorEnabled`, and never inferred from the standing. A `null` — a project document that
+ *  `startedAt`, and never inferred from the standing. A `null` — a project document that
  *  did not answer — keeps the card's own word rather than guessing a tense for a project nobody has
  *  read, which is the rule the meta line's third field is under. */
 export function acceptanceActionLabel(started: boolean | null): string {
@@ -307,7 +352,7 @@ export function acceptanceConfirmationStaleExplanation(
   );
 }
 
-/** What a confirmation records: the count it was given over, and the seal it locked.
+/** What a START records: the count it was given over, and the seal it locked.
  *
  *  Read off the RECORD and never off the version standing now. Those are the same version exactly
  *  while the confirmation counts, and the whole point of the record is what it says when they are
@@ -320,6 +365,31 @@ export function acceptanceConfirmedLine(confirmation: RecordedStandardSetConfirm
   return `You started the project on ${count} criteria at seal ${seal}`;
 }
 
+/** …and what every other confirmation records: the project was running already, and the press
+ *  confirmed a version of its criteria rather than starting it. `changed` is what that version
+ *  changed — "1 new, 1 stricter" — when this window pressed it and so knows; the read says only the
+ *  seal, because once a set is confirmed nothing is left changed. */
+export function acceptanceReconfirmedLine(
+  confirmation: RecordedStandardSetConfirmation,
+  changed: string | null = null,
+): string {
+  const count = confirmation.criteriaMaterial.length;
+  const seal = shortSeal(confirmation.criteriaDigest);
+  const line = `You confirmed ${count} criteria at seal ${seal}`;
+  return changed ? `${line} — ${changed}` : line;
+}
+
+/** Which of the two a record says: a confirmation that started the project carries what the start
+ *  left it with (`startedWith`), and one that started nothing does not. */
+export function acceptanceReceiptLine(
+  confirmation: RecordedStandardSetConfirmation,
+  changed: string | null = null,
+): string {
+  return confirmation.startedWith
+    ? acceptanceConfirmedLine(confirmation)
+    : acceptanceReconfirmedLine(confirmation, changed);
+}
+
 /** Who made it and when, under that line — the stamp the other receipts carry (`by you at 09:15`),
  *  from the same clock. The door this card is pressed at takes the browser's own credential and
  *  refuses any request carrying an acting session, so "by you" is not a guess about who is reading:
@@ -329,24 +399,24 @@ export function acceptanceReceiptStamp(confirmation: RecordedStandardSetConfirma
 }
 
 /**
- * Whether this project is waiting to be started on a plan nobody has confirmed, read off the
- * confirmation standing and the project document — null for either one that could not be read.
+ * Whether this card asks its question: a STARTED project running on a plan nobody has confirmed,
+ * read off the confirmation standing and the project document — null for either one that could not
+ * be read.
  *
- * Four facts and no fifth: the project is OPEN, it states criteria, it holds at least one task, and
- * the set standing now has not been confirmed. `satisfied` is deliberately absent — waiting for
- * every criterion to be met put the question at the moment it could only be agreed with, which is
- * what this card was moved for. No quiet period is needed either side of a write:
+ * The facts: the project is OPEN and started, it states criteria, it holds at least one task, the
+ * set standing now has not been confirmed — and the change card is not the one asking. `satisfied`
+ * is deliberately absent: waiting for every criterion to be met put the question at the moment it
+ * could only be agreed with. No quiet period is needed either side of a write:
  * `project_update(acceptanceCriteriaItems)` replaces the whole set in one statement
  * (`criteria-pending-decisions.ts`), so a read never catches a plan half-written.
  *
- * THE TASK COUNT IS THE FOURTH BECAUSE "START" IS A VERB THAT NEEDS AN OBJECT. `project_create`
- * returns before the coordinator has filed a single task, and the plan is written at that moment
- * and there is nothing yet to hand out — so the first version of this condition, which asked for
- * OPEN and criteria and nothing else, put a `Start the project` button in front of the agent while
- * it was still deciding how to split the work, and a press on it would have started nothing. The
- * count is `_count.tasks`: everything filed under the project, settled work included, because the
- * question here is whether there is any work at all and which of it may run is the dispatcher's,
- * not this card's.
+ * A PROJECT NOBODY HAS STARTED IS NOT ASKED HERE. It used to be, as soon as it held one task — the
+ * count was this condition's guess at when a plan was ready, and it put `Start the project` in
+ * front of a coordinator still deciding how to split the work. It is asked by the start card now,
+ * and only once its coordinator says the plan is ready (`project_request_start`). What is left for
+ * this card is the started project nobody ever confirmed — the ones that were running before
+ * confirming was how a project started — and a set that moved when the server could not say how,
+ * which the change card cannot list.
  */
 export function settlementHeldOnConfirmation(
   standing: StandardSetConfirmationStanding | null,
@@ -355,7 +425,9 @@ export function settlementHeldOnConfirmation(
   if (!acceptanceConfirmationAnswerable(standing)) return false;
   if (project === null || project.status !== 'OPEN') return false;
   if ((project.acceptanceCriteriaItems ?? []).length === 0) return false;
-  return (project._count?.tasks ?? 0) > 0;
+  if ((project._count?.tasks ?? 0) === 0) return false;
+  if (projectStarted(project) !== true) return false;
+  return !criteriaChangeHeld(standing, project);
 }
 
 /**
@@ -512,10 +584,14 @@ export function AcceptanceConfirmationCard({
  */
 export function AcceptanceConfirmationReceipt({
   confirmation,
+  changed = null,
 }: {
   /** The newest confirmation on record, as the standing read publishes it. */
   confirmation: RecordedStandardSetConfirmation;
+  /** What a re-confirmation pressed in this window changed, when it knows (`confirmedChangesKey`). */
+  changed?: string | null;
 }): JSX.Element {
+  const started = confirmation.startedWith ?? null;
   return (
     <div className="approval-card settlement-receipt" id={ACCEPTANCE_RECEIPT_ID}>
       <div className="approval-head settlement-card-head">
@@ -525,7 +601,17 @@ export function AcceptanceConfirmationReceipt({
         </span>
       </div>
       <div className="approval-body settlement-receipt-body">
-        <p className="settlement-receipt-line">{acceptanceConfirmedLine(confirmation)}</p>
+        <p className="settlement-receipt-line">{acceptanceReceiptLine(confirmation, changed)}</p>
+        {/* A start's record says what the project was started WITH — the settings the owner
+            pressed, as the start recorded them, and which of them the owner changed from the
+            coordinator's suggestion. Off the record, not off today's settings. */}
+        {started ? (
+          <RunSettingsSummary
+            className="settlement-receipt-settings"
+            settings={started.settings}
+            differs={started.differsFromRequest}
+          />
+        ) : null}
         <p className="settlement-receipt-stamp">{acceptanceReceiptStamp(confirmation)}</p>
       </div>
     </div>
@@ -533,8 +619,75 @@ export function AcceptanceConfirmationReceipt({
 }
 
 /**
- * The wired card for one conversation: at most one, delivered the first time an unstarted project
- * states a plan nobody has confirmed, and re-derived from both reads on every render after that.
+ * The settlement card for one conversation: whichever of the three is asking — "Start this
+ * project?", "Confirm the new criteria?", or this card — mounted as one, so the conversation and
+ * the strip pinned over it hear about exactly one question.
+ *
+ * Each card reads, delivers and answers its own question, and their conditions are exclusive by
+ * construction: an unstarted project is the start card's alone, and a started one is the change
+ * card's while the server can say what changed and this card's otherwise. What comes back up is
+ * which of them is on screen and still asking (`onOpenQuestion`), which is what the strip names.
+ */
+export function SessionAcceptanceConfirmationCard({
+  projectId,
+  onOpenQuestion,
+  onChatAbout,
+  onViewTasks,
+}: {
+  /** The project this session coordinates. Ordinary sessions have none and get no card. */
+  projectId: string | null | undefined;
+  /** Told which question is on screen and still asking — or null — each time that changes, and
+   *  null when the cards go: what the pinned strip points at (`DecisionRail.tsx`). A stable
+   *  function. */
+  onOpenQuestion?: (question: SettlementQuestion | null) => void;
+  /** Arms the bottom composer to talk about the plan, given what the next send should carry. */
+  onChatAbout?: (plan: SettlementPlanChat) => void;
+  /** Opens the tasks this conversation created, for the start card's "View tasks". */
+  onViewTasks?: () => void;
+}): JSX.Element {
+  const [open, setOpen] = useState<Record<SettlementQuestion, boolean>>({
+    START: false,
+    CRITERIA_CHANGE: false,
+    CONFIRMATION: false,
+  });
+  const report = useCallback((question: SettlementQuestion, isOpen: boolean) => {
+    setOpen((previous) => (previous[question] === isOpen ? previous : { ...previous, [question]: isOpen }));
+  }, []);
+  const onStartOpen = useCallback((isOpen: boolean) => report('START', isOpen), [report]);
+  const onChangeOpen = useCallback((isOpen: boolean) => report('CRITERIA_CHANGE', isOpen), [report]);
+  const onConfirmationOpen = useCallback((isOpen: boolean) => report('CONFIRMATION', isOpen), [report]);
+  const asking: SettlementQuestion | null = open.START
+    ? 'START'
+    : open.CRITERIA_CHANGE
+      ? 'CRITERIA_CHANGE'
+      : open.CONFIRMATION
+        ? 'CONFIRMATION'
+        : null;
+  useEffect(() => {
+    onOpenQuestion?.(asking);
+  }, [onOpenQuestion, asking]);
+  useEffect(() => () => onOpenQuestion?.(null), [onOpenQuestion]);
+  return (
+    <>
+      <SessionStartProjectCard
+        projectId={projectId}
+        onOpen={onStartOpen}
+        onChatAbout={onChatAbout}
+        onViewTasks={onViewTasks}
+      />
+      <SessionCriteriaChangeCard projectId={projectId} onOpen={onChangeOpen} onChatAbout={onChatAbout} />
+      <SessionCriteriaConfirmationCard
+        projectId={projectId}
+        onOpen={onConfirmationOpen}
+        onChatAbout={onChatAbout}
+      />
+    </>
+  );
+}
+
+/**
+ * This card, wired: at most one, delivered the first time a started project runs on a plan nobody
+ * has confirmed, and re-derived from both reads on every render after that.
  *
  * The standing is read under `acceptanceConfirmationQuery` — the same query the conversation draws
  * the record from — and the project under the project page's own `['project', id]`. A press sends
@@ -549,26 +702,20 @@ export function AcceptanceConfirmationReceipt({
  * would mean waiting for nothing, so the way past this card is to start the project or to say what
  * should change first.
  */
-export function SessionAcceptanceConfirmationCard({
+export function SessionCriteriaConfirmationCard({
   projectId,
-  onOpenQuestion,
+  onOpen,
   onChatAbout,
 }: {
   /** The project this session coordinates. Ordinary sessions have none and get no card. */
   projectId: string | null | undefined;
-  /** Told whether this card is on screen and the project is still unstarted each time that
-   *  changes, and `false` when the card goes: what the pinned strip points at
-   *  (`DecisionRail.tsx`). A stable function. */
-  onOpenQuestion?: (open: boolean) => void;
+  /** Told whether this card is on screen and its question still open each time that changes, and
+   *  `false` when the card goes. A stable function. */
+  onOpen?: (open: boolean) => void;
   /** Arms the bottom composer to talk about this plan, given what the next send should carry as
    *  context. Nothing here is a door, and the card stays put. Called from a press only, so unlike
-   *  `onOpenQuestion` it need not be stable. */
-  onChatAbout?: (plan: {
-    projectId: string;
-    criteriaDigest: string;
-    projectTitle: string;
-    criteria: string[];
-  }) => void;
+   *  `onOpen` it need not be stable. */
+  onChatAbout?: (plan: SettlementPlanChat) => void;
 }): JSX.Element | null {
   const qc = useQueryClient();
   const project = projectId ?? '';
@@ -598,9 +745,9 @@ export function SessionAcceptanceConfirmationCard({
   const shown = delivered || held;
   const openHere = shown && acceptanceConfirmationStillOpen(standing);
   useEffect(() => {
-    onOpenQuestion?.(openHere);
-  }, [onOpenQuestion, openHere]);
-  useEffect(() => () => onOpenQuestion?.(false), [onOpenQuestion]);
+    onOpen?.(openHere);
+  }, [onOpen, openHere]);
+  useEffect(() => () => onOpen?.(false), [onOpen]);
 
   const confirm = useMutation({
     mutationFn: (criteriaDigest: string) => confirmAcceptanceCriteria(project, criteriaDigest),
@@ -649,6 +796,7 @@ export function SessionAcceptanceConfirmationCard({
       criteria: [...(criteria ?? [])]
         .sort((a, b) => a.ordinal - b.ordinal)
         .map((item) => item.text),
+      question: 'CONFIRMATION',
     });
   };
   // A press in flight, or one the door has taken, is not a card that can be answered: the two
@@ -668,9 +816,8 @@ export function SessionAcceptanceConfirmationCard({
       standing={standing}
       criteria={criteria}
       projectTitle={title}
-      // Straight off the project read, absent-or-unread meaning neither yes nor no. A press
-      // here will turn it on, and a project that was already on when this card arrived says so.
-      started={document?.coordinatorEnabled ?? null}
+      // Straight off the project read, absent-or-unread meaning neither yes nor no.
+      started={document === null ? null : projectStarted(document)}
       busy={confirm.isPending}
       error={confirm.isError ? confirm.error : null}
       keys={keys}

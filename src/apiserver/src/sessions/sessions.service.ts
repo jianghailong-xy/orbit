@@ -61,6 +61,10 @@ import {
   supportsMidTurnSteer,
   supportsTargetBoundCurrentWorkSteer,
   uuidToBase62,
+  accountToMoveTo,
+  planUsageBlockedUntil,
+  type AccountEngine,
+  type PlanUsage,
 } from '@orbit/shared';
 import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { PrismaService } from '../prisma/prisma.service';
@@ -112,6 +116,7 @@ import { SESSION_TAG_PALETTE } from '../session-tags/session-tags.service';
 import {
   CreateSessionDto,
   SessionConfigDto,
+  AUTOMATIC_ACCOUNT,
   SessionInterruptDto,
   SessionResumeDto,
   SessionTurnDto,
@@ -173,6 +178,16 @@ import {
   type TranscriptRecordKind,
 } from './transcript-around';
 import { EngineSignedOutConflict, signedOutEngineRefusal } from './engine-signin-preflight';
+import { ACCOUNT_ID_PATTERN } from '../runners/dto';
+import {
+  accountLabel,
+  accountSwitchNotice,
+  automaticAccount,
+  runAccount,
+  workspaceLeavesAccountToOrbit,
+} from '../providers/plan-usage-accounts';
+import { sanitizeRunnerEngines } from '../common/runner-engines';
+import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
 import {
   CURRENT_WORK_INTERRUPTED,
   CURRENT_WORK_SESSION_ENDED,
@@ -273,6 +288,35 @@ function resumeRequestFingerprint(dto: SessionResumeDto): string {
       provider: dto.provider ?? null,
     }))
     .digest('hex');
+}
+
+/**
+ * The id of the copy a send makes of a file an earlier turn of this session already carries (see
+ * `assertLinkableAttachments`). Derived from the request rather than drawn at random so that a
+ * replay of the same send names the same copy: the receipt check compares the files a turn holds
+ * with the ones its request named, and a random id would make every response-lost replay of a
+ * re-send read as a different payload.
+ */
+function resentAttachmentId(sessionId: string, clientTurnId: string, sourceId: string): string {
+  const b = createHash('sha256').update(`resend:${sessionId}:${clientTurnId}:${sourceId}`).digest();
+  b[6] = (b[6] & 0x0f) | 0x80; // RFC 9562 version 8, "custom"
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = b.subarray(0, 16).toString('hex');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+/** The ids a turn written for this request holds, sorted: each one it named, except that a file an
+ *  earlier turn carries is there as its copy. `stored` is what the turn holds now — a named id in
+ *  it was linked as-is, one outside it was already another turn's when the request came in. */
+function expectedTurnAttachments(
+  sessionId: string,
+  clientTurnId: string,
+  attachmentIds: string[] | undefined,
+  stored: readonly string[],
+): string[] {
+  return [...new Set(attachmentIds ?? [])]
+    .map((id) => (stored.includes(id) ? id : resentAttachmentId(sessionId, clientTurnId, id)))
+    .sort();
 }
 
 /**
@@ -673,6 +717,20 @@ export class SessionsService {
       dto.prompt === '' && !dto.shell && (dto.attachmentIds?.length ?? 0) > 0;
     if (!dto.prompt && !attachmentsAlone) throw new BadRequestException('prompt is required');
     assertPromptSize(dto.prompt, 'prompt');
+    // An account id, never a path: which account is stored here, and where it lives is only ever
+    // what the runner reports. CreateSessionDto is an interface, so nothing upstream checked it.
+    if (
+      dto.codexAccount != null &&
+      (typeof dto.codexAccount !== 'string' || !ACCOUNT_ID_PATTERN.test(dto.codexAccount))
+    ) {
+      throw new BadRequestException('codexAccount must be "default" or the id of one of the runner\'s accounts');
+    }
+    if (
+      dto.claudeAccount != null &&
+      (typeof dto.claudeAccount !== 'string' || !ACCOUNT_ID_PATTERN.test(dto.claudeAccount))
+    ) {
+      throw new BadRequestException('claudeAccount must be "default" or the id of one of the runner\'s accounts');
+    }
     // The session runs on a runner. Prefer an explicit pin; otherwise derive it from
     // the chosen workspace's machine (workspaces belong to a runner) — picking a workspace is
     // enough to know which machine + project dir to run in.
@@ -916,15 +974,37 @@ export class SessionsService {
     // everything this deliberately lets through.
     const targetRunner = await this.prisma.runner.findFirst({
       where: { id: assignedRunnerId, ownerId },
-      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true },
+      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, planUsage: true },
     });
+    // The Codex or Claude account this session runs on: the one picked for it — which pins it there —
+    // else, when its workspace leaves the account to Orbit, the runner's account whose quota resets
+    // soonest (automaticAccount), which Orbit may move it off when that account's usage limit stops
+    // it. Stored here; its conversation lives in that account's directory. Null runs on the
+    // workspace's.
+    const automatic = (engine: AccountEngine) =>
+      provider === engine && providerBuiltin && targetRunner
+        ? automaticAccount(
+            engine,
+            { env: workspaceEnv, codexAccount: accountChoices?.codexAccount, claudeAccount: accountChoices?.claudeAccount },
+            targetRunner.engines,
+            targetRunner.planUsage,
+            new Date(),
+          )
+        : null;
+    const codexAccount = dto.codexAccount ?? automatic(AgentProvider.CODEX);
+    const claudeAccount = dto.claudeAccount ?? automatic(AgentProvider.CLAUDE);
     const refusal =
       targetRunner &&
       signedOutEngineRefusal({
         runtime,
         bringsOwnCredentials: borrowedRuntime != null,
         workspaceEnv,
-        accounts: accountChoices,
+        // The account this session runs on is the one judged, whatever the workspace says.
+        accounts: {
+          ...accountChoices,
+          ...(codexAccount ? { codexAccount } : {}),
+          ...(claudeAccount ? { claudeAccount } : {}),
+        },
         runner: targetRunner,
       });
     // Typed, not a bare 409: this is an availability condition — the engine is signed out on a
@@ -966,6 +1046,12 @@ export class SessionsService {
         // whose effective model has no fast lane simply dispatches without one instead of being
         // refused at create.
         fastMode: dto.fastMode === true,
+        // As picked or chosen above, `default` included: NULL is the one value that follows the
+        // workspace's choice. A pick by hand pins it.
+        codexAccount,
+        codexAccountPinned: dto.codexAccount != null,
+        claudeAccount,
+        claudeAccountPinned: dto.claudeAccount != null,
         workspaceId: dto.workspaceId,
         assignedRunnerId,
         taskId: dto.taskId,
@@ -4171,27 +4257,49 @@ export class SessionsService {
   }
 
   /**
-   * Verify the given attachment ids are the caller's, scoped to this session, and not yet
-   * tied to a turn. Returns the de-duped ids. Throws on any unknown/foreign/already-used id
-   * so a bad reference is rejected BEFORE a turn is queued (no orphan text turn, no silent
-   * drop of an image the user meant to send). Call before inserting the turn; link after.
+   * Verify the given attachment ids are the caller's and scoped to this session, and return the
+   * de-duped ids to link to the turn. Throws on any unknown/foreign id so a bad reference is
+   * rejected BEFORE a turn is queued (no orphan text turn, no silent drop of an image the user
+   * meant to send). Call before inserting the turn; link after.
+   *
+   * An id already on a turn is a file this session sent before, named again — a retry re-sending
+   * the message it went out with (the clients' Retry carries that message's own ids). It is copied,
+   * and the copy is what gets linked: an attachment belongs to exactly one turn and is deleted with
+   * it, so moving it would take the picture out of the bubble it was sent in, and a withdrawn retry
+   * would take it with it — `AutoRetryService.copyAttachments` copies for the same reason. Refusing
+   * it instead failed every Retry of a message that had a file, and the words came back into the
+   * composer without it. The copy's id is `resentAttachmentId`, so a replay of this send finds it.
    */
   private async assertLinkableAttachments(
     ownerId: string,
     sessionId: string,
+    clientTurnId: string,
     attachmentIds: string[] | undefined,
-    tx: Prisma.TransactionClient | PrismaService = this.prisma,
+    tx: Prisma.TransactionClient,
   ): Promise<string[]> {
     const ids = [...new Set(attachmentIds ?? [])];
     if (ids.length === 0) return [];
     const found = await tx.attachment.findMany({
-      where: { id: { in: ids }, ownerId, sessionId, turnId: null },
-      select: { id: true },
+      where: { id: { in: ids }, ownerId, sessionId },
+      select: { id: true, turnId: true },
     });
     if (found.length !== ids.length) {
-      throw new BadRequestException('one or more attachments are unknown, not yours, or already attached');
+      throw new BadRequestException('one or more attachments are unknown or not yours');
     }
-    return ids;
+    const copyOf = new Map(
+      found
+        .filter((a) => a.turnId != null)
+        .map((a) => [a.id, resentAttachmentId(sessionId, clientTurnId, a.id)] as const),
+    );
+    if (copyOf.size === 0) return ids;
+    // In the database, so the bytes are not carried through this process under the session lock.
+    await tx.$executeRaw`
+      INSERT INTO "attachment" (id, owner_id, session_id, mime_type, size_bytes, file_name, data)
+      SELECT c.copy_id, a.owner_id, a.session_id, a.mime_type, a.size_bytes, a.file_name, a.data
+        FROM unnest(ARRAY[${Prisma.join([...copyOf.keys()])}]::uuid[],
+                    ARRAY[${Prisma.join([...copyOf.values()])}]::uuid[]) AS c(source_id, copy_id)
+        JOIN "attachment" a ON a.id = c.source_id`;
+    return ids.map((id) => copyOf.get(id) ?? id);
   }
 
   /**
@@ -4328,10 +4436,15 @@ export class SessionsService {
             : intent === 'NEXT_TURN'
               ? ['message']
               : ['message', 'steer'];
-        const expectedAttachments = [...new Set(dto.attachmentIds ?? [])].sort();
         const storedAttachments = (existing.attachments ?? [])
           .map((attachment) => attachment.id)
           .sort();
+        const expectedAttachments = expectedTurnAttachments(
+          id,
+          dto.clientTurnId,
+          dto.attachmentIds,
+          storedAttachments,
+        );
         if (
           !expectedKinds.includes(existing.kind)
           || existing.content !== dto.content
@@ -4403,7 +4516,13 @@ export class SessionsService {
       // Check attachments only after the idempotency lookup: on a retry of a successful
       // request they are already linked to this same turn and must not make the retry fail.
       // For a genuinely new request validation still precedes the turn insert.
-      const attachmentIds = await this.assertLinkableAttachments(ownerId, id, dto.attachmentIds, tx);
+      const attachmentIds = await this.assertLinkableAttachments(
+        ownerId,
+        id,
+        dto.clientTurnId,
+        dto.attachmentIds,
+        tx,
+      );
       // A claim can race the lazy first-turn seed. While holding the same Session lock as
       // queue.buildSession, ensure an unestablished runtime cannot lose its opening prompt.
       if (session.numTurns === 0) await this.ensurePromptSeeded(tx, session, attachmentIds);
@@ -4689,7 +4808,13 @@ export class SessionsService {
       // Checked before anything is dropped, so a request that cannot be honoured leaves
       // the queue exactly as it found it.
       const attachmentIds = followUp
-        ? await this.assertLinkableAttachments(ownerId, id, dto?.attachmentIds, tx)
+        ? await this.assertLinkableAttachments(
+          ownerId,
+          id,
+          dto!.clientTurnId!,
+          dto?.attachmentIds,
+          tx,
+        )
         : [];
       if (followUp) await opts?.participateFollowUpTransaction?.(tx);
       // Explicit CURRENT_WORK is durable authored input, not a disposable queue row. Settle it
@@ -6635,8 +6760,13 @@ export class SessionsService {
       });
       if (existing) {
         const expectedKind = dto.kind === 'shell' ? 'shell' : 'message';
-        const expectedAttachments = [...new Set(dto.attachmentIds ?? [])].sort();
         const storedAttachments = existing.attachments.map((attachment) => attachment.id).sort();
+        const expectedAttachments = expectedTurnAttachments(
+          id,
+          dto.clientTurnId,
+          dto.attachmentIds,
+          storedAttachments,
+        );
         if (
           existing.kind !== expectedKind
           || existing.content !== dto.content
@@ -6689,6 +6819,7 @@ export class SessionsService {
       const attachmentIds = await this.assertLinkableAttachments(
         ownerId,
         id,
+        dto.clientTurnId,
         dto.attachmentIds,
         tx,
       );
@@ -7098,7 +7229,8 @@ export class SessionsService {
         workspaceModel: session.workspace?.model,
         modelCatalog: session.assignedRunner?.modelCatalog,
         workspaceEnv: session.workspace?.env as Record<string, string> | null,
-        codexAccount: session.workspace?.codexAccount,
+        codexAccount: session.codexAccount ?? session.workspace?.codexAccount,
+        claudeAccount: session.claudeAccount ?? session.workspace?.claudeAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
       const requestedPermissionMode =
@@ -7265,6 +7397,112 @@ export class SessionsService {
       return true;
     }, loggedRetry(this.logger, 'sessions.updateConfig'));
     if (queuedControlTurn) this.realtime.notifyInbox(id);
+    return { ok: true };
+  }
+
+  /**
+   * Which of its runner's accounts a session on the built-in Codex or Claude engine runs on, picked in
+   * the composer's Provider menu. An account the runner reports pins the session to it — its usage
+   * limit then waits for the reset. `automatic` leaves it to Orbit: the session stays where it is until
+   * that account's limit stops it, and moves then — or at once, when the account it is on is spent
+   * already and another has room.
+   *
+   * A move is spawn-only, as a provider is: the account IS the engine's environment. On a live session
+   * a `reload` naming the engine re-spawns it on the new account once no turn is in flight, and the
+   * runner carries the conversation across (CODEX_ACCOUNT_MOVE_V1, CLAUDE_ACCOUNT_MOVE_V1); a runner
+   * that declares neither is refused the move, since it would resume where the conversation is. An
+   * ended or unclaimed one just stores it, for the claim that runs it next — at once, if it was waiting
+   * out the old account's reset. The next engine start says so in the transcript.
+   */
+  async switchAccount(ownerId: string, id: string, account: unknown) {
+    if (typeof account !== 'string' || (account !== AUTOMATIC_ACCOUNT && !ACCOUNT_ID_PATTERN.test(account))) {
+      throw new BadRequestException('account must be "automatic", "default" or the id of one of the runner\'s accounts');
+    }
+    const reload = await withTransactionRetry(this.prisma, async (tx) => {
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session"
+        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+        FOR UPDATE`;
+      if (locked.length === 0) throw new NotFoundException('session not found');
+      const session = await tx.session.findUniqueOrThrow({
+        where: { id },
+        select: {
+          status: true,
+          provider: true,
+          providerBuiltin: true,
+          retryAt: true,
+          codexAccount: true,
+          codexAccountPinned: true,
+          claudeAccount: true,
+          claudeAccountPinned: true,
+          workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
+          assignedRunner: { select: { engines: true, planUsage: true, capabilities: true } },
+        },
+      });
+      const engine: AccountEngine | null =
+        session.provider === AgentProvider.CODEX || session.provider === AgentProvider.CLAUDE
+          ? session.provider
+          : null;
+      if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin) || !session.assignedRunner) {
+        throw new BadRequestException("only a session on the built-in Codex or Claude engine runs on one of its runner's accounts");
+      }
+      const runner = session.assignedRunner;
+      const own = engine === AgentProvider.CODEX ? session.codexAccount : session.claudeAccount;
+      const workspacePick = engine === AgentProvider.CODEX ? session.workspace?.codexAccount : session.workspace?.claudeAccount;
+      const choice = engine === AgentProvider.CODEX ? { codexAccount: own ?? workspacePick } : { claudeAccount: own ?? workspacePick };
+      const current = runAccount(engine, session.workspace?.env, choice, runner.engines);
+      if (!current) throw new BadRequestException("this session spends a key of its own, not one of its runner's accounts");
+      const accounts = sanitizeRunnerEngines(runner.engines)?.find((entry) => entry.engine === engine)?.accounts;
+      const usage = runner.planUsage as PlanUsage | null;
+      const now = new Date();
+      let to = current;
+      let pinned = true;
+      let notice: string | null = null;
+      if (account === AUTOMATIC_ACCOUNT) {
+        if (!workspaceLeavesAccountToOrbit(engine, session.workspace, runner.engines)) {
+          throw new BadRequestException("this session's workspace decides its account");
+        }
+        pinned = false;
+        const spent = planUsageBlockedUntil(usage, engine, now, current) != null;
+        const roomier = spent ? accountToMoveTo(engine, accounts, usage, now, current) : null;
+        if (roomier) {
+          to = roomier;
+          notice = accountSwitchNotice(engine, { from: current, to }, runner.engines);
+        }
+      } else {
+        const row = accounts?.find((entry) => entry.id === account);
+        if (!row) throw new BadRequestException("that account is not one this session's runner reports");
+        if (row.auth === 'no') throw new ConflictException("that account is signed out on this session's runner");
+        to = account;
+        if (to !== current) notice = `Switched to ${accountLabel(engine, to, runner.engines)}`;
+      }
+      const moves = to !== current;
+      if (moves && !runner.capabilities.includes(engine === AgentProvider.CODEX ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1)) {
+        throw new ConflictException(
+          "this session's runner cannot move a conversation to another account yet — it updates itself when no turn is running",
+        );
+      }
+      const live = !SessionsService.TERMINAL.includes(session.status) && session.status !== RunStatus.PENDING;
+      await tx.session.update({
+        where: { id },
+        data: {
+          ...(engine === AgentProvider.CODEX
+            ? { codexAccount: to, codexAccountPinned: pinned }
+            : { claudeAccount: to, claudeAccountPinned: pinned }),
+          ...(notice ? { poolSwitchNotice: notice } : {}),
+          // A session waiting out the old account's reset goes now, on the one with room.
+          ...(moves && session.retryAt && session.retryAt > now ? { retryAt: now } : {}),
+        },
+      });
+      if (!moves || !live) return false;
+      await this.insertTurnLocked(tx, id, {
+        kind: 'reload',
+        content: JSON.stringify({ provider: engine }),
+        clientTurnId: randomUUID(),
+      });
+      return true;
+    }, loggedRetry(this.logger, 'sessions.switchAccount'));
+    if (reload) this.realtime.notifyInbox(id);
     return { ok: true };
   }
 

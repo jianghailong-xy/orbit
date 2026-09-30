@@ -94,6 +94,53 @@ describe('waiting for the runner to confirm a sign-in', () => {
     expect(probeReportsSignedIn([{ id: RUNNER, engines: null }], RUNNER, 'kimi')).toBe(false);
     expect(probeReportsSignedIn([], RUNNER, 'kimi')).toBe(false);
   });
+
+  it('keeps waiting for a newly named account when Default is already signed in', () => {
+    const before = [
+      {
+        id: RUNNER,
+        engines: [
+          {
+            engine: 'claude' as const,
+            installed: true,
+            auth: 'yes' as const,
+            accounts: [{ id: 'default', home: '/root/.claude', auth: 'yes' as const }],
+          },
+        ],
+      },
+    ];
+    const after = [
+      {
+        id: RUNNER,
+        engines: [
+          {
+            engine: 'claude' as const,
+            installed: true,
+            auth: 'yes' as const,
+            accounts: [
+              { id: 'default', home: '/root/.claude', auth: 'yes' as const },
+              { id: '3fa91c2e', name: 'Personal', home: '/slot', auth: 'yes' as const },
+            ],
+          },
+        ],
+      },
+    ];
+
+    // The engine-level answer belongs to Default. It must not stop the refresh before the new
+    // account has appeared in the list and been confirmed there.
+    expect(probeReportsSignedIn(before, RUNNER, 'claude', undefined, 'Personal')).toBe(false);
+    expect(probeReportsSignedIn(after, RUNNER, 'claude', undefined, 'Personal')).toBe(true);
+    // An account-specific wait must not fall back to Default when an older/transient report omits
+    // the account list altogether.
+    expect(
+      probeReportsSignedIn(
+        [{ id: RUNNER, engines: [{ engine: 'claude', installed: true, auth: 'yes' }] }],
+        RUNNER,
+        'claude',
+        '3fa91c2e',
+      ),
+    ).toBe(false);
+  });
 });
 
 describe('RunnerSignIn choice of route', () => {

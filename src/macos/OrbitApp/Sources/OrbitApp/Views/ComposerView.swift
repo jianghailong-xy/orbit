@@ -413,7 +413,13 @@ struct ComposerView: View {
                     .accessibilityLabel(help)
             }
             if let usage = console.planUsage {
-                PlanUsageIndicator(usage: usage)
+                // Which of the runner's Codex or Claude accounts this quota is, named in the gauge's
+                // detail rather than beside it, where a phone's footer has no room for an email (web
+                // parity).
+                PlanUsageIndicator(usage: usage,
+                                   account: console.accountLabel.map {
+                                       PlanUsageAccount(label: $0, note: console.accountNote)
+                                   })
             }
             // Context stays visible even before the first turn reports tokens — a New Session
             // reads 0%. Rightmost gauge, next to Send.
@@ -550,12 +556,15 @@ struct ComposerView: View {
     /// menu does, whichever way the system opens it.
     private var modelMenu: some View {
         Menu {
-            // Only when there is somewhere to go: a second account with the same vendor, or
-            // another endpoint on the same CLI. One entry means no switch is possible, and the row
-            // is left out rather than shown inert.
-            if console.providerSwitchChoices.count > 1 {
+            // Only when there is somewhere to go: a second account with the same vendor, another
+            // endpoint on the same CLI, or another of the runner's accounts of this engine. One entry
+            // means no switch is possible, and the row is left out rather than shown inert.
+            if console.providerSwitchChoices.count > 1 || console.accountRowsOffered {
                 Menu {
                     ForEach(console.providerSwitchChoices) { choice in
+                        // With its accounts listed under it, the tick is on the account (or on
+                        // Automatic) rather than on the engine.
+                        let listsAccounts = choice.slug == console.accountEngine && console.accountRowsOffered
                         // A choice this runner can't run stays listed and carries its reason
                         // (web parity): hiding it turns "not signed in on this machine" into
                         // "Orbit lost my provider". The running one is exempt — it is the row's
@@ -578,9 +587,10 @@ struct ComposerView: View {
                         } label: {
                             menuItemLabel(
                                 blocked ? "\(choice.label) — \(reason)\(fix)" : choice.label,
-                                selected: choice.slug == console.provider)
+                                selected: choice.slug == console.provider && !listsAccounts)
                         }
                         .disabled(blocked && !fixable)
+                        if listsAccounts { accountItems(choice.slug) }
                     }
                 } label: {
                     Text("Provider")
@@ -813,6 +823,35 @@ struct ComposerView: View {
             .lineLimit(1)
             .foregroundStyle(.secondary)
             .contentShape(Rectangle())
+    }
+
+    /// The runner's accounts of the session's engine, right under it in the Provider submenu (web
+    /// parity): Automatic first where its workspace leaves the account to Orbit, then each account with
+    /// its own quota. A pick moves the session there (`ConsoleModel.switchAccount`); a signed-out
+    /// account is a request for its sign-in, as a provider row in that state is.
+    @ViewBuilder
+    private func accountItems(_ engine: String) -> some View {
+        if console.automaticOffered(engine) {
+            Button {
+                Task { await console.switchAccount(CodexAccounts.automaticID) }
+            } label: {
+                menuItemLabel("Automatic · Resets soonest", selected: console.sessionAutomatic)
+            }
+        }
+        ForEach(console.accountChoices) { account in
+            Button {
+                if account.unavailable != nil {
+                    if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                } else {
+                    Task { await console.switchAccount(account.id) }
+                }
+            } label: {
+                menuItemLabel(
+                    account.unavailable.map { "\(account.label) — \($0), sign in →" }
+                        ?? account.quota.map { "\(account.label) · \($0)" } ?? account.label,
+                    selected: !console.sessionAutomatic && account.id == console.account(for: engine))
+            }
+        }
     }
 
     /// A menu row whose checkmark sits at the TRAILING end of the row, the way a Picker draws it —
@@ -1198,10 +1237,18 @@ private final class PlaceholderTextView: UITextView {
 }
 #endif
 
+/// Whose quota the detail's windows are: one of the runner's Codex accounts, where it has several.
+/// `note` says how a new session came to it when nothing picked one.
+private struct PlanUsageAccount {
+    let label: String
+    let note: String?
+}
+
 /// Compact plan-usage pill for the composer footer. Limit items mirror Codex TUI,
 /// while percentages retain Orbit's percent-consumed semantics.
 private struct PlanUsageIndicator: View {
     let usage: PlanUsageSnapshot
+    var account: PlanUsageAccount?
     @State private var showDetail = false
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -1232,7 +1279,7 @@ private struct PlanUsageIndicator: View {
             .buttonStyle(.plain)
             .help("Plan usage \(pct)%")
             .accessibilityLabel("Plan usage \(pct)%")
-            .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage))
+            .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage, account: account))
         }
     }
 }
@@ -1422,15 +1469,24 @@ private struct ContextWindowDetailPresentation: ViewModifier {
 private struct PlanUsageDetailPresentation: ViewModifier {
     @Binding var isPresented: Bool
     let usage: PlanUsageSnapshot
+    let account: PlanUsageAccount?
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
+
+    /// What the account row adds to the phone sheet's height: its line, the rule and the gap after
+    /// it, and the note when there is one.
+    private var accountHeight: Int {
+        guard let account else { return 0 }
+        return account.note == nil ? 50 : 70
+    }
 
     func body(content: Content) -> some View {
         #if os(macOS)
         content.popover(isPresented: $isPresented, arrowEdge: .top) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Plan usage").font(.headline)
+                if let account { PlanUsageAccountRow(account: account, compact: true) }
                 PlanUsageDetailRows(rows: usage.rows, compact: true)
             }
             .padding(14)
@@ -1445,6 +1501,7 @@ private struct PlanUsageDetailPresentation: ViewModifier {
             content.popover(isPresented: $isPresented) {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Plan usage").font(.headline)
+                    if let account { PlanUsageAccountRow(account: account) }
                     PlanUsageDetailRows(rows: usage.rows)
                 }
                 .padding(16)
@@ -1459,6 +1516,9 @@ private struct PlanUsageDetailPresentation: ViewModifier {
                         Button("Done") { isPresented = false }
                     }
                     .padding(.bottom, 16)
+                    if let account {
+                        PlanUsageAccountRow(account: account).padding(.bottom, 18)
+                    }
                     PlanUsageDetailRows(rows: usage.rows)
                     Spacer(minLength: 0)
                 }
@@ -1466,11 +1526,36 @@ private struct PlanUsageDetailPresentation: ViewModifier {
                 .padding(.top, 24)
                 .padding(.bottom, 20)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .presentationDetents([.height(CGFloat(120 + usage.rows.count * 66))])
+                .presentationDetents([.height(CGFloat(120 + usage.rows.count * 66 + accountHeight))])
                 .presentationDragIndicator(.visible)
             }
         }
         #endif
+    }
+}
+
+/// Whose quota the windows below are, ruled off from them: "Account" and the account's name, which
+/// gives way with an ellipsis (names are often emails), and the note under it when there is one.
+private struct PlanUsageAccountRow: View {
+    let account: PlanUsageAccount
+    var compact: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 16) {
+                Text("Account").layoutPriority(1)
+                Spacer(minLength: 0)
+                Text(account.label).foregroundStyle(.secondary).lineLimit(1)
+            }
+            .font(compact ? .caption : .subheadline)
+            if let note = account.note {
+                Text(note)
+                    .font(compact ? .caption2 : .caption)
+                    .foregroundStyle(.tertiary)
+            }
+            Divider().padding(.top, compact ? 8 : 10)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 

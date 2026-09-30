@@ -114,8 +114,9 @@ final class SettingsStackWiringTests: XCTestCase {
     }
 
     /// The sheet moves a `NavigationStack` whose path IS Settings' stack in `NavState`, and registers
-    /// every frame that stack carries on its root — the runners list and a runner's record, the
-    /// `SettingsPage`s, and an account's record under Admin.
+    /// every frame that stack carries on its root — the runners list, a runner's record and the two
+    /// pages it pushes (an engine's, its name's), the `SettingsPage`s, and an account's record under
+    /// Admin.
     func testTheSheetsStackIsSettingsOwnStack() throws {
         let sheet = code(try slice(try appSource("Views/SettingsSheet.swift"),
                                    from: "struct SettingsSheet: View {", to: "/// The page a `SettingsPage` frame names."))
@@ -126,6 +127,8 @@ final class SettingsStackWiringTests: XCTestCase {
                                      to: "default:                          EmptyView()")
         for frame in ["case .settingsRunners:            RunnersSettingsList()",
                       "case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)",
+                      "case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)",
+                      "case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)",
                       "case .settingsPage(let page):     SettingsPageView(page: page)",
                       "case .userDetail(let userID):     AdminUserDetailView(userID: userID)"] {
             XCTAssertTrue(destinations.contains(frame), "the sheet renders \(frame)")
@@ -170,9 +173,101 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertTrue(list.contains("Button(SettingsCopy.signOut, role: .destructive) { model.logout() }"))
     }
 
+    /// The avatar and name are one button, pencilled as ChatGPT's are, that opens the edit-profile
+    /// card; the card writes only through `AppModel` — from Save or Return in the field, the steps
+    /// `ProfileEdit.steps` names, photo first — and the account it answers with is the one every view
+    /// goes on showing. Cancel writes nothing.
+    func testTheHeaderOpensTheEditProfileCard() throws {
+        let sheet = try appSource("Views/SettingsSheet.swift")
+        let header = code(try slice(sheet, from: "private var header: some View {",
+                                    to: ".listRowBackground(Color.clear)"))
+        XCTAssertTrue(header.contains("Button { editingProfile = true } label: {"))
+        XCTAssertTrue(header.contains("AccountAvatar(name: displayName, diameter: 72,"),
+                      "the header draws the account's photo when it has one")
+        XCTAssertTrue(header.contains(".overlay(alignment: .bottomTrailing) { EditBadge() }"))
+        XCTAssertTrue(header.contains(".accessibilityLabel(SettingsCopy.editProfile)"))
+        XCTAssertTrue(code(sheet).contains(".sheet(isPresented: $editingProfile) {"))
+
+        let card = code(try slice(sheet, from: "private struct ProfileEditSheet: View {",
+                                  to: "private struct CameraBadge: View {"))
+        XCTAssertTrue(card.contains("AvatarMonogram(name: draft,"), "without a photo the card's avatar follows the field")
+        XCTAssertTrue(card.contains(".onSubmit(save)"))
+        XCTAssertTrue(card.contains("Button(action: save)"))
+        XCTAssertTrue(card.contains(".disabled(!ProfileEdit.canSave(draft, saved: model.user?.name, photo: photo))"))
+        XCTAssertTrue(card.contains("let steps = ProfileEdit.steps(draft, saved: model.user?.name, photo: photo)"))
+        XCTAssertTrue(card.contains("failed = await model.saveAvatar(jpeg)"))
+        XCTAssertTrue(card.contains("failed = await model.removeAvatar()"))
+        XCTAssertTrue(card.contains("failed = await model.saveName(name)"))
+        XCTAssertTrue(card.contains("Button(SharePanelCopy.cancel) { dismiss() }"))
+
+        let saveName = code(try slice(try appSource("AppModel.swift"),
+                                      from: "func saveName(_ name: String) async -> String? {",
+                                      to: "func saveAvatar("))
+        XCTAssertTrue(saveName.contains("user = try await api.updateProfile(UpdateProfileRequest(name: ProfileEdit.name(name)))"))
+        XCTAssertTrue(saveName.contains("SettingsCopy.nameNotSaved(APIClient.failureReason(error))"))
+    }
+
+    /// The photo on iOS, as ChatGPT's card does it: the avatar opens a menu at the avatar — the photo
+    /// library, the camera, Files, and Remove when there is a photo — and every new photo goes through
+    /// Orbit's own round crop screen before it becomes the card's draft.
+    func testTheCardChangesThePhotoFromAMenuThroughARoundCrop() throws {
+        let sheet = code(try appSource("Views/SettingsSheet.swift"))
+        let card = try slice(sheet, from: "private struct ProfileEditSheet: View {", to: "private struct CameraBadge: View {")
+        XCTAssertTrue(card.contains("Menu {"))
+        XCTAssertTrue(card.contains("Label(SettingsCopy.photoLibrary, systemImage: \"photo.on.rectangle\")"))
+        XCTAssertTrue(card.contains("Button { photoFlow = .camera } label: {"))
+        XCTAssertTrue(card.contains("Label(SettingsCopy.chooseFile, systemImage: \"folder\")"))
+        XCTAssertTrue(card.contains("Label(SettingsCopy.removePhoto, systemImage: \"trash\")"))
+        XCTAssertTrue(card.contains("avatar.overlay(alignment: .bottomTrailing) { CameraBadge() }"))
+        XCTAssertFalse(card.contains("confirmationDialog"), "the photo's actions are a menu at the avatar, not a sheet from the bottom")
+        XCTAssertTrue(card.contains(".photosPicker(isPresented: $showingLibrary, selection: $libraryPick, matching: .images)"))
+        XCTAssertTrue(card.contains(".fileImporter(isPresented: $choosingFile, allowedContentTypes: [.image])"))
+        XCTAssertTrue(card.contains("CameraPicker { taken in photoFlow = taken.map(PhotoFlow.crop) }"))
+        XCTAssertTrue(card.contains("AvatarCropView(image: image, cancel: { photoFlow = nil }) { jpeg in"))
+        XCTAssertTrue(card.contains("photo = .replaced(jpeg)"))
+
+        let crop = try slice(sheet, from: "private struct AvatarCropView: View {", to: "private struct NotificationSettingsPage: View {")
+        XCTAssertTrue(crop.contains("MagnifyGesture()"), "pinched into place")
+        XCTAssertTrue(crop.contains("AvatarCrop.clampedOffset("), "and never uncovering the circle")
+        XCTAssertTrue(crop.contains("let square = AvatarCrop.cropRect(image: image.size, circle: circle, zoom: zoom, offset: offset)"))
+        XCTAssertTrue(crop.contains("image.orbitAvatarJPEG(crop: square)"))
+        XCTAssertTrue(crop.contains("Text(SettingsCopy.savePhoto)"))
+        let camera = try slice(sheet, from: "private struct CameraPicker: UIViewControllerRepresentable {",
+                               to: "func imagePickerControllerDidCancel")
+        XCTAssertTrue(camera.contains("picker.sourceType = .camera"))
+        XCTAssertFalse(camera.contains("allowsEditing = true"), "the square system crop is not the one used")
+    }
+
+    /// The photo is drawn wherever the account's avatar is: Settings' header on iOS, the sidebar's
+    /// account row (macOS and iPad), and macOS Settings — which also sets it, removes it, and renames.
+    func testTheAccountsPhotoIsDrawnAndSetEverywhereItsAvatarIs() throws {
+        let main = code(try appSource("Views/MainView.swift"))
+        let footer = try slice(main, from: "struct AccountFooter: View {", to: "struct AccountAvatar: View {")
+        XCTAssertTrue(footer.contains("AccountAvatar(name: display)"))
+        XCTAssertFalse(footer.contains("AvatarMonogram("), "the footer draws the photo when there is one")
+        let avatar = try slice(main, from: "struct AccountAvatar: View {", to: "struct AvatarPhoto: View {")
+        XCTAssertTrue(avatar.contains("if let photo = model.avatarImage {"))
+
+        let model = code(try appSource("AppModel.swift"))
+        XCTAssertTrue(model.contains("didSet { refreshAvatar() }"), "a new account fetches its photo")
+        let saveAvatar = try slice(model, from: "func saveAvatar(_ jpeg: Data) async -> String? {", to: "func removeAvatar(")
+        XCTAssertTrue(saveAvatar.contains("let account = try await api.setAvatar(jpeg: jpeg)"))
+        XCTAssertTrue(saveAvatar.contains("avatarImage = PlatformImage(data: jpeg)"), "what was sent is what is shown")
+
+        let form = code(try slice(try appSource("Views/SettingsAdminView.swift"),
+                                  from: "#if os(macOS)\n/// macOS Settings", to: "// MARK: - Admin"))
+        XCTAssertTrue(form.contains("AccountAvatar(name: u.name ?? u.email, diameter: 40)"))
+        XCTAssertTrue(form.contains(".fileImporter(isPresented: $choosingPhoto, allowedContentTypes: [.image])"))
+        XCTAssertTrue(form.contains("NSImage(contentsOf: url)?.orbitAvatarJPEG()"))
+        XCTAssertTrue(form.contains("accountMessage = await model.saveAvatar(jpeg)"))
+        XCTAssertTrue(form.contains("accountMessage = await model.removeAvatar()"))
+        XCTAssertTrue(form.contains("accountMessage = await model.saveName(name)"))
+    }
+
     /// The runners list the sheet pushes carries the same `runnerDetail` frame the Runners section's
     /// rows do, pushed by hand through `AppModel.push` — which lands on Settings' stack while the
     /// sheet is up. One frame type, two stacks: the stack on screen is what decides where it lands.
+    /// The same goes for the two pages a runner's record pushes, its engine's and its name's.
     func testTheRunnersListInsideSettingsPushesTheSameFrameTheRunnersSectionDoes() throws {
         let runners = try appSource("Views/SkillsRunnersView.swift")
         let settingsList = code(try slice(runners, from: "struct RunnersSettingsList: View {",
@@ -182,11 +277,16 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertFalse(settingsList.contains("NavigationLink"),
                        "and is not a link — a disclosure indicator here would be the odd one out "
                        + "against the section's identical list")
+        XCTAssertTrue(settingsList.contains(".foregroundStyle(Color.primary)"),
+                      "its label is the label colour: inside a button's label even `.primary` is the tint")
 
         let shell = code(try slice(try appSource("Views/CompactShell.swift"), from: "case .runners:",
                                    to: "// FOLLOWING"))
         XCTAssertTrue(shell.contains("case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)"),
                       "the Runners section renders that same frame — the reuse is the frame type")
+        XCTAssertTrue(shell.contains("RunnerEnginePage(runnerID: runnerID, engine: engine)")
+                        && shell.contains("RunnerNamePage(runnerID: runnerID)"),
+                      "and the pages a record pushes, on its own stack as on Settings'")
     }
 
     /// macOS keeps its one grouped form — in the Settings window and the main window's column — and

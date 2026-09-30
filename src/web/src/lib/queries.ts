@@ -12,6 +12,7 @@ import type {
 import {
   ApiError,
   api,
+  fetchAvatarDataUrl,
   getSession,
   getSessionDiff,
   listShareLinks,
@@ -78,6 +79,24 @@ export type { ConfiguredProvider };
 
 export const runnersQuery = () =>
   queryOptions({ queryKey: ['runners'], queryFn: () => api<any[]>('/runners') });
+
+/** The runner release published by this Orbit instance. Deployments without the download
+ *  manifest simply contribute no version; the runners' own reports still establish the latest. */
+export const publishedRunnerVersionQuery = () =>
+  queryOptions({
+    queryKey: ['runner-published-version'] as const,
+    queryFn: async (): Promise<string | null> => {
+      try {
+        const response = await fetch('/dl/version.json');
+        if (!response.ok) return null;
+        const body = (await response.json()) as { version?: unknown };
+        return typeof body.version === 'string' ? body.version : null;
+      } catch {
+        return null;
+      }
+    },
+    staleTime: 5 * 60_000,
+  });
 
 /** Whether the deployment has zero users — gates the signed-out boot toward /setup. */
 export const setupStatusQuery = () =>
@@ -152,6 +171,8 @@ export interface Me {
   createdAt: string;
   preferences?: UserPreferences;
   role?: 'MEMBER' | 'ADMIN';
+  /** When the account's profile photo was set — the version it is fetched by. Null without one. */
+  avatarUpdatedAt?: string | null;
 }
 
 /** The signed-in user — backs the account page and the nav footer's avatar + name. */
@@ -159,6 +180,16 @@ export const meQuery = () =>
   queryOptions({
     queryKey: ['user', 'me'] as const,
     queryFn: () => api<Me>('/users/me'),
+  });
+
+/** The account's profile photo as a data URL, by the version `me` names — a new photo is a new
+ *  key, and nothing is fetched while there is none. */
+export const avatarQuery = (version: string | null | undefined) =>
+  queryOptions({
+    queryKey: ['user', 'me', 'avatar', version ?? null] as const,
+    queryFn: fetchAvatarDataUrl,
+    enabled: !!version,
+    staleTime: Infinity,
   });
 
 /**
