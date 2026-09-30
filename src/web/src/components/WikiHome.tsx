@@ -7,6 +7,7 @@ import { relTime } from './Transcript';
 import { WikiCard, WikiEmpty, WikiPin } from './WikiCards';
 import { WikiEntryLine } from './WikiEntryRow';
 import { WikiDot, WikiOpChip, WikiTrustBadge } from './WikiMarks';
+import { WikiPlanBanner, WikiPlanCard } from './WikiPlanCard';
 import { WikiRunTimelineRow } from './WikiRunPage';
 import { wikiEntriesQuery, wikiReviewQuery, wikiSpaceQuery, wikiSpacesQuery, wikiTimelineQuery } from '../lib/queries';
 import type { WikiChangeset, WikiChangesetOp, WikiEntry, WikiSpaceWithUsage, WikiTimelineItem } from '../lib/wiki';
@@ -49,8 +50,9 @@ import { wikiRecentRows } from '../lib/wikiReviewMode';
 /**
  * The Wiki home: what the space holds, and what wants the owner's attention.
  *
- * THE ORDER IS THE DESIGN'S (§12.1, mock 11): Principles, then the decision log, with Review leading
- * the right rail above what changed lately and what the agents used. The topics are no longer a grid
+ * THE ORDER IS THE DESIGN'S (§12.1, mock 11; mock 25 since the plan): Principles, then the decision log,
+ * with the Plan card (when the plan has something to say) and Review leading the right rail above what
+ * changed lately and what the agents used. A phone's Plan banner is the second, under Review's (mock 26). The topics are no longer a grid
  * here — they are the category directory beside the page (`WikiDirectory`, owner's call 2026-09-28).
  * A phone draws one column: the Review bar, Principles, Recent decisions, Recently changed, Agents
  * used the wiki (mock 12) — the order iOS draws, and `WIKI_*` here is one half of that pair.
@@ -94,6 +96,8 @@ export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
           <RightOutlined className="ic" />
         </Link>
       )}
+      {/* The plan's banner is the phone's second (mock 26 ①), under Review's; the desktop's is the rail's first card. */}
+      <WikiPlanBanner space={space} />
       <div className="wk-cols">
       <div className="wk-col">
         <WikiCard
@@ -151,6 +155,7 @@ export function WikiHome({ space }: { space: WikiSpaceWithUsage }) {
       </div>
 
       <div className="wk-col">
+        <WikiPlanCard space={space} />
         <ReviewCard space={space} pending={pending} changesets={review.data ?? []} entryById={entryById} />
 
         <WikiCard title={WIKI_RECENTLY_CHANGED}>

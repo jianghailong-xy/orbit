@@ -6,6 +6,7 @@ import { OrbitLinkCardsProvider } from '../components/OrbitLinkCard';
 import { statusLabel } from '../components/WorkspaceView';
 import { WikiArticleRoute } from '../components/WikiArticlePage';
 import { WikiBrowsePage } from '../components/WikiBrowsePage';
+import { WikiDocRoute } from '../components/WikiDocPage';
 import { WikiCard, WikiEmpty } from '../components/WikiCards';
 import { WikiContentsButton, WikiContentsProvider, WikiDirectory, type WikiDirectoryAt } from '../components/WikiDirectory';
 import { WikiEntryDrawer } from '../components/WikiEntryDrawer';
@@ -13,6 +14,7 @@ import { WikiHome } from '../components/WikiHome';
 import { WikiIndexPage } from '../components/WikiIndexPage';
 import { WikiMaintenanceStatus } from '../components/WikiMaintenanceStatus';
 import { WikiNewEntryButton } from '../components/WikiNewEntry';
+import { WikiPlanRoute } from '../components/WikiPlanPage';
 import { WikiReviewPage } from '../components/WikiReviewPage';
 import { WikiRunDrawer } from '../components/WikiRunPage';
 import { WikiSettingsButton } from '../components/WikiSettingsButton';
@@ -35,6 +37,7 @@ import {
   wikiSpacePath,
 } from '../lib/wiki';
 import { wikiArticlePath, wikiCount } from '../lib/wikiArticles';
+import { wikiDocPath } from '../lib/wikiDocs';
 
 /**
  * The Wiki's routes, and the chrome they share.
@@ -50,7 +53,7 @@ import { wikiArticlePath, wikiCount } from '../lib/wikiArticles';
  * the picker in the header is how they mean another one.
  */
 
-export type WikiRoute = 'home' | 'topic' | 'entry' | 'review' | 'settings' | 'run' | 'browse' | 'index';
+export type WikiRoute = 'home' | 'topic' | 'entry' | 'review' | 'settings' | 'run' | 'browse' | 'index' | 'doc' | 'plan' | 'planDoc' | 'planSection';
 
 interface SpaceRow {
   id: string;
@@ -125,6 +128,29 @@ export function WikiPage({ route }: { route: WikiRoute }) {
       </WikiFrame>
     );
   }
+  // A document of the confirmed plan (mocks 23–24), and the plan itself (mocks 21–22) with a phone's page
+  // for one of its documents and one of their sections.
+  if (route === 'doc') {
+    const slug = params.doc ?? '';
+    return (
+      <WikiFrame space={space} at={{ view: 'doc', slug }}>
+        <WikiDocRoute spaceId={space.id} spaceSlug={space.slug} slug={slug} />
+      </WikiFrame>
+    );
+  }
+  if (route === 'plan' || route === 'planDoc' || route === 'planSection') {
+    const section = Number(params.section ?? 0);
+    return (
+      <WikiFrame space={space} at={{ view: 'plan' }}>
+        <WikiPlanRoute
+          spaceId={space.id}
+          spaceSlug={space.slug}
+          docSlug={route === 'plan' ? null : (params.doc ?? null)}
+          section={route === 'planSection' && Number.isInteger(section) && section > 0 ? section : null}
+        />
+      </WikiFrame>
+    );
+  }
   if (route === 'browse') {
     return (
       <WikiFrame space={space} at={{ view: 'browse' }}>
@@ -178,10 +204,12 @@ function EntryRoute({ space, entryParam }: { space: SpaceRow; entryParam: string
   const location = useLocation();
   const entryId = routeId(entryParam) ?? entryParam;
   const entry = useQuery(wikiEntryQuery(entryId));
-  const from = (location.state as { wikiBack?: { topic: string; part: number } } | null)?.wikiBack ?? null;
-  const topic = from?.topic ?? entry.data?.topics?.[0] ?? null;
+  const from = (location.state as { wikiBack?: { topic?: string; part?: number; doc?: string } } | null)?.wikiBack ?? null;
+  // An entry opened from a document's footnote or its entries keeps that document behind it.
+  const doc = from?.doc ?? null;
+  const topic = doc ? null : (from?.topic ?? entry.data?.topics?.[0] ?? null);
   const part = from?.part ?? 0;
-  const back = topic ? wikiArticlePath(space.slug, topic, part) : wikiSpacePath(space.slug);
+  const back = doc ? wikiDocPath(space.slug, doc) : topic ? wikiArticlePath(space.slug, topic, part) : wikiSpacePath(space.slug);
 
   return (
     // The drawer draws its sources with the conversation's own link cards, and those ask a provider
@@ -191,7 +219,11 @@ function EntryRoute({ space, entryParam }: { space: SpaceRow; entryParam: string
     <OrbitLinkCardsProvider stateWord={statusLabel} host={wikiLinkHost()}>
       <div className="wk-with-drawer">
         <div className="wk-drawer-bg" aria-hidden="true">
-          {topic ? (
+          {doc ? (
+            <WikiFrame space={space} at={{ view: 'doc', slug: doc }}>
+              <WikiDocRoute spaceId={space.id} spaceSlug={space.slug} slug={doc} />
+            </WikiFrame>
+          ) : topic ? (
             <WikiFrame space={space} at={{ view: 'topic', topic, part }}>
               <WikiArticleRoute spaceId={space.id} spaceSlug={space.slug} topicSlug={topic} part={part} />
             </WikiFrame>

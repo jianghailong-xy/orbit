@@ -43,6 +43,22 @@ final class WikiModel {
     /// server does not know — by storage key.
     private(set) var runs: [String: WikiChangesetView] = [:]
     private(set) var missingRuns: Set<String> = []
+    /// The space on screen's documents (criterion 10 revised): the confirmed plan's directory, the
+    /// documents read so far and the ones its plan does not have, and the A–Z index — of the same space
+    /// the articles are, and dropped with them when another space is picked.
+    private(set) var docsDirectory: WikiDocsDirectory?
+    private(set) var docs: [String: WikiDoc] = [:]
+    private(set) var missingDocs: Set<String> = []
+    private(set) var failedDocs: Set<String> = []
+    private(set) var docIndex: WikiDocsIndex?
+    /// The space's plan (criterion 11): the version in force, the draft waiting, the proposals, the job —
+    /// read on the owner's door only. `planMissing` is a server from before the plan, which has none.
+    private(set) var plan: WikiPlanState?
+    private(set) var planState = ListLoadState()
+    private(set) var planMissing = false
+    /// Every version, newest first (the version menu), and the older ones read whole when picked.
+    private(set) var planVersions: [WikiPlanVersionSummary] = []
+    private(set) var planVersionReads: [Int: WikiPlanVersion] = [:]
 
     private let api: APIClient
     @ObservationIgnored private var nudgeTask: Task<Void, Never>?
@@ -190,6 +206,16 @@ final class WikiModel {
             missingArticles = []
             failedArticles = []
             topicEntries = [:]
+            docsDirectory = nil
+            docs = [:]
+            missingDocs = []
+            failedDocs = []
+            docIndex = nil
+            plan = nil
+            planState = ListLoadState()
+            planMissing = false
+            planVersions = []
+            planVersionReads = [:]
         }
         return space
     }
@@ -278,9 +304,184 @@ final class WikiModel {
         if directory != nil { await loadDirectory() }
         if articleIndex != nil { await loadArticleIndex() }
         for address in Array(articles.keys) { await loadArticle(address) }
+        if docsDirectory != nil { await loadDocsDirectory() }
+        if docIndex != nil { await loadDocIndex() }
+        for slug in Array(docs.keys) { await loadDoc(slug) }
+        if plan != nil || planState.hasLoaded { await loadPlan() }
         for key in Array(runs.keys) { await loadRun(key) }
         if reviewState.hasLoaded { await loadReview() }
         for key in Array(onScreen.keys) { await loadEntry(key) }
+    }
+
+    // MARK: the documents (criterion 10 revised)
+
+    /// The confirmed plan's directory — the Contents sheet, Browse and the plan page's documents. With no
+    /// plan confirmed its `plan` is nil, and the Wiki reads by topic as it did.
+    func loadDocsDirectory() async {
+        if spaces.isEmpty { await loadSpaces() }
+        guard let space = articlesSpace() else { return }
+        guard let read = try? await api.wikiDocs(spaceID: space.id), articlesSpaceID == space.id else { return }
+        if read != docsDirectory { docsDirectory = read }
+    }
+
+    /// One document. A 404 is a document the confirmed plan does not have.
+    func loadDoc(_ slug: String) async {
+        if spaces.isEmpty { await loadSpaces() }
+        guard let space = articlesSpace() else { return }
+        do {
+            let read = try await api.wikiDoc(spaceID: space.id, slug: slug)
+            guard articlesSpaceID == space.id else { return }
+            missingDocs.remove(slug)
+            failedDocs.remove(slug)
+            if docs[slug] != read { docs[slug] = read }
+        } catch APIError.http(let status, _) where status == 404 {
+            missingDocs.insert(slug)
+        } catch {
+            failedDocs.insert(slug)
+        }
+    }
+
+    /// Every document and every section title no other document shares, A to Z.
+    func loadDocIndex() async {
+        if spaces.isEmpty { await loadSpaces() }
+        guard let space = articlesSpace() else { return }
+        guard let read = try? await api.wikiDocIndex(spaceID: space.id), articlesSpaceID == space.id else { return }
+        if read != docIndex { docIndex = read }
+    }
+
+    // MARK: the plan (criterion 11) — the owner's door only
+
+    /// The plan, its versions and the directory its documents are written into, side by side.
+    func loadPlan() async {
+        if spaces.isEmpty { await loadSpaces() }
+        guard let space = articlesSpace() else { return }
+        planState.begin()
+        async let versionsRead = api.wikiPlanVersions(spaceID: space.id)
+        do {
+            let read = try await api.wikiPlan(spaceID: space.id)
+            guard articlesSpaceID == space.id else { return }
+            planMissing = false
+            if read != plan { plan = read }
+            planState.succeed()
+        } catch APIError.http(let status, _) where status == 404 {
+            guard articlesSpaceID == space.id else { return }
+            planMissing = true
+            plan = nil
+            planState.succeed()
+        } catch {
+            planState.fail()
+        }
+        if let versions = try? await versionsRead, articlesSpaceID == space.id, versions.versions != planVersions {
+            planVersions = versions.versions
+        }
+    }
+
+    /// One older version, read whole when the version menu picks it.
+    func loadPlanVersion(_ version: Int) async {
+        guard let space = articlesSpace(), planVersionReads[version] == nil,
+              let read = try? await api.wikiPlanVersion(spaceID: space.id, version: version), articlesSpaceID == space.id else { return }
+        planVersionReads[version] = read
+    }
+
+    /// What a plan write came to: done, refused by the gate with every error, or refused otherwise.
+    enum PlanWrite: Equatable {
+        case done(version: Int)
+        case refused([WikiPlanGateError])
+        case failed(String)
+    }
+
+    /// Draft plan, or Redraft… with the owner's words: a task of the maintenance list. Nil on success
+    /// (with whether a job was made, or one already on its way answered), else the sentence to show.
+    func redraftPlan(instructions: String?) async -> (created: Bool, refusal: String?) {
+        guard let space = currentSpace else { return (false, WikiCopy.refused) }
+        busy = true
+        defer { busy = false }
+        do {
+            let answer = try await api.redraftWikiPlan(spaceID: space.id, instructions: instructions)
+            await loadPlan()
+            return (answer.created, nil)
+        } catch {
+            await loadPlan()
+            return (false, Self.refusal(error))
+        }
+    }
+
+    /// Confirm plan: the draft becomes the version in force, and its documents are written.
+    func confirmPlan(version: Int) async -> PlanWrite {
+        await planWrite { space in try await self.api.confirmWikiPlan(spaceID: space.id, version: version) }
+    }
+
+    /// Edit: one document or section as the owner rewrote it, in the draft's shape — a new draft.
+    func editPlan(_ request: WikiPlanEditRequest) async -> PlanWrite {
+        await planWrite { space in try await self.api.editWikiPlan(spaceID: space.id, request) }
+    }
+
+    /// Reject a change a maintenance run proposed: the plan is as it was.
+    func rejectPlanProposal(_ id: String) async -> String? {
+        busy = true
+        defer { busy = false }
+        do {
+            _ = try await api.decideWikiPlanProposal(id, WikiPlanDecideRequest(action: .reject))
+            await loadPlan()
+            return nil
+        } catch {
+            await loadPlan()
+            return Self.refusal(error)
+        }
+    }
+
+    /// Accept a change: the server applies it to the newest version and puts the result through the gate —
+    /// a new draft. With no other draft waiting (`confirm`) that draft is confirmed at once: two requests,
+    /// the second only once the first came back with a draft the gate passed. A refusal of the first
+    /// leaves the plan as it was, and its errors are the answer; nothing is confirmed.
+    func acceptPlanProposal(_ id: String, confirm: Bool) async -> (accepted: PlanWrite, confirmed: Bool) {
+        guard let space = currentSpace else { return (.failed(WikiCopy.refused), false) }
+        busy = true
+        defer { busy = false }
+        let draft: WikiPlanVersion
+        do {
+            let decided = try await api.decideWikiPlanProposal(id, WikiPlanDecideRequest(action: .accept))
+            guard let made = decided.draft else {
+                await loadPlan()
+                return (.failed(WikiCopy.refused), false)
+            }
+            draft = made
+        } catch {
+            await loadPlan()
+            if let errors = WikiPlanLogic.gateErrors(error) { return (.refused(errors), false) }
+            return (.failed(Self.refusal(error)), false)
+        }
+        guard confirm else {
+            await loadPlan()
+            return (.done(version: draft.version), false)
+        }
+        do {
+            let confirmed = try await api.confirmWikiPlan(spaceID: space.id, version: draft.version)
+            await loadPlan()
+            await loadDocsDirectory()
+            return (.done(version: confirmed.version), true)
+        } catch {
+            // The change is in a draft that waits for Confirm plan: what the page then shows.
+            await loadPlan()
+            if let errors = WikiPlanLogic.gateErrors(error) { return (.refused(errors), false) }
+            return (.failed(Self.refusal(error)), false)
+        }
+    }
+
+    private func planWrite(_ write: (WikiSpace) async throws -> WikiPlanVersion) async -> PlanWrite {
+        guard let space = currentSpace else { return .failed(WikiCopy.refused) }
+        busy = true
+        defer { busy = false }
+        do {
+            let version = try await write(space)
+            await loadPlan()
+            await loadDocsDirectory()
+            return .done(version: version.version)
+        } catch {
+            await loadPlan()
+            if let errors = WikiPlanLogic.gateErrors(error) { return .refused(errors) }
+            return .failed(Self.refusal(error))
+        }
     }
 
     // MARK: Review

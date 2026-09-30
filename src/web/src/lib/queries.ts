@@ -35,7 +35,20 @@ import type { OwnerConfirmationView } from '../components/OwnerConfirmationCard'
 import type { PendingCriteriaDecisionQueue } from '../components/CriteriaDecisionCard';
 import type { ProjectOpenItemsView } from '../components/CoordinatorQuestionCard';
 import type { ProjectCrossingRow, TaskAttribution } from './attribution';
-import type { WikiArticleDirectory, WikiArticleIndex, WikiArticleView, WikiChangesetView, WikiSearchRow, WikiSpaceHealth } from '@orbit/shared';
+import type {
+  WikiArticleDirectory,
+  WikiArticleIndex,
+  WikiArticleView,
+  WikiChangesetView,
+  WikiDocView,
+  WikiDocsDirectory,
+  WikiDocsIndex,
+  WikiPlanState,
+  WikiPlanVersion,
+  WikiPlanVersionSummary,
+  WikiSearchRow,
+  WikiSpaceHealth,
+} from '@orbit/shared';
 import type {
   WikiChangeset,
   WikiEntry,
@@ -1045,6 +1058,104 @@ export const wikiReviewQuery = (spaceId?: string | null) =>
       api<WikiChangeset[]>(
         spaceId ? `/wiki/review?space=${encodeURIComponent(spaceId)}` : '/wiki/review',
       ),
+  });
+
+/**
+ * A space's documents, by the plan its owner confirmed (contract `docs.reads.directory`): categories →
+ * documents → sections, each saying whether it is written yet. `plan: null` while no plan is confirmed —
+ * the directory then lists the topic articles instead (`wikiReadsByDocs`).
+ */
+export const wikiDocsQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'docs'] as const,
+    queryFn: () => api<WikiDocsDirectory>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/docs`),
+    enabled: spaceId !== null,
+    staleTime: 30_000,
+  });
+
+/**
+ * One document, its sentences' marks and its footnotes resolved (contract `docs.reads.doc`). `null` is the
+ * server saying the confirmed plan has no such document (404): an answer, kept as data rather than retried.
+ */
+export const wikiDocQuery = (spaceId: string | null, slug: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'doc', slug] as const,
+    queryFn: async (): Promise<WikiDocView | null> => {
+      try {
+        return await api<WikiDocView>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/docs/${encodeURIComponent(slug!)}`);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404 && !isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
+    enabled: spaceId !== null && slug !== null,
+  });
+
+/** Every document of the plan and every section title no other document shares, A to Z (contract `docs.reads.index`). */
+export const wikiDocIndexQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'doc-index'] as const,
+    queryFn: () => api<WikiDocsIndex>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/doc-index`),
+    enabled: spaceId !== null,
+  });
+
+/**
+ * The plan (contract `plan.routes.state`): the version in force, the draft waiting, the proposals and the
+ * space's plan job. The owner's door only — a request with a session header is refused, and this app sends
+ * none. Read again while a job is on its way, since a job's run reports on the runner door, not here.
+ */
+export const wikiPlanQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'plan'] as const,
+    queryFn: async (): Promise<WikiPlanState | null> => {
+      try {
+        return wikiPlanStateOf(await api<unknown>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/plan`));
+      } catch (error) {
+        // A server from before the plan (no such route) has none to show: an answer, not a failure.
+        if (error instanceof ApiError && error.status === 404 && !isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
+    enabled: spaceId !== null,
+    staleTime: 15_000,
+    refetchInterval: (query) => {
+      const state = query.state.data?.job?.state;
+      return state === 'queued' || state === 'running' ? 30_000 : false;
+    },
+  });
+
+/**
+ * The plan's read as the pages use it, or null for an answer that is not one (a server from before the
+ * plan, a stub): the lists and the job filled in when a field is left out, so no page reads a hole.
+ */
+export function wikiPlanStateOf(raw: unknown): WikiPlanState | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const read = raw as Partial<WikiPlanState>;
+  if (typeof read.spaceId !== 'string') return null;
+  return {
+    spaceId: read.spaceId,
+    confirmed: read.confirmed ?? null,
+    draft: read.draft ?? null,
+    proposals: Array.isArray(read.proposals) ? read.proposals : [],
+    job: read.job ?? null,
+  };
+}
+
+/** Every version of the plan, newest first: the version menu. */
+export const wikiPlanVersionsQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'plan', 'versions'] as const,
+    queryFn: async () =>
+      (await api<{ spaceId: string; versions: WikiPlanVersionSummary[] }>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/plan/versions`)).versions,
+    enabled: spaceId !== null,
+  });
+
+/** One version, whole, whatever its status: what the page shows when the menu picks an older one. */
+export const wikiPlanVersionQuery = (spaceId: string | null, version: number | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'plan', 'version', version] as const,
+    queryFn: () => api<WikiPlanVersion>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/plan/versions/${version}`),
+    enabled: spaceId !== null && version !== null,
   });
 
 export const linkPreviewsQuery = (refs: readonly LinkPreviewRef[]) =>
