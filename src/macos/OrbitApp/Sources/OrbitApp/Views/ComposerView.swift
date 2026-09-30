@@ -1526,7 +1526,23 @@ private struct PlanUsageDetailPresentation: ViewModifier {
 
     #if os(iOS)
     private var resetHeight: Int {
-        resetConsole?.codexResetCardVisible == true ? 238 : 0
+        guard let resetConsole, resetConsole.codexResetCardVisible else { return 0 }
+
+        // The normal card is about 160pt including its top inset. Add room only for the
+        // secondary lines that are actually visible; reserving the maximum state here leaves a
+        // large empty tail below the button on the common, ready-to-use state.
+        var height = 160
+        if let operation = resetConsole.codexResetOperation,
+           operation.isActive || !operation.status.isEmpty {
+            height += 28
+        }
+        if resetConsole.codexResetEligibilityReason != nil && !resetConsole.codexResetEligible {
+            height += 28
+        }
+        if resetConsole.codexResetError != nil {
+            height += 28
+        }
+        return height
     }
     #endif
 
