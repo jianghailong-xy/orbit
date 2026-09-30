@@ -255,17 +255,8 @@ async function settle(): Promise<void> {
   }
 }
 
-/** The panorama read the card's Automatic switch counts its waiting work from. Answered here
- *  because the section reads it, not because anything below asserts on it. */
-const PANORAMA = {
-  buckets: { running: 0, ready: 0, blocked: 0, awaitingVerification: 0, done: 0, failed: 0, cancelled: 0 },
-  shape: { taskCount: 0, edgeCount: 0, ratio: 0, maxDepth: 0, form: 'chain' },
-};
-
-/** The read half, by endpoint. Every stub below routes through this so the panorama read cannot
- *  be answered with a coordinator status, which is a payload with no `buckets` in it. */
-const read = (path: string, status: CoordinatorStatus) =>
-  Promise.resolve(path.endsWith('/panorama') ? PANORAMA : status) as Promise<never>;
+/** The read half: the section's one read is the coordinator status. */
+const read = (_path: string, status: CoordinatorStatus) => Promise.resolve(status) as Promise<never>;
 
 /** Answer each read with the payload its own endpoint serves, and every write with `write`. */
 function serve(status: CoordinatorStatus, write?: (path: string) => Promise<unknown>) {

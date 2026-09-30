@@ -28,6 +28,8 @@ export const START_PROJECT_TITLE = 'Start this project?';
 export const START_ASKED_BY_COORDINATOR = 'asked by the coordinator';
 /** What a session row, its header and the pinned strip say while the card is waiting. */
 export const READY_TO_START = 'Ready to start';
+/** The project page's status tag for a project nobody has started. */
+export const NOT_STARTED = 'Not started';
 export const START_DONE_WHEN = 'Done when';
 export const START_PLAN = 'Plan';
 export const START_HOW_IT_RUNS = 'How it runs';
@@ -161,6 +163,68 @@ export function runMergeCheckMissing(
   settings: Pick<ProjectStartSettings, 'line' | 'automatic' | 'mergeCheckCommand'>,
 ): boolean {
   return settings.automatic && settings.line === 'PROJECT_BRANCH' && !settings.mergeCheckCommand?.trim();
+}
+
+// ── The words: the project page ──────────────────────────────────────────────────────────────
+
+/**
+ * The start card's way in from the project page. A coordinator's request is answered on the card in
+ * its conversation, and the Open items row takes the reader there ("Review") rather than drawing a
+ * second copy; with no request, the row is the owner's own "Start…", which opens the same card over
+ * the page, set by the default rule.
+ */
+export const START_ROW_ASKED = 'The coordinator asked';
+export const START_ROW_OWN = 'Start…';
+export const START_ROW_NOT_ASKED = 'not asked yet';
+
+/** Why a reader arrives in the coordinator conversation from "Review" (`?intent=start-project`): to
+ *  find the start card, which the conversation scrolls to once it is drawn. */
+export const START_PROJECT_INTENT = 'start-project';
+
+/** A line as a sentence names it, mid-sentence: "a project branch", "directly into main". */
+export function runLineInSentence(line: ProjectStartSettings['line']): string {
+  return line === 'MAIN' ? 'directly into main' : 'a project branch';
+}
+
+/** The request's row under its title: who asked, and what it suggests — "The coordinator asked · a
+ *  project branch · Automatic on · at most 3 at a time". */
+export function startRequestSummary(settings: ProjectStartSettings): string {
+  return [
+    START_ROW_ASKED,
+    runLineInSentence(settings.line),
+    `${RUN_AUTOMATIC} ${settings.automatic ? 'on' : 'off'}`,
+    `at most ${settings.maxConcurrentTasks} at a time`,
+  ].join(' · ');
+}
+
+/** The integration row of a project nobody has started: where its tasks land is the start's to
+ *  decide — "Tasks land on: decided when you start — the coordinator suggests a project branch". */
+export const RUN_LINE_DECIDED_AT_START = 'decided when you start';
+export const RUN_LINE_SUGGESTED = 'the coordinator suggests';
+
+/** "How it runs", once the project is started: the settings the start card set, in one block. */
+export const RUN_APPLIES_FROM_NEXT_TASK = 'applies from the next task';
+export const RUN_ESCALATE_AFTER = 'Escalate after';
+export const RUN_ESCALATE_HINT = 'Items the coordinator hasn’t handled by then come to you.';
+export const RUN_SAVE = 'Save';
+/** What a Save the doors did not take says, over the door's own message. */
+export const RUN_NOT_SAVED = 'These settings were not saved';
+export const RUN_PAUSE = 'Pause project';
+export const RUN_PAUSE_HINT = 'Stops new tasks, wake-ups and merges into main. Running tasks finish.';
+export const RUN_RESUME = 'Resume project';
+export const RUN_NOT_PAUSED = 'The project was not paused';
+export const RUN_NOT_RESUMED = 'The project was not resumed';
+
+/** Why Tasks land on is read-only: the line started integrating — `since` is "2h ago" — and moving
+ *  it would orphan what already landed on it. */
+export function runLineLocked(since: string | null): string {
+  return `This project started integrating${since ? ` ${since}` : ''}, so the line it lands on can `
+    + 'no longer change. Merge it into main, or give up the branch, to start another.';
+}
+
+/** What a paused project says before what pausing does: since when — "Paused 2h ago." */
+export function runPausedSince(since: string): string {
+  return `Paused ${since}.`;
 }
 
 // ── The settings a start left behind, in one line ────────────────────────────────────────────

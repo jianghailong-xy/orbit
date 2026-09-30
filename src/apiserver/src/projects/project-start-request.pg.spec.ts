@@ -606,6 +606,13 @@ test('a coordinator asks its owner to start the project, and the plan is checked
   await t.test('(7) starting the project resolves its request, and marks what the owner changed', async () => {
     const project = await planned('answered');
     const filed = await ask(project.id, project.sessionId);
+    // The projects list reads the same open request — the row's "Needs you · Ready to start" — off
+    // the items it already aggregates, and says when it was asked.
+    const listed = async (projectId: string) =>
+      (await projects.list(ownerId)).find((row) => row.id === projectId)?.attention.startRequest;
+    const asking = await listed(project.id);
+    assert.ok(asking, 'the list carries the open request');
+    assert.ok(asking.waitingSince instanceof Date);
     const started = await acceptance.startProject(ownerId, project.id, {
       criteriaDigest: await seal(project.id),
       line: 'PROJECT_BRANCH',
@@ -629,6 +636,16 @@ test('a coordinator asks its owner to start the project, and the plan is checked
     assert.deepEqual(confirmation.started_with.differsFromRequest, ['maxConcurrentTasks'],
       'the start records the difference, for the receipt and the coordinator’s card');
     assert.equal((await openItems.list(ownerId, project.id)).startRequest, null);
+    assert.equal(await listed(project.id), null, 'a started project asks nothing on the list');
+
+    // A request left OPEN beside a start — nothing does that today, the start answers it in its own
+    // transaction — still asks nobody anything on the list: it counts only while `started_at` is null.
+    const leftOpen = await planned('answered-left-open');
+    await ask(leftOpen.id, leftOpen.sessionId);
+    assert.ok(await listed(leftOpen.id));
+    await sql.query(`UPDATE "project" SET "started_at" = now() WHERE "id" = $1::uuid`, [leftOpen.id]);
+    assert.equal((await requests(leftOpen.id))[0].state, 'OPEN');
+    assert.equal(await listed(leftOpen.id), null, 'a started project asks nothing, whatever is left open');
 
     // A start that names no request — the owner's own Start… — answers the open one all the same:
     // a started project has nothing left to ask.
