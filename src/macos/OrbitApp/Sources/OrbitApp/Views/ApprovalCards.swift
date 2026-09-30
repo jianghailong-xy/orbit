@@ -1777,8 +1777,9 @@ private struct AcceptanceConfirmationReceiptCard: View {
 
 // MARK: - the start card, and the card that asks again once the criteria move
 
-/// "Start this project?" — the one card on which the account owner starts a project: the criteria
-/// it will be judged by, the plan its coordinator filed, and how it runs, pressed once.
+/// "Start this project?" in a coordinator conversation — the one card on which the account owner
+/// starts a project: the criteria it will be judged by, the plan its coordinator filed, and how it
+/// runs, pressed once.
 ///
 /// ASKED, NEVER INFERRED. It is delivered once the coordinator has asked to start
 /// (`project_request_start`) and the plan passed Orbit's ready check — the open `START_REQUEST`
@@ -1788,45 +1789,103 @@ private struct AcceptanceConfirmationReceiptCard: View {
 /// re-derived from the reads on every render. A request that stops standing leaves the card on
 /// screen, dimmed, with Start dead and the reason above it (`StartProject.Standing`).
 ///
-/// The look is the confirmation card's — the same blue surface, header and full-width capsules —
-/// with two sections of its own, Plan and How it runs, in white grouped panels. Every word is
-/// OrbitKit's `StartProject` / `RunSettings`, held to the browser's `lib/projectStart.ts` by
-/// `StartProjectCardCopyParityTests`.
+/// What it draws is `StartProjectCard` below, which the project page's own "Start…" opens too.
 private struct StartProjectCardView: View {
     let console: ConsoleModel
     let itemID: String
-    @State private var starting = false
-    @State private var criteriaOpen = false
 
     var body: some View {
         let standing = console.startStanding(itemID)
-        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
-            ApprovalHeader(symbol: "play.fill", title: StartProject.title, tone: .blue)
-            if let row = console.startRequestRow, row.itemId == itemID,
-               let request = row.startRequest {
-                content(row: row, request: request, standing: standing)
-            } else {
+        if let row = console.startRequestRow, row.itemId == itemID,
+           let request = row.startRequest {
+            StartProjectCard(
+                projectID: console.projectID ?? "",
+                projectTitle: console.projectTitle,
+                askedAt: row.waitingSince,
+                request: request,
+                criteria: console.projectCriteria.sorted { $0.ordinal < $1.ordinal },
+                plan: StartProject.planView(graph: console.projectGraph, request: request,
+                                            fallbackCount: console.projectTaskCount),
+                draft: console.startDraft(for: row),
+                standing: standing,
+                onDraft: { console.setStartDraft($0, for: itemID) },
+                onStart: { await console.startProject(itemID: itemID) },
+                // The tasks the plan names, in the list this conversation's agent created them in
+                // — the same list the tray below the transcript opens.
+                onViewTasks: { _ = console.openCreatedTasks() },
+                // Say what should change before it starts: the same control, and the same word for
+                // it, as the other cards that hand a reply to the composer. The card stays, and
+                // Start stays live.
+                onChatAbout: {
+                    console.startPlanChangeReply(criteriaDigest: request.criteriaDigest, question: .start)
+                })
+        } else {
+            VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+                ApprovalHeader(symbol: "play.fill", title: StartProject.title, tone: .blue)
                 // Nothing left to draw from: the request this card was drawn for is not the one the
                 // console holds. Said, rather than drawn blank.
                 Text(StartProject.requestGone)
                     .font(.orbitLabel).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .approvalChrome(.blue, dimmed: !StartProject.isOpen(standing))
+        }
+    }
+}
+
+/// The start card itself, drawn from what it is given: the conversation's card above, and the
+/// project page's own "Start…" (`ProjectsView`), which opens this same card over the page for a
+/// project nobody has asked about — web's `StartProjectCard`, shared the same way by
+/// `SessionStartProjectCard` and `OwnerStartProjectCard`.
+///
+/// A card no coordinator asked for (`askedAt` nil) carries the default rule's settings rather than
+/// a suggestion, and no ready check ran on its plan, so it claims neither: no "asked by", no
+/// "suggested by the coordinator", no "Orbit checked the plan" — and no Chat about this, which has no
+/// conversation to hand a reply to there.
+///
+/// The look is the confirmation card's — the same blue surface, header and full-width capsules —
+/// with two sections of its own, Plan and How it runs, in white grouped panels. Every word is
+/// OrbitKit's `StartProject` / `RunSettings`, held to the browser's `lib/projectStart.ts` by
+/// `StartProjectCardCopyParityTests`.
+struct StartProjectCard: View {
+    let projectID: String
+    let projectTitle: String
+    /// When the coordinator asked; nil for a card nobody asked for.
+    let askedAt: String?
+    let request: ProjectStartRequest
+    /// The criteria a press confirms, in order.
+    let criteria: [ProjectCriteriaDocument.Item]
+    let plan: StartPlanView
+    /// The settings as the owner has left them.
+    let draft: StartSettingsDraft
+    let standing: StartProject.Standing
+    let onDraft: (StartSettingsDraft) -> Void
+    let onStart: () async -> Void
+    let onViewTasks: () -> Void
+    /// Hands a reply to the conversation's composer. Nil where there is no conversation to talk in —
+    /// the card opened over the project page — and then the press is not drawn.
+    var onChatAbout: (() -> Void)? = nil
+    /// A press the door did not take, in its own words.
+    var error: String? = nil
+    @State private var starting = false
+    @State private var criteriaOpen = false
+
+    /// Whether a coordinator asked for this card.
+    private var asked: Bool { askedAt != nil }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
+            ApprovalHeader(symbol: "play.fill", title: StartProject.title, tone: .blue)
+            content
         }
         .approvalChrome(.blue, dimmed: !StartProject.isOpen(standing))
     }
 
-    private var items: [ProjectCriteriaDocument.Item] {
-        console.projectCriteria.sorted { $0.ordinal < $1.ordinal }
-    }
-
     @ViewBuilder
-    private func content(row: ProjectOpenItemRow, request: ProjectStartRequest,
-                         standing: StartProject.Standing) -> some View {
-        let draft = console.startDraft(for: row)
+    private var content: some View {
         let editable = standing == .live && !starting
-        Text(StartProject.meta(projectTitle: console.projectTitle,
-                               askedAgo: RelativeTime.format(row.waitingSince),
+        Text(StartProject.meta(projectTitle: projectTitle,
+                               askedAgo: askedAt.flatMap { RelativeTime.format($0) },
                                seal: CriteriaDecisions.shortSeal(request.criteriaDigest)))
             .font(.orbitLabel).foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1839,32 +1898,37 @@ private struct StartProjectCardView: View {
                             in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
         }
 
-        StartSectionHead(title: StartProject.doneWhenHead(items.count))
-        criteria
-        planSection(request)
-        howItRunsSection(draft: draft, request: request, editable: editable)
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.green)
-            Text(StartProject.checkedLine(repository: request.repository))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        StartSectionHead(title: StartProject.doneWhenHead(criteria.count))
+        criteriaList
+        planSection
+        howItRunsSection(editable: editable)
+        if asked {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.green)
+                Text(StartProject.checkedLine(repository: request.repository))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .font(.orbitLabel)
         }
-        .font(.orbitLabel)
-        Text(StartProject.explanation(items.count))
+        Text(StartProject.explanation(criteria.count))
             .font(.orbitProse)
             .frame(maxWidth: .infinity, alignment: .leading)
+        if let error {
+            Text(error)
+                .font(.orbitLabel).foregroundStyle(Color.red)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
         ApprovalActions {
-            startButton(draft: draft, standing: standing)
-            chatButton(request)
+            startButton
+            if let onChatAbout { chatButton(onChatAbout) }
         }
     }
 
     /// The plan: its order in one line, the way to the tasks it names, and what the ready check
     /// warned about in amber.
     @ViewBuilder
-    private func planSection(_ request: ProjectStartRequest) -> some View {
-        let plan = StartProject.planView(graph: console.projectGraph, request: request,
-                                         fallbackCount: console.projectTaskCount)
+    private var planSection: some View {
         StartSectionHead(title: StartProject.planHead(plan.count))
         StartPanel {
             VStack(alignment: .leading, spacing: 6) {
@@ -1872,11 +1936,9 @@ private struct StartProjectCardView: View {
                     Text(order).font(.orbitSubtext).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                // The tasks the plan names, in the list this conversation's agent created them in
-                // — the same list the tray below the transcript opens.
                 Button {
                     PlatformHaptics.tap()
-                    console.openCreatedTasks()
+                    onViewTasks()
                 } label: {
                     Text(StartProject.viewTasks).font(.orbitSubtext).foregroundStyle(Color.blue)
                 }
@@ -1890,20 +1952,21 @@ private struct StartProjectCardView: View {
         }
     }
 
-    /// How it runs: the integration settings, prefilled with the coordinator's suggestion and the
-    /// owner's to change before the press — and the coordinator's reason for suggesting them.
+    /// How it runs: the integration settings, prefilled with the coordinator's suggestion — or the
+    /// default rule's, on a card nobody asked for — and the owner's to change before the press; and
+    /// the coordinator's reason for suggesting them.
     @ViewBuilder
-    private func howItRunsSection(draft: StartSettingsDraft, request: ProjectStartRequest,
-                                  editable: Bool) -> some View {
-        StartSectionHead(title: StartProject.howItRuns, aside: StartProject.suggestedByCoordinator)
+    private func howItRunsSection(editable: Bool) -> some View {
+        StartSectionHead(title: StartProject.howItRuns,
+                         aside: asked ? StartProject.suggestedByCoordinator : nil)
         StartPanel {
-            lineRow(draft: draft, request: request, editable: editable)
+            lineRow(editable: editable)
             Divider()
-            automaticRow(draft: draft, editable: editable)
+            automaticRow(editable: editable)
             Divider()
-            atMostRow(draft: draft, editable: editable)
+            atMostRow(editable: editable)
             Divider()
-            mergeCheckRow(draft: draft, editable: editable)
+            mergeCheckRow(editable: editable)
         }
         if !request.why.isEmpty {
             Text(StartProject.coordinatorSays(request.why))
@@ -1914,9 +1977,9 @@ private struct StartProjectCardView: View {
 
     /// The criteria, open, each clamped to two lines, the toggle taking the clamp off — the
     /// confirmation card's rule, for its reason: a folded list is an invitation to sign unread.
-    @ViewBuilder private var criteria: some View {
-        if !items.isEmpty {
-            ForEach(items) { item in
+    @ViewBuilder private var criteriaList: some View {
+        if !criteria.isEmpty {
+            ForEach(criteria) { item in
                 HStack(alignment: .top, spacing: 8) {
                     Text("\(item.ordinal)")
                         .font(.orbitMonoFine).foregroundStyle(.secondary)
@@ -1931,7 +1994,7 @@ private struct StartProjectCardView: View {
                 criteriaOpen.toggle()
             } label: {
                 Text(criteriaOpen ? AcceptanceConfirmations.showLessLabel
-                                  : AcceptanceConfirmations.readLabel(count: items.count))
+                                  : AcceptanceConfirmations.readLabel(count: criteria.count))
                     .font(.orbitLabel)
                     .foregroundStyle(Color.blue)
             }
@@ -1943,16 +2006,14 @@ private struct StartProjectCardView: View {
     // MARK: How it runs — the four settings, prefilled with the coordinator's suggestion
 
     private func update(_ change: (inout StartSettingsDraft) -> Void) {
-        guard let row = console.startRequestRow, row.itemId == itemID else { return }
-        var draft = console.startDraft(for: row)
-        change(&draft)
-        console.setStartDraft(draft, for: itemID)
+        var next = draft
+        change(&next)
+        onDraft(next)
     }
 
     /// Where finished tasks land, picked from the platform's own menu: each option with the sentence
     /// that says what choosing it means, and the one chosen ticked.
-    private func lineRow(draft: StartSettingsDraft, request: ProjectStartRequest,
-                         editable: Bool) -> some View {
+    private func lineRow(editable: Bool) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 8) {
                 Text(RunSettings.tasksLandOn).font(.orbitProse)
@@ -1989,7 +2050,7 @@ private struct StartProjectCardView: View {
                 .disabled(!editable)
             }
             if draft.line == .projectBranch {
-                Text(StartProject.branch(request, projectID: console.projectID ?? ""))
+                Text(StartProject.branch(request, projectID: projectID))
                     .font(.orbitMono).foregroundStyle(.secondary)
                     .lineLimit(1).truncationMode(.middle)
             }
@@ -2007,7 +2068,7 @@ private struct StartProjectCardView: View {
     }
 
     /// Automatic, with the sentence for the line chosen: the merge half follows the line.
-    private func automaticRow(draft: StartSettingsDraft, editable: Bool) -> some View {
+    private func automaticRow(editable: Bool) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             // The label is its own Text and the switch trails it, on both platforms: macOS draws a
             // bare Toggle as a checkbox in front of its label.
@@ -2029,7 +2090,7 @@ private struct StartProjectCardView: View {
     }
 
     /// How many tasks may be in flight at once, within the door's own bounds.
-    private func atMostRow(draft: StartSettingsDraft, editable: Bool) -> some View {
+    private func atMostRow(editable: Bool) -> some View {
         HStack(spacing: 8) {
             Text(RunSettings.atMost).font(.orbitProse)
             Spacer(minLength: 8)
@@ -2049,7 +2110,7 @@ private struct StartProjectCardView: View {
 
     /// The check run on the combined tree before anything lands — amber, with the ready check's own
     /// warning under it, while Automatic would merge the branch into main with nothing run.
-    private func mergeCheckRow(draft: StartSettingsDraft, editable: Bool) -> some View {
+    private func mergeCheckRow(editable: Bool) -> some View {
         let missing = draft.mergeCheckMissing
         return VStack(alignment: .leading, spacing: 4) {
             Text(RunSettings.mergeCheck).font(.orbitProse)
@@ -2079,17 +2140,16 @@ private struct StartProjectCardView: View {
 
     // MARK: the two answers
 
-    /// One press, one write: the criteria confirmed by the seal the coordinator asked about, and
-    /// every setting as the card shows it (`StartProject.body`). Live only while the request stands
-    /// and the draft is one the door would take.
-    private func startButton(draft: StartSettingsDraft,
-                             standing: StartProject.Standing) -> some View {
+    /// One press, one write: the criteria confirmed by the seal the card names, and every setting as
+    /// the card shows it (`StartProject.body`). Live only while the request stands and the draft is
+    /// one the door would take.
+    private var startButton: some View {
         Button {
             guard standing == .live, draft.complete, !starting else { return }
             PlatformHaptics.tap()
             starting = true
             Task {
-                await console.startProject(itemID: itemID)
+                await onStart()
                 starting = false
             }
         } label: {
@@ -2099,17 +2159,16 @@ private struct StartProjectCardView: View {
         .disabled(starting || standing != .live || !draft.complete)
     }
 
-    /// Say what should change before it starts: the same control, and the same word for it, as the
-    /// other cards that hand a reply to the composer. The card stays, and Start stays live.
-    private func chatButton(_ request: ProjectStartRequest) -> some View {
+    /// Chat about this, where there is a conversation to talk in.
+    private func chatButton(_ chat: @escaping () -> Void) -> some View {
         Button {
             PlatformHaptics.tap()
-            console.startPlanChangeReply(criteriaDigest: request.criteriaDigest, question: .start)
+            chat()
         } label: {
             Text(Approvals.chatAction).approvalActionLabel()
         }
         .buttonStyle(.bordered)
-        .disabled(console.projectCriteria.isEmpty)
+        .disabled(criteria.isEmpty)
     }
 }
 

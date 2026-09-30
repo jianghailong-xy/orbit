@@ -56,12 +56,29 @@ final class ProjectPageCopyParityTests: XCTestCase {
                                                  waitingForLanding: 1)
         let cells = ProjectPage.overviewCells(integrating, taskCount: 9, line: .projectBranch)
             + ProjectPage.overviewCells(ProjectPanoramaBuckets(), taskCount: 0, line: nil)
+            + ProjectPage.overviewCells(integrating, taskCount: 9, line: .projectBranch, started: false)
+            + ProjectPage.overviewCells(ProjectPanoramaBuckets(), taskCount: 0, line: nil, started: false)
         for cell in cells {
             assertSays(web, "label: '\(cell.label)'", in: Self.panorama)
             assertSays(web, "'\(cell.footnote)'", in: Self.panorama)
         }
         assertSays(web, "'waiting on dependencies'", in: Self.panorama)
         assertSays(web, "% complete`", in: Self.panorama)
+        // Ready on a project nobody has started (mock board3 ②), in both shapes of the card.
+        assertSays(web, "export const READY_UNTIL_STARTED = '\(ProjectPage.readyUntilStarted)';", in: Self.panorama)
+        assertSays(web, "const readyFootnote = notStarted ? READY_UNTIL_STARTED : 'can start now';", in: Self.panorama)
+        assertSays(web, "ready: readyFootnote,", in: Self.panorama)
+        assertSays(web, "lane.key === 'ready' ? { ...lane, footnote: readyFootnote } : lane)", in: Self.panorama)
+    }
+
+    /// An open project nobody has started is "Not started" (mock board3 ②), and grey — not the
+    /// tag of one that runs.
+    func testAProjectNobodyStartedIsTaggedNotStarted() throws {
+        let web = try source(Self.page)
+        assertSays(web, "{p.status === 'OPEN' && started === false ? (", in: Self.page)
+        assertSays(web, "<Tag color=\"default\">{NOT_STARTED}</Tag>", in: Self.page)
+        let words = try source("src/web/src/lib/projectStart.ts")
+        assertSays(words, "export const NOT_STARTED = '\(StartProject.notStarted)';", in: "src/web/src/lib/projectStart.ts")
     }
 
     func testCriteriaWords() throws {
@@ -118,6 +135,10 @@ final class ProjectPageCopyParityTests: XCTestCase {
             .replacingOccurrences(of: "23", with: "${needsYou.length}")
             .replacingOccurrences(of: "29", with: "${withCoordinator.length}")
         assertSays(web, "`\(hint)`", in: Self.progress)
+        // The coordinator's request to start leads Needs you, and is counted there; the owner's own
+        // Start… is counted in nothing.
+        assertSays(web, "...(startRequest ? [startRequest] : []),", in: Self.progress)
+        assertSays(web, "{ownStart ? <OwnStartRowView onStart={ownStart} /> : null}", in: Self.progress)
         for phrase in ["`waiting ${waited}`", "`${waited} · goes to you in ${formatSpan(left)}`",
                        "`${waited} · due to come to you`", "`escalated ${ago(row.escalatedAt, now)}`",
                        "OWNER: 'You', COORDINATOR: 'Coordinator'",

@@ -11,9 +11,11 @@ extension ProjectPage {
 
     // MARK: - Work overview: when the work is not moving
 
-    /// Ready work, and nothing starting it.
-    public static func stalledOnReady(_ b: ProjectPanoramaBuckets) -> Bool {
-        b.ready > 0 && b.running == 0
+    /// Ready work, and nothing starting it — unless nobody has started the project, when it is the
+    /// start that ready work is waiting for, and the Ready cell says so instead
+    /// (`readyUntilStarted`).
+    public static func stalledOnReady(_ b: ProjectPanoramaBuckets, started: Bool? = nil) -> Bool {
+        b.ready > 0 && b.running == 0 && started != false
     }
 
     public static let stalledTitle = "Dispatch needs attention"

@@ -1889,10 +1889,14 @@ final class AppModel {
     ///
     /// A project page a phone opened over this very conversation goes back down to it: putting the
     /// conversation on top again would stack a second copy of it over the first.
-    func openProjectCoordinator(sessionID: String, agentID: String?, focus item: SessionOwnerItem? = nil) {
+    func openProjectCoordinator(sessionID: String, agentID: String?, focus item: SessionOwnerItem? = nil,
+                                focusStartCard: Bool = false) {
         let id = PublicID.toPublic(sessionID)
         let agent = agentID.map(PublicID.toPublic) ?? self.agentID(for: id)
         if let item { consoleRegistry?.model(for: id, agentID: agent).focus(ownerItem: item) }
+        // The start card is the same kind of landing — Review on the project page's request to
+        // start — through the same door, so the page it opens is the one Answer's opens.
+        if focusStartCard { consoleRegistry?.model(for: id, agentID: agent).focusStartCard() }
         if nav.returnToConsole(id) { return }
         show(.console(sessionID: id, origin: .list), agent: agent)
     }

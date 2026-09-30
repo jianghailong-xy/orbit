@@ -647,13 +647,32 @@ public final class APIClient: @unchecked Sendable {
         try await patch("projects/\(projectID)", body: UpdateProjectStatusRequest(status: status))
     }
 
-    /// Flip the Automatic switch, fenced on the revision the page read — a write racing another
-    /// edit of the project's authorisation set is refused rather than applied over it.
-    public func setProjectAutomatic(_ projectID: String, enabled: Bool,
-                                    expectedConfigRevision: String) async throws -> ProjectDocument {
-        try await patch("projects/\(projectID)",
-                        body: SetProjectAutomaticRequest(coordinatorEnabled: enabled,
-                                                         expectedConfigRevision: expectedConfigRevision))
+    /// How it runs' half of the authorization set — Automatic and the concurrency limit — fenced on
+    /// the revision the page read: a write racing another edit of the set is refused 409
+    /// `STALE_CONFIG_REVISION` rather than applied over it.
+    public func updateProjectAuthorization(_ projectID: String,
+                                           _ body: UpdateProjectAuthorizationRequest) async throws -> ProjectDocument {
+        try await patch("projects/\(projectID)", body: body)
+    }
+
+    /// The line, the merge check and the escalation window (§1.2 L5). A line that started
+    /// integrating is 409 `INTEGRATION_LINE_LOCKED`; the other two change for the life of the
+    /// project.
+    public func updateProjectIntegration(_ projectID: String,
+                                         _ body: UpdateProjectIntegrationRequest) async throws -> ProjectIntegrationView {
+        try await patch("projects/\(projectID)/integration", body: body)
+    }
+
+    /// Pause project: nothing starts its tasks or merges it into main by itself until it is resumed;
+    /// runs already going finish. The owner's own credential and no acting session — the door
+    /// refuses one.
+    public func pauseProject(_ projectID: String) async throws -> ProjectPauseState {
+        try await postEmpty("projects/\(projectID)/pause")
+    }
+
+    /// Resume project: the pause lifted.
+    public func resumeProject(_ projectID: String) async throws -> ProjectPauseState {
+        try await postEmpty("projects/\(projectID)/resume")
     }
 
     /// Remove an EMPTY project; one that still holds tasks is a 409 naming how many.
