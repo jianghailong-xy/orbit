@@ -593,9 +593,11 @@ struct ComposerView: View {
                         if listsAccounts { accountItems(choice.slug) }
                     }
                 } label: {
-                    Text("Provider")
-                    Text(AgentDefaults.providerName(console.provider,
-                                                    configured: console.configuredProviders))
+                    menuSubmenuLabel(
+                        "Provider",
+                        value: AgentDefaults.providerName(
+                            console.provider,
+                            configured: console.configuredProviders))
                 }
                 Divider()
             }
@@ -639,8 +641,7 @@ struct ComposerView: View {
                     }
                 }
             } label: {
-                Text("Effort")
-                Text(console.effort.label)
+                menuSubmenuLabel("Effort", value: console.effort.label)
             }
             // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast"
             // tier both exist on some models and not others, so a row drawn regardless would be a
@@ -661,8 +662,7 @@ struct ComposerView: View {
                         }
                     }
                 } label: {
-                    Text("Speed")
-                    Text(console.fastMode ? "Fast" : "Standard")
+                    menuSubmenuLabel("Speed", value: console.fastMode ? "Fast" : "Standard")
                 }
             }
         } label: {
@@ -855,18 +855,36 @@ struct ComposerView: View {
         }
     }
 
-    /// A menu row whose checkmark sits at the TRAILING end of the row, the way a Picker draws it —
-    /// a Menu of Buttons has to render it explicitly. Trailing, not leading (`Label(_:systemImage:)`,
-    /// the natural spelling): a leading icon takes a column on the selected row only, so that row's
-    /// text starts one checkmark to the right of every sibling's, which is what the phone report
-    /// showed. Web parity too — `.scope-menu-row`'s check sits in a trailing slot.
+    /// Keep every option's text on one left edge and reserve the same trailing checkmark slot on
+    /// every row. An image that only exists on the selected row makes SwiftUI measure that row
+    /// differently on iOS, so its text shifts when the selection changes. The transparent image is
+    /// intentional: it preserves the geometry while the visible check remains the only accent in
+    /// the menu (web parity: `.scope-menu-row`'s check sits in a trailing slot).
     @ViewBuilder
     private func menuItemLabel(_ text: String, selected: Bool) -> some View {
         HStack(spacing: 8) {
-            Text(text)
-            Spacer(minLength: 12)
-            if selected { Image(systemName: "checkmark") }
+            Text(text).lineLimit(1)
+            Spacer(minLength: 8)
+            Image(systemName: "checkmark")
+                .foregroundStyle(selected ? Color.accentColor : Color.clear)
+                .frame(width: 20, alignment: .trailing)
+                .accessibilityHidden(!selected)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The two-level settings rows stay on one baseline: the title owns the left edge, the current
+    /// value sits in a muted trailing column, and the nested Menu supplies its disclosure chevron.
+    /// Keeping the chevron native avoids drawing a second indicator on macOS and iOS.
+    private func menuSubmenuLabel(_ title: String, value: String) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+            Spacer(minLength: 12)
+            Text(value)
+                .foregroundStyle(Color.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: `/` autocomplete menu
