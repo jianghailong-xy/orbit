@@ -46,6 +46,17 @@ The root Node.js requirement is therefore 20.19 or newer.
 | --- | --- | --- |
 | `deepmerge-ts` pinned to `^8.0.2` | Prisma 7.9.1's CLI pins `@prisma/config` to `deepmerge-ts` 7.1.5, which carries [GHSA-ggr8-5vv4-36mx](https://github.com/advisories/GHSA-ggr8-5vv4-36mx) (high; stack exhaustion when merging recursive object graphs). The package reaches the production tree through `@prisma/client`'s optional `prisma` peer, so it is not a dev-only finding. `@prisma/config` uses only `deepmerge` as c12's config merger, and 8.x keeps that export with the same semantics for plain objects. | Drop the `overrides` entry once a Prisma release depends on `deepmerge-ts` 8 or later. |
 
+## Multer aborted-upload cleanup (2026-09-30)
+
+[Dependabot alert #67](https://github.com/jianghailong-xy/orbit/security/dependabot/67) reports
+[GHSA-3pph-fpjx-jg34](https://github.com/expressjs/multer/security/advisories/GHSA-3pph-fpjx-jg34):
+Multer versions from 2.2.0 up to, but excluding, 2.4.0 can leave orphaned disk files after aborted uploads.
+Orbit's attachment, runner, and avatar `FileInterceptor` endpoints use default memory storage, so the
+specific disk-storage race is not reachable with the current configuration. The lockfile nevertheless
+upgrades Multer from 2.3.0 to the patched 2.4.0 and removes its unused `concat-stream` dependency tree.
+The old `multer` override (`^2.3.0`) is removed because `@nestjs/platform-express` 12.1.0 already pins
+Multer to 2.4.0; the upstream dependency now meets the override's removal condition.
+
 ## Verification
 
 Run from a clean checkout:
