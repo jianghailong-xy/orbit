@@ -266,7 +266,7 @@ import {
 } from './AcceptanceConfirmationCard';
 import {
   READY_TO_START,
-  confirmedChangesKey,
+  confirmedChangesProjectKey,
   type SettlementQuestion,
 } from '../lib/projectStart';
 import { SessionProjectSettlementCard } from './ProjectSettlementCard';
@@ -4078,17 +4078,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
   });
   // What a re-confirmation pressed in this window changed — "1 new, 1 stricter" — which only the
-  // change card knew at the press (`confirmedChangesKey`). Never fetched: once a set is confirmed
+  // change card knew at the press (`confirmedChangesProjectKey`). Never fetched: once a set is confirmed
   // nothing is left changed, so there is nothing to ask the server for, and a receipt drawn
   // without it says the seal and the count.
   const confirmedChanges = useQuery({
-    queryKey: confirmedChangesKey(
-      coordinatedProjectId ?? '',
-      acceptanceConfirmation.data?.confirmation?.criteriaDigest ?? '',
-    ),
+    queryKey: confirmedChangesProjectKey(coordinatedProjectId ?? ''),
     queryFn: (): string | null => null,
     enabled: false,
     staleTime: Infinity,
+    gcTime: Infinity,
   });
 
   // The merges this project has already made, for the record each one leaves where it happened
