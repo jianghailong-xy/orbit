@@ -82,7 +82,7 @@ final class CodexRateLimitResetAPIClientTests: XCTestCase {
                 return (200, Data(Self.operation.utf8))
             }
             if request.httpMethod == "POST" && path.hasSuffix("/codex-rate-limit-reset") {
-                let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data()) as? [String: String]) ?? [:]
+                let body = (try? JSONSerialization.jsonObject(with: sentBody(request)) as? [String: String]) ?? [:]
                 precondition(body["clientRequestId"] == "0199a0c4-7a1e-7c3e-9d4f-2a6b8c0d1e30")
                 precondition(body["accountFingerprint"] == "cxa1_0123456789abcdef0123456789abcdef")
                 precondition(body["workspaceId"] == "workspace-1")
@@ -105,4 +105,22 @@ final class CodexRateLimitResetAPIClientTests: XCTestCase {
                 workspaceId: "workspace-1"))
         XCTAssertFalse(response.replayed)
     }
+}
+
+/// URLProtocol hands back a request whose body has been moved to `httpBodyStream` on Apple platforms,
+/// so the bytes are read off the stream rather than off `httpBody` (which is nil there, and only
+/// Linux's Foundation keeps) — without this the POST's preconditions fail on macOS alone.
+private func sentBody(_ request: URLRequest) -> Data {
+    if let body = request.httpBody { return body }
+    guard let stream = request.httpBodyStream else { return Data() }
+    stream.open()
+    defer { stream.close() }
+    var data = Data()
+    var buffer = [UInt8](repeating: 0, count: 4096)
+    while stream.hasBytesAvailable {
+        let read = stream.read(&buffer, maxLength: buffer.count)
+        if read <= 0 { break }
+        data.append(contentsOf: buffer[0..<read])
+    }
+    return data
 }
