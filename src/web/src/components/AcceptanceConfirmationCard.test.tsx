@@ -33,7 +33,7 @@ import {
 } from './AcceptanceConfirmationCard';
 import { RUN_SETTING_DIFFERS } from '../lib/projectStart';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
-import { ENTER_HINT, SHORTCUT_HINT } from './CardHotkey';
+import { ENTER_HINT } from './CardHotkey';
 import { shortSeal } from './CriteriaDecisionCard';
 
 /**
@@ -810,27 +810,19 @@ describe('the two actions, reading the set, and confirming it', () => {
     expect(qc.getQueryData(acceptanceConfirmationKey(PROJECT))).toEqual(standingOf('CONFIRMED'));
   });
 
-  it('takes the keyboard: the bare key confirms and the chord is the button that talks', async () => {
+  it('confirms on Enter and leaves Chat about this without a shortcut', async () => {
     const { node, card } = await delivered();
 
     // One card asking, so it holds the keys — and each control says which key presses it, on the
     // control itself: a shortcut nobody can see is a shortcut nobody has.
     expect(hintOn(action(card(), ACCEPTANCE_CONFIRM_LABEL))).toBe(ENTER_HINT);
-    expect(hintOn(action(card(), OWNER_SEND_BACK_ACTION))).toBe(SHORTCUT_HINT);
+    expect(hintOn(action(card(), OWNER_SEND_BACK_ACTION))).toBeNull();
 
-    // The chord first, because it leaves the card standing: it hands the plan over and reaches no
-    // door, exactly as the button does.
     await key({ metaKey: true });
-    expect(armed, 'the composer was not armed, or armed more than once').toHaveLength(1);
-    expect(armed[0]).toEqual({
-      projectId: PROJECT,
-      criteriaDigest: CURRENT,
-      projectTitle: TITLE,
-      criteria: NONE_MET.map((item) => item.text),
-      question: 'CONFIRMATION',
-    });
+    await key({ ctrlKey: true });
+    expect(armed, 'a chord armed Chat about this').toEqual([]);
     expect(presses(), 'the chord reached the door').toEqual([]);
-    expect(cardsIn(node), 'the card went away when the chord talked').toHaveLength(1);
+    expect(cardsIn(node), 'the chord removed the card').toHaveLength(1);
 
     // And the bare key is the press itself, sending the same version the button sends — and, like
     // the button, leaving this page with the question answered. The record of it is the

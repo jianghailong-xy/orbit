@@ -63,7 +63,7 @@ import {
 } from './AcceptanceConfirmationCard';
 import { AppLink } from './AppLink';
 import { CardActionButton, CardActions } from './CardAction';
-import { ENTER_HINT, SHORTCUT_HINT, useDecisionCardKeys } from './CardHotkey';
+import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { ago } from '../lib/watches';
@@ -378,7 +378,6 @@ export function StartProjectCard({
         {onChatAbout ? (
           <CardActionButton tone="secondary" disabled={criteria === null} onClick={onChatAbout}>
             {OWNER_SEND_BACK_ACTION}
-            {keys && criteria !== null && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
           </CardActionButton>
         ) : null}
       </CardActions>
@@ -540,9 +539,7 @@ export function SessionStartProjectCard({
   };
   const keys = useDecisionCardKeys({
     confirmEnabled: onScreen && !start.isPending && stale === null && draft !== null && startDraftComplete(draft),
-    chatEnabled: onScreen && criteria !== null,
     onConfirm: press,
-    onChatAbout: talkAbout,
   });
 
   if (!onScreen || !shown || !request || !draft) return null;

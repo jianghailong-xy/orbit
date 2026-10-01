@@ -5,11 +5,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useApproveHotkey, useCardKeyClaim, useDecisionCardKeys } from './CardHotkey';
 
 /**
- * The keyboard the cards that ask the reader share: which key answers which way, whose keyboard is
+ * The keyboard the cards that ask the reader share: which key confirms, whose keyboard is
  * not the cards', and — the half that is a decision rather than a binding — what happens when two
  * cards ask at once.
  *
- * The cards themselves are replaced with probes that report one thing each: where their two answers
+ * The cards themselves are replaced with probes that report one thing each: where their confirmation
  * would go, and whether they hold the keys. The probes read `data-keys` (the same fact the hint is
  * drawn from) rather than the hint, because what the card LOOKS like with the keys is each card's
  * own file's business; what is asserted here is who has them.
@@ -51,20 +51,22 @@ function key(init: KeyboardEventInit = {}): void {
 const HINT = { metaKey: true };
 const CTRL = { ctrlKey: true };
 
-/** A card of the four: two answers, two counters, and what it holds. */
+/** A confirmation card and its ordinary Chat about this button. */
 function Card({
   confirmEnabled = true,
-  chatEnabled = true,
   onConfirm,
   onChatAbout,
 }: {
   confirmEnabled?: boolean;
-  chatEnabled?: boolean;
   onConfirm: () => void;
   onChatAbout: () => void;
 }): JSX.Element {
-  const keys = useDecisionCardKeys({ confirmEnabled, chatEnabled, onConfirm, onChatAbout });
-  return <div data-card data-keys={String(keys)} />;
+  const keys = useDecisionCardKeys({ confirmEnabled, onConfirm });
+  return (
+    <div data-card data-keys={String(keys)}>
+      <button type="button" onClick={onChatAbout}>Chat about this</button>
+    </div>
+  );
 }
 
 /** The approval card's own trigger, on the same claim — it took Enter first, and it is the reason
@@ -78,8 +80,8 @@ function Approve({ active, onApprove }: { active: boolean; onApprove: () => void
 const keysOf = (scope: ParentNode, selector: string): string[] =>
   [...scope.querySelectorAll<HTMLElement>(selector)].map((el) => el.dataset.keys ?? '');
 
-describe('one card, two answers', () => {
-  it('answers the first way on the bare key and the second on the chord, and never both', async () => {
+describe('confirmation keys', () => {
+  it('confirms on Enter and leaves both modifier chords unhandled', async () => {
     const confirm = vi.fn();
     const chat = vi.fn();
     await mount(<Card onConfirm={confirm} onChatAbout={chat} />);
@@ -88,33 +90,33 @@ describe('one card, two answers', () => {
     expect(confirm, 'the bare key answers the first way').toHaveBeenCalledTimes(1);
     expect(chat).not.toHaveBeenCalled();
 
-    // ⌘ on macOS and Ctrl elsewhere are one chord (`CardHotkey.IS_MAC` spends the difference on the
-    // label alone), so both spellings are asserted where both can be sent.
     for (const mod of [HINT, CTRL]) {
       key(mod);
-      expect(chat, 'the chord answers the second way').toHaveBeenCalledTimes(1);
-      expect(confirm, 'the chord did not also answer the first way').toHaveBeenCalledTimes(1);
-      chat.mockClear();
+      expect(chat, 'Chat about this has no shortcut').not.toHaveBeenCalled();
+      expect(confirm, 'the chord did not confirm').toHaveBeenCalledTimes(1);
     }
   });
 
-  it('does nothing for an answer whose own button is dead, and still answers the other way', async () => {
+  it('holds no keys when confirmation is disabled, even while Chat about this can be clicked', async () => {
     const confirm = vi.fn();
     const chat = vi.fn();
-    await mount(<Card confirmEnabled={false} onConfirm={confirm} onChatAbout={chat} />);
+    const node = await mount(<Card confirmEnabled={false} onConfirm={confirm} onChatAbout={chat} />);
     key();
     expect(confirm, 'the first way was dead').not.toHaveBeenCalled();
     key(HINT);
-    expect(chat, 'the second way was live').toHaveBeenCalledTimes(1);
+    expect(chat, 'a chord opened Chat about this').not.toHaveBeenCalled();
+    expect(keysOf(node, '[data-card]')).toEqual(['false']);
+    act(() => node.querySelector('button')?.click());
+    expect(chat, 'Chat about this is still clickable').toHaveBeenCalledTimes(1);
 
-    // The other way round, on the same card: the two answers of one card are not dead together.
+    // When confirmation becomes available again, only Enter comes back.
     const second = vi.fn();
     await act(async () =>
-      root?.render(<Card chatEnabled={false} onConfirm={second} onChatAbout={chat} />),
+      root?.render(<Card onConfirm={second} onChatAbout={chat} />),
     );
     chat.mockClear();
     key(HINT);
-    expect(chat, 'the second way was dead').not.toHaveBeenCalled();
+    expect(chat, 'Chat about this has no shortcut').not.toHaveBeenCalled();
     key();
     expect(second, 'the first way was live').toHaveBeenCalledTimes(1);
   });
@@ -123,7 +125,7 @@ describe('one card, two answers', () => {
     const confirm = vi.fn();
     const chat = vi.fn();
     const node = await mount(
-      <Card confirmEnabled={false} chatEnabled={false} onConfirm={confirm} onChatAbout={chat} />,
+      <Card confirmEnabled={false} onConfirm={confirm} onChatAbout={chat} />,
     );
     key();
     key(HINT);
@@ -148,7 +150,7 @@ describe('the keyboard is not the card’s while the reader is typing', () => {
     expect(chat).not.toHaveBeenCalled();
   });
 
-  it('leaves the bare key to a focused button, whose own Enter is the same press, but not the chord', async () => {
+  it('leaves the bare key to a focused button and does not give Chat about this the chord', async () => {
     const confirm = vi.fn();
     const chat = vi.fn();
     await mount(<Card onConfirm={confirm} onChatAbout={chat} />);
@@ -159,7 +161,7 @@ describe('the keyboard is not the card’s while the reader is typing', () => {
     key();
     expect(confirm, 'a button’s own Enter answers it, not the card').not.toHaveBeenCalled();
     key(HINT);
-    expect(chat, 'no button answers the chord, so it is the card’s').toHaveBeenCalledTimes(1);
+    expect(chat, 'Chat about this has no shortcut').not.toHaveBeenCalled();
   });
 });
 
@@ -188,7 +190,7 @@ describe('two cards asking at once', () => {
     await act(async () =>
       root?.render(
         <>
-          <Card confirmEnabled={false} chatEnabled={false} onConfirm={first} onChatAbout={first} />
+          <Card confirmEnabled={false} onConfirm={first} onChatAbout={first} />
           <Card onConfirm={second} onChatAbout={second} />
         </>,
       ),
@@ -203,7 +205,7 @@ describe('two cards asking at once', () => {
     const dead = vi.fn();
     const node = await mount(
       <>
-        <Card confirmEnabled={false} chatEnabled={false} onConfirm={dead} onChatAbout={dead} />
+        <Card confirmEnabled={false} onConfirm={dead} onChatAbout={dead} />
         <Card onConfirm={live} onChatAbout={live} />
       </>,
     );

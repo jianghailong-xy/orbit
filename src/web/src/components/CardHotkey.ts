@@ -5,13 +5,10 @@ import { useEffect, useRef, useState } from 'react';
  *
  * WHY ONE MODULE
  * --------------
- * Five cards now take Enter: the approval card, which took it first (`ApprovalPanel`), and the four
- * that ask a two-way question and hand the reply to the composer — the evidence decision, the owner
- * confirmation, the acceptance confirmation and the project settlement. One gesture over one screen
- * deserves one predicate, so what counts as "the reader pressed the card's answer" is decided here
- * and nowhere else: the bare key for the primary answer, the ⌘/Ctrl chord for the second, neither
- * while a field has the keyboard, and the bare key yields to a focused button, whose own Enter is
- * the same press.
+ * Enter confirms the primary action. Chat about this has no shortcut; the approval card's always
+ * allow and the project settlement card's delegation keep their ⌘/Ctrl chord. The same predicate
+ * leaves every key to a focused field and the bare key to a focused button, whose own Enter is the
+ * same press.
  *
  * WHY A CARD CAN STAND DOWN
  * -------------------------
@@ -24,7 +21,7 @@ import { useEffect, useRef, useState } from 'react';
  *
  * The claim is per CARD, not per key: the approval card wants both the bare key and the chord, and
  * a card that claimed twice would never be the only asker. `useCardKeyClaim` is that claim;
- * `useDecisionCardKeys` is it plus the two answers the four cards share.
+ * `useDecisionCardKeys` is it plus the primary confirmation the decision cards share.
  */
 
 /** The modifier's own name, for the hint. The chord is `metaKey || ctrlKey` on every platform, as
@@ -119,49 +116,18 @@ export function useApproveHotkey(active: boolean, onTrigger: () => void, opts?: 
 }
 
 /**
- * The four cards that ask a two-way question: Enter for the first answer, the ⌘/Ctrl chord for the
- * second — the one that hands the reply to the composer.
- *
- * Each enabled flag is that answer's own `disabled`, because the two answers of these cards are not
- * dead together: a settlement card whose project was settled elsewhere keeps `Chat about this` live
- * while its confirm is dark, and the key must follow the button rather than the card.
+ * Enter for a decision card's primary confirmation. Chat about this has no shortcut, so a card
+ * with only that button still enabled holds no keys against another card's confirmation.
  */
 export function useDecisionCardKeys({
   confirmEnabled,
-  chatEnabled,
   onConfirm,
-  onChatAbout,
 }: {
   /** Whether `Confirm done` — or the primary action's own words — could succeed right now. */
   confirmEnabled: boolean;
-  /** Whether the second answer, the one that arms the composer, could. */
-  chatEnabled: boolean;
   onConfirm: () => void;
-  onChatAbout: () => void;
 }): boolean {
-  const confirm = useRef(onConfirm);
-  confirm.current = onConfirm;
-  const chat = useRef(onChatAbout);
-  chat.current = onChatAbout;
-  const owns = useCardKeyClaim(confirmEnabled || chatEnabled);
-  useEffect(() => {
-    if (!owns) return;
-    const onKey = (e: KeyboardEvent): void => {
-      // The chord is asked first: `isCardAnswer` never reads the same event as both, and a chord
-      // whose answer is dead does nothing rather than falling through to the bare key's.
-      if (isCardAnswer(e, true)) {
-        if (!chatEnabled) return;
-        e.preventDefault();
-        chat.current();
-        return;
-      }
-      if (!isCardAnswer(e, false)) return;
-      if (!confirmEnabled) return;
-      e.preventDefault();
-      confirm.current();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [owns, confirmEnabled, chatEnabled]);
+  const owns = useCardKeyClaim(confirmEnabled);
+  useApproveHotkey(owns, onConfirm, { requireMod: false });
   return owns;
 }

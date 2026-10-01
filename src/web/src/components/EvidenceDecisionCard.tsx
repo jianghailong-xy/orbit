@@ -5,7 +5,7 @@ import { api } from '../api';
 import { decisionReceiptAnchor } from '../lib/decisionReceipt';
 import { pendingDecisionsQuery, taskEvidenceQuery } from '../lib/queries';
 import { CardActionButton, CardActions } from './CardAction';
-import { ENTER_HINT, SHORTCUT_HINT, useDecisionCardKeys } from './CardHotkey';
+import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
 // The word this card's second action uses. Imported rather than re-declared, and read inside the
 // component rather than bound at module scope: `OwnerConfirmationCard` reaches this module for
@@ -332,7 +332,6 @@ export function EvidenceDecisionActions({
         </CardActionButton>
         <CardActionButton tone="secondary" disabled={disabled} onClick={onChatAbout}>
           {OWNER_SEND_BACK_ACTION}
-          {keys && !disabled && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
         </CardActionButton>
       </CardActions>
       {/* Under the buttons and not inside the second one's tooltip, for the reason the
@@ -679,15 +678,11 @@ function EvidenceDecisionSlot({
     if (standing.state !== 'DECIDABLE') return;
     onSendBack(standing.row);
   };
-  // What the two buttons carry, and so what the two keys carry: one question with two ways out,
-  // and its answers are dead together — the second one leaves by the composer rather than by a
-  // press here, which changes where the reason is typed and not whether this card can be answered.
+  // Enter follows the confirmation button's liveness. Chat about this leaves by the composer.
   const live = standing.state === 'DECIDABLE' && !answer.isPending && !answer.isSuccess;
   const keys = useDecisionCardKeys({
     confirmEnabled: live,
-    chatEnabled: live,
     onConfirm: confirm,
-    onChatAbout: chat,
   });
   return (
     <EvidenceDecisionCard

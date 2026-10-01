@@ -4048,8 +4048,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       )
       .map((a) => a.id),
   );
-  // The card that owns the ⌘/Ctrl+Enter shortcut is the first one the key could actually reach.
-  const activeApprovalId = approvals.find((a) => answerableApprovalIds.has(a.id))?.id;
+  // Questions submit only through their button, so they must not hold Enter against a later create.
+  const activeApprovalId = approvals.find(
+    (a) => a.toolName !== 'AskUserQuestion' && answerableApprovalIds.has(a.id),
+  )?.id;
   // The same read the pinned strip and the evidence card are drawn from — the same query key, so
   // this shares their cached read and adds no request.
   const pendingDecisions = useQuery({
@@ -8046,7 +8048,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               {/* The live drafts used to render here, after everything. They render inside the
                   transcript now, at the seq the stretch began — see StreamingDraftsCtx. */}
               {!selectedTrashed && approvals.map((a) => (
-                // Only the first (oldest) still-answerable card owns the ⌘/Ctrl+Enter shortcut;
+                // Only the first (oldest) still-answerable approval with a shortcut owns Enter;
                 // once it's decided the next one becomes first, so the key walks the queue in
                 // order — stepping over any card whose question is already over.
                 <ApprovalPanel
