@@ -76,8 +76,9 @@ private struct CircleSwipeRow: ViewModifier {
     @State private var trailingWidth: CGFloat = 0
 
     /// The list's top and bottom row inset, which the row now carries itself so its card can fill
-    /// the cell; the row stands as tall as it did.
-    private static let rowInset: CGFloat = 11
+    /// the cell; the row stands as tall as it did (75.3pt for a session row, measured on an iOS 26.5
+    /// simulator against the system's own inset).
+    private static let rowInset: CGFloat = 15
     private static let diameter: CGFloat = 47
     private static let slot = CGFloat(RowSwipeGeometry.slot)
     private static let gap = CGFloat(RowSwipeGeometry.gap)
@@ -94,6 +95,9 @@ private struct CircleSwipeRow: ViewModifier {
 
     /// Held past the full-swipe point: letting go now runs the first leading action.
     private var armed: Bool { dragStart != nil && geometry.isFullSwipe(offset) }
+
+    /// This row is the list's open one (or, outside a `rowSwipeList`, is slid at all).
+    private var isOpen: Bool { shared.map { $0.openID == id } ?? (offset != 0) }
 
     /// How far the cell reaches past the row on each side — the list's own side insets (16 or 20pt
     /// by device, and the safe area in landscape), which the card and the buttons cover too.
@@ -120,7 +124,10 @@ private struct CircleSwipeRow: ViewModifier {
                 frame = now
             }
             .listRowInsets(.vertical, 0)
-            .listRowSeparator(.hidden, edges: offset != 0 ? .all : [])
+            // The system's swiped row hides the separators either side of it. Keyed to the list's
+            // open row rather than to `offset`: a separator change made alone, mid-drag, was taken up
+            // by the list only some of the time; made in the same update as `openID`, every time.
+            .listRowSeparator(.hidden, edges: isOpen ? .all : [])
             .gesture(SidewaysPan(began: began, moved: moved, ended: ended))
             .onChange(of: shared?.openID) { _, open in
                 if open != id, offset != 0, dragStart == nil { settle(.closed) }
@@ -151,7 +158,7 @@ private struct CircleSwipeRow: ViewModifier {
     }
 
     /// Both sides' buttons, pinned to the cell's edges under the row; a side shows only while the
-    /// row is slid its way. Laid out even then, so its width is known before the first swipe.
+    /// row is slid its way.
     private var buttons: some View {
         HStack(spacing: 0) {
             side(leading, shown: offset > 0)
@@ -165,16 +172,29 @@ private struct CircleSwipeRow: ViewModifier {
     }
 
     /// One side's buttons, left to right, with the gap at either end that `RowSwipeGeometry.openWidth`
-    /// counts.
+    /// counts. Its slots are laid out, hidden, even while the row is shut, so the side's width is
+    /// known before the first swipe; the buttons themselves exist only while the row is slid their
+    /// way, so a shut row offers no stray buttons to VoiceOver or to a tap.
     private func side(_ actions: [RowSwipeAction], shown: Bool) -> some View {
+        slots(actions) { circleFace($0) }
+            .hidden()
+            .accessibilityHidden(true)
+            .overlay {
+                if shown {
+                    slots(actions) { circle($0) }
+                        .opacity(min(1, abs(offset) / Self.fadeIn))
+                        .allowsHitTesting(dragStart == nil)
+                }
+            }
+    }
+
+    private func slots<Slot: View>(_ actions: [RowSwipeAction],
+                                   @ViewBuilder _ slot: @escaping (RowSwipeAction) -> Slot) -> some View {
         HStack(spacing: Self.gap) {
-            ForEach(actions) { circle($0) }
+            ForEach(actions) { slot($0) }
         }
         .padding(.horizontal, Self.gap)
         .fixedSize()
-        .opacity(shown ? min(1, abs(offset) / Self.fadeIn) : 0)
-        .allowsHitTesting(shown && dragStart == nil)
-        .accessibilityHidden(!shown)
     }
 
     private func circle(_ action: RowSwipeAction) -> some View {
@@ -185,26 +205,31 @@ private struct CircleSwipeRow: ViewModifier {
             settle(.closed)
             action.perform()
         } label: {
-            VStack(spacing: 4) {
-                Image(systemName: action.systemImage)
-                    .symbolVariant(.fill)
-                    .font(.orbitDiscGlyph)
-                    .foregroundStyle(.white)
-                    .frame(width: Self.diameter, height: Self.diameter)
-                    .background(action.tint, in: Circle())
-                    .scaleEffect(fullSwipeTarget ? 1.12 : 1)
-                Text(action.title)
-                    .font(.orbitLabel)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            .frame(minWidth: Self.slot)
+            circleFace(action, grown: fullSwipeTarget)
         }
         .buttonStyle(CirclePress())
         .disabled(!action.isEnabled)
         .accessibilityLabel(action.title)
         .opacity(armed && !fullSwipeTarget ? 0 : 1)
         .animation(.snappy(duration: 0.2), value: armed)
+    }
+
+    /// A button's face: the circle of its colour with its symbol, over its title.
+    private func circleFace(_ action: RowSwipeAction, grown: Bool = false) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: action.systemImage)
+                .symbolVariant(.fill)
+                .font(.orbitSwipeGlyph)
+                .foregroundStyle(.white)
+                .frame(width: Self.diameter, height: Self.diameter)
+                .background(action.tint, in: Circle())
+                .scaleEffect(grown ? 1.12 : 1)
+            Text(action.title)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(minWidth: Self.slot)
     }
 
     private func began() {

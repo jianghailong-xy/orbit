@@ -113,6 +113,15 @@ private struct SessionRowActions: ViewModifier {
                               isEnabled: canComplete) { model.completeSession(session.id) }
     }
 
+    private var renameButton: some View {
+        Button {
+            renameDraft = session.title ?? ""
+            renaming = true
+        } label: {
+            Label("Rename…", systemImage: "pencil")
+        }
+    }
+
     private var pinAction: RowSwipeAction {
         RowSwipeAction(title: isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash" : "pin",
                        tint: .indigo) { model.setPinned(session, pinned: !isPinned) }
@@ -135,15 +144,6 @@ private struct SessionRowActions: ViewModifier {
         }
         .tint(action.role == .destructive ? nil : action.tint)
         .disabled(!action.isEnabled)
-    }
-
-    private var renameButton: some View {
-        Button {
-            renameDraft = session.title ?? ""
-            renaming = true
-        } label: {
-            Label("Rename…", systemImage: "pencil")
-        }
     }
 }
 

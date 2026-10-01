@@ -46,10 +46,14 @@ final class SwipeShotTests: XCTestCase {
         let app = launch("open")
         shot("open-1-rest")
         cells(app, "open-rest")
+        tree(app, "open-rest")
+        note("at rest: Complete buttons = \(app.buttons.matching(NSPredicate(format: "label == %@", "Complete")).count), Delete buttons = \(app.buttons.matching(NSPredicate(format: "label == %@", "Delete")).count)")
         row(app, target).swipeRight(); settle()
         shot("open-2-right")
         frames(app, ["Complete", "Pin"], "open-right")
         cells(app, "open-right")
+        tree(app, "open-right")
+        note("open right: Complete buttons = \(app.buttons.matching(NSPredicate(format: "label == %@", "Complete")).count), Delete buttons = \(app.buttons.matching(NSPredicate(format: "label == %@", "Delete")).count)")
         row(app, first).tap(); settle()
         shot("open-3-closed-by-tap")
         row(app, target).swipeLeft(); settle()
@@ -118,7 +122,7 @@ final class SwipeShotTests: XCTestCase {
         row(app, target).swipeLeft(); settle()
         row(app, first).swipeLeft(); settle()
         shot("three-5-second-row-opened")
-        note("after opening s1 with s3 open: Delete buttons on screen = \(app.buttons.matching(identifier: "Delete").count)")
+        note("after opening s1 with s3 open: Delete buttons on screen = \(app.buttons.matching(NSPredicate(format: "label == %@", "Delete")).count)")
 
         row(app, first).tap(); settle()
         row(app, target).swipeUp(); settle()
@@ -129,7 +133,28 @@ final class SwipeShotTests: XCTestCase {
         app.terminate()
     }
 
+    /// Open and shut rows one after another, each way, so the separators either side of a swiped
+    /// row can be checked on every one of them.
+    func test5Separators() {
+        let app = launch("open")
+        let titles = [first, second, target, "设置页整体改版（iOS/macOS + web）", "判断：设置页改版的下一步"]
+        for (i, title) in titles.enumerated() {
+            row(app, title).swipeLeft(); settle()
+            shot("sep-\(i)-left")
+            row(app, title == first ? second : first).tap(); settle()
+            row(app, title).swipeRight(); settle()
+            shot("sep-\(i)-right")
+            row(app, title == first ? second : first).tap(); settle()
+        }
+        cells(app, "sep-end")
+        app.terminate()
+    }
+
     // MARK: helpers
+
+    private func tree(_ app: XCUIApplication, _ name: String) {
+        write(app.debugDescription, "tree-\(name).txt")
+    }
 
     private func launch(_ variant: String, dark: Bool = true) -> XCUIApplication {
         let app = XCUIApplication()
