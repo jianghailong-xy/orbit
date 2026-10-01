@@ -467,7 +467,7 @@ function NavigationProbe(): null {
 }
 
 async function mount(path: string): Promise<void> {
-  const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
+  const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const nextContainer = document.createElement('div');
   const nextRoot = createRoot(nextContainer);
   client = nextClient;

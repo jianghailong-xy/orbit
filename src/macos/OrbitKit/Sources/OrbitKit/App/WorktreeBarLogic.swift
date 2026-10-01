@@ -21,14 +21,15 @@ public enum WorktreeBarLogic {
     /// also keep the bar visible so their outcome text has somewhere to land even if the runner
     /// reports an empty diff.
     public static func mode(isolationStatus: String?, branch: String?, changedFileCount: Int,
-                            mergeStatus: String? = nil, commitStatus: String? = nil) -> Mode {
+                            mergeStatus: String? = nil, commitStatus: String? = nil,
+                            hasMergeRecovery: Bool = false) -> Mode {
         guard let iso = isolationStatus else { return .hidden }
         if iso == "shared-nogit" { return .notIsolated }
         guard iso == "worktree", branch != nil else { return .hidden }
         let actionableStatus =
             mergeStatus == "pending" || mergeStatus == "conflict" || mergeStatus == "error" ||
             commitStatus == "pending" || commitStatus == "error"
-        return changedFileCount > 0 || actionableStatus ? .worktree : .hidden
+        return changedFileCount > 0 || actionableStatus || hasMergeRecovery ? .worktree : .hidden
     }
 
     /// The primary action offered on the bar.

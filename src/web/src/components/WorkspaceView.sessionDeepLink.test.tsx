@@ -298,6 +298,8 @@ describe('a session opened at one record', () => {
       expect(row(47)?.textContent).toContain('the newest answer');
       expect(streams().filter((es) => !es.closed)).toHaveLength(1);
     });
+    await pastStreamDebounce();
+    expect(streams().filter((es) => !es.closed)).toHaveLength(1);
     // The stream resumes right after the last event the pages brought in.
     expect(streams()[0].url).toContain('sinceSeq=47');
     expect(mounted().querySelector('button[aria-label="Jump to latest"]')).toBeNull();

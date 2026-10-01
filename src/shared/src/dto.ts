@@ -1190,6 +1190,9 @@ export interface MergeCommand {
    *  verified one carry no test evidence. Absent for work that is not under convergence
    *  management, which is almost every merge; the tip is then whatever the branch says. */
   requiredSourceSha?: string;
+  recoveryAction?: import('./mergeRecovery').MergeRecoveryAction;
+  recovery?: import('./mergeRecovery').MergeRecovery;
+  check?: { command: string; timeoutSeconds: number };
 }
 
 /** Control plane → runner: commit a live session's uncommitted worktree changes onto its
@@ -1894,6 +1897,7 @@ export interface SessionMergeResultRequest {
   /** Paths git reported as conflicting, for `status: 'conflict'`. */
   conflicts?: string[];
   message?: string;
+  recovery?: import('./mergeRecovery').MergeRecovery;
 }
 
 /**

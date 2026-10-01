@@ -333,6 +333,80 @@ func TestCodexAutomaticApprovalAnswersOrbitMCPConsentUnderAuto(t *testing.T) {
 	}
 }
 
+func TestCodexAutoApprovalAllowsRoutineWorkspaceRequests(t *testing.T) {
+	auto := codexAutoApprovalContextFor("/repo", "/tmp/uploads/session-1")
+	for _, tc := range []struct {
+		name    string
+		request codexApprovalRequest
+		params  map[string]interface{}
+	}{
+		{
+			name:    "local command",
+			request: codexApprovalRequest{},
+			params:  map[string]interface{}{"command": "go test ./...", "cwd": "/repo"},
+		},
+		{
+			name:    "workspace patch",
+			request: codexApprovalRequest{fileChange: true},
+			params:  map[string]interface{}{"reason": "update the implementation"},
+		},
+		{
+			name:    "temporary cleanup",
+			request: codexApprovalRequest{},
+			params: map[string]interface{}{
+				"command": "SMOKE_DIR=/tmp/uploads/session-1/smoke; rm -rf \"$SMOKE_DIR\"",
+				"cwd":     "/repo",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			allowed, decided := codexAutoApproval(tc.request, tc.params, auto)
+			if !decided || !allowed {
+				t.Fatalf("codexAutoApproval = (%v, %v), want allowed without asking", allowed, decided)
+			}
+		})
+	}
+}
+
+func TestCodexAutoApprovalLeavesBoundariesAndHighRiskRequestsForOwner(t *testing.T) {
+	auto := codexAutoApprovalContextFor("/repo", "/tmp/uploads/session-1")
+	for _, tc := range []struct {
+		name   string
+		params map[string]interface{}
+	}{
+		{
+			name:   "outside workspace",
+			params: map[string]interface{}{"command": "ls", "cwd": "/etc"},
+		},
+		{
+			name:   "network overlay",
+			params: map[string]interface{}{"command": "npm install", "cwd": "/repo", "additionalPermissions": map[string]interface{}{"network": map[string]interface{}{"enabled": true}}},
+		},
+		{
+			name:   "network command",
+			params: map[string]interface{}{"command": "curl https://example.com", "cwd": "/repo"},
+		},
+		{
+			name:   "extra write root",
+			params: map[string]interface{}{"command": "go test ./...", "cwd": "/repo", "grantRoot": "/tmp"},
+		},
+		{
+			name:   "unscoped recursive delete",
+			params: map[string]interface{}{"command": "rm -rf /", "cwd": "/repo"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			allowed, decided := codexAutoApproval(codexApprovalRequest{}, tc.params, auto)
+			if decided || allowed {
+				t.Fatalf("codexAutoApproval = (%v, %v), want approval card", allowed, decided)
+			}
+		})
+	}
+	if allowed, decided := codexAutoApproval(codexApprovalRequest{mcpTool: true, server: "acme"}, nil, auto); decided || allowed {
+		t.Fatalf("third-party MCP = (%v, %v), want approval card", allowed, decided)
+	}
+}
+
 // A cancelled session must not leave an approval poll running, and must not approve.
 func TestBridgeCodexApprovalFailsClosedOnCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

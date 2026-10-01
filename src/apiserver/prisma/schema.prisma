@@ -1245,6 +1245,8 @@ model Session {
   // (mergeError carries git's message / the failed precondition). All null until asked.
   mergeStatus          String?   @map("merge_status")
   mergeError           String?   @map("merge_error")
+  mergeRecovery        Json?     @map("merge_recovery")
+  mergeRecoveryAction  String?   @map("merge_recovery_action")
   mergeRequestedAt     DateTime? @map("merge_requested_at")
   // Fresh for every queued attempt. Runner results must echo this UUID, so a
   // delayed result from an attempt cleared by Resume cannot complete a later one.

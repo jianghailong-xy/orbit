@@ -307,6 +307,11 @@ describe('a runner’s page, laid out as web.png', () => {
     });
   });
 
+  it('keeps the disk card when Default is spent but another Claude account has room', async () => {
+    await mount(machine('Claude Default spent but another signed-in account has room'));
+    expect(cards().map(({ title }) => title)).toEqual(['Disk 92% full']);
+  });
+
   it('offers each card’s one action, and each does what it says', async () => {
     const lab = machine('everything at once');
     const { sent } = await mount(lab);

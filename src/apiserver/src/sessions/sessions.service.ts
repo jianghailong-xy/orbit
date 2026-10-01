@@ -1,3 +1,4 @@
+import { SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryReady, type MergeRecoveryAction } from '@orbit/shared';
 import {
   BadRequestException,
   ConflictException,
@@ -182,6 +183,7 @@ import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import {
   accountLabel,
   accountSwitchNotice,
+  accountBeforeDispatch,
   automaticAccount,
   runAccount,
   workspaceLeavesAccountToOrbit,
@@ -582,7 +584,7 @@ function automaticAccountOnSwitch(
 
 /** Whether `runner` carries a conversation from one of its `engine` accounts to another. */
 function runnerCarriesAccounts(runner: { capabilities: string[] }, engine: AccountEngine): boolean {
-  return runner.capabilities.includes(engine === AgentProvider.CODEX ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1);
+  return (runner.capabilities ?? []).includes(engine === AgentProvider.CODEX ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1);
 }
 
 /** The account columns a provider switch writes (accountOnProviderSwitch); empty writes none. */
@@ -3047,7 +3049,7 @@ export class SessionsService {
       include: {
         workspace: true,
         assignedRunner: {
-          select: { id: true, name: true, status: true, lastHeartbeatAt: true },
+          select: { id: true, name: true, status: true, lastHeartbeatAt: true, capabilities: true },
         },
         tagLinks: {
           include: {
@@ -3113,6 +3115,7 @@ export class SessionsService {
       .sort((a, b) => Number(b.isSystem) - Number(a.isSystem) || a.position - b.position);
     return withSessionCapabilities({
       ...rest,
+      mergeRecoverySupported: session.assignedRunner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1) ?? false,
       tags,
       // Both shapes of the same fact, because the two faces of the API have always differed here:
       // the row's `runningBgJobs`/`runningBgShells` arrays ride along in the spread above, and a
@@ -4382,6 +4385,58 @@ export class SessionsService {
   }
 
   /** Enqueue a user message for a live or still-queued (PENDING) session. */
+  /**
+   * On Automatic, the account an idle session's next message should not reach: one its runner's own
+   * snapshot already reports spent (accountBeforeDispatch). The session moves to one with room and a
+   * reload is queued ahead of the message — re-spawning the engine there with the conversation carried
+   * across, as picking the account in the menu does (switchAccount) — instead of the message failing on
+   * the limit first and being sent again after that failure's move. The columns to write, for the
+   * caller's one Session write; null when nothing moves.
+   *
+   * Only an idle session (AWAITING_INPUT): a turn in flight finishes or fails where it is, and a
+   * failure there makes the move itself.
+   */
+  private async accountMoveBeforeTurn(
+    tx: Prisma.TransactionClient,
+    session: Session,
+  ): Promise<Prisma.SessionUncheckedUpdateInput | null> {
+    if (session.status !== RunStatus.AWAITING_INPUT || !session.assignedRunnerId) return null;
+    const engine: AccountEngine | null =
+      session.provider === AgentProvider.CODEX || session.provider === AgentProvider.CLAUDE ? session.provider : null;
+    if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin)) return null;
+    const runner = await tx.runner.findUnique({
+      where: { id: session.assignedRunnerId },
+      select: { engines: true, planUsage: true, capabilities: true },
+    });
+    if (!runner || !runnerCarriesAccounts(runner, engine)) return null;
+    const workspace = session.workspaceId
+      ? await tx.workspace.findUnique({
+          where: { id: session.workspaceId },
+          select: { env: true, codexAccount: true, claudeAccount: true },
+        })
+      : null;
+    const codex = engine === AgentProvider.CODEX;
+    const move = accountBeforeDispatch(
+      engine,
+      { account: codex ? session.codexAccount : session.claudeAccount, pinned: codex ? session.codexAccountPinned : session.claudeAccountPinned },
+      workspace,
+      runner.engines,
+      runner.planUsage,
+      new Date(),
+    );
+    if (!move) return null;
+    await this.insertTurnLocked(tx, session.id, {
+      kind: 'reload',
+      content: JSON.stringify({ provider: engine }),
+      clientTurnId: randomUUID(),
+    });
+    return {
+      ...(codex ? { codexAccount: move.to } : { claudeAccount: move.to }),
+      // Said on the `resumed` that reload earns, unless another line is already owed.
+      ...(session.poolSwitchNotice ? {} : { poolSwitchNotice: accountSwitchNotice(engine, move, runner.engines) }),
+    };
+  }
+
   async createTurn(
     ownerId: string,
     id: string,
@@ -4637,6 +4692,10 @@ export class SessionsService {
         // rolls the charge back with the turn it was for.
         await opts?.participateSendTransaction?.(tx);
       }
+      // On Automatic, an idle session whose account its runner's own snapshot already reports spent
+      // moves to one with room before this message reaches it, a reload going ahead of it
+      // (accountMoveBeforeTurn). Its columns ride on the one Session write below (lock-order I3).
+      const accountMove = kind === 'message' ? await this.accountMoveBeforeTurn(tx, session) : null;
       // This is the authoritative queue placement: it is read before this row exists and while
       // the Session lock prevents dequeue/complete from changing its predecessors underneath it.
       // A steer takes precedence because it joins the running turn instead of waiting behind it.
@@ -4670,6 +4729,7 @@ export class SessionsService {
           // their back would be a second, unasked-for turn) or from the sweeper itself
           // (the retry has now fired). Both routes into a new turn pass through here.
           retryAt: null,
+          ...(accountMove ?? {}),
           ...(session.mergeStatus === 'pending' && !mergeExecuting
             ? {
                 mergeStatus: null,
@@ -5392,8 +5452,11 @@ export class SessionsService {
     id: string,
     targetBranch?: string,
     waitSeconds?: number,
-    options: { rememberTarget?: boolean } = {},
+    options: { rememberTarget?: boolean; recoveryAction?: MergeRecoveryAction; previewId?: string } = {},
   ) {
+    if (options.recoveryAction && !['preview', 'apply', 'sync-local'].includes(options.recoveryAction)) {
+      throw new BadRequestException('invalid merge recovery action');
+    }
     const wait = SessionsService.mergeWaitSeconds(waitSeconds);
     const target = targetBranch?.trim() || null;
     // The operation this call is about, for a caller that asked to wait on it. Assigned inside the
@@ -5438,6 +5501,29 @@ export class SessionsService {
       ) {
         throw new ConflictException('wait for the current turn to finish before merging');
       }
+      if (options.recoveryAction) {
+        const runner = await tx.runner.findUnique({
+          where: { id: session.assignedRunnerId }, select: { capabilities: true },
+        });
+        if (!runner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1)) {
+          throw new ConflictException('upgrade this runner to check and repair target branches');
+        }
+        const recovery = readMergeRecovery(session.mergeRecovery);
+        if (options.recoveryAction !== 'preview') {
+          if (!recovery || !options.previewId || recovery.previewId !== options.previewId ||
+              (target && recovery.targetBranch !== target)) {
+            throw new ConflictException('the recovery preview is no longer current; check again');
+          }
+          const retry = session.mergeRecoveryAction === 'apply' &&
+            ['PUSH_FAILED', 'REMOTE_NOT_VERIFIED'].includes(recovery.code);
+          if (options.recoveryAction === 'apply' && !mergeRecoveryReady(recovery) && !retry) {
+            throw new ConflictException('review a ready candidate before applying it');
+          }
+          if (options.recoveryAction === 'sync-local' && recovery.code !== 'LOCAL_SYNC_PENDING') {
+            throw new ConflictException('no landed candidate is waiting for local sync');
+          }
+        }
+      }
       // `[K6]` §7, the dispatch gate: everything that can be decided before a repository is
       // touched. Two questions, and the ORDER is the point.
       //
@@ -5460,8 +5546,8 @@ export class SessionsService {
         taskId: session.taskId,
         targetBranch: target ?? session.mergeTarget ?? '',
       });
-      if (gate.decision === 'ALREADY_LANDED') return { alreadyLanded: gate };
-      if (gate.decision !== 'ALLOWED') {
+      if (gate.decision === 'ALREADY_LANDED' && !options.recoveryAction) return { alreadyLanded: gate };
+      if (gate.decision !== 'ALLOWED' && gate.decision !== 'ALREADY_LANDED' && options.recoveryAction !== 'sync-local') {
         throw new ConflictException(`${gate.decision}: ${gate.detail}`);
       }
 
@@ -5470,7 +5556,9 @@ export class SessionsService {
         where: { id },
         data: {
           mergeStatus: 'pending',
-          mergeTarget: target,
+          mergeTarget: target ?? (options.recoveryAction ? readMergeRecovery(session.mergeRecovery)?.targetBranch ?? null : null),
+          mergeRecoveryAction: options.recoveryAction ?? null,
+          ...(!options.recoveryAction ? { mergeRecovery: Prisma.DbNull } : {}),
           mergeRequestedAt: new Date(),
           mergeOperationId: operationId,
           // `[K6]` §7: which checkpoint THIS operation was authorised for, persisted with the
@@ -5478,12 +5566,14 @@ export class SessionsService {
           // commit against this rather than against anything the runner sent — a gate that only
           // holds when the client cooperates is not a gate. Null for unmanaged work, which is
           // almost every merge, and which is then unaffected by all of this.
-          mergeCheckpointId: gate.checkpointId,
+          mergeCheckpointId: options.recoveryAction === 'apply' || options.recoveryAction === 'sync-local' || gate.decision !== 'ALLOWED' ? session.mergeCheckpointId : gate.checkpointId,
           mergeOperationOwner: null,
           mergeError: null,
-          mergedAt: null,
-          mergedSourceSha: null,
-          branchMerged: null,
+          ...(!['preview', 'sync-local'].includes(options.recoveryAction ?? '') ? {
+            mergedAt: null,
+            mergedSourceSha: null,
+            branchMerged: null,
+          } : {}),
         },
       });
       return session.workspaceId;

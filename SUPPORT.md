@@ -18,6 +18,9 @@ Repository issues and Discussions are not an emergency or guaranteed-response su
 [community guide](COMMUNITY.md#maintainer-response-convention) for volunteer response targets. Operators
 should maintain their own backups, monitoring, rollback procedures, and incident contacts.
 
+For runner enrollment, offline status, or runtime failures, follow the
+[runner troubleshooting decision tree](docs/runner-troubleshooting.md) before filing a report.
+
 ## Useful diagnostic information
 
 When reporting a problem, include only non-sensitive information:

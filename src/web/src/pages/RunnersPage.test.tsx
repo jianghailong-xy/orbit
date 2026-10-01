@@ -147,6 +147,11 @@ describe('the Runners list’s third line', () => {
     expect(line?.textContent).toBe('Claude signed out · app checkout stuck in a rebase');
   });
 
+  it('keeps the disk warning when Default is spent but another Claude account has room', async () => {
+    await mount([machine('Claude Default spent but another signed-in account has room', 'runner-multi-account')]);
+    expect(card('lab').querySelector('.runner-attention')?.textContent).toBe('Disk 92% full');
+  });
+
   it('stays away when nothing on the machine depends on what is wrong with it', async () => {
     // Claude is signed out on workstation, and none of its workspaces run on Claude.
     await mount([WORKSTATION]);

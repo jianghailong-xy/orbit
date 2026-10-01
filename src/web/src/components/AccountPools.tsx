@@ -807,7 +807,7 @@ export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: 
       {engine === 'codex' ? (
         <div className="np-field">
           <span className="np-field-l">Who can use it</span>
-          <Radio.Group value={who} onChange={(e) => setWho(e.target.value as 'me' | 'people')}>
+          <Radio.Group name="new-pool-who" value={who} onChange={(e) => setWho(e.target.value as 'me' | 'people')}>
             <Radio value="me">Just me</Radio>
             <Radio value="people">Me and people I add</Radio>
           </Radio.Group>

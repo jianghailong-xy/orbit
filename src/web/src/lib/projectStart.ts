@@ -468,6 +468,11 @@ export function criteriaChangeSummary(changes: {
 export const confirmedChangesKey = (projectId: string, digest: string) =>
   ['project', projectId, 'confirmed-changes', digest] as const;
 
+/** The current window's receipt summary, kept on the project so the transcript reader can observe
+ * it while the confirmation digest changes from the old seal to the one just confirmed. */
+export const confirmedChangesProjectKey = (projectId: string) =>
+  ['project', projectId, 'confirmed-changes'] as const;
+
 // ── The write ────────────────────────────────────────────────────────────────────────────────
 
 /**

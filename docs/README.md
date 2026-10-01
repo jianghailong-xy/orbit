@@ -17,6 +17,9 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 | Collect a design-partner story | [Design partner case-study template](design-partner-case-study-template.md) |
 | Follow project direction | [Public roadmap](../ROADMAP.md) |
 | Run Orbit on your own server | [Self-hosting](self-hosting.md) |
+| Complete the first task on a fresh host | [Clean-machine first-run checklist](first-run.md) |
+| Find deployment settings and defaults | [Configuration reference](configuration.md) |
+| Diagnose runner enrollment, heartbeat, or runtime failures | [Runner troubleshooting](runner-troubleshooting.md) |
 | Publish or upgrade a release | [Release process](release-process.md) |
 | Verify a fresh install and runner heartbeat | [Clean-host smoke record](evidence/clean-install-2026-09-29.md) |
 | Understand the system and trust boundaries | [Architecture overview](architecture.md) |
@@ -41,6 +44,11 @@ This is the entry point for Orbit's user, operator, contributor, and maintainer 
 - [Design partner case-study template](design-partner-case-study-template.md) — consent, evidence, quote, and
   publication fields for a fact-checked partner story.
 - [Self-hosting](self-hosting.md) — Docker Compose, secrets, runners, TLS, upgrades, and production checks.
+- [Clean-machine first-run checklist](first-run.md) — prerequisites, bootstrap, enrollment, one completed task,
+  and a reusable evidence table.
+- [Configuration reference](configuration.md) — server, backup, and runner settings with defaults and change procedures.
+- [Runner troubleshooting](runner-troubleshooting.md) — enrollment, heartbeat/connectivity, runtime authentication,
+  and safe support evidence.
 - [Runner CLI and automation](runner-cli.md) — task/session commands, service tokens, and authorization
   boundaries.
 - [Postgres backup and restore](postgres-backup-restore.md) — base backups, WAL archiving, point-in-time

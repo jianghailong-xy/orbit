@@ -11,6 +11,7 @@ import {
   acceptanceConfirmationKey,
   type StandardSetConfirmationStanding,
 } from '../lib/acceptanceConfirmation';
+import { encodeId } from '../lib/idCodec';
 import {
   ACCEPTANCE_PHONE_QUERY,
   CRITERIA_PREVIEW,
@@ -730,14 +731,17 @@ describe('ProjectAcceptanceCard on what the work has done', () => {
     const reasons = unmetReasons(row);
 
     // EVERY named task is a link, not just the first: knowing which task is holding a criterion
-    // open and having no way to open it is the whole of what this line was failing to do.
+    // open and having no way to open it is the whole of what this line was failing to do. Each opens
+    // over this project's page, as its row in the task list does (lib/projectTaskRoute) — not over
+    // the Tasks page, which lists only the tasks outside projects.
+    const at = (taskId: string) => `href="/projects/${encodeId(PROJECT)}/tasks/${taskId}"`;
     const named = (row.match(/class="acceptance-held-up"/g) ?? []).length;
-    const links = (row.match(/<a [^>]*href="\/tasks\/[^"]+"/g) ?? []).length;
+    const links = (row.match(/<a [^>]*href="\/projects\/[^/"]+\/tasks\/[^"]+"/g) ?? []).length;
     expect(named).toBe(4);
     expect(links).toBe(named);
-    expect(reasons[0]).toContain('href="/tasks/t-1"');
-    expect(reasons[0]).toContain('href="/tasks/t-2"');
-    expect(reasons[1]).toContain('href="/tasks/t-3"');
+    expect(reasons[0]).toContain(at('t-1'));
+    expect(reasons[0]).toContain(at('t-2'));
+    expect(reasons[1]).toContain(at('t-3'));
 
     // What each one needs, as a sentence. The code is a completion-refusal token and reads as
     // one; nobody opening a project page agreed to learn that vocabulary.
