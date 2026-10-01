@@ -9,8 +9,30 @@ struct MergeRecoveryView: View {
     let message: String?
     let supported: Bool
     let busy: Bool
+    /// The open sections, by key. Kept here, not in each `DisclosureGroup`: `body` draws the card twice,
+    /// whole and scrolling, and the two have to agree — a section holding its own state would be shut
+    /// in the scrolling copy the moment opening it tipped the card over.
+    @State private var opened: [String: Bool] = [:]
+
+    /// A ready candidate — its commits, its diff, three actions — is taller than the band's share on a
+    /// phone, more so with the keyboard up. Past this the card scrolls inside, capped as the Background
+    /// processes list is…
+    private static let heightCap: CGFloat = 320
+    /// …and however little room is left, its title and the line under it stay on screen.
+    private static let heightFloor: CGFloat = 60
 
     var body: some View {
+        // Natural height where the band has room; where it hasn't, scroll inside rather than draw past
+        // the bar — over the transcript above it and under the composer below.
+        ViewThatFits(in: .vertical) {
+            card
+            ScrollView { card }
+                .frame(minHeight: Self.heightFloor, maxHeight: Self.heightCap)
+        }
+        .background(Color.orange.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var card: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(recovery.title).font(.orbitLabel.weight(.semibold))
             if let checkedAt = recovery.checkedAt { Text("Checked at \(checkedAt)").foregroundStyle(.secondary) }
@@ -21,21 +43,25 @@ struct MergeRecoveryView: View {
                 Text("Local \(recovery.targetBranch) has extra commits that are not on origin/\(recovery.targetBranch). Review them before continuing this merge.")
             }
             if let message, !recovery.ready {
-                DisclosureGroup("Details") { Text(message).textSelection(.enabled) }
+                DisclosureGroup("Details", isExpanded: isOpen("details")) { Text(message).textSelection(.enabled) }
             }
             if let commits = recovery.localCommits {
-                DisclosureGroup("Local-only commits (\(commits.count)) — included in the push") {
+                DisclosureGroup("Local-only commits (\(commits.count)) — included in the push",
+                                isExpanded: isOpen("local")) {
                     commitsView(commits)
                 }
             }
             if let commits = recovery.remoteCommits {
-                DisclosureGroup("Remote-only commits (\(commits.count))") { commitsView(commits) }
+                DisclosureGroup("Remote-only commits (\(commits.count))", isExpanded: isOpen("remote")) {
+                    commitsView(commits)
+                }
             }
             if let conflicts = recovery.conflicts, !conflicts.isEmpty {
                 Text(conflicts.joined(separator: "\n")).textSelection(.enabled)
             }
             if let patch = recovery.patch, recovery.candidateSha != nil {
-                DisclosureGroup("Complete candidate diff against origin/\(recovery.targetBranch)") {
+                DisclosureGroup("Complete candidate diff against origin/\(recovery.targetBranch)",
+                                isExpanded: isOpen("diff")) {
                     ScrollView([.horizontal, .vertical]) {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             ForEach(Array(patch.components(separatedBy: "\n").enumerated()), id: \.offset) { line in
@@ -49,7 +75,7 @@ struct MergeRecoveryView: View {
                 Text(check.status == "unconfigured" ? "Git preview only; no merge check is configured."
                      : check.status == "passed" ? "Configured merge check passed." : "Configured merge check failed.")
                 if let output = check.output, !output.isEmpty {
-                    DisclosureGroup("Check output") { Text(output).textSelection(.enabled) }
+                    DisclosureGroup("Check output", isExpanded: isOpen("check")) { Text(output).textSelection(.enabled) }
                 }
             }
             if recovery.ready {
@@ -59,7 +85,7 @@ struct MergeRecoveryView: View {
                 Text("The remote contains the reviewed candidate. Save blocking local edits before syncing; this action only updates this machine.")
             }
             if let branch = recovery.repairBranch {
-                DisclosureGroup("Saved repair branch and location") {
+                DisclosureGroup("Saved repair branch and location", isExpanded: isOpen("repair")) {
                     Text(branch).textSelection(.enabled)
                     if let path = recovery.repairWorktree { Text(path).textSelection(.enabled) }
                 }
@@ -83,7 +109,11 @@ struct MergeRecoveryView: View {
         .font(.orbitLabel)
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.orange.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    /// Whether the section `key` is open — see `opened`.
+    private func isOpen(_ key: String) -> Binding<Bool> {
+        Binding(get: { opened[key] ?? false }, set: { opened[key] = $0 })
     }
 
     private func commitsView(_ commits: [MergeRecoveryCommit]) -> some View {
