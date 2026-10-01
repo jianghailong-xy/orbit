@@ -394,6 +394,42 @@ function parseEngineLogLine(line: string): EngineLogLine | undefined {
   return m ? { level: m[2], source: m[3], text: m[4] } : undefined;
 }
 
+type ToolFailureSummary = { tool: string; path?: string; reason: string };
+
+// Tool failures arrive on stderr because the runner could not persist a normal tool result. Keep
+// the first screen useful by extracting the small part a reader needs, while leaving the complete
+// line (including any continuation lines) behind the disclosure control.
+function parseToolFailureSummary(message: string): ToolFailureSummary | undefined {
+  const clean = stripAnsi(message);
+  const text = parseEngineLogLine(clean)?.text ?? clean;
+  const match = /(?:^|\n)error=([\w.-]+)\s+verification failed:\s*([\s\S]*)/i.exec(text);
+  if (!match) return undefined;
+
+  const detail = match[2].trim();
+  const pathMatch = /(?:^|\s)(\/[^\s:]*\/worktrees\/[^/\s]+\/([^:\n]+?))(?::|\n|$)/.exec(detail);
+  const path = pathMatch?.[2]?.trim() || undefined;
+  const lower = detail.toLowerCase();
+  let reason: string;
+  if (lower.startsWith('invalid patch:')) {
+    const tail = detail
+      .slice('invalid patch:'.length)
+      .replace(pathMatch?.[1] ?? '', '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/[.:]+$/, '');
+    reason = tail ? `Invalid patch: ${tail}` : 'Invalid patch';
+  } else if (lower.startsWith('failed to find expected lines')) {
+    reason = 'Expected lines not found';
+  } else {
+    reason = 'Patch verification failed';
+  }
+  return { tool: match[1], path, reason };
+}
+
+function canStartStderrContinuation(line: string): boolean {
+  return /verification failed:/i.test(line) && line.trimEnd().endsWith(':');
+}
+
 // A bare URL in an engine's log line ("See the sandbox prerequisites: https://…") is advice you
 // are meant to follow, so make it followable. Only http(s) is linked, and the line is rendered as
 // plain text otherwise — a log line is not Markdown, and running it through a Markdown renderer
@@ -502,15 +538,32 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   // (rather than per sub-workspace) is deliberate — one process writes the stderr, and which tool
   // call happened to be open when it flushed is incidental.
   const stderrSeen = new Map<string, ErrorNode>();
+  let lastStderr: { node: ErrorNode; seq: number; continuing: boolean } | undefined;
   const engineStderr = (parentId: string | undefined, seq: number, line: string) => {
+    // apply_patch writes the explanation over several adjacent stderr events. Keep those lines in
+    // one card while a continuation is expected; a timestamp starts a new logger record and stops
+    // the merge. Only durable sequence numbers are eligible, so live events with seq 0 stay apart.
+    if (
+      lastStderr &&
+      seq > 0 &&
+      lastStderr.seq + 1 === seq &&
+      lastStderr.continuing &&
+      !LEADING_TIMESTAMP.test(line)
+    ) {
+      lastStderr.node.message += `\n${line}`;
+      lastStderr.seq = seq;
+      return;
+    }
     const key = line.replace(LEADING_TIMESTAMP, '');
     const prev = stderrSeen.get(key);
     if (prev) {
       prev.repeats = (prev.repeats ?? 1) + 1;
+      lastStderr = { node: prev, seq, continuing: canStartStderrContinuation(line) };
       return;
     }
     const node: ErrorNode = { kind: 'error', seq, message: line };
     stderrSeen.set(key, node);
+    lastStderr = { node, seq, continuing: canStartStderrContinuation(line) };
     into(parentId).push(node);
   };
 
@@ -533,6 +586,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   for (const ev of events) {
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
+    if (ev.type !== 'system') lastStderr = undefined;
     switch (ev.type) {
       case 'user': {
         outageOver();
@@ -734,6 +788,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
       case 'system':
         // A deliberate heads-up from the runner (see NoticeNode) — the turn itself was fine.
         if (p.notice) {
+          lastStderr = undefined;
           into(parent).push({ kind: 'notice', seq: ev.seq, message: String(p.notice) });
           break;
         }
@@ -748,11 +803,15 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         if (p.stderr) {
           const line = stripAnsi(String(p.stderr)).trim();
           if (line && !isBenignEngineStderr(line)) engineStderr(parent, ev.seq, line);
-        }
+          else lastStderr = undefined;
+        } else lastStderr = undefined;
         // A `resumed` begins a new engine run: a retry loop prints the same refusal per
         // attempt, and each attempt's failure is its own error row. The fold is per run,
         // not per session — reset it so the next identical line starts a new row.
-        if (p.subtype === 'resumed') stderrSeen.clear();
+        if (p.subtype === 'resumed') {
+          stderrSeen.clear();
+          lastStderr = undefined;
+        }
         break;
       default:
         break;
@@ -1188,6 +1247,8 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
         </div>
       );
     case 'error': {
+      const failure = parseToolFailureSummary(node.message);
+      if (failure) return <ToolFailureCard node={node} summary={failure} />;
       // An engine's own log line is its running commentary — often advice that ends in "…in the
       // meantime", not this turn dying. Shown at the level the engine itself logged, with the
       // stamp and module it wrote for its log kept in the tooltip. Anything without that preamble
@@ -1222,6 +1283,38 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
         />
       );
   }
+}
+
+function ToolFailureCard({
+  node,
+  summary,
+}: {
+  node: ErrorNode;
+  summary: ToolFailureSummary;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="chat-error-card" data-seq={node.seq}>
+      <div className="chat-error-card-head">
+        <ToolOutlined className="chat-error-card-icon" />
+        <strong>{summary.tool}</strong>
+        <span className="chat-error-card-status">Failed</span>
+        {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
+      </div>
+      {summary.path && <div className="chat-error-card-path">{summary.path}</div>}
+      <div className="chat-error-card-reason">{summary.reason}</div>
+      <button
+        className="chat-error-card-disclosure"
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <RightOutlined rotate={expanded ? 90 : 0} />
+        {expanded ? 'Hide full log' : 'Show full log'}
+      </button>
+      {expanded && <pre className="chat-error-card-log">{node.message}</pre>}
+    </div>
+  );
 }
 
 /**

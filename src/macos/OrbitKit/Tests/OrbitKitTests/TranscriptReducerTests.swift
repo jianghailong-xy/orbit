@@ -1684,6 +1684,30 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(message, "--dangerously-skip-permissions cannot be used with root/sudo privileges")
     }
 
+    /// apply_patch writes its verification explanation over adjacent stderr events. The reducer
+    /// keeps those lines in one row so the native card can show a compact summary and disclose the
+    /// complete log on demand.
+    func testMultilineApplyPatchStderrFoldsIntoOneRow() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object([
+            "stderr": .string("2026-09-29T23:54:05.014653Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /root/.orbit/worktrees/session/site/assets/README.md:")
+        ])))
+        r.apply(RunEvent(seq: 2, type: .system, payload: .object([
+            "stderr": .string("The HTML uses `data-asset-slot` attributes for future screenshots/GIFs")
+        ])))
+        r.apply(RunEvent(seq: 3, type: .system, payload: .object([
+            "stderr": .string("architecture. Do not add third-party tracking pixels without an explicit privacy review.")
+        ])))
+
+        XCTAssertEqual(r.state.items.count, 1)
+        guard case .error(_, let message)? = r.state.items.first else {
+            return XCTFail("expected one merged error row")
+        }
+        XCTAssertTrue(message.contains("site/assets/README.md:"))
+        XCTAssertTrue(message.contains("The HTML uses"))
+        XCTAssertTrue(message.contains("privacy review"))
+    }
+
     /// A `system` event with no stderr is lifecycle noise and still earns no row.
     func testSystemEventWithoutStderrStaysSilent() {
         var r = TranscriptReducer()

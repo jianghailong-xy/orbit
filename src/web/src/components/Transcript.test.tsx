@@ -701,6 +701,51 @@ describe('engine stderr', () => {
     expect(html).toContain('No conversation found with session ID: abc');
   });
 
+  it('renders an apply_patch failure as a compact card with the file and reason', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          stderrEvent(
+            1,
+            '2026-09-29T23:52:33.303654Z ERROR codex_core::tools::router: ' +
+              'error=apply_patch verification failed: invalid patch: multiple operations target ' +
+              '/root/.orbit/worktrees/session/scripts/check-pages-links.mjs\n',
+          ),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('chat-error-card');
+    expect(html).toContain('apply_patch');
+    expect(html).toContain('scripts/check-pages-links.mjs');
+    expect(html).toContain('Invalid patch: multiple operations target');
+    expect(html).toContain('Show full log');
+    expect(html).not.toContain('chat-error-card-log');
+  });
+
+  it('folds multiline apply_patch stderr into one collapsed card', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          stderrEvent(
+            1,
+            '2026-09-29T23:54:05.014653Z ERROR codex_core::tools::router: ' +
+              'error=apply_patch verification failed: Failed to find expected lines in ' +
+              '/root/.orbit/worktrees/session/site/assets/README.md:\n',
+          ),
+          stderrEvent(2, 'The HTML uses `data-asset-slot` attributes for future screenshots/GIFs so swapping media does not change the information'),
+          stderrEvent(3, 'architecture. Do not add third-party tracking pixels without an explicit privacy review.'),
+        ]}
+      />,
+    );
+
+    expect(html.split('chat-error-card"').length - 1).toBe(1);
+    expect(html).toContain('site/assets/README.md');
+    expect(html).toContain('Expected lines not found');
+    expect(html).not.toContain('The HTML uses');
+    expect(html).not.toContain('chat-error-card-log');
+  });
+
   // codex colours its stderr with tracing's ANSI layer. The ESC byte is invisible in HTML, so
   // an unstripped line reads as "[2m…[0m [31mERROR[0m" — every log line wrapped in garbage.
   const codexLine = (ts: string, message: string) =>
