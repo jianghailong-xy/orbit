@@ -9,8 +9,9 @@ import OrbitKit
 //         Trash)
 //       – trailing (swipe left)  → Delete, red, destructive, and `allowsFullSwipe: false` so a
 //         stray full swipe can't fire it — the user must tap the revealed button.
-//     On iOS 26 the row draws these itself as circles (`circleSwipeActions`): the system draws its
-//     own at this row's height as squashed capsules. Both are drawn from the same action lists.
+//     On iOS 26 the compact list's rows draw these themselves as circles (`circleSwipeActions`):
+//     the system draws its own at this row's height as squashed capsules. Both are drawn from the
+//     same action lists.
 //   • contextMenu — the cross-platform "source of truth": the same actions on a long-press (iOS) or
 //     right-click (macOS), so they're discoverable and reachable by VoiceOver, and so macOS (where
 //     row swiping is awkward) still has them.
@@ -20,6 +21,9 @@ import OrbitKit
 
 private struct SessionRowActions: ViewModifier {
     @Environment(AppModel.self) private var model
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     let session: Session
     /// The tab this row is shown under; `nil` means an Open-list surface.
     /// `.completed` and `.trash` swap the positive action from Complete to Move to Open; `.trash` also
@@ -55,9 +59,13 @@ private struct SessionRowActions: ViewModifier {
             }
     }
 
+    /// The compact list's rows draw their own circles on iOS 26. The regular-width list keeps the
+    /// system's buttons: its rows are selected in place, and the circles draw the row's separators
+    /// themselves, which a selected row's would need to follow.
     @ViewBuilder private func swipeable(_ content: Content) -> some View {
         #if os(iOS)
-        if #available(iOS 26.0, *) {
+        if #available(iOS 26.0, *),
+           SessionListPresentation.resolve(isCompactWidth: horizontalSizeClass == .compact) == .compact {
             content
                 .contextMenu { menu }
                 .circleSwipeActions(id: session.id, leading: leadingActions, trailing: trailingActions,

@@ -20,10 +20,13 @@ struct RowSwipeAction: Identifiable {
 
 #if os(iOS)
 /// The list's half of the circle swipe: which row is open — opening another closes it, and while
-/// one is open a tap on any row only closes it, as the system's swipe does — and where the list is,
-/// so a row can tell how far its cell reaches past it. Handed to the rows by `rowSwipeList`.
+/// one is open a tap on any row only closes it, as the system's swipe does — and where it and the
+/// list are, so the row above it can drop its separator and a row can tell how far its cell reaches
+/// past it. Handed to the rows by `rowSwipeList`.
 @Observable final class RowSwipeState {
     var openID: AnyHashable?
+    /// The open row, unslid, in the window.
+    var openFrame: CGRect = .zero
     var listFrame: CGRect = .zero
 }
 
@@ -83,6 +86,8 @@ private struct CircleSwipeRow: ViewModifier {
     private static let slot = CGFloat(RowSwipeGeometry.slot)
     private static let gap = CGFloat(RowSwipeGeometry.gap)
     private static let cardRadius: CGFloat = 24
+    /// The list's separator, as iOS 26 draws it under a plain row: 1pt, across the row's content.
+    private static let separator: CGFloat = 1
     /// How far the row slides before its buttons are fully drawn.
     private static let fadeIn: CGFloat = 24
 
@@ -98,6 +103,12 @@ private struct CircleSwipeRow: ViewModifier {
 
     /// This row is the list's open one (or, outside a `rowSwipeList`, is slid at all).
     private var isOpen: Bool { shared.map { $0.openID == id } ?? (offset != 0) }
+
+    /// The list's open row sits right under this one, so this row's separator runs along its top.
+    private var isAboveOpen: Bool {
+        guard let shared, shared.openID != nil, shared.openID != id else { return false }
+        return abs(shared.openFrame.minY - frame.maxY) < 1
+    }
 
     /// How far the cell reaches past the row on each side — the list's own side insets (16 or 20pt
     /// by device, and the safe area in landscape), which the card and the buttons cover too.
@@ -117,6 +128,11 @@ private struct CircleSwipeRow: ViewModifier {
             .background { if offset != 0 { card } }
             .overlay { if offset != 0 || shared?.openID != nil { closer } }
             .offset(x: offset)
+            .overlay(alignment: .bottom) {
+                if !isOpen && !isAboveOpen {
+                    Rectangle().fill(Color(uiColor: .separator)).frame(height: Self.separator)
+                }
+            }
             .background { buttons }
             .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { now in
                 // The list moved under an open row — it scrolled — so the row shuts, as the system's does.
@@ -124,10 +140,11 @@ private struct CircleSwipeRow: ViewModifier {
                 frame = now
             }
             .listRowInsets(.vertical, 0)
-            // The system's swiped row hides the separators either side of it. Keyed to the list's
-            // open row rather than to `offset`: a separator change made alone, mid-drag, was taken up
-            // by the list only some of the time; made in the same update as `openID`, every time.
-            .listRowSeparator(.hidden, edges: isOpen ? .all : [])
+            // The row draws its separator itself (the overlay above): the system's swiped row hides
+            // the separators either side of it, and the list's own, turned off as a row opened, was
+            // taken up only some of the time and not always given back when it shut (iOS 26.5
+            // simulator).
+            .listRowSeparator(.hidden)
             .gesture(SidewaysPan(began: began, moved: moved, ended: ended))
             .onChange(of: shared?.openID) { _, open in
                 if open != id, offset != 0, dragStart == nil { settle(.closed) }
@@ -135,6 +152,7 @@ private struct CircleSwipeRow: ViewModifier {
             .onDisappear {
                 offset = 0
                 dragStart = nil
+                if shared?.openID == id { shared?.openID = nil }
             }
             .sensoryFeedback(.impact(weight: .medium), trigger: armed) { _, now in now }
     }
@@ -224,6 +242,9 @@ private struct CircleSwipeRow: ViewModifier {
                 .frame(width: Self.diameter, height: Self.diameter)
                 .background(action.tint, in: Circle())
                 .scaleEffect(grown ? 1.12 : 1)
+                // The button speaks its title; the symbol's own label would add to it ("Selected"
+                // for the checkmark circle).
+                .accessibilityHidden(true)
             Text(action.title)
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
@@ -234,7 +255,12 @@ private struct CircleSwipeRow: ViewModifier {
 
     private func began() {
         dragStart = offset
-        if shared?.openID != id { shared?.openID = id }   // shuts whichever row was open
+        claimOpen()   // shuts whichever row was open
+    }
+
+    private func claimOpen() {
+        shared?.openFrame = frame
+        if shared?.openID != id { shared?.openID = id }
     }
 
     private func moved(_ dx: CGFloat) {
@@ -253,7 +279,7 @@ private struct CircleSwipeRow: ViewModifier {
         let target = geometry.offset(at: rest)
         switch rest {
         case .leading, .trailing:
-            shared?.openID = id
+            claimOpen()
             withAnimation(.snappy) { offset = target }
         case .closed:
             if shared?.openID == id { shared?.openID = nil }
