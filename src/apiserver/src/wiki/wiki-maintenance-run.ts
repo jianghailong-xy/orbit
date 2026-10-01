@@ -42,6 +42,7 @@ import {
   type WikiMaintenance,
 } from './wiki-maintenance';
 import { wikiMaintenanceRunsToday } from './wiki-maintenance-session';
+import { hasQueuedWikiPlanJob, resumeWikiPlanJobs } from './wiki-plan-job';
 import { currentWikiRollout, wikiOnFor } from './wiki-rollout';
 
 /**
@@ -64,6 +65,12 @@ import { currentWikiRollout, wikiOnFor } from './wiki-rollout';
  * together make one task. A space whose runs for the UTC day are used up (`settings.maintenance
  * .dailyRunLimit`), or a Manual space whose review queue has no room for a run's proposals, makes none,
  * and says why on its cursor row (`held`) until one is made.
+ *
+ * A PLAN JOB GOES FIRST (contract `plan.jobs.staggered`). While a draft or a build the owner asked for
+ * waits for the list (`queued`), no run is made, however due the space is: a fact that finds the list free
+ * makes the job's task instead, and the facts stay in the backlog, so the first fact after the job's task
+ * ended is asked by the rules above as it always was. On 2026-10-01 a build confirmed while a run was under
+ * way waited behind two more runs, an hour and eleven minutes.
  *
  * THE TASK IS JUDGED BY WHAT ITS RUN DID. It is pinned to the space's maintenance workspace and provider,
  * starts at once (runAt now), and its one criterion is EXECUTABLE: `orbit wiki check --space <id>
@@ -123,7 +130,7 @@ export type WikiMaintenanceTriggerOutcome =
   | {
     made: false;
     spaceId: string;
-    why: 'off' | 'unfinished' | 'no_new_fact' | 'not_due' | 'nothing_settled' | WikiMaintenanceHeldReason;
+    why: 'off' | 'unfinished' | 'plan_job_queued' | 'no_new_fact' | 'not_due' | 'nothing_settled' | WikiMaintenanceHeldReason;
   };
 
 /** The rows `considerWikiMaintenance` reads and writes. */
@@ -156,6 +163,8 @@ export async function considerWikiMaintenance(
   const listId = settings.listId;
   // Cheap first: a run that has not ended is the one this fact waits for.
   if (await unfinishedTask(prisma, ownerId, listId)) return no('unfinished');
+  // And a plan job that waits for the list goes before the next run.
+  if (await hasQueuedWikiPlanJob(prisma, ownerId, spaceId)) return no('plan_job_queued');
 
   const scope = await spaceScope(prisma, ownerId, spaceId);
   const cursor = await cursorOf(prisma, ownerId, spaceId);
@@ -245,7 +254,8 @@ export async function considerWikiMaintenance(
  * The one writer of a maintenance task: a class only so that its retry is labelled like every other. The
  * list row is locked before any task of it is read or written (rank 20, ahead of the task and the wiki
  * rows), and read again under that lock: of two facts arriving together, the second finds the first one's
- * task, and the day's limit is counted once more with the lock held.
+ * task, a plan job queued meanwhile is found and goes first, and the day's limit is counted once more with
+ * the lock held.
  */
 class MaintenanceTaskWriter {
   private readonly logger = new Logger('WikiMaintenanceTrigger');
@@ -260,7 +270,7 @@ class MaintenanceTaskWriter {
     now: Date;
     task: { title: string; description: string; acceptanceCommand: string; workspaceId: string; provider: string };
     run: { due: WikiMaintenanceDue; backlog: number; pendingSessions: number; oldestPendingAt: Date | null; expect: FactPosition };
-  }): Promise<{ taskId: string; runId: string } | { why: 'off' | 'unfinished' | 'daily_limit_reached' }> {
+  }): Promise<{ taskId: string; runId: string } | { why: 'off' | 'unfinished' | 'plan_job_queued' | 'daily_limit_reached' }> {
     const { ownerId, spaceId, listId, now } = input;
     return withTransactionRetry(
       this.prisma,
@@ -269,6 +279,7 @@ class MaintenanceTaskWriter {
           SELECT "paused" FROM "task_list" WHERE "id" = ${listId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`;
         if (!list) return { why: 'off' } as const;
         if (await unfinishedTask(tx, ownerId, listId)) return { why: 'unfinished' } as const;
+        if (await hasQueuedWikiPlanJob(tx, ownerId, spaceId)) return { why: 'plan_job_queued' } as const;
         if ((await wikiMaintenanceRunsToday(tx, ownerId, spaceId, now)).remaining <= 0) return { why: 'daily_limit_reached' } as const;
         const task = await tx.task.create({
           data: {
@@ -446,7 +457,11 @@ export class WikiMaintenanceTrigger implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** The owner's spaces whose maintenance is on, each asked about the hint. */
+  /**
+   * The owner's spaces whose maintenance is on, each asked about the hint — and a space whose plan job
+   * waits for its free list has the job's task made in the run's place, whether or not the job heard the
+   * list's last task end.
+   */
   async evaluate(ownerId: string, hint: WikiMaintenanceHint, now: Date = new Date()): Promise<WikiMaintenanceTriggerOutcome[]> {
     if (!wikiOnFor(currentWikiRollout(), ownerId)) return [];
     const spaces = await this.prisma.wikiSpace.findMany({
@@ -460,6 +475,12 @@ export class WikiMaintenanceTrigger implements OnModuleInit, OnModuleDestroy {
       if (outcome.made) {
         this.logger.log(`space ${space.id}: made maintenance task ${outcome.taskId} (${outcome.due})`);
         this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [outcome.taskId], resync: false });
+      } else if (outcome.why === 'plan_job_queued') {
+        const made = await resumeWikiPlanJobs(this.prisma, ownerId, { spaceId: space.id, states: ['queued'] }, now);
+        if (made.length > 0) {
+          this.logger.log(`space ${space.id}: made plan job tasks ${made.join(', ')} before the next maintenance run`);
+          this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: made, resync: false });
+        }
       }
       outcomes.push(outcome);
     }
