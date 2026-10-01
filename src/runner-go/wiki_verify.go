@@ -194,6 +194,9 @@ type wikiVerifySummary struct {
 type wikiVerifyFailure struct {
 	OpID string `json:"opId"`
 	Why  string `json:"why"`
+	// refused is what was wrong with the model's answer, when it answered and the answer was not a verdict:
+	// a maintenance run's second pass tells the model (wikiVerifyRetrySuffix).
+	refused string
 }
 
 // wikiVerifyAuthError is the model endpoint refusing the token: every op after it would be refused
@@ -219,8 +222,9 @@ var (
 )
 
 // runWikiVerify verifies the ops the calling session proposed into spaceID, one at a time, and
-// reports each verdict as soon as it is read. Progress lines go to progress as they happen.
-func runWikiVerify(t *Transport, sessionID, spaceID string, cfg wikiVerifyConfig, max int, progress io.Writer) (wikiVerifySummary, error) {
+// reports each verdict as soon as it is read. refused says, by op id, why the model's answer in an
+// earlier pass was not a verdict (nil on a first pass). Progress lines go to progress as they happen.
+func runWikiVerify(t *Transport, sessionID, spaceID string, cfg wikiVerifyConfig, max int, refused map[string]string, progress io.Writer) (wikiVerifySummary, error) {
 	summary := wikiVerifySummary{SpaceID: spaceID, Model: cfg.model, Failures: []wikiVerifyFailure{}}
 	claude, err := wikiVerifyClaudePath()
 	if err != nil {
@@ -229,14 +233,15 @@ func runWikiVerify(t *Transport, sessionID, spaceID string, cfg wikiVerifyConfig
 	if err := wikiVerifyEndpointUp(cfg.baseURL); err != nil {
 		return summary, err
 	}
-	err = verifyWikiOps(t, wikiOwnVerifications, sessionID, spaceID, cfg, claude, max, &summary, progress)
+	err = verifyWikiOps(t, wikiOwnVerifications, sessionID, spaceID, cfg, claude, max, refused, &summary, progress)
 	return summary, err
 }
 
 // verifyWikiOps verifies the ops door lists, page by page, at most max of them (0: every one), and
-// reports each verdict through the same door as soon as it is read. The model's endpoint and the Claude
-// Code to ask it through are the caller's to have made sure of.
-func verifyWikiOps(t *Transport, door wikiVerifyDoor, sessionID, spaceID string, cfg wikiVerifyConfig, claude string, max int, summary *wikiVerifySummary, progress io.Writer) error {
+// reports each verdict through the same door as soon as it is read. An op refused names is asked about
+// again, the prompt saying why its last answer was not taken. The model's endpoint and the Claude Code
+// to ask it through are the caller's to have made sure of.
+func verifyWikiOps(t *Transport, door wikiVerifyDoor, sessionID, spaceID string, cfg wikiVerifyConfig, claude string, max int, refused map[string]string, summary *wikiVerifySummary, progress io.Writer) error {
 	after := ""
 	for {
 		raw, err := t.listWikiVerifications(door.route, sessionID, spaceID, after, wikiVerifyPageSize)
@@ -260,7 +265,7 @@ func verifyWikiOps(t *Transport, door wikiVerifyDoor, sessionID, spaceID string,
 				return nil
 			}
 			summary.Looked++
-			stop, err := verifyOneWikiOp(t, door, sessionID, spaceID, cfg, claude, item, summary, progress)
+			stop, err := verifyOneWikiOp(t, door, sessionID, spaceID, cfg, claude, item, refused[item.OpID], summary, progress)
 			if err != nil {
 				return err
 			}
@@ -275,33 +280,39 @@ func verifyWikiOps(t *Transport, door wikiVerifyDoor, sessionID, spaceID string,
 	}
 }
 
-// verifyOneWikiOp asks the model about one op and reports what it said. It answers stop when the
-// server says the space left Automatic, and an error only for what ends the whole run.
-func verifyOneWikiOp(t *Transport, door wikiVerifyDoor, sessionID, spaceID string, cfg wikiVerifyConfig, claude string, item wikiVerificationItem, summary *wikiVerifySummary, progress io.Writer) (bool, error) {
+// verifyOneWikiOp asks the model about one op and reports what it said. refused is why its last answer
+// about the op was not a verdict, when an earlier pass asked: the prompt says so, and names the ids a
+// duplicate may name. It answers stop when the server says the space left Automatic, and an error only
+// for what ends the whole run.
+func verifyOneWikiOp(t *Transport, door wikiVerifyDoor, sessionID, spaceID string, cfg wikiVerifyConfig, claude string, item wikiVerificationItem, refused string, summary *wikiVerifySummary, progress io.Writer) (bool, error) {
 	label := fmt.Sprintf("op %s (%s)", item.OpID, item.Entry.Title)
-	fail := func(why string) {
+	fail := func(why, answerRefused string) {
 		summary.Failed++
-		summary.Failures = append(summary.Failures, wikiVerifyFailure{OpID: item.OpID, Why: why})
+		summary.Failures = append(summary.Failures, wikiVerifyFailure{OpID: item.OpID, Why: why, refused: answerRefused})
 		fmt.Fprintf(progress, "%s: no verdict — %s\n", label, why)
 	}
 	candidates := wikiVerifyCandidates(item)
+	prompt := wikiVerifyPrompt(item, candidates)
+	if refused != "" {
+		prompt += wikiVerifyRetrySuffix(refused, candidates)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), wikiVerifyCallTimeout)
-	answer, usage, err := askWikiVerifier(ctx, claude, cfg, wikiVerifyPrompt(item, candidates))
+	answer, usage, err := askWikiVerifier(ctx, claude, cfg, prompt)
 	cancel()
 	summary.Usage.InputTokens += usage.InputTokens
 	summary.Usage.OutputTokens += usage.OutputTokens
 	var auth *wikiVerifyAuthError
 	if errors.As(err, &auth) {
-		fail("the model endpoint answered 401")
+		fail("the model endpoint answered 401", "")
 		return false, err
 	}
 	if err != nil {
-		fail(err.Error())
+		fail(err.Error(), "")
 		return false, nil
 	}
 	verdict, err := parseWikiVerdict(answer, candidates)
 	if err != nil {
-		fail("the model's answer is not a verdict (" + err.Error() + "), so nothing was reported")
+		fail("the model's answer is not a verdict ("+err.Error()+"), so nothing was reported", err.Error())
 		return false, nil
 	}
 	body := map[string]interface{}{"opId": item.OpID, "verdict": verdict.Verdict, "reason": verdict.Reason, "model": cfg.model}
@@ -321,7 +332,7 @@ func verifyOneWikiOp(t *Transport, door wikiVerifyDoor, sessionID, spaceID strin
 		return false, fmt.Errorf("%s: the server's answer is not the shape this build reads: %w", door.command, err)
 	}
 	if len(report.Outcomes) == 0 {
-		fail("the server recorded nothing for it")
+		fail("the server recorded nothing for it", "")
 		return false, nil
 	}
 	outcome := report.Outcomes[0]
@@ -335,7 +346,7 @@ func verifyOneWikiOp(t *Transport, door wikiVerifyDoor, sessionID, spaceID strin
 			fmt.Fprintf(progress, "%s: %s verdict not recorded — %s\n", label, verdict.Verdict, message)
 			return true, nil
 		}
-		fail("the server refused the verdict: " + message)
+		fail("the server refused the verdict: "+message, "")
 		return false, nil
 	}
 	summary.Verified++
@@ -639,6 +650,28 @@ func wikiVerifyPrompt(item wikiVerificationItem, candidates []wikiVerifyCandidat
 	return b.String()
 }
 
+// wikiVerifyRetrySuffix is what a maintenance run's second pass adds to an op's prompt when the model's
+// answer in the first was not a verdict (contract `maintenance.job.run.steps`, verify): why it was not
+// taken, and the ids duplicateOf may be — the ones listed above, or none. The answer is read as strictly
+// as the first was.
+func wikiVerifyRetrySuffix(refused string, candidates []wikiVerifyCandidate) string {
+	var b strings.Builder
+	b.WriteString("\n## Your last answer was not taken\n")
+	fmt.Fprintf(&b, "You were asked about this entry before, and your answer was not a verdict: %s.\n", refused)
+	if len(candidates) == 0 {
+		b.WriteString("No entry is listed above, so this entry is no duplicate: answer supported, partial or unsupported, with no duplicateOf.\n")
+	} else {
+		ids := make([]string, 0, len(candidates))
+		for _, candidate := range candidates {
+			ids = append(ids, candidate.ID)
+		}
+		fmt.Fprintf(&b, "duplicateOf must be one of these ids, copied exactly: %s. Give it only for a duplicate; an entry "+
+			"that repeats none of them is no duplicate.\n", strings.Join(ids, ", "))
+	}
+	b.WriteString("Answer again, with one JSON object and nothing else.\n")
+	return b.String()
+}
+
 // wikiVerdict is one verdict as the model gave it, checked.
 type wikiVerdict struct {
 	Verdict     string
@@ -756,7 +789,7 @@ func cliWikiVerify(args []string, out io.Writer, ctx cliOrchestrationContext) er
 	if *jsonOut {
 		progress = io.Discard
 	}
-	summary, runErr := runWikiVerify(t, ctx.sessionID, spaceID, cfg, *max, progress)
+	summary, runErr := runWikiVerify(t, ctx.sessionID, spaceID, cfg, *max, nil, progress)
 	if *jsonOut {
 		raw, err := json.Marshal(summary)
 		if err != nil {

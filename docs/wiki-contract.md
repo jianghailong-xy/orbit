@@ -622,6 +622,7 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   提示词手写：条目的 kind、标题、摘要、字段，每条出处的原文，以及可被判为重复的条目（op 自己 similar[] 里 active 的，amend 的目标条目）；
   回答必须是一个 JSON 对象 `{"verdict", "reason", "duplicateOf"}`。**读不成结论就不放行**：不回报、计入失败，op 继续等。
   遇到模型端点 401 立即停（真 Claude Code 每次 401 要重试约 3 分钟），space 不再是 Automatic 时停；有 op 没拿到结论就非零退出。
+  单独调用时这个退出码的语义不变。维护运行不看它：它在自己的进程里核实本次运行的 op，没结论的再问一遍，仍没结论的不让运行失败（19.4 第 8 步）。
   描述文案把「只核实本会话的 op、绝不手写结论」写成前置条件（`agentSurface.verify.precondition`），逐词测试。
 - **`wiki_propose` 的描述**把「这是提议、要等 owner 审」写成前置条件（JSON 的 `agentSurface.proposeDescription`），T5 做逐词测试。
 - **用户门** `/api/wiki`（JwtAuthGuard，owner 本人）：spaces 列表与待审数、建 space、改设置（含审阅模式）、绑 workspace、首页、条目列表、主题、
@@ -1047,7 +1048,7 @@ JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端�
 
 ### 19.4 `orbit wiki maintain --space <id> [--model MODEL] [--concurrency N] [--json]`
 
-只有维护会话能跑（其余 `WIKI_NOT_MAINTENANCE_SESSION`），一次跑完以下各步，任何一步失败或被截断都不推进游标；熔断扣下 op 不算失败，游标停在被扣下的案卷之前：
+只有维护会话能跑（其余 `WIKI_NOT_MAINTENANCE_SESSION`），一次跑完以下各步，任何一步失败或被截断都不推进游标；熔断扣下 op 不算失败，游标停在被扣下的案卷之前；op 没拿到核实结论也不算失败（第 8 步）：
 
 1. **起点**：`GET …/maintenance/run` 拿 space 与仓库、维护 workspace 的工作目录、主题表、护栏数字和期望位置，同时记下运行开始、是哪个会话。
 2. **checkout**：维护 workspace 的工作目录（`~` 按 runner 账号的家目录展开——会话里 HOME 是干净目录），先 fetch；它的 origin 与 space
@@ -1067,8 +1068,14 @@ JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端�
    从这一页起的 op 全部扣下不提议（`heldBackByBreaker`），一个会话出现在几页时按最后一页算；游标只推进到这一页的 `from`，下一次运行
    重读这些案卷，扣下的知识不丢，已提议的也不会被重读。这一步不写任何东西，也不让运行失败。
 7. **提议**：`POST …/maintenance/changesets`，origin 为 `maintenance`；此时还有 op 被拒就判失败。
-8. **核实**：Automatic 下走 `orbit wiki verify` 对本次运行自己的 op 的核实，没拿到结论的再核一遍；然后接手已结束的会话留下的
-   等核实的 op（§7.4），每次最多 `adoptOpsMax`（50）个，本次运行没抽取过就先为它们备好模型；接手的 op 没拿到结论不算失败，留给下一次。
+8. **核实**：Automatic 下走 `orbit wiki verify` 对本次运行自己的 op 的核实，没拿到结论的再核一遍：第二遍的提示里写明上一遍的回答
+   为什么没被收下（例如 duplicateOf 不是列出的条目），并列出 duplicateOf 能填的 id（一条都没列时，说明它不可能是 duplicate）；回答照样
+   严格解析，不宽读成别的结论。然后接手已结束的会话留下的等核实的 op（§7.4），每次最多 `adoptOpsMax`（50）个，本次运行没抽取过就先为
+   它们备好模型。**没拿到结论的 op 不让运行失败**，本次运行自己的（两遍之后）和接手的一样：没结论就不生效，照旧等核实；运行照常往下走、
+   以 succeeded 收尾、推进游标，连续失败数不加；本次运行的会话结束后，由下一次运行接手（报告的 `verification.waitingForNextRun`）。
+   起因：2026-09-30 与 10-01 的运行因 89 个 op 里 1 个、79 个里 4 个没结论而整次失败，游标不动，下一次重读同一批案卷、按同样的比例
+   再失败。真正的停止照旧让运行失败：模型端点 401、服务端出错。space 已不是 Automatic 时核实停下，没核的 op 等它再切回 Automatic，
+   这同样不让运行失败。
 9. **锚点**：`orbit wiki anchors verify`，`--repo` 取上面的 checkout。
 10. **文档**（判据 3 第 3 版，19.6）：有已确认的 plan 时，只重写本次运行的事实碰到的节——条目碰到的、仓库材料在 origin/main 上变了的、
     被撤过句的，以及没有生成作业在等时还从没写过的——落不进任何一节的新知识至多产出一条 plan 修改建议；没有已确认的 plan 就不写文档，
@@ -1079,7 +1086,8 @@ JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端�
 
 运行报告（`WikiMaintenanceReport`）：会话、案卷、跳过、离题数，条目（抽到 / 保留 / 丢弃 / 锚点在库外 / principle），
 op（提议 / 记下 / 被拒 / 自检丢弃 / 被配额挡住 / 被熔断扣下 / 直接生效 / 等待），核实（本次运行自己的 op；接手的单列为
-`verification.adopted {ops, verified, failed}`，CLI 输出里是一行 `- adopted: …`）、锚点、文档（`docs`，19.6）各自的结果，**token（输入、输出、
+`verification.adopted {ops, verified, failed}`，CLI 输出里是一行 `- adopted: …`；没拿到结论、等下一次运行接手的 op——本次运行
+自己的与接手的合计——单列为 `verification.waitingForNextRun`，CLI 输出里是一行 `- waiting for the next run: …`）、锚点、文档（`docs`，19.6）各自的结果，**token（输入、输出、
 调用次数，含抽取、核实、文档的节与 plan 修改建议）**与耗时，失败时 `stoppedAt`。最多 16,000 字节 JSON，存在运行那一行上，`ops.refused` 单独
 成列。判据 3 第 3 版之前的运行报的是 `articles`，不是 `docs`。
 
