@@ -739,6 +739,27 @@ describe('engine stderr', () => {
     expect(html).not.toContain('chat-error-card-log');
   });
 
+  it('renders a codex router error as a compact tool row', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          stderrEvent(
+            1,
+            '2026-10-01T11:53:04.032027Z ERROR codex_core::tools::router: ' +
+              'error=view_image.detail only supports `high` or `original`; omit `detail` for ' +
+              'default high resized behavior, got `low`',
+          ),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('chat-error-card');
+    expect(html).toContain('view_image');
+    expect(html).toContain('Failed');
+    expect(html).toContain('view_image.detail only supports');
+    expect(html).not.toContain('chat-error-text');
+  });
+
   it('folds multiline apply_patch stderr into one collapsed card', () => {
     const html = renderToStaticMarkup(
       <Transcript

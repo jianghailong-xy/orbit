@@ -412,7 +412,17 @@ function parseToolFailureSummary(message: string): ToolFailureSummary | undefine
     // associate it with the most recent unresolved tool_use; if there is no such call, keep the
     // message as a generic folded failure card instead of exposing a raw red log row.
     const generic = /^error=(failed to parse function arguments\b[\s\S]*)$/i.exec(tail.trim());
-    return generic ? { tool: '', reason: generic[1].trim() } : undefined;
+    if (generic) return { tool: '', reason: generic[1].trim() };
+
+    // Some runtime/tool-router failures do not use the verification wording above, but still
+    // identify the tool immediately after `error=` (for example `view_image.detail ...`). Keep
+    // these failures on the same compact tool row so a long tracing line never becomes a red
+    // paragraph in the transcript.
+    const detail = tail.replace(/^error=/i, '').trim();
+    const token = /^([\w.-]+)/.exec(detail)?.[1];
+    if (token) return { tool: token.split('.')[0], reason: detail };
+
+    return undefined;
   }
 
   const detail = match[2].trim();
@@ -1384,23 +1394,48 @@ function ToolFailureCard({
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="chat-error-card" data-seq={node.seq}>
-      <div className="chat-error-card-head">
-        <ToolOutlined className="chat-error-card-icon" />
-        <strong>{summary.tool || 'Tool call'}</strong>
-        <span className="chat-error-card-status">Failed</span>
-        {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
-      </div>
-      {summary.path && <div className="chat-error-card-path">{summary.path}</div>}
-      <div className="chat-error-card-reason">{summary.reason}</div>
-      <button
-        className="chat-error-card-disclosure"
-        type="button"
+      <div
+        className="chat-tool-row chat-error-card-head"
+        role="button"
+        tabIndex={0}
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setExpanded((value) => !value);
+          }
+        }}
       >
-        <RightOutlined rotate={expanded ? 90 : 0} />
-        {expanded ? 'Hide full log' : 'Show full log'}
-      </button>
+        <span className="chat-tool-caret">
+          <RightOutlined rotate={expanded ? 90 : 0} />
+        </span>
+        <span className="chat-tool-icon chat-error-card-icon">
+          <ToolOutlined />
+        </span>
+        <strong className="chat-tool-name">{summary.tool || 'Tool call'}</strong>
+        <span className="chat-tool-summary chat-error-card-status">Failed</span>
+        <CloseCircleFilled className="chat-tool-status err" />
+        {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
+      </div>
+      <div className="chat-error-card-detail">
+        {summary.path && <div className="chat-error-card-path">{summary.path}</div>}
+        <div className="chat-error-card-reason" title={summary.reason}>
+          {summary.reason}
+        </div>
+        <button
+          className="chat-error-card-disclosure"
+          type="button"
+          aria-expanded={expanded}
+          onClick={(event) => {
+            event.stopPropagation();
+            setExpanded((value) => !value);
+          }}
+        >
+          <RightOutlined rotate={expanded ? 90 : 0} />
+          {expanded ? 'Hide full log' : 'Show full log'}
+        </button>
+      </div>
       {expanded && <pre className="chat-error-card-log">{node.message}</pre>}
     </div>
   );
