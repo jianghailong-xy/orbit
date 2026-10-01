@@ -133,6 +133,8 @@ export const COORDINATOR_AUTHORITY: Readonly<Record<CoordinatorAction, Authority
   // owner's act is CONFIRM_ACCEPTANCE_CRITERIA above; settlement is what those rows then say. Until
   // 2026-09-08 this row described an intention rather than the server — see that file's header for
   // the decision it was built on, and `refuseProjectStatusWrite` below for what a session may ask.
+  // Since 2026-10-01 the account owner may also record DONE in person for a project the facts
+  // cannot prove (`POST /projects/:id/done`); no session may, by that same rule.
   SETTLE_PROJECT_DONE: 'AUTOMATIC',
   // Ending a `project_blocker` episode: since `project_blocker_resolve`, an act a coordinator can
   // perform, which is why it is graded here at all.

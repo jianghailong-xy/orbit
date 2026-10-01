@@ -23,6 +23,8 @@ import {
 } from 'class-validator';
 import {
   ProjectStatus,
+  type AcceptedGap,
+  type ProjectDoneRequestBody,
   type ProjectStartRequestBody,
   type StartProjectRequestBody,
 } from '@orbit/shared';
@@ -424,6 +426,26 @@ export class ConfirmAcceptanceCriteriaDto {
     message: 'criteriaDigest must be the 64-character sha256 digest of the criteria set being confirmed',
   })
   criteriaDigest!: string;
+}
+
+/**
+ * `POST /projects/:id/done` (`@orbit/shared` `ProjectDoneRequestBody`): the account owner recording
+ * the project done — the version of the criteria they read, the request the card was drawn from if
+ * there was one, and the gaps they accepted.
+ */
+export class DoneProjectDto implements ProjectDoneRequestBody {
+  /** The coordinator's `DONE_REQUEST` this press answers; absent or null when the owner records it
+   *  done without being asked. */
+  @IsOptional() @IsPublicId() requestId?: string | null;
+
+  @Matches(SHA256_DIGEST_PATTERN, {
+    message: 'criteriaDigest must be the 64-character sha256 digest of the criteria set being recorded done',
+  })
+  criteriaDigest!: string;
+
+  /** One per criterion Orbit could not prove, each kept as it was sent. */
+  @IsArray() @ArrayMaxSize(MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS) @IsObject({ each: true })
+  acceptedGaps!: AcceptedGap[];
 }
 
 /**

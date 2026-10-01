@@ -210,6 +210,9 @@ test('the index is owner-scoped and newest first, and narrows only when asked', 
     id: true,
     title: true,
     status: true,
+    doneBy: true,
+    doneAt: true,
+    acceptedGaps: true,
     goal: true,
     createdAt: true,
     updatedAt: true,
@@ -700,9 +703,13 @@ test('an update writes only the fields it was sent, and null clears one', async 
   const service = serviceWith(prisma);
 
   // Settling a project must not blank the goal that says what it was for. Since 0229 DONE is an
-  // ordinary field write too — it is asserted separately, in the removal suites.
+  // ordinary field write too — it is asserted separately, in the removal suites. A status other
+  // than DONE takes the DONE record with it (migration 0345): who recorded a DONE is a fact about a
+  // DONE, so it is part of the same write rather than a field of its own.
   await service.update(OWNER_ID, PROJECT_ID, { status: ProjectStatus.CANCELLED } as never);
-  assert.deepEqual(writes[0], { status: 'CANCELLED' });
+  assert.deepEqual(writes[0], {
+    status: 'CANCELLED', doneBy: null, doneAt: null, doneCriteriaDigest: null, acceptedGaps: [],
+  });
 
   await service.update(OWNER_ID, PROJECT_ID, { goal: null, title: 'Renamed' } as never);
   assert.deepEqual(writes[1], { title: 'Renamed', goal: null });

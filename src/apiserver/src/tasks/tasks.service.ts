@@ -1980,7 +1980,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         select: { ownerId: true },
       }).catch(() => null);
       if (!project) continue;
-      await storeDerivedProjectStatus(this.prisma, project.ownerId, projectId).catch((e) =>
+      await storeDerivedProjectStatus(this.prisma, project.ownerId, projectId, {
+        sessions: this.sessions,
+      }).catch((e) =>
         this.logger.warn(`derived project status not reconciled: ${e?.message ?? e}`),
       );
     }

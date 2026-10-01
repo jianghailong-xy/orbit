@@ -152,6 +152,7 @@ import {
   type CriterionIndependenceAnswer,
 } from './project-criterion-independence';
 import {
+  NO_DONE_RECORD,
   derivedDoneFromLanes,
   readStandardSetConfirmationState,
   storeDerivedProjectStatus,
@@ -409,6 +410,9 @@ const PROJECT_LIST_SELECT = {
   id: true,
   title: true,
   status: true,
+  doneBy: true,
+  doneAt: true,
+  acceptedGaps: true,
   goal: true,
   createdAt: true,
   updatedAt: true,
@@ -3229,6 +3233,11 @@ export class ProjectsService {
     const data: Prisma.ProjectUpdateInput = {
       ...(dto.title !== undefined ? { title: dto.title } : {}),
       ...(dto.status !== undefined ? { status: dto.status } : {}),
+      // Who recorded a DONE is a fact about a DONE: a project this write takes out of it carries no
+      // record of one (`project.done_*`, migration 0345).
+      ...(dto.status !== undefined && dto.status !== SharedProjectStatus.DONE
+        ? NO_DONE_RECORD
+        : {}),
       ...(dto.goal !== undefined ? { goal: ProjectsService.blankToNull(dto.goal) } : {}),
       ...(dto.instructions !== undefined
         ? { instructions: ProjectsService.blankToNull(dto.instructions) }
@@ -3631,7 +3640,9 @@ export class ProjectsService {
    * stored must no more un-state them than a wake that could not be delivered un-records a merge.
    */
   private async reprojectProjectStatus(ownerId: string, projectId: string): Promise<void> {
-    await storeDerivedProjectStatus(this.prisma, ownerId, projectId).catch((e) =>
+    await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
+      sessions: this.sessions,
+    }).catch((e) =>
       this.logger.warn(`derived project status not re-projected after a criteria edit: ${
         (e as { message?: string })?.message ?? String(e)}`),
     );

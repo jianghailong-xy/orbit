@@ -1,6 +1,9 @@
-import { ProjectStatus } from '@prisma/client';
+import { Logger } from '@nestjs/common';
+import { Prisma, ProjectStatus } from '@prisma/client';
+import type { ProjectDoneBy } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
+import type { SessionsService } from '../sessions/sessions.service';
 import {
   criteriaFromDefinitions,
   standardSetConfirmationStanding,
@@ -26,6 +29,7 @@ import {
   readCriterionSatisfaction,
   type CriterionSatisfaction,
 } from './project-criterion-satisfaction';
+import { tellCoordinatorProjectReopened, type ProjectReopenReason } from './project-started';
 
 /**
  * `project.status = 'DONE'` as a PROJECTION of two committed facts, rather than a column somebody
@@ -94,6 +98,11 @@ import {
  * in `coordinator-authority.ts`: what the owner writes is the CONFIRMATION, and DONE is the
  * projection of it onto work that has landed. "No principal writes it" becomes true of the server
  * rather than of an intention.
+ *
+ * One principal does, for the one case the facts cannot settle: the account owner, in person, on
+ * `POST /projects/:id/done` (`ProjectAcceptanceService.recordProjectDone`, migration 0345). That
+ * record is a decision rather than a reading, and `storeDerivedProjectStatus` says below what does
+ * and does not take it away.
  */
 
 /** Why the projection is withholding DONE. Empty exactly when it is not. */
@@ -219,7 +228,17 @@ type DerivationClient = Pick<
   | 'projectCodebase'
   | 'projectCriteriaAuthorship'
   | 'projectStandardSetConfirmation'
+  // A task serving a criterion that was reopened after the owner recorded the project done.
+  | 'task'
 >;
+
+export interface StoreDerivedProjectStatusOptions {
+  /** Where the coordinator is told why the owner's DONE was reopened. An edge without one — the
+   *  merge-receipt writer, a hand-built fixture — still reopens the record, and tells nobody. */
+  sessions?: SessionsService;
+}
+
+const log = new Logger('ProjectDoneDerived');
 
 /**
  * Read both inputs and project the status, without writing anything.
@@ -366,31 +385,128 @@ export async function readStandardSetConfirmationState(
  * --------------------------------------------
  * A projection that could only ever set DONE would be a latch, and a latch is a decision rather
  * than a reading: reopening a criterion, or filing a new task against one, must take DONE away
- * again or the column would go on asserting something its inputs no longer support.
+ * again or the column would go on asserting something its inputs no longer support. A DONE it
+ * writes is recorded `done_by = 'DERIVED'`, with the seal it was derived against.
  *
  * CANCELLED is left alone in both directions. It says a person dropped this project, which is not
  * a claim about the work and not something the work can overturn — a projection that reopened a
  * cancelled project would be overruling the owner with a merge receipt.
  *
+ * AN OWNER'S RECORD IS A DECISION, AND THE PROJECTION DOES NOT OVERRULE IT
+ * ------------------------------------------------------------------------
+ * A DONE the account owner recorded in person (`done_by = 'OWNER'`, `POST /projects/:id/done`) is
+ * the answer for exactly the case the facts cannot settle — a criterion Orbit cannot prove, whose
+ * gap the owner accepted. Projecting over it would take it away on the next task write, merge
+ * receipt or confirmation, which is what it was recorded to stop. So it stands until one of the two
+ * facts the owner's decision was about moves (`ownerRecordReopenedBy`): the criteria are no longer
+ * the ones it was recorded against, or a task serving one of them has been reopened since. Then the
+ * projection takes the row back — OPEN, or DONE recorded DERIVED when the facts now prove it by
+ * themselves — and when that reopens the project, the coordinator is told why.
+ *
  * The compare-and-set is in the WHERE clause rather than in a read taken first: two concurrent
  * post-commit edges deriving the same answer write the row once, and the loser learns it wrote
- * nothing instead of racing to write the same value again.
+ * nothing instead of racing to write the same value again. It names the record as well as the
+ * status, so an owner's DONE committed between this read and this write is never projected over.
  */
 export async function storeDerivedProjectStatus(
   prisma: DerivationClient,
   ownerId: string,
   projectId: string,
+  options: StoreDerivedProjectStatusOptions = {},
 ): Promise<DerivedProjectDone> {
-  const derived = await readDerivedProjectDone(prisma, ownerId, projectId);
-  await prisma.project.updateMany({
+  const reading = await readDerivedProjectDoneReading(prisma, ownerId, projectId);
+  const { derived } = reading;
+  const seal = reading.standing.currentVersion.digest;
+  const stored = await prisma.project.findFirst({
+    where: { id: projectId, ownerId },
+    select: { status: true, doneBy: true, doneAt: true, doneCriteriaDigest: true },
+  });
+  if (!stored || stored.status === ProjectStatus.CANCELLED) return derived;
+
+  let reopenedBy: ProjectReopenReason | null = null;
+  if (stored.status === ProjectStatus.DONE && stored.doneBy === ('OWNER' satisfies ProjectDoneBy)) {
+    reopenedBy = await ownerRecordReopenedBy(prisma, ownerId, projectId, stored, seal);
+    if (reopenedBy === null) return derived;
+  } else if (stored.status === derived.status) {
+    return derived;
+  }
+
+  const written = await prisma.project.updateMany({
     where: {
       id: projectId,
       ownerId,
-      status: derived.done ? ProjectStatus.OPEN : ProjectStatus.DONE,
+      status: stored.status,
+      doneBy: stored.doneBy,
+      doneAt: stored.doneAt,
     },
-    data: { status: derived.status },
+    data: derived.done
+      ? {
+        status: ProjectStatus.DONE,
+        doneBy: 'DERIVED' satisfies ProjectDoneBy,
+        doneAt: new Date(),
+        doneCriteriaDigest: seal,
+        acceptedGaps: [],
+      }
+      : { status: ProjectStatus.OPEN, ...NO_DONE_RECORD },
   });
+
+  if (written.count === 1 && reopenedBy !== null && !derived.done && options.sessions) {
+    await tellCoordinatorProjectReopened(prisma, options.sessions, {
+      ownerId,
+      projectId,
+      doneAt: stored.doneAt!,
+      reason: reopenedBy,
+    }).catch((e) =>
+      log.warn(`coordinator not told project ${projectId} was reopened: ${
+        (e as { message?: string })?.message ?? String(e)}`),
+    );
+  }
   return derived;
+}
+
+/** The DONE record of a project that is not recorded done (`project.done_*`, migration 0345). */
+export const NO_DONE_RECORD = {
+  doneBy: null,
+  doneAt: null,
+  doneCriteriaDigest: null,
+  acceptedGaps: [],
+} as const satisfies Prisma.ProjectUpdateManyMutationInput;
+
+/**
+ * Why an owner's DONE no longer stands, or null while it does — the two facts the owner's decision
+ * was about, and no others.
+ *
+ *   * The criteria: the seal it was recorded against is not the seal of the criteria that stand
+ *     now. An edit, a criterion added or removed, a weakening the owner approved — the decision was
+ *     about a different set.
+ *   * A task serving one of them was reopened after it was recorded. `task_progress_epoch_advance`
+ *     (0271) starts a task's next lifecycle epoch whenever it leaves DONE, CANCELLED or FAILED for
+ *     OPEN or IN_PROGRESS, whichever door moved it, so the epoch's start is the reopen itself.
+ *
+ * Both are read off committed rows rather than told by the edge that runs the projection, so every
+ * edge gives the same answer, and a later one still sees a reopen an earlier one missed.
+ */
+async function ownerRecordReopenedBy(
+  prisma: Pick<PrismaService, 'task'>,
+  ownerId: string,
+  projectId: string,
+  record: { doneAt: Date | null; doneCriteriaDigest: string | null },
+  seal: string,
+): Promise<ProjectReopenReason | null> {
+  if (record.doneCriteriaDigest !== seal) return { kind: 'CRITERIA_CHANGED', currentDigest: seal };
+  const reopened = await prisma.task.findFirst({
+    where: {
+      ownerId,
+      projectId,
+      criterionDefinitionId: { not: null },
+      progress: { epochStartedAt: { gt: record.doneAt! } },
+    },
+    orderBy: { id: 'asc' },
+    select: { id: true, title: true },
+  });
+  return reopened
+    ? { kind: 'SERVING_TASK_REOPENED', taskId: reopened.id, taskTitle: reopened.title }
+    : null;
 }
 
 /** The newest confirmation on record, current or not — r3's read, in r3's order: `confirmedAt`

@@ -157,7 +157,8 @@ export interface ProjectIntegrationBuckets {
 
 /**
  * What opened an exception item, as §4.2's closed set spells it — and `START_REQUEST`, a
- * coordinator asking its owner to start the project (`project_request_start`, `project-start.ts`).
+ * coordinator asking its owner to start the project (`project_request_start`, `project-start.ts`),
+ * and `DONE_REQUEST`, one asking its owner to record the project done (`project-done.ts`).
  * The set is closed in the database too (`project_open_item_kind_chk`): a new kind is a migration.
  */
 export type OpenItemKind =
@@ -168,7 +169,8 @@ export type OpenItemKind =
   | 'PROMOTION_APPROVAL'
   | 'COORDINATOR_QUESTION'
   | 'FUSE_PAUSED'
-  | 'START_REQUEST';
+  | 'START_REQUEST'
+  | 'DONE_REQUEST';
 
 /**
  * The kinds a project's coordinator can be handling (§7.1 V1/V2): `OpenItemKind` minus the four

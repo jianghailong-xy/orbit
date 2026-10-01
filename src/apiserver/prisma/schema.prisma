@@ -1967,6 +1967,18 @@ model Project {
 
   status ProjectStatus @default(OPEN)
 
+  /// Who recorded the project DONE (migration 0345): 'OWNER', the account owner in person on
+  /// `POST /projects/:id/done`, or 'DERIVED', the projection from committed facts
+  /// (`project-done-derived.ts`); null while neither has. An OWNER record survives ordinary task
+  /// writes, merge receipts and confirmations — only the criteria changing, or a task serving one
+  /// being reopened, reopens it. Present exactly with `doneAt`.
+  doneBy             String?   @map("done_by")
+  doneAt             DateTime? @map("done_at") @db.Timestamptz(3)
+  /// The seal of the criteria the DONE was recorded against.
+  doneCriteriaDigest String?   @map("done_criteria_digest") @db.Char(64)
+  /// The gaps the owner accepted when recording it done, as the card sent them (`AcceptedGap[]`).
+  acceptedGaps       Json      @default("[]") @map("accepted_gaps")
+
   /// The session this project is coordinated from — one durable conversation per project.
   ///
   /// Written in either of two places, meaning the same thing in both. A project recorded from

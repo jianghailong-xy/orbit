@@ -1522,7 +1522,14 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // One more accepted `project_coordinator_wake.event` spelling. The CHECK is widened to admit
       // the blocker notification, but no wake row is backfilled or rewritten, and none of the
       // preserved task, session or acceptance relations is named.
-      '0342_project_blocker_coordinator_wake'],
+      '0342_project_blocker_coordinator_wake',
+      // The owner DONE record (0345): four columns on `project` plus CHECKs for its provenance,
+      // digest and accepted-gap array. Existing DONE rows are backfilled only in those new columns
+      // as DERIVED; no task, criterion, confirmation or judgment row is rewritten. The two
+      // `project_open_item` CHECKs are widened for DONE_REQUEST and every existing item satisfies
+      // them. No trigger, function or type is created, replaced or dropped, so the preserved DONE
+      // writer fence and all task/acceptance data remain untouched.
+      '0345_project_owner_done'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
