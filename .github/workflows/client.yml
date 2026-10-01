@@ -132,3 +132,32 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             build
+
+  # TEMPORARY — an evidence run, not a gate; this branch is never merged. `.swipe-probe/` builds the
+  # session rows with their swipe actions — the system's, and the circles that replace them on iOS 26 —
+  # into a throwaway app over fixture sessions, photographs them and drives them (see
+  # .swipe-probe/README.md).
+  swipe-shots-ios:
+    name: Swipe probe (iOS session row actions)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Build, test and capture
+        run: bash .swipe-probe/ios/run.sh
+      - name: Upload the captures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: swipe-shots-ios
+          path: .swipe-probe/ios/shots
+          if-no-files-found: error

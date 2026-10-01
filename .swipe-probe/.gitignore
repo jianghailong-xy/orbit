@@ -1,0 +1,5 @@
+.dd/
+*.xcodeproj/
+build.log
+shots/
+results/

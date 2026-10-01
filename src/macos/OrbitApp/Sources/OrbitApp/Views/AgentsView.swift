@@ -327,6 +327,8 @@ struct AgentPanes: View {
     @State private var hitsQuery = ""
     @State private var contentSearched = true
     @State private var searching = false
+    /// Which row's circle swipe actions are out (iOS 26 — see `RowSwipeState`).
+    @State private var rowSwipe = RowSwipeState()
     #endif
     // Set true when the composer hands ↑/↓ back on Escape, so the session list can be arrow-navigated
     // without a click; the binding also tracks click-to-focus.
@@ -404,6 +406,7 @@ struct AgentPanes: View {
         // Plain style so the sections read as light headers over full-width rows (matching the
         // current list), not boxed inset-grouped cards.
         .listStyle(.plain)
+        .rowSwipeList(rowSwipe)
         #endif
         .focused($listFocused)
         .onChange(of: app.sessionListFocusRequest) { _, _ in listFocused = true }
