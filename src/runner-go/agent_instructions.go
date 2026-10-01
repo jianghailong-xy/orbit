@@ -6,6 +6,16 @@ import (
 	"strings"
 )
 
+// Delivery is handled by the runner and may not be visible in Codex's tool result.
+// Keep this in Codex's application context so an upload failure never asks the model to redraw.
+const codexImageDeliveryInstructions = "After generating an image, preserve the original file. " +
+	"Do not regenerate it solely because Orbit could not attach or upload it. " +
+	"Only claim that the image is attached or delivered when Orbit explicitly confirms attachment delivery; " +
+	"successful generation alone is not delivery confirmation. " +
+	"If delivery fails, report that the image was generated but delivery failed, keep the original file available, " +
+	"and let Orbit retry delivery. If delivery status is unavailable, report only generation success " +
+	"without claiming delivery success or failure."
+
 func orbitCLIExecutable() string {
 	exe, err := os.Executable()
 	if err != nil {

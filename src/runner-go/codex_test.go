@@ -209,6 +209,10 @@ func TestCodexAppServerTurnParams(t *testing.T) {
 	if !ok || owner["kind"] != "application" || owner["value"] != "Owner instructions." {
 		t.Fatalf("owner append context = %#v", additional["orbit_00000000_agent_append_00000000"])
 	}
+	imageDelivery, ok := additional["orbit_00000000_image_delivery"].(map[string]interface{})
+	if !ok || imageDelivery["kind"] != "application" || imageDelivery["value"] != codexImageDeliveryInstructions {
+		t.Fatalf("image delivery context = %#v", additional["orbit_00000000_image_delivery"])
+	}
 }
 
 func TestCodexInstructionModeForUserAgent(t *testing.T) {
@@ -258,6 +262,11 @@ func TestCodexCompactionRefreshesInstructionContextOnNextTurn(t *testing.T) {
 	})
 	if generation != 1 {
 		t.Fatalf("post-compaction generation = %d, want 1", generation)
+	}
+	refreshed := codexAgentAdditionalContext(AgentExecConfig{}, "", generation, false, true)
+	imageDelivery, ok := refreshed["orbit_00000001_image_delivery"].(map[string]interface{})
+	if !ok || imageDelivery["value"] != codexImageDeliveryInstructions {
+		t.Fatalf("image delivery instructions not restored after compaction: %#v", refreshed)
 	}
 	_, stableGeneration := additional.prepareInstructionContext(func() error { return nil })
 	if stableGeneration != generation {
@@ -438,6 +447,9 @@ func TestCodexLegacyInstructionDeliveryDoesNotReplaceDeveloperInstructions(t *te
 	if len(input) != 2 || !strings.Contains(input[0]["text"].(string), "<orbit_application_context>") || input[1]["text"] != "hello" {
 		t.Fatalf("legacy input = %#v", input)
 	}
+	if !strings.Contains(input[0]["text"].(string), codexImageDeliveryInstructions) {
+		t.Fatalf("legacy input is missing image delivery instructions: %#v", input)
+	}
 	items := codexInjectedAgentItems(job.Agent, "/usr/local/bin/orbit", false, true)
 	if len(items) != 1 || items[0]["role"] != "developer" {
 		t.Fatalf("injected items = %#v", items)
@@ -445,6 +457,9 @@ func TestCodexLegacyInstructionDeliveryDoesNotReplaceDeveloperInstructions(t *te
 	content, ok := items[0]["content"].([]map[string]interface{})
 	if !ok || len(content) != 1 || content[0]["type"] != "input_text" || !strings.Contains(content[0]["text"].(string), "Owner instructions.") {
 		t.Fatalf("injected content = %#v", items[0]["content"])
+	}
+	if !strings.Contains(content[0]["text"].(string), codexImageDeliveryInstructions) {
+		t.Fatalf("developer item is missing image delivery instructions: %#v", content)
 	}
 	thread := codexThreadParams(job, "/repo", "/tmp/uploads")
 	if _, ok := thread["developerInstructions"]; ok {

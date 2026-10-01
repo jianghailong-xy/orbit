@@ -1133,11 +1133,16 @@ func (a *codexAppServer) injectAgentContext(
 	return err
 }
 
-func codexInjectedAgentItems(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) []map[string]interface{} {
+func codexAgentContext(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) string {
 	context := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches)
 	if strings.TrimSpace(context) == "" {
-		return nil
+		return codexImageDeliveryInstructions
 	}
+	return context + "\n\n" + codexImageDeliveryInstructions
+}
+
+func codexInjectedAgentItems(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) []map[string]interface{} {
+	context := codexAgentContext(agent, executable, insideRecordedWork, watches)
 	return []map[string]interface{}{
 		{
 			"type": "message",
@@ -1289,6 +1294,10 @@ func codexAgentAdditionalContext(
 ) map[string]interface{} {
 	context := map[string]interface{}{}
 	prefix := fmt.Sprintf("orbit_%08d_", generation)
+	context[prefix+"image_delivery"] = map[string]interface{}{
+		"kind":  "application",
+		"value": codexImageDeliveryInstructions,
+	}
 	if instruction := orbitCLIInstructions(executable, insideRecordedWork, watches); instruction != "" {
 		context[prefix+"cli"] = map[string]interface{}{
 			"kind":  "application",
@@ -1307,10 +1316,7 @@ func codexAgentAdditionalContext(
 }
 
 func codexLegacyAgentContext(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) string {
-	context := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches)
-	if strings.TrimSpace(context) == "" {
-		return ""
-	}
+	context := codexAgentContext(agent, executable, insideRecordedWork, watches)
 	return "<orbit_application_context>\n" + context + "\n</orbit_application_context>"
 }
 
