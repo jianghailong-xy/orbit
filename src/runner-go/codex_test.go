@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -1202,6 +1203,109 @@ func TestHandleCodexItemImageGenerationThroughRealRewrite(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestStageCodexGeneratedImageCopiesIntoSessionUploads(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "generated_images")
+	threadDir := filepath.Join(root, "thread-1")
+	if err := os.MkdirAll(threadDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	saved := filepath.Join(threadDir, "exec-1.png")
+	wantBytes := []byte{0x89, 'P', 'N', 'G'}
+	if err := os.WriteFile(saved, wantBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	uploadRoot := filepath.Join(t.TempDir(), "uploads", "session-1")
+	staged := stageCodexGeneratedImage(saved, root, uploadRoot)
+	if staged == "" {
+		t.Fatal("stageCodexGeneratedImage returned an empty path")
+	}
+	gotBytes, err := os.ReadFile(staged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(gotBytes) != string(wantBytes) {
+		t.Fatalf("staged bytes = %v, want %v", gotBytes, wantBytes)
+	}
+	if want := filepath.Join(uploadRoot, "exec-1.png"); staged != want {
+		t.Fatalf("staged path = %q, want %q", staged, want)
+	}
+
+	outside := filepath.Join(t.TempDir(), "outside.png")
+	if err := os.WriteFile(outside, wantBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := stageCodexGeneratedImage(outside, root, uploadRoot); got != "" {
+		t.Fatalf("outside-root image staged at %q", got)
+	}
+}
+
+func TestHandleCodexItemImageGenerationFallsBackToSessionUpload(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "generated_images")
+	threadDir := filepath.Join(root, "thread-1")
+	if err := os.MkdirAll(threadDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	saved := filepath.Join(threadDir, "exec-1.png")
+	wantBytes := []byte{0x89, 'P', 'N', 'G'}
+	if err := os.WriteFile(saved, wantBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	uploadRoot := filepath.Join(t.TempDir(), "uploads", "session-1")
+	var got []emittedEvent
+	emit := func(eventType string, payload map[string]interface{}) {
+		got = append(got, emittedEvent{eventType, payload})
+	}
+	var result codexTurnResult
+	var last strings.Builder
+	handleCodexItemWithImageFallback(
+		map[string]interface{}{"item": map[string]interface{}{
+			"type": "imageGeneration", "id": "exec-1", "status": "completed", "savedPath": saved,
+		}},
+		emit, &result, &last, true,
+		func(text string) string { return text }, // Simulate a failed control-plane upload.
+		func(path string) string {
+			staged := stageCodexGeneratedImage(path, root, uploadRoot)
+			if staged == "" {
+				return ""
+			}
+			return fmt.Sprintf("![generated image](%s)", staged)
+		},
+	)
+	if len(got) != 1 || got[0].typ != evAssistant {
+		t.Fatalf("events = %+v, want one assistant event", got)
+	}
+	text, _ := got[0].payload["text"].(string)
+	if !strings.Contains(text, "![generated image](") || !strings.Contains(text, uploadRoot) {
+		t.Fatalf("fallback text = %q, want a session upload path", text)
+	}
+	staged := filepath.Join(uploadRoot, "exec-1.png")
+	if gotBytes, err := os.ReadFile(staged); err != nil || string(gotBytes) != string(wantBytes) {
+		t.Fatalf("staged image = (%v, %v), want %v", gotBytes, err, wantBytes)
+	}
+}
+
+func TestHandleCodexItemImageGenerationNoticesWhenFallbackCannotStage(t *testing.T) {
+	item := map[string]interface{}{
+		"type": "imageGeneration", "id": "exec-1", "status": "completed",
+		"savedPath": "/root/.codex/generated_images/thread-1/exec-1.png",
+	}
+	var got []emittedEvent
+	var result codexTurnResult
+	var last strings.Builder
+	handleCodexItemWithImageFallback(
+		map[string]interface{}{"item": item},
+		func(eventType string, payload map[string]interface{}) {
+			got = append(got, emittedEvent{eventType, payload})
+		},
+		&result, &last, true,
+		func(text string) string { return text },
+		func(string) string { return "" },
+	)
+	if len(got) != 1 || got[0].typ != evSystem || got[0].payload["noticeKind"] != "codex-image-generation-unattached" {
+		t.Fatalf("events = %+v, want one unattached-image notice", got)
 	}
 }
 

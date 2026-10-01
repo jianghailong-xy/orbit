@@ -388,10 +388,16 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			case <-app.done:
 				return
 			case msg := <-app.notifications:
-				handleCodexAppNotification(threadID, msg, emit, &activeMu, &active, finalizeActive, func(codexTurnID string) {
+				handleCodexAppNotificationWithImageFallback(threadID, msg, emit, &activeMu, &active, finalizeActive, func(codexTurnID string) {
 					recordCodexTurnID("", codexTurnID)
 				}, func(text string) string {
 					return rewriteLocalMarkdownImages(workerCtx, t, job.SessionID, text, []string{execDir, upDir, genImagesDir})
+				}, func(path string) string {
+					staged := stageCodexGeneratedImage(path, genImagesDir, upDir)
+					if staged == "" {
+						return ""
+					}
+					return fmt.Sprintf("![generated image](%s)", staged)
 				}, sessionRateLimits, steerDispatch.acknowledge)
 				activeMu.Lock()
 				tokens := 0
@@ -1699,6 +1705,10 @@ func codexNotificationThreadID(msg codexRPCMessage) string {
 // onSteerAck is called with the Orbit turn id of a mid-turn message Codex has just echoed back,
 // which is that message's only answer — it has no result of its own (codex_steer.go).
 func handleCodexAppNotification(threadID string, msg codexRPCMessage, emit emitFn, activeMu *sync.Mutex, active **codexAppActiveTurn, finalize func(codexTurnResult), onTurnStarted func(string), processAssistant assistantTextProcessor, onRateLimits func(map[string]interface{}), onSteerAck func(string)) {
+	handleCodexAppNotificationWithImageFallback(threadID, msg, emit, activeMu, active, finalize, onTurnStarted, processAssistant, nil, onRateLimits, onSteerAck)
+}
+
+func handleCodexAppNotificationWithImageFallback(threadID string, msg codexRPCMessage, emit emitFn, activeMu *sync.Mutex, active **codexAppActiveTurn, finalize func(codexTurnResult), onTurnStarted func(string), processAssistant assistantTextProcessor, imageFallback generatedImageFallback, onRateLimits func(map[string]interface{}), onSteerAck func(string)) {
 	// Empty is accepted for compatibility with older app-server notifications that were not
 	// thread-scoped. Current turn/item notifications always carry threadId; when present it is
 	// authoritative and child-thread activity must stay out of the Orbit root session.
@@ -1753,7 +1763,7 @@ func handleCodexAppNotification(threadID string, msg codexRPCMessage, emit emitF
 		item := mapValue(firstPresent(params, "item"))
 		activeMu.Lock()
 		if *active != nil {
-			handleCodexItem(map[string]interface{}{"item": item}, emit, &(*active).result, &(*active).fullText, false, processAssistant)
+			handleCodexItemWithImageFallback(map[string]interface{}{"item": item}, emit, &(*active).result, &(*active).fullText, false, processAssistant, imageFallback)
 		}
 		activeMu.Unlock()
 		reportCodexSteerEcho(activeMu, active, item, onSteerAck)
@@ -1777,7 +1787,7 @@ func handleCodexAppNotification(threadID string, msg codexRPCMessage, emit emitF
 					emit(evThinking, map[string]interface{}{"text": text})
 				}
 			} else {
-				handleCodexItem(map[string]interface{}{"item": item}, emit, &(*active).result, &(*active).fullText, true, processAssistant)
+				handleCodexItemWithImageFallback(map[string]interface{}{"item": item}, emit, &(*active).result, &(*active).fullText, true, processAssistant, imageFallback)
 			}
 		}
 		activeMu.Unlock()
