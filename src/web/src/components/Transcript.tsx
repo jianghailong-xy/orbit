@@ -595,7 +595,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
     // apply_patch writes the explanation over several stderr events. Once the first line is tied to
     // a tool call, keep un-timestamped continuation lines on that card even if another tool_use was
     // interleaved or the event sequence has a gap. A timestamp starts a new logger record.
-    if (lastStderr?.tool && lastStderr.continuing && !LEADING_TIMESTAMP.test(line)) {
+    if (lastStderr && 'tool' in lastStderr && lastStderr.continuing && !LEADING_TIMESTAMP.test(line)) {
       const result = lastStderr.tool.result;
       if (result) {
         const previous = resultText(result.content);
