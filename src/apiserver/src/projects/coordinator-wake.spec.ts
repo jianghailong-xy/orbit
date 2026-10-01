@@ -406,8 +406,8 @@ test('a settled project with nothing left over is no fact, and the version moves
   );
 });
 
-// Pointed at the newest migration — 0303 since `PROJECT_SETTLED_UNMERGED` joined the set, 0299
-// before it. This assertion went red on purpose the moment the constant grew: the CHECK before
+// Pointed at the newest migration — 0342 since `PROJECT_BLOCKER_RAISED` joined the set. This
+// assertion went red on purpose the moment the constant grew: the CHECK before
 // it did not list the new live event, and a wake the database refuses is a delivery that throws —
 // and it is repointed rather than loosened, because each migration restates the whole list, so the
 // claim is the same three-way equality it was.
@@ -415,12 +415,12 @@ test('the events this unit knows about are exactly those the latest migration ac
   const sql = readFileSync(
     path.resolve(
       __dirname,
-      '../../prisma/migrations/0303_project_settled_unmerged/migration.sql',
+      '../../prisma/migrations/0342_project_blocker_coordinator_wake/migration.sql',
     ),
     'utf8',
   );
   const check = /"event" IN \(([\s\S]*?)\)\)/.exec(sql);
-  assert.ok(check, 'migration 0303 no longer constrains the event column');
+  assert.ok(check, 'migration 0342 no longer constrains the event column');
   const accepted = [...check[1].matchAll(/'([A-Z_]+)'/g)].map((hit) => hit[1]).sort();
   assert.deepEqual(
     accepted,

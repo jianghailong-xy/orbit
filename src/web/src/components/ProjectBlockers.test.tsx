@@ -40,6 +40,8 @@ function blocker(over: Partial<ProjectBlocker> = {}): ProjectBlocker {
     subjectTitle: '阶段2b 作业完成通知 + resume 时注入作业状态',
     criterionOrdinal: 3,
     criterionRevision: 1,
+    agentArgument: null,
+    criterionText: null,
     detail: {
       reason: 'OUTSIDE_DECLARED_SCOPE',
       source: 'CRITERION_UNLANDED',
@@ -101,6 +103,7 @@ describe('ProjectBlockersCard — what each blocker says', () => {
     expect(html).toContain('Needs your approval');
     expect(html).toContain('Changed files it didn’t declare');
     expect(html).toContain('阶段2b 作业完成通知 + resume 时注入作业状态');
+    expect(html).toContain('Are these extra files part of the delivery you want to accept?');
     expect(html).toContain(SCOPE_ACTION);
     // The first file whole, the next by name in the same directory, the rest counted.
     expect(html).toContain(
@@ -113,7 +116,24 @@ describe('ProjectBlockersCard — what each blocker says', () => {
     expect(html).toContain('阶段0 止血：warm 淘汰避让 + TTL 续期 · criterion 5 is now revision 2');
     expect(html).toContain('since 4h');
 
-    expect(html.match(/Resolve…/g)).toHaveLength(2);
+    expect(html.match(/Review…/g)).toHaveLength(2);
+  });
+
+  it('shows the agent explanation only for a criterion-exemption blocker', () => {
+    const html = paint(standing({
+      open: [blocker({
+        kind: 'HUMAN_DECISION_REQUIRED',
+        requiredAction: '请裁定这条判据是否适用于本次交付。',
+        agentArgument: '这次交付只定位根因，没有执行补数。',
+        criterionText: '给出可验证的补数方案，并完成一次成功重跑。',
+        detail: { reason: 'CRITERION_EXEMPTION_ARGUED', source: 'CRITERION_UNLANDED', paths: [] },
+      })],
+      resolved: [],
+      resolvedCount: 0,
+    }));
+    expect(html).toContain('Agent’s explanation');
+    expect(html).toContain('这次交付只定位根因，没有执行补数。');
+    expect(html).toContain('Current criterion 3');
   });
 
   it('names a blocker of any other kind by its kind and who has to act', () => {
@@ -223,7 +243,7 @@ async function openDialog(): Promise<HTMLElement> {
     </QueryClientProvider>,
   );
   const first = [...document.body.querySelectorAll<HTMLButtonElement>('button')]
-    .filter((candidate) => (candidate.textContent ?? '').trim() === 'Resolve…')[0];
+    .filter((candidate) => (candidate.textContent ?? '').trim() === 'Review…')[0];
   expect(first).toBeDefined();
   await click(first!);
   await settle();
@@ -233,18 +253,21 @@ async function openDialog(): Promise<HTMLElement> {
 }
 
 describe('ProjectBlockersCard — resolving one', () => {
-  it('asks why it is no longer blocking, and sends nothing without an answer', async () => {
+  it('puts the decision question and evidence first, and sends nothing without an answer', async () => {
     const dialog = await openDialog();
     const text = dialog.textContent ?? '';
-    expect(text).toContain('Resolve this blocker');
+    expect(text).toContain('Review this blocker');
     expect(text).toContain('Changed files it didn’t declare · 阶段2b 作业完成通知 + resume 时注入作业状态');
-    expect(text).toContain('Why is it no longer blocking?');
-    expect(text).toContain('Recorded with your name and this reason');
+    expect(text).toContain('Are these extra files part of the delivery you want to accept?');
+    expect(text).not.toContain('Agent’s explanation');
+    expect(text).not.toContain('Current criterion');
+    expect(text).toContain('What did you verify?');
+    expect(text).toContain('Accepting records your name and note');
 
-    const resolve = button('Resolve');
+    const resolve = button('Accept these files');
     expect(resolve?.disabled).toBe(true);
     await type(dialog.querySelector('textarea')!, '   ');
-    expect(button('Resolve')?.disabled).toBe(true);
+    expect(button('Accept these files')?.disabled).toBe(true);
     expect(apiMock).not.toHaveBeenCalled();
   });
 
@@ -253,7 +276,7 @@ describe('ProjectBlockersCard — resolving one', () => {
     const dialog = await openDialog();
     const reason = '已在 09-07 合入 main，判据 3 已满足；这 3 个文件是注入作业状态的必要改动，接受。';
     await type(dialog.querySelector('textarea')!, reason);
-    const resolve = button('Resolve');
+    const resolve = button('Accept these files');
     expect(resolve?.disabled).toBe(false);
     await click(resolve!);
     await settle();
@@ -269,7 +292,7 @@ describe('ProjectBlockersCard — resolving one', () => {
     apiMock.mockRejectedValue(new Error('BLOCKER_ALREADY_RESOLVED: this blocker is already resolved'));
     const dialog = await openDialog();
     await type(dialog.querySelector('textarea')!, 'closing it');
-    await click(button('Resolve')!);
+    await click(button('Accept these files')!);
     await settle();
 
     const text = document.body.querySelector('.ant-modal')?.textContent ?? '';

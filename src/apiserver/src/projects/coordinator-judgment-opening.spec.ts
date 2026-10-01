@@ -19,6 +19,7 @@ import {
   attemptEndedUnsettledFact,
   criterionReadyFact,
   projectAcceptanceLandedFact,
+  projectBlockerRaisedFact,
   projectTasksSettledFact,
 } from './coordinator-wake';
 import {
@@ -126,6 +127,33 @@ test('every wake event has a sentence of its own', () => {
   // nothing at all about why it exists.
   const unknown = { ...ENDED, event: 'SOMETHING_NEW' } as unknown as WakeFact;
   assert.match(describeWakeFact(unknown), /SOMETHING_NEW/);
+});
+
+test('a blocker notification gives the coordinator the human handoff and the existing decision door', () => {
+  const blockerId = randomUUID();
+  const blocker = projectBlockerRaisedFact({
+    projectId: PROJECT,
+    blockerId,
+    taskId: TASK,
+    detail: {
+      blockerId,
+      blockerKind: 'HUMAN_DECISION_REQUIRED',
+      taskTitle: '只读分析 failed 根因',
+      requiredAction: '请账号所有者裁决。',
+      agentArgument: '这条判据不适用于只读分析。',
+      criterionText: '给出可验证的补数方案。',
+      paths: ['src/apiserver/src/tasks/example.ts'],
+    },
+  });
+
+  assert.match(describeWakeFact(blocker), /需要账号所有者裁决/);
+  const message = buildCoordinatorDeliveryMessage(blocker, 'tea-cli app-build');
+  assert.match(message, /agent 的原话：/);
+  assert.match(message, /当前判据：/);
+  assert.match(message, /project_blocker_resolve/);
+  assert.match(message, /只有账号所有者同意后 blocker 才会关闭/);
+  assert.match(message, new RegExp(uuidToBase62(blockerId)));
+  assert.match(message, /不要合并，也不要放行下一条任务/);
 });
 
 test('PROJECT_TASKS_SETTLED carries the merge-evidence order and stops where the judgment did', () => {
