@@ -109,6 +109,47 @@ export function openItemKindForJobState(
   }
 }
 
+/**
+ * What a landing that did not land failed OF, in the four words its next step turns on (§2.6, J-T1b):
+ * the branches conflicted, a check on the combined tree disagreed, a check ran out of its budget
+ * before it answered, or the machinery stopped. A conflict is answered only by a branch that changed;
+ * the other three may be answered by running the same landing again, when whoever asks can say why
+ * it will come out differently.
+ */
+export const LANDING_FAILURE_CLASSES = ['CONFLICT', 'CHECK_FAILED', 'CHECK_TIMED_OUT', 'ERROR'] as const;
+export type LandingFailureClass = (typeof LANDING_FAILURE_CLASSES)[number];
+
+/** The classes `integration_retry` runs a landing again from — migration 0344's CHECK spells them. */
+export const RETRYABLE_LANDING_FAILURE_CLASSES = ['CHECK_FAILED', 'CHECK_TIMED_OUT', 'ERROR'] as const;
+export type RetryableLandingFailureClass = (typeof RETRYABLE_LANDING_FAILURE_CLASSES)[number];
+
+/**
+ * The class of a finished job, or null for a state that is not a failure.
+ *
+ * Read off the job's structured result — its state, and the `timedOut` the runner sets on a check it
+ * killed at its budget — never off the output: a check's own words are the delivery's, and a class
+ * decided by grepping them would be decided by whatever the test happened to print.
+ */
+export function landingFailureClass(job: { state: string; checks: unknown }): LandingFailureClass | null {
+  switch (job.state) {
+    case 'CONFLICT': return 'CONFLICT';
+    case 'ERROR': return 'ERROR';
+    case 'CHECK_FAILED': {
+      const checks = Array.isArray(job.checks) ? job.checks : [];
+      const timedOut = checks.some((check) =>
+        check !== null && typeof check === 'object' && (check as { timedOut?: unknown }).timedOut === true);
+      return timedOut ? 'CHECK_TIMED_OUT' : 'CHECK_FAILED';
+    }
+    default: return null;
+  }
+}
+
+export function isRetryableLandingFailure(
+  failureClass: LandingFailureClass | null,
+): failureClass is RetryableLandingFailureClass {
+  return (RETRYABLE_LANDING_FAILURE_CLASSES as readonly string[]).includes(failureClass ?? '');
+}
+
 /** The checks the runner ran, as it reports them back. `outputTail` is clipped by the runner. */
 export interface IntegrationCheckResult {
   name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
@@ -553,6 +594,61 @@ export async function queueLandingBehindTheWork(
   });
 }
 
+/** Why a rerun was asked for, as migration 0344 records it on the generation it queued. */
+export interface LandingRetryRequest {
+  /** The failed generation this one runs again. */
+  ofJobId: string;
+  failureClass: RetryableLandingFailureClass;
+  reason: string;
+  requestedBySessionId: string;
+}
+
+/**
+ * Queue the next generation of a task's landing because its coordinator asked for it (§2.3 J-T1b) —
+ * the one way a landing that stopped is attempted again without the task being completed again (J5).
+ *
+ * The branch is the one a DONE written now would hand the line (`landingWorkSession`), not the one
+ * the failed generation was handed: a task that was run again after its landing failed has its work
+ * on the later branch, and replaying the earlier one would land work the task has moved past — the
+ * merge-check baseline fix of 2026-10-01 was run again on a new branch after its first landing
+ * failed, and the branch that landing had been handed no longer even merges with the upstream.
+ *
+ * Null when there is nothing to queue: the task has no work branch, the project has no binding, its
+ * line integrates into the upstream itself (a MAIN line queues candidates, never a LAND_TASK), or a
+ * landing of this task is already in flight (J3's index). The caller holds the task row, as the DONE
+ * transaction does, so the generation read here is not raced.
+ */
+export async function queueLandingRetry(
+  tx: Prisma.TransactionClient,
+  input: { ownerId: string; projectId: string; taskId: string; retry: LandingRetryRequest },
+): Promise<{ jobId: string; generation: number; sourceRef: string } | null> {
+  const task = await tx.task.findFirst({
+    where: { id: input.taskId, ownerId: input.ownerId, projectId: input.projectId },
+    select: { codeless: true, sessions: workSessionsOfTaskSelect() },
+  });
+  const work = landingWorkSession(task?.sessions ?? []);
+  if (!task || task.codeless || !work?.branch) return null;
+  const codebase = await tx.projectCodebase.findFirst({
+    where: { projectId: input.projectId, slot: 'primary' },
+    select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
+  });
+  if (!codebase || codebase.integrationRef === codebase.upstreamRef) return null;
+  const jobId = await queueLandTask(tx, {
+    ownerId: input.ownerId,
+    projectId: input.projectId,
+    taskId: input.taskId,
+    codebase,
+    session: { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId },
+    retry: input.retry,
+  });
+  if (jobId === null) return null;
+  const queued = await tx.projectIntegrationJob.findUniqueOrThrow({
+    where: { id: jobId },
+    select: { generation: true, sourceRef: true },
+  });
+  return { jobId, generation: queued.generation, sourceRef: queued.sourceRef };
+}
+
 // ── enqueue (J-T1a) ───────────────────────────────────────────────────────────────────────────
 
 /**
@@ -784,6 +880,8 @@ async function queueLandTask(
     session: { id: string; branch: string; runnerId: string | null };
     /** Omitted for the landing a DONE asks for, whose key is its generation (§2.1). */
     idempotencyKey?: string;
+    /** Set only for the generation `integration_retry` asked for (J-T1b, migration 0344). */
+    retry?: LandingRetryRequest;
   },
 ): Promise<string | null> {
   const inflight = await tx.projectIntegrationJob.count({
@@ -822,6 +920,14 @@ async function queueLandTask(
         subjectId: input.taskId,
         generation,
       }),
+      ...(input.retry
+        ? {
+            retryOfJobId: input.retry.ofJobId,
+            retryFailureClass: input.retry.failureClass,
+            retryReason: input.retry.reason,
+            retryRequestedBySessionId: input.retry.requestedBySessionId,
+          }
+        : {}),
     }],
     skipDuplicates: true,
     select: { id: true },

@@ -677,6 +677,30 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult("The item is closed, with your reason on it.\n"+prettyJSON(raw), false)
 
+	case "integration_retry":
+		id := getString(args, "projectId")
+		taskID := getString(args, "taskId")
+		if id == "" || taskID == "" {
+			return toolResult("projectId and taskId are required", true)
+		}
+		reason := strings.TrimSpace(getString(args, "reason"))
+		if reason == "" {
+			return toolResult("reason is required: say why running this landing again will come out "+
+				"differently. The platform never reruns a failed landing by itself, so a rerun nobody "+
+				"explained is exactly the silent retry it refuses to make", true)
+		}
+		// The acting session IS the authority, as it is for open_item_resolve: the server checks it
+		// against the project's own coordinator pointer, and refuses — with the reason — a landing
+		// that is in flight, a failure that is the account owner's, or a task of another project.
+		raw, err := s.t.retryIntegration(s.sessionID, id, taskID, reason)
+		if err != nil {
+			return toolResult("integration retry failed: "+err.Error(), true)
+		}
+		return toolResult("The next generation of this task's landing is queued, with your reason on it, "+
+			"and the open items about the failed one are superseded. It lands on the project branch "+
+			"and goes on to the merge check like any landing; if it fails, a new item reaches you on "+
+			"its own.\n"+prettyJSON(raw), false)
+
 	case "task_dependency_graph":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -2902,6 +2926,41 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"stays on the row as the reason the item was closed by hand.",
 				},
 			}, "projectId", "itemId", "note"),
+		},
+		{
+			"name": "integration_retry",
+			"description": "Run one of your project's failed landings again: a task that is DONE " +
+				"whose newest landing onto the project's integration line ended CHECK_FAILED (a check " +
+				"on the combined tree disagreed, or ran out of time — CHECK_TIMED_OUT) or ERROR (the " +
+				"integration machinery stopped). This is the only way such a landing is attempted again: " +
+				"the platform never reruns one by itself, and task_start runs the task again on a new " +
+				"branch without ever queueing another landing of the work it finished. It is a decision, " +
+				"not a reflex — read the item first, and rerun only when you can say why this run will " +
+				"come out differently (the merge check's baseline was repaired, the check timed out, the " +
+				"machinery failed). A red that belongs to the delivery is sent back (task_reopen) or " +
+				"replaced instead, and a CONFLICT is refused here: only a branch that changed answers " +
+				"one. Queues exactly one new generation of the task's landing, which carries your " +
+				"reason and the failure class it reruns, and supersedes your open items about the failed " +
+				"one with your reason on them. Refused with the reason when a landing of the task is " +
+				"already queued or running, when the failure's item is the account owner's (escalated, " +
+				"or a project that is not Automatic), when the owner has an open blocker on the task, or " +
+				"when the task is not this project's. Only the conversation the project is coordinated " +
+				"from may call it.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project you coordinate, as shown in its web UI URL (/projects/<id>).",
+				},
+				"taskId": map[string]interface{}{
+					"type":        "string",
+					"description": "The DONE task whose failed landing to run again.",
+				},
+				"reason": map[string]interface{}{
+					"type": "string",
+					"description": "Why this run will come out differently — what changed since the failed " +
+						"one. Up to 2000 characters; it stays on the new landing and on every item it supersedes.",
+				},
+			}, "projectId", "taskId", "reason"),
 		},
 		{
 			"name": "project_delete",

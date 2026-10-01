@@ -791,6 +791,15 @@ interface IntegrationItemPayload {
   } | null;
   errorCode?: string;
   errorDetail?: unknown;
+  /** What the failure was of (`landingFailureClass`), and which generation of the landing it was. */
+  failureClass?: string | null;
+  generation?: number;
+  /** Present on a generation the coordinator asked for through `integration_retry` (J-T1b). */
+  retry?: {
+    retryOfJobId?: string;
+    failureClass?: string | null;
+    reason?: string | null;
+  } | null;
 }
 
 /** Longest tail of a check's output a turn carries. The payload holds 16 KiB; a turn is not a log. */
@@ -827,6 +836,61 @@ function integrationItemFacts(kind: string, payload: IntegrationItemPayload): st
     `集成作业以一个错误结束：${payload.errorCode ?? '未记录错误码'}。`,
     ...(detail ? [`错误详情：${clip(detail)}`] : []),
   ];
+}
+
+/** What each failure class means, in the sentence a coordinator decides the next step from. */
+const FAILURE_CLASS_MEANING: Readonly<Record<string, string>> = {
+  CONFLICT: '两边改了同一处，git 合不上',
+  CHECK_FAILED: '检查跑完了，退出码与声明不一致',
+  CHECK_TIMED_OUT: '有一条检查跑到它的时间预算还没结束，被平台终止，没有给出结论',
+  ERROR: '集成作业本身出了错，不是检查的结论',
+};
+
+/**
+ * The failure's class, and — for a generation the coordinator asked for through `integration_retry`
+ * — what it reran and why (J-T1b). Empty for a payload an older build wrote, which says neither.
+ */
+function failureClassLines(payload: IntegrationItemPayload): string[] {
+  const lines: string[] = [];
+  if (payload.failureClass) {
+    const meaning = FAILURE_CLASS_MEANING[payload.failureClass];
+    lines.push(`失败分类：${payload.failureClass}${meaning ? `（${meaning}）` : ''}。`);
+  }
+  const retry = payload.retry;
+  if (retry?.retryOfJobId) {
+    lines.push(
+      `这是这项任务的第 ${payload.generation ?? '?'} 代落地，由协调会话要求重跑：上一代（作业 `
+      + `${uuidToBase62(retry.retryOfJobId)}）的失败分类是 ${retry.failureClass ?? '未记录'}，`
+      + `重跑的理由是「${retry.reason ?? ''}」。同一个失败又出现了一次，不要再原样重跑。`,
+    );
+  }
+  return lines;
+}
+
+/**
+ * The next step a LAND_TASK's failure leaves its coordinator, by the class it failed of (J-T1b).
+ *
+ * The task is already DONE — a landing is what follows a DONE — so the one door this message must not
+ * point at is `task_start`: it runs the task again on a new branch and never queues another landing
+ * of the work it finished, which is how three DONE tasks of 34Y7My8sqhKLWtmCQYv1l stopped at their
+ * first landing on 2026-10-01 with nothing able to move them.
+ */
+function landingNextStep(projectId: string, taskId: string, payload: IntegrationItemPayload): string {
+  const read = `先读这条任务（task_get，taskId 传 ${taskId}，评论与它的会话都在上面）。任务本身已经是 DONE，`
+    + '落地失败不改它的状态；task_start 只会再跑一遍任务、开一条新分支，不会重新排这次落地。\n';
+  const rework = '用 task_reopen 把任务退回返工、另起一个取代它的任务（task_create 带 supersedesTaskId），'
+    + '或者取消（task_update 置 CANCELLED）';
+  if (payload.failureClass === 'CONFLICT' || (payload.files?.length ?? 0) > 0) {
+    return read
+      + '冲突只有改过的分支才能解开：原样重跑会再冲突一次，integration_retry 也不接受冲突。'
+      + `${rework}。`;
+  }
+  return read
+    + '先判断红的是谁。是交付本身的问题，就' + `${rework}。`
+    + '不是交付的问题——合并检查的基线后来修好了、检查超时、集成机器出错——就用 integration_retry'
+    + `（projectId 传 ${projectId}，taskId 传 ${taskId}，reason 写明这次为什么会不同）重排一次落地：`
+    + '它入队这项任务的下一代落地，成了就进项目分支、继续往后的合并检查，没成会再开一条待办给你。'
+    + '这类落地去留由你判，不拿去问账号所有者。';
 }
 
 /**
@@ -943,14 +1007,13 @@ export function openItemMessage(item: OpenItemMessageSource): string {
     const taskId = item.taskId ? uuidToBase62(item.taskId) : null;
     return `【例外待办】${item.title}\n\n`
       + `项目 ${projectId} 的一次集成没有把工作放进集成线：\n`
-      + `${integrationItemFacts(item.kind, payload).join('\n')}\n\n`
+      + `${[...integrationItemFacts(item.kind, payload), ...failureClassLines(payload)].join('\n')}\n\n`
       + '这条待办的负责人是你。平台不会自己重试一次没有落地的集成，所以不会有第二次作业自己出现；'
       + '要判断的是下一步。\n'
       + (taskId
-        ? `先读这条任务（task_get，taskId 传 ${taskId}，评论与它的会话都在上面），再决定是重新跑`
-          + '（task_start）、另起一个取代它的任务（task_create 带 supersedesTaskId），还是取消'
-          + '（task_update 置 CANCELLED）。任务落地、被取消或被取代之后，这条待办由平台自己关闭，'
-          + `你不用回报。${handClose}\n`
+        ? `${landingNextStep(projectId, taskId, payload)}\n`
+          + '任务落地、被取消或被取代之后，这条待办由平台自己关闭；用 integration_retry 重排时，'
+          + `它会带着你的理由被标成已取代。你不用回报。${handClose}\n`
         : '这条待办身后没有任务：它来自一次晋升（把项目分支合入 main）的作业，那种作业不为任何单个'
           + '任务做事，今天也没有一条属于协调会话的重试门——需要重跑时找账号所有者说明，不要自己造一条作业。\n')
       + `\n${notice}`;

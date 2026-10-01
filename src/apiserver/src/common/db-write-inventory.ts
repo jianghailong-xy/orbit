@@ -266,6 +266,17 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary. A request that committed is answered with the same row on a re-issue (alreadyOpen), never a second one.',
   },
   {
+    at: 'projects/project-open-item.service.ts#retryIntegration',
+    shape: 'TX_RETRIED',
+    locks: 'task FOR NO KEY UPDATE (rank 50) — the row lock the DONE transaction holds when it queues a landing (projects/project-integration-job.ts#enqueueForDoneTask), so a rerun and a DONE of one task are ordered and read one generation counter — under which the project, the task\'s newest LAND_TASK, its OPEN integration items, its open owner blockers, its work sessions and the project_codebase (rank 55) are read unlocked; then project_integration_job (rank 60): one new LAND_TASK through projects/project-integration-job.ts#queueLandTask, whose foreign keys take the held task and the session FOR KEY SHARE; then project_open_item (rank 60): the coordinator\'s OPEN integration items of that task, superseded by primary key.',
+    identity: 'The task, the acting session and the reason, all fixed before the closure. One task holds at most one QUEUED-or-RUNNING landing — J3\'s partial unique index — and a generation is keyed `ij:v1:LAND_TASK:<taskId>:<generation>`, so a call retried after a lost response finds the generation it queued in flight and is refused INTEGRATION_RETRY_IN_FLIGHT rather than queueing a second.',
+    isolation: '',
+    attempts: 4,
+    replay: 'Every input is re-read under the task lock on each attempt: the task\'s status, which conversation coordinates the project and whether it is Automatic, the newest landing and its state, the open items and blockers, and the branch the task\'s work is on. A retried attempt refuses or queues exactly as a first attempt against those rows would have.',
+    effects: 'None. The landing it queued is handed out by the next heartbeat (runner-api/integration-job-relay.ts#dispatchIntegrationJobs) from the committed row.',
+    answer: 'Typed 503 from the global boundary. A rerun that committed is refused INTEGRATION_RETRY_IN_FLIGHT on a re-issue, never queued twice.',
+  },
+  {
     at: 'projects/project-acceptance.service.ts#recordMergeEvidence',
     shape: 'TX_RETRIED',
     locks: 'project FOR NO KEY UPDATE (rank 40), then project_merge_evidence (rank 60).',
@@ -1461,7 +1472,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // inside a transaction its caller owns, and each takes only rank-60 child rows: the queue row in
   // the transaction that wrote a task's DONE, the exception item and the receipt in the transaction
   // that wrote a job's terminal state.
-  { at: 'projects/project-integration-job.ts#queueLandTask', under: 'runnerApi.turnComplete, taskCompletionEvidence.decide, taskOwnerConfirmation.confirm and tasks aggregation — the transaction that wrote the task DONE, which already holds the rank-50 task and the rank-55 project_codebase the line was started under' },
+  { at: 'projects/project-integration-job.ts#queueLandTask', under: 'runnerApi.turnComplete, taskCompletionEvidence.decide, taskOwnerConfirmation.confirm and tasks aggregation — the transaction that wrote the task DONE, which already holds the rank-50 task and the rank-55 project_codebase the line was started under — and projectOpenItem.retryIntegration (`integration_retry`, §2.3 J-T1b) through queueLandingRetry, which holds the same rank-50 task row and reads the codebase unlocked; the generation it writes carries the retry columns 0344 added' },
   { at: 'projects/project-open-item.ts#recordPromotionApproval', under: "runnerApi.integrationJobResult through applyIntegrationJobResult — the transaction that wrote the promotion check's READY, or an automatic landing's READY when it was handed back (M-T12), which runnerApi.heartbeat also writes for a claim whose Automatic authorization is gone (integration-job-relay's finishHandedBack); one project_open_item child row (rank 60), assigned to the account owner and never escalated, whose project and task foreign keys take FOR KEY SHARE" },
   { at: 'projects/project-promotion.service.ts#candidateIn', under: 'projectPromotion.considerCandidate — the whole of that unit, split out so its own transaction is opened in one place' },
   { at: 'projects/project-promotion.service.ts#supersedeLiveCandidates', under: 'projectPromotion.considerCandidate — retiring the candidate that was standing, inside the transaction that makes the new one (M-T6) — and runnerApi.integrationJobResult, through refileCandidateBehindTheWork, retiring a candidate whose check found it was looking at a branch the task work did not end on (J-T1e)' },

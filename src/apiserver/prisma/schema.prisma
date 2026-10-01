@@ -2360,6 +2360,16 @@ model ProjectIntegrationJob {
   /// as well as on the promotion because the job is the record of what was sent out to be pushed.
   confirmedAutomatically Boolean @default(false) @map("confirmed_automatically")
 
+  /// A LAND_TASK generation a coordinator asked for through `integration_retry` (migration 0344,
+  /// contract §2.3 J-T1b): the failed generation it runs again, what that one failed of
+  /// (CHECK_FAILED, CHECK_TIMED_OUT or ERROR), the reason given, and the conversation that asked.
+  /// All four or none, held by a CHECK. `retryOfJobId` is a history reference with no relation: a
+  /// terminal job is never rewritten, so nothing may SET NULL it.
+  retryOfJobId              String? @map("retry_of_job_id") @db.Uuid
+  retryFailureClass         String? @map("retry_failure_class")
+  retryReason               String? @map("retry_reason")
+  retryRequestedBySessionId String? @map("retry_requested_by_session_id") @db.Uuid
+
   /// `ij:v1:<kind>:<taskId or promotionId>:<generation>` — enqueue is idempotent on the fact. The one
   /// exception is the landing J-T1e owes the work, keyed by the work's generation instead
   /// (`landingBehindTheWorkKey`).

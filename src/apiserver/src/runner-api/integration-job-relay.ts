@@ -25,6 +25,7 @@ import {
   integrationItemTitle,
   isTerminalJobState,
   jobLanded,
+  landingFailureClass,
   landingJudgedTooEarly,
   landingLeftWorkBehind,
   openItemKindForJobState,
@@ -631,6 +632,8 @@ export async function applyIntegrationJobResult(
         id: true, projectId: true, ownerId: true, kind: true, state: true,
         taskId: true, sessionId: true, promotionId: true, targetRef: true, sourceRef: true,
         claimLeaseOwner: true, claimGeneration: true, runnerId: true, claimedAt: true,
+        generation: true, retryOfJobId: true, retryFailureClass: true, retryReason: true,
+        retryRequestedBySessionId: true,
         session: { select: { baseSha: true } },
         task: { select: { title: true, assigneeId: true, creatorType: true, creatorId: true } },
       },
@@ -939,6 +942,15 @@ export async function applyIntegrationJobResult(
           checks,
           errorCode: body.errorCode ?? null,
           errorDetail: body.errorDetail ?? null,
+          generation: job.generation,
+          retry: job.retryOfJobId
+            ? {
+                retryOfJobId: job.retryOfJobId,
+                failureClass: job.retryFailureClass,
+                reason: job.retryReason,
+                requestedBySessionId: job.retryRequestedBySessionId,
+              }
+            : null,
         }),
       });
       openItemId = opened?.itemId ?? openItemId;
@@ -1043,8 +1055,25 @@ function nothingToLandComment(input: {
     checks: IntegrationCheckResult[];
     errorCode: string | null;
     errorDetail: Record<string, unknown> | null;
+    /** Which generation of the landing this was, and — when the coordinator asked for it through
+     *  `integration_retry` — what it reran and why (migration 0344). */
+    generation: number;
+    retry: {
+      retryOfJobId: string;
+      failureClass: string | null;
+      reason: string | null;
+      requestedBySessionId: string | null;
+    } | null;
   },
 ): Record<string, unknown> {
+  // What every failure says about itself beside its own facts: the class its next step turns on
+  // (J-T1b), and, for a rerun, the generation it was and what it was asked to answer — so a second
+  // red is read as a second red, not as a first one.
+  const classified = {
+    failureClass: landingFailureClass({ state, checks: detail.checks }),
+    generation: detail.generation,
+    ...(detail.retry ? { retry: detail.retry } : {}),
+  };
   if (state === 'CONFLICT') {
     return {
       jobKind: detail.kind,
@@ -1054,6 +1083,7 @@ function nothingToLandComment(input: {
       files: detail.conflicts.slice(0, 200),
       // Said explicitly because it is the first question a reader has: the branch did not move.
       nothingLanded: true,
+      ...classified,
     };
   }
   if (state === 'CHECK_FAILED') {
@@ -1063,9 +1093,15 @@ function nothingToLandComment(input: {
       jobKind: detail.kind,
       check: failed ?? null,
       branchUnchanged: true,
+      ...classified,
     };
   }
-  return { jobKind: detail.kind, errorCode: detail.errorCode, errorDetail: detail.errorDetail };
+  return {
+    jobKind: detail.kind,
+    errorCode: detail.errorCode,
+    errorDetail: detail.errorDetail,
+    ...classified,
+  };
 }
 
 /** The runner clips its own output, and this clips it again: a row is not a log file. */

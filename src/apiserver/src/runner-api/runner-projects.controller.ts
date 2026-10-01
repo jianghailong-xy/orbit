@@ -24,6 +24,7 @@ import {
   RequestProjectStartDto,
   ResolveOpenItemDto,
   ResolveProjectBlockerDto,
+  RetryIntegrationDto,
   SendToCoordinatorDto,
   UpdateProjectDto,
 } from '../projects/dto';
@@ -73,7 +74,7 @@ export class RunnerProjectsController {
     private readonly acceptance: ProjectAcceptanceService,
     private readonly handoffs: ProjectHandoffService,
     private readonly orchestration: RunnerOrchestrationAuthorizer,
-    // Only `askOwner`, `requestStart` and `resolveOpenItem` need it. Defaulted for the reason
+    // Only `askOwner`, `requestStart`, `resolveOpenItem` and `retryIntegration` need it. Defaulted for the reason
     // `ProjectsService`'s own late parameters are: Nest injects by type rather than by position,
     // while the specs that build this controller by hand to exercise one route would each have to
     // stub a service they never reach.
@@ -468,6 +469,28 @@ export class RunnerProjectsController {
       kind: 'SESSION',
       sessionId: sessionId?.trim() ?? '',
     });
+  }
+
+  /**
+   * A coordinator running one of its project's failed landings again (`integration_retry`, contract
+   * §2.3 J-T1b): the next LAND_TASK generation of a DONE task whose newest landing ended
+   * CHECK_FAILED (a red check, or one that ran out of time) or ERROR.
+   *
+   * The platform reruns nothing by itself (J5), so this is the door a rerun takes, and it takes a
+   * reason. The acting session is the authority, checked by the service against the project's own
+   * coordinator pointer exactly as for the hand-close above — and, like it, a missing or blank header
+   * is NOT read as the account owner. No orchestration credential: it starts no session, and the
+   * landing it queues is the line's own work.
+   */
+  @Post('projects/:id/tasks/:taskId/integration/retry')
+  retryIntegration(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
+    @Body() dto: RetryIntegrationDto,
+  ) {
+    return this.openItems.retryIntegration(runner.ownerId, id, taskId, dto, sessionId?.trim());
   }
 
   /**

@@ -32,6 +32,7 @@ import { IsPublicId } from '../common/public-id';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterion-shape-advice';
 import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolution';
 import { MAX_OPEN_ITEM_RESOLUTION_NOTE, MAX_QUESTION_CHARS } from './project-open-item';
+import { MAX_INTEGRATION_RETRY_REASON } from './project-integration-retry';
 import { MAX_START_REQUEST_WHY } from './project-start-request';
 import type { IntegrationLine, IntegrationSettings } from './project-integration-line';
 
@@ -630,6 +631,16 @@ export class AnswerOpenItemDto {
  */
 export class ResolveOpenItemDto {
   @IsString() @MinLength(1) @MaxLength(MAX_OPEN_ITEM_RESOLUTION_NOTE) note!: string;
+}
+
+/**
+ * The project's coordinator running one of its failed landings again (`integration_retry`, contract
+ * §2.3 J-T1b). One field, required for the reason the hand-close's note is: a rerun is a decision
+ * that the red was not the delivery's, and the sentence saying why is what the record keeps. The
+ * service restates the requirement — a blank reason is refused there too — and the length.
+ */
+export class RetryIntegrationDto {
+  @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_RETRY_REASON) reason!: string;
 }
 
 export class RecordMergeEvidenceDto {

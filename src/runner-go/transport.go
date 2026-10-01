@@ -1427,6 +1427,25 @@ func (t *Transport) resolveOpenItem(sessionID, id, itemID, note string) (json.Ra
 	return out, err
 }
 
+// retryIntegration asks for the next generation of a DONE task's failed landing, as the acting
+// session (contract §2.3 J-T1b). The session header is the authority the server checks against the
+// project's coordinator pointer; the reason travels as the body and is kept on the new generation and
+// on every item it supersedes. A refusal — in flight, the owner's, not this project's — travels as the
+// server raised it.
+func (t *Transport) retryIntegration(sessionID, id, taskID, reason string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(taskID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/tasks/"+url.PathEscape(taskID)+"/integration/retry",
+		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 func (t *Transport) taskDependencyGraph(id string, maxDepth, maxNodes int) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
