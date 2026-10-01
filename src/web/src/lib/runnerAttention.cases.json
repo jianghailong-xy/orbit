@@ -563,6 +563,272 @@
     }
   },
   {
+    "name": "Claude Default spent but another signed-in account has room: only the disk needs attention",
+    "input": {
+      "runner": {
+        "name": "lab", "hostname": "lab-host", "version": "0.1.197", "online": true,
+        "engines": [{
+          "engine": "claude", "installed": true, "auth": "yes",
+          "accounts": [
+            { "id": "default", "home": "/root/.claude", "auth": "yes" },
+            { "id": "work", "home": "/root/.orbit/claude-accounts/work", "auth": "yes" }
+          ]
+        }],
+        "planUsage": { "claude": {
+          "provider": "claude", "sevenDay": { "utilization": 100 },
+          "accounts": { "work": { "provider": "claude", "sevenDay": { "utilization": 20 } } }
+        } }
+      },
+      "workspaces": [{
+        "id": "ws-app", "name": "app", "lastProvider": "claude",
+        "workDirFreeBytes": "8589934592", "workDirTotalBytes": "107374182400"
+      }],
+      "nowMs": 1790640900000, "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [{
+        "kind": "diskLow", "tone": "warn", "short": "Disk 92% full",
+        "title": "Disk 92% full", "actionKind": "setReserve"
+      }],
+      "listLine": "Disk 92% full", "subtitle": "lab-host · v0.1.197",
+      "disk": { "freeBytes": 8589934592, "totalBytes": 107374182400, "usedPercent": 92 }
+    }
+  },
+  {
+    "name": "all Claude accounts near their limits: the account with most room supplies its own fullest window",
+    "input": {
+      "runner": {
+        "name": "lab", "hostname": "lab-host", "version": "0.1.197", "online": true,
+        "engines": [{
+          "engine": "claude", "installed": true, "auth": "yes",
+          "accounts": [
+            { "id": "default", "home": "/root/.claude", "auth": "yes" },
+            { "id": "work", "home": "/root/.orbit/claude-accounts/work", "auth": "yes" }
+          ]
+        }],
+        "planUsage": { "claude": {
+          "provider": "claude", "sevenDay": { "utilization": 100, "resetsAt": "2026-10-02T00:00:00Z" },
+          "accounts": { "work": {
+            "provider": "claude",
+            "fiveHour": { "utilization": 94, "resetsAt": "2026-09-29T03:00:00Z" },
+            "sevenDay": { "utilization": 92, "resetsAt": "2026-10-03T00:00:00Z" }
+          } }
+        } }
+      },
+      "workspaces": [{ "id": "ws-app", "name": "app", "lastProvider": "claude" }],
+      "nowMs": 1790640900000, "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [{
+        "kind": "quotaNearLimit", "tone": "warn", "short": "Claude 5-hour limit 94%",
+        "title": "Claude 5-hour limit at 94%", "actionKind": null
+      }],
+      "listLine": "Claude 5-hour limit 94%", "subtitle": "lab-host · v0.1.197", "disk": null
+    }
+  },
+  {
+    "name": "all Claude accounts spent: the quota warning remains",
+    "input": {
+      "runner": {
+        "name": "lab", "hostname": "lab-host", "version": "0.1.197", "online": true,
+        "engines": [{
+          "engine": "claude", "installed": true, "auth": "yes",
+          "accounts": [
+            { "id": "default", "home": "/root/.claude", "auth": "yes" },
+            { "id": "work", "home": "/root/.orbit/claude-accounts/work", "auth": "yes" }
+          ]
+        }],
+        "planUsage": { "claude": {
+          "provider": "claude", "sevenDay": { "utilization": 100 },
+          "accounts": { "work": { "provider": "claude", "fiveHour": { "utilization": 100 } } }
+        } }
+      },
+      "workspaces": [{ "id": "ws-app", "name": "app", "lastProvider": "claude" }],
+      "nowMs": 1790640900000, "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [{
+        "kind": "quotaNearLimit", "tone": "warn", "short": "Claude weekly limit 100%",
+        "title": "Claude weekly limit at 100%", "actionKind": null
+      }],
+      "listLine": "Claude weekly limit 100%", "subtitle": "lab-host · v0.1.197", "disk": null
+    }
+  },
+  {
+    "name": "a signed-out Claude account's old quota cannot hide Default's warning",
+    "input": {
+      "runner": {
+        "name": "lab", "hostname": "lab-host", "version": "0.1.197", "online": true,
+        "engines": [{
+          "engine": "claude", "installed": true, "auth": "yes",
+          "accounts": [
+            { "id": "default", "home": "/root/.claude", "auth": "yes" },
+            { "id": "work", "home": "/root/.orbit/claude-accounts/work", "auth": "no" }
+          ]
+        }],
+        "planUsage": { "claude": {
+          "provider": "claude", "sevenDay": { "utilization": 100 },
+          "accounts": { "work": { "provider": "claude", "sevenDay": { "utilization": 20 } } }
+        } }
+      },
+      "workspaces": [{ "id": "ws-app", "name": "app", "lastProvider": "claude" }],
+      "nowMs": 1790640900000, "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [{
+        "kind": "quotaNearLimit", "tone": "warn", "short": "Claude weekly limit 100%",
+        "title": "Claude weekly limit at 100%", "actionKind": null
+      }],
+      "listLine": "Claude weekly limit 100%", "subtitle": "lab-host · v0.1.197", "disk": null
+    }
+  },
+  {
+    "name": "an unread signed-in Claude account does not imply every account is near its limit",
+    "input": {
+      "runner": {
+        "name": "lab", "hostname": "lab-host", "version": "0.1.197", "online": true,
+        "engines": [{
+          "engine": "claude", "installed": true, "auth": "yes",
+          "accounts": [
+            { "id": "default", "home": "/root/.claude", "auth": "yes" },
+            { "id": "work", "home": "/root/.orbit/claude-accounts/work", "auth": "yes" }
+          ]
+        }],
+        "planUsage": { "claude": { "provider": "claude", "sevenDay": { "utilization": 100 } } }
+      },
+      "workspaces": [{ "id": "ws-app", "name": "app", "lastProvider": "claude" }],
+      "nowMs": 1790640900000, "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "an unread Claude Default does not inherit another account's spent quota",
+    "input": {
+      "runner": {
+        "name": "lab", "hostname": "lab-host", "version": "0.1.197", "online": true,
+        "engines": [{
+          "engine": "claude", "installed": true, "auth": "yes",
+          "accounts": [
+            { "id": "default", "home": "/root/.claude", "auth": "yes" },
+            { "id": "work", "home": "/root/.orbit/claude-accounts/work", "auth": "yes" }
+          ]
+        }],
+        "planUsage": { "claude": {
+          "provider": "claude",
+          "accounts": { "work": { "provider": "claude", "sevenDay": { "utilization": 100 } } }
+        } }
+      },
+      "workspaces": [{ "id": "ws-app", "name": "app", "lastProvider": "claude" }],
+      "nowMs": 1790640900000, "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "quota from a removed Claude account cannot hide the remaining accounts' warning",
+    "input": {
+      "runner": {
+        "name": "lab", "hostname": "lab-host", "version": "0.1.197", "online": true,
+        "engines": [{
+          "engine": "claude", "installed": true, "auth": "yes",
+          "accounts": [
+            { "id": "default", "home": "/root/.claude", "auth": "yes" },
+            { "id": "work", "home": "/root/.orbit/claude-accounts/work", "auth": "yes" }
+          ]
+        }],
+        "planUsage": { "claude": {
+          "provider": "claude", "sevenDay": { "utilization": 100 },
+          "accounts": {
+            "work": { "provider": "claude", "sevenDay": { "utilization": 97 } },
+            "removed": { "provider": "claude", "sevenDay": { "utilization": 20 } }
+          }
+        } }
+      },
+      "workspaces": [{ "id": "ws-app", "name": "app", "lastProvider": "claude" }],
+      "nowMs": 1790640900000, "latestVersion": "0.1.197"
+    },
+    "expected": {
+      "items": [{
+        "kind": "quotaNearLimit", "tone": "warn", "short": "Claude weekly limit 97%",
+        "title": "Claude weekly limit at 97%", "actionKind": null
+      }],
+      "listLine": "Claude weekly limit 97%", "subtitle": "lab-host · v0.1.197", "disk": null
+    }
+  },
+  {
+    "name": "a Claude account past its quota reset no longer makes every account near its limit",
+    "input": {
+      "runner": {
+        "name": "lab", "hostname": "lab-host", "version": "0.1.197", "online": true,
+        "engines": [{
+          "engine": "claude", "installed": true, "auth": "yes",
+          "accounts": [
+            { "id": "default", "home": "/root/.claude", "auth": "yes" },
+            { "id": "work", "home": "/root/.orbit/claude-accounts/work", "auth": "yes" }
+          ]
+        }],
+        "planUsage": { "claude": {
+          "provider": "claude", "sevenDay": { "utilization": 100 },
+          "accounts": { "work": {
+            "provider": "claude", "sevenDay": { "utilization": 100, "resetsAt": "2026-09-28T23:00:00Z" }
+          } }
+        } }
+      },
+      "workspaces": [{ "id": "ws-app", "name": "app", "lastProvider": "claude" }],
+      "nowMs": 1790640900000, "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "two Claude accounts spent but a third has room: no runner-wide quota warning",
+    "input": {
+      "runner": {
+        "name": "lab", "hostname": "lab-host", "version": "0.1.197", "online": true,
+        "engines": [{
+          "engine": "claude", "installed": true, "auth": "yes",
+          "accounts": [
+            { "id": "default", "home": "/root/.claude", "auth": "yes" },
+            { "id": "work", "home": "/root/.orbit/claude-accounts/work", "auth": "yes" },
+            { "id": "personal", "home": "/root/.orbit/claude-accounts/personal", "auth": "yes" }
+          ]
+        }],
+        "planUsage": { "claude": {
+          "provider": "claude", "sevenDay": { "utilization": 100 },
+          "accounts": {
+            "work": { "provider": "claude", "sevenDay": { "utilization": 100 } },
+            "personal": { "provider": "claude", "sevenDay": { "utilization": 89.6 } }
+          }
+        } }
+      },
+      "workspaces": [{ "id": "ws-app", "name": "app", "lastProvider": "claude" }],
+      "nowMs": 1790640900000, "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
+    "name": "Codex Default spent but another signed-in account has room: no runner-wide quota warning",
+    "input": {
+      "runner": {
+        "name": "lab", "hostname": "lab-host", "version": "0.1.197", "online": true,
+        "engines": [{
+          "engine": "codex", "installed": true, "auth": "yes",
+          "accounts": [
+            { "id": "default", "home": "/root/.codex", "auth": "yes" },
+            { "id": "work", "home": "/root/.orbit/codex-accounts/work", "auth": "yes" }
+          ]
+        }],
+        "planUsage": { "codex": {
+          "provider": "codex", "secondary": { "utilization": 100, "windowDurationMins": 10080 },
+          "accounts": { "work": {
+            "provider": "codex", "secondary": { "utilization": 20, "windowDurationMins": 10080 }
+          } }
+        } }
+      },
+      "workspaces": [{ "id": "ws-app", "name": "app", "lastProvider": "codex" }],
+      "nowMs": 1790640900000, "latestVersion": "0.1.197"
+    },
+    "expected": { "items": [], "listLine": null, "subtitle": "lab-host · v0.1.197", "disk": null }
+  },
+  {
     "name": "no Keep Free, exactly 10% free: nothing",
     "input": {
       "runner": {

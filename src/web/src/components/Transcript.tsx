@@ -336,8 +336,9 @@ type TextNode = {
   // `delivery` above, which is how far a message got on its way into the engine.
   itemCard?: OpenItemDelivery;
   // The turn that starts a task's run, when the control plane recorded the task its brief was built
-  // from beside the echo (`taskStart`, lib/taskStartCard). Drawn as the task instead of a bubble, with
-  // `text` — the brief written for the agent — folded inside it.
+  // from beside the echo (`taskStart`, lib/taskStartCard), or the same snapshot carried onto an
+  // exact retry. Drawn as the task instead of a bubble, with `text` — the brief written for the
+  // agent — folded inside it.
   taskStart?: TaskStart;
   // The message telling the coordinator its project was started, when the control plane recorded
   // the facts beside the echo (`projectStarted`, lib/projectStarted). Nobody's message either.
@@ -392,6 +393,42 @@ type EngineLogLine = { level: string; source: string; text: string };
 function parseEngineLogLine(line: string): EngineLogLine | undefined {
   const m = TRACING_LINE.exec(line);
   return m ? { level: m[2], source: m[3], text: m[4] } : undefined;
+}
+
+type ToolFailureSummary = { tool: string; path?: string; reason: string };
+
+// Tool failures arrive on stderr because the runner could not persist a normal tool result. Keep
+// the first screen useful by extracting the small part a reader needs, while leaving the complete
+// line (including any continuation lines) behind the disclosure control.
+function parseToolFailureSummary(message: string): ToolFailureSummary | undefined {
+  const clean = stripAnsi(message);
+  const text = parseEngineLogLine(clean)?.text ?? clean;
+  const match = /(?:^|\n)error=([\w.-]+)\s+verification failed:\s*([\s\S]*)/i.exec(text);
+  if (!match) return undefined;
+
+  const detail = match[2].trim();
+  const pathMatch = /(?:^|\s)(\/[^\s:]*\/worktrees\/[^/\s]+\/([^:\n]+?))(?::|\n|$)/.exec(detail);
+  const path = pathMatch?.[2]?.trim() || undefined;
+  const lower = detail.toLowerCase();
+  let reason: string;
+  if (lower.startsWith('invalid patch:')) {
+    const tail = detail
+      .slice('invalid patch:'.length)
+      .replace(pathMatch?.[1] ?? '', '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/[.:]+$/, '');
+    reason = tail ? `Invalid patch: ${tail}` : 'Invalid patch';
+  } else if (lower.startsWith('failed to find expected lines')) {
+    reason = 'Expected lines not found';
+  } else {
+    reason = 'Patch verification failed';
+  }
+  return { tool: match[1], path, reason };
+}
+
+function canStartStderrContinuation(line: string): boolean {
+  return /verification failed:/i.test(line) && line.trimEnd().endsWith(':');
 }
 
 // A bare URL in an engine's log line ("See the sandbox prerequisites: https://…") is advice you
@@ -453,11 +490,32 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
     }
     return roots;
   };
+  // A task retry re-sends the exact brief that opened the run, but its new user event has no
+  // `taskStart` payload of its own. Keep the control-plane snapshot from that run only while a
+  // retryable failure is waiting, so the re-sent brief keeps the same card shape without treating
+  // an arbitrary message that happens to contain the brief as a task start.
+  type TaskStartReplay = { text: string; card: TaskStart };
+  const taskStartByParent = new Map<string, TaskStartReplay>();
+  const taskStartRetryByParent = new Map<string, TaskStartReplay>();
+  const parentKey = (parentId?: string): string => parentId ?? '';
+  const armTaskStartRetry = (parentId?: string) => {
+    const start = taskStartByParent.get(parentKey(parentId));
+    if (start) taskStartRetryByParent.set(parentKey(parentId), start);
+  };
+  const taskStartForRetry = (parentId: string | undefined, text: string): TaskStart | undefined => {
+    const key = parentKey(parentId);
+    const retry = taskStartRetryByParent.get(key);
+    // Any next user turn closes the retry window. Only an exact replay of the recorded brief gets
+    // the card; a new message remains an ordinary user bubble.
+    taskStartRetryByParent.delete(key);
+    return retry?.text === text ? retry.card : undefined;
+  };
   // A sign-in failure is reported once per dispatch, so a session that is picked up again
   // reports the identical one seconds later. That card is a remedy, not a log line: stacking
   // two says nothing new and puts two live copies of a sign-in there is only one of — with two
   // codes to read and two Cancels for the same relay. A repeat folds into the card above it.
   const authError = (parentId: string | undefined, seq: number, message: string) => {
+    armTaskStartRetry(parentId);
     const list = into(parentId);
     const prev = list[list.length - 1];
     if (prev?.kind === 'authError' && prev.message === message) return;
@@ -475,6 +533,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
     message: string,
     variant: AutoRetryVariant,
   ) => {
+    armTaskStartRetry(parentId);
     if (liveRetry) liveRetry.stale = true;
     const list = into(parentId);
     // A quota is usually spent on the message that just went out, which puts that bubble
@@ -502,15 +561,32 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   // (rather than per sub-workspace) is deliberate — one process writes the stderr, and which tool
   // call happened to be open when it flushed is incidental.
   const stderrSeen = new Map<string, ErrorNode>();
+  let lastStderr: { node: ErrorNode; seq: number; continuing: boolean } | undefined;
   const engineStderr = (parentId: string | undefined, seq: number, line: string) => {
+    // apply_patch writes the explanation over several adjacent stderr events. Keep those lines in
+    // one card while a continuation is expected; a timestamp starts a new logger record and stops
+    // the merge. Only durable sequence numbers are eligible, so live events with seq 0 stay apart.
+    if (
+      lastStderr &&
+      seq > 0 &&
+      lastStderr.seq + 1 === seq &&
+      lastStderr.continuing &&
+      !LEADING_TIMESTAMP.test(line)
+    ) {
+      lastStderr.node.message += `\n${line}`;
+      lastStderr.seq = seq;
+      return;
+    }
     const key = line.replace(LEADING_TIMESTAMP, '');
     const prev = stderrSeen.get(key);
     if (prev) {
       prev.repeats = (prev.repeats ?? 1) + 1;
+      lastStderr = { node: prev, seq, continuing: canStartStderrContinuation(line) };
       return;
     }
     const node: ErrorNode = { kind: 'error', seq, message: line };
     stderrSeen.set(key, node);
+    lastStderr = { node, seq, continuing: canStartStderrContinuation(line) };
     into(parentId).push(node);
   };
 
@@ -533,6 +609,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   for (const ev of events) {
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
+    if (ev.type !== 'system') lastStderr = undefined;
     switch (ev.type) {
       case 'user': {
         outageOver();
@@ -569,8 +646,12 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // lib/openItemDelivery). Read off the event rather than out of the text, so a delivery that
         // carries no card keeps the reading it has always had.
         const itemCard = parseOpenItemDelivery(p) ?? undefined;
-        // The same for a task run's opening turn (lib/taskStartCard): the payload, never the brief.
-        const taskStart = parseTaskStartCard(p) ?? undefined;
+        // The same for a task run's opening turn (lib/taskStartCard): use the payload, or the
+        // opening payload's snapshot for an exact retry, never infer a new card from text alone.
+        const text = recorded ? recorded.text : p.text ? String(p.text) : '';
+        const taskStartFromPayload = parseTaskStartCard(p);
+        const retriedTaskStart = taskStartForRetry(parent, text);
+        const taskStart = taskStartFromPayload ?? retriedTaskStart;
         const startedCard = parseProjectStarted(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
@@ -588,7 +669,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           const node: TextNode = {
             kind: 'user',
             seq: ev.seq,
-            text: recorded ? recorded.text : p.text ? String(p.text) : '',
+            text,
             note: recorded?.note,
             itemCard,
             taskStart,
@@ -599,6 +680,9 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             delivery: typeof p.delivery === 'string' ? p.delivery : undefined,
             steer: p.steer === true,
           };
+          if (taskStart) {
+            taskStartByParent.set(parentKey(parent), { text, card: taskStart });
+          }
           if (ev.turnId) userByTurn.set(ev.turnId, node);
           into(parent).push(node);
         }
@@ -704,6 +788,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // other way.
         const subtype = typeof p.subtype === 'string' ? p.subtype : '';
         const failed = subtype !== '' && !TURN_FINISHED_SUBTYPES.has(subtype) && !turnAccountedFor;
+        if (failed) armTaskStartRetry(parent);
         roots.push(
           failed
             ? { kind: 'error', seq: ev.seq, message: TURN_ENDED_WITHOUT_REPLY }
@@ -737,6 +822,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
       case 'system':
         // A deliberate heads-up from the runner (see NoticeNode) — the turn itself was fine.
         if (p.notice) {
+          lastStderr = undefined;
           into(parent).push({ kind: 'notice', seq: ev.seq, message: String(p.notice) });
           break;
         }
@@ -751,11 +837,15 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         if (p.stderr) {
           const line = stripAnsi(String(p.stderr)).trim();
           if (line && !isBenignEngineStderr(line)) engineStderr(parent, ev.seq, line);
-        }
+          else lastStderr = undefined;
+        } else lastStderr = undefined;
         // A `resumed` begins a new engine run: a retry loop prints the same refusal per
         // attempt, and each attempt's failure is its own error row. The fold is per run,
         // not per session — reset it so the next identical line starts a new row.
-        if (p.subtype === 'resumed') stderrSeen.clear();
+        if (p.subtype === 'resumed') {
+          stderrSeen.clear();
+          lastStderr = undefined;
+        }
         break;
       default:
         break;
@@ -1191,6 +1281,8 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
         </div>
       );
     case 'error': {
+      const failure = parseToolFailureSummary(node.message);
+      if (failure) return <ToolFailureCard node={node} summary={failure} />;
       // An engine's own log line is its running commentary — often advice that ends in "…in the
       // meantime", not this turn dying. Shown at the level the engine itself logged, with the
       // stamp and module it wrote for its log kept in the tooltip. Anything without that preamble
@@ -1225,6 +1317,38 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
         />
       );
   }
+}
+
+function ToolFailureCard({
+  node,
+  summary,
+}: {
+  node: ErrorNode;
+  summary: ToolFailureSummary;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="chat-error-card" data-seq={node.seq}>
+      <div className="chat-error-card-head">
+        <ToolOutlined className="chat-error-card-icon" />
+        <strong>{summary.tool}</strong>
+        <span className="chat-error-card-status">Failed</span>
+        {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
+      </div>
+      {summary.path && <div className="chat-error-card-path">{summary.path}</div>}
+      <div className="chat-error-card-reason">{summary.reason}</div>
+      <button
+        className="chat-error-card-disclosure"
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <RightOutlined rotate={expanded ? 90 : 0} />
+        {expanded ? 'Hide full log' : 'Show full log'}
+      </button>
+      {expanded && <pre className="chat-error-card-log">{node.message}</pre>}
+    </div>
+  );
 }
 
 /**

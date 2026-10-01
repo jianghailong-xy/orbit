@@ -87,6 +87,15 @@ extension CGFloat {
     static let composerBandGap: CGFloat = 8
 }
 
+#if os(iOS)
+private enum ComposerModelMenuPage: Equatable {
+    case root
+    case provider
+    case effort
+    case speed
+}
+#endif
+
 struct ComposerView: View {
     @Environment(AppModel.self) private var app
     @Bindable var console: ConsoleModel
@@ -109,6 +118,8 @@ struct ComposerView: View {
     @State private var showPhotoPicker = false
     @State private var showFileImporter = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
+    @State private var showModelMenu = false
+    @State private var modelMenuPage: ComposerModelMenuPage = .root
     #endif
 
     // The models of the current provider, in catalog order (Opus → Haiku). The model control's
@@ -553,8 +564,12 @@ struct ComposerView: View {
     /// session is pushed immediately in the item's action (applyConfig → PATCH /config); doing it
     /// there instead of via .onChange means a server config sync writing these values back doesn't
     /// echo a redundant PATCH. `.menuOrder(.fixed)` keeps it reading top to bottom the way the web
-    /// menu does, whichever way the system opens it.
+    /// menu does, whichever way the system opens it. macOS keeps the native nested `Menu`; iOS
+    /// uses the custom popover below because its native menu owns the checkmark column.
     private var modelMenu: some View {
+#if os(iOS)
+        iosModelMenu
+#else
         Menu {
             // Only when there is somewhere to go: a second account with the same vendor, another
             // endpoint on the same CLI, or another of the runner's accounts of this engine. One entry
@@ -602,9 +617,11 @@ struct ComposerView: View {
                         }
                     }
                 } label: {
-                    Text("Provider")
-                    Text(AgentDefaults.providerName(console.provider,
-                                                    configured: console.configuredProviders))
+                    menuSubmenuLabel(
+                        "Provider",
+                        value: AgentDefaults.providerName(
+                            console.provider,
+                            configured: console.configuredProviders))
                 }
                 Divider()
             }
@@ -648,8 +665,7 @@ struct ComposerView: View {
                     }
                 }
             } label: {
-                Text("Effort")
-                Text(console.effort.label)
+                menuSubmenuLabel("Effort", value: console.effort.label)
             }
             // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast"
             // tier both exist on some models and not others, so a row drawn regardless would be a
@@ -670,8 +686,7 @@ struct ComposerView: View {
                         }
                     }
                 } label: {
-                    Text("Speed")
-                    Text(console.fastMode ? "Fast" : "Standard")
+                    menuSubmenuLabel("Speed", value: console.fastMode ? "Fast" : "Standard")
                 }
             }
         } label: {
@@ -679,7 +694,323 @@ struct ComposerView: View {
         }
         .menuOrder(.fixed)
         .footerMenuChrome()
+#endif
     }
+
+#if os(iOS)
+    /// iOS puts a `Menu` label's images in a platform-owned leading column. That makes a selected
+    /// row's checkmark jump to the left of the text, regardless of the label's HStack. Use a custom
+    /// popover for this picker so every row owns the same text, check and disclosure columns.
+    private var iosModelMenu: some View {
+        Button {
+            modelMenuPage = .root
+            showModelMenu = true
+        } label: {
+            modelChipLabel
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .layoutPriority(1)
+        .popover(isPresented: $showModelMenu,
+                 attachmentAnchor: .rect(.bounds), arrowEdge: .bottom) {
+            iosModelMenuCard
+                .presentationBackground(.clear)
+                .presentationCompactAdaptation(.popover)
+        }
+        .accessibilityLabel("Model and runtime settings")
+    }
+
+    private var iosModelMenuWidth: CGFloat {
+        min(324, max(280, UIScreen.main.bounds.width * 0.76))
+    }
+
+    @ViewBuilder
+    private var iosModelMenuCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if modelMenuPage != .root {
+                iosModelMenuHeader
+                Divider().padding(.horizontal, 14)
+            }
+            ScrollView(.vertical, showsIndicators: false) {
+                switch modelMenuPage {
+                case .root:
+                    iosModelMenuRoot
+                case .provider:
+                    iosProviderMenu
+                case .effort:
+                    iosEffortMenu
+                case .speed:
+                    iosSpeedMenu
+                }
+            }
+            .frame(maxHeight: 470)
+        }
+        .padding(.vertical, 10)
+        .frame(width: iosModelMenuWidth)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+        }
+        .shadow(color: .black.opacity(0.16), radius: 20, y: 8)
+    }
+
+    private var iosModelMenuHeader: some View {
+        HStack(spacing: 12) {
+            Button {
+                modelMenuPage = .root
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.orbitControlGlyph)
+                    .frame(width: 24, height: 36)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+
+            Text(iosModelMenuHeaderTitle)
+                .font(.orbitControl.weight(.medium))
+                .foregroundStyle(Color.primary)
+                .frame(width: 84, alignment: .leading)
+            Text(iosModelMenuHeaderValue)
+                .font(.orbitControl)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 42)
+    }
+
+    private var iosModelMenuHeaderTitle: String {
+        switch modelMenuPage {
+        case .root: return ""
+        case .provider: return "Provider"
+        case .effort: return "Effort"
+        case .speed: return "Speed"
+        }
+    }
+
+    private var iosModelMenuHeaderValue: String {
+        switch modelMenuPage {
+        case .root: return ""
+        case .provider:
+            return AgentDefaults.providerName(console.provider,
+                                              configured: console.configuredProviders)
+        case .effort: return console.effort.label
+        case .speed: return console.fastMode ? "Fast" : "Standard"
+        }
+    }
+
+    @ViewBuilder
+    private var iosModelMenuRoot: some View {
+        if console.providerSwitchChoices.count > 1 || console.accountRowsOffered {
+            iosMenuRow(title: "Provider",
+                       value: AgentDefaults.providerName(
+                           console.provider, configured: console.configuredProviders),
+                       showsChevron: true) {
+                modelMenuPage = .provider
+            }
+            Divider().padding(.horizontal, 14)
+        }
+
+        ForEach(modelMenuItems) { model in
+            iosMenuRow(title: model.name,
+                       selected: model.id == console.modelID,
+                       disabled: !console.providerCapabilitiesResolved) {
+                iosSelectModel(model)
+            }
+        }
+
+        Divider().padding(.horizontal, 14)
+        iosMenuRow(title: "Effort", value: console.effort.label, showsChevron: true) {
+            modelMenuPage = .effort
+        }
+        if fastModeUsable {
+            iosMenuRow(title: "Speed", value: console.fastMode ? "Fast" : "Standard",
+                       showsChevron: true) {
+                modelMenuPage = .speed
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var iosProviderMenu: some View {
+        ForEach(console.providerSwitchChoices) { choice in
+            let blocked = choice.unavailable != nil && choice.slug != console.provider
+            let here = choice.slug == console.accountEngine
+            let elsewhere = here || blocked ? [] : console.accountChoices(for: choice.slug)
+            let listsAccounts = (here && console.accountRowsOffered) || !elsewhere.isEmpty
+            let fixable = blocked && choice.fixEngine != nil
+            let reason = choice.unavailable ?? ""
+            let fix = fixable ? ", sign in →" : ""
+            iosMenuRow(
+                title: blocked ? "\(choice.label) — \(reason)\(fix)" : choice.label,
+                selected: choice.slug == console.provider && !listsAccounts,
+                disabled: blocked && !fixable) {
+                    if fixable {
+                        if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                        showModelMenu = false
+                    } else if !blocked {
+                        Task {
+                            await console.selectProvider(choice.slug)
+                            showModelMenu = false
+                        }
+                    }
+                }
+            if here && console.accountRowsOffered {
+                iosCurrentAccountRows(choice.slug)
+            } else if !elsewhere.isEmpty {
+                iosOtherAccountRows(choice.slug, elsewhere)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func iosCurrentAccountRows(_ engine: String) -> some View {
+        if console.automaticOffered(engine) {
+            iosMenuRow(title: "Automatic · Resets soonest", selected: console.sessionAutomatic) {
+                Task {
+                    await console.switchAccount(CodexAccounts.automaticID)
+                    showModelMenu = false
+                }
+            }
+        }
+        ForEach(console.accountChoices) { account in
+            let label = account.unavailable.map { "\(account.label) — \($0), sign in →" }
+                ?? account.quota.map { "\(account.label) · \($0)" } ?? account.label
+            iosMenuRow(title: label,
+                       selected: !console.sessionAutomatic
+                           && account.id == console.account(for: engine)) {
+                if account.unavailable != nil {
+                    if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                    showModelMenu = false
+                } else {
+                    Task {
+                        await console.switchAccount(account.id)
+                        showModelMenu = false
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func iosOtherAccountRows(_ engine: String, _ rows: [AccountChoice]) -> some View {
+        if console.automaticOffered(engine) {
+            iosMenuRow(title: "Automatic · Resets soonest") {
+                Task {
+                    await console.selectProvider(engine, account: CodexAccounts.automaticID)
+                    showModelMenu = false
+                }
+            }
+        }
+        ForEach(rows) { account in
+            let label = account.unavailable.map { "\(account.label) — \($0), sign in →" }
+                ?? account.quota.map { "\(account.label) · \($0)" } ?? account.label
+            iosMenuRow(title: label) {
+                if account.unavailable != nil {
+                    if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                    showModelMenu = false
+                } else {
+                    Task {
+                        await console.selectProvider(engine, account: account.id)
+                        showModelMenu = false
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var iosEffortMenu: some View {
+        ForEach(effortMenuItems) { effort in
+            iosMenuRow(title: effort.label, selected: effort == console.effort) {
+                console.selectEffort(effort)
+                Task { await console.applyConfig(effort: effort.rawValue) }
+                app.rememberDefaultEffort(effort.rawValue)
+                showModelMenu = false
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var iosSpeedMenu: some View {
+        ForEach([false, true], id: \.self) { fast in
+            iosMenuRow(title: fast ? "Fast" : "Standard",
+                       selected: fast == console.fastMode) {
+                console.fastMode = fast
+                Task { await console.applyConfig(fastMode: fast) }
+                showModelMenu = false
+            }
+        }
+    }
+
+    private func iosSelectModel(_ model: ModelOption) {
+        let nextEffort = AgentDefaults.normalizedEffort(
+            console.effort, for: console.provider, model: model.id,
+            catalog: console.modelCatalog, configured: console.configuredProviders)
+        let resetEffort = nextEffort != console.effort
+        let clampedPermissionMode = console.selectModel(model.id)
+        app.rememberDefaultModel(model.id, for: console.provider)
+        let permissionMode = clampedPermissionMode ? console.permissionMode.rawValue : nil
+        if resetEffort { console.effort = nextEffort }
+        Task {
+            await console.applyConfig(
+                model: model.id, permissionMode: permissionMode,
+                effort: resetEffort ? nextEffort.rawValue : nil)
+        }
+        showModelMenu = false
+    }
+
+    /// All rows reserve the same trailing check and disclosure columns. Empty `Color.clear` cells
+    /// are intentional: unlike an empty native `Menu` image, they cannot be moved by iOS.
+    private func iosMenuRow(title: String, value: String? = nil, selected: Bool = false,
+                            disabled: Bool = false, showsChevron: Bool = false,
+                            action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                if let value {
+                    Text(title)
+                        .frame(width: 84, alignment: .leading)
+                    Text(value)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                } else {
+                    Text(title)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 4)
+                Group {
+                    if selected {
+                        Image(systemName: "checkmark")
+                            .foregroundStyle(Color.accentColor)
+                    } else {
+                        Color.clear
+                    }
+                }
+                .frame(width: 20, height: 20)
+                Group {
+                    if showsChevron {
+                        Image(systemName: "chevron.right")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Color.clear
+                    }
+                }
+                .frame(width: 20, height: 20)
+            }
+            .font(.orbitControl)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .opacity(disabled ? 0.45 : 1)
+        .padding(.horizontal, 14)
+    }
+#endif
 
     /// The model's name as the chip shows it: "Runtime default" for a draft whose provider has not
     /// resolved yet, else the catalog's friendly name.
@@ -894,18 +1225,50 @@ struct ComposerView: View {
         }
     }
 
-    /// A menu row whose checkmark sits at the TRAILING end of the row, the way a Picker draws it —
-    /// a Menu of Buttons has to render it explicitly. Trailing, not leading (`Label(_:systemImage:)`,
-    /// the natural spelling): a leading icon takes a column on the selected row only, so that row's
-    /// text starts one checkmark to the right of every sibling's, which is what the phone report
-    /// showed. Web parity too — `.scope-menu-row`'s check sits in a trailing slot.
+    /// Keep every option's text on one left edge and show a check only on the selected row. iOS
+    /// treats an Image inside a Menu label as its native leading icon, so the selected row must own
+    /// the image and unselected rows must omit it; transparent placeholders are still rendered as
+    /// checks by the native menu (web parity: `.scope-menu-row` has one selected check).
     @ViewBuilder
     private func menuItemLabel(_ text: String, selected: Bool) -> some View {
         HStack(spacing: 8) {
-            Text(text)
-            Spacer(minLength: 12)
-            if selected { Image(systemName: "checkmark") }
+            Text(text).lineLimit(1)
+            Spacer(minLength: 8)
+            #if os(iOS)
+            if selected {
+                Image(systemName: "checkmark")
+                    .foregroundStyle(Color.accentColor)
+            }
+            #else
+            Image(systemName: "checkmark")
+                .foregroundStyle(selected ? Color.accentColor : Color.clear)
+                .frame(width: 20, alignment: .trailing)
+                .accessibilityHidden(!selected)
+            #endif
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The two-level settings rows stay on one baseline: the title owns the left edge, the current
+    /// value follows it in a muted run, and the nested Menu supplies its disclosure chevron. iOS
+    /// keeps only one text label for a submenu, so a single concatenated Text is used there; two
+    /// sibling Text views make the current value disappear from the native menu row.
+    @ViewBuilder
+    private func menuSubmenuLabel(_ title: String, value: String) -> some View {
+        #if os(iOS)
+        (Text(title) + Text("    ") + Text(value).foregroundStyle(Color.secondary))
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        #else
+        HStack(spacing: 8) {
+            Text(title)
+            Spacer(minLength: 12)
+            Text(value)
+                .foregroundStyle(Color.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        #endif
     }
 
     // MARK: `/` autocomplete menu
@@ -1526,7 +1889,23 @@ private struct PlanUsageDetailPresentation: ViewModifier {
 
     #if os(iOS)
     private var resetHeight: Int {
-        resetConsole?.codexResetCardVisible == true ? 238 : 0
+        guard let resetConsole, resetConsole.codexResetCardVisible else { return 0 }
+
+        // The normal card is about 160pt including its top inset. Add room only for the
+        // secondary lines that are actually visible; reserving the maximum state here leaves a
+        // large empty tail below the button on the common, ready-to-use state.
+        var height = 160
+        if let operation = resetConsole.codexResetOperation,
+           operation.isActive || !operation.status.isEmpty {
+            height += 28
+        }
+        if resetConsole.codexResetEligibilityReason != nil && !resetConsole.codexResetEligible {
+            height += 28
+        }
+        if resetConsole.codexResetError != nil {
+            height += 28
+        }
+        return height
     }
     #endif
 

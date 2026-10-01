@@ -128,6 +128,19 @@ describe('listAttentionLine', () => {
 describe('what an item says beyond the case file', () => {
   const itemsOf = (name: string) => runnerAttention(caseNamed(name).input);
 
+  it('uses the available account’s own window and reset when every account is near its limit', () => {
+    const [quota] = itemsOf(
+      'all Claude accounts near their limits: the account with most room supplies its own fullest window',
+    );
+    expect(quota.params).toEqual({
+      engine: 'claude',
+      window: '5-hour limit',
+      percent: 94,
+      resetsAt: '2026-09-29T03:00:00Z',
+      workspaces: ['app'],
+    });
+  });
+
   it('wikova: the quota names the workspace that spends it and keeps the reset time raw', () => {
     const [quota, disk] = itemsOf('real wikova: Claude weekly 98% and a 95% full disk');
     expect(quota.detail).toBe(

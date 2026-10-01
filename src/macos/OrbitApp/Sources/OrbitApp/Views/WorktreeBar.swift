@@ -27,7 +27,8 @@ struct WorktreeBar: View {
             switch WorktreeBarLogic.mode(isolationStatus: d?.isolationStatus, branch: d?.branch,
                                          changedFileCount: files.count,
                                          mergeStatus: d?.mergeStatus,
-                                         commitStatus: d?.commitStatus) {
+                                         commitStatus: d?.commitStatus,
+                                         hasMergeRecovery: d?.mergeRecovery != nil) {
             case .hidden:
                 EmptyView()
             case .notIsolated:
@@ -101,6 +102,10 @@ struct WorktreeBar: View {
             if let commitFailure {
                 WorktreeCommitFailureView(console: console, failure: commitFailure, branch: branch)
                     .id(d.commitError ?? "")
+            } else if let recovery = d.mergeRecovery {
+                MergeRecoveryView(console: console, recovery: recovery, message: d.mergeError,
+                                  supported: d.mergeRecoverySupported == true,
+                                  busy: console.worktree.busy || turnActive || d.mergeStatus == "pending")
             } else if let failure {
                 failureView(message: failure, manualMergeCommand: manualMergeCmd)
             }
@@ -263,6 +268,13 @@ private struct WorktreeMergeControl: View {
 
         if diverged, let wb = detail.worktreeBranch {
             adoptControl(worktreeBranch: wb, busy: busy)
+        } else if let recovery = detail.mergeRecovery, detail.mergeRecoverySupported == true {
+            WTPillButton(title: status == "pending" ? "Working…" : recovery.code == "LOCAL_SYNC_PENDING"
+                         ? "Sync local checkout" : "Check and repair", disabled: busy || status == "pending") {
+                Task { await console.worktree.recoverMerge(
+                    action: recovery.code == "LOCAL_SYNC_PENDING" ? "sync-local" : "preview",
+                    previewID: recovery.previewId) }
+            }
         } else if status == "merged" {
             let elsewhere = detail.mergeTarget != nil && detail.mergeTarget != "main" && detail.mergeTarget != "master"
             WTChip(title: "✓ Merged" + (elsewhere ? " → \(detail.mergeTarget!)" : ""))

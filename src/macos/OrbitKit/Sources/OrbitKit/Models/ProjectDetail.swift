@@ -142,6 +142,26 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
     public let tasksByStatus: [String: Int]?
     /// Every open blocker and the latest resolved ones; nil from a server that predates the read.
     public let blockers: ProjectBlockers?
+    /// When the project was started — the start card's one write, or the backfill for a project
+    /// that was running before starts were recorded — or nil for one nobody has started.
+    public let startedAt: String?
+    /// Whether the read carried `startedAt` at all, which is what separates "never started" (a
+    /// null) from "this server did not say" (no key) — the two answers `started` must not merge.
+    public let startedAtRead: Bool
+    /// When its owner paused it (Pause project), or nil: while set, nothing starts or merges by
+    /// itself.
+    public let pausedAt: String?
+    /// How many of its tasks may be in flight at once — How it runs' "At most". Nil from a read that
+    /// did not say.
+    public let maxConcurrentTasks: Int?
+
+    /// Whether the project has been started, read off `startedAt` and off nothing else — not off
+    /// Automatic, which is how a started project runs rather than whether it does. Nil for a read
+    /// that did not carry the field, which no condition reads as either answer. Web's
+    /// `projectStarted`.
+    public var started: Bool? {
+        startedAtRead ? startedAt != nil : nil
+    }
 
     public init(id: String, title: String, status: ProjectStatus = .open, goal: String? = nil,
                 instructions: String? = nil, createdAt: String = "", updatedAt: String? = nil,
@@ -149,7 +169,9 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
                 coordinatorSessionId: String? = nil, taskCount: Int = 0,
                 acceptanceCriteriaItems: [ProjectCriterion] = [],
                 integration: ProjectIntegrationSettings? = nil,
-                tasksByStatus: [String: Int]? = nil, blockers: ProjectBlockers? = nil) {
+                tasksByStatus: [String: Int]? = nil, blockers: ProjectBlockers? = nil,
+                startedAt: String? = nil, startedAtRead: Bool = false, pausedAt: String? = nil,
+                maxConcurrentTasks: Int? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -165,6 +187,10 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         self.integration = integration
         self.tasksByStatus = tasksByStatus
         self.blockers = blockers
+        self.startedAt = startedAt
+        self.startedAtRead = startedAtRead || startedAt != nil
+        self.pausedAt = pausedAt
+        self.maxConcurrentTasks = maxConcurrentTasks
     }
 
     private struct Counts: Codable {
@@ -174,7 +200,7 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, title, status, goal, instructions, createdAt, updatedAt, coordinatorEnabled,
              configRevision, coordinatorSessionId, acceptanceCriteriaItems, integration, tasksByStatus,
-             blockers
+             blockers, startedAt, pausedAt, maxConcurrentTasks
         case counts = "_count"
     }
 
@@ -196,6 +222,10 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         integration = try c.decodeIfPresent(ProjectIntegrationSettings.self, forKey: .integration)
         tasksByStatus = try? c.decodeIfPresent([String: Int].self, forKey: .tasksByStatus)
         blockers = try? c.decodeIfPresent(ProjectBlockers.self, forKey: .blockers)
+        startedAtRead = c.contains(.startedAt)
+        startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
+        pausedAt = try c.decodeIfPresent(String.self, forKey: .pausedAt)
+        maxConcurrentTasks = try? c.decodeIfPresent(Int.self, forKey: .maxConcurrentTasks)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -215,6 +245,9 @@ public struct ProjectDocument: Codable, Equatable, Sendable, Identifiable {
         try c.encodeIfPresent(integration, forKey: .integration)
         try c.encodeIfPresent(tasksByStatus, forKey: .tasksByStatus)
         try c.encodeIfPresent(blockers, forKey: .blockers)
+        if startedAtRead { try c.encode(startedAt, forKey: .startedAt) }
+        try c.encodeIfPresent(pausedAt, forKey: .pausedAt)
+        try c.encodeIfPresent(maxConcurrentTasks, forKey: .maxConcurrentTasks)
     }
 }
 
@@ -246,11 +279,22 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
     }
 }
 
-/// The integration line plus what the queue has done with it — the facts the page's line row draws.
+/// The integration line plus what the queue has done with it — the facts the page's line row draws,
+/// and the settings How it runs edits.
 public struct ProjectIntegrationView: Codable, Equatable, Sendable {
     public let line: IntegrationLine?
     public let ref: String?
     public let upstreamRef: String?
+    /// Integration started, so the line can no longer change (§1.2 L4): How it runs draws it
+    /// read-only, with the reason.
+    public let locked: Bool
+    /// When the project started integrating — what the locked line's reason says "since".
+    public let startedAt: String?
+    /// The check run on the combined tree before a landing; nil when there is none.
+    public let mergeCheckCommand: String?
+    /// How long an exception may wait on the coordinator before it becomes the owner's. Nil from a
+    /// server that predates it.
+    public let escalationSeconds: Int?
     /// How far the line is ahead of upstream; nil before anything landed on it.
     public let commitsAheadOfUpstream: Int?
     /// When upstream was last absorbed into the line; nil when it never was.
@@ -266,10 +310,16 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
     public init(line: IntegrationLine? = nil, ref: String? = nil, upstreamRef: String? = nil,
                 commitsAheadOfUpstream: Int? = nil, lastUpstreamSyncAt: String? = nil,
                 integratingCount: Int = 0, queuedCount: Int = 0, mergeCheckOnTip: String = "UNKNOWN",
-                inFlight: ProjectIntegrationInFlight? = nil) {
+                inFlight: ProjectIntegrationInFlight? = nil, locked: Bool = false,
+                startedAt: String? = nil, mergeCheckCommand: String? = nil,
+                escalationSeconds: Int? = nil) {
         self.line = line
         self.ref = ref
         self.upstreamRef = upstreamRef
+        self.locked = locked
+        self.startedAt = startedAt
+        self.mergeCheckCommand = mergeCheckCommand
+        self.escalationSeconds = escalationSeconds
         self.commitsAheadOfUpstream = commitsAheadOfUpstream
         self.lastUpstreamSyncAt = lastUpstreamSyncAt
         self.integratingCount = integratingCount
@@ -283,6 +333,10 @@ public struct ProjectIntegrationView: Codable, Equatable, Sendable {
         line = try c.decodeIfPresent(IntegrationLine.self, forKey: .line)
         ref = try c.decodeIfPresent(String.self, forKey: .ref)
         upstreamRef = try c.decodeIfPresent(String.self, forKey: .upstreamRef)
+        locked = try c.decodeIfPresent(Bool.self, forKey: .locked) ?? false
+        startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
+        mergeCheckCommand = try c.decodeIfPresent(String.self, forKey: .mergeCheckCommand)
+        escalationSeconds = try? c.decodeIfPresent(Int.self, forKey: .escalationSeconds)
         commitsAheadOfUpstream = try c.decodeIfPresent(Int.self, forKey: .commitsAheadOfUpstream)
         lastUpstreamSyncAt = try c.decodeIfPresent(String.self, forKey: .lastUpstreamSyncAt)
         integratingCount = try c.decodeIfPresent(Int.self, forKey: .integratingCount) ?? 0
@@ -724,13 +778,83 @@ public struct UpdateProjectStatusRequest: Codable, Equatable, Sendable {
     }
 }
 
-/// `PATCH /projects/:id` flipping the Automatic switch, fenced on the revision it was read at.
-public struct SetProjectAutomaticRequest: Codable, Equatable, Sendable {
-    public let coordinatorEnabled: Bool
+/// `PATCH /projects/:id` writing How it runs' half of the authorization set — Automatic and the
+/// concurrency limit — fenced on the revision it was read at. Only what changed is sent.
+///
+/// `automatic`, never `coordinatorEnabled`: both write the same column, and the server reads an
+/// older client's `coordinatorEnabled: false` as a pause too — the compatibility an older build is
+/// owed — which a newer client that means only "stop running it for me" must not ask for.
+public struct UpdateProjectAuthorizationRequest: Encodable, Equatable, Sendable {
+    public let automatic: Bool?
+    public let maxConcurrentTasks: Int?
     public let expectedConfigRevision: String
 
-    public init(coordinatorEnabled: Bool, expectedConfigRevision: String) {
-        self.coordinatorEnabled = coordinatorEnabled
+    public init(automatic: Bool? = nil, maxConcurrentTasks: Int? = nil, expectedConfigRevision: String) {
+        self.automatic = automatic
+        self.maxConcurrentTasks = maxConcurrentTasks
         self.expectedConfigRevision = expectedConfigRevision
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case automatic, maxConcurrentTasks, expectedConfigRevision
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(automatic, forKey: .automatic)
+        try c.encodeIfPresent(maxConcurrentTasks, forKey: .maxConcurrentTasks)
+        try c.encode(expectedConfigRevision, forKey: .expectedConfigRevision)
+    }
+}
+
+/// `PATCH /projects/:id/integration` (§1.2 L5): the line, the merge check and the escalation
+/// window, as one object so the server validates the whole choice at once. Only what changed is
+/// sent — and the line only while it can still move, because sending the value a locked line
+/// already holds is refused 409. A merge check sent is sent even when it is none: `null` removes it.
+public struct UpdateProjectIntegrationRequest: Encodable, Equatable, Sendable {
+    public let line: IntegrationLine?
+    /// `.some(nil)` removes the check; nil leaves it alone.
+    public let mergeCheckCommand: String??
+    public let exceptionEscalationSeconds: Int?
+
+    public init(line: IntegrationLine? = nil, mergeCheckCommand: String?? = nil,
+                exceptionEscalationSeconds: Int? = nil) {
+        self.line = line
+        self.mergeCheckCommand = mergeCheckCommand
+        self.exceptionEscalationSeconds = exceptionEscalationSeconds
+    }
+
+    /// Whether it says anything at all — a Save with nothing changed at this door sends nothing.
+    public var isEmpty: Bool {
+        line == nil && mergeCheckCommand == nil && exceptionEscalationSeconds == nil
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case line, mergeCheckCommand, exceptionEscalationSeconds
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encodeIfPresent(line, forKey: .line)
+        if let check = mergeCheckCommand {
+            if let check { try c.encode(check, forKey: .mergeCheckCommand) } else { try c.encodeNil(forKey: .mergeCheckCommand) }
+        }
+        try c.encodeIfPresent(exceptionEscalationSeconds, forKey: .exceptionEscalationSeconds)
+    }
+}
+
+/// What `POST /projects/:id/pause` and `/resume` answer: whether the project is paused now.
+public struct ProjectPauseState: Codable, Equatable, Sendable {
+    public let projectId: String
+    public let startedAt: String?
+    public let pausedAt: String?
+    public let pausedReason: String?
+
+    public init(projectId: String, startedAt: String? = nil, pausedAt: String? = nil,
+                pausedReason: String? = nil) {
+        self.projectId = projectId
+        self.startedAt = startedAt
+        self.pausedAt = pausedAt
+        self.pausedReason = pausedReason
     }
 }

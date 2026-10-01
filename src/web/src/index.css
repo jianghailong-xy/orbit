@@ -981,13 +981,24 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   height: 44px;
   padding: 0 8px;
+  border: 0;
   border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
-.tp-user-trigger:hover {
+.tp-user-trigger:hover,
+.tp-user-trigger.open {
   background: var(--bg-hover);
+}
+.tp-user-trigger:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
 }
 .tp-user-name {
   flex: 1;
@@ -998,6 +1009,69 @@ body {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-1);
+}
+.ant-dropdown-menu.tp-account-menu {
+  width: 280px;
+  max-width: calc(100vw - 16px);
+}
+.tp-account-menu .ant-dropdown-menu-item,
+.tp-account-menu .ant-dropdown-menu-submenu-title {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+}
+.tp-account-menu .ant-dropdown-menu-title-content {
+  flex: 1;
+  min-width: 0;
+}
+.tp-account-menu .ant-dropdown-menu-item.tp-account-profile {
+  min-height: 64px;
+}
+.tp-account-profile-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.tp-account-identity {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.35;
+}
+.tp-account-name,
+.tp-account-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tp-account-name {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.tp-account-detail,
+.tp-account-profile-chevron,
+.tp-account-current-theme {
+  color: var(--text-2);
+  font-size: 12px;
+}
+.tp-account-profile-chevron {
+  flex: none;
+}
+.tp-account-appearance-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+}
+.tp-account-current-theme {
+  margin-left: auto;
+}
+.tp-account-menu .ant-dropdown-menu-item-danger,
+.tp-account-menu .ant-dropdown-menu-item-danger .ant-dropdown-menu-item-icon {
+  color: var(--error);
 }
 
 /* ---- Collapsible sidebar ---- */
@@ -7185,6 +7259,75 @@ button.chat-jump-start:hover {
   gap: 6px;
   align-items: baseline;
   overflow-wrap: anywhere;
+}
+.chat-error-card {
+  margin: 8px 0;
+  padding: 9px 11px 8px 12px;
+  border: 1px solid var(--error-border);
+  border-left: 3px solid var(--error);
+  border-radius: 9px;
+  background: var(--error-bg);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.chat-error-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.chat-error-card-icon {
+  color: var(--error);
+  flex: none;
+}
+.chat-error-card-status {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+}
+.chat-error-card-path {
+  margin: 4px 0 1px 22px;
+  color: var(--text-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.chat-error-card-reason {
+  margin-left: 22px;
+  color: var(--text-1);
+  font-weight: 500;
+}
+.chat-error-card-disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 6px 0 0 20px;
+  padding: 0;
+  border: 0;
+  color: var(--text-2);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.chat-error-card-disclosure:hover {
+  color: var(--text-1);
+}
+.chat-error-card-log {
+  max-height: 280px;
+  margin: 7px 0 0 20px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--text-2);
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow: auto;
 }
 .chat-error-mark {
   flex: none;
@@ -14790,6 +14933,43 @@ button.chat-jump-start:hover {
   margin-block-start: 8px;
   margin-inline-start: 32px;
 }
+/* A row opens its task over the page (ProjectTaskRow) and is tinted the way a Tasks page row is —
+   the same two tokens for "under the pointer" and "open in the panel". The inline padding gives
+   the tint room at the row's edges; the negative margin keeps the words where they were. Scoped
+   under .ant-list to outrank AntD's own item padding without !important. */
+.ant-list .project-task-row.is-openable {
+  cursor: pointer;
+  padding-inline: 12px;
+  margin-inline: -12px;
+}
+.project-task-row.is-openable:hover {
+  background: var(--bg-hover);
+}
+.project-task-row.is-open {
+  background: var(--brand-tint);
+}
+.project-task-row.is-open:hover {
+  background: var(--brand-border);
+}
+/* The title is a link for ⌘/middle-click and the keyboard; to the eye it is the row's title. */
+.project-task-row-link,
+.project-task-row-link:hover {
+  color: inherit;
+}
+/* A task open over its project's page (ProjectTaskPanel) — the Tasks page's panel, lying over the
+   page instead of beside it. The page is a whole document (graph, cards, the task list) and
+   narrowing it would re-flow all of it, carrying the row that was pressed out of view; the Tasks
+   page narrows its table instead, which suits a table. At ≤960px both are the same full-screen page
+   (the panel's own rule). */
+@media (min-width: 961px) {
+  .project-task-panel > .task-detail-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 40;
+    box-shadow: -12px 0 32px rgba(31, 35, 41, 0.1);
+  }
+}
 /* Preserve the reading order but stop fixed metadata from squeezing the identity down to a few
    characters: the full title/excerpt gets the first band, then count + disclosure share the next. */
 @media (max-width: 640px) {
@@ -18537,3 +18717,15 @@ a.wkctx-title:hover { text-decoration: underline; }
   font-size: 11.5px;
   color: var(--text-3);
 }
+
+.wt-recovery { margin: 0 12px 12px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-subtle); font-size: 12px; overflow-wrap: anywhere; }
+.wt-recovery p { margin: 10px 0; color: var(--text-2); }
+.wt-recovery summary { cursor: pointer; margin: 10px 0; }
+.wt-recovery-histories { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.wt-recovery-histories small { display: block; opacity: .7; margin-bottom: 8px; }
+.wt-recovery pre { white-space: pre-wrap; max-height: 400px; overflow: auto; font-size: 11px; }
+.wt-recovery-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.wt-recovery-actions button { padding: 5px 10px; border-radius: 6px; cursor: pointer; }
+.wt-recovery-actions button:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg); color: var(--text-1); font: inherit; }
+.wt-recovery-actions button:disabled { opacity: .55; cursor: default; }
+@media (max-width: 680px) { .wt-recovery-histories { grid-template-columns: 1fr; } }

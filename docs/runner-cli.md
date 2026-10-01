@@ -172,6 +172,7 @@ entry. A runner newer than the server it talks to says in words that the server 
 rather than reporting a bare 404.
 
 ## Headless runner-local access
+
 A process on a registered runner with no `ORBIT_SESSION_ID` can use the runner credential to inspect and send
 messages only to sessions hosted by that runner:
 

@@ -1,6 +1,6 @@
 {
   "name": "orbit",
-  "version": "0.1.200",
+  "version": "0.1.201",
   "private": true,
   "description": "Orbit — AI Agent task scheduling platform (control plane + distributed coding-agent runners)",
   "license": "MIT",
@@ -11,9 +11,12 @@
   ],
   "overrides": {
     "deepmerge-ts": "^8.0.2",
-    "mysql2": "^3.24.3"
+    "mysql2": "^3.24.3",
+    "multer": "^2.4.0"
   },
   "scripts": {
+    "docs:check": "node scripts/check-docs.mjs",
+    "test:docs": "node --test test/check-docs.test.mjs",
     "build": "npm run build -w @orbit/shared && npm run build -w @orbit/apiserver && npm run build -w @orbit/web",
     "build:runner": "bash scripts/build-binaries.sh dist-bin",
     "db:up": "docker compose up -d postgres",
@@ -35,5 +38,11 @@
   },
   "engines": {
     "node": ">=26.0.0"
+  },
+  "devDependencies": {
+    "github-slugger": "2.0.0",
+    "markdown-it": "15.0.2",
+    "markdown-link-check": "3.15.0",
+    "markdownlint-cli2": "0.23.3"
   }
 }

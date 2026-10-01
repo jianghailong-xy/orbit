@@ -23,6 +23,8 @@ import {
   sharedPoolUnavailableReason,
 } from '../providers/shared-pool';
 import { PoolNotices } from '../providers/pool-notice';
+import { CLAUDE_ACCOUNT_MOVE_V1, CODEX_ACCOUNT_MOVE_V1 } from '../providers/account-move-capability';
+import { accountBeforeDispatch, accountSwitchNotice } from '../providers/plan-usage-accounts';
 import {
   choosePoolMember,
   poolFallbackNotice,
@@ -307,6 +309,69 @@ export class QueueService {
     }
   }
 
+  /**
+   * The Codex and Claude accounts a claim builds `session`'s engine on: its own, else its workspace's.
+   *
+   * On Automatic — nobody pinned it, and its workspace leaves the account to Orbit — one its runner's
+   * own snapshot already reports spent is left first, for one with room (accountBeforeDispatch), when
+   * the runner can carry the conversation there. Before, the engine was built on it anyway, its first
+   * turn failed on the usage limit, and only then did the turn-complete or events path make this same
+   * move and the retry sweep send the message again: a failed start and up to a sweep's wait, for a
+   * reset time the snapshot had already stated.
+   *
+   * The move is a compare-and-set on the account the claim read, so a pick made in between wins; it owes
+   * the transcript its line (the one a failure's move says), which the engine this claim starts carries
+   * on its first event.
+   */
+  private async accountsForClaim(session: {
+    id: string;
+    provider: string | null;
+    providerBuiltin: boolean;
+    codexAccount: string | null;
+    codexAccountPinned: boolean;
+    claudeAccount: string | null;
+    claudeAccountPinned: boolean;
+    workspace: { env: unknown; codexAccount: string | null; claudeAccount: string | null } | null;
+    assignedRunner: { engines: unknown; planUsage: unknown; capabilities: string[] } | null;
+  }): Promise<{ codexAccount: string | null | undefined; claudeAccount: string | null | undefined }> {
+    const workspace = session.workspace;
+    const accounts = {
+      codexAccount: session.codexAccount ?? workspace?.codexAccount,
+      claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
+    };
+    const engine =
+      session.provider === AgentProvider.CODEX || session.provider === AgentProvider.CLAUDE ? session.provider : null;
+    const runner = session.assignedRunner;
+    if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin) || !runner) return accounts;
+    if (!(runner.capabilities ?? []).includes(engine === AgentProvider.CODEX ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1)) {
+      return accounts;
+    }
+    const codex = engine === AgentProvider.CODEX;
+    const own = codex ? session.codexAccount : session.claudeAccount;
+    const move = accountBeforeDispatch(
+      engine,
+      { account: own, pinned: codex ? session.codexAccountPinned : session.claudeAccountPinned },
+      workspace,
+      runner.engines,
+      runner.planUsage,
+      new Date(),
+    );
+    if (!move) return accounts;
+    const { count } = await this.prisma.session.updateMany({
+      where: codex
+        ? { id: session.id, codexAccount: own, codexAccountPinned: false }
+        : { id: session.id, claudeAccount: own, claudeAccountPinned: false },
+      data: codex ? { codexAccount: move.to } : { claudeAccount: move.to },
+    });
+    if (count === 0) return accounts;
+    // Owed only when no other line is: one already owed (a pool's) is said first, as PoolNotices.owe keeps it.
+    await this.prisma.session.updateMany({
+      where: { id: session.id, poolSwitchNotice: null },
+      data: { poolSwitchNotice: accountSwitchNotice(engine, move, runner.engines) },
+    });
+    return codex ? { ...accounts, codexAccount: move.to } : { ...accounts, claudeAccount: move.to };
+  }
+
   private async buildSession(sessionId: string): Promise<ClaimedSession> {
     const session = await this.prisma.session.findUniqueOrThrow({
       where: { id: sessionId },
@@ -317,7 +382,15 @@ export class QueueService {
         // `engines` carries the Codex and Claude accounts this runner has, which is where the chosen
         // account resolves to a CODEX_HOME or a CLAUDE_CONFIG_DIR.
         assignedRunner: {
-          select: { runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true, engines: true },
+          select: {
+            runtimeDefaultModels: true,
+            modelCatalog: true,
+            runsAsRoot: true,
+            engines: true,
+            // What moving it off a spent account before this start reads (accountsForClaim).
+            planUsage: true,
+            capabilities: true,
+          },
         },
         // The account-level permission default and orchestration switch, which replaced the
         // per-workspace ones.
@@ -402,6 +475,9 @@ export class QueueService {
       (await this.prisma.runEvent.aggregate({ where: { sessionId: session.id }, _max: { seq: true } }))._max.seq ??
       0;
     const workspace = session.workspace;
+    // The account this start builds the engine on — moved first off one the runner's own snapshot
+    // already reports spent, on Automatic, rather than after the engine's first turn fails there.
+    const accounts = await this.accountsForClaim(session);
     // A Wiki maintenance session's run (wiki/wiki-maintenance-session.ts), null for every other session.
     const maintenance = await wikiMaintenanceRunOf(this.prisma, session);
     const declared = session.provider ?? null;
@@ -436,9 +512,9 @@ export class QueueService {
         workspaceModel: workspace?.model,
         modelCatalog: session.assignedRunner?.modelCatalog,
         workspaceEnv: workspace?.env as Record<string, string> | null,
-        // The account picked for this session, else its workspace's.
-        codexAccount: session.codexAccount ?? workspace?.codexAccount,
-        claudeAccount: session.claudeAccount ?? workspace?.claudeAccount,
+        // The account picked for this session, else its workspace's (accountsForClaim).
+        codexAccount: accounts.codexAccount,
+        claudeAccount: accounts.claudeAccount,
         runnerEngines: session.assignedRunner?.engines,
       });
     let exec = resolveExec(session.model);

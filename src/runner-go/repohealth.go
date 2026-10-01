@@ -319,9 +319,7 @@ func rescueWorkingTree(root string, state repoRootState) (string, error) {
 	body := fmt.Sprintf(
 		"Orbit found this checkout in a %q state and cleaned it up.\n\nSaved here first: this is the working tree exactly as it was,\nconflict markers and all. Files: %s\n",
 		state.State, strings.Join(state.Paths, ", "))
-	commit, err := gitEnv(root, append(env,
-		"GIT_AUTHOR_NAME=Orbit Runner", "GIT_AUTHOR_EMAIL=runner@orbit",
-		"GIT_COMMITTER_NAME=Orbit Runner", "GIT_COMMITTER_EMAIL=runner@orbit"),
+	commit, err := gitEnv(root, env,
 		"commit-tree", tree, "-p", head, "-m", "rescue: working tree before Orbit cleaned up this checkout", "-m", body)
 	if err != nil || commit == "" {
 		return "", fmt.Errorf("commit-tree: %s", gitStderr(err))

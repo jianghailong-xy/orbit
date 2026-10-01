@@ -4,6 +4,10 @@ This guide covers the included Docker Compose deployment: PostgreSQL, the contro
 sidecar, and nginx gateway. It is a practical starting point for one trusted team. Production operators remain
 responsible for TLS, host security, monitoring, and off-host backups.
 
+For a fresh host, follow the [first-run checklist](first-run.md) through one completed task. Use the
+[configuration reference](configuration.md) for defaults, secret handling, and rebuild/recreate requirements,
+and [runner troubleshooting](runner-troubleshooting.md) when enrollment or execution fails.
+
 ## Requirements
 
 - Docker Engine with the Compose plugin

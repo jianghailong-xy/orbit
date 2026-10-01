@@ -17,6 +17,7 @@ import {
   CRITERIA_CHANGE_TITLE,
   CRITERIA_CHANGE_WHAT_CHANGED,
   confirmedChangesKey,
+  confirmedChangesProjectKey,
   criteriaChangeConfirmLabel,
   criteriaChangeKind,
   criteriaChangeMeta,
@@ -260,6 +261,7 @@ export function SessionCriteriaChangeCard({
       // What this press confirmed, for the receipt under the seal it signed: the read that draws
       // the receipt says only the seal, since nothing is left changed once it is confirmed.
       qc.setQueryData(confirmedChangesKey(project, press.digest), press.summary);
+      qc.setQueryData(confirmedChangesProjectKey(project), press.summary);
       qc.setQueryData(acceptanceConfirmationKey(project), next);
     },
     onError: () => qc.invalidateQueries({ queryKey: acceptanceConfirmationKey(project) }),

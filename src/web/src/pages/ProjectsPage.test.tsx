@@ -1470,11 +1470,14 @@ describe('ProjectDetailPage — expanding a task onto its subtasks', () => {
   }
 
   /** One opened level, mounted on its own: a static render cannot press the row's button, so this
-   *  is the only way to assert what an expansion actually puts on screen. */
+   *  is the only way to assert what an expansion actually puts on screen. Under a router, on the
+   *  project's own page: every row opens its task over that page. */
   function renderLevel(qc: QueryClient, projectId: string, parentTaskId: string) {
     return renderToStaticMarkup(
       <QueryClientProvider client={qc}>
-        <ProjectTaskLevel projectId={projectId} parentTaskId={parentTaskId} />
+        <MemoryRouter initialEntries={[`/projects/${projectId}`]}>
+          <ProjectTaskLevel projectId={projectId} parentTaskId={parentTaskId} />
+        </MemoryRouter>
       </QueryClientProvider>,
     );
   }

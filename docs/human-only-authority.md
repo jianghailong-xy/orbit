@@ -325,7 +325,7 @@ message, and two specs (`coordinator-authority.spec.ts:62,100`,
 > the same transaction as the edit. It never writes one for a set nobody confirmed, and never
 > starts a project.
 
-### Decision: (B). The card prompts; the confirmation is written through an owner-authenticated door.
+### Decision: (B). The card prompts; the confirmation is written through an owner-authenticated door
 
 Not because an agent cannot press it — per §"What HUMAN_ONLY actually provides" (`:137-143`) this
 tier has never claimed "impossibility of an agent performing the action", and the review above
