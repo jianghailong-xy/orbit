@@ -84,7 +84,8 @@ struct OrbitiOSApp: App {
 
 /// Sign-in gate. Defined here (not shared) because the macOS `RootView` lives in the excluded
 /// `OrbitApp.swift`. Once signed in, the shell adapts to width: iPhone (compact) gets a left-drawer
-/// shell (`CompactShell`), iPad (regular) keeps `MainView`'s three-column split.
+/// shell (`CompactShell`), iPad (regular) keeps `MainView`'s three-column split, whose first column
+/// is that same drawer.
 private struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var hSize
@@ -99,8 +100,8 @@ private struct RootView: View {
             // Register for "needs your reply" pushes once signed in (idempotent).
             .task { model.enablePush() }
             .sessionSearchSheet(model)
-            // Settings is a sheet over whichever shell is showing — the drawer's gear on iPhone, the
-            // sidebar's row on iPad.
+            // Settings is a sheet over whichever shell is showing — raised by the drawer's gear, which
+            // the iPad's sidebar carries too.
             .settingsSheet(model)
         } else {
             LoginView()

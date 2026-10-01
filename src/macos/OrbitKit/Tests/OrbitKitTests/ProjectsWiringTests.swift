@@ -142,6 +142,39 @@ final class ProjectsWiringTests: XCTestCase {
         XCTAssertTrue(row.contains("model.openProject(project.id, origin: .drawer)"))
     }
 
+    /// The iPad's sidebar is this same drawer, seated in the split's first column (the owner's pick,
+    /// 2026-10-01, docs/mocks/ipad-sidebar-reuse-drawer): one rail on both, so the counts, the open
+    /// projects and the New session / Settings bar come with it, and the Manage group and account row
+    /// it replaced are gone — Settings holds Runners, Admin and Sign out. macOS keeps its source list.
+    /// In the column the drawer closes nothing, its title and search ride the column's bar beside the
+    /// system's sidebar toggle, and a work row only switches section, as the source list did: the list
+    /// column is on screen anyway, and the detail keeps the page it had.
+    func testTheIPadSidebarIsTheDrawer() throws {
+        let main = code(try appSource("Views/MainView.swift"))
+        let sidebar = try slice(main, from: "private var sidebar: some View {", to: "\n    }\n")
+        XCTAssertTrue(sidebar.contains("#if os(iOS)\n        NavigationDrawer(close: {}, live: true, inSidebarColumn: true)"
+                                       + "\n        #else\n        SectionSidebar("),
+                      "the iPad seats the drawer; macOS keeps its source list")
+        let macOS = try slice(main, from: "#if os(macOS)", to: "#endif")
+        XCTAssertTrue(macOS.contains("struct SectionSidebar: View {") && macOS.contains("struct AccountFooter: View {"),
+                      "the source list and its account row are macOS's alone")
+
+        let shell = code(try appSource("Views/CompactShell.swift"))
+        XCTAssertTrue(shell.contains("\nstruct NavigationDrawer: View {"), "MainView seats it, so it isn't private")
+        let drawer = try slice(shell, from: "struct NavigationDrawer: View {", to: "private var actionBar: some View {")
+        XCTAssertTrue(drawer.contains("if !inSidebarColumn {\n                HStack {"), "the column draws no header of its own")
+        XCTAssertTrue(drawer.contains("if inSidebarColumn { columnBar }"), "its header rides the column's bar")
+        for row in ["private var projectsRow: some View {", "private var wikiRow: some View {"] {
+            let press = try slice(shell, from: row, to: ".drawerRow()")
+            XCTAssertTrue(press.contains("if !inSidebarColumn { model.nav.popToRoot() }"),
+                          "in the column `\(row)` only switches section")
+        }
+        let tasks = try slice(shell, from: "private func sectionRow(_ section: AppSection) -> some View {",
+                              to: ".drawerRow()")
+        XCTAssertTrue(tasks.contains("if section == .tasks && !inSidebarColumn {"),
+                      "and Tasks keeps the task the detail shows")
+    }
+
     /// A project's page the drawer opened gives the left edge back to the drawer, as a Recents console
     /// does (the owner's report, 2026-09-29: the swipe went back to the Projects list instead). The
     /// edge strip is up while that page is on top, and the page turns the system back-swipe off; the

@@ -4,9 +4,9 @@ import OrbitKit
 import UIKit
 #endif
 
-// Batch D + Agents-in-sidebar refinement: the Workspace list now lives in the sidebar source list
-// (see `SectionSidebar`), folding away the old middle column. iOS renders first-level Workspaces;
-// macOS retains its runner grouping. What remains
+// Batch D + Agents-in-sidebar refinement: the Workspace list now lives in the sidebar, folding away
+// the old middle column. iOS renders first-level Workspaces in the drawer (iPad's sidebar is the
+// same drawer); macOS retains its runner grouping (see `SectionSidebar`). What remains
 // here is the selected agent's detail, split across the two right panes to mirror Open:
 //   • content column → the agent's sessions as a plain list; the window toolbar hosts the
 //                       Open/Completed/Trash scope switcher (principal), a New-session button
@@ -59,40 +59,18 @@ struct WorkspaceNavigationRow: View {
     /// `running` and never as the spinner: nobody is generating, something is happening anyway.
     var jobs: Bool = false
     let waiting: Int
-    /// The compact drawer keeps Workspace and Runner on one line. The regular-width iPad sidebar
-    /// uses a calmer two-line identity treatment so status never competes with truncated metadata.
-    var runnerOnSecondLine = false
 
     var body: some View {
         let status = WorkspaceNavigationStatusLogic.resolve(
             waiting: waiting, running: running, jobs: jobs, runnerOffline: offline)
         HStack(spacing: 12) {
             WorkspaceFolderIcon(selected: selected, offline: offline)
-            if runnerOnSecondLine {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 0) {
-                        workspaceName
-                        disabledBadge
-                    }
-                    // Offline is said in words here, not left to the folder's corner badge: that
-                    // badge is a small muted glyph on a dark row and reads as texture rather than
-                    // as state. This line has the width for it, and saying it costs no contrast —
-                    // dimming the whole row, the other obvious option, would drag this subtitle
-                    // under 3:1. The badge stays on as the second channel.
-                    Text(offline ? "\(runnerLabel) · Offline" : runnerLabel)
-                        .font(.orbitListSubtitle)
-                        .lineLimit(1)
-                        .foregroundStyle(.secondary)
-                }
-                .layoutPriority(1)
-            } else {
-                HStack(spacing: 0) {
-                    workspaceName
-                    disabledBadge
-                    Text(" · \(runnerLabel)")
-                        .lineLimit(1)
-                        .foregroundStyle(.secondary)
-                }
+            HStack(spacing: 0) {
+                workspaceName
+                disabledBadge
+                Text(" · \(runnerLabel)")
+                    .lineLimit(1)
+                    .foregroundStyle(.secondary)
             }
             Spacer(minLength: 6)
             if case .needsYou(let count) = status {
@@ -151,38 +129,15 @@ struct NeedsYouCountCapsule: View {
 }
 #endif
 
-/// A Workspace row for the regular-width sidebar. iPad uses a two-line Workspace/Runner identity;
-/// macOS preserves its existing disclosure content and faint ⌘N shortcut where available.
+#if os(macOS)
+/// A Workspace row in the macOS sidebar's Workspaces disclosure: the name over its provider and
+/// working directory, with the faint ⌘N shortcut where it has one. (iOS draws the drawer's
+/// `WorkspaceNavigationRow` on both iPhone and iPad.)
 struct AgentRowView: View {
-    #if os(iOS)
-    @Environment(AppModel.self) private var model
-    #endif
     let agent: Agent
-    #if !os(iOS)
     var shortcutIndex: Int? = nil
     var configuredProviders: [ConfiguredProvider] = []
-    #endif
     var body: some View {
-        #if os(iOS)
-        let offline = model.agents?.runnerIsOffline(agent.runnerId) == true
-        let running = model.runningWorkspaceIDs.contains(agent.id)
-        let jobs = model.jobWorkspaceIDs.contains(agent.id)
-        let selected = model.selectedSection == .agents && model.selectedAgentID == agent.id
-        WorkspaceNavigationRow(
-            agent: agent,
-            runnerLabel: model.agents?.runnerLabel(agent.runnerId) ?? "Shared",
-            selected: selected,
-            offline: offline,
-            running: running,
-            jobs: jobs,
-            // Regular-width iOS keeps its existing status policy: another Session waiting for the
-            // user must not replace this Workspace's running cue. The compact drawer owns the
-            // needs-you badge; the shared row only supplies its visual when that surface opts in.
-            waiting: 0,
-            runnerOnSecondLine: true
-        )
-        .padding(.vertical, 4)
-        #else
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
@@ -207,9 +162,9 @@ struct AgentRowView: View {
             }
         }
         .padding(.vertical, 2)
-        #endif
     }
 }
+#endif
 
 /// How this list's rows navigate — a fact about the container the list is in, not about the rows
 /// (they are the same rows in both shells; see `AgentPanes.sessionRow`).

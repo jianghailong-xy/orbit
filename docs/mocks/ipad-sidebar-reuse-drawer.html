@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>iPad 侧栏 — 直接复用 iPhone 抽屉（效果图）</title>
+<style>
+  :root {
+    --tint: #2E6BFF;                       /* AccentColor: sRGB (0.18, 0.42, 1.0) */
+    --amber: #FF9500;
+    --label: #000;
+    --label-2: rgba(0, 0, 0, .5);
+    --drawer: #F9F9F9;                     /* drawerSurface: white 0.976 */
+    --mark: rgba(255, 59, 48, .9);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 40px 48px; background: #e4e4e9; color: #16161a; width: 1670px;
+    font: 15px/1.55 "Nimbus Sans", "Noto Sans CJK SC", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 28px; letter-spacing: -.02em; margin: 0 0 6px; }
+  h2 { font-size: 20px; margin: 46px 0 14px; }
+  .lede { color: #55555e; margin: 0 0 22px; font-size: 16px; max-width: 1300px; }
+  .tag { display: inline-block; font-size: 13.5px; font-weight: 600; border-radius: 999px; padding: 2px 11px; margin: 0 8px 10px 0; }
+  .tag.now { background: #ffd9d4; color: #8f1d13; }
+  .tag.after { background: #d6e4ff; color: #14428f; }
+  .tag.plain { background: #ececf1; color: #55555e; font-weight: 400; }
+  .num { display: inline-flex; width: 20px; height: 20px; border-radius: 50%; background: var(--mark); color: #fff;
+         font-size: 12px; font-weight: 700; align-items: center; justify-content: center; vertical-align: 1px; flex: none; }
+
+  /* ── iPad（横屏，截图是「更多空间」缩放：1590×1192.5pt，1pt = 1px）──────────────────────── */
+  .ipad { width: 1590px; height: 1192.5px; position: relative; overflow: hidden; border-radius: 22px; background: #fff;
+          box-shadow: 0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.08); }
+  .shot { position: absolute; top: 0; height: 1192.5px; background-image: url(ipad-sidebar-reuse-drawer-shot.png);
+          background-size: 1590px 1192.5px; background-repeat: no-repeat; }
+  .col { width: 318px; height: 1192.5px; position: relative; overflow: hidden; border-radius: 22px 4px 4px 22px;
+         box-shadow: 0 14px 34px rgba(0,0,0,.15), 0 0 0 1px rgba(0,0,0,.08); }
+
+  /* ── 侧栏（抽屉同一个视图）─────────────────────────────────── */
+  .side { position: absolute; left: 0; top: 0; width: 318px; height: 1192.5px; background: var(--drawer); overflow: hidden;
+          color: var(--label); font: 17px/20.33px "Nimbus Sans", "Noto Sans CJK SC", sans-serif; }
+  .side.edge { box-shadow: inset -1px 0 0 rgba(60, 60, 67, .13); }
+  .abs { position: absolute; }
+  .drow { position: absolute; left: 10px; width: 298px; height: 42.33px; border-radius: 10px;
+          display: flex; align-items: center; padding: 0 12px; white-space: nowrap; }
+  .drow.sel { background: rgba(46, 107, 255, .14); }
+  .drow .icon { width: 24px; flex: none; display: flex; justify-content: center; position: relative; }
+  .drow .name { flex: none; }
+  .drow .meta { color: var(--label-2); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .drow .title { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .drow .sp { flex: 1 1 auto; min-width: 18px; }
+  .drow .spin, .drow .cap { margin-left: 12px; }
+  .drow .amber { margin-left: 12px; font-size: 11px; font-weight: 600; color: var(--amber); font-variant-numeric: tabular-nums; }
+  .glabel { position: absolute; left: 22px; font-size: 15px; line-height: 20px; font-weight: 600; color: var(--label-2); }
+  .glabel .n { font-size: 11px; font-weight: 400; margin-left: 8px; }
+  .glabel.proj { color: rgba(60, 60, 67, .6); }
+  .spin { width: 13px; height: 13px; flex: none; overflow: visible; }
+  .cap { flex: none; font-size: 11px; line-height: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
+         color: var(--amber); background: rgba(255, 149, 0, .15); border-radius: 999px; padding: 2px 7px; }
+
+  .mk { position: absolute; border: 1.6px dashed var(--mark); border-radius: 8px; pointer-events: none; z-index: 5; }
+  .mk .num { position: absolute; top: -11px; right: -11px; }
+  .mk .num.l { right: auto; left: -11px; }
+
+  /* ── 对照区 ─────────────────────────────────────────────── */
+  .row { display: flex; gap: 34px; align-items: flex-start; }
+  figure { margin: 0; }
+  .notes { flex: 1; background: #fff; border-radius: 16px; padding: 22px 26px 18px; box-shadow: 0 0 0 1px rgba(0,0,0,.06);
+           margin-top: 37px; font-size: 15px; line-height: 1.62; color: #4a4a52; }
+  .notes ol { margin: 0; padding: 0; list-style: none; }
+  .notes li { margin: 0 0 15px; padding-left: 32px; position: relative; }
+  .notes li .num { position: absolute; left: 0; top: 2px; }
+  .notes li b { color: #16161a; }
+  .notes .same { margin-top: 6px; padding-top: 14px; border-top: 1px solid #ececf0; color: #6a6a72; font-size: 14.5px; }
+  .notes .same b { color: #16161a; }
+  .crop { font-size: 13px; color: #6a6a72; margin-top: 10px; width: 318px; }
+</style>
+
+<h1>iPad 侧栏 — 直接复用 iPhone 抽屉</h1>
+<p class="lede">
+  侧栏这一列换成 iPhone 抽屉的同一个视图：行、计数、状态记号、底部操作条都和手机一致。它仍是 iPad 那条可以收起的侧栏列，
+  不是 iPhone 那种把整屏推开的滑出抽屉。工作区照抄截图，项目和数字是示意。
+</p>
+
+<span class="tag after">② 改后 · 横屏整屏</span><span class="tag plain">只改了最左一列；中间的会话列表和右侧详情是你截图的原像素</span>
+<div class="ipad" id="hero"></div>
+
+<h2>侧栏逐项对照</h2>
+<div class="row">
+  <figure>
+    <span class="tag now">① 现在</span>
+    <div class="col"><div class="shot" style="left:0;width:318px;background-position:0 0"></div><div id="before-marks"></div></div>
+    <div class="crop">截图原样（头像和账号名已遮去）</div>
+  </figure>
+  <figure>
+    <span class="tag after">② 改后</span>
+    <div class="col" id="after"></div>
+    <div class="crop">iPhone 抽屉同一个视图</div>
+  </figure>
+  <div class="notes">
+    <ol>
+      <li><span class="num">1</span><b>顶栏</b>：抽屉的「Orbit + 搜索」。搜索按钮打开 ⌘K 会话面板，在哪一页都能跳到任意会话；iPad 现在没有任何入口能打开它，键盘 ⌘K 也没接。系统的收起侧栏按钮保留，和搜索并成一组。</li>
+      <li><span class="num">2</span><b>数字</b>：Projects 旁边是在等你的项目数，Wiki 旁边是待审提案数，和 iPhone 一样（web 只给 Wiki 标数字）。iPad 现在都不显示。</li>
+      <li><span class="num">3</span><b>工作区</b>：从两行（名称 / Runner）改成一行「名称 · Runner」，状态都放在右侧同一列：等你处理是琥珀数字，运行中是灰色转圈，离线看文件夹角标。iPad 现在不显示等你的数字。选中态从系统灰底换成 iPhone 的蓝色浅底；行高统一成抽屉的 44pt（现在工作区行是 70pt），同一屏能多放一组项目。</li>
+      <li><span class="num">4</span><b>Projects 分组</b>：没关闭的项目，等你的排前面，其余按最近活动排序，点一下打开项目页。iPad 现在没有这一组。</li>
+      <li><span class="num">5</span><b>Manage 整组去掉</b>：Runners、Admin 本来就在设置里（Machines &amp; models、Account 两组）；Following 和 iPhone、web 一样不再放入口，从会话的 Watching 条和通知照样能进。</li>
+      <li><span class="num">6</span><b>底栏</b>：账户行换成浮动的 New session 和设置圆钮，列表从它们下面滑过。头像和退出登录在设置页里。</li>
+    </ol>
+    <div class="same"><b>不变</b>：中间会话列表、右侧详情、侧栏的收起和展开方式。横屏下侧栏常驻，点行不会把它收起。</div>
+  </div>
+</div>
+
+<script>
+const C = 2 * Math.PI * 6.5;
+const spinner = (rot = -60) => `<svg class="spin" viewBox="0 0 13 13"><circle cx="6.5" cy="6.5" r="6.5" fill="none" stroke="rgba(0,0,0,.5)" stroke-width="2" stroke-linecap="round" stroke-dasharray="${(0.7 * C).toFixed(2)} ${C.toFixed(2)}" transform="rotate(${rot} 6.5 6.5)"/></svg>`;
+const capsule = n => `<span class="cap">${n}</span>`;
+const folder = (offline, sel) => `<span class="icon"><svg viewBox="0 0 20 16" style="width:18.6px;height:14.9px"><path d="M1 3.2a2 2 0 0 1 2-2h4.1c.5 0 .9.2 1.3.5l1.3 1.2h7.3a2 2 0 0 1 2 2v8.9a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2z M1 5.6h18" fill="none" stroke="${sel ? 'var(--tint)' : '#000'}" stroke-width="1.45" stroke-linejoin="round"/></svg>${offline ? `<span class="abs" style="right:-2px;bottom:-5px;width:13px;height:13px;border-radius:50%;background:var(--drawer);display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 12 12" style="width:10px;height:10px"><path d="M1.5 4.6a6.6 6.6 0 0 1 9 0M3.2 6.4a4.2 4.2 0 0 1 5.6 0M4.9 8.2a1.8 1.8 0 0 1 2.2 0M2 1.6l8 8.8" fill="none" stroke="rgba(0,0,0,.5)" stroke-width="1.5" stroke-linecap="round"/></svg></span>` : ''}</span>`;
+// SF Symbols 替身：square.grid.2x2 / checklist / book.closed
+const grid = `<span class="icon"><svg viewBox="0 0 20 20" style="width:19px;height:19px"><g fill="none" stroke="#000" stroke-width="1.55"><rect x="1.8" y="1.8" width="6.9" height="6.9" rx="1.7"/><rect x="11.3" y="1.8" width="6.9" height="6.9" rx="1.7"/><rect x="1.8" y="11.3" width="6.9" height="6.9" rx="1.7"/><rect x="11.3" y="11.3" width="6.9" height="6.9" rx="1.7"/></g></svg></span>`;
+const checklist = `<span class="icon"><svg viewBox="0 0 22 18" style="width:21px;height:17px"><circle cx="4.4" cy="4.6" r="3.7" fill="#000"/><path d="M2.7 4.7l1.2 1.2 2.2-2.4" fill="none" stroke="#fff" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="4.4" cy="13.4" r="3.1" fill="none" stroke="#000" stroke-width="1.4"/><path d="M10.6 4.6h10M10.6 13.4h10" stroke="#000" stroke-width="1.6" stroke-linecap="round"/></svg></span>`;
+const book = `<span class="icon"><svg viewBox="0 0 18 21" style="width:16.5px;height:19.5px"><path d="M3.6 1.3h11.2a1.6 1.6 0 0 1 1.6 1.6v13.3a1 1 0 0 1-1 1H4.1a2.1 2.1 0 0 0 0 4.2h11.5M3.6 1.3a2 2 0 0 0-2 2v15.2M5.6 1.6v15.4" fill="none" stroke="#000" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round" transform="translate(0 -1.2) scale(1 .96)"/></svg></span>`;
+const magnifier = (sz = 19) => `<svg viewBox="0 0 20 20" style="width:${sz}px;height:${sz}px"><circle cx="8.3" cy="8.3" r="6.3" fill="none" stroke="#000" stroke-width="2"/><path d="M13 13l5 5" stroke="#000" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+const sidebarGlyph = `<svg viewBox="0 0 24 20" style="width:23px;height:19px"><rect x="1.2" y="1.2" width="21.6" height="17.6" rx="4" fill="none" stroke="#000" stroke-width="1.7"/><path d="M8.6 1.6v16.8" stroke="#000" stroke-width="1.7"/><path d="M3.8 5.6h2.4M3.8 8.6h2.4M3.8 11.6h2.4" stroke="#000" stroke-width="1.4" stroke-linecap="round"/></svg>`;
+
+const WORK = [
+  { icon: grid, t: 'Projects', n: 2 },
+  { icon: checklist, t: 'Tasks' },
+  { icon: book, t: 'Wiki', n: 4 },
+];
+const WS = [
+  { name: 'orbit', runner: 'wikova', sel: true, wait: 1 },
+  { name: 'wikova-develop', runner: 'wikova' },
+  { name: 'wikova-prod', runner: 'wikova' },
+  { name: 'wikova-data', runner: 'workstation', spin: true },
+  { name: 'lfs', runner: 'workstation' },
+  { name: 'wikids', runner: 'workstation' },
+  { name: 'orbit', runner: 'longdeMac-mini.local', offline: true },
+  { name: 'HPC', runner: 'workstation-gpu' },
+];
+const PJ = [
+  { t: 'Orbit Wiki · 阶段 2：从 Orbit 记录生成 wiki', wait: 2 },
+  { t: 'GitHub 主阵地优化与首轮开源发布', wait: 1 },
+  { t: '项目收尾重做：协调者请求收尾，证明不了就不收', run: true },
+  { t: 'FineWeb × Common Crawl → RocksDB 语料库' },
+  { t: 'Wikids AI 游戏模块：狼人杀 MVP' },
+  { t: '试点：集成线线上端到端（判据 14 的验证载体）' },
+  { t: 'New Task 并入 Coordinator 会话' },
+  { t: 'Postgres 性能与容量治理' },
+  { t: '把「什么算完成」从项目末尾搬到开工前' },
+  { t: 'Runner 自动升级与回滚' },
+];
+
+const SW = 318, H = 1192.5, PITCH = 44.33;
+const ROW0 = 84;                                     // 第一行的顶：顶栏按钮（31.5–75.5pt）下面 8pt，同抽屉
+const DIV = ROW0 + 3 * PITCH + 8;                    // 分隔线：工作行之后 8pt
+const WS_LABEL = DIV + 0.5 + 14, WS_TOP = WS_LABEL + 24;
+const PJ_LABEL = WS_TOP + WS.length * PITCH + 14, PJ_TOP = PJ_LABEL + 24;
+const BAR = H - 20 - 8 - 44;                         // 底栏：home indicator 20pt + 8pt 间距
+
+function sidebar(edge) {
+  let s = '';
+  // 状态栏左半（TestFlight 返回、时间、日期），位置照截图
+  s += `<div class="abs" style="left:25.8px;top:8px;height:16px;font-size:13.6px;line-height:16px;font-weight:600;white-space:nowrap;width:240px">
+          <svg class="abs" viewBox="0 0 8 9" style="left:0;top:3.6px;width:8.6px;height:9.4px"><path d="M7.5.4v8.2L.6 4.5z" fill="#000"/></svg>
+          <span class="abs" style="left:13.9px">TestFlight</span><span class="abs" style="left:89.5px">9:20 PM</span><span class="abs" style="left:153.1px">Thu 1 Oct</span></div>`;
+  // 顶栏：Orbit + [搜索 | 收起侧栏]（同一组玻璃按钮，右缘对齐截图里的收起按钮）
+  s += `<div class="abs" style="left:22px;top:40.7px;font-size:22px;line-height:26px;font-weight:700;letter-spacing:.2px">Orbit</div>`;
+  s += `<div class="abs" style="left:208px;top:31.5px;width:100px;height:44px;border-radius:999px;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.08),inset 0 0 0 .5px rgba(0,0,0,.07);display:flex;align-items:center;justify-content:space-around;padding:0 8px">${magnifier(20)}${sidebarGlyph}</div>`;
+  // Projects · Tasks · Wiki
+  WORK.forEach((w, i) => {
+    s += `<div class="drow" style="top:${ROW0 + i * PITCH + 1}px">${w.icon}<span style="margin-left:12px">${w.t}</span><span class="sp"></span>${w.n ? `<span class="amber">${w.n}</span>` : ''}</div>`;
+  });
+  s += `<div class="abs" style="left:22px;top:${DIV}px;width:${SW - 32}px;height:.5px;background:rgba(60,60,67,.29)"></div>`;
+  s += `<div class="glabel" style="top:${WS_LABEL}px">Workspaces</div>`;
+  WS.forEach((w, i) => {
+    const mark = w.wait ? capsule(w.wait) : w.spin ? spinner(-40 + i * 50) : '';
+    s += `<div class="drow${w.sel ? ' sel' : ''}" style="top:${WS_TOP + i * PITCH + 1}px">${folder(w.offline, w.sel)}<span class="name" style="margin-left:12px">${w.name}</span><span class="meta">&nbsp;· ${w.runner}</span><span class="sp"></span>${mark}</div>`;
+  });
+  s += `<div class="glabel proj" style="top:${PJ_LABEL}px">Projects<span class="n">10</span></div>`;
+  PJ.forEach((p, j) => {
+    const mark = p.wait ? capsule(p.wait) : p.run ? spinner(20) : '';
+    s += `<div class="drow" style="top:${PJ_TOP + j * PITCH + 1}px"><span class="title">${p.t}</span><span class="sp"></span>${mark}</div>`;
+  });
+  // 浮动底栏：New session + 设置
+  s += `<div class="abs" style="left:10px;top:${BAR + 0.67}px;height:42.67px;width:164.67px;border-radius:999px;background:var(--tint);color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.12)"><svg viewBox="0 0 20 20" style="width:19px;height:19px"><path d="M9 3.2H4.6A2 2 0 0 0 2.6 5.2v10.2a2 2 0 0 0 2 2h10.2a2 2 0 0 0 2-2V11" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><path d="M15.4 2.2l2.4 2.4-7.6 7.6-3.1.7.7-3.1z" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>New session</div>`;
+  s += `<div class="abs" style="left:${SW - 10 - 44}px;top:${BAR}px;width:44px;height:44px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.14);display:flex;align-items:center;justify-content:center"><svg viewBox="0 0 24 24" style="width:21px;height:21px"><circle cx="12" cy="12" r="3.2" fill="none" stroke="#000" stroke-width="1.9"/><path d="M10.3 2.5h3.4l.5 2.6 1.9.8 2.2-1.5 2.4 2.4-1.5 2.2.8 1.9 2.6.5v3.4l-2.6.5-.8 1.9 1.5 2.2-2.4 2.4-2.2-1.5-1.9.8-.5 2.6h-3.4l-.5-2.6-1.9-.8-2.2 1.5-2.4-2.4 1.5-2.2-.8-1.9-2.6-.5v-3.4l2.6-.5.8-1.9-1.5-2.2 2.4-2.4 2.2 1.5 1.9-.8z" fill="none" stroke="#000" stroke-width="1.8" stroke-linejoin="round"/></svg></div>`;
+  return `<div class="side${edge ? ' edge' : ''}">${s}</div>`;
+}
+
+const box = (l, t, r, b, n, left) => `<div class="mk" style="left:${l}px;top:${t}px;width:${r - l}px;height:${b - t}px"><span class="num${left ? ' l' : ''}">${n}</span></div>`;
+
+// 整屏：左边新侧栏，右边两列用截图
+document.getElementById('hero').innerHTML =
+  `<div class="shot" style="left:${SW}px;width:${1590 - SW}px;background-position:-${SW}px 0"></div>` + sidebar(true);
+
+// 改后（带标注）
+document.getElementById('after').innerHTML = sidebar(false) +
+  box(12, 27, 313, 80, 1) +
+  box(264, ROW0 + 2, 306, ROW0 + 3 * PITCH - 1, 2) +
+  box(7, WS_TOP - 2, 311, WS_TOP + WS.length * PITCH + 2, 3) +
+  box(7, PJ_LABEL - 4, 311, BAR - 6, 4) +
+  box(5, BAR - 3, 313, BAR + 47, 6);
+
+// 现在（截图上标注）：两行工作区、Manage、账户行
+document.getElementById('before-marks').innerHTML =
+  box(9, 290, 309, 859, 3) +
+  box(9, 868, 309, 1116, 5) +
+  box(5, 1122, 313, 1189, 6);
+</script>
+</html>
