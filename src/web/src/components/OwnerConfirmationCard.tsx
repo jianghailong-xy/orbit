@@ -6,7 +6,7 @@ import { api } from '../api';
 import { markdownToPlainLines } from '../lib/markdownText';
 import { ownerConfirmationQuery } from '../lib/queries';
 import { CardActionButton, CardActions } from './CardAction';
-import { ENTER_HINT, SHORTCUT_HINT, useDecisionCardKeys } from './CardHotkey';
+import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
 import { revealOwnerConfirmationCard } from './DecisionRail';
 import { decisionReceiptTime } from './EvidenceDecisionCard';
@@ -313,7 +313,6 @@ export function OwnerConfirmationActions({
         </CardActionButton>
         <CardActionButton tone="secondary" disabled={disabled} onClick={onSendBack}>
           {OWNER_SEND_BACK_ACTION}
-          {keys && !disabled && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
         </CardActionButton>
       </CardActions>
       {/* Under the buttons and not inside the second one's tooltip: a touch screen has no hover,
@@ -429,9 +428,8 @@ export function SessionOwnerConfirmationCard({
     if (reveal && shownRequest) revealOwnerConfirmationCard();
   }, [reveal, shownRequest]);
 
-  // One write and one handoff, called by the buttons and by the keys alike: the same press, whether
-  // it came from a finger or the keyboard. A card that is not asking holds no keys, and the hook is
-  // told so rather than left to guess (`CardHotkey.ts`).
+  // The confirmation button and Enter make the same write; Chat about this arms the composer.
+  // A card that cannot confirm holds no keys (`CardHotkey.ts`).
   const decide = (decision: OwnerDecision): void => {
     if (!waiting) return;
     answer.mutate({ requestId: waiting.requestId, decision });
@@ -443,9 +441,7 @@ export function SessionOwnerConfirmationCard({
   const asking = waiting !== null && read.data !== undefined && !answer.isPending;
   const keys = useDecisionCardKeys({
     confirmEnabled: asking,
-    chatEnabled: asking,
     onConfirm: () => decide('CONFIRM'),
-    onChatAbout: chatAbout,
   });
 
   if (!taskId || !read.data || !waiting) return null;

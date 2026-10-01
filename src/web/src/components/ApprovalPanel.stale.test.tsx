@@ -38,7 +38,7 @@ vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
   // getSessionEventPage calls the module-local `api`, so replacing the exported `api`
   // alone would never intercept the transcript seed.
-  return { ...actual, api: vi.fn(), getSessionEventPage: vi.fn() };
+  return { ...actual, api: vi.fn(), getSessionEventPage: vi.fn(), decideApproval: vi.fn() };
 });
 // jsdom has no IndexedDB, and a cached transcript would seed the window instead of the stub.
 vi.mock('../lib/transcriptStore', () => ({
@@ -46,7 +46,7 @@ vi.mock('../lib/transcriptStore', () => ({
   saveTranscript: async () => {},
 }));
 
-const { api, getSessionEventPage } = await import('../api');
+const { api, getSessionEventPage, decideApproval } = await import('../api');
 const apiMock = vi.mocked(api);
 const seedMock = vi.mocked(getSessionEventPage);
 const { WorkspaceView } = await import('./WorkspaceView');
@@ -180,6 +180,8 @@ beforeEach(() => {
   vi.stubGlobal('EventSource', FakeEventSource);
   apiMock.mockReset();
   seedMock.mockReset();
+  vi.mocked(decideApproval).mockReset();
+  vi.mocked(decideApproval).mockResolvedValue(undefined);
   seedMock.mockImplementation(async () => ({ events: TOOL_CALLS, hasMore: false }));
   apiMock.mockImplementation((path: string) => {
     const reply = (value: unknown) => Promise.resolve(value) as Promise<never>;
@@ -330,6 +332,41 @@ async function theJobsCardsArriveLive(): Promise<void> {
 }
 
 describe('an approval that arrived live outlives the question it was raised for', () => {
+  it('shows Enter on Create it and creates only that project when a question is waiting before it', async () => {
+    await mount();
+    await publish([
+      { seq: 0, type: 'approval_request', payload: {
+        id: 'approval-question', toolName: 'AskUserQuestion',
+        input: { questions: [{ question: 'Which branch?', options: [{ label: 'main' }] }] },
+      } },
+      { seq: 0, type: 'approval_request', payload: {
+        id: 'approval-project', toolName: 'orbit_project_create',
+        input: { title: 'Project closeout', goal: 'Make closeout explicit', acceptanceCriteriaItems: [{ text: 'The owner can close it.' }] },
+      } },
+    ]);
+
+    const create = primaryOf(cardFor('Project closeout'));
+    expect(create.textContent).toContain('Create it');
+    expect(create.querySelector('.approval-kbd')?.textContent, 'Create it is missing Enter').toBe('Enter');
+    expect(cardFor('Project closeout').querySelector('.card-action--secondary .approval-kbd')).toBeNull();
+    await act(async () => {
+      for (const mod of [{ metaKey: true }, { ctrlKey: true }]) {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...mod }));
+      }
+    });
+    expect(decideApproval, 'a chord answered the card').not.toHaveBeenCalled();
+    expect(mounted().querySelector('.composer-replyto'), 'a chord armed Chat about this').toBeNull();
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    expect(vi.mocked(decideApproval).mock.calls).toEqual([
+      [SESSION_PUBLIC, 'approval-project', 'allow', undefined, undefined, undefined],
+    ]);
+    expect(mounted().querySelectorAll('.approval-card')).toHaveLength(1);
+    expect(cardFor('Which branch?')).toBeTruthy();
+  });
+
   it('stops offering an answer once the call it asks about has a result', async () => {
     await bothCardsArriveLive();
 

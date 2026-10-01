@@ -354,6 +354,14 @@ struct TranscriptView: View {
     // it clears the top edge, so "I scrolled above" can never be observed; an accumulating set only
     // grew and the header died). See `recomputeStuck` / `QuestionRuler`.
     @State private var ruler = QuestionRuler()
+    // A scroll asked for from OUTSIDE a SwiftUI update — the main-queue hop after a tap halts the coast,
+    // or after a link's page lands — carried into the next update, which makes it (the
+    // `.onChange(of: heldScroll)` in `body`). `proxy.scrollTo` picks the row's index path when it is
+    // called but scrolls when the List next updates; called from out here, a publish landing in between
+    // can remove rows, and UIKit is handed an index past the end: NSInternalInconsistencyException out of
+    // `_validateScrollingTargetIndexPath`, SIGABRT — the 0.1.2 (4028) TestFlight crash. Inside an update
+    // both halves see the same rows.
+    @State private var heldScroll: HeldScroll?
     #if os(iOS)
     // Handle to the List's UIScrollView (populated by `ScrollTouchConfigurator`) so the jump-to-latest
     // action can force a scroll to the bottom even while the list is coasting.
@@ -515,11 +523,7 @@ struct TranscriptView: View {
                 // Same coast fix as the jump-to-latest disc: cancel the momentum first, or the
                 // deceleration swallows the scroll.
                 transcriptScroll.halt()
-                DispatchQueue.main.async {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(request.rowID, anchor: .center)
-                    }
-                }
+                DispatchQueue.main.async { holdScroll(to: request.rowID, anchor: .center) }
                 #else
                 withAnimation(.easeOut(duration: 0.2)) {
                     proxy.scrollTo(request.rowID, anchor: .center)
@@ -538,10 +542,14 @@ struct TranscriptView: View {
                 #if os(iOS)
                 transcriptScroll.halt()
                 #endif
-                DispatchQueue.main.async {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(request.rowID, anchor: .center)
-                    }
+                DispatchQueue.main.async { holdScroll(to: request.rowID, anchor: .center) }
+            }
+            // The scrolls `heldScroll` carried here, made inside this update — after the List has taken
+            // its rows, so the index path SwiftUI picks for the row is one UIKit has.
+            .onChange(of: heldScroll) { _, held in
+                guard let held else { return }
+                withAnimation(.easeOut(duration: 0.2)) {
+                    proxy.scrollTo(held.rowID, anchor: held.anchor)
                 }
             }
             .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
@@ -733,6 +741,12 @@ struct TranscriptView: View {
         }
     }
 
+    /// Carry a scroll into the next update rather than making it from here (see `heldScroll`). A new
+    /// tick each time, so asking twice for the same row scrolls twice.
+    private func holdScroll(to rowID: String, anchor: UnitPoint) {
+        heldScroll = HeldScroll(rowID: rowID, anchor: anchor, tick: (heldScroll?.tick ?? 0) &+ 1)
+    }
+
     // Sticky header that names the turn above the fold and scrolls back to it — web's
     // `.chat-sticky-question` (muted label + a single ellipsized line, both from `StickySummary`).
     // `anchor: .top` lands the bubble just under this header (it's a safe-area inset, so the scroll
@@ -756,9 +770,7 @@ struct TranscriptView: View {
             // Same coast fix as the jump-to-latest disc: cancel the momentum so `proxy.scrollTo` isn't
             // swallowed by the deceleration, then scroll to the question row on the next runloop.
             transcriptScroll.halt()
-            DispatchQueue.main.async {
-                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bubble.id, anchor: .top) }
-            }
+            DispatchQueue.main.async { holdScroll(to: bubble.id, anchor: .top) }
             #else
             withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bubble.id, anchor: .top) }
             #endif
@@ -807,9 +819,7 @@ struct TranscriptView: View {
             // computed offset: a lazy List's `contentSize` is only an estimate, so an offset undershoots
             // the end (it scrolled, but stopped short of the bottom).
             transcriptScroll.halt()
-            DispatchQueue.main.async {
-                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bottomID, anchor: .bottom) }
-            }
+            DispatchQueue.main.async { holdScroll(to: bottomID, anchor: .bottom) }
             #else
             withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bottomID, anchor: .bottom) }
             #endif
@@ -975,6 +985,13 @@ struct SessionStatusCardView: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Session status")
     }
+}
+
+/// A transcript scroll waiting for the next update to make it (`TranscriptView.heldScroll`).
+private struct HeldScroll: Equatable {
+    let rowID: String
+    let anchor: UnitPoint
+    let tick: Int
 }
 
 #if os(iOS)

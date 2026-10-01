@@ -38,7 +38,7 @@ import {
   acceptanceReadLabel,
   type SettlementPlanChat,
 } from './AcceptanceConfirmationCard';
-import { ENTER_HINT, SHORTCUT_HINT } from './CardHotkey';
+import { ENTER_HINT } from './CardHotkey';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { SessionStartProjectCard, startBody, startPlanView } from './StartProjectCard';
@@ -539,9 +539,9 @@ describe('what the card says', () => {
       .toBe(`✓${startCheckedLine('https://github.com/jianghailong-xy/orbit.git')}`);
     expect(card().querySelector('.settlement-card-explains')?.textContent).toBe(startExplanation(4));
     expect(actionsOf(card()).map(labelOf)).toEqual([START_PROJECT_ACTION, OWNER_SEND_BACK_ACTION]);
-    // One card asking, so it holds the keys, and says so on each control.
+    // The primary action shows Enter; Chat about this has no shortcut.
     expect(action(card(), START_PROJECT_ACTION).querySelector('.approval-kbd')?.textContent).toBe(ENTER_HINT);
-    expect(action(card(), OWNER_SEND_BACK_ACTION).querySelector('.approval-kbd')?.textContent).toBe(SHORTCUT_HINT);
+    expect(action(card(), OWNER_SEND_BACK_ACTION).querySelector('.approval-kbd')).toBeNull();
   });
 
   it('changes the Automatic sentence with the line, and marks the merge check only where it would be missed', async () => {
@@ -630,16 +630,11 @@ describe('the press', () => {
     expect(action(card(), START_PROJECT_ACTION).disabled).toBe(false);
   });
 
-  it('takes the keyboard: the bare key starts it, the chord hands the plan to the composer', async () => {
+  it('starts on Enter and leaves Chat about this without a shortcut', async () => {
     const { card } = await delivered();
     await key({ metaKey: true });
-    expect(armed).toEqual([{
-      projectId: PROJECT,
-      criteriaDigest: SEAL,
-      projectTitle: TITLE,
-      criteria: CRITERIA.map((c) => c.text),
-      question: 'START',
-    }]);
+    await key({ ctrlKey: true });
+    expect(armed).toEqual([]);
     expect(bodies, 'the chord reached the door').toEqual([]);
     expect(card().querySelectorAll('textarea'), 'a text box grew inside the card').toHaveLength(0);
 

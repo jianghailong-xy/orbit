@@ -110,6 +110,28 @@ public struct ToolDisplay: Equatable, Sendable {
                                path: input["file_path"]?.stringValue.map(splitPath), meta: nil,
                                body: .diff([hunk]), autoOpen: false)
 
+        case "apply_patch":
+            let files: [String]
+            if case .array(let values)? = input["files"] {
+                files = values.compactMap { $0.stringValue }.filter { !$0.isEmpty }
+            } else {
+                files = []
+            }
+            let patch = input["patch"]?.stringValue ?? input["diff"]?.stringValue
+            let body: ToolBody
+            if let patch, !patch.isEmpty {
+                body = .code(patch)
+            } else if !files.isEmpty {
+                body = .code(files.joined(separator: "\n"))
+            } else {
+                body = .none
+            }
+            return ToolDisplay(label: "apply_patch", symbol: "pencil", tone: .write,
+                               summary: nil, summaryMono: false,
+                               path: files.first.map(splitPath),
+                               meta: files.count > 1 ? "(files.count) files" : nil,
+                               body: body, autoOpen: false)
+
         case "MultiEdit":
             var edits: [JSONValue] = []
             if case .array(let arr)? = input["edits"] { edits = arr }

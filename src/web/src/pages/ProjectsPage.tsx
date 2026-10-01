@@ -1203,19 +1203,15 @@ export function ProjectDetailPage() {
           {/* One command centre, two responsibilities: the work account establishes context on
               the left, then the coordinator offers the primary human action on the right. On
               narrow screens they remain in this reading/focus order and stack full-width. */}
-          <div
-            className={
-              started !== false ? 'project-command-center has-run-settings' : 'project-command-center'
-            }
-          >
+          <div className="project-command-center">
             <ProjectPanoramaHeader
               projectId={id}
               projectStatus={p.status}
               integrationLine={p.integration?.line ?? null}
               started={started}
             />
-            {/* The right rail: the coordinator, and — once the project is started — How it runs,
-                every setting the start card set, Automatic among them. */}
+            {/* The right rail holds the coordinator only. How it runs follows the command centre at
+                full width so the settings never make the overview's column look empty. */}
             <div className="project-command-rail">
               {/* A grouped tally omits zero-valued statuses. Preserve "payload absent" as unknown,
                   but turn a present map with no OPEN row into the honest zero the card can say. */}
@@ -1224,13 +1220,14 @@ export function ProjectDetailPage() {
                 layout={narrow ? 'narrow' : 'desktop'}
                 openTaskCount={p.tasksByStatus ? (p.tasksByStatus.OPEN ?? 0) : undefined}
               />
-              {started !== false ? (
-                <ProjectPageBlock name="run-settings">
-                  <ProjectRunSettings projectId={id} project={p} />
-                </ProjectPageBlock>
-              ) : null}
             </div>
           </div>
+
+          {started !== false ? (
+            <ProjectPageBlock name="run-settings">
+              <ProjectRunSettings projectId={id} project={p} />
+            </ProjectPageBlock>
+          ) : null}
 
           {/* The stable definition of the project follows the changing execution state and its
               coordinator. A long brief stays complete here; its full Markdown remains the one

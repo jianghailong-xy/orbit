@@ -8,7 +8,7 @@ import {
   readAcceptanceConfirmation,
   type StandardSetConfirmationStanding,
 } from '../lib/acceptanceConfirmation';
-import { ENTER_HINT, SHORTCUT_HINT, useDecisionCardKeys } from './CardHotkey';
+import { ENTER_HINT, SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { PROVENANCE_LABEL, PROVENANCE_TITLE } from './CriteriaDecisionCard';
 
 /**
@@ -600,8 +600,6 @@ export function SessionProjectSettlementCard({
     if (!standing || standing.confirmed || confirm.isPending) return;
     confirm.mutate(standing.currentVersion.digest);
   };
-  // `useDecisionCardKeys` still calls this slot `onChatAbout`: it is the second press on every
-  // decision card, and this file is the one that stopped handing it to a composer.
   const delegate = (): void => {
     if (document === null) return;
     onDelegate?.({ facts: projectSettlementContext(document) });
@@ -609,12 +607,9 @@ export function SessionProjectSettlementCard({
   const offersConfirmation = document?.derivedDone?.withheld.includes(CONFIRMATION_CLAUSE) ?? false;
   const confirmable = standing != null && standing.state !== 'CONFIRMED';
   const asking = shown && document !== null && !settled;
-  const keys = useDecisionCardKeys({
-    confirmEnabled: asking && offersConfirmation && confirmable && !confirm.isPending,
-    chatEnabled: asking,
-    onConfirm: confirmSet,
-    onChatAbout: delegate,
-  });
+  const keys = useCardKeyClaim(asking);
+  useApproveHotkey(keys && offersConfirmation && confirmable && !confirm.isPending, confirmSet, { requireMod: false });
+  useApproveHotkey(keys, delegate);
 
   if (!shown || document === null) return null;
   const title = document.title || project;

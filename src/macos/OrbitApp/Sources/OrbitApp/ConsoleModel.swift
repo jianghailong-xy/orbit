@@ -1120,9 +1120,18 @@ final class ConsoleModel {
     /// the ceiling until the next streamed event. Deliberately not guarded on a change of value: the
     /// transcript re-asserts "pinned at the tail" whenever it appears or switches session, and each
     /// of those is a legitimate place to enforce the cap. A call under the ceiling costs one compare.
+    ///
+    /// The trim is published a turn later, not from the call: the call comes from inside the
+    /// transcript's own update, and a publish there lands between the scroll that same update asks for
+    /// next (`onAppear`, a session switch) and the List update that makes it — so that scroll's index
+    /// path is picked from rows the trim is about to remove (see `TranscriptView.heldScroll`).
     func setReadingHistory(_ reading: Bool) {
         readingHistory = reading
-        if !reading, trimWindow() { publishStateNow() }
+        guard !reading else { return }
+        Task { @MainActor [weak self] in
+            guard let self, !self.readingHistory, self.trimWindow() else { return }
+            self.publishStateNow()
+        }
     }
 
     /// Enforce `maxWindowItems`, unless the reader is up in the history (see `setReadingHistory`) or

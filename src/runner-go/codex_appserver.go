@@ -795,9 +795,10 @@ func codexStderrIsStateInitFailure(line string) bool {
 // auto-approves only known-safe read-only commands and asks about everything else, which Orbit
 // then routes to the same approval card Claude and Kimi use.
 //
-// Auto maps to `on-request`, which lets Codex surface requests that need a boundary decision. Its
-// native auto-reviewer handles eligible escalations; the approval bridge remains a compatibility
-// fallback and automatically accepts routine requests inside the workspace.
+// Auto maps to `on-request` plus a workspace-write sandbox, which lets Codex route boundary
+// crossings through its native reviewer before Orbit falls back to a human card. The approval
+// bridge remains a compatibility fallback and automatically accepts routine requests inside the
+// workspace.
 //
 // dontAsk deliberately stays on `never`. Orbit's Don't Ask is fail-closed ("deny anything not
 // pre-approved"), but Codex is never handed an allowlist — so switching it to `untrusted` would
@@ -1321,19 +1322,13 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 		input = append(input, map[string]interface{}{"type": "localImage", "path": p})
 	}
 	params := map[string]interface{}{
-		"threadId":            threadID,
-		"clientUserMessageId": orbitTurnID,
-		"input":               input,
-		"cwd":                 execDir,
-		"approvalPolicy":      codexApprovalPolicy(job.Agent.PermissionMode),
-		"runtimeWorkspaceRoots": []string{
-			execDir,
-			upDir,
-		},
-		// Orbit's linked worktrees keep Git metadata outside execDir, and normal runner workflows
-		// use network-backed tools and caches. Keep the established full-access sandbox; Auto's
-		// request classifier and native reviewer handle approval decisions at the request layer.
-		"sandboxPolicy": map[string]interface{}{"type": "dangerFullAccess"},
+		"threadId":              threadID,
+		"clientUserMessageId":   orbitTurnID,
+		"input":                 input,
+		"cwd":                   execDir,
+		"approvalPolicy":        codexApprovalPolicy(job.Agent.PermissionMode),
+		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(job.Agent.PermissionMode, job, execDir, upDir),
+		"sandboxPolicy":         codexSandboxPolicy(job.Agent.PermissionMode, job, execDir, upDir),
 	}
 	if reviewer := codexApprovalsReviewer(job.Agent.PermissionMode); reviewer != "" {
 		params["approvalsReviewer"] = reviewer
@@ -1367,14 +1362,11 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 
 func codexThreadParams(job *ClaimedSession, execDir, upDir string) map[string]interface{} {
 	params := map[string]interface{}{
-		"cwd":            execDir,
-		"approvalPolicy": codexApprovalPolicy(job.Agent.PermissionMode),
-		"sandbox":        "danger-full-access",
-		"runtimeWorkspaceRoots": []string{
-			execDir,
-			upDir,
-		},
-		"threadSource": "orbit",
+		"cwd":                   execDir,
+		"approvalPolicy":        codexApprovalPolicy(job.Agent.PermissionMode),
+		"sandbox":               codexSandboxMode(job.Agent.PermissionMode),
+		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(job.Agent.PermissionMode, job, execDir, upDir),
+		"threadSource":          "orbit",
 	}
 	if reviewer := codexApprovalsReviewer(job.Agent.PermissionMode); reviewer != "" {
 		params["approvalsReviewer"] = reviewer

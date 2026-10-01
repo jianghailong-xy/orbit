@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { pendingDecisionsQuery } from '../lib/queries';
 import { CARD_ACTION_CLASS } from './CardAction';
-import { ENTER_HINT, SHORTCUT_HINT } from './CardHotkey';
+import { ENTER_HINT } from './CardHotkey';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
 import {
   decisionRowKey,
@@ -734,7 +734,7 @@ describe('a press, end to end inside the browser', () => {
     expect(press(rendered, DECISION_CONFIRM_ACTION).disabled).toBe(false);
   });
 
-  it('takes the keyboard: the bare key confirms and the chord is the same handoff the button makes', async () => {
+  it('confirms on Enter and leaves Chat about this without a shortcut', async () => {
     const live = row();
     const onSendBack = vi.fn();
     const qc = newClient();
@@ -755,12 +755,11 @@ describe('a press, end to end inside the browser', () => {
     // One card asking, so it holds the keys — and each control says which key presses it, on the
     // control itself: a shortcut nobody can see is a shortcut nobody has.
     expect(hintOn(press(rendered, DECISION_CONFIRM_ACTION))).toBe(ENTER_HINT);
-    expect(hintOn(press(rendered, OWNER_SEND_BACK_ACTION))).toBe(SHORTCUT_HINT);
+    expect(hintOn(press(rendered, OWNER_SEND_BACK_ACTION))).toBeNull();
 
-    // The chord first, because it leaves the card standing: it hands the row over and reaches no
-    // door, which is exactly what its button does.
     await key({ metaKey: true });
-    expect(onSendBack.mock.calls).toEqual([[live]]);
+    await key({ ctrlKey: true });
+    expect(onSendBack).not.toHaveBeenCalled();
     expect(apiMock, 'the chord reached the door').not.toHaveBeenCalled();
     expect(press(rendered, DECISION_CONFIRM_ACTION).disabled).toBe(false);
 

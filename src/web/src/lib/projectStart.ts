@@ -119,6 +119,8 @@ export type SettlementQuestion = 'START' | 'CRITERIA_CHANGE' | 'CONFIRMATION';
 // ── The words: How it runs ───────────────────────────────────────────────────────────────────
 
 export const RUN_TASKS_LAND_ON = 'Tasks land on';
+export const RUN_EXECUTION = 'Execution';
+export const RUN_INTEGRATION = 'Integration';
 export const RUN_LINE_PROJECT_BRANCH = 'A project branch';
 export const RUN_LINE_PROJECT_BRANCH_HINT =
   'Recommended when tasks depend on each other: they land here first and are checked together.';

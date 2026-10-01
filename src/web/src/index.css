@@ -1051,13 +1051,9 @@ body {
   font-weight: 600;
 }
 .tp-account-detail,
-.tp-account-profile-chevron,
 .tp-account-current-theme {
   color: var(--text-2);
   font-size: 12px;
-}
-.tp-account-profile-chevron {
-  flex: none;
 }
 .tp-account-appearance-label {
   display: flex;
@@ -14136,6 +14132,18 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   color: var(--text-3);
 }
+/* The ordinary empty state follows the mobile hierarchy: provider first, then the instruction,
+   then the model that this draft will actually send with. */
+.np-empty-copy {
+  margin-top: 20px;
+  font-size: 17px;
+  color: var(--text-3);
+}
+.np-current-model {
+  margin-top: 5px;
+  font-size: 14px;
+  color: var(--text-4);
+}
 .np-card {
   display: inline-flex;
   flex-direction: column;
@@ -14842,10 +14850,8 @@ button.chat-jump-start:hover {
     grid-template-columns: minmax(0, 1fr);
   }
 }
-/* The rail: the coordinator, and How it runs under it once the project is started. Alone, the
-   coordinator fills the rail to the overview's height, as it always has. With How it runs the rail
-   is the taller column, so the overview keeps its own height instead of stretching into a card of
-   blank space. */
+/* The rail holds the coordinator beside the overview. How it runs follows this row at full width,
+   so a tall settings card cannot leave a dead strip beside the overview. */
 .project-command-rail {
   display: flex;
   flex-direction: column;
@@ -14855,37 +14861,110 @@ button.chat-jump-start:hover {
 .project-command-rail > .project-command-coordinator {
   flex: 1 1 auto;
 }
-.project-command-center.has-run-settings {
-  align-items: start;
-}
-.project-command-center.has-run-settings > .project-work-overview {
-  height: auto !important;
-}
 
-/* How it runs (mock board3 ④): the Open items shell, the integration settings' rows. In the 352px
-   rail each row stacks, label over control, so the controls get the rail's width; once the rail is
-   the page's width (≤920px) the label column comes back, until every setting stacks at 640px. */
+/* How it runs (mock board3 ④): the settings follow the command centre at full width. The two
+   groups keep execution and integration scannable without shrinking the command input into the
+   former 352px rail. */
 .project-run-settings {
-  margin-bottom: 0;
+  margin-bottom: 20px;
 }
-.project-run-settings .project-integration-setting {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 4px;
+.project-run-settings .project-open-items-hint {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin-left: auto;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font-size: 11.5px;
+  font-weight: 650;
 }
-.project-run-settings .project-integration-setting-label {
-  padding-top: 0;
+.project-run-settings-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 18px;
+  padding: 11px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 9px;
+  background: var(--brand-tint);
+  font-size: 13px;
 }
-@media (max-width: 920px) and (min-width: 641px) {
-  .project-run-settings .project-integration-setting {
-    grid-template-columns: 132px minmax(0, 1fr);
-    gap: 12px;
-  }
-  .project-run-settings .project-integration-setting-label {
-    padding-top: 4px;
-  }
+.project-run-settings-summary-dot {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--brand);
 }
-.project-run-settings .project-run-pause {
-  margin-inline-start: auto;
+.project-run-settings-summary > div {
+  display: grid;
+  gap: 2px;
+}
+.project-run-settings-summary strong {
+  color: var(--text-1);
+  font-weight: 650;
+}
+.project-run-settings-summary span:not(.project-run-settings-summary-dot) {
+  color: var(--text-2);
+}
+.project-run-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+}
+.project-run-settings-group {
+  min-width: 0;
+}
+.project-run-settings-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 2px;
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.project-run-settings-group-head::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+.project-run-settings-grid .project-integration-setting {
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 12px;
+}
+.project-run-settings-grid .project-integration-setting-label {
+  padding-top: 4px;
+}
+.project-run-settings-grid .project-run-lines .ant-radio-wrapper-disabled {
+  color: var(--text-1);
+  cursor: default;
+}
+.project-run-settings-grid .project-run-lines .ant-radio-wrapper-disabled .ant-radio-disabled + span {
+  color: var(--text-1);
+}
+.project-run-settings-grid .project-run-lines .ant-radio-disabled.ant-radio-checked .ant-radio-inner {
+  border-color: var(--brand);
+  background: var(--brand);
+}
+.project-run-settings-grid .project-run-lines .ant-radio-disabled.ant-radio-checked .ant-radio-inner::after {
+  background-color: #fff;
+}
+.project-run-settings-grid .start-card-mono,
+.project-run-settings-grid .start-card-mono input {
+  width: 100%;
+}
+.project-run-settings-grid .project-integration-setting.is-warn .ant-input {
+  width: 100%;
+}
+.project-run-settings .project-integration-setting-actions {
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
 }
 .project-run-settings-loading {
   padding: 16px 0 8px;
@@ -14893,6 +14972,29 @@ button.chat-jump-start:hover {
 }
 .project-run-settings-error {
   margin-top: 10px;
+}
+@media (max-width: 920px) {
+  .project-run-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}
+@media (max-width: 640px) {
+  .project-run-settings .project-open-items-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .project-run-settings .project-open-items-hint {
+    margin-left: 0;
+  }
+  .project-run-settings-grid .project-integration-setting {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+  .project-run-settings-grid .project-integration-setting-label {
+    padding-top: 0;
+  }
 }
 
 /* A task row has flexible copy followed by a fixed count and, sometimes, a disclosure. AntD's

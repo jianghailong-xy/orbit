@@ -1708,6 +1708,59 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertTrue(message.contains("privacy review"))
     }
 
+    /// A runner can report an apply_patch/parser failure on stderr without emitting a normal
+    /// tool_result. The failure still belongs to the unresolved call, so it must settle that card
+    /// and keep the surrounding tool run contiguous instead of creating a red row between groups.
+    func testToolFailureStderrSettlesTheUnresolvedToolCard() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("t1"), "name": .string("Bash"),
+            "input": .object(["command": .string("pwd")])
+        ])))
+        r.apply(RunEvent(seq: 2, type: .toolResult, payload: .object([
+            "toolUseId": .string("t1"), "content": .string("/root/orbit")
+        ])))
+        r.apply(RunEvent(seq: 3, type: .toolUse, payload: .object([
+            "toolUseId": .string("t2"), "name": .string("apply_patch"),
+            "input": .object(["files": .array([.string("/repo/README.md")])])
+        ])))
+        r.apply(RunEvent(seq: 4, type: .system, payload: .object([
+            "stderr": .string("2026-09-29T23:54:05.014653Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /root/.orbit/worktrees/session/site/assets/README.md:")
+        ])))
+        // A sequence gap and a following tool_use must not leak the expected source line as a
+        // second top-level error row.
+        r.apply(RunEvent(seq: 8, type: .system, payload: .object([
+            "stderr": .string("The transcript's tool-call rendering: the folded/expandable card row, its semantic body (command /")
+        ])))
+        r.apply(RunEvent(seq: 9, type: .toolUse, payload: .object([
+            "toolUseId": .string("t3"), "name": .string("Bash"),
+            "input": .object(["command": .string("git status")])
+        ])))
+        r.apply(RunEvent(seq: 10, type: .toolResult, payload: .object([
+            "toolUseId": .string("t3"), "content": .string("clean")
+        ])))
+
+        XCTAssertEqual(r.state.items.compactMap(\.asTool).count, 3)
+        XCTAssertFalse(r.state.items.contains { if case .error = $0 { return true }; return false })
+        XCTAssertEqual(r.state.items[1].asTool?.status, .error)
+        XCTAssertTrue(r.state.items[1].asTool?.result?.contains("semantic body") == true)
+    }
+
+    func testUnnamedToolParserFailureSettlesTheLatestUnresolvedTool() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("t1"), "name": .string("mcp__orbit__task_create"),
+            "input": .object(["title": .string("Ship it")])
+        ])))
+        r.apply(RunEvent(seq: 2, type: .system, payload: .object([
+            "stderr": .string("error=failed to parse function arguments: unknown field `question`, expected `title` or `options` at line 1 column 174")
+        ])))
+
+        XCTAssertEqual(r.state.items.count, 1)
+        XCTAssertEqual(r.state.items.first?.asTool?.status, .error)
+        XCTAssertTrue(r.state.items.first?.asTool?.result?.contains("unknown field") == true)
+    }
+
     /// A `system` event with no stderr is lifecycle noise and still earns no row.
     func testSystemEventWithoutStderrStaysSilent() {
         var r = TranscriptReducer()

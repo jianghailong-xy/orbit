@@ -32,6 +32,7 @@ function markup(
     disabled?: boolean;
     note?: string;
     engines?: RunnerEngineHealth[];
+    currentModelLabel?: string;
     projectIntent?: boolean;
   } = {},
 ) {
@@ -45,6 +46,7 @@ function markup(
         runnerId="019fc086-c7c7-7c92-8215-778ad8a6280a"
         disabled={opts.disabled}
         note={opts.note}
+        currentModelLabel={opts.currentModelLabel}
         projectIntent={opts.projectIntent}
       />
     </MemoryRouter>,
@@ -52,13 +54,13 @@ function markup(
 }
 
 describe('NewSessionProviderHero', () => {
-  it('keeps the ordinary New Session framing word-for-word by default', () => {
+  it('uses the iOS empty-state hierarchy for an ordinary new session', () => {
     const html = markup('claude');
 
-    expect(html).toContain('<div class="np-title">Start a new session</div>');
-    expect(html).toContain(
-      '<div class="np-sub">Describe the task — Orbit remembers who runs it.</div>',
-    );
+    expect(html).toContain('<div class="np-empty-copy">Send a task to get started.</div>');
+    expect(html).toContain('<div class="np-current-model">Claude Opus 5</div>');
+    expect(html).not.toContain('Start a new session');
+    expect(html).not.toContain('Orbit remembers who runs it.');
     expect(html).not.toContain('Start a new project');
     expect(html).not.toContain('define the goal, acceptance criteria, and task breakdown together.');
   });
@@ -82,14 +84,11 @@ describe('NewSessionProviderHero', () => {
     expect(html).toContain('np-chev');
   });
 
-  it('names the model it will run, without a funding label in the healthy state', () => {
-    // The credential (subscription vs your key) is a constant the user already set and isn't
-    // actionable here, so the healthy summary names only the model. Funding resurfaces solely as
-    // the `unavailable` warning (covered below).
-    expect(markup('claude')).toContain('Claude Opus 5');
-    expect(markup('claude')).not.toContain('runner login');
-    expect(markup('deepseek')).toContain('DeepSeek V4 Pro');
-    expect(markup('deepseek')).not.toContain('your API key');
+  it('shows the draft model rather than the provider default in the empty state', () => {
+    const html = markup('claude', { currentModelLabel: 'Claude Sonnet 5' });
+
+    expect(html).toContain('<div class="np-current-model">Claude Sonnet 5</div>');
+    expect(html).not.toContain('Claude Opus 5');
   });
 
   it('drops the chevron when there is nothing to pick', () => {

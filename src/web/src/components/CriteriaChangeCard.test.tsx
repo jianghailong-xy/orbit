@@ -28,7 +28,7 @@ import {
   acceptancePlanChangePlaceholder,
   type SettlementPlanChat,
 } from './AcceptanceConfirmationCard';
-import { ENTER_HINT, SHORTCUT_HINT } from './CardHotkey';
+import { ENTER_HINT } from './CardHotkey';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { SessionCriteriaChangeCard, criteriaChangeCounts, criteriaChangeHeld } from './CriteriaChangeCard';
@@ -305,7 +305,7 @@ describe('what the card says', () => {
     expect(card().querySelector('.settlement-card-explains')?.textContent).toBe(CRITERIA_CHANGE_EXPLAINS);
     expect(actionsOf(card()).map(labelOf)).toEqual(['Confirm 5 criteria', OWNER_SEND_BACK_ACTION]);
     expect(actionsOf(card())[0]!.querySelector('.approval-kbd')?.textContent).toBe(ENTER_HINT);
-    expect(actionsOf(card())[1]!.querySelector('.approval-kbd')?.textContent).toBe(SHORTCUT_HINT);
+    expect(actionsOf(card())[1]!.querySelector('.approval-kbd')).toBeNull();
     // No start anywhere on it: the project is running, and nothing on the card says otherwise.
     expect(card().textContent).not.toContain('Start');
   });
@@ -356,18 +356,13 @@ describe('the press', () => {
     await until(() => reports[reports.length - 1] === false, 'the page to be told');
   });
 
-  it('takes the keyboard: the bare key confirms, the chord hands the new criteria to the composer', async () => {
+  it('confirms on Enter and leaves Chat about this without a shortcut', async () => {
     const { node } = await delivered();
     await key({ ctrlKey: true });
-    expect(armed).toEqual([{
-      projectId: PROJECT,
-      criteriaDigest: CURRENT,
-      projectTitle: TITLE,
-      criteria: CRITERIA.map((c) => c.text),
-      question: 'CRITERIA_CHANGE',
-    }]);
+    await key({ metaKey: true });
+    expect(armed).toEqual([]);
     expect(presses, 'the chord reached the door').toEqual([]);
-    expect(cardIn(node), 'the card went away when the chord talked').not.toBeNull();
+    expect(cardIn(node), 'the chord removed the card').not.toBeNull();
 
     await key();
     await until(() => presses.length === 1, 'the bare key to confirm');

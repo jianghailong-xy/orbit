@@ -99,6 +99,12 @@ struct WorktreeBar: View {
                 case .none:   EmptyView()
                 }
             }
+            // Pin to the same 30pt collapsed-row height as the background tray below (web parity: both
+            // bars share `min-height: 30`) so the stack above the composer reads as one system — this 24
+            // plus the bar's 3pt insets. On the row, as web has it (`.wt-row`), not the whole bar: a
+            // `minHeight` frame takes any shorter height it's offered, so on the bar it let a recovery
+            // card taller than the band's share spill out — over the transcript and under the composer.
+            .frame(minHeight: 24)
             if let commitFailure {
                 WorktreeCommitFailureView(console: console, failure: commitFailure, branch: branch)
                     .id(d.commitError ?? "")
@@ -110,9 +116,7 @@ struct WorktreeBar: View {
                 failureView(message: failure, manualMergeCommand: manualMergeCmd)
             }
         }
-        // Pin to the same 30pt collapsed-row height as the background tray below (web parity: both
-        // bars share `min-height: 30`) so the stack above the composer reads as one system.
-        .padding(.horizontal, 10).padding(.vertical, 3).frame(minHeight: 30)
+        .padding(.horizontal, 10).padding(.vertical, 3)
         // The same subtle tint the tray uses, NOT `.bar`: the two are peers in the stack and have to
         // read as one surface (web parity: `.wt-bar` and `.bg-tray` are both `--bg-subtle`). This
         // fill is also what lets the pill stand on the bare content backdrop now that `ComposerBand`

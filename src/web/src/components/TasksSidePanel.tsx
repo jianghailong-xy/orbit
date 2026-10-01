@@ -14,7 +14,6 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   ProjectOutlined,
-  RightOutlined,
   SettingOutlined,
   TeamOutlined,
   UserOutlined,
@@ -787,7 +786,6 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                         {me.data?.name && me.data.name !== me.data.email ? me.data.email : 'View profile'}
                       </span>
                     </span>
-                    <RightOutlined className="tp-account-profile-chevron" />
                   </span>
                 ),
                 onClick: () => navigate('/settings/profile'),
