@@ -1302,6 +1302,18 @@ export class RunnerApiController {
     }
     const after = applied.after;
     if (after) {
+      if (after.considerPromotionProjectId) {
+        // M-F1 / M-F4, after the commit and from the committed rows: "the queue is empty" is only
+        // true of rows that landed, and this job's own is one of them. The service logs and swallows
+        // its own failures — a candidate not made now is made by the next landing.
+        //
+        // BEFORE the facts below, and that order is the closing guardrail's (D5): the merge into
+        // the upstream this queues is work still in flight, and a settled project whose last
+        // landing has just finished must be read with it queued. Read a moment earlier, the project
+        // looks finished while its work is about to go to the upstream — the gap a judgment once
+        // filed a needless "merge into main" task in (`project-looks-finished.ts`).
+        await this.promotions?.considerCandidate(after.considerPromotionProjectId);
+      }
       // J10: the receipt is the fact the tasks downstream were waiting for, and the item is what
       // somebody has to look at. Both are announcements of rows that are already committed, so a
       // failure here is logged and never raised — the runner's result was taken either way.
@@ -1311,12 +1323,6 @@ export class RunnerApiController {
       if (after.openItemIds.length > 0) {
         await this.openItems?.deliverForItems(after.openItemIds)
           .catch((error) => this.logger.warn(`integration exception item not delivered: ${(error as Error)?.message}`));
-      }
-      if (after.considerPromotionProjectId) {
-        // M-F1 / M-F4, after the commit and from the committed rows: "the queue is empty" is only
-        // true of rows that landed, and this job's own is one of them. The service logs and swallows
-        // its own failures — a candidate not made now is made by the next landing.
-        await this.promotions?.considerCandidate(after.considerPromotionProjectId);
       }
       // §7.6 V12 / criterion 13: the merge approval this result may have opened is one of the four
       // things only the account owner can answer, so their devices are told. Handed the item id

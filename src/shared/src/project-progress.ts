@@ -729,4 +729,9 @@ export interface SessionOwnerItem<Instant = string> {
  * anything else (a blocked tool call, a proposal) keeps the generic approval wording, and so does
  * one counting two kinds at once.
  */
-export type SessionWaitingKind = 'OWNER_CONFIRMATION' | 'OWNER_ITEM' | 'START_REQUEST';
+export type SessionWaitingKind =
+  | 'OWNER_CONFIRMATION'
+  | 'OWNER_ITEM'
+  | 'START_REQUEST'
+  | 'DONE_REQUEST'
+  | 'RECORD_AS_DONE';

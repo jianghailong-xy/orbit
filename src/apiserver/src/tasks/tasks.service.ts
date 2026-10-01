@@ -170,6 +170,7 @@ import {
   type AuthorityRequiredAction,
 } from '../projects/coordinator-authority';
 import { criteriaFromDefinitions, criterionKeyOf } from '../projects/project-acceptance';
+import { landingInFlight } from '../projects/project-looks-finished';
 import {
   AUTO_RUN_RETRY_BACKOFF_MS,
   MAX_AUTO_RUN_FAILURES,
@@ -5163,10 +5164,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!actingSessionId || items.length === 0) return;
     const acting = await this.prisma.session.findFirst({
       where: { id: actingSessionId, ownerId },
-      select: { dispatchOrigin: true },
+      select: {
+        dispatchOrigin: true,
+        // The fact this judgment was opened for — the wake that OPENED it, as the scope derivation
+        // reads it — because a settled project's judgment files nothing while the project's work is
+        // still landing (`refuseTaskOpening`).
+        coordinatorWakes: {
+          where: { status: 'SESSION_OPENED' }, select: { event: true }, take: 1,
+        },
+      },
     });
     const principal = authorityPrincipal(acting?.dispatchOrigin);
     if (principal !== 'JUDGMENT') return;
+    const openedFor = acting?.coordinatorWakes?.[0]?.event ?? null;
     const byProject = new Map<string, Array<{
       criterionKey?: string;
       completionCriterion?: TaskCompletionCriterionValue | null;
@@ -5211,6 +5221,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           creatorSession: { dispatchOrigin: SessionDispatchOrigin.PROJECT_COORDINATOR },
         },
       });
+      // Asked only of the judgment it applies to: a settled project's.
+      const landing = openedFor === 'PROJECT_TASKS_SETTLED'
+        && await landingInFlight(this.prisma, projectId);
       for (const item of group) {
         const refusal = refuseTaskOpening(principal, {
           completionCriterion: item.completionCriterion,
@@ -5219,6 +5232,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           openedInWindow,
           opening: group.length,
           budgetPerDay: project.sessionBudgetPerDay,
+          openedFor,
+          landingInFlight: landing,
         });
         if (refusal) throw new ForbiddenException(refusal);
       }

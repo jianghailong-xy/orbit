@@ -501,6 +501,9 @@ test('the detail read reports progress without loading the project’s tasks', a
     // `STANDARD_SET_UNCONFIRMED` — which is what a project whose criteria nobody has confirmed
     // gets, and not a refusal to answer.
     projectStandardSetConfirmation: { findFirst: async () => null },
+    // The landing reasons' one project-wide input: the landings and merges into the upstream in
+    // flight. None here.
+    projectIntegrationJob: { findMany: async () => [] },
     // The project's blockers, read in one raw statement beside the lanes above.
     $queryRaw: async () => [],
   });
@@ -551,6 +554,9 @@ test('the detail read serves the authored criteria and no second representation 
     // `STANDARD_SET_UNCONFIRMED` — which is what a project whose criteria nobody has confirmed
     // gets, and not a refusal to answer.
     projectStandardSetConfirmation: { findFirst: async () => null },
+    // The landing reasons' one project-wide input: the landings and merges into the upstream in
+    // flight. None here.
+    projectIntegrationJob: { findMany: async () => [] },
     // The project's blockers, read in one raw statement beside the lanes above.
     $queryRaw: async () => [],
   });
@@ -600,6 +606,9 @@ test('the detail item is the authored declaration, with no derived verdict besid
     // `STANDARD_SET_UNCONFIRMED` — which is what a project whose criteria nobody has confirmed
     // gets, and not a refusal to answer.
     projectStandardSetConfirmation: { findFirst: async () => null },
+    // The landing reasons' one project-wide input: the landings and merges into the upstream in
+    // flight. None here.
+    projectIntegrationJob: { findMany: async () => [] },
     // The project's blockers, read in one raw statement beside the lanes above.
     $queryRaw: async () => [],
   });
@@ -657,11 +666,23 @@ test('the detail item is the authored declaration, with no derived verdict besid
     independence: 'INDEPENDENT',
     conflicts: [],
     remedy: null,
+    // Why its work is not on main by a receipt of its own: nothing is filed under it, so there is
+    // no receipt to stand on — the reason a card groups it by, decided here and not by the card.
+    landingReason: 'NO_RECEIPT',
     // Which of the three clauses THIS criterion trips, carried with it so a reader groups the
     // criteria by clause without restating the predicates — and two rather than three, which is
     // the difference between this criterion and the project's own list above.
     withheld: ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED'],
   }]);
+  // And every number a card prints, counted once from those same answers: on main plus each reason
+  // adds up to the criteria, so no two numbers on one card can disagree.
+  assert.deepEqual(project.derivedDone.counts, {
+    criteria: 1,
+    met: 0,
+    landed: 0,
+    onMain: 0,
+    byReason: { IN_FLIGHT: 0, ON_PROJECT_BRANCH: 0, NOTHING_TO_LAND: 0, NO_RECEIPT: 1, CODELESS: 0 },
+  });
 });
 
 test('someone else’s project is a 404, not an empty project', async () => {

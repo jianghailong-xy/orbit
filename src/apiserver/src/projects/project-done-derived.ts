@@ -21,10 +21,21 @@ import {
   type CriterionIndependenceRemedy,
 } from './project-criterion-independence';
 import {
-  readCriterionLanding,
+  criterionLanding,
+  readLandingBranches,
   type CriterionLanding,
   type CriterionLandingAnswer,
+  type LandingBranches,
 } from './project-criterion-landing';
+import {
+  CRITERION_LANDING_REASONS,
+  criterionLandingReason,
+  readCriterionLandingReasonFacts,
+  readInFlightLandingJobs,
+  type CriterionLandingReason,
+  type InFlightLandingJob,
+  type LandingReasonServingTask,
+} from './criterion-landing-reason';
 import {
   readCriterionSatisfaction,
   type CriterionSatisfaction,
@@ -138,6 +149,29 @@ export interface DerivedDoneCriterion {
    *  which is what makes a withheld criterion something a card can render rather than something
    *  quietly missing from a total. */
   remedy: CriterionIndependenceRemedy | null;
+  /** Why its work is not on the upstream by a receipt of its own (`criterion-landing-reason.ts`):
+   *  set on every criterion that is not LANDED, and on a LANDED one that had nothing to land. Null
+   *  exactly when it is on main by work of its own. A card groups by this and decides nothing. */
+  landingReason: CriterionLandingReason | null;
+}
+
+/**
+ * Every number a card prints about this project's criteria, counted once, here, from the same
+ * answers `criteria` carries — so "1 criterion has no merge receipt" and "0 with no merge receipt"
+ * can no longer sit on one card (2026-10-01). `onMain` and `byReason` partition the criteria:
+ * they add up to `criteria`.
+ */
+export interface DerivedDoneCounts {
+  /** The stated criteria. */
+  criteria: number;
+  /** Satisfied by the work filed under them. */
+  met: number;
+  /** LANDED, however: on main by work of their own, or with nothing to land. */
+  landed: number;
+  /** LANDED with work of their own on the upstream — `landingReason` null. */
+  onMain: number;
+  /** Every other criterion, by its `landingReason`. */
+  byReason: Record<CriterionLandingReason, number>;
 }
 
 /** The projection: the status these facts project, and — when it is not DONE — what is missing. */
@@ -147,6 +181,7 @@ export interface DerivedProjectDone {
   withheld: DerivedDoneWithheld[];
   criteria: DerivedDoneCriterionAnswer[];
   confirmation: StandardSetConfirmationState;
+  counts: DerivedDoneCounts;
 }
 
 /**
@@ -215,6 +250,26 @@ export function deriveProjectDone(
     withheld,
     criteria: answers,
     confirmation,
+    counts: derivedDoneCounts(answers),
+  };
+}
+
+/** The counts, over the answers they describe and nothing else. */
+export function derivedDoneCounts(criteria: readonly DerivedDoneCriterion[]): DerivedDoneCounts {
+  const byReason = Object.fromEntries(
+    CRITERION_LANDING_REASONS.map((reason) => [reason, 0]),
+  ) as Record<CriterionLandingReason, number>;
+  let onMain = 0;
+  for (const criterion of criteria) {
+    if (criterion.landingReason === null) onMain += 1;
+    else byReason[criterion.landingReason] += 1;
+  }
+  return {
+    criteria: criteria.length,
+    met: criteria.filter((criterion) => criterion.satisfied).length,
+    landed: criteria.filter((criterion) => criterion.landing === 'LANDED').length,
+    onMain,
+    byReason,
   };
 }
 
@@ -230,6 +285,8 @@ type DerivationClient = Pick<
   | 'projectStandardSetConfirmation'
   // A task serving a criterion that was reopened after the owner recorded the project done.
   | 'task'
+  // The landings and merges into the upstream in flight, which a criterion's landing reason reads.
+  | 'projectIntegrationJob'
 >;
 
 export interface StoreDerivedProjectStatusOptions {
@@ -269,6 +326,10 @@ export interface DerivedProjectDoneReading {
   derived: DerivedProjectDone;
   standing: StandardSetConfirmationStanding;
   satisfaction: CriterionSatisfaction[];
+  /** The landings and merges into the upstream queued or running when this was read — the input
+   *  an IN_FLIGHT reason was decided by, and what the closing guardrail asks before telling
+   *  anybody the project looks finished (`project-looks-finished.ts`). */
+  inFlight: InFlightLandingJob[];
 }
 
 export async function readDerivedProjectDoneReading(
@@ -276,7 +337,15 @@ export async function readDerivedProjectDoneReading(
   ownerId: string,
   projectId: string,
 ): Promise<DerivedProjectDoneReading> {
-  const [definitions, satisfaction, landing, independence, confirmation] = await Promise.all([
+  const [
+    definitions,
+    satisfaction,
+    landingFacts,
+    branches,
+    inFlight,
+    independence,
+    confirmation,
+  ] = await Promise.all([
     prisma.projectAcceptanceCriterionDefinition.findMany({
       where: { projectId, project: { ownerId } },
       orderBy: { ordinal: 'asc' },
@@ -291,7 +360,11 @@ export async function readDerivedProjectDoneReading(
       },
     }),
     readCriterionSatisfaction(prisma, ownerId, projectId),
-    readCriterionLanding(prisma, ownerId, projectId),
+    // The landing lane's facts with what its reasons need beside them, and the branches and the
+    // in-flight jobs both are read against.
+    readCriterionLandingReasonFacts(prisma, ownerId, projectId),
+    readLandingBranches(prisma, projectId),
+    readInFlightLandingJobs(prisma, projectId),
     readCriterionIndependence(prisma, ownerId, projectId),
     latestConfirmation(prisma, projectId),
   ]);
@@ -300,11 +373,40 @@ export async function readDerivedProjectDoneReading(
     standardSetVersion(criteriaFromDefinitions(definitions)),
     confirmation,
   );
+  const landing = criterionLandingWithReasons(landingFacts, branches, inFlight);
   return {
     derived: derivedDoneFromLanes(satisfaction, landing, independence, standing.state),
     standing,
     satisfaction,
+    inFlight,
   };
+}
+
+/** One criterion's landing answer with its reason beside it — the landing lane as the projection
+ *  reads it. */
+export interface CriterionLandingWithReason extends CriterionLandingAnswer {
+  landingReason: CriterionLandingReason | null;
+}
+
+/**
+ * The landing lane and each criterion's reason, folded from one read of the facts: the landing
+ * from `criterionLanding`, the reason from `criterionLandingReason` given that same landing, so the
+ * two cannot describe different work.
+ */
+export function criterionLandingWithReasons(
+  facts: ReadonlyArray<{ id: string; servingTasks: ReadonlyArray<LandingReasonServingTask> }>,
+  branches: LandingBranches,
+  inFlight: readonly InFlightLandingJob[],
+): CriterionLandingWithReason[] {
+  const serving = new Map(facts.map((definition) => [definition.id, definition.servingTasks]));
+  return criterionLanding(facts, branches).map((answer) => ({
+    ...answer,
+    landingReason: criterionLandingReason(
+      { landing: answer.landing, servingTasks: serving.get(answer.definitionId) ?? [] },
+      branches,
+      inFlight,
+    ),
+  }));
 }
 
 /**
@@ -312,8 +414,8 @@ export async function readDerivedProjectDoneReading(
  *
  * Split out of `readDerivedProjectDone` so a caller holding the lanes ALREADY can project without
  * reading them a second time: `ProjectsService.get` reads all three for the criteria it serves
- * (`readCriterionSatisfaction`, `readCriterionLanding`, `readCriterionIndependence`) and needs one
- * query more — the confirmation — to answer this. There is one fold, here, so a project's detail
+ * (`readCriterionSatisfaction`, the landing lane with its reasons, `readCriterionIndependence`) and
+ * needs one query more — the confirmation — to answer this. There is one fold, here, so a project's detail
  * document and the column written from it cannot disagree.
  *
  * `satisfaction` is the spine because it is the lane that is one row per criterion by
@@ -322,24 +424,29 @@ export async function readDerivedProjectDoneReading(
  */
 export function derivedDoneFromLanes(
   satisfaction: readonly CriterionSatisfaction[],
-  landing: readonly CriterionLandingAnswer[],
+  landing: readonly CriterionLandingWithReason[],
   independence: readonly CriterionIndependenceAnswer[],
   confirmation: StandardSetConfirmationState,
 ): DerivedProjectDone {
-  const landed = new Map(landing.map((row) => [row.definitionId, row.landing]));
+  const landed = new Map(landing.map((row) => [row.definitionId, row]));
   const independent = new Map(independence.map((row) => [row.definitionId, row]));
   const criteria = satisfaction.map((row) => ({
     definitionId: row.definitionId,
     satisfied: row.satisfied,
     // The same default `ProjectsService.get` serves: a criterion this lane has no receipt about
     // is UNKNOWN, which is exactly what it is for a criterion the lane never saw.
-    landing: landed.get(row.definitionId) ?? ('UNKNOWN' satisfies CriterionLanding),
+    landing: landed.get(row.definitionId)?.landing ?? ('UNKNOWN' satisfies CriterionLanding),
     // A criterion this lane never saw has no authorship row to collide with anything, which is
     // the same answer it gives for a criterion whose author is the owner or is unknown.
     independence: independent.get(row.definitionId)?.independence
       ?? ('INDEPENDENT' satisfies CriterionIndependence),
     conflicts: independent.get(row.definitionId)?.conflicts ?? [],
     remedy: independent.get(row.definitionId)?.remedy ?? null,
+    // And a criterion the lane never saw has no receipt to stand on, which is what its reader
+    // would have said about it too.
+    landingReason: landed.has(row.definitionId)
+      ? landed.get(row.definitionId)!.landingReason
+      : ('NO_RECEIPT' satisfies CriterionLandingReason),
   }));
 
   return deriveProjectDone(criteria, confirmation);

@@ -168,6 +168,7 @@ export const AUTHORITY_REFUSAL_CODES = [
   'TASK_CRITERION_UNDECLARED',
   'TASK_CRITERION_UNKNOWN',
   'TASK_BUDGET_SPENT',
+  'TASK_LANDING_IN_FLIGHT',
 ] as const;
 export type AuthorityRefusalCode = (typeof AUTHORITY_REFUSAL_CODES)[number];
 
@@ -182,6 +183,8 @@ export const AUTHORITY_REQUIRED_ACTIONS = [
   'NAME_THE_CRITERION_THIS_SERVES',
   /** The day's allowance is spent. Nothing to fix in the request; it can be made again later. */
   'WAIT_FOR_THE_BUDGET_WINDOW',
+  /** The project's work is still being landed or merged into the upstream. Nothing to file. */
+  'WAIT_FOR_THE_LANDING',
 ] as const;
 export type AuthorityRequiredAction = (typeof AUTHORITY_REQUIRED_ACTIONS)[number];
 
@@ -432,6 +435,11 @@ export interface TaskOpeningFacts {
   opening: number;
   /** `project.session_budget_per_day`. null is the column's own "no limit". */
   budgetPerDay: number | null;
+  /** The fact the acting judgment session was opened for (`project_coordinator_wake.event` of the
+   *  wake that opened it), when it was opened for one. */
+  openedFor?: string | null;
+  /** A `LAND_TASK`, `CHECK_PROMOTION` or `LAND_PROMOTION` is queued or running in this project. */
+  landingInFlight?: boolean;
 }
 
 /**
@@ -470,6 +478,28 @@ export function refuseTaskOpening(
   facts: TaskOpeningFacts,
 ): AuthorityRefusal | null {
   if (principal !== 'JUDGMENT') return null;
+  // First, because it is about whether there is anything to file at all. The judgment a settled
+  // project opens exists to check that the work reached the upstream, and while a landing or a
+  // merge into it is still running, what looks missing is on its way there: on 2026-10-01 such a
+  // judgment filed a "merge into main" task in exactly that gap and hung it on a criterion that was
+  // already met. The job's own result re-derives the settled fact when it ends, so waiting loses
+  // nothing (`project-looks-finished.ts`).
+  if (facts.openedFor === 'PROJECT_TASKS_SETTLED' && facts.landingInFlight) {
+    return {
+      code: 'TASK_LANDING_IN_FLIGHT',
+      action: 'OPEN_TASK',
+      tier: COORDINATOR_AUTHORITY.OPEN_TASK,
+      requiredAction: 'WAIT_FOR_THE_LANDING',
+      message:
+        'This project’s work is still being landed or merged into the upstream (a LAND_TASK, '
+        + 'CHECK_PROMOTION or LAND_PROMOTION is queued or running), so a judgment opened because its '
+        + 'tasks settled files no work now: whatever looks missing from the upstream is on its way '
+        + 'there, and getting it there is the platform’s job, not a task. When the job ends Orbit '
+        + 'derives the settled fact again and tells whoever has to act. Nothing was written. A task '
+        + 'whose only job is to get work into the upstream serves no acceptance criterion — never '
+        + 'give one a criterionKey.',
+    };
+  }
   const declared = facts.declaredCriterionKey?.trim();
   if (!declared) {
     return {

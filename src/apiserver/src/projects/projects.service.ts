@@ -128,10 +128,12 @@ import {
 } from './project-criterion-satisfaction';
 import {
   type CriterionLanding,
-  criterionLanding,
   landingBranchesFor,
-  readCriterionLandingFacts,
 } from './project-criterion-landing';
+import {
+  readCriterionLandingReasonFacts,
+  readInFlightLandingJobs,
+} from './criterion-landing-reason';
 import {
   configureProjectIntegration,
   type IntegrationSettings,
@@ -153,6 +155,7 @@ import {
 } from './project-criterion-independence';
 import {
   NO_DONE_RECORD,
+  criterionLandingWithReasons,
   derivedDoneFromLanes,
   readStandardSetConfirmationState,
   storeDerivedProjectStatus,
@@ -2434,6 +2437,7 @@ export class ProjectsService {
       satisfaction,
       landingFacts,
       codebase,
+      inFlight,
       independence,
       blockers,
       standardSetConfirmation,
@@ -2466,11 +2470,16 @@ export class ProjectsService {
       // above rather than per criterion or per task. It is a second call because the lane is bolted
       // on beside the derivation instead of inside it, which is what keeps the three clauses out of
       // reach of it; its cost is one findMany whose nested select carries every serving task's
-      // merge receipts, so it is bounded by this project's criteria and not by its work.
-      readCriterionLandingFacts(this.prisma, ownerId, id),
+      // merge receipts, so it is bounded by this project's criteria and not by its work. It carries
+      // each serving task's newest work session too, one relation further down, which is what a
+      // criterion's landing reason reads beside the receipts (`criterion-landing-reason.ts`).
+      readCriterionLandingReasonFacts(this.prisma, ownerId, id),
       // The project's binding, one statement: which two branches those receipts count on, and the
       // integration line this read serves beside the criteria.
       readProjectCodebase(this.prisma, id),
+      // And the landings and merges into the upstream queued or running, one statement: the one
+      // input of a landing reason that is not about any one criterion's work (IN_FLIGHT).
+      readInFlightLandingJobs(this.prisma, id),
       // And the independence lane, in the same batch and on the same terms. Two findManys rather
       // than one — the criteria with their serving work's sessions, and this project's authorship
       // rows — because 0251 deliberately puts no foreign key on `definition_id`, so Prisma has no
@@ -2487,7 +2496,11 @@ export class ProjectsService {
       // the column says what it says instead of re-deriving the rule for itself.
       readStandardSetConfirmationState(this.prisma, project.acceptanceCriterionDefinitions, id),
     ]);
-    const landingAnswers = criterionLanding(landingFacts, landingBranchesFor(codebase));
+    const landingAnswers = criterionLandingWithReasons(
+      landingFacts,
+      landingBranchesFor(codebase),
+      inFlight,
+    );
     const answered = new Map(satisfaction.map((row) => [row.definitionId, row]));
     const landed = new Map(landingAnswers.map((row) => [row.definitionId, row.landing]));
     const independent = new Map(independence.map((row) => [row.definitionId, row]));

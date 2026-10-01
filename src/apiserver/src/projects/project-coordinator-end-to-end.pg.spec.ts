@@ -382,6 +382,19 @@ suite('T8 replays create → auto-dispatch → failed attempt → judgment work 
     assert.equal(settledWake.status, 'SESSION_OPENED');
     assert.ok(settledWake.sessionId);
     assert.notEqual(settledWake.sessionId, failureJudgment.id);
+    // A judgment, because one of the two criteria is served by nothing — not a project that looks
+    // finished, which goes to the standing conversation instead (`project-looks-finished.pg.spec.ts`).
+    // And its protocol is the one project closing D5 left: it files no "merge into main" work, it
+    // looks for a landing still in flight first, and it is told the server refuses its task_create
+    // while one is.
+    const settlementJudgment = await db.session.findUniqueOrThrow({
+      where: { id: settledWake.sessionId! },
+      select: { prompt: true },
+    });
+    assert.equal((settlementJudgment.prompt ?? '').includes('合并并录入主干证据'), false,
+      'the settlement judgment is still told to file a merge task against a criterion');
+    assert.match(settlementJudgment.prompt ?? '', /LAND_TASK、CHECK_PROMOTION、LAND_PROMOTION 排队或在跑/);
+    assert.match(settlementJudgment.prompt ?? '', /TASK_LANDING_IN_FLIGHT/);
     assert.equal(
       await db.projectConvergenceDecision.count({ where: { projectId: project.id } }),
       2,
