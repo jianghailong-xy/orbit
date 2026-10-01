@@ -112,6 +112,12 @@ export interface WikiMaintenanceReport {
   verification?: {
     verified: number;
     failed: number;
+    /**
+     * Every op the run got no verdict for — its own after both passes, and the adopted ones: none of them is
+     * live, each keeps waiting for its verification, and the next run adopts it. None of them fails the run.
+     * An older runner does not report it: its run failed when one of its own ops got no verdict.
+     */
+    waitingForNextRun?: number;
     /** What the run adopted of what ended sessions left waiting, counted apart from its own ops. */
     adopted?: { ops: number; verified: number; failed: number };
   };

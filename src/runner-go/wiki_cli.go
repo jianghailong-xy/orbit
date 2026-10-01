@@ -102,8 +102,11 @@ changed on origin/main (a cited file gone withdraws the sentences citing it), an
 waiting, the ones never written — and one change to the plan is proposed at most for what fits no
 section, a new design document under docs/ among it; with no confirmed plan no document is written;
 and the cursor advances. Any step before the documents that fails ends the run failed and moves
-nothing; the documents' step reports what it could not do and fails nothing. It prints what it did,
-the token spend included, and exits non-zero when the run failed.
+nothing; the documents' step reports what it could not do and fails nothing. Nor does an op the
+verification gets no verdict for: it is asked about once more — told, when its answer was not a
+verdict, why, and which ids a duplicate may name — and one still without a verdict is not live and
+keeps waiting; the next run adopts it. A 401 from the model's endpoint still fails the run. It
+prints what it did, the token spend included, and exits non-zero when the run failed.
 `,
 	"check": `orbit wiki check — whether a Wiki maintenance run did what its task expected
 
@@ -197,7 +200,9 @@ CLAUDE_CONFIG_DIR, the token from ANTHROPIC_AUTH_TOKEN through an apiKeyHelper),
 answers supported, partial, unsupported or duplicate. Each verdict is reported as soon as it is
 read. An answer that is not exactly a verdict reports nothing and counts as a failure; the command
 stops at the first 401 from the model's endpoint and when the space is no longer automatic, and
-exits non-zero when any op it looked at was left without a verdict.
+exits non-zero when any op it looked at was left without a verdict. A Wiki maintenance run does not
+go by that exit: what its verification leaves without a verdict waits for the next run, and fails
+nothing.
 `,
 	"dossier": `orbit wiki dossier — read what happened in a space since its cursor, as its Wiki maintenance run
 

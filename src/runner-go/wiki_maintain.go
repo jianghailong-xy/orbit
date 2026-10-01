@@ -42,7 +42,9 @@ import (
 // or an op the server refuses ends the run `failed`: the space's cursor stays where it was, its
 // consecutive failures go up by one, and the report says where it stopped. Only a run that got through
 // every step advances the cursor, to the last page it read — the position its task expects, which is what
-// `orbit wiki check` holds it to — or, when the breaker held ops back, to where their pages start.
+// `orbit wiki check` holds it to — or, when the breaker held ops back, to where their pages start. An op
+// the verification got no verdict for, asked twice, is not a step that failed: it is not live, it keeps
+// waiting, and the next run adopts it, as it adopts what any ended session left waiting.
 //
 // WHAT THE MODEL SAYS IS CHECKED BEFORE IT IS PROPOSED, and proposed only as the space's maintenance run.
 // Each entry is held to its dossier the way the demo's extract.py held it: a known kind with its fields,
@@ -75,7 +77,8 @@ var wikiMaintainDescription = wikiMaintainPrecondition + " This is a Wiki mainte
 	"provider's, through a clean Claude Code with thinking off — extract at most " + strconv.Itoa(wikiMaintainEntriesPerSession) +
 	" entries from each, checks every entry against its dossier and the checkout, proposes them by topic with dryRun " +
 	"first and then as the space's maintenance run — holding back, for the next run, the dossiers whose entries the " +
-	"run's circuit breaker has no room for — has them verified in an automatic space, re-verifies the anchors, " +
+	"run's circuit breaker has no room for — has them verified in an automatic space (an op it gets no verdict for, " +
+	"asked twice, is not live and waits for the next run, which adopts it; that fails nothing), re-verifies the anchors, " +
 	"writes again only the sections of the confirmed plan's documents that the entries and origin/main's changes " +
 	"touched (proposing a change to the plan for what fits no section, and writing no document when no plan is " +
 	"confirmed), and advances the cursor. It prints what it did, the token spend included, and exits non-zero when " +
@@ -259,6 +262,9 @@ type wikiMaintainReport struct {
 type wikiMaintainVerification struct {
 	Verified int `json:"verified"`
 	Failed   int `json:"failed"`
+	// WaitingForNextRun is every op the run got no verdict for — its own after both passes, and the adopted
+	// ones: none is live, each keeps waiting for its verification, and the next run adopts it.
+	WaitingForNextRun int `json:"waitingForNextRun"`
 	// What the run adopted of the ops ended sessions left waiting, counted apart from its own.
 	Adopted *wikiMaintainAdopted `json:"adopted,omitempty"`
 }
@@ -1431,7 +1437,8 @@ func (r *wikiMaintainRun) send(topic string, ops []wikiMaintainOp, dryRun bool) 
 // ── Verification and anchors ────────────────────────────────────────────────────────────────────
 
 // verify has the local model verify the run's own ops in an automatic space (`orbit wiki verify`), gives
-// the ones left without a verdict one more pass, and then adopts what ended sessions left waiting.
+// the ones left without a verdict one more pass, and then adopts what ended sessions left waiting. What
+// still has no verdict waits for the next run, and fails nothing.
 func (r *wikiMaintainRun) verify() error {
 	if r.context.ReviewMode != "automatic" {
 		return nil
@@ -1444,12 +1451,18 @@ func (r *wikiMaintainRun) verify() error {
 	return r.adopt()
 }
 
-// verifyOwn verifies the ops this run proposed, in two passes at most.
+// verifyOwn verifies the ops this run proposed, in two passes at most. The second asks again about the ops
+// the first got no verdict for, telling the model why an answer of its was not a verdict and which ids a
+// duplicate may name; it reads the answer as strictly. What still has no verdict fails nothing, as an
+// adopted op without one fails nothing (contract `maintenance.job.run.steps`, verify): nothing applies
+// without a verdict, so it is not live, and it keeps waiting for its verification, which the next run adopts
+// once this run's session has ended. A 401 and an error from the server still end the run failed.
 func (r *wikiMaintainRun) verifyOwn() error {
 	result := &wikiMaintainVerification{}
 	r.report.Verification = result
+	var refused map[string]string
 	for pass := 0; pass < 2; pass++ {
-		summary, err := runWikiVerify(r.t, r.sessionID, r.spaceID, r.cfg, 0, r.progress)
+		summary, err := runWikiVerify(r.t, r.sessionID, r.spaceID, r.cfg, 0, refused, r.progress)
 		r.report.Tokens.Calls += summary.Looked
 		r.report.Tokens.Input += summary.Usage.InputTokens
 		r.report.Tokens.Output += summary.Usage.OutputTokens
@@ -1459,11 +1472,29 @@ func (r *wikiMaintainRun) verifyOwn() error {
 			return err
 		}
 		if summary.Failed == 0 || summary.Stopped != "" {
-			return nil
+			break
+		}
+		refused = map[string]string{}
+		for _, failure := range summary.Failures {
+			if failure.refused != "" {
+				refused[failure.OpID] = failure.refused
+			}
 		}
 	}
-	return fmt.Errorf("%s left without a verdict after two passes: they keep waiting, and the run did not finish",
-		wikiCount(result.Failed, "op was", "ops were"))
+	if result.Failed > 0 {
+		result.WaitingForNextRun += result.Failed
+		r.say("%s of the run's own got no verdict: not live, and the next run adopts %s.",
+			wikiCount(result.Failed, "op", "ops"), wikiPronoun(result.Failed))
+	}
+	return nil
+}
+
+// wikiPronoun is how a sentence names a count of ops after it has said it.
+func wikiPronoun(n int) string {
+	if n == 1 {
+		return "it"
+	}
+	return "them"
 }
 
 // adopt verifies what ended sessions left waiting for their verification in the space — a failed run's
@@ -1494,7 +1525,7 @@ func (r *wikiMaintainRun) adopt() error {
 		}
 	}
 	summary := wikiVerifySummary{SpaceID: r.spaceID, Model: r.cfg.model, Failures: []wikiVerifyFailure{}}
-	err = verifyWikiOps(r.t, wikiAdoptedVerifications, r.sessionID, r.spaceID, r.cfg, r.claude, wikiMaintainAdoptOpsMax, &summary, r.progress)
+	err = verifyWikiOps(r.t, wikiAdoptedVerifications, r.sessionID, r.spaceID, r.cfg, r.claude, wikiMaintainAdoptOpsMax, nil, &summary, r.progress)
 	r.report.Tokens.Calls += summary.Looked
 	r.report.Tokens.Input += summary.Usage.InputTokens
 	r.report.Tokens.Output += summary.Usage.OutputTokens
@@ -1502,6 +1533,7 @@ func (r *wikiMaintainRun) adopt() error {
 		r.report.Verification = &wikiMaintainVerification{}
 	}
 	r.report.Verification.Adopted = &wikiMaintainAdopted{Ops: summary.Looked, Verified: summary.Verified, Failed: summary.Failed}
+	r.report.Verification.WaitingForNextRun += summary.Failed
 	if err != nil {
 		return err
 	}
@@ -1693,6 +1725,10 @@ func describeWikiMaintainSummary(s wikiMaintainSummary) string {
 		if a := r.Verification.Adopted; a != nil {
 			fmt.Fprintf(&b, "\n- adopted: %d ops ended sessions left waiting for their verification, %d verified, %d without a verdict",
 				a.Ops, a.Verified, a.Failed)
+		}
+		if n := r.Verification.WaitingForNextRun; n > 0 {
+			fmt.Fprintf(&b, "\n- waiting for the next run: %s without a verdict, not live; the next run adopts %s",
+				wikiCount(n, "op", "ops"), wikiPronoun(n))
 		}
 	}
 	if r.Anchors != nil {
