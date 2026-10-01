@@ -7260,6 +7260,75 @@ button.chat-jump-start:hover {
   align-items: baseline;
   overflow-wrap: anywhere;
 }
+.chat-error-card {
+  margin: 8px 0;
+  padding: 9px 11px 8px 12px;
+  border: 1px solid var(--error-border);
+  border-left: 3px solid var(--error);
+  border-radius: 9px;
+  background: var(--error-bg);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.chat-error-card-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.chat-error-card-icon {
+  color: var(--error);
+  flex: none;
+}
+.chat-error-card-status {
+  margin-left: auto;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--error);
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  font-size: 11px;
+  font-weight: 600;
+}
+.chat-error-card-path {
+  margin: 4px 0 1px 22px;
+  color: var(--text-2);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.chat-error-card-reason {
+  margin-left: 22px;
+  color: var(--text-1);
+  font-weight: 500;
+}
+.chat-error-card-disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 6px 0 0 20px;
+  padding: 0;
+  border: 0;
+  color: var(--text-2);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.chat-error-card-disclosure:hover {
+  color: var(--text-1);
+}
+.chat-error-card-log {
+  max-height: 280px;
+  margin: 7px 0 0 20px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--text-2);
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow: auto;
+}
 .chat-error-mark {
   flex: none;
 }
