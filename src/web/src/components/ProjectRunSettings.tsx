@@ -7,8 +7,10 @@ import {
   RUN_APPLIES_FROM_NEXT_TASK,
   RUN_AT_MOST,
   RUN_AUTOMATIC,
+  RUN_EXECUTION,
   RUN_ESCALATE_AFTER,
   RUN_ESCALATE_HINT,
+  RUN_INTEGRATION,
   RUN_LINE_MAIN,
   RUN_LINE_MAIN_HINT,
   RUN_LINE_PROJECT_BRANCH,
@@ -262,102 +264,129 @@ export function ProjectRunSettings({
     <section className="project-open-items project-run-settings" aria-label={START_HOW_IT_RUNS}>
       {head}
 
-      <div className="project-integration-setting">
-        <div className="project-integration-setting-label">{RUN_TASKS_LAND_ON}</div>
+      <div className="project-run-settings-summary">
+        <span className="project-run-settings-summary-dot" aria-hidden="true" />
         <div>
-          <Radio.Group
-            className="project-run-lines"
-            aria-label={RUN_TASKS_LAND_ON}
-            value={draft.line}
-            disabled={view.locked}
-            onChange={(event) => set({ line: event.target.value })}
-          >
-            <Radio value="PROJECT_BRANCH">
-              <b>{RUN_LINE_PROJECT_BRANCH}</b> · <code className="start-card-branch" title={branch}>{shortBranch(branch)}</code>
-              {/* What each line means, while it can still be chosen. Once it is locked the choice
-                  is history, and the sentence under the two says why it cannot move. */}
-              {view.locked ? null : (
-                <div className="project-integration-setting-hint">{RUN_LINE_PROJECT_BRANCH_HINT}</div>
-              )}
-            </Radio>
-            <Radio value="MAIN">
-              <b>{RUN_LINE_MAIN}</b>
-              {view.locked ? null : (
-                <div className="project-integration-setting-hint">{RUN_LINE_MAIN_HINT}</div>
-              )}
-            </Radio>
-          </Radio.Group>
-          {view.locked ? (
-            <div className="project-integration-setting-hint">
-              {runLineLocked(view.startedAt ? ago(view.startedAt, now) : null)}
+          <strong>{RUN_AUTOMATIC} {draft.automatic ? RUN_SWITCH_ON : RUN_SWITCH_OFF}</strong>
+          <span>
+            {draft.line === null
+              ? ''
+              : draft.line === 'MAIN'
+                ? RUN_LINE_MAIN
+                : `${RUN_LINE_PROJECT_BRANCH} · ${shortBranch(branch)}`}
+            {draft.line !== null && draft.maxConcurrentTasks !== null
+              ? ` · ${draft.maxConcurrentTasks} ${runTasksAtATime(draft.maxConcurrentTasks)}`
+              : ''}
+          </span>
+        </div>
+      </div>
+
+      <div className="project-run-settings-grid">
+        <div className="project-run-settings-group">
+          <div className="project-run-settings-group-head">{RUN_EXECUTION}</div>
+
+          <div className="project-integration-setting">
+            <div className="project-integration-setting-label">{RUN_TASKS_LAND_ON}</div>
+            <div>
+              <Radio.Group
+                className="project-run-lines"
+                aria-label={RUN_TASKS_LAND_ON}
+                value={draft.line}
+                disabled={view.locked}
+                onChange={(event) => set({ line: event.target.value })}
+              >
+                <Radio value="PROJECT_BRANCH">
+                  <b>{RUN_LINE_PROJECT_BRANCH}</b> · <code className="start-card-branch" title={branch}>{shortBranch(branch)}</code>
+                  {/* What each line means, while it can still be chosen. Once it is locked the choice
+                      is history, and the sentence under the two says why it cannot move. */}
+                  {view.locked ? null : (
+                    <div className="project-integration-setting-hint">{RUN_LINE_PROJECT_BRANCH_HINT}</div>
+                  )}
+                </Radio>
+                <Radio value="MAIN">
+                  <b>{RUN_LINE_MAIN}</b>
+                  {view.locked ? null : (
+                    <div className="project-integration-setting-hint">{RUN_LINE_MAIN_HINT}</div>
+                  )}
+                </Radio>
+              </Radio.Group>
+              {view.locked ? (
+                <div className="project-integration-setting-hint">
+                  {runLineLocked(view.startedAt ? ago(view.startedAt, now) : null)}
+                </div>
+              ) : null}
             </div>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="project-integration-setting">
-        <div className="project-integration-setting-label">{RUN_AUTOMATIC}</div>
-        <div>
-          <div className="start-card-inline">
-            <Switch
-              checked={draft.automatic}
-              aria-label={RUN_AUTOMATIC}
-              onChange={(automatic) => set({ automatic })}
-            />
-            <span>{draft.automatic ? RUN_SWITCH_ON : RUN_SWITCH_OFF}</span>
           </div>
-          {/* The start card's sentence, for the line the project is on — or the one being chosen:
-              what Automatic does with a merge into main depends on it. */}
-          <div className="project-integration-setting-hint">{runAutomaticHint(draft.line ?? 'PROJECT_BRANCH')}</div>
-        </div>
-      </div>
 
-      <div className="project-integration-setting">
-        <div className="project-integration-setting-label">{RUN_AT_MOST}</div>
-        <div className="start-card-inline">
-          <InputNumber
-            className="start-card-count"
-            min={1}
-            max={START_MAX_CONCURRENT_TASKS}
-            precision={0}
-            value={draft.maxConcurrentTasks}
-            aria-label={RUN_AT_MOST}
-            onChange={(value) => set({ maxConcurrentTasks: typeof value === 'number' ? value : null })}
-          />
-          <span>{runTasksAtATime(draft.maxConcurrentTasks)}</span>
-        </div>
-      </div>
+          <div className="project-integration-setting">
+            <div className="project-integration-setting-label">{RUN_AUTOMATIC}</div>
+            <div>
+              <div className="start-card-inline">
+                <Switch
+                  checked={draft.automatic}
+                  aria-label={RUN_AUTOMATIC}
+                  onChange={(automatic) => set({ automatic })}
+                />
+                <span>{draft.automatic ? RUN_SWITCH_ON : RUN_SWITCH_OFF}</span>
+              </div>
+              {/* The start card's sentence, for the line the project is on — or the one being chosen:
+                  what Automatic does with a merge into main depends on it. */}
+              <div className="project-integration-setting-hint">{runAutomaticHint(draft.line ?? 'PROJECT_BRANCH')}</div>
+            </div>
+          </div>
 
-      <div className={missingCheck ? 'project-integration-setting is-warn' : 'project-integration-setting'}>
-        <div className="project-integration-setting-label">{RUN_MERGE_CHECK}</div>
-        <div>
-          <Input
-            className="start-card-mono"
-            value={draft.mergeCheckCommand}
-            placeholder={RUN_MERGE_CHECK_PLACEHOLDER}
-            aria-label={RUN_MERGE_CHECK}
-            status={missingCheck ? 'warning' : undefined}
-            onChange={(event) => set({ mergeCheckCommand: event.target.value })}
-          />
-          <div className="project-integration-setting-hint">{RUN_MERGE_CHECK_HINT}</div>
-          {missingCheck ? <div className="start-card-warn">{RUN_NO_MERGE_CHECK_WARNING}</div> : null}
+          <div className="project-integration-setting">
+            <div className="project-integration-setting-label">{RUN_AT_MOST}</div>
+            <div className="start-card-inline">
+              <InputNumber
+                className="start-card-count"
+                min={1}
+                max={START_MAX_CONCURRENT_TASKS}
+                precision={0}
+                value={draft.maxConcurrentTasks}
+                aria-label={RUN_AT_MOST}
+                onChange={(value) => set({ maxConcurrentTasks: typeof value === 'number' ? value : null })}
+              />
+              <span>{runTasksAtATime(draft.maxConcurrentTasks)}</span>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div className="project-integration-setting">
-        <div className="project-integration-setting-label">{RUN_ESCALATE_AFTER}</div>
-        <div>
-          <Select
-            value={draft.escalationSeconds}
-            style={{ width: 140 }}
-            aria-label={RUN_ESCALATE_AFTER}
-            onChange={(escalationSeconds) => set({ escalationSeconds })}
-            options={(ESCALATION_CHOICES.some((choice) => choice.seconds === draft.escalationSeconds)
-              ? ESCALATION_CHOICES
-              : [...ESCALATION_CHOICES, { seconds: draft.escalationSeconds, label: escalationLabel(draft.escalationSeconds) }]
-            ).map((choice) => ({ value: choice.seconds, label: choice.label }))}
-          />
-          <div className="project-integration-setting-hint">{RUN_ESCALATE_HINT}</div>
+        <div className="project-run-settings-group">
+          <div className="project-run-settings-group-head">{RUN_INTEGRATION}</div>
+
+          <div className={missingCheck ? 'project-integration-setting is-warn' : 'project-integration-setting'}>
+            <div className="project-integration-setting-label">{RUN_MERGE_CHECK}</div>
+            <div>
+              <Input
+                className="start-card-mono"
+                value={draft.mergeCheckCommand}
+                placeholder={RUN_MERGE_CHECK_PLACEHOLDER}
+                aria-label={RUN_MERGE_CHECK}
+                status={missingCheck ? 'warning' : undefined}
+                onChange={(event) => set({ mergeCheckCommand: event.target.value })}
+              />
+              <div className="project-integration-setting-hint">{RUN_MERGE_CHECK_HINT}</div>
+              {missingCheck ? <div className="start-card-warn">{RUN_NO_MERGE_CHECK_WARNING}</div> : null}
+            </div>
+          </div>
+
+          <div className="project-integration-setting">
+            <div className="project-integration-setting-label">{RUN_ESCALATE_AFTER}</div>
+            <div>
+              <Select
+                value={draft.escalationSeconds}
+                style={{ width: 140 }}
+                aria-label={RUN_ESCALATE_AFTER}
+                onChange={(escalationSeconds) => set({ escalationSeconds })}
+                options={(ESCALATION_CHOICES.some((choice) => choice.seconds === draft.escalationSeconds)
+                  ? ESCALATION_CHOICES
+                  : [...ESCALATION_CHOICES, { seconds: draft.escalationSeconds, label: escalationLabel(draft.escalationSeconds) }]
+                ).map((choice) => ({ value: choice.seconds, label: choice.label }))}
+              />
+              <div className="project-integration-setting-hint">{RUN_ESCALATE_HINT}</div>
+            </div>
+          </div>
         </div>
       </div>
 

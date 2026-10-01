@@ -2256,7 +2256,7 @@ describe('ProjectDetailPage — integration', () => {
 
   it('offers the integration settings under How it runs, in the right rail', () => {
     // §7.2 V4 / mock board3 ④: the line, the merge check and the escalation window, with Automatic
-    // and the rest of what the start card set, in the one block — not behind the row above.
+    // and the rest of what the start card set, in the one full-width block — not behind the row above.
     const { html } = withIntegration();
     const page = html();
     const at = page.indexOf('data-project-block="run-settings"');
@@ -2553,7 +2553,7 @@ describe('ProjectDetailPage — a project nobody has started', () => {
     const at = started.indexOf('data-project-block="run-settings"');
     expect(at).toBeGreaterThan(-1);
     expect(started).toContain('How it runs');
-    // In the right rail, after the coordinator.
+    // Below the command centre, after the coordinator in reading order.
     expect(started.indexOf('data-project-block="coordinator"')).toBeLessThan(at);
     expect(started.indexOf('class="project-command-rail"')).toBeLessThan(at);
     // The switch is How it runs', and the coordinator card carries none.

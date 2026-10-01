@@ -36,7 +36,7 @@ import {
   type SettlementPlanChat,
 } from './AcceptanceConfirmationCard';
 import { CardActionButton, CardActions } from './CardAction';
-import { ENTER_HINT, SHORTCUT_HINT, useDecisionCardKeys } from './CardHotkey';
+import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL, shortSeal } from './CriteriaDecisionCard';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 
@@ -217,7 +217,6 @@ export function CriteriaChangeCard({
         </CardActionButton>
         <CardActionButton tone="secondary" onClick={onChatAbout}>
           {OWNER_SEND_BACK_ACTION}
-          {keys && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
         </CardActionButton>
       </CardActions>
     </div>
@@ -296,9 +295,7 @@ export function SessionCriteriaChangeCard({
   };
   const keys = useDecisionCardKeys({
     confirmEnabled: onScreen && !confirm.isPending,
-    chatEnabled: onScreen,
     onConfirm: press,
-    onChatAbout: talkAbout,
   });
 
   if (!onScreen || !standing?.changesSinceConfirmed) return null;

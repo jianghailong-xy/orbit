@@ -16,7 +16,7 @@ import {
   type SettlementQuestion,
 } from '../lib/projectStart';
 import { CardActionButton, CardActions } from './CardAction';
-import { ENTER_HINT, SHORTCUT_HINT, useDecisionCardKeys } from './CardHotkey';
+import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL, receiptClock, shortSeal } from './CriteriaDecisionCard';
 // The words this card's second action uses. Imported rather than re-declared, and read inside the
 // component rather than bound at module scope: `OwnerConfirmationCard` reaches this module again
@@ -539,9 +539,7 @@ export function AcceptanceConfirmationCard({
             already handing work out and is being re-confirmed (`acceptanceActionLabel`). */}
         <CardActionButton tone="primary" disabled={busy || !answerable} onClick={onStart}>
           {acceptanceActionLabel(started)}
-          {/* The key and the button it presses are one fact, so the hint follows THIS button's own
-              `disabled` and not the card's: a plan that moved at another end keeps the chord live
-              while the primary is dark. */}
+          {/* The hint follows the confirmation button's own disabled state. */}
           {keys && !(busy || !answerable) && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
         {/* The same control, and the same word for it, as the other three cards that hand a
@@ -549,7 +547,6 @@ export function AcceptanceConfirmationCard({
             that could not be read names none. */}
         <CardActionButton tone="secondary" disabled={standing === null} onClick={onChatAbout}>
           {OWNER_SEND_BACK_ACTION}
-          {keys && standing !== null && <span className="approval-kbd">{SHORTCUT_HINT}</span>}
         </CardActionButton>
       </CardActions>
     </div>
@@ -779,10 +776,7 @@ export function SessionCriteriaConfirmationCard({
     confirm.isSuccess && (standing === null || standing.currentVersion.digest === confirm.variables);
   const title = document?.title || project;
 
-  // The two presses, named once so that the buttons and the keys make the same one. What each needs
-  // is what its own `disabled` says: the primary needs a standing that can be answered and no press
-  // in flight, the second needs only a version to talk about — a card whose plan moved at another
-  // end keeps that one live, so the chord follows the button rather than the card (`CardHotkey.ts`).
+  // Enter confirms the same standing as the button. Chat about this needs only a version to discuss.
   const start = (): void => {
     if (standing === null || !acceptanceConfirmationAnswerable(standing)) return;
     confirm.mutate(standing.currentVersion.digest);
@@ -799,15 +793,11 @@ export function SessionCriteriaConfirmationCard({
       question: 'CONFIRMATION',
     });
   };
-  // A press in flight, or one the door has taken, is not a card that can be answered: the two
-  // answers are dead together, and the second one leaves by the composer rather than by a press
-  // here, which changes where the reason is typed and not whether this card can be answered.
+  // A press in flight, or one the door has taken, holds no confirmation key.
   const asking = shown && !answeredHere;
   const keys = useDecisionCardKeys({
     confirmEnabled: asking && !confirm.isPending && acceptanceConfirmationAnswerable(standing),
-    chatEnabled: asking && standing !== null,
     onConfirm: start,
-    onChatAbout: talkAbout,
   });
 
   if (!shown || answeredHere) return null;

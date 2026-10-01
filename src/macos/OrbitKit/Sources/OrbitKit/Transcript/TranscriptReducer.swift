@@ -128,6 +128,10 @@ public struct TranscriptReducer: Sendable, Codable {
     /// apply_patch are emitted as adjacent events, so they should read as one card rather than a
     /// stack of red log rows. A new timestamp or a sequence gap ends the continuation.
     private var lastStderr: (id: String, seq: Int, continuing: Bool)?
+    /// A tool failure that was correlated from stderr. Some runtimes omit the normal tool_result,
+    /// so the failure has to settle the still-running card directly; continuation lines stay on it
+    /// even when a tool_use was interleaved or the durable sequence has a gap.
+    private var lastToolFailure: (id: String, seq: Int, continuing: Bool)?
     /// Whether this turn has already put a row on screen that accounts for how it went: a reply, the
     /// runner's own error (or the sign-in / auto-retry card it earns), or the user's own interrupt.
     /// `endTurn` speaks only when none of them did — in the recorded corpus every codex `failed`
@@ -229,7 +233,12 @@ public struct TranscriptReducer: Sendable, Codable {
             if let cw = ev.payload["contextWindow"]?.intValue, cw > 0 { state.contextWindow = cw }
         }
 
-        if ev.type != .system { lastStderr = nil }
+        // A tool_use/tool_result can sit between the first stderr line and its un-timestamped
+        // continuation. Other transcript events are a hard boundary for the pending log.
+        if ev.type != .system && ev.type != .toolUse && ev.type != .toolResult {
+            lastStderr = nil
+            lastToolFailure = nil
+        }
 
         // A sub-agent's own events fold into the list kept for the Agent call that started it, not
         // into the conversation — see `TranscriptState.subagentItems`.
@@ -264,6 +273,7 @@ public struct TranscriptReducer: Sendable, Codable {
             if str(ev, "subtype") == "resumed" {
                 clearLiveToolOutputsAtBoundary()
                 lastStderr = nil
+                lastToolFailure = nil
             }
             // A deliberate heads-up (see `TranscriptItem.notice`) — the turn itself was fine. Never
             // sent beside stderr; if it ever were, it wins, as on web. One row per event, unfolded.
@@ -304,6 +314,7 @@ public struct TranscriptReducer: Sendable, Codable {
         taskLaunch.removeAll()
         stderrSeen.removeAll()
         lastStderr = nil
+        lastToolFailure = nil
         state.subagentItems = [:]
     }
 
@@ -1172,17 +1183,45 @@ public struct TranscriptReducer: Sendable, Codable {
     private mutating func appendEngineStderr(_ ev: RunEvent) {
         guard let raw = str(ev, "stderr") else {
             lastStderr = nil
+            lastToolFailure = nil
             return
         }
         let line = EngineStderr.clean(raw)
         guard !line.isEmpty else {
             lastStderr = nil
+            lastToolFailure = nil
             return
         }
         guard !EngineStderr.isBenign(line) else {
             lastStderr = nil
+            lastToolFailure = nil
             return
         }
+        // A failed apply_patch or malformed tool invocation can be written to stderr without a
+        // normal tool_result. Keep its continuation on the card it already settled, even when the
+        // sequence has a gap; the timestamp is the boundary between logger records.
+        if let last = lastToolFailure,
+           !EngineStderr.startsNewLog(line),
+           let i = state.items.firstIndex(where: { $0.id == last.id }),
+           case .toolCall(var card) = state.items[i], card.status == .error {
+            card.result = [card.result, line].compactMap { $0 }.joined(separator: "\n")
+            state.items[i] = .toolCall(card)
+            lastToolFailure = (id: last.id, seq: ev.seq, continuing: true)
+            return
+        }
+        if let failure = ToolFailure.parse(line),
+           let i = unresolvedToolIndex(named: failure.tool) {
+            guard case .toolCall(var card) = state.items[i] else { return }
+            card.result = line
+            card.status = .error
+            card.resultSeq = ev.seq
+            card.resultTruncated = ev.truncated
+            state.items[i] = .toolCall(card)
+            lastToolFailure = (id: card.id, seq: ev.seq, continuing: EngineStderr.canStartContinuation(line))
+            lastStderr = nil
+            return
+        }
+        lastToolFailure = nil
         if let last = lastStderr,
            ev.seq > 0,
            last.seq + 1 == ev.seq,
@@ -1207,6 +1246,18 @@ public struct TranscriptReducer: Sendable, Codable {
         stderrSeen[key] = (id: id, line: line, count: 1)
         lastStderr = (id: id, seq: ev.seq, continuing: EngineStderr.canStartContinuation(line))
         state.items.append(.error(id: id, message: line))
+    }
+
+    /// Find the latest still-running top-level call that a stderr failure belongs to. Named failures
+    /// (apply_patch verification) are matched exactly; parser errors omit the tool name and use the
+    /// most recent unresolved call instead.
+    private func unresolvedToolIndex(named name: String?) -> Int? {
+        let wanted = name?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        for i in state.items.indices.reversed() {
+            guard case .toolCall(let card) = state.items[i], card.status == .running else { continue }
+            if wanted.isEmpty || card.name.lowercased() == wanted { return i }
+        }
+        return nil
     }
 
     /// A failure that fixes itself, raised as a card carrying the pending retry rather than a bare
@@ -1536,6 +1587,27 @@ enum TurnOutcome {
 
 /// Readying an engine's raw stderr line for the transcript — the native half of the web
 /// transcript's `stripAnsi` / `LEADING_TIMESTAMP` / `isBenignEngineStderr`.
+private enum ToolFailure {
+    /// Return the named tool for verification failures, or nil for parser failures that omit it.
+    /// Anything else is ordinary engine stderr and stays on the diagnostic-row path.
+    static func parse(_ line: String) -> (tool: String?, reason: String)? {
+        guard let marker = line.range(of: "error=", options: .caseInsensitive) else { return nil }
+        let tail = String(line[marker.lowerBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let rest = String(tail.dropFirst("error=".count))
+        let lower = rest.lowercased()
+        if let separator = lower.range(of: " verification failed:") {
+            let toolEnd = rest.index(rest.startIndex, offsetBy: separator.lowerBound.utf16Offset(in: lower))
+            let tool = String(rest[..<toolEnd])
+            let reasonStart = rest.index(rest.startIndex, offsetBy: separator.upperBound.utf16Offset(in: lower))
+            return (tool: tool, reason: String(rest[reasonStart...]))
+        }
+        if lower.hasPrefix("error=failed to parse function arguments") {
+            return (tool: nil, reason: String(tail.dropFirst("error=".count)))
+        }
+        return nil
+    }
+}
+
 private enum EngineStderr {
     // A pattern that fails to compile leaves the text untouched rather than dropping the line: a
     // stderr shown with its escape codes still says why the turn failed.

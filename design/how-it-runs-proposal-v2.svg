@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1420" viewBox="0 0 1440 1420">
+  <defs>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="10" flood-color="#17233b" flood-opacity="0.08"/>
+    </filter>
+    <style>
+      .ui { font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; fill: #1f2937; }
+      .muted { fill: #8a94a3; }
+      .subtle { fill: #657185; }
+      .label { font-size: 16px; font-weight: 600; }
+      .body { font-size: 16px; }
+      .small { font-size: 14px; }
+      .tiny { font-size: 12px; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+      .button-text { fill: #ffffff; }
+    </style>
+  </defs>
+  <rect width="1440" height="1420" fill="#f8fafc"/>
+  <rect x="0" y="0" width="1440" height="46" fill="#ffffff"/>
+  <path d="M0 46H1440" stroke="#e8edf3"/>
+  <text x="72" y="30" class="ui small" font-weight="600" fill="#6b7280">Projects / My equipment pick-up / Integrating</text>
+  <text x="1225" y="30" class="ui tiny muted">PROPOSED LAYOUT · V2</text>
+
+  <!-- The top command centre remains two columns, but the settings card no longer lives in the rail. -->
+  <rect x="72" y="76" width="820" height="504" rx="14" fill="#ffffff" stroke="#e5eaf0"/>
+  <text x="98" y="117" class="ui" font-size="22" font-weight="700">Work overview</text>
+  <text x="770" y="117" class="ui small muted" text-anchor="end">8 tasks · 13 dependencies</text>
+  <rect x="98" y="143" width="768" height="166" rx="10" fill="#fbfcfe" stroke="#edf0f4"/>
+  <line x1="354" y1="143" x2="354" y2="309" stroke="#edf0f4"/>
+  <line x1="610" y1="143" x2="610" y2="309" stroke="#edf0f4"/>
+  <text x="120" y="176" class="ui small subtle">●  Running</text>
+  <text x="120" y="230" class="ui" font-size="36" font-weight="700">1</text>
+  <text x="120" y="261" class="ui small muted">active sessions</text>
+  <text x="376" y="176" class="ui small subtle">▶  Ready</text>
+  <text x="376" y="230" class="ui" font-size="36" font-weight="700">0</text>
+  <text x="376" y="261" class="ui small muted">can start now</text>
+  <text x="632" y="176" class="ui small subtle">□  Waiting</text>
+  <text x="632" y="230" class="ui" font-size="36" font-weight="700">6</text>
+  <text x="632" y="261" class="ui small muted">for a prerequisite to land</text>
+  <rect x="98" y="336" width="768" height="206" rx="10" fill="#ffffff" stroke="#edf0f4"/>
+  <text x="120" y="370" class="ui small subtle">Open items</text>
+  <circle cx="128" cy="408" r="6" fill="#3875f6"/>
+  <text x="148" y="414" class="ui body" font-weight="600">Checks failed on the combined tree</text>
+  <text x="148" y="443" class="ui small muted">The coordinator is waiting for a response.</text>
+  <line x1="120" y1="472" x2="842" y2="472" stroke="#edf0f4"/>
+  <rect x="120" y="493" width="174" height="12" rx="6" fill="#dce6ff"/>
+  <rect x="302" y="493" width="382" height="12" rx="6" fill="#e8ecf2"/>
+  <rect x="692" y="493" width="150" height="12" rx="6" fill="#dce6ff"/>
+
+  <rect x="918" y="76" width="450" height="504" rx="14" fill="#ffffff" stroke="#e5eaf0" filter="url(#shadow)"/>
+  <text x="944" y="120" class="ui" font-size="23" font-weight="700">Coordinator</text>
+  <rect x="1252" y="96" width="92" height="28" rx="14" fill="#fff1dc"/>
+  <circle cx="1268" cy="110" r="5" fill="#ff8a00"/>
+  <text x="1279" y="115" class="ui tiny" font-weight="700" fill="#d97800">Needs you</text>
+  <text x="944" y="164" class="ui body" font-weight="700">Project cleanup: finish the last check</text>
+  <text x="944" y="191" class="ui body" font-weight="700">and unblock the next task</text>
+  <text x="944" y="224" class="ui small muted">last active 54m ago · 1st coordinator of this project</text>
+  <line x1="944" y1="248" x2="1342" y2="248" stroke="#e9edf3"/>
+  <text x="944" y="282" class="ui small muted">Workspace</text>
+  <text x="1044" y="282" class="ui small" font-weight="600">orbit</text>
+  <text x="944" y="315" class="ui small muted">Wake-ups</text>
+  <text x="1044" y="315" class="ui small" fill="#2f9b55" font-weight="600">delivered · last 59m ago</text>
+  <rect x="944" y="344" width="398" height="56" rx="10" fill="#f3f4f6"/>
+  <text x="964" y="369" class="ui small muted">Manual dispatch</text>
+  <text x="964" y="391" class="ui small" font-weight="600">7 open tasks are coordinated from this conversation.</text>
+  <rect x="944" y="419" width="398" height="46" rx="8" fill="#3b73f7"/>
+  <text x="1143" y="448" class="ui body button-text" text-anchor="middle" font-weight="700">Reply to coordinator</text>
+
+  <!-- Full-width settings: no column can leave a dead strip beside it. -->
+  <rect x="72" y="610" width="1296" height="700" rx="14" fill="#ffffff" stroke="#dfe6ef" filter="url(#shadow)"/>
+  <text x="98" y="655" class="ui" font-size="23" font-weight="700">How it runs</text>
+  <rect x="1158" y="633" width="184" height="28" rx="14" fill="#eef4ff"/>
+  <text x="1250" y="651" class="ui tiny" text-anchor="middle" fill="#3b73f7" font-weight="700">Applies from next task</text>
+  <text x="98" y="687" class="ui small muted">The current run is shown first; edit settings below.</text>
+  <rect x="98" y="710" width="1244" height="70" rx="10" fill="#f7faff" stroke="#dce7ff"/>
+  <circle cx="124" cy="745" r="8" fill="#3b73f7"/>
+  <text x="144" y="744" class="ui body" font-weight="700">Automatic on</text>
+  <text x="144" y="767" class="ui small subtle">Project branch · 3 tasks at a time</text>
+
+  <text x="98" y="822" class="ui tiny" fill="#7b8798" font-weight="700" letter-spacing="1.1">EXECUTION</text>
+  <line x1="181" y1="818" x2="700" y2="818" stroke="#edf0f4"/>
+  <text x="98" y="857" class="ui label">Tasks land on</text>
+  <rect x="98" y="871" width="584" height="44" rx="8" fill="#f8fafc" stroke="#e3e8ef"/>
+  <circle cx="122" cy="893" r="9" fill="#3b73f7"/>
+  <circle cx="122" cy="893" r="4" fill="#ffffff"/>
+  <text x="143" y="899" class="ui body" font-weight="600">Project branch</text>
+  <text x="300" y="899" class="ui small mono muted">project/34Y7M…</text>
+  <text x="98" y="938" class="ui tiny subtle">Locked after first integration · branch selected for this run.</text>
+  <text x="98" y="982" class="ui label">Automatic</text>
+  <rect x="98" y="995" width="53" height="30" rx="15" fill="#3b73f7"/>
+  <circle cx="136" cy="1010" r="11" fill="#ffffff"/>
+  <text x="168" y="1016" class="ui small" font-weight="700">On</text>
+  <text x="98" y="1048" class="ui tiny subtle">Runs tasks, handles failed checks, and merges a clean branch into main.</text>
+  <text x="98" y="1092" class="ui label">Concurrency</text>
+  <rect x="98" y="1106" width="64" height="38" rx="7" fill="#ffffff" stroke="#ccd5e1"/>
+  <text x="130" y="1131" class="ui body" text-anchor="middle" font-weight="600">3</text>
+  <text x="174" y="1131" class="ui small subtle">tasks at a time</text>
+
+  <text x="744" y="822" class="ui tiny" fill="#7b8798" font-weight="700" letter-spacing="1.1">INTEGRATION</text>
+  <line x1="840" y1="818" x2="1342" y2="818" stroke="#edf0f4"/>
+  <text x="744" y="857" class="ui label">Merge check</text>
+  <rect x="744" y="871" width="598" height="44" rx="7" fill="#f8fafc" stroke="#e3e8ef"/>
+  <text x="759" y="898" class="ui small mono" fill="#354154">bash scripts/worktree-overlay.sh &amp;&amp; npm test</text>
+  <text x="744" y="938" class="ui tiny subtle">Runs on the combined tree before a branch can land.</text>
+  <text x="744" y="982" class="ui label">Escalate after</text>
+  <rect x="744" y="995" width="128" height="38" rx="7" fill="#ffffff" stroke="#ccd5e1"/>
+  <text x="760" y="1020" class="ui small">2 hours</text>
+  <path d="M848 1010l8 8 8-8" fill="none" stroke="#7b8798" stroke-width="2"/>
+  <text x="744" y="1060" class="ui tiny subtle">Exceptions wait this long before the coordinator asks for help.</text>
+  <rect x="744" y="1105" width="598" height="44" rx="8" fill="#fff8ed" stroke="#f3dfba"/>
+  <circle cx="767" cy="1127" r="8" fill="#f29a2e"/>
+  <text x="786" y="1132" class="ui tiny" fill="#8f5b16">Pause stops new tasks, wake-ups and merges; running tasks finish.</text>
+
+  <line x1="98" y1="1180" x2="1342" y2="1180" stroke="#e9edf3"/>
+  <rect x="98" y="1200" width="116" height="40" rx="7" fill="#3b73f7"/>
+  <text x="156" y="1225" class="ui small button-text" text-anchor="middle" font-weight="700">Save changes</text>
+  <rect x="224" y="1200" width="126" height="40" rx="7" fill="#ffffff" stroke="#ccd5e1"/>
+  <text x="287" y="1225" class="ui small" text-anchor="middle" font-weight="600">Pause project</text>
+  <text x="98" y="1278" class="ui tiny muted">Changes apply to the next task. Existing work keeps its current settings.</text>
+</svg>

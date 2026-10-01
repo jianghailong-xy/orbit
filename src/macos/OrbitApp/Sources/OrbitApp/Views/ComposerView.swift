@@ -845,7 +845,14 @@ struct ComposerView: View {
             Button {
                 Task { await console.switchAccount(CodexAccounts.automaticID) }
             } label: {
+                #if os(iOS)
+                // Once it is the pick, "Current" says all there is: what Automatic does is why
+                // someone picks it, not news to the session already on it.
+                accountRowLabel("Automatic", detail: console.sessionAutomatic ? nil : "Resets soonest",
+                                selected: console.sessionAutomatic)
+                #else
                 menuItemLabel("Automatic · Resets soonest", selected: console.sessionAutomatic)
+                #endif
             }
         }
         ForEach(console.accountChoices) { account in
@@ -856,10 +863,16 @@ struct ComposerView: View {
                     Task { await console.switchAccount(account.id) }
                 }
             } label: {
+                #if os(iOS)
+                accountRowLabel(account.label,
+                                detail: account.unavailable.map { "\($0), sign in →" } ?? account.quota,
+                                selected: !console.sessionAutomatic && account.id == console.account(for: engine))
+                #else
                 menuItemLabel(
                     account.unavailable.map { "\(account.label) — \($0), sign in →" }
                         ?? account.quota.map { "\(account.label) · \($0)" } ?? account.label,
                     selected: !console.sessionAutomatic && account.id == console.account(for: engine))
+                #endif
             }
         }
     }
@@ -875,7 +888,11 @@ struct ComposerView: View {
             Button {
                 Task { await console.selectProvider(engine, account: CodexAccounts.automaticID) }
             } label: {
+                #if os(iOS)
+                accountRowLabel("Automatic", detail: "Resets soonest", selected: false)
+                #else
                 menuItemLabel("Automatic · Resets soonest", selected: false)
+                #endif
             }
         }
         ForEach(rows) { account in
@@ -886,48 +903,82 @@ struct ComposerView: View {
                     Task { await console.selectProvider(engine, account: account.id) }
                 }
             } label: {
+                #if os(iOS)
+                accountRowLabel(account.label,
+                                detail: account.unavailable.map { "\($0), sign in →" } ?? account.quota,
+                                selected: false)
+                #else
                 menuItemLabel(
                     account.unavailable.map { "\(account.label) — \($0), sign in →" }
                         ?? account.quota.map { "\(account.label) · \($0)" } ?? account.label,
                     selected: false)
+                #endif
             }
         }
     }
 
-    /// Keep every option's text on one left edge and show a check only on the selected row. iOS
-    /// treats an Image inside a Menu label as its native leading icon, so the selected row must own
-    /// the image and unselected rows must omit it; transparent placeholders are still rendered as
-    /// checks by the native menu (web parity: `.scope-menu-row` has one selected check).
+    /// One option of the menu. Web draws the chosen one's check at the row's trailing end; an iOS 26
+    /// menu can only draw an image before the title, and a row that has one starts its title past the
+    /// image column while a row without one starts at the margin — a check on the chosen row alone put
+    /// the menu on two edges. So on iOS no row carries an image: every title starts at the margin, and
+    /// the chosen one says "Current" underneath (the label's second Text, which the menu draws as the
+    /// row's subtitle). macOS keeps the trailing check, a clear one on every other row.
     @ViewBuilder
     private func menuItemLabel(_ text: String, selected: Bool) -> some View {
+        #if os(iOS)
+        Text(Self.menuBreakable(text))
+        if selected { Text("Current") }
+        #else
         HStack(spacing: 8) {
             Text(text).lineLimit(1)
             Spacer(minLength: 8)
-            #if os(iOS)
-            if selected {
-                Image(systemName: "checkmark")
-                    .foregroundStyle(Color.accentColor)
-            }
-            #else
             Image(systemName: "checkmark")
                 .foregroundStyle(selected ? Color.accentColor : Color.clear)
                 .frame(width: 20, alignment: .trailing)
                 .accessibilityHidden(!selected)
-            #endif
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        #endif
     }
 
-    /// The two-level settings rows stay on one baseline: the title owns the left edge, the current
-    /// value follows it in a muted run, and the nested Menu supplies its disclosure chevron. iOS
-    /// keeps only one text label for a submenu, so a single concatenated Text is used there; two
-    /// sibling Text views make the current value disappear from the native menu row.
+    #if os(iOS)
+    /// An account under its engine in the Provider submenu, one level in from the provider rows: the
+    /// transparent glyph takes the image column the provider rows leave empty, and iOS starts the
+    /// title of a row with an image past that column. Its quota — or what Automatic does — goes
+    /// underneath; the account the session is on says "Current" there first.
+    @ViewBuilder
+    private func accountRowLabel(_ name: String, detail: String?, selected: Bool) -> some View {
+        Label { Text(Self.menuBreakable(name)) } icon: { Image(uiImage: Self.clearGlyph) }
+        if selected {
+            Text(detail.map { "Current · \($0)" } ?? "Current")
+        } else if let detail {
+            Text(detail)
+        }
+    }
+
+    /// The indent for `accountRowLabel`: a checkmark drawn fully transparent, rendered as is — a
+    /// template image would be tinted back into a visible check by the menu.
+    private static let clearGlyph = UIImage(systemName: "checkmark")?
+        .withTintColor(.clear, renderingMode: .alwaysOriginal) ?? UIImage()
+
+    /// A name the menu has to wrap — an email, a "name@Provider" — breaks before its "@" or after a
+    /// dot, where a zero-width space marks the line's break opportunities, rather than where the
+    /// system's hyphenator puts it ("mail.-com").
+    private static func menuBreakable(_ text: String) -> String {
+        text.replacingOccurrences(of: "@", with: "\u{200B}@")
+            .replacingOccurrences(of: #"\.(?=[A-Za-z])"#, with: ".\u{200B}", options: .regularExpression)
+    }
+    #endif
+
+    /// The two-level settings rows: the title owns the left edge, and the nested Menu supplies its
+    /// disclosure chevron. iOS draws the current value as the row's subtitle — the label's second
+    /// Text — under the title, so the values of Provider, Effort and Speed share the titles' edge
+    /// instead of starting wherever each title happens to end. macOS keeps it in a muted trailing run.
     @ViewBuilder
     private func menuSubmenuLabel(_ title: String, value: String) -> some View {
         #if os(iOS)
-        (Text(title) + Text("    ") + Text(value).foregroundStyle(Color.secondary))
-            .lineLimit(1)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        Text(title)
+        Text(value)
         #else
         HStack(spacing: 8) {
             Text(title)

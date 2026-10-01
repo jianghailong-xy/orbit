@@ -3,7 +3,7 @@ import Foundation
 import OrbitKit
 
 struct ToolFailureSummary {
-    let tool: String
+    let tool: String?
     let path: String?
     let reason: String
 
@@ -12,15 +12,25 @@ struct ToolFailureSummary {
     /// the original message remains available when the reader expands it.
     static func parse(_ message: String) -> ToolFailureSummary? {
         let clean = message.replacingOccurrences(of: "\r\n", with: "\n")
-        guard let marker = clean.range(of: "error=") else { return nil }
-        let afterMarker = clean[marker.upperBound...]
-        guard let verification = afterMarker.range(of: " verification failed:", options: .caseInsensitive) else {
+        guard let marker = clean.range(of: "error=", options: .caseInsensitive) else { return nil }
+        let tail = String(clean[marker.lowerBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let rest = String(tail.dropFirst("error=".count))
+        let lowerRest = rest.lowercased()
+        let tool: String?
+        let detail: String
+        if let verification = lowerRest.range(of: " verification failed:") {
+            let toolEnd = rest.index(rest.startIndex, offsetBy: verification.lowerBound.utf16Offset(in: lowerRest))
+            let detailStart = rest.index(rest.startIndex, offsetBy: verification.upperBound.utf16Offset(in: lowerRest))
+            let parsedTool = String(rest[..<toolEnd])
+            guard !parsedTool.isEmpty else { return nil }
+            tool = parsedTool
+            detail = String(rest[detailStart...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        } else if lowerRest.hasPrefix("failed to parse function arguments") {
+            tool = nil
+            detail = rest.trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
             return nil
         }
-        let tool = String(afterMarker[..<verification.lowerBound])
-        guard !tool.isEmpty else { return nil }
-        let detail = String(afterMarker[verification.upperBound...])
-            .trimmingCharacters(in: .whitespacesAndNewlines)
 
         var path: String?
         if let worktrees = detail.range(of: "/worktrees/") {
@@ -39,6 +49,8 @@ struct ToolFailureSummary {
             reason = "Invalid patch"
         } else if lower.hasPrefix("failed to find expected lines") {
             reason = "Expected lines not found"
+        } else if lower.hasPrefix("failed to parse function arguments") {
+            reason = detail
         } else {
             reason = "Patch verification failed"
         }
@@ -56,7 +68,7 @@ struct ToolFailureCardView: View {
             HStack(spacing: 7) {
                 Image(systemName: "wrench.and.screwdriver")
                     .foregroundStyle(.red)
-                Text(summary.tool)
+                Text(summary.tool ?? "Tool call")
                     .font(.orbitMono.weight(.semibold))
                 Spacer(minLength: 0)
                 Text("Failed")
