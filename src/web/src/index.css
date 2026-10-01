@@ -16346,9 +16346,8 @@ button.chat-jump-start:hover {
 /* The Watching strip (WatchRelations.tsx `SessionWatchStrip`) is drawn in the Background processes
    tray's own shell (.bg-tray) with Tasks created here's rows and links (.ct-*); these are only what a
    wait adds to them. Folded, what the wait needs (a threshold, a count) sits where a lone target's name
-   would, and truncates before the sentence beside it does. Opened, each watch is one sentence in the
-   list's grey, over the targets it waits on; the line under it is the one said only while nobody is
-   checking the watch. */
+   would, and truncates before the sentence beside it does. Opened, each watch lists its targets in the
+   list's grey; the line under it is the one said only while nobody is checking the watch. */
 .watch-strip-target {
   flex: 0 1 auto;
   min-width: 0;

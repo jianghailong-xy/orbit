@@ -307,10 +307,8 @@ describe('a session’s Following and Followed by', () => {
     const strip = container!.querySelector('.watch-strip')!;
     await click(strip.querySelector('.bg-tray-row'), 'the strip');
     expect(strip.querySelector('.wt-expand')?.textContent).toBe('▾');
-    // One sentence says what the five rows said: the condition, the resume, and the deadline.
-    expect(strip.querySelector('.watch-say')?.textContent).toBe(
-      'Resumes this session when it finishes, or in 20h at the latest.',
-    );
+    // The expanded card no longer repeats a resume sentence above the target.
+    expect(strip.querySelector('.watch-say')).toBeNull();
     // The line above already names the one target, so the list doesn't again; the foot leads to it.
     expect(strip.querySelectorAll('.ct-row')).toHaveLength(0);
     const links = [...strip.querySelectorAll<HTMLAnchorElement>('.ct-foot a')];
@@ -325,7 +323,7 @@ describe('a session’s Following and Followed by', () => {
     }
   });
 
-  it('opens several watches into one sentence each, over the targets each waits on', async () => {
+  it('opens several watches over the targets each waits on', async () => {
     serve([
       watch('W1', {
         lastEvaluatedAt: at(-MINUTE),
@@ -350,10 +348,7 @@ describe('a session’s Following and Followed by', () => {
 
     const watches = [...strip.querySelectorAll<HTMLElement>('.watch-strip-watch')];
     expect(watches.map((w) => w.dataset.watchId)).toEqual(['W1', 'W2']);
-    expect(watches.map((w) => w.querySelector('.watch-say')?.textContent)).toEqual([
-      'Resumes this session when all of them finish, or in 6h at the latest.',
-      'Resumes this session when it finishes, or in 20h at the latest.',
-    ]);
+    expect(strip.querySelectorAll('.watch-say')).toHaveLength(0);
     // Each target a row in the task list's words, opening its own page; what met the condition first.
     const rows = (w: HTMLElement) =>
       [...w.querySelectorAll<HTMLAnchorElement>('a.ct-row')].map((a) => [

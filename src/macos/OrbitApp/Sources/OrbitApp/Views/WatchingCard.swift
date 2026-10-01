@@ -8,11 +8,10 @@ import OrbitKit
 /// `CreatedTasksCard`): one line, and opened, a list.
 ///
 /// The line names a lone target with where it stands, in its own list's pill, or states what several
-/// need beside Tasks created here's sentence over where they stand. Opened, each watch is one
-/// sentence — what it waits for, and the deadline that resumes this session anyway — over the targets
-/// it waits on, each opening its page; a lone target is on the line already, so the foot leads to it
-/// instead. Read-only: a wait is changed by talking to the agent, and Pause/Stop live on the Following
-/// page. The browser's `SessionWatchStrip` says the same words (`WatchStripCopyParityTests`,
+/// need beside Tasks created here's sentence over where they stand. Opened, each watch lists its
+/// targets and only adds a freshness reminder when the watch has gone unchecked; a lone target is on
+/// the line already, so the foot leads to it instead. Read-only: a wait is changed by talking to
+/// the agent, and Pause/Stop live on the Following page. The browser's `SessionWatchStrip` says the same words (`WatchStripCopyParityTests`,
 /// `src/shared/src/watch-strip.fixture.json`).
 struct WatchingCardStack: View {
     @Environment(AppModel.self) private var model
@@ -24,17 +23,17 @@ struct WatchingCardStack: View {
     /// Tasks created here's row: the pill column, so the titles start under each other, and its height.
     private static let statusColumn: CGFloat = 70
     private static let rowHeight: CGFloat = 31
-    /// Past about five rows and a sentence the list stops and scrolls inside, so opening it never
+    /// Past about five rows the list stops and scrolls inside, so opening it never
     /// pushes the conversation off…
     private static let listCap: CGFloat = 190
-    /// …and however little room the band leaves — a card opened below takes its share too — a
-    /// sentence and a row stay on screen: every scrolling list in the band keeps a floor.
+    /// …and however little room the band leaves — a card opened below takes its share too — a row
+    /// stays on screen: every scrolling list in the band keeps a floor.
     private static let listFloor: CGFloat = 60
 
     var body: some View {
         if let store = model.watches, let summary = store.summary(for: sessionID) {
-            // The deadline and "Not checked for" are relative to now: redraw between fetches so they
-            // don't freeze.
+            // The "Not checked for" reminder is relative to now: redraw between fetches so it
+            // doesn't freeze.
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 VStack(spacing: 0) {
                     header(summary)
@@ -116,8 +115,8 @@ struct WatchingCardStack: View {
 
     // MARK: - opened
 
-    /// Each watch's sentence and targets. Natural height where the band has room; where it hasn't, a
-    /// capped list that scrolls inside and never shrinks below its floor.
+    /// Each watch's targets, plus a stale reminder when needed. Natural height where the band has
+    /// room; where it hasn't, a capped list that scrolls inside and never shrinks below its floor.
     private func list(_ summary: WatchSessionSummary, now: Date) -> some View {
         ViewThatFits(in: .vertical) {
             watches(summary, now: now)
@@ -139,24 +138,18 @@ struct WatchingCardStack: View {
         }
     }
 
-    /// One watch: its sentence, the line it adds while nobody is checking it, and its targets.
+    /// One watch: its stale reminder when nobody is checking it, and its targets.
     private func watchBlock(_ watch: Watch, now: Date, listsTargets: Bool) -> some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(WatchProjection.stripSentence(for: watch, now: now))
+            if let stale = WatchProjection.stripStaleLine(for: watch, now: now) {
+                Text(stale)
                     .font(.orbitMeta)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
-                if let stale = WatchProjection.stripStaleLine(for: watch, now: now) {
-                    Text(stale)
-                        .font(.orbitMeta)
-                        .foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
             if listsTargets {
                 ForEach(WatchProjection.stripTargets(of: watch), id: \.targetResourceId) { target in
                     Divider().opacity(0.5)
