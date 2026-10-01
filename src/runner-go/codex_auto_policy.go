@@ -161,7 +161,14 @@ func codexAutoCommandTargetsOutsideRoots(command, cwd string, roots []string) bo
 			search = at + len("git")
 			continue
 		}
-		tokens := codexShellWordsUntilOperator(command[at+len("git"):])
+		suffixStart := at + len("git")
+		// A quoted executable (`"git" -C ...`) leaves the closing quote just
+		// after the word. Skip it before tokenizing the options.
+		if suffixStart < len(command) && (command[suffixStart] == '\'' || command[suffixStart] == '"') {
+			suffixStart++
+		}
+		tokens := codexShellWordsUntilOperator(command[suffixStart:])
+		gitDir := cwd
 		for i := 0; i < len(tokens); i++ {
 			token := tokens[i]
 			// Git's `--` ends its option list; a later `-C` is an argument, not a
@@ -171,9 +178,6 @@ func codexAutoCommandTargetsOutsideRoots(command, cwd string, roots []string) bo
 			}
 			path, needsNext, matched := codexGitPathOption(token)
 			if !matched {
-				if !strings.HasPrefix(token, "-") {
-					break
-				}
 				continue
 			}
 			if needsNext {
@@ -185,8 +189,12 @@ func codexAutoCommandTargetsOutsideRoots(command, cwd string, roots []string) bo
 				i++
 				path = tokens[i]
 			}
-			if !codexPathWithinRootsFrom(path, cwd, roots) {
+			resolved, ok := codexResolvePathFrom(path, gitDir)
+			if !ok || !codexPathWithinRoots(resolved, roots) {
 				return true
+			}
+			if codexGitPathChangesDirectory(token) {
+				gitDir = resolved
 			}
 		}
 		search = at + len("git")
@@ -209,18 +217,27 @@ func codexGitPathOption(token string) (path string, needsNext, matched bool) {
 	}
 }
 
+func codexGitPathChangesDirectory(token string) bool {
+	return token == "-C" || (strings.HasPrefix(token, "-C") && len(token) > len("-C"))
+}
+
 func codexPathWithinRootsFrom(path, cwd string, roots []string) bool {
+	resolved, ok := codexResolvePathFrom(path, cwd)
+	return ok && codexPathWithinRoots(resolved, roots)
+}
+
+func codexResolvePathFrom(path, cwd string) (string, bool) {
 	path = strings.TrimSpace(path)
 	if path == "" || strings.HasPrefix(path, "~") || strings.ContainsAny(path, "$`*?") {
-		return false
+		return "", false
 	}
 	if !filepath.IsAbs(path) {
 		if cwd == "" {
-			return false
+			return "", false
 		}
 		path = filepath.Join(cwd, path)
 	}
-	return codexPathWithinRoots(path, roots)
+	return filepath.Clean(path), true
 }
 
 // codexShellWordsUntilOperator is intentionally a small lexer, not a shell interpreter. It only
