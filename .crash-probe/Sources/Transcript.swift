@@ -21,6 +21,14 @@ enum ScrollFix {
 
 enum LastScroll { static var text = "-" }
 
+/// Candidate fix `route`: a scroll asked for outside an update, carried to the next one.
+struct PendingScroll: Equatable {
+    let id: String
+    let anchor: UnitPoint
+    let why: String
+    let tick: Int
+}
+
 struct TranscriptView: View {
     let console: FakeConsole
     private let bottomID = PRow.bottom.id
@@ -28,6 +36,8 @@ struct TranscriptView: View {
     @State private var stuckID: String?
     @State private var ruler = QuestionRuler()
     @State private var transcriptScroll = TranscriptScroll()
+    @State private var pendingScroll: PendingScroll?
+    @State private var pendingTick = 0
 
     private func tracker(ruler: QuestionRuler) -> some ViewModifier {
         ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck,
@@ -37,6 +47,19 @@ struct TranscriptView: View {
     private var canPageOlder: Bool {
         guard #available(iOS 18, macOS 15, *) else { return false }
         return console.state.hasMoreOlder
+    }
+
+    /// The body of a tap's main-queue hop. As shipped it scrolls right here, outside any update;
+    /// under `route` it hands the target to `pendingScroll`, whose `.onChange` scrolls inside the
+    /// next update — after that update has applied whatever rows were pending.
+    private func hopScroll(_ proxy: ScrollViewProxy, _ id: String, _ anchor: UnitPoint, _ why: String) {
+        if Probe.fix == "route" {
+            let tick = pendingTick &+ 1
+            pendingTick = tick
+            pendingScroll = PendingScroll(id: id, anchor: anchor, why: why, tick: tick)
+        } else {
+            withAnimation(.easeOut(duration: 0.2)) { scrollNow(proxy, id, anchor, why) }
+        }
     }
 
     private func scrollNow(_ proxy: ScrollViewProxy, _ id: String, _ anchor: UnitPoint, _ why: String) {
@@ -103,21 +126,19 @@ struct TranscriptView: View {
             .onChange(of: console.scrollRequest) { _, request in
                 guard let request else { return }
                 transcriptScroll.halt()
-                DispatchQueue.main.async {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        scrollNow(proxy, request.rowID, .center, "needs-you")
-                    }
-                }
+                DispatchQueue.main.async { hopScroll(proxy, request.rowID, .center, "needs-you") }
             }
             .onChange(of: console.recordRequest, initial: true) { _, request in
                 guard let request else { return }
                 atBottom = false
                 console.recordRequestFollowed(request)
                 transcriptScroll.halt()
-                DispatchQueue.main.async {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        scrollNow(proxy, request.rowID, .center, "record")
-                    }
+                DispatchQueue.main.async { hopScroll(proxy, request.rowID, .center, "record") }
+            }
+            .onChange(of: pendingScroll) { _, request in
+                guard let request else { return }
+                withAnimation(.easeOut(duration: 0.2)) {
+                    scrollNow(proxy, request.id, request.anchor, request.why)
                 }
             }
             // Probe-only: the script "presses" the two buttons; the actions are the buttons' own.
@@ -247,9 +268,7 @@ struct TranscriptView: View {
         atBottom = false
         transcriptScroll.halt()
         guard let id else { return }
-        DispatchQueue.main.async {
-            withAnimation(.easeOut(duration: 0.2)) { scrollNow(proxy, id, .top, "sticky") }
-        }
+        DispatchQueue.main.async { hopScroll(proxy, id, .top, "sticky") }
     }
 
     // The jump-to-latest disc's tap (iOS branch of `scrollToBottomButton`'s action).
@@ -260,9 +279,7 @@ struct TranscriptView: View {
             return
         }
         transcriptScroll.halt()
-        DispatchQueue.main.async {
-            withAnimation(.easeOut(duration: 0.2)) { scrollNow(proxy, bottomID, .bottom, "jump") }
-        }
+        DispatchQueue.main.async { hopScroll(proxy, bottomID, .bottom, "jump") }
         atBottom = true
     }
 

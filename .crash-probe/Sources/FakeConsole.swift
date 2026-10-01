@@ -217,6 +217,7 @@ final class FakeConsole {
         case "record": return 800
         case "history": return 900
         case "fuzz": return [0, 200, 650, 1000, 1150, 1350][rng.int(0, 5)]
+        case "press": return 700
         default: return 600
         }
     }
@@ -271,6 +272,17 @@ final class FakeConsole {
 
     func setReadingHistory(_ reading: Bool) {
         readingHistory = reading
+        if Probe.fix == "route" {
+            // Candidate fix: not from inside the transcript's update — a scroll issued later in the
+            // same dispatch would be resolved against the rows this trim is about to remove.
+            guard !reading else { return }
+            Task { @MainActor [weak self] in
+                guard let self, !self.readingHistory, self.trimWindow() else { return }
+                LastCause.text = "setReadingHistory(false) trim (next turn)"
+                self.publishStateNow()
+            }
+            return
+        }
         if !reading, trimWindow() {
             LastCause.text = "setReadingHistory(false) trim"
             publishStateNow()
@@ -394,6 +406,19 @@ final class FakeConsole {
             Trace.shared.log("DECISIONS \(self.sessionID) n=\(self.decisionCards.count)")
         }
 
+        if sessionID == "s-main" && Probe.scenario == "press" {
+            // Churn: an approval row that comes and goes at the tail, published on its own, often
+            // enough that a publish is usually pending when a tap's main-queue hop runs.
+            Task { [weak self] in
+                while let self, !Task.isCancelled {
+                    await self.pause(6, 22)
+                    LastCause.text = "churn approval"
+                    self.reducer.pendingApprovals = self.reducer.pendingApprovals.isEmpty
+                        ? [PApproval(id: "ap-churn")] : []
+                    self.publishStateNow()
+                }
+            }
+        }
         if sessionID == "s-main" && Probe.scenario == "record" {
             await openAtRecord()
         } else if reducer.items.isEmpty {
@@ -464,6 +489,22 @@ final class FakeConsole {
             }
         case "fuzz":
             if rng.chance(0.10) { await fuzzOp() }
+        case "press":
+            // The three taps whose scroll takes a main-queue hop in the shipped view.
+            switch rng.int(0, 99) {
+            case 0..<50:
+                LastCause.text = "jump press"
+                probeJumpTick += 1
+            case 50..<75:
+                LastCause.text = "needs-you press"
+                scrollTick += 1
+                let target = state.pendingApprovals.first.map { "approval-\($0.id)" }
+                    ?? state.items.dropLast(rng.int(0, 3)).last?.id ?? "transcript-bottom"
+                scrollRequest = ScrollRequest(rowID: target, tick: scrollTick)
+            default:
+                LastCause.text = "sticky press"
+                probeStickyTick += 1
+            }
         default:
             // Plain streaming, with an occasional send and /status card.
             if now.timeIntervalSince(last) > 3 {

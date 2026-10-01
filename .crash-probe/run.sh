@@ -4,9 +4,9 @@
 #
 #   RUNS="scenario:mode:fix:seed ..." bash .crash-probe/run.sh [out-dir]
 #
-#   scenario  cold warm overcap trim resync record history switch swap fuzz   (see FakeConsole.swift)
+#   scenario  cold warm overcap trim resync record history switch swap fuzz press (see FakeConsole.swift)
 #   mode      count = log + skip an out-of-bounds scroll (counts them all); crash = let it abort
-#   fix       none = as shipped in v0.1.2-beta.142; defer = candidate fix (see Transcript.swift)
+#   fix       none = as shipped in v0.1.2-beta.142; defer / route = candidate fixes (see Transcript.swift)
 set -uo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -84,7 +84,7 @@ run() {  # run <scenario> <mode> <fix> <seed>
   local scenario="$1" mode="$2" fix="$3" seed="$4"
   local name="$scenario-$mode-$fix-$seed"
   local seconds=14
-  [ "$scenario" = "fuzz" ] && seconds=25
+  case "$scenario" in fuzz|press) seconds=25 ;; esac
   local container docs
   container=$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data 2>/dev/null)
   docs="$container/Documents"
@@ -109,13 +109,12 @@ run() {  # run <scenario> <mode> <fix> <seed>
   sleep 1
 }
 
-DEFAULT_RUNS="cold:count:none:1 warm:count:none:1 overcap:count:none:1 trim:count:none:1 \
-resync:count:none:1 record:count:none:1 history:count:none:1 switch:count:none:1 swap:count:none:1 \
-fuzz:count:none:1 fuzz:count:none:2 fuzz:count:none:3 fuzz:count:none:4 \
-fuzz:count:defer:1 fuzz:count:defer:2 fuzz:count:defer:3 fuzz:count:defer:4 \
-overcap:count:defer:1 trim:count:defer:1 resync:count:defer:1 history:count:defer:1 \
-switch:count:defer:1 swap:count:defer:1 \
-overcap:crash:none:1 trim:crash:none:1 fuzz:crash:none:1"
+DEFAULT_RUNS="press:count:none:1 press:count:none:2 press:count:none:3 press:count:none:4 \
+press:crash:none:5 \
+press:count:route:1 press:count:route:2 press:count:route:3 press:count:route:4 \
+fuzz:count:route:1 fuzz:count:route:2 fuzz:count:route:3 fuzz:count:route:4 \
+overcap:count:route:1 history:count:route:1 record:count:route:1 switch:count:route:1 \
+swap:count:route:1 trim:count:route:1 resync:count:route:1 cold:count:route:1"
 RUNS="${RUNS:-$DEFAULT_RUNS}"
 
 echo "== run =="
