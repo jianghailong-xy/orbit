@@ -1,0 +1,38 @@
+# XcodeGen spec for the transcript-List scroll crash probe — EVIDENCE ONLY, never shipped and never a
+# gate. Reproduces TestFlight crash D8B79F89 (0.1.2 build 4028, iOS 26.6.1): an out-of-bounds
+# scroll target in SwiftUI's UpdateCoalescingCollectionView. See Sources/Probe.swift.
+#
+# No OrbitKit dependency: the one piece of it the copied scroll tracker needs (`TailPinning`) is
+# copied verbatim, so the build is just this app.
+name: CrashProbe
+options:
+  bundleIdPrefix: io.orbitd
+  deploymentTarget:
+    iOS: "17.0"   # the app's floor; the iOS 18 branches it gates are what run on iOS 26
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+
+targets:
+  CrashProbe:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Sources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.crashprobe
+        PRODUCT_NAME: CrashProbe
+        INFOPLIST_FILE: Sources/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGNING_ALLOWED: NO
+        TARGETED_DEVICE_FAMILY: "1"
+
+schemes:
+  CrashProbe:
+    build:
+      targets:
+        CrashProbe: all
