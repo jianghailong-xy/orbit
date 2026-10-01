@@ -26,6 +26,10 @@
  *      sections they fit to be written again; what fits no section is one plan proposal, and the plan does
  *      not change until the owner confirms; a space with no confirmed plan writes no document; and a
  *      repository file gone from origin/main withdraws the sentences citing it;
+ *   9. a plan job goes before the next run (2026-10-01): a build or a draft queued behind a maintenance
+ *      run is made when the run's task ends — the change published on the run's session, as the runner's
+ *      door publishes it — and no fact makes a run while one waits, however due: the trigger makes the
+ *      job's task instead; once the job's task ended, the next fact makes the run by the rules as they were;
  *
  * and beside them: the daily limit holds a due space and says so in its health; the task is made pinned,
  * at once, with `orbit wiki check --expect-cursor` as its one criterion; the run proposes as `maintenance`
@@ -77,7 +81,7 @@ import { WikiMaintenance } from './wiki-maintenance';
 import { considerWikiMaintenance, WikiMaintenanceTrigger, wikiMaintenanceHintFor, type WikiMaintenanceHint } from './wiki-maintenance-run';
 import { wikiMaintenanceRunsToday } from './wiki-maintenance-session';
 import { WikiPlans } from './wiki-plan';
-import { WikiPlanJobFacts } from './wiki-plan-job';
+import { WikiPlanJobFacts, wikiPlanJobHintFor } from './wiki-plan-job';
 import { WikiPlanController } from './wiki-plan.controller';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService } from './wiki.service';
@@ -1659,3 +1663,120 @@ test('a repository file gone from origin/main withdraws the sentences citing it,
      WHERE "withdrawn_path" IS NOT NULL AND "section_id" IN (SELECT x."id" FROM "wiki_doc_section" x JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1)`, [s.spaceId, randomUUID()]),
     /wiki_doc_sentence_withdrawn_chk/);
 });
+
+// ── 9. a plan job goes before the next run ───────────────────────────────────────────────────────
+
+interface JobRow {
+  id: string;
+  kind: string;
+  state: string;
+  task_id: string | null;
+  outcome: string | null;
+}
+
+async function jobRow(h: Harness, jobId: string): Promise<JobRow> {
+  return (await h.sql.query<JobRow>(`SELECT "id","kind","state","task_id","outcome" FROM "wiki_plan_job" WHERE "id" = $1`, [jobId])).rows[0]!;
+}
+
+const runsOf = (h: Harness, s: Space): Promise<number> => h.prisma.wikiMaintenanceRun.count({ where: { spaceId: s.spaceId } });
+
+/**
+ * A planned space whose backlog made its maintenance task, under way on its runner, and a job of `kind` its
+ * owner asked for meanwhile — a build by confirming the draft, a draft by asking for one — queued behind the
+ * run's task: the morning of 2026-10-01, when the owner confirmed the plan while a run was under way.
+ */
+async function queuedBehindARun(h: Harness, name: string, kind: 'build' | 'draft') {
+  const s = await plannedSpace(h, name);
+  const backlog = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  const made = await consider(h, s, hintOf([backlog[0]!]));
+  assert.equal(made.made, true, `the due space makes its maintenance task: ${JSON.stringify(made)}`);
+  if (!made.made) throw new Error('unreachable');
+  const run = await runSession(h, s, made.taskId);
+  if (kind === 'build') await confirm(h, s, s.version);
+  else expectStatus(await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/spaces/${s.spaceId}/plan/redraft`, {}), 200, 'the owner asks for a draft');
+  const [job] = (await h.sql.query<JobRow>(
+    `SELECT "id","kind","state","task_id","outcome" FROM "wiki_plan_job" WHERE "space_id" = $1 AND "kind" = $2 AND "state" <> 'ended'`,
+    [s.spaceId, kind],
+  )).rows;
+  assert.equal(job?.state, 'queued', `the ${kind} waits for the run: ${JSON.stringify(job)}`);
+  const page = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
+  assert.equal(toUuid(page.body.job.waitingFor.taskId as string), made.taskId, 'the plan page says it waits for the maintenance run');
+  return { s, maintenanceTask: made.taskId, run, jobId: job.id };
+}
+
+/**
+ * A task of the list ends as the runner's door ends it — its acceptance turn's comparison settles it in
+ * POST /runner/sessions/:id/turn-complete — and the change that door publishes:
+ * `RealtimeService.publishTaskChanged(sessionId, taskId)`, keyed by the session and not by the owner.
+ */
+async function endedOnItsSession(h: Harness, taskId: string, sessionId: string): Promise<NormalizedRunEvent> {
+  await h.sql.query(`UPDATE "task" SET "status" = 'DONE', "updated_at" = now() WHERE "id" = $1`, [taskId]);
+  await h.sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED' WHERE "id" = $1`, [sessionId]);
+  return { seq: 0, type: RunEventType.TASK_CHANGED, ts: new Date().toISOString(), payload: { taskId, taskIds: [], resync: true } } as NormalizedRunEvent;
+}
+
+for (const kind of ['build', 'draft'] as const) {
+  test(`a ${kind} queued behind a maintenance run goes first: the run's end, published on its session, makes the ${kind}'s task and no second run`, { skip }, async () => {
+    const h = await boot();
+    const { s, maintenanceTask, run, jobId } = await queuedBehindARun(h, `first-${kind}`, kind);
+    // A fact while the run is under way waits for it, as ever.
+    const meanwhile = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(9) });
+    assert.deepEqual(await consider(h, s, hintOf([meanwhile])), { made: false, spaceId: s.spaceId, why: 'unfinished' });
+
+    // The run's task ends, and the change is published on the run's session: the job's facts take it.
+    const ended = await endedOnItsSession(h, maintenanceTask, run);
+    await h.facts.take(run, ended);
+    await h.facts.idle();
+    const job = await jobRow(h, jobId);
+    assert.equal(job.state, 'made', `the run's end made the ${kind}: it is ${job.state}`);
+    const list = (await maintenanceTasks(h, s)).map((row) => row.id);
+    assert.deepEqual(list.slice(list.indexOf(maintenanceTask)), [maintenanceTask, job.task_id], `the list's next task is the ${kind}'s`);
+    assert.deepEqual(wikiPlanJobHintFor(run, ended), { ownerId: null, sessionId: run, taskIds: [maintenanceTask] },
+      'a change published on a session names its tasks, the owner read from the session');
+    assert.deepEqual(wikiPlanJobHintFor(`user:${s.owner.id}`, { ...ended, payload: { taskIds: [maintenanceTask], resync: false } }),
+      { ownerId: s.owner.id, sessionId: null, taskIds: [maintenanceTask] }, "and the owner's own is as it was");
+
+    // The next fact of the due space finds the list the job's: no second run.
+    const next = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(8) });
+    assert.deepEqual(await consider(h, s, hintOf([next])), { made: false, spaceId: s.spaceId, why: 'unfinished' });
+    assert.equal(await runsOf(h, s), 1, 'one maintenance run: the one that ended');
+  });
+
+  test(`while a ${kind} waits for the list no due fact makes a run — the trigger makes the ${kind}'s task instead — and after it the next fact does, as before`, { skip }, async () => {
+    const h = await boot();
+    const { s, maintenanceTask, run, jobId } = await queuedBehindARun(h, `yield-${kind}`, kind);
+    // The run's task ends, and nothing has told the job yet: the list is free and the job still waits.
+    await endedOnItsSession(h, maintenanceTask, run);
+    assert.equal((await jobRow(h, jobId)).state, 'queued');
+
+    // The backlog is past the threshold and more facts arrive: none of them makes a run while the job waits.
+    for (const fact of await settledSessions(h, s, 3, 20)) {
+      assert.deepEqual(await consider(h, s, hintOf([fact])), { made: false, spaceId: s.spaceId, why: 'plan_job_queued' }, `a queued ${kind} goes first`);
+    }
+    assert.equal(await runsOf(h, s), 1, 'no second run');
+    assert.equal((await jobRow(h, jobId)).state, 'queued', 'deciding makes nothing: the trigger\'s service makes the job');
+
+    // The trigger's service takes the next published fact: it makes the job's task, not a run.
+    const fact = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(15) });
+    await h.trigger.take(fact, { seq: 0, type: RunEventType.STATUS, ts: new Date().toISOString(), payload: {} } as NormalizedRunEvent);
+    await h.trigger.idle();
+    const job = await jobRow(h, jobId);
+    assert.equal(job.state, 'made', `the trigger made the ${kind}'s task: it is ${job.state}`);
+    assert.equal(await runsOf(h, s), 1, 'and no run');
+    assert.ok(h.announced.some((a) => a.ownerId === s.owner.id && JSON.stringify(a.change).includes(job.task_id!)), 'the job\'s task is published');
+    assert.deepEqual(await consider(h, s, hintOf([fact])), { made: false, spaceId: s.spaceId, why: 'unfinished' }, 'facts wait for the job\'s run');
+
+    // The job's task ends — its run said nothing, so the job ended failed — and with nothing queued the next
+    // fact makes the run, by the rules as they were: the backlog its facts piled up meanwhile is due.
+    const jobRun = await runSession(h, s, job.task_id!);
+    await h.facts.take(jobRun, await endedOnItsSession(h, job.task_id!, jobRun));
+    await h.facts.idle();
+    assert.deepEqual([(await jobRow(h, jobId)).state, (await jobRow(h, jobId)).outcome], ['ended', 'failed']);
+    const after = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(5) });
+    const made = await consider(h, s, hintOf([after]));
+    assert.equal(made.made, true, `the next fact after the ${kind} makes the run: ${JSON.stringify(made)}`);
+    if (!made.made) return;
+    assert.equal(made.due, 'backlog');
+    assert.equal(await runsOf(h, s), 2);
+  });
+}
