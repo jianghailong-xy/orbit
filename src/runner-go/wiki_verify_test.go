@@ -818,6 +818,33 @@ func TestWikiVerifyParsesOnlyAVerdict(t *testing.T) {
 	}
 }
 
+// A maintenance run asks again about an op whose answer was not a verdict, saying why and which ids duplicateOf
+// may be — none, when no entry is listed — and reads the new answer as strictly as the first.
+func TestWikiVerifyAsksAgainSayingWhyTheLastAnswerWasNotTaken(t *testing.T) {
+	refused := `a duplicate must name one of the listed entries, and "entry-gone" is not one`
+	listed := []wikiVerifyCandidate{{ID: "entry-a", Kind: "pitfall", Title: "A"}, {ID: "entry-b", Kind: "convention", Title: "B"}}
+	again := wikiVerifyRetrySuffix(refused, listed)
+	for _, part := range []string{
+		"## Your last answer was not taken",
+		"your answer was not a verdict: " + refused + ".",
+		"duplicateOf must be one of these ids, copied exactly: entry-a, entry-b.",
+		"Answer again, with one JSON object and nothing else.",
+	} {
+		if !strings.Contains(again, part) {
+			t.Errorf("the second asking does not say %q:\n%s", part, again)
+		}
+	}
+	none := wikiVerifyRetrySuffix("no JSON object in it", nil)
+	if !strings.Contains(none, "your answer was not a verdict: no JSON object in it.") ||
+		!strings.Contains(none, "No entry is listed above, so this entry is no duplicate: answer supported, partial or unsupported") {
+		t.Errorf("the second asking with nothing listed:\n%s", none)
+	}
+	// However it was asked, an answer naming an id that is not listed is still no verdict.
+	if _, err := parseWikiVerdict(`{"verdict":"duplicate","reason":"Same.","duplicateOf":"entry-gone"}`, listed); err == nil {
+		t.Error("a duplicate of an entry not listed was read as a verdict")
+	}
+}
+
 // ── What stops a run ────────────────────────────────────────────────────────────────────────────
 
 func TestWikiVerifyStopsAtTheFirst401(t *testing.T) {

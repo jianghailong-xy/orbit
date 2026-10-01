@@ -41,7 +41,11 @@ type fakeMaintainDoor struct {
 	// propose answers a proposal, dry run or not, by its ops.
 	propose       func(ops []interface{}, dryRun bool) (int, string)
 	verifications string
-	check         func(expect string) (int, string)
+	// own is the run's own ops that wait for their verification, as the proposer's list hands them: a verdict
+	// reported for one takes it off the list, so a second pass is handed what the first left. While it is nil,
+	// verifications is answered once and the list is empty after.
+	own   []map[string]interface{}
+	check func(expect string) (int, string)
 	// adoptable is what ended sessions left waiting, as the adoption list pages it; a verdict reported for one
 	// takes it off the list, and adoptOutcome answers it (nil: applied as Auto). adoptMissing is a server that
 	// predates the adoption routes.
@@ -89,6 +93,8 @@ func newFakeMaintainDoor(t *testing.T) *fakeMaintainDoor {
 			ops, _ := request.body["ops"].([]interface{})
 			dry, _ := request.body["dryRun"].(bool)
 			status, body = d.propose(ops, dry)
+		case r.Method == http.MethodGet && path == "verifications" && d.own != nil:
+			status, body = http.StatusOK, d.ownPage()
 		case r.Method == http.MethodGet && path == "verifications":
 			status, body = http.StatusOK, firstNonEmpty(d.verifications, `{"spaceId":"space-1","mode":"automatic","items":[],"next":""}`)
 			d.verifications = `{"spaceId":"space-1","mode":"automatic","items":[],"next":""}`
@@ -97,6 +103,9 @@ func newFakeMaintainDoor(t *testing.T) *fakeMaintainDoor {
 			outcomes := []interface{}{}
 			for _, v := range verdicts {
 				verdict, _ := v.(map[string]interface{})
+				d.mu.Lock()
+				d.verified[fmt.Sprint(verdict["opId"])] = true
+				d.mu.Unlock()
 				outcomes = append(outcomes, map[string]interface{}{"opId": verdict["opId"], "status": "applied", "trust": "auto"})
 			}
 			raw, _ := json.Marshal(map[string]interface{}{"mode": "automatic", "outcomes": outcomes})
@@ -192,6 +201,20 @@ func (d *fakeMaintainDoor) adoptionPage(query url.Values) string {
 		items = append(items, item)
 	}
 	raw, _ := json.Marshal(map[string]interface{}{"spaceId": "space-1", "mode": "automatic", "items": items, "next": next})
+	return string(raw)
+}
+
+// ownPage is the run's own ops still waiting for their verification, as the proposer's list hands them.
+func (d *fakeMaintainDoor) ownPage() string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	items := []map[string]interface{}{}
+	for _, item := range d.own {
+		if !d.verified[fmt.Sprint(item["opId"])] {
+			items = append(items, item)
+		}
+	}
+	raw, _ := json.Marshal(map[string]interface{}{"spaceId": "space-1", "mode": "automatic", "items": items, "next": ""})
 	return string(raw)
 }
 
@@ -647,6 +670,9 @@ func TestWikiMaintainAdoptsWhatEndedSessionsLeftWaitingAfterItsOwnOps(t *testing
 	if v == nil || v.Verified != 2 || v.Failed != 0 || v.Adopted == nil || *v.Adopted != (wikiMaintainAdopted{Ops: wikiMaintainAdoptOpsMax, Verified: wikiMaintainAdoptOpsMax - 1, Failed: 1}) {
 		t.Fatalf("verification = %+v (adopted %+v), want its own two verified, and %d adopted: all but one verified", v, v.Adopted, wikiMaintainAdoptOpsMax)
 	}
+	if v.WaitingForNextRun != 1 {
+		t.Errorf("%d ops waiting for the next run, want the adopted one without a verdict", v.WaitingForNextRun)
+	}
 
 	// Its own ops first; then the adopted ones, oldest first and no more than the cap, each on the adoption
 	// route — as the maintenance session, and with the verdict the model gave.
@@ -797,6 +823,185 @@ func TestWikiMaintainAdoptsNothingWhereThereIsNothingToAdoptFrom(t *testing.T) {
 				t.Errorf("the adoption list was asked %d times, want %d", got, c.asked)
 			}
 		})
+	}
+}
+
+// ── An op the verification gets no verdict for ──────────────────────────────────────────────────
+
+// ownItem is one of the run's own ops as the proposer's verification list hands it: a pitfall citing the
+// tool call behind the port dossier's L2, with the neighbours given.
+func ownItem(opID, title string, similar ...map[string]interface{}) map[string]interface{} {
+	return map[string]interface{}{
+		"opId": opID, "op": "add", "entryId": "e-" + opID,
+		"entry": map[string]interface{}{"kind": "pitfall", "title": title, "summary": "s", "fields": map[string]interface{}{}},
+		"sources": []interface{}{map[string]interface{}{"kind": "tool_call", "ref": "call-2", "quote": nil,
+			"text": "connect ECONNREFUSED 127.0.0.1:9000", "truncated": false}},
+		"similar": append([]map[string]interface{}{}, similar...),
+	}
+}
+
+// The runs of 2026-09-30 and 10-01: the local model judged an op a duplicate of an entry its prompt did not
+// list, and judged it so again when asked once more — and the whole run failed, its cursor unmoved, for one op
+// in eighty-nine. Now the second asking says why the first answer was not taken and which ids a duplicate may
+// name; an op still without a verdict after it is not live and fails nothing: the run succeeds, the cursor
+// advances, and the next run adopts the op — and reports its verdict once the entry it repeats is offered.
+func TestWikiMaintainLeavesAnOpWithoutAVerdictToTheNextRun(t *testing.T) {
+	f := newMaintainFixture(t)
+	door := newFakeMaintainDoor(t)
+	door.context = maintainContext(f, "automatic", 0, "tok-expect")
+	door.pages[""] = maintainPage("tok-expect", false, portDossier("session-a"))
+	door.propose = pendingForVerification
+	live := map[string]interface{}{"id": "entry-fixture", "kind": "convention", "title": "Fixtures hand out their ports", "status": "active", "trust": "auto"}
+	proposed := map[string]interface{}{"id": "entry-port", "kind": "pitfall", "title": "PORT is read at import", "status": "proposed", "trust": "proposed"}
+	door.own = []map[string]interface{}{ownItem("op-0", "fixture 不写死端口"), ownItem("op-1", "PORT 在导入时读取", live, proposed)}
+	// The model takes op-1 for a duplicate of entry-port, which is not live and so not listed: once, and again.
+	vllm := newFakeVLLM(t, func(prompt string) (int, string) {
+		switch {
+		case strings.Contains(prompt, "==== CASE FILE ===="):
+			return extractorAnswers(prompt)
+		case strings.Contains(prompt, "Title: PORT 在导入时读取\n"):
+			return http.StatusOK, `{"verdict":"duplicate","reason":"the space already says this","duplicateOf":"entry-port"}`
+		}
+		return http.StatusOK, `{"verdict":"supported","reason":"the cited record says exactly this"}`
+	})
+	spawns := fakeVerifyClaude(t)
+	wikiMaintainSession(t, door.URL, vllm)
+
+	summary, err := runMaintainCLI(t)
+	if err != nil {
+		t.Fatalf("an op without a verdict failed the run: %v\n%+v", err, summary)
+	}
+	// The run succeeded, and the cursor moved to the position its task expects.
+	if summary.Outcome != "succeeded" || !summary.Advanced || summary.Cursor != "tok-expect" || summary.Error != "" {
+		t.Errorf("summary = %+v, want a run that succeeded and advanced the cursor", summary)
+	}
+	end := finished(t, door)
+	report, _ := end["report"].(map[string]interface{})
+	if end["outcome"] != "succeeded" || end["to"] != "tok-expect" || end["error"] != nil || report["stoppedAt"] != nil {
+		t.Errorf("the run ended %v", end)
+	}
+	// The report counts the op apart, as waiting for the next run.
+	v := summary.Report.Verification
+	if v == nil || v.Verified != 1 || v.Failed != 1 || v.WaitingForNextRun != 1 || v.Adopted != nil {
+		t.Errorf("verification = %+v, want one verified and one waiting for the next run", v)
+	}
+	if verification, _ := report["verification"].(map[string]interface{}); verification["waitingForNextRun"] != float64(1) {
+		t.Errorf("the report the server kept = %v", report)
+	}
+	if !strings.Contains(describeWikiMaintainSummary(summary), "\n- waiting for the next run: 1 op without a verdict, not live; the next run adopts it") {
+		t.Errorf("the summary does not count it apart:\n%s", describeWikiMaintainSummary(summary))
+	}
+	// Nothing was reported for op-1, so nothing of it is live; and the run went on past the verification.
+	for _, call := range door.of(http.MethodPost, "space-1/verifications") {
+		for _, verdict := range call.body["verdicts"].([]interface{}) {
+			if verdict.(map[string]interface{})["opId"] == "op-1" {
+				t.Errorf("a verdict was reported for the op the model gave none for: %v", verdict)
+			}
+		}
+	}
+	if len(door.of(http.MethodGet, "anchors")) != 1 || len(door.of(http.MethodGet, "maintenance/docs")) != 1 {
+		t.Error("the run stopped at the op without a verdict")
+	}
+	// The second pass asked about op-1 alone, saying why its answer was not taken and which ids a duplicate may
+	// name; op-0, verified the first time, was not asked again.
+	var asked []string
+	for _, spawn := range spawns() {
+		switch {
+		case strings.Contains(spawn.Prompt, "Title: PORT 在导入时读取\n"):
+			asked = append(asked, spawn.Prompt)
+		case strings.Contains(spawn.Prompt, "Title: fixture 不写死端口\n") && strings.Contains(spawn.Prompt, "not taken"):
+			t.Errorf("an op that had its verdict was asked again:\n%s", spawn.Prompt)
+		}
+	}
+	if len(asked) != 2 {
+		t.Fatalf("op-1 was asked %d times, want twice", len(asked))
+	}
+	if strings.Contains(asked[0], "Your last answer was not taken") {
+		t.Errorf("the first asking already says an answer was not taken:\n%s", asked[0])
+	}
+	for _, part := range []string{
+		"## Your last answer was not taken",
+		`your answer was not a verdict: a duplicate must name one of the listed entries, and "entry-port" is not one.`,
+		"duplicateOf must be one of these ids, copied exactly: entry-fixture.",
+	} {
+		if !strings.Contains(asked[1], part) {
+			t.Errorf("the second asking does not say %q:\n%s", part, asked[1])
+		}
+	}
+
+	// The next run: the session that proposed op-1 has ended, so op-1 is among what ended sessions left waiting —
+	// and entry-port has gone live since, so it is offered, and the model's duplicate is a verdict.
+	door.pages[""] = maintainPage("tok-expect", false)
+	door.adoptable = []map[string]interface{}{ownItem("op-1", "PORT 在导入时读取", live,
+		map[string]interface{}{"id": "entry-port", "kind": "pitfall", "title": "PORT is read at import", "status": "active", "trust": "auto"})}
+	door.adoptOutcome = func(verdict map[string]interface{}) map[string]interface{} {
+		return map[string]interface{}{"opId": verdict["opId"], "status": "reinforced", "reinforced": true, "verdict": verdict["verdict"]}
+	}
+	var out strings.Builder
+	if err := cmdWikiCLI([]string{"maintain", "--space", "space-1"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("the next run: %v\n%s", err, out.String())
+	}
+	adopted := adoptedVerdicts(t, door)
+	if len(adopted) != 1 || adopted[0]["opId"] != "op-1" || adopted[0]["verdict"] != "duplicate" || adopted[0]["duplicateOf"] != "entry-port" {
+		t.Errorf("the next run reported %v, want op-1 a duplicate of entry-port", adopted)
+	}
+	for _, line := range []string{"op op-1 (PORT 在导入时读取): duplicate — a duplicate of entry-port: its sources were added there",
+		"- adopted: 1 ops ended sessions left waiting for their verification, 1 verified, 0 without a verdict"} {
+		if !strings.Contains(out.String(), line) {
+			t.Errorf("the next run did not say %q:\n%s", line, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "waiting for the next run") {
+		t.Errorf("the next run left something waiting:\n%s", out.String())
+	}
+	if ends := door.of(http.MethodPost, "maintenance/finish"); len(ends) != 2 || ends[1].body["outcome"] != "succeeded" {
+		t.Errorf("the runs ended %v", ends)
+	}
+}
+
+// What stops the verification still fails the run: the model's endpoint refusing the token stops it at the first
+// op — every op after would be refused the same way — and the run ends failed at verify, its cursor unmoved.
+func TestWikiMaintainStillFailsWhenTheVerificationIsRefusedTheToken(t *testing.T) {
+	f := newMaintainFixture(t)
+	door := newFakeMaintainDoor(t)
+	door.context = maintainContext(f, "automatic", 0, "tok-expect")
+	door.pages[""] = maintainPage("tok-expect", false, portDossier("session-a"))
+	door.propose = pendingForVerification
+	door.own = []map[string]interface{}{ownItem("op-0", "fixture 不写死端口"), ownItem("op-1", "PORT 在导入时读取")}
+	door.adoptable = []map[string]interface{}{adoptedItem(1)}
+	vllm := newFakeVLLM(t, func(prompt string) (int, string) {
+		if strings.Contains(prompt, "==== CASE FILE ====") {
+			return extractorAnswers(prompt)
+		}
+		return http.StatusUnauthorized, ""
+	})
+	spawns := fakeVerifyClaude(t)
+	wikiMaintainSession(t, door.URL, vllm)
+
+	summary, err := runMaintainCLI(t)
+	if err == nil || !strings.Contains(err.Error(), "401") || !strings.Contains(err.Error(), "the cursor did not move") {
+		t.Fatalf("a refused token in the verification = %v, want the run failed", err)
+	}
+	if summary.Outcome != "failed" || summary.Advanced {
+		t.Errorf("summary = %+v", summary)
+	}
+	end := finished(t, door)
+	report, _ := end["report"].(map[string]interface{})
+	if end["outcome"] != "failed" || end["to"] != nil || report["stoppedAt"] != "verify" || !strings.Contains(fmt.Sprint(end["error"]), "401") {
+		t.Errorf("the run ended %v", end)
+	}
+	asked := 0
+	for _, spawn := range spawns() {
+		if !strings.Contains(spawn.Prompt, "==== CASE FILE ====") {
+			asked++
+		}
+	}
+	if asked != 1 {
+		t.Errorf("the model was asked for %d verdicts, want none after the first 401", asked)
+	}
+	if len(door.of(http.MethodGet, "space-1/verifications")) != 1 || len(door.of(http.MethodGet, "maintenance/verifications")) != 0 ||
+		len(door.of(http.MethodGet, "anchors")) != 0 {
+		t.Error("the run went on past the 401: a second pass, the adoption or the anchors")
 	}
 }
 

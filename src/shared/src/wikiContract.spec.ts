@@ -555,6 +555,24 @@ describe('wiki contract', () => {
     expect(CONTRACT.maintenance.job.report).toMatch(new RegExp(`adopted \\{${Object.keys(adopted).join(', ')}\\}`, 'u'));
   });
 
+  it('leaves an op the verification got no verdict for to the next run, and fails nothing', () => {
+    // 2026-09-30 and 10-01: one op in eighty-nine, then four in seventy-nine, without a verdict failed every run,
+    // and the cursor never moved. The run's own ops now wait as an adopted op does.
+    const job = CONTRACT.maintenance.job;
+    const verify: string = job.run.steps.find((step: string) => step.startsWith('verify:'));
+    expect(verify).toMatch(/says why the model's last answer was not a verdict and lists the ids duplicateOf may be/u);
+    expect(verify).toMatch(/read as strictly as the first/u);
+    expect(verify).toMatch(/one of the run's own after both passes, or an adopted one — is not live/u);
+    expect(verify).toMatch(/fails nothing: the run goes on, succeeds and advances the cursor, and the next run adopts the op/u);
+    expect(verify).toMatch(/A 401 from the model's endpoint and an error from the server still end the run failed/u);
+    expect(job.run.failure).toMatch(/Nor does an op the verification left without a verdict/u);
+    expect(CONTRACT.reviewModes.verification.adoption.run).toMatch(/An op of the run's own that its two passes left without a verdict waits the same way/u);
+    // The report counts what waits for the next run apart.
+    expect(job.report).toMatch(/verification \{verified, failed, waitingForNextRun — /u);
+    // orbit wiki verify on its own still exits non-zero for an op left without a verdict; a run does not go by that.
+    expect(CONTRACT.agentSurface.verify.unreadable).toMatch(/The command exits non-zero when any op failed\. A maintenance run does not go by that exit/u);
+  });
+
   it.each(['entry', 'op', 'changeset', 'source'])('has a consistent %s state machine', (name) => {
     const sm = name === 'source' ? CONTRACT.sourceStates : CONTRACT.states[name];
     const values: string[] = sm.values;
