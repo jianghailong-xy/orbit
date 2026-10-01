@@ -224,6 +224,8 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 - 判据级：服务任务非空且所有**有提交可落**的服务任务全部 `ON_UPSTREAM` → `LANDED`；服务任务非空、所有有提交可落的服务任务都是 `ON_UPSTREAM` 或 `ON_INTEGRATION_LINE`、且至少一个不是 `ON_UPSTREAM` → `ON_INTEGRATION_LINE`；其余 → `UNKNOWN`。`MAIN` 线项目不会出现 `ON_INTEGRATION_LINE`。
 - 「有提交可落」= `task.codeless = false`（§1.1 `isCodeTask` 的前半）。一条声明自己不需要代码的任务（SR5 的逃生口：调研、文档、以证据为交付的验收任务）不解析 SOURCE，因此没有自己的分支、没有自己的提交，也不可能有任何回执把它的工作放到 `main` 上——它不参与这条合取，既不挡 `LANDED` 也不提供 `LANDED`。这与 §2.5 J9 对依赖的豁免是同一条规则（SR27：文档类前置不该让下游等一个永远不会存在的检查点），也让 `ProjectIntegrationBuckets.doneNotIntegrated`（「DONE work with nothing to land」）与 `NOT_APPLICABLE` 的口径在判据这一层成立。**注意这不是给验收类任务开绕过落地判定的口子**：跑过分支的任务就是有自己的提交（无论它的回执或标题怎么说），仍然按原样顶住 `LANDED`；只读声明，不读会话史（`isCodeTask` 的后半读的是**最新**一条会话，而回执挂在**任务**上，用它会漏掉「上一次落地、这一次没分叉」的任务）。
 - 只有 codeless 的服务任务、但确实有服务任务时，判据读 `LANDED`（零个提交全部在 upstream 上，即 J9 的「没有可等的」）；**没有人**服务时仍读 `UNKNOWN`。
+- 声明 codeless 的门（0346）：`task_create`、`task_create_batch` 的每一项、`task_update`（MCP、CLI、runner API 同一个 DTO）。建任务时声明不需要理由；给已有任务声明必须带 `codelessReason`（存进 `task.codeless_reason`，撤回声明时清掉），且已经有自己提交的任务一律拒绝（`TASK_CODELESS_HAS_COMMITS`：有让目标移动过的 `MERGED` 回执，或有工作会话报告过改动）。
+- 线的 `NOTHING_TO_LAND` 也可以让任务退出合取，但**只凭 runner 的实测**（0346）：作业行的 `source_on_upstream = true`（空分支的 tip 是 upstream 的祖先），且该作业在任务结束工作之后、对它最后所在的分支作答（`jobSawTheFinishedBranch`），且写下了回执（只有任务在任何地方都没有会话报告过工作时才写，J8）。不按状态放行：会话死掉、成果在别的分支上的任务同样会被判 `NOTHING_TO_LAND`；没测（旧行、旧 runner）或测出不在 upstream 上的，一律仍挡 `LANDED`。此前这一豁免只在 `target_sha_before = upstream_sha` 且没做 main 同步时成立，项目分支一旦领先 main 就永远不成立（2026-10-01，项目 `34WzvgkHWbY1VwXmSPUZi` 的上线任务）。
 - 零提交的验收任务挡死判据落地判定，是 2026-09-22 在项目 `34ODoUKJGEsfbgcJDGS4q` 实测到的洞：48 条任务全部 DONE、13/14 条判据 `LANDED`，第 12 条被判据名下那条零提交的验收任务钉在 `ON_INTEGRATION_LINE`，项目到不了 DONE。修复只改读数（`project-criterion-landing.ts` 的 `criterionLanding`/`taskHasNothingToLand`），不改判据措辞。
 - `readCriterionLanding` 多读一次代码库行，`ProjectsService.get` 的语句数随之 17 → 18（`project-get-query-count.pg.spec.ts`）。
 
@@ -305,6 +307,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 | `tested_sha` / `tested_tree_sha` | char(40) NULL | 在其上跑检查的提交与它的树 |
 | `landed_sha` / `landed_tree_sha` | char(40) NULL | 推送后目标 tip 与它的树 |
 | `ahead_of_upstream` | int NULL | `git rev-list --count <upstream>..<landed>` |
+| `source_on_upstream` | boolean NULL | 迁移 0346。仅 `NOTHING_TO_LAND` 时由 runner 实测：S 是否 U 的祖先（`git merge-base --is-ancestor S U`）。NULL = 没测（旧行、旧 runner、其他答案） |
 | `checks` | jsonb NOT NULL DEFAULT `'[]'` | `[{ name: 'TASK_ACCEPTANCE' \| 'MERGE_CHECK', command, expectedExitCode, exitCode: number \| null, timedOut, durationMs, outputTail }]`，`outputTail` ≤ 16 KB |
 | `conflicts` | text[] NOT NULL DEFAULT `'{}'` | |
 | `error_code` / `error_detail` | text / jsonb NULL | 闭集见 J12 |
@@ -366,7 +369,7 @@ export function receiptIsLandingEvidence(receipt: LandingReceiptFacts, branches:
 **J-T2 的投递**：`HeartbeatResponse` 新增 `integrationJobs: IntegrationJobCommand[]`，由 `integration-job-relay.ts` 的 `dispatchIntegrationJobs`（照抄 `codex-reset-relay.ts` 的 `dispatchCodexResetCommand`）填入，每拍每个 runner 至多 2 条、串行键互不相同。结果与进度路由：
 
 - `POST /runner/integration-jobs/:jobId/progress` `{ claimGeneration, leaseOwner, phase, upstreamMoved?: { from, to } }`
-- `POST /runner/integration-jobs/:jobId/result` `{ claimGeneration, leaseOwner, state, phase, sourceSha, targetShaBefore, upstreamSha, mainSyncSha, testedSha, testedTreeSha, landedSha, landedTreeSha, aheadOfUpstream, checks, conflicts, errorCode, errorDetail, includedLandedShas? }`
+- `POST /runner/integration-jobs/:jobId/result` `{ claimGeneration, leaseOwner, state, phase, sourceSha, targetShaBefore, upstreamSha, mainSyncSha, testedSha, testedTreeSha, landedSha, landedTreeSha, aheadOfUpstream, sourceOnUpstream?, checks, conflicts, errorCode, errorDetail, includedLandedShas? }`
 
 两条路由写进 `contracts/runner-write-protocol.json`，同步两处 SHA 钉子（§8.3）。
 
@@ -396,7 +399,7 @@ interface IntegrationJobCommand {
 |---|---|---|
 | **J-S1 FETCH** | `git fetch <remote> <target_ref> <upstream_ref>`；T0 = 远端目标 tip（`PROJECT_BRANCH` 线目标不存在时 T0 = U）；U = 远端 upstream tip；S = `git rev-parse refs/heads/<源分支>` → `source_sha` | fetch 失败 → `ERROR / FETCH_FAILED`；源分支不存在 → `ERROR / SOURCE_BRANCH_MISSING`；upstream 不存在 → `ERROR / BASE_REF_NOT_FOUND` |
 | **J-S2 MAIN_SYNC**（仅 `PROJECT_BRANCH`） | U 不是 T0 的祖先时，在 T0 上 `git merge --no-ff -m "Merge <upstream> into <target>" U` → M = `main_sync_sha`，base = M；否则 base = T0 | 冲突 → `CONFLICT`（`phase = MAIN_SYNC`，冲突路径来自 `git diff --name-only --diff-filter=U`） |
-| **J-S3 已包含** | S 是 base 的祖先：S **等于会话记录的 base**（分支停在 fork 点，自己没有提交）→ `NOTHING_TO_LAND`（0300）；否则 → `ALREADY_LANDED`。两者都不推送，丢弃 M | |
+| **J-S3 已包含** | S 是 base 的祖先：S **等于会话记录的 base**（分支停在 fork 点，自己没有提交）→ `NOTHING_TO_LAND`（0300），并实测 S 是否 U 的祖先，报为 `sourceOnUpstream`（0346）；否则 → `ALREADY_LANDED`。两者都不推送，丢弃 M | |
 | **J-S4 REBASE / MERGE** | fork = `git merge-base S base`；`git rev-list --merges fork..S` 非空 → **MERGE 模式** `git merge --no-ff S`（保住合并提交里的冲突解法）；否则 `git rebase --onto base <fork 或 sessionBaseSha> S`。结果 C = `tested_sha` | 冲突 → `CONFLICT`（`phase = REBASE` 或 `MERGE`） |
 | **J-S5 CHECK** | 组合树自带 `scripts/worktree-overlay.sh` 时先运行它（见下方「检查前的铺环境」），再在 C 上依次跑任务验收命令（有 `acceptance_command` 时）与合并检查命令（有配置时），逐条比对退出码 | 铺环境失败或超时 → `ERROR / CHECK_TREE_UNPREPARED`；任一退出码不一致 → `CHECK_FAILED`（什么都不推送） |
 | **J-S6a 落地前核对** | `tested_tree_sha = git rev-parse C^{tree}`；要求 `HEAD = C` 且 `git status --porcelain --untracked-files=no` 为空（检查不得改动或提交已跟踪文件） | → `ERROR / CHECK_MUTATED_TREE` |

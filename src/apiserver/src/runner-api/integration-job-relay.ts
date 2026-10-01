@@ -853,6 +853,9 @@ export async function applyIntegrationJobResult(
         landedSha: body.landedSha ?? undefined,
         landedTreeSha: body.landedTreeSha ?? undefined,
         aheadOfUpstream: body.aheadOfUpstream ?? undefined,
+        // The runner's measurement and nothing else (0346): only a boolean it sent is written, so a
+        // row an older runner answered keeps NULL — "not measured" — which §1.4 withholds on.
+        sourceOnUpstream: typeof body.sourceOnUpstream === 'boolean' ? body.sourceOnUpstream : undefined,
         checks: checks as unknown as Prisma.InputJsonValue,
         conflicts: (body.conflicts ?? []).slice(0, 200),
         errorCode: body.errorCode ?? undefined,

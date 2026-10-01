@@ -288,10 +288,10 @@ test('GET /projects/:id says whether the work settled AND whether it landed, sep
   // codebase". It resolves no SOURCE, so it has no branch, no commit of its own and no receipt; and
   // before this unit, no way to stop holding its criterion at ON_INTEGRATION_LINE for ever.
   //
-  // The declaration is written on the row directly, which is how the product writes it today: the
+  // The declaration is made where the task is created, through task_create's own service: the
   // column is declared by the schema and read by three lanes (source resolution, §2.5 J9's wait,
-  // and the integration backfill), and no DTO carries it yet. `dependency-landed-on-integration-ref`
-  // declares its codeless prerequisite the same way.
+  // and the integration backfill), and since 0346 the task doors carry it — create for free, an edit
+  // only with a reason (`criterion-landing-codeless.pg.spec.ts`).
   for (const [nibble, branch] of [['b', 'orbit/nothing-to-land-1'], ['c', 'orbit/nothing-to-land-2']]) {
     const session = await finishedWork(`the part that reached main (${branch})`, nothingToLandAt.key, branch);
     await mergeRecorded(session, {
@@ -303,13 +303,10 @@ test('GET /projects/:id says whether the work settled AND whether it landed, sep
     title: 'the acceptance task that only produces evidence',
     projectId,
     criterionKey: nothingToLandAt.key,
+    codeless: true,
     ...EXECUTABLE_DECLARATION,
   } as never);
   await settleExecutable(evidenceOnlyTask.id);
-  await prisma.task.update({
-    where: { id: evidenceOnlyTask.id },
-    data: { codeless: true },
-  });
 
   // ── 9. the guard: the same two landed pieces, and a third whose commits are only on the line ───
   // The third ran a branch, so it has commits of its own, and its only receipt names the project's

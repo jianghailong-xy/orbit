@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -403,6 +406,120 @@ func TestIntegrationAlreadyLandedKeepsItsAnswerForABranchWithCommits(t *testing.
 	}
 	if got := r.originRev("refs/heads/project/line"); got != before {
 		t.Fatalf("the target moved: %s -> %s", before, got)
+	}
+}
+
+// TestIntegrationNothingToLandMeasuresWhereTheTipIs: NOTHING_TO_LAND says the branch carries nothing
+// of its own, and on a project branch AHEAD of main that is not yet "nothing that main lacks" — a
+// branch forked from the line holds the line's own commits. So the runner measures where the empty
+// tip is (`git merge-base --is-ancestor <tip> <upstream>`, migration 0346) and the control plane
+// lets the answer out of a criterion's landing only on true. Both cases are the 2026-10-01 shape:
+// the line is ahead of main, which is exactly where the old inference (target tip = upstream tip)
+// could never say anything.
+func TestIntegrationNothingToLandMeasuresWhereTheTipIs(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		// The commit the empty branch forks at and never moves off: main, or the line's own tip.
+		forkAt         string
+		wantOnUpstream bool
+	}{
+		{name: "forked at main: the tip is on the upstream", forkAt: "main", wantOnUpstream: true},
+		{name: "forked at the line: the tip is not on the upstream", forkAt: "project/line", wantOnUpstream: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newIntegrationRepo(t)
+			r.checkoutNew("project/line", "main")
+			r.write("line.txt", "landed on the line, not yet on main\n")
+			r.commit("project branch")
+			r.push("project/line")
+			before := r.originRev("refs/heads/project/line")
+
+			fork := r.rev(tc.forkAt)
+			r.checkoutNew("orbit/rollout", tc.forkAt)
+			r.push("orbit/rollout")
+			r.checkout("main")
+
+			command := r.command("orbit/rollout", "project/line")
+			command.SessionBaseSha = fork
+			result := runIntegrationJob(command, silent)
+			if result.State != "NOTHING_TO_LAND" {
+				t.Fatalf("state = %s (%s), want NOTHING_TO_LAND", result.State, result.ErrorCode)
+			}
+			if result.TargetShaBefore == result.UpstreamSha {
+				t.Fatalf("the line is at main (%s), so this is not the case the measurement is for", result.UpstreamSha)
+			}
+			if result.SourceOnUpstream == nil {
+				t.Fatal("NOTHING_TO_LAND reported no measurement of where the tip is")
+			}
+			if *result.SourceOnUpstream != tc.wantOnUpstream {
+				t.Fatalf("sourceOnUpstream = %v, want %v (tip %s, upstream %s)",
+					*result.SourceOnUpstream, tc.wantOnUpstream, result.SourceSha, result.UpstreamSha)
+			}
+			if got := r.originRev("refs/heads/project/line"); got != before {
+				t.Fatalf("the target moved: %s -> %s", before, got)
+			}
+		})
+	}
+}
+
+// TestIntegrationJobReportsTheTipOnTheUpstream: the measurement is only a fact once the control
+// plane has it, so this follows it onto the wire — the result POSTed for the job carries
+// `sourceOnUpstream: true`. And only that answer does: a landing is not asked the question, and its
+// result says nothing about it rather than a false the control plane would have to tell apart from
+// a measured one.
+func TestIntegrationJobReportsTheTipOnTheUpstream(t *testing.T) {
+	report := func(t *testing.T, job IntegrationJobCommand) map[string]interface{} {
+		t.Helper()
+		var result map[string]interface{}
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasSuffix(r.URL.Path, "/result") {
+				if err := json.NewDecoder(r.Body).Decode(&result); err != nil {
+					t.Errorf("decode result: %v", err)
+				}
+				_, _ = w.Write([]byte(`{"accepted":true,"state":"NOTHING_TO_LAND","receiptIds":[],"openItemId":null}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{}`))
+		}))
+		defer srv.Close()
+		runIntegrationJobAndReport(NewTransport(srv.URL, "tok"), job)
+		if result == nil {
+			t.Fatal("no result was reported")
+		}
+		return result
+	}
+
+	r := newIntegrationRepo(t)
+	r.checkoutNew("project/line", "main")
+	r.write("line.txt", "landed on the line, not yet on main\n")
+	r.commit("project branch")
+	r.push("project/line")
+	fork := r.rev("main")
+	r.checkoutNew("orbit/rollout", "main")
+	r.push("orbit/rollout")
+	r.checkoutNew("task/work", "main")
+	r.write("work.txt", "a commit of its own\n")
+	r.commit("task work")
+	r.push("task/work")
+	r.checkout("main")
+
+	empty := r.command("orbit/rollout", "project/line")
+	empty.JobID = "job-empty"
+	empty.SessionBaseSha = fork
+	sent := report(t, empty)
+	if sent["state"] != "NOTHING_TO_LAND" || sent["sourceOnUpstream"] != true {
+		t.Fatalf("result = %#v, want NOTHING_TO_LAND with sourceOnUpstream true", sent)
+	}
+
+	landing := r.command("task/work", "project/line")
+	landing.JobID = "job-landing"
+	landing.SessionBaseSha = fork
+	sent = report(t, landing)
+	if sent["state"] != "LANDED" {
+		t.Fatalf("result = %#v, want LANDED", sent)
+	}
+	if _, present := sent["sourceOnUpstream"]; present {
+		t.Fatalf("a landing reported a measurement nobody asked it for: %#v", sent)
 	}
 }
 

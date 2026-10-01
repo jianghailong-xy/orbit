@@ -263,6 +263,12 @@ import {
   taskSelfRewrittenStandardRefusalBody,
 } from './task-completion-criterion-change-guard';
 import {
+  normaliseCodelessReason,
+  readTaskCommitEvidence,
+  taskCodelessHasCommitsBody,
+  taskCodelessReasonRequiredBody,
+} from './task-codeless';
+import {
   criterionAsksForOwnerConfirmation,
   ownerConfirmationNotDelegatedBody,
 } from './owner-confirmed-automatic-delegation';
@@ -3948,6 +3954,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // INSERT entirely, exactly as every task written before they existed.
       criterionDefinitionId: criterionDeclaration?.criterionDefinitionId,
       criterionRevision: criterionDeclaration?.criterionRevision,
+      // SR5's declaration, made with the task: no reason is asked for a task's first statement of
+      // what it is (`task-codeless.ts`). Omitted leaves the column default, false.
+      codeless: dto.codeless,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       // Omitted means unscheduled. The `undefined` is what makes that true without a default:
       // Prisma leaves the column out of the INSERT, so the row is born NULL exactly as every task
@@ -8262,6 +8271,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // write below). A stored change record never stops describing it, so it is not that prose.
     const clearsStaleOverrideReason = attachesVerifier
       && readTaskCriterionChange(before.completionCriterionOverrideReason) == null;
+    // The codeless door (`task-codeless.ts`): turning an existing task codeless takes it out of its
+    // criterion's landing conjunction, so it is asked why, and refused for a task whose commits are
+    // already somewhere — those are work that has to land. Only the change is questioned: re-sending
+    // the value the task has, or taking the declaration back, writes no reason and needs none.
+    // Before the transaction, like every refusal on this path.
+    const declaresCodeless = dto.codeless === true && !before.codeless;
+    const withdrawsCodeless = dto.codeless === false && before.codeless;
+    let codelessReason: string | null = null;
+    if (declaresCodeless) {
+      codelessReason = normaliseCodelessReason(dto.codelessReason);
+      if (codelessReason == null) throw new BadRequestException(taskCodelessReasonRequiredBody());
+      const commits = await readTaskCommitEvidence(this.prisma, id);
+      if (commits.length > 0) throw new ConflictException(taskCodelessHasCommitsBody(commits));
+    }
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
@@ -8400,6 +8423,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // licence to erase how this task came to carry the criterion it has.
       completionCriterionOverrideReason:
         criterionChangeRecord ?? (clearsStaleOverrideReason ? null : undefined),
+      // The declaration and its reason move together: written with the reason the door above
+      // asked for, and taken back with it — a reason left on a task that lands again would be
+      // explaining a declaration it no longer makes.
+      codeless: declaresCodeless || withdrawsCodeless ? dto.codeless : undefined,
+      codelessReason: declaresCodeless ? codelessReason : withdrawsCodeless ? null : undefined,
       // Three-state like the pins above: omitted keeps the conclusion, null revokes it. Revoking is
       // a real operation rather than an undo — a subject completed by VERIFICATION_PASSED goes back
       // to OPEN on the next reconcile, which is the point of storing the verdict rather than
