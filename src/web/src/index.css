@@ -6878,6 +6878,13 @@ button.chat-jump-start:hover {
 .chat-file:hover {
   background: var(--bg-hover);
 }
+.chat-file.is-error {
+  border-color: var(--error-border);
+  color: var(--error);
+}
+.chat-file.is-error:hover {
+  background: var(--error-bg);
+}
 .chat-file-name {
   overflow: hidden;
   text-overflow: ellipsis;

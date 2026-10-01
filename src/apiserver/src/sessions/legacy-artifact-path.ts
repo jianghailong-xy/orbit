@@ -1,6 +1,10 @@
 import { uuidToBase62 } from '@orbit/shared';
 import path from 'path';
 
+// Agents commonly cite a source file as `/path/file.ts:123` (or a small line range). The suffix
+// is a location hint, not part of the file name the runner can read.
+const SOURCE_LINE_SUFFIX = /:\d+(?::\d+)?(?:-\d+(?::\d+)?)?$/;
+
 /**
  * The path a client is asking for when it fetches a session artifact, resolved far enough to know
  * it is one of that session's own files — or null, which the door answers as "artifact not found".
@@ -36,7 +40,7 @@ export function resolveLegacyArtifactPath(
     // Keep the raw value; the path checks below reject malformed or unsafe values.
   }
   if (!path.isAbsolute(decoded) || decoded.split(/[\\/]+/).includes('..')) return null;
-  const normalized = path.normalize(decoded);
+  const normalized = path.normalize(decoded.replace(SOURCE_LINE_SUFFIX, ''));
   const parts = normalized.split(path.sep).filter(Boolean);
   const dirNames = new Set([sessionId, uuidToBase62(sessionId)]);
   const marker = parts.findIndex(

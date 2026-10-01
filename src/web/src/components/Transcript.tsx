@@ -1998,6 +1998,50 @@ export function AttachmentImage({
   );
 }
 
+// A legacy artifact request can wait on a runner to copy a path into the control plane. Keep that
+// wait finite in the browser: an offline runner used to leave a clicked chip spinning forever, and
+// the catch below could never turn it into a retryable state. If the server eventually answers an
+// already-timed-out request, release the object URL rather than leaking it.
+const FILE_RESOLVE_TIMEOUT_MS = 15_000;
+
+function resolveFileObjectUrl(
+  resolve: (key: string) => Promise<string>,
+  key: string,
+): Promise<string> {
+  return new Promise((fulfil, reject) => {
+    let finished = false;
+    const timer = setTimeout(() => {
+      finished = true;
+      reject(new Error('file request timed out'));
+    }, FILE_RESOLVE_TIMEOUT_MS);
+    let request: Promise<string>;
+    try {
+      request = resolve(key);
+    } catch (error) {
+      clearTimeout(timer);
+      reject(error);
+      return;
+    }
+    request.then(
+      (url) => {
+        if (finished) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        finished = true;
+        clearTimeout(timer);
+        fulfil(url);
+      },
+      (error) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 function ResolvedAttachmentImage({
   id,
   className,
@@ -2020,7 +2064,7 @@ function ResolvedAttachmentImage({
     if (exp) return; // export: bytes are pre-resolved into the data-URL map, no live fetch
     let active = true;
     let made: string | null = null;
-    resolve(id)
+    resolveFileObjectUrl(resolve, id)
       .then((u) => {
         if (active) {
           made = u;
@@ -2050,6 +2094,7 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   const resolve = useContext(AttachmentResolverContext);
   const exp = useContext(ExportCtx);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const label = name || 'file';
   // Static export: the download endpoint is bearer-guarded and non-image files aren't
   // embedded, so surface the attachment's name as an inert chip rather than a dead button.
@@ -2063,9 +2108,10 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   }
   const download = async (): Promise<void> => {
     if (busy) return;
+    setFailed(false);
     setBusy(true);
     try {
-      const objUrl = await resolve(id);
+      const objUrl = await resolveFileObjectUrl(resolve, id);
       const a = document.createElement('a');
       a.href = objUrl;
       a.download = label;
@@ -2074,14 +2120,23 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
       a.remove();
       setTimeout(() => URL.revokeObjectURL(objUrl), 10_000);
     } catch {
-      /* leave the chip in place so the user can retry */
+      // Keep the chip retryable, but make a failed fetch visible. Previously this catch left a
+      // clicked chip indistinguishable from an unclicked one, which looked like a dead control.
+      setFailed(true);
     } finally {
       setBusy(false);
     }
   };
   return (
-    <button type="button" className="chat-file" onClick={download} title={`Download ${label}`}>
-      {busy ? <LoadingOutlined spin /> : <PaperClipOutlined />}
+    <button
+      type="button"
+      className={`chat-file${failed ? ' is-error' : ''}`}
+      onClick={download}
+      title={failed ? `Retry download ${label}` : `Download ${label}`}
+      aria-label={failed ? `Retry download ${label}` : `Download ${label}`}
+      data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
+    >
+      {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
       <span className="chat-file-name">{label}</span>
     </button>
   );
@@ -2249,6 +2304,12 @@ function looksLikeImagePath(src: string): boolean {
   return /\.(?:png|jpe?g|gif|webp|heic|heif|bmp|tiff?)$/i.test(src.split(/[?#]/)[0] ?? src);
 }
 
+// Source references often add `:line` (or `:line-line`) after the file name. It is useful to the
+// reader, but the artifact route and the runner need the path without that location hint.
+function artifactPathFromLink(src: string): string {
+  return src.replace(/:\d+(?::\d+)?(?:-\d+(?::\d+)?)?$/, '');
+}
+
 function isLegacyArtifactSrc(src: string): boolean {
   return isLocalFileSrc(src) && /\/\.orbit\/(?:uploads|worktrees)\/[0-9a-z-]{16,}\//i.test(src);
 }
@@ -2275,10 +2336,11 @@ function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }
     );
   }
   if (typeof src === 'string' && isLegacyArtifactSrc(src)) {
-    if (looksLikeImagePath(src)) {
-      return <LocalArtifactImage artifactPath={src} alt={typeof alt === 'string' ? alt : 'Image'} />;
+    const artifactPath = artifactPathFromLink(src);
+    if (looksLikeImagePath(artifactPath)) {
+      return <LocalArtifactImage artifactPath={artifactPath} alt={typeof alt === 'string' ? alt : 'Image'} />;
     }
-    return <LocalArtifactFile artifactPath={src} label={fileLabel(src)} />;
+    return <LocalArtifactFile artifactPath={artifactPath} label={fileLabel(artifactPath)} />;
   }
   if (typeof src === 'string' && isLocalImageSrc(src)) {
     return (
@@ -2308,7 +2370,7 @@ function LocalArtifactImage({ artifactPath, alt }: { artifactPath: string; alt: 
     if (!resolve || exp) return;
     let active = true;
     let made: string | null = null;
-    resolve(artifactPath)
+    resolveFileObjectUrl(resolve, artifactPath)
       .then((u) => {
         if (active) {
           made = u;
@@ -2344,6 +2406,7 @@ function LocalArtifactFile({
   const resolve = useContext(ArtifactResolverContext);
   const exp = useContext(ExportCtx);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const shown = label || fileLabel(artifactPath);
   const filename = downloadName || fileLabel(artifactPath);
   if (!resolve || exp) {
@@ -2356,9 +2419,10 @@ function LocalArtifactFile({
   }
   const download = async (): Promise<void> => {
     if (busy) return;
+    setFailed(false);
     setBusy(true);
     try {
-      const objUrl = await resolve(artifactPath);
+      const objUrl = await resolveFileObjectUrl(resolve, artifactPath);
       const a = document.createElement('a');
       a.href = objUrl;
       a.download = filename;
@@ -2367,14 +2431,23 @@ function LocalArtifactFile({
       a.remove();
       setTimeout(() => URL.revokeObjectURL(objUrl), 10_000);
     } catch {
-      /* keep the chip retryable */
+      // The artifact endpoint may refuse a stale path or an offline runner. Surface that state so
+      // the user knows the click was handled and can retry when the runner is back.
+      setFailed(true);
     } finally {
       setBusy(false);
     }
   };
   return (
-    <button type="button" className="chat-file" onClick={download} title={`Download ${filename}`}>
-      {busy ? <LoadingOutlined spin /> : <PaperClipOutlined />}
+    <button
+      type="button"
+      className={`chat-file${failed ? ' is-error' : ''}`}
+      onClick={download}
+      title={failed ? `Retry download ${filename}` : `Download ${filename}`}
+      aria-label={failed ? `Retry download ${filename}` : `Download ${filename}`}
+      data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
+    >
+      {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
       <span className="chat-file-name">{shown}</span>
     </button>
   );
@@ -2395,11 +2468,18 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
     return <AttachmentFile id={id} name={name} />;
   }
   if (typeof href === 'string' && isLegacyArtifactSrc(href)) {
+    // Older replies used ordinary links for generated images. Treat those the same as the image
+    // form so a labelled `[preview](...png)` does not degrade to a download chip forever.
+    const artifactPath = artifactPathFromLink(href);
+    const label = nodeText(children).trim() || fileLabel(artifactPath);
+    if (looksLikeImagePath(artifactPath)) {
+      return <LocalArtifactImage artifactPath={artifactPath} alt={label} />;
+    }
     return (
       <LocalArtifactFile
-        artifactPath={href}
-        label={nodeText(children).trim() || fileLabel(href)}
-        downloadName={fileLabel(href)}
+        artifactPath={artifactPath}
+        label={label}
+        downloadName={fileLabel(artifactPath)}
       />
     );
   }

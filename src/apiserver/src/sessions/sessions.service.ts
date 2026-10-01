@@ -3889,16 +3889,16 @@ export class SessionsService {
     if (attached) return attached;
 
     const localFile = await this.resolveExistingLocalArtifactFile(resolved.root, resolved.file);
-    if (!localFile) return this.requestAndWaitForLegacyArtifact(sessionId, resolved.original, filename);
+    if (!localFile) return this.requestAndWaitForLegacyArtifact(sessionId, resolved.file, filename);
 
     let st: Awaited<ReturnType<typeof fs.stat>>;
     try {
       st = await fs.stat(localFile);
     } catch {
-      return this.requestAndWaitForLegacyArtifact(sessionId, resolved.original, filename);
+      return this.requestAndWaitForLegacyArtifact(sessionId, resolved.file, filename);
     }
     if (!st.isFile() || st.size <= 0 || st.size > MAX_UPLOAD_BYTES) {
-      return this.requestAndWaitForLegacyArtifact(sessionId, resolved.original, filename);
+      return this.requestAndWaitForLegacyArtifact(sessionId, resolved.file, filename);
     }
     const data = await fs.readFile(localFile);
     const local = {
