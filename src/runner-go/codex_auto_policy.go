@@ -5,9 +5,8 @@ import (
 	"strings"
 )
 
-// codexAutoApprovalContext describes the roots that Auto may use without asking. Codex's
-// workspace-write sandbox remains the final boundary; this context only decides whether an
-// approval request is safe enough to answer automatically.
+// codexAutoApprovalContext describes the roots that Auto may use without asking. The context is
+// only a request-level classifier; it never expands the execution scope on its own.
 type codexAutoApprovalContext struct {
 	workspaceRoots []string
 	tempRoots      []string
@@ -18,35 +17,6 @@ func codexAutoApprovalContextFor(execDir, upDir string) codexAutoApprovalContext
 		workspaceRoots: []string{execDir, upDir},
 		tempRoots:      []string{upDir},
 	}
-}
-
-func codexRuntimeWorkspaceRoots(permissionMode string, job *ClaimedSession, execDir, upDir string) []string {
-	roots := []string{execDir, upDir}
-	if permissionMode == "auto" && job != nil && job.WT != nil && job.WT.RepoDir != "" {
-		// A linked worktree stores its index and worktree metadata in the shared repository's
-		// .git directory. Grant that metadata directory alone so local git commands do not
-		// become "outside workspace" approvals; the repository's source files remain outside.
-		roots = append(roots, filepath.Join(job.WT.RepoDir, ".git"))
-	}
-	return roots
-}
-
-func codexSandboxPolicy(permissionMode string, job *ClaimedSession, execDir, upDir string) map[string]interface{} {
-	if permissionMode == "auto" {
-		return map[string]interface{}{
-			"type":          "workspaceWrite",
-			"writableRoots": codexRuntimeWorkspaceRoots(permissionMode, job, execDir, upDir),
-			"networkAccess": false,
-		}
-	}
-	return map[string]interface{}{"type": "dangerFullAccess"}
-}
-
-func codexSandboxMode(permissionMode string) string {
-	if permissionMode == "auto" {
-		return "workspace-write"
-	}
-	return "danger-full-access"
 }
 
 // codexAutoApproval answers the narrow, request-level part of Auto's policy. An undecided result
