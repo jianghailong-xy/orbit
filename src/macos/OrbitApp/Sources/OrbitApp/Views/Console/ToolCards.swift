@@ -2,6 +2,114 @@ import SwiftUI
 import Foundation
 import OrbitKit
 
+struct ToolFailureSummary {
+    let tool: String
+    let path: String?
+    let reason: String
+
+    /// Tool verification failures arrive as engine stderr, sometimes with the file path and
+    /// explanation split over several lines. Extract only the stable summary for the folded card;
+    /// the original message remains available when the reader expands it.
+    static func parse(_ message: String) -> ToolFailureSummary? {
+        let clean = message.replacingOccurrences(of: "\r\n", with: "\n")
+        guard let marker = clean.range(of: "error=") else { return nil }
+        let afterMarker = clean[marker.upperBound...]
+        guard let verification = afterMarker.range(of: " verification failed:", options: .caseInsensitive) else {
+            return nil
+        }
+        let tool = String(afterMarker[..<verification.lowerBound])
+        guard !tool.isEmpty else { return nil }
+        let detail = String(afterMarker[verification.upperBound...])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var path: String?
+        if let worktrees = detail.range(of: "/worktrees/") {
+            let afterWorktree = detail[worktrees.upperBound...]
+            if let slash = afterWorktree.firstIndex(of: "/") {
+                let candidate = afterWorktree[afterWorktree.index(after: slash)...]
+                let end = candidate.firstIndex(where: { $0 == ":" || $0 == "\n" || $0 == " " }) ?? candidate.endIndex
+                let value = String(candidate[..<end])
+                if !value.isEmpty { path = value }
+            }
+        }
+
+        let lower = detail.lowercased()
+        let reason: String
+        if lower.hasPrefix("invalid patch:") {
+            reason = "Invalid patch"
+        } else if lower.hasPrefix("failed to find expected lines") {
+            reason = "Expected lines not found"
+        } else {
+            reason = "Patch verification failed"
+        }
+        return ToolFailureSummary(tool: tool, path: path, reason: reason)
+    }
+}
+
+struct ToolFailureCardView: View {
+    let message: String
+    let summary: ToolFailureSummary
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 7) {
+                Image(systemName: "wrench.and.screwdriver")
+                    .foregroundStyle(.red)
+                Text(summary.tool)
+                    .font(.orbitMono.weight(.semibold))
+                Spacer(minLength: 0)
+                Text("Failed")
+                    .font(.orbitSectionLabel.weight(.semibold))
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Color.red.opacity(0.12), in: Capsule())
+            }
+            if let path = summary.path {
+                Text(path)
+                    .font(.orbitMonoFine)
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 22)
+                    .textSelection(.enabled)
+            }
+            Text(summary.reason)
+                .font(.orbitLabel.weight(.medium))
+                .padding(.leading, 22)
+            Button {
+                expanded.toggle()
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                    Text(expanded ? "Hide full log" : "Show full log")
+                }
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, 20)
+            if expanded {
+                Text(message)
+                    .font(.orbitMonoFine)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(Color.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 11).padding(.vertical, 9)
+        .background(Color.red.opacity(0.055), in: RoundedRectangle(cornerRadius: 9))
+        .overlay(alignment: .leading) {
+            Rectangle().fill(Color.red).frame(width: 3)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 9).stroke(Color.red.opacity(0.25), lineWidth: 1)
+        }
+    }
+}
+
 // The transcript's tool-call rendering: the folded/expandable card row, its semantic body (command /
 // code / markdown / diff), the red-green diff line views, and the collapsing monospace block. The
 // name→display mapping lives in `OrbitKit.ToolDisplay` so it stays in step with web and testable.

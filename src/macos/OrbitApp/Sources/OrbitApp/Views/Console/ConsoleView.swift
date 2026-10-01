@@ -1299,8 +1299,12 @@ struct TranscriptItemView: View {
         case .interrupt:
             Label("Interrupted", systemImage: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
         case .error(_, let message):
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red).textSelection(.enabled)
+            if let summary = ToolFailureSummary.parse(message) {
+                ToolFailureCardView(message: message, summary: summary)
+            } else {
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red).textSelection(.enabled)
+            }
         case .authError(_, let message):
             if let console {
                 AuthErrorCardView(console: console, message: message)

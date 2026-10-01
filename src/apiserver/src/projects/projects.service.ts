@@ -157,7 +157,7 @@ import {
   storeDerivedProjectStatus,
 } from './project-done-derived';
 import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run';
-import { tellCoordinatorProjectStarted } from './project-started';
+import { tellCoordinatorProjectPaused, tellCoordinatorProjectStarted } from './project-started';
 import {
   type ProjectPauseRow,
   legacySwitchPauseWrite,
@@ -3465,7 +3465,9 @@ export class ProjectsService {
    * `POST /projects/:id/pause` — Pause project: nothing starts the project's tasks by itself, an
    * agent's `task_start` is refused, and Automatic merges nothing into main; runs already going
    * finish, and the owner's own Run still starts a task (`project-pause.ts`,
-   * `tasks/project-pause-dispatch.ts`). Its coordinator is still woken the way Automatic says.
+   * `tasks/project-pause-dispatch.ts`). A changed press leaves one fact-keyed notification on its
+   * existing live coordinator conversation; it is not a wake event and asks the coordinator to do
+   * nothing.
    *
    * The owner's alone: a request carrying an acting session is refused 403 before anything is read.
    * A project nobody has started is refused 409 PROJECT_NOT_STARTED — it runs nothing by itself
@@ -3480,13 +3482,14 @@ export class ProjectsService {
       (tx) => ProjectsService.writePause(tx, ownerId, id, 'PAUSE'),
       loggedRetry(this.logger, 'projects.pause'),
     );
-    return this.afterPause(ownerId, id, written);
+    return this.afterPause(ownerId, id, 'PAUSE', written);
   }
 
   /**
    * `POST /projects/:id/resume` — Resume project: the project moves by itself again, whichever way
-   * it was paused. The owner's alone, like the pause. Resuming a project that is not paused changes
-   * nothing and says so.
+   * it was paused. The owner's alone, like the pause. A changed press tells its existing live
+   * coordinator which tasks move automatically and which still wait to be started by hand.
+   * Resuming a project that is not paused changes nothing and says so.
    *
    * What the pause held is not replayed here: the automatic doors re-read the project on their own
    * next pass — the sweep within the minute, a prerequisite finishing at once — and start what is
@@ -3499,7 +3502,7 @@ export class ProjectsService {
       (tx) => ProjectsService.writePause(tx, ownerId, id, 'RESUME'),
       loggedRetry(this.logger, 'projects.resume'),
     );
-    return this.afterPause(ownerId, id, written);
+    return this.afterPause(ownerId, id, 'RESUME', written);
   }
 
   /** Refused whole before anything is read: a request from a session does not pause or resume. */
@@ -3518,7 +3521,12 @@ export class ProjectsService {
     ownerId: string,
     id: string,
     press: 'PAUSE' | 'RESUME',
-  ): Promise<{ row: ProjectPauseRow; moved: boolean }> {
+  ): Promise<{
+    row: ProjectPauseRow;
+    moved: boolean;
+    episodePausedAt: Date | null;
+    pressedAt: Date | null;
+  }> {
     const [locked] = await tx.$queryRaw<ProjectPauseRow[]>(Prisma.sql`
       SELECT "started_at" AS "startedAt", "paused_at" AS "pausedAt",
              "paused_reason" AS "pausedReason"
@@ -3526,7 +3534,8 @@ export class ProjectsService {
        WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
          FOR NO KEY UPDATE`);
     if (!locked) throw new NotFoundException('project not found');
-    const write = press === 'PAUSE' ? ownerPauseWrite(locked, new Date()) : resumeWrite(locked);
+    const pressedAt = new Date();
+    const write = press === 'PAUSE' ? ownerPauseWrite(locked, pressedAt) : resumeWrite(locked);
     if (write === 'NOT_STARTED') {
       throw new ConflictException({
         code: 'PROJECT_NOT_STARTED',
@@ -3535,19 +3544,59 @@ export class ProjectsService {
           + 'itself until its owner starts it. Nothing was written.',
       });
     }
-    if (!write) return { row: locked, moved: false };
+    if (!write) {
+      return { row: locked, moved: false, episodePausedAt: locked.pausedAt, pressedAt: null };
+    }
     await tx.project.update({ where: { id }, data: write });
-    return { row: { ...locked, ...write }, moved: true };
+    return {
+      row: { ...locked, ...write },
+      moved: true,
+      // The durable identity of either notification is the pause episode this press wrote or
+      // lifted. A legacy Automatic-off pause keeps its original instant when the owner claims it.
+      episodePausedAt: press === 'PAUSE' ? write.pausedAt : locked.pausedAt,
+      pressedAt,
+    };
   }
 
-  /** After the commit, and only when something changed: every client of the owner re-reads it. */
-  private afterPause(
+  /** After the commit, and only when something changed: clients and the coordinator are told. */
+  private async afterPause(
     ownerId: string,
     id: string,
-    written: { row: ProjectPauseRow; moved: boolean },
-  ): ProjectPauseState {
-    if (written.moved) this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, id);
-    return projectPauseState(id, written.row);
+    press: 'PAUSE' | 'RESUME',
+    written: {
+      row: ProjectPauseRow;
+      moved: boolean;
+      episodePausedAt: Date | null;
+      pressedAt: Date | null;
+    },
+  ): Promise<ProjectPauseState> {
+    const state = projectPauseState(id, written.row);
+    if (!written.moved) return state;
+
+    this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, id);
+    if (this.sessions && written.episodePausedAt && written.pressedAt) {
+      const telling = press === 'PAUSE'
+        ? tellCoordinatorProjectPaused(this.prisma, this.sessions, {
+          ownerId,
+          projectId: id,
+          pausedAt: written.episodePausedAt,
+        })
+        : tellCoordinatorProjectStarted(this.prisma, this.sessions, {
+          ownerId,
+          projectId: id,
+          start: {
+            by: 'RESUME',
+            pausedAt: written.episodePausedAt,
+            at: written.pressedAt,
+          },
+        });
+      await telling.catch((e) =>
+        this.logger.warn(`coordinator not told project ${id} was ${
+          press === 'PAUSE' ? 'paused' : 'resumed'}: ${
+          (e as { message?: string })?.message ?? String(e)}`),
+      );
+    }
+    return state;
   }
 
   /**

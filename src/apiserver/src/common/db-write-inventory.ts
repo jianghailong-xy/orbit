@@ -295,7 +295,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Whether the project has started, whether it is paused and by whom are read under the lock on every attempt, and the write is decided from them (projects/project-pause.ts#ownerPauseWrite). A retried attempt that finds the project already where the press would put it writes nothing, which is what a first attempt against those rows would have done; one that finds it unstarted is the same 409.',
-    effects: 'None inside. The `project.changed` publish is after this resolves, and only when a row changed.',
+    effects: 'None inside. After this resolves, and only when a row changed, the `project.changed` publish is sent and the project’s existing live coordinator conversation gets one ordinary turn keyed by the project id and the pause episode’s `paused_at` (projects/project-started.ts#tellCoordinatorProjectPaused). A telling that fails is logged and costs the pause nothing.',
     answer: 'Typed 503 from the global boundary; an unstarted project is the explicit 409 PROJECT_NOT_STARTED; a request from a session is the 403 before anything is read.',
   },
   {
@@ -306,7 +306,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Whether the project has started, whether it is paused and by whom are read under the lock on every attempt, and the write is decided from them (projects/project-pause.ts#resumeWrite). A retried attempt that finds the project already where the press would put it writes nothing, which is what a first attempt against those rows would have done.',
-    effects: 'None inside. The `project.changed` publish is after this resolves, and only when a row changed.',
+    effects: 'None inside. After this resolves, and only when a row changed, the `project.changed` publish is sent and the project’s existing live coordinator conversation gets one ordinary turn keyed by the project id and the lifted pause episode’s `paused_at` (projects/project-started.ts#tellCoordinatorProjectStarted with RESUME). A telling that fails is logged and costs the resume nothing.',
     answer: 'Typed 503 from the global boundary; a request from a session is the 403 before anything is read.',
   },
   {
