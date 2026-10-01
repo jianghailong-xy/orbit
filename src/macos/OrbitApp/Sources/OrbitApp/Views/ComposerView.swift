@@ -991,11 +991,13 @@ struct ComposerView: View {
                     }
                 }
                 .frame(width: 20, height: 20)
-                if showsChevron {
-                    Image(systemName: "chevron.right")
-                        .foregroundStyle(.secondary)
-                } else {
-                    Color.clear
+                Group {
+                    if showsChevron {
+                        Image(systemName: "chevron.right")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Color.clear
+                    }
                 }
                 .frame(width: 20, height: 20)
             }
