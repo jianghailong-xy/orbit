@@ -1,4 +1,4 @@
-import type { OpenItemDeliveryCard, ProjectStartedCard, TaskStartCard } from '@orbit/shared';
+import type { OpenItemDeliveryCard, ProjectStartedCard, SessionMessageCard, TaskStartCard } from '@orbit/shared';
 
 import { buildResumeContinuation } from './resume-continuation';
 
@@ -7,7 +7,8 @@ import { buildResumeContinuation } from './resume-continuation';
  *
  * Delivery appends context to a person's message — `#`-reference summaries, a list console's
  * condition board, the background work a returning engine is told about, a promoted coordinator's
- * standing role, the wiki's confirmed notes for the codebase (`<orbit_wiki_context>`) — and leaves
+ * standing role, the wiki's confirmed notes for the codebase (`<orbit_wiki_context>`), which session
+ * sent another session's message (`<orbit-session-message>`) — and leaves
  * `conversation_turn.content` as the words they wrote. The runner echoes
  * what it was handed as the `user` event, so that event's text is both at once, and every client
  * drew all of it inside the person's own bubble: blocks that say "不是用户说的", signed by the user.
@@ -105,5 +106,23 @@ export function withProjectStarted(
   const stored = { ...payload };
   delete stored.projectStarted;
   if (card !== null) stored.projectStarted = card;
+  return stored;
+}
+
+/**
+ * The same rule once more for another Orbit session's message: `sessionMessage` is the session that
+ * sent the turn (`SessionMessageCard`, sessions/session-message.ts), read out of the turn's own
+ * sender column when the echo is stored, so a client draws "from [that session]" rather than the
+ * owner's bubble. Absent for every turn no session sent, and a card arriving from the runner is
+ * dropped: who sent a message is the control plane's to say, never the transcript's.
+ */
+export function withSessionMessage(
+  payload: Record<string, unknown>,
+  card: SessionMessageCard | null,
+): Record<string, unknown> {
+  if (typeof payload?.text !== 'string') return payload;
+  const stored = { ...payload };
+  delete stored.sessionMessage;
+  if (card !== null) stored.sessionMessage = card;
   return stored;
 }

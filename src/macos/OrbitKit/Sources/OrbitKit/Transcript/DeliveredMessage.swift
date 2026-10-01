@@ -46,6 +46,7 @@ let injectedTagLabels: [String: String] = [
     "orbit_project_coordinator_context": "project coordinator context",
     "list-conditions": "list conditions",
     "background-jobs": "background jobs",
+    "orbit-session-message": "session message",
 ]
 
 /// The tag `text` opens with, as `<tag>` or `<tag …>`. Nil when it opens with anything else.

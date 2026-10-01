@@ -18,6 +18,7 @@ import { RunnerSessionScope, SessionsService } from '../sessions/sessions.servic
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { RecordMergeReceiptDto } from '../sessions/dto';
 import { assertClientTurnIdNotReserved } from '../sessions/watch-turn-key';
+import { chargeSessionMessage } from '../sessions/session-message';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { SessionAttemptService } from '../projects/session-attempt.service';
 import { SessionLifecycleActor } from '../projects/attempt-budget';
@@ -302,6 +303,10 @@ export class RunnerSessionsController {
     @Body() dto: { message: string; clientTurnId?: string; resumeIfEnded?: boolean },
   ) {
     const resumeIfEnded = dto.resumeIfEnded === true;
+    // The session this message is FROM, when there is one: the caller the orchestration credential
+    // just proved, and nothing a body could say. A headless credential is nobody's session, so its
+    // message carries no sender — as the owner's own does not (session-message.ts).
+    let senderSessionId: string | undefined;
     if (isHeadlessCaller(callingSessionId)) {
       // Reviving spawns an engine and takes a runner slot, which puts it with the lifecycle verbs
       // below rather than with `send` — and those have no headless path at all. Refused loudly
@@ -320,7 +325,7 @@ export class RunnerSessionsController {
       );
     } else {
       this.assertNoServiceToken(grant);
-      await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+      senderSessionId = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     }
     const actor = RunnerSessionsController.actor(callingSessionId);
     // Same idempotency key every other entry point sends. A caller that retries a request it
@@ -339,6 +344,7 @@ export class RunnerSessionsController {
     // and while the routing protocol was rollout-gated the request was refused outright.
     const turn = { clientTurnId, content: dto.message };
     const charge = {
+      senderSessionId,
       // AU3/TH3, but only for a NEW turn that has already passed idempotency and placement. The
       // callback runs under createTurn's Session lock and in its transaction: a retry observes the
       // durable clientTurnId first and spends nothing, while a refusal rolls back both charge and
@@ -346,8 +352,13 @@ export class RunnerSessionsController {
       //
       // Carried onto the resume route unchanged. A steer the budget refuses must not become
       // affordable by reviving the session it was aimed at instead.
-      participateSendTransaction: (tx: Prisma.TransactionClient) =>
-        this.attempts.chargeSteer(runner.ownerId, id, actor, tx),
+      //
+      // The session-to-session hourly limit is charged at the same boundary and for the same
+      // reason (contract §2.4): a retry of a counted message is not another message.
+      participateSendTransaction: async (tx: Prisma.TransactionClient) => {
+        if (senderSessionId) await chargeSessionMessage(tx, senderSessionId, id);
+        await this.attempts.chargeSteer(runner.ownerId, id, actor, tx);
+      },
     };
     // Opt-in, unlike the browser's composer, which decides this for a person who is watching and
     // can see the session come back up. Here the caller is an agent: reviving burns tokens and

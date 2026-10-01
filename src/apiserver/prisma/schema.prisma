@@ -1775,6 +1775,15 @@ model ConversationTurn {
   /// Runtime-authored USER acknowledgement, persisted by event ingest before turn-complete.
   deliveryAcknowledgedAt DateTime? @map("delivery_acknowledged_at")
   content         String? // user message text (null for interrupt/end)
+  /// The session that sent this turn, when it is one Orbit session's message to another
+  /// (`session_send`, `project_send` — docs/session-request-reply-contract.md §2.1). Written only
+  /// by those two runner doors, from the caller's own identity and never from a request body; null
+  /// is every other turn: the account owner, a headless credential, the platform's own deliveries.
+  /// Deliberately not a relation: a foreign key would lock the sender's row under the recipient's,
+  /// and two sessions messaging each other would deadlock (migration 0343). The partial index the
+  /// hourly limit counts with (`conversation_turn_sender_session_id_idx`) lives in that migration,
+  /// because schema.prisma cannot express a partial index.
+  senderSessionId String?   @map("sender_session_id") @db.Uuid
   status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED
   deliveredAt     DateTime? @map("delivered_at")
   leaseDeadlineAt DateTime? @map("lease_deadline_at")

@@ -124,6 +124,7 @@ import {
   type CodexRateLimitResetResultRequest,
   type OpenItemDeliveryCard,
   type ProjectStartedCard,
+  type SessionMessageCard,
   type TaskStartCard,
   type RunnerModelCatalog,
 } from '@orbit/shared';
@@ -227,6 +228,7 @@ import {
 } from './scheduled-wakeup';
 import { nextAutoRetryAt } from '../sessions/auto-retry.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
+import { appendSessionMessageContext, readSessionMessageCard } from '../sessions/session-message';
 import {
   recordOwnerConfirmationRequest,
   runStoppedWorking,
@@ -238,6 +240,7 @@ import {
   withControlPlaneNote,
   withOpenItemDelivery,
   withProjectStarted,
+  withSessionMessage,
   withTaskStart,
 } from './control-plane-note';
 import { readTaskStartCard } from '../tasks/task-start-card';
@@ -2953,6 +2956,7 @@ export class RunnerApiController {
         sendIntent: string | null;
         targetTurnId: string | null;
         coordinatorContextKey: string | null;
+        senderSessionId: string | null;
       }>>`
         UPDATE "conversation_turn"
           SET status = 'IN_FLIGHT',
@@ -3039,7 +3043,8 @@ export class RunnerApiController {
         RETURNING id, seq, kind, content, "client_turn_id" AS "clientTurnId",
                   "send_intent" AS "sendIntent",
                   "target_turn_id" AS "targetTurnId",
-                  "coordinator_context_key" AS "coordinatorContextKey"
+                  "coordinator_context_key" AS "coordinatorContextKey",
+                  "sender_session_id" AS "senderSessionId"
       `;
       if (rows.length === 0) return null;
       const t = rows[0];
@@ -3118,6 +3123,20 @@ export class RunnerApiController {
           // nothing rather than leaking another tenant's list into a prompt.
           if (sessionContext) {
             content = (await this.references.expand(sessionContext.ownerId, content)) ?? content;
+          }
+          // Another Orbit session's message says so, in a block after its words (session-message.ts,
+          // contract §2.2): without it the recipient reads another agent as the account owner. After
+          // the words and never before them, so the echo still opens with what the sender wrote and
+          // the block is recorded as the control plane's note. A steer gets it too — it is a message
+          // like any other, only written into the turn already running — and a re-delivery does not:
+          // its continuation is the platform's words, and the engine already read the block once.
+          if (t.senderSessionId && sessionContext) {
+            content = (await appendSessionMessageContext(
+              tx,
+              sessionContext.ownerId,
+              t.senderSessionId,
+              content,
+            )) ?? content;
           }
           // A list's console also carries back what the control plane noticed while nobody was
           // talking to it. Piggybacked here rather than pushed as its own turn — see
@@ -4792,7 +4811,7 @@ export class RunnerApiController {
       const userTurns = userTurnIds.length > 0
         ? await tx.conversationTurn.findMany({
             where: { sessionId, id: { in: userTurnIds } },
-            select: { id: true, content: true, clientTurnId: true },
+            select: { id: true, content: true, clientTurnId: true, senderSessionId: true },
           })
         : [];
       const authoredUserText = new Map(userTurns.map((turn) => [turn.id, turn.content]));
@@ -4820,6 +4839,16 @@ export class RunnerApiController {
         );
         if (card) taskStartCards.set(turn.id, card);
       }
+      // The turns another Orbit session sent (`session_send` / `project_send`), and who sent each —
+      // drawn as "from [that session]" rather than as the owner's own message (session-message.ts,
+      // contract §2.3). Read off the turn's sender column, so a batch of the owner's messages reads
+      // nothing here.
+      const sessionMessageCards = new Map<string, SessionMessageCard>();
+      for (const turn of userTurns) {
+        if (!turn.senderSessionId) continue;
+        const card = await readSessionMessageCard(tx, session.ownerId, turn.senderSessionId);
+        if (card) sessionMessageCards.set(turn.id, card);
+      }
       // And the turns telling a coordinator its project was started, by the same kind of key
       // (`project-started:v1:`, project-started.ts) — read for those turns and no others.
       const startedCards = new Map<string, ProjectStartedCard>();
@@ -4846,6 +4875,10 @@ export class RunnerApiController {
         e.payload = withProjectStarted(
           e.payload,
           (e.turnId ? startedCards.get(e.turnId) : undefined) ?? null,
+        );
+        e.payload = withSessionMessage(
+          e.payload,
+          (e.turnId ? sessionMessageCards.get(e.turnId) : undefined) ?? null,
         );
       }
       // A move between account-pool members is said on the first engine start after it — the first

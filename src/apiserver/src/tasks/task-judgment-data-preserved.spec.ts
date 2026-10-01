@@ -1522,7 +1522,13 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // One more accepted `project_coordinator_wake.event` spelling. The CHECK is widened to admit
       // the blocker notification, but no wake row is backfilled or rewritten, and none of the
       // preserved task, session or acceptance relations is named.
-      '0342_project_blocker_coordinator_wake'],
+      '0342_project_blocker_coordinator_wake',
+      // Who sent a turn: one nullable UUID column with no default on `conversation_turn`
+      // (`sender_session_id`, deliberately no foreign key) and one partial index on it. Read against
+      // every claim above: `conversation_turn` is not among the preserved relations and nothing else
+      // is named — no `task`, `session`, `project` or `project_acceptance_*` object, no function,
+      // trigger or type created, replaced or dropped, and no INSERT, UPDATE or DELETE.
+      '0343_conversation_turn_sender_session'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
