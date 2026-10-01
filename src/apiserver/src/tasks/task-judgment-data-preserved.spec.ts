@@ -1518,7 +1518,11 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `merge_recovery_action` (TEXT). Pure addition: no stored row is backfilled, no column,
       // constraint, type, trigger or function is dropped or replaced. The preserved task data,
       // criterion labels, project acceptance objects and DONE writer fence are untouched.
-      '0341_session_merge_recovery'],
+      '0341_session_merge_recovery',
+      // One more accepted `project_coordinator_wake.event` spelling. The CHECK is widened to admit
+      // the blocker notification, but no wake row is backfilled or rewritten, and none of the
+      // preserved task, session or acceptance relations is named.
+      '0342_project_blocker_coordinator_wake'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

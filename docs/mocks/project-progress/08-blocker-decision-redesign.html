@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blocker decision redesign</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --surface: #fff;
+      --surface-soft: #fbfcfe;
+      --ink: #172033;
+      --muted: #6c7587;
+      --faint: #9aa3b3;
+      --line: #e5e8ee;
+      --line-strong: #d6dbe5;
+      --brand: #635bff;
+      --brand-dark: #5149e5;
+      --brand-soft: #f0efff;
+      --gold: #b7791f;
+      --gold-soft: #fff7df;
+      --red: #c2413b;
+      --red-soft: #fff0ef;
+      --green: #25845e;
+      --green-soft: #ecf9f2;
+      --shadow: 0 20px 54px rgba(28, 38, 61, .10);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 1120px;
+      background: var(--bg);
+      color: var(--ink);
+      font: 14px/1.5 Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .topbar {
+      height: 66px;
+      display: flex;
+      align-items: center;
+      padding: 0 48px;
+      background: rgba(255,255,255,.90);
+      border-bottom: 1px solid var(--line);
+    }
+    .wordmark { font-weight: 760; letter-spacing: -.03em; font-size: 20px; }
+    .crumb { margin-left: 28px; color: var(--muted); }
+    .crumb strong { color: var(--ink); font-weight: 650; }
+    .top-actions { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+    .avatar {
+      width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+      background: #e6e4ff; color: #4d47c6; font-weight: 700; font-size: 12px;
+    }
+    .page { padding: 38px 48px 60px; }
+    .project-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 30px; }
+    .eyebrow { color: var(--muted); font-size: 12px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
+    h1 { margin: 6px 0 4px; font-size: 30px; line-height: 1.2; letter-spacing: -.04em; }
+    .project-meta { color: var(--muted); }
+    .status {
+      display: inline-flex; align-items: center; gap: 7px; padding: 7px 11px;
+      border: 1px solid #cfe8db; border-radius: 999px; color: var(--green); background: var(--green-soft); font-weight: 650;
+    }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #35a46f; }
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 520px; gap: 28px; align-items: start; }
+    .panel {
+      background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 4px 18px rgba(33, 44, 67, .045);
+    }
+    .panel-head { display: flex; align-items: baseline; padding: 22px 24px 17px; border-bottom: 1px solid var(--line); }
+    .panel-title { font-size: 19px; font-weight: 720; letter-spacing: -.02em; }
+    .panel-count { margin-left: 10px; color: var(--gold); font-size: 12px; font-weight: 650; }
+    .panel-help { margin-left: auto; color: var(--muted); font-size: 12px; }
+    .blocker { padding: 22px 24px 24px; border-bottom: 1px solid var(--line); }
+    .blocker:last-child { border-bottom: 0; }
+    .blocker-top { display: flex; align-items: flex-start; gap: 10px; }
+    .tag {
+      flex: none; display: inline-flex; align-items: center; height: 24px; padding: 0 9px;
+      border-radius: 6px; font-size: 11px; font-weight: 700; letter-spacing: .01em;
+    }
+    .tag.gold { color: #986617; background: var(--gold-soft); border: 1px solid #f5df9c; }
+    .tag.red { color: #a33d37; background: var(--red-soft); border: 1px solid #f2c9c6; }
+    .blocker-title { font-size: 16px; line-height: 1.35; font-weight: 720; letter-spacing: -.015em; }
+    .age { margin-left: auto; flex: none; color: var(--faint); font-size: 12px; }
+    .subject { margin: 7px 0 0 0; color: #4d576a; font-size: 13px; }
+    .subject a { color: #4e48c8; text-decoration: none; font-weight: 620; }
+    .evidence { margin-top: 16px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .evidence-row { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 14px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+    .evidence-row:last-child { border-bottom: 0; }
+    .evidence-label { color: var(--muted); font-size: 12px; font-weight: 650; }
+    .evidence-copy { color: var(--ink); font-size: 13px; }
+    .quote { color: #3e4655; }
+    .quote::before { content: "“"; color: var(--brand); font-size: 18px; font-weight: 800; margin-right: 3px; }
+    .quote::after { content: "”"; color: var(--brand); font-size: 18px; font-weight: 800; margin-left: 2px; }
+    .criterion { font-weight: 620; }
+    .criterion small { display: block; color: var(--muted); font-weight: 400; margin-top: 2px; }
+    .impact { margin-top: 14px; display: flex; align-items: center; gap: 8px; color: #5d6574; font-size: 12px; }
+    .impact strong { color: #30394a; font-weight: 650; }
+    .impact-mark { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; color: #a46f12; background: var(--gold-soft); font-size: 11px; font-weight: 800; }
+    .actions { display: flex; align-items: center; gap: 9px; margin-top: 17px; }
+    button { font: inherit; cursor: default; }
+    .btn { border: 1px solid var(--line-strong); border-radius: 7px; padding: 8px 13px; color: #40495a; background: #fff; font-weight: 650; font-size: 12px; }
+    .btn.primary { border-color: var(--brand); color: #fff; background: var(--brand); box-shadow: 0 3px 8px rgba(99,91,255,.20); }
+    .btn.primary.alt { border-color: #3b9d71; background: #309166; box-shadow: 0 3px 8px rgba(48,145,102,.18); }
+    .btn.link { border-color: transparent; color: #514bd0; background: transparent; padding-left: 4px; }
+    .audit { margin-left: auto; color: var(--faint); font-size: 11px; }
+    .files { display: flex; flex-wrap: wrap; gap: 6px; }
+    .file { padding: 4px 7px; border-radius: 5px; background: #f4f6f9; border: 1px solid #e2e6ed; color: #536074; font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .history { padding: 15px 24px; color: var(--muted); font-size: 12px; }
+    .history b { color: #4b5567; }
+
+    .decision-shell { position: sticky; top: 28px; }
+    .decision-head { padding: 22px 24px 18px; border-bottom: 1px solid var(--line); }
+    .decision-kicker { display: flex; align-items: center; gap: 8px; color: var(--brand-dark); font-size: 11px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+    .decision-kicker span { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); }
+    h2 { margin: 9px 0 5px; font-size: 21px; line-height: 1.25; letter-spacing: -.03em; }
+    .decision-subject { color: var(--muted); font-size: 13px; }
+    .decision-body { padding: 20px 24px 22px; }
+    .section-label { margin-bottom: 7px; color: var(--muted); font-size: 11px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; }
+    .decision-quote { padding: 13px 15px; border-radius: 9px; background: var(--gold-soft); border: 1px solid #f3dda1; color: #4c4128; font-size: 13px; line-height: 1.6; }
+    .decision-criterion { margin-top: 18px; padding: 13px 15px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); }
+    .criterion-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+    .criterion-head b { font-size: 12px; }
+    .criterion-head a { color: #514bd0; font-size: 11px; font-weight: 650; text-decoration: none; }
+    .criterion-text { color: #424b5c; font-size: 13px; }
+    .consequence { margin-top: 18px; padding: 13px 15px; border-radius: 9px; background: var(--brand-soft); border: 1px solid #dbd9ff; }
+    .consequence strong { display: block; color: #433cb4; font-size: 12px; margin-bottom: 3px; }
+    .consequence span { color: #555a76; font-size: 12px; }
+    .decision-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 22px; }
+    .decision-actions .btn { min-height: 42px; font-size: 13px; }
+    .decision-foot { margin-top: 13px; color: var(--faint); font-size: 11px; line-height: 1.5; }
+    .rule { margin: 22px 0 0; border: 0; border-top: 1px solid var(--line); }
+    .legend { display: flex; gap: 18px; margin-top: 16px; color: var(--muted); font-size: 11px; }
+    .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+    .legend-dot { width: 7px; height: 7px; border-radius: 50%; }
+    .legend-dot.agent { background: var(--brand); }
+    .legend-dot.orbit { background: #d29b24; }
+    .caption { margin-top: 20px; color: var(--faint); font-size: 11px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wordmark">Orbit</div>
+    <div class="crumb">Projects&nbsp; / &nbsp;<strong>tea-cli app-build</strong></div>
+    <div class="top-actions"><span class="status"><span class="status-dot"></span>Running</span><span class="avatar">LZ</span></div>
+  </header>
+
+  <main class="page">
+    <div class="project-head">
+      <div>
+        <div class="eyebrow">Project overview</div>
+        <h1>tea-cli app-build 301391</h1>
+        <div class="project-meta">The coordinator is waiting for two decisions before it can continue.</div>
+      </div>
+      <span class="status"><span class="status-dot"></span>2 decisions waiting</span>
+    </div>
+
+    <div class="layout">
+      <section class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Blockers</span>
+          <span class="panel-count">2 need your decision</span>
+          <span class="panel-help">oldest first</span>
+        </div>
+
+        <article class="blocker">
+          <div class="blocker-top">
+            <span class="tag gold">Decision needed</span>
+            <div class="blocker-title">Agent proposes an exception to criterion 3</div>
+            <span class="age">since 10d</span>
+          </div>
+          <div class="subject"><a href="#">[只读] 查 103970114 / 204085250（tea-cli app-build 301391）</a></div>
+          <div class="evidence">
+            <div class="evidence-row"><div class="evidence-label">Agent's reason</div><div class="evidence-copy quote">这次交付只定位连续 failed 的根因，没有执行补数；因此补数方案这条验收标准不适用于本次只读分析。</div></div>
+            <div class="evidence-row"><div class="evidence-label">Criterion 3</div><div class="evidence-copy criterion">根因定位后，给出可验证的补数方案，并完成一次成功重跑。<small>Current wording · revision 2</small></div></div>
+          </div>
+          <div class="impact"><span class="impact-mark">!</span><strong>Blocks:</strong> merge to main · the next task will stay on hold</div>
+          <div class="actions"><button class="btn primary">Review decision</button><button class="btn link">Open task ↗</button><span class="audit">Your choice is recorded with your name</span></div>
+        </article>
+
+        <article class="blocker">
+          <div class="blocker-top">
+            <span class="tag gold">Approval needed</span>
+            <div class="blocker-title">Delivery changed files outside its declaration</div>
+            <span class="age">since 1h</span>
+          </div>
+          <div class="subject"><a href="#">[只读→待确认] 业务日 20260919:102454446 实例绿但 data_build_info 写 build failed (Timeout)</a></div>
+          <div class="evidence">
+            <div class="evidence-row"><div class="evidence-label">Changed files</div><div class="evidence-copy files"><span class="file">src/data_build_info.ts</span><span class="file">src/retry-policy.ts</span><span class="file">tests/timeout.spec.ts</span></div></div>
+            <div class="evidence-row"><div class="evidence-label">Agent's request</div><div class="evidence-copy">Approve these files so the timeout diagnosis and the proposed missing-data fix can proceed.</div></div>
+          </div>
+          <div class="impact"><span class="impact-mark">!</span><strong>Blocks:</strong> merge to main</div>
+          <div class="actions"><button class="btn">Review files</button><button class="btn primary">Approve and continue</button></div>
+        </article>
+
+        <div class="history">▸ <b>3 resolved</b> · latest: Auto-resolved — the work landed on main · view history</div>
+      </section>
+
+      <aside class="panel decision-shell">
+        <div class="decision-head">
+          <div class="decision-kicker"><span></span>Decision panel · selected blocker</div>
+          <h2>Should criterion 3 be waived for this delivery?</h2>
+          <div class="decision-subject">[只读] 查连续 failed 的根因 · task 204085250</div>
+        </div>
+        <div class="decision-body">
+          <div class="section-label">What the agent is saying</div>
+          <div class="decision-quote">“这次交付只定位连续 failed 的根因，没有执行补数；因此补数方案这条验收标准不适用于本次只读分析。”</div>
+
+          <div class="decision-criterion">
+            <div class="criterion-head"><b>Criterion 3 · revision 2</b><a href="#">Open acceptance criteria ↗</a></div>
+            <div class="criterion-text">根因定位后，给出可验证的补数方案，并完成一次成功重跑。</div>
+          </div>
+
+          <div class="consequence"><strong>What your choice changes</strong><span>Accepting closes this blocker; other delivery checks still apply. Leaving it open keeps this delivery blocked.</span></div>
+
+          <div class="decision-actions"><button class="btn">Leave it open<br><small>Blocker stays open</small></button><button class="btn primary alt">Accept the explanation<br><small>Continue toward merge</small></button></div>
+          <div class="decision-foot">Add what you verified before accepting; the system records the outcome and your note together.</div>
+          <hr class="rule">
+          <div class="legend"><span class="legend-item"><span class="legend-dot agent"></span>Agent's claim</span><span class="legend-item"><span class="legend-dot orbit"></span>Orbit's observed evidence</span></div>
+        </div>
+      </aside>
+    </div>
+    <div class="caption">Proposed blocker decision flow · The card answers: what happened, what the agent claims, what is blocked, and what each choice does.</div>
+  </main>
+</body>
+</html>

@@ -159,7 +159,13 @@ export class CompletionInputRouter {
     );
     if (outcome.outcome === 'REFUSED' || outcome.outcome === 'ALREADY_AWAKE') return outcome;
     const blocker = await this.disposition.raiseBlockerIfNeeded(fact);
-    if (blocker) return { ...outcome, blockerKind: blocker.kind };
+    if (blocker) {
+      // The blocker row is the durable human handoff. Automatic also gets a separate wake keyed
+      // to that episode, so the coordinator can explain it and use its existing owner-approval
+      // door instead of treating the landing fact as an ordinary merge instruction.
+      await this.disposition.notifyCoordinatorOfBlocker(fact, blocker);
+      return { ...outcome, blockerKind: blocker.kind };
+    }
     const action = await this.disposition.chooseAction(fact);
     return action ? { ...outcome, action } : outcome;
   }

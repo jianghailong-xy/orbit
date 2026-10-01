@@ -200,6 +200,30 @@ export class CoordinatorDeliveryService {
   }
 
   /**
+   * Tell Automatic's standing coordinator that a human-owned blocker was raised.
+   *
+   * This uses the same wake ledger and carrier as every other coordinator notification, but its
+   * authorizer deliberately checks only the Automatic switch. A blocker notification is an
+   * explanation of a human decision, not a coordinator judgment and must not spend convergence
+   * budget before the coordinator has even read it.
+   */
+  async deliverBlocker(fact: WakeFact): Promise<CoordinatorDeliveryOutcome> {
+    return this.queue(fact, this.authorizeBlocker);
+  }
+
+  private readonly authorizeBlocker: WakeAuthorizer = async (fact) => {
+    const project = await this.prisma.project.findUnique({
+      where: { id: fact.projectId },
+      select: { coordinatorEnabled: true },
+    });
+    if (!project) return { allowed: false, refusalCode: 'PROJECT_GONE' };
+    if (!project.coordinatorEnabled) {
+      return { allowed: false, refusalCode: 'COORDINATOR_DISABLED' };
+    }
+    return { allowed: true };
+  };
+
+  /**
    * Deliver one committed fact as a QUEUED turn on the standing conversation — contract §0.3 G6's
    * carrier, which `deliver` above predates.
    *

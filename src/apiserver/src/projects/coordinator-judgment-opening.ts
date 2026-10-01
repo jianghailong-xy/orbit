@@ -91,6 +91,16 @@ export function describeWakeFact(fact: WakeFact): string {
         `${String(detail.taskCount ?? '全部')} 个任务都 DONE 了，但没有任何合并回执能证明这些成果` +
         `已经在默认分支上（落地判定：${String(detail.landing ?? '未知')}）。`
       );
+    case 'PROJECT_BLOCKER_RAISED': {
+      const paths = Array.isArray(detail.paths)
+        ? detail.paths.filter((path): path is string => typeof path === 'string')
+        : [];
+      const pathText = paths.length > 0 ? `，涉及 ${paths.join('、')}` : '';
+      return (
+        `任务「${String(detail.taskTitle ?? uuidToBase62(fact.subjectId))}」触发了 `
+        + `project blocker ${String(detail.blockerKind ?? 'UNKNOWN')}${pathText}，需要账号所有者裁决。`
+      );
+    }
     case 'COMPLETION_EVIDENCE_REVISED':
       // The title is there when the fact is delivered to be decided (`CompletionEvidenceProducer`);
       // a fact that was only recorded carries the id alone.
@@ -483,6 +493,43 @@ export function buildCoordinatorDeliveryMessage(
       + `${projectId}）读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
       + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
       + '所以以你自己刚读到的库里状态为准。'
+    );
+  }
+  if (fact.event === 'PROJECT_BLOCKER_RAISED') {
+    const detail = (fact.detail ?? {}) as {
+      blockerId?: unknown;
+      blockerKind?: unknown;
+      requiredAction?: unknown;
+      taskTitle?: unknown;
+      agentArgument?: unknown;
+      criterionText?: unknown;
+      paths?: unknown;
+    };
+    const taskId = uuidToBase62(fact.subjectId);
+    const blockerId = typeof detail.blockerId === 'string'
+      ? uuidToBase62(detail.blockerId)
+      : uuidToBase62(fact.subjectVersion);
+    const paths = Array.isArray(detail.paths)
+      ? detail.paths.filter((path): path is string => typeof path === 'string')
+      : [];
+    const evidence = typeof detail.agentArgument === 'string' && detail.agentArgument.trim()
+      ? `agent 的原话：\n「${detail.agentArgument.trim()}」\n\n`
+      : '';
+    const criterion = typeof detail.criterionText === 'string' && detail.criterionText.trim()
+      ? `当前判据：\n「${detail.criterionText.trim()}」\n\n`
+      : '';
+    const files = paths.length > 0 ? `涉及文件：\n${paths.map((path) => `- ${path}`).join('\n')}\n\n` : '';
+    return (
+      `【项目「${projectTitle}」有一条交付需要账号所有者裁决】\n\n`
+      + `${describeWakeFact(fact)}\n\n`
+      + `${evidence}${criterion}${files}`
+      + `这不是普通失败，也不是你可以自行放行的合并。先用 project_get（projectId 传 ${projectId}）和 `
+      + `task_get（taskId 传 ${taskId}）核对上下文；在裁决前不要合并，也不要放行下一条任务。\n\n`
+      + `如果你能把建议和依据写清楚，用 project_blocker_resolve（projectId 传 ${projectId}，`
+      + `blockerId 传 ${blockerId}，reason 说明你建议如何处理）提交建议。这个动作会先进入账号所有者的确认卡，`
+      + '只有账号所有者同意后 blocker 才会关闭；对方拒绝或卡片无人回答时，保持 blocker 打开并继续报告它。\n\n'
+      + `平台要求的原动作：${String(detail.requiredAction ?? '先得到账号所有者的决定。')}\n\n`
+      + '这是一条通知，不会中断当前回合；以你重新读取到的项目状态为准。'
     );
   }
   if (fact.event === 'COMPLETION_EVIDENCE_REVISED') {

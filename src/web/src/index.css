@@ -14666,18 +14666,69 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   color: var(--text-2);
 }
-.project-blockers-action {
+.project-blockers-subject a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 2px;
+}
+.project-blockers-question {
+  margin-top: 7px;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.project-blockers-next {
   margin-top: 2px;
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-3);
 }
+.project-blockers-next span {
+  margin-right: 5px;
+  color: var(--text-2);
+  font-weight: 600;
+}
 .project-blockers-paths {
-  margin-top: 3px;
+  margin-top: 6px;
   font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
   font-size: 11.5px;
   color: var(--text-3);
   overflow-wrap: anywhere;
+}
+.project-blockers-files {
+  margin-top: 3px;
+}
+.project-blockers-files > summary {
+  cursor: pointer;
+  list-style-position: inside;
+}
+.project-blockers-files ul {
+  margin: 5px 0 0;
+  padding-left: 18px;
+  color: var(--text-3);
+}
+.project-blockers-files code,
+.project-blockers-dialog-evidence code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.project-blockers-evidence {
+  margin-top: 7px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.project-blockers-evidence > summary {
+  cursor: pointer;
+  color: var(--text-2);
+}
+.project-blockers-evidence p {
+  margin: 5px 0 0;
+  padding-left: 18px;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 .project-blockers-side {
   display: flex;
@@ -14708,6 +14759,41 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   color: var(--text-2);
 }
+.project-blockers-dialog-question {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--brand);
+  background: var(--bg-sunken);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.project-blockers-dialog-kicker {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.project-blockers-dialog-evidence {
+  margin: 0 0 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.project-blockers-dialog-evidence p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+.project-blockers-dialog-evidence ul {
+  margin: 0;
+  padding-left: 17px;
+}
 .project-blockers-dialog-label {
   display: block;
   margin-bottom: 4px;
@@ -14724,6 +14810,16 @@ button.chat-jump-start:hover {
   margin-inline-end: auto;
   font-size: 11.5px;
   color: var(--text-3);
+}
+@media (max-width: 560px) {
+  .project-blockers-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .project-blockers-side {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
 }
 
 /* Work account and human control are one command centre: a flexible evidence card and a stable
