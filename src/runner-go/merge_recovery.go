@@ -162,7 +162,7 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 		if ff == "only" && r.AddsMergeCommit {
 			return recoveryError(r, "LINEAR_HISTORY_REQUIRED", "merge.ff=only disallows this target-history merge; prepare a separate PR candidate")
 		}
-		if _, err := git(r.RepairWorktree, "-c", "user.name=Orbit Runner", "-c", "user.email=runner@orbit", "merge", "--ff", "--no-edit", r.RemoteSha); err != nil {
+		if _, err := git(r.RepairWorktree, "merge", "--ff", "--no-edit", r.RemoteSha); err != nil {
 			return recoveryConflict(r, "TARGET_SYNC", err)
 		}
 	}
@@ -176,7 +176,7 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 		if _, err := git(r.RepairWorktree, "reset", "--hard", r.SourceSha); err != nil {
 			return recoveryError(r, "PREVIEW_FAILED", gitStderr(err))
 		}
-		args := []string{"-c", "user.name=Orbit Runner", "-c", "user.email=runner@orbit", "rebase"}
+		args := []string{"rebase"}
 		if anchor := replayAnchor(root, req.SessionID, r.SourceSha, req.BaseSha); anchor != "" {
 			args = append(args, "--onto", syncSha, anchor)
 		} else {
