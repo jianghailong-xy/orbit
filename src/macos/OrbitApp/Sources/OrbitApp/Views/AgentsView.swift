@@ -233,6 +233,11 @@ struct AgentContentColumn: View {
                                                description: Text(app.agents?.errorText ?? "Request failed — check your connection."))
                         Button("Retry") { Task { await app.loadAgentsThenLand() } }
                     }
+                case .content? where app.launchLandingPending:
+                    // The workspaces are in but the landing isn't: it waits for the rest of the
+                    // workspace fetch (runners, providers, pools), and asking for a pick it is about
+                    // to make is the "Select a workspace" a cold launch used to flash.
+                    ProgressView()
                 default:
                     ContentUnavailableView("Select a workspace", systemImage: "folder",
                                            description: Text("Pick a workspace in the sidebar to see its sessions and settings."))

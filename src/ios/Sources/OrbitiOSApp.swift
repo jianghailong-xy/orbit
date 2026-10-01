@@ -61,9 +61,11 @@ struct OrbitiOSApp: App {
                     switch phase {
                     case .background:
                         // iOS can suspend/terminate at will from here, so checkpoint synchronously
-                        // (an async write could be cut off mid-flight) before we lose the CPU.
+                        // (an async write could be cut off mid-flight) before we lose the CPU —
+                        // the open transcripts, and the lists a cold launch draws its first frame from.
                         didBackground = true
                         model.consoleRegistry?.persistAll()
+                        model.persistLaunchSnapshot()
                     case .active:
                         // Only after a genuine background trip: a socket suspended there may be dead
                         // but not yet erroring, so kick the open consoles + the user-level
