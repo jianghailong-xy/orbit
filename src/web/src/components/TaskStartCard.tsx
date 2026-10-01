@@ -33,7 +33,8 @@ import { ExportCtx, MD, relTime } from './Transcript';
  * verbatim.
  *
  * Drawn from the payload the control plane recorded beside the echo (`taskStart`, read by
- * lib/taskStartCard), never out of the brief's text.
+ * lib/taskStartCard); an exact retry may carry that same snapshot forward, but a card is never
+ * inferred from the brief's text.
  */
 export function TaskStartCard({
   card,

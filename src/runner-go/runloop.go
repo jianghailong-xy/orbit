@@ -1306,6 +1306,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 						TargetBranch: res.TargetBranch, TargetShaBefore: res.TargetShaBefore,
 						RebaseBaseSha: res.RebaseBase, Conflicts: res.Conflicts,
 						AlreadyMerged: res.AlreadyMerged,
+						Recovery:      res.Recovery,
 					}); err != nil {
 						logln("merge-result POST failed for", req.SessionID+":", err)
 						if !isRetryableTransportError(err) {

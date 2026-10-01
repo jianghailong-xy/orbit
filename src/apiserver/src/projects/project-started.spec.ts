@@ -12,9 +12,12 @@ import { uuidToBase62 } from '@orbit/shared';
 import {
   PROJECT_STARTED_LISTED_TASKS,
   type ProjectStart,
+  projectPausedMessage,
+  projectPausedTurnId,
   projectStartOfTurn,
   projectStartedMessage,
   projectStartedTurnId,
+  readProjectStartedCard,
 } from './project-started';
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -26,6 +29,11 @@ const CONFIRMED: Extract<ProjectStart, { by: 'CONFIRMATION' }> = {
   at: AT,
 };
 const SWITCHED: Extract<ProjectStart, { by: 'SWITCH' }> = { by: 'SWITCH', configRevision: '3', at: AT };
+const RESUMED: Extract<ProjectStart, { by: 'RESUME' }> = {
+  by: 'RESUME',
+  pausedAt: new Date('2026-09-23T04:00:00.000Z'),
+  at: AT,
+};
 
 function held(count: number): Array<{ id: string; title: string }> {
   return Array.from({ length: count }, (_, index) => ({
@@ -108,7 +116,36 @@ test('the Automatic switch is told in its own words, and names what the press di
     + 'owner for something, ask it again.'));
 });
 
-test('the turn is keyed by what the press wrote: the confirmation, or the revision it moved to', () => {
+test('Resume uses the start message format for automatic and held tasks, in its own words', () => {
+  const tasks = held(1);
+  const { projectId, text } = message(tasks, 1, RESUMED);
+  assert.match(text, /^From Orbit · project resumed\n\n/);
+  assert.ok(text.includes(
+    'The account owner resumed project “Two Codex accounts on one machine” '
+      + `(${uuidToBase62(projectId)}) at 2026-09-23T05:06:07.072Z.`,
+  ));
+  assert.ok(text.includes('From now on Orbit starts this project’s tasks that are set to run on their own'));
+  assert.ok(text.includes(`- ${tasks[0].title} (${uuidToBase62(tasks[0].id)})`));
+  assert.ok(text.endsWith('Resuming the project answered nothing else: if you are still waiting on the '
+    + 'owner for something, ask it again.'));
+});
+
+test('Pause says the whole stop, and asks the coordinator to do nothing', () => {
+  const projectId = randomUUID();
+  const text = projectPausedMessage({ projectId, projectTitle: 'Two Codex accounts on one machine' });
+  assert.equal(text, [
+    'From Orbit · project paused',
+    'The account owner paused project “Two Codex accounts on one machine” '
+      + `(${uuidToBase62(projectId)}).`,
+    'While the project is paused, task_start is refused with 409 PROJECT_PAUSED. Orbit does not '
+      + 'start any of this project’s tasks automatically and does not merge anything into main '
+      + 'automatically. Sessions already running are not affected.',
+    'This is a notification, not a request to start work. The project stays paused until the '
+      + 'account owner presses Resume project.',
+  ].join('\n\n'));
+});
+
+test('the turn is keyed by what the press wrote: confirmation, revision, or pause episode', () => {
   const project = randomUUID();
   const key = (start: ProjectStart) => projectStartedTurnId(project, start);
   assert.equal(key(CONFIRMED), key({ ...CONFIRMED, at: new Date() }), 'the same confirmation, one key');
@@ -117,6 +154,13 @@ test('the turn is keyed by what the press wrote: the confirmation, or the revisi
   assert.notEqual(key(SWITCHED), key({ ...SWITCHED, configRevision: '4' }));
   assert.notEqual(key(SWITCHED), projectStartedTurnId(randomUUID(), SWITCHED),
     'a revision number is only unique within its project');
+  assert.equal(key(RESUMED), key({ ...RESUMED, at: new Date() }),
+    'replaying a Resume of the same pause episode changed its key');
+  assert.notEqual(key(RESUMED), key({ ...RESUMED, pausedAt: new Date(RESUMED.pausedAt.getTime() + 1) }));
+  assert.notEqual(key(RESUMED), projectStartedTurnId(randomUUID(), RESUMED));
+  assert.equal(projectPausedTurnId(project, RESUMED.pausedAt),
+    projectPausedTurnId(project, new Date(RESUMED.pausedAt)),
+    'replaying Pause for the same episode changed its key');
 });
 
 test('a reader gets the start back off the key, and nothing off any other key', () => {
@@ -125,6 +169,8 @@ test('a reader gets the start back off the key, and nothing off any other key', 
     { by: 'CONFIRMATION', confirmationId: CONFIRMED.confirmationId });
   assert.deepEqual(projectStartOfTurn(projectStartedTurnId(project, SWITCHED)),
     { by: 'SWITCH', projectId: project, configRevision: '3' });
+  assert.deepEqual(projectStartOfTurn(projectStartedTurnId(project, RESUMED)),
+    { by: 'RESUME', projectId: project, pausedAt: RESUMED.pausedAt });
   for (const other of [
     null,
     undefined,
@@ -136,10 +182,23 @@ test('a reader gets the start back off the key, and nothing off any other key', 
     `project-started:v1:switch:${randomUUID()}`,
     `project-started:v1:switch:${randomUUID()}:three`,
     `project-started:v1:switch:${randomUUID()}:3:extra`,
+    `project-started:v1:resume:${randomUUID()}`,
+    `project-started:v1:resume:${randomUUID()}:not-a-time`,
+    `project-started:v1:resume:${randomUUID()}:-1`,
+    `project-started:v1:resume:${randomUUID()}:9007199254740992`,
+    `project-started:v1:resume:${randomUUID()}:8640000000000001`,
+    `project-started:v1:resume:${randomUUID()}:1727000000000:extra`,
+    projectPausedTurnId(project, RESUMED.pausedAt),
     `project-started:v1:unknown:${randomUUID()}`,
   ]) {
     assert.equal(projectStartOfTurn(other), null, `${String(other)} was read as a start`);
   }
+});
+
+test('a Resume key produces no ProjectStarted card, so every client draws the ordinary message', async () => {
+  const key = projectStartOfTurn(projectStartedTurnId(randomUUID(), RESUMED));
+  assert.ok(key?.by === 'RESUME');
+  assert.equal(await readProjectStartedCard({} as never, randomUUID(), key), null);
 });
 
 test('a start that recorded its settings says them, and names what is not what it was asked for', () => {

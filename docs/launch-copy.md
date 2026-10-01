@@ -116,22 +116,22 @@ Use the exact scenario names only if the post has room; otherwise link the full 
 
 ## Maintainer reply snippets
 
-**“Is this hosted?”**
+### Is this hosted?
 
 > No. You run the control plane and PostgreSQL, register runners, install and authenticate a runtime on those
 > runners, and choose the network and access controls. Start with the [self-hosting guide](self-hosting.md).
 
-**“Is a worktree a sandbox?”**
+### Is a worktree a sandbox?
 
 > No. A worktree reduces checkout collisions between concurrent sessions. Processes still run as the runner OS
 > account and can access whatever that account can access.
 
-**“Can it finish a project without review?”**
+### Can it finish a project without review?
 
 > Orbit coordinates and supervises agents; it does not guarantee that an agent finishes correctly without review,
 > approval, or a human merge decision.
 
-**“Which runtimes are supported?”**
+### Which runtimes are supported?
 
 > Claude Code, Codex, Kimi Code, and OpenCode are supported, with configured compatible providers where applicable.
 > Install and authenticate the runtime on the runner; feature parity and resume behavior vary by provider.
@@ -161,4 +161,3 @@ Before publishing any variant:
 - `[ ]` Any metric has a baseline, method, date, and source.
 - `[ ]` Screenshots and partner quotes have written permission and are redacted.
 - `[ ]` A maintainer has a correction/removal contact and a rollback plan for the post.
-

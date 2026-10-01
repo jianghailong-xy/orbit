@@ -3796,8 +3796,29 @@ final class ConsoleModel {
         Task { await refreshRulerQuestions(force: true) }
     }
 
+    /// The start card a project page's Review is on its way to — the same wait as an owner item's,
+    /// for the card the coordinator's request to start the project is answered on.
+    private var pendingStartCard = false
+
+    /// Point this conversation at its start card: the project page's Review on the coordinator's
+    /// request, the way `focus(ownerItem:)` points it at an owner item's card — spent by the read,
+    /// for the same reason.
+    func focusStartCard() {
+        pendingStartCard = true
+        Task { await refreshRulerQuestions(force: true) }
+    }
+
     /// Spend the pending press, if the card it names is on screen now.
     private func scrollToPendingOwnerItem() {
+        // The start card by whichever request it is drawn for: a project holds at most one, and the
+        // page's row names the card rather than the request, which a newer one may have replaced.
+        if pendingStartCard, let card = decisionCards.first(where: {
+            if case .startProject = $0.kind { return true }
+            return false
+        }) {
+            pendingStartCard = false
+            requestScroll(to: card.id)
+        }
         guard let item = pendingOwnerItem, let rowID = rowID(forOwnerItem: item) else { return }
         pendingOwnerItem = nil
         requestScroll(to: rowID)

@@ -48,6 +48,7 @@ func TestSetupWorktreeCreatesMissingWorkDir(t *testing.T) {
 // The session ends up genuinely isolated instead of silently sharing a dir that never existed.
 func TestSetupWorktreeCreatesMissingWorkDirThenAutoInitsGit(t *testing.T) {
 	t.Setenv("ORBIT_HOME", t.TempDir())
+	isolatedGitIdentityConfig(t, "[user]\n\tname = Test\n\temail = test@orbit\n")
 	missing := filepath.Join(t.TempDir(), "never-created", "project")
 
 	job := &ClaimedSession{SessionID: "s-autoinit", Branch: "orbit/feat", AutoInitGit: true}

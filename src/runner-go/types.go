@@ -598,7 +598,10 @@ type MergeCommand struct {
 	// carry no test evidence, and merging them is what `[K6]`'s gate exists to stop. Empty on an
 	// older control plane, or for work that is not under convergence management — then the tip is
 	// whatever the branch says, exactly as before.
-	RequiredSourceSha string `json:"requiredSourceSha,omitempty"`
+	RequiredSourceSha string                  `json:"requiredSourceSha,omitempty"`
+	RecoveryAction    string                  `json:"recoveryAction,omitempty"`
+	Recovery          *MergeRecovery          `json:"recovery,omitempty"`
+	Check             *MergeRecoveryCheckSpec `json:"check,omitempty"`
 }
 
 // ImportResultRequest settles a session's pending transcript import: ok clears the
@@ -672,11 +675,12 @@ type MergeResultRequest struct {
 	// The branch this merge advanced, the tip it had before, and the base the source was replayed
 	// onto — the fields the control plane's merge receipt (§13.7) is checked against afterwards.
 	// Omitted by an older runner; the receipt is still written, naming what it knows.
-	TargetBranch    string   `json:"targetBranch,omitempty"`
-	TargetShaBefore string   `json:"targetShaBefore,omitempty"`
-	RebaseBaseSha   string   `json:"rebaseBaseSha,omitempty"`
-	Conflicts       []string `json:"conflicts,omitempty"`
-	Message         string   `json:"message,omitempty"`
+	TargetBranch    string         `json:"targetBranch,omitempty"`
+	TargetShaBefore string         `json:"targetShaBefore,omitempty"`
+	RebaseBaseSha   string         `json:"rebaseBaseSha,omitempty"`
+	Conflicts       []string       `json:"conflicts,omitempty"`
+	Message         string         `json:"message,omitempty"`
+	Recovery        *MergeRecovery `json:"recovery,omitempty"`
 }
 
 // CommitCommand mirrors @orbit/shared: a request to commit a live session's uncommitted

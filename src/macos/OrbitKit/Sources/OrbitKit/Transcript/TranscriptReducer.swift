@@ -124,6 +124,10 @@ public struct TranscriptReducer: Sendable, Codable {
     /// Transient like `bgLaunch` — excluded from the persisted keys below, so snapshots written
     /// before it existed still decode; a rehydrated session simply starts folding afresh.
     private var stderrSeen: [String: (id: String, line: String, count: Int)] = [:]
+    /// The most recent stderr row that may receive continuation lines. Tool failures from
+    /// apply_patch are emitted as adjacent events, so they should read as one card rather than a
+    /// stack of red log rows. A new timestamp or a sequence gap ends the continuation.
+    private var lastStderr: (id: String, seq: Int, continuing: Bool)?
     /// Whether this turn has already put a row on screen that accounts for how it went: a reply, the
     /// runner's own error (or the sign-in / auto-retry card it earns), or the user's own interrupt.
     /// `endTurn` speaks only when none of them did — in the recorded corpus every codex `failed`
@@ -225,6 +229,8 @@ public struct TranscriptReducer: Sendable, Codable {
             if let cw = ev.payload["contextWindow"]?.intValue, cw > 0 { state.contextWindow = cw }
         }
 
+        if ev.type != .system { lastStderr = nil }
+
         // A sub-agent's own events fold into the list kept for the Agent call that started it, not
         // into the conversation — see `TranscriptState.subagentItems`.
         if Self.subagentEventTypes.contains(ev.type), let parent = str(ev, "parentToolUseId"), !parent.isEmpty {
@@ -255,7 +261,10 @@ public struct TranscriptReducer: Sendable, Codable {
         case .taskProgress:     applyTaskProgress(ev)
         case .status, .result:  applyStatus(ev)
         case .system:
-            if str(ev, "subtype") == "resumed" { clearLiveToolOutputsAtBoundary() }
+            if str(ev, "subtype") == "resumed" {
+                clearLiveToolOutputsAtBoundary()
+                lastStderr = nil
+            }
             // A deliberate heads-up (see `TranscriptItem.notice`) — the turn itself was fine. Never
             // sent beside stderr; if it ever were, it wins, as on web. One row per event, unfolded.
             if let notice = nonEmpty(str(ev, "notice")) {
@@ -294,6 +303,7 @@ public struct TranscriptReducer: Sendable, Codable {
         bgLaunch.removeAll()
         taskLaunch.removeAll()
         stderrSeen.removeAll()
+        lastStderr = nil
         state.subagentItems = [:]
     }
 
@@ -1160,18 +1170,42 @@ public struct TranscriptReducer: Sendable, Codable {
     /// Transcript's `system` case). Everything else on a `system` event but a notice stays lifecycle
     /// noise.
     private mutating func appendEngineStderr(_ ev: RunEvent) {
-        guard let raw = str(ev, "stderr") else { return }
+        guard let raw = str(ev, "stderr") else {
+            lastStderr = nil
+            return
+        }
         let line = EngineStderr.clean(raw)
-        guard !line.isEmpty, !EngineStderr.isBenign(line) else { return }
+        guard !line.isEmpty else {
+            lastStderr = nil
+            return
+        }
+        guard !EngineStderr.isBenign(line) else {
+            lastStderr = nil
+            return
+        }
+        if let last = lastStderr,
+           ev.seq > 0,
+           last.seq + 1 == ev.seq,
+           last.continuing,
+           !EngineStderr.startsNewLog(line),
+           let i = state.items.firstIndex(where: { $0.id == last.id }) {
+            if case .error(_, let message) = state.items[i] {
+                state.items[i] = .error(id: last.id, message: "\(message)\n\(line)")
+                lastStderr = (id: last.id, seq: ev.seq, continuing: true)
+                return
+            }
+        }
         let key = EngineStderr.foldKey(line)
         if let seen = stderrSeen[key], let i = state.items.firstIndex(where: { $0.id == seen.id }) {
             let count = seen.count + 1
             stderrSeen[key] = (id: seen.id, line: seen.line, count: count)
             state.items[i] = .error(id: seen.id, message: "\(seen.line) ×\(count)")
+            lastStderr = (id: seen.id, seq: ev.seq, continuing: EngineStderr.canStartContinuation(line))
             return
         }
         let id = nextID()
         stderrSeen[key] = (id: id, line: line, count: 1)
+        lastStderr = (id: id, seq: ev.seq, continuing: EngineStderr.canStartContinuation(line))
         state.items.append(.error(id: id, message: line))
     }
 
@@ -1517,6 +1551,20 @@ private enum EngineStderr {
 
     /// The key two occurrences of one line fold on: the line minus its leading ISO-8601 timestamp.
     static func foldKey(_ line: String) -> String { strip(leadingTimestamp, from: line) }
+
+    /// A verification error whose explanation continues on the following stderr event ends in a
+    /// colon. A timestamped line always starts a new logger record, even if its text also ends in
+    /// one.
+    static func canStartContinuation(_ line: String) -> Bool {
+        line.localizedCaseInsensitiveContains("verification failed:") &&
+            line.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix(":")
+    }
+
+    static func startsNewLog(_ line: String) -> Bool {
+        guard let leadingTimestamp else { return false }
+        let range = NSRange(line.startIndex..., in: line)
+        return leadingTimestamp.firstMatch(in: line, range: range) != nil
+    }
 
     /// Does this line say nothing about the session? Both lines below are noise Orbit's own env
     /// injection provokes: a configured provider (DeepSeek, …) borrows the claude runtime by having

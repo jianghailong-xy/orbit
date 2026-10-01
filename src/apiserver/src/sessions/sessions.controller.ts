@@ -524,7 +524,7 @@ export class SessionsController {
   ) {
     // The owner's own Merge menu: the one door whose explicit pick becomes the workspace default.
     return this.sessions.mergeToMain(user.userId, id, dto?.targetBranch, dto?.waitSeconds,
-      { rememberTarget: true });
+      { rememberTarget: true, recoveryAction: dto?.recoveryAction, previewId: dto?.previewId });
   }
 
   /**

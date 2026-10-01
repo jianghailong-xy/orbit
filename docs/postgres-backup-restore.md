@@ -3,7 +3,7 @@
 The deployment keeps two things on disk so any moment of the database can be reconstructed:
 
 | What | Where | Cadence |
-|---|---|---|
+| --- | --- | --- |
 | Continuous WAL archive | `./data/pg-archive/wal/<segment>.gz` | every finished segment; a written-to database closes one at least every 5 min (`archive_timeout=300`) |
 | Base backups | `./data/pg-archive/base/<UTC stamp>/` | daily, newest 2 kept |
 

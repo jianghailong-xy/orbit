@@ -295,7 +295,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Whether the project has started, whether it is paused and by whom are read under the lock on every attempt, and the write is decided from them (projects/project-pause.ts#ownerPauseWrite). A retried attempt that finds the project already where the press would put it writes nothing, which is what a first attempt against those rows would have done; one that finds it unstarted is the same 409.',
-    effects: 'None inside. The `project.changed` publish is after this resolves, and only when a row changed.',
+    effects: 'None inside. After this resolves, and only when a row changed, the `project.changed` publish is sent and the project’s existing live coordinator conversation gets one ordinary turn keyed by the project id and the pause episode’s `paused_at` (projects/project-started.ts#tellCoordinatorProjectPaused). A telling that fails is logged and costs the pause nothing.',
     answer: 'Typed 503 from the global boundary; an unstarted project is the explicit 409 PROJECT_NOT_STARTED; a request from a session is the 403 before anything is read.',
   },
   {
@@ -306,7 +306,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'Whether the project has started, whether it is paused and by whom are read under the lock on every attempt, and the write is decided from them (projects/project-pause.ts#resumeWrite). A retried attempt that finds the project already where the press would put it writes nothing, which is what a first attempt against those rows would have done.',
-    effects: 'None inside. The `project.changed` publish is after this resolves, and only when a row changed.',
+    effects: 'None inside. After this resolves, and only when a row changed, the `project.changed` publish is sent and the project’s existing live coordinator conversation gets one ordinary turn keyed by the project id and the lifted pause episode’s `paused_at` (projects/project-started.ts#tellCoordinatorProjectStarted with RESUME). A telling that fails is logged and costs the resume nothing.',
     answer: 'Typed 503 from the global boundary; a request from a session is the 403 before anything is read.',
   },
   {
@@ -1669,6 +1669,7 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: "auth/auth.service.ts#changePassword", class: "ONE_ROW_BY_KEY", statements: 1 },
   { at: "auth/auth.service.ts#issueRefreshToken", class: "INSERT", statements: 1 },
   { at: "auth/auth.service.ts#logout", class: "ONE_ROW_CAS", statements: 1 },
+  { at: 'queue/queue.service.ts#accountsForClaim', class: 'ONE_ROW_CAS', statements: 2, note: "At most two UPDATEs of the claimed session's row by its key, from buildSession after the claim committed, and only when the session is on Automatic and its runner's own snapshot reports its account spent. The move is the compare-and-set: predicated on the account the claim read and on the session not being pinned, so a pick made in between writes nothing here and the engine is built where that pick put it. The second writes the transcript line owed, only while none is (`pool_switch_notice IS NULL`), as PoolNotices.owe does. Deliberately no transaction: each statement stands alone, and one that does not land costs only the move, which the usage-limit failure then makes as it always did." },
   // The three writes exception items make outside anybody's transaction. All of them run after the
   // fact they are about has committed, and none of them may cost it: a delivery that could not be
   // made is re-derived from the same rows the next time the conversation's turn ends (§4.4 X-D4).

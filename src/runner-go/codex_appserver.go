@@ -198,7 +198,8 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 	app, err := startReadyCodexAppServer(ctx, state, initTimeout, func() (*codexAppServer, error) {
 		return startCodexAppServer(ctx, job, execDir, state.Dir, processEnv, emit,
 			func(approvalCtx context.Context, request codexApprovalRequest, params map[string]interface{}) bool {
-				return bridgeCodexApproval(approvalCtx, t, job, request, params)
+				return bridgeCodexApprovalWithContext(approvalCtx, t, job, request, params,
+					codexAutoApprovalContextFor(execDir, upDir))
 			})
 	})
 	if err != nil {
@@ -794,9 +795,9 @@ func codexStderrIsStateInitFailure(line string) bool {
 // auto-approves only known-safe read-only commands and asks about everything else, which Orbit
 // then routes to the same approval card Claude and Kimi use.
 //
-// Auto maps to `on-request`, which Codex documents as "the model decides when to ask the user for
-// approval" — that is what Auto is, so the mode means the same thing here as on Claude rather
-// than being a Claude-only feature. Its requests reach the same card `untrusted` already uses.
+// Auto maps to `on-request`, which lets Codex surface requests that need a boundary decision. Its
+// native auto-reviewer handles eligible escalations; the approval bridge remains a compatibility
+// fallback and automatically accepts routine requests inside the workspace.
 //
 // dontAsk deliberately stays on `never`. Orbit's Don't Ask is fail-closed ("deny anything not
 // pre-approved"), but Codex is never handed an allowlist — so switching it to `untrusted` would
@@ -813,6 +814,17 @@ func codexApprovalPolicy(permissionMode string) string {
 	default:
 		return "never"
 	}
+}
+
+// codexApprovalsReviewer selects Codex's native automatic reviewer for Auto. `on-request`
+// otherwise routes every eligible approval to the user; the reviewer keeps the boundary and
+// risk checks in Codex while removing routine human interruptions. The request-level bridge
+// remains the compatibility path for app-server builds without this reviewer.
+func codexApprovalsReviewer(permissionMode string) string {
+	if permissionMode == "auto" {
+		return "auto_review"
+	}
+	return ""
 }
 
 // codexAutomaticApproval applies the parts of a permission mode that need no human, mirroring
@@ -850,11 +862,20 @@ func codexAutomaticApproval(permissionMode string, request codexApprovalRequest)
 // human via the same approval card the other runtimes use. Fails CLOSED on every error path —
 // a control-plane outage must never auto-approve a command.
 func bridgeCodexApproval(ctx context.Context, t *Transport, job *ClaimedSession, request codexApprovalRequest, params map[string]interface{}) bool {
+	return bridgeCodexApprovalWithContext(ctx, t, job, request, params, codexAutoApprovalContext{})
+}
+
+func bridgeCodexApprovalWithContext(ctx context.Context, t *Transport, job *ClaimedSession, request codexApprovalRequest, params map[string]interface{}, autoContext codexAutoApprovalContext) bool {
 	if ctx.Err() != nil || t == nil || job == nil {
 		return false
 	}
 	if allowed, decided := codexAutomaticApproval(job.Agent.PermissionMode, request); decided {
 		return allowed
+	}
+	if job.Agent.PermissionMode == "auto" {
+		if allowed, decided := codexAutoApproval(request, params, autoContext); decided {
+			return allowed
+		}
 	}
 	input := map[string]interface{}{}
 	if request.mcpTool {
@@ -1309,13 +1330,13 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 			execDir,
 			upDir,
 		},
-		// danger-full-access mirrors the Claude path, which runs unsandboxed in execDir.
-		// approvalPolicy is already "never" (Orbit fully trusts the agent), so codex's
-		// sandbox is the only thing left restricting it — and workspace-write (network off,
-		// writableRoots limited to the uploads dir) breaks git: fetch has no network, and a
-		// worktree session's real .git lives outside the workspace so FETCH_HEAD writes get
-		// denied. Full access removes that asymmetry with Claude.
+		// Orbit's linked worktrees keep Git metadata outside execDir, and normal runner workflows
+		// use network-backed tools and caches. Keep the established full-access sandbox; Auto's
+		// request classifier and native reviewer handle approval decisions at the request layer.
 		"sandboxPolicy": map[string]interface{}{"type": "dangerFullAccess"},
+	}
+	if reviewer := codexApprovalsReviewer(job.Agent.PermissionMode); reviewer != "" {
+		params["approvalsReviewer"] = reviewer
 	}
 	if contextOptions.Mode == codexInstructionsAdditionalContext {
 		if additional := codexAgentAdditionalContext(
@@ -1348,12 +1369,15 @@ func codexThreadParams(job *ClaimedSession, execDir, upDir string) map[string]in
 	params := map[string]interface{}{
 		"cwd":            execDir,
 		"approvalPolicy": codexApprovalPolicy(job.Agent.PermissionMode),
-		"sandbox":        "danger-full-access", // see codexTurnParams: parity with unsandboxed Claude
+		"sandbox":        "danger-full-access",
 		"runtimeWorkspaceRoots": []string{
 			execDir,
 			upDir,
 		},
 		"threadSource": "orbit",
+	}
+	if reviewer := codexApprovalsReviewer(job.Agent.PermissionMode); reviewer != "" {
+		params["approvalsReviewer"] = reviewer
 	}
 	if job.Agent.Model != "" {
 		params["model"] = job.Agent.Model

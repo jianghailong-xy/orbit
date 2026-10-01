@@ -98,6 +98,9 @@ func TestCodexAppServerThreadParams(t *testing.T) {
 	if got["sandbox"] != "danger-full-access" {
 		t.Fatalf("sandbox = %v", got["sandbox"])
 	}
+	if _, ok := got["approvalsReviewer"]; ok {
+		t.Fatalf("approvalsReviewer should be absent outside Auto: %q", got["approvalsReviewer"])
+	}
 	if _, ok := got["developerInstructions"]; ok {
 		t.Fatalf("thread params must not replace effective developer instructions: %q", got["developerInstructions"])
 	}
@@ -121,6 +124,32 @@ func TestCodexAppServerThreadParamsForwardSystemInstructions(t *testing.T) {
 	}
 	if _, ok := got["developerInstructions"]; ok {
 		t.Fatalf("developerInstructions unexpectedly overrides local config: %q", got["developerInstructions"])
+	}
+}
+
+func TestCodexAppServerAutoRetainsFullAccessSandbox(t *testing.T) {
+	job := &ClaimedSession{Agent: AgentExecConfig{PermissionMode: "auto"}}
+	thread := codexThreadParams(job, "/repo", "/tmp/uploads")
+	if thread["approvalPolicy"] != "on-request" {
+		t.Fatalf("approvalPolicy = %v, want on-request", thread["approvalPolicy"])
+	}
+	if thread["sandbox"] != "danger-full-access" {
+		t.Fatalf("sandbox = %v, want danger-full-access", thread["sandbox"])
+	}
+	if thread["approvalsReviewer"] != "auto_review" {
+		t.Fatalf("approvalsReviewer = %v, want auto_review", thread["approvalsReviewer"])
+	}
+	turn := codexTurnParams("thread-1", job, "/repo", "/tmp/uploads", "turn-1", "run tests", nil, codexTurnContextOptions{})
+	if turn["approvalsReviewer"] != "auto_review" {
+		t.Fatalf("turn approvalsReviewer = %v, want auto_review", turn["approvalsReviewer"])
+	}
+	sandbox, ok := turn["sandboxPolicy"].(map[string]interface{})
+	if !ok || sandbox["type"] != "dangerFullAccess" {
+		t.Fatalf("sandboxPolicy = %#v, want dangerFullAccess", turn["sandboxPolicy"])
+	}
+	roots, ok := sandbox["writableRoots"].([]string)
+	if ok || roots != nil {
+		t.Fatalf("sandbox writableRoots = %#v", sandbox["writableRoots"])
 	}
 }
 

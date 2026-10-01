@@ -989,6 +989,9 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// "Merge to main" outcome: pending | merged | conflict | error. Nil until the user merges.
     public let mergeStatus: String?
     public let mergeError: String?
+    public let mergeRecovery: MergeRecovery?
+    public let mergeRecoverySupported: Bool?
+    public let workspace: SessionDetailAgent?
     /// The branch the last merge targeted (nil = the runner's auto-detected default).
     public let mergeTarget: String?
     /// Candidate target branches for the "Merge to…" dropdown (empty/nil for older runners).
@@ -1047,6 +1050,9 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         worktreeDirty = try values.decodeIfPresent(Bool.self, forKey: .worktreeDirty)
         mergeStatus = try values.decodeIfPresent(String.self, forKey: .mergeStatus)
         mergeError = try values.decodeIfPresent(String.self, forKey: .mergeError)
+        mergeRecovery = try values.decodeIfPresent(MergeRecovery.self, forKey: .mergeRecovery)
+        mergeRecoverySupported = try values.decodeIfPresent(Bool.self, forKey: .mergeRecoverySupported)
+        workspace = try values.decodeIfPresent(SessionDetailAgent.self, forKey: .workspace)
         mergeTarget = try values.decodeIfPresent(String.self, forKey: .mergeTarget)
         mergeTargets = try values.decodeIfPresent([String].self, forKey: .mergeTargets)
         branchMerged = try values.decodeIfPresent(Bool.self, forKey: .branchMerged)
@@ -1067,6 +1073,8 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 branch: String? = nil, isolationStatus: String? = nil,
                 changedFiles: [SessionChangedFile]? = nil, worktreeDirty: Bool? = nil,
                 mergeStatus: String? = nil, mergeError: String? = nil, mergeTarget: String? = nil,
+                mergeRecovery: MergeRecovery? = nil, mergeRecoverySupported: Bool? = nil,
+                workspace: SessionDetailAgent? = nil,
                 mergeTargets: [String]? = nil, branchMerged: Bool? = nil, worktreeBranch: String? = nil,
                 commitStatus: String? = nil, commitError: String? = nil,
                 commitResultMessage: String? = nil,
@@ -1085,6 +1093,9 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.worktreeDirty = worktreeDirty
         self.mergeStatus = mergeStatus
         self.mergeError = mergeError
+        self.mergeRecovery = mergeRecovery
+        self.mergeRecoverySupported = mergeRecoverySupported
+        self.workspace = workspace
         self.mergeTarget = mergeTarget
         self.mergeTargets = mergeTargets
         self.branchMerged = branchMerged
@@ -1198,7 +1209,13 @@ public struct SessionAccountRequest: Codable, Sendable {
 /// POST /sessions/:id/merge — merge the session branch into `targetBranch` (default when nil).
 public struct MergeRequest: Codable, Sendable {
     public let targetBranch: String?
-    public init(targetBranch: String? = nil) { self.targetBranch = targetBranch }
+    public let recoveryAction: String?
+    public let previewId: String?
+    public init(targetBranch: String? = nil, recoveryAction: String? = nil, previewId: String? = nil) {
+        self.targetBranch = targetBranch
+        self.recoveryAction = recoveryAction
+        self.previewId = previewId
+    }
 }
 
 // MARK: - Session search (⌘K)

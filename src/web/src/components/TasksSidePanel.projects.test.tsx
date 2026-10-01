@@ -18,10 +18,11 @@ import { TasksSidePanel } from './TasksSidePanel';
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
   api: vi.fn(),
+  fetchAvatarDataUrl: vi.fn(),
   getSession: vi.fn(),
 }));
 vi.mock('../lib/theme', () => ({ useThemeMode: () => ({ mode: 'system', setMode: () => {} }) }));
-const { api } = await import('../api');
+const { api, fetchAvatarDataUrl } = await import('../api');
 
 const NOW = Date.now();
 const ago = (ms: number) => new Date(NOW - ms).toISOString();
@@ -77,14 +78,14 @@ function RouterProbe() {
   return null;
 }
 
-function serve(projects: SidebarProject[] = OPEN_PROJECTS) {
+function serve(projects: SidebarProject[] = OPEN_PROJECTS, avatarUpdatedAt: string | null = null) {
   vi.mocked(api).mockImplementation((async (path: string) => {
     requested.push(path);
     if (path === '/projects?status=OPEN') return projects;
     if (path === '/runners') return [];
     if (path === '/workspaces') return [];
     if (path === '/sessions/counts') return [];
-    if (path === '/users/me') return { id: 'me', name: 'Me', email: 'me@example.com', role: 'USER' };
+    if (path === '/users/me') return { id: 'me', name: 'Me', email: 'me@example.com', role: 'USER', avatarUpdatedAt };
     if (path === '/wiki/spaces') return [];
     throw new Error(`unstubbed ${path}`);
   }) as never);
@@ -132,6 +133,7 @@ const currentEntry = () =>
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
     media: query,
@@ -156,9 +158,27 @@ afterEach(async () => {
   document.body.innerHTML = '';
   vi.unstubAllGlobals();
   vi.mocked(api).mockReset();
+  vi.mocked(fetchAvatarDataUrl).mockReset();
 });
 
 describe('the sidebar’s Projects group', () => {
+  it('uses the uploaded account photo in both the trigger and the profile menu', async () => {
+    const photo = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6pAAAAABJRU5ErkJggg==';
+    vi.mocked(fetchAvatarDataUrl).mockResolvedValue(photo);
+    serve(OPEN_PROJECTS, '2026-09-30T00:00:00Z');
+    await visit('/projects');
+
+    const trigger = container!.querySelector<HTMLButtonElement>('.tp-user-trigger')!;
+    expect(trigger.querySelector('img')?.getAttribute('src')).toBe(photo);
+    await act(async () => trigger.click());
+    await settle();
+
+    expect(document.querySelector('.tp-account-profile img')?.getAttribute('src')).toBe(photo);
+    expect(document.querySelector('.tp-account-detail')?.textContent).toBe('me@example.com');
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(vi.mocked(fetchAvatarDataUrl)).toHaveBeenCalledTimes(1);
+  });
+
   it('lists the open projects, the ones waiting on you first, then by the newest activity', async () => {
     serve();
     await visit('/projects');

@@ -2,13 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ConflictException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
+import { SESSION_MERGE_RECOVERY_V1, type MergeRecovery } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const OWNER_ID = '22222222-2222-4222-8222-222222222222';
 const OPERATION_OWNER = '33333333-3333-4333-8333-333333333333';
 
-function harness(overrides: Record<string, unknown> = {}) {
+function harness(overrides: Record<string, unknown> = {}, capabilities = [SESSION_MERGE_RECOVERY_V1]) {
   const session = {
     id: SESSION_ID,
     ownerId: OWNER_ID,
@@ -27,6 +28,7 @@ function harness(overrides: Record<string, unknown> = {}) {
   const writes: unknown[] = [];
   const workspaceWrites: unknown[] = [];
   const tx = {
+    runner: { findUnique: async () => ({ capabilities }) },
     $queryRaw: async (...args: unknown[]) => {
       lockCalls.push(args);
       return [{ id: SESSION_ID }];
@@ -98,6 +100,59 @@ test('merge queueing reads and writes the Session under one owner-scoped FOR UPD
   );
   assert.equal(data.mergeOperationOwner, null);
   assert.deepEqual(h.workspaceWrites, []);
+});
+
+const candidate: MergeRecovery = {
+  code: 'READY', targetBranch: 'develop', previewId: 'reviewed',
+  sourceSha: 'a'.repeat(40), localSha: 'b'.repeat(40), remoteSha: 'c'.repeat(40),
+  candidateSha: 'd'.repeat(40), candidateTreeSha: 'e'.repeat(40), patch: 'full diff',
+  check: { status: 'unconfigured' },
+};
+
+test('recovery refuses stale approval, failed checks, and an unsupported runner without queueing', async (t) => {
+  for (const tc of [
+    { name: 'stale preview', recovery: candidate, previewId: 'older', capabilities: [SESSION_MERGE_RECOVERY_V1] },
+    { name: 'failed check', recovery: { ...candidate, code: 'CHECK_FAILED' }, previewId: 'reviewed', capabilities: [SESSION_MERGE_RECOVERY_V1] },
+    { name: 'old runner', recovery: candidate, previewId: 'reviewed', capabilities: [] },
+  ]) {
+    await t.test(tc.name, async () => {
+      const h = harness({ mergeRecovery: tc.recovery }, tc.capabilities);
+      await assert.rejects(() => h.service.mergeToMain(OWNER_ID, SESSION_ID, 'develop', undefined,
+        { recoveryAction: 'apply', previewId: tc.previewId }), ConflictException);
+      assert.deepEqual(h.writes, []);
+    });
+  }
+});
+
+test('applying a recovery keeps its frozen checkpoint and exact target under the existing fence', async () => {
+  const h = harness({ mergeRecovery: candidate, mergeCheckpointId: 'frozen-checkpoint' });
+  await h.service.mergeToMain(OWNER_ID, SESSION_ID, undefined, undefined,
+    { recoveryAction: 'apply', previewId: 'reviewed' });
+  const data = (h.writes[0] as { data: Record<string, unknown> }).data;
+  assert.equal(data.mergeTarget, 'develop');
+  assert.equal(data.mergeCheckpointId, 'frozen-checkpoint');
+  assert.equal(data.mergeRecoveryAction, 'apply');
+  assert.equal(data.mergeOperationOwner, null);
+  assert.equal('mergeRecovery' in data, false, 'approved candidate must not be cleared');
+});
+
+test('read-only preview keeps the previous landing projections', async () => {
+  const h = harness({ branchMerged: true, mergedSourceSha: candidate.sourceSha, mergedAt: new Date() });
+  await h.service.mergeToMain(OWNER_ID, SESSION_ID, 'develop', undefined, { recoveryAction: 'preview' });
+  const data = (h.writes[0] as { data: Record<string, unknown> }).data;
+  for (const field of ['mergedAt', 'mergedSourceSha', 'branchMerged']) assert.equal(field in data, false);
+});
+
+test('local sync preserves landed projections and cannot be used for a candidate that never landed', async () => {
+  const h = harness({ mergeRecovery: { ...candidate, code: 'LOCAL_SYNC_PENDING' } });
+  await h.service.mergeToMain(OWNER_ID, SESSION_ID, undefined, undefined,
+    { recoveryAction: 'sync-local', previewId: 'reviewed' });
+  const data = (h.writes[0] as { data: Record<string, unknown> }).data;
+  for (const field of ['mergedAt', 'mergedSourceSha', 'branchMerged']) assert.equal(field in data, false);
+  const unlanded = harness({ mergeRecovery: candidate });
+  await assert.rejects(() => unlanded.service.mergeToMain(OWNER_ID, SESSION_ID, undefined, undefined,
+    { recoveryAction: 'sync-local', previewId: 'reviewed' }), ConflictException);
+  assert.deepEqual(unlanded.writes, []);
 });
 
 for (const tc of [

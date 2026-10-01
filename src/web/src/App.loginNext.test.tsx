@@ -31,7 +31,9 @@ vi.mock('./components/AppShell', async () => {
     FlushView: ({ children }: { children: ReactNode }) => children,
   };
 });
-vi.mock('./pages/TaskListView', () => ({ TaskListView: () => <TaskPage /> }));
+// The Tasks routes' element (TaskRoute reads the task to decide which page it opens over, and there
+// is no query client here to read it with).
+vi.mock('./pages/TaskRoute', () => ({ TaskRoute: () => <TaskPage /> }));
 
 function TaskPage() {
   const { id } = useParams();

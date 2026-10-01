@@ -14,13 +14,13 @@ Complete this section before recording a quote or sharing a draft outside the pa
 
 | Check | Owner | Status / date |
 | --- | --- | --- |
-| Partner agreed to an interview and the intended audience |  | `[ ]` |
-| Partner chose named, anonymized, or private attribution |  | `[ ]` |
-| No credentials, tokens, hostnames, private URLs, customer data, or sensitive topology are in the draft |  | `[ ]` |
-| Screenshots and repository names are cleared or replaced with fixtures |  | `[ ]` |
-| Partner approved direct quotes and the final factual draft |  | `[ ]` |
-| Maintainer checked every product claim against the tagged commit and docs |  | `[ ]` |
-| Publication channel, date, and rollback contact are recorded |  | `[ ]` |
+| Partner agreed to an interview and the intended audience | | `[ ]` |
+| Partner chose named, anonymized, or private attribution | | `[ ]` |
+| No credentials, tokens, hostnames, private URLs, customer data, or sensitive topology are in the draft | | `[ ]` |
+| Screenshots and repository names are cleared or replaced with fixtures | | `[ ]` |
+| Partner approved direct quotes and the final factual draft | | `[ ]` |
+| Maintainer checked every product claim against the tagged commit and docs | | `[ ]` |
+| Publication channel, date, and rollback contact are recorded | | `[ ]` |
 
 **Do not publish until every required check is complete.** If the partner withdraws consent, remove
 the draft from the launch queue and retain only the minimum internal record needed for audit.
@@ -59,7 +59,7 @@ frustrations.
 | Observation | Source / date | Redaction needed |
 | --- | --- | --- |
 | `[e.g., handoff required a pasted transcript]` | `[interview / ticket / run log]` | `[none / describe]` |
-|  |  |  |
+| | | |
 
 ## 3. Pilot hypothesis and success measures
 
@@ -73,11 +73,11 @@ like a launch story.
 
 | Measure | Baseline | Target / question | Observed | Evidence |
 | --- | --- | --- | --- | --- |
-| Handoff reconstruction time |  |  |  |  |
-| Number of sessions or runners involved |  |  |  |  |
-| Approval / merge decisions retained in history |  |  |  |  |
-| Failed or abandoned runs recovered |  |  |  |  |
-| Other partner-defined measure |  |  |  |  |
+| Handoff reconstruction time | | | | |
+| Number of sessions or runners involved | | | | |
+| Approval / merge decisions retained in history | | | | |
+| Failed or abandoned runs recovered | | | | |
+| Other partner-defined measure | | | | |
 
 If the pilot did not establish a baseline, say **not measured**. Qualitative evidence is valid when
 the method and limitation are stated.
@@ -133,8 +133,8 @@ Walk through one end-to-end episode in the order a reader could verify it.
 
 | Claim in the draft | Evidence link or artifact | Commit / date | Verified by |
 | --- | --- | --- | --- |
-| `[claim]` | `[sanitized transcript, screenshot, run log]` |  |  |
-|  |  |  |  |
+| `[claim]` | `[sanitized transcript, screenshot, run log]` | | |
+| | | | |
 
 ## 6. Partner voice
 
@@ -188,4 +188,3 @@ Use this compact card for a README, Discussion, or article sidebar after the ful
 - **Publication date:**
 - **Removal or correction contact:**
 - **Notes / expiry of permission:**
-

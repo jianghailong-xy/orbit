@@ -77,6 +77,14 @@ const button = (scope: HTMLElement, label: RegExp) =>
   [...scope.querySelectorAll<HTMLButtonElement>('button')].find((b) => label.test(b.textContent ?? ''));
 
 describe('a failed commit on the worktree bar', () => {
+  it('keeps local-sync recovery visible after a landing with no changed files', async () => {
+    const bar = await mount(failed({ changedFiles: [], worktreeDirty: false, commitStatus: null,
+      mergeStatus: 'merged', mergeRecoverySupported: true,
+      mergeRecovery: { code: 'LOCAL_SYNC_PENDING', targetBranch: 'develop', previewId: 'landed' } }));
+    expect(bar.querySelector('[aria-label="Target branch recovery"]')).toBeTruthy();
+    expect(bar.textContent).toContain('local sync pending');
+    expect(button(bar, /Retry merge/)).toBeUndefined();
+  });
   it('leads with what happened and why, with git\'s words folded away', async () => {
     const bar = await mount(failed(), () => undefined);
 
