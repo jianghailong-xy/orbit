@@ -127,14 +127,17 @@ func TestCodexAppServerThreadParamsForwardSystemInstructions(t *testing.T) {
 	}
 }
 
-func TestCodexAppServerAutoRetainsFullAccessSandbox(t *testing.T) {
-	job := &ClaimedSession{Agent: AgentExecConfig{PermissionMode: "auto"}}
+func TestCodexAppServerAutoUsesWorkspaceSandboxAndReviewer(t *testing.T) {
+	job := &ClaimedSession{
+		Agent: AgentExecConfig{PermissionMode: "auto"},
+		WT:    &Worktree{RepoDir: "/repo-root"},
+	}
 	thread := codexThreadParams(job, "/repo", "/tmp/uploads")
 	if thread["approvalPolicy"] != "on-request" {
 		t.Fatalf("approvalPolicy = %v, want on-request", thread["approvalPolicy"])
 	}
-	if thread["sandbox"] != "danger-full-access" {
-		t.Fatalf("sandbox = %v, want danger-full-access", thread["sandbox"])
+	if thread["sandbox"] != "workspace-write" {
+		t.Fatalf("sandbox = %v, want workspace-write", thread["sandbox"])
 	}
 	if thread["approvalsReviewer"] != "auto_review" {
 		t.Fatalf("approvalsReviewer = %v, want auto_review", thread["approvalsReviewer"])
@@ -144,11 +147,11 @@ func TestCodexAppServerAutoRetainsFullAccessSandbox(t *testing.T) {
 		t.Fatalf("turn approvalsReviewer = %v, want auto_review", turn["approvalsReviewer"])
 	}
 	sandbox, ok := turn["sandboxPolicy"].(map[string]interface{})
-	if !ok || sandbox["type"] != "dangerFullAccess" {
-		t.Fatalf("sandboxPolicy = %#v, want dangerFullAccess", turn["sandboxPolicy"])
+	if !ok || sandbox["type"] != "workspaceWrite" || sandbox["networkAccess"] != false {
+		t.Fatalf("sandboxPolicy = %#v, want workspaceWrite with network disabled", turn["sandboxPolicy"])
 	}
 	roots, ok := sandbox["writableRoots"].([]string)
-	if ok || roots != nil {
+	if !ok || len(roots) != 3 || roots[0] != "/repo" || roots[1] != "/tmp/uploads" || roots[2] != "/repo-root/.git" {
 		t.Fatalf("sandbox writableRoots = %#v", sandbox["writableRoots"])
 	}
 }
