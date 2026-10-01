@@ -3700,8 +3700,10 @@ const safeJson = (v: any): string => {
   }
 };
 
-// A tool_result's content is either a string or an array of content blocks
-// (text/image/...). Flatten it to displayable text.
+// A tool_result's content is either a string, an array of content blocks
+// (text/image/...), or an MCP CallToolResult wrapper whose `content` holds that array. Flatten it
+// to displayable text. The wrapper matters for Codex: its app-server can pass the whole MCP result
+// through, so an image is one level below the value the runner stores on the event.
 // Exported so the background-process tray can flatten a Read-on-output result the same way.
 export function resultText(content: any): string {
   if (content == null) return '';
@@ -3711,21 +3713,77 @@ export function resultText(content: any): string {
       .map((b: any) => {
         if (typeof b === 'string') return b;
         if (b && b.type === 'text') return b.text ?? '';
-        if (b && b.type === 'image') return ''; // rendered inline by resultImages()
+        if (isResultImageBlock(b)) return ''; // rendered inline by resultImages()
+        if (hasResultImage(b)) return resultText(b);
         return safeJson(b);
       })
       .filter((s) => s !== '')
       .join('\n');
   }
+  if (isResultImageBlock(content)) return '';
+  // Do not stringify an image-bearing MCP wrapper: that would put the base64 payload into a
+  // <pre>, which is both unreadable and wide enough to stretch the transcript. Keep any text the
+  // wrapper carries alongside the image, and let resultImages render the picture separately.
+  if (hasResultImage(content)) {
+    return resultWrapperValues(content)
+      .map((value) => resultText(value))
+      .filter((text) => text !== '')
+      .join('\n');
+  }
   return safeJson(content);
+}
+
+const RESULT_WRAPPER_KEYS = ['content', 'result', 'output', 'structuredContent'] as const;
+
+function isResultImageBlock(value: any): boolean {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    (value.type === 'image' ||
+      value.type === 'input_image' ||
+      value.type === 'image_url' ||
+      typeof value.image_url === 'string' ||
+      typeof value.imageUrl === 'string' ||
+      (value.image_url && typeof value.image_url === 'object'))
+  );
+}
+
+function resultWrapperValues(content: any): any[] {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return [];
+  return RESULT_WRAPPER_KEYS.filter((key) => Object.prototype.hasOwnProperty.call(content, key)).map(
+    (key) => content[key],
+  );
+}
+
+/** Find image blocks in either Anthropic's direct array or an MCP result wrapper. */
+function resultImageBlocks(content: any): any[] {
+  const found: any[] = [];
+  const seen = new Set<any>();
+  const visit = (value: any, depth: number) => {
+    if (value == null || depth > 4) return;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, depth + 1);
+      return;
+    }
+    if (typeof value !== 'object' || seen.has(value)) return;
+    seen.add(value);
+    if (isResultImageBlock(value)) {
+      found.push(value);
+      return;
+    }
+    for (const nested of resultWrapperValues(value)) visit(nested, depth + 1);
+  };
+  visit(content, 0);
+  return found;
 }
 
 // Whether a tool_result carries an image at all — including one the server emptied of its bytes
 // because it was too big to ship inline (see the apiserver's MAX_IMAGE_PAYLOAD). The block outlives
 // that clip, keeping its type and media_type, exactly so this stays true: a screenshot still opens
-// its card on arrival, and the open card refetches the payload whole.
+// its card on arrival, and the open card refetches the payload whole. MCP results may wrap the same
+// block in `{ content: [...] }` (or `{ result: { content: [...] } }`), so inspect those wrappers too.
 export function hasResultImage(content: any): boolean {
-  return Array.isArray(content) && content.some((b) => b && b.type === 'image');
+  return resultImageBlocks(content).length > 0;
 }
 
 // Inline images carried by a tool_result's content blocks — e.g. Read on a .png, or an
@@ -3733,11 +3791,18 @@ export function hasResultImage(content: any): boolean {
 // runner, so render it as a data URL. A block whose data the server clipped yields nothing
 // here until the untrimmed payload lands. A plain-text result yields [].
 function resultImages(content: any): string[] {
-  if (!Array.isArray(content)) return [];
   const urls: string[] = [];
-  for (const b of content) {
-    const s = b && b.type === 'image' ? b.source : null;
-    if (s && s.data && s.media_type) urls.push(`data:${s.media_type};base64,${s.data}`);
+  for (const block of resultImageBlocks(content)) {
+    const source = block.source && typeof block.source === 'object' ? block.source : undefined;
+    const data = source?.data ?? block.data;
+    const mime = source?.media_type ?? source?.mimeType ?? block.media_type ?? block.mimeType;
+    const imageUrl = block.image_url && typeof block.image_url === 'object' ? block.image_url.url : block.image_url;
+    const directUrl = imageUrl ?? block.imageUrl ?? source?.url ?? block.url;
+    if (typeof directUrl === 'string' && directUrl) {
+      urls.push(directUrl);
+    } else if (typeof data === 'string' && data && typeof mime === 'string' && mime) {
+      urls.push(data.startsWith('data:') ? data : `data:${mime};base64,${data}`);
+    }
   }
   return urls;
 }
