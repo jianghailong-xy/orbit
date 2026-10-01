@@ -176,6 +176,10 @@ func TestCodexEngineHealthAccountsOneAccountIsJustDefault(t *testing.T) {
 
 func TestCodexEngineHealthAccountsOnlyForAnInstalledEngine(t *testing.T) {
 	home, _ := codexAccountSlotTestHomes(t)
+	// The Claude half of this report reads Claude's Default from CLAUDE_CONFIG_DIR before HOME,
+	// and a runner session's own environment names its account there (claudeAccountSlotTestHomes
+	// clears it for the same reason).
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	signInCodexHome(t, filepath.Join(home, ".codex"))
 	if _, err := codexAccountKind.create("Work"); err != nil {
 		t.Fatal(err)

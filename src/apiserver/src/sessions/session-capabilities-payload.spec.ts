@@ -46,6 +46,8 @@ function sessionRow() {
     runningBgJobs: [],
     runningBgJobActivity: {},
     runningSubagentCount: 0,
+    // The detail's newest merge-repair child, which this session has none of.
+    children: [],
     workspaceId: null,
     workspaceName: null,
     workspaceModel: null,
