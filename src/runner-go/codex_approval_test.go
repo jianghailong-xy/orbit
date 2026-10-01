@@ -407,6 +407,33 @@ func TestCodexAutoApprovalLeavesBoundariesAndHighRiskRequestsForOwner(t *testing
 	}
 }
 
+func TestCodexAutoApprovalTreatsGitPathOverridesAsWorkspaceBoundaries(t *testing.T) {
+	auto := codexAutoApprovalContextFor("/repo", "/tmp/uploads/session-1")
+	for _, tc := range []struct {
+		name    string
+		command string
+		want    bool
+		decided bool
+	}{
+		{name: "ordinary git uses cwd", command: "git status --short", want: true, decided: true},
+		{name: "workspace git -C", command: "git -C /repo status --short", want: true, decided: true},
+		{name: "nested shell outside git -C", command: "/bin/bash -lc 'git -C /other status --short'", want: false, decided: false},
+		{name: "outside git dir", command: "git --git-dir=/other/.git status", want: false, decided: false},
+		{name: "outside work tree", command: "git --work-tree /other status", want: false, decided: false},
+		{name: "unresolved git path", command: "git -C \"$DEPLOY_ROOT\" status", want: false, decided: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			allowed, decided := codexAutoApproval(codexApprovalRequest{}, map[string]interface{}{
+				"command": tc.command,
+				"cwd":     "/repo",
+			}, auto)
+			if allowed != tc.want || decided != tc.decided {
+				t.Fatalf("codexAutoApproval = (%v, %v), want (%v, %v)", allowed, decided, tc.want, tc.decided)
+			}
+		})
+	}
+}
+
 // A cancelled session must not leave an approval poll running, and must not approve.
 func TestBridgeCodexApprovalFailsClosedOnCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

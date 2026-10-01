@@ -53,7 +53,9 @@ func codexAutoApproval(request codexApprovalRequest, params map[string]interface
 		return false, false
 	}
 	command := strings.TrimSpace(firstString(params, "command"))
-	if command == "" || codexAutoCommandNeedsApproval(command, autoContext.tempRoots) {
+	if command == "" ||
+		codexAutoCommandTargetsOutsideRoots(command, cwd, autoContext.workspaceRoots) ||
+		codexAutoCommandNeedsApproval(command, autoContext.tempRoots) {
 		return false, false
 	}
 	return true, true
@@ -140,6 +142,135 @@ func codexAutoCommandNeedsApproval(command string, tempRoots []string) bool {
 	return false
 }
 
+// codexAutoCommandTargetsOutsideRoots recognizes Git's explicit path selectors. Checking only
+// the request cwd is insufficient for commands such as `git -C /other/checkout status`: Git reads
+// the checkout named by -C, not the process cwd. Unknown or variable selectors fail closed because
+// Auto must be able to prove the target is inside the session's workspace before skipping a card.
+func codexAutoCommandTargetsOutsideRoots(command, cwd string, roots []string) bool {
+	if len(roots) == 0 {
+		return true
+	}
+	lower := strings.ToLower(command)
+	for search := 0; search < len(lower); {
+		relative := strings.Index(lower[search:], "git")
+		if relative < 0 {
+			break
+		}
+		at := search + relative
+		if !codexShellWordAt(lower, at, len("git")) {
+			search = at + len("git")
+			continue
+		}
+		tokens := codexShellWordsUntilOperator(command[at+len("git"):])
+		for i := 0; i < len(tokens); i++ {
+			token := tokens[i]
+			// Git's `--` ends its option list; a later `-C` is an argument, not a
+			// path selector.
+			if token == "--" {
+				break
+			}
+			path, needsNext, matched := codexGitPathOption(token)
+			if !matched {
+				if !strings.HasPrefix(token, "-") {
+					break
+				}
+				continue
+			}
+			if needsNext {
+				if i+1 >= len(tokens) {
+					// There is no path to prove safe, so a malformed selector must not
+					// silently become an automatic approval.
+					return true
+				}
+				i++
+				path = tokens[i]
+			}
+			if !codexPathWithinRootsFrom(path, cwd, roots) {
+				return true
+			}
+		}
+		search = at + len("git")
+	}
+	return false
+}
+
+func codexGitPathOption(token string) (path string, needsNext, matched bool) {
+	switch {
+	case token == "-C" || token == "--git-dir" || token == "--work-tree":
+		return "", true, true
+	case strings.HasPrefix(token, "-C") && len(token) > len("-C"):
+		return token[len("-C"):], false, true
+	case strings.HasPrefix(token, "--git-dir="):
+		return strings.TrimPrefix(token, "--git-dir="), false, true
+	case strings.HasPrefix(token, "--work-tree="):
+		return strings.TrimPrefix(token, "--work-tree="), false, true
+	default:
+		return "", false, false
+	}
+}
+
+func codexPathWithinRootsFrom(path, cwd string, roots []string) bool {
+	path = strings.TrimSpace(path)
+	if path == "" || strings.HasPrefix(path, "~") || strings.ContainsAny(path, "$`*?") {
+		return false
+	}
+	if !filepath.IsAbs(path) {
+		if cwd == "" {
+			return false
+		}
+		path = filepath.Join(cwd, path)
+	}
+	return codexPathWithinRoots(path, roots)
+}
+
+// codexShellWordsUntilOperator is intentionally a small lexer, not a shell interpreter. It only
+// needs to preserve quoted Git path arguments and stop before a subsequent shell command. Anything
+// it cannot resolve remains conservative through codexPathWithinRootsFrom.
+func codexShellWordsUntilOperator(command string) []string {
+	words := []string{}
+	current := strings.Builder{}
+	var quote byte
+	flush := func() {
+		if current.Len() > 0 {
+			words = append(words, current.String())
+			current.Reset()
+		}
+	}
+	for i := 0; i < len(command); i++ {
+		c := command[i]
+		if quote != 0 {
+			switch {
+			case c == quote:
+				quote = 0
+			case c == '\\' && quote == '"' && i+1 < len(command):
+				i++
+				current.WriteByte(command[i])
+			default:
+				current.WriteByte(c)
+			}
+			continue
+		}
+		switch c {
+		case '\'', '"':
+			quote = c
+		case '\\':
+			if i+1 < len(command) {
+				i++
+				current.WriteByte(command[i])
+			}
+		case ' ', '\t', '\r', '\n':
+			flush()
+		case ';', '&', '|':
+			flush()
+			return words
+		default:
+			current.WriteByte(c)
+		}
+	}
+	flush()
+	return words
+}
+
 func codexShellWord(command, word string) bool {
 	for start := 0; ; {
 		at := strings.Index(command[start:], word)
@@ -147,14 +278,19 @@ func codexShellWord(command, word string) bool {
 			return false
 		}
 		at += start
-		end := at + len(word)
-		beforeWord := at == 0 || !codexShellWordChar(command[at-1])
-		afterWord := end == len(command) || !codexShellWordChar(command[end])
-		if beforeWord && afterWord {
+		if codexShellWordAt(command, at, len(word)) {
 			return true
 		}
-		start = end
+		start = at + len(word)
 	}
+}
+
+func codexShellWordAt(command string, at, length int) bool {
+	if at < 0 || at+length > len(command) {
+		return false
+	}
+	return (at == 0 || !codexShellWordChar(command[at-1])) &&
+		(at+length == len(command) || !codexShellWordChar(command[at+length]))
 }
 
 func codexShellWordChar(value byte) bool {
