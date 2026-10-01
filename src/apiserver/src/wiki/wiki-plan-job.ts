@@ -48,9 +48,11 @@ import { ensureWikiMaintenanceList, wikiMaintenanceProviderProblem } from './wik
  * does not stand in the way: it writes the version it was made for, and the waiting one the next — a
  * section whose material did not change is left as it is, so after a small edit only what changed is
  * written again. And the job shares the maintenance list with the
- * maintenance runs, one task of it at a time: a job whose list has a task that has not ended waits
- * (`queued`) and is made when a task of the owner's ends — the maintenance trigger, for its part, makes no
- * task while the list has one, so the local model is never asked by both at once. A job is not a
+ * maintenance runs, one task of it at a time, and goes first: a job whose list has a task that has not
+ * ended waits (`queued`) and is made when a task of the owner's ends, before any next run — the
+ * maintenance trigger makes no task while the list has one, nor while a job waits for it, and a fact that
+ * finds the list free makes the job's task instead — so the runs never put the owner's job off, and the
+ * local model is never asked by both at once. A job is not a
  * maintenance run: it is not counted against the space's daily runs (`wikiMaintenanceRunsToday`), and
  * that limit does not hold it back.
  *
@@ -495,25 +497,40 @@ export async function settleWikiPlanJobsOfTasks(prisma: Db, ownerId: string, tas
 const USER_SCOPE = 'user:';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** The owner and the tasks a published task change names, or null for any other event. */
-export function wikiPlanJobHintFor(runId: string, event: NormalizedRunEvent): { ownerId: string; taskIds: string[] } | null {
-  if (event.type !== RunEventType.TASK_CHANGED || !runId.startsWith(USER_SCOPE)) return null;
-  const ownerId = runId.slice(USER_SCOPE.length);
-  if (!UUID.test(ownerId)) return null;
+/** Who a published task change is for — the owner it was published for, or the session it was published on — and its tasks. */
+export type WikiPlanJobHint =
+  | { ownerId: string; sessionId: null; taskIds: string[] }
+  | { ownerId: null; sessionId: string; taskIds: string[] };
+
+/**
+ * The owner or the session a published task change names, and its tasks, or null for any other event. The
+ * tasks module publishes a change for the owner (`user:<owner>`); the runner's doors publish the change of a
+ * task a session's turn or end settled on that session — which is how a maintenance run's task ends, its
+ * acceptance turn's comparison settling it — and its owner is the session's.
+ */
+export function wikiPlanJobHintFor(runId: string, event: NormalizedRunEvent): WikiPlanJobHint | null {
+  if (event.type !== RunEventType.TASK_CHANGED) return null;
+  const ownerId = runId.startsWith(USER_SCOPE) ? runId.slice(USER_SCOPE.length) : null;
+  if (!UUID.test(ownerId ?? runId)) return null;
   const payload = (event.payload ?? {}) as { taskId?: unknown; taskIds?: unknown };
   const ids = [...(Array.isArray(payload.taskIds) ? payload.taskIds : []), payload.taskId].filter(
     (id): id is string => typeof id === 'string' && UUID.test(id),
   );
-  return { ownerId, taskIds: [...new Set(ids)] };
+  const taskIds = [...new Set(ids)];
+  return ownerId === null ? { ownerId, sessionId: runId, taskIds } : { ownerId, sessionId: null, taskIds };
 }
 
 /**
- * The trigger's subscription (contract `plan.jobs.trigger`): every task change this replica published,
- * read for its owner — the made jobs of the tasks it names are ended if their task has, and the owner's
- * queued jobs are asked again, since the list they wait on may have just been freed. An event is
- * published after its write, at most once, and a crash between loses it: a lost one is a job that waits
- * for the owner's next task change, or their next request. An owner's hints are taken one at a time,
- * those arriving meanwhile merged into the next.
+ * The trigger's subscription (contract `plan.jobs.trigger`): every task change this replica published —
+ * the tasks module's, for the owner, and the runner doors', on the session whose turn or end settled the
+ * task, read for that session's owner — the made jobs of the tasks it names are ended if their task has,
+ * and the owner's queued jobs are asked again, since the list they wait on may have just been freed. A
+ * maintenance run's task ends the second way: read for the owner's changes alone, as it was until
+ * 2026-10-01, its end moved no job, and the maintenance trigger's next fact made another run first. An
+ * event is published after its write, at most once, and a crash between loses it: a lost one is a job
+ * that waits for the owner's next task change, the maintenance trigger's next fact of the space, or the
+ * owner's next request. An owner's hints are taken one at a time, those arriving meanwhile merged into
+ * the next.
  */
 @Injectable()
 export class WikiPlanJobFacts implements OnModuleInit, OnModuleDestroy {
@@ -529,11 +546,7 @@ export class WikiPlanJobFacts implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit(): void {
     this.subscription = this.realtime?.localPublications().subscribe(({ runId, event }) => {
-      try {
-        this.take(runId, event);
-      } catch (error) {
-        this.logger.warn(`a task change was not taken: ${(error as Error).message}`);
-      }
+      this.take(runId, event).catch((error) => this.logger.warn(`a task change was not taken: ${(error as Error).message}`));
     });
   }
 
@@ -542,15 +555,23 @@ export class WikiPlanJobFacts implements OnModuleInit, OnModuleDestroy {
     this.subscription = undefined;
   }
 
-  /** One published event, taken for its owner. */
-  take(runId: string, event: NormalizedRunEvent): void {
+  /** One published event, taken for its owner: the session's, for a change published on a session. */
+  async take(runId: string, event: NormalizedRunEvent): Promise<void> {
     const hint = wikiPlanJobHintFor(runId, event);
     if (!hint) return;
-    const waiting = this.waiting.get(hint.ownerId) ?? new Set<string>();
+    let ownerId: string;
+    if (hint.ownerId !== null) {
+      ownerId = hint.ownerId;
+    } else {
+      const session = await this.prisma.session.findFirst({ where: { id: hint.sessionId }, select: { ownerId: true } });
+      if (!session) return;
+      ownerId = session.ownerId;
+    }
+    const waiting = this.waiting.get(ownerId) ?? new Set<string>();
     for (const id of hint.taskIds) waiting.add(id);
-    this.waiting.set(hint.ownerId, waiting);
-    if (!this.draining.has(hint.ownerId)) {
-      const owner = hint.ownerId;
+    this.waiting.set(ownerId, waiting);
+    if (!this.draining.has(ownerId)) {
+      const owner = ownerId;
       const drain = this.drain(owner).finally(() => this.draining.delete(owner));
       this.draining.set(owner, drain);
     }
@@ -683,6 +704,19 @@ export async function wikiPlanJobOfSession(prisma: Db, ownerId: string, spaceId:
 /** Whether a task is a plan job's: the maintenance claim and the day's run count ask it. */
 export async function isWikiPlanJobTask(prisma: Pick<Prisma.TransactionClient, 'wikiPlanJob'>, taskId: string): Promise<boolean> {
   return (await prisma.wikiPlanJob.findFirst({ where: { taskId }, select: { id: true } })) !== null;
+}
+
+/**
+ * Whether a job of the space waits for its list (`queued`): the maintenance trigger asks it, and makes no
+ * run while one does (contract `plan.jobs.staggered`). A held job waits for the owner's settings, not for
+ * the list, and stands in no run's way.
+ */
+export async function hasQueuedWikiPlanJob(
+  prisma: Pick<Prisma.TransactionClient, 'wikiPlanJob'>,
+  ownerId: string,
+  spaceId: string,
+): Promise<boolean> {
+  return (await prisma.wikiPlanJob.findFirst({ where: { ownerId, spaceId, state: 'queued' }, select: { id: true } })) !== null;
 }
 
 // ── The materials a draft reads of Orbit ────────────────────────────────────────────────────────

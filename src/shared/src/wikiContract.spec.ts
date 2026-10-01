@@ -733,6 +733,10 @@ describe('wiki contract', () => {
     // The due threshold counts sessions (design §8.2's «20 个会话»), and no clock starts a task.
     expect(CONTRACT.maintenance.cursor.due).toMatch(/sessions have a fact after the watermark/u);
     expect(job.trigger.conditions).toMatch(/No clock starts a task/u);
+    // A plan job the owner asked for goes before the next run (2026-10-01): none is made while one is queued.
+    const notMade: string[] = job.trigger.notMade;
+    expect(notMade.some((why) => why.startsWith('a plan job of the space is queued for the list (plan.jobs.staggered): it goes first'))).toBe(true);
+    expect(job.trigger.lock).toMatch(/the space's queued plan jobs/u);
     // The task's one criterion is the check, in exactly the shape the server writes it.
     expect(job.task.completionCriterion).toBe('EXECUTABLE');
     expect(job.task.acceptanceCommand).toBe(wikiMaintenanceCheckCommand('<id>', '<token>'));
@@ -1007,6 +1011,10 @@ describe('wiki contract', () => {
     // A fact asks for a job, and what moves it on is a fact too — never a clock.
     expect(jobs.means).toMatch(/never a clock/u);
     expect(jobs.trigger).toMatch(/No clock asks anything/u);
+    // A queued job goes before the next maintenance run, and a task's end published on a session moves it (2026-10-01).
+    expect(jobs.staggered).toMatch(/a queued job goes first: the maintenance trigger makes no task while the list has one that has not ended, nor while a job of the space is queued/u);
+    expect(jobs.states.queued).toMatch(/before the next maintenance run/u);
+    expect(jobs.trigger).toMatch(/whether published for the owner or on a session/u);
     expect(jobs.notAMaintenanceRun).toMatch(/wikiMaintenanceRunsToday/u);
     expect(jobs.task.list).toMatch(/Wiki maintenance list/u);
     expect(jobs.task.acceptanceCommand).toBe('orbit wiki plan check --space <id> --job <id>');

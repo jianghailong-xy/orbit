@@ -1003,12 +1003,13 @@
         "notMade": [
           "maintenance is off, or names no workspace or list",
           "a task of the maintenance list has not ended (OPEN or IN_PROGRESS)",
+          "a plan job of the space is queued for the list (plan.jobs.staggered): it goes first — the trigger makes the job's task instead — and the facts wait in the backlog for the first fact after the job's task ended, which these same rules ask",
           "the event names no fact of the space after the cursor: a rename, the maintenance run's own events, another space's work",
           "the space is not due",
           "no fact past the settle grace is left to cover",
           "held: the day's runs are used up, or a Manual space's review queue has no room"
         ],
-        "lock": "The task is made under a lock on the maintenance list's row, after the list's unended tasks and the day's count are read again under it, so two facts arriving together make one task."
+        "lock": "The task is made under a lock on the maintenance list's row, after the list's unended tasks, the space's queued plan jobs and the day's count are read again under it, so two facts arriving together make one task, and a job queued meanwhile still goes first."
       },
       "held": {
         "reasons": [
@@ -1395,7 +1396,7 @@
       },
       "storedStates": ["queued", "held", "made", "ended"],
       "states": {
-        "queued": "the space's maintenance list has a task that has not ended; the job is made when a task of the owner's ends",
+        "queued": "the space's maintenance list has a task that has not ended; the job is made when a task of the owner's ends, before the next maintenance run (staggered)",
         "held": "the space's maintenance names no workspace, or a provider no run could start on (held.reason); the job is made when the owner's next change to the maintenance settings, or their next request, finds that settled",
         "running": "its task is made: dispatched, or running, with the gate round it is on — a build with how far it has got (progress)",
         "succeeded": "its run stored a draft the gate let through (version); a build's wrote the documents of a confirmed version (version) and left no section unwritten",
@@ -1419,8 +1420,8 @@
         "materialsProjectsMax": 500
       },
       "request": "A request asks for a draft, or with instructions a revision. The space's draft or revision that has not ended answers it (one open a space, a partial unique index) and is asked again whether it may be made now; a made job whose task already ended, or is gone, without its run saying how is ended failed first, so it cannot stand in the way. Otherwise a job is recorded and asked at once: held when the settings say so; queued when the list has a task that has not ended; else made. A build is asked for by the owner's confirmation of a version, after it commits and never failing it: the space's build that waits (queued or held, one a space, a partial unique index) answers it, pointed at the newer version, and is asked again; a build already made does not stand in the way — it writes the version it was made for, and the waiting one the next, behind its task. A build names its version from the start (version), and keeps it when it fails.",
-      "trigger": "WikiPlanJobFacts takes every task change this replica publishes (task.changed): the made jobs of the tasks it names are ended failed when their task ended before the run said how it went, and the owner's queued jobs are asked again, since the list may have just been freed. The owner's change to a space's maintenance settings asks its queued and held jobs again. No clock asks anything.",
-      "staggered": "A job and the space's maintenance runs share its list, one task at a time: the maintenance trigger makes no task while the list has one that has not ended (maintenance.job.trigger.notMade), and a job waits behind one the same way, so the local model is never asked by both at once.",
+      "trigger": "WikiPlanJobFacts takes every task change this replica publishes (task.changed), whether published for the owner or on a session: the runner's doors publish the change of a task a session's turn or end settled on that session, read for the session's owner — which is how a maintenance run's task ends, its acceptance turn's comparison settling it. The made jobs of the tasks it names are ended failed when their task ended before the run said how it went, and the owner's queued jobs are asked again, since the list may have just been freed. The maintenance trigger asks a space's queued jobs again too, when a fact finds its list free (staggered). The owner's change to a space's maintenance settings asks its queued and held jobs again. No clock asks anything.",
+      "staggered": "A job and the space's maintenance runs share its list, one task at a time, and a queued job goes first: the maintenance trigger makes no task while the list has one that has not ended, nor while a job of the space is queued (maintenance.job.trigger.notMade) — a fact that finds the list free makes the job's task instead — so when a maintenance run's task ends the job's task is made before any next run, and the facts that arrived meanwhile wait in the backlog for the first fact after the job's task ended. A job waits behind a run the same way, so the local model is never asked by both at once. A held job waits for the owner's settings, not for the list, and stands in no run's way.",
       "notAMaintenanceRun": "A job's task is not a maintenance run: it is not counted against settings.maintenance.dailyRunLimit (wikiMaintenanceRunsToday counts the list's other tasks), the day's limit does not hold it back, and it runs whether or not maintenance is turned on — the list is made for it when the space has none, and the claim does not refuse its session for maintenance being off (maintenance.run).",
       "task": {
         "list": "the space's hidden Wiki maintenance list (maintenance.list), made for the job when the space has none",
