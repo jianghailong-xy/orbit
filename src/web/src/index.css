@@ -14136,6 +14136,18 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   color: var(--text-3);
 }
+/* The ordinary empty state follows the mobile hierarchy: provider first, then the instruction,
+   then the model that this draft will actually send with. */
+.np-empty-copy {
+  margin-top: 20px;
+  font-size: 17px;
+  color: var(--text-3);
+}
+.np-current-model {
+  margin-top: 5px;
+  font-size: 14px;
+  color: var(--text-4);
+}
 .np-card {
   display: inline-flex;
   flex-direction: column;

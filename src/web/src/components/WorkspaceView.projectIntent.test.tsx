@@ -166,7 +166,9 @@ async function mount(entry: string, expectedTitle: string): Promise<void> {
     );
   });
   await waitForUi(() => {
-    expect(nextContainer.querySelector('.np-title')?.textContent).toBe(expectedTitle);
+    const selector = expectedTitle === 'Start a new session' ? '.np-empty-copy' : '.np-title';
+    const rendered = nextContainer.querySelector(selector)?.textContent;
+    expect(rendered).toBe(expectedTitle === 'Start a new session' ? 'Send a task to get started.' : expectedTitle);
   });
 }
 
@@ -195,19 +197,14 @@ describe('New Session project intent', () => {
     expect(intent.querySelectorAll('button[aria-label="Dismiss project intent"]')).toHaveLength(1);
   });
 
-  it('keeps the ordinary compose framing byte-for-byte when the route has no intent', async () => {
+  it('uses the empty-state hierarchy when the route has no intent', async () => {
     await mount(NEW_SESSION_PATH, 'Start a new session');
 
-    expect({
-      title: one('.np-title').outerHTML,
-      subtitle: one('.np-sub').outerHTML,
-      intent: container?.querySelector('.composer-project-intent') ?? null,
-    }).toEqual({
-      title: '<div class="np-title">Start a new session</div>',
-      subtitle:
-        '<div class="np-sub">Describe the task — Orbit remembers who runs it.</div>',
-      intent: null,
-    });
+    expect(one('.np-empty-copy').textContent).toBe('Send a task to get started.');
+    expect(one('.np-current-model').textContent).toBeTruthy();
+    expect(container?.querySelector('.composer-project-intent')).toBeNull();
+    expect(container?.querySelector('.np-title')).toBeNull();
+    expect(container?.querySelector('.np-sub')).toBeNull();
   });
 
   it('dismisses into the ordinary New Session route and framing', async () => {
@@ -217,15 +214,13 @@ describe('New Session project intent', () => {
     await waitForUi(() => {
       expect(one('[data-testid="location"]').textContent).toBe(NEW_SESSION_PATH);
       expect(mountedContainer().querySelector('.composer-project-intent')).toBeNull();
-      expect(one('.np-title').textContent).toBe('Start a new session');
+      expect(one('.np-empty-copy').textContent).toBe('Send a task to get started.');
     });
 
     expect(one('[data-testid="location"]').textContent).toBe(NEW_SESSION_PATH);
     expect(mountedContainer().querySelector('.composer-project-intent')).toBeNull();
-    expect(one('.np-title').textContent).toBe('Start a new session');
-    expect(one('.np-sub').textContent).toBe(
-      'Describe the task — Orbit remembers who runs it.',
-    );
+    expect(one('.np-empty-copy').textContent).toBe('Send a task to get started.');
+    expect(one('.np-current-model').textContent).toBeTruthy();
   });
 });
 

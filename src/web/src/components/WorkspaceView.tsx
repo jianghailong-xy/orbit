@@ -8254,6 +8254,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 }}
                 onPickAccount={pickDraftAccount}
                 runnerId={runner.id}
+                currentModelLabel={shownModelLabel}
                 // Nothing to choose until we know which workspace (and so which project) this runs in.
                 disabled={!pickedWorkspace}
                 note={providerSwitchNote}
