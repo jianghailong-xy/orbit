@@ -762,6 +762,63 @@ describe('engine stderr', () => {
     expect(html).not.toContain('chat-error-card-log');
   });
 
+  it('keeps an apply_patch stderr failure inside the surrounding tool group', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          { seq: 1, type: 'tool_use', payload: { id: 't1', name: 'Bash', input: { command: 'pwd' } } },
+          { seq: 2, type: 'tool_result', payload: { toolUseId: 't1', content: '/root/orbit' } },
+          { seq: 3, type: 'tool_use', payload: { id: 't2', name: 'apply_patch', input: { files: ['/repo/README.md'] } } },
+          stderrEvent(
+            4,
+            '2026-09-29T23:54:05.014653Z ERROR codex_core::tools::router: ' +
+              'error=apply_patch verification failed: Failed to find expected lines in ' +
+              '/root/.orbit/worktrees/session/site/assets/README.md:',
+          ),
+          stderrEvent(8, 'The transcript\'s tool-call rendering: the folded/expandable card row, its semantic body (command /'),
+          { seq: 9, type: 'tool_use', payload: { id: 't3', name: 'Bash', input: { command: 'git status' } } },
+          { seq: 10, type: 'tool_result', payload: { toolUseId: 't3', content: 'clean' } },
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Tools × 3');
+    expect(html).toContain('1 failed');
+    expect(html).toContain('Failed: ');
+    expect(html).not.toContain('chat-error-card');
+    // The expected source line belongs to the failed call's expandable result, not a second red row.
+    expect(html).not.toContain("The transcript's tool-call rendering");
+  });
+
+  it('folds an unnamed function-argument failure into the latest unresolved tool', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          { seq: 1, type: 'tool_use', payload: { id: 't1', name: 'mcp__orbit__task_create', input: { title: 'Ship it' } } },
+          stderrEvent(2, 'error=failed to parse function arguments: unknown field `question`, expected `title` or `options` at line 1 column 174'),
+          { seq: 3, type: 'tool_use', payload: { id: 't2', name: 'Bash', input: { command: 'echo done' } } },
+          { seq: 4, type: 'tool_result', payload: { toolUseId: 't2', content: 'done' } },
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Create task');
+    expect(html).toContain('chat-tool-status err');
+    expect(html).not.toContain('chat-error');
+    expect(html).not.toContain('error=failed to parse function arguments');
+  });
+
+  it('uses a compact generic failure card when no tool call can be correlated', () => {
+    const html = renderToStaticMarkup(
+      <Transcript events={[stderrEvent(1, 'error=failed to parse function arguments: unknown field `question`')]} />,
+    );
+
+    expect(html).toContain('chat-error-card');
+    expect(html).toContain('Tool call');
+    expect(html).toContain('failed to parse function arguments');
+    expect(html).not.toContain('chat-error-text');
+  });
+
   // codex colours its stderr with tracing's ANSI layer. The ESC byte is invisible in HTML, so
   // an unstripped line reads as "[2m…[0m [31mERROR[0m" — every log line wrapped in garbage.
   const codexLine = (ts: string, message: string) =>

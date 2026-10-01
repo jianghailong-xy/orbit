@@ -403,8 +403,17 @@ type ToolFailureSummary = { tool: string; path?: string; reason: string };
 function parseToolFailureSummary(message: string): ToolFailureSummary | undefined {
   const clean = stripAnsi(message);
   const text = parseEngineLogLine(clean)?.text ?? clean;
-  const match = /(?:^|\n)error=([\w.-]+)\s+verification failed:\s*([\s\S]*)/i.exec(text);
-  if (!match) return undefined;
+  const marker = /error=/i.exec(text);
+  if (!marker) return undefined;
+  const tail = text.slice(marker.index);
+  const match = /^error=([\w.-]+)\s+verification failed:\s*([\s\S]*)/i.exec(tail);
+  if (!match) {
+    // Codex reports malformed tool input without naming the tool in the line. The caller can still
+    // associate it with the most recent unresolved tool_use; if there is no such call, keep the
+    // message as a generic folded failure card instead of exposing a raw red log row.
+    const generic = /^error=(failed to parse function arguments\b[\s\S]*)$/i.exec(tail.trim());
+    return generic ? { tool: '', reason: generic[1].trim() } : undefined;
+  }
 
   const detail = match[2].trim();
   const pathMatch = /(?:^|\s)(\/[^\s:]*\/worktrees\/[^/\s]+\/([^:\n]+?))(?::|\n|$)/.exec(detail);
@@ -477,6 +486,10 @@ const TURN_FINISHED_SUBTYPES = new Set(['success', 'completed']);
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
   const roots: Node[] = [];
   const byId = new Map<string, ToolNode>();
+  // Stderr failures are emitted without a tool_use id by some runners. Keep the unresolved calls
+  // in arrival order so a verification/parser failure can still be folded into the call it names
+  // (or, for parser errors that omit the name, the most recent unresolved call).
+  const openTools: Array<{ node: ToolNode; parent?: string }> = [];
   // Legacy transcripts (pre-id) carry no tool_use id / tool_result toolUseId, so a
   // result can't be matched by id. Fall back to the most recently opened tool that
   // still has no result — results arrive right after their call in those streams.
@@ -561,32 +574,69 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   // (rather than per sub-workspace) is deliberate — one process writes the stderr, and which tool
   // call happened to be open when it flushed is incidental.
   const stderrSeen = new Map<string, ErrorNode>();
-  let lastStderr: { node: ErrorNode; seq: number; continuing: boolean } | undefined;
+  let lastStderr:
+    | { error: ErrorNode; seq: number; continuing: boolean }
+    | { tool: ToolNode; seq: number; continuing: boolean }
+    | undefined;
+  const removeOpenTool = (tool: ToolNode) => {
+    const index = openTools.findIndex((entry) => entry.node === tool);
+    if (index >= 0) openTools.splice(index, 1);
+  };
+  const unresolvedTool = (name: string, parentId?: string): ToolNode | undefined => {
+    const wanted = name.trim().toLowerCase();
+    for (let i = openTools.length - 1; i >= 0; i--) {
+      const entry = openTools[i];
+      if (entry.parent !== parentId || entry.node.result) continue;
+      if (!wanted || entry.node.name.toLowerCase() === wanted) return entry.node;
+    }
+    return undefined;
+  };
   const engineStderr = (parentId: string | undefined, seq: number, line: string) => {
-    // apply_patch writes the explanation over several adjacent stderr events. Keep those lines in
-    // one card while a continuation is expected; a timestamp starts a new logger record and stops
-    // the merge. Only durable sequence numbers are eligible, so live events with seq 0 stay apart.
+    // apply_patch writes the explanation over several stderr events. Once the first line is tied to
+    // a tool call, keep un-timestamped continuation lines on that card even if another tool_use was
+    // interleaved or the event sequence has a gap. A timestamp starts a new logger record.
+    if (lastStderr?.tool && lastStderr.continuing && !LEADING_TIMESTAMP.test(line)) {
+      const result = lastStderr.tool.result;
+      if (result) {
+        const previous = resultText(result.content);
+        lastStderr.tool.result = { ...result, content: `${previous}\n${line}` };
+        lastStderr.seq = seq;
+        return;
+      }
+      lastStderr = undefined;
+    }
     if (
       lastStderr &&
+      'error' in lastStderr &&
       seq > 0 &&
       lastStderr.seq + 1 === seq &&
       lastStderr.continuing &&
       !LEADING_TIMESTAMP.test(line)
     ) {
-      lastStderr.node.message += `\n${line}`;
+      lastStderr.error.message += `\n${line}`;
       lastStderr.seq = seq;
       return;
+    }
+    const failure = parseToolFailureSummary(line);
+    if (failure) {
+      const tool = unresolvedTool(failure.tool, parentId);
+      if (tool) {
+        tool.result = { content: line, isError: true, seq };
+        removeOpenTool(tool);
+        lastStderr = { tool, seq, continuing: canStartStderrContinuation(line) };
+        return;
+      }
     }
     const key = line.replace(LEADING_TIMESTAMP, '');
     const prev = stderrSeen.get(key);
     if (prev) {
       prev.repeats = (prev.repeats ?? 1) + 1;
-      lastStderr = { node: prev, seq, continuing: canStartStderrContinuation(line) };
+      lastStderr = { error: prev, seq, continuing: canStartStderrContinuation(line) };
       return;
     }
     const node: ErrorNode = { kind: 'error', seq, message: line };
     stderrSeen.set(key, node);
-    lastStderr = { node, seq, continuing: canStartStderrContinuation(line) };
+    lastStderr = { error: node, seq, continuing: canStartStderrContinuation(line) };
     into(parentId).push(node);
   };
 
@@ -609,7 +659,9 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   for (const ev of events) {
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
-    if (ev.type !== 'system') lastStderr = undefined;
+    // A tool_use/tool_result can sit between the first stderr line and its un-timestamped
+    // continuation. Other transcript events are a hard boundary for the pending log.
+    if (ev.type !== 'system' && ev.type !== 'tool_use' && ev.type !== 'tool_result') lastStderr = undefined;
     switch (ev.type) {
       case 'user': {
         outageOver();
@@ -754,6 +806,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           children: [],
         };
         if (node.id) byId.set(node.id, node);
+        openTools.push({ node, parent });
         into(parent).push(node);
         lastOpenTool = node;
         break;
@@ -764,6 +817,8 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           (lastOpenTool && !lastOpenTool.result ? lastOpenTool : undefined);
         if (t) {
           t.result = { content: p.content, isError: !!p.isError, seq: ev.seq, truncated: ev.truncated };
+          removeOpenTool(t);
+          if (lastStderr && 'tool' in lastStderr && lastStderr.tool === t) lastStderr = undefined;
           if (t === lastOpenTool) lastOpenTool = undefined;
         } else {
           into(parent).push({
@@ -1331,7 +1386,7 @@ function ToolFailureCard({
     <div className="chat-error-card" data-seq={node.seq}>
       <div className="chat-error-card-head">
         <ToolOutlined className="chat-error-card-icon" />
-        <strong>{summary.tool}</strong>
+        <strong>{summary.tool || 'Tool call'}</strong>
         <span className="chat-error-card-status">Failed</span>
         {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
       </div>
@@ -2833,7 +2888,10 @@ function leadToolSummary(desc: ToolDesc): { text: string; mono: boolean } | unde
   if (desc.path) return { text: relPath(desc.path), mono: true };
   if (desc.summary) return { text: desc.summary, mono: !!desc.summaryMono };
   if (desc.meta) return { text: desc.meta, mono: true };
-  return undefined;
+  // A generic tool can have no compact input summary (apply_patch is the common example when its
+  // input only carries a file list). Naming the tool is still more useful than a red row with no
+  // lead, and keeps the failed call discoverable inside the folded group.
+  return { text: desc.label, mono: false };
 }
 
 function ToolGroupStatus({ status }: { status: ToolGroupSummary['status'] }) {
@@ -2969,6 +3027,26 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
       };
     case 'Edit':
       return { label: 'Edit', icon: <EditOutlined />, tone: 'write', path: i.file_path, body: <Diff oldStr={i.old_string} newStr={i.new_string} /> };
+    case 'apply_patch': {
+      const files = Array.isArray(i.files)
+        ? i.files.filter((p: unknown): p is string => typeof p === 'string' && p.length > 0)
+        : [];
+      const patch = typeof i.patch === 'string' ? i.patch : typeof i.diff === 'string' ? i.diff : '';
+      return {
+        label: 'apply_patch',
+        icon: <EditOutlined />,
+        tone: 'write',
+        path: files[0],
+        meta: files.length > 1 ? `${files.length} files` : undefined,
+        body: patch
+          ? <Pre text={patch} threshold={16} />
+          : files.length
+            ? <KeyVals obj={{ files }} />
+            : hasKeys(i)
+              ? <KeyVals obj={i} />
+              : undefined,
+      };
+    }
     case 'MultiEdit':
       return {
         label: 'MultiEdit',
