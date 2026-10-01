@@ -9778,6 +9778,10 @@ button.chat-jump-start:hover {
 .coordinator-question .approval-body {
   background: var(--bg-raised);
   padding: 10px 14px 4px;
+  /* This card is read and answered top to bottom. Keep its body in the page flow so a
+     long question cannot turn the card itself into a nested scroll region. */
+  max-height: none;
+  overflow: visible;
 }
 .coordinator-question-text {
   margin: 2px 0 8px;
