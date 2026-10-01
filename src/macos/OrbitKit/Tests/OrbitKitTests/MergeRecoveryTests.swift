@@ -68,4 +68,39 @@ final class MergeRecoveryTests: XCTestCase {
         XCTAssertTrue(prompt.contains("owner will check"))
         XCTAssertTrue(recovery.repairPrompt(preparePR: true).contains("organize commits on a separate PR candidate"))
     }
+
+    /// The review sheet pins the step the state asks for, the other steps under it, and keeps
+    /// "Check again" in its header whenever checking isn't that step.
+    func testTheSheetPinsTheStepTheStateAsksFor() throws {
+        let check = MergeRecoveryButton(title: "Check again", action: .preview)
+        let resolve = MergeRecoveryButton(title: "Resolve in repair session", action: .repair(preparePR: false))
+        let preparePR = MergeRecoveryButton(title: "Prepare PR candidate", action: .repair(preparePR: true))
+
+        let ready = try decode(payload()).buttons(supported: true)
+        XCTAssertEqual(ready, MergeRecoveryButtons(
+            primary: MergeRecoveryButton(title: "Sync develop and merge", action: .apply),
+            secondary: [preparePR], headerCheck: check))
+        XCTAssertEqual(try decode(payload(["repairWorktree": NSNull()])).buttons(supported: true).secondary, [],
+                       "no repair worktree, no PR candidate to prepare")
+
+        XCTAssertEqual(try decode(["code": "TARGET_DIVERGED", "targetBranch": "develop"]).buttons(supported: true),
+                       MergeRecoveryButtons(primary: MergeRecoveryButton(title: "Check and repair", action: .preview),
+                                            secondary: [], headerCheck: nil),
+                       "not checked yet: checking is the step")
+        XCTAssertEqual(try decode(payload(["code": "PREVIEW_CHANGED"])).buttons(supported: true),
+                       MergeRecoveryButtons(primary: check, secondary: [resolve, preparePR], headerCheck: nil),
+                       "the title says check again, so that is the step")
+        XCTAssertEqual(try decode(payload(["code": "CONFLICT"])).buttons(supported: true),
+                       MergeRecoveryButtons(primary: resolve, secondary: [preparePR], headerCheck: check))
+        XCTAssertEqual(try decode(payload(["code": "PUSH_FAILED"])).buttons(supported: true),
+                       MergeRecoveryButtons(
+                           primary: MergeRecoveryButton(title: "Check result / retry reviewed candidate", action: .apply),
+                           secondary: [resolve, preparePR], headerCheck: check))
+        XCTAssertEqual(try decode(payload(["code": "LOCAL_SYNC_PENDING"])).buttons(supported: true),
+                       MergeRecoveryButtons(primary: MergeRecoveryButton(title: "Sync local checkout", action: .syncLocal),
+                                            secondary: [], headerCheck: nil))
+        XCTAssertEqual(try decode(payload()).buttons(supported: false),
+                       MergeRecoveryButtons(primary: nil, secondary: [], headerCheck: nil),
+                       "an older runner can't recover: nothing to press")
+    }
 }

@@ -11,7 +11,13 @@ import OrbitKit
 struct WorktreeBar: View {
     @Environment(AppModel.self) private var app
     let console: ConsoleModel
-    @State private var showDiff = false
+    /// The bar opens one sheet at a time — the session's diff, or the merge recovery's review — so
+    /// they share one `.sheet(item:)` host rather than stacking two `.sheet`s on the container.
+    private enum Sheet: String, Identifiable {
+        case diff, recovery
+        var id: String { rawValue }
+    }
+    @State private var sheet: Sheet?
     @State private var copied = false
 
     var body: some View {
@@ -37,7 +43,12 @@ struct WorktreeBar: View {
                 if let d, let branch = d.branch { pill(detail: d, branch: branch, files: files) }
             }
         }
-        .sheet(isPresented: $showDiff) { DiffSheet(console: console) }
+        .sheet(item: $sheet) { which in
+            switch which {
+            case .diff: DiffSheet(console: console)
+            case .recovery: MergeRecoverySheet(console: console)
+            }
+        }
     }
 
     // MARK: - shared-nogit nudge
@@ -82,46 +93,53 @@ struct WorktreeBar: View {
             ? WorktreeBarLogic.manualMergeCommand(mergeTarget: d.mergeTarget, branch: branch)
             : nil
 
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                // The whole branch + stat summary is the tap target that opens the diff — there's no
-                // separate chevron anymore (a lone › sitting right next to the merge caret's ⌄ read as a
-                // second dropdown, not "view diff"). Copy is the secondary action, so it moves to the
-                // long-press (right-click on macOS) context menu — a plain tap can no longer silently
-                // copy, and the Commit/Merge control stays its own target so a diff tap can't fire it.
-                branchSummary(branch: branch, add: add, del: del, count: files.count,
-                              committed: primary == .merge)
-                // The action button keeps its size (web `flex: none`); the branch/stat truncate first
-                // under narrow width.
-                switch primary {
-                case .commit: WorktreeCommitControl(console: console, detail: d, turnActive: turnActive).layoutPriority(2)
-                case .merge:  WorktreeMergeControl(console: console, detail: d, branch: branch).layoutPriority(2)
-                case .none:   EmptyView()
+        return VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    // The whole branch + stat summary is the tap target that opens the diff — there's no
+                    // separate chevron anymore (a lone › sitting right next to the merge caret's ⌄ read as a
+                    // second dropdown, not "view diff"). Copy is the secondary action, so it moves to the
+                    // long-press (right-click on macOS) context menu — a plain tap can no longer silently
+                    // copy, and the Commit/Merge control stays its own target so a diff tap can't fire it.
+                    branchSummary(branch: branch, add: add, del: del, count: files.count,
+                                  committed: primary == .merge)
+                    // The action button keeps its size (web `flex: none`); the branch/stat truncate first
+                    // under narrow width.
+                    switch primary {
+                    case .commit: WorktreeCommitControl(console: console, detail: d, turnActive: turnActive).layoutPriority(2)
+                    case .merge:  WorktreeMergeControl(console: console, detail: d, branch: branch).layoutPriority(2)
+                    case .none:   EmptyView()
+                    }
+                }
+                // Pin to the same 30pt collapsed-row height as the background tray below (web parity: both
+                // bars share `min-height: 30`) so the stack above the composer reads as one system — this 24
+                // plus the bar's 3pt insets. On the row, as web has it (`.wt-row`), not the whole bar: a
+                // `minHeight` frame takes any shorter height it's offered, so on the bar it let whatever the
+                // bar holds under the row spill out of it — over the transcript and under the composer.
+                .frame(minHeight: 24)
+                if let commitFailure {
+                    WorktreeCommitFailureView(console: console, failure: commitFailure, branch: branch)
+                        .id(d.commitError ?? "")
+                } else if d.mergeRecovery == nil, let failure {
+                    failureView(message: failure, manualMergeCommand: manualMergeCmd)
                 }
             }
-            // Pin to the same 30pt collapsed-row height as the background tray below (web parity: both
-            // bars share `min-height: 30`) so the stack above the composer reads as one system — this 24
-            // plus the bar's 3pt insets. On the row, as web has it (`.wt-row`), not the whole bar: a
-            // `minHeight` frame takes any shorter height it's offered, so on the bar it let a recovery
-            // card taller than the band's share spill out — over the transcript and under the composer.
-            .frame(minHeight: 24)
-            if let commitFailure {
-                WorktreeCommitFailureView(console: console, failure: commitFailure, branch: branch)
-                    .id(d.commitError ?? "")
-            } else if let recovery = d.mergeRecovery {
-                MergeRecoveryView(console: console, recovery: recovery, message: d.mergeError,
-                                  supported: d.mergeRecoverySupported == true,
-                                  busy: console.worktree.busy || turnActive || d.mergeStatus == "pending")
-            } else if let failure {
-                failureView(message: failure, manualMergeCommand: manualMergeCmd)
+            .padding(.horizontal, 10).padding(.vertical, 3)
+            // A merge held for target recovery is the bar's second row: what holds it, one line, and
+            // the review behind it in a sheet — never the review itself, which is taller than the band
+            // can give on a phone. The row is the recovery's only way in; the merge slot above gives
+            // way to it.
+            if commitFailure == nil, let recovery = d.mergeRecovery {
+                Divider()
+                MergeRecoveryRow(recovery: recovery, working: d.mergeStatus == "pending") { sheet = .recovery }
             }
         }
-        .padding(.horizontal, 10).padding(.vertical, 3)
         // The same subtle tint the tray uses, NOT `.bar`: the two are peers in the stack and have to
         // read as one surface (web parity: `.wt-bar` and `.bg-tray` are both `--bg-subtle`). This
         // fill is also what lets the pill stand on the bare content backdrop now that `ComposerBand`
         // carries no surface of its own.
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
         .padding(.bottom, .composerBandGap)
     }
@@ -137,7 +155,7 @@ struct WorktreeBar: View {
             .layoutPriority(1)
             .contextMenu { copyBranchButton(branch) }
         } else {
-            Button { showDiff = true } label: {
+            Button { sheet = .diff } label: {
                 HStack(spacing: 8) {
                     branchLabel(branch)
                     statView(add: add, del: del, count: count, committed: committed)
@@ -272,13 +290,10 @@ private struct WorktreeMergeControl: View {
 
         if diverged, let wb = detail.worktreeBranch {
             adoptControl(worktreeBranch: wb, busy: busy)
-        } else if let recovery = detail.mergeRecovery, detail.mergeRecoverySupported == true {
-            WTPillButton(title: status == "pending" ? "Working…" : recovery.code == "LOCAL_SYNC_PENDING"
-                         ? "Sync local checkout" : "Check and repair", disabled: busy || status == "pending") {
-                Task { await console.worktree.recoverMerge(
-                    action: recovery.code == "LOCAL_SYNC_PENDING" ? "sync-local" : "preview",
-                    previewID: recovery.previewId) }
-            }
+        } else if detail.mergeRecovery != nil, detail.mergeRecoverySupported == true {
+            // The recovery's steps live in its review sheet, opened from the bar's second row — a
+            // button here would be a second way into the same thing.
+            EmptyView()
         } else if status == "merged" {
             let elsewhere = detail.mergeTarget != nil && detail.mergeTarget != "main" && detail.mergeTarget != "master"
             WTChip(title: "✓ Merged" + (elsewhere ? " → \(detail.mergeTarget!)" : ""))
@@ -638,7 +653,8 @@ struct DiffSheet: View {
 }
 
 /// One row in the changed-file list: git status letter + path (dir dimmed) + `+/−` stat (or binary).
-private struct DiffFileRow: View {
+/// The merge recovery sheet lists its candidate diff with it too, so a diff has one look in the app.
+struct DiffFileRow: View {
     let file: SessionChangedFile
 
     var body: some View {
@@ -678,7 +694,7 @@ private struct DiffFileRow: View {
 
 /// One file's unified diff, colored per line (add green / del red / hunk dimmed). The patch text is
 /// read live off the console so it appears the moment the lazy `/diff` fetch lands.
-private struct DiffFileView: View {
+struct DiffFileView: View {
     let console: ConsoleModel
     let file: SessionChangedFile
 
@@ -726,7 +742,8 @@ private struct DiffFileView: View {
 
     /// Build a per-line colored `AttributedString` from a unified diff, dropping git file-header
     /// noise (mirrors web's `parseUnifiedDiff`). Returns whether it was trimmed at the line cap.
-    private static func colorize(_ patch: String) -> (AttributedString, Bool) {
+    /// Also draws each file of a merge recovery's candidate diff.
+    static func colorize(_ patch: String) -> (AttributedString, Bool) {
         var out = AttributedString()
         var count = 0
         var trimmed = false

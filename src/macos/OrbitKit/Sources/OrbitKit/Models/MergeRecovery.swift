@@ -7,6 +7,41 @@ public struct MergeRecoveryCommit: Codable, Equatable, Sendable {
     public let date: String
 }
 
+/// One button of the merge-recovery review sheet.
+public struct MergeRecoveryButton: Equatable, Sendable, Identifiable {
+    public enum Action: Equatable, Sendable {
+        /// Fetch and preview the candidate again (runner `preview`).
+        case preview
+        /// Push the reviewed candidate (runner `apply`).
+        case apply
+        /// Bring this machine's checkout up to the target that landed (runner `sync-local`).
+        case syncLocal
+        /// Start a repair session — to resolve the recovery, or to prepare a PR candidate.
+        case repair(preparePR: Bool)
+    }
+    public let title: String
+    public let action: Action
+    public var id: String { title }
+    public init(title: String, action: Action) {
+        self.title = title
+        self.action = action
+    }
+}
+
+/// What the review sheet offers in a state: the step the state asks for (prominent, pinned at the
+/// sheet's foot), the other steps pinned under it, and checking again as the header's link
+/// whenever checking isn't the step itself.
+public struct MergeRecoveryButtons: Equatable, Sendable {
+    public let primary: MergeRecoveryButton?
+    public let secondary: [MergeRecoveryButton]
+    public let headerCheck: MergeRecoveryButton?
+    public init(primary: MergeRecoveryButton?, secondary: [MergeRecoveryButton], headerCheck: MergeRecoveryButton?) {
+        self.primary = primary
+        self.secondary = secondary
+        self.headerCheck = headerCheck
+    }
+}
+
 public struct MergeRecovery: Codable, Equatable, Sendable {
     public struct Check: Codable, Equatable, Sendable {
         public let status: String
@@ -54,6 +89,34 @@ public struct MergeRecovery: Codable, Equatable, Sendable {
         if code == "FETCH_FAILED" { return "Could not check the remote" }
         if ["PUSH_FAILED", "REMOTE_NOT_VERIFIED"].contains(code) { return "Could not confirm the target push" }
         return "\(targetBranch) needs synchronization"
+    }
+
+    /// The review sheet's buttons — the same steps, titles and gates the inline card had (and web's
+    /// `MergeRecoveryPanel` has), arranged around the one the state asks for. An older runner can't
+    /// recover, so it gets none.
+    public func buttons(supported: Bool) -> MergeRecoveryButtons {
+        guard supported else { return MergeRecoveryButtons(primary: nil, secondary: [], headerCheck: nil) }
+        if code == "LOCAL_SYNC_PENDING" {
+            return MergeRecoveryButtons(primary: MergeRecoveryButton(title: "Sync local checkout", action: .syncLocal),
+                                        secondary: [], headerCheck: nil)
+        }
+        let check = MergeRecoveryButton(title: previewId == nil ? "Check and repair" : "Check again", action: .preview)
+        let resolve = MergeRecoveryButton(title: "Resolve in repair session", action: .repair(preparePR: false))
+        let preparePR = MergeRecoveryButton(title: "Prepare PR candidate", action: .repair(preparePR: true))
+        let repairs = repairWorktree == nil ? [] : ready ? [preparePR] : [resolve, preparePR]
+        if ready {
+            return MergeRecoveryButtons(primary: MergeRecoveryButton(title: "Sync \(targetBranch) and merge", action: .apply),
+                                        secondary: repairs, headerCheck: check)
+        }
+        if ["PUSH_FAILED", "REMOTE_NOT_VERIFIED"].contains(code) {
+            return MergeRecoveryButtons(
+                primary: MergeRecoveryButton(title: "Check result / retry reviewed candidate", action: .apply),
+                secondary: repairs, headerCheck: check)
+        }
+        if code == "CONFLICT", repairWorktree != nil {
+            return MergeRecoveryButtons(primary: resolve, secondary: [preparePR], headerCheck: check)
+        }
+        return MergeRecoveryButtons(primary: check, secondary: repairs, headerCheck: nil)
     }
 
     public func repairPrompt(preparePR: Bool) -> String {

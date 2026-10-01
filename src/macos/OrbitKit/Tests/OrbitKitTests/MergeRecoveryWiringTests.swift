@@ -2,8 +2,9 @@ import Foundation
 import XCTest
 
 /// SwiftUI doesn't exist on Linux, so nothing here compiles the app shell — CI's `client.yml` does.
-/// These hold the branch bar's merge-recovery card to its layout in the source instead: the card stays
-/// inside the bar, and the bar inside the band above the composer, however little room the band has.
+/// These hold the merge recovery's review to its place in the source instead: one row on the branch
+/// bar, the review itself in a full-height sheet — never inside the band above the composer, which
+/// has no room for it on a phone.
 /// Each check reads the slice of the file it's about, so a match somewhere else can't pass it.
 final class MergeRecoveryWiringTests: XCTestCase {
     private struct SourceMissing: Error, CustomStringConvertible {
@@ -44,23 +45,24 @@ final class MergeRecoveryWiringTests: XCTestCase {
     }
 
     /// The owner's report, 2026-10-01: on a phone a ready candidate — its commits, its diff, three
-    /// actions — is taller than the band's share, and it drew past the bar it sits in, over the
-    /// transcript above and under the composer below. The card scrolls inside past a cap, above a
-    /// floor, as the band's other cards do; and the bar never takes a height shorter than it holds.
-    func testTheRecoveryCardStaysInsideTheBar() throws {
-        let card = code(try source("Views/MergeRecoveryView.swift"))
-        let body = try slice(card, from: "var body: some View {", to: "\n    }")
-        XCTAssertTrue(body.contains("ViewThatFits(in: .vertical) {"),
-                      "the card stands at its natural height only where that fits")
-        XCTAssertTrue(body.contains("ScrollView { card }"), "and scrolls inside where it doesn't…")
-        XCTAssertTrue(body.contains(".frame(minHeight: Self.heightFloor, maxHeight: Self.heightCap)"),
-                      "…past a cap, above a floor")
+    /// actions — is taller than the band's share, and it drew past the bar it sat in, over the
+    /// transcript above and under the composer below. The review now lives in a full-height system
+    /// sheet (the owner's pick of three: no half height), opened from one row on the bar.
+    func testTheReviewLivesInAFullHeightSheetOpenedFromTheBar() throws {
+        let bar = code(try source("Views/WorktreeBar.swift"))
+        XCTAssertFalse(bar.contains("MergeRecoveryView("), "the review is never drawn inside the bar")
+        XCTAssertTrue(bar.contains(
+            "MergeRecoveryRow(recovery: recovery, working: d.mergeStatus == \"pending\") { sheet = .recovery }"),
+                      "one row on the bar opens it…")
+        XCTAssertTrue(bar.contains("case .recovery: MergeRecoverySheet(console: console)"), "…as the bar's sheet")
+        let mergeSlot = try slice(bar, from: "private struct WorktreeMergeControl", to: "private func adoptControl")
+        XCTAssertFalse(mergeSlot.contains("Check and repair"), "the merge slot gives way to that row: one way in")
 
-        // The card is drawn twice, whole and scrolling; a section that kept its own open state would
-        // be shut in the scrolling copy the moment opening it tipped the card over.
-        XCTAssertEqual(card.components(separatedBy: "DisclosureGroup(").count - 1,
-                       card.components(separatedBy: "isExpanded: isOpen(").count - 1,
-                       "every section opens through the card's one record of what is open")
+        let sheet = code(try source("Views/MergeRecoverySheet.swift"))
+        XCTAssertFalse(sheet.contains("presentationDetents"),
+                       "full height only — no half height, so no floating glass on iOS 26")
+        XCTAssertTrue(sheet.contains(".safeAreaInset(edge: .bottom"), "its step is pinned, reachable without scrolling")
+        XCTAssertTrue(sheet.contains("r.buttons(supported: supported)"), "and its steps are MergeRecovery.buttons'")
 
         let pill = code(try slice(source("Views/WorktreeBar.swift"),
                                   from: "private func pill(", to: ".padding(.bottom, .composerBandGap)"))
