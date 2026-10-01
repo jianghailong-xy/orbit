@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { MergeRecovery } from '@orbit/shared';
+import type { MergeRepairSession } from '../api';
 import { MergeRecoveryPanel } from './MergeRecoveryPanel';
 
 const reviewed: MergeRecovery = {
@@ -21,14 +22,16 @@ afterEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 });
 
-async function mount(recovery = reviewed, busy = false, supported = true) {
+async function mount(recovery = reviewed, busy = false, supported = true,
+  repairSession?: MergeRepairSession, repairStarting = false) {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   container = document.createElement('div'); document.body.appendChild(container);
   root = createRoot(container);
-  const action = vi.fn(); const repair = vi.fn();
+  const action = vi.fn(); const repair = vi.fn(); const openRepair = vi.fn();
   await act(async () => root!.render(<MergeRecoveryPanel recovery={recovery} message="actual runner detail"
-    busy={busy} supported={supported} onAction={action} onRepair={repair} />));
-  return { element: container, action, repair };
+    busy={busy} supported={supported} onAction={action} onRepair={repair}
+    repairSession={repairSession} repairStarting={repairStarting} onOpenRepair={openRepair} />));
+  return { element: container, action, repair, openRepair };
 }
 const button = (el: Element, label: RegExp) => [...el.querySelectorAll('button')].find((b) => label.test(b.textContent ?? ''));
 
@@ -72,4 +75,25 @@ it('an older runner retains the diagnostic and cannot receive new recovery actio
   const h = await mount({ code: 'TARGET_DIVERGED', targetBranch: 'develop' }, false, false);
   expect(h.element.textContent).toContain('Update the runner');
   expect(h.element.querySelector('button')).toBeNull();
+});
+
+it('keeps a running repair session tappable and prevents a duplicate repair', async () => {
+  const h = await mount({ ...reviewed, code: 'CONFLICT', phase: 'TARGET_SYNC' }, false, true, {
+    id: 'repair-session', title: 'Resolve merge recovery', status: 'RUNNING', runState: 'RUNNING',
+  });
+  expect(h.element.textContent).toContain('Repair session running');
+  expect(h.element.textContent).toContain('Tap to open the running session');
+  await act(async () => button(h.element, /Repair session running/)!.click());
+  expect(h.openRepair).toHaveBeenCalledOnce();
+  expect(button(h.element, /^Resolve in repair session$/)?.disabled).toBe(true);
+  expect(button(h.element, /^Prepare PR candidate$/)?.disabled).toBe(true);
+});
+
+it('renders the latest repair result after the child session settles', async () => {
+  const h = await mount({ ...reviewed, code: 'CONFLICT', phase: 'TARGET_SYNC' }, false, true, {
+    id: 'repair-session', title: 'Resolve merge recovery', status: 'AWAITING_INPUT', runState: 'AWAITING_INPUT',
+  });
+  expect(h.element.textContent).toContain('Repair session completed');
+  expect(h.element.textContent).toContain('Ready to check again');
+  expect(button(h.element, /^Resolve in repair session$/)?.disabled).toBe(false);
 });

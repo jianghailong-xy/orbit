@@ -68,8 +68,10 @@ final class WorktreeModel {
         await loadDetail()
         while !Task.isCancelled {
             let pending = detail?.mergeStatus == "pending" || detail?.commitStatus == "pending"
+            let repairRunning = detail?.mergeRepairSession?.effectiveRunState == .queued
+                || detail?.mergeRepairSession?.effectiveRunState == .running
             let live = isSessionLive()
-            guard pending || live else {
+            guard pending || live || repairRunning else {
                 // Settled + terminal: nothing to fetch. Wait, then re-evaluate — an action that sets
                 // pending (below) will make the next pass enter the 3s outcome poll.
                 try? await Task.sleep(nanoseconds: 3_000_000_000)
@@ -177,13 +179,11 @@ final class WorktreeModel {
     }
 
     func repairRecovery(preparePR: Bool) async -> String? {
-        guard let recovery = detail?.mergeRecovery,
-              let workspaceID = (detail?.workspace ?? detail?.agent)?.id else { return nil }
         busy = true
         defer { busy = false }
         do {
-            let session = try await api.createSession(CreateSessionRequest(
-                prompt: recovery.repairPrompt(preparePR: preparePR), agentId: workspaceID))
+            let session = try await api.createMergeRepair(sessionID: sessionID, preparePR: preparePR)
+            await loadDetail()
             return session.id
         } catch { onOutcome(Self.failure("Could not start repair session", error: error)); return nil }
     }

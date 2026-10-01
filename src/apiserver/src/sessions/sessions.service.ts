@@ -1,4 +1,4 @@
-import { SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryReady, type MergeRecoveryAction } from '@orbit/shared';
+import { SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryPrompt, mergeRecoveryReady, type MergeRecoveryAction } from '@orbit/shared';
 import {
   BadRequestException,
   ConflictException,
@@ -3068,6 +3068,28 @@ export class SessionsService {
           where: { revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
           select: { token: true, createdAt: true },
         },
+        // A merge recovery can hand work to a dedicated repair conversation. Keep only the newest
+        // repair child on the parent detail so the status card can follow it without loading the
+        // owner's whole session list. The source marker is server-owned by startMergeRepair.
+        children: {
+          where: { ownerId, source: 'merge-repair', deletedAt: null },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: {
+            id: true,
+            title: true,
+            status: true,
+            endReason: true,
+            completedAt: true,
+            archivedAt: true,
+            deletedAt: true,
+            error: true,
+            createdAt: true,
+            startedAt: true,
+            finishedAt: true,
+            lastTurnAt: true,
+          },
+        },
       },
     });
     if (!session) throw new NotFoundException('session not found');
@@ -3097,6 +3119,7 @@ export class SessionsService {
       tagLinks,
       coordinatorForProject,
       shareLinks,
+      children,
       // The retired columns (0306): never written since, so what they hold is at best stale.
       shareToken: _retiredShareToken,
       sharedAt: _retiredSharedAt,
@@ -3115,6 +3138,7 @@ export class SessionsService {
       .sort((a, b) => Number(b.isSystem) - Number(a.isSystem) || a.position - b.position);
     return withSessionCapabilities({
       ...rest,
+      mergeRepairSession: children[0] ? withSessionState(children[0]) : null,
       mergeRecoverySupported: session.assignedRunner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1) ?? false,
       tags,
       // Both shapes of the same fact, because the two faces of the API have always differed here:
@@ -3131,6 +3155,54 @@ export class SessionsService {
       shareToken: shareLinks?.[0]?.token ?? null,
       sharedAt: shareLinks?.[0]?.createdAt ?? null,
     });
+  }
+
+  /**
+   * Start the repair conversation owned by a merge recovery. The parent link is written by the
+   * server so the original session can show the child's live/terminal state after navigation or a
+   * reload. A live child is reused, which makes repeated taps idempotent; a terminal child remains
+   * visible as the last result and a later explicit tap may start a fresh attempt.
+   */
+  async startMergeRepair(ownerId: string, id: string, preparePR = false) {
+    const parent = await this.prisma.session.findFirst({
+      where: { id, ownerId, deletedAt: null },
+      select: {
+        id: true,
+        workspaceId: true,
+        assignedRunnerId: true,
+        provider: true,
+        mergeRecovery: true,
+      },
+    });
+    if (!parent) throw new NotFoundException('session not found');
+    const recovery = readMergeRecovery(parent.mergeRecovery);
+    if (!recovery || !parent.workspaceId) {
+      throw new ConflictException('no merge recovery is available for this session');
+    }
+
+    const existing = await this.prisma.session.findFirst({
+      where: {
+        ownerId,
+        parentSessionId: parent.id,
+        source: 'merge-repair',
+        deletedAt: null,
+        status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (existing) return withSessionState(existing);
+
+    const created = await this.create(
+      ownerId,
+      {
+        workspaceId: parent.workspaceId,
+        assignedRunnerId: parent.assignedRunnerId ?? undefined,
+        provider: parent.provider ?? undefined,
+        prompt: mergeRecoveryPrompt(recovery, preparePR),
+      },
+      { source: 'merge-repair', parentSessionId: parent.id },
+    );
+    return withSessionState(created);
   }
 
   /**

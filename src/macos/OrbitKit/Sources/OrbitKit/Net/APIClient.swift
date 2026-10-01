@@ -244,6 +244,11 @@ public final class APIClient: @unchecked Sendable {
         try await post("sessions", body: req)
     }
 
+    /// Start (or return) the server-owned repair conversation attached to a merge recovery.
+    public func createMergeRepair(sessionID: String, preparePR: Bool = false) async throws -> Session {
+        try await post("sessions/\(sessionID)/merge-repair", body: MergeRepairRequest(preparePR: preparePR))
+    }
+
     public func sendTurn(sessionID: String, _ req: SessionTurnRequest) async throws -> TurnAccepted {
         try await post("sessions/\(sessionID)/turns", body: req)
     }

@@ -57,6 +57,8 @@ export function SessionOutputs({
   onMergeToMain,
   onRecoverMerge,
   onRepairRecovery,
+  onOpenRepair,
+  repairStarting,
   merging,
   onResolveInSession,
   resolving,
@@ -92,6 +94,8 @@ export function SessionOutputs({
   merging?: boolean;
   onRecoverMerge?: (action: MergeRecoveryAction, previewId?: string) => void;
   onRepairRecovery?: (preparePr: boolean) => void;
+  onOpenRepair?: () => void;
+  repairStarting?: boolean;
   /** Provided by the parent; on a conflict, resumes the session so its workspace rebases the branch
    *  onto the merge target and resolves the conflicts (after which the merge fast-forwards).
    *  Receives the branch that conflicted, so the workspace rebases onto the right one. */
@@ -273,7 +277,12 @@ export function SessionOutputs({
       {detail.mergeRecovery && <MergeRecoveryPanel recovery={detail.mergeRecovery}
         message={detail.mergeError}
         supported={detail.mergeRecoverySupported === true}
-        busy={!!merging || !!turnActive || detail.mergeStatus === 'pending'} onAction={onRecoverMerge} onRepair={onRepairRecovery} />}
+        busy={!!merging || !!turnActive || detail.mergeStatus === 'pending'}
+        onAction={onRecoverMerge}
+        onRepair={onRepairRecovery}
+        repairSession={detail.mergeRepairSession}
+        repairStarting={repairStarting}
+        onOpenRepair={onOpenRepair} />}
       {failed && (!detail.mergeRecovery || detail.commitStatus === 'error') && (
         <div className="wt-merge wt-bar-fail">
           {detail.commitStatus === 'error' ? (

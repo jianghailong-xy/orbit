@@ -1,4 +1,4 @@
-import { mergeRecoveryPrompt, type MergeRecoveryAction } from '@orbit/shared';
+import { type MergeRecoveryAction } from '@orbit/shared';
 import {
   ArrowDownOutlined,
   ArrowLeftOutlined,
@@ -195,6 +195,7 @@ import {
   cancelQueuedTurn,
   adoptSessionBranch,
   commitSession,
+  createMergeRepairSession,
   createInteractiveSession,
   decideApproval,
   deleteSession,
@@ -2164,6 +2165,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         (detail.mergeStatus === 'pending' || detail.commitStatus === 'pending')
       )
         return 3000;
+      const repairState = detail?.mergeRepairSession?.runState
+        ?? detail?.mergeRepairSession?.runStatus
+        ?? detail?.mergeRepairSession?.status;
+      if (['PENDING', 'QUEUED', 'RUNNING'].includes(String(repairState).toUpperCase())) return 3000;
       // A deep-linked/Completed ENDING row may already be absent from the Open list. Keep polling
       // its own current detail until terminal instead of relying solely on selectedFromList.
       return shouldPollSessionDetail(selectedId, detail, selectedFromList) ? 5000 : false;
@@ -5371,17 +5376,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   });
   const repairRecoveryMut = useMutation({
     mutationFn: (preparePr: boolean) => {
-      if (!detailForSelected?.mergeRecovery || !detailForSelected.workspace?.id) throw new Error('No repair context');
-      return createInteractiveSession({
-        workspaceId: detailForSelected.workspace.id,
-        assignedRunnerId: detailForSelected.assignedRunnerId ?? undefined,
-        provider: detailForSelected.provider ?? undefined,
-        prompt: mergeRecoveryPrompt(detailForSelected.mergeRecovery, preparePr),
-      });
+      if (!selectedId || !detailForSelected?.mergeRecovery) throw new Error('No repair context');
+      return createMergeRepairSession(selectedId, preparePr);
     },
     onSuccess: (session) => {
-      message.sessionNotice({ sessionId: session.id, sessionTitle: 'Merge repair', event: 'merge-repair',
-        headline: 'Repair session started', detail: 'Return to the original session to check and review the completed repair.', tone: 'info' });
+      if (selectedId) {
+        qc.setQueryData<any>(['session', selectedId], (old: any) =>
+          old ? { ...old, mergeRepairSession: session } : old,
+        );
+        void qc.invalidateQueries({ queryKey: ['session', selectedId], exact: true });
+      }
+      message.sessionNotice({ sessionId: session.id, sessionTitle: session.title ?? 'Merge repair', event: 'merge-repair',
+        headline: 'Repair session started', detail: 'Opening the repair session.', tone: 'info' });
+      navigate(`/sessions/${encodeId(session.id)}`);
       void qc.invalidateQueries({ queryKey: ['sessions'] });
     },
     onError: (e: Error) => message.error(e.message),
@@ -8345,6 +8352,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             recoveryAction, previewId,
           }) : undefined}
           onRepairRecovery={(preparePr) => repairRecoveryMut.mutate(preparePr)}
+          repairStarting={repairRecoveryMut.isPending}
+          onOpenRepair={detailForSelected?.mergeRepairSession ? () => navigate(`/sessions/${encodeId(detailForSelected.mergeRepairSession!.id)}`) : undefined}
           resolving={resolveMut.isPending}
           onResolveInSession={
             selectedId && detailForSelected?.branch

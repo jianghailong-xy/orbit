@@ -834,6 +834,12 @@ public struct CreateSessionRequest: Codable, Sendable {
     }
 }
 
+/// POST /sessions/:id/merge-repair — the server derives the prompt from the current recovery.
+public struct MergeRepairRequest: Codable, Sendable {
+    public let preparePR: Bool
+    public init(preparePR: Bool = false) { self.preparePR = preparePR }
+}
+
 /// The durable approval record (GET /sessions/:id/approvals). Distinct from the live
 /// `approval_request` SSE nudge; this is the source of truth on (re)connect.
 public struct ApprovalInfo: Codable, Equatable, Sendable, Identifiable {
@@ -959,6 +965,25 @@ public struct SessionDetailAgent: Codable, Equatable, Sendable {
     }
 }
 
+/// The newest repair conversation attached to a merge recovery. It is projected onto the parent
+/// detail so the review sheet can keep showing live progress after the app navigates away.
+public struct MergeRepairSession: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let title: String?
+    public let status: RunStatus?
+    public let runStatus: RunStatus?
+    public let sessionState: SessionState?
+    public let runState: SessionRunState?
+    public let lifecycleState: SessionLifecycleState?
+    public let error: String?
+    public let completedAt: String?
+
+    public var effectiveRunStatus: RunStatus? { runStatus ?? status }
+    public var effectiveRunState: SessionRunState? {
+        SessionRunState.resolveOptional(runState, legacy: sessionState, status: effectiveRunStatus)
+    }
+}
+
 /// GET /sessions/:id — a single session's detail. Only the worktree-status-bar fields are typed
 /// (Codable ignores the rest of the payload); they mirror the same-named fields on web's
 /// `SessionDetail` and drive `WorktreeBarLogic`. The runner reports the live state each heartbeat
@@ -990,6 +1015,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public let mergeStatus: String?
     public let mergeError: String?
     public let mergeRecovery: MergeRecovery?
+    public let mergeRepairSession: MergeRepairSession?
     public let mergeRecoverySupported: Bool?
     public let workspace: SessionDetailAgent?
     /// The branch the last merge targeted (nil = the runner's auto-detected default).
@@ -1051,6 +1077,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         mergeStatus = try values.decodeIfPresent(String.self, forKey: .mergeStatus)
         mergeError = try values.decodeIfPresent(String.self, forKey: .mergeError)
         mergeRecovery = try values.decodeIfPresent(MergeRecovery.self, forKey: .mergeRecovery)
+        mergeRepairSession = try values.decodeIfPresent(MergeRepairSession.self, forKey: .mergeRepairSession)
         mergeRecoverySupported = try values.decodeIfPresent(Bool.self, forKey: .mergeRecoverySupported)
         workspace = try values.decodeIfPresent(SessionDetailAgent.self, forKey: .workspace)
         mergeTarget = try values.decodeIfPresent(String.self, forKey: .mergeTarget)
@@ -1074,6 +1101,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 changedFiles: [SessionChangedFile]? = nil, worktreeDirty: Bool? = nil,
                 mergeStatus: String? = nil, mergeError: String? = nil, mergeTarget: String? = nil,
                 mergeRecovery: MergeRecovery? = nil, mergeRecoverySupported: Bool? = nil,
+                mergeRepairSession: MergeRepairSession? = nil,
                 workspace: SessionDetailAgent? = nil,
                 mergeTargets: [String]? = nil, branchMerged: Bool? = nil, worktreeBranch: String? = nil,
                 commitStatus: String? = nil, commitError: String? = nil,
@@ -1094,6 +1122,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.mergeStatus = mergeStatus
         self.mergeError = mergeError
         self.mergeRecovery = mergeRecovery
+        self.mergeRepairSession = mergeRepairSession
         self.mergeRecoverySupported = mergeRecoverySupported
         self.workspace = workspace
         self.mergeTarget = mergeTarget

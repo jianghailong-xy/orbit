@@ -89,13 +89,18 @@ struct MergeRecoverySheet: View {
         let turnActive = (app.session(id: console.sessionID)?.effectiveRunStatus ?? console.sessionStatus) == .running
         // Working = the recovery itself is running; a turn in flight only holds the steps back.
         let working = console.worktree.busy || d.mergeStatus == "pending"
-        let blocked = working || turnActive
+        let repairRunning = d.mergeRepairSession?.effectiveRunState == .queued
+            || d.mergeRepairSession?.effectiveRunState == .running
+        let blocked = working || turnActive || repairRunning
         let buttons = r.buttons(supported: supported)
         let close = { dismiss() }
         let target = r.targetBranch
         return List {
             Section { header(r, check: buttons.headerCheck, working: working, blocked: blocked) }
                 .listRowBackground(Color.clear)
+            if let repair = d.mergeRepairSession {
+                Section { repairStatus(repair, target: r.targetBranch) }
+            }
             if let message = d.mergeError, !r.ready {
                 Section {
                     NavigationLink("Details") { RecoveryTextPage(title: "Details", text: message, close: close) }
@@ -214,6 +219,48 @@ struct MergeRecoverySheet: View {
             return "The remote contains the reviewed candidate. Save blocking local edits before syncing; this action only updates this machine."
         default: return nil
         }
+    }
+
+    @ViewBuilder
+    private func repairStatus(_ repair: MergeRepairSession, target: String) -> some View {
+        let running = repair.effectiveRunState == .queued || repair.effectiveRunState == .running
+        let failed = repair.effectiveRunState == .failed
+        Button {
+            app.openProjectCoordinator(sessionID: repair.id, agentID: console.worktree.detail?.workspace?.id)
+        } label: {
+            HStack(spacing: 10) {
+                if running {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: failed ? "xmark.circle.fill" : "checkmark.circle.fill")
+                        .foregroundStyle(failed ? .red : .green)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(running ? "Repair session running" : failed ? "Repair session failed" : "Repair session completed")
+                        .font(.orbitLabel.weight(.semibold))
+                    Text(repair.title ?? "Resolve merge recovery for \(target)")
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    if running {
+                        Text("Tap to open the running session")
+                            .font(.orbitMeta)
+                            .foregroundStyle(.secondary)
+                    } else if !failed {
+                        Text("Ready to check again")
+                            .font(.orbitMeta)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.orbitMeta.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens the repair session")
     }
 
     // MARK: - check

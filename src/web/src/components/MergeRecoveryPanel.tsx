@@ -1,16 +1,24 @@
 import { mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction } from '@orbit/shared';
+import type { MergeRepairSession } from '../api';
 
-export function MergeRecoveryPanel({ recovery: r, message, busy, supported, onAction, onRepair }: {
+export function MergeRecoveryPanel({ recovery: r, message, busy, supported, onAction, onRepair,
+  repairSession, repairStarting, onOpenRepair }: {
   recovery: MergeRecovery;
   message?: string | null;
   busy: boolean;
   supported: boolean;
   onAction?: (action: MergeRecoveryAction, previewId?: string) => void;
   onRepair?: (preparePr: boolean) => void;
+  repairSession?: MergeRepairSession | null;
+  repairStarting?: boolean;
+  onOpenRepair?: () => void;
 }) {
   const ready = mergeRecoveryReady(r);
   const pendingLocal = r.code === 'LOCAL_SYNC_PENDING';
   const retry = ['PUSH_FAILED', 'REMOTE_NOT_VERIFIED'].includes(r.code);
+  const repairRunState = (repairSession?.runState ?? repairSession?.runStatus ?? repairSession?.status ?? '').toUpperCase();
+  const repairRunning = ['PENDING', 'QUEUED', 'RUNNING'].includes(repairRunState) || repairStarting;
+  const repairFailed = repairRunState === 'FAILED';
   const title = pendingLocal ? `Merged into origin/${r.targetBranch}; local sync pending`
     : ready ? `Review synchronization into ${r.targetBranch}`
     : r.code === 'CONFLICT' ? (r.phase === 'TARGET_SYNC' ? `${r.targetBranch} synchronization has conflicts` : 'Your changes conflict with the synchronized target')
@@ -24,6 +32,17 @@ export function MergeRecoveryPanel({ recovery: r, message, busy, supported, onAc
     {r.code === 'TARGET_DIVERGED' && <p>Local {r.targetBranch} and origin/{r.targetBranch} each have unique commits.</p>}
     {r.code === 'TARGET_AHEAD' && <p>Local {r.targetBranch} has extra commits that are not on origin/{r.targetBranch}. Review them before continuing this merge.</p>}
     {message && !ready && <details><summary>Details</summary><pre>{message}</pre></details>}
+    {repairSession && onOpenRepair && <button type="button" className={`wt-recovery-repair-status${repairRunning ? ' is-running' : repairFailed ? ' is-failed' : ' is-complete'}`}
+      onClick={onOpenRepair} aria-label={repairRunning ? 'Open running repair session' : 'Open repair session'}>
+      <span className="wt-recovery-repair-status-copy">
+        <strong>{repairRunning ? 'Repair session running' : repairFailed ? 'Repair session failed' : 'Repair session completed'}</strong>
+        <small>{repairSession.title ?? `Resolve merge recovery for ${r.targetBranch}`}</small>
+      </span>
+      <span aria-hidden="true" className="wt-recovery-repair-chevron">›</span>
+    </button>}
+    {repairSession && repairRunning && <p className="wt-recovery-repair-hint">Tap to open the running session</p>}
+    {repairSession && !repairRunning && !repairFailed && <p className="wt-recovery-repair-hint">Ready to check again</p>}
+    {repairSession && repairFailed && repairSession.error && <p className="wt-recovery-repair-error">{repairSession.error}</p>}
     {!r.previewId && <p>Check the local and remote commits before continuing the merge.</p>}
     {r.localCommits && <div className="wt-recovery-histories">
       <details open><summary>Local-only commits ({r.localCommits.length}) — included in the push</summary>
@@ -49,8 +68,8 @@ export function MergeRecoveryPanel({ recovery: r, message, busy, supported, onAc
           {retry && <button type="button" disabled={busy} onClick={() => onAction('apply', r.previewId)}>Check result / retry reviewed candidate</button>}
         </>)}
       {r.repairWorktree && onRepair && !pendingLocal && <>
-        {r.code !== 'READY' && <button type="button" disabled={busy} onClick={() => onRepair(false)}>Resolve in repair session</button>}
-        <button type="button" disabled={busy} onClick={() => onRepair(true)}>Prepare PR candidate</button>
+        {r.code !== 'READY' && <button type="button" disabled={busy || repairRunning} onClick={() => onRepair(false)}>{repairStarting ? 'Opening repair session…' : 'Resolve in repair session'}</button>}
+        <button type="button" disabled={busy || repairRunning} onClick={() => onRepair(true)}>Prepare PR candidate</button>
       </>}
     </div>
     {!supported && <p>Update the runner to use target synchronization recovery.</p>}

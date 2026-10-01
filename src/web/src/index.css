@@ -18925,4 +18925,13 @@ a.wkctx-title:hover { text-decoration: underline; }
 .wt-recovery-actions button { padding: 5px 10px; border-radius: 6px; cursor: pointer; }
 .wt-recovery-actions button:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg); color: var(--text-1); font: inherit; }
 .wt-recovery-actions button:disabled { opacity: .55; cursor: default; }
+.wt-recovery-repair-status { display: flex; align-items: center; gap: 10px; width: 100%; margin: 10px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-raised); color: var(--text-1); text-align: left; cursor: pointer; font: inherit; }
+.wt-recovery-repair-status.is-running { border-color: color-mix(in srgb, var(--brand) 38%, var(--border)); background: color-mix(in srgb, var(--brand) 8%, var(--bg-raised)); }
+.wt-recovery-repair-status.is-failed { border-color: color-mix(in srgb, var(--error) 38%, var(--border)); }
+.wt-recovery-repair-status-copy { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.wt-recovery-repair-status-copy strong, .wt-recovery-repair-status-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wt-recovery-repair-status-copy small { color: var(--text-2); }
+.wt-recovery-repair-chevron { color: var(--text-2); font-size: 22px; line-height: 1; }
+.wt-recovery-repair-hint { margin: 5px 0 0 !important; font-size: 11px; }
+.wt-recovery-repair-error { color: var(--error) !important; }
 @media (max-width: 680px) { .wt-recovery-histories { grid-template-columns: 1fr; } }

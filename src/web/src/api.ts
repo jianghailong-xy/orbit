@@ -378,6 +378,13 @@ export const createInteractiveSession = (body: {
     },
   });
 
+/** Start the server-owned repair conversation for a merge recovery. */
+export const createMergeRepairSession = (sessionId: string, preparePR = false) =>
+  api<MergeRepairSession>(`/sessions/${sessionId}/merge-repair`, {
+    method: 'POST',
+    body: preparePR ? { preparePR: true } : {},
+  });
+
 /** Import a local Claude Code transcript as a session of a workspace — the workspace-settings
  *  entry for `orbit session import`. The runner locates the transcript on its own disk, replays
  *  it into Orbit, and resumes the conversation when the next message is sent. The create answers
@@ -1224,6 +1231,19 @@ export type SessionListItem = Record<string, any> & {
   status?: string | null;
 };
 
+/** The repair conversation attached to a merge recovery on its parent session. */
+export interface MergeRepairSession {
+  id: string;
+  title?: string | null;
+  runState?: string | null;
+  runStatus?: string | null;
+  status?: string | null;
+  lifecycleState?: string | null;
+  sessionState?: string | null;
+  error?: string | null;
+  completedAt?: string | null;
+}
+
 /** A single session's detail, as returned by GET /sessions/:id. Only the fields the web
  *  reads are typed; `branch`/`baseSha`/`changedFiles`/`isolationStatus` carry the
  *  per-session git worktree result (null until the runner reports completion). */
@@ -1298,6 +1318,7 @@ export interface SessionDetail {
   mergeStatus?: 'pending' | 'merged' | 'conflict' | 'error' | null;
   mergeError?: string | null;
   mergeRecovery?: MergeRecovery | null;
+  mergeRepairSession?: MergeRepairSession | null;
   mergeRecoveryAction?: MergeRecoveryAction | null;
   mergeRecoverySupported?: boolean;
   mergedAt?: string | null;

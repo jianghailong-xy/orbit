@@ -29,6 +29,7 @@ import { SetSessionTagsDto } from '../session-tags/dto';
 import { SessionTagsService } from '../session-tags/session-tags.service';
 import {
   CreateSessionDto,
+  MergeRepairDto,
   MergeToMainDto,
   SessionArmRetryDto,
   SessionConfigDto,
@@ -275,6 +276,16 @@ export class SessionsController {
   ) {
     // `agentId` is the pre-rename name every shipped client still sends.
     return this.sessions.create(user.userId, { ...dto, workspaceId: dto.workspaceId ?? dto.agentId });
+  }
+
+  /** Start (or return) the repair session attached to this merge recovery. */
+  @Post(':id/merge-repair')
+  mergeRepair(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto?: MergeRepairDto,
+  ) {
+    return this.sessions.startMergeRepair(user.userId, id, dto?.preparePR === true);
   }
 
   /**
