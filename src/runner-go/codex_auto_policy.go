@@ -19,6 +19,35 @@ func codexAutoApprovalContextFor(execDir, upDir string) codexAutoApprovalContext
 	}
 }
 
+func codexRuntimeWorkspaceRoots(permissionMode string, job *ClaimedSession, execDir, upDir string) []string {
+	roots := []string{execDir, upDir}
+	if permissionMode == "auto" && job != nil && job.WT != nil && job.WT.RepoDir != "" {
+		// A linked worktree stores its index and worktree metadata in the shared repository's
+		// .git directory. Grant that metadata directory alone so local git commands do not
+		// become boundary crossings; the repository's source files remain outside.
+		roots = append(roots, filepath.Join(job.WT.RepoDir, ".git"))
+	}
+	return roots
+}
+
+func codexSandboxPolicy(permissionMode string, job *ClaimedSession, execDir, upDir string) map[string]interface{} {
+	if permissionMode == "auto" {
+		return map[string]interface{}{
+			"type":          "workspaceWrite",
+			"writableRoots": codexRuntimeWorkspaceRoots(permissionMode, job, execDir, upDir),
+			"networkAccess": false,
+		}
+	}
+	return map[string]interface{}{"type": "dangerFullAccess"}
+}
+
+func codexSandboxMode(permissionMode string) string {
+	if permissionMode == "auto" {
+		return "workspace-write"
+	}
+	return "danger-full-access"
+}
+
 // codexAutoApproval answers the narrow, request-level part of Auto's policy. An undecided result
 // is deliberately sent to the normal approval card: Auto reduces routine interruptions, while
 // keeping a human in the loop for boundaries and high-impact operations.
@@ -150,6 +179,16 @@ func codexAutoCommandTargetsOutsideRoots(command, cwd string, roots []string) bo
 	if len(roots) == 0 {
 		return true
 	}
+	// Codex wraps shell commands in bash -lc. Parse that quoting layer before
+	// inspecting Git arguments, including any command after the wrapper.
+	outer, rest := codexShellWordsUntilOperator(command)
+	if len(outer) == 3 && (outer[1] == "-c" || outer[1] == "-lc") {
+		switch filepath.Base(outer[0]) {
+		case "bash", "sh", "dash", "zsh", "ksh":
+			return codexAutoCommandTargetsOutsideRoots(outer[2], cwd, roots) ||
+				(rest != "" && codexAutoCommandTargetsOutsideRoots(rest, cwd, roots))
+		}
+	}
 	lower := strings.ToLower(command)
 	for search := 0; search < len(lower); {
 		relative := strings.Index(lower[search:], "git")
@@ -157,7 +196,7 @@ func codexAutoCommandTargetsOutsideRoots(command, cwd string, roots []string) bo
 			break
 		}
 		at := search + relative
-		if !codexShellWordAt(lower, at, len("git")) {
+		if !codexShellWordAt(lower, at, len("git")) || (at > 0 && (lower[at-1] == '-' || lower[at-1] == '.')) {
 			search = at + len("git")
 			continue
 		}
@@ -167,8 +206,9 @@ func codexAutoCommandTargetsOutsideRoots(command, cwd string, roots []string) bo
 		if suffixStart < len(command) && (command[suffixStart] == '\'' || command[suffixStart] == '"') {
 			suffixStart++
 		}
-		tokens := codexShellWordsUntilOperator(command[suffixStart:])
+		tokens, _ := codexShellWordsUntilOperator(command[suffixStart:])
 		gitDir := cwd
+		var paths []string
 		for i := 0; i < len(tokens); i++ {
 			token := tokens[i]
 			// Git's `--` ends its option list; a later `-C` is an argument, not a
@@ -189,12 +229,21 @@ func codexAutoCommandTargetsOutsideRoots(command, cwd string, roots []string) bo
 				i++
 				path = tokens[i]
 			}
+			if !codexGitPathChangesDirectory(token) {
+				// Relative --git-dir/--work-tree values use the cwd after all -C
+				// options, regardless of where those options appeared.
+				paths = append(paths, path)
+				continue
+			}
 			resolved, ok := codexResolvePathFrom(path, gitDir)
 			if !ok || !codexPathWithinRoots(resolved, roots) {
 				return true
 			}
-			if codexGitPathChangesDirectory(token) {
-				gitDir = resolved
+			gitDir = resolved
+		}
+		for _, path := range paths {
+			if !codexPathWithinRootsFrom(path, gitDir, roots) {
+				return true
 			}
 		}
 		search = at + len("git")
@@ -218,7 +267,7 @@ func codexGitPathOption(token string) (path string, needsNext, matched bool) {
 }
 
 func codexGitPathChangesDirectory(token string) bool {
-	return token == "-C" || (strings.HasPrefix(token, "-C") && len(token) > len("-C"))
+	return strings.HasPrefix(token, "-C")
 }
 
 func codexPathWithinRootsFrom(path, cwd string, roots []string) bool {
@@ -227,7 +276,6 @@ func codexPathWithinRootsFrom(path, cwd string, roots []string) bool {
 }
 
 func codexResolvePathFrom(path, cwd string) (string, bool) {
-	path = strings.TrimSpace(path)
 	if path == "" || strings.HasPrefix(path, "~") || strings.ContainsAny(path, "$`*?") {
 		return "", false
 	}
@@ -243,7 +291,7 @@ func codexResolvePathFrom(path, cwd string) (string, bool) {
 // codexShellWordsUntilOperator is intentionally a small lexer, not a shell interpreter. It only
 // needs to preserve quoted Git path arguments and stop before a subsequent shell command. Anything
 // it cannot resolve remains conservative through codexPathWithinRootsFrom.
-func codexShellWordsUntilOperator(command string) []string {
+func codexShellWordsUntilOperator(command string) ([]string, string) {
 	words := []string{}
 	current := strings.Builder{}
 	var quote byte
@@ -275,17 +323,17 @@ func codexShellWordsUntilOperator(command string) []string {
 				i++
 				current.WriteByte(command[i])
 			}
-		case ' ', '\t', '\r', '\n':
+		case ' ', '\t', '\r':
 			flush()
-		case ';', '&', '|':
+		case ';', '&', '|', '\n':
 			flush()
-			return words
+			return words, command[i+1:]
 		default:
 			current.WriteByte(c)
 		}
 	}
 	flush()
-	return words
+	return words, ""
 }
 
 func codexShellWord(command, word string) bool {
