@@ -7,8 +7,8 @@ import { useEffect, useRef, useState } from 'react';
  * --------------
  * Enter confirms the primary action. Chat about this has no shortcut; the approval card's always
  * allow and the project settlement card's delegation keep their ⌘/Ctrl chord. The same predicate
- * leaves every key to a focused field and the bare key to a focused button, whose own Enter is the
- * same press.
+ * leaves every key to a focused field with text and the bare key to a focused button, whose own
+ * Enter is the same press. An empty field has no typing to protect, so the card can still answer.
  *
  * WHY A CARD CAN STAND DOWN
  * -------------------------
@@ -50,11 +50,14 @@ function isCardAnswer(e: KeyboardEvent, requireMod: boolean): boolean {
   const hasMod = e.metaKey || e.ctrlKey;
   if (requireMod ? !hasMod : hasMod) return false;
   const el = document.activeElement;
-  const isField =
+  const isFieldWithText =
     el instanceof HTMLElement &&
-    (el.isContentEditable || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA');
+    (el.isContentEditable
+      ? el.textContent !== ''
+      : (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') &&
+        (el as HTMLInputElement | HTMLTextAreaElement).value !== '');
   const isButton = el instanceof HTMLElement && el.tagName === 'BUTTON';
-  return !(isField || (!requireMod && isButton));
+  return !(isFieldWithText || (!requireMod && isButton));
 }
 
 /**
@@ -94,7 +97,7 @@ export function useCardKeyClaim(asking: boolean): boolean {
 
 /**
  * The approval card's two triggers, unchanged since it took Enter: the bare key approves, the chord
- * always-allows, and neither fires while a field has the keyboard.
+ * always-allows, and neither fires while a field with text has the keyboard.
  *
  * `active` is whether this card holds the keys — `useCardKeyClaim`'s answer, which the caller gets
  * once for the card, because a card claiming twice is never the only asker.

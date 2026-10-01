@@ -135,12 +135,28 @@ describe('confirmation keys', () => {
   });
 });
 
-describe('the keyboard is not the card’s while the reader is typing', () => {
-  it('leaves a focused field every key it has', async () => {
+describe('the keyboard yields to text entry', () => {
+  it('answers the card when the focused field is empty', async () => {
     const confirm = vi.fn();
     const chat = vi.fn();
     await mount(<Card onConfirm={confirm} onChatAbout={chat} />);
     const field = document.createElement('textarea');
+    document.body.appendChild(field);
+    field.focus();
+
+    key();
+    expect(confirm).toHaveBeenCalledTimes(1);
+    key(HINT);
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(chat).not.toHaveBeenCalled();
+  });
+
+  it('leaves a focused field every key it has once it contains text', async () => {
+    const confirm = vi.fn();
+    const chat = vi.fn();
+    await mount(<Card onConfirm={confirm} onChatAbout={chat} />);
+    const field = document.createElement('textarea');
+    field.value = 'draft';
     document.body.appendChild(field);
     field.focus();
 
