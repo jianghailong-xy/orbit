@@ -149,6 +149,33 @@ final class OwnerConfirmationCopyParityTests: XCTestCase {
                        "the report's fold point")
     }
 
+    /// The block right above Confirm done. Its whole sentences — counts, plurals, the branch and the
+    /// landing put together — are proved against the shared fixture by `OwnerConfirmationIfConfirmedTests`
+    /// and the web card's test; this holds the parts both ends declare to the same words.
+    func testTheIfYouConfirmWordsMatchTheWebCard() throws {
+        let web = try flat(Self.webCard)
+
+        assertDeclares(web, "IF_YOU_CONFIRM", OwnerConfirmations.ifYouConfirm,
+                       "the block's heading")
+        assertDeclares(web, "IF_CONFIRMED_NOT_ON_MAIN", OwnerConfirmations.notOnMain,
+                       "the unmerged branch's line")
+        assertDeclares(web, "IF_CONFIRMED_NO_RECORD_ON_MAIN", OwnerConfirmations.noRecordOnMain,
+                       "the branch nobody can place on main")
+        assertDeclares(web, "IF_CONFIRMED_DOES_NOT_MERGE", OwnerConfirmations.doesNotMerge,
+                       "what confirming does not do to the branch")
+        assertDeclares(web, "IF_CONFIRMED_LINE_THEN_OWNER", OwnerConfirmations.lineThenOwner,
+                       "the integration line's landing")
+        assertDeclares(web, "IF_CONFIRMED_AUTO_MAIN", OwnerConfirmations.autoMain,
+                       "Automatic's landing")
+        assertDeclares(web, "IF_CONFIRMED_ENDS_SESSION", OwnerConfirmations.endsSession,
+                       "the run the confirmation ends")
+        // Drawn once, by the card (where it sits is the web card's own test).
+        assertContains(web, "<OwnerConfirmationIfYouConfirm ifConfirmed={view.ifConfirmed} />",
+                       "the card drawing the block")
+        XCTAssertEqual(web.components(separatedBy: "<OwnerConfirmationIfYouConfirm ").count, 2,
+                       "the block is drawn once, by the card")
+    }
+
     /// The line the row and the console header say while one of these cards is waiting. It is
     /// declared by the card and used by the console, so both are checked: a client that declares
     /// the words but never says them is as wrong as one that says different ones.

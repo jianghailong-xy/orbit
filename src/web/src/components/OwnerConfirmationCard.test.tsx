@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import type { OwnerConfirmationIfConfirmed } from '@orbit/shared';
 import { act, type JSX } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -11,6 +12,9 @@ import { ownerConfirmationQuery } from '../lib/queries';
 import { ENTER_HINT } from './CardHotkey';
 import { DecisionStrip, ownerConfirmationPointer, type PendingDecisionQueue } from './DecisionRail';
 import {
+  IF_CONFIRMED_ENDS_SESSION,
+  IF_CONFIRMED_NOT_ON_MAIN,
+  IF_YOU_CONFIRM,
   OWNER_CONFIRMATION_HEADING,
   OWNER_CONFIRMATION_NO_CRITERIA,
   OWNER_CONFIRMATION_NO_REPORT,
@@ -30,12 +34,15 @@ import {
   OwnerConfirmationCard,
   OwnerDecisionReceipt,
   SessionOwnerConfirmationCard,
+  criteriaItemsLabel,
+  ifConfirmedRows,
   ownerConfirmationWaitingIn,
   ownerDecisionReceiptLine,
   ownerDecisionReceiptsIn,
   ownerDecisionRefusal,
   ownerDecisionRequest,
   whatTheRunReported,
+  type IfConfirmedRow,
   type OwnerConfirmationView,
   type OwnerConfirmationWaiting,
   type RecordedOwnerDecision,
@@ -244,7 +251,9 @@ describe('the confirmation card', () => {
     expect(html.indexOf(escaped(TITLE))).toBeLessThan(settles);
     expect(settles).toBeGreaterThan(-1);
     expect(reported).toBeGreaterThan(settles);
-    expect(html).toContain(escaped(CRITERIA));
+    // What settles it is one row at rest, saying how much is behind it; it opens in place.
+    expect(html).toContain('>1 item<');
+    expect(html).not.toContain(escaped(CRITERIA));
     expect(html).toContain(escaped(whatTheRunReported(waiting().report)));
     // The report is the run's words with the Markdown marks taken off.
     expect(html).toContain(escaped('Done. 38 invoices are renamed and filed under finance/2026-09/'));
@@ -252,13 +261,16 @@ describe('the confirmation card', () => {
   });
 
   it('has exactly two answers, Confirm done and Chat about this, and both can be pressed', () => {
-    const answers = buttons(card()).filter((button) => button.text !== OWNER_CONFIRMATION_SHOW_ALL);
+    // The folds are not answers: Show all, and the row what counts as done is folded into.
+    const isFold = (button: { text: string }): boolean =>
+      button.text === OWNER_CONFIRMATION_SHOW_ALL || button.text.startsWith(WHAT_SETTLES_IT);
+    const answers = buttons(card()).filter((button) => !isFold(button));
     expect(answers.map((button) => button.text)).toEqual([OWNER_CONFIRM_ACTION, OWNER_SEND_BACK_ACTION]);
     expect(answers.map((button) => isDisabled(button.tag))).toEqual([false, false]);
     // The primary look belongs to Confirm done.
     expect(answers[0].tag).toContain('card-action--primary');
     // And while a press is on its way, neither is pressable again.
-    const busy = buttons(card({ busy: true })).filter((button) => button.text !== OWNER_CONFIRMATION_SHOW_ALL);
+    const busy = buttons(card({ busy: true })).filter((button) => !isFold(button));
     expect(busy.map((button) => isDisabled(button.tag))).toEqual([true, true]);
   });
 
@@ -274,15 +286,77 @@ describe('the confirmation card', () => {
     expect(bare).toContain(OWNER_CONFIRMATION_NO_REPORT);
   });
 
-  it('keeps the paragraphs and list items of both boxes on lines of their own', () => {
+  it('keeps the paragraphs and list items of both boxes on lines of their own', async () => {
     // Flattened, a report written as a lead and a list read as one run-on line — on the phone with
     // the list's dashes still in it.
-    const html = card({
-      view: view({ acceptanceCriteria: '## Done when\n\n- all filed\n- totals match' }),
-      waiting: waiting({ report: { text: 'Done.\n\n- **renamed**: 38\n- **moved**: 2', reportedAt: '2026-09-13T10:39:00.000Z' } }),
-    });
-    expect(html).toContain('>Done when\n\n• all filed\n• totals match<');
-    expect(html).toContain('>Done.\n\n• renamed: 38\n• moved: 2<');
+    const v = view({ acceptanceCriteria: '## Done when\n\n- all filed\n- totals match' });
+    const w = waiting({ report: { text: 'Done.\n\n- **renamed**: 38\n- **moved**: 2', reportedAt: '2026-09-13T10:39:00.000Z' } });
+    expect(card({ view: v, waiting: w })).toContain('>Done.\n\n• renamed: 38\n• moved: 2<');
+    // What counts as done is behind its fold; opened, it keeps its lines too.
+    const scope = await mount(<OwnerConfirmationCard view={v} waiting={w} onDecide={() => {}} onSendBack={() => {}} />);
+    await press(scope.querySelector<HTMLElement>('.owner-confirmation-fold')!);
+    expect(scope.querySelector('.owner-confirmation-value')?.textContent).toBe('Done when\n\n• all filed\n• totals match');
+  });
+
+  it('folds what counts as done into one row that says how much is behind it, and opens it in place', async () => {
+    const v = view({ acceptanceCriteria: '1. One\n2. Two\n3. Three\n4. Four\n5. Five\n6. Six' });
+    const scope = await mount(<OwnerConfirmationCard view={v} waiting={waiting()} onDecide={() => {}} onSendBack={() => {}} />);
+    const fold = scope.querySelector<HTMLButtonElement>('.owner-confirmation-fold')!;
+    expect(fold.textContent).toBe(`${WHAT_SETTLES_IT}6 items`);
+    expect(fold.getAttribute('aria-expanded')).toBe('false');
+    expect(scope.textContent).not.toContain('1. One');
+
+    await press(fold);
+    expect(fold.getAttribute('aria-expanded')).toBe('true');
+    // In place: the criteria open inside the same box, right under the row.
+    expect(fold.nextElementSibling?.textContent).toBe('1. One\n2. Two\n3. Three\n4. Four\n5. Five\n6. Six');
+
+    await press(fold);
+    expect(scope.textContent).not.toContain('1. One');
+  });
+
+  it('draws If you confirm right above Confirm done, white and without an author', async () => {
+    const ifConfirmed: OwnerConfirmationIfConfirmed = {
+      startsTasks: [{ id: 't2', title: 'Draw the card on iOS', starts: 'NOW' }],
+      startsAfterLanding: false,
+      branch: { name: 'orbit/p1-1c207b', linesAdded: 9432, linesRemoved: 11, files: 41, onMain: 'NO' },
+      landing: 'NONE',
+      endsSession: { sessionId: SESSION_ID, runningBgJobs: 0 },
+    };
+    const html = card({ view: view({ ifConfirmed }) });
+    // Under the report, over the buttons.
+    expect(html.indexOf(IF_YOU_CONFIRM)).toBeGreaterThan(html.indexOf(WHAT_THE_RUN_REPORTED));
+    expect(html.indexOf(IF_YOU_CONFIRM)).toBeLessThan(html.indexOf(OWNER_CONFIRM_ACTION));
+    expect(html).toContain('Starts 1 task waiting on this one');
+    expect(html).toContain(`${IF_CONFIRMED_NOT_ON_MAIN} · <span class="owner-confirmation-if-added">+9,432</span>`);
+    expect(html).toContain('orbit/p1-1c207b — confirming doesn’t merge it');
+    expect(html).toContain(`>${IF_CONFIRMED_ENDS_SESSION}<`);
+    // Nobody's words: no "what the agent said" over it, and no name on it.
+    const block = html.slice(html.indexOf('class="owner-confirmation-if"'), html.indexOf(OWNER_CONFIRM_ACTION));
+    expect(block).not.toContain(WHAT_THE_RUN_REPORTED);
+
+    // Pressed for real, it is the last thing before the row Confirm done is in.
+    const scope = await mount(
+      <OwnerConfirmationCard view={view({ ifConfirmed })} waiting={waiting()} onDecide={() => {}} onSendBack={() => {}} />,
+    );
+    const next = scope.querySelector('.owner-confirmation-if')?.nextElementSibling as HTMLElement | null;
+    expect(next?.querySelector('button')?.textContent).toContain(OWNER_CONFIRM_ACTION);
+  });
+
+  it('leaves out what the read left out, and the whole block when nothing is left', () => {
+    // An older server, nothing waiting, every item unread, nothing to say: no block.
+    expect(card()).not.toContain(IF_YOU_CONFIRM);
+    expect(card({ view: view({ ifConfirmed: null }) })).not.toContain(IF_YOU_CONFIRM);
+    expect(card({ view: view({ ifConfirmed: {} }) })).not.toContain(IF_YOU_CONFIRM);
+    expect(card({
+      view: view({ ifConfirmed: { startsTasks: [], startsAfterLanding: false, branch: null, landing: 'NONE', endsSession: null } }),
+    })).not.toContain(IF_YOU_CONFIRM);
+    // Only the run could be read: only its row.
+    const ends = card({ view: view({ ifConfirmed: { endsSession: { sessionId: SESSION_ID, runningBgJobs: 2 } } }) });
+    expect(ends).toContain(IF_YOU_CONFIRM);
+    expect(ends).toContain('Ends this session · 2 background jobs stop');
+    expect(ends).not.toContain(IF_CONFIRMED_NOT_ON_MAIN);
+    expect(ends.match(/owner-confirmation-if-row/gu)?.length).toBe(1);
   });
 
   it('folds at the ceiling without leaving the … on a line of its own', () => {
@@ -327,6 +401,48 @@ describe('where the card is drawn, and what a decision leaves', () => {
     expect(sentBack).toContain(OWNER_SENT_BACK_HEADING);
     expect(ownerDecisionReceiptLine(sendBack)).toMatch(/^Asked for more by you · /u);
     expect(buttons(sentBack)).toEqual([]);
+  });
+
+  it('opens a receipt straight to what counted as done, with no second fold inside its own', async () => {
+    const scope = await mount(<OwnerDecisionReceipt view={view({ waiting: null })} decided={decided()} />);
+    await press(buttonIn(scope, `${OWNER_SHOW_WHAT_SETTLED_IT} ▾`));
+    expect(scope.textContent).toContain(CRITERIA);
+    expect(scope.querySelector('.owner-confirmation-fold')).toBeNull();
+    expect(scope.textContent).not.toContain(IF_YOU_CONFIRM);
+  });
+});
+
+/**
+ * If you confirm and the folded criteria row, proved against `owner-confirmation-if-confirmed.fixture.json`
+ * — the same cases the native client's `OwnerConfirmationIfConfirmedTests` proves its own against, so
+ * the browser, the Mac and the phone say one thing about what a confirmation sets off.
+ */
+describe('If you confirm, in the words both clients say', () => {
+  const fixture = JSON.parse(
+    readFileSync(
+      [
+        resolve(process.cwd(), '../shared/src/owner-confirmation-if-confirmed.fixture.json'),
+        resolve(process.cwd(), 'src/shared/src/owner-confirmation-if-confirmed.fixture.json'),
+      ].find(existsSync)!,
+      'utf8',
+    ),
+  ) as {
+    rows: Array<{ case: string; ifConfirmed: OwnerConfirmationIfConfirmed | null; rows: IfConfirmedRow[] }>;
+    criteria: Array<{ case: string; acceptanceCriteria: string | null; label: string | null }>;
+  };
+
+  it('draws the rows the read describes, in order, and none for what it left out', () => {
+    expect(fixture.rows.length).toBeGreaterThan(10);
+    for (const c of fixture.rows) {
+      expect(ifConfirmedRows(c.ifConfirmed), c.case).toEqual(c.rows);
+    }
+  });
+
+  it('counts what counts as done the way the folded row says it', () => {
+    expect(fixture.criteria.length).toBeGreaterThan(8);
+    for (const c of fixture.criteria) {
+      expect(criteriaItemsLabel(c.acceptanceCriteria), c.case).toBe(c.label);
+    }
   });
 });
 
