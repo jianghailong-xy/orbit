@@ -1761,6 +1761,75 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertTrue(r.state.items.first?.asTool?.result?.contains("unknown field") == true)
     }
 
+    /// codex's tool router rejects a call by naming the tool in front of its reason instead of
+    /// saying "verification failed". That still settles the call it names: one row, failed,
+    /// carrying the router's sentence — not a card left running beside a separate failure card
+    /// (web parity: `parseToolFailureSummary`'s last branch).
+    func testRouterErrorSettlesTheUnresolvedCallItNames() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("t1"), "name": .string("view_image"),
+            "input": .object(["path": .string("/tmp/shot.png"), "detail": .string("low")])
+        ])))
+        r.apply(RunEvent(seq: 2, type: .system, payload: .object([
+            "stderr": .string("2026-10-01T11:53:04.032027Z ERROR codex_core::tools::router: error=view_image.detail only supports `high` or `original`; omit `detail` for default high resized behavior, got `low`\n")
+        ])))
+
+        XCTAssertEqual(r.state.items.count, 1)
+        XCTAssertEqual(r.state.items.first?.asTool?.status, .error)
+        XCTAssertTrue(r.state.items.first?.asTool?.result?.contains("view_image.detail only supports") == true)
+    }
+
+    /// The router names the call, so the latest one doesn't win by default: a Bash still running
+    /// after the rejected call keeps running, and a router error naming no running call
+    /// (`write_stdin` — the runner draws codex's shell calls as Bash) settles nothing.
+    func testRouterErrorOnlySettlesACallOfTheToolItNames() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("t1"), "name": .string("View_Image"),
+            "input": .object(["path": .string("/tmp/shot.png")])
+        ])))
+        r.apply(RunEvent(seq: 2, type: .toolUse, payload: .object([
+            "toolUseId": .string("t2"), "name": .string("Bash"),
+            "input": .object(["command": .string("sleep 5")])
+        ])))
+        r.apply(RunEvent(seq: 3, type: .system, payload: .object([
+            "stderr": .string("2026-10-01T11:53:04.032027Z ERROR codex_core::tools::router: error=view_image.detail only supports `high` or `original`; omit `detail` for default high resized behavior, got `low`\n")
+        ])))
+        r.apply(RunEvent(seq: 4, type: .system, payload: .object([
+            "stderr": .string("2026-09-29T12:11:34.930771Z ERROR codex_core::tools::router: error=write_stdin failed: Unknown process id 0\n")
+        ])))
+
+        XCTAssertEqual(r.state.items.count, 3)
+        XCTAssertEqual(r.state.items[0].asTool?.status, .error, "matched by name, ignoring case")
+        XCTAssertEqual(r.state.items[1].asTool?.status, .running)
+        guard case .error(_, let message) = r.state.items[2] else {
+            return XCTFail("expected the write_stdin line to keep its own row")
+        }
+        XCTAssertTrue(message.contains("error=write_stdin failed"))
+    }
+
+    /// With no call of that name running, the line keeps its own row — and that row draws as the
+    /// compact "view_image · Failed" card, not a raw red log line (web: `renders a codex router
+    /// error as a compact tool row`). Only an `error=` that opens with a name earns the card.
+    func testRouterErrorWithNoRunningCallIsACompactFailureCard() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object([
+            "stderr": .string("2026-10-01T11:53:04.032027Z ERROR codex_core::tools::router: error=view_image.detail only supports `high` or `original`; omit `detail` for default high resized behavior, got `low`\n")
+        ])))
+
+        XCTAssertEqual(r.state.items.count, 1)
+        guard case .error(_, let message)? = r.state.items.first else {
+            return XCTFail("expected one row for the stderr line")
+        }
+        let card = ToolFailureSummary.parse(message)
+        XCTAssertEqual(card?.tool, "view_image")
+        XCTAssertNil(card?.path)
+        XCTAssertTrue(card?.reason.hasPrefix("view_image.detail only supports `high` or `original`") == true)
+        // Source code echoed on stderr is no tool failure: no name follows its `error=`.
+        XCTAssertNil(ToolFailureSummary.parse("const generic = /^error=(failed to parse function arguments\\b[\\s\\S]*)$/i.exec(tail.trim());"))
+    }
+
     /// A `system` event with no stderr is lifecycle noise and still earns no row.
     func testSystemEventWithoutStderrStaysSilent() {
         var r = TranscriptReducer()

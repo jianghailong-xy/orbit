@@ -1249,8 +1249,8 @@ public struct TranscriptReducer: Sendable, Codable {
     }
 
     /// Find the latest still-running top-level call that a stderr failure belongs to. Named failures
-    /// (apply_patch verification) are matched exactly; parser errors omit the tool name and use the
-    /// most recent unresolved call instead.
+    /// (apply_patch verification, a router's `view_image.detail …`) are matched by name, ignoring
+    /// case; parser errors omit the tool name and use the most recent unresolved call instead.
     private func unresolvedToolIndex(named name: String?) -> Int? {
         let wanted = name?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
         for i in state.items.indices.reversed() {
@@ -1588,8 +1588,10 @@ enum TurnOutcome {
 /// Readying an engine's raw stderr line for the transcript — the native half of the web
 /// transcript's `stripAnsi` / `LEADING_TIMESTAMP` / `isBenignEngineStderr`.
 private enum ToolFailure {
-    /// Return the named tool for verification failures, or nil for parser failures that omit it.
-    /// Anything else is ordinary engine stderr and stays on the diagnostic-row path.
+    /// Return the named tool for verification failures and for any other router failure that opens
+    /// with the tool's name (`view_image.detail …` → `view_image`), or nil for parser failures that
+    /// omit it. A line with no `error=<token>` is ordinary engine stderr and stays on the
+    /// diagnostic-row path.
     static func parse(_ line: String) -> (tool: String?, reason: String)? {
         guard let marker = line.range(of: "error=", options: .caseInsensitive) else { return nil }
         let tail = String(line[marker.lowerBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1604,7 +1606,10 @@ private enum ToolFailure {
         if lower.hasPrefix("failed to parse function arguments") {
             return (tool: nil, reason: String(tail.dropFirst("error=".count)))
         }
-        return nil
+        // Web parity: `parseToolFailureSummary`'s last branch — the same token names the card.
+        let detail = rest.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let tool = ToolFailureSummary.routerToolName(detail) else { return nil }
+        return (tool: tool, reason: detail)
     }
 }
 
