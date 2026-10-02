@@ -48,6 +48,27 @@ public struct RowSwipeGeometry: Equatable, Sendable {
         return slots.reduce(0, +) + gap * Double(slots.count + 1)
     }
 
+    /// How far a side's button has grown in, 0 to 1, with the row slid `revealed` points: button
+    /// `index`, counted from the screen edge inward, grows from a dot over the last `growth` points
+    /// before its slot is clear of the row — so the outermost comes first and each next one follows,
+    /// and the same distance shrinks them away as the row shuts. Measured off the system's own swipe
+    /// (iOS 26.5 simulator): a lone Delete is first seen 55pt out at a fifth of its size and is
+    /// whole at 80, where its slot clears; the second leading button is not yet out at 103.
+    public static func reveal(of index: Int, slots: [Double], revealed: Double) -> Double {
+        guard index >= 0, index < slots.count else { return 0 }
+        let clear = openWidth(slots: Array(slots.prefix(index + 1)))
+        return min(1, max(0, (revealed - (clear - growth)) / growth))
+    }
+
+    /// How a grown-in fraction shows: the button is drawn at that scale, and fades in a little ahead
+    /// of it, as the system's does (about a third opaque at a fifth of its size).
+    public static func revealOpacity(_ reveal: Double) -> Double {
+        reveal <= 0 ? 0 : min(1, 0.15 + 0.85 * reveal)
+    }
+
+    /// The distance over which a button grows in.
+    public static let growth = 30.0
+
     /// The offset for a finger that has moved the row to `raw`: one-to-one up to either side's
     /// width, and past it only grudgingly, the way a scroll view gives past its end — except toward
     /// a full swipe, which follows the finger. A side with no buttons gives only that little.

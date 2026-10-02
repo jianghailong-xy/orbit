@@ -59,8 +59,10 @@ extension View {
 /// them. This draws the same slots with a round button in each — measured off the owner's
 /// screenshots of the system's: 60pt slots 10pt apart and 10pt from the screen edge, the row slid
 /// 10pt clear of the last one as a rounded card filling its cell, and under each a 47pt circle of
-/// the action's colour over its 13pt title. Where the row goes under the finger and where it
-/// settles is `RowSwipeGeometry`.
+/// the action's colour over its 13pt title. As the row slides, each button grows in from a dot in
+/// its own slot, the outermost first, and shrinks away the same way as the row shuts — the system's
+/// own swipe, as Notes shows it, recorded frame by frame. Where the row goes under the finger, where
+/// it settles and how far each button has grown is `RowSwipeGeometry`.
 @available(iOS 26.0, *)
 private struct CircleSwipeRow: ViewModifier {
     let id: AnyHashable
@@ -75,8 +77,11 @@ private struct CircleSwipeRow: ViewModifier {
     @State private var dragStart: CGFloat?
     /// The row, unslid, in the window.
     @State private var frame: CGRect = .zero
-    @State private var leadingWidth: CGFloat = 0
-    @State private var trailingWidth: CGFloat = 0
+    /// Each button's slot width (wider than `slot` for a long title), by action.
+    @State private var slotWidths: [String: CGFloat] = [:]
+    /// The side whose buttons are drawn: the one the row is slid toward, kept until it has shut so
+    /// the buttons can shrink away with it.
+    @State private var shownSide: HorizontalEdge?
 
     /// The list's top and bottom row inset, which the row now carries itself so its card can fill
     /// the cell; the row stands as tall as it did (75.3pt for a session row, measured on an iOS 26.5
@@ -88,12 +93,20 @@ private struct CircleSwipeRow: ViewModifier {
     private static let cardRadius: CGFloat = 24
     /// The list's separator, as iOS 26 draws it under a plain row: 1pt, across the row's content.
     private static let separator: CGFloat = 1
-    /// How far the row slides before its buttons are fully drawn.
-    private static let fadeIn: CGFloat = 24
+    /// How a button follows the size the row's position gives it, and how it lands once whole.
+    private static let following = Animation.spring(response: 0.28, dampingFraction: 1)
+    private static let landing = Animation.spring(response: 0.3, dampingFraction: 0.72)
+    /// The row going home: no bounce, so the card isn't left lingering on a spring's tail before it
+    /// fades — the system's is home and white again in about a third of a second.
+    private static let shutting = Animation.smooth(duration: 0.35)
+
+    private func slots(of actions: [RowSwipeAction]) -> [Double] {
+        actions.map { Double(slotWidths[$0.id] ?? Self.slot) }
+    }
 
     private var geometry: RowSwipeGeometry {
-        RowSwipeGeometry(leadingWidth: leading.isEmpty ? 0 : leadingWidth,
-                         trailingWidth: trailing.isEmpty ? 0 : trailingWidth,
+        RowSwipeGeometry(leadingWidth: RowSwipeGeometry.openWidth(slots: slots(of: leading)),
+                         trailingWidth: RowSwipeGeometry.openWidth(slots: slots(of: trailing)),
                          rowWidth: frame.width + bleed.leading + bleed.trailing,
                          leadingFullSwipe: leadingFullSwipe && leading.first?.isEnabled == true)
     }
@@ -125,7 +138,8 @@ private struct CircleSwipeRow: ViewModifier {
                 }
             }
             .padding(.vertical, Self.rowInset)
-            .background { if offset != 0 { card } }
+            // The card stays until the row is home, as the system's does, and then fades.
+            .background { if offset != 0 || shownSide != nil { card } }
             .overlay { if offset != 0 || shared?.openID != nil { closer } }
             .offset(x: offset)
             .overlay(alignment: .bottom) {
@@ -152,6 +166,7 @@ private struct CircleSwipeRow: ViewModifier {
             .onDisappear {
                 offset = 0
                 dragStart = nil
+                shownSide = nil
                 if shared?.openID == id { shared?.openID = nil }
             }
             .sensoryFeedback(.impact(weight: .medium), trigger: armed) { _, now in now }
@@ -179,35 +194,42 @@ private struct CircleSwipeRow: ViewModifier {
     /// row is slid its way.
     private var buttons: some View {
         HStack(spacing: 0) {
-            side(leading, shown: offset > 0)
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { leadingWidth = $0 }
+            side(leading, edge: .leading)
             Spacer(minLength: 0)
-            side(trailing.reversed(), shown: offset < 0)
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { trailingWidth = $0 }
+            side(trailing, edge: .trailing)
         }
         .padding(.leading, -bleed.leading)
         .padding(.trailing, -bleed.trailing)
     }
 
     /// One side's buttons, left to right, with the gap at either end that `RowSwipeGeometry.openWidth`
-    /// counts. Its slots are laid out, hidden, even while the row is shut, so the side's width is
-    /// known before the first swipe; the buttons themselves exist only while the row is slid their
-    /// way, so a shut row offers no stray buttons to VoiceOver or to a tap.
-    private func side(_ actions: [RowSwipeAction], shown: Bool) -> some View {
-        slots(actions) { circleFace($0) }
-            .hidden()
-            .accessibilityHidden(true)
-            .overlay {
-                if shown {
-                    slots(actions) { circle($0) }
-                        .opacity(min(1, abs(offset) / Self.fadeIn))
-                        .allowsHitTesting(dragStart == nil)
+    /// counts. Its slots are laid out, hidden, even while the row is shut, so each slot's width is
+    /// known before the first swipe; the buttons themselves exist only while the side is shown, so a
+    /// shut row offers no stray buttons to VoiceOver or to a tap. `actions` run from the screen edge
+    /// inward, so the trailing side lays them out reversed.
+    private func side(_ actions: [RowSwipeAction], edge: HorizontalEdge) -> some View {
+        let laidOut: [RowSwipeAction] = edge == .leading ? actions : actions.reversed()
+        let widths = slots(of: actions)
+        return slotRow(laidOut) { action in
+            circleFace(action)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { slotWidths[action.id] = $0 }
+        }
+        .hidden()
+        .accessibilityHidden(true)
+        .overlay {
+            if shownSide == edge {
+                slotRow(laidOut) { action in
+                    let index = actions.firstIndex { $0.id == action.id } ?? 0
+                    circle(action, reveal: RowSwipeGeometry.reveal(of: index, slots: widths,
+                                                                   revealed: Double(abs(offset))))
                 }
+                .allowsHitTesting(dragStart == nil)
             }
+        }
     }
 
-    private func slots<Slot: View>(_ actions: [RowSwipeAction],
-                                   @ViewBuilder _ slot: @escaping (RowSwipeAction) -> Slot) -> some View {
+    private func slotRow<Slot: View>(_ actions: [RowSwipeAction],
+                                     @ViewBuilder _ slot: @escaping (RowSwipeAction) -> Slot) -> some View {
         HStack(spacing: Self.gap) {
             ForEach(actions) { slot($0) }
         }
@@ -215,7 +237,13 @@ private struct CircleSwipeRow: ViewModifier {
         .fixedSize()
     }
 
-    private func circle(_ action: RowSwipeAction) -> some View {
+    /// A button, grown in as far as `reveal` says: the circle and its title scale together about the
+    /// middle of the pair, and fade in a little ahead of their size. Like the system's, a button
+    /// doesn't jump to the size the row's position gives it but springs after it — trailing a fast
+    /// pull, growing on after the finger lets go, overshooting a few percent as it lands whole, and
+    /// shrinking all at once as the row shuts (recorded: 104% before settling, all three at ~75%
+    /// partway shut).
+    private func circle(_ action: RowSwipeAction, reveal: Double) -> some View {
         // Held past the full-swipe point, the button that will run grows a little and its
         // neighbours step aside.
         let fullSwipeTarget = armed && action.id == leading.first?.id
@@ -228,7 +256,9 @@ private struct CircleSwipeRow: ViewModifier {
         .buttonStyle(CirclePress())
         .disabled(!action.isEnabled)
         .accessibilityLabel(action.title)
-        .opacity(armed && !fullSwipeTarget ? 0 : 1)
+        .scaleEffect(max(reveal, 0.01))   // never a singular transform
+        .opacity(armed && !fullSwipeTarget ? 0 : RowSwipeGeometry.revealOpacity(reveal))
+        .animation(reveal >= 1 ? Self.landing : Self.following, value: reveal)
         .animation(.snappy(duration: 0.2), value: armed)
     }
 
@@ -266,6 +296,7 @@ private struct CircleSwipeRow: ViewModifier {
     private func moved(_ dx: CGFloat) {
         guard let dragStart else { return }
         offset = geometry.dragged(dragStart + dx)
+        if offset != 0 { shownSide = offset > 0 ? .leading : .trailing }
     }
 
     private func ended(_ dx: CGFloat, _ velocity: CGFloat) {
@@ -275,15 +306,23 @@ private struct CircleSwipeRow: ViewModifier {
         settle(geometry.rest(offset: lifted, velocity: velocity))
     }
 
+    /// Once a shutting row is home, its card and buttons go — the card fades out from under it — and
+    /// it stops being the list's open row, so the separators either side come back only now.
+    private func putAway() {
+        guard offset == 0 else { return }
+        withAnimation(.easeOut(duration: 0.15)) { shownSide = nil }
+        if shared?.openID == id { shared?.openID = nil }
+    }
+
     private func settle(_ rest: RowSwipeGeometry.Rest) {
         let target = geometry.offset(at: rest)
         switch rest {
         case .leading, .trailing:
             claimOpen()
+            shownSide = rest == .leading ? .leading : .trailing
             withAnimation(.snappy) { offset = target }
         case .closed:
-            if shared?.openID == id { shared?.openID = nil }
-            withAnimation(.snappy) { offset = 0 }
+            withAnimation(Self.shutting) { offset = 0 } completion: { putAway() }
         case .fullSwipe:
             if shared?.openID == id { shared?.openID = nil }
             let action = leading[0]
@@ -292,7 +331,7 @@ private struct CircleSwipeRow: ViewModifier {
                 // A completed or reopened row leaves the list; one that stays (the request failed)
                 // comes back once the list has had its chance to drop it.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    withAnimation(.snappy) { offset = 0 }
+                    withAnimation(Self.shutting) { offset = 0 } completion: { putAway() }
                 }
             }
         }
