@@ -4,14 +4,38 @@ import XCTest
 // and in the long-press menu, on Open, Completed and Trash — and the panel it opens. Soft failures:
 // whatever cannot be found is noted next to the pictures and the run moves on, so one pass collects
 // everything it can.
+//
+// Round 2: XCUITest's `swipeLeft()` left the real list's rows shut on the first round (the long-press
+// test passed), so a row is now opened by the first of several gestures that works — a quick flick,
+// a slow one, and finger-like drags — and `test0Gestures` records which ones open it.
 final class ShareShotTests: XCTestCase {
     /// Has a public link open (stub.py), so its panel shows the link, its layers and its expiry.
     private let linked = "审查导入逻辑避免侵入用户身份"
     /// Has none yet, so its panel opens on Only you.
     private let unlinked = "滑动按钮圆形设计"
+    /// Lower down the Open list, below the first screenful's top half.
+    private let lower = "Wiki 审核模式文案对齐"
+    private let first = "iOS 会话列表左滑按钮"
     private let completed = "修复登录后的跳转"
     private let trashed = "临时调试：通知不弹出"
     private var notes: [String] = []
+
+    private typealias Gesture = (name: String, perform: (XCUIElement) -> Void)
+
+    private let gestures: [Gesture] = [
+        ("swipeLeft", { $0.swipeLeft() }),
+        ("swipeLeft-slow", { $0.swipeLeft(velocity: .slow) }),
+        ("drag-from-edge", { cell in
+            let start = cell.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5))
+            start.press(forDuration: 0.1, thenDragTo: start.withOffset(CGVector(dx: -220, dy: 0)),
+                        withVelocity: XCUIGestureVelocity(300), thenHoldForDuration: 0.4)
+        }),
+        ("drag-from-middle", { cell in
+            let start = cell.coordinate(withNormalizedOffset: CGVector(dx: 0.6, dy: 0.5))
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: -200, dy: 0)),
+                        withVelocity: .fast, thenHoldForDuration: 0.1)
+        }),
+    ]
 
     override func setUp() {
         continueAfterFailure = true
@@ -22,11 +46,30 @@ final class ShareShotTests: XCTestCase {
         write(notes.joined(separator: "\n"), "\(file)-notes.txt")
     }
 
+    /// Which gestures open a row of the real list, high and low on the screen. Notes only.
+    func test0Gestures() {
+        let app = launch(dark: true)
+        for title in [linked, lower] {
+            for gesture in gestures {
+                let before = row(app, title).frame
+                gesture.perform(row(app, title))
+                settle(1.2)
+                let open = app.buttons["Share"].exists
+                note("\(gesture.name) on \(title): \(open ? "OPEN" : "shut") — row \(before) → \(row(app, title).frame)")
+                if open {
+                    row(app, first).tap()
+                    settle()
+                }
+            }
+        }
+        app.terminate()
+    }
+
     /// Open: the swipe shows Share inside Delete, and Share opens the session page's panel.
     func test1OpenSwipe() {
         let app = launch(dark: true)
         shot("open-1-rest")
-        row(app, linked).swipeLeft(); settle()
+        openTrailing(app, linked, showing: "Share", "open")
         shot("open-2-swipe-left")
         frames(app, ["Share", "Delete"], "open-left")
         XCTAssertTrue(app.buttons["Share"].exists, "Open: Share is in the left swipe")
@@ -56,7 +99,7 @@ final class ShareShotTests: XCTestCase {
     func test3CompletedAndTrash() {
         let app = launch(dark: true)
         scope(app, "Completed")
-        row(app, completed).swipeLeft(); settle()
+        openTrailing(app, completed, showing: "Delete", "completed")
         shot("completed-1-swipe-left")
         frames(app, ["Share", "Delete"], "completed-left")
         XCTAssertTrue(app.buttons["Share"].exists, "Completed: Share is in the left swipe")
@@ -65,7 +108,7 @@ final class ShareShotTests: XCTestCase {
         tap(app, "Done")
 
         scope(app, "Trash")
-        row(app, trashed).swipeLeft(); settle()
+        openTrailing(app, trashed, showing: "Delete Permanently", "trash")
         shot("trash-1-swipe-left")
         frames(app, ["Share", "Delete Permanently"], "trash-left")
         XCTAssertFalse(app.buttons["Share"].exists, "Trash: no Share in the left swipe")
@@ -81,7 +124,7 @@ final class ShareShotTests: XCTestCase {
     /// The swipe and its panel once more, in light.
     func test4Light() {
         let app = launch(dark: false)
-        row(app, linked).swipeLeft(); settle()
+        openTrailing(app, linked, showing: "Share", "light")
         shot("light-1-swipe-left")
         tap(app, "Share")
         panel(app, "light-2-share-panel", expectLink: true)
@@ -89,6 +132,21 @@ final class ShareShotTests: XCTestCase {
     }
 
     // MARK: helpers
+
+    /// Slide the row open on its trailing side with the first gesture that opens it — the row is open
+    /// once `label`, one of that side's buttons, exists.
+    private func openTrailing(_ app: XCUIApplication, _ title: String, showing label: String, _ name: String) {
+        for gesture in gestures {
+            gesture.perform(row(app, title))
+            settle(1.2)
+            if app.buttons[label].exists {
+                note("\(name): opened by \(gesture.name)")
+                return
+            }
+            note("\(name): \(gesture.name) left it shut")
+        }
+        write(app.debugDescription, "missing-open-\(name).txt")
+    }
 
     private func launch(dark: Bool) -> XCUIApplication {
         let app = XCUIApplication()
@@ -98,7 +156,7 @@ final class ShareShotTests: XCTestCase {
             note("the list never appeared")
             write(app.debugDescription, "missing-list.txt")
         }
-        settle(1)
+        settle(1.5)
         return app
     }
 
