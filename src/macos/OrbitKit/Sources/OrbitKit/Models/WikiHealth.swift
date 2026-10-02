@@ -54,6 +54,22 @@ public struct WikiMaintenanceHealth: Codable, Equatable, Sendable {
         }
     }
 
+    /// Of the runs whose latest attempt failed, the one that ended last: whose failure it was (`kind`,
+    /// `infra` or `content`), its error, and when it ended.
+    public struct LastFailure: Codable, Equatable, Sendable {
+        public let kind: String
+        public let reason: String?
+        public let at: String
+        public let sessionId: String?
+
+        public init(kind: String, reason: String?, at: String, sessionId: String?) {
+            self.kind = kind
+            self.reason = reason
+            self.at = at
+            self.sessionId = sessionId
+        }
+    }
+
     public let look: WikiMaintenanceLook
     public let enabled: Bool
     public let lastOkAt: String?
@@ -67,11 +83,12 @@ public struct WikiMaintenanceHealth: Codable, Equatable, Sendable {
     public let held: WikiMaintenanceHeld?
     public let running: Running?
     public let lastRun: LastRun?
+    public let lastFailure: LastFailure?
 
     public init(look: WikiMaintenanceLook, enabled: Bool, lastOkAt: String? = nil, lastRunAt: String? = nil,
                 consecutiveFailures: Int = 0, backlog: Int = 0, oldestPendingAt: String? = nil, lagSeconds: Int = 0,
                 dailyLimitReached: Bool = false, held: WikiMaintenanceHeld? = nil, running: Running? = nil,
-                lastRun: LastRun? = nil) {
+                lastRun: LastRun? = nil, lastFailure: LastFailure? = nil) {
         self.look = look
         self.enabled = enabled
         self.lastOkAt = lastOkAt
@@ -84,6 +101,7 @@ public struct WikiMaintenanceHealth: Codable, Equatable, Sendable {
         self.held = held
         self.running = running
         self.lastRun = lastRun
+        self.lastFailure = lastFailure
     }
 
     public init(from decoder: Decoder) throws {
@@ -100,6 +118,7 @@ public struct WikiMaintenanceHealth: Codable, Equatable, Sendable {
         held = try? c.decodeIfPresent(WikiMaintenanceHeld.self, forKey: .held)
         running = try? c.decodeIfPresent(Running.self, forKey: .running)
         lastRun = try? c.decodeIfPresent(LastRun.self, forKey: .lastRun)
+        lastFailure = try? c.decodeIfPresent(LastFailure.self, forKey: .lastFailure)
     }
 }
 
