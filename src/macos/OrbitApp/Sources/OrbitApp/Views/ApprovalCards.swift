@@ -1250,8 +1250,11 @@ private struct OwnerConfirmationIfYouConfirm: View {
                         .foregroundStyle(row.kind == .start ? Color.accentColor : Color.secondary)
                         .frame(width: 18)
                     VStack(alignment: .leading, spacing: 1) {
+                        // Wraps rather than truncates: in the transcript's list a row's first line
+                        // was cut to one line (the probe's "Goes onto the integration line; mergin…").
                         lead(row)
                             .font(.orbitSubtext.weight(.semibold))
+                            .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         if let detail = row.detail {
                             Text(detail)
