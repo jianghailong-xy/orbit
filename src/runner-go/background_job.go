@@ -52,13 +52,6 @@ const (
 	bgStatusFailed    = "failed"
 	bgStatusKilled    = "killed"
 
-	// bgDrainWaitCap is how long a drain waits for jobs (not services) to finish
-	// before killing them. A drain runs where the checkout is about to be
-	// rewritten or removed, so waiting cannot be unbounded — but a job seconds
-	// from done should report its own exit code rather than be killed on the
-	// doorstep.
-	bgDrainWaitCap = 30 * time.Second
-
 	// bgKillTeardownGrace bounds how long an explicit kill or an over-budget
 	// drain waits for the process to actually go, so a wedged child cannot wedge
 	// session teardown behind it.
@@ -109,6 +102,14 @@ const (
 	bgWakeAttempts   = 3
 	bgWakeRetryDelay = 2 * time.Second
 )
+
+// bgDrainWaitCap is how long a drain waits for jobs (not services) to finish
+// before killing them. A drain runs where the checkout is about to be
+// rewritten or removed, so waiting cannot be unbounded — but a job seconds
+// from done should report its own exit code rather than be killed on the
+// doorstep. A variable only so a test whose job never finishes on its own
+// need not sit the whole cap out.
+var bgDrainWaitCap = 30 * time.Second
 
 // errRunnerShuttingDown refuses a job once the runner has begun to stop. The runner is the job's
 // only host, so it would be killed within bgDrainWaitCap of starting, and nobody would start it

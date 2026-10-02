@@ -702,7 +702,7 @@ func TestWikiMaintenanceSessionDrivesTheRealClaudeCodeCleanly(t *testing.T) {
 	})); err != nil {
 		t.Fatal(err)
 	}
-	result := waitFrameType(t, frames, "result")
+	result := waitFrameTypeWithin(t, frames, "result", realClaudeContractTimeout)
 	if result["subtype"] != claudeMaxTurnsSubtype || result["is_error"] != true {
 		t.Fatalf("the turn ended %v (is_error %v), want error_max_turns: %v\n%s", result["subtype"], result["is_error"], result, stderr.String())
 	}
