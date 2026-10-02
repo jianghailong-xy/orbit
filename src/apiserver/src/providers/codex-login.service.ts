@@ -539,6 +539,8 @@ export class CodexLoginService implements OnModuleDestroy {
       throw new ConflictException({
         code: 'POOL_CODEX_ACCOUNT_DUPLICATE',
         message: `This ChatGPT account is already in "${pool.label}"`,
+        // Which account this sign-in turned out to be: the page names it in the refusal it shows.
+        email: tokens.email,
       });
     }
     const data = {

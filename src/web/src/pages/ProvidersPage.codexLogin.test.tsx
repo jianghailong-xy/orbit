@@ -14,11 +14,12 @@ import { ProvidersPage } from './ProvidersPage';
 
 /**
  * A Codex pool of one's own ChatGPT account (migration 0323) on /providers and on its own page, mounted
- * for real against a fake API: the account's row — its email, plan and `…AB12`, where it stands, each
- * window's quota and when it resets — and "Sign in with ChatGPT", the device flow that puts it in: the
- * notice first, then the page to open and the one-time code, polled until the person approved it, and
- * each way it can end. Signed out by OpenAI, it is signed in again from its row; its owner signs it out
- * and deletes the pool. A new "Just me" Codex pool is one of these, and opens straight to signing in.
+ * for real against a fake API: one row per account it holds — its email, plan and `…AB12`, where it
+ * stands, each window's quota and when it resets, and NEXT on the account a session would run on — and
+ * "Add account", the device flow that puts another one in: the notice first, then the page to open and
+ * the one-time code, polled until the person approved it, and each way it can end. Signed out by OpenAI,
+ * an account is signed in again from its own row; its owner signs one out by its fingerprint and deletes
+ * the pool. A new "Just me" Codex pool is one of these, and opens straight to signing in.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -57,19 +58,38 @@ function account(over: Partial<CodexLogin> = {}): CodexLogin {
   };
 }
 
-/** The pool as GET /providers/pools serves it: no members, and the account — or none — beside them. */
-function codexPool(login: CodexLogin | null): ProviderPool {
+/** The pool as GET /providers/pools serves it: no members, and its ChatGPT accounts — none, one or
+ *  several — beside them, oldest first. `login` is the first of them, the one its sessions run on. */
+function codexPool(...logins: CodexLogin[]): ProviderPool {
   return {
     id: POOL_ID,
     slug: 'my-codex',
     label: 'My Codex',
     engine: 'codex',
-    login,
+    login: logins[0] ?? null,
+    logins,
     resetsAt: null,
-    unavailable: login ? null : 'the pool "My Codex" has no ChatGPT account signed in — sign in on its page, or pick another provider',
+    unavailable:
+      logins.length > 0
+        ? null
+        : 'the pool "My Codex" has no ChatGPT account signed in — sign in on its page, or pick another provider',
     members: [],
   };
 }
+
+/** The second account of a pool that holds two: Pro, both windows read, plenty of room. */
+const hl = () =>
+  account({
+    email: 'hl.work@gmail.com',
+    plan: 'pro',
+    fingerprint: '…7QX4',
+    linkedAt: '2026-10-01T09:00:00.000Z',
+    usage: {
+      provider: 'codex',
+      primary: { utilization: 18, resetsAt: IN_AN_HOUR, windowDurationMins: 300 },
+      secondary: { utilization: 40, resetsAt: IN_THREE_DAYS, windowDurationMins: 10080 },
+    },
+  });
 
 interface Sent {
   method: string;
@@ -206,7 +226,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
       if (method === 'POST' && p === LOGIN) {
         return { status: 'PENDING', verificationUrl: DEVICE_URL, userCode: CODE, expiresAt: CODE_EXPIRES };
       }
-      if (method === 'POST' && p === '/providers/pools') return codexPool(null);
+      if (method === 'POST' && p === '/providers/pools') return codexPool();
       if (method === 'DELETE' && p === LOGIN) return { status: 'CANCELLED', account: null };
       if (method === 'DELETE' && p === `${LOGIN}/account`) return { removed: 1 };
       return {};
@@ -227,7 +247,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     const card = container.querySelector<HTMLElement>('.pool-sec .pool-card')!;
     const head = card.querySelector<HTMLElement>('.re-head')!;
     expect(head.querySelector('.re-runner')?.textContent).toBe('My Codex');
-    expect(head.querySelector('.re-summary')?.textContent).toBe('Just me');
+    expect(head.querySelector('.re-summary')?.textContent).toBe('Just me · 1 of 1 account available');
     // One account to start on: it is named, not "next".
     expect(head.querySelector('.pool-gauge-name')?.textContent).toBe('lin@example.com');
     // Its tightest window, by name: the weekly one at 41%, ahead of the 5-hour one at 23%.
@@ -368,18 +388,19 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     await mount(AT);
     expect(container.querySelector('.pool-page-title h1')?.textContent).toBe('My Codex');
     expect(text()).toContain(
-      'Codex pool · Just me · sessions run on your own ChatGPT account, and its sign-in stays on the Orbit server.',
+      'Codex pool · Just me · 1 of 1 account available · each session starts on the account whose quota resets soonest, and stays on it until that one runs out.',
     );
-    // One account a pool: while it has one, there is nothing to sign in.
-    expect(button('Sign in with ChatGPT')).toBeNull();
-    expect(container.querySelector('.pool-detail .re-runner')?.textContent).toBe('Account');
+    // The way in is always there, however many accounts the pool holds.
+    expect(button('Add account')).not.toBeNull();
+    expect(container.querySelector('.pool-detail .re-runner')?.textContent).toBe('Accounts1');
+    expect(container.querySelector('.pool-detail .pool-head-count')?.textContent).toBe('1');
     expect(row().querySelector('.pool-key-mask')?.textContent).toBe('ChatGPT Plus · …AB12');
     expect(container.querySelector('.pool-danger-note')?.textContent).toBe(
       'Its ChatGPT sign-in is deleted from the Orbit server with it.',
     );
 
     // Signing it out is a quiet mark — grey until it is pointed at (index.css) — that asks first, and
-    // says what it costs.
+    // says what it costs. The pool's only account: nothing keeps running without it.
     expect(labelled('Sign out lin@example.com')[0].classList.contains('pool-signout')).toBe(true);
     await click(labelled('Sign out lin@example.com')[0]);
     const confirm = document.body.querySelector<HTMLElement>('.ant-popover:not(.ant-popover-hidden)')!;
@@ -388,7 +409,9 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
       'Its sign-in is deleted from the Orbit server, and no session runs on this pool until you sign in again.',
     );
     await click(button('Sign out', confirm));
-    expect(sent).toEqual([{ method: 'DELETE', path: `${LOGIN}/account`, body: undefined }]);
+    expect(sent).toEqual([
+      { method: 'DELETE', path: `${LOGIN}/account?fingerprint=${encodeURIComponent('…AB12')}`, body: undefined },
+    ]);
 
     await click(button('Delete pool'));
     const del = Array.from(document.body.querySelectorAll<HTMLElement>('.ant-popover:not(.ant-popover-hidden)')).pop()!;
@@ -399,12 +422,12 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
   });
 
   it('puts an account in with the device flow: the notice, the code and its page, then the account', async () => {
-    pools = [codexPool(null)];
+    pools = [codexPool()];
     await mount(AT);
     expect(text()).toContain('No account yet — no session can start on this pool until you sign in with ChatGPT.');
     expect(container.querySelector('.pool-gauge')?.textContent).toBe('Not signed in');
 
-    await click(button('Sign in with ChatGPT'));
+    await click(button('Add account'));
     const consent = dialogText();
     expect(dialog()?.querySelector('.pa-lead')?.textContent).toBe(
       'Sign in with your own ChatGPT account to run My Codex on it.',
@@ -433,12 +456,12 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     );
 
     // Approved in the browser: the next poll comes back with the account, stored.
-    polls = [{ status: 'CONFIRMED', account: account() }];
+    polls = [{ status: 'CONFIRMED', account: account(), logins: [account()] }];
     pools = [codexPool(account())];
     await until(() => dialogText().includes('is in My Codex'));
     expect(dialog()?.querySelector('.pa-done-t')?.textContent).toBe('lin@example.com is in My Codex');
     expect(dialog()?.querySelector('.pa-done-s')?.textContent).toBe(
-      'It’s ready for the next session. Only you can sign it out or sign it in again.',
+      'My Codex has 1 account now. A session moves to this one when the account it’s on runs out.',
     );
     expect(dialog()?.querySelector('.pa-acct-s')?.textContent).toBe(
       'ChatGPT Plus · …AB12 · its sign-in stays on the Orbit server',
@@ -451,9 +474,9 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
   });
 
   it('gives up the sign-in on the server when the dialog is cancelled before the code was approved', async () => {
-    pools = [codexPool(null)];
+    pools = [codexPool()];
     await mount(AT);
-    await click(button('Sign in with ChatGPT'));
+    await click(button('Add account'));
     await click(button('Sign in with ChatGPT', dialog()!));
     await click(button('Cancel', dialog()!));
     expect(sent).toEqual([
@@ -463,7 +486,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
   });
 
   it('gives up a sign-in whose code was still on its way when the dialog closed', async () => {
-    pools = [codexPool(null)];
+    pools = [codexPool()];
     await mount(AT);
     // The server takes its time printing the code: the start is still out when the person gives up.
     let answer: (value: unknown) => void = () => {};
@@ -477,7 +500,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
       }
       return base(p, init as never);
     }) as typeof api);
-    await click(button('Sign in with ChatGPT'));
+    await click(button('Add account'));
     await click(button('Sign in with ChatGPT', dialog()!));
     await click(button('Cancel', dialog()!));
     expect(sent).toEqual([{ method: 'POST', path: LOGIN, body: undefined }]);
@@ -492,10 +515,10 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
   });
 
   it('offers a new code once the old one expired', async () => {
-    pools = [codexPool(null)];
+    pools = [codexPool()];
     polls = [{ status: 'EXPIRED', account: null }];
     await mount(AT);
-    await click(button('Sign in with ChatGPT'));
+    await click(button('Add account'));
     await click(button('Sign in with ChatGPT', dialog()!));
     await until(() => dialogText().includes('The code expired'));
     expect(dialog()?.querySelector('.pa-done-s')?.textContent).toBe('It wasn’t approved in time. Get a new code to try again.');
@@ -506,41 +529,156 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
   });
 
   it('says why a sign-in did not finish, in the server’s words', async () => {
-    pools = [codexPool(null)];
+    pools = [codexPool()];
     polls = [{ status: 'FAILED', error: 'the codex CLI gave up (exit 1)', account: null }];
     await mount(AT);
-    await click(button('Sign in with ChatGPT'));
+    await click(button('Add account'));
     await click(button('Sign in with ChatGPT', dialog()!));
     await until(() => dialogText().includes('The sign-in didn’t finish'));
     expect(dialog()?.querySelector('.pa-done-s')?.textContent).toBe('The codex CLI gave up (exit 1).');
     expect(button('Try again', dialog()!)).not.toBeNull();
   });
 
-  it('refuses the same account twice, and another account in a pool that has one', async () => {
-    pools = [codexPool(null)];
-    polls = [new ApiError('This ChatGPT account is already in "My Codex"', 409, 'POOL_CODEX_ACCOUNT_DUPLICATE')];
+  it('refuses an account the pool already holds, naming it and saying what a second sign-in is worth', async () => {
+    pools = [codexPool(account())];
+    polls = [
+      new ApiError('This ChatGPT account is already in "My Codex"', 409, 'POOL_CODEX_ACCOUNT_DUPLICATE', {
+        email: 'lin@example.com',
+      }),
+    ];
     await mount(AT);
-    await click(button('Sign in with ChatGPT'));
+    await click(button('Add account'));
     await click(button('Sign in with ChatGPT', dialog()!));
     await until(() => dialogText().includes('already in'));
     expect(dialog()?.querySelector('.pa-done-t')?.textContent).toBe('This ChatGPT account is already in My Codex');
     expect(dialog()?.querySelector('.pa-done-s')?.textContent).toBe(
-      'It’s the account this pool runs on — signing it in twice adds nothing.',
+      'lin@example.com is one of its accounts, and signing it in twice adds no quota. Sign in with a different account.',
     );
-    await click(button('Close', dialog()!));
+    // The way out of it is a fresh sign-in with a different account, or closing.
+    expect(button('Close', dialog()!)).not.toBeNull();
+    polls = [{ status: 'PENDING', verificationUrl: DEVICE_URL, userCode: CODE, expiresAt: CODE_EXPIRES, account: null }];
+    await click(button('Get a new code', dialog()!));
+    expect(sent.filter((call) => call.method === 'POST')).toHaveLength(2);
+    expect(dialog()?.querySelector('.cx-code-text')?.textContent).toContain(CODE);
+  });
+
+  it('reads a refusal with no account named the same way, without the address', async () => {
+    pools = [codexPool(account())];
+    polls = [new ApiError('This ChatGPT account is already in "My Codex"', 409, 'POOL_CODEX_ACCOUNT_DUPLICATE')];
+    await mount(AT);
+    await click(button('Add account'));
+    await click(button('Sign in with ChatGPT', dialog()!));
+    await until(() => dialogText().includes('already in'));
+    expect(dialog()?.querySelector('.pa-done-s')?.textContent).toBe(
+      'It’s one of its accounts, and signing it in twice adds no quota. Sign in with a different account.',
+    );
+  });
+
+  it('holds several accounts: a row each, NEXT on the one a session would run on, and the head counts them', async () => {
+    pools = [
+      codexPool(
+        account({
+          usage: {
+            provider: 'codex',
+            primary: { utilization: 6, resetsAt: IN_AN_HOUR, windowDurationMins: 300 },
+            secondary: { utilization: 97, resetsAt: IN_THREE_DAYS, windowDurationMins: 10080 },
+          },
+        }),
+        hl(),
+      ),
+    ];
+    await mount('/providers');
+    const card = container.querySelector<HTMLElement>('.pool-sec .pool-card')!;
+    const head = card.querySelector<HTMLElement>('.re-head')!;
+    // The card says who can use it and how many of its accounts can run.
+    expect(head.querySelector('.re-summary')?.textContent).toBe('Just me · 2 of 2 accounts available');
+    // The head reads the account a session would start on, and its tightest window.
+    expect(head.querySelector('.pool-gauge-name')?.textContent).toBe('Next: lin@example.com');
+    expect(head.querySelector('.pool-gauge-pct')?.textContent).toBe('Weekly 97%');
+    const rows = Array.from(container.querySelectorAll<HTMLElement>('.pool-sec .pool-row-login'));
+    expect(rows.map((el) => el.querySelector('.re-name')?.textContent)).toEqual([
+      'lin@example.comNEXT',
+      'hl.work@gmail.com',
+    ]);
+    expect(rows.map((el) => el.querySelector('.pool-key-mask')?.textContent)).toEqual([
+      'ChatGPT Plus · …AB12',
+      'ChatGPT Pro · …7QX4',
+    ]);
 
     await act(async () => root.unmount());
     container.remove();
-    pools = [codexPool(account({ state: 'SIGNED_OUT' }))];
-    polls = [new ApiError('"My Codex" already runs on lin@example.com — sign it out first', 409, 'POOL_CODEX_ACCOUNT_TAKEN')];
     await mount(AT);
-    await click(button('Sign in again', row()));
-    await click(button('Sign in with ChatGPT', dialog()!));
-    await until(() => dialogText().includes('runs on another account'));
-    expect(dialog()?.querySelector('.pa-done-t')?.textContent).toBe('My Codex runs on another account');
-    expect(dialog()?.querySelector('.pa-done-s')?.textContent).toBe(
-      'Sign in as lin@example.com instead — or sign it out first to switch accounts.',
+    const detail = container.querySelector<HTMLElement>('.pool-detail')!;
+    // The card's head: how many accounts it holds, and which one the next session starts on.
+    expect(detail.querySelector('.re-runner')?.textContent).toBe('Accounts2');
+    expect(detail.querySelector('.pool-head-count')?.textContent).toBe('2');
+    expect(detail.querySelector('.pool-gauge-name')?.textContent).toBe('Next: lin@example.com');
+    expect(detail.querySelector('.pool-gauge-pct')?.textContent).toBe('Weekly 97%');
+    expect(text()).toContain(
+      'Codex pool · Just me · 2 of 2 accounts available · each session starts on the account whose quota resets soonest, and stays on it until that one runs out.',
     );
+    // Both rows are there, each with its own windows and its own sign-out mark.
+    expect(container.querySelectorAll('.pool-detail .pool-row-login')).toHaveLength(2);
+    expect(labelled('Sign out lin@example.com')).toHaveLength(1);
+    expect(labelled('Sign out hl.work@gmail.com')).toHaveLength(1);
+    expect(container.querySelector('.pool-danger-note')?.textContent).toBe(
+      'Its ChatGPT sign-ins are deleted from the Orbit server with it.',
+    );
+  });
+
+  it('signs one account out by its own fingerprint, and says the pool keeps running on the other', async () => {
+    pools = [codexPool(account(), hl())];
+    await mount(AT);
+    await click(labelled('Sign out lin@example.com')[0]);
+    const confirm = document.body.querySelector<HTMLElement>('.ant-popover:not(.ant-popover-hidden)')!;
+    expect(confirm.querySelector('.ant-popconfirm-title')?.textContent).toBe('Sign out lin@example.com?');
+    expect(confirm.querySelector('.ant-popconfirm-description')?.textContent).toBe(
+      'Its sign-in is deleted from the Orbit server, and no session runs on it until you sign in again — My Codex keeps running on its other account.',
+    );
+    await click(button('Sign out', confirm));
+    expect(sent).toEqual([
+      { method: 'DELETE', path: `${LOGIN}/account?fingerprint=${encodeURIComponent('…AB12')}`, body: undefined },
+    ]);
+
+    // Three of them: what stays is plural.
+    await act(async () => root.unmount());
+    container.remove();
+    pools = [codexPool(account(), hl(), account({ email: 'third@example.com', fingerprint: '…CC34' }))];
+    await mount(AT);
+    await click(labelled('Sign out lin@example.com')[0]);
+    const again = document.body.querySelector<HTMLElement>('.ant-popover:not(.ant-popover-hidden)')!;
+    expect(again.querySelector('.ant-popconfirm-description')?.textContent).toBe(
+      'Its sign-in is deleted from the Orbit server, and no session runs on it until you sign in again — My Codex keeps running on its other accounts.',
+    );
+  });
+
+  it('adds a second account: the notice says what the pool runs on now, and the ending says how many it holds', async () => {
+    pools = [codexPool(account())];
+    await mount(AT);
+    await click(button('Add account'));
+    expect(dialog()?.querySelector('.pa-lead')?.textContent).toBe(
+      'Sign in with another ChatGPT account of yours to add it to My Codex. It runs on 1 account now.',
+    );
+    expect(Array.from(dialog()!.querySelectorAll('.pa-facts li')).map((li) => li.textContent)).toEqual([
+      'Only you can use it. Sessions on a ChatGPT account are yours alone, even when My Codex is shared: the people in it can’t run on it or see which account it is.',
+      'The sign-in stays on the Orbit server. It never goes to a runner. Runners get a session token, not your login.',
+      'Sign out any time. My Codex keeps running on its other accounts.',
+    ]);
+    expect(dialog()?.querySelector('.pa-risk')?.textContent).toBe(
+      'Only your own accounts. Signing in with someone else’s ChatGPT account is sharing it. OpenAI’s terms don’t allow that, and an account used that way can be suspended.',
+    );
+
+    await click(button('Sign in with ChatGPT', dialog()!));
+    polls = [{ status: 'CONFIRMED', account: hl(), logins: [account(), hl()] }];
+    pools = [codexPool(account(), hl())];
+    await until(() => dialogText().includes('is in My Codex'));
+    expect(dialog()?.querySelector('.pa-done-t')?.textContent).toBe('hl.work@gmail.com is in My Codex');
+    expect(dialog()?.querySelector('.pa-done-s')?.textContent).toBe(
+      'My Codex has 2 accounts now. A session moves to this one when the account it’s on runs out.',
+    );
+    await click(button('Done', dialog()!));
+    await until(() => container.querySelectorAll('.pool-row-login').length === 2);
+    expect(labelled('Sign out hl.work@gmail.com')).toHaveLength(1);
   });
 
   it('makes a "Just me" Codex pool one of these, and opens it straight to signing in', async () => {
@@ -555,7 +693,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     );
     expect(modal.querySelector<HTMLInputElement>('label.np-field input')?.value).toBe('My Codex');
     await type(modal.querySelector<HTMLInputElement>('label.np-field input'), 'Codex');
-    pools = [codexPool(null)];
+    pools = [codexPool()];
     await click(button('Create pool', modal));
     expect(sent).toEqual([{ method: 'POST', path: '/providers/pools', body: { label: 'Codex', engine: 'codex' } }]);
     expect(path).toBe(AT);

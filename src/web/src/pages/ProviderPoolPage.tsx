@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { PlusOutlined } from '@ant-design/icons';
 import { Button, Popconfirm, Spin } from 'antd';
 import { api } from '../api';
 import {
@@ -12,7 +13,7 @@ import {
 } from '../components/AccountPools';
 import { CodexSignInModal } from '../components/CodexSignIn';
 import { AddKeyModal, PoolPeopleCard, PoolRulesCard, ReplaceKeyModal } from '../components/SharedPool';
-import { codexLoginPath, isLoginPool, loginName } from '../lib/codexLogin';
+import { codexLoginPath, isLoginPool, loginName, poolLogins, type CodexLogin } from '../lib/codexLogin';
 import { encodeId, routeId } from '../lib/idCodec';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import {
@@ -146,23 +147,31 @@ export function ProviderPoolPage() {
 const NO_REFUSALS: PoolRefusals = new Map();
 
 /**
- * A Codex pool of the user's own (migration 0323): the one ChatGPT account it runs on — its email, plan,
- * where it stands and its quota, with when each window resets — and the ways to change that: sign in
- * with ChatGPT while it has none, sign in again once OpenAI signed it out, sign it out, delete the pool.
- * Only its owner ever reaches this page (another user's pool is not found), so every press is theirs.
+ * A Codex pool of the user's own (migration 0323): every ChatGPT account it holds — each one's email,
+ * plan, where it stands and its quota, with when each window resets — and the ways to change that: add
+ * an account by signing one in, put back one OpenAI signed out, sign one out, delete the pool. Only its
+ * owner ever reaches this page (another user's pool is not found), so every press is theirs.
  */
 function CodexPoolPage({ pool, signInFirst }: { pool: ProviderPool; signInFirst: boolean }) {
   const message = useToast();
   const qc = useQueryClient();
   const navigate = useNavigate();
-  const [signingIn, setSigningIn] = useState(signInFirst && !pool.login);
+  const logins = poolLogins(pool);
+  // The dialog, and which account it is for: null to add one more, an account OpenAI signed out to
+  // put that one back.
+  const [signingIn, setSigningIn] = useState<{ login: CodexLogin | null } | null>(
+    signInFirst && logins.length === 0 ? { login: null } : null,
+  );
   const refresh = () => void qc.invalidateQueries({ queryKey: ['providers'] });
   const failed = (e: Error) => message.error(e.message || 'Failed');
   const signOut = useMutation({
-    mutationFn: () => api(`${codexLoginPath(pool.id)}/account`, { method: 'DELETE' }),
-    onSuccess: () => {
+    mutationFn: (login: CodexLogin) =>
+      api(`${codexLoginPath(pool.id)}/account?fingerprint=${encodeURIComponent(login.fingerprint)}`, {
+        method: 'DELETE',
+      }),
+    onSuccess: (_, login) => {
       refresh();
-      message.success(`${pool.login ? loginName(pool.login) : 'The account'} is signed out`);
+      message.success(`${loginName(login)} is signed out`);
     },
     onError: failed,
   });
@@ -175,7 +184,7 @@ function CodexPoolPage({ pool, signInFirst }: { pool: ProviderPool; signInFirst:
     },
     onError: failed,
   });
-  const deleteNote = 'Its ChatGPT sign-in is deleted from the Orbit server with it.';
+  const deleteNote = `Its ChatGPT sign-in${logins.length === 1 ? ' is' : 's are'} deleted from the Orbit server with it.`;
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -189,28 +198,32 @@ function CodexPoolPage({ pool, signInFirst }: { pool: ProviderPool; signInFirst:
             <h1 className="page-title">{pool.label}</h1>
           </div>
           <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
-            Codex pool · Just me · sessions run on your own ChatGPT account, and its sign-in stays on the
-            Orbit server.
+            Codex pool · Just me · {availabilityOf(pool, NO_REFUSALS)} · each session starts on the
+            account whose quota resets soonest, and stays on it until that one runs out.
           </div>
         </div>
-        {/* One account a pool: a second sign-in is how a signed-out one comes back, from its row. */}
-        {!pool.login && (
-          <Button type="primary" onClick={() => setSigningIn(true)}>
-            Sign in with ChatGPT
-          </Button>
-        )}
+        {/* Always here: a pool of one's own takes one account after another, and a signed-out one comes
+            back from its row. */}
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setSigningIn({ login: null })}>
+          Add account
+        </Button>
       </div>
 
       <div className="re-card pool-card pool-detail" data-pool={pool.id}>
         <div className="re-head">
-          <span className="re-runner">Account</span>
+          <span className="re-runner">
+            Accounts<span className="pool-head-count">{logins.length}</span>
+          </span>
           <span className="re-head-sp" />
           <PoolGauge pool={pool} />
         </div>
         <PoolMembers
           pool={pool}
           refusals={NO_REFUSALS}
-          loginActions={{ onSignIn: () => setSigningIn(true), onSignOut: () => signOut.mutate() }}
+          loginActions={{
+            onSignIn: (login) => setSigningIn({ login }),
+            onSignOut: (login) => signOut.mutate(login),
+          }}
         />
       </div>
 
@@ -229,7 +242,9 @@ function CodexPoolPage({ pool, signInFirst }: { pool: ProviderPool; signInFirst:
         <span className="pool-danger-note">{deleteNote}</span>
       </div>
 
-      {signingIn && <CodexSignInModal pool={pool} onClose={() => setSigningIn(false)} />}
+      {signingIn && (
+        <CodexSignInModal pool={pool} login={signingIn.login} onClose={() => setSigningIn(null)} />
+      )}
     </div>
   );
 }

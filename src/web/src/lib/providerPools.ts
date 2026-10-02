@@ -73,7 +73,10 @@ export interface ProviderPool {
   /** What it runs on: `claude` (the 0265 pools of one's own Claude keys) or `codex` — a pool of one's
    *  own ChatGPT account (migration 0323), or a shared pool. Absent from an older server: `claude`. */
   engine?: string;
-  /** A Codex pool of one's own: the ChatGPT account it runs on, or null before anyone signed in. */
+  /** A Codex pool of one's own: every ChatGPT account it holds, oldest first — the one its sessions
+   *  run on being the first of them. Absent from an older server, which names that one only. */
+  logins?: CodexLogin[];
+  /** The first of `logins` — the account the pool's sessions run on, or null before anyone signed in. */
   login?: CodexLogin | null;
   /** A shared pool (sharedPoolAsProviderPool): the whole of it as its page reads it — its people, its
    *  rules and the viewer's place in it. Absent on an account pool of the user's own. */
