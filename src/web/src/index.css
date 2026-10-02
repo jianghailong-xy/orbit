@@ -13692,6 +13692,163 @@ button.chat-jump-start:hover {
   color: var(--text-3);
 }
 
+/* ── A Codex pool by who reads it: its owner, or somebody they added (docs/mocks/account-pool-access) ── */
+/* The subtitle: who can use it first, a shade darker. */
+.pool-sub {
+  font-size: 12px;
+  color: var(--text-3);
+}
+.pool-sub b {
+  color: var(--text-2);
+  font-weight: 500;
+}
+/* Whose sessions an account runs, after its fingerprint: a ChatGPT account its owner's alone, a key
+   everybody's. */
+.pool-runs-for {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.pool-runs-for.all {
+  color: var(--success);
+}
+.pool-runs-for .anticon {
+  font-size: 11px;
+}
+/* The owner's ChatGPT accounts, as somebody they added sees them: one locked line. */
+.pool-card .re-row.pool-row-locked {
+  grid-template-columns: minmax(0, 1fr);
+  background: var(--bg-subtle);
+}
+.pool-row-locked .re-name {
+  color: var(--text-2);
+}
+.pool-lock-tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px dashed var(--border);
+  border-radius: 7px;
+  background: var(--fill-muted);
+  color: var(--text-3);
+  font-size: 13px;
+}
+/* Who can use it: the switch with what it means beside it, then each person, the one rule, and why the
+   owner's ChatGPT accounts are never anybody else's. */
+.who-card .re-head {
+  gap: 10px;
+}
+.who-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.who-mode:last-child {
+  border-bottom: 0;
+}
+.who-mode-h {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.who-card .pool-rule {
+  border-top: 1px solid var(--border-subtle);
+}
+.pool-runs {
+  color: var(--text-3);
+}
+.pool-runs.all {
+  color: var(--text-2);
+}
+.who-foot {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-subtle);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-3);
+}
+.who-foot .anticon {
+  flex: none;
+  margin-top: 4px;
+  font-size: 12px;
+}
+.who-foot b {
+  color: var(--text-2);
+  font-weight: 600;
+}
+.pool-share-emails {
+  width: 100%;
+}
+/* "Add account": each kind a card that is its own radio, what it runs said on it. */
+.add-kinds {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+.add-kinds .ant-radio-wrapper.add-kind {
+  display: flex;
+  align-items: flex-start;
+  margin-inline-end: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+}
+.add-kinds .ant-radio-wrapper.add-kind.ant-radio-wrapper-checked {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+}
+.add-kinds .add-kind .ant-radio {
+  align-self: flex-start;
+  margin-top: 3px;
+}
+.add-kinds .add-kind .ant-radio-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-inline: 12px 0;
+}
+.add-kind-t {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.add-kind-s {
+  display: block;
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.add-kind-s b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.add-kind-key {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #6b7280, #4b5563);
+  color: #fff;
+  font-size: 13px;
+}
+
 /* ── "Add a key" / "Replace key" ─────────────────────────────────────────────── */
 .pa-lead {
   font-size: 13px;
