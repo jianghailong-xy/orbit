@@ -1550,7 +1550,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the
       // six preserved objects — and it has no INSERT, UPDATE or DELETE. No `project_acceptance_*`
       // object is named.
-      '0346_codeless_and_source_on_upstream'],
+      '0346_codeless_and_source_on_upstream',
+      // The four lifetime token sums leave `session` (0347): `sum_input_tokens`,
+      // `sum_output_tokens`, `sum_cache_read` and `sum_cache_write` are dropped, catalog-only, after
+      // an anonymous DO gate that RAISEs while any function body still reads one. Read against every
+      // claim above: it ALTERs only `session`, so no `task` or `project_acceptance_*` object is
+      // named and the 0177 pair and every stored task and criterion row are out of its reach. No
+      // function, trigger or type is created, replaced or dropped — the gate is a DO block, not a
+      // `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none
+      // of the six preserved objects. No INSERT, UPDATE or DELETE.
+      '0347_drop_session_token_sums'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

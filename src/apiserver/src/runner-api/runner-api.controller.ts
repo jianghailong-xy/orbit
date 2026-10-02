@@ -3679,7 +3679,6 @@ export class RunnerApiController {
       );
     }
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
-    const usage = dto.usage;
     // Go's legacy `omitempty` encoding can omit an empty changedFiles slice. A new runner's
     // baseSha still proves that it computed a worktree snapshot, so normalize that shape to the
     // empty snapshot instead of advancing the base while retaining the previous file list.
@@ -3687,8 +3686,8 @@ export class RunnerApiController {
       dto.changedFiles ?? (dto.baseSha !== undefined ? [] : undefined);
     // Retried whole. Every decision — the duplicate-ack check, the park, the merge-state clear, the
     // billing accrual — is taken from the Session row read under its own lock inside the closure,
-    // so a re-run cannot accrue against a turn the winner already closed. `dto` and its usage are
-    // outside, so a retry books the same numbers and not a second set.
+    // so a re-run cannot accrue against a turn the winner already closed. `dto` is outside, so a
+    // retry books the same numbers and not a second set.
     const finalized = await withTransactionRetry(this.prisma, async (tx) => {
       // Serialize completion with createTurn's enqueue transition. Whichever locks the
       // Session first determines whether a follow-up is already queued; this prevents the
@@ -4427,10 +4426,6 @@ export class RunnerApiController {
           lastTurnAt: new Date(),
           numTurns: { increment: turnInc },
           costUsd: { increment: dto.costUsd ?? 0 },
-          sumInputTokens: { increment: usage?.input_tokens ?? 0 },
-          sumOutputTokens: { increment: usage?.output_tokens ?? 0 },
-          sumCacheRead: { increment: usage?.cache_read_input_tokens ?? 0 },
-          sumCacheWrite: { increment: usage?.cache_creation_input_tokens ?? 0 },
           // Folded into the park for the same reason the merge-state clear is: one write, and
           // conditional on the row still being the one this turn ran on. A turn put back in the
           // queue with no arm behind it is what the "engine never came up" case used to look
