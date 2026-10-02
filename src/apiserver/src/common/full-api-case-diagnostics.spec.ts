@@ -176,21 +176,26 @@ test('reports a passing test', () => {});
 `;
 
 test('(i) a case killed by its own wall clock is reported as a timeout, with the log it did leave', () => {
-  const run = runCase(1, 'hangs.spec.js', HANGS, 2);
+  // 15 seconds, not 2. The marker reaches the log only after two node boots -- the `node --test`
+  // runner and the child it starts for the spec -- and on a loaded machine those take seconds: with
+  // a thirteenth of a core the marker arrived 2.7-4.1s in, with a thirty-first 6.2-6.8s. Under 2s
+  // such a case was killed with an empty log, and the marker assertion below went red for the
+  // machine's load rather than for the harness. The cases that assert nothing about the log keep 2.
+  const run = runCase(1, 'hangs.spec.js', HANGS, 15);
 
   assert.equal(run.status, 124, 'timeout reports the wall clock it enforced as 124');
-  assert.match(run.output, /full-api FAILED \[1\/1\]: fake\/hangs\.spec\.js TIMED_OUT exit=124 elapsed=\d+s timeout=2/u);
+  assert.match(run.output, /full-api FAILED \[1\/1\]: fake\/hangs\.spec\.js TIMED_OUT exit=124 elapsed=\d+s timeout=15/u);
   // The evidence the old failure branch threw away: this case never printed `not ok`, so `sed`
   // printed nothing, and the run recorded a red with no stated reason.
   assert.doesNotMatch(run.output, /^not ok/mu);
   assert.match(run.output, /full-api NO TAP \[1\/1\]/u);
   assert.match(run.output, /# marker: this case will outlive its wall clock/u, 'the tail of the log is printed');
-  assert.match(run.output, /^exit=124 elapsed=\d+s timeout=2 kind=TIMED_OUT$/mu);
+  assert.match(run.output, /^exit=124 elapsed=\d+s timeout=15 kind=TIMED_OUT$/mu);
 
   assert.ok(run.receipt, 'a case that reported no TAP still leaves a receipt');
   assert.equal(run.receipt.failureKind, 'TIMED_OUT');
   assert.equal(run.receipt.exitCode, 124);
-  assert.equal(run.receipt.timeoutSeconds, 2);
+  assert.equal(run.receipt.timeoutSeconds, 15);
   assert.ok(run.receipt.elapsedSeconds >= 1, `wall clock was recorded: ${run.receipt.elapsedSeconds}`);
   assert.equal(run.receipt.outcome, 'FAILED');
   assert.equal(run.receipt.summary.tests, 0);
