@@ -33,16 +33,23 @@ public struct RenameSessionFolderRequest: Codable, Sendable {
     public init(name: String) { self.name = name }
 }
 
-/// POST /sessions/:id/move — file a session in one of its workspace's folders, or in none.
+/// POST /sessions/:id/move — file a session in one of its workspace's folders, or in none; with a
+/// `workspaceId`, move an ended session to that workspace, filed in one of its folders or in none.
 public struct MoveSessionRequest: Encodable, Sendable {
     public let folderId: String?
-    public init(folderId: String?) { self.folderId = folderId }
+    public let workspaceId: String?
+    public init(folderId: String?, workspaceId: String? = nil) {
+        self.folderId = folderId
+        self.workspaceId = workspaceId
+    }
 
-    private enum CodingKeys: String, CodingKey { case folderId }
+    private enum CodingKeys: String, CodingKey { case folderId, workspaceId }
 
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         // An explicit null rather than an omitted key: "in no folder" is what the request asks for.
         try c.encode(folderId, forKey: .folderId)
+        // Left out within the session's own workspace, which is what an omitted key means.
+        try c.encodeIfPresent(workspaceId, forKey: .workspaceId)
     }
 }
