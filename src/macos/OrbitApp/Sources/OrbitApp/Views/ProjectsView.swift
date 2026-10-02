@@ -529,12 +529,13 @@ struct ProjectDetailView: View {
             }
         }
         // Held on the list rather than beside the page's own alert: one view, one alert.
-        .alert(ProjectPage.resolveBlockerTitle, isPresented: Binding(get: { blockerToResolve != nil },
-                                                                   set: { if !$0 { blockerToResolve = nil } }),
+        .alert(blockerToResolve.map(ProjectPage.resolveBlockerTitle) ?? "",
+               isPresented: Binding(get: { blockerToResolve != nil },
+                                    set: { if !$0 { blockerToResolve = nil } }),
                presenting: blockerToResolve) { blocker in
-            TextField(ProjectPage.resolveBlockerQuestion, text: $resolveReason)
-            Button("Cancel", role: .cancel) { blockerToResolve = nil }
-            Button(ProjectPage.resolveBlockerConfirm) {
+            TextField(ProjectPage.resolveBlockerQuestion(blocker), text: $resolveReason)
+            Button(ProjectPage.resolveBlockerKeep(blocker), role: .cancel) { blockerToResolve = nil }
+            Button(ProjectPage.resolveBlockerConfirm(blocker)) {
                 let reason = String(resolveReason.trimmingCharacters(in: .whitespacesAndNewlines)
                     .prefix(ProjectPage.blockerReasonLimit))
                 Task { notice = await store.resolveBlocker(blocker.id, reason: reason) }
@@ -1315,6 +1316,11 @@ struct ProjectDetailView: View {
                     if let subject = ProjectPage.blockerSubjectLine(blocker) {
                         Text(subject).font(.orbitSubtext).lineLimit(2)
                     }
+                    if let decision = ProjectPage.blockerDecision(blocker) {
+                        Text(decision.question)
+                            .font(.orbitSubtext.weight(.semibold))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Text(blocker.requiredAction)
                         .font(.orbitLabel)
                         .foregroundStyle(.secondary)
@@ -1324,7 +1330,7 @@ struct ProjectDetailView: View {
                     }
                 }
                 Spacer(minLength: 6)
-                Button(ProjectPage.resolveBlockerPress) {
+                Button(ProjectPage.resolveBlockerPress(blocker)) {
                     resolveReason = ""
                     blockerToResolve = blocker
                 }
