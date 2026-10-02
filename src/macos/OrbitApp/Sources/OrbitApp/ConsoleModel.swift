@@ -622,6 +622,11 @@ final class ConsoleModel {
     // session runner's reported set, narrowed to host-level + this session's agent (see applySlashItems).
     private(set) var slashItems: [SlashCommandInfo] = []
     var slashScope: String?   // nil = both kinds; "command"/"skill" when opened from the + menu
+    /// Whether the composer holds the keyboard (iOS): its editor's begin/end editing writes it, and
+    /// setting it focuses the field (`ComposerView`). A phone gives the transcript the room while you
+    /// type: the band's cards, the bars under the nav bar and the nav bar itself fold away until the
+    /// keyboard goes (`ConsoleView`).
+    var composerEditing = false
 
     /// The worktree status bar's own model (detail snapshot + diffs + commit/merge actions) —
     /// see `WorktreeModel`. Wired back to this console for the live status + the status line.

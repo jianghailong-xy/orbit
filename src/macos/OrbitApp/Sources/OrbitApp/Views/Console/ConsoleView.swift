@@ -97,11 +97,22 @@ struct ConsoleView: View {
         var byCard: [String: [Data]] = [:]
     }
 
+    /// Whether the conversation gets the screen while you type: on a phone (compact width), while
+    /// the composer holds the keyboard. The band's cards, the bars under the nav bar and the nav bar
+    /// itself fold away together, and come back when the keyboard goes. The wide shells keep all of it.
+    private func foldsChrome(_ console: ConsoleModel?) -> Bool {
+        #if os(iOS)
+        hSize == .compact && console?.composerEditing == true
+        #else
+        false
+        #endif
+    }
+
     private func consoleBody(navTitleWidth: CGFloat) -> some View {
         Group {
             if let console = registry.peek(sessionID) {
                 VStack(spacing: 0) {
-                    TranscriptView(console: console)
+                    TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console))
                     // Pending approvals (incl. the AskUserQuestion form) render inline at the tail of
                     // the transcript now — as the agent's latest turn, web-style — not in a fixed panel
                     // here. See TranscriptView.
@@ -149,13 +160,18 @@ struct ConsoleView: View {
                                 onDismiss: dismiss)
                                 .padding(.bottom, .composerBandGap)
                         }
-                        // What this session waits on — a watch, not a process — above the real shells.
-                        WatchingCardStack(sessionID: console.sessionID)
-                        BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress)
-                        // The tasks this session's agent created, beside the code the bar below
-                        // carries — the session's two kinds of output, together.
-                        CreatedTasksCard(console: console)
-                        WorktreeBar(console: console)
+                        // The session's cards, which a phone folds while you type (`TypingFold`). The
+                        // one-off cards above stay: each is about the message being sent.
+                        VStack(spacing: 0) {
+                            // What this session waits on — a watch, not a process — above the real shells.
+                            WatchingCardStack(sessionID: console.sessionID)
+                            BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress)
+                            // The tasks this session's agent created, beside the code the bar below
+                            // carries — the session's two kinds of output, together.
+                            CreatedTasksCard(console: console)
+                            WorktreeBar(console: console)
+                        }
+                        .modifier(TypingFold(folded: foldsChrome(console)))
                         ComposerView(console: console)
                         // What the provider pick standing in the composer will do, and WHEN — the
                         // part that matters, because a run keeps its provider for its whole life.
@@ -193,13 +209,19 @@ struct ConsoleView: View {
         // list carries the bar — showing it in both columns would state one fact twice.
         // …and, when this session is itself holding a question that does NOT stop its turn, the same
         // bar pointing down into this transcript instead of away from it. See `NeedsYouBannerView`.
+        // While you type the bar folds away with the nav bar (`foldsChrome`), and a backdrop takes the
+        // nav bar's place behind the status bar so the transcript doesn't scroll under the clock.
         .safeAreaInset(edge: .top, spacing: 0) {
             if hSize == .compact {
                 let console = registry.peek(sessionID)
-                NeedsYouBannerView(
-                    excluding: sessionID,
-                    below: console?.waitingBelow,
-                    onOpenBelow: { rowID in console?.requestScroll(to: rowID) })
+                if foldsChrome(console) {
+                    Color.clear.frame(height: 0).background(.bar, ignoresSafeAreaEdges: .top)
+                } else {
+                    NeedsYouBannerView(
+                        excluding: sessionID,
+                        below: console?.waitingBelow,
+                        onOpenBelow: { rowID in console?.requestScroll(to: rowID) })
+                }
             }
         }
         // Pushed onto the compact NavigationStack (and shown as the split detail on iPad), this page
@@ -208,6 +230,9 @@ struct ConsoleView: View {
         // right under the back button. (The New-session compose page already does this; without it the
         // console reverts to the large bar the moment the session is created — the reported gap.)
         .navigationBarTitleDisplayMode(.inline)
+        // …and none at all while a phone's composer holds the keyboard (`foldsChrome`): back, the
+        // title and Share come back when the keyboard goes.
+        .toolbar(foldsChrome(registry.peek(sessionID)) ? .hidden : .automatic, for: .navigationBar)
         // Inline title: the session name over a "state · when" subtitle, matching the web Agent
         // console header (`AgentView.tsx`). Centered/two-line — the system convention (Messages/Phone)
         // — rather than web's left-aligned bar. The status word lived in the transcript's `statusBar`
@@ -276,6 +301,27 @@ struct ConsoleView: View {
     }
 }
 
+/// The band's cards while a phone's composer holds the keyboard (`foldsChrome`): folded to no
+/// height, not removed, so an open list, the branch bar's sheet host and a "View tasks ›" press made
+/// meanwhile all keep their state, and the cards come back as they were when the keyboard goes.
+/// The wide shells never fold, and macOS doesn't take the modifier at all.
+private struct TypingFold: ViewModifier {
+    let folded: Bool
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .frame(height: folded ? 0 : nil, alignment: .top)
+            .clipped()
+            .opacity(folded ? 0 : 1)
+            .allowsHitTesting(!folded)
+            .accessibilityHidden(folded)
+        #else
+        content
+        #endif
+    }
+}
+
 #if os(iOS)
 /// The pushed console's inline nav-bar title: the session name over a "state · when" subtitle,
 /// mirroring the web Agent console header (see OrbitKit `SessionHeader`). The session (with its
@@ -336,6 +382,9 @@ private struct ConsoleNavTitle: View {
 struct TranscriptView: View {
     @Environment(AppModel.self) private var app
     let console: ConsoleModel
+    /// The sticky "↑ Your question" header folds away while a phone's composer holds the keyboard,
+    /// with the rest of the console's chrome (`ConsoleView.foldsChrome`).
+    var hidesStickyQuestion = false
     private let bottomID = TranscriptRow.bottom.id
     // Mirrors web's `atBottom` (AgentView.tsx): flips false once the user scrolls up off the live
     // tail. Drives the floating jump-to-latest button AND gates the auto-follow below, so reading
@@ -594,7 +643,7 @@ struct TranscriptView: View {
             // the target just *below* the header, not hidden under it. iOS 18+/macOS 15+ (needs the
             // scroll/row geometry); on the earlier floor `stuckID` never updates, so this stays hidden.
             .safeAreaInset(edge: .top, spacing: 0) {
-                if #available(iOS 18, macOS 15, *), let q = stuckBubble {
+                if #available(iOS 18, macOS 15, *), !hidesStickyQuestion, let q = stuckBubble {
                     stickyQuestion(q, proxy: proxy)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
