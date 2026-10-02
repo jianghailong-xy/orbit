@@ -2530,7 +2530,13 @@ export class SessionsService {
     // a different question. It is not behind `GENERATING_SESSION_FILTER` either: an unanswered
     // decision outlives the turn that delivered its card, which is exactly the state in which the
     // badge was dark while somebody was waiting.
-    const decisions = await readOwnerDecisionSignals(this.prisma, ownerId);
+    //
+    // A project ready to start is not one of them here. Its row still says "Ready to start", but
+    // nothing is blocked on the start and the owner makes it when they choose, so it lights no
+    // tally — the clients' bar leaves the same row out (`SessionGrouping.countsOnlyAStart`), and the
+    // APNs badge never counted it.
+    const decisions = (await readOwnerDecisionSignals(this.prisma, ownerId))
+      .filter((signal) => signal.kind !== 'START_REQUEST');
     const awaitingDecision =
       decisions.length === 0
         ? []
