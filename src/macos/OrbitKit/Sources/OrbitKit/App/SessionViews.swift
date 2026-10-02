@@ -60,6 +60,11 @@ public enum SessionListPresentation: Equatable, Sendable {
     }
 
     public var showsPersistentScope: Bool { self == .regular }
+
+    /// Whether the search field sits in the bottom toolbar, where a thumb reaches it, rather than in
+    /// the drawer under the navigation bar. The phone's list only — and only on a system that draws
+    /// a bottom search field (iOS 26), which the view checks.
+    public var searchesFromBottom: Bool { self == .compact }
 }
 
 /// The relative timestamp at the trailing edge of a session-list row. A settled row dates its last

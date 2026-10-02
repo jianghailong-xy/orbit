@@ -1,4 +1,5 @@
 import {
+  ConflictException,
   Injectable,
   Logger,
   NotFoundException,
@@ -13,6 +14,7 @@ import {
   isUsageLimitErrorText,
   planUsageBlockedUntil,
   type PlanUsage,
+  type SessionMessageCard,
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,8 +26,19 @@ import {
 } from '../projects/task-aggregation';
 import { RealtimeService } from '../realtime/realtime.service';
 import { deriveSessionCapabilities } from './session-state';
-import { SessionsService } from './sessions.service';
+import { SessionsService, type SessionResumeAnswer } from './sessions.service';
 import { isBackgroundWakeTurn } from '../runner-api/background-job-wake';
+import { readSessionMessageCard } from './session-message';
+import {
+  attachHeldReplies,
+  hasHeldSessionReplies,
+  isSessionReplyTurn,
+  moveSessionRequestToTurn,
+  NothingHeldToResend,
+  readTurnRequestIds,
+  SESSION_REPLY_TURN_PREFIX,
+} from './session-request';
+import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
 import { runAccount } from '../providers/plan-usage-accounts';
 import {
   classifyTransactionError,
@@ -73,6 +86,15 @@ export function nextAutoRetryAt(attempts: number, now: Date): Date | null {
 // Nothing here is worth waking a scheduler for at a fixed cost forever: read a bounded page,
 // and let a backlog drain over consecutive sweeps.
 const MAX_PER_SWEEP = 50;
+
+/** What a retry re-sends (`AutoRetryService.messageToResend`). */
+interface ResendMessage {
+  content: string;
+  attachmentsOf: string | null;
+  senderSessionId: string | null;
+  turnId: string | null;
+  sessionReplies?: true;
+}
 
 /**
  * The list pause, asked where a retry is RELEASED rather than where it was armed.
@@ -420,12 +442,14 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
 
-        const { content, attachmentsOf } = await this.messageToResend(
-          session.id,
-          session.prompt,
-          session.numTurns,
-        );
-        if (!content) {
+        const message = await this.messageToResend(session.id, session.prompt, session.numTurns);
+        const { content, attachmentsOf } = message;
+        // A failed turn that handed back the outcomes of this session's own requests is re-sent as
+        // what it was: a reply turn, nobody's words, the outcomes its failure held for this session
+        // taken onto it as it is written (sessions/session-request.ts). Only while some are held —
+        // with none, it would wake the session to say nothing.
+        const resendsReplies = !!message.sessionReplies && await hasHeldSessionReplies(this.prisma, session.id);
+        if (!content && !resendsReplies) {
           // Nothing to re-send (no user message, no opening prompt to fall back on). Sending
           // an invented "continue" would be us writing in the user's voice.
           await this.disarm(session.id, session.status, 'nothing to re-send');
@@ -487,16 +511,34 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           if (attachmentsOf) {
             attachmentIds.push(...(await this.copyAttachments(session.id, attachmentsOf)));
           }
-          await this.sessions.resume(session.ownerId, session.id, {
-            content,
-            attachmentIds,
-            clientTurnId: randomUUID(),
-          });
+          await this.sessions.resume(
+            session.ownerId,
+            session.id,
+            {
+              content,
+              attachmentIds,
+              // The platform's own key space (watch-turn-key.ts): a turn under it is always the
+              // platform's re-send, never a message anybody sent again. A reply turn's re-send is one
+              // again, so its outcomes are found, merged and drawn as what they are.
+              clientTurnId: resendsReplies
+                ? `${SESSION_REPLY_TURN_PREFIX}retry:${randomUUID()}`
+                : `${AUTO_RETRY_TURN_KEY_PREFIX}${randomUUID()}`,
+            },
+            this.resendCarrying(session.id, message, resendsReplies),
+          );
         } catch (error) {
           // Nothing was re-sent, so the copies made for it are not history — just bytes. Dropped
           // before anything else in this catch, which has paths that rethrow and paths that end
           // the retry, and would leak a copy of every image on each of them otherwise.
           await this.discardCopies(attachmentIds);
+          // The reply turn this was re-sending would have said nothing: since the look before the
+          // claim, another turn of the session took the outcomes it held. That turn said them, so
+          // there is nothing left to retry — and the attempt the claim spent goes back, which is what
+          // says the retry is over rather than under way (`giveUpClaim`).
+          if (error instanceof NothingHeldToResend) {
+            await this.giveUpClaim(session.id, session.status, attempts, 'its outcomes were said on another turn');
+            continue;
+          }
           // §13.6 SU6, at the only point left where it can still surprise this sweep: the claim
           // above and the resume below are two transactions, so a supersession can commit between
           // them. The resume is then refused — correctly — but the ordinary catch would treat it as
@@ -665,15 +707,99 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    *
    * Empty text when there is nothing to re-send — the same conclusion that disarms a sweep, and
    * the clients offer no button rather than a dead one.
+   *
+   * When the words are another Orbit session's, the card their echo carries comes with them
+   * (`sessionMessage`, session-message.ts): a client whose window does not hold that echo learns
+   * from it that the retry is not the owner's to send, and asks the server to re-send instead
+   * (`resendRetryMessage`, contract §2.1).
    */
-  async retryMessage(ownerId: string, id: string): Promise<{ text: string }> {
+  async retryMessage(
+    ownerId: string,
+    id: string,
+  ): Promise<{ text: string; sessionMessage?: SessionMessageCard }> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       select: { id: true, prompt: true, numTurns: true },
     });
     if (!session) throw new NotFoundException('session not found');
-    const { content } = await this.messageToResend(session.id, session.prompt, session.numTurns);
-    return { text: content };
+    const message = await this.messageToResend(session.id, session.prompt, session.numTurns);
+    if (!message.content || !message.senderSessionId) return { text: message.content };
+    const requestId = message.turnId
+      ? (await readTurnRequestIds(this.prisma, session.id, [message.turnId])).get(message.turnId)
+      : undefined;
+    const card = await readSessionMessageCard(this.prisma, ownerId, message.senderSessionId, requestId);
+    return card ? { text: message.content, sessionMessage: card } : { text: message.content };
+  }
+
+  /**
+   * The failure card's Retry, when what it re-sends is another session's message (§2.1, §8 criterion
+   * 15): re-sent now by the server, as the sweep would re-send it, and not through the owner's own
+   * door — which would say the words again in the owner's name, signed by nobody. Here they keep their
+   * sender, the request they were moves onto the new turn, and nothing is charged: not that pair's
+   * hour (§2.4), not a steer.
+   *
+   * The message is the one `retryMessage` answers with, chosen by the sweep's own chooser at the
+   * moment of the click. The files it went out with go with it, by the ids they already have — the
+   * re-send copies them as any resend of a file does (`SessionsService.assertLinkableAttachments`), so
+   * a replay of this request under the same key names the same copies. NEXT_TURN, never a steer: a
+   * re-send is a turn of its own.
+   */
+  async resendRetryMessage(
+    ownerId: string,
+    id: string,
+    clientTurnId: string,
+  ): Promise<SessionResumeAnswer> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { id: true, prompt: true, numTurns: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    const message = await this.messageToResend(session.id, session.prompt, session.numTurns);
+    if (!message.content) {
+      throw new ConflictException('this session has no message for a retry to re-send');
+    }
+    const attachmentIds = message.attachmentsOf
+      ? (await this.prisma.attachment.findMany({
+          where: { sessionId: session.id, turnId: message.attachmentsOf },
+          orderBy: { createdAt: 'asc' },
+          select: { id: true },
+        })).map((attachment) => attachment.id)
+      : [];
+    return this.sessions.resume(
+      ownerId,
+      session.id,
+      { content: message.content, attachmentIds, clientTurnId, intent: 'NEXT_TURN' },
+      this.resendCarrying(session.id, message, false),
+    );
+  }
+
+  /**
+   * What a re-send carries beside its words, the sweep's and the failure card's alike (§2.1, §8
+   * criteria 14 and 17). A failed reply turn is re-sent as a reply turn that takes the outcomes it is
+   * re-sent for in the transaction that writes it (`attachHeldReplies`). Another session's message
+   * keeps its sender — without it the recipient reads it as the account owner's — and the request it
+   * was moves onto the new turn (`moveSessionRequestToTurn`), so the block the engine reads asks for a
+   * reply and the card names the request. Nothing else is passed: this is the platform's re-send,
+   * charged neither against that pair's hourly limit nor as a steer (no `participateSendTransaction`).
+   */
+  private resendCarrying(sessionId: string, message: ResendMessage, resendsReplies: boolean) {
+    if (resendsReplies) {
+      return {
+        onTurnWritten: (tx: Prisma.TransactionClient, turn: { clientTurnId: string }) =>
+          attachHeldReplies(tx, sessionId, turn.clientTurnId),
+      };
+    }
+    if (!message.senderSessionId) return undefined;
+    const carriedBy = message.turnId;
+    return {
+      senderSessionId: message.senderSessionId,
+      ...(carriedBy
+        ? {
+            onTurnWritten: (tx: Prisma.TransactionClient, turn: { id: string }) =>
+              moveSessionRequestToTurn(tx, sessionId, carriedBy, turn.id),
+          }
+        : {}),
+    };
   }
 
   /**
@@ -683,15 +809,22 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * it — a screenshot the user sent with them is a row hanging off that turn, and a retry that
    * re-sent the text alone asked the model about a picture it was never shown. Null when there
    * is nothing to carry.
+   *
+   * `senderSessionId` is who sent it, when that turn was another Orbit session's message
+   * (session-message.ts): the re-send is still that session's, and delivered without its sender it
+   * would read as the account owner's. Null for every message nobody's session sent.
+   *
+   * `turnId` is the turn those words are read off, when they are a turn's: the request they were, if
+   * they were one, sits on it and moves with the re-send (`moveSessionRequestToTurn`).
+   *
+   * `sessionReplies` says the latest turn handed back the outcomes of this session's own requests: it
+   * has no words to re-send, and the sweep re-sends it as a reply turn when its outcomes are held.
    */
   private async messageToResend(
     sessionId: string,
     prompt: string,
     numTurns: number,
-  ): Promise<{
-    content: string;
-    attachmentsOf: string | null;
-  }> {
+  ): Promise<ResendMessage> {
     // The user events themselves, not a tail of the whole stream: the latest one is near the
     // end only on a short turn. One workspace turn emits hundreds of tool/system events after the
     // message that provoked it — 400+ on the sessions that surfaced this — so a fixed window
@@ -711,7 +844,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     // question already answered. The runtime still holds the notification that woke that turn and
     // hands it over with the next message it is sent.
     if (await this.failureFollowsAnsweredMessage(sessionId, events[events.length - 1])) {
-      return { content: '', attachmentsOf: null };
+      return { content: '', attachmentsOf: null, senderSessionId: null, turnId: null };
     }
 
     // A provider's user event echoes exactly what the runner received, including delivery-time
@@ -731,6 +864,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
             targetTurnId: true,
             deliveryStatus: true,
             content: true,
+            senderSessionId: true,
             // A CURRENT_WORK USER can be the newest authored event when the executable it joined
             // fails. That adjustment is not a new executable. Follow its durable address back to
             // the exact message whose provider run failed, even if that message's USER fell
@@ -742,6 +876,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
                 sendIntent: true,
                 deliveryStatus: true,
                 content: true,
+                senderSessionId: true,
               },
             },
           },
@@ -753,15 +888,19 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       sendIntent: string | null;
       deliveryStatus: string | null;
       content: string | null;
+      senderSessionId: string | null;
     };
     const durableTurns = new Map<string, RetryTurn>();
     for (const turn of turns) {
       durableTurns.set(turn.id, turn);
       if (turn.targetTurn) durableTurns.set(turn.targetTurn.id, turn.targetTurn);
     }
+    // Each turn's own sender beside its words: the one re-sent is the one whose words are re-sent,
+    // which for an addressed steer is the message it joined rather than the steer.
     const durableContent = new Map([...durableTurns.values()].map((turn) => [turn.id, {
       id: turn.id,
       content: turn.content ?? '',
+      senderSessionId: turn.senderSessionId ?? null,
     }]));
 
     const executableFor = (turnId: string) => {
@@ -783,15 +922,22 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     };
 
     let chosen: (typeof events)[number] | undefined;
-    let chosenDurable: { id: string; content: string } | undefined;
+    let chosenDurable: { id: string; content: string; senderSessionId: string | null } | undefined;
     let content = '';
     for (let i = events.length - 1; i >= 0; i--) {
       const event = events[i];
       if (event.turnId && durableTurns.has(event.turnId)) {
         // A background job's wake (runner-api/background-job-wake.ts) carries nobody's words, and
         // stepping past it would re-send what the person said before it — a message already
-        // answered. There is nothing to re-send; the job's end stays in its durable event.
-        if (isBackgroundWakeTurn(turns.find((turn) => turn.id === event.turnId)?.clientTurnId)) break;
+        // answered. There is nothing to re-send; the job's end stays in its durable event. A turn
+        // handing back the outcomes of session requests carries nobody's words either, and stepping
+        // past it is wrong for the same reason; what it said is on the request rows, where its
+        // failure held it, and the sweep re-sends it as a reply turn (sessions/session-request.ts).
+        const keyOfTurn = turns.find((turn) => turn.id === event.turnId)?.clientTurnId;
+        if (isSessionReplyTurn(keyOfTurn)) {
+          return { content: '', attachmentsOf: null, senderSessionId: null, turnId: null, sessionReplies: true };
+        }
+        if (isBackgroundWakeTurn(keyOfTurn)) break;
         const original = executableFor(event.turnId);
         if (original?.content.trim()) {
           chosen = event;
@@ -819,7 +965,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       const opening = seeded?.content || prompt;
       if (opening.trim()) content = opening;
     }
-    if (!content) return { content: '', attachmentsOf: null };
+    if (!content) return { content: '', attachmentsOf: null, senderSessionId: null, turnId: null };
     // The turn THAT message came from, never merely the session's latest turn: pairing these words
     // with a later turn's images would re-send a message the user never wrote.
     return {
@@ -828,6 +974,11 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       // never got to announce. Its uploads are the compose page's, and the claim parked them
       // on the seeded first turn.
       attachmentsOf: chosenDurable?.id ?? (chosen ? chosen.turnId : seeded?.id ?? null),
+      // Read off the same durable turn as the words. An echo with no turn row behind it, and the
+      // opening prompt, are nobody's session's message.
+      senderSessionId: chosenDurable?.senderSessionId ?? null,
+      // ...and so is the request those words were, when they were one: it sits on that turn.
+      turnId: chosenDurable?.id ?? null,
     };
   }
 
@@ -1198,6 +1349,22 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       if (classifyTransactionError(error).retryable) return 'BUSY';
       throw error;
     }
+  }
+
+  /**
+   * End a retry this sweep has already claimed, because its re-send turned out to have nothing to say.
+   * The claim cleared `retry_at` and spent an attempt in one statement — the shape migrations 0350 and
+   * 0352 read as a retry going ahead — so handing the attempt back is what says it was given up: the
+   * requests waiting on a failed session close, and outcomes held for its retry are said on its task.
+   * A compare-and-set on exactly what the claim wrote, so a session revived in between is left alone.
+   */
+  private async giveUpClaim(sessionId: string, parkedAs: RunStatus, attempts: number, why: string): Promise<void> {
+    const { count } = await this.prisma.session.updateMany({
+      where: { id: sessionId, status: parkedAs, retryAt: null, retryAttempts: attempts + 1 },
+      data: { retryAttempts: attempts },
+    });
+    this.log.warn(`auto-retry of ${sessionId} given up after its claim: ${why}`);
+    if (count > 0) this.announceSettled(sessionId, parkedAs);
   }
 
   private async disarm(sessionId: string, parkedAs: RunStatus, why: string): Promise<void> {

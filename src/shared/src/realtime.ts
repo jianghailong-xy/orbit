@@ -8,6 +8,7 @@ import {
 } from './enums';
 import type { SessionCapabilities } from './dto';
 import type { SessionOwnerItem, SessionWaitingKind } from './project-progress';
+import type { SessionRequestPeer } from './session-request';
 
 /**
  * The user-scoped control-plane stream's wire protocol (`GET /api/events`).
@@ -51,6 +52,11 @@ export enum ControlEventType {
   TASK_LIST_CHANGED = 'task.list.changed',
   /** The owner's session-tag library changed. USER-SCOPED (see above). */
   TAG_CHANGED = 'tag.changed',
+  /** One of the owner's session folders was created, renamed or deleted. USER-SCOPED (see above).
+   *  `data` is a `ControlResourceChanged` naming the folder: a nudge to re-read
+   *  `GET /session-folders`. A session moved between folders is a `session.updated` instead, whose
+   *  summary carries the new `folderId`. */
+  FOLDER_CHANGED = 'folder.changed',
   /** The deployment's configured model providers changed. USER-SCOPED (see above). */
   PROVIDER_CHANGED = 'provider.changed',
   /** A project's pending criteria decisions changed — a loosening edit was held for the owner, or
@@ -85,7 +91,7 @@ export enum ControlEventType {
 export interface ControlEvent {
   type: ControlEventType;
   /** The session this event is about — EMPTY for the user-scoped events (`task.list.changed` /
-   *  `tag.changed` / `provider.changed` / `project.criteria_decisions.changed` /
+   *  `tag.changed` / `folder.changed` / `provider.changed` / `project.criteria_decisions.changed` /
    *  `project.changed` / `watch.changed` / `wiki.changed`), which belong to the owner, not to any
    *  one session. Clients must dispatch on `type`, not on the presence of a
    *  session id. */
@@ -121,6 +127,11 @@ export interface ControlSessionSummary {
   capabilities?: SessionCapabilities;
   agentId: string | null;
   agent: { id: string; name: string | null; model: string | null; effort: string | null } | null;
+  /** The session folder this session is filed in, or null when it is in no folder. Always sent by
+   *  a server that has folders, so the `session.updated` a move publishes is how other clients see
+   *  it: a client folding this summary into a row must treat null as a value and clear its own.
+   *  Only an absent key — an older control plane — means "unchanged". */
+  folderId?: string | null;
   /** Project relation projected onto a coordinator Session. Optional for rolling-version peers. */
   projectId?: string | null;
   projectTitle?: string | null;
@@ -162,6 +173,13 @@ export interface ControlSessionSummary {
    *  it holds, and an item that was answered clears the banner by arriving as an empty list. An
    *  absent key is an older control plane, and leaves whatever the row had. */
   ownerItems?: SessionOwnerItem[];
+  /** The sessions this one asked for a reply and is still waiting on (`session_send` /
+   *  `project_send` with `expectReply`, docs/session-request-reply-contract.md §6), oldest first.
+   *  Sent as `[]` when there are none, for the reason `ownerItems` is; absent from an older
+   *  control plane. */
+  awaitingReplyFrom?: SessionRequestPeer[];
+  /** The sessions waiting on a reply from this one, oldest first. Same `[]` convention. */
+  owesReplyTo?: SessionRequestPeer[];
   lastTurnAt: string | null;
   /** When the server will re-send the message this run's failure killed, or null if nothing is
    *  armed. Part of the summary because it is part of what `runState: FAILED` means here: a
@@ -255,8 +273,8 @@ export interface ControlAgentChanged {
   affectsTaskRows?: boolean;
 }
 
-/** `data` for the user-scoped events (`task.list.changed` / `tag.changed` / `provider.changed` /
- *  `project.criteria_decisions.changed` / `watch.changed` / `wiki.changed`). Same contract as the two
+/** `data` for the user-scoped events (`task.list.changed` / `tag.changed` / `folder.changed` /
+ *  `provider.changed` / `project.criteria_decisions.changed` / `watch.changed` / `wiki.changed`). Same contract as the two
  *  above: refetch the matching read; the id is for future fine-grained updates and logging, except on
  *  the last three, where it names the project whose pending decisions to re-read, the watch to
  *  re-read, and the wiki space whose pages and review queue to re-read. */

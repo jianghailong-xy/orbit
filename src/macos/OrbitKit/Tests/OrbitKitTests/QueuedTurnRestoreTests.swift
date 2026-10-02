@@ -136,6 +136,52 @@ final class QueuedTurnRestoreTests: XCTestCase {
         XCTAssertFalse(older.authoredByOrbit)
     }
 
+    /// Another Orbit session's message waiting in the queue: the projection says who sent it
+    /// (`sessionMessage`), the queue keeps that on the bubble it draws, and the words — somebody's,
+    /// but not the reader's — never come back to the reader's composer, withdrawn or dropped by a Stop
+    /// (docs/session-request-reply-contract.md §2.3, criterion 12).
+    func testAnotherSessionsMessageIsDrawnAsItsCardAndNeverComesBack() throws {
+        let listed = try JSONDecoder().decode([QueuedTurnInfo].self, from: Data("""
+            [{"turnId": "t-sent", "kind": "message", "content": "please review the migration",
+              "attachments": [],
+              "sessionMessage": {"fromSessionId": "34YCLEOsvlZDk31Ma1xAy", "fromTitle": "Worker: review",
+                                 "fromAgentName": "orbit", "requestId": "34YgrQMXGzcFaGOglxvaO"}},
+             {"turnId": "t-typed", "kind": "message", "content": "and then deploy", "attachments": []}]
+            """.utf8))
+        let card = SessionMessage(fromSessionId: "34YCLEOsvlZDk31Ma1xAy", fromTitle: "Worker: review",
+                                  fromAgentName: "orbit", requestId: "34YgrQMXGzcFaGOglxvaO")
+        XCTAssertEqual(listed.map(\.senderCard), [card, nil])
+        XCTAssertEqual(listed.map(\.authoredByOrbit), [nil, nil], "somebody did write it: the other session")
+
+        var r = TranscriptReducer()
+        r.reconcileQueuedTurns(listed, knownBefore: [])
+        XCTAssertEqual(r.state.queued.map(\.sessionMessage), [card, nil])
+        XCTAssertEqual(r.state.queued.compactMap(ComposerLogic.restorableText(of:)), ["and then deploy"],
+                       "the other session's words came back to the reader's composer")
+
+        // Kept across the queue's next reading, which takes the exact bubble it drew, and across the
+        // transcript snapshot the console stores.
+        r.reconcileQueuedTurns(listed, knownBefore: Set(listed.map(\.turnId)))
+        XCTAssertEqual(r.state.queued.map(\.sessionMessage), [card, nil])
+        let stored = try JSONEncoder().encode(r.state.queued[0])
+        XCTAssertEqual(try JSONDecoder().decode(UserBubble.self, from: stored).sessionMessage, card)
+
+        // The rule is the card, not the words: the same words with none are the reader's own.
+        XCTAssertEqual(ComposerLogic.restorableText(of: bubble("please review the migration")),
+                       "please review the migration")
+    }
+
+    /// An optimistic send the reader made, that the queue's reading then names as its own row, is not
+    /// another session's for having been matched: a row with no card leaves the bubble with none.
+    func testTheReadersOwnSendIsNotGivenAnotherSessionsCard() {
+        var r = TranscriptReducer()
+        r.addOptimisticUser(clientTurnId: "c1", text: "and then deploy", queued: true)
+        r.reconcileQueuedTurns([QueuedTurnInfo(turnId: "t-typed", content: "and then deploy")], knownBefore: [])
+        XCTAssertEqual(r.state.queued.map(\.turnId), ["t-typed"])
+        XCTAssertNil(r.state.queued[0].sessionMessage)
+        XCTAssertEqual(ComposerLogic.restorableText(of: r.state.queued[0]), "and then deploy")
+    }
+
     // MARK: the console is wired to both rules
 
     private enum WiringError: Error, CustomStringConvertible {

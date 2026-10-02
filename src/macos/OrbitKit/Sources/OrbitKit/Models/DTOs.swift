@@ -311,6 +311,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// are already inside `pendingApprovals`; this says which they are, so the bar can name one and
     /// open its card. Empty (or nil, from an older control plane) when none.
     public let ownerItems: [SessionOwnerItem]?
+    /// Who this conversation is waiting on for a reply, and who is waiting on it (session requests,
+    /// `SessionRequestCopy.peersLine`). Nil from an older control plane; empty when none is open.
+    public let awaitingReplyFrom: [SessionRequestPeer]?
+    public let owesReplyTo: [SessionRequestPeer]?
     /// The task whose run this is; nil for an ordinary conversation. It is how the console finds the
     /// question it may have to draw a card for (`OwnerConfirmation.swift`) — a card is drawn in the
     /// run's own session, and only there.
@@ -391,6 +395,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// by position). Empty/absent when untagged or from an older server. Drives the row's tag dots
     /// and the list's tag filter/grouping — see `SessionFilter` / `SessionTimeGrouping`.
     public let tags: [SessionTag]?
+    /// The folder this session is filed in (`SessionFolder`), or nil when it is in none — and
+    /// from an older server, which doesn't send the key. The list groups by it
+    /// (`SessionFolderGrouping`).
+    public let folderId: String?
 
     public var effectiveRunStatus: RunStatus { runStatus ?? status }
     public var effectiveRunState: SessionRunState {
@@ -465,6 +473,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
+        awaitingReplyFrom = try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .awaitingReplyFrom)
+        owesReplyTo = try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .owesReplyTo)
         taskId = try values.decodeIfPresent(String.self, forKey: .taskId)
         branch = try values.decodeIfPresent(String.self, forKey: .branch)
         updatedAt = try values.decodeIfPresent(String.self, forKey: .updatedAt)
@@ -491,6 +501,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         agent = try values.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         tags = try values.decodeIfPresent([SessionTag].self, forKey: .tags)
+        folderId = try values.decodeIfPresent(String.self, forKey: .folderId)
     }
 
     public init(id: String, title: String?, status: RunStatus, runStatus: RunStatus? = nil,
@@ -517,7 +528,9 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
                 poolMemberProviderId: String? = nil, poolKeyId: String? = nil,
                 codexAccount: String? = nil, codexAccountPinned: Bool? = nil,
-                claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil) {
+                claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil,
+                awaitingReplyFrom: [SessionRequestPeer]? = nil, owesReplyTo: [SessionRequestPeer]? = nil,
+                folderId: String? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -540,6 +553,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.pendingApprovals = pendingApprovals
         self.waitingKind = waitingKind
         self.ownerItems = ownerItems
+        self.awaitingReplyFrom = awaitingReplyFrom
+        self.owesReplyTo = owesReplyTo
         self.taskId = taskId
         self.branch = branch
         self.updatedAt = updatedAt
@@ -566,6 +581,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.lastTurnAt = lastTurnAt
         self.currentTurnStartedAt = currentTurnStartedAt
         self.tags = tags
+        self.folderId = folderId
     }
 }
 
@@ -676,7 +692,22 @@ public struct ArmAutoRetryRequest: Codable, Sendable {
 /// `ConsoleModel.retryMessageText`.
 public struct RetryMessage: Codable, Sendable {
     public let text: String
-    public init(text: String) { self.text = text }
+    /// The card the words' echo carries when they are another Orbit session's (`sessionMessage`,
+    /// apiserver session-message.ts): the Retry then asks the server to re-send them
+    /// (`APIClient.resendRetryMessage`, `RetryRoute`). Nil for the owner's own words.
+    public let sessionMessage: SessionMessage?
+    public init(text: String, sessionMessage: SessionMessage? = nil) {
+        self.text = text
+        self.sessionMessage = sessionMessage
+    }
+}
+
+/// POST /sessions/:id/retry-message — the failure card's Retry, asking the server to re-send another
+/// session's message as that session's (docs/session-request-reply-contract.md §2.1). Keyed like any
+/// send, so a replay after a lost response is the same re-send.
+public struct RetryResendRequest: Codable, Sendable {
+    public let clientTurnId: String
+    public init(clientTurnId: String) { self.clientTurnId = clientTurnId }
 }
 
 /// POST /sessions/:id/turns — send a user message or raw shell command.
@@ -766,6 +797,12 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// held raw for `ProjectStarted.parseCard` — the reader the echo's payload is read by.
     public let projectStarted: JSONValue?
     public var startedCard: ProjectStarted? { ProjectStarted.parseCard(projectStarted) }
+    /// Who sent this turn, when it is another Orbit session's message (`sessionMessage`) — held raw
+    /// for `SessionMessage.parseCard`, the reader the echo's payload is read by, so the card drawn
+    /// while the message waits is the one its echo is drawn as. Nil on every turn nobody's session
+    /// sent, and from a server that predates the field.
+    public let sessionMessage: JSONValue?
+    public var senderCard: SessionMessage? { SessionMessage.parseCard(sessionMessage) }
     /// The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
     /// predates the field.
@@ -773,13 +810,15 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
 
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
-                projectStarted: JSONValue? = nil, authoredByOrbit: Bool? = nil) {
+                projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
+                authoredByOrbit: Bool? = nil) {
         self.turnId = turnId
         self.kind = kind
         self.content = content
         self.attachments = attachments
         self.openItemDelivery = openItemDelivery
         self.projectStarted = projectStarted
+        self.sessionMessage = sessionMessage
         self.authoredByOrbit = authoredByOrbit
     }
 }
@@ -812,12 +851,16 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let codexAccount: String?
     /// The same for a session on the built-in Claude engine: one of the runner's Claude accounts.
     public let claudeAccount: String?
+    /// The folder the new session is filed in — one started from a folder's page lands in that
+    /// folder (docs/session-folders-move-design.md §3.2). It has to be one of this workspace's
+    /// folders, else the server answers 400. Nil omits it: the session is in no folder.
+    public let folderId: String?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
                 provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
-                claudeAccount: String? = nil) {
+                claudeAccount: String? = nil, folderId: String? = nil) {
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
@@ -831,6 +874,7 @@ public struct CreateSessionRequest: Codable, Sendable {
         self.attachmentIds = attachmentIds
         self.codexAccount = codexAccount
         self.claudeAccount = claudeAccount
+        self.folderId = folderId
     }
 }
 

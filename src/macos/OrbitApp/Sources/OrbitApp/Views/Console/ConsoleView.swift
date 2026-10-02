@@ -342,6 +342,15 @@ struct TranscriptView: View {
     // history isn't yanked back down by streaming updates. Maintained by `ScrollTracker` (macOS 15+);
     // on the macOS 14 floor it stays true — the view keeps the unconditional follow and hides the button.
     @State private var atBottom = true
+    // Whether more than `TailPinning.nearBottom` of content sits below the viewport right now, for any
+    // reason. `atBottom` can't say: it un-pins on a scroll UP alone, so a pinned transcript whose tail
+    // left the view some other way — a row that grew under it (a card opened, an image or link card
+    // landing), the keyboard, a follow that fell short — still read as at the bottom, and the
+    // jump-to-latest button never showed. Maintained by `ScrollTracker` beside `atBottom`.
+    @State private var tailOutOfView = false
+    // Pinned, but come to rest with the tail out of view: the button's other reason to show. Decided by
+    // the `.task(id: strandKey)` in `body`, so a gap the next follow is about to close never flashes it.
+    @State private var stranded = false
     // Id of the user turn the sticky header names — the newest question above the fold — or nil at the
     // very top where none is. Derived from the top anchor + the message list by `recomputeStuck`.
     @State private var stuckID: String?
@@ -374,12 +383,17 @@ struct TranscriptView: View {
     /// landed as — two red compile gates.
     private func tracker(ruler: QuestionRuler) -> some ViewModifier {
         #if os(iOS)
-        return ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck,
-                             scroll: transcriptScroll)
+        return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
+                             recompute: recomputeStuck, scroll: transcriptScroll)
         #else
-        return ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck)
+        return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
+                             recompute: recomputeStuck)
         #endif
     }
+
+    /// What `stranded` is re-decided on: the tail leaving or entering the view, the pin, and every
+    /// publish — whose follow may yet close the gap.
+    private var strandKey: String { "\(tailOutOfView)|\(atBottom)|\(console.stateRevision)" }
 
     /// Whether the load-earlier row is offered at all. Gated to the same floor as `ScrollTracker`:
     /// below it `atBottom` can never leave true, so the follow-on publish of a prepended page would
@@ -491,7 +505,7 @@ struct TranscriptView: View {
                 console.setReadingHistory(!pinned)
             }
             .onChange(of: console.sessionID) {
-                atBottom = true; ruler.reset(); stuckID = nil
+                atBottom = true; stranded = false; ruler.reset(); stuckID = nil
                 console.setReadingHistory(false)
                 // The reader's place went with the transcript that was on screen: the new one has
                 // not been laid out yet, and the bar's direction word must not answer for the
@@ -553,12 +567,23 @@ struct TranscriptView: View {
                 }
             }
             .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
-            // Floating jump-to-latest button, shown only while scrolled up (web's `.scroll-to-bottom`).
+            // Floating jump-to-latest button (web's `.scroll-to-bottom`): shown while scrolled up, and
+            // while the tail is out of view for any other reason (`stranded`).
             .overlay(alignment: .bottom) {
-                if !atBottom || console.detached {
+                if !atBottom || console.detached || stranded {
                     scrollToBottomButton(proxy: proxy)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
+            }
+            // Whether a pinned transcript is stranded off its tail, decided once it has sat that way for
+            // a moment. A publish restarts the wait: the follow it triggers lands a frame or two after
+            // the rows grew, and the gap read in between — the normal state while a reply streams (see
+            // `TailPinning`) — must not flash the button on every update. A transcript the reader
+            // scrolled up isn't decided here: `!atBottom` shows the button already.
+            .task(id: strandKey) {
+                guard atBottom, tailOutOfView else { stranded = false; return }
+                try? await Task.sleep(for: .milliseconds(400))
+                if !Task.isCancelled { stranded = true }
             }
             // Sticky "↑ Your question" header (web's `.chat-sticky-question`): pin the newest question
             // *above the fold* to the top so it stays in view during a long reply, and tap it to jump
@@ -575,6 +600,7 @@ struct TranscriptView: View {
                 }
             }
             .animation(.easeOut(duration: 0.15), value: atBottom)
+            .animation(.easeOut(duration: 0.15), value: stranded)
             // Only fires when the header appears/disappears (not on every text swap), so animating it
             // can't churn during a scroll.
             .animation(.easeOut(duration: 0.15), value: stuckID == nil)
@@ -619,7 +645,8 @@ struct TranscriptView: View {
     /// A turn the bar may point back at: asked already, and the head of a round rather than a line inside one.
     private func namesAQuestion(_ b: UserBubble) -> Bool {
         !b.queued && StickySummary.isAnchor(text: b.text, note: b.note, itemCard: b.itemCard,
-                                            taskStart: b.taskStart, startedCard: b.startedCard)
+                                            taskStart: b.taskStart, startedCard: b.startedCard,
+                                            sessionMessage: b.sessionMessage)
     }
 
     private var stuckBubble: UserBubble? {
@@ -693,7 +720,19 @@ struct TranscriptView: View {
             // checked FIRST as the transcript's own row checks it (`TranscriptItemView`): the shape
             // must not depend on which of the two states the turn is in. A delivery's paragraph is
             // neither of the two wake blocks below, so nothing is shadowed by the order.
-            if let card = bubble.itemCard {
+            //
+            // Another Orbit session's message is asked about before all of them, as the transcript's
+            // row asks it: who sent it is the projection's (`QueuedTurnInfo.senderCard`), and its words
+            // are the sending agent's to choose — they could take a wake's shape. Cancel withdraws it
+            // and hands nothing back to the composer (`ComposerLogic.restorableText`). Not offered for
+            // a steer: `session_send` into a running turn is written into it, and the server refuses
+            // to withdraw what the engine may already be reading (`UserBubbleView` hides it the same way).
+            if let card = bubble.sessionMessage {
+                SessionMessageCardView(card: card, text: bubble.text, ts: bubble.ts,
+                                       undelivered: bubble.undelivered,
+                                       onCancelQueued: bubble.turnId == nil || bubble.steer
+                                           ? nil : { Task { await console.cancelQueued(bubble) } })
+            } else if let card = bubble.itemCard {
                 OpenItemDeliveryCardView(card: card, text: bubble.text, ts: bubble.ts,
                                          undelivered: bubble.undelivered,
                                          onCancelQueued: bubble.turnId == nil
@@ -758,7 +797,8 @@ struct TranscriptView: View {
         // card reading "not typed by you".
         let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
                                        taskStart: bubble.taskStart,
-                                       startedCard: bubble.startedCard)
+                                       startedCard: bubble.startedCard,
+                                       sessionMessage: bubble.sessionMessage)
         // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
         return CoastingButton {
             #if os(iOS)
@@ -1133,8 +1173,9 @@ private struct ScrollTouchConfigurator: UIViewRepresentable {
 }
 #endif
 
-/// The single scroll observer: drives the jump-to-latest button's `atBottom`, AND feeds the sticky
-/// header by stashing the live content offset into `ruler` and asking for a recompute each frame.
+/// The single scroll observer: drives the jump-to-latest button's `atBottom` and `tailOutOfView`,
+/// AND feeds the sticky header by stashing the live content offset into `ruler` and asking for a
+/// recompute each frame.
 /// `onScrollGeometryChange` (macOS 15+/iOS 18+) is read-only — unlike `scrollPosition(id:)` +
 /// `scrollTargetLayout()` it registers no per-row scroll targets, so it won't re-break `List`
 /// virtualization (see the transcript-freeze history). On the earlier floor it's a no-op, leaving
@@ -1142,6 +1183,9 @@ private struct ScrollTouchConfigurator: UIViewRepresentable {
 /// bottom, un-pin only on an *upward* scroll — a downward content-growth delta must never strand the view.
 private struct ScrollTracker: ViewModifier {
     @Binding var atBottom: Bool
+    /// The gap alone, with the pin's slack — not whether the transcript still follows its tail, which
+    /// is `atBottom`'s question. See `TranscriptView.tailOutOfView`.
+    @Binding var tailOutOfView: Bool
     let ruler: QuestionRuler
     let recompute: () -> Void
     #if os(iOS)
@@ -1192,6 +1236,7 @@ private struct ScrollTracker: ViewModifier {
                     atBottom = TailPinning.pinned(wasPinned: atBottom, from: was, to: now,
                                                   readerDriven: readerIsMoving,
                                                   evidence: Self.evidence)
+                    tailOutOfView = now.bottomGap > TailPinning.nearBottom
                     ruler.contentOffset = CGFloat(now.offset)
                     recompute()
                 }
@@ -1249,15 +1294,25 @@ struct TranscriptItemView: View {
     var body: some View {
         switch item {
         case .user(let b):
+            // Another Orbit session's message (`session_send` / `project_send`): somebody's words,
+            // but not the reader's, so not the reader's bubble. Who sent it is what the control plane
+            // recorded beside the echo (`sessionMessage`, `SessionMessage.parse`), so it is asked
+            // FIRST — before anything is read out of the words, which are the sending agent's to
+            // choose — as the browser asks it (`NodeView`). No payload, the old reading.
+            //
             // An exception item's delivery is the control plane's too, and for a stronger reason
             // than the wakes below: nobody typed it at all. What the turn says is a paragraph
             // written for the AGENT — the tools to call, the ids to call them with — so drawing it
             // as a message is both wrong about who sent it and unreadable as a record: the item's
             // kind, its title, the files a merge conflicted on and whether the work has landed are
             // all in the payload recorded beside it (`openItemDelivery`, `OpenItemDelivery.parse`).
-            // With no payload the turn keeps its old reading — this is checked FIRST, as the browser
-            // checks it (`NodeView`).
-            if let card = b.itemCard {
+            // With no payload the turn keeps its old reading — this is checked before the wakes, as
+            // the browser checks it (`NodeView`).
+            if let card = b.sessionMessage {
+                SessionMessageCardView(card: card, text: b.text, ts: b.ts,
+                                       undelivered: b.undelivered || b.delivery == "failed",
+                                       attached: b.attached)
+            } else if let card = b.itemCard {
                 // The note the same turn carried rides inside the card (`b.attached`): nobody typed
                 // this turn either, so the control plane's words do not go back into a bubble in the
                 // reader's own name — the same rule the wake card applies to a mixed note.
@@ -1285,6 +1340,18 @@ struct TranscriptItemView: View {
                 ProjectStartedCardView(card: started, text: b.text, ts: b.ts,
                                        undelivered: b.undelivered || b.delivery == "failed",
                                        attached: b.attached)
+            } else if let replies = b.sessionReplies, !replies.isEmpty {
+                // The outcomes of this session's own requests, handed back (`sessionReplies`,
+                // `SessionReply.parse`): a reply turn carries nobody's words, and a message of the
+                // owner's may carry outcomes that were held for it — then the owner's words are their
+                // bubble, first, and the outcomes follow as cards, with what else delivery appended
+                // folded into them (web parity: NodeView).
+                VStack(alignment: .leading, spacing: 6) {
+                    if !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        UserBubbleView(bubble: withoutNote(b))
+                    }
+                    SessionReplyCardsView(replies: replies, ts: b.ts, attached: replyRest(b))
+                }
             } else if let wake = WatchWakeText.parse(b.text) {
                 // A turn a watch queued is the watch's to show, not a message the user typed: it opens
                 // with a raw UUID and carries the whole payload the agent read (web parity: NodeView).
@@ -1352,6 +1419,12 @@ struct TranscriptItemView: View {
     /// its other blocks instead of repeating the wake beneath the card.
     private func attachedRest(_ wake: BackgroundWake) -> (kind: String, text: String)? {
         wake.rest.isEmpty ? nil : (kind: describeNote(wake.rest), text: wake.rest)
+    }
+
+    /// What the reply cards did NOT take from a turn's note, as the entry folded inside them.
+    private func replyRest(_ bubble: UserBubble) -> (kind: String, text: String)? {
+        let rest = SessionReply.withoutReplyBlocks(bubble.note)
+        return rest.isEmpty ? nil : (kind: describeNote(rest), text: rest)
     }
 
     /// The same bubble with the note taken off it: all of it is the card's now, so leaving it here

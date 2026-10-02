@@ -723,7 +723,13 @@ suite('(q) the core tables keep every trigger that predates this project', async
   // and 31 since 0280 added `task_list_task_count_insert`/`_delete`/`_relist` and 0282 added
   // `project_task_status_count_insert`/`_delete`/`_move`. Six additions by two later projects:
   // same reasoning as `session` above — the number moves, the claim does not.
-  assert.deepEqual(counts, { run_event: 1, session: 11, task: 31 });
+  //
+  // `session`: 12 since 0350 added `session_request_recipient_ended`, which closes the session
+  // requests still waiting on a session whose run ends, and writes only `session_request`; 13 since
+  // 0352 added `session_request_asker_stopped`, which marks the outcomes held for an asking session
+  // that stopped for good, and writes only `session_request` too. Additions by a later project: the
+  // number moves, the claim does not.
+  assert.deepEqual(counts, { run_event: 1, session: 13, task: 31 });
 
   // And every one that went is named, so a reader can tell a removal from an accident.
   for (const trigger of [

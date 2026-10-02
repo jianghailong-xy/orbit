@@ -21,6 +21,7 @@ import {
   shortBranchName,
   workBranchEndedOn,
 } from './project-integration-job';
+import { openItemOwed } from './project-open-item';
 import {
   LIVE_PROMOTION_STATES,
   PROMOTION_COLUMNS,
@@ -553,6 +554,8 @@ async function applyDecline(
     throw new ConflictException({ code: PROMOTION_NOT_READY, message: 'this promotion moved on' });
   }
   await resolveApprovalItem(tx, row.openItemId, 'DECLINED', userId);
+  // After the card, which keeps the owner's answer: what the platform closes is the failures.
+  await closePromotionItems(tx, row.projectId, row.id, 'RESOLVED');
 }
 
 /**
@@ -582,10 +585,11 @@ async function applyCancel(tx: Prisma.TransactionClient, row: PromotionRow): Pro
       });
     }
   }
-  await tx.projectPromotion.updateMany({
+  const moved = await tx.projectPromotion.updateMany({
     where: { id: row.id, state: row.state },
     data: { state: 'CANCELLED' satisfies PromotionState, decidedAt: new Date() },
   });
+  if (moved.count > 0) await closePromotionItems(tx, row.projectId, row.id, 'RESOLVED');
 }
 
 /** One promotion of one project, by both ids, so a promotion of another project is not found. */
@@ -620,6 +624,40 @@ async function resolveApprovalItem(
   });
 }
 
+/**
+ * §4.2: a candidate that leaves the live states takes the failures about it with it, in the same
+ * transaction — `PROMOTION_MOVED_ON`, closed by the platform.
+ *
+ * The INTEGRATION_* items its check or its landing opened name it by `promotion_id`, and each is
+ * waiting on THIS candidate being put right. Once it is superseded, declined, cancelled or merged,
+ * nothing will put it right and nobody needs it to: left open, the item is escalated to the owner on
+ * the clock, and M-T11 counts it against every later candidate of the project — so a candidate that
+ * no longer exists keeps the Automatic setting from merging anything.
+ *
+ * By the item's `promotion_id`, not by `project_promotion.open_item_id`: that column names the
+ * owner's approval card and nothing else, and the card is answered by its own close — the owner's
+ * decision (`resolveApprovalItem`) or the supersession beside this call. The kinds here never include
+ * the card, so whichever runs first, the owner's answer on it stands.
+ *
+ * SUPERSEDED when a newer candidate took this one's place, RESOLVED for every other way out.
+ */
+async function closePromotionItems(
+  tx: Prisma.TransactionClient,
+  projectId: string,
+  promotionId: string,
+  state: 'SUPERSEDED' | 'RESOLVED',
+): Promise<void> {
+  await tx.projectOpenItem.updateMany({
+    where: { projectId, promotionId, state: 'OPEN', kind: { in: INTEGRATION_ITEM_KINDS } },
+    data: {
+      state,
+      resolution: 'PROMOTION_MOVED_ON',
+      resolvedBy: 'PLATFORM',
+      resolvedAt: new Date(),
+    },
+  });
+}
+
 /** What one finished promotion job did to the promotion it belongs to. */
 export interface PromotionJobOutcome {
   promotionId: string;
@@ -640,7 +678,9 @@ export interface PromotionJobOutcome {
 }
 
 /** The exception kinds that are an integration line's own problems (§4.2): while one of this
- *  project's is open, nothing it would carry into main is clean enough to go there by itself. */
+ *  project's is open and still owed (`openItemOwed`), nothing it would carry into main is clean
+ *  enough to go there by itself. One about a candidate or a task that has moved on holds nothing
+ *  back, whether or not anything has closed it yet. */
 const INTEGRATION_ITEM_KINDS = ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR'];
 
 /**
@@ -670,9 +710,13 @@ async function automaticConfirmationRefusalIn(
     where: { id: promotion.codebaseId },
     select: { integrationRef: true, upstreamRef: true },
   });
-  const openIntegrationItems = await tx.projectOpenItem.count({
-    where: { projectId: promotion.projectId, state: 'OPEN', kind: { in: INTEGRATION_ITEM_KINDS } },
-  });
+  const [counted] = await tx.$queryRaw<Array<{ open: number }>>(Prisma.sql`
+    SELECT count(*)::int AS "open"
+      FROM "project_open_item" item
+     WHERE item."project_id" = ${promotion.projectId}::uuid
+       AND item."state" = 'OPEN'
+       AND item."kind" IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
+       AND ${openItemOwed('item')}`);
   // The line as the binding says now, and only if it is still the line this candidate was made on:
   // its source is the project's branch and its upstream is the project's upstream.
   const line = !codebase
@@ -691,7 +735,7 @@ async function automaticConfirmationRefusalIn(
     checks: report.checks,
     upstreamShaChecked: report.upstreamSha,
     mergeTreeSha: report.testedTreeSha,
-    openIntegrationItems,
+    openIntegrationItems: counted!.open,
     runnerHandsBackMovedUpstream: report.runnerHandsBackMovedUpstream,
   });
 }
@@ -751,7 +795,8 @@ function storedChecks(promotion: PromotionRow): IntegrationCheckResult[] {
 }
 
 /**
- * M-T6: retire the candidates standing on one source, their check jobs and their cards.
+ * M-T6: retire the candidates standing on one source, their check jobs, their cards and the failures
+ * they had open (§4.2, `closePromotionItems`).
  *
  * `keepJobIds` names a job whose result is being applied right now: a terminal job row is written
  * once (`project_integration_job_terminal_guard`), so cancelling that one here would make the very
@@ -790,6 +835,7 @@ async function supersedeLiveCandidates(
         },
       });
     }
+    await closePromotionItems(tx, projectId, row.id, 'SUPERSEDED');
   }
 }
 
@@ -992,6 +1038,7 @@ export async function applyPromotionJobResult(
         receiptIds,
       },
     });
+    await closePromotionItems(tx, promotion.projectId, promotion.id, 'RESOLVED');
     return { promotionId: promotion.id, state: 'MERGED', receiptIds, openApproval: null };
   }
   return blockPromotion(tx, promotion.id, checks, input.conflicts, now, input.sourceSha);

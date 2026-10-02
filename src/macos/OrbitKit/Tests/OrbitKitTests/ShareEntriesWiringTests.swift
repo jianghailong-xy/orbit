@@ -150,12 +150,12 @@ final class ShareEntriesWiringTests: XCTestCase {
         XCTAssertEqual(actions.components(separatedBy: "RowSwipeAction(title: \"Share\"").count - 1, 1,
                        "the swipe and the menu draw the same one")
 
-        // Swiped left it sits inside Delete: a side lists its actions from the screen edge inward, so
-        // Delete stays outermost, and the trailing side has no full swipe. The circles and the
-        // system's buttons draw the same list.
+        // Swiped left it sits inside Delete and Move: a side lists its actions from the screen edge
+        // inward, so Delete stays outermost, and the trailing side has no full swipe. The circles and
+        // the system's buttons draw the same list. (`SessionMoveWiringTests` holds the whole order.)
         let trailing = try slice(actions, from: "private var trailingActions: [RowSwipeAction] {", to: "\n    }")
-        XCTAssertTrue(trailing.contains("if let shareAction { return [deleteAction, shareAction] }"))
-        XCTAssertTrue(trailing.contains("return [deleteAction]"), "Delete alone where there's no Share")
+        XCTAssertTrue(trailing.contains("[deleteAction] + [moveAction, shareAction].compactMap { $0 }"),
+                      "Delete first and alone where there's no Share")
         XCTAssertTrue(actions.contains("trailing: trailingActions"))
         let system = try slice(actions, from: ".swipeActions(edge: .trailing, allowsFullSwipe: false) {", to: "}")
         XCTAssertTrue(system.contains("ForEach(trailingActions) { button($0) }"))

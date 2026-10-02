@@ -342,11 +342,14 @@ export enum RunEventType {
   // STATUS/TURN_END accompanies. Maps to ControlEventType.SESSION_UPDATED, so the client gets the
   // same full summary it upserts for a status change.
   SESSION_UPDATED = 'session_updated',
-  // Owner-level libraries: task lists, session tags, model providers. These have no session to
-  // hang off, so they're published USER-SCOPED (RealtimeService.publishForUser) — same hub, same
-  // NOTIFY bridge, but routed by owner id instead of by session.
+  // Owner-level libraries: task lists, session tags, session folders, model providers. These have
+  // no session to hang off, so they're published USER-SCOPED (RealtimeService.publishForUser) —
+  // same hub, same NOTIFY bridge, but routed by owner id instead of by session.
   TASK_LIST_CHANGED = 'task_list_changed',
   TAG_CHANGED = 'tag_changed',
+  // A session folder was created, renamed or deleted. Moving a session between folders is a
+  // SESSION_UPDATED on that session instead: it changes one list row, not the folder set.
+  FOLDER_CHANGED = 'folder_changed',
   PROVIDER_CHANGED = 'provider_changed',
   // A project's held criteria proposals changed: one was filed for the owner, or the owner decided
   // one. Owner-scoped like the libraries above — the question is the project owner's, not any
@@ -383,6 +386,7 @@ export function isLifecycleType(t: RunEventType): boolean {
     t === RunEventType.AGENT_CHANGED ||
     t === RunEventType.TASK_LIST_CHANGED ||
     t === RunEventType.TAG_CHANGED ||
+    t === RunEventType.FOLDER_CHANGED ||
     t === RunEventType.PROVIDER_CHANGED ||
     t === RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED ||
     t === RunEventType.PROJECT_CHANGED ||

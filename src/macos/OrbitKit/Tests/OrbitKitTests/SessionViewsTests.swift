@@ -32,6 +32,12 @@ final class SessionViewsTests: XCTestCase {
         XCTAssertTrue(regular.showsPersistentScope)
     }
 
+    /// The phone's list searches from the bottom; the iPad's column keeps the field under its bar.
+    func testOnlyTheCompactListSearchesFromTheBottom() {
+        XCTAssertTrue(SessionListPresentation.compact.searchesFromBottom)
+        XCTAssertFalse(SessionListPresentation.regular.searchesFromBottom)
+    }
+
     /// An older control plane sends no `currentTurnStartedAt`. Falling back to `lastTurnAt` here is
     /// what the row must never do: that field is rewritten on every state move, so it would print
     /// "just now" against every spinner in the list at once. Bare is the honest answer.
