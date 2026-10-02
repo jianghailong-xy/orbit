@@ -1,6 +1,6 @@
 # 会话间消息：发送者署名与「请求 → 回复」
 
-**状态**：设计已定（2026-10-01，owner 的三项决定见 §9），尚未实现。分两期：**P0 署名**、**P1 请求与回复**，P1 依赖 P0。
+**状态**：设计已定（2026-10-01，owner 的三项决定见 §9），实现进度见对应的 Orbit 任务。分两期：**P0 署名**、**P1 请求与回复**，P1 依赖 P0。
 两期实现以本文为准；实现中要偏离本文，先改本文。
 
 ---
@@ -27,9 +27,10 @@
 
 ## 1. 术语
 
-- **会话间消息**：调用方是一个会话（请求带 `X-Orbit-Session-Id`），目标是另一个会话。入口只有两个：
-  `session_send`（`POST /runner/sessions/:id/turns`）和 `project_send`
-  （`POST /runner/projects/:id/coordinator/messages`，目标在投递时解析）。人从客户端发的、headless 凭据发的、
+- **会话间消息**：调用方是一个会话（请求带 `X-Orbit-Session-Id`），目标是另一个会话。入口有三个：
+  `session_send`（`POST /runner/sessions/:id/turns`）、`project_send`
+  （`POST /runner/projects/:id/coordinator/messages`，目标在投递时解析），以及 `session_interrupt` 附带的消息
+  （`POST /runner/sessions/:id/interrupt` 带 `message`）。人从客户端发的、headless 凭据发的、
   平台自己投递的（watch 唤醒、open item、criteria 回复……）都**不是**会话间消息，本文不改它们。
 - **请求**：带 `expectReply: true` 的会话间消息。
 - **结局**：请求的终态，五种之一（§4）。
@@ -41,8 +42,11 @@
 
 ### 2.1 记录
 
-`conversation_turn` 新增可空列 `sender_session_id`。§1 的两个入口写 turn 时填调用方会话，其他入口一律留空。
+`conversation_turn` 新增可空列 `sender_session_id`。§1 的三个入口写 turn 时填调用方会话，其他入口一律留空。
 空值就是今天的语义：人或平台写的。
+
+例外只有一个：自动重试（`src/apiserver/src/sessions/auto-retry.service.ts`）重发上一条消息时，新 turn 沿用原 turn 的
+`sender_session_id`。重发的还是那个会话的话，丢了署名，对方就会把它当成 owner 说的。这是平台的重发，不计入 §2.4 的上限。
 
 ### 2.2 引擎看到什么
 
@@ -79,11 +83,14 @@
 web、macOS、iOS 把带这张卡片的 `user` 事件画成「来自 [会话 X]」卡片，会话标题可点，不再画成 owner 的气泡。
 旧客户端读不到卡片，显示和今天一样。
 
+还在排队、没投递的会话间消息也一样：队列接口带上同一张卡片，三端的队列把它画成卡片；owner 撤回这条排队消息时，
+不把对方的原文放回自己的输入框。
+
 ### 2.4 频率上限（随 P0 上线）
 
 P0 让接收方第一次知道是谁在跟它说话，两个会话也就第一次能来回对话。所以上限跟 P0 一起上，不等 P1：
 
-- 每个**有序会话对**（A→B）在滚动的 1 小时内最多 **20** 条会话间消息，普通消息和请求合计。
+- 每个**有序会话对**（A→B）在滚动的 1 小时内最多 **20** 条会话间消息，普通消息、打断附带的消息和请求合计。
 - 超出返回 409 `SESSION_MESSAGE_RATE_LIMITED`，`retryable: false`。文案指向正确的做法：要等 B 干完活，
   用 `session_await`，不要一遍遍问它。
 - 20 是常量，不是设置。依据：一个 agent 回合通常要几分钟，正常协作一小时到不了 20 条；而「问一句状态、
@@ -285,6 +292,13 @@ P1：
 9. 发送方被打断时丢掉的回信，在它下一次被投递 turn 时补上。
 10. 所有允许指定 `clientTurnId` 的客户端入口拒收 `session-reply:` 前缀。
 
+P0 补充（2026-10-02）：
+
+11. 自动重试重发一条会话间消息时，新 turn 的 `sender_session_id` 与原 turn 相同，引擎收到的文本带
+    `<orbit-session-message>` 块。
+12. 排队中的会话间消息在 web / macOS / iOS 的队列里画成卡片；撤回时不把对方的原文放回 owner 的输入框。
+13. `session_interrupt` 附带的消息写入 `sender_session_id`，并计入 §2.4 的上限。
+
 ---
 
 ## 9. 已定的决策（owner，2026-10-01）
@@ -299,3 +313,6 @@ P1：
   要判断一次发送属于哪个 thread，就得知道它是在哪一轮里发出的，而 steer 和回信合并让这件事没有确定的答案；
   按会话对计数是确定的，也顺带覆盖了 P0 打开的普通消息回路。
 - 触到上限时只拒绝调用方，不另外通知 owner：拒绝文案已经指向正确的做法，卡片和会话列表上也看得见。
+
+2026-10-02 补充：P0 验收时发现还有三处会把另一个会话的话当成 owner 说的：自动重试的重发、排队中的消息、打断附带的消息。
+§1、§2.1、§2.3、§2.4 已补上对应规则，验收见 §8 第 11–13 条。其中打断附带的消息是本文原先漏列的入口。
