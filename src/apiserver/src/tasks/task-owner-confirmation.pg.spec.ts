@@ -633,14 +633,16 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
         assert.equal(await asking(), null, 'a job in flight is the run working on');
 
         // (d) The job ends, and the next turn ends with nothing left anywhere: this is the
-        // question, about the turn that ended the run — and the declaration is spent by it.
+        // question — asked at the turn that ended the run, about what the run said in the turn it
+        // declared in — and the declaration is spent by it.
         await reportJob('completed');
         const lastTurnId = await queueMessage('the last of it');
         await endTurn(lastTurnId, LAST_REPORT);
         const view = await confirmations.read(ownerId, busyTaskId);
         assert.ok(view.waiting, 'the declared run has stopped working, so its owner is asked');
         assert.equal(view.waiting.sessionId, busySessionId);
-        assert.equal(view.waiting.report?.text, LAST_REPORT, 'about the turn that ended it');
+        assert.equal(view.waiting.report?.text, SECOND_REPORT,
+          'the report is the declaring turn\'s, not what the turn that ended the run said');
         assert.equal(await questions(), 1, 'one declaration, one question');
         assert.equal(await waitingOn(busySessionId), 1);
         assert.equal(await statusOf(busyTaskId), 'OPEN', 'asking is still not concluding');

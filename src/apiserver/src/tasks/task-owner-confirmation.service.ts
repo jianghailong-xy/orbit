@@ -102,7 +102,7 @@ export class TaskOwnerConfirmationService {
   ) {}
 
   async read(ownerId: string, taskId: string): Promise<OwnerConfirmationView> {
-    const view = await readOwnerConfirmation(this.prisma, ownerId, taskId);
+    const view = await readOwnerConfirmation(this.prisma, ownerId, taskId, this.tasks);
     if (!view) throw new NotFoundException('task not found');
     return view;
   }
