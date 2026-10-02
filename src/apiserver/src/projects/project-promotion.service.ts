@@ -21,6 +21,7 @@ import {
   shortBranchName,
   workBranchEndedOn,
 } from './project-integration-job';
+import { openItemOwed } from './project-open-item';
 import {
   LIVE_PROMOTION_STATES,
   PROMOTION_COLUMNS,
@@ -677,7 +678,9 @@ export interface PromotionJobOutcome {
 }
 
 /** The exception kinds that are an integration line's own problems (§4.2): while one of this
- *  project's is open, nothing it would carry into main is clean enough to go there by itself. */
+ *  project's is open and still owed (`openItemOwed`), nothing it would carry into main is clean
+ *  enough to go there by itself. One about a candidate or a task that has moved on holds nothing
+ *  back, whether or not anything has closed it yet. */
 const INTEGRATION_ITEM_KINDS = ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR'];
 
 /**
@@ -707,9 +710,13 @@ async function automaticConfirmationRefusalIn(
     where: { id: promotion.codebaseId },
     select: { integrationRef: true, upstreamRef: true },
   });
-  const openIntegrationItems = await tx.projectOpenItem.count({
-    where: { projectId: promotion.projectId, state: 'OPEN', kind: { in: INTEGRATION_ITEM_KINDS } },
-  });
+  const [counted] = await tx.$queryRaw<Array<{ open: number }>>(Prisma.sql`
+    SELECT count(*)::int AS "open"
+      FROM "project_open_item" item
+     WHERE item."project_id" = ${promotion.projectId}::uuid
+       AND item."state" = 'OPEN'
+       AND item."kind" IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
+       AND ${openItemOwed('item')}`);
   // The line as the binding says now, and only if it is still the line this candidate was made on:
   // its source is the project's branch and its upstream is the project's upstream.
   const line = !codebase
@@ -728,7 +735,7 @@ async function automaticConfirmationRefusalIn(
     checks: report.checks,
     upstreamShaChecked: report.upstreamSha,
     mergeTreeSha: report.testedTreeSha,
-    openIntegrationItems,
+    openIntegrationItems: counted!.open,
     runnerHandsBackMovedUpstream: report.runnerHandsBackMovedUpstream,
   });
 }
