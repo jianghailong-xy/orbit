@@ -19,15 +19,15 @@ final class RevealTests: XCTestCase {
         let target = row(app, title)
         let width = target.frame.width
         // A — open slowly to about 200pt, hold, let go (it stays open), then a tap elsewhere shuts it.
-        drag(target, from: 0.95, by: -200 / width, speed: 80, hold: 1.2)
+        drag(target, from: 0.95, by: -200 / width, speed: 250, hold: 1.2)
         pause(1.5)
         row(app, other).tap()
         pause(1.5)
         // B — a short pull (60pt) let go: it falls back shut.
-        drag(target, from: 0.95, by: -60 / width, speed: 60, hold: 0.8)
+        drag(target, from: 0.95, by: -60 / width, speed: 200, hold: 0.8)
         pause(1.5)
         // C — the other side, about 120pt, held, let go, shut by a tap.
-        drag(target, from: 0.05, by: 120 / width, speed: 80, hold: 1.0)
+        drag(target, from: 0.05, by: 120 / width, speed: 250, hold: 1.0)
         pause(1.5)
         row(app, other).tap()
         pause(1.5)

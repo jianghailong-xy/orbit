@@ -52,7 +52,11 @@ for t in Notes Native Circles; do
   ls -la "$OUT/rec-$t.mp4" || true
   if command -v ffmpeg >/dev/null; then
     mkdir -p "$OUT/frames-$t"
-    ffmpeg -loglevel error -i "$OUT/rec-$t.mp4" -vf "fps=15,scale=iw/2:-1" -q:v 3 "$OUT/frames-$t/%04d.jpg" || true
+    # The rows' band only (200–400pt), half size, and only frames that differ from the last: the
+    # launch's static home screen and every hold collapse, the motion stays frame for frame.
+    ffmpeg -loglevel error -i "$OUT/rec-$t.mp4" \
+      -vf "crop=iw:600:0:600,scale=iw/2:-1,mpdecimate=hi=256:lo=128:frac=0.05" -vsync vfr -q:v 3 \
+      "$OUT/frames-$t/%04d.jpg" || true
     echo "   frames: $(ls "$OUT/frames-$t" | wc -l)"
   fi
 done
