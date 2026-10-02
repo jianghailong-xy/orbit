@@ -198,8 +198,11 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 	app, err := startReadyCodexAppServer(ctx, state, initTimeout, func() (*codexAppServer, error) {
 		return startCodexAppServer(ctx, job, execDir, state.Dir, processEnv, emit,
 			func(approvalCtx context.Context, request codexApprovalRequest, params map[string]interface{}) bool {
-				return bridgeCodexApprovalWithContext(approvalCtx, t, job, request, params,
-					codexAutoApprovalContextFor(execDir, upDir))
+				autoContext := codexAutoApprovalContextFor(execDir, upDir)
+				if job.WT != nil && job.WT.RepoDir != "" {
+					autoContext = codexAutoApprovalContextFor(execDir, upDir, job.WT.RepoDir)
+				}
+				return bridgeCodexApprovalWithContext(approvalCtx, t, job, request, params, autoContext)
 			})
 	})
 	if err != nil {

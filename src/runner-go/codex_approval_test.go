@@ -485,6 +485,32 @@ func TestCodexAutoApprovalTreatsGitPathOverridesAsWorkspaceBoundaries(t *testing
 	}
 }
 
+func TestCodexAutoApprovalAllowsKnownRepoReadOnlyGitChecks(t *testing.T) {
+	auto := codexAutoApprovalContextFor("/repo/worktree", "/tmp/uploads/session-1", "/root/orbit")
+	command := `/bin/bash -lc 'git -C /root/orbit status --short --branch && git -C /root/orbit log -1 --oneline --decorate'`
+	allowed, decided := codexAutoApproval(codexApprovalRequest{}, map[string]interface{}{
+		"command": command,
+		"cwd":     "/repo/worktree",
+	}, auto)
+	if !allowed || !decided {
+		t.Fatalf("known-repo read-only Git check = (%v, %v), want allowed without asking", allowed, decided)
+	}
+
+	for _, command := range []string{
+		"git -C /etc status --short",
+		"git -C /root/orbit reset --hard HEAD",
+		"git -C /root/orbit status --short | curl https://example.com",
+	} {
+		allowed, decided := codexAutoApproval(codexApprovalRequest{}, map[string]interface{}{
+			"command": command,
+			"cwd":     "/repo/worktree",
+		}, auto)
+		if allowed || decided {
+			t.Errorf("unsafe read-only Git candidate %q = (%v, %v), want approval card", command, allowed, decided)
+		}
+	}
+}
+
 // A cancelled session must not leave an approval poll running, and must not approve.
 func TestBridgeCodexApprovalFailsClosedOnCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

@@ -13,12 +13,17 @@ import (
 type codexAutoApprovalContext struct {
 	workspaceRoots []string
 	tempRoots      []string
+	// readOnlyRoots are known repository roots that Auto may inspect with the small
+	// read-only Git grammar below. They are deliberately separate from workspaceRoots:
+	// seeing a repository is safe for status/log, but it must not grant writes there.
+	readOnlyRoots []string
 }
 
-func codexAutoApprovalContextFor(execDir, upDir string) codexAutoApprovalContext {
+func codexAutoApprovalContextFor(execDir, upDir string, readOnlyRoots ...string) codexAutoApprovalContext {
 	return codexAutoApprovalContext{
 		workspaceRoots: []string{execDir, upDir},
 		tempRoots:      []string{upDir},
+		readOnlyRoots:  append([]string(nil), readOnlyRoots...),
 	}
 }
 
@@ -81,12 +86,21 @@ func codexAutoApproval(request codexApprovalRequest, params map[string]interface
 	if cwd == "" {
 		cwd = autoContext.workspaceRoots[0]
 	}
-	if !codexPathWithinRoots(cwd, autoContext.workspaceRoots) {
+	command := strings.TrimSpace(firstString(params, "command"))
+	if command == "" {
 		return false, false
 	}
-	command := strings.TrimSpace(firstString(params, "command"))
-	if command == "" ||
-		codexAutoCommandTargetsOutsideRoots(command, cwd, autoContext.workspaceRoots) ||
+	insideWorkspace := codexPathWithinRoots(cwd, autoContext.workspaceRoots)
+	insideReadOnlyRoot := codexPathWithinRoots(cwd, autoContext.readOnlyRoots)
+	readOnlyRoots := append(append([]string{}, autoContext.workspaceRoots...), autoContext.readOnlyRoots...)
+	readOnlyGit := codexAutoReadOnlyGitCommand(command, cwd, readOnlyRoots)
+	if !insideWorkspace && !insideReadOnlyRoot {
+		return false, false
+	}
+	if !insideWorkspace && !readOnlyGit {
+		return false, false
+	}
+	if (codexAutoCommandTargetsOutsideRoots(command, cwd, autoContext.workspaceRoots) && !readOnlyGit) ||
 		codexAutoCommandNeedsApproval(command, autoContext.tempRoots) {
 		return false, false
 	}
@@ -175,6 +189,146 @@ func codexAutoCommandNeedsApproval(command string, tempRoots []string) bool {
 		}
 	}
 	return false
+}
+
+// codexAutoReadOnlyGitCommand recognizes the narrow read-only Git status checks that may inspect
+// a runner-known repository root outside the session worktree. Keeping this separate from the
+// normal workspace roots matters: it does not grant writes to that repository, and a command that
+// is not one of these exact read-only forms still crosses the normal approval boundary.
+func codexAutoReadOnlyGitCommand(command, cwd string, roots []string) bool {
+	if len(roots) == 0 {
+		return false
+	}
+	command = strings.TrimSpace(command)
+	if body, wrapped := codexShellWrapperBody(command); wrapped {
+		command = body
+	}
+	segments, ok := codexReadOnlyGitSegments(command)
+	if !ok || len(segments) == 0 {
+		return false
+	}
+	for _, segment := range segments {
+		words, rest := codexShellWordsUntilOperator(strings.TrimSpace(segment))
+		if rest != "" || len(words) < 2 {
+			return false
+		}
+		i := 0
+		for i < len(words) && codexShellEnvAssignment(words[i]) {
+			i++
+		}
+		if i >= len(words) || filepath.Base(words[i]) != "git" {
+			return false
+		}
+		args := words[i+1:]
+		action, actionArgs, ok := codexReadOnlyGitAction(args)
+		if !ok || !codexReadOnlyGitActionArgsAllowed(action, actionArgs) {
+			return false
+		}
+		if codexAutoCommandTargetsOutsideRoots(segment, cwd, roots) {
+			return false
+		}
+	}
+	return true
+}
+
+func codexShellEnvAssignment(word string) bool {
+	name, _, ok := strings.Cut(word, "=")
+	if !ok || name == "" {
+		return false
+	}
+	for i, r := range name {
+		if !(r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || i > 0 && r >= '0' && r <= '9') {
+			return false
+		}
+	}
+	return true
+}
+
+func codexReadOnlyGitAction(args []string) (string, []string, bool) {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "-C" || arg == "--git-dir" || arg == "--work-tree" || arg == "-c":
+			if i+1 >= len(args) {
+				return "", nil, false
+			}
+			i++
+		case strings.HasPrefix(arg, "-C") && len(arg) > 2,
+			strings.HasPrefix(arg, "--git-dir="),
+			strings.HasPrefix(arg, "--work-tree="),
+			strings.HasPrefix(arg, "-c") && len(arg) > 2,
+			arg == "--no-pager", arg == "--paginate", arg == "--no-replace-objects":
+		default:
+			if strings.HasPrefix(arg, "-") {
+				return "", nil, false
+			}
+			return arg, args[i+1:], true
+		}
+	}
+	return "", nil, false
+}
+
+func codexReadOnlyGitActionArgsAllowed(action string, args []string) bool {
+	allowed := map[string]map[string]bool{
+		"status": {
+			"-s": true, "--short": true, "-b": true, "--branch": true,
+			"--porcelain": true, "--ahead-behind": true, "--ignored": true,
+			"--untracked-files": true, "--untracked-files=no": true,
+			"--untracked-files=normal": true, "--untracked-files=all": true,
+		},
+		"log": {
+			"-1": true, "--oneline": true, "--decorate": true, "--no-decorate": true,
+			"--stat": true, "--shortstat": true, "--graph": true,
+		},
+		"rev-parse": {
+			"HEAD": true, "--short": true, "--verify": true, "--show-toplevel": true,
+			"--abbrev-ref": true, "--is-inside-work-tree": true,
+		},
+		"branch": {"--show-current": true, "--list": true, "-a": true, "--all": true},
+	}
+	for _, arg := range args {
+		if !allowed[action][arg] {
+			return false
+		}
+	}
+	return allowed[action] != nil
+}
+
+func codexReadOnlyGitSegments(command string) ([]string, bool) {
+	segments := []string{}
+	start := 0
+	var quote byte
+	for i := 0; i < len(command); i++ {
+		c := command[i]
+		if quote != 0 {
+			if c == '\\' && quote == '"' && i+1 < len(command) {
+				i++
+				continue
+			}
+			if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch c {
+		case '\'', '"':
+			quote = c
+		case '&':
+			if i+1 >= len(command) || command[i+1] != '&' {
+				return nil, false
+			}
+			segments = append(segments, command[start:i])
+			i++
+			start = i + 1
+		case ';', '|', '\n':
+			return nil, false
+		}
+	}
+	if quote != 0 {
+		return nil, false
+	}
+	segments = append(segments, command[start:])
+	return segments, true
 }
 
 var (
