@@ -169,6 +169,14 @@ function duplicateKey(label: string, contributor: { name: string; you: boolean }
   });
 }
 
+/** The refusal an admin role gets on a pool of one's own: its owner is its only admin (migration 0358). */
+function ownPoolOneAdmin() {
+  return new ForbiddenException({
+    code: 'POOL_OWN_ONE_ADMIN',
+    message: 'A pool of your own has one admin, you — the people you add to it are members',
+  });
+}
+
 /**
  * Shared Codex pools (migration 0321, docs/codex-shared-pool-design.md §2.5, "account" read as "key"):
  * the doors of the pool page. Every one of them first finds the caller among the pool's people, and a
@@ -186,6 +194,17 @@ function duplicateKey(label: string, contributor: { name: string; you: boolean }
  * The pool's creator is its `ownerId` and stays an admin: nobody can remove them or make them a member,
  * so a pool never runs out of admins. The claim side — who may dispatch with it, which key a session
  * runs on, and the session token — is QueueService.resolveSharedPool.
+ *
+ * The same doors serve a Codex pool of one person's own (migration 0358): the pool their ChatGPT accounts
+ * are in (migration 0323), which they make on the providers page and whose accounts they sign in there
+ * (ProvidersService, CodexLoginService). Its owner is among its people as its ADMIN, so the owner adds
+ * people to it by the email of their Orbit account and adds and removes API keys here, under the table
+ * above; taking every other person out is how it goes back to "Just me" — who can use a pool is its
+ * people, never `shared` — and their keys and session tokens go with them. Its owner is its only admin:
+ * the people they add are members, nobody else can be made one, and so nobody else can delete the pool
+ * (its accounts with it) or change its rules. The people it takes run on its API keys alone — its ChatGPT
+ * accounts are its owner's, and so are the sessions they run (QueueService.resolveLoginPool) — and no
+ * answer here says anything about those accounts.
  */
 @Injectable()
 export class SharedPoolsService {
@@ -196,10 +215,16 @@ export class SharedPoolsService {
     private readonly providers: ProvidersService,
   ) {}
 
-  /** The shared pools the caller is in. */
+  /** The Codex pools the caller runs on as one of their people: the shared pools they are in, and the pools
+   *  of somebody else's own they were added to. A pool of their own is on their providers page
+   *  (ProvidersService.listPools), and `get` reads its people and keys. */
   async list(userId: string) {
     const pools = await this.prisma.providerPool.findMany({
-      where: { shared: true, people: { some: { userId } } },
+      where: {
+        engine: AgentProvider.CODEX,
+        people: { some: { userId } },
+        OR: [{ shared: true }, { ownerId: { not: userId } }],
+      },
       orderBy: { createdAt: 'asc' },
       select: POOL_VIEW_SELECT,
     });
@@ -243,7 +268,8 @@ export class SharedPoolsService {
     return this.get(userId, poolId);
   }
 
-  /** An admin deletes the pool: its people, keys, ledger and session tokens go with it. */
+  /** An admin deletes the pool: its people, keys, ledger and session tokens go with it — and, from a pool of
+   *  one's own, whose only admin is its owner, its ChatGPT accounts. */
   async remove(userId: string, poolId: string) {
     await this.adminOf(userId, poolId, 'delete it');
     const people = await this.peopleOf(poolId);
@@ -252,9 +278,11 @@ export class SharedPoolsService {
     return { ok: true };
   }
 
-  /** An admin adds a person by the email of their Orbit account. Adding someone already in changes nothing. */
+  /** An admin adds a person by the email of their Orbit account. Adding someone already in changes nothing.
+   *  On a pool of one's own, everybody added is a member: its owner is its only admin. */
   async addPerson(userId: string, poolId: string, dto: AddSharedPoolPersonDto) {
-    await this.adminOf(userId, poolId, 'add people to it');
+    const place = await this.adminOf(userId, poolId, 'add people to it');
+    if (!place.pool.shared && dto.role !== undefined && dto.role !== 'MEMBER') throw ownPoolOneAdmin();
     const person = await this.prisma.user.findUnique({ where: { email: dto.email.trim() }, select: { id: true } });
     if (!person) throw new NotFoundException('No Orbit account has that email');
     await this.prisma.providerPoolPerson.createMany({
@@ -265,12 +293,14 @@ export class SharedPoolsService {
     return this.get(userId, poolId);
   }
 
-  /** An admin makes a person an admin or a member — anyone but the pool's creator. */
+  /** An admin makes a person an admin or a member — anyone but the pool's creator. Nobody but its owner is
+   *  an admin of a pool of one's own. */
   async setRole(userId: string, poolId: string, personId: string, dto: UpdateSharedPoolPersonDto) {
     const place = await this.adminOf(userId, poolId, 'change who is an admin');
     if (personId === place.pool.ownerId && dto.role !== 'ADMIN') {
       throw new ForbiddenException('The person who made the pool stays one of its admins');
     }
+    if (!place.pool.shared && personId !== place.pool.ownerId && dto.role !== 'MEMBER') throw ownPoolOneAdmin();
     const { count } = await this.prisma.providerPoolPerson.updateMany({
       where: { poolId, userId: personId },
       data: { role: dto.role },
@@ -450,13 +480,17 @@ export class SharedPoolsService {
     return count > 0;
   }
 
-  /** The caller's place in a shared pool, or not found — for a pool they are not in exactly as for none. */
+  /** The caller's place in a Codex pool — a shared one, or one of somebody's own (migration 0358) — or not
+   *  found: for a pool they are not in exactly as for none. */
   private async place(userId: string, poolId: string) {
     const place = await this.prisma.providerPoolPerson.findUnique({
       where: { poolId_userId: { poolId, userId } },
-      select: { role: true, pool: { select: { shared: true, ownerId: true, label: true, membersCanAdd: true } } },
+      select: {
+        role: true,
+        pool: { select: { engine: true, shared: true, ownerId: true, label: true, membersCanAdd: true } },
+      },
     });
-    if (!place || !place.pool.shared) throw new NotFoundException('pool not found');
+    if (!place || place.pool.engine !== AgentProvider.CODEX) throw new NotFoundException('pool not found');
     return place;
   }
 

@@ -120,6 +120,25 @@ export function loginSwitchNotice(to: LoginAccount, from: LoginAccount | null, n
   return `Switched to ${accountName(to)} — ${why}`;
 }
 
+/**
+ * The line for a session of the pool's owner moving off ChatGPT account `from` onto API key `to` of the
+ * same pool (migration 0358), none of its accounts being able to run: loginSwitchNotice's words, with the
+ * key named by its label as pool-key-select.ts names one. `from` is null when that account is no longer in
+ * the pool.
+ */
+export function loginToKeySwitchNotice(to: { label: string }, from: LoginAccount | null, now: Date): string {
+  const why = from ? whyLeft(from, now) : 'the previous account is no longer in this pool';
+  return `Switched to ${to.label} — ${why}`;
+}
+
+/**
+ * The line for a session of the pool's owner moving back off an API key onto ChatGPT account `to`, which
+ * can run again: nothing is wrong with the key — an owner's sessions run on their own accounts first.
+ */
+export function keyToLoginSwitchNotice(to: LoginAccount): string {
+  return `Switched to ${accountName(to)} — your ChatGPT accounts come first`;
+}
+
 /** Signed out first, since only its owner can undo that; then the used-up window, as the gateway names it. */
 function whyLeft(from: LoginAccount, now: Date): string {
   const name = accountName(from);

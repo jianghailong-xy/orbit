@@ -88,9 +88,10 @@ test("the caller's own account pools are listed by name, on Claude, and only the
     { slug: 'claude-accounts', label: 'Claude accounts' },
   ]).listUsable('user-1');
 
-  // Their own account pools, and the shared pools they are in (migration 0321) — nobody else's.
+  // Their own account pools, and the Codex pools they are one of the people of — a shared pool
+  // (migration 0321), or somebody else's own pool its owner added them to (migration 0358) — nobody else's.
   assert.deepEqual(captured.poolWhere, {
-    OR: [{ ownerId: 'user-1', shared: false }, { shared: true, people: { some: { userId: 'user-1' } } }],
+    OR: [{ ownerId: 'user-1', shared: false }, { engine: 'codex', people: { some: { userId: 'user-1' } } }],
   });
   assert.deepEqual(listed.at(-1), {
     slug: 'claude-accounts',
