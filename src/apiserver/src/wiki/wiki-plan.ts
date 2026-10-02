@@ -96,6 +96,11 @@ import { WikiRefusalError, type WikiPrincipal } from './wiki.service';
  *               document's category is one of the plan's, and every document a scope leaves something
  *               to is one of the plan's.
  *
+ * A closed-set value — a section's kind, an entry kind, a topic, a declared field's level, a fact's kind —
+ * is read with whatever backticks or quotes wrap the whole of it taken off (`unwrapped`), and an error
+ * names a value the request gave as a JSON string (`quoted`), so what is wrong with it shows (contract
+ * `plan.gate.values`).
+ *
  * What it does NOT check is the repository: a file, a docs section or a symbol exists only in a
  * checkout, which the server has none of. The drafting job checks those on the runner, at a sha, and
  * the server keeps what it reported beside the version (`repoCheck`, `repoSha`) for the owner to read.
@@ -186,6 +191,44 @@ function chars(text: string): number {
   return Array.from(text).length;
 }
 
+/** What a message would not show: controls, format characters (a zero-width space, a BOM), separators, and every space but U+0020. */
+const UNSEEN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Zs}]/gu;
+
+/**
+ * A value the request gave, as an error names it back (contract `plan.gate.values`): a JSON string, with
+ * every character that would not show written as \uXXXX, so the backticks around a value, a space at
+ * either end and an invisible character all show. 10-01: «`decision` is no kind of entry: one of
+ * principle, convention, decision, …» read as decision refused for not being decision, three rounds
+ * running. The runner's gate writes the same (wiki_verify.go `wikiQuote`).
+ */
+function quoted(value: string): string {
+  return JSON.stringify(value).replace(UNSEEN, (c) =>
+    c === ' ' ? c : Array.from({ length: c.length }, (_, i) => `\\u${c.charCodeAt(i).toString(16).padStart(4, '0')}`).join(''));
+}
+
+/** What a model wraps a whole value in: backticks, and quotes of every kind. */
+const WRAPPERS: ReadonlyArray<readonly [string, string]> = [['`', '`'], ['"', '"'], ["'", "'"], ['“', '”'], ['‘', '’'], ['「', '」'], ['『', '』'], ['«', '»']];
+
+/**
+ * A closed-set value as the gate reads it (contract `plan.gate.values`): the whitespace at either end
+ * taken off, then whatever backticks or quotes wrap the whole of it — a pair at its two ends with no more
+ * of either inside — as often as they do: `decision` reads decision. Only the wrapping goes: `a` and `b`
+ * is no wrapped value, and a value that is not in the set is still refused. The runner's gate reads the
+ * same (wiki_verify.go `wikiUnwrap`).
+ */
+function unwrapped(value: string): string {
+  let text = value.trim();
+  for (;;) {
+    const pair = WRAPPERS.find(([open, close]) => {
+      if (text.length < open.length + close.length || !text.startsWith(open) || !text.endsWith(close)) return false;
+      const held = text.slice(open.length, text.length - close.length);
+      return !held.includes(open) && !held.includes(close);
+    });
+    if (!pair) return text;
+    text = text.slice(pair[0].length, text.length - pair[1].length).trim();
+  }
+}
+
 /**
  * One walk of a request, collecting every error rather than stopping at the first: the drafting job
  * hands the whole list back to the model, and a model told one mistake at a time needs a round each.
@@ -221,8 +264,8 @@ class Walk {
         'schema',
         `${path}.${key}`,
         declared
-          ? `${key} is declared in newFields as needing adding: put its value under ${path}.extra.${key}, not beside the schema's fields`
-          : `${key} is not a field of the plan schema (${WIKI_PLAN_SCHEMA[level].join(', ')}): remove it`
+          ? `${quoted(key)} is declared in newFields as needing adding: put its value under ${path}.extra.${key}, not beside the schema's fields`
+          : `${quoted(key)} is not a field of the plan schema (${WIKI_PLAN_SCHEMA[level].join(', ')}): remove it`
             + (holdsExtra ? `, or declare it in newFields at "${level}" and put its value under extra` : ''),
       );
     }
@@ -240,7 +283,7 @@ class Walk {
     const declared = this.declared.get(level) ?? new Set<string>();
     for (const [name, field] of Object.entries(value as Record<string, unknown>)) {
       if (!declared.has(name)) {
-        this.fail('schema', `${path}.${name}`, `${name} is not declared in newFields at "${level}": declare it as needing adding, or remove it`);
+        this.fail('schema', `${path}.${name}`, `${quoted(name)} is not declared in newFields at "${level}": declare it as needing adding, or remove it`);
         continue;
       }
       out[name] = field;
@@ -308,6 +351,18 @@ class Walk {
     return this.list(value, path, minItems).map((item, i) => this.text(item, `${path}[${i}]`, WIKI_PLAN_RULES.textMaxChars, true));
   }
 
+  /** A required value of a closed set — a kind, a topic, a level — read unwrapped: what wraps the whole of it is no part of it. */
+  closed(value: unknown, path: string, max: number): string {
+    const refused = this.errors.length;
+    const text = unwrapped(this.text(value, path, max, true));
+    if (text === '' && this.errors.length === refused) this.fail('schema', path, 'must not be empty');
+    return text;
+  }
+
+  closedList(value: unknown, path: string): string[] {
+    return this.list(value, path).map((item, i) => this.closed(item, `${path}[${i}]`, WIKI_PLAN_RULES.textMaxChars));
+  }
+
   date(value: unknown, path: string): string | null {
     if (value === undefined || value === null) return null;
     if (typeof value !== 'string' || !DATE.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
@@ -368,7 +423,7 @@ class Walk {
     const keys = new Set<string>();
     doc.sections.forEach((section, i) => {
       if (section.key === null) return;
-      if (keys.has(section.key)) this.fail('schema', `${path}.sections[${i}].key`, `${section.key} is the key of an earlier section of this document`);
+      if (keys.has(section.key)) this.fail('schema', `${path}.sections[${i}].key`, `${quoted(section.key)} is the key of an earlier section of this document`);
       keys.add(section.key);
     });
     return doc;
@@ -377,9 +432,9 @@ class Walk {
   section(value: unknown, path: string): PlanSection | null {
     const raw = this.object(value, path, 'section');
     if (!raw) return null;
-    const kind = this.text(raw.kind, `${path}.kind`, 64, true);
+    const kind = this.closed(raw.kind, `${path}.kind`, 64);
     if (kind !== '' && !(WIKI_PLAN_SECTION_KINDS as readonly string[]).includes(kind)) {
-      this.fail('schema', `${path}.kind`, `${kind} is not a section kind: one of ${WIKI_PLAN_SECTION_KINDS.join(', ')}`);
+      this.fail('schema', `${path}.kind`, `${quoted(kind)} is not a section kind: one of ${WIKI_PLAN_SECTION_KINDS.join(', ')}`);
     }
     return {
       key: raw.key === undefined || raw.key === null ? null : this.slug(raw.key, `${path}.key`),
@@ -428,12 +483,12 @@ class Walk {
     if (since !== null && until !== null && since > until) this.fail('schema', `${path}.until`, 'must not be before since');
     const projects = this.texts(raw.projects, `${path}.projects`);
     projects.forEach((project, i) => project !== '' && this.projects.push({ path: `${path}.projects[${i}]`, value: project }));
-    const topics = this.texts(raw.topics, `${path}.topics`);
+    const topics = this.closedList(raw.topics, `${path}.topics`);
     topics.forEach((topic, i) => topic !== '' && this.topics.push({ path: `${path}.topics[${i}]`, value: topic }));
-    const entryKinds = this.texts(raw.entryKinds, `${path}.entryKinds`);
+    const entryKinds = this.closedList(raw.entryKinds, `${path}.entryKinds`);
     entryKinds.forEach((kind, i) => {
       if (kind !== '' && !(WIKI_ENTRY_KINDS as readonly string[]).includes(kind)) {
-        this.fail('references', `${path}.entryKinds[${i}]`, `${kind} is no kind of entry: one of ${WIKI_ENTRY_KINDS.join(', ')}`);
+        this.fail('references', `${path}.entryKinds[${i}]`, `${quoted(kind)} is no kind of entry: one of ${WIKI_ENTRY_KINDS.join(', ')}`);
       }
     });
     return {
@@ -459,14 +514,14 @@ class Walk {
       const at = `${path}[${i}]`;
       const raw = this.object(item, at, 'newField');
       if (!raw) return [];
-      const level = this.text(raw.at, `${at}.at`, 32, true);
+      const level = this.closed(raw.at, `${at}.at`, 32);
       if (level !== '' && !(WIKI_PLAN_NEW_FIELD_LEVELS as readonly string[]).includes(level)) {
         this.fail('schema', `${at}.at`, `a field may be declared at ${WIKI_PLAN_NEW_FIELD_LEVELS.join(', ')}`);
       }
       const name = this.text(raw.name, `${at}.name`, 64, true);
       if (name !== '' && !/^[A-Za-z][A-Za-z0-9]*$/u.test(name)) this.fail('schema', `${at}.name`, 'must be a camelCase name');
       if ((WIKI_PLAN_SCHEMA[level as WikiPlanSchemaLevel] as readonly string[] | undefined)?.includes(name)) {
-        this.fail('schema', `${at}.name`, `${name} is a field the schema already has at "${level}"`);
+        this.fail('schema', `${at}.name`, `${quoted(name)} is a field the schema already has at "${level}"`);
       }
       return [{ at: level as WikiPlanNewFieldLevel, name, why: this.text(raw.why, `${at}.why`, WIKI_PLAN_RULES.textMaxChars, true) }];
     });
@@ -487,21 +542,21 @@ function declaredOf(newFields: readonly WikiPlanNewField[]): Map<WikiPlanNewFiel
 function checkWhole(walk: Walk, plan: PlanContent, prefix: string): void {
   const categories = new Set<string>();
   plan.categories.forEach((category, i) => {
-    if (categories.has(category.key)) walk.fail('schema', `${prefix}categories[${i}].key`, `${category.key} is the key of an earlier category`);
+    if (categories.has(category.key)) walk.fail('schema', `${prefix}categories[${i}].key`, `${quoted(category.key)} is the key of an earlier category`);
     categories.add(category.key);
   });
   const slugs = new Set<string>();
   plan.docs.forEach((doc, i) => {
-    if (slugs.has(doc.slug)) walk.fail('schema', `${prefix}docs[${i}].slug`, `${doc.slug} is the slug of an earlier document`);
+    if (slugs.has(doc.slug)) walk.fail('schema', `${prefix}docs[${i}].slug`, `${quoted(doc.slug)} is the slug of an earlier document`);
     slugs.add(doc.slug);
   });
   plan.docs.forEach((doc, i) => {
     if (doc.category !== '' && !categories.has(doc.category)) {
-      walk.fail('references', `${prefix}docs[${i}].category`, `${doc.category} is not one of the plan's categories (${[...categories].join(', ')})`);
+      walk.fail('references', `${prefix}docs[${i}].category`, `${quoted(doc.category)} is not one of the plan's categories (${[...categories].join(', ')})`);
     }
     doc.scopeOut.forEach((out, j) => out.docs.forEach((slug, k) => {
       if (slug !== '' && !slugs.has(slug)) {
-        walk.fail('references', `${prefix}docs[${i}].scopeOut[${j}].docs[${k}]`, `${slug} is no document of this plan: name the document it is left to by its slug`);
+        walk.fail('references', `${prefix}docs[${i}].scopeOut[${j}].docs[${k}]`, `${quoted(slug)} is no document of this plan: name the document it is left to by its slug`);
       }
     }));
   });
@@ -1127,9 +1182,9 @@ export class WikiPlans {
       if (found) {
         resolved.set(named.value, found);
       } else if ((byTitle.get(named.value)?.length ?? 0) > 1) {
-        walk.fail('references', named.path, `${byTitle.get(named.value)!.length} projects are titled «${named.value}»: name the one meant by its id`);
+        walk.fail('references', named.path, `${byTitle.get(named.value)!.length} projects are titled ${quoted(named.value)}: name the one meant by its id`);
       } else {
-        walk.fail('references', named.path, `no project of this account is titled «${named.value}» or has that id: name one of the account's projects exactly`);
+        walk.fail('references', named.path, `no project of this account is titled ${quoted(named.value)} or has that id: name one of the account's projects exactly`);
       }
     }
     const slugs = [...new Set(walk.topics.map((named) => named.value))];
@@ -1139,7 +1194,7 @@ export class WikiPlans {
         : (await this.prisma.wikiTopic.findMany({ where: { ownerId, spaceId, slug: { in: slugs } }, select: { slug: true } })).map((t) => t.slug),
     );
     for (const named of walk.topics) {
-      if (!topics.has(named.value)) walk.fail('references', named.path, `${named.value} is not a topic of this space`);
+      if (!topics.has(named.value)) walk.fail('references', named.path, `${quoted(named.value)} is not a topic of this space`);
     }
     for (const doc of plan.docs) {
       for (const section of doc.sections) {
@@ -1275,7 +1330,7 @@ export class WikiPlans {
     const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
     if (!raw) throw gateRefusal([{ check: 'schema', path: '', message: 'the body is an object: { baseVersion, target, plan, repoCheck, model, idempotencyKey }' }], 'The draft');
     for (const key of Object.keys(raw)) {
-      if (!['baseVersion', 'target', 'plan', 'repoCheck', 'model', 'idempotencyKey'].includes(key)) envelope.fail('schema', key, `${key} is not a field of a draft: baseVersion, target, plan, repoCheck, model, idempotencyKey`);
+      if (!['baseVersion', 'target', 'plan', 'repoCheck', 'model', 'idempotencyKey'].includes(key)) envelope.fail('schema', key, `${quoted(key)} is not a field of a draft: baseVersion, target, plan, repoCheck, model, idempotencyKey`);
     }
     const baseVersion = raw.baseVersion === null || raw.baseVersion === undefined ? null : envelope.integer(raw.baseVersion, 'baseVersion', 1, 2_147_483_647);
     const target = targetOf(envelope, raw.target);
@@ -1333,7 +1388,7 @@ export class WikiPlans {
     const envelope = new Walk(new Map());
     if (!raw) throw gateRefusal([{ check: 'schema', path: '', message: 'the body is an object: { baseVersion, docSlug, doc } or { baseVersion, docSlug, sectionKey, section }' }], 'The edit');
     for (const key of Object.keys(raw)) {
-      if (!['baseVersion', 'docSlug', 'doc', 'sectionKey', 'section'].includes(key)) envelope.fail('schema', key, `${key} is not a field of an edit: baseVersion, docSlug, doc, sectionKey, section`);
+      if (!['baseVersion', 'docSlug', 'doc', 'sectionKey', 'section'].includes(key)) envelope.fail('schema', key, `${quoted(key)} is not a field of an edit: baseVersion, docSlug, doc, sectionKey, section`);
     }
     const baseVersion = envelope.integer(raw.baseVersion, 'baseVersion', 1, 2_147_483_647);
     const docSlug = envelope.slug(raw.docSlug, 'docSlug');
@@ -1360,7 +1415,7 @@ export class WikiPlans {
       const section = walk.section(raw.section, 'section');
       if (section) {
         if (section.key !== null && section.key !== key && plan.docs[at].sections.some((other, i) => i !== s && other.key === section.key)) {
-          walk.fail('schema', 'section.key', `${section.key} is the key of another section of ${docSlug}`);
+          walk.fail('schema', 'section.key', `${quoted(section.key)} is the key of another section of ${docSlug}`);
         }
         plan.docs[at].sections[s] = { ...section, key: section.key ?? key };
       }
@@ -1451,20 +1506,20 @@ export class WikiPlans {
     const walk = new Walk(declaredOf(base.newFields));
     if (!raw) throw gateRefusal([{ check: 'schema', path: '', message: 'the body is an object: { reason, change: { doc, category }, facts }' }], 'The proposal');
     for (const key of Object.keys(raw)) {
-      if (!['reason', 'change', 'facts'].includes(key)) walk.fail('schema', key, `${key} is not a field of a proposal: reason, change, facts`);
+      if (!['reason', 'change', 'facts'].includes(key)) walk.fail('schema', key, `${quoted(key)} is not a field of a proposal: reason, change, facts`);
     }
     const reason = walk.text(raw.reason, 'reason', WIKI_PLAN_RULES.reasonMaxChars, true);
     const facts = this.factsOf(walk, raw.facts);
     const change = raw.change && typeof raw.change === 'object' && !Array.isArray(raw.change) ? (raw.change as Record<string, unknown>) : null;
     if (!change) walk.fail('schema', 'change', 'must be an object: { doc, category }');
     for (const key of Object.keys(change ?? {})) {
-      if (!['doc', 'category'].includes(key)) walk.fail('schema', `change.${key}`, `${key} is not a field of a change: doc, category`);
+      if (!['doc', 'category'].includes(key)) walk.fail('schema', `change.${key}`, `${quoted(key)} is not a field of a change: doc, category`);
     }
     const doc = change ? walk.doc(change.doc, 'change.doc') : null;
     const category = change?.category === undefined || change?.category === null ? null : walk.category(change.category, 'change.category');
     const opens = category !== null && !base.categories.some((c) => c.key === category.key);
     if (category && !opens) {
-      walk.fail('schema', 'change.category.key', `${category.key} is already a category of the plan: leave category out, and file the document under it`);
+      walk.fail('schema', 'change.category.key', `${quoted(category.key)} is already a category of the plan: leave category out, and file the document under it`);
     }
     const plan = doc ? applyChange(base, doc, opens ? category : null) : base;
     checkWhole(walk, plan, 'plan.');
@@ -1504,12 +1559,13 @@ export class WikiPlans {
         walk.fail('schema', at, 'must be an object: { kind, id }');
         return [];
       }
-      for (const key of Object.keys(fact)) if (!['kind', 'id'].includes(key)) walk.fail('schema', `${at}.${key}`, `${key} is not a field of a fact: kind, id`);
-      if (!(WIKI_PLAN_FACT_KINDS as readonly unknown[]).includes(fact.kind)) {
+      for (const key of Object.keys(fact)) if (!['kind', 'id'].includes(key)) walk.fail('schema', `${at}.${key}`, `${quoted(key)} is not a field of a fact: kind, id`);
+      const kind = typeof fact.kind === 'string' ? unwrapped(fact.kind) : fact.kind;
+      if (!(WIKI_PLAN_FACT_KINDS as readonly unknown[]).includes(kind)) {
         walk.fail('schema', `${at}.kind`, `a fact is one of ${WIKI_PLAN_FACT_KINDS.join(', ')}`);
         return [];
       }
-      if (fact.kind === 'commit') {
+      if (kind === 'commit') {
         // A commit is named by its full sha, which the maintenance run found on origin/main: the server has
         // no checkout to look it up in (contract `plan.proposals.factKinds`).
         const sha = String(fact.id ?? '').trim().toLowerCase();
@@ -1526,7 +1582,7 @@ export class WikiPlans {
         walk.fail('schema', `${at}.id`, 'must be an id');
         return [];
       }
-      return [{ kind: fact.kind as WikiPlanFactKind, id }];
+      return [{ kind: kind as WikiPlanFactKind, id }];
     });
   }
 
@@ -1554,7 +1610,7 @@ export class WikiPlans {
     ownerChannel(actingSessionId, 'deciding a change to the plan');
     const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
     const walk = new Walk(new Map());
-    for (const key of Object.keys(raw)) if (!['action', 'note'].includes(key)) walk.fail('schema', key, `${key} is not a field of a decision: action, note`);
+    for (const key of Object.keys(raw)) if (!['action', 'note'].includes(key)) walk.fail('schema', key, `${quoted(key)} is not a field of a decision: action, note`);
     const action = raw.action;
     if (!(WIKI_PLAN_PROPOSAL_ACTIONS as readonly unknown[]).includes(action)) walk.fail('schema', 'action', `must be one of ${WIKI_PLAN_PROPOSAL_ACTIONS.join(', ')}`);
     const note = raw.note === undefined || raw.note === null ? null : walk.text(raw.note, 'note', WIKI_PLAN_RULES.reasonMaxChars, false) || null;
@@ -1927,7 +1983,7 @@ function targetOf(walk: Walk, value: unknown): { min: number; max: number } {
     walk.fail('schema', 'target', 'must be an object: { min, max }');
     return { min: WIKI_PLAN_RULES.docsMin, max: WIKI_PLAN_RULES.docsMax };
   }
-  for (const key of Object.keys(raw)) if (!['min', 'max'].includes(key)) walk.fail('schema', `target.${key}`, `${key} is not a field of a target: min, max`);
+  for (const key of Object.keys(raw)) if (!['min', 'max'].includes(key)) walk.fail('schema', `target.${key}`, `${quoted(key)} is not a field of a target: min, max`);
   const min = walk.integer(raw.min, 'target.min', 1, WIKI_PLAN_RULES.docsCeiling);
   const max = walk.integer(raw.max, 'target.max', 1, WIKI_PLAN_RULES.docsCeiling);
   if (max < min) walk.fail('schema', 'target', 'max must not be below min');
@@ -1941,7 +1997,7 @@ function repoCheckOf(walk: Walk, value: unknown): WikiPlanRepoCheck {
     walk.fail('schema', 'repoCheck', 'is required: { sha, checked, missing }, what the drafting job found when it checked the repository references on the runner');
     return { sha: '', checked: 0, missing: [] };
   }
-  for (const key of Object.keys(raw)) if (!['sha', 'checked', 'missing'].includes(key)) walk.fail('schema', `repoCheck.${key}`, `${key} is not a field of a repository check: sha, checked, missing`);
+  for (const key of Object.keys(raw)) if (!['sha', 'checked', 'missing'].includes(key)) walk.fail('schema', `repoCheck.${key}`, `${quoted(key)} is not a field of a repository check: sha, checked, missing`);
   const sha = typeof raw.sha === 'string' ? raw.sha.trim().toLowerCase() : '';
   if (!/^[0-9a-f]{7,64}$/u.test(sha)) walk.fail('schema', 'repoCheck.sha', 'must be the commit the references were checked at: 7 to 64 hex characters');
   const checked = walk.integer(raw.checked, 'repoCheck.checked', 0, 1_000_000);
