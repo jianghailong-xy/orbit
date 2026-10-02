@@ -96,6 +96,9 @@ private struct CircleSwipeRow: ViewModifier {
     /// How a button follows the size the row's position gives it, and how it lands once whole.
     private static let following = Animation.spring(response: 0.28, dampingFraction: 1)
     private static let landing = Animation.spring(response: 0.3, dampingFraction: 0.72)
+    /// The row going home: no bounce, so the card isn't left lingering on a spring's tail before it
+    /// fades — the system's is home and white again in about a third of a second.
+    private static let shutting = Animation.smooth(duration: 0.35)
 
     private func slots(of actions: [RowSwipeAction]) -> [Double] {
         actions.map { Double(slotWidths[$0.id] ?? Self.slot) }
@@ -319,7 +322,7 @@ private struct CircleSwipeRow: ViewModifier {
             shownSide = rest == .leading ? .leading : .trailing
             withAnimation(.snappy) { offset = target }
         case .closed:
-            withAnimation(.snappy) { offset = 0 } completion: { putAway() }
+            withAnimation(Self.shutting) { offset = 0 } completion: { putAway() }
         case .fullSwipe:
             if shared?.openID == id { shared?.openID = nil }
             let action = leading[0]
@@ -328,7 +331,7 @@ private struct CircleSwipeRow: ViewModifier {
                 // A completed or reopened row leaves the list; one that stays (the request failed)
                 // comes back once the list has had its chance to drop it.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    withAnimation(.snappy) { offset = 0 } completion: { putAway() }
+                    withAnimation(Self.shutting) { offset = 0 } completion: { putAway() }
                 }
             }
         }
