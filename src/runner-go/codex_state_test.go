@@ -173,23 +173,163 @@ func TestResolveCodexStateMarkerWinsAndCustomProviderStaysLocal(t *testing.T) {
 	}
 
 	customScratch := filepath.Join(root, "custom-run")
-	selected, err = resolveCodexStateDir(customScratch, "", nil, []string{"OPENAI_BASE_URL=https://example.test/v1"}, root)
+	selected, err = resolveCodexStateDir(customScratch, "", nil, []string{"HOME=/users/alice", "OPENAI_BASE_URL=https://example.test/v1"}, root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if selected.Layout != codexStateLayoutLegacy || selected.Shared {
-		t.Fatalf("custom provider selected shared state: %#v", selected)
+	if selected.Layout != codexStateLayoutIsolated || selected.Shared {
+		t.Fatalf("custom provider selected %#v, want a home of its own", selected)
 	}
 
 	// The marker is persisted before app-server spawn, so a failed first spawn may
-	// leave no SQLite file. That explicit local choice must still be retryable.
+	// leave no SQLite file, or a legacy backfill it never finished. Neither holds a
+	// thread, so the session is placed afresh, and stays local.
 	localMeta := &sessionMeta{CodexStateLayout: codexStateLayoutLegacy}
-	selected, err = resolveCodexStateDir(customScratch, "", localMeta, []string{"OPENAI_API_KEY=secret"}, root)
+	selected, err = resolveCodexStateDir(customScratch, "", localMeta, []string{"HOME=/users/alice", "OPENAI_API_KEY=secret"}, root)
 	if err != nil {
 		t.Fatalf("pre-thread local retry failed: %v", err)
 	}
-	if selected.Layout != codexStateLayoutLegacy || selected.Shared {
+	if selected.Layout != codexStateLayoutIsolated || selected.Shared {
 		t.Fatalf("pre-thread local retry selected %#v", selected)
+	}
+}
+
+// A credential-isolated session runs in a CODEX_HOME of its own: the real home's configuration is
+// linked in, its history and its login are not, so Codex has none of the runner's history to
+// backfill. Every start links again — the real home as it is now — and keeps what Codex wrote there.
+func TestIsolatedCodexHomeBorrowsConfigurationButNotHistoryOrLogin(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("ORBIT_HOME", filepath.Join(root, "orbit"))
+	realHome := filepath.Join(root, "user", ".codex")
+	for _, dir := range []string{"rules", "skills", ".tmp", "archived_sessions", filepath.Join("sessions", "2026", "09", "30")} {
+		if err := os.MkdirAll(filepath.Join(realHome, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const config = "model = \"gpt-5.5\"\n"
+	for name, body := range map[string]string{
+		"config.toml": config,
+		"auth.json":   `{"tokens":"the runner's own"}`,
+		filepath.Join("sessions", "2026", "09", "30", "rollout-2026-09-30T08-00-00-history.jsonl"): "{}\n",
+	} {
+		if err := os.WriteFile(filepath.Join(realHome, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	env := []string{"HOME=" + filepath.Join(root, "user"), "OPENAI_BASE_URL=https://gateway.test/v1", "OPENAI_API_KEY=sk-pool"}
+	scratch := filepath.Join(root, "run")
+
+	selected, err := resolveCodexStateDir(scratch, "", nil, env, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, err := filepath.Abs(filepath.Join(scratch, "codex-home"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if selected.Layout != codexStateLayoutIsolated || selected.Shared || selected.CodexHome != home || selected.Dir != home {
+		t.Fatalf("selected %#v, want state and CODEX_HOME both %s", selected, home)
+	}
+	if runtime.GOOS != "windows" {
+		if info, err := os.Stat(home); err != nil || info.Mode().Perm() != machineHomePerm {
+			t.Fatalf("the session's home: %v, %v", info, err)
+		}
+	}
+	for _, name := range []string{"config.toml", "rules", "skills", ".tmp"} {
+		if got, err := os.Readlink(filepath.Join(home, name)); err != nil || got != filepath.Join(realHome, name) {
+			t.Fatalf("%s links to %q (%v), want the real home's", name, got, err)
+		}
+	}
+	for _, name := range []string{"sessions", "archived_sessions", "auth.json", "AGENTS.md"} {
+		if _, err := os.Lstat(filepath.Join(home, name)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("%s is in the session's home (%v)", name, err)
+		}
+	}
+
+	// What Codex writes is the session's: its thread, and a file it put where a link was.
+	rollout := filepath.Join(home, "sessions", "2026", "10", "01", "rollout-2026-10-01T16-40-29-thread-1.jsonl")
+	if err := os.MkdirAll(filepath.Dir(rollout), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(rollout, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(home, "config.toml")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "config.toml"), []byte("its own"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// And the real home changes between two starts.
+	if err := os.WriteFile(filepath.Join(realHome, "AGENTS.md"), []byte("# instructions\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(realHome, "rules")); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := &sessionMeta{CodexStateLayout: codexStateLayoutIsolated, CodexStateHome: home}
+	again, err := resolveCodexStateDir(scratch, "thread-1", meta, env, root)
+	if err != nil || again != selected {
+		t.Fatalf("a resumed session selected %#v (%v), want %#v", again, err, selected)
+	}
+	if _, err := os.Stat(rollout); err != nil {
+		t.Fatalf("the session's own thread did not survive a restart: %v", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(home, "config.toml")); err != nil || string(got) != "its own" {
+		t.Fatalf("the file Codex wrote became %q (%v)", got, err)
+	}
+	if got, err := os.Readlink(filepath.Join(home, "AGENTS.md")); err != nil || got != filepath.Join(realHome, "AGENTS.md") {
+		t.Fatalf("AGENTS.md links to %q (%v), want the real home's new one", got, err)
+	}
+	if _, err := os.Lstat(filepath.Join(home, "rules")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("rules still links to an entry the real home no longer has (%v)", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(realHome, "config.toml")); err != nil || string(got) != config {
+		t.Fatalf("the real home's config.toml became %q (%v)", got, err)
+	}
+}
+
+// A session-local marker with no thread behind it holds nothing to keep — the marker is written
+// before the spawn, so a first start that failed leaves one — and the session is placed as a new one
+// is: in a home of its own on injected credentials, on its account's shared state without. Once there
+// is a thread, the marker wins.
+func TestResolveCodexStatePlacesAPreThreadSessionLocalMarkerAfresh(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("ORBIT_HOME", filepath.Join(root, "orbit"))
+	builtIn := []string{"HOME=/users/alice"}
+	injected := []string{"HOME=/users/alice", "OPENAI_API_KEY=sk-pool"}
+	for _, tc := range []struct {
+		layout string
+		env    []string
+		want   string
+	}{
+		{codexStateLayoutLegacy, injected, codexStateLayoutIsolated},
+		{codexStateLayoutLegacy, builtIn, codexStateLayoutShared},
+		{codexStateLayoutIsolated, injected, codexStateLayoutIsolated},
+		{codexStateLayoutIsolated, builtIn, codexStateLayoutShared},
+	} {
+		selected, err := resolveCodexStateDir(filepath.Join(root, "run"), "", &sessionMeta{CodexStateLayout: tc.layout}, tc.env, root)
+		if err != nil || selected.Layout != tc.want {
+			t.Fatalf("%s marker, env %v: selected %#v (%v), want %s", tc.layout, tc.env, selected, err, tc.want)
+		}
+	}
+
+	scratch := filepath.Join(root, "legacy-run")
+	if err := os.MkdirAll(filepath.Join(scratch, "codex-state"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scratch, "codex-state", "state_5.sqlite"), []byte("db"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	selected, err := resolveCodexStateDir(scratch, "thread-1", &sessionMeta{CodexStateLayout: codexStateLayoutLegacy}, injected, root)
+	if err != nil || selected.Layout != codexStateLayoutLegacy {
+		t.Fatalf("a legacy session with a thread selected %#v (%v)", selected, err)
+	}
+	// Carrying an isolated thread to an account is moveCodexThreadToClaimedAccount's; resolving keeps it.
+	selected, err = resolveCodexStateDir(filepath.Join(root, "isolated-run"), "thread-1", &sessionMeta{CodexStateLayout: codexStateLayoutIsolated}, builtIn, root)
+	if err != nil || selected.Layout != codexStateLayoutIsolated {
+		t.Fatalf("an isolated session with a thread selected %#v (%v)", selected, err)
 	}
 }
 
