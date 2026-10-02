@@ -329,6 +329,9 @@ struct AgentPanes: View {
     @State private var searching = false
     /// Which row's circle swipe actions are out (iOS 26 — see `RowSwipeState`).
     @State private var rowSwipe = RowSwipeState()
+    /// The row whose Share was tapped — drives the share panel, owned by the list for the same
+    /// reason as `taggingSession`.
+    @State private var sharingSession: Session?
     #endif
     // Set true when the composer hands ↑/↓ back on Escape, so the session list can be arrow-navigated
     // without a click; the binding also tracks click-to-focus.
@@ -572,6 +575,15 @@ struct AgentPanes: View {
         .sheet(item: $taggingSession) { s in
             SessionTagSheet(session: s).environment(app)
         }
+        #if os(iOS)
+        // The share panel for the row whose Share was tapped: the session page's own (ConsoleView's),
+        // list-owned like the tag picker above. iOS only, as the rows' Share is.
+        .sheet(item: $sharingSession) { s in
+            if let baseURL = app.baseURL {
+                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)
+            }
+        }
+        #endif
         // Load the owner's tag library when the pane appears so the picker + chips are populated.
         .task { await app.loadSessionTags() }
     }
@@ -733,7 +745,6 @@ struct AgentPanes: View {
         contentSearched = res.contentSearched
         hitsQuery = res.q
     }
-    #endif
 
     /// One row, wrapped for the container it is in. The row view itself is the same either way; what
     /// changes is who moves the screen — the three-column shell's `List` selection, or the row's own
@@ -744,7 +755,8 @@ struct AgentPanes: View {
         let row = AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open)
         switch rowNavigation {
         case .selection:
-            row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }).tag(s.id)
+            row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s })
+                .tag(s.id)
         case .push:
             // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
             // usable hiding place on iOS 17/18 (see `AppModel.push`). `.foregroundStyle(.primary)`:
@@ -757,9 +769,10 @@ struct AgentPanes: View {
             // and `.contextMenu` are read off the view the `List` hosts as its row, and a `Button`
             // does not pass them up from its label — which is where this wrapper used to leave them,
             // and why a swipe or a long press on a compact session row did nothing.
-            .sessionRowActions(s, scope: view, onTag: { taggingSession = s })
+            .sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s })
         }
     }
+    #endif
 
     @ViewBuilder private func tagSectionHeader(_ tag: SessionTag?) -> some View {
         if let tag {
