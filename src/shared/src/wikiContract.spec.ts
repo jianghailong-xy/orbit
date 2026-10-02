@@ -784,7 +784,7 @@ describe('wiki contract', () => {
     expect(job.recovery.orphan).toMatch(/The run did not report its end\./u);
     expect(job.recovery.attempts).toMatch(/startedAt, never written again/u);
     expect(job.recovery.inSession).toMatch(/rules\.serverWaitMinutes at most/u);
-    expect(job.recovery.migration).toMatch(/0354_wiki_maintenance_run_attempts/u);
+    expect(job.recovery.migration).toMatch(/0356_wiki_maintenance_run_attempts/u);
     expect(CONTRACT.maintenance.cursor.advance.body.failureKind).toMatch(/when it is not said, read off its error/u);
     // The task's one criterion is the check, in exactly the shape the server writes it.
     expect(job.task.completionCriterion).toBe('EXECUTABLE');

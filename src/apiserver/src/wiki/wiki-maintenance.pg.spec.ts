@@ -2064,7 +2064,7 @@ test('a run whose task ended without it saying how is given that end — and the
        ($9,$4,$5,$10,now() - interval '5 hours','failed',$11,now() - interval '4 hours')`,
     [randomUUID(), randomUUID(), randomUUID(), s.spaceId, s.owner.id, legacy.orphan, legacy.twice, legacy.kindless,
       randomUUID(), legacy.server, 'propose: orbit wiki maintain: POST /runner/wiki/spaces/x/maintenance/changesets -> 500 {"statusCode":500}']);
-  await h.sql.query(readFileSync(path.join(__dirname, '../../prisma/migrations/0354_wiki_maintenance_run_attempts/migration.sql'), 'utf8'));
+  await h.sql.query(readFileSync(path.join(__dirname, '../../prisma/migrations/0356_wiki_maintenance_run_attempts/migration.sql'), 'utf8'));
   const swept = await runRow(h, legacy.orphan);
   assert.deepEqual([swept.outcome, swept.failureKind, swept.error, swept.attempts], ['failed', 'infra', WIKI_RUN_NOT_REPORTED, 1]);
   assert.ok(swept.endedAt && swept.startedAt && swept.endedAt >= swept.startedAt);

@@ -41,9 +41,10 @@
 --
 -- NUMBERING, RE-RUNNABILITY
 -- -------------------------
--- 0354: origin/main stood at 0350 and other projects' unpushed worktrees spelled 0351, 0352 and 0353 when
--- this was written (2026-10-02). Every statement can run twice: ADD COLUMN IF NOT EXISTS, constraints added only when
--- absent, and each UPDATE matches no row the second time.
+-- Written as 0354 (2026-10-02, when origin/main stood at 0350) and renumbered 0356 before it landed:
+-- origin/main had reached 0355, and orbit/retry-50e5cf, not yet landed, spells 0354_session_retry_claimed.
+-- The two dirs would share a number, which the migration ledger refuses. Every statement can run twice:
+-- ADD COLUMN IF NOT EXISTS, constraints added only when absent, and each UPDATE matches no row the second time.
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 
 ALTER TABLE "wiki_maintenance_run"

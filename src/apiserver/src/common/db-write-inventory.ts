@@ -1314,7 +1314,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary is never reached: the trigger runs off the request path, logs the failure, and the next fact of the space asks again.',
   },
   // A maintenance task that died (contracts/wiki.contract.json `maintenance.job.recovery`, migration
-  // 0354): started again once by a runAt the dispatcher keeps, or closed FAILED, under the list's lock.
+  // 0356): started again once by a runAt the dispatcher keeps, or closed FAILED, under the list's lock.
   {
     at: 'wiki/wiki-maintenance-run.ts#settle',
     shape: 'TX_RETRIED',

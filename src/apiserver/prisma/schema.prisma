@@ -6301,7 +6301,7 @@ model WikiMaintenanceRun {
   expectKind      String?   @map("expect_kind")
   expectRef       String?   @map("expect_ref")
   sessionId       String?   @map("session_id") @db.Uuid
-  /// The run's first start, never written again (migration 0354): a retry or a rerun is `lastStartedAt`.
+  /// The run's first start, never written again (migration 0356): a retry or a rerun is `lastStartedAt`.
   startedAt       DateTime? @map("started_at") @db.Timestamptz(3)
   endedAt         DateTime? @map("ended_at") @db.Timestamptz(3)
   /// `succeeded` | `failed` | `truncated`, as the run reported it.

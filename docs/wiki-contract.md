@@ -1132,7 +1132,7 @@ owner 09-29：agent 往 `docs/` 里写的设计文档，wiki 要主动跟上。
   tokens { input, output, calls }, seconds, error? }`（`WikiMaintenanceDocsReport`）：这一步自己的模型调用与耗时另算一份，也计在运行的 token 里。`skipped` 为 `no_confirmed_plan`（没有已确认的 plan，什么都不写）或 `no_server_support`（服务端还没有 22.12
   的路由）。
 
-### 19.7 死在基础设施上的任务不再挡住维护（`maintenance.job.recovery`，迁移 `0354_wiki_maintenance_run_attempts`）
+### 19.7 死在基础设施上的任务不再挡住维护（`maintenance.job.recovery`，迁移 `0356_wiki_maintenance_run_attempts`）
 
 起因（10-01 至 10-02 线上）：维护任务的会话在 runner 重启时被 reaper 判 `runner offline`，任务停在 OPEN、没有活会话；
 触发器把任何 OPEN 任务都当作「运行中」，四个多小时没建新维护。调度器为什么没重派：reaper 对开了 autoRunWhenReady 的任务
@@ -1154,10 +1154,10 @@ owner 09-29：agent 往 `docs/` 里写的设计文档，wiki 要主动跟上。
 - **关单**（`close`）：`content` 的死，或重跑后又死：任务记 FAILED；运行行没说过怎么结束的，补 outcome failed、failureKind 和原因。清单空出来，
   下一个事实照常建下一次运行（游标没动，space 仍到期）。
 - **孤儿运行行**（`orphan`）：任务已终态（DONE / FAILED / CANCELLED）而运行行没有 outcome 的，补 outcome failed、failureKind infra、
-  error `The run did not report its end.`，ended_at 不早于最后一次开始。现存的由迁移 0354 一次补齐，之后由触发器在每个提示上补本 space 的。
+  error `The run did not report its end.`，ended_at 不早于最后一次开始。现存的由迁移 0356 一次补齐，之后由触发器在每个提示上补本 space 的。
 - **多次尝试**（`attempts`）：运行行保留首次开始（`startedAt`，不再改写），另记最后一次开始（`lastStartedAt`）与次数（`attempts`）；
   会话内重试和平台重跑都算一次。每次开始清掉上一次尝试说的结局（outcome、endedAt、error、failureKind、opsRefused、report），
-  所以运行行说的是最近一次尝试的结局，`endedAt` 不会早于 `startedAt`。迁移 0354 把已经「先结束后开始」的行改成两次尝试，
+  所以运行行说的是最近一次尝试的结局，`endedAt` 不会早于 `startedAt`。迁移 0356 把已经「先结束后开始」的行改成两次尝试，
   首次开始取该任务最早的会话。
 - **会话内**（`inSession`）：`orbit wiki maintain` 遇到服务端答 5xx 或不答时先等服务恢复，最多 `rules.serverWaitMinutes`（15 分钟），
   用一个只读、会读数据库的请求探活（`/api/health` 不碰数据库，磁盘满时照样答 200）：开始之前等，因为某一步停在服务端上而失败时，
@@ -1170,7 +1170,7 @@ owner 09-29：agent 往 `docs/` 里写的设计文档，wiki 要主动跟上。
 JSON 里是 `maintenance.health`；服务端在 `src/apiserver/src/wiki/wiki-health.ts`（读）与 `wiki-maintenance.ts` 的
 `advanceCursor`（通知），用户门在 `wiki/wiki-health.controller.ts`；共享类型与 look 的判定在 `src/shared/src/wikiHealth.ts`；
 两端的文案在 web `lib/wikiHealth.ts` 与 OrbitKit `WikiHealthLogic.swift`，由 `src/shared/src/wiki-health.fixture.json` 锁住。
-读的是 0315 的 `wiki_cursor` 与 0320 的 `wiki_maintenance_run`（0354 给运行行加了尝试次数与失败类别，见 19.7）。
+读的是 0315 的 `wiki_cursor` 与 0320 的 `wiki_maintenance_run`（0356 给运行行加了尝试次数与失败类别，见 19.7）。
 
 ### 20.1 读：`GET /api/wiki/spaces/:id/health`
 

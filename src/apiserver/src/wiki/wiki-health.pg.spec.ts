@@ -310,7 +310,7 @@ async function pageToExpected(h: Harness, s: Space, run: string, expect: string)
 
 /**
  * A run reporting that it did not succeed: through the cursor route (a truncated turn) or the finish route —
- * saying whose the failure was when `failureKind` is given, as `orbit wiki maintain` does since migration 0354.
+ * saying whose the failure was when `failureKind` is given, as `orbit wiki maintain` does since migration 0356.
  */
 async function fail(h: Harness, s: Space, run: string, via: 'cursor' | 'finish', error: string, failureKind?: 'infra' | 'content'): Promise<void> {
   const answer = via === 'cursor'

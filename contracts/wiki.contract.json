@@ -1086,7 +1086,7 @@
       },
       "recovery": {
         "doc": "docs/wiki-contract.md section 19.7",
-        "migration": "src/apiserver/prisma/migrations/0354_wiki_maintenance_run_attempts/migration.sql",
+        "migration": "src/apiserver/prisma/migrations/0356_wiki_maintenance_run_attempts/migration.sql",
         "rules": {
           "rerunAfterMinutes": 10,
           "rerunsMax": 1,
