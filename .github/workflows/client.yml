@@ -78,8 +78,10 @@ jobs:
 
   macos:
     name: macOS (build + test)
-    # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    # TEMPORARY (probe branch, never merged): this branch only photographs, so its dispatch skips the
+    # 10× compile gates; the task branch's own dispatch runs them, and the probe job below builds the
+    # same iOS sources for the simulator itself.
+    if: github.event_name == 'pull_request'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -104,8 +106,10 @@ jobs:
 
   ios:
     name: iOS (generate + build)
-    # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    # TEMPORARY (probe branch, never merged): this branch only photographs, so its dispatch skips the
+    # 10× compile gates; the task branch's own dispatch runs them, and the probe job below builds the
+    # same iOS sources for the simulator itself.
+    if: github.event_name == 'pull_request'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -132,3 +136,32 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             build
+
+  # TEMPORARY — an evidence run, not a gate; this branch is never merged. `.move-probe/` hosts the
+  # real session list and console against `oc-stub.py`; OwnerConfirmationShotTests photographs the
+  # owner-confirmation card's If you confirm block and folded criteria row for comparison with
+  # docs/mocks/owner-confirmation-review-ios.html, phone ②.
+  if-you-confirm-ios:
+    name: If you confirm probe (iOS owner-confirmation card)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Build, test and capture
+        run: bash .move-probe/ios/run-oc.sh
+      - name: Upload the captures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: if-you-confirm-shots
+          path: .move-probe/ios/shots
+          if-no-files-found: error
