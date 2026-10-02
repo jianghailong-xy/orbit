@@ -3766,9 +3766,11 @@ export class RunnerApiController {
           // How much of that budget is spent, for the one failure class whose wait is decided
           // here rather than by a reply's text — see `retryArmAt` below.
           retryAttempts: true,
-          // Which shared pool's key a failed turn may have ended on — see `keyRetryAt` below.
+          // Which shared pool's key, or login pool's account, a failed turn may have ended on — see
+          // `keyRetryAt` below.
           provider: true,
           poolKeyId: true,
+          poolCodexAccountId: true,
           // Which of the runner's Codex accounts a turn its usage limit ended ran on, and whether it
           // was picked by hand — see `codexUsageLimit` below.
           codexAccount: true,
@@ -4104,9 +4106,10 @@ export class RunnerApiController {
       // key. That is re-sent the moment another key can take it, or at the first reset when none can
       // (QueueService.sharedPoolKeyRetryAt) — the account pool's "room on another member re-sends now",
       // for keys. Decided from the keys, not from the engine's words, and never for a turn whose key can
-      // still run: that failure was not the key's. A login pool's turn its account's usage limit ended is
-      // armed the same way, at the reset the backend named (QueueService.loginPoolRetryAt) — the session
-      // waits for its one account and is never moved.
+      // still run: that failure was not the key's. A login pool's turn its account ended — spent, or signed
+      // out by OpenAI — is armed the same way, from its ChatGPT accounts (QueueService.loginPoolRetryAt):
+      // at once when another can take it, which the next claim moves the session to, else at the first
+      // account's reset.
       const keyRetryAt =
         dto.status === RunStatus.FAILED
         && completedTurn?.kind === 'message'
@@ -5637,7 +5640,8 @@ export class RunnerApiController {
           : null;
       // A shared pool's key that ended the run is waited out the same way, from the keys rather than the
       // words (QueueService.sharedPoolKeyRetryAt): now while another key can take the work — and a login
-      // pool's spent account until the reset the backend named (QueueService.loginPoolRetryAt).
+      // pool's account from its ChatGPT accounts, now while another can take it, else until the first of
+      // them comes back (QueueService.loginPoolRetryAt).
       const keyRetryAt =
         effectiveStatus === RunStatus.FAILED
         && current.retryAt == null
