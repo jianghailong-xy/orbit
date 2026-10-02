@@ -325,7 +325,9 @@ final class SessionMoveWiringTests: XCTestCase {
         XCTAssertTrue(connected.contains("Task { await loadSessionFolders() }"))
 
         let load = try slice(app, from: "func loadSessionFolders() async {", to: "\n    }")
-        XCTAssertTrue(load.contains("if let folders = try? await api.listSessionFolders() { sessionFolders = folders }"),
+        XCTAssertTrue(load.contains("guard let folders = try? await api.listSessionFolders() else { return }"),
                       "best-effort, like the tag library: an older server leaves it empty")
+        XCTAssertTrue(load.contains("sessionFolders = folders"),
+                      "an answer that landed replaces the library")
     }
 }

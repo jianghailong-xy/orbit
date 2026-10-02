@@ -97,6 +97,10 @@ final class ConsoleModel {
     /// runs no stream, and `send()` calls `createSession` for this agent instead of POSTing a turn
     /// (see `createDraftSession`). A live console leaves this nil.
     private let draftAgent: Agent?
+    /// Draft only: the folder whose page opened this draft (a folder page's ✎), whose sessions the
+    /// session it creates is filed in — the create request carries it as `folderId`
+    /// (docs/session-folders-move-design.md §3.3). Nil for a draft opened from a list.
+    private let draftFolderID: String?
     private(set) var provider = "claude"
     /// Draft only: an explicit provider pick from the new-session hero, as opposed to the agent's
     /// own. Non-nil means the create request carries it AND the pick is remembered on the agent
@@ -670,6 +674,7 @@ final class ConsoleModel {
         self.sessionID = sessionID
         self.agentID = agentID
         self.draftAgent = nil
+        self.draftFolderID = nil
         self.attachments = attachments
         let api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
         self.api = api
@@ -697,11 +702,13 @@ final class ConsoleModel {
          providerPools: [ProviderPool] = [],
          sharedPools: [SharedPool] = [],
          modelCatalog: RunnerModelCatalog? = nil, accountDefaultEffort: String? = nil,
+         folderID: String? = nil,
          baseURL: URL, tokenStore: TokenStore,
          attachments: AttachmentImageStore) {
         self.sessionID = ""
         self.agentID = agent.id
         self.draftAgent = agent
+        self.draftFolderID = folderID
         self.attachments = attachments
         let api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
         self.api = api
@@ -2442,7 +2449,10 @@ final class ConsoleModel {
                 // Only an explicit pick, as with the provider: none leaves it to the workspace's
                 // account, or to Automatic, which the server resolves when it creates the session.
                 codexAccount: provider == "codex" ? draftCodexAccount : nil,
-                claudeAccount: provider == "claude" ? draftClaudeAccount : nil))
+                claudeAccount: provider == "claude" ? draftClaudeAccount : nil,
+                // The folder page this draft was opened from, if any: the session is filed in it as
+                // it is created (§3.3). Omitted for a draft from a list.
+                folderId: draftFolderID))
             composerText = ""
             pendingAttachments = []
             // The pick was this session's binding; nothing to write back. The next draft here

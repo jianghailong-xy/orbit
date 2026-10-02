@@ -76,9 +76,9 @@ final class NavigationEntrancesWiringTests: XCTestCase {
         // session it named, and that tail is not the entry any more.
         let entries: [(entry: String, end: String, frame: String)] = [
             ("func newSessionInCurrentAgent() {", "\n    }",
-             "show(.compose(agentID: id), agent: id)"),
+             "show(.compose(agentID: id, folderID: nil), agent: id)"),
             ("func composeWithAgent(_ id: String) {", "\n    }",
-             "show(.compose(agentID: id), agent: id)"),
+             "show(.compose(agentID: id, folderID: nil), agent: id)"),
             ("func openRecentSession(_ s: Session) {", "\n    }",
              "show(.console(sessionID: s.id, origin: .drawer), agent: s.agent?.id ?? s.agentId)"),
             ("func openNeedsYouSession(_ s: Session) {", "\n    }",
