@@ -3226,6 +3226,24 @@ body {
 .session-section-head:first-child {
   padding-top: 2px;
 }
+/* The Pinned heading folds its rows away, as Notes' Pinned does: the whole heading is the button,
+   and the chevron at its end points down while the rows show, right once they are folded. */
+.session-section-fold {
+  width: 100%;
+  justify-content: space-between;
+  border: 0;
+  font-family: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.session-section-chev {
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+.session-section-chev.open {
+  transform: rotate(90deg);
+}
 /* Foot of the list while the next page loads. */
 .session-list-more {
   display: flex;

@@ -28,6 +28,7 @@ import {
   PlusOutlined,
   PushpinFilled,
   PushpinOutlined,
+  RightOutlined,
   SearchOutlined,
   ThunderboltOutlined,
   UndoOutlined,
@@ -708,6 +709,9 @@ const SESSION_COL_KEY = 'orbit.sessionColWidth';
 const SESSION_COL_MIN = 200;
 const SESSION_COL_MAX = 560;
 const SESSION_COL_DEFAULT = 320;
+
+// Whether the session list's Pinned section is folded to its heading, persisted across reloads.
+const PINNED_COLLAPSED_KEY = 'orbit.sessionPinnedCollapsed';
 
 // Delay the SSE (re)connect on a session switch so holding the arrow keys to scrub
 // the list doesn't open-then-immediately-close a connection per session skipped past.
@@ -1605,6 +1609,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Both are view-local UI state (not persisted) — the same as the native list.
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [groupByTag, setGroupByTag] = useState(false);
+  // The Pinned section folds to its heading, as Notes' Pinned does (and as on iOS). Unlike those two
+  // it is persisted, so a reload doesn't unfold it.
+  const [pinnedCollapsed, setPinnedCollapsed] = useState(
+    () => localStorage.getItem(PINNED_COLLAPSED_KEY) === '1',
+  );
+  const togglePinned = (): void => {
+    const next = !pinnedCollapsed;
+    setPinnedCollapsed(next);
+    localStorage.setItem(PINNED_COLLAPSED_KEY, next ? '1' : '0');
+  };
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null); // session row whose action menu is open
   // Touch swipe actions for session rows: hover has no touch equivalent, so on mobile the row's
   // actions sit behind a swipe instead, laid out like the iOS list (lib/sessionSwipe) — swipe right
@@ -2470,8 +2484,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           }))
         : sessionTimeSections(visibleSessions, {
             pinnedFirst: view === 'open' && !tagFilter,
-          }).map((s) => ({ key: s.title, tag: null as SessionTagRef | null, ...s })),
-    [visibleSessions, groupByTag, view, tagFilter],
+          }).map((s) => ({
+            key: s.title,
+            tag: null as SessionTagRef | null,
+            ...s,
+            // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
+            sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
+          })),
+    [visibleSessions, groupByTag, view, tagFilter, pinnedCollapsed],
   );
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
@@ -7249,12 +7269,27 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           )}
           {sections.map((sec) => (
             <Fragment key={sec.key}>
-              <div className="session-section-head">
-                {sec.tag && (
-                  <span className="session-section-dot" style={{ background: sec.tag.color }} />
-                )}
-                {sec.title}
-              </div>
+              {sec.key === 'Pinned' ? (
+                <button
+                  type="button"
+                  className="session-section-head session-section-fold"
+                  aria-expanded={!pinnedCollapsed}
+                  onClick={togglePinned}
+                >
+                  {sec.title}
+                  <RightOutlined
+                    className={`session-section-chev${pinnedCollapsed ? '' : ' open'}`}
+                    aria-hidden
+                  />
+                </button>
+              ) : (
+                <div className="session-section-head">
+                  {sec.tag && (
+                    <span className="session-section-dot" style={{ background: sec.tag.color }} />
+                  )}
+                  {sec.title}
+                </div>
+              )}
               {sec.sessions.map((s) => {
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
                 const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);

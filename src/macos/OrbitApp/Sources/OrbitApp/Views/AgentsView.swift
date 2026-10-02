@@ -332,6 +332,10 @@ struct AgentPanes: View {
     /// The row whose Share was tapped — drives the share panel, owned by the list for the same
     /// reason as `taggingSession`.
     @State private var sharingSession: Session?
+    /// Whether the Pinned section is folded to its header (iOS list only). Stored rather than view
+    /// state: this pane is rebuilt per workspace (`.id(a.id)`), so @State would unfold it on every
+    /// switch, and on every launch.
+    @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
     #endif
     // Set true when the composer hands ↑/↓ back on Escape, so the session list can be arrow-navigated
     // without a click; the binding also tracks click-to-focus.
@@ -386,6 +390,18 @@ struct AgentPanes: View {
                             } else {
                                 sessionRow(session)
                             }
+                        }
+                    } else if section.title == "Pinned" {
+                        // Pinned folds to its header, as Notes' Pinned does: the rows leave the
+                        // list, the header stays to bring them back. The rows are dropped here
+                        // rather than through `Section(isExpanded:)`, whose disclosure only draws in
+                        // the sidebar list style.
+                        Section {
+                            if !pinnedCollapsed {
+                                ForEach(section.sessions) { sessionRow($0) }
+                            }
+                        } header: {
+                            pinnedSectionHeader(section.title)
                         }
                     } else {
                         Section {
@@ -784,6 +800,29 @@ struct AgentPanes: View {
             Text("Untagged").textCase(nil)
         }
     }
+
+    #if os(iOS)
+    /// The Pinned section's header: its title, and at the trailing edge a chevron that points down
+    /// while the rows show and right once they are folded away (one glyph turned, never two
+    /// swapped — as the cards' chevrons). The whole band is the button, not just the chevron.
+    private func pinnedSectionHeader(_ title: String) -> some View {
+        Button {
+            withAnimation { pinnedCollapsed.toggle() }
+        } label: {
+            HStack {
+                Text(title).textCase(nil)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .rotationEffect(.degrees(pinnedCollapsed ? 0 : 90))
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityHint(pinnedCollapsed ? "Shows the pinned sessions" : "Hides the pinned sessions")
+    }
+    #endif
 }
 
 /// The agent edit form, presented as a sheet from the content column's toolbar gear (it used to be
