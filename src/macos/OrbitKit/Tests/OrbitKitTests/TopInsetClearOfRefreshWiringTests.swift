@@ -1,10 +1,10 @@
 import Foundation
 import XCTest
 
-/// SwiftUI doesn't exist on Linux, so nothing here compiles the list. These hold the session list's
-/// top bands to their source: they go through `topInsetClearOfRefresh`, which moves the iOS 26
-/// refresh control off them by the tested `RefreshControlClearance` — a bare top inset on that list
-/// is what drew the pull's spinner over the "… needs you" bar.
+/// SwiftUI doesn't exist on Linux, so nothing here compiles the lists. These hold the refreshable
+/// lists' top bands to their source: they go through `topInsetClearOfRefresh`, which moves the iOS
+/// 26 refresh control off them by the tested `RefreshControlClearance` — a bare top inset on the
+/// session list is what drew the pull's spinner over the "… needs you" bar.
 final class TopInsetClearOfRefreshWiringTests: XCTestCase {
     private struct SourceMissing: Error, CustomStringConvertible {
         let path: String
@@ -43,12 +43,34 @@ final class TopInsetClearOfRefreshWiringTests: XCTestCase {
                        "a bare top inset on the refreshable list puts the pull's spinner on the bar")
     }
 
-    func testTheTestedRuleMovesOnlyTheControlTheNavigationBarHosts() throws {
+    func testTheRunnersAndSkillsNoticeStaysClearOfTheRefreshControl() throws {
+        let runners = code(try appSource("Views/SkillsRunnersView.swift"))
+        XCTAssertTrue(runners.contains(".topInsetClearOfRefresh {"),
+                      "the load-failure notice over rows goes through the modifier")
+        XCTAssertFalse(runners.contains(".safeAreaInset(edge: .top"),
+                       "the phone's runners and skills lists pull to refresh too")
+    }
+
+    func testTheTestedRuleMovesOnlyTheNearestListsOwnControl() throws {
         let modifier = code(try appSource("Views/TopInsetClearOfRefresh.swift"))
         XCTAssertTrue(modifier.contains("RefreshControlClearance.shift("), "the tested rule decides")
         XCTAssertTrue(modifier.contains("control.superview?.superview is UINavigationBar"),
                       "only the arrangement that was measured is moved")
-        XCTAssertTrue(modifier.contains("scrollView.refreshControl != nil"),
-                      "only a scroll view that carries a refresh control is the one found")
+        XCTAssertTrue(modifier.contains("nearest.refreshControl != nil"),
+                      "the nearest list, and only if it refreshes — never one further off")
+        XCTAssertTrue(modifier.contains("VStack(spacing: 0) { bands }"),
+                      "empty bands still report a frame, so a gone notice stops moving the control")
+    }
+
+    func testAListAFinishedRefreshLeftPastItsTopGoesBackUnlessTheReaderTookIt() throws {
+        let modifier = code(try appSource("Views/TopInsetClearOfRefresh.swift"))
+        XCTAssertTrue(modifier.contains("if wasRefreshing, !control.isRefreshing { refreshEnded() }"),
+                      "watched from the moment iOS itself says the refresh has stopped")
+        XCTAssertTrue(modifier.contains("RefreshControlClearance.returnsToTop("),
+                      "the tested rule decides how far past its top is a refresh's doing")
+        XCTAssertTrue(modifier.contains("if pan.state == .began { settling = nil }"),
+                      "a drag after the refresh is the reader's, and nothing pulls it back")
+        XCTAssertTrue(modifier.contains("placement.scrollView = nil"),
+                      "off screen the list is let go, drag target included")
     }
 }
