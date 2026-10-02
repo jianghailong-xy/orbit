@@ -10,7 +10,12 @@
  *  (C) No browser-visible providers or pool payload carries a credential. Every route the providers
  *      controllers declare is called, refusals included, and no body holds `sk-ant`, a stored
  *      ciphertext or a key field. The owner's own reveal route, which exists to return a key, is the
- *      positive control that shows the check can see one.
+ *      positive control that shows the check can see one. Nor does any of them hand a person the owner
+ *      added to a pool of her ChatGPT accounts (migration 0358) anything of those accounts: asked by
+ *      them — at her pool wherever a route takes one — no answer names an account's email, plan,
+ *      `…AB12`, quota or the words OpenAI refused it with, only that she has some (`ownerHasChatGPT`),
+ *      and neither does their session on the pool. Her own same requests, which read every one of
+ *      those, are the positive control.
  *  (D) The key never lands in an agent's env (Workspace.env), nor anywhere else at rest: it is
  *      decrypted at the claim, into the job env alone.
  *  (E) A ChatGPT account in a Codex pool runs its owner's sessions and nobody else's (migration 0358): a
@@ -26,13 +31,13 @@
  *
  * Every refusal is paired with the same request made for the owner, which has to go through, so a door
  * that refused everything could not pass. Everything between the rows and the answers is production
- * code: the providers controllers behind real HTTP, with the global pipe, interceptors and filter
- * main.ts installs; SessionsService, TasksService, ProvidersService, QueueService, RunnerApiController
- * and the quota cache (ProviderPlanUsageService); for (E), SharedPoolsService and the pool gateway's
- * controller and both its services, behind main.ts's own body parsers. Only the network the server calls
- * out on (`fetch`, and in (E) a recorder standing where OpenAI's API and ChatGPT's Codex backend stand —
- * POOL_GATEWAY_UPSTREAM and POOL_LOGIN_UPSTREAM, which nothing in production can change) and the check
- * of a person's signed token are stand-ins.
+ * code: the providers controllers — the shared pools' among them — behind real HTTP, with the global pipe,
+ * interceptors and filter main.ts installs; SessionsService, TasksService, ProvidersService,
+ * SharedPoolsService, QueueService, RunnerApiController and the quota cache (ProviderPlanUsageService); for
+ * (E), the pool gateway's controller and both its services, behind main.ts's own body parsers. Only the
+ * network the server calls out on (`fetch`, and in (E) a recorder standing where OpenAI's API and ChatGPT's
+ * Codex backend stand — POOL_GATEWAY_UPSTREAM and POOL_LOGIN_UPSTREAM, which nothing in production can
+ * change), the codex CLI a ChatGPT sign-in starts, and the check of a person's signed token are stand-ins.
  *
  * It only adds rows, under ids and slugs of its own, and refuses to run anywhere but the disposable
  * server `coordinator-pg-test-safety` identifies.
@@ -42,8 +47,11 @@ import 'reflect-metadata';
 
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingHttpHeaders, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import { Module, RequestMethod, ValidationPipe } from '@nestjs/common';
@@ -88,6 +96,7 @@ import { encryptSecret } from './provider-crypto';
 import { ProvidersController } from './providers.controller';
 import { CodexLoginService } from './codex-login.service';
 import { ProvidersService } from './providers.service';
+import { SharedPoolsController } from './shared-pools.controller';
 import { SharedPoolsService } from './shared-pools.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -304,20 +313,29 @@ async function tablesHoldingAKey(client: Client): Promise<string[]> {
 }
 
 /** What the providers doors are built around; set before Nest builds them. */
-const doorsOver: { providers: ProvidersService | null; login: CodexLoginService | null; prisma: unknown } = {
+const doorsOver: {
+  providers: ProvidersService | null;
+  login: CodexLoginService | null;
+  pools: SharedPoolsService | null;
+  prisma: unknown;
+} = {
   providers: null,
   login: null,
+  pools: null,
   prisma: null,
 };
 
 @Module({
-  controllers: [ProvidersController, AdminProvidersController, RunnerProvidersController],
+  controllers: [ProvidersController, AdminProvidersController, RunnerProvidersController, SharedPoolsController],
   providers: [
     { provide: ProvidersService, useFactory: () => doorsOver.providers },
     // The ChatGPT sign-in's own controller dependency (migration 0323). The REAL service: (C) sweeps
     // every route the controller declares, these five included, and a stub answering 500 would be a
     // route whose body nobody checked.
     { provide: CodexLoginService, useFactory: () => doorsOver.login },
+    // The pool page's doors (migrations 0321, 0358), which the people an owner adds to a pool read it
+    // through — the REAL service, for the same reason.
+    { provide: SharedPoolsService, useFactory: () => doorsOver.pools },
     { provide: PrismaService, useFactory: () => doorsOver.prisma },
     JwtAuthGuard,
     AdminRoleGuard,
@@ -470,6 +488,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
   );
   doorsOver.providers = providers;
   doorsOver.login = new CodexLoginService(prisma, realtime);
+  doorsOver.pools = new SharedPoolsService(prisma, realtime, providers);
   doorsOver.prisma = db;
   const doors = await openDoors();
   t.after(async () => {
@@ -479,8 +498,8 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     await client.end();
   });
 
-  /** Every ciphertext a provider row — or a pool's ChatGPT login (migration 0323) — has held while this
-   *  spec ran, rotated and deleted ones included. */
+  /** Every ciphertext a provider row — or a pool's ChatGPT login (migration 0323), or an OpenAI API key in a
+   *  pool (migration 0321) — has held while this spec ran, rotated and deleted ones included. */
   const ciphertexts = new Set<string>();
   const track = async () => {
     for (const row of await db.modelProvider.findMany({ select: { apiKeyEnc: true } })) ciphertexts.add(row.apiKeyEnc);
@@ -488,6 +507,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
       ciphertexts.add(row.accessTokenEnc);
       ciphertexts.add(row.refreshTokenEnc);
     }
+    for (const row of await db.poolApiKey.findMany({ select: { secretEncrypted: true } })) ciphertexts.add(row.secretEncrypted);
   };
   const names = new Map<string, string>();
   const answers: Answer[] = [];
@@ -495,7 +515,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
    *  body: a 500 is no evidence, but a leak has to be reported as the leak it is. */
   async function ask(
     bearer: string,
-    method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     route: string,
     params: Record<string, string>,
     body: unknown,
@@ -1028,8 +1048,276 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     assert.equal(reveal.json.apiKey, personal.key);
   });
 
+  await t.test("(C) a person she added to a pool of her ChatGPT accounts reads nothing of them at any route, refusals included, but that she has some — and her own same requests read all of it", async () => {
+    const owner = await person(db, 'chatgpt-owner');
+    const member = await person(db, 'chatgpt-member');
+    const ownerAt = await machine(db, owner, 'chatgpt-owner');
+    const memberAt = await machine(db, member, 'chatgpt-member');
+    names
+      .set(owner, 'the ChatGPT pool owner')
+      .set(member, 'a person in her ChatGPT pool')
+      .set(ownerAt.runnerToken, "the ChatGPT pool owner's runner")
+      .set(memberAt.runnerToken, "her ChatGPT pool person's runner");
+    const poolKeys: string[] = [];
+    const openaiKey = () => {
+      const key = `sk-proj-${randomUUID().replace(/-/g, '')}${randomUUID().replace(/-/g, '')}`;
+      poolKeys.push(key);
+      return key;
+    };
+
+    // Her Codex pool, made through the browser's door, and two ChatGPT accounts in it as the sign-in and the
+    // pool gateway leave them: one running, with the quota the backend's last answer carried; one OpenAI
+    // signed out, with its words for why. Each value a page could show of them is one nothing else here
+    // prints, so finding it in a body is finding the account.
+    const made = await call(owner, 'POST', 'providers/pools', {}, { label: 'Codex Pool', engine: 'codex' }, 201);
+    const pool = await db.providerPool.findUniqueOrThrow({
+      where: { id: toUuid(String(made.json.id)) },
+      select: { id: true, slug: true },
+    });
+    const resetsIn = (hours: number) => new Date(Date.now() + hours * 60 * 60 * 1000).toISOString();
+    const accounts = [
+      {
+        accountId: `acct-${randomUUID()}-QZ7Y`,
+        email: `running-${randomUUID()}@chatgpt-account.invalid`,
+        plan: `plan-${randomUUID()}`,
+        state: 'ACTIVE',
+        lastError: null,
+        usage: {
+          provider: 'codex',
+          primary: { utilization: 6, resetsAt: resetsIn(2), windowDurationMins: 300 },
+          secondary: { utilization: 97, resetsAt: resetsIn(80), windowDurationMins: 10080 },
+        },
+      },
+      {
+        accountId: `acct-${randomUUID()}-WX5V`,
+        email: `signed-out-${randomUUID()}@chatgpt-account.invalid`,
+        plan: `plan-${randomUUID()}`,
+        state: 'SIGNED_OUT',
+        lastError: `Your refresh token was revoked ${randomUUID()}`,
+        usage: null,
+      },
+    ];
+    const tokens: string[] = [];
+    for (const { usage, ...account } of accounts) {
+      const pair = { access: `codex-access-${randomUUID()}`, refresh: `codex-refresh-${randomUUID()}` };
+      tokens.push(pair.access, pair.refresh);
+      await db.poolCodexLogin.create({
+        data: {
+          ...account,
+          ...(usage ? { usage, usageReadAt: new Date() } : {}),
+          poolId: pool.id,
+          userId: owner,
+          accessTokenEnc: encryptSecret(pair.access),
+          refreshTokenEnc: encryptSecret(pair.refresh),
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      });
+    }
+    /** What a page shows of each account — its owner's to read and nobody else's. */
+    const onlyHers = accounts.flatMap((account) => [
+      { what: 'an email', value: account.email },
+      { what: 'a plan', value: account.plan },
+      { what: 'a fingerprint', value: `…${account.accountId.slice(-4)}` },
+      ...(account.usage
+        ? [account.usage.primary, account.usage.secondary].map((window) => ({ what: 'a quota', value: window.resetsAt }))
+        : []),
+      ...(account.lastError ? [{ what: 'a last error', value: account.lastError }] : []),
+      // OpenAI's own id of the account, which no response names, hers included.
+      { what: 'an account id', value: account.accountId },
+    ]);
+    const readIn = (text: string) => onlyHers.filter(({ value }) => text.includes(value)).map(({ what }) => what);
+    const signedIn = () =>
+      db.poolCodexLogin.findMany({
+        where: { poolId: pool.id },
+        orderBy: { accountId: 'asc' },
+        select: { accountId: true, state: true },
+      });
+    const before = await signedIn();
+    await track();
+
+    // The person, by the email of their Orbit account, and one API key of hers: what they run on.
+    const { email: memberEmail } = await db.user.findUniqueOrThrow({ where: { id: member }, select: { email: true } });
+    const at = { id: uuidToBase62(pool.id) };
+    await call(owner, 'POST', 'providers/shared-pools/:id/people', at, { email: memberEmail }, 201);
+    await call(owner, 'POST', 'providers/shared-pools/:id/keys', at, { label: 'orbit-org-1', apiKey: openaiKey() }, 201);
+
+    // Their session on it, opened through the session door, claimed by their runner and read back as their
+    // session pages read it.
+    const opened = await sessions.create(member, { prompt: 'hello', title: 'on her pool', workspaceId: memberAt.workspaceId, provider: pool.slug });
+    const theirSession = {
+      claimed: await claim(memberAt.runnerId, opened.id),
+      read: await sessions.get(member, opened.id),
+      listed: await sessions.list(member, { workspaceId: memberAt.workspaceId }),
+    };
+
+    // A sign-in she starts runs a stand-in for the codex CLI, which prints its page and code and waits:
+    // nothing here reaches OpenAI.
+    const work = await mkdtemp(join(tmpdir(), 'pool-security-codex-'));
+    const cli = join(work, 'codex');
+    await writeFile(
+      cli,
+      `#!/usr/bin/env bash
+printf '1. Open this link in your browser and sign in to your account\\r\\n   https://auth.openai.com/codex/device\\r\\n\\r\\n'
+printf '2. Enter this one-time code (expires in 15 minutes)\\r\\n   POOL-5PEC1\\r\\n\\r\\n'
+exec sleep 300
+`,
+      { mode: 0o755 },
+    );
+    const bin = process.env.CODEX_LOGIN_BIN;
+    process.env.CODEX_LOGIN_BIN = cli;
+
+    type Who = 'person' | 'owner';
+    const asked: Record<Who, Answer[]> = { person: [], owner: [] };
+    /**
+     * Every route the providers controllers declare, asked by `who` — at her pool wherever one takes a
+     * pool's id or slug — in an order that leaves the pool standing to the end: the reads; her pool where a
+     * provider's id or slug goes; what each of them makes of their own; her pool's rules, people and keys;
+     * and last, what takes something out of it. The two doors that delete a pool are asked about one the
+     * asker made just before: asked about hers, they would refuse the person as every door below that would
+     * change it does — and for her, delete it before the rest of the sweep had read it.
+     */
+    async function sweep(who: Who) {
+      const bearer = who === 'person' ? member : owner;
+      const runner = who === 'person' ? memberAt.runnerToken : ownerAt.runnerToken;
+      const by = (forThePerson: number, forHer: number) => (who === 'person' ? forThePerson : forHer);
+      const them = { ...at, userId: uuidToBase62(member) };
+      const from = answers.length;
+
+      // The pickers, the management lists, the catalogue, her pool's two pages, and a sign-in on it started,
+      // polled and given up.
+      await ask(bearer, 'GET', 'providers', {}, undefined, 200);
+      await ask(bearer, 'GET', 'providers/mine', {}, undefined, 200);
+      await ask(bearer, 'GET', 'providers/presets', {}, undefined, 200);
+      await ask(bearer, 'GET', 'providers/pools', {}, undefined, 200);
+      await ask(bearer, 'GET', 'providers/shared-pools', {}, undefined, 200);
+      await ask(runner, 'GET', 'runner/providers', {}, undefined, 200);
+      await ask(bearer, 'GET', 'admin/providers', {}, undefined, 403);
+      await ask(bearer, 'GET', 'providers/pools/:id', at, undefined, by(404, 200));
+      await ask(bearer, 'GET', 'providers/shared-pools/:id', at, undefined, 200);
+      await ask(bearer, 'POST', 'providers/pools/:id/codex-login', at, undefined, by(404, 201));
+      await ask(bearer, 'GET', 'providers/pools/:id/codex-login', at, undefined, by(404, 200));
+      await ask(bearer, 'DELETE', 'providers/pools/:id/codex-login', at, undefined, by(404, 200));
+
+      // Her pool where a provider's id or slug goes — a pool is no provider, to either of them — and its
+      // members, which a Codex pool has none of.
+      await ask(bearer, 'GET', 'providers/mine/:id/key', at, undefined, 404);
+      await ask(bearer, 'PATCH', 'providers/mine/:id', at, { label: 'Renamed' }, 404);
+      await ask(bearer, 'DELETE', 'providers/mine/:id', at, undefined, 404);
+      await ask(bearer, 'POST', 'providers/pools/:id/members', at, { providerId: at.id }, 404);
+      await ask(bearer, 'DELETE', 'providers/pools/:id/members/:providerId', { ...at, providerId: at.id }, undefined, by(404, 200));
+      await ask(bearer, 'PATCH', 'admin/providers/:id', at, { label: 'Renamed' }, 403);
+      await ask(bearer, 'DELETE', 'admin/providers/:id', at, undefined, 403);
+      await ask(runner, 'PATCH', 'runner/providers/:slug', { slug: pool.slug }, { label: 'Renamed' }, 404);
+      await ask(runner, 'DELETE', 'runner/providers/:slug', { slug: pool.slug }, undefined, 404);
+
+      // What each of them makes of their own.
+      await ask(bearer, 'POST', 'providers/test', {}, { baseUrl: ANTHROPIC, apiKey: subscription(), model: 'claude-opus-5', runtime: 'claude' }, 201);
+      await ask(bearer, 'POST', 'providers/mine', {}, { label: 'Own', baseUrl: ANTHROPIC, apiKey: subscription() }, 201);
+      await ask(
+        runner,
+        'POST',
+        'runner/providers',
+        {},
+        { label: 'Own, from a runner', baseUrl: ANTHROPIC, apiKey: subscription(), models: [{ value: 'claude-opus-5', label: 'Opus 5' }] },
+        201,
+      );
+      await ask(bearer, 'POST', 'admin/providers', {}, { label: 'Shared', baseUrl: ANTHROPIC, apiKey: subscription() }, 403);
+      const ownPool = await ask(bearer, 'POST', 'providers/pools', {}, { label: 'Own pool', engine: 'codex' }, 201);
+      await ask(bearer, 'DELETE', 'providers/pools/:id', { id: String(ownPool.json?.id) }, undefined, 200);
+      const ownShared = await ask(bearer, 'POST', 'providers/shared-pools', {}, { label: 'Own shared pool' }, 201);
+      await ask(bearer, 'DELETE', 'providers/shared-pools/:id', { id: String(ownShared.json?.id) }, undefined, 200);
+
+      // Her pool's rules and people: hers to change.
+      await ask(bearer, 'PATCH', 'providers/shared-pools/:id', at, { membersCanAdd: true }, by(403, 200));
+      await ask(bearer, 'POST', 'providers/shared-pools/:id/people', at, { email: memberEmail }, by(403, 201));
+      await ask(bearer, 'PATCH', 'providers/shared-pools/:id/people/:userId', them, { role: 'MEMBER' }, by(403, 200));
+      // A key of their own put in, renamed, given a new secret and taken out: each answer the pool as they read it.
+      const label = `the ${who}'s key`;
+      const added = await ask(bearer, 'POST', 'providers/shared-pools/:id/keys', at, { label, apiKey: openaiKey() }, 201);
+      const keyId = (added.json?.keys as Array<{ id: string; label: string }> | undefined)?.find((key) => key.label === label)?.id;
+      const key = { ...at, keyId: String(keyId) };
+      await ask(bearer, 'PATCH', 'providers/shared-pools/:id/keys/:keyId', key, { label: `${label}, renamed` }, 200);
+      await ask(bearer, 'PUT', 'providers/shared-pools/:id/keys/:keyId/secret', key, { apiKey: openaiKey() }, 200);
+      await ask(bearer, 'DELETE', 'providers/shared-pools/:id/keys/:keyId', key, undefined, 200);
+
+      // Last, what takes something out of her pool: an account, the person, and the person themselves.
+      await ask(bearer, 'DELETE', 'providers/pools/:id/codex-login/account', at, undefined, by(404, 200));
+      await ask(bearer, 'DELETE', 'providers/shared-pools/:id/people/:userId', them, undefined, by(403, 200));
+      await ask(bearer, 'POST', 'providers/shared-pools/:id/leave', at, undefined, by(201, 403));
+      asked[who] = answers.slice(from);
+    }
+
+    try {
+      await sweep('person');
+      // Nothing the person was refused took anything of hers: both accounts are there, as they were.
+      assert.deepEqual(await signedIn(), before, 'a door the person was refused at changed her accounts');
+      await sweep('owner');
+    } finally {
+      if (bin === undefined) delete process.env.CODEX_LOGIN_BIN;
+      else process.env.CODEX_LOGIN_BIN = bin;
+      await rm(work, { recursive: true, force: true });
+    }
+
+    // The person read nothing of her accounts: not in an answer, not in their session, not in a push.
+    assert.deepEqual(
+      asked.person.flatMap((answer) => {
+        const found = readIn(answer.text);
+        return found.length ? [`${answer.method} /api/${answer.route} as ${answer.who} → ${answer.status}: ${found.join(', ')}`] : [];
+      }),
+      [],
+      'what the person read of her ChatGPT accounts',
+    );
+    assert.deepEqual(readIn(wire(theirSession)), [], 'what their session on her pool says of her ChatGPT accounts');
+    assert.deepEqual(
+      broadcasts.filter((broadcast) => broadcast.includes(member)).flatMap((broadcast) => readIn(wire(broadcast))),
+      [],
+      'what was pushed to the person of her ChatGPT accounts',
+    );
+    // …but that she has some, which the page's locked line is drawn from — and a pool with none says so.
+    const answered = (who: Who, method: string, route: string) =>
+      asked[who].find((answer) => answer.method === method && answer.route === route)?.json;
+    assert.equal(answered('person', 'GET', 'providers/shared-pools/:id')?.ownerHasChatGPT, true);
+    assert.equal(
+      (answered('person', 'GET', 'providers/shared-pools') as Array<{ id: string; ownerHasChatGPT: boolean }>).find((p) => p.id === at.id)
+        ?.ownerHasChatGPT,
+      true,
+    );
+    assert.equal(answered('person', 'POST', 'providers/shared-pools')?.ownerHasChatGPT, false);
+
+    // The positive control: her own same requests read every one of those — bar OpenAI's id of an account,
+    // which is nobody's to read.
+    const shown = new Set(asked.owner.flatMap((answer) => onlyHers.filter(({ value }) => answer.text.includes(value))));
+    assert.deepEqual(
+      onlyHers.filter((item) => !shown.has(item)).map(({ what, value }) => `${what}: ${value}`),
+      accounts.map((account) => `an account id: ${account.accountId}`),
+      'what her own requests did not read of her ChatGPT accounts',
+    );
+
+    // No answer to either of them carries a credential: a token of her accounts or an OpenAI key, in the
+    // clear or as stored.
+    const secrets = [...tokens, ...poolKeys];
+    assert.deepEqual(
+      [...asked.person, ...asked.owner].flatMap((answer) => {
+        const found = [
+          ...credentialsIn(answer.text, ciphertexts),
+          ...secrets.filter((secret) => answer.text.includes(secret)).map(() => 'a token or a key in the clear'),
+        ];
+        return found.length ? [`${answer.method} /api/${answer.route} as ${answer.who} → ${answer.status}: ${found.join(', ')}`] : [];
+      }),
+      [],
+      'responses carrying a credential',
+    );
+    // Each was the answer its request should get, and each of them asked every route there is.
+    assert.deepEqual([...asked.person, ...asked.owner].filter((answer) => answer.status !== answer.expected).map(statusOf), []);
+    const declared = routesOf(ProvidersController, AdminProvidersController, RunnerProvidersController, SharedPoolsController);
+    for (const who of ['person', 'owner'] as const) {
+      const swept = new Set(asked[who].map((answer) => `${answer.method} ${answer.route}`));
+      assert.deepEqual(declared.filter((route) => !swept.has(route)), [], `routes the ${who} never asked`);
+    }
+  });
+
   await t.test('(C) …and those responses are every route the providers controllers declare', () => {
-    const declared = routesOf(ProvidersController, AdminProvidersController, RunnerProvidersController);
+    const declared = routesOf(ProvidersController, AdminProvidersController, RunnerProvidersController, SharedPoolsController);
     assert.ok(declared.length >= 18, `read only ${declared.length} routes off the controllers`);
     const swept = new Set(answers.map((answer) => `${answer.method} ${answer.route}`));
     assert.deepEqual(

@@ -84,6 +84,12 @@ interface PoolActivity {
  * cap limits), whether a session is generating on it now, and whether it is the one a session the viewer
  * starts now would run on (`next`: the claim's own choice, choosePoolKey, asked for a session that has
  * no key yet). No key's secret or fingerprint is selected to build this, so none can reach it.
+ *
+ * Of the ChatGPT accounts a pool of somebody's own holds (migration 0323) it says one thing, to everyone
+ * in it: whether there are any (`ownerHasChatGPT`), which is what the page's locked line — "<owner>'s
+ * ChatGPT accounts — Only <owner>'s sessions run on them" — needs. Their email, plan, `…AB12`, quota and
+ * why OpenAI refused one are their owner's, read on the providers page (ProvidersService, CodexLoginService),
+ * and no column holding any of them is selected here, so none can reach the people the owner added.
  */
 function poolView(
   pool: PoolRow,
@@ -92,6 +98,7 @@ function poolView(
   activity: PoolActivity,
   viewerId: string,
   now: Date,
+  ownerHasChatGPT: boolean,
 ) {
   const names = new Map(pool.people.map((person) => [person.userId, person.user.name]));
   const viewer = pool.people.find((person) => person.userId === viewerId);
@@ -116,6 +123,7 @@ function poolView(
     membersCanAdd: pool.membersCanAdd,
     ownKeyFirst: pool.ownKeyFirst,
     viewerRole: viewer?.role as PoolRole,
+    ownerHasChatGPT,
     // The month a share cap and every usage figure below count, UTC.
     window: { start: usageWindowStart(now).toISOString(), end: nextUsageWindowStart(now).toISOString() },
     people: pool.people.map((person) => ({
@@ -204,7 +212,7 @@ function ownPoolOneAdmin() {
  * the people they add are members, nobody else can be made one, and so nobody else can delete the pool
  * (its accounts with it) or change its rules. The people it takes run on its API keys alone — its ChatGPT
  * accounts are its owner's, and so are the sessions they run (QueueService.resolveLoginPool) — and no
- * answer here says anything about those accounts.
+ * answer here says anything about those accounts but whether there are any (`ownerHasChatGPT`).
  */
 @Injectable()
 export class SharedPoolsService {
@@ -568,6 +576,12 @@ export class SharedPoolsService {
       },
       _count: { _all: true },
     });
+    // Which pools hold a ChatGPT account of their owner's: of each account, only the pool it is in is read.
+    const logins = await this.prisma.poolCodexLogin.findMany({
+      where: { poolId: { in: ids } },
+      select: { poolId: true },
+    });
+    const withAccounts = new Set(logins.map((login) => login.poolId));
     const runningKeys = new Set(running.flatMap((session) => (session.poolKeyId ? [session.poolKeyId] : [])));
     return pools.map((pool) =>
       poolView(
@@ -582,6 +596,7 @@ export class SharedPoolsService {
         },
         viewerId,
         now,
+        withAccounts.has(pool.id),
       ),
     );
   }
