@@ -41,8 +41,9 @@ final class FolderAcceptanceTests: ProbeCase {
     /// the toast says so; back on the list the new folder's row leads it, counting that session.
     func test1NewFolderFromMovePanel() {
         let app = launch(dark: true)
+        settleList(app)
         shot("accept-1a-0-list-before")
-        openPanel(app, "accept-1a")
+        openMovePanel(app, "accept-1a")
         panel(app, "accept-1a-1-move-panel")
         option(app, newFolder).tap(); settle()
         enter(app, "Launch notes")
@@ -188,7 +189,8 @@ final class FolderAcceptanceTests: ProbeCase {
         alertButton(app, create)
         refusal(app, couldNotCreate, "accept-4-2-menu-duplicate-refused")
 
-        openPanel(app, "accept-4-panel")
+        settleList(app)
+        openMovePanel(app, "accept-4-panel")
         panel(app, "accept-4-3-move-panel")
         option(app, newFolder).tap(); settle()
         enter(app, release)
@@ -238,6 +240,33 @@ final class FolderAcceptanceTests: ProbeCase {
     }
 
     // MARK: helpers
+
+    /// Wait for the list to stop moving: the needs-you bar arrives a moment after the rows and
+    /// pushes them down, and a drag that starts while it lands opens the row instead of sliding it
+    /// (round 2's first test opened the session's page that way).
+    private func settleList(_ app: XCUIApplication) {
+        let bar = app.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", "needs you")).firstMatch
+        if !bar.waitForExistence(timeout: 20) { note("the needs-you bar never came") }
+        settle(1.5)
+    }
+
+    /// The Move panel for `moving`: its row's swipe, then Move. Should a drag still land as a tap,
+    /// back to the list and open the same panel from the row's long-press menu (Move…) instead.
+    private func openMovePanel(_ app: XCUIApplication, _ name: String) {
+        openTrailing(app, moving, showing: "Move", name)
+        if app.buttons["Move"].exists {
+            tap(app, "Move")
+            return
+        }
+        note("\(name): the swipe did not open the row; using its long-press menu's Move…")
+        let alert = app.alerts.firstMatch
+        if alert.exists, alert.buttons["Cancel"].exists { alert.buttons["Cancel"].tap(); settle() }
+        let back = app.navigationBars.buttons["BackButton"]
+        if back.exists { back.tap(); settle(1.5) }
+        row(app, moving).press(forDuration: 1.2)
+        settle()
+        tap(app, "Move…")
+    }
 
     /// The list's ≡ menu (its label names the scope on a phone), opened.
     private func openListMenu(_ app: XCUIApplication) {
