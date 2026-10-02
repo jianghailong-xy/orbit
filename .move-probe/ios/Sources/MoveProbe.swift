@@ -35,6 +35,9 @@ private struct ProbeRoot: View {
             }
         }
         .toastHost()
+        // The shells' stream lifecycle (CompactShell / MainView): start exactly the focused
+        // session's console — without it a pushed console never loads its transcript or its cards.
+        .onChange(of: app.focusedConsoleSessionID, initial: true) { _, _ in app.syncConsoleFocus() }
         .task {
             // What the launch landing does once the workspace list is in: open the one workspace.
             await app.agents?.load()
