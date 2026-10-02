@@ -6326,6 +6326,11 @@ model WikiMaintenanceRun {
   /// How many times the platform started the run's task again after its session died of an infra failure.
   reruns          Int       @default(0)
   rerunAt         DateTime? @map("rerun_at") @db.Timestamptz(3)
+  /// `active` | `paused` — made while the space was behind (contract `maintenance.job.catchUp`, migration 0357);
+  /// NULL for a run made while it was not.
+  catchUp         String?   @map("catch_up")
+  /// The provider the run was pinned to answers on this machine or a private network (`catchUp.localEndpoint`).
+  localEndpoint   Boolean   @default(false) @map("local_endpoint")
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 

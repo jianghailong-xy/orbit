@@ -171,6 +171,17 @@ export class WikiCursorAdvanceDto {
 }
 
 /**
+ * POST /api/runner/wiki/spaces/:id/maintenance/advance — a Wiki maintenance run recorded its ops, and the cursor
+ * moves past the sessions they came from (contract `maintenance.job.run.steps`, advance): `to` is the token of the
+ * last page whose ops are recorded.
+ */
+export class WikiMaintenanceAdvanceDto {
+  @IsString()
+  @MaxLength(2_000)
+  to!: string;
+}
+
+/**
  * POST /api/runner/wiki/spaces/:id/maintenance/finish — how a Wiki maintenance run ended, and what it did
  * (contract `maintenance.job.finish`): the cursor advance's three fields, and the run's report.
  */
