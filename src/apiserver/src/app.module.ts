@@ -13,6 +13,7 @@ import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { SessionsModule } from './sessions/sessions.module';
 import { SessionTagsModule } from './session-tags/session-tags.module';
+import { SessionFoldersModule } from './session-folders/session-folders.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TaskListsModule } from './task-lists/task-lists.module';
 import { LinkPreviewsModule } from './link-previews/link-previews.module';
@@ -45,6 +46,7 @@ import { WikiModule } from './wiki/wiki.module';
     WorkspacesModule,
     SessionsModule,
     SessionTagsModule,
+    SessionFoldersModule,
     TasksModule,
     TaskListsModule,
     LinkPreviewsModule,

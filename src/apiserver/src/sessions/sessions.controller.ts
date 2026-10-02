@@ -31,6 +31,7 @@ import {
   CreateSessionDto,
   MergeRepairDto,
   MergeToMainDto,
+  MoveSessionDto,
   SessionArmRetryDto,
   SessionConfigDto,
   SessionAccountDto,
@@ -271,7 +272,7 @@ export class SessionsController {
   @Post()
   create(
     @CurrentUser() user: AuthUser,
-    @Body(PublicIdPipe.forFields('workspaceId', 'agentId', 'assignedRunnerId', 'taskId', 'attachmentIds'))
+    @Body(PublicIdPipe.forFields('workspaceId', 'agentId', 'assignedRunnerId', 'taskId', 'attachmentIds', 'folderId'))
     dto: CreateSessionDto,
   ) {
     // `agentId` is the pre-rename name every shipped client still sends.
@@ -631,6 +632,18 @@ export class SessionsController {
   @Delete(':id/pin')
   unpin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.unpin(user.userId, id);
+  }
+
+  /** File this session in one of its workspace's folders, or in none (`folderId` null or omitted).
+   *  A `workspaceId` other than the session's own is a 409 until moving between workspaces exists.
+   *  See SessionsService.move. */
+  @Post(':id/move')
+  move(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: MoveSessionDto,
+  ) {
+    return this.sessions.move(user.userId, id, dto);
   }
 
   /** Replace the set of personal colored tags applied to this session (picker sends the full

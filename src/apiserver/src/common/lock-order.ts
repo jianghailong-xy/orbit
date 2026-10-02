@@ -88,6 +88,20 @@ export const LOCK_ORDER = [
     why: 'A pause writes the list row and then every Task in it, so the list is taken before its Tasks.',
   },
   {
+    rank: 25,
+    relation: 'session_folder',
+    modes: 'FOR UPDATE (rename — `name` is in a unique index — and delete) · FOR KEY SHARE (SessionsService.move\'s pre-lock, and the session.folder_id FK)',
+    why:
+      'Below `session` because a folder delete reaches the sessions filed in it through '
+      + '`session_folder_id_fkey` ON DELETE SET NULL, after it already holds the folder row. The '
+      + 'one transaction that holds a session and wants a folder, `SessionsService.move`, therefore '
+      + 'takes the folder first, at FOR KEY SHARE — the mode its UPDATE\'s FK check takes anyway, '
+      + 'moved ahead of the session lock exactly as I2 moves the creator-session lock. Every other '
+      + 'Session writer reaches a folder only through that FK, which I3 keeps from firing: a row '
+      + 'written once re-checks no key whose column it did not change. A session INSERT naming a '
+      + 'folder takes it FOR KEY SHARE too, from a row nothing else can see yet.',
+  },
+  {
     rank: 30,
     relation: 'session',
     modes: 'FOR UPDATE (runner lease fence, inbox, lifecycle) · FOR KEY SHARE (task.creator_session_id FK)',

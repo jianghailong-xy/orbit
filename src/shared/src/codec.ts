@@ -258,6 +258,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'eventId',
   'sourceId',
   'tagId',
+  // The session folder a session is filed in (0348): the row `GET /session-folders` hands out, and
+  // the one `POST /sessions` and `POST /sessions/:id/move` take back.
+  'folderId',
   'turnId',
   // A CURRENT_WORK receipt names the exact executable it was aimed at. That is a row address
   // (not a delivery fence), so it must use the same public spelling as turnId.

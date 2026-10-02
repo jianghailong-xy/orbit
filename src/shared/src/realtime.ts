@@ -51,6 +51,11 @@ export enum ControlEventType {
   TASK_LIST_CHANGED = 'task.list.changed',
   /** The owner's session-tag library changed. USER-SCOPED (see above). */
   TAG_CHANGED = 'tag.changed',
+  /** One of the owner's session folders was created, renamed or deleted. USER-SCOPED (see above).
+   *  `data` is a `ControlResourceChanged` naming the folder: a nudge to re-read
+   *  `GET /session-folders`. A session moved between folders is a `session.updated` instead, whose
+   *  summary carries the new `folderId`. */
+  FOLDER_CHANGED = 'folder.changed',
   /** The deployment's configured model providers changed. USER-SCOPED (see above). */
   PROVIDER_CHANGED = 'provider.changed',
   /** A project's pending criteria decisions changed — a loosening edit was held for the owner, or
@@ -85,7 +90,7 @@ export enum ControlEventType {
 export interface ControlEvent {
   type: ControlEventType;
   /** The session this event is about — EMPTY for the user-scoped events (`task.list.changed` /
-   *  `tag.changed` / `provider.changed` / `project.criteria_decisions.changed` /
+   *  `tag.changed` / `folder.changed` / `provider.changed` / `project.criteria_decisions.changed` /
    *  `project.changed` / `watch.changed` / `wiki.changed`), which belong to the owner, not to any
    *  one session. Clients must dispatch on `type`, not on the presence of a
    *  session id. */
@@ -121,6 +126,11 @@ export interface ControlSessionSummary {
   capabilities?: SessionCapabilities;
   agentId: string | null;
   agent: { id: string; name: string | null; model: string | null; effort: string | null } | null;
+  /** The session folder this session is filed in, or null when it is in no folder. Always sent by
+   *  a server that has folders, so the `session.updated` a move publishes is how other clients see
+   *  it: a client folding this summary into a row must treat null as a value and clear its own.
+   *  Only an absent key — an older control plane — means "unchanged". */
+  folderId?: string | null;
   /** Project relation projected onto a coordinator Session. Optional for rolling-version peers. */
   projectId?: string | null;
   projectTitle?: string | null;
@@ -255,8 +265,8 @@ export interface ControlAgentChanged {
   affectsTaskRows?: boolean;
 }
 
-/** `data` for the user-scoped events (`task.list.changed` / `tag.changed` / `provider.changed` /
- *  `project.criteria_decisions.changed` / `watch.changed` / `wiki.changed`). Same contract as the two
+/** `data` for the user-scoped events (`task.list.changed` / `tag.changed` / `folder.changed` /
+ *  `provider.changed` / `project.criteria_decisions.changed` / `watch.changed` / `wiki.changed`). Same contract as the two
  *  above: refetch the matching read; the id is for future fine-grained updates and logging, except on
  *  the last three, where it names the project whose pending decisions to re-read, the watch to
  *  re-read, and the wiki space whose pages and review queue to re-read. */

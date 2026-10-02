@@ -877,6 +877,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
           select: { id: true, status: true, lastHeartbeatAt: true },
         },
         workspaceId: true,
+        folderId: true,
         lastTurnAt: true,
         workspace: { select: { id: true, name: true, model: true, effort: true } },
         coordinatorForProject: { select: { id: true, title: true } },
@@ -918,6 +919,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             effort: s.workspace.effort ?? null,
           }
         : null,
+      // Null is a value here: a session moved out of its folder reaches the owner's other clients
+      // by this key going null.
+      folderId: s.folderId ?? null,
       projectId: s.coordinatorForProject?.id ?? null,
       projectTitle: s.coordinatorForProject?.title ?? null,
       pendingApprovals,

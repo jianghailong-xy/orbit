@@ -37,6 +37,7 @@ type Row = {
   lastTurnAt: Date | null;
   workspace: { id: string; name: string | null; model: string | null; effort: string | null } | null;
   coordinatorForProject?: { id: string; title: string } | null;
+  folderId?: string | null;
   /** Read by the approval count: whose cards are still being asked depends on whether the
    *  conversation is generating, and — when it is not — on which of these processes are up. */
   engineTurnActive?: boolean | null;
@@ -540,6 +541,55 @@ test('wiki.changed reaches its owner\'s stream, carrying the space id and nothin
   assert.equal(mine[0].sessionId, '');
   assert.equal(mine[0].agentId, null);
   assert.equal(theirs.length, 0);
+});
+
+/**
+ * A session folder belongs to one of the owner's workspaces, not to any session filed in it, so
+ * creating, renaming or deleting one rides the owner key like the tag library does.
+ */
+test('folder.changed reaches its owner\'s stream, carrying the folder id and nothing else', async () => {
+  const svc = svcWith({}, 0);
+  const mine: ControlEvent[] = [];
+  const theirs: ControlEvent[] = [];
+  const subA = svc.streamForUser('userA').subscribe((e) => mine.push(e));
+  const subB = svc.streamForUser('userB').subscribe((e) => theirs.push(e));
+
+  svc.publishForUser('userA', RunEventType.FOLDER_CHANGED, 'folder-1');
+  await delay(30);
+  subA.unsubscribe();
+  subB.unsubscribe();
+
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].type, 'folder.changed');
+  assert.deepEqual(mine[0].data, { id: 'folder-1' });
+  assert.equal(mine[0].sessionId, '');
+  assert.equal(mine[0].agentId, null);
+  assert.equal(theirs.length, 0);
+});
+
+/**
+ * Moving a session between folders publishes `session.updated`, and the summary is how the owner's
+ * other clients learn where it went — so it carries `folderId` every time, null included: a session
+ * moved out of its folder has to be able to clear the folder a client's row still names.
+ */
+test('session.updated carries the session\'s folderId, and null as a value', async () => {
+  const svc = svcWith({
+    sessA: { ...rowA, folderId: 'folderA' },
+    sessB: { ...rowA, id: 'sessB', folderId: null },
+  });
+  const got: ControlEvent[] = [];
+  const sub = svc.streamForUser('userA').subscribe((e) => got.push(e));
+
+  svc.publishSessionUpdated('sessA');
+  svc.publishSessionUpdated('sessB');
+  await delay(30);
+  sub.unsubscribe();
+
+  const byId = new Map(got.map((e) => [e.sessionId, e.data as Record<string, unknown>]));
+  assert.equal(byId.get('sessA')?.folderId, 'folderA');
+  assert.ok(byId.has('sessB'));
+  assert.ok('folderId' in byId.get('sessB')!, 'null is sent, not omitted');
+  assert.equal(byId.get('sessB')!.folderId, null);
 });
 
 test('task.changed carries a bounded row set or an explicit full-resync signal', async () => {
