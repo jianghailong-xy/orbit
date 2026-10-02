@@ -111,8 +111,9 @@ type Refreshed =
  *   the same request (`refreshRequestBody`). This is the only place the pair is rotated, one refresh at a
  *   time per account (a refresh token is good once), under the account row's lock.
  * - WHAT THE BACKEND SAID: `usage_limit_reached` records the reset it names on the account (`spent_until`)
- *   before the 429 goes back unchanged, and the session is owed the line saying so; its retry waits for
- *   that reset (QueueService.loginPoolRetryAt) — no other account is tried. A refresh the token endpoint
+ *   before the 429 goes back unchanged, and the session is owed the line saying so; its retry goes at once
+ *   when another account can take it, whose claim moves the session there, else waits for the first reset
+ *   (QueueService.loginPoolRetryAt) — no other account is tried here. A refresh the token endpoint
  *   refuses, or a 401 on a token just refreshed, signs the account out (SIGNED_OUT, which only its owner
  *   can undo by signing in again) and is answered 403 with that — not 401, which the runner would read as
  *   its own login failing. A rate limit is waited out on the same login (sendUpstream).

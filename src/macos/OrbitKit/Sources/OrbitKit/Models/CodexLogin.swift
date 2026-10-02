@@ -1,12 +1,12 @@
 import Foundation
 
-/// The ChatGPT account a Codex pool of one's own runs on (migration 0323): the owner's own
+/// One of the ChatGPT accounts a Codex pool of one's own runs on (migration 0323): the owner's own
 /// subscription, signed in by the Orbit server with the official codex CLI's device flow and kept
 /// there encrypted — never on a runner, never in a response. What a pool carries of it is this: its
 /// email, its plan, `…AB12`, whether OpenAI still takes it, and its quota once something has read it.
 /// Mirrors web's `CodexLogin` (lib/codexLogin.ts) field for field.
 ///
-/// A pool of this kind is drawn the way every pool is: its account is the pool's one member
+/// A pool of this kind is drawn the way every pool is: each of its accounts is one of the pool's members
 /// (`CodexLoginPool.drawn`), attached as `PoolMember.login` the way a shared pool's key is attached as
 /// `PoolMember.key` — so the Providers list, the picker and the composer take it as they take any pool.
 public struct CodexLogin: Codable, Equatable, Sendable {
@@ -15,7 +15,7 @@ public struct CodexLogin: Codable, Equatable, Sendable {
     public let email: String?
     /// The plan the account's sign-in names (`plus`, `pro`, …), when it names one.
     public let plan: String?
-    /// `…AB12`: all any response says of the account's id.
+    /// `…AB12`: all any response says of the account's id — and what signing that one account out names.
     public let fingerprint: String
     public let lastError: String?
     public let expiresAt: String?
@@ -72,7 +72,7 @@ public struct CodexLoginAttempt: Codable, Equatable, Sendable {
     }
 }
 
-/// Where a sign-in stands (GET /api/providers/pools/:id/codex-login), and the account the pool holds —
+/// Where a sign-in stands (GET /api/providers/pools/:id/codex-login), and the accounts the pool holds —
 /// before and after. `status` is PENDING, CONFIRMED, EXPIRED, CANCELLED, FAILED or NONE (nothing in
 /// flight on this server); a status this build does not know is read as still waiting by nobody —
 /// `CodexSignIn.step(after:)` ends on it.
@@ -81,22 +81,28 @@ public struct CodexLoginPoll: Codable, Equatable, Sendable {
     public let verificationUrl: String?
     public let userCode: String?
     public let expiresAt: String?
+    /// The pool's first account — or, once CONFIRMED, the account this sign-in stored.
     public let account: CodexLogin?
+    /// Every account the pool holds, oldest first, once this poll stored the one it was waiting on.
+    /// Absent from an older server, which names only `account`.
+    public let logins: [CodexLogin]?
     /// Why it failed, in the server's words.
     public let error: String?
 
     public init(status: String, verificationUrl: String? = nil, userCode: String? = nil,
-                expiresAt: String? = nil, account: CodexLogin? = nil, error: String? = nil) {
+                expiresAt: String? = nil, account: CodexLogin? = nil, logins: [CodexLogin]? = nil,
+                error: String? = nil) {
         self.status = status
         self.verificationUrl = verificationUrl
         self.userCode = userCode
         self.expiresAt = expiresAt
         self.account = account
+        self.logins = logins
         self.error = error
     }
 }
 
-/// What signing the account out answers: how many accounts went (0 or 1).
+/// What signing an account out answers: how many accounts went (0 or 1).
 public struct CodexLoginSignOut: Codable, Equatable, Sendable {
     public let removed: Int?
 }

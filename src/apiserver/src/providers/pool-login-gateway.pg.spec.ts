@@ -659,6 +659,11 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
     assert.equal((await ask(again)).status, 200);
     assert.equal(backendRequests()[0].headers.authorization, `Bearer ${pool.login.access}`);
     await eventually(async () => (await loginRow(pool.id, pool.accountId)).spentUntil === null, 'the spent mark cleared');
+    // And the window reading that answer carried takes the spent one's place at the ledger's next write:
+    // a reading with a window used up keeps the account off too (pool-login-select.ts loginCanRun).
+    await ledger.flush();
+    const read = await loginRow(pool.id, pool.accountId);
+    assert.equal((read.usage as { primary: { utilization: number } }).primary.utilization, 42);
     const at = new Date();
     assert.deepEqual(await queue.accountPoolResumesAt(owner.id, pool.slug, at), at);
   });

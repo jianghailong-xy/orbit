@@ -49,12 +49,15 @@ struct ProvidersOverviewForm: View {
                     }
                     ForEach(pools) { pool in
                         NavigationLink(value: NavNode.accountPool(poolID: pool.id)) {
-                            // A Codex pool of one's own runs on a ChatGPT account: "Just me · the
-                            // account" under its name, and where that account stands.
+                            // A Codex pool of one's own runs on ChatGPT accounts: "Just me · 2 of 2
+                            // accounts available" under its name, and its head's gauge — the tightest
+                            // window of the account the next session starts on, orange near its limit.
+                            let login = CodexLoginPool.isLoginPool(pool)
                             PoolRowLabel(engine: ProviderPools.runsCodex(pool) ? "codex" : "claude",
                                          title: pool.label,
-                                         line: CodexLoginPool.isLoginPool(pool) ? CodexLoginPool.overviewLine(pool) : nil,
-                                         value: ProvidersOverview.poolSummary(pool))
+                                         line: login ? CodexLoginPool.summary(pool) : nil,
+                                         value: ProvidersOverview.poolSummary(pool),
+                                         valueTone: login ? ProviderPools.headGauge(pool)?.tone : nil)
                         }
                     }
                 } header: {
@@ -88,16 +91,23 @@ struct ProvidersOverviewForm: View {
 }
 
 /// A pool's row: its engine's mark and its name — "Shared · 4 members" under a shared pool's — and how
-/// many of its keys or accounts a session could start on now.
+/// many of its keys or accounts a session could start on now, or the gauge a Codex pool's head reads,
+/// in that gauge's tone.
 private struct PoolRowLabel: View {
     let engine: String
     let title: String
     let line: String?
     let value: String
+    var valueTone: PoolStatus.Tone? = nil
 
     var body: some View {
         LabeledContent {
-            Text(value)
+            if let valueTone {
+                Text(value)
+                    .foregroundStyle(PoolTone.color(valueTone))
+            } else {
+                Text(value)
+            }
         } label: {
             HStack(spacing: 12) {
                 ProviderMark(provider: engine, size: 26)
@@ -844,46 +854,54 @@ struct CodexPoolActions {
     var poll: () async throws -> CodexLoginPoll
     /// Give a sign-in still waiting on its code up, on the server.
     var cancel: () async -> Void
-    var signOut: () async -> String?
+    /// Sign one of its accounts out.
+    var signOut: (CodexLogin) async -> String?
     var deletePool: () async -> String?
     /// The pools read again: an account just went in.
     var refresh: () async -> Void
 }
 
-/// A Codex pool of one's own ChatGPT account (migration 0323), in the web page's blocks: what the pool
-/// is and — while it has no account — "Sign in with ChatGPT"; the Account section, its one row the
-/// account with its windows and when each resets (signed out: why, and "Sign in again"; a swipe signs
-/// it out); and deleting the pool. Only its owner ever sees the pool, so every press is theirs.
+/// Which account a "Sign in with ChatGPT" sheet is for: one more (nil), or one OpenAI signed out going
+/// back in.
+private struct CodexSignInTarget: Identifiable {
+    let again: CodexLogin?
+    var id: String { again.map { "again \($0.fingerprint)" } ?? "add" }
+}
+
+/// A Codex pool of one's own ChatGPT accounts (migration 0323), in the web page's blocks: what the pool
+/// is, how many of its accounts can run, and "Add account" — always, one account after another; the
+/// Accounts section, a row per account with its windows and when each resets — NEXT on the one the next
+/// session starts on, among several; signed out: why, and "Sign in again"; its mark or a swipe signs it
+/// out — and deleting the pool. Only its owner ever sees the pool, so every press is theirs.
 struct CodexPoolPageView: View {
     let pool: ProviderPool
     let actions: CodexPoolActions
     var now: Date = Date()
 
-    @State private var signingIn = false
-    @State private var signingOut = false
+    @State private var signingIn: CodexSignInTarget?
+    @State private var signingOut: CodexLogin?
     @State private var confirmingDelete = false
     @State private var notice: String?
 
     var body: some View {
         Form {
             head
-            accountSection
+            accountsSection
             deleteSection
         }
         .navigationTitle(pool.label)
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $signingIn) {
-            CodexSignInSheet(pool: pool, actions: actions)
+        .sheet(item: $signingIn) { target in
+            CodexSignInSheet(pool: pool, again: target.again, actions: actions)
         }
-        .confirmationDialog(pool.login.map(CodexLoginPool.signOutTitle) ?? CodexLoginPool.signOut,
-                            isPresented: $signingOut, titleVisibility: .visible) {
+        .confirmationDialog(signingOut.map(CodexLoginPool.signOutTitle) ?? CodexLoginPool.signOut,
+                            isPresented: signingOutAsked, titleVisibility: .visible, presenting: signingOut) { login in
             Button(CodexLoginPool.signOut, role: .destructive) {
-                let login = pool.login
-                run(done: CodexLoginPool.signedOut(login)) { await actions.signOut() }
+                run(done: CodexLoginPool.signedOut(login)) { await actions.signOut(login) }
             }
             Button(CodexSignIn.cancel, role: .cancel) {}
-        } message: {
-            Text(CodexLoginPool.signOutNote)
+        } message: { _ in
+            Text(CodexLoginPool.signOutNote(pool))
         }
         .confirmationDialog(CodexLoginPool.deleteTitle(pool), isPresented: $confirmingDelete,
                             titleVisibility: .visible) {
@@ -892,7 +910,7 @@ struct CodexPoolPageView: View {
             }
             Button(CodexSignIn.cancel, role: .cancel) {}
         } message: {
-            Text(CodexLoginPool.deleteNote)
+            Text(CodexLoginPool.deleteNote(pool))
         }
         .overlay(alignment: .bottom) {
             if let notice {
@@ -910,8 +928,8 @@ struct CodexPoolPageView: View {
         .animation(.default, value: notice)
     }
 
-    /// What the pool is — Codex's mark, "Codex pool", "Just me" — and, while it has no account, the one
-    /// press that puts one in.
+    /// What the pool is — Codex's mark, "Codex pool", whose it is and how many of its accounts can run —
+    /// and "Add account", the press that puts one more in.
     private var head: some View {
         Section {
             VStack(alignment: .leading, spacing: 14) {
@@ -920,44 +938,49 @@ struct CodexPoolPageView: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(CodexLoginPool.pageTitle)
                             .font(.headline)
-                        Text(CodexLoginPool.justMe)
+                        Text(CodexLoginPool.summary(pool))
                             .font(.orbitListSubtitle)
                             .foregroundStyle(.secondary)
                     }
                 }
                 .padding(.horizontal, 4)
-                if pool.login == nil {
-                    WideButton(title: CodexLoginPool.signIn) { signingIn = true }
-                }
+                WideButton(title: CodexLoginPool.addAccount) { signingIn = CodexSignInTarget(again: nil) }
             }
             .listRowBackground(Color.clear)
             .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
         }
     }
 
-    private var accountSection: some View {
+    /// Every account, oldest first, under a head that names the one the next session starts on and reads
+    /// its tightest window — or, with none to start on, says when or why.
+    private var accountsSection: some View {
         Section {
-            if let member = pool.members.first, let login = member.login {
-                CodexAccountRow(member: member, login: login, now: now) { signingIn = true }
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        Button(role: .destructive) { signingOut = true } label: {
-                            Label(CodexLoginPool.signOut, systemImage: "rectangle.portrait.and.arrow.right")
-                        }
-                    }
-            } else {
+            if pool.members.isEmpty {
                 Text(CodexLoginPool.noAccount)
                     .foregroundStyle(.secondary)
             }
+            ForEach(pool.members) { member in
+                if let login = member.login {
+                    CodexAccountRow(member: member, login: login, next: CodexLoginPool.showsNext(member, in: pool),
+                                    now: now, signInAgain: { signingIn = CodexSignInTarget(again: login) },
+                                    signOut: { signingOut = login })
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) { signingOut = login } label: {
+                                Label(CodexLoginPool.signOut, systemImage: "rectangle.portrait.and.arrow.right")
+                            }
+                        }
+                }
+            }
         } header: {
-            PoolSectionHeader(title: CodexLoginPool.accountHeader, trailing: headerNote)
+            PoolSectionHeader(title: CodexLoginPool.accountsHeader, count: CodexLoginPool.logins(pool).count,
+                              trailing: ProviderPools.headline(pool, now: now), reading: ProviderPools.headGauge(pool))
         } footer: {
-            Text(CodexLoginPool.accountFooter)
+            Text(CodexLoginPool.accountsFooter)
         }
     }
 
-    /// Why nothing can run, or until when — the account's own row says the rest.
-    private var headerNote: String? {
-        pool.members.contains(where: \.next) ? nil : CodexLoginPool.headline(pool, now: now)
+    private var signingOutAsked: Binding<Bool> {
+        Binding(get: { signingOut != nil }, set: { if !$0 { signingOut = nil } })
     }
 
     private var deleteSection: some View {
@@ -967,7 +990,7 @@ struct CodexPoolPageView: View {
                     .frame(maxWidth: .infinity)
             }
         } footer: {
-            Text(CodexLoginPool.deleteNote)
+            Text(CodexLoginPool.deleteNote(pool))
         }
     }
 
@@ -992,13 +1015,16 @@ struct CodexPoolPageView: View {
     }
 }
 
-/// The ChatGPT account: its email and plan, where it stands, each of its windows with when it resets —
-/// and, once OpenAI signed it out, why and the press that signs it in again.
+/// One of the pool's ChatGPT accounts: its email and plan — NEXT, when it is the one the next session
+/// starts on among several — where it stands, each of its windows with when it resets, and its sign-out
+/// mark; once OpenAI signed it out, why and the press that signs it in again.
 private struct CodexAccountRow: View {
     let member: PoolMember
     let login: CodexLogin
+    let next: Bool
     let now: Date
     let signInAgain: () -> Void
+    let signOut: () -> Void
 
     var body: some View {
         let status = ProviderPools.memberStatus(member, now: now)
@@ -1008,9 +1034,14 @@ private struct CodexAccountRow: View {
                 ProviderMark(provider: "codex", size: 28)
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(member.label)
-                        .font(.headline)
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Text(member.label)
+                            .font(.headline)
+                            .lineLimit(1)
+                        if next {
+                            PoolChip(text: SharedPoolPage.nextChip)
+                        }
+                    }
                     Text(CodexLoginPool.line(login))
                         .font(.orbitLabel)
                         .foregroundStyle(.secondary)
@@ -1030,6 +1061,17 @@ private struct CodexAccountRow: View {
                     }
                 }
                 Spacer(minLength: 0)
+                // Signing this account out: the mark rests in the row's grey — red on a row that is fine
+                // reads as something wrong with it — and asks before it does anything. The tint, not a
+                // style on the image: a borderless button draws its label in its tint.
+                Button(action: signOut) {
+                    Image(systemName: "rectangle.portrait.and.arrow.right")
+                        .frame(width: 30, height: 30)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .tint(Color.secondary)
+                .accessibilityLabel(CodexLoginPool.signOutLabel(login))
             }
             if windows.isEmpty {
                 Text(CodexLoginPool.noQuota)
@@ -1088,10 +1130,13 @@ private struct CodexWindowRow: View {
 
 /// "Sign in with ChatGPT": what signing in means (and the warning that stays: an account is one
 /// person's), then the page to open and the one-time code — copied with a tap — while the sheet asks the
-/// server every couple of seconds whether it was approved, then the account. Closing it before the code
-/// was approved gives the sign-in up on the server.
+/// server every couple of seconds whether it was approved, then the account and how many the pool holds
+/// now. One account per sign-in: the pool's first, one more beside those, or — `again` — one OpenAI
+/// signed out going back in. Closing it before the code was approved gives the sign-in up on the server.
 struct CodexSignInSheet: View {
     let pool: ProviderPool
+    /// The account a sign-in again is for, once OpenAI signed it out; nil to add one more.
+    let again: CodexLogin?
     let actions: CodexPoolActions
 
     @State private var step: CodexSignIn.Step
@@ -1103,8 +1148,10 @@ struct CodexSignInSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
-    init(pool: ProviderPool, actions: CodexPoolActions, step: CodexSignIn.Step = .consent) {
+    init(pool: ProviderPool, again: CodexLogin? = nil, actions: CodexPoolActions,
+         step: CodexSignIn.Step = .consent) {
         self.pool = pool
+        self.again = again
         self.actions = actions
         _step = State(initialValue: step)
     }
@@ -1137,24 +1184,27 @@ struct CodexSignInSheet: View {
             consent
         case .code(let url, let code, let expiresAt):
             codeStep(url: url, code: code, expiresAt: expiresAt)
-        case .done(let account):
-            done(account)
+        case .done(let account, let logins):
+            done(account, logins: logins)
         case .expired:
             ending(icon: "exclamationmark.circle.fill", title: CodexSignIn.expiredTitle,
                    detail: CodexSignIn.expiredDetail, retry: CodexSignIn.newCode)
         case .failed(let reason):
             ending(icon: "exclamationmark.circle.fill", title: CodexSignIn.failedTitle,
                    detail: CodexSignIn.sentence(reason), retry: CodexSignIn.tryAgain)
-        case .duplicate:
+        case .duplicate(let email):
+            // A new code, for a different account.
             ending(icon: "exclamationmark.circle.fill", title: CodexSignIn.duplicateTitle(pool),
-                   detail: CodexSignIn.duplicateDetail, retry: nil)
-        case .taken:
-            ending(icon: "exclamationmark.circle.fill", title: CodexSignIn.takenTitle(pool),
-                   detail: CodexSignIn.takenDetail(pool.login), retry: CodexSignIn.newCode)
+                   detail: CodexSignIn.duplicateDetail(email), retry: CodexSignIn.newCode)
         }
     }
 
     // MARK: steps
+
+    /// Adding one more to a pool that already runs on an account of its owner's own: the notice says what
+    /// the pool runs on now, that this account stays theirs alone even once the pool is shared, and what
+    /// the pool does without it.
+    private var addsAnother: Bool { CodexSignIn.addsAnother(pool, again: again) }
 
     /// What signing in means: whose it is, where the sign-in stays, that it can be signed out — and that
     /// an account is not to be shared.
@@ -1166,7 +1216,8 @@ struct CodexSignInSheet: View {
                     .padding(.top, 6)
                     .padding(.bottom, 12)
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(CodexSignIn.facts(pool).enumerated()), id: \.offset) { index, fact in
+                    let facts = addsAnother ? CodexSignIn.anotherFacts(pool) : CodexSignIn.facts(pool)
+                    ForEach(Array(facts.enumerated()), id: \.offset) { index, fact in
                         if index > 0 {
                             Divider().padding(.leading, 16)
                         }
@@ -1178,7 +1229,8 @@ struct CodexSignInSheet: View {
                 .background(Color(uiColor: .secondarySystemGroupedBackground),
                             in: RoundedRectangle(cornerRadius: 26, style: .continuous))
                 .padding(.horizontal, 16)
-                (Text("⚠︎ ") + Text(CodexSignIn.risk.lead).bold() + Text(CodexSignIn.risk.rest))
+                let risk = addsAnother ? CodexSignIn.anotherRisk : CodexSignIn.risk
+                (Text("⚠︎ ") + Text(risk.lead).bold() + Text(risk.rest))
                     .font(.orbitListSubtitle)
                     .foregroundStyle(PoolTone.color(.warning))
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1197,11 +1249,16 @@ struct CodexSignInSheet: View {
         .background(Color(uiColor: .systemGroupedBackground))
     }
 
-    /// The lead: signing in for the first time, or — the pool's account signed out — as that account.
+    /// The lead: the pool's first account, one more beside those it runs on, or — one OpenAI signed out
+    /// — that account again.
     private var lead: Text {
-        if CodexSignIn.isAgain(pool) {
-            return Text(CodexSignIn.againLeadPrefix(pool.login)) + Text(pool.label).bold()
+        if let again {
+            return Text(CodexSignIn.againLeadPrefix(again)) + Text(pool.label).bold()
                 + Text(CodexSignIn.againLeadSuffix)
+        }
+        if addsAnother {
+            return Text(CodexSignIn.anotherLeadPrefix) + Text(pool.label).bold()
+                + Text(CodexSignIn.anotherLeadSuffix(pool))
         }
         return Text(CodexSignIn.leadPrefix) + Text(pool.label).bold() + Text(CodexSignIn.leadSuffix)
     }
@@ -1274,14 +1331,14 @@ struct CodexSignInSheet: View {
     /// What to do on the page: sign in — as the account signed out, when signing it in again — and
     /// enter the code.
     private var instruction: Text {
-        if CodexSignIn.isAgain(pool), let email = pool.login?.email {
+        if let email = again?.email {
             return Text(CodexSignIn.enterCodeAsPrefix) + Text(email).bold() + Text(CodexSignIn.enterCodeAsSuffix)
         }
         return Text(CodexSignIn.enterCode)
     }
 
-    /// It went in: the account, as the pool now holds it.
-    private func done(_ account: CodexLogin?) -> some View {
+    /// It went in: the account, as the pool now holds it, and how many accounts that makes.
+    private func done(_ account: CodexLogin?, logins: [CodexLogin]) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top, spacing: 12) {
@@ -1291,7 +1348,7 @@ struct CodexSignInSheet: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(CodexSignIn.doneTitle(account, pool: pool))
                             .font(.headline)
-                        Text(CodexSignIn.doneDetail)
+                        Text(CodexSignIn.doneDetail(pool, logins: logins))
                             .font(.orbitListSubtitle)
                             .foregroundStyle(.secondary)
                     }
@@ -1319,8 +1376,8 @@ struct CodexSignInSheet: View {
         .background(Color(uiColor: .systemGroupedBackground))
     }
 
-    /// Any other way it ended: why, and — unless the pool already runs on that account — a new code.
-    private func ending(icon: String, title: String, detail: String, retry: String?) -> some View {
+    /// Any other way it ended: why, and a new code — after the same account twice, for a different one.
+    private func ending(icon: String, title: String, detail: String, retry: String) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top, spacing: 12) {
@@ -1335,10 +1392,8 @@ struct CodexSignInSheet: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                if let retry {
-                    WideButton(title: retry, busy: starting) { start() }
-                        .disabled(starting)
-                }
+                WideButton(title: retry, busy: starting) { start() }
+                    .disabled(starting)
                 Button(CodexSignIn.close) { close() }
                     .frame(maxWidth: .infinity)
             }
@@ -1462,7 +1517,8 @@ struct AccountPoolPageView: View {
                     AccountRow(member: member, now: now)
                 }
             } header: {
-                PoolSectionHeader(title: ProviderPools.accountsHeader, trailing: ProviderPools.headline(pool, now: now))
+                PoolSectionHeader(title: ProviderPools.accountsHeader, trailing: ProviderPools.headline(pool, now: now),
+                                  reading: ProviderPools.headGauge(pool))
             } footer: {
                 Text(ProviderPools.accountsFooter + " " + ProvidersOverview.editOnWeb)
             }
@@ -1520,14 +1576,24 @@ private struct AccountRow: View {
 
 // MARK: - Parts
 
-/// A section's heading with a few words at its far end ("Next: orbit-org-1").
+/// A section's heading — with how many it holds, where that is said ("Accounts 2") — and a few words at
+/// its far end ("Next: orbit-org-1"), then the head's gauge where it has one ("Weekly 97%", orange near
+/// its limit), which keeps its width while the words before it give way.
 private struct PoolSectionHeader: View {
     let title: String
+    var count: Int? = nil
     let trailing: String?
+    var reading: PoolStatus? = nil
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
             SettingsHeader(title)
+            if let count {
+                Text(verbatim: "\(count)")
+                    .font(.orbitLabel)
+                    .foregroundStyle(.tertiary)
+                    .monospacedDigit()
+            }
             Spacer(minLength: 8)
             if let trailing {
                 Text(trailing)
@@ -1535,6 +1601,15 @@ private struct PoolSectionHeader: View {
                     .foregroundStyle(.secondary)
                     .textCase(nil)
                     .lineLimit(1)
+            }
+            if let reading {
+                Text(reading.label)
+                    .font(.orbitLabel.weight(reading.tone == .warning ? .semibold : .regular))
+                    .foregroundStyle(PoolTone.color(reading.tone))
+                    .monospacedDigit()
+                    .textCase(nil)
+                    .lineLimit(1)
+                    .fixedSize()
             }
         }
     }

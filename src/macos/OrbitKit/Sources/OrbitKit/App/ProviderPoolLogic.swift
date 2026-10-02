@@ -132,9 +132,13 @@ public enum ProviderPools {
     }
 
     /// The Accounts header's trailing words (web's `PoolGauge`): the account the next session starts
-    /// on; with none, when the first spent one frees up; with none that can run, why.
+    /// on — named, in a pool of one's own ChatGPT account that holds just the one and so has nothing to
+    /// choose between — then the gauge `headGauge` reads; with none, when the first spent one frees up;
+    /// with none that can run, why.
     public static func headline(_ pool: ProviderPool, now: Date = Date(), timeZone: TimeZone = .current) -> String {
-        if let next = pool.members.first(where: \.next) { return "Next: \(next.label)" }
+        if let next = pool.members.first(where: \.next) {
+            return next.login != nil && pool.members.count == 1 ? next.label : "Next: \(next.label)"
+        }
         if let unavailable = pool.unavailable { return unavailable }
         if pool.members.contains(where: { $0.state == .spent }) {
             return spentNote(pool, now: now, timeZone: timeZone) ?? "All spent"
@@ -164,13 +168,36 @@ public enum ProviderPools {
     }
 
     /// The gauge a member's row shows (web's `memberQuota`): the window that stopped a spent member,
-    /// else the 5-hour window the pool ranks its members by. Nil when it reports no quota.
+    /// else the one closest to its limit — a 5-hour window at 6% says nothing of a weekly one at 97%,
+    /// which stops the account first. A tie goes to the first of them, the 5-hour window. Nil when it
+    /// reports no quota.
     public static func memberQuota(_ member: PoolMember) -> PlanUsageRow? {
         guard let rows = member.planUsage?.rows, !rows.isEmpty else { return nil }
         if member.state == .spent, let binding = rows.first(where: { $0.window.utilization >= 100 }) {
             return binding
         }
-        return rows.first(where: { $0.key == "fiveHour" }) ?? rows.first
+        return rows.reduce(nil as PlanUsageRow?) { tightest, row in
+            guard let tightest else { return row }
+            return row.window.utilization > tightest.window.utilization ? row : tightest
+        }
+    }
+
+    /// The head's gauge beside its account (web's `PoolGauge`): the tightest window of the account the
+    /// next session starts on (`memberQuota`), by its short name — "Weekly 97%" — in the warning tone at
+    /// 90% or more; for an account that reports no quota, that it reports none. Nil with no account to
+    /// start on — `headline` says when or why — and for a key, which has no window to fill.
+    public static func headGauge(_ pool: ProviderPool) -> PoolStatus? {
+        guard let next = pool.members.first(where: \.next) else { return nil }
+        guard let quota = memberQuota(next) else {
+            return next.key == nil ? PoolStatus(label: CodexLoginPool.noQuota, tone: .neutral) : nil
+        }
+        return PoolStatus(label: quotaReading(quota), tone: quota.nearLimit ? .warning : .neutral)
+    }
+
+    /// A window's reading in the words a gauge has room for: its short name and how much of it is used
+    /// ("Weekly 97%", "5h 6%").
+    public static func quotaReading(_ row: PlanUsageRow) -> String {
+        "\(SessionProviderChoices.compactWindowLabel(row.label)) \(row.percent)%"
     }
 
     /// When a window resets, as the pages say it: `14:05` within a day, `Mon 14:05` beyond that — a

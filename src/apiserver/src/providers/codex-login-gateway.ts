@@ -181,7 +181,7 @@ export function accountName(login: { email: string | null; accountId: string }):
 }
 
 /** A window's name, as the personal pools' notices give it (pool-select.ts WINDOWS). */
-function windowName(window: PlanUsageWindow | null): string | null {
+export function windowName(window: PlanUsageWindow | null): string | null {
   const minutes = window?.windowDurationMins;
   if (!minutes) return null;
   if (minutes === 300) return '5-hour';
@@ -193,8 +193,9 @@ const utcMinute = (at: Date) => `${at.toISOString().slice(0, 16).replace('T', ' 
 
 /**
  * The transcript line a session of a login pool is owed when its account's usage limit is reached: which
- * window, on which account, and when the session goes again. Not "Switched to …": a login pool has one
- * account, and the session waits for it.
+ * window, on which account, and when the session goes again. Not "Switched to …": that is the line of the
+ * claim that moves the session to another account (pool-login-select.ts loginSwitchNotice), which says it
+ * in this one's place. This one stands when the session stays and waits for its account.
  */
 export function loginSpentNotice(login: { email: string | null; accountId: string }, snapshot: PlanUsageSnapshot | null, resetAt: Date): string {
   const window = windowName(spentWindow(snapshot));

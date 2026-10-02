@@ -16,6 +16,8 @@ import XCTest
 ///   pool the whole view as `shared`, a key OpenAI refused as `INVALID` — out of GET
 ///   /providers/shared-pools, which the server's account pools never carry. This client reads that
 ///   endpoint into `SharedPool` (Models/SharedPools.swift) instead, so the three stay web's own;
+/// - a Codex pool's accounts (`logins`) and a sign-in's poll are web's `CodexLogin` / `CodexLoginPoll`
+///   (`lib/codexLogin.ts`), and a member's gauge is the window web's `memberQuota` picks;
 /// - a pool that cannot run is greyed in the server's own words, which the web's pool head says too;
 /// - the picker's and the status bar's words are the web's, word for word.
 ///
@@ -120,15 +122,49 @@ final class ProviderPoolsParityTests: XCTestCase {
 
     func testThePoolDecodesExactlyTheFieldsWebDeclares() throws {
         let web = try declaredFields(interfaceBody("ProviderPool", in: source(Self.anchor), file: Self.anchor))
-        // Every field filled in — a Codex pool's account among them — so none is left out for being nil.
+        // Every field filled in — a Codex pool's accounts among them — so none is left out for being nil.
+        let account = CodexLogin(email: "e", fingerprint: "…AB12")
         let pool = ProviderPool(id: "p", slug: "claude-accounts", label: "Claude accounts",
                                 resetsAt: "2026-09-25T10:00:00.000Z", unavailable: "No account can run",
-                                members: [fullMember], engine: "claude",
-                                login: CodexLogin(email: "e", fingerprint: "…AB12"))
+                                members: [fullMember], engine: "claude", login: account, logins: [account])
         XCTAssertEqual(try encodedKeys(pool), web.subtracting(Self.webSharedPool))
         XCTAssertTrue(Self.webSharedPool.isSubset(of: web),
                       "\(Self.anchor)'s ProviderPool no longer carries the shared pool — drop it from this check")
         XCTAssertTrue(web.contains("unavailable"), "\(Self.anchor) no longer declares `unavailable` on a pool")
+    }
+
+    /// A Codex pool's accounts are web's `CodexLogin` field for field, and so is a sign-in's poll — every
+    /// account the pool holds riding along on it as `logins` (lib/codexLogin.ts).
+    func testACodexPoolsAccountsDecodeTheShapeWebDeclares() throws {
+        let lib = "src/web/src/lib/codexLogin.ts"
+        let web = try source(lib)
+        let account = CodexLogin(state: "ACTIVE", email: "e", plan: "plus", fingerprint: "…AB12", lastError: "x",
+                                 expiresAt: "2026-10-07T09:12:00.000Z", linkedAt: "2026-09-28T09:12:00.000Z",
+                                 usage: PlanUsageSnapshot(provider: "codex", primary: PlanUsageWindow(utilization: 1)),
+                                 usageUnavailable: "y")
+        XCTAssertEqual(try encodedKeys(account), declaredFields(try interfaceBody("CodexLogin", in: web, file: lib)))
+        let poll = CodexLoginPoll(status: "CONFIRMED", verificationUrl: "u", userCode: "c", expiresAt: "t",
+                                  account: account, logins: [account], error: "e")
+        XCTAssertEqual(try encodedKeys(poll), declaredFields(try interfaceBody("CodexLoginPoll", in: web, file: lib)))
+        // An older server names only the one account: both ends read `login` as that one.
+        XCTAssertTrue(web.contains("pool.logins ?? (pool.login ? [pool.login] : [])"),
+                      "\(lib) no longer reads an older server's one `login` as the pool's accounts")
+    }
+
+    /// A member's gauge is chosen the way web's `memberQuota` chooses it: the window that stopped a spent
+    /// member, else the tightest — the first of two level ones — rather than always the 5-hour window.
+    func testAMembersGaugeIsChosenAsTheWebChoosesIt() throws {
+        let web = try source(Self.anchor).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        XCTAssertTrue(web.contains("member.state === 'SPENT' ? rows.find((row) => row.window.utilization >= 100)"),
+                      "\(Self.anchor)'s memberQuota no longer draws the window that stopped a spent member")
+        XCTAssertTrue(web.contains("row.window.utilization > tightest.window.utilization ? row : tightest"),
+                      "\(Self.anchor)'s memberQuota no longer draws the tightest window, the first of two level ones")
+        let level = PoolMember(id: "m", slug: "m", label: "M",
+                               planUsage: PlanUsageSnapshot(provider: "codex",
+                                                            primary: PlanUsageWindow(utilization: 50, windowDurationMins: 300),
+                                                            secondary: PlanUsageWindow(utilization: 50, windowDurationMins: 10080)),
+                               state: .available)
+        XCTAssertEqual(ProviderPools.memberQuota(level)?.label, "5h limit")
     }
 
     func testTheMemberStatesAreTheServersAndTheWebs() throws {

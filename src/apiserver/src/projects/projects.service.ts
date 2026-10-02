@@ -125,7 +125,11 @@ import { coordinatorFuseUsage, readCoordinatorWakeups } from './coordinator-prog
 import { openFuseEpisodeId } from './project-fuse';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
 import { readTaskIntegrationViews } from './project-task-integration';
-import { emptyProjectListRollup, readProjectListRollups } from './project-list-rollup';
+import {
+  emptyProjectListRollup,
+  readProjectListRollups,
+  readProjectSidebarRollups,
+} from './project-list-rollup';
 import {
   emptyProjectListAttention,
   readProjectListAttention,
@@ -435,6 +439,22 @@ const PROJECT_LIST_SELECT = {
   updatedAt: true,
   ...COORDINATION_INCLUDE,
   // At most one row apiece, joined by its own unique key, like the two above.
+  coordinatorSession: { select: COORDINATOR_ACTIVITY_SELECT },
+} satisfies Prisma.ProjectSelect;
+
+/**
+ * A row of `GET /projects/sidebar`, as opposed to a project document.
+ *
+ * The rail draws four things of a project — it is working, it waits on the reader, how recently it
+ * moved, and its title — and this is the select behind them. `goal`, `updatedAt` and the
+ * coordination bindings are absent on purpose: nothing on the rail reads them, and the whole point
+ * of this endpoint is that a 15-second poll does not carry what a page view carries.
+ */
+const SIDEBAR_PROJECT_SELECT = {
+  id: true,
+  title: true,
+  status: true,
+  createdAt: true,
   coordinatorSession: { select: COORDINATOR_ACTIVITY_SELECT },
 } satisfies Prisma.ProjectSelect;
 
@@ -2570,6 +2590,54 @@ export class ProjectsService {
         standardSetConfirmation,
       ),
     };
+  }
+
+  /**
+   * The open projects the web sidebar's Projects group draws, and only what it draws them from.
+   *
+   * `list`'s Open read is the same rows plus seven task lanes, the integration line and the whole
+   * attention summary, and the rail polls this every 15 seconds from every open tab. Classifying
+   * every task of every project for a dot that reads one lane is what made a browser tab the
+   * single largest consumer of this database (2026-09-29: ~5,400 calls/day, ~1.1s of PostgreSQL
+   * execution each, ~100 minutes/day), so the rail got its own read: the same `running` count and
+   * the same `lastActivityAt`, from `readProjectSidebarRollups`.
+   *
+   * The fields it keeps are the ones `SidebarProject` declares — `buckets` carries `running` alone,
+   * and `attention` is the same whole summary the index sends (its `ownerItems` and
+   * `startRequest` are what the row's amber count reads). Absent fields are absent for a reason:
+   * depth here is paid for twice a minute by every open tab.
+   *
+   * `buckets.running` is the index's own number, not a second reading of IN_PROGRESS — see the
+   * reader, which reaches it with the same `projectTaskWorkStateSql` the index uses. A rail that
+   * disagreed with the page it opens would be worse than a slow one.
+   */
+  listSidebar(ownerId: string) {
+    // Several open tabs poll in lockstep, and a project write invalidates all of them at once.
+    // Same argument as `list`: identical concurrent reads share one pass.
+    return this.listSingleFlight.run(`${ownerId}:sidebar`, () => this.loadSidebar(ownerId));
+  }
+
+  private async loadSidebar(ownerId: string) {
+    const projects = await this.prisma.project.findMany({
+      where: { ownerId, status: ProjectStatus.OPEN },
+      orderBy: { createdAt: 'desc' },
+      select: SIDEBAR_PROJECT_SELECT,
+    });
+    if (projects.length === 0) return [];
+    const [rollups, attention] = await Promise.all([
+      readProjectSidebarRollups(this.prisma, ownerId),
+      // The same reader the index folds, narrowed to the projects this read returns, so the rail
+      // and the page cannot disagree about what waits on the reader.
+      readProjectListAttention(this.prisma, ownerId, ProjectStatus.OPEN),
+    ]);
+    return projects.map(({ coordinatorSession, ...project }) => ({
+      ...project,
+      // A project with no tasks has no group in the aggregate, and reports nothing in flight and
+      // no activity rather than making the client read two shapes.
+      ...(rollups.get(project.id) ?? { buckets: { running: 0 }, lastActivityAt: null }),
+      attention: attention.get(project.id) ?? emptyProjectListAttention(),
+      coordinatorActivity: coordinatorActivityOf(coordinatorSession),
+    }));
   }
 
   /** The project's integration line, as `GET /projects/:id/integration` serves it (contract §1.6). */
