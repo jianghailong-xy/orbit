@@ -555,8 +555,9 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     };
     vi.mocked(switchSessionAccount).mockResolvedValue({ ok: true } as never);
     await mount(`/sessions/${SESSION}`, '.composer-box textarea');
-    // The gauge reads the first window, the 5-hour one.
-    await settlesOn('Plan usage 0%');
+    // The gauge reads the window that stops the login — Default's spent week, though its 5-hour one
+    // reads 0% — as the menu's row for it does.
+    await settlesOn('Plan usage 100%');
     const rows = (await providerMenuRows())!;
     // The row reads the window that stops it: Default's weekly one, though its 5-hour one reads 0%.
     expect(rows.map(rowText)).toEqual(['Claude', 'AutomaticResets soonest', 'DefaultWeekly 100% ✓', 'Work5h 30%']);
