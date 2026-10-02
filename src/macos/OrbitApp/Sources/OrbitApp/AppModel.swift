@@ -60,6 +60,12 @@ final class AppModel {
     /// `GET /session-tags`. Drives the tag picker sheet and the list's tag filter/group chips; empty
     /// on an older server without the endpoint. See `loadSessionTags` / `setSessionTags`.
     var sessionTags: [SessionTag] = []
+    #if os(iOS)
+    /// The owner's session folders, every workspace's (`GET /session-folders`, by name) — the Move
+    /// panel lists the ones in the session's own workspace. iOS only, as the panel is: macOS shows no
+    /// folders (docs/session-folders-move-design.md §1). See `loadSessionFolders`.
+    var sessionFolders: [SessionFolder] = []
+    #endif
     // Top-level nav: which AppShell section is showing, and every section's navigation stack. The
     // app lands on the Agents section (the first agent's session list); the agent is selected once
     // the list loads — see `loadAgentsThenLand`.
@@ -712,6 +718,7 @@ final class AppModel {
         runningWorkspaceIDs = []
         jobWorkspaceIDs = []
         projectCoordinators = [:]
+        sessionFolders = []
         #endif
         sessionDetails.removeAll()
         resetNavigation()
@@ -884,6 +891,10 @@ final class AppModel {
                         // `wiki.changed` has no replay either, and nothing depends on it arriving:
                         // re-read what the Wiki has loaded, the drawer's number with it.
                         if let wiki { Task { await wiki.reloadLoaded() } }
+                        #if os(iOS)
+                        // Nor has `folder.changed`: re-read the folders the Move panel offers.
+                        Task { await loadSessionFolders() }
+                        #endif
                         // Runners has neither push nor poll: a list that failed while offline
                         // would otherwise stay on its error until someone pulls to refresh.
                         if let runners, runners.loadState.lastLoadFailed {
@@ -990,6 +1001,14 @@ final class AppModel {
         // `groupsFor` default of `['sessions']`, a list refetch for an event about something else.
         case .wikiChanged:
             wiki?.nudge()
+        #if os(iOS)
+        // A folder was created, renamed or deleted, here or on another device: re-read the library
+        // the Move panel lists (docs/session-folders-move-design.md §5.6). The event names the folder
+        // and nothing else, and a session moved between folders is a `session.updated` of its own,
+        // so this refetches no list — `default` below refetched Open and left the folders stale.
+        case .folderChanged:
+            Task { await loadSessionFolders() }
+        #endif
         // AgentsModel.load() fetches the provider catalog with the list; provider edits do not
         // change task-row membership or live overlays.
         case .providerChanged:
@@ -1904,6 +1923,76 @@ final class AppModel {
         moveSessionToOpen(sessionID)
         dismissToast()
     }
+
+    // MARK: session folders (iOS — docs/session-folders-move-design.md §3–4)
+
+    #if os(iOS)
+    /// Load the owner's folder library: when a workspace's session list appears, and again when
+    /// `folder.changed` says one was created, renamed or deleted, here or on another device.
+    /// Best-effort like the tag library — an older server without the endpoint leaves it empty, and
+    /// the Move panel then offers No Folder and New Folder… alone.
+    func loadSessionFolders() async {
+        guard let api else { return }
+        if let folders = try? await api.listSessionFolders() { sessionFolders = folders }
+    }
+
+    /// File a session in one of its workspace's folders, or in none (`folderID` nil) — the Move
+    /// panel's tap. The row moves at once: the folder is written into every loaded copy before the
+    /// request goes, and written back as it was if the server refuses. Either way the lists are
+    /// re-read afterwards, which settles what the server holds.
+    func moveSession(_ id: String, toFolder folderID: String?) {
+        guard let api, let row = session(id: id), row.folderId != folderID else { return }
+        let origin = row.folderId
+        let name = toastSessionTitle(id)
+        let moved = SessionMoveCopy.moved(to: sessionFolder(folderID), from: sessionFolder(origin))
+        patchSessionFolder(id, to: folderID)
+        Task { @MainActor in
+            do {
+                try await api.moveSession(id, folderID: folderID)
+                showToast(moved, sessionID: id, sessionTitle: name, tone: .info, icon: "folder")
+            } catch {
+                patchSessionFolder(id, to: origin)
+                showToast(SessionMoveCopy.moveFailed, sessionID: id, sessionTitle: name,
+                          detail: APIClient.failureReason(error), tone: .error)
+            }
+            await reloadSessionLists()
+        }
+    }
+
+    /// New Folder… in the Move panel: create the folder in the session's workspace, then move the
+    /// session into it. Nil once the folder exists and the move is under way; otherwise why the
+    /// folder wasn't created, as the sentence the panel shows (`SessionMoveCopy.createFailure` — a
+    /// name the workspace already has is said as such).
+    func createSessionFolder(named name: String, in workspace: Agent, moving sessionID: String) async -> String? {
+        guard let api else { return nil }
+        do {
+            let folder = try await api.createSessionFolder(workspaceID: workspace.id, name: name)
+            if !sessionFolders.contains(where: { $0.id == folder.id }) { sessionFolders.append(folder) }
+            moveSession(sessionID, toFolder: folder.id)
+            return nil
+        } catch {
+            return SessionMoveCopy.createFailure(error, name: name, workspace: workspace.name)
+        }
+    }
+
+    private func sessionFolder(_ id: String?) -> SessionFolder? {
+        guard let id else { return nil }
+        return sessionFolders.first { $0.id == id }
+    }
+
+    /// Write a folder into every loaded copy of a row, as `patchSessionTitle` writes a title: the Open
+    /// snapshot (and through it the pane's Open list), the pane's own Completed list, and the cold-route
+    /// detail cache.
+    private func patchSessionFolder(_ id: String, to folderID: String?) {
+        if let index = sessions.firstIndex(where: { $0.id == id }) {
+            var list = sessions
+            list[index] = list[index].settingFolder(folderID)
+            applySessionSnapshot(list)
+        }
+        if let cached = sessionDetails.resolve(id) { sessionDetails.store(cached.settingFolder(folderID)) }
+        agents?.applyMovedSession(id, folderID: folderID)
+    }
+    #endif
 
     // MARK: routing + notification intents
 

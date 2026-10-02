@@ -71,6 +71,13 @@ public extension Session {
         merging(title: title)
     }
 
+    /// File this row in a folder (nil: in none) before the server confirms the move, so the list and
+    /// the Move panel show it there at once — and, written back with the folder it had, put it back
+    /// when the server refuses. See `AppModel.moveSession`.
+    func settingFolder(_ folderID: String?) -> Session {
+        merging(folderId: .some(folderID))
+    }
+
     /// Apply only the projected Project relation. This is safe even for Completed/Trash rows that
     /// the ordinary Open-list summary merge deliberately refuses: rotation/delete still needs to
     /// remove their Coordinator badge immediately.

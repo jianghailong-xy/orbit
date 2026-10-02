@@ -343,6 +343,8 @@ struct AgentPanes: View {
     /// The row whose Share was tapped — drives the share panel, owned by the list for the same
     /// reason as `taggingSession`.
     @State private var sharingSession: Session?
+    /// The row whose Move was tapped — drives the Move panel, list-owned like the two above.
+    @State private var movingSession: Session?
     /// Whether the Pinned section is folded to its header (iOS list only). Stored rather than view
     /// state: this pane is rebuilt per workspace (`.id(a.id)`), so @State would unfold it on every
     /// switch, and on every launch.
@@ -622,9 +624,20 @@ struct AgentPanes: View {
                 ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)
             }
         }
+        // The Move panel for the row whose Move was tapped: the folders of this workspace, counted
+        // over the list the row is in (docs/session-folders-move-design.md §4).
+        .sheet(item: $movingSession) { s in
+            SessionMoveSheet(session: s, workspace: agent, listed: agents.agentSessions).environment(app)
+        }
         #endif
-        // Load the owner's tag library when the pane appears so the picker + chips are populated.
-        .task { await app.loadSessionTags() }
+        // Load the owner's tag library when the pane appears so the picker + chips are populated,
+        // and on iOS the folder library the Move panel offers.
+        .task {
+            await app.loadSessionTags()
+            #if os(iOS)
+            await app.loadSessionFolders()
+            #endif
+        }
     }
 
     /// What the List's selection is bound to: the projection onto the section's stack in the
@@ -794,7 +807,8 @@ struct AgentPanes: View {
         let row = AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open)
         switch rowNavigation {
         case .selection:
-            row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s })
+            row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },
+                                  onMove: { movingSession = s })
                 .tag(s.id)
         case .push:
             // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
@@ -808,7 +822,8 @@ struct AgentPanes: View {
             // and `.contextMenu` are read off the view the `List` hosts as its row, and a `Button`
             // does not pass them up from its label — which is where this wrapper used to leave them,
             // and why a swipe or a long press on a compact session row did nothing.
-            .sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s })
+            .sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },
+                               onMove: { movingSession = s })
         }
     }
     #endif
