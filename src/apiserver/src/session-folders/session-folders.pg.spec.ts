@@ -10,7 +10,8 @@
  *   (4) a folder of another workspace, or of another owner, is refused with a 400 — by the move and
  *       by session create alike — and nothing is written;
  *   (5) the folder-only move files a session, moves it between folders and takes it out again, a
- *       running and a completed session included; Trash and another workspace are refused (409);
+ *       running and a completed session included; Trash is refused (409), and so is another
+ *       workspace for a session that has not ended (session-move-workspace.pg.spec has the rest);
  *   (6) a session created with a folderId is created in that folder, including when the folder
  *       disappears between the check and the INSERT (a 400, not a 500);
  *   (7) the session list (Open, Completed, Trash) and the session detail carry folderId, and a
@@ -468,9 +469,10 @@ test('session folders: owned, unique per workspace, deleted without deleting a s
     assert.equal(inTrash.status, 409, inTrash.text);
     assert.match(inTrash.json.message, /Trash/);
     assert.equal(await folderOf(trashed), first);
+    // Another workspace takes only an ended session — sessions/session-move-workspace.pg.spec.
     const elsewhere = await move(idle, { workspaceId: pub(beta), folderId: null });
     assert.equal(elsewhere.status, 409, elsewhere.text);
-    assert.equal(elsewhere.json.message, 'moving to another workspace is not available yet');
+    assert.equal(elsewhere.json.message, 'End the session first.');
     assert.equal((await move(idle, { folderId: pub(first) }, other)).status, 404, 'another owner moved my session');
     assert.equal((await move(randomUUID(), { folderId: null })).status, 404);
     assert.equal(await folderOf(idle), null);

@@ -71,7 +71,7 @@ export const LOCK_ORDER = [
   {
     rank: 15,
     relation: 'workspace, model_provider',
-    modes: 'FOR SHARE (unit L4 plan preflight) · FOR KEY SHARE (task.assignee_id FK)',
+    modes: 'FOR SHARE (unit L4 plan preflight; the workspace a SessionsService.move names) · FOR KEY SHARE (task.assignee_id FK)',
     why:
       'A plan is REFUSED when its assignee has been deleted or its provider disabled, and both of '
       + 'those are ordinary UPDATEs of a non-key column — which FOR KEY SHARE does not conflict '
@@ -79,7 +79,9 @@ export const LOCK_ORDER = [
       + 'at FOR SHARE before the first write and re-reads them there. Rank 15 rather than a place '
       + 'of their own further down because the INSERT reaches them at 10 through user and would '
       + 'otherwise be locking upward after having locked at 40; neither relation waits on anything '
-      + 'these paths hold (see LOCK_ORDER_COMPATIBLE), so this adds an ordering and no edge.',
+      + 'these paths hold (see LOCK_ORDER_COMPATIBLE), so this adds an ordering and no edge. A '
+      + 'session moved to another workspace holds that workspace the same way, for the same reason, '
+      + 'before its folder (25) and the session (30).',
   },
   {
     rank: 20,
