@@ -104,9 +104,14 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
         let web = try source(Self.blockers)
         for reason in ["OUTSIDE_DECLARED_SCOPE", "ACCEPTANCE_STANDARD_MOVED", "CRITERION_EXEMPTION_ARGUED",
                        "MERGE_REFUSED_BY_GIT"] {
-            let headline = ProjectPage.blockerHeadline(ProjectBlocker(id: "b", kind: "K", detail: .init(reason: reason)))
+            let blocker = ProjectBlocker(id: "b", kind: "K", detail: .init(reason: reason))
+            let headline = ProjectPage.blockerHeadline(blocker)
             assertSays(web, "tag: '\(headline.tag)'", in: Self.blockers)
             assertSays(web, "title: '\(headline.title)'", in: Self.blockers)
+            // The decision each of these asks for, and its two answers, under the same reason.
+            let decision = try XCTUnwrap(ProjectPage.blockerDecision(blocker), reason)
+            assertSays(web, "\(reason): { question: '\(decision.question)', acceptLabel: '\(decision.acceptLabel)', "
+                       + "keepLabel: '\(decision.keepLabel)', }", in: Self.blockers)
         }
         for owner in ["USER", "COORDINATOR", "SYSTEM"] {
             let tag = ProjectPage.blockerHeadline(ProjectBlocker(id: "b", kind: "K", owner: owner)).tag
@@ -119,10 +124,28 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
         assertSays(web, "`Auto-resolved — ${note || 'its condition no longer holds'}${when}`", in: Self.blockers)
         assertSays(web, "`Resolved by you — ${note || 'no reason was recorded'}${when}`", in: Self.blockers)
         assertSays(web, "`Resolved by the coordinator${note ? ` — ${note}` : ''}${when}`", in: Self.blockers)
-        assertSays(web, "title=\"\(ProjectPage.resolveBlockerTitle)\"", in: Self.blockers)
-        assertSays(web, ProjectPage.resolveBlockerQuestion, in: Self.blockers)
-        assertSays(web, ProjectPage.resolveBlockerNote, in: Self.blockers)
-        assertSays(web, "> \(ProjectPage.resolveBlockerPress) <", in: Self.blockers)
+        // A decision is reviewed and answered in its own words; any other blocker is resolved.
+        let decided = ProjectBlocker(id: "b", kind: "K", detail: .init(reason: "OUTSIDE_DECLARED_SCOPE"))
+        let plain = ProjectBlocker(id: "b", kind: "K")
+        XCTAssertNil(ProjectPage.blockerDecision(plain))
+        assertSays(web, "{prompt ? '\(ProjectPage.resolveBlockerPress(decided))' : '\(ProjectPage.resolveBlockerPress(plain))'}",
+                   in: Self.blockers)
+        assertSays(web, "title={prompt ? '\(ProjectPage.resolveBlockerTitle(decided))' : '\(ProjectPage.resolveBlockerTitle(plain))'}",
+                   in: Self.blockers)
+        assertSays(web, "{prompt ? '\(ProjectPage.resolveBlockerQuestion(decided))' : '\(ProjectPage.resolveBlockerQuestion(plain))'}",
+                   in: Self.blockers)
+        assertSays(web, "{prompt?.keepLabel ?? '\(ProjectPage.resolveBlockerKeep(plain))'}", in: Self.blockers)
+        assertSays(web, "{prompt?.acceptLabel ?? '\(ProjectPage.resolveBlockerConfirm(plain))'}", in: Self.blockers)
+        assertSays(web, ">\(ProjectPage.resolveBlockerNote)<", in: Self.blockers)
+        // What the decision rests on, under the dialog's labels and for the same reasons.
+        for label in [ProjectPage.blockerDecisionLabel, ProjectPage.blockerArgumentLabel,
+                      ProjectPage.blockerCriterionLabel, ProjectPage.blockerFilesLabel] {
+            assertSays(web, ">\(label)<", in: Self.blockers)
+        }
+        assertSays(web, "blocker.agentArgument?.trim() && blocker.detail?.reason === 'CRITERION_EXEMPTION_ARGUED'",
+                   in: Self.blockers)
+        assertSays(web, "return reason === 'CRITERION_EXEMPTION_ARGUED' || reason === 'ACCEPTANCE_STANDARD_MOVED';",
+                   in: Self.blockers)
         assertSays(web, "`${open.length} open`", in: Self.blockers)
         assertSays(web, "`${blockers.resolvedCount} resolved · latest: `", in: Self.blockers)
     }

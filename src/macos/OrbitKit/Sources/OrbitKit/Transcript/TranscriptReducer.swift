@@ -1601,7 +1601,7 @@ private enum ToolFailure {
             let reasonStart = rest.index(rest.startIndex, offsetBy: separator.upperBound.utf16Offset(in: lower))
             return (tool: tool, reason: String(rest[reasonStart...]))
         }
-        if lower.hasPrefix("error=failed to parse function arguments") {
+        if lower.hasPrefix("failed to parse function arguments") {
             return (tool: nil, reason: String(tail.dropFirst("error=".count)))
         }
         return nil

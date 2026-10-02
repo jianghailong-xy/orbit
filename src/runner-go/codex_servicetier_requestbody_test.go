@@ -45,6 +45,7 @@ const codexTierAbsent = "<absent>"
 // A session in fast mode sends `service_tier: "priority"` on both Codex paths, and one that is not
 // sends no tier at all.
 func TestRealCodexFastServiceTierReachesTheResponsesRequest(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		fast bool
@@ -79,6 +80,7 @@ func TestRealCodexFastServiceTierReachesTheResponsesRequest(t *testing.T) {
 // and an id no catalogue has are dropped). A real tier name can be let through like that by any
 // release, so the control is an id no catalogue will ever advertise.
 func TestRealCodexDropsATierTheCatalogueDoesNotAdvertise(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ sent, want string }{
 		{sent: "fast", want: codexFastServiceTier},
 		{sent: "orbit-unadvertised-tier", want: codexTierAbsent},

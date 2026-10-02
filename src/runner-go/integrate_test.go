@@ -130,6 +130,7 @@ func silent(string, *IntegrationUpstreamMoved) {}
 // target that did not exist yet. What it pins is J-S7 — the runner does not report LANDED from the
 // fact that its own push returned zero, it reads the target back and compares the tree.
 func TestIntegrationRebaseLandsAndVerifies(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("task/a", "main")
 	r.write("a.txt", "from a\n")
@@ -155,6 +156,7 @@ func TestIntegrationRebaseLandsAndVerifies(t *testing.T) {
 // TestIntegrationAbsorbsUpstreamBeforeLanding is J-S2: a project branch takes main's new commits by
 // MERGE, never by rewriting itself, and the branch's own old tip stays an ancestor of what lands.
 func TestIntegrationAbsorbsUpstreamBeforeLanding(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("project/line", "main")
 	r.write("line.txt", "on the line\n")
@@ -197,6 +199,7 @@ func TestIntegrationAbsorbsUpstreamBeforeLanding(t *testing.T) {
 // reconciled, so the runner merges instead. The assertion is the outcome a person cares about —
 // the job lands rather than stopping at a conflict — plus the shape that made it possible.
 func TestIntegrationMergesASourceThatCarriesMerges(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.write("shared.txt", "base\n")
 	base := r.commit("shared base")
@@ -236,6 +239,7 @@ func TestIntegrationMergesASourceThatCarriesMerges(t *testing.T) {
 // TestIntegrationConflictLandsNothing is the claim an INTEGRATION_CONFLICT item makes to a person:
 // the target is exactly where it was, and the item can name the files.
 func TestIntegrationConflictLandsNothing(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("project/line", "main")
 	r.write("contested.txt", "theirs\n")
@@ -268,6 +272,7 @@ func TestIntegrationConflictLandsNothing(t *testing.T) {
 // one stops the job with the branch untouched. The command here fails only when both files are
 // present, which is a state neither branch is in on its own — the case the checks exist for.
 func TestIntegrationCheckFailureLandsNothing(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("project/line", "main")
 	r.write("keep.txt", "quiet\n")
@@ -307,6 +312,7 @@ func TestIntegrationCheckFailureLandsNothing(t *testing.T) {
 // files has moved the thing being verified out from under the verification, so what would land is
 // not what passed. The job refuses rather than pushing either one.
 func TestIntegrationRefusesACheckThatMutatedTheTree(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("task/f", "main")
 	r.write("f.txt", "from f\n")
@@ -332,6 +338,7 @@ func TestIntegrationRefusesACheckThatMutatedTheTree(t *testing.T) {
 // TestIntegrationAlreadyLandedPushesNothing: a task whose work the target already contains is a
 // fact to record, not an error and not a push.
 func TestIntegrationAlreadyLandedPushesNothing(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("task/g", "main")
 	r.write("g.txt", "from g\n")
@@ -358,6 +365,7 @@ func TestIntegrationAlreadyLandedPushesNothing(t *testing.T) {
 // on a 429 was answered the positive way here, and the receipt written from it said a delivery was
 // on the line that no branch held (project 34Tq39ByZ0rV4c6pJkfw7).
 func TestIntegrationNothingToLandForAnEmptyBranch(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	// The line, at the commit the retry session will fork at and never move off.
 	r.checkoutNew("project/line", "main")
@@ -387,6 +395,7 @@ func TestIntegrationNothingToLandForAnEmptyBranch(t *testing.T) {
 // of that base. There is a commit of the task's on it and the target already contains it, so the
 // answer stays the positive one.
 func TestIntegrationAlreadyLandedKeepsItsAnswerForABranchWithCommits(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	fork := r.rev("main")
 	r.checkoutNew("task/i", "main")
@@ -417,6 +426,7 @@ func TestIntegrationAlreadyLandedKeepsItsAnswerForABranchWithCommits(t *testing.
 // the line is ahead of main, which is exactly where the old inference (target tip = upstream tip)
 // could never say anything.
 func TestIntegrationNothingToLandMeasuresWhereTheTipIs(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		// The commit the empty branch forks at and never moves off: main, or the line's own tip.
@@ -468,6 +478,7 @@ func TestIntegrationNothingToLandMeasuresWhereTheTipIs(t *testing.T) {
 // result says nothing about it rather than a false the control plane would have to tell apart from
 // a measured one.
 func TestIntegrationJobReportsTheTipOnTheUpstream(t *testing.T) {
+	t.Parallel()
 	report := func(t *testing.T, job IntegrationJobCommand) map[string]interface{} {
 		t.Helper()
 		var result map[string]interface{}
@@ -526,6 +537,7 @@ func TestIntegrationJobReportsTheTipOnTheUpstream(t *testing.T) {
 // TestIntegrationLeavesNoWorktreeBehind: the scratch worktree is removed on every exit path,
 // including the failing ones, because a leftover is what the NEXT attempt trips over.
 func TestIntegrationLeavesNoWorktreeBehind(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("project/line", "main")
 	r.write("contested.txt", "theirs\n")
@@ -574,6 +586,7 @@ func (r *integrationRepo) promotionCommand(kind, sourceBranch, sourceKind string
 // the no-op git makes of a branch already sitting on the tip. The check and the landing are two
 // separate jobs, as they are in the queue, and the landing is held to the tree the check passed.
 func TestPromotionOfATaskBranchRebasesAndFastForwards(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("task/only", "main")
 	r.write("a.txt", "from a\n")
@@ -673,6 +686,7 @@ func automaticLanding(r *integrationRepo, sourceSha string, checked integrationR
 // pushed — a merge commit whose first parent is exactly the upstream the check ran against, which is
 // what makes `git revert -m 1 <merge>` the receipt's undo.
 func TestAutomaticPromotionLandsOntoTheUpstreamItWasCheckedAgainst(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	sourceSha, checked := checkedProjectBranch(t, r)
 
@@ -698,6 +712,7 @@ func TestAutomaticPromotionLandsOntoTheUpstreamItWasCheckedAgainst(t *testing.T)
 // whose card promises it lands on its own), and READY, so the owner is asked. The owner-confirmed
 // run of the very same job is the control: it is what the Automatic mark is the difference from.
 func TestAutomaticPromotionHandsBackAMovedUpstream(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	sourceSha, checked := checkedProjectBranch(t, r)
 	r.write("elsewhere.txt", "somebody else landed first\n")
@@ -749,6 +764,7 @@ func TestAutomaticPromotionHandsBackAMovedUpstream(t *testing.T) {
 // the race is exact rather than timed. The owner-confirmed run of the same job through the same race
 // is the control: it merges again onto the main that moved and lands (M5).
 func TestAutomaticPromotionHandsBackAMainThatMovesDuringThePush(t *testing.T) {
+	t.Parallel()
 	for _, automatic := range []bool{true, false} {
 		r := newIntegrationRepo(t)
 		sourceSha, checked := checkedProjectBranch(t, r)
@@ -789,6 +805,7 @@ func TestAutomaticPromotionHandsBackAMainThatMovesDuringThePush(t *testing.T) {
 // TestAutomaticPromotionWithNoCheckedTipLandsNothing: a mark with nothing to hold the landing to is
 // not a licence to land anywhere. The control plane never sends one; the runner does not trust that.
 func TestAutomaticPromotionWithNoCheckedTipLandsNothing(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	sourceSha, checked := checkedProjectBranch(t, r)
 	land := automaticLanding(r, sourceSha, checked)
@@ -809,6 +826,7 @@ func TestAutomaticPromotionWithNoCheckedTipLandsNothing(t *testing.T) {
 // down is what the check then finds. Without this the check is a false red about work that is fine
 // — the shape of the command decided the verdict, which is the bug this pins shut.
 func TestIntegrationPreparesTheTreeBeforeTheChecks(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("project/line", "main")
 	// The recipe is the PROJECT's: what the line integrates is what the tree carries. It writes an
@@ -845,6 +863,7 @@ func TestIntegrationPreparesTheTreeBeforeTheChecks(t *testing.T) {
 // tree they could be judged in. That is an ERROR, not a red check — reporting it as the task's
 // command failing would be the same false red one layer down, and it is the machine that is broken.
 func TestIntegrationRefusesWhenTheRecipeFails(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("project/line", "main")
 	r.writeIn("scripts/worktree-overlay.sh",
@@ -885,6 +904,7 @@ func TestIntegrationRefusesWhenTheRecipeFails(t *testing.T) {
 // the tree's recipe has to run there too — and this is the path a MAIN line's tasks take, which is
 // where a command that needs JS dependencies is most likely to be declared.
 func TestPromotionPreparesTheTreeBeforeTheChecks(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.writeIn("scripts/worktree-overlay.sh",
 		"#!/usr/bin/env bash\nset -eu\nmkdir -p node_modules\ntouch node_modules/.ready\n")

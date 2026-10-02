@@ -26,17 +26,16 @@ import (
 )
 
 func TestKimiACPHandshakeAgainstRealCLI(t *testing.T) {
+	t.Parallel()
 	home := userHome()
 	// The PATH the runner service runs with, not the shell's: an engine installed by
-	// its official installer sits in a private dir this adds (service.go).
+	// its official installer sits in a private dir this adds (service.go). startKimiACP
+	// resolves the engine off the process PATH, which TestMain has already given it.
 	enginePath := runnerEnginePath(home, os.Getenv("PATH"))
 	exe, ok := lookPathIn(providerKimi, enginePath)
 	if !ok {
 		t.Skipf("no %s binary on PATH or in %v", providerKimi, engineInstallerDirs(home))
 	}
-	// startKimiACP resolves the engine off the process PATH, so the test process needs
-	// the service's one too.
-	t.Setenv("PATH", enginePath)
 
 	execDir := t.TempDir()
 	scratchDir := t.TempDir()

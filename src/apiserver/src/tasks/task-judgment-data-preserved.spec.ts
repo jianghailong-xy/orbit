@@ -1551,16 +1551,26 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // six preserved objects — and it has no INSERT, UPDATE or DELETE. No `project_acceptance_*`
       // object is named.
       '0346_codeless_and_source_on_upstream',
+      // The four lifetime token sums leave `session` (0347): `sum_input_tokens`,
+      // `sum_output_tokens`, `sum_cache_read` and `sum_cache_write` are dropped, catalog-only, after
+      // an anonymous DO gate that RAISEs while any function body still reads one. Read against every
+      // claim above: it ALTERs only `session`, so no `task` or `project_acceptance_*` object is
+      // named and the 0177 pair and every stored task and criterion row are out of its reach. No
+      // function, trigger or type is created, replaced or dropped — the gate is a DO block, not a
+      // `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none
+      // of the six preserved objects. No INSERT, UPDATE or DELETE.
+      '0347_drop_session_token_sums',
       // Session folders (0348, docs/session-folders-move-design.md §3.1): one new table,
       // `session_folder` (foreign keys to `user` and `workspace`, both ON DELETE CASCADE, a unique
       // index on (workspace_id, name) and an index on owner_id), and one nullable UUID column with
       // no default on `session`, `folder_id`, catalog-only, with its index and a foreign key into
       // the new table ON DELETE SET NULL. Read against every claim above: no `task`, `project` or
-      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion
-      // row are out of its reach. No function, trigger or type is created, replaced or dropped — so
-      // it is not another writer of the DONE fence and names none of the six preserved objects. No
-      // INSERT, UPDATE or DELETE: the new table starts empty and every session reads NULL. (0343 and
-      // 0347 are spelled by unlanded branches, so this takes the next number nobody uses.)
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and
+      // criterion row are out of its reach. No function, trigger or type is created, replaced or
+      // dropped — so it is not another writer of the DONE fence and names none of the six preserved
+      // objects. No INSERT, UPDATE or DELETE: the new table starts empty and every session reads
+      // NULL. (0343 is left to the unlanded branches that spell it, and 0347 is taken, so this
+      // takes the next number nobody uses.)
       '0348_session_folder'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

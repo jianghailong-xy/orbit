@@ -47,8 +47,10 @@ struct MergeRecoveryRow: View {
 /// A merge held for target recovery, reviewed in a full-height system sheet — the owner's pick of
 /// three (2026-10-01): no half height, so it reads the same on iOS 17/18 and 26, with no floating
 /// glass. The steps, titles and gates are web's `MergeRecoveryPanel`'s, laid out for a phone: what
-/// holds the merge on top, the commits that go out with it, the remote's commits and the complete
-/// candidate diff one push deeper, and the step the state asks for pinned at the foot
+/// holds the merge on top; then the branches — this session's into the target, and how local and
+/// remote targets stand — with their tips, the remote's commits and the repair branch one push
+/// deeper; then the commits the push adds, each labelled by where it comes from, with the complete
+/// candidate diff as that list's last row; and the step the state asks for pinned at the foot
 /// (`MergeRecovery.buttons`), reachable without scrolling. It reads the console live, so a check, a
 /// sync or a landing shows up while it's open; once the recovery is gone — merged, or cleared — it
 /// closes itself.
@@ -111,57 +113,64 @@ struct MergeRecoverySheet: View {
                     ForEach(conflicts, id: \.self) { Text($0).font(.orbitMono).textSelection(.enabled) }
                 }
             }
-            if let commits = r.localCommits, !commits.isEmpty {
-                Section {
-                    ForEach(commits, id: \.sha) { MergeRecoveryCommitRow(commit: $0) }
-                } header: {
-                    HStack {
-                        Text("Local-only commits — included in the push")
-                        Spacer(minLength: 8)
-                        Text("\(commits.count)")
-                    }
-                    .textCase(nil)
+            // The branches in one row: what the review is about, before what it lists.
+            Section {
+                NavigationLink {
+                    RecoveryBranchesPage(recovery: r, branch: d.branch, close: close)
+                } label: {
+                    RecoveryRouteRow(branch: d.branch, target: target, relation: r.targetRelation)
                 }
             }
             let candidate = r.candidateSha != nil ? r.patch : nil
-            if r.remoteCommits != nil || candidate != nil {
+            if let push = r.pushCommits, !push.isEmpty {
+                // What the push adds to origin, exactly — the question the review answers. The diff
+                // is the same push read as content, so it closes the list rather than leading it.
+                let inline = r.inlinePushCommits()
                 Section {
-                    if let remote = r.remoteCommits {
+                    ForEach(inline.shown, id: \.sha) { MergeRecoveryCommitRow(commit: $0, origin: r.origin(of: $0)) }
+                    if inline.hidden > 0 {
                         NavigationLink {
-                            RecoveryCommitsPage(title: "Remote-only commits", commits: remote, close: close)
+                            RecoveryCommitsPage(title: "Pushes to origin/\(target)", commits: push, origin: r.origin(of:),
+                                                close: close)
                         } label: {
-                            RecoveryLinkRow(title: "Remote-only commits", subtitle: Text("Already on origin/\(target)"),
-                                            value: "\(remote.count)")
+                            RecoveryLinkRow(title: "All \(push.count) commits",
+                                            subtitle: Text("\(inline.hidden) more from this session"), value: "")
                         }
                     }
-                    if let candidate {
-                        let files = UnifiedDiff.files(candidate)
-                        NavigationLink {
-                            CandidateDiffPage(target: target, patch: candidate, files: files, close: close)
-                        } label: {
-                            RecoveryLinkRow(title: "Complete candidate diff",
-                                            subtitle: Text("Against origin/\(target) · ") + diffStat(files),
-                                            value: "\(files.count) \(files.count == 1 ? "file" : "files")")
+                    if let candidate { candidateDiffLink(target: target, patch: candidate, close: close) }
+                } header: {
+                    HStack {
+                        Text("Pushes to origin/\(target)")
+                        Spacer(minLength: 8)
+                        Text("\(push.count) \(push.count == 1 ? "commit" : "commits")")
+                    }
+                    .textCase(nil)
+                } footer: {
+                    Text(r.landingNote)
+                }
+            } else {
+                // A runner that predates the push list: the local-only commits on their own.
+                if let commits = r.localCommits, !commits.isEmpty {
+                    Section {
+                        ForEach(commits, id: \.sha) { MergeRecoveryCommitRow(commit: $0) }
+                    } header: {
+                        HStack {
+                            Text("Local-only commits — included in the push")
+                            Spacer(minLength: 8)
+                            Text("\(commits.count)")
                         }
+                        .textCase(nil)
                     }
                 }
+                if let candidate {
+                    Section { candidateDiffLink(target: target, patch: candidate, close: close) }
+                }
             }
-            if r.check != nil || r.repairBranch != nil {
+            if let check = r.check {
                 Section {
-                    if let check = r.check { checkRow(check, close: close) }
-                    if let branch = r.repairBranch {
-                        NavigationLink {
-                            RecoveryTextPage(title: "Saved repair branch",
-                                             text: [branch, r.repairWorktree].compactMap { $0 }.joined(separator: "\n"),
-                                             close: close)
-                        } label: {
-                            LabeledContent("Saved repair branch") {
-                                Text(branch).font(.orbitMono).lineLimit(1).truncationMode(.middle)
-                            }
-                        }
-                    }
+                    checkRow(check, close: close)
                 } footer: {
-                    if let note = footer(r) { Text(note) }
+                    if let note = r.reviewNote { Text(note) }
                 }
             }
         }
@@ -210,7 +219,11 @@ struct MergeRecoverySheet: View {
 
     private func lede(_ r: MergeRecovery) -> String? {
         let t = r.targetBranch
-        if r.ready { return "Preserves both target histories.\(r.addsMergeCommit == true ? " Adds one merge commit." : "")" }
+        if r.ready {
+            // With the push listed, its note says how it lands.
+            guard (r.pushCommits ?? []).isEmpty else { return nil }
+            return "Preserves both target histories.\(r.addsMergeCommit == true ? " Adds one merge commit." : "")"
+        }
         switch r.code {
         case "TARGET_DIVERGED": return "Local \(t) and origin/\(t) each have unique commits."
         case "TARGET_AHEAD":
@@ -278,16 +291,16 @@ struct MergeRecoverySheet: View {
         }
     }
 
-    private func footer(_ r: MergeRecovery) -> String? {
-        var parts: [String] = []
-        if let check = r.check {
-            parts.append(check.status == "unconfigured" ? "Git preview only; no merge check is configured."
-                         : check.status == "passed" ? "Configured merge check passed." : "Configured merge check failed.")
+    /// The candidate's complete diff against the remote target, one push deeper.
+    private func candidateDiffLink(target: String, patch: String, close: @escaping () -> Void) -> some View {
+        let files = UnifiedDiff.files(patch)
+        return NavigationLink {
+            CandidateDiffPage(target: target, patch: patch, files: files, close: close)
+        } label: {
+            RecoveryLinkRow(title: "Complete candidate diff",
+                            subtitle: Text("Against origin/\(target) · ") + diffStat(files),
+                            value: "\(files.count) \(files.count == 1 ? "file" : "files")")
         }
-        if r.ready {
-            parts.append("The local-only commits above will be pushed with this session’s changes. For linear history or required PRs, prepare a PR candidate instead.")
-        }
-        return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
     private func diffStat(_ files: [UnifiedDiffFile]) -> Text {
@@ -374,19 +387,58 @@ private struct RecoveryCloseButton: ToolbarContent {
     }
 }
 
-/// One commit: its subject, then who, when and which.
+/// One commit: its subject, then where it comes from (in the push's list), who, when and which.
 private struct MergeRecoveryCommitRow: View {
     let commit: MergeRecoveryCommit
+    var origin: MergeRecoveryCommitOrigin? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(commit.subject).font(.orbitSubtext).lineLimit(2)
-            (Text("\(commit.author) · \(RelativeTime.format(commit.date) ?? commit.date) · ")
+            (originLabel
+                + Text("\(commit.author) · \(RelativeTime.format(commit.date) ?? commit.date) · ")
                 + Text(String(commit.sha.prefix(8))).font(.orbitMonoFine))
                 .font(.orbitMeta)
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 2)
+    }
+
+    /// Local-only stands out: never pushed, it is what the review is for.
+    private var originLabel: Text {
+        switch origin {
+        case nil: return Text("")
+        case .localOnly?: return Text(MergeRecoveryCommitOrigin.localOnly.label).fontWeight(.semibold).foregroundStyle(.orange)
+            + Text(" · ")
+        case let origin?: return Text("\(origin.label) · ")
+        }
+    }
+}
+
+/// The review's branch information in one row: this session's branch into the target, and how the
+/// local target stands against origin once a check has read both.
+private struct RecoveryRouteRow: View {
+    let branch: String?
+    let target: String
+    let relation: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.triangle.branch").font(.orbitMeta).foregroundStyle(.secondary)
+                Group {
+                    if let branch { BranchLabelView(branch: branch) } else { Text("This session").font(.orbitMono) }
+                }
+                .lineLimit(1)
+                .truncationMode(.middle)
+                Image(systemName: "arrow.right").font(.orbitMeta).foregroundStyle(.secondary)
+                Text(target).font(.orbitMono).lineLimit(1).layoutPriority(1)
+            }
+            if let relation {
+                Text(relation).font(.orbitLabel).foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -411,10 +463,11 @@ private struct RecoveryLinkRow: View {
 private struct RecoveryCommitsPage: View {
     let title: String
     let commits: [MergeRecoveryCommit]
+    let origin: (MergeRecoveryCommit) -> MergeRecoveryCommitOrigin
     let close: () -> Void
 
     var body: some View {
-        List(commits, id: \.sha) { MergeRecoveryCommitRow(commit: $0) }
+        List(commits, id: \.sha) { MergeRecoveryCommitRow(commit: $0, origin: origin($0)) }
             .navigationTitle(title)
             .toolbar { RecoveryCloseButton(close: close) }
     }
@@ -487,7 +540,66 @@ private struct CandidateFilePage: View {
     }
 }
 
-/// Text to read and copy — the runner's details, a check's output, where the repair branch lives.
+/// The branches behind the route row: this session's tip, both target tips and how they stand, what
+/// origin has that local doesn't, and the candidate with the private branch and checkout it was built
+/// in. Full SHAs and paths, selectable to copy.
+private struct RecoveryBranchesPage: View {
+    let recovery: MergeRecovery
+    let branch: String?
+    let close: () -> Void
+
+    var body: some View {
+        let r = recovery
+        let t = r.targetBranch
+        List {
+            Section {
+                row(branch ?? "This session", r.sourceSha)
+            } header: {
+                Text("Source").textCase(nil)
+            }
+            Section {
+                row("Local \(t)", r.localSha)
+                row("origin/\(t)", r.remoteSha)
+            } header: {
+                Text("Target").textCase(nil)
+            } footer: {
+                if let relation = r.targetRelation { Text(relation) }
+            }
+            if let remote = r.remoteCommits, !remote.isEmpty {
+                Section {
+                    ForEach(remote, id: \.sha) { MergeRecoveryCommitRow(commit: $0) }
+                } header: {
+                    Text("Already on origin/\(t)").textCase(nil)
+                } footer: {
+                    Text("Brought to this machine by the sync; not pushed.")
+                }
+            }
+            if r.candidateSha != nil || r.repairBranch != nil || r.repairWorktree != nil {
+                Section {
+                    row("Candidate", r.candidateSha)
+                    row("Repair branch", r.repairBranch)
+                    row("Repair worktree", r.repairWorktree)
+                } header: {
+                    Text("Candidate").textCase(nil)
+                }
+            }
+        }
+        .navigationTitle("Branches")
+        .toolbar { RecoveryCloseButton(close: close) }
+    }
+
+    @ViewBuilder
+    private func row(_ title: String, _ value: String?) -> some View {
+        if let value {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.orbitSubtext)
+                Text(value).font(.orbitMono).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+        }
+    }
+}
+
+/// Text to read and copy — the runner's details, a check's output.
 private struct RecoveryTextPage: View {
     let title: String
     let text: String

@@ -82,6 +82,35 @@ final class RowSwipeGeometryTests: XCTestCase {
         XCTAssertEqual(open.rest(offset: 0, velocity: 0), .closed)
     }
 
+    func testALoneButtonGrowsInOverItsLastThirtyPoints() {
+        // The system's lone Delete: not out at 50pt, a fifth of its size at 55, whole at 80.
+        let delete: [Double] = [60]
+        XCTAssertEqual(RowSwipeGeometry.reveal(of: 0, slots: delete, revealed: 50), 0)
+        XCTAssertEqual(RowSwipeGeometry.reveal(of: 0, slots: delete, revealed: 56), 0.2, accuracy: 1e-9)
+        XCTAssertEqual(RowSwipeGeometry.reveal(of: 0, slots: delete, revealed: 65), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(RowSwipeGeometry.reveal(of: 0, slots: delete, revealed: 80), 1)
+        // Pulled on past its slot, it stays whole.
+        XCTAssertEqual(RowSwipeGeometry.reveal(of: 0, slots: delete, revealed: 140), 1)
+    }
+
+    func testButtonsGrowInFromTheEdgeInward() {
+        let leading: [Double] = [60, 60]
+        // Complete is whole by the time Pin starts: the system's Pin is not out at 103pt.
+        XCTAssertEqual(RowSwipeGeometry.reveal(of: 0, slots: leading, revealed: 103), 1)
+        XCTAssertEqual(RowSwipeGeometry.reveal(of: 1, slots: leading, revealed: 103), 0)
+        XCTAssertEqual(RowSwipeGeometry.reveal(of: 1, slots: leading, revealed: 135), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(RowSwipeGeometry.reveal(of: 1, slots: leading, revealed: 150), 1)
+        // A wide slot pushes the next one's start out with it.
+        XCTAssertEqual(RowSwipeGeometry.reveal(of: 1, slots: [84, 60], revealed: 150), 0.2, accuracy: 1e-9)
+        XCTAssertEqual(RowSwipeGeometry.reveal(of: 2, slots: leading, revealed: 150), 0, "no third button")
+    }
+
+    func testAButtonFadesInAheadOfItsSize() {
+        XCTAssertEqual(RowSwipeGeometry.revealOpacity(0), 0)
+        XCTAssertEqual(RowSwipeGeometry.revealOpacity(0.2), 0.32, accuracy: 1e-9)
+        XCTAssertEqual(RowSwipeGeometry.revealOpacity(1), 1)
+    }
+
     func testEachRestHasItsOffset() {
         XCTAssertEqual(open.offset(at: .closed), 0)
         XCTAssertEqual(open.offset(at: .leading), 150)

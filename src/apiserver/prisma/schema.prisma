@@ -1060,19 +1060,13 @@ model Session {
   // PENDING = created, claimable by its assigned runner.
   status               RunStatus @default(PENDING)
   // billing, accrued per turn
-  sumInputTokens       Int       @default(0) @map("sum_input_tokens")
-  sumOutputTokens      Int       @default(0) @map("sum_output_tokens")
-  sumCacheRead         Int       @default(0) @map("sum_cache_read")
-  sumCacheWrite        Int       @default(0) @map("sum_cache_write")
   numTurns             Int       @default(0) @map("num_turns")
   costUsd              Float     @default(0) @map("cost_usd")
   // How full the context window is RIGHT NOW: the tokens the latest top-level assistant message
   // actually cost (fresh input + cache reads + cache writes + output), denormalized from the
-  // turn_end event that already carries it for the clients' context gauge. Deliberately not
-  // derivable from the four sums above — those accrue over the session's whole life, so the only
-  // thing they say about the current window is that it is smaller. A long-lived session has to
-  // rotate before it reaches the window (compaction is lossy), and this is the measurement that
-  // decision needs. null until a runtime reports one: never-run sessions, and runtimes that
+  // turn_end event that already carries it for the clients' context gauge. A long-lived session
+  // has to rotate before it reaches the window (compaction is lossy), and this is the measurement
+  // that decision needs. null until a runtime reports one: never-run sessions, and runtimes that
   // don't report it yet (kimi).
   contextTokens        Int?      @map("context_tokens")
   // What contextTokens is a fraction of: the window the engine that produced that number will

@@ -1,0 +1,114 @@
+{
+  "about": [
+    "What \"always allow\" remembers from a Bash command a person approved — one set of cases both",
+    "clients are proved against. `bashRules.spec.ts` walks it through `bashCommandRules`, which the web",
+    "card calls; OrbitKit's `ApprovalRememberParityTests` walks the same file through",
+    "`Approvals.bashCommandRules` on Linux. A rule change starts here and lands at both ends or neither.",
+    "",
+    "Each case: `command` (the approval's `input.command`, exactly as the engine sent it) and `rules` —",
+    "the command prefixes remembered, in order, each stored as `Bash(<prefix>:*)`. An empty list means",
+    "the card offers no remember action at all."
+  ],
+  "cases": [
+    {
+      "name": "a blank command remembers nothing",
+      "command": "",
+      "rules": []
+    },
+    {
+      "name": "whitespace alone remembers nothing",
+      "command": "   ",
+      "rules": []
+    },
+    {
+      "name": "one command: the program and its sub-command",
+      "command": "git add -A",
+      "rules": ["git add"]
+    },
+    {
+      "name": "a flag ends the prefix",
+      "command": "ls -la",
+      "rules": ["ls"]
+    },
+    {
+      "name": "env assignments ahead of the program are skipped",
+      "command": "FOO=bar git diff",
+      "rules": ["git diff"]
+    },
+    {
+      "name": "a subshell has no clean program word",
+      "command": "(cd /x && ls)",
+      "rules": []
+    },
+    {
+      "name": "Codex's shell wrapper is never remembered",
+      "command": "/bin/bash -lc 'git status'",
+      "rules": []
+    },
+    {
+      "name": "the card from 2026-10-02: Codex's multi-line /bin/bash -lc script",
+      "command": "/bin/bash -lc \"set -o pipefail\nprintf '%s\\\\n' '--- recent errors ---'\ndocker compose logs --no-color --since=5m apiserver 2>&1 | grep -E 'ERROR|P2020|approval|approval|ExceptionsHandler' | tail -120 || true\nprintf '%s\\\\n' '--- recent warnings ---'\ndocker compose logs --no-color --since=5m apiserver 2>&1 | grep -E 'WARN|BadEnvironmentKey' | tail -40 || true\"",
+      "rules": []
+    },
+    {
+      "name": "a wrapper anywhere in a compound line refuses the whole line",
+      "command": "cd /repo && /bin/bash -lc \"git status\"",
+      "rules": []
+    },
+    {
+      "name": "a wrapper behind a pipe",
+      "command": "cat notes.txt | sh -c 'wc -l'",
+      "rules": []
+    },
+    {
+      "name": "a wrapper behind an env assignment",
+      "command": "FOO=1 bash -c 'echo $FOO'",
+      "rules": []
+    },
+    {
+      "name": "a wrapper spelled --command",
+      "command": "zsh --command 'ls'",
+      "rules": []
+    },
+    {
+      "name": "a wrapper named inside quotes is only text",
+      "command": "echo \"a; bash -c x\"",
+      "rules": ["echo"]
+    },
+    {
+      "name": "a sub-command that recurs is remembered once",
+      "command": "git add a; git status; git add b",
+      "rules": ["git add", "git status"]
+    },
+    {
+      "name": "a bareword second word keeps the rule narrow",
+      "command": "npm install; npm run build",
+      "rules": ["npm install", "npm run"]
+    },
+    {
+      "name": "quoted arguments fall back to the program",
+      "command": "echo \"a\"; echo \"b\"",
+      "rules": ["echo"]
+    },
+    {
+      "name": "every sub-command of a compound line, not just the leading cd",
+      "command": "cd /root/.orbit/worktrees/019f04fc; git add -A src/macos; echo \"=== any isSystem refs left anywhere? ===\"; grep -rn \"isSystem\" src/macos || echo \"(none — good)\"; echo \"=== any conflict markers left? ===\"; grep -rn \"^<<<<<<<\\|^=======\\|^>>>>>>>\" src/macos || echo \"(none — good)\"; echo \"=== unmerged files? ===\"; git diff --name-only --diff-filter=U || true; echo \"(empty = all resolved)\"",
+      "rules": ["cd", "git add", "echo", "grep", "git diff", "true"]
+    },
+    {
+      "name": "a quoted separator does not split a sub-command",
+      "command": "cd /x && git commit -m \"a;b\"",
+      "rules": ["cd", "git commit"]
+    },
+    {
+      "name": "a backslash-escaped pipe inside quotes stays one sub-command",
+      "command": "grep -rn \"^<<<<<<<\\|^=======\\|^>>>>>>>\" src",
+      "rules": ["grep"]
+    },
+    {
+      "name": "newlines separate sub-commands",
+      "command": "git status\nnpm test",
+      "rules": ["git status", "npm test"]
+    }
+  ]
+}

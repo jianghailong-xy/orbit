@@ -24,13 +24,13 @@ final class OrbitAskPreviewTests: XCTestCase {
         for tool in ["orbit_task_batch", "orbit_dag_change", "orbit_task_create", "orbit_project_create",
                      "orbit_blocker_resolve", "orbit_provider_create", "orbit_provider_update",
                      "orbit_provider_delete"] {
-            XCTAssertNil(Approvals.rememberRule(toolName: tool, input: json("{}")),
-                         "\(tool) must not offer Allow & remember")
+            XCTAssertEqual(Approvals.rememberRules(toolName: tool, input: json("{}")), [],
+                           "\(tool) must not offer Allow & remember")
         }
         // An ordinary tool still can — an ordinary orbit MCP tool included, which is the control
         // for this being about those asks and not about the `orbit_` prefix.
-        XCTAssertNotNil(Approvals.rememberRule(toolName: "Read", input: json("{}")))
-        XCTAssertNotNil(Approvals.rememberRule(toolName: "orbit_task_get", input: json("{}")))
+        XCTAssertFalse(Approvals.rememberRules(toolName: "Read", input: json("{}")).isEmpty)
+        XCTAssertFalse(Approvals.rememberRules(toolName: "orbit_task_get", input: json("{}")).isEmpty)
     }
 
     // MARK: ending a blocker

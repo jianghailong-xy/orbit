@@ -3226,6 +3226,24 @@ body {
 .session-section-head:first-child {
   padding-top: 2px;
 }
+/* The Pinned heading folds its rows away, as Notes' Pinned does: the whole heading is the button,
+   and the chevron at its end points down while the rows show, right once they are folded. */
+.session-section-fold {
+  width: 100%;
+  justify-content: space-between;
+  border: 0;
+  font-family: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.session-section-chev {
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+.session-section-chev.open {
+  transform: rotate(90deg);
+}
 /* Foot of the list while the next page loads. */
 .session-list-more {
   display: flex;
@@ -6692,7 +6710,11 @@ button.chat-jump-start:hover {
 .olc-head > :not(.olc-kind) {
   margin-left: auto;
 }
+/* The type's name keeps its width and the state beside it gives way: a failed session's state is its
+   error, which can run to a sentence, and a pill held at its full length pushed the card out of its
+   bubble. */
 .olc-kind {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -6712,6 +6734,9 @@ button.chat-jump-start:hover {
   font-size: 12px;
 }
 .olc-state {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 1px 7px;
   border: 1px solid;
   border-radius: 999px;
@@ -6816,6 +6841,16 @@ button.chat-jump-start:hover {
   border-top: 1px solid var(--border-subtle);
   font-size: 12.5px;
   color: var(--text-2);
+}
+/* One line, like the native card's: a failed coordinator's word is its error. */
+.olc-foot-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.olc-foot-time {
+  flex: none;
 }
 .olc-foot-arrow {
   margin-left: auto;
@@ -18930,6 +18965,9 @@ a.wkctx-title:hover { text-decoration: underline; }
 .wt-recovery p { margin: 10px 0; color: var(--text-2); }
 .wt-recovery summary { cursor: pointer; margin: 10px 0; }
 .wt-recovery-histories { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.wt-recovery-histories > :only-child { grid-column: 1 / -1; }
+.wt-recovery-route code { font-size: 11px; }
+.wt-recovery-origin.is-local { color: var(--warning); font-weight: 600; }
 .wt-recovery-histories small { display: block; opacity: .7; margin-bottom: 8px; }
 .wt-recovery pre { white-space: pre-wrap; max-height: 400px; overflow: auto; font-size: 11px; }
 .wt-recovery-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }

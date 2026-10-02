@@ -329,6 +329,13 @@ struct AgentPanes: View {
     @State private var searching = false
     /// Which row's circle swipe actions are out (iOS 26 — see `RowSwipeState`).
     @State private var rowSwipe = RowSwipeState()
+    /// The row whose Share was tapped — drives the share panel, owned by the list for the same
+    /// reason as `taggingSession`.
+    @State private var sharingSession: Session?
+    /// Whether the Pinned section is folded to its header (iOS list only). Stored rather than view
+    /// state: this pane is rebuilt per workspace (`.id(a.id)`), so @State would unfold it on every
+    /// switch, and on every launch.
+    @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
     #endif
     // Set true when the composer hands ↑/↓ back on Escape, so the session list can be arrow-navigated
     // without a click; the binding also tracks click-to-focus.
@@ -383,6 +390,18 @@ struct AgentPanes: View {
                             } else {
                                 sessionRow(session)
                             }
+                        }
+                    } else if section.title == "Pinned" {
+                        // Pinned folds to its header, as Notes' Pinned does: the rows leave the
+                        // list, the header stays to bring them back. The rows are dropped here
+                        // rather than through `Section(isExpanded:)`, whose disclosure only draws in
+                        // the sidebar list style.
+                        Section {
+                            if !pinnedCollapsed {
+                                ForEach(section.sessions) { sessionRow($0) }
+                            }
+                        } header: {
+                            pinnedSectionHeader(section.title)
                         }
                     } else {
                         Section {
@@ -572,6 +591,15 @@ struct AgentPanes: View {
         .sheet(item: $taggingSession) { s in
             SessionTagSheet(session: s).environment(app)
         }
+        #if os(iOS)
+        // The share panel for the row whose Share was tapped: the session page's own (ConsoleView's),
+        // list-owned like the tag picker above. iOS only, as the rows' Share is.
+        .sheet(item: $sharingSession) { s in
+            if let baseURL = app.baseURL {
+                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)
+            }
+        }
+        #endif
         // Load the owner's tag library when the pane appears so the picker + chips are populated.
         .task { await app.loadSessionTags() }
     }
@@ -733,7 +761,6 @@ struct AgentPanes: View {
         contentSearched = res.contentSearched
         hitsQuery = res.q
     }
-    #endif
 
     /// One row, wrapped for the container it is in. The row view itself is the same either way; what
     /// changes is who moves the screen — the three-column shell's `List` selection, or the row's own
@@ -744,7 +771,8 @@ struct AgentPanes: View {
         let row = AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open)
         switch rowNavigation {
         case .selection:
-            row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }).tag(s.id)
+            row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s })
+                .tag(s.id)
         case .push:
             // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
             // usable hiding place on iOS 17/18 (see `AppModel.push`). `.foregroundStyle(.primary)`:
@@ -757,9 +785,10 @@ struct AgentPanes: View {
             // and `.contextMenu` are read off the view the `List` hosts as its row, and a `Button`
             // does not pass them up from its label — which is where this wrapper used to leave them,
             // and why a swipe or a long press on a compact session row did nothing.
-            .sessionRowActions(s, scope: view, onTag: { taggingSession = s })
+            .sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s })
         }
     }
+    #endif
 
     @ViewBuilder private func tagSectionHeader(_ tag: SessionTag?) -> some View {
         if let tag {
@@ -771,6 +800,29 @@ struct AgentPanes: View {
             Text("Untagged").textCase(nil)
         }
     }
+
+    #if os(iOS)
+    /// The Pinned section's header: its title, and at the trailing edge a chevron that points down
+    /// while the rows show and right once they are folded away (one glyph turned, never two
+    /// swapped — as the cards' chevrons). The whole band is the button, not just the chevron.
+    private func pinnedSectionHeader(_ title: String) -> some View {
+        Button {
+            withAnimation { pinnedCollapsed.toggle() }
+        } label: {
+            HStack {
+                Text(title).textCase(nil)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .rotationEffect(.degrees(pinnedCollapsed ? 0 : 90))
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityHint(pinnedCollapsed ? "Shows the pinned sessions" : "Hides the pinned sessions")
+    }
+    #endif
 }
 
 /// The agent edit form, presented as a sheet from the content column's toolbar gear (it used to be
