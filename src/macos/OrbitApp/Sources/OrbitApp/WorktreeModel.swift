@@ -5,9 +5,10 @@ import OrbitKit
 /// Drives the worktree status bar for one session: the `SessionDetail` snapshot behind the bar, the
 /// lazily-fetched per-file diffs, and the commit / merge / resolve-in-session actions with their
 /// shared busy flag. Split out of `ConsoleModel` so the console keeps to stream + composer +
-/// approvals; owned by it (`console.worktree`) and rendered by `WorktreeBar`. The two callbacks are
-/// wired by `ConsoleModel` — the session's live status (poll cadence) and the console status line
-/// (action failures) are the only context it needs from its host.
+/// approvals; owned by it (`console.worktree`) and rendered by `WorktreeBar`. `isSessionLive` and
+/// `onOutcome` are wired by `ConsoleModel` — the session's live status (poll cadence) and the toast
+/// host are the only context it needs from its host. `onAccepted` and `onDetail` are wired by
+/// `ConsoleRegistry`, which follows a merge/commit to its result after this console loses focus.
 @MainActor
 @Observable
 final class WorktreeModel {
@@ -22,6 +23,16 @@ final class WorktreeModel {
     /// not a comment on what you just typed, so it doesn't belong in the composer's error line.
     /// Failures carry a warning/error tone, which is what keeps them on screen until dismissed.
     @ObservationIgnored var onOutcome: (ToastRequest) -> Void = { _ in }
+    /// A Merge or Commit the server accepted. The runner answers on a later heartbeat, when the user
+    /// may be anywhere and this model's poll has stopped with the console's focus — so the result
+    /// card comes from whoever follows the request from here, not from this model.
+    @ObservationIgnored var onAccepted: (PendingSessionOperations.Kind) -> Void = { _ in }
+    /// Every detail read after the latest accepted request. The bar's poll usually sees the runner's
+    /// answer first, and the result card should land with the bar's own change.
+    @ObservationIgnored var onDetail: (SessionDetail) -> Void = { _ in }
+    /// Requests accepted so far. A read already in flight when one is accepted can carry the status
+    /// from before it — none at all on a first merge, which reads as superseded — so it isn't passed on.
+    @ObservationIgnored private var acceptedCount = 0
     /// Surface a transient, informational status line that auto-dismisses (the resume confirmation).
 
     /// GET /sessions/:id detail driving the status bar (branch, changedFiles +/− stats, merge /
@@ -50,10 +61,12 @@ final class WorktreeModel {
     /// Best-effort: a failure keeps the last snapshot so a transient blip doesn't blank the bar.
     func loadDetail() async {
         guard !sessionID.isEmpty else { return }
+        let acceptedBefore = acceptedCount
         do {
             let next = try await api.sessionDetail(sessionID)
-            surfaceCompletedAction(from: detail, to: next)
+            surfaceRetry(from: detail, to: next)
             detail = next
+            if acceptedBefore == acceptedCount { onDetail(next) }
         }
         catch { /* keep last */ }
     }
@@ -155,6 +168,7 @@ final class WorktreeModel {
         defer { busy = false }
         do { try await api.commit(sessionID: sessionID) }
         catch { onOutcome(Self.failure("Commit failed", error: error)); return }
+        accepted(.commit)
         // Reflect the pending commit immediately; the poll loop then follows the runner's outcome.
         await loadDetail()
     }
@@ -164,6 +178,7 @@ final class WorktreeModel {
         defer { busy = false }
         do { try await api.merge(sessionID: sessionID, targetBranch: target) }
         catch { onOutcome(Self.failure("Merge failed", error: error)); return }
+        accepted(.merge)
         await loadDetail()
     }
 
@@ -175,6 +190,9 @@ final class WorktreeModel {
             try await api.merge(sessionID: sessionID, targetBranch: recovery.targetBranch,
                                 recoveryAction: action, previewId: previewID)
         } catch { onOutcome(Self.failure("Could not start recovery", error: error)); return }
+        // A preview only checks again, and the review sheet shows what it found — web follows every
+        // recovery step to a result card but that one.
+        if action != "preview" { accepted(.merge) }
         await loadDetail()
     }
 
@@ -247,10 +265,15 @@ final class WorktreeModel {
         await loadDetail()
     }
 
-    /// Turn a finished merge/commit into the same card web shows for it — same headline, same tone,
-    /// same diagnostic line (`AgentView`'s merge/commit notices). "status bar" in web's copy is this
-    /// worktree bar; on iOS that phrase would read as the system clock strip, so it's named here.
-    private func surfaceCompletedAction(from old: SessionDetail?, to new: SessionDetail) {
+    private func accepted(_ kind: PendingSessionOperations.Kind) {
+        acceptedCount += 1
+        onAccepted(kind)
+    }
+
+    /// A failed merge or commit picked up again gets a card saying it's under way. Results aren't
+    /// reported here: this poll stops with the console's focus, and a result read on returning would
+    /// be a late one — `ConsoleRegistry` follows the request to `resultCard` instead.
+    private func surfaceRetry(from old: SessionDetail?, to new: SessionDetail) {
         guard let old else { return }
         if (old.mergeStatus == "conflict" || old.mergeStatus == "error"), new.mergeStatus == "pending" {
             onOutcome(ToastRequest(message: "Merging…", tone: .info))
@@ -258,37 +281,53 @@ final class WorktreeModel {
         }
         if old.commitStatus == "error", new.commitStatus == "pending" {
             onOutcome(ToastRequest(message: "Committing…", tone: .info))
-            return
         }
-        if old.mergeStatus == "pending", new.mergeStatus != "pending", let recovery = new.mergeRecovery {
-            onOutcome(ToastRequest(message: recovery.title,
-                                   tone: recovery.code == "READY" ? .info : .warning))
-            return
-        }
-        let target = new.mergeTarget ?? "main"
-        if old.mergeStatus == "pending", new.mergeStatus == "merged" {
-            onOutcome(ToastRequest(message: "Merged into \(target)"))
-        } else if old.mergeStatus == "pending", new.mergeStatus == "conflict" {
-            onOutcome(ToastRequest(
-                message: "Merge conflict in \(target)",
-                detail: "Merge aborted; your branch is unchanged. Resolve it from the worktree bar.",
-                tone: .warning))
-        } else if old.mergeStatus == "pending", new.mergeStatus == "error" {
-            onOutcome(ToastRequest(message: "Merge into \(target) failed",
-                                   detail: Self.trimmed(new.mergeError), tone: .error))
-        } else if old.commitStatus == "pending", new.commitStatus == "error" {
-            // The runner's plain sentence when it gave one, git's words otherwise (web does the same).
-            let failure = WorktreeBarLogic.commitFailure(commitStatus: new.commitStatus,
-                                                         commitError: new.commitError,
-                                                         commitResultMessage: new.commitResultMessage)
-            onOutcome(ToastRequest(message: "Commit failed", detail: failure?.why, tone: .error))
-        } else if old.commitStatus == "pending", new.commitStatus == "committed" {
-            onOutcome(ToastRequest(message: "Changes committed",
-                                   detail: Self.trimmed(new.commitResultMessage)))
-        } else if old.commitStatus == "pending", new.commitStatus == "nochange" {
-            onOutcome(ToastRequest(message: "No changes to commit",
-                                   detail: Self.trimmed(new.commitResultMessage),
-                                   tone: .neutral))
+    }
+
+    /// A merge/commit the runner has answered, as the same card web shows for it — same headline,
+    /// same tone, same diagnostic line (`WorkspaceView`'s merge/commit notices). "status bar" in web's
+    /// copy is this worktree bar; on iOS that phrase would read as the system clock strip, so it's
+    /// named here. Nil when there's nothing to report: a Resume cleared the status first.
+    static func resultCard(of kind: PendingSessionOperations.Kind, in detail: SessionDetail) -> ToastRequest? {
+        switch kind {
+        case .merge:
+            if let recovery = detail.mergeRecovery {
+                return ToastRequest(message: recovery.title,
+                                    tone: recovery.code == "READY" ? .info : .warning)
+            }
+            let target = detail.mergeTarget ?? "main"
+            switch detail.mergeStatus {
+            case "merged":
+                return ToastRequest(message: "Merged into \(target)")
+            case "conflict":
+                return ToastRequest(
+                    message: "Merge conflict in \(target)",
+                    detail: "Merge aborted; your branch is unchanged. Resolve it from the worktree bar.",
+                    tone: .warning)
+            case "error":
+                return ToastRequest(message: "Merge into \(target) failed",
+                                    detail: Self.trimmed(detail.mergeError), tone: .error)
+            default:
+                return nil
+            }
+        case .commit:
+            switch detail.commitStatus {
+            case "error":
+                // The runner's plain sentence when it gave one, git's words otherwise (web does the same).
+                let failure = WorktreeBarLogic.commitFailure(commitStatus: detail.commitStatus,
+                                                             commitError: detail.commitError,
+                                                             commitResultMessage: detail.commitResultMessage)
+                return ToastRequest(message: "Commit failed", detail: failure?.why, tone: .error)
+            case "committed":
+                return ToastRequest(message: "Changes committed",
+                                    detail: Self.trimmed(detail.commitResultMessage))
+            case "nochange":
+                return ToastRequest(message: "No changes to commit",
+                                    detail: Self.trimmed(detail.commitResultMessage),
+                                    tone: .neutral)
+            default:
+                return nil
+            }
         }
     }
 
