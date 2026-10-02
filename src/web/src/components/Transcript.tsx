@@ -81,6 +81,9 @@ import type { TaskStartCard as TaskStart } from '@orbit/shared';
 import { TaskStartCard } from './TaskStartCard';
 import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
+import { parseSessionMessage } from '../lib/sessionMessage';
+import type { SessionMessageCard as SessionMessage } from '@orbit/shared';
+import { SessionMessageCard } from './SessionMessageCard';
 import { parseBackgroundJobs, summarizeBackgroundJobs } from '../lib/backgroundJobs';
 import { parseReferencedTasks, summarizeReferencedTasks } from '../lib/referencedTask';
 import { parseWikiContext } from '../lib/wikiContext';
@@ -343,6 +346,10 @@ type TextNode = {
   // The message telling the coordinator its project was started, when the control plane recorded
   // the facts beside the echo (`projectStarted`, lib/projectStarted). Nobody's message either.
   startedCard?: Started;
+  // Another Orbit session's message, when the control plane recorded which session sent it beside
+  // the echo (`sessionMessage`, lib/sessionMessage). Somebody's words, but not the reader's: drawn
+  // as "From [that session]" instead of the owner's bubble.
+  sessionMessage?: SessionMessage;
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
@@ -715,6 +722,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         const retriedTaskStart = taskStartForRetry(parent, text);
         const taskStart = taskStartFromPayload ?? retriedTaskStart;
         const startedCard = parseProjectStarted(p) ?? undefined;
+        const sessionMessage = parseSessionMessage(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
@@ -736,6 +744,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             itemCard,
             taskStart,
             startedCard,
+            sessionMessage,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
@@ -1239,6 +1248,22 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
   const exporting = useContext(ExportCtx);
   switch (node.kind) {
     case 'user': {
+      // Another Orbit session's message (`session_send` / `project_send`): somebody's words, but not
+      // the reader's, so not the reader's bubble. Who sent it is what the control plane recorded
+      // beside the echo (lib/sessionMessage), so it is asked first — before anything is read out of
+      // the words themselves, which are the sending agent's to choose. No payload, the old reading.
+      if (node.sessionMessage) {
+        return (
+          <SessionMessageCard
+            card={node.sessionMessage}
+            text={node.text}
+            seq={node.seq}
+            ts={node.ts}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+          />
+        );
+      }
       // A turn a watch queued is the watch's to show, not a message the user typed.
       const wake = parseWatchWake(node.text);
       if (wake) {
@@ -1814,7 +1839,7 @@ function AutoRetryCard({
 // Collapse a user bubble past this many characters: a pasted blob would otherwise parse and lay
 // out as one giant node and stall the transcript. The composer caps input well above this;
 // resumed/old sessions can still carry big messages.
-const USER_BUBBLE_TRUNCATE = 6000;
+export const USER_BUBBLE_TRUNCATE = 6000;
 
 // User message bubble. The text is Markdown-rendered by the same `MD` renderer as the assistant
 // turn: the messages sent here are mostly long structured prompts (headings, lists, fenced

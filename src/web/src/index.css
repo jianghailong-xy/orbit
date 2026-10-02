@@ -17158,6 +17158,78 @@ button.chat-jump-start:hover {
   word-break: break-word;
 }
 
+/* Another Orbit session's message (components/SessionMessageCard.tsx): on the side every turn this
+   conversation is handed sits, but a raised card rather than the owner's own tinted bubble — the
+   words are another agent's, and the head says whose. */
+.smc-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0;
+}
+.smc {
+  width: min(560px, 88%);
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+}
+.smc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.smc-mark {
+  flex: none;
+  color: var(--brand);
+}
+.smc-from {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.smc-agent {
+  flex: none;
+  padding: 0 8px;
+  border: 1px solid var(--brand-border);
+  border-radius: 9px;
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 18px;
+}
+.smc-body {
+  margin-top: 6px;
+}
+.smc-more {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.smc-meta {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bg-hover-strong);
+  color: var(--text-3);
+  font-size: 11px;
+}
+.smc-meta a {
+  color: var(--brand);
+  text-decoration: none;
+}
+.smc-undelivered {
+  margin-top: 4px;
+  color: var(--warning);
+  font-size: 12px;
+}
+
 /* The message telling a coordinator its project was started (ProjectStartedCard.tsx): the exception
    item's card, in the brand tone — nothing here failed — with the tasks that wait on the coordinator
    as a raised list of links. */

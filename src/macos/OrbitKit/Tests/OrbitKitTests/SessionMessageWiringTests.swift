@@ -1,0 +1,112 @@
+import Foundation
+import XCTest
+
+/// Both native shells draw another session's message as its card — and only a turn that carries one.
+///
+/// The model half is `SessionMessageTests`; this is the view half, and it reads source, because
+/// SwiftUI does not exist on Linux and `ConsoleView.swift` and `SessionMessageCardView.swift` are
+/// compiled only by the macOS and iOS jobs (`client.yml`). It cannot see layout. What it holds is the
+/// wiring a compiler would let drift in silence: the transcript asks for the card before anything
+/// else and falls through to the old bubble without one, the card's title is the way into the
+/// sending session, and the iOS target still compiles the one shared copy of both files.
+final class SessionMessageWiringTests: XCTestCase {
+
+    private enum WiringError: Error, CustomStringConvertible {
+        case missing(String)
+        var description: String {
+            switch self {
+            case .missing(let what):
+                return "\(what) was not found above this test. If it moved, move this check with it "
+                    + "rather than deleting it: it is the only gate on Linux that sees whether a "
+                    + "message from another session is still drawn as one."
+            }
+        }
+    }
+
+    private static let consolePath = "src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift"
+    private static let cardPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/SessionMessageCardView.swift"
+    private static let iosProject = "src/ios/project.yml"
+
+    private func source(_ relative: String) throws -> String {
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        for _ in 0..<12 {
+            let candidate = dir.appendingPathComponent(relative)
+            if FileManager.default.fileExists(atPath: candidate.path) {
+                return try String(contentsOf: candidate, encoding: .utf8)
+            }
+            dir = dir.deletingLastPathComponent()
+        }
+        throw WiringError.missing(relative)
+    }
+
+    /// One stretch of a file, so a match somewhere else cannot answer for the part being asserted
+    /// about.
+    private func section(_ source: String, from: String, to: String) throws -> String {
+        guard let start = source.range(of: from),
+              let end = source.range(of: to, range: start.upperBound..<source.endIndex) else {
+            throw WiringError.missing("\(from) … \(to)")
+        }
+        return String(source[start.lowerBound..<end.lowerBound])
+    }
+
+    /// The lines of one stretch that are CODE: a call that is commented out still contains its own
+    /// words, so every assertion below is made over these and never over the raw slice.
+    private func statements(_ source: String) -> [String] {
+        source.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && !$0.hasPrefix("//") }
+    }
+
+    func testTheTranscriptAsksForTheCardFirstAndKeepsTheBubbleWithoutOne() throws {
+        let view = try section(try source(Self.consolePath),
+                               from: "struct TranscriptItemView: View", to: "case .assistant(let b)")
+        let user = statements(try section(view, from: "case .user(let b):", to: "UserBubbleView(bubble: b)\n"))
+        XCTAssertEqual(user.dropFirst().first, "if let card = b.sessionMessage {",
+                       "the card is no longer the first thing a user turn is asked about")
+        // The branch itself: the card, drawn from the turn's own words and note, and then on to the
+        // readings every other turn has always had.
+        XCTAssertEqual(Array(user.dropFirst(2).prefix(4)), [
+            "SessionMessageCardView(card: card, text: b.text, ts: b.ts,",
+            "undelivered: b.undelivered || b.delivery == \"failed\",",
+            "attached: b.attached)",
+            "} else if let card = b.itemCard {",
+        ], "a turn with a sender is not drawn as the session-message card")
+        XCTAssertTrue(view.contains("UserBubbleView(bubble: b)"), "a turn with no sender lost its bubble")
+        // Not behind a platform: one branch, drawn by both shells.
+        XCTAssertFalse(user.contains { $0.hasPrefix("#if") }, "the card is drawn on one platform only")
+    }
+
+    func testTheBarAndItsAnchorsAreHandedTheSender() throws {
+        let console = try source(Self.consolePath)
+        let anchor = try section(console, from: "private func namesAQuestion", to: "private var stuckBubble")
+        XCTAssertTrue(anchor.contains("sessionMessage: b.sessionMessage"),
+                      "the bar's anchor test no longer knows a turn came from another session")
+        let bar = try section(console, from: "let summary = StickySummary.of(", to: "CoastingButton")
+        XCTAssertTrue(bar.contains("sessionMessage: bubble.sessionMessage"),
+                      "the bar would call another session's message \"Your question\"")
+    }
+
+    func testTheTitleOpensTheSendingSession() throws {
+        let card = statements(try source(Self.cardPath))
+        XCTAssertTrue(card.contains("if let url = SessionMessageCard.sessionLink(card) {"),
+                      "the sender's title is no longer a link to the sending session")
+        XCTAssertTrue(card.contains("openURL(url)"), "the link opens nowhere")
+        XCTAssertTrue(card.contains("Text(SessionMessageCard.title(card))"))
+        XCTAssertFalse(card.contains { $0.hasPrefix("#if os(") }, "the card differs by platform")
+    }
+
+    /// ONE CARD FOR BOTH NATIVE CLIENTS. iOS has no copy of its own: its target compiles
+    /// `../macos/OrbitApp/Sources/OrbitApp` in place and excludes the macOS-only files, so the card
+    /// drawn above is what a phone draws too — unless somebody adds either file to that exclude list,
+    /// which is the one way the two could come apart without a compiler saying so.
+    func testBothNativeClientsDrawTheOneCard() throws {
+        let project = try source(Self.iosProject)
+        let sources = try section(project, from: "    sources:", to: "    dependencies:")
+        XCTAssertTrue(sources.contains("path: ../macos/OrbitApp/Sources/OrbitApp"),
+                      "the iOS client must still reuse the shared shell rather than a second copy of it")
+        XCTAssertFalse(sources.contains("SessionMessageCardView.swift"),
+                       "the iOS target no longer compiles the session-message card")
+        XCTAssertFalse(sources.contains("ConsoleView.swift"),
+                       "the iOS target no longer compiles the transcript that draws the card")
+    }
+}

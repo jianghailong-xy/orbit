@@ -21,6 +21,7 @@ export * from './providerTransport';
 export * from './retry';
 export * from './searchTerms';
 export * from './sessionCreatedTasks';
+export * from './session-message';
 export * from './source';
 export * from './task-start';
 export * from './watch';

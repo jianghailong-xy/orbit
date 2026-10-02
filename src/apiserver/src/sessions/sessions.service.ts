@@ -4326,6 +4326,7 @@ export class SessionsService {
       requestFingerprint?: string;
       sendIntent?: SessionTurnIntent;
       targetTurnId?: string;
+      senderSessionId?: string;
     },
   ) {
     const existing = await tx.conversationTurn.findUnique({
@@ -4528,6 +4529,14 @@ export class SessionsService {
       /** Orchestration's attempt charge. Invoked exactly once for a NEW, placeable turn, inside
        * this transaction after idempotency/target checks and before the turn is written. */
       participateSendTransaction?: (tx: Prisma.TransactionClient) => Promise<void>;
+      /**
+       * The session this turn is a message FROM (`conversation_turn.sender_session_id`,
+       * session-message.ts). Set by the two session-to-session doors — `session_send` and
+       * `project_send` — from the session their orchestration credential proved, and by nothing
+       * else: it is an option of this call and never a field of `dto`, so no request body can name a
+       * sender. Written on a NEW turn only; a replay returns the turn as it was written.
+       */
+      senderSessionId?: string;
       /** Full logical resume payload hash. Present only when resume delegates to this live path. */
       requestFingerprint?: string;
       /**
@@ -4780,6 +4789,7 @@ export class SessionsService {
         ...(opts?.requestFingerprint ? { requestFingerprint: opts.requestFingerprint } : {}),
         ...(intent ? { sendIntent: intent } : {}),
         ...(targetTurnId ? { targetTurnId } : {}),
+        ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
       const nextStatus = statusAfterTurnEnqueued(session.status);
@@ -6684,6 +6694,13 @@ export class SessionsService {
        */
       participateSendTransaction?: (tx: Prisma.TransactionClient) => Promise<void>;
       /**
+       * Who the turn is a message from — see `createTurn`'s own. Carried onto both branches: the
+       * live delegation below and the revive, because the session-to-session doors reach both
+       * through this one verb and a message is no less another session's for having woken its
+       * recipient up.
+       */
+      senderSessionId?: string;
+      /**
        * This request is a PERSON saying something now — the HTTP resume door, and only that one.
        *
        * It is what decides whether a message whose session has been replaced is ROUTED to the run
@@ -6788,6 +6805,7 @@ export class SessionsService {
         // below would be a fence on the branch nobody uses.
         fence: opts?.fence,
         participateSendTransaction: opts?.participateSendTransaction,
+        senderSessionId: opts?.senderSessionId,
         requestFingerprint,
       });
       // Nothing was revived: this turn joined a process that was already running. Said out loud
@@ -7035,6 +7053,7 @@ export class SessionsService {
         content: dto.content,
         clientTurnId: dto.clientTurnId,
         requestFingerprint,
+        ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
       // A revive may also move the session to another provider on the same runtime. Unlike a live
