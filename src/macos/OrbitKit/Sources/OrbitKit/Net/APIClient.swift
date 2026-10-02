@@ -356,6 +356,28 @@ public final class APIClient: @unchecked Sendable {
         return f
     }()
 
+    // MARK: session folders (docs/session-folders-move-design.md §3)
+
+    /// Every folder the caller has, in every workspace, by name. An older server without the
+    /// endpoint 404s; the caller treats that as "no folders", which leaves the lists flat.
+    public func listSessionFolders() async throws -> [SessionFolder] { try await get("session-folders") }
+    /// Create a folder in one of the caller's workspaces; a name already used there is a 409.
+    public func createSessionFolder(workspaceID: String, name: String) async throws -> SessionFolder {
+        try await post("session-folders", body: CreateSessionFolderRequest(workspaceId: workspaceID, name: name))
+    }
+    /// Rename a folder; returns it as renamed. A name its workspace already has is a 409.
+    public func renameSessionFolder(_ id: String, name: String) async throws -> SessionFolder {
+        try await patch("session-folders/\(id)", body: RenameSessionFolderRequest(name: name))
+    }
+    /// Delete the folder and nothing else: the sessions in it go back to their workspace's list.
+    public func deleteSessionFolder(_ id: String) async throws { try await deleteRaw("session-folders/\(id)") }
+    /// File a session in one of its workspace's folders, or in none (`folderID` nil). Allowed for
+    /// any session outside Trash, a running one included. The server broadcasts `session.updated`,
+    /// whose summary carries the new `folderId`, so the owner's other clients follow.
+    public func moveSession(_ id: String, folderID: String?) async throws {
+        _ = try await postRaw("sessions/\(id)/move", body: MoveSessionRequest(folderId: folderID))
+    }
+
     // MARK: public links — one per session, task or project (docs/share-links-design.md §5)
 
     /// The root's link that has not ended (nil when it has none), with how much each of its layers

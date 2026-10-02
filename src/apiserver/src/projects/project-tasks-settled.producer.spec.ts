@@ -122,11 +122,11 @@ function producerFixture(
       // The projection's, for the IN_FLIGHT landing reason.
       findMany: async () => [],
     },
-    projectOpenItem: {
-      findFirst: async () => {
-        order.push('open-items-read');
-        return options.openItem ? { id: randomUUID() } : null;
-      },
+    // The guardrail's one statement about open items: whether any is open that is still owed
+    // (`project-looks-finished.ts`, `openItemOwed`).
+    $queryRaw: async () => {
+      order.push('open-items-read');
+      return [{ owed: options.openItem === true }];
     },
     projectCriteriaAuthorship: { findMany: async () => [] },
     projectStandardSetConfirmation: { findFirst: async () => null },

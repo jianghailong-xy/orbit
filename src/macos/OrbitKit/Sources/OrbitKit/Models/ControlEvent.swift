@@ -23,6 +23,10 @@ public enum ControlEventType: String, Codable, Sendable {
     /// Owner-level libraries. These are USER-scoped: `sessionId` is empty (see ControlEvent).
     case taskListChanged = "task.list.changed"
     case tagChanged = "tag.changed"
+    /// One of the owner's session folders was created, renamed or deleted: a nudge to re-read
+    /// `GET /session-folders`. A session moved between folders is a `session.updated` instead,
+    /// whose summary carries the new `folderId`.
+    case folderChanged = "folder.changed"
     case providerChanged = "provider.changed"
     /// One of the owner's wiki spaces changed — a proposal recorded, ops decided in Review, the
     /// space's settings or bindings moved. USER-scoped like the three above. `data` names the SPACE
@@ -43,9 +47,9 @@ public enum ControlEventType: String, Codable, Sendable {
 public struct ControlEvent: Codable, Equatable, Sendable {
     public let type: ControlEventType
     /// The session this event is about — EMPTY for the user-scoped library events
-    /// (`task.list.changed` / `tag.changed` / `provider.changed`), which belong to the owner rather
-    /// than to any session. Still non-optional: the keepalive ping omits the field entirely, and
-    /// that's what makes it fail to decode (see SSEDecoding.controlEvent).
+    /// (`task.list.changed` / `tag.changed` / `folder.changed` / `provider.changed`), which belong
+    /// to the owner rather than to any session. Still non-optional: the keepalive ping omits the
+    /// field entirely, and that's what makes it fail to decode (see SSEDecoding.controlEvent).
     public let sessionId: String
     public let agentId: String?
     public let ts: String
@@ -129,6 +133,11 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     /// `.some(value)` is the moment to resume. `decodeIfPresent` cannot tell the first two apart
     /// — it maps an explicit null to nil as well — so the decoder asks `contains` instead.
     public let retryAt: String??
+    /// The folder this session is filed in. Doubly optional for `retryAt`'s reason: `nil` is an
+    /// older control plane that never sends the key (keep the row's), `.some(nil)` is this server
+    /// saying the session is in no folder — how a move out of one reaches the owner's other
+    /// clients — and `.some(id)` is the folder it is in now.
+    public let folderId: String??
 
     public var effectiveRunStatus: RunStatus { runStatus ?? status }
     public var effectiveRunState: SessionRunState {
@@ -182,6 +191,9 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
         lastTurnAt = try values.decodeIfPresent(String.self, forKey: .lastTurnAt)
         retryAt = values.contains(.retryAt)
             ? .some(try values.decodeIfPresent(String.self, forKey: .retryAt))
+            : nil
+        folderId = values.contains(.folderId)
+            ? .some(try values.decodeIfPresent(String.self, forKey: .folderId))
             : nil
     }
 }

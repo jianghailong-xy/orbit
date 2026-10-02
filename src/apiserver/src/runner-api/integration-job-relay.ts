@@ -38,7 +38,11 @@ import {
   resolveIntegrationItemsOnLanding,
 } from '../projects/project-open-item';
 import { sessionReportedWork } from '../projects/landing-source-branch';
-import { promotionDedupeKey } from '../projects/project-promotion';
+import {
+  LIVE_PROMOTION_STATES,
+  PromotionState,
+  promotionDedupeKey,
+} from '../projects/project-promotion';
 import {
   applyPromotionJobResult,
   automaticLandingRefusal,
@@ -922,7 +926,17 @@ export async function applyIntegrationJobResult(
       }
     }
     const itemKind = openItemKindForJobState(effectiveState);
-    if (itemKind) {
+    // §4.2: a promotion job's failure belongs to its candidate, and a candidate that left the live
+    // states while the job ran — superseded, declined, cancelled or merged — is waiting on nobody.
+    // `applyPromotionJobResult` kept the answer it had for that reason, and the report is on the job
+    // row written above; an item opened about it would be a todo nothing is left to close, escalated
+    // to the owner and counted against the project's next candidate by M-T11.
+    const candidateMovedOn = itemKind !== null && job.promotionId !== null
+      && !LIVE_PROMOTION_STATES.includes((await tx.projectPromotion.findUnique({
+        where: { id: job.promotionId },
+        select: { state: true },
+      }))?.state as PromotionState);
+    if (itemKind && !candidateMovedOn) {
       const opened = await recordIntegrationFailure(tx, {
         projectId: job.projectId,
         ownerId: job.ownerId,
