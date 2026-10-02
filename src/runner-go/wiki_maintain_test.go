@@ -619,7 +619,7 @@ func adoptionAnswers(prompt string) (int, string) {
 	case strings.Contains(prompt, "==== CASE FILE ===="):
 		return extractorAnswers(prompt)
 	case strings.Contains(prompt, "Adopted claim 3\n"):
-		return http.StatusOK, `{"verdict":"duplicate","reason":"the live entry says this","duplicateOf":"entry-later"}`
+		return http.StatusOK, `{"verdict":"duplicate","reason":"the live entry says this","duplicateOf":"E1"}`
 	case strings.Contains(prompt, "Adopted claim 7\n"):
 		return http.StatusOK, "I cannot tell."
 	}
@@ -719,7 +719,7 @@ func TestWikiMaintainAdoptsWhatEndedSessionsLeftWaitingAfterItsOwnOps(t *testing
 			third = spawn.Prompt
 		}
 	}
-	for _, part := range []string{"what the failed run's session 3 observed", "- id entry-later: [pitfall] The same claim, live since"} {
+	for _, part := range []string{"what the failed run's session 3 observed", "- E1: [pitfall] The same claim, live since"} {
 		if !strings.Contains(third, part) {
 			t.Errorf("the adopted op's prompt does not carry %q:\n%s", part, third)
 		}
@@ -842,8 +842,8 @@ func ownItem(opID, title string, similar ...map[string]interface{}) map[string]i
 
 // The runs of 2026-09-30 and 10-01: the local model judged an op a duplicate of an entry its prompt did not
 // list, and judged it so again when asked once more — and the whole run failed, its cursor unmoved, for one op
-// in eighty-nine. Now the second asking says why the first answer was not taken and which ids a duplicate may
-// name; an op still without a verdict after it is not live and fails nothing: the run succeeds, the cursor
+// in eighty-nine. Now the second asking says why the first answer was not taken and which numbers a duplicate
+// may name; an op still without a verdict after it is not live and fails nothing: the run succeeds, the cursor
 // advances, and the next run adopts the op — and reports its verdict once the entry it repeats is offered.
 func TestWikiMaintainLeavesAnOpWithoutAVerdictToTheNextRun(t *testing.T) {
 	f := newMaintainFixture(t)
@@ -854,13 +854,14 @@ func TestWikiMaintainLeavesAnOpWithoutAVerdictToTheNextRun(t *testing.T) {
 	live := map[string]interface{}{"id": "entry-fixture", "kind": "convention", "title": "Fixtures hand out their ports", "status": "active", "trust": "auto"}
 	proposed := map[string]interface{}{"id": "entry-port", "kind": "pitfall", "title": "PORT is read at import", "status": "proposed", "trust": "proposed"}
 	door.own = []map[string]interface{}{ownItem("op-0", "fixture 不写死端口"), ownItem("op-1", "PORT 在导入时读取", live, proposed)}
-	// The model takes op-1 for a duplicate of entry-port, which is not live and so not listed: once, and again.
+	// The model takes op-1 for a duplicate of entry-port — E2, once it is live and listed after entry-fixture — which
+	// is not live and so not listed: once, and again.
 	vllm := newFakeVLLM(t, func(prompt string) (int, string) {
 		switch {
 		case strings.Contains(prompt, "==== CASE FILE ===="):
 			return extractorAnswers(prompt)
 		case strings.Contains(prompt, "Title: PORT 在导入时读取\n"):
-			return http.StatusOK, `{"verdict":"duplicate","reason":"the space already says this","duplicateOf":"entry-port"}`
+			return http.StatusOK, `{"verdict":"duplicate","reason":"the space already says this","duplicateOf":"E2"}`
 		}
 		return http.StatusOK, `{"verdict":"supported","reason":"the cited record says exactly this"}`
 	})
@@ -902,8 +903,8 @@ func TestWikiMaintainLeavesAnOpWithoutAVerdictToTheNextRun(t *testing.T) {
 	if len(door.of(http.MethodGet, "anchors")) != 1 || len(door.of(http.MethodGet, "maintenance/docs")) != 1 {
 		t.Error("the run stopped at the op without a verdict")
 	}
-	// The second pass asked about op-1 alone, saying why its answer was not taken and which ids a duplicate may
-	// name; op-0, verified the first time, was not asked again.
+	// The second pass asked about op-1 alone, saying why its answer was not taken and which numbers a duplicate
+	// may name; op-0, verified the first time, was not asked again.
 	var asked []string
 	for _, spawn := range spawns() {
 		switch {
@@ -921,8 +922,8 @@ func TestWikiMaintainLeavesAnOpWithoutAVerdictToTheNextRun(t *testing.T) {
 	}
 	for _, part := range []string{
 		"## Your last answer was not taken",
-		`your answer was not a verdict: a duplicate must name one of the listed entries, and "entry-port" is not one.`,
-		"duplicateOf must be one of these ids, copied exactly: entry-fixture.",
+		`your answer was not a verdict: a duplicate must name one of the listed entries by its number (E1), and "E2" is not one.`,
+		"duplicateOf must be one of these numbers of the entries listed above: E1.",
 	} {
 		if !strings.Contains(asked[1], part) {
 			t.Errorf("the second asking does not say %q:\n%s", part, asked[1])
