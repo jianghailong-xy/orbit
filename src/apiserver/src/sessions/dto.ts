@@ -141,6 +141,12 @@ export interface MergeRepairDto {
   preparePR?: boolean;
 }
 
+/** POST /sessions/:id/retry-message — the failure card's Retry, asking the server to re-send. */
+export interface SessionRetryResendDto {
+  /** Client-supplied idempotency key (UUID): a retried request answers with the turn it wrote. */
+  clientTurnId: string;
+}
+
 export interface SessionArmRetryDto {
   /** When the re-send should fire (ISO). Supplied by the caller because disarming cleared the
    *  only copy the server had; the client re-derives it from the failing reply with the same

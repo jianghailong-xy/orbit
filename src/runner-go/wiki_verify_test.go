@@ -447,7 +447,7 @@ func scriptedVerdicts(prompt string) (int, string) {
 	case strings.Contains(prompt, "Unsupported claim"):
 		return http.StatusOK, `{"verdict": "unsupported", "reason": "Nothing in the record mentions tmpfs.", "duplicateOf": null}`
 	case strings.Contains(prompt, "Duplicate claim"):
-		return http.StatusOK, `{"verdict": "duplicate", "reason": "The space already says this.", "duplicateOf": "entry-closed-sets"}`
+		return http.StatusOK, `{"verdict": "duplicate", "reason": "The space already says this.", "duplicateOf": "E1"}`
 	}
 	return http.StatusOK, "I cannot tell."
 }
@@ -531,16 +531,17 @@ func TestWikiVerifyReportsTheVerdictTheModelGaveForEachOp(t *testing.T) {
 			t.Errorf("request %d's system prompt is not the verifier's own: %s", i, request.System)
 		}
 	}
-	// What the model is handed: the entry, the text of what it cites, and only the LIVE neighbours.
+	// What the model is handed: the entry, the text of what it cites, and only the LIVE neighbours — each by
+	// its number, never by its id, which the model named and the command reported the id of.
 	dup := requests[3].Prompt
 	for _, part := range []string{"Duplicate claim", "## The entry (a pitfall)", "The build said: it went wrong", `The proposer quoted: "it went wrong"`,
-		"- id entry-closed-sets: [convention] Closed sets are CHECK constraints", `"duplicateOf"`} {
+		"- E1: [convention] Closed sets are CHECK constraints", `"duplicateOf"`, "give that entry's number (E1, E2, …) as duplicateOf"} {
 		if !strings.Contains(dup, part) {
 			t.Errorf("the prompt does not carry %q:\n%s", part, dup)
 		}
 	}
-	if strings.Contains(dup, "entry-rejected") {
-		t.Errorf("a rejected neighbour was offered as something to duplicate:\n%s", dup)
+	if strings.Contains(dup, "entry-rejected") || strings.Contains(dup, "entry-closed-sets") {
+		t.Errorf("the prompt names an entry by its id, or offers a rejected neighbour as something to duplicate:\n%s", dup)
 	}
 }
 
@@ -783,7 +784,7 @@ func TestWikiVerifyReportsNothingForAnAnswerThatIsNotAVerdict(t *testing.T) {
 }
 
 func TestWikiVerifyParsesOnlyAVerdict(t *testing.T) {
-	candidates := []wikiVerifyCandidate{{ID: "e1", Kind: "pitfall", Title: "An entry"}}
+	candidates := []wikiVerifyCandidate{{Number: "E1", ID: "34XhYj76NhjjOJTEFEtFE", Kind: "pitfall", Title: "An entry"}}
 	for _, tc := range []struct {
 		text    string
 		verdict string
@@ -792,13 +793,21 @@ func TestWikiVerifyParsesOnlyAVerdict(t *testing.T) {
 		{text: `{"verdict":"supported","reason":"Yes."}`, verdict: "supported"},
 		{text: "Thinking it over: {not json}.\n{\"verdict\":\"partial\",\"reason\":\"Half.\"}", verdict: "partial"},
 		{text: "```json\n{\"verdict\": \"unsupported\", \"reason\": \"No.\", \"duplicateOf\": \"\"}\n```", verdict: "unsupported"},
-		{text: `{"verdict":"duplicate","reason":"Same.","duplicateOf":"e1"}`, verdict: "duplicate"},
+		{text: `{"verdict":"duplicate","reason":"Same.","duplicateOf":"E1"}`, verdict: "duplicate"},
+		// Wrapped as a model wraps a closed-set value: only the wrapping goes.
+		{text: "{\"verdict\":\"`duplicate`\",\"reason\":\"Same.\",\"duplicateOf\":\" `E1` \"}", verdict: "duplicate"},
 		{text: "Supported.", refuse: "no JSON object"},
 		{text: `{"verdict":"Supported ","reason":"Yes."}`, refuse: "verdict is not one of"},
 		{text: `{"verdict":"supported","reason":"   "}`, refuse: "no reason"},
 		{text: `{"verdict":"duplicate","reason":"Same."}`, refuse: "must name one of the listed entries"},
-		{text: `{"verdict":"duplicate","reason":"Same.","duplicateOf":"e2"}`, refuse: "must name one of the listed entries"},
-		{text: `{"verdict":"partial","reason":"Half.","duplicateOf":"e1"}`, refuse: "only a duplicate does"},
+		{text: `{"verdict":"duplicate","reason":"Same.","duplicateOf":"E2"}`, refuse: `must name one of the listed entries by its number (E1), and "E2" is not one`},
+		// A number is one of the listed ones exactly: not its id, whole or cut short, and nothing like it.
+		{text: `{"verdict":"duplicate","reason":"Same.","duplicateOf":"34XhYj76NhjjOJTEFEtFE"}`, refuse: `and "34XhYj76NhjjOJTEFEtFE" is not one`},
+		{text: `{"verdict":"duplicate","reason":"Same.","duplicateOf":"34XhYj76NhjjOJTEFE"}`, refuse: `and "34XhYj76NhjjOJTEFE" is not one`},
+		{text: `{"verdict":"duplicate","reason":"Same.","duplicateOf":"e1"}`, refuse: `and "e1" is not one`},
+		{text: `{"verdict":"duplicate","reason":"Same.","duplicateOf":"E01"}`, refuse: `and "E01" is not one`},
+		{text: `{"verdict":"duplicate","reason":"Same.","duplicateOf":"E1 (An entry)"}`, refuse: `and "E1 (An entry)" is not one`},
+		{text: `{"verdict":"partial","reason":"Half.","duplicateOf":"E1"}`, refuse: `a partial verdict names a duplicate ("E1"), which only a duplicate does`},
 		{text: `{"reason":"No verdict here."}`, refuse: "no JSON object"},
 	} {
 		got, err := parseWikiVerdict(tc.text, candidates)
@@ -811,6 +820,13 @@ func TestWikiVerifyParsesOnlyAVerdict(t *testing.T) {
 		if err != nil || got.Verdict != tc.verdict {
 			t.Errorf("%q = %+v, %v; want %s", tc.text, got, err, tc.verdict)
 		}
+		if tc.verdict == "duplicate" && got.DuplicateOf != "34XhYj76NhjjOJTEFEtFE" {
+			t.Errorf("%q names %q, want the id of the entry its number names", tc.text, got.DuplicateOf)
+		}
+	}
+	if _, err := parseWikiVerdict(`{"verdict":"duplicate","reason":"Same.","duplicateOf":"E1"}`, nil); err == nil ||
+		!strings.Contains(err.Error(), `by its number, and none is listed (it named "E1")`) {
+		t.Errorf("a duplicate with nothing listed = %v", err)
 	}
 	long, err := parseWikiVerdict(`{"verdict":"supported","reason":"`+strings.Repeat("é", 600)+`"}`, nil)
 	if err != nil || len([]rune(long.Reason)) != wikiVerifyReasonMaxChars {
@@ -821,13 +837,13 @@ func TestWikiVerifyParsesOnlyAVerdict(t *testing.T) {
 // A maintenance run asks again about an op whose answer was not a verdict, saying why and which ids duplicateOf
 // may be — none, when no entry is listed — and reads the new answer as strictly as the first.
 func TestWikiVerifyAsksAgainSayingWhyTheLastAnswerWasNotTaken(t *testing.T) {
-	refused := `a duplicate must name one of the listed entries, and "entry-gone" is not one`
-	listed := []wikiVerifyCandidate{{ID: "entry-a", Kind: "pitfall", Title: "A"}, {ID: "entry-b", Kind: "convention", Title: "B"}}
+	refused := `a duplicate must name one of the listed entries by its number (E1, E2), and "entry-gone" is not one`
+	listed := []wikiVerifyCandidate{{Number: "E1", ID: "entry-a", Kind: "pitfall", Title: "A"}, {Number: "E2", ID: "entry-b", Kind: "convention", Title: "B"}}
 	again := wikiVerifyRetrySuffix(refused, listed)
 	for _, part := range []string{
 		"## Your last answer was not taken",
 		"your answer was not a verdict: " + refused + ".",
-		"duplicateOf must be one of these ids, copied exactly: entry-a, entry-b.",
+		"duplicateOf must be one of these numbers of the entries listed above: E1, E2.",
 		"Answer again, with one JSON object and nothing else.",
 	} {
 		if !strings.Contains(again, part) {
@@ -839,9 +855,168 @@ func TestWikiVerifyAsksAgainSayingWhyTheLastAnswerWasNotTaken(t *testing.T) {
 		!strings.Contains(none, "No entry is listed above, so this entry is no duplicate: answer supported, partial or unsupported") {
 		t.Errorf("the second asking with nothing listed:\n%s", none)
 	}
-	// However it was asked, an answer naming an id that is not listed is still no verdict.
-	if _, err := parseWikiVerdict(`{"verdict":"duplicate","reason":"Same.","duplicateOf":"entry-gone"}`, listed); err == nil {
-		t.Error("a duplicate of an entry not listed was read as a verdict")
+	if strings.Contains(again, "entry-a") || strings.Contains(again, "entry-b") {
+		t.Errorf("the second asking names an entry by its id:\n%s", again)
+	}
+	// However it was asked, an answer naming an entry not listed, or one by its id, is still no verdict.
+	for _, named := range []string{"entry-gone", "E3", "entry-a"} {
+		if _, err := parseWikiVerdict(`{"verdict":"duplicate","reason":"Same.","duplicateOf":"`+named+`"}`, listed); err == nil {
+			t.Errorf("a duplicate of %s was read as a verdict", named)
+		}
+	}
+}
+
+// The runs of 09-30 to 10-02: asked to copy a 21-character id into duplicateOf, the local model wrote
+// 34XhYj76NhjjOJTEFEtFE as 34XhYj76NhjjOJTEFE run after run, the second asking included, and the op never got a
+// verdict. The model now sees each entry it may repeat by a number of its own, names it by that number, and the
+// command reports the id the number stands for. A number not listed is no verdict, and neither is an id, whole or
+// cut short: nothing is guessed from a prefix. The second asking says why, and lists the numbers.
+func TestWikiVerifyHasTheModelNameADuplicateByItsNumberNeverByItsId(t *testing.T) {
+	rebase := map[string]interface{}{"id": "34XhYj76NhjjOJTEFEtFE", "kind": "convention", "title": "收工前 rebase 到 main、写明分支和 sha、不自己 merge", "status": "active", "trust": "auto"}
+	other := map[string]interface{}{"id": "34XhYj76NhjjOJTEFEtFA", "kind": "convention", "title": "Closed sets are CHECK constraints", "status": "active", "trust": "auto"}
+	items := []map[string]interface{}{
+		verifyItem("op-number", "Numbered claim", other, rebase),
+		verifyItem("op-cut", "Cut claim", other, rebase),
+		verifyItem("op-whole", "Whole id claim", other, rebase),
+		verifyItem("op-unlisted", "Unlisted claim", other, rebase),
+	}
+	door := newFakeVerifyDoor(t, items)
+	named := map[string]string{"Numbered claim": "E2", "Cut claim": "34XhYj76NhjjOJTEFE", "Whole id claim": "34XhYj76NhjjOJTEFEtFE", "Unlisted claim": "E3"}
+	vllm := newFakeVLLM(t, func(prompt string) (int, string) {
+		for title, number := range named {
+			if strings.Contains(prompt, "Title: "+title+"\n") {
+				if title == "Cut claim" && strings.Contains(prompt, "Your last answer was not taken") {
+					number = "E2" // told why, and which numbers it may give
+				}
+				return http.StatusOK, `{"verdict": "duplicate", "reason": "It says what that convention says.", "duplicateOf": "` + number + `"}`
+			}
+		}
+		return http.StatusOK, "I cannot tell."
+	})
+	spawns := fakeVerifyClaude(t)
+	wikiVerifySession(t, door, vllm)
+	transport, err := cliTransport()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := wikiVerifyConfigFromEnv("")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := runWikiVerify(transport, "caller-session", "space-1", cfg, 0, nil, io.Discard)
+	if err != nil {
+		t.Fatalf("the first pass: %v", err)
+	}
+	// The number is mapped to the id it stands for; the rest are no verdict, and nothing is reported for them.
+	verdicts := door.Verdicts()
+	if len(verdicts) != 1 || verdicts[0]["opId"] != "op-number" || verdicts[0]["duplicateOf"] != "34XhYj76NhjjOJTEFEtFE" {
+		t.Fatalf("reported %v, want op-number alone, a duplicate of the id E2 stands for", verdicts)
+	}
+	refused := map[string]string{}
+	for _, failure := range first.Failures {
+		refused[failure.OpID] = failure.refused
+	}
+	for op, value := range map[string]string{"op-cut": `"34XhYj76NhjjOJTEFE"`, "op-whole": `"34XhYj76NhjjOJTEFEtFE"`, "op-unlisted": `"E3"`} {
+		want := "a duplicate must name one of the listed entries by its number (E1, E2), and " + value + " is not one"
+		if refused[op] != want {
+			t.Errorf("%s was refused for %q, want %q", op, refused[op], want)
+		}
+	}
+	if first.Verified != 1 || first.Failed != 3 {
+		t.Errorf("the first pass: %d verified, %d failed", first.Verified, first.Failed)
+	}
+	// Every prompt lists the entries by number, and names no id.
+	for _, spawn := range spawns() {
+		for _, part := range []string{"- E1: [convention] Closed sets are CHECK constraints\n", "- E2: [convention] 收工前 rebase 到 main、写明分支和 sha、不自己 merge\n"} {
+			if !strings.Contains(spawn.Prompt, part) {
+				t.Errorf("the prompt does not list %q:\n%s", part, spawn.Prompt)
+			}
+		}
+		if strings.Contains(spawn.Prompt, "34XhYj76") {
+			t.Errorf("the prompt shows the model an id to copy:\n%s", spawn.Prompt)
+		}
+	}
+
+	// The second asking, as a maintenance run makes it: why, and which numbers.
+	door.mu.Lock()
+	door.items = items[1:]
+	door.mu.Unlock()
+	asked := len(spawns())
+	second, err := runWikiVerify(transport, "caller-session", "space-1", cfg, 0, refused, io.Discard)
+	if err != nil {
+		t.Fatalf("the second pass: %v", err)
+	}
+	for _, spawn := range spawns()[asked:] {
+		if !strings.Contains(spawn.Prompt, "Title: Cut claim\n") {
+			continue
+		}
+		for _, part := range []string{
+			"## Your last answer was not taken",
+			`your answer was not a verdict: a duplicate must name one of the listed entries by its number (E1, E2), and "34XhYj76NhjjOJTEFE" is not one.`,
+			"duplicateOf must be one of these numbers of the entries listed above: E1, E2.",
+		} {
+			if !strings.Contains(spawn.Prompt, part) {
+				t.Errorf("the second asking does not say %q:\n%s", part, spawn.Prompt)
+			}
+		}
+	}
+	verdicts = door.Verdicts()
+	if second.Verified != 1 || second.Failed != 2 || len(verdicts) != 2 || verdicts[1]["opId"] != "op-cut" || verdicts[1]["duplicateOf"] != "34XhYj76NhjjOJTEFEtFE" {
+		t.Errorf("the second pass: %d verified, %d failed, reported %v — want op-cut, named by its number this time", second.Verified, second.Failed, verdicts)
+	}
+}
+
+// What a check names back is a JSON string, every character that would not show escaped; what it reads of a
+// closed-set value is what the wrapping holds, and nothing looser.
+func TestWikiQuoteShowsWhatAValueHoldsAndWikiUnwrapTakesOffOnlyItsWrapping(t *testing.T) {
+	for value, want := range map[string]string{
+		"decision":        `"decision"`,
+		"`decision`":      "\"`decision`\"",
+		" decision ":      `" decision "`,
+		"decision\u200b":  `"decision\u200b"`,
+		"\ufeffdecision":  `"\ufeffdecision"`,
+		"a\u00a0b\u3000c": `"a\u00a0b\u3000c"`,
+		"say \"hi\"\\":    `"say \"hi\"\\"`,
+		"tab\there\n":     `"tab\there\n"`,
+		"\x00\x7f\u0085":  `"\u0000\u007f\u0085"`,
+		"决策 «x»":          `"决策 «x»"`,
+		"\U000E0001":      `"\udb40\udc01"`,
+	} {
+		if got := wikiQuote(value); got != want {
+			t.Errorf("wikiQuote(%q) = %s, want %s", value, got, want)
+		}
+		// Whatever it escapes, it is JSON that reads back as the value.
+		var back string
+		if err := json.Unmarshal([]byte(wikiQuote(value)), &back); err != nil || back != value {
+			t.Errorf("wikiQuote(%q) reads back as %q (%v)", value, back, err)
+		}
+	}
+	for value, want := range map[string]string{
+		"decision":           "decision",
+		"`decision`":         "decision",
+		" `decision` ":       "decision",
+		"\"decision\"":       "decision",
+		"'decision'":         "decision",
+		"“decision”":         "decision",
+		"「decision」":         "decision",
+		"« `decision` »":     "decision",
+		"`E2`":               "E2",
+		"`decision":          "`decision",
+		"dec`ision":          "dec`ision",
+		"`decision\"":        "`decision\"",
+		"decisions":          "decisions",
+		"Decision":           "Decision",
+		"decision\u200b":     "decision\u200b",
+		"``":                 "",
+		"`":                  "`",
+		"\"pitfall\" `x`":    "\"pitfall\" `x`",
+		"`a` and `b`":        "`a` and `b`",
+		"34XhYj76NhjjOJTEFE": "34XhYj76NhjjOJTEFE",
+	} {
+		if got := wikiUnwrap(value); got != want {
+			t.Errorf("wikiUnwrap(%q) = %q, want %q", value, got, want)
+		}
 	}
 }
 
@@ -995,6 +1170,29 @@ func TestWikiVerifyDescriptionIsAPrecondition(t *testing.T) {
 			t.Errorf("the prompt never offers %q", verdict)
 		}
 	}
+	// The entries a duplicate may name are numbered E1 to En and named back by number, never by id: the contract
+	// says so, and the prompt and the reading do it.
+	for _, says := range []struct{ key, phrase string }{
+		{"prompt", "each by a number of its own, E1 to En in the order listed, and never by its id"},
+		{"prompt", `"duplicateOf": the number of the neighbour it duplicates, for a duplicate}, and the command reports the id that number stands for`},
+		{"unreadable", "A number is one the prompt listed, exactly: an id, whole or cut short, is none, and nothing is guessed from a prefix"},
+	} {
+		if !strings.Contains(verify[says.key].(string), says.phrase) {
+			t.Errorf("agentSurface.verify.%s does not say %q", says.key, says.phrase)
+		}
+	}
+	var item wikiVerificationItem
+	_ = json.Unmarshal([]byte(`{"opId":"op-1","op":"add","similar":[`+
+		`{"id":"34XhYj76NhjjOJTEFEtFA","kind":"pitfall","title":"First","status":"active"},`+
+		`{"id":"34XhYj76NhjjOJTEFEtFE","kind":"convention","title":"Second","status":"active"}]}`), &item)
+	candidates := wikiVerifyCandidates(item)
+	numbered := wikiVerifyPrompt(item, candidates)
+	if !strings.Contains(numbered, "- E1: [pitfall] First\n- E2: [convention] Second\n") || strings.Contains(numbered, "34XhYj76") {
+		t.Errorf("the prompt does not list the entries by number alone:\n%s", numbered)
+	}
+	if got, err := parseWikiVerdict(`{"verdict":"duplicate","reason":"Same.","duplicateOf":"E2"}`, candidates); err != nil || got.DuplicateOf != "34XhYj76NhjjOJTEFEtFE" {
+		t.Errorf("E2 = %+v, %v: want the id it stands for", got, err)
+	}
 	var spec cliCapabilitySpec
 	for _, candidate := range wikiCLICapabilities {
 		if candidate.Tool == "wiki_verify" {
@@ -1062,20 +1260,26 @@ func TestWikiVerifyOffersTheModelOnlyLiveNeighboursAndTheAmendsOwnEntry(t *testi
 		t.Fatal(err)
 	}
 	candidates := wikiVerifyCandidates(item)
-	ids := []string{}
+	ids, numbers := []string{}, []string{}
 	for _, candidate := range candidates {
 		ids = append(ids, candidate.ID)
+		numbers = append(numbers, candidate.Number)
 	}
-	if !reflect.DeepEqual(ids, []string{"entry-self", "entry-live"}) {
-		t.Errorf("candidates = %v, want the amend's own entry and the one live neighbour", ids)
+	if !reflect.DeepEqual(ids, []string{"entry-self", "entry-live"}) || !reflect.DeepEqual(numbers, []string{"E1", "E2"}) {
+		t.Errorf("candidates = %v numbered %v, want the amend's own entry and the one live neighbour, E1 and E2", ids, numbers)
 	}
 	prompt := wikiVerifyPrompt(item, candidates)
 	for _, part := range []string{
-		"the change amends entry entry-self", "(the entry this amend changes)", "### Record 1: commit abc123",
-		"This record's text is not available", "(The text was cut here.)", `"fix": "x"`,
+		"the change amends entry E1, listed below", "- E1: [pitfall] An amended pitfall (the entry this amend changes)", "- E2: [pitfall] Live",
+		"### Record 1: commit abc123", "This record's text is not available", "(The text was cut here.)", `"fix": "x"`,
 	} {
 		if !strings.Contains(prompt, part) {
 			t.Errorf("the prompt does not carry %q:\n%s", part, prompt)
+		}
+	}
+	for _, id := range []string{"entry-self", "entry-live", "entry-proposed"} {
+		if strings.Contains(prompt, id) {
+			t.Errorf("the prompt names %s by its id:\n%s", id, prompt)
 		}
 	}
 }

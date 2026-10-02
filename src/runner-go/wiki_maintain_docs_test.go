@@ -462,6 +462,48 @@ func TestWikiMaintainProposesOneChangeForANewDesignDocumentNoSectionCites(t *tes
 
 // ── No confirmed plan, no document ──────────────────────────────────────────────────────────────
 
+// 10-01 10:40Z: a proposal's session condition named its kind `decision`, in backticks, and the server's gate
+// refused it three rounds running with «`decision` is no kind of entry: one of principle, convention, decision,
+// …», which reads as decision refused for being decision. The run reads a closed-set value as what its wrapping
+// holds before it sends the proposal (contract `plan.gate.values`), and names back what it refuses quoted.
+func TestWikiMaintainProposalReadsAWrappedKindBareAndNamesWhatItRefusesQuoted(t *testing.T) {
+	raw, _ := json.Marshal(planBase())
+	var plan wikiPlanVersionRead
+	if err := json.Unmarshal(raw, &plan); err != nil {
+		t.Fatal(err)
+	}
+	items := []wikiProposalItem{{ID: "K1", entry: &wikiUnplacedEntry{ID: "entry-1", Kind: "convention", Title: "收工前 rebase 到 main"}}}
+	answer := parseWikiProposal("放入：storage\n理由：收工的约定没有地方放。\n覆盖：K1\n" +
+		"### 1. 收工约定 | conventions | 300\n讲什么：收工前 rebase 到 main、写明分支和 sha、不自己 merge。\n" +
+		"- 会话：关键词 rebase、merge；kind `decision`/\"convention\"；主题 `storage-topic`；要找：owner 说收工前要 rebase 的原话\n")
+	request, problems := assembleWikiProposal(plan, answer, items, nil)
+	if len(problems) != 0 {
+		t.Fatalf("a wrapped kind was refused: %v", problems)
+	}
+	sections := request.Change.Doc.Sections
+	sessions := sections[len(sections)-1].Sources.Sessions
+	if sessions == nil || !reflect.DeepEqual(sessions.EntryKinds, []string{"decision", "convention"}) || !reflect.DeepEqual(sessions.Topics, []string{"storage-topic"}) {
+		t.Errorf("the proposal carries the session condition %+v, want its kinds and topic bare", sessions)
+	}
+
+	answer = parseWikiProposal("放入：`storage-docs`\n理由：收工的约定没有地方放。\n覆盖：K1、K7\n" +
+		"### 1. 收工约定 | convention | 300\n讲什么：收工前 rebase 到 main。\n- 会话：关键词 rebase\n")
+	_, problems = assembleWikiProposal(plan, answer, items, nil)
+	for _, want := range []string{
+		`「覆盖」里的 "K7" 不是新知识的编号`,
+		`第 1 节的 type "convention" 不是节的类型`,
+		`「放入」"storage-docs" 不是目录里的一篇`,
+	} {
+		found := false
+		for _, problem := range problems {
+			found = found || strings.HasPrefix(problem, want)
+		}
+		if !found {
+			t.Errorf("the problems do not say %q: %v", want, problems)
+		}
+	}
+}
+
 func TestWikiMaintainWritesNoDocumentWithoutAConfirmedPlan(t *testing.T) {
 	f := docsRepo(t)
 	door := newFakeMaintainDoor(t)

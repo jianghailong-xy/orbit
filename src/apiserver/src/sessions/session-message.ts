@@ -6,7 +6,6 @@ import {
   type SessionReplyOption,
   type SessionRequestState,
 } from '@orbit/shared';
-import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
 
 /**
  * One Orbit session's message to another, and what the platform says about who sent it
@@ -22,15 +21,16 @@ import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
  * `session_interrupt` carries (`POST /runner/sessions/:id/interrupt`), from the session the
  * orchestration credential proved — never from a request body, so no caller can name somebody else as
  * the sender. Null is every other turn: the account owner, a headless credential, the platform's own
- * deliveries. The one exception is the auto-retry sweep's re-send of a failed message, which keeps
- * the sender of the message it re-sends (§2.1).
+ * deliveries. The one exception is the platform's re-send of a failed message — the auto-retry sweep's,
+ * or the failure card's Retry asking the server for it — which keeps the sender of the message it
+ * re-sends (§2.1).
  *
- * It is said three times, each from that one column:
+ * It is said twice from that one column:
  *   - to the engine, as a block appended AFTER the message at delivery (`appendSessionMessageContext`),
  *     so `controlPlaneNoteOf` records it as the control plane's note and not as the sender's words;
- *   - to the clients, as the card stored beside the runner's echo (`readSessionMessageCard`);
- *   - to the limit, which counts what one session sent another in the last hour
- *     (`chargeSessionMessage`).
+ *   - to the clients, as the card stored beside the runner's echo (`readSessionMessageCard`).
+ * The limit counts what one session sent another in the last hour from a record of its own, written as
+ * each message is sent (`chargeSessionMessage`).
  */
 
 /**
@@ -61,32 +61,37 @@ export class SessionMessageRateLimited extends ConflictException {}
  * idempotency and placement, before the turn is written — so a retry that replays a committed
  * `clientTurnId` never reaches it, and two sends to one session are counted one after the other.
  * `session_interrupt`'s message is charged the same way, from `interrupt`'s
- * `participateFollowUpTransaction`. What is counted is the turns themselves: the sender column on the
- * recipient's turns in the last hour. A refusal rolls back with the turn it was for, so nothing a
+ * `participateFollowUpTransaction`. A refusal rolls back with the turn it was for, so nothing a
  * refusal answered is counted.
  *
+ * What is counted is what was SENT: a `session_message_charge` row written here for every message
+ * admitted (migration 0351), and not the recipient's turns. A turn still queued is deleted when an
+ * interrupt drops the queue or the owner withdraws it, and counted off the turns the hour went down
+ * with it — queue a few messages, drop them with an interrupt that carries one more, and the pair
+ * starts again. A row here is untouched by whatever happens to its message afterwards. The pair's rows
+ * whose hour is over are dropped as it counts, so within the window the count only grows.
+ *
  * Only the three session-to-session doors call it. A person's message, a headless credential's and the
- * platform's own deliveries carry no sender, are not counted, and are never refused here. The one
- * turn the platform writes WITH a sender is the auto-retry sweep's re-send of a message that failed
- * (§2.1): the words are still the sending session's, but the session did not send them again, so the
- * count leaves them out.
+ * platform's own deliveries carry no sender, are not counted, and are never refused here. Nor is a
+ * re-send of a message that failed — the auto-retry sweep's, or the failure card's Retry asking the
+ * server for it (§2.1): the words are still the sending session's, but the session did not send them
+ * again, and neither re-send comes through here.
  */
 export async function chargeSessionMessage(
   tx: Prisma.TransactionClient,
   fromSessionId: string,
   toSessionId: string,
 ): Promise<void> {
-  const sent = await tx.conversationTurn.count({
-    where: {
-      sessionId: toSessionId,
-      senderSessionId: fromSessionId,
-      // Counted the way the spawn-rate window counts its hour (`SessionsService`
-      // SPAWN_RATE_WINDOW_MS): a Prisma DateTime against the column Prisma wrote.
-      createdAt: { gt: new Date(Date.now() - SESSION_MESSAGE_WINDOW_MS) },
-      NOT: { clientTurnId: { startsWith: AUTO_RETRY_TURN_KEY_PREFIX } },
-    },
-  });
-  if (sent < SESSION_MESSAGES_PER_PAIR_PER_HOUR) return;
+  // Counted the way the spawn-rate window counts its hour (`SessionsService` SPAWN_RATE_WINDOW_MS): a
+  // Prisma DateTime against the column Prisma wrote.
+  const windowStart = new Date(Date.now() - SESSION_MESSAGE_WINDOW_MS);
+  const pair = { toSessionId, fromSessionId };
+  await tx.sessionMessageCharge.deleteMany({ where: { ...pair, createdAt: { lte: windowStart } } });
+  const sent = await tx.sessionMessageCharge.count({ where: pair });
+  if (sent < SESSION_MESSAGES_PER_PAIR_PER_HOUR) {
+    await tx.sessionMessageCharge.create({ data: pair });
+    return;
+  }
   throw new SessionMessageRateLimited({
     statusCode: 409,
     error: 'Conflict',
