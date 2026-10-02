@@ -715,8 +715,8 @@ function AccountPickList({
 
 /**
  * "New pool": the engine it runs, its name, and who can use it. A Codex pool for "Just me" runs on the
- * user's own ChatGPT account: it is theirs alone, and its account goes in by "Sign in with ChatGPT" on
- * its page, which opens the moment the pool exists (migration 0323). Shared, a Codex pool holds OpenAI
+ * user's own ChatGPT account: it is theirs alone, and its accounts go in from "Add account" on its page,
+ * whose dialog opens the moment the pool exists (migration 0323). Shared, a Codex pool holds OpenAI
  * API keys that each person pastes on its page once it exists: whoever makes it adds people by the email
  * of their Orbit account, and says whether they may put keys of their own in. A Claude pool is the
  * user's own Claude subscriptions, picked here the way "Create a pool" picks them.

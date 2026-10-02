@@ -377,7 +377,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     expect(dialog()?.querySelector('.pa-lead')?.textContent).toBe(
       'OpenAI signed lin@example.com out. Sign in with it again to put it back in My Codex.',
     );
-    await click(button('Sign in with ChatGPT', dialog()!));
+    await click(button('Get a code', dialog()!));
     expect(sent).toEqual([{ method: 'POST', path: LOGIN, body: undefined }]);
     expect(dialog()?.querySelector('.cx-hint')?.textContent).toBe(
       'Sign in there as lin@example.com, then enter this one-time code:',
@@ -440,11 +440,14 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     expect(dialog()?.querySelector('.pa-risk')?.textContent).toBe(
       'Don’t share your account. OpenAI’s terms don’t allow a ChatGPT account to be shared — an account used that way can be suspended.',
     );
+    // What the notice's press is about: the one-time code the next step shows (03-2's own button).
+    expect(button('Cancel', dialog()!)).not.toBeNull();
+    expect(button('Get a code', dialog()!)).not.toBeNull();
     // Nothing starts on the server before the person asks for it.
     expect(consent).not.toContain(CODE);
     expect(sent).toEqual([]);
 
-    await click(button('Sign in with ChatGPT', dialog()!));
+    await click(button('Get a code', dialog()!));
     expect(sent).toEqual([{ method: 'POST', path: LOGIN, body: undefined }]);
     expect(button('Open the sign-in page', dialog()!)?.getAttribute('href')).toBe(DEVICE_URL);
     expect(dialog()?.querySelector('.cx-url')?.textContent).toBe(DEVICE_URL);
@@ -477,7 +480,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     pools = [codexPool()];
     await mount(AT);
     await click(button('Add account'));
-    await click(button('Sign in with ChatGPT', dialog()!));
+    await click(button('Get a code', dialog()!));
     await click(button('Cancel', dialog()!));
     expect(sent).toEqual([
       { method: 'POST', path: LOGIN, body: undefined },
@@ -501,7 +504,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
       return base(p, init as never);
     }) as typeof api);
     await click(button('Add account'));
-    await click(button('Sign in with ChatGPT', dialog()!));
+    await click(button('Get a code', dialog()!));
     await click(button('Cancel', dialog()!));
     expect(sent).toEqual([{ method: 'POST', path: LOGIN, body: undefined }]);
     await act(async () => {
@@ -519,7 +522,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     polls = [{ status: 'EXPIRED', account: null }];
     await mount(AT);
     await click(button('Add account'));
-    await click(button('Sign in with ChatGPT', dialog()!));
+    await click(button('Get a code', dialog()!));
     await until(() => dialogText().includes('The code expired'));
     expect(dialog()?.querySelector('.pa-done-s')?.textContent).toBe('It wasn’t approved in time. Get a new code to try again.');
     polls = [{ status: 'PENDING', verificationUrl: DEVICE_URL, userCode: CODE, expiresAt: CODE_EXPIRES, account: null }];
@@ -533,7 +536,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     polls = [{ status: 'FAILED', error: 'the codex CLI gave up (exit 1)', account: null }];
     await mount(AT);
     await click(button('Add account'));
-    await click(button('Sign in with ChatGPT', dialog()!));
+    await click(button('Get a code', dialog()!));
     await until(() => dialogText().includes('The sign-in didn’t finish'));
     expect(dialog()?.querySelector('.pa-done-s')?.textContent).toBe('The codex CLI gave up (exit 1).');
     expect(button('Try again', dialog()!)).not.toBeNull();
@@ -548,7 +551,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     ];
     await mount(AT);
     await click(button('Add account'));
-    await click(button('Sign in with ChatGPT', dialog()!));
+    await click(button('Get a code', dialog()!));
     await until(() => dialogText().includes('already in'));
     expect(dialog()?.querySelector('.pa-done-t')?.textContent).toBe('This ChatGPT account is already in My Codex');
     expect(dialog()?.querySelector('.pa-done-s')?.textContent).toBe(
@@ -567,7 +570,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     polls = [new ApiError('This ChatGPT account is already in "My Codex"', 409, 'POOL_CODEX_ACCOUNT_DUPLICATE')];
     await mount(AT);
     await click(button('Add account'));
-    await click(button('Sign in with ChatGPT', dialog()!));
+    await click(button('Get a code', dialog()!));
     await until(() => dialogText().includes('already in'));
     expect(dialog()?.querySelector('.pa-done-s')?.textContent).toBe(
       'It’s one of its accounts, and signing it in twice adds no quota. Sign in with a different account.',
@@ -668,7 +671,7 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
       'Only your own accounts. Signing in with someone else’s ChatGPT account is sharing it. OpenAI’s terms don’t allow that, and an account used that way can be suspended.',
     );
 
-    await click(button('Sign in with ChatGPT', dialog()!));
+    await click(button('Get a code', dialog()!));
     polls = [{ status: 'CONFIRMED', account: hl(), logins: [account(), hl()] }];
     pools = [codexPool(account(), hl())];
     await until(() => dialogText().includes('is in My Codex'));

@@ -178,10 +178,12 @@ export function CodexSignInModal({
 
   const footer =
     step.kind === 'consent' ? (
+      // What this step's press is about: the one-time code to enter on OpenAI's page, which is what
+      // comes next — not the sign-in itself, which is finished there (03-flows, the notice's press).
       <>
         <Button onClick={close}>Cancel</Button>
         <Button type="primary" loading={starting} onClick={() => void start()}>
-          Sign in with ChatGPT
+          Get a code
         </Button>
       </>
     ) : step.kind === 'code' ? (
