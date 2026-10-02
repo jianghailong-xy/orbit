@@ -114,6 +114,11 @@ import {
   sessionRequestReceipt,
   TooManyOpenRequests,
 } from '../sessions/session-request';
+import {
+  readTaskWorkCarriers,
+  taskRunOverlay,
+  type TaskRunOverlay,
+} from '../sessions/task-work-carrier';
 import { SessionsService, type SessionReceiveBlockedReason } from '../sessions/sessions.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { coordinatorFuseUsage, readCoordinatorWakeups } from './coordinator-progress';
@@ -180,7 +185,7 @@ import {
   resumeWrite,
 } from './project-pause';
 import { projectMoves } from '../tasks/project-pause-dispatch';
-import { readProjectTaskWorkStates } from './project-task-work-state';
+import { readProjectTaskWorkStates, type ProjectTaskWorkStateFields } from './project-task-work-state';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
@@ -2784,9 +2789,11 @@ export class ProjectsService {
     ]);
     const items = page.map(({ _count, ...task }) => {
       const dependency = dependencies.get(task.id) ?? UNCONNECTED_TASK;
-      const work = workStates.get(task.id) ?? {
-        workState: 'BLOCKED' as const,
+      const work: ProjectTaskWorkStateFields = workStates.get(task.id) ?? {
+        workState: 'BLOCKED',
         verificationState: null,
+        runReason: null,
+        runStalled: false,
       };
       return {
         ...task,
@@ -3038,7 +3045,7 @@ export class ProjectsService {
           ),
         ])
       : [
-          new Map<string, { running: boolean; queued: boolean }>(),
+          new Map<string, TaskRunOverlay>(),
           new Map(),
         ];
     const tasks = rowsInGraph.map(({ createdAt: _createdAt, ...task }) => ({
@@ -3100,50 +3107,34 @@ export class ProjectsService {
   }
 
   /**
-   * Which of this project's tasks have a run on them right now: `running` = a RUNNING Session,
-   * `queued` = a PENDING one with nothing running yet.
+   * Which of this project's tasks have a run on them right now: `running` = a work Session
+   * carrying it (a turn executing, or the session parked waiting for something that will wake it),
+   * `queued` = a PENDING one, plus why it is running and whether its background jobs went quiet.
    *
    * The graph needs this because `Task.status` does not carry it. Dispatch opens a Session and
    * leaves the row `OPEN` — only `reclaimStalledTask` and a retry ever write `IN_PROGRESS` — so a
    * project graph drawn from the column alone reports the task somebody is watching as untouched,
    * which is exactly the state a reader opens the picture to find.
    *
-   * The same two flags, derived the same way, as `TasksService.withRunning`: the task list, the
-   * task-rooted graph and this canvas must not describe one running task in three ways. Scoped by
-   * the tasks' PROJECT rather than by their ids, for the reason the edge query is — the id list is
-   * as long as the project, and a 23,442-element `IN` is a query plan nobody wants.
+   * The same flags, derived from the same carriers (`sessions/task-work-carrier.ts`), as
+   * `TasksService.withRunning`: the task list, the task-rooted graph and this canvas must not
+   * describe one running task in three ways. Scoped by the tasks' PROJECT rather than by their
+   * ids, for the reason the edge query is — the id list is as long as the project, and a
+   * 23,442-element `IN` is a query plan nobody wants.
    */
   private async liveTaskState(
     ownerId: string,
     projectId: string,
-  ): Promise<Map<string, { running: boolean; queued: boolean }>> {
-    const busy = await this.prisma.session.groupBy({
-      by: ['taskId', 'status'],
-      where: {
-        ownerId,
-        status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
-        task: { ownerId, projectId },
-      },
-      _count: { _all: true },
-    });
-    const running = new Set(
-      busy.filter((row) => row.status === RunStatus.RUNNING).map((row) => row.taskId),
+  ): Promise<Map<string, TaskRunOverlay>> {
+    const carriers = await readTaskWorkCarriers(
+      this.prisma,
+      Prisma.sql`carrier."owner_id" = ${ownerId}::uuid
+        AND carrier."task_id" IN (
+          SELECT project_task."id" FROM "task" project_task
+           WHERE project_task."owner_id" = ${ownerId}::uuid
+             AND project_task."project_id" = ${projectId}::uuid)`,
     );
-    const queued = new Set(
-      busy.filter((row) => row.status === RunStatus.PENDING).map((row) => row.taskId),
-    );
-    const live = new Map<string, { running: boolean; queued: boolean }>();
-    for (const taskId of new Set([...running, ...queued])) {
-      if (!taskId) continue;
-      // A task with both is simply running; `queued` is only meaningful when nothing is running
-      // yet. `session_task_execution_claim_idx` makes that pair impossible anyway — this is here
-      // so the two flags mean the same thing they mean in `TasksService.withRunning`.
-      live.set(taskId, {
-        running: running.has(taskId),
-        queued: queued.has(taskId) && !running.has(taskId),
-      });
-    }
-    return live;
+    return new Map([...carriers].map(([taskId, carrier]) => [taskId, taskRunOverlay(carrier)]));
   }
 
   /**

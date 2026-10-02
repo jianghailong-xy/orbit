@@ -65,6 +65,8 @@ function makeService(opts: { ownedList?: boolean; ownedTask?: boolean } = {}) {
             ]
           : [],
     },
+    // The list's live count: the work sessions carrying its tasks.
+    $queryRaw: async () => [{ count: 2 }],
     session: {
       count: async ({ where }: any) => (where?.numTurns?.gt !== undefined ? 0 : 3),
       findMany: async () => [
@@ -97,6 +99,7 @@ test('a list reference appends the shape of the list, not its tasks', async () =
   assert.ok(out.includes(`<referenced-list id="${LIST_PUBLIC_ID}">`), out);
   assert.match(out, /FineWeb CC-MAIN-2025-26/);
   assert.match(out, /DONE 249 \/ OPEN 248/);
+  assert.match(out, /在跑 {3}2/);
   // Attribution rides along, so "is this a prompt problem" is answerable without a second call.
   assert.match(out, /quota 1 \/ infrastructure 1/);
   assert.match(out, /已暂停 · 并发上限 3/);

@@ -1,5 +1,7 @@
 import { Prisma } from '@prisma/client';
+import type { TaskRunReason } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { readTaskWorkCarriers, taskCarriedSql } from '../sessions/task-work-carrier';
 import { manualRunnableTaskSql } from '../tasks/manual-runnable-task-sql';
 import { everyPrerequisiteDoneOrRetiredSql } from '../tasks/task-dependencies';
 import {
@@ -33,10 +35,19 @@ export type ProjectTaskVerificationState =
 export interface ProjectTaskWorkStateFields {
   workState: ProjectTaskWorkState;
   verificationState: ProjectTaskVerificationState | null;
+  /**
+   * Why a RUNNING row is running (sessions/task-work-carrier.ts). Null on every other lane, and on
+   * a RUNNING row no session carries — one its own `IN_PROGRESS` status put there.
+   */
+  runReason: TaskRunReason | null;
+  /** The RUNNING row is held only by background jobs that have stopped producing output. */
+  runStalled: boolean;
 }
 
-interface ProjectTaskWorkStateRow extends ProjectTaskWorkStateFields {
+interface ProjectTaskWorkStateRow {
   taskId: string;
+  workState: ProjectTaskWorkState;
+  verificationState: ProjectTaskVerificationState | null;
 }
 
 /**
@@ -53,15 +64,13 @@ export function verificationSubjectSql(alias = 't'): string {
     AND ${alias}."verifies_task_id" IS NULL`;
 }
 
-/** A live task-work claim, in the exact spelling the execute/session gates use. */
+/**
+ * A work session is carrying the task: a turn queued or running, or the session parked at
+ * AWAITING_INPUT with something that will wake it (sessions/task-work-carrier.ts). The same
+ * predicate the manual-run gate refuses on, so RUNNING and READY can never both claim a row.
+ */
 export function liveTaskWorkSql(alias = 't'): string {
-  return `EXISTS (
-    SELECT 1 FROM "session" work_session
-     WHERE work_session."task_id" = ${alias}."id"
-       AND work_session."deleted_at" IS NULL
-       AND work_session."starts_task_work" = true
-       AND work_session."status" IN ('PENDING'::"run_status", 'RUNNING'::"run_status")
-  )`;
+  return taskCarriedSql(alias, 'work_session');
 }
 
 /**
@@ -144,9 +153,18 @@ export async function readProjectTaskWorkStates(
   const narrowed = taskIds
     ? Prisma.sql`AND t."id" IN (${Prisma.join(taskIds.map((id) => Prisma.sql`${id}::uuid`))})`
     : Prisma.empty;
-  return readTaskWorkStates(prisma, Prisma.sql`t."owner_id" = ${ownerId}::uuid
+  return readTaskWorkStates(
+    prisma,
+    Prisma.sql`t."owner_id" = ${ownerId}::uuid
        AND t."project_id" = ${projectId}::uuid
-       ${narrowed}`);
+       ${narrowed}`,
+    // The project's carriers rather than the id list again: a project has a handful of them, and
+    // the graph's list is up to 50,000 ids long. Rows outside the list are simply never looked up.
+    Prisma.sql`carrier."task_id" IN (
+      SELECT project_task."id" FROM "task" project_task
+       WHERE project_task."owner_id" = ${ownerId}::uuid
+         AND project_task."project_id" = ${projectId}::uuid)`,
+  );
 }
 
 /**
@@ -162,6 +180,7 @@ export async function readTaskWorkState(
   const states = await readTaskWorkStates(
     prisma,
     Prisma.sql`t."owner_id" = ${ownerId}::uuid AND t."id" = ${taskId}::uuid`,
+    Prisma.sql`carrier."task_id" = ${taskId}::uuid`,
   );
   return states.get(taskId) ?? null;
 }
@@ -201,10 +220,14 @@ export interface TaskVerifierRow {
   verdict: string | null;
 }
 
-/** One query shape for every reader above, so a project page and a task detail cannot disagree. */
+/**
+ * One query shape for every reader above, so a project page and a task detail cannot disagree.
+ * `carriers` scopes the run-reason read to (at least) the tasks `where` reaches.
+ */
 async function readTaskWorkStates(
   prisma: PrismaService,
   where: Prisma.Sql,
+  carriers: Prisma.Sql,
 ): Promise<Map<string, ProjectTaskWorkStateFields>> {
   // Narrowed as the project index narrows it: the dependency graph hands this up to 50,000 ids, and
   // on the 109,875-task project the READY lane's walk was 3.5s of the 4.5s this read took for them.
@@ -218,7 +241,8 @@ async function readTaskWorkStates(
   const verifierRunning = Prisma.raw(liveTaskWorkSql('verifier_task'));
   const verifierRunnable = Prisma.raw(manualRunnableTaskSql('verifier_task'));
 
-  const rows = await prisma.$queryRaw<ProjectTaskWorkStateRow[]>(Prisma.sql`
+  const [rows, carriedBy] = await Promise.all([
+    prisma.$queryRaw<ProjectTaskWorkStateRow[]>(Prisma.sql`
     SELECT t."id" AS "taskId",
            (${state})::text AS "workState",
            (${verificationState})::text AS "verificationState"
@@ -233,10 +257,18 @@ async function readTaskWorkStates(
           FROM "task" verifier_task
          WHERE verifier_task."id" = (${latestVerifier})
       ) current_verifier ON true
-     WHERE ${where}`);
+     WHERE ${where}`),
+    readTaskWorkCarriers(prisma, carriers),
+  ]);
 
-  return new Map(rows.map((row) => [row.taskId, {
-    workState: row.workState,
-    verificationState: row.verificationState,
-  }]));
+  return new Map(rows.map((row) => {
+    // A reason only beside the lane it explains: a DONE row whose session lingers is DONE.
+    const carrier = row.workState === 'RUNNING' ? carriedBy.get(row.taskId) : undefined;
+    return [row.taskId, {
+      workState: row.workState,
+      verificationState: row.verificationState,
+      runReason: carrier?.runReason ?? null,
+      runStalled: carrier?.runStalled ?? false,
+    }];
+  }));
 }

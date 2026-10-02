@@ -82,6 +82,7 @@ import {
   projectGraphOverview,
   PROJECT_GRAPH_NODE_HEIGHT,
   PROJECT_GRAPH_NODE_WIDTH,
+  runningLabel,
   type MarkStatusCounts,
   type ProjectGraphMark,
   type ProjectMotifMark,
@@ -214,6 +215,9 @@ function TaskLink({
 function TaskNode({ data }: NodeProps<TaskFlowNode>) {
   const state = getTaskDependencyVisualState(data.task);
   const status = taskStatusLabel(data.task.status, data.task.running, data.task.queued);
+  // "Running · Background job": a run waiting on something it started is still running, and what
+  // it is waiting on is worth reading before opening it. Null from a server that gives no reason.
+  const running = data.task.running ? runningLabel(data.task) : null;
   const canonical = data.task.workState;
   // The graph supplies topology, but never re-derives execution eligibility from indegree. The
   // same canonical lane rendered by the mobile task card decides both label and ready tally.
@@ -240,7 +244,7 @@ function TaskNode({ data }: NodeProps<TaskFlowNode>) {
       ? 'Ready to run'
       : tone === 'blocked'
         ? data.waitingOn > 0 ? `Waiting on ${data.waitingOn}` : 'Blocked'
-        : status;
+        : running ?? status;
   return (
     <div className={`pdg-task is-${tone}`}>
       {data.hasIncoming && (
@@ -256,7 +260,7 @@ function TaskNode({ data }: NodeProps<TaskFlowNode>) {
         aria-label={
           tone === 'ready' || tone === 'blocked'
             ? `${data.task.title}, ${status}, ${meta}`
-            : `${data.task.title}, ${status}`
+            : `${data.task.title}, ${running ?? status}`
         }
       >
         <span className="pdg-task-title">{data.task.title}</span>
