@@ -1,5 +1,14 @@
 import { useEffect, useState, type JSX } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import {
+  BranchesOutlined,
+  CaretRightFilled,
+  DownOutlined,
+  MergeOutlined,
+  PoweroffOutlined,
+  RightOutlined,
+} from '@ant-design/icons';
+import type { OwnerConfirmationIfConfirmed, OwnerConfirmationStart } from '@orbit/shared';
 import { Alert } from 'antd';
 import { useLocation } from 'react-router-dom';
 import { api } from '../api';
@@ -28,10 +37,13 @@ import { decisionReceiptTime } from './EvidenceDecisionCard';
  *
  * WHAT THE OWNER DECIDES FROM
  * ---------------------------
- * The task, what settles it (its acceptance criteria, in its own words), and what the run reported
- * (its last message of the turn that asked). Confirm done records the decision the task's DONE is
- * derived from. Chat about this asks for what is missing; that reason is sent to this session as
- * owner's next message, the task stays open, and the next turn that ends asks again.
+ * The task, what settles it (its acceptance criteria, in its own words, folded to one row until
+ * opened), what the run reported (its last message of the turn that asked), and — right above the
+ * buttons, because the card is taller than a phone's screen and that is what is in view at the
+ * press — what confirming sets off, as the read computes it (`ifConfirmed`). Confirm done records the
+ * decision the task's DONE is derived from. Chat about this asks for what is missing; that reason is
+ * sent to this session as owner's next message, the task stays open, and the next turn that ends
+ * asks again.
  *
  * AND ONE PLACE TO TYPE
  * ---------------------
@@ -85,6 +97,8 @@ export interface OwnerConfirmationView {
   acceptanceCriteria: string | null;
   waiting: OwnerConfirmationWaiting | null;
   decisions: RecordedOwnerDecision[];
+  /** What confirming sets off, while a run is waiting; null otherwise, absent from an older server. */
+  ifConfirmed?: OwnerConfirmationIfConfirmed | null;
 }
 
 export type OwnerDecision = 'CONFIRM' | 'SEND_BACK';
@@ -143,6 +157,110 @@ export const OWNER_CONFIRMATION_STALE_CODES: readonly string[] = [
  *  the same ceiling — the same kind of field, read by the same person, on a card with the same
  *  reason to keep its buttons in view. */
 export const REPORT_CLAMP = 240;
+
+/** What the folded criteria row counts: `6 items`. Top-level list items when the criteria are a list,
+ *  paragraphs when they are not; null when nobody wrote any, and the box says so instead of folding.
+ *  Counted on the plain lines, which keep a bullet as `•` and an ordered item's number. */
+export function criteriaItemsLabel(acceptanceCriteria: string | null | undefined): string | null {
+  const lines = markdownToPlainLines(acceptanceCriteria).split('\n');
+  let items = lines.filter((line) => /^(?:• |[0-9]{1,9}[.)][ \t]|[0-9]{1,9}[、）])/u.test(line)).length;
+  if (items === 0) {
+    items = lines.filter((line, i) => line.trim() !== '' && (i === 0 || lines[i - 1].trim() === '')).length;
+  }
+  return items === 0 ? null : counted(items, 'item', 'items');
+}
+
+/** The block right above Confirm done: what the press sets off, as Orbit computed it from its own
+ *  records. It wears no author — the two boxes above it quote the task and the agent, this does not. */
+export const IF_YOU_CONFIRM = 'IF YOU CONFIRM';
+export const IF_CONFIRMED_NOT_ON_MAIN = 'Not on main yet';
+export const IF_CONFIRMED_NO_RECORD_ON_MAIN = 'No record of this branch on main';
+export const IF_CONFIRMED_DOES_NOT_MERGE = 'confirming doesn’t merge it';
+export const IF_CONFIRMED_LINE_THEN_OWNER = 'Goes onto the integration line; merging into main asks you again';
+export const IF_CONFIRMED_AUTO_MAIN = 'Lands on main by itself if the checks pass';
+export const IF_CONFIRMED_ENDS_SESSION = 'Ends this session';
+
+/** One row of the block: its symbol, its first line, the branch's added lines said after it in the
+ *  diff's green, and a quieter second line. */
+export interface IfConfirmedRow {
+  kind: 'START' | 'BRANCH' | 'LANDING' | 'ENDS_SESSION';
+  lead: string;
+  added: string | null;
+  detail: string | null;
+}
+
+function counted(n: number, one: string, many: string): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+/** The line for the tasks of one tier — and when the project holds them until the work lands, that
+ *  they start then and not at the press. */
+function startsLine(starts: OwnerConfirmationStart, n: number, afterLanding: boolean): string {
+  const tasks = counted(n, 'task', 'tasks');
+  if (starts === 'NOW') return afterLanding ? `Starts ${tasks} once this lands` : `Starts ${tasks} waiting on this one`;
+  if (starts === 'WHEN_SLOT_FREES') {
+    const start = n === 1 ? 'starts' : 'start';
+    return afterLanding ? `${tasks} ${start} once this lands and a slot frees` : `${tasks} ${start} when a slot frees`;
+  }
+  const become = n === 1 ? 'becomes' : 'become';
+  return afterLanding ? `${tasks} ${become} ready to start once this lands` : `${tasks} ${become} ready to start`;
+}
+
+const START_TIERS: readonly OwnerConfirmationStart[] = ['NOW', 'WHEN_SLOT_FREES', 'MANUAL'];
+
+/**
+ * The block's rows, in its order: the tasks it starts (one row per tier, their titles under it), the
+ * branch while it is not known to be on main, how the work lands, and the run it ends. An item the
+ * read left out draws no row; no rows, no block.
+ *
+ * The branch row says confirming does not merge it only where the landing is read and is not
+ * Automatic's — there the DONE does lead to main, as the landing row says.
+ */
+export function ifConfirmedRows(ifConfirmed: OwnerConfirmationIfConfirmed | null | undefined): IfConfirmedRow[] {
+  if (!ifConfirmed) return [];
+  const rows: IfConfirmedRow[] = [];
+  for (const starts of START_TIERS) {
+    const tasks = (ifConfirmed.startsTasks ?? []).filter((task) => task.starts === starts);
+    if (tasks.length === 0) continue;
+    rows.push({
+      kind: 'START',
+      lead: startsLine(starts, tasks.length, ifConfirmed.startsAfterLanding === true),
+      added: null,
+      detail: tasks.map((task) => task.title).join(' · '),
+    });
+  }
+  const { branch, landing, endsSession } = ifConfirmed;
+  if (branch && (branch.onMain === 'NO' || branch.onMain === 'UNKNOWN')) {
+    rows.push({
+      kind: 'BRANCH',
+      lead: branch.onMain === 'NO' ? IF_CONFIRMED_NOT_ON_MAIN : IF_CONFIRMED_NO_RECORD_ON_MAIN,
+      added: branch.onMain === 'NO' && branch.linesAdded > 0 ? `+${branch.linesAdded.toLocaleString('en-US')}` : null,
+      detail: landing === 'NONE' || landing === 'LINE_THEN_OWNER'
+        ? `${branch.name} — ${IF_CONFIRMED_DOES_NOT_MERGE}`
+        : branch.name,
+    });
+  }
+  if (landing === 'LINE_THEN_OWNER' || landing === 'AUTO_MAIN') {
+    rows.push({
+      kind: 'LANDING',
+      lead: landing === 'LINE_THEN_OWNER' ? IF_CONFIRMED_LINE_THEN_OWNER : IF_CONFIRMED_AUTO_MAIN,
+      added: null,
+      detail: null,
+    });
+  }
+  if (endsSession) {
+    const jobs = endsSession.runningBgJobs;
+    rows.push({
+      kind: 'ENDS_SESSION',
+      lead: jobs > 0
+        ? `${IF_CONFIRMED_ENDS_SESSION} · ${counted(jobs, 'background job', 'background jobs')} ${jobs === 1 ? 'stops' : 'stop'}`
+        : IF_CONFIRMED_ENDS_SESSION,
+      added: null,
+      detail: null,
+    });
+  }
+  return rows;
+}
 
 /** The run waiting in THIS session, or null — the card is drawn in the session that reported, only. */
 export function ownerConfirmationWaitingIn(
@@ -234,25 +352,45 @@ export function whatTheRunReported(report: OwnerConfirmationReport | null, now?:
 function OwnerConfirmationBoxes({
   acceptanceCriteria,
   report,
+  foldCriteria = false,
 }: {
   acceptanceCriteria: string | null;
   report: OwnerConfirmationReport | null;
+  /** Fold the criteria to one row that opens in place — the card's, whose buttons need the height. */
+  foldCriteria?: boolean;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
+  const [criteriaOpen, setCriteriaOpen] = useState(false);
   const criteria = markdownToPlainLines(acceptanceCriteria);
+  const items = foldCriteria ? criteriaItemsLabel(acceptanceCriteria) : null;
   const said = markdownToPlainLines(report?.text);
   const long = said.length > REPORT_CLAMP;
   return (
     <>
       <div className="owner-confirmation-box">
-        <div className="owner-confirmation-key">{WHAT_SETTLES_IT}</div>
-        <div className="owner-confirmation-value">
-          {criteria === '' ? (
-            <span className="decision-ask-quiet">{OWNER_CONFIRMATION_NO_CRITERIA}</span>
-          ) : (
-            criteria
-          )}
-        </div>
+        {items !== null ? (
+          <button
+            type="button"
+            className="owner-confirmation-fold"
+            aria-expanded={criteriaOpen}
+            onClick={() => setCriteriaOpen(!criteriaOpen)}
+          >
+            <span className="owner-confirmation-key">{WHAT_SETTLES_IT}</span>
+            <span className="owner-confirmation-count">{items}</span>
+            {criteriaOpen ? <DownOutlined /> : <RightOutlined />}
+          </button>
+        ) : (
+          <div className="owner-confirmation-key">{WHAT_SETTLES_IT}</div>
+        )}
+        {items === null || criteriaOpen ? (
+          <div className="owner-confirmation-value">
+            {criteria === '' ? (
+              <span className="decision-ask-quiet">{OWNER_CONFIRMATION_NO_CRITERIA}</span>
+            ) : (
+              criteria
+            )}
+          </div>
+        ) : null}
       </div>
       <div className="owner-confirmation-box">
         <div className="owner-confirmation-key">{whatTheRunReported(report)}</div>
@@ -277,6 +415,49 @@ function OwnerConfirmationBoxes({
         )}
       </div>
     </>
+  );
+}
+
+const IF_CONFIRMED_SYMBOL: Record<IfConfirmedRow['kind'], JSX.Element> = {
+  START: <CaretRightFilled />,
+  BRANCH: <BranchesOutlined />,
+  LANDING: <MergeOutlined />,
+  ENDS_SESSION: <PoweroffOutlined />,
+};
+
+/** What confirming sets off, right above Confirm done — or nothing, when the read says nothing. */
+function OwnerConfirmationIfYouConfirm({
+  ifConfirmed,
+}: {
+  ifConfirmed: OwnerConfirmationIfConfirmed | null | undefined;
+}): JSX.Element | null {
+  const rows = ifConfirmedRows(ifConfirmed);
+  if (rows.length === 0) return null;
+  return (
+    <div className="owner-confirmation-if">
+      <div className="owner-confirmation-key">{IF_YOU_CONFIRM}</div>
+      {rows.map((row) => (
+        <div key={`${row.kind}:${row.lead}`} className={`owner-confirmation-if-row is-${row.kind.toLowerCase()}`}>
+          <span className="owner-confirmation-if-symbol" aria-hidden="true">
+            {IF_CONFIRMED_SYMBOL[row.kind]}
+          </span>
+          <div className="owner-confirmation-if-text">
+            <div className="owner-confirmation-if-lead">
+              {row.lead}
+              {row.added !== null ? (
+                <>
+                  {' · '}
+                  <span className="owner-confirmation-if-added">{row.added}</span>
+                </>
+              ) : null}
+            </div>
+            {row.detail !== null ? (
+              <div className="owner-confirmation-if-detail" title={row.detail}>{row.detail}</div>
+            ) : null}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -332,7 +513,7 @@ export function OwnerConfirmationCard({
   onDecide,
   onSendBack,
 }: {
-  view: Pick<OwnerConfirmationView, 'taskId' | 'title' | 'acceptanceCriteria'>;
+  view: Pick<OwnerConfirmationView, 'taskId' | 'title' | 'acceptanceCriteria' | 'ifConfirmed'>;
   waiting: OwnerConfirmationWaiting;
   /** A press from this card is on its way to the door. */
   busy?: boolean;
@@ -364,7 +545,10 @@ export function OwnerConfirmationCard({
             {OWNER_CONFIRMATION_YOURS}
             <span className="owner-confirmation-id">{view.taskId}</span>
           </div>
-          <OwnerConfirmationBoxes acceptanceCriteria={view.acceptanceCriteria} report={waiting.report} />
+          <OwnerConfirmationBoxes acceptanceCriteria={view.acceptanceCriteria} report={waiting.report} foldCriteria />
+          {/* Right above the buttons: the card is taller than a phone's screen, and this is what is
+              in view at the press. A refused press says why between it and the buttons. */}
+          <OwnerConfirmationIfYouConfirm ifConfirmed={view.ifConfirmed} />
           {error && refusal ? (
             <Alert
               className="evidence-decision-error"
