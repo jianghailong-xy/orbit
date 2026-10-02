@@ -8,7 +8,7 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { escalatesAt } from './open-item-escalation.service';
-import { ownerItemKind } from './project-open-item';
+import { openItemOwed, ownerItemKind } from './project-open-item';
 import { START_REQUEST_KIND } from './project-start-request';
 
 export type ProjectAttentionSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
@@ -227,7 +227,9 @@ async function readBlockers(
  * why it is null-tolerant on the way in and read only for the rows that can have one.
  *
  * A start request counts only while its project has not been started: the start answers it in the
- * same transaction, and a request somehow left open beside a start asks nobody anything.
+ * same transaction, and a request somehow left open beside a start asks nobody anything. Any item
+ * counts only while it is owed (`openItemOwed`), for the same reason: one about a candidate or a
+ * task that has moved on asks nobody anything either, whether or not anything has closed it yet.
  */
 async function readOpenItems(
   prisma: PrismaService,
@@ -247,5 +249,6 @@ async function readOpenItems(
                        AND proj.owner_id = ${ownerId}::uuid
      WHERE item.state = 'OPEN' ${narrowed}
        AND (item.kind <> 'START_REQUEST' OR proj.started_at IS NULL)
+       AND ${openItemOwed('item')}
      GROUP BY item.project_id, item.kind, item.assignee, item.assignee_reason`);
 }
