@@ -1350,6 +1350,14 @@ model Session {
   // answers with something that is not one of those failures — not merely when a retry is
   // dispatched, which would let a provider that fails identically every time loop unbounded.
   retryAttempts        Int       @default(0) @map("retry_attempts")
+  // When the auto-retry sweep CLAIMED this retry — cleared `retry_at` and began writing the turn
+  // that fulfils it (migration 0354, docs/session-request-reply-contract.md §8 criterion 20).
+  // Between the claim and that turn the row is parked with `retry_at` NULL, which is also what a
+  // retry given up looks like; this is the fact that tells them apart (`awaitsAutoRetry`). NULL =
+  // no claim in flight. Cleared by the turn the resume writes, a re-arm, a disarm and the attempt
+  // a give-up hands back; a reader also treats a claim older than `RETRY_CLAIM_WINDOW_MS` as dead,
+  // so a sweep that died mid-claim cannot leave a session reading as on-its-way forever.
+  retryClaimedAt       DateTime? @map("retry_claimed_at")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 

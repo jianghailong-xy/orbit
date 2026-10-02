@@ -38,7 +38,6 @@ import {
   SessionRenameDto,
   SessionResumeDto,
   SessionInterruptDto,
-  SessionRetryResendDto,
   SessionTurnDto,
   RecordMergeReceiptDto,
 } from './dto';
@@ -593,17 +592,15 @@ export class SessionsController {
   /** Re-send that message now, the way the auto-retry does: the Retry button's door when the message
    *  is another session's (`sessionMessage` on the answer above), so it goes out with that session as
    *  its sender and the request it was, charged to nobody's hourly limit (contract §2.1) — not through
-   *  the owner's own door, which would say it again in the owner's name. */
+   *  the owner's own door, which would say it again in the owner's name.
+   *
+   *  The turn key is the server's own, derived from the failed message (contract §2.1, §8 criterion
+   *  19): the caller names nothing, so no click can queue a second turn for the same failure. A body
+   *  carrying `clientTurnId` from a client that predates that is ignored, not refused — the key it
+   *  chose is simply not the one the re-send goes out under. */
   @Post(':id/retry-message')
-  resendRetryMessage(
-    @CurrentUser() user: AuthUser,
-    @Param('id', PublicIdPipe) id: string,
-    @Body() dto: SessionRetryResendDto,
-  ) {
-    const clientTurnId = typeof dto?.clientTurnId === 'string' ? dto.clientTurnId.trim() : '';
-    if (!clientTurnId) throw new BadRequestException('clientTurnId is required');
-    assertClientTurnIdNotReserved(clientTurnId);
-    return this.autoRetry.resendRetryMessage(user.userId, id, clientTurnId);
+  resendRetryMessage(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.autoRetry.resendRetryMessage(user.userId, id);
   }
 
   /** Turn off the pending auto-retry on this session. Arming happens by itself when a quota or a
