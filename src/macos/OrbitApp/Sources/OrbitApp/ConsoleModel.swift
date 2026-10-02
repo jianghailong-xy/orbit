@@ -2893,7 +2893,7 @@ final class ConsoleModel {
         reducer.removeApproval(id: approvalID)
         publishStateNow()
         localSendTick &+= 1 // a reply is a send too — pin the transcript to the tail (web parity)
-        let req = ApprovalDecisionRequest(behavior: .deny, message: text, answers: nil, rememberRule: nil)
+        let req = ApprovalDecisionRequest(behavior: .deny, message: text, answers: nil, rememberRules: nil)
         // Replayed through a gateway blip like any other send — the decision only applies to a
         // still-PENDING approval server-side, so a lost response can't answer the question twice.
         do {
@@ -2909,15 +2909,15 @@ final class ConsoleModel {
 
     func decide(_ approval: PendingApproval, behavior: ApprovalBehavior,
                 answers: [String: [String]]? = nil, remember: Bool = false) async {
-        var rule: PermissionRule?
+        var rules: [PermissionRule]?
         if remember, behavior == .allow, let input = approval.input {
-            rule = Approvals.rememberRule(toolName: approval.toolName ?? "", input: input)
+            rules = Approvals.rememberRules(toolName: approval.toolName ?? "", input: input)
         }
         // Optimistic: drop the card now (the SSE `approval_resolved` echoes this). On failure,
         // re-seed from REST so it reappears rather than silently vanishing.
         reducer.removeApproval(id: approval.id)
         publishStateNow()
-        let req = ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRule: rule)
+        let req = ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules)
         do { try await api.decideApproval(sessionID: sessionID, approvalID: approval.id, req) }
         catch {
             statusMessage = "Approval failed — \(APIClient.failureReason(error))."

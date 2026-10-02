@@ -73,13 +73,13 @@ import type { PrismaService } from '../prisma/prisma.service';
  *
  * The declaration was the first half of the answer, and honouring it was not enough: the same
  * project went on reading ON_INTEGRATION_LINE for the same criterion afterwards. The task holding it
- * declares nothing, and cannot be made to — `codeless` is written when a task is created and no door
- * writes it afterwards, so a task created without it can never gain it. What it has instead is a
- * better fact, and the LINE's own: it ran a branch, committed nothing to it, and when the line was
- * handed that branch — after the session that ran it had finished with it — it answered that the tip
- * was already ON THE UPSTREAM. That answer is §2.2's `ALREADY_LANDED`, it is on the task's own job
- * row, and it says what SR27's rule says one contract over — there was nothing of this task's to
- * land, because it never had a commit of its own.
+ * declared nothing, and then could not be made to — `codeless` was written only when a task was
+ * created. (Since 0346 the edit doors write it too, with a reason, and never for a task that has
+ * commits of its own.) What it has instead is a better fact, and the LINE's own: it ran a branch,
+ * committed nothing to it, and when the line was handed that branch — after the session that ran it
+ * had finished with it — it answered that the tip was already ON THE UPSTREAM. That answer is
+ * §2.2's `ALREADY_LANDED`, it is on the task's own job row, and it says what SR27's rule says one
+ * contract over — there was nothing of this task's to land, because it never had a commit of its own.
  *
  * §2.5 J9 already exempts the very same tasks from a dependent's wait, in SR27's words: a "write the
  * docs" prerequisite must not make the task after it demand a checkpoint that was never going to
@@ -201,6 +201,13 @@ export interface LandingJobFacts {
   targetShaBefore: string | null;
   /** The upstream tip the same job read, in the same fetch. */
   upstreamSha: string | null;
+  /** With NOTHING_TO_LAND: whether the runner measured the source tip an ancestor of that upstream
+   *  tip (0346). Null when it measured nothing — every older row, and every older runner. */
+  sourceOnUpstream: boolean | null;
+  /** The receipts the answer wrote. A NOTHING_TO_LAND writes one only when no work session of the
+   *  task had reported work of its own anywhere (J8), so an empty list there is the line saying the
+   *  task's work is on a branch it was not handed (`jobAnsweredForTheWholeTask`). */
+  receiptIds: readonly string[];
   /** The branch the line was handed: `refs/heads/<session branch>`, frozen at enqueue (J-T1a). */
   sourceRef: string;
   /** The job's first claim. The runner resolves the branch after it (J-S1), so no answer is older. */
@@ -353,10 +360,7 @@ export function lineStartedSql(alias: string): string {
  * reaches it by asking whether the source tip is an ancestor of the base it is working from, and for
  * a project with a line of its own that base is the TARGET — so a branch whose work was merged into
  * the project branch an hour ago and a branch that carries nothing at all are answered identically.
- * `NOTHING_TO_LAND` (0300) is the second of those said on its own: the runner reports it when the
- * source tip did not move off the commit its session started at, which is exactly "no commit of its
- * own". Both are accepted, and the other two conditions below are unchanged for both — they are what
- * makes the base the UPSTREAM instead:
+ * The other two conditions are what makes the base the UPSTREAM instead:
  *
  *  - no merge of the upstream into the target ran (`main_sync_sha` is null), so the base is the
  *    target tip itself rather than a commit that absorbed the upstream into it; and
@@ -368,17 +372,30 @@ export function lineStartedSql(alias: string): string {
  * found no commit of its own on it. Nothing here resolves ancestry: the answer is what the runner
  * resolved, and these are the columns it reports beside it.
  *
- * WHY `NOTHING_TO_LAND` DOES NOT WIDEN THIS: a row carrying it is still read with both conditions.
- * The state says the branch was empty; it does not say the branch was the task's WORK — a task whose
- * session died before it delivered and whose work is on another branch gets the same answer, and
- * letting that out of the roll-up on the state alone would be the false green this file refuses to
- * give. Where the line was at the upstream, the two readings coincide and the exemption stands; where
- * the line has moved past it, `jobSawTheFinishedBranch` and these conditions still withhold it.
+ * What it does NOT cover, said here rather than left to be discovered: an `ALREADY_LANDED` computed
+ * against a line that has moved PAST the upstream proves only that the tip is inside the LINE, and a
+ * task whose branch is offered to such a line goes on withholding LANDED. That is not a new answer —
+ * it is the one this lane has always given where it cannot tell, and withholding is the safe
+ * direction.
  *
- * What it does NOT cover, said here rather than left to be discovered: an answer computed against a
- * line that has moved PAST the upstream proves only that the tip is inside the LINE, and a task whose
- * branch is offered to such a line goes on withholding LANDED. That is not a new answer — it is the
- * one this lane has always given where it cannot tell, and withholding is the safe direction.
+ * `NOTHING_TO_LAND` (0300) is the line saying the branch never moved off the commit its session
+ * started at — "no commit of its own" — and since 0346 it is read by ONE fact: the runner's own
+ * measurement, taken when it gives that answer, that the source tip is an ancestor of the upstream
+ * (`source_on_upstream`). That is the guarantee the two conditions above give, without needing the
+ * line to BE the upstream for it to be known. It was read with those two conditions until then, and
+ * they hold only until a project branch's first landing: on 2026-10-01 a project's rollout task, which
+ * never had a commit, held its criterion at ON_INTEGRATION_LINE for ever on a line ahead of main
+ * (34WzvgkHWbY1VwXmSPUZi).
+ *
+ * WHY THE STATE NEVER COUNTS ON ITS OWN: it says the branch was empty, not that the branch was the
+ * task's WORK — a task whose session died before it delivered, and one whose work went to another
+ * branch, get the same answer, and letting either out of the roll-up on the state, or on a session
+ * or task status beside it, would be the false green this file refuses to give. So a
+ * NOTHING_TO_LAND that measured nothing (every row written before 0346, and every row an older
+ * runner writes) and one that measured the tip OFF the upstream (an empty branch forked from the
+ * project line: nothing on the branch, but not nothing that main lacks) both withhold — and one that
+ * measured it on the upstream is still only about one branch at one moment, which is what
+ * `jobSawTheFinishedBranch` and `jobAnsweredForTheWholeTask` are asked beside it for.
  *
  * And the OTHER reading of "it never had a commit of its own" — the branch never moved from the
  * commit it forked at — is not in this data, which is why the fact is read off the job instead of
@@ -390,12 +407,14 @@ export function lineStartedSql(alias: string): string {
  * A moment: the row records what was true when it was computed, nothing rewrites a terminal job (the
  * schema's `project_integration_job_terminal_guard`), and the upstream losing a commit is the one
  * direction a default branch does not move. The line growing past the upstream afterwards cannot
- * hurt either: at the moment of this observation the line WAS the upstream. What CAN move afterwards
+ * hurt either: at the moment of this observation the line WAS the upstream, or the tip was measured
+ * against the upstream itself, and an ancestor of the upstream stays one. What CAN move afterwards
  * is the branch itself, which is why this answer lets nothing out on its own — see
  * `jobSawTheFinishedBranch`.
  */
 export function jobSawTipOnUpstream(job: LandingJobFacts): boolean {
-  return (job.state === 'ALREADY_LANDED' || job.state === 'NOTHING_TO_LAND')
+  if (job.state === 'NOTHING_TO_LAND') return job.sourceOnUpstream === true;
+  return job.state === 'ALREADY_LANDED'
     && job.mainSyncSha === null
     && job.targetShaBefore !== null
     && job.targetShaBefore === job.upstreamSha;
@@ -446,12 +465,32 @@ export function jobSawTheFinishedBranch(job: LandingJobFacts): boolean {
 }
 
 /**
+ * Whether a NOTHING_TO_LAND is the line's answer about the TASK, and not only about the empty branch
+ * it was handed: true when the answer wrote its receipt.
+ *
+ * That receipt is written by the same transaction as the answer, and only when no work session of the
+ * task had reported work of its own anywhere (J8, `workSessionsReportingWork` in the relay) — the fact
+ * §2.5 J9 releases dependents on. When one had, the line was handed an empty branch while the task's
+ * work sat on another one: the shape of 2026-09-23, a retry that died with nothing beside the session
+ * that delivered. The answer then writes no receipt and tells the task which branch holds its work,
+ * and this lane reads the same fact the same way: that task has commits of its own, and the empty tip
+ * being on the upstream says nothing about them.
+ *
+ * An ALREADY_LANDED is not asked: it writes its receipt whenever it is written down, and it is read by
+ * the conditions `jobSawTipOnUpstream` already gives it.
+ */
+export function jobAnsweredForTheWholeTask(job: LandingJobFacts): boolean {
+  return job.state !== 'NOTHING_TO_LAND' || job.receiptIds.length > 0;
+}
+
+/**
  * One job's answer that the task's work carried nothing the upstream did not already have: the tip on
  * the upstream (`jobSawTipOnUpstream`), of the branch the work ended on, after it ended
- * (`jobSawTheFinishedBranch`).
+ * (`jobSawTheFinishedBranch`), with no work of the task's reported anywhere else
+ * (`jobAnsweredForTheWholeTask`).
  */
 export function jobFoundNothingOfItsOwn(job: LandingJobFacts): boolean {
-  return jobSawTipOnUpstream(job) && jobSawTheFinishedBranch(job);
+  return jobSawTipOnUpstream(job) && jobSawTheFinishedBranch(job) && jobAnsweredForTheWholeTask(job);
 }
 
 /**
@@ -516,12 +555,13 @@ export function lineSawNothingToLand(task: LandingServingTask): boolean {
  *
  * THE SECOND WAY, AND WHY IT HAD TO BE ADDED
  * ------------------------------------------
- * The declaration is a fact about an intention, and it is the ONLY fact of its kind: `codeless` is
- * written when a task is created and no door writes it afterwards, so a task created without it can
- * never gain it. On 2026-09-22 that cost a project of 48 finished tasks its DONE a second time: its
- * criterion 12 was served by a finished acceptance task that ran a branch, committed nothing to it
- * and declared nothing, and no receipt could ever put its work on `main` — the same deadlock the
- * declaration had just been taught to break, one task over, with no declaration anywhere to read.
+ * The declaration is a fact about an intention, and it is the ONLY fact of its kind: `codeless` was
+ * written only when a task was created, so a task created without it could never gain it (0346 gave
+ * the edit doors it too — with a reason, and never for a task that has commits of its own). On
+ * 2026-09-22 that cost a project of 48 finished tasks its DONE a second time: its criterion 12 was
+ * served by a finished acceptance task that ran a branch, committed nothing to it and declared
+ * nothing, and no receipt could ever put its work on `main` — the same deadlock the declaration had
+ * just been taught to break, one task over, with no declaration anywhere to read.
  *
  * What that task has instead is the line's own answer, and it is the better fact of the two: the
  * task's branch was offered to the line after its session had finished with it, and the line replied
@@ -659,6 +699,8 @@ export const LANDING_SERVING_WORK_SELECT = {
       mainSyncSha: true,
       targetShaBefore: true,
       upstreamSha: true,
+      sourceOnUpstream: true,
+      receiptIds: true,
       sourceRef: true,
       startedAt: true,
       session: { select: { finishedAt: true, worktreeBranch: true, worktreeDirty: true } },

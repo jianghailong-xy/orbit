@@ -15,6 +15,7 @@ import {
   type RunEvent,
   Transcript,
   UndeliveredCtx,
+  resultText,
 } from './Transcript';
 import { encodeId } from '../lib/idCodec';
 import { ApiError } from '../api';
@@ -737,6 +738,27 @@ describe('engine stderr', () => {
     expect(html).toContain('Invalid patch: multiple operations target');
     expect(html).toContain('Show full log');
     expect(html).not.toContain('chat-error-card-log');
+  });
+
+  it('renders a codex router error as a compact tool row', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          stderrEvent(
+            1,
+            '2026-10-01T11:53:04.032027Z ERROR codex_core::tools::router: ' +
+              'error=view_image.detail only supports `high` or `original`; omit `detail` for ' +
+              'default high resized behavior, got `low`',
+          ),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('chat-error-card');
+    expect(html).toContain('view_image');
+    expect(html).toContain('Failed');
+    expect(html).toContain('view_image.detail only supports');
+    expect(html).not.toContain('chat-error-text');
   });
 
   it('folds multiline apply_patch stderr into one collapsed card', () => {
@@ -1803,6 +1825,28 @@ describe('tool run folding', () => {
 
     expect(html).toContain('Bash × 3');
     expect(html).toContain(`data:image/png;base64,${data}`);
+  });
+
+  // Codex's app-server can pass an MCP CallToolResult wrapper through unchanged. The image is
+  // then under `content`, rather than being the tool_result's top-level array, so it must still
+  // split the run and must not fall back to printing the base64 payload as JSON text.
+  it('keeps a wrapped screenshot out of the fold', () => {
+    const data = 'iVBORw0KGgo=';
+    const shot = {
+      content: [{ type: 'text', text: 'screenshot ready' }, { type: 'image', data, mimeType: 'image/png' }],
+    };
+    const html = render([
+      callWith('Bash', { command: 'ls' }, 'a.txt'),
+      callWith('Bash', { command: 'pwd' }, '/tmp'),
+      callWith('Bash', { command: 'whoami' }, 'root'),
+      callWith('exec', { command: 'capture' }, shot),
+    ]);
+
+    expect(html).toContain('Bash × 3');
+    expect(html).not.toContain('chat-tool-group-detail');
+    expect(html).toContain(`data:image/png;base64,${data}`);
+    expect(resultText(shot)).toBe('screenshot ready');
+    expect(html).not.toContain(`"data": "${data}"`);
   });
 
   it('still folds a run of plain calls', () => {

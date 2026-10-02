@@ -636,6 +636,14 @@ func setupSourceWorktree(job *ClaimedSession, baseDir string) string {
 	}
 	execDir := filepath.Join(wtPath, rel)
 
+	// A checkout that is not this run's to re-attach is retired first (checkoutBelongsTo).
+	if isGitRepo(wtPath) && !checkoutBelongsTo(wtPath, repoRoot, job.Branch) {
+		if err := retireCheckout(job.SessionID, wtPath); err != nil {
+			return refuseSourceWorktree(job, sourceRefusalWorktreeRequired,
+				fmt.Sprintf("the checkout at %s is not this run's and could not be retired: %v", wtPath, err))
+		}
+	}
+
 	// Re-attach after a restart. The fork point comes from the base ref, else the pin — never from
 	// merge-base with HEAD, which for a checkout forked off a project branch is main's fork point.
 	if isGitRepo(wtPath) {
@@ -750,6 +758,17 @@ func setupWorktree(job *ClaimedSession, baseDir string) string {
 		rel = "."
 	}
 	execDir := filepath.Join(wtPath, rel)
+
+	// A checkout that is not this session's to re-attach — one a workspace on another repository
+	// left here before the session was moved — is retired first (checkoutBelongsTo), and a new one
+	// made below.
+	if isGitRepo(wtPath) && !checkoutBelongsTo(wtPath, repoRoot, job.Branch) {
+		if err := retireCheckout(job.SessionID, wtPath); err != nil {
+			job.IsolationStatus = isoSharedNoGit
+			logln(fmt.Sprintf("session %s — checkout %s is not this session's and could not be retired (%v); running shared", job.SessionID, wtPath, err))
+			return baseDir
+		}
+	}
 
 	// Reuse an existing checkout (reclaim/resume after a restart): the dir survives with
 	// any uncommitted in-flight work intact. Recover BaseSha from the persisted base ref.
@@ -2452,7 +2471,9 @@ const maxRetainedEligibleCheckouts = 32
 
 // gcWorktrees is the ONLY thing that removes a session checkout. Finalization no longer does:
 // the server's keepCheckout=false means a checkout has become ELIGIBLE for reclamation, and this
-// sweep re-asks that same judgement every pass rather than anyone recording it locally.
+// sweep re-asks that same judgement every pass rather than anyone recording it locally. (Setting up
+// a claim also retires a checkout at the session's path that is not that claim's to re-attach —
+// retireCheckout — which replaces it rather than reclaiming it.)
 //
 // What it removes, and when:
 //
@@ -2487,7 +2508,8 @@ func gcWorktrees(t *Transport, live map[string]bool, pressure worktreeGCPressure
 	var candidates []candidate
 	var names []string
 	for _, e := range entries {
-		if !e.IsDir() || live[e.Name()] || strings.HasPrefix(e.Name(), rebaseScratchPrefix) || strings.HasPrefix(e.Name(), mergeRecoveryWorktreePrefix) {
+		if !e.IsDir() || live[e.Name()] || strings.HasPrefix(e.Name(), rebaseScratchPrefix) || strings.HasPrefix(e.Name(), mergeRecoveryWorktreePrefix) ||
+			strings.HasPrefix(e.Name(), retiredCheckoutPrefix) {
 			continue
 		}
 		var touched time.Time

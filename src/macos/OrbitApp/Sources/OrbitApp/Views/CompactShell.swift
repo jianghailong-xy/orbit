@@ -17,8 +17,9 @@ import OrbitKit
 /// section's `NavigationStack` — each section keeps its own, so switching between them does not cost
 /// either one its depth. The rows here carry their own destinations and push them by hand — a
 /// `Button` calling `AppModel.push`, since a `NavigationLink(value:)` would draw the platform's
-/// disclosure indicator (see `AppModel.push`); the iPad/macOS shells keep the `List(selection:)`
-/// sidebar + detail pair, bound to a projection of that same stack.
+/// disclosure indicator (see `AppModel.push`). The iPad seats this same drawer as its split view's
+/// first column (`MainView`) and macOS keeps a `List(selection:)` source list; both pair it with a
+/// detail bound to a projection of that same stack.
 struct CompactShell: View {
     @Environment(AppModel.self) private var model
 
@@ -638,37 +639,36 @@ private enum DrawerMetrics {
 
 /// The left navigation drawer: a search header over the section rail (mirroring the web sidebar), with
 /// a floating New session / Settings action bar laid over the rail's bottom. The current section is
-/// highlighted.
-private struct NavigationDrawer: View {
+/// highlighted. The iPad's sidebar is this same view (`inSidebarColumn`), so the two never drift apart.
+struct NavigationDrawer: View {
     @Environment(AppModel.self) private var model
     let close: () -> Void
     /// True once any part of the drawer is on screen (open, or peeking mid-drag). While false the rows
     /// still render their static content — only the animated live cues are held back, so opening never
     /// waits on anything. See the call site in `CompactShell`.
     let live: Bool
+    /// The iPad: the drawer is the split view's first column, which stays until its own toggle hides
+    /// it. Its title and search ride that column's bar, beside the system's sidebar toggle, rather
+    /// than drawing a second header under it; and a work row only switches section, as the source
+    /// list it replaced did — the list column is on screen anyway, and the detail keeps its page.
+    var inSidebarColumn = false
 
     var body: some View {
         return VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Orbit")
-                    .font(.title2.weight(.bold))
-                // The ⌘K palette's touch entry point: jump to any session, in any workspace. iPad
-                // keyboards get ⌘K itself as well.
-                Spacer()
-                Button {
-                    close()
-                    model.searchOpen = true
-                } label: {
-                    DrawerCircleGlyph(systemName: "magnifyingglass")
+            if !inSidebarColumn {
+                HStack {
+                    drawerTitle
+                    Spacer()
+                    searchButton {
+                        DrawerCircleGlyph(systemName: "magnifyingglass")
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Search sessions")
-                .keyboardShortcut("k", modifiers: .command)
+                .padding(.leading, DrawerMetrics.textLeading)
+                .padding(.trailing, DrawerMetrics.hInset)
+                .padding(.top, 14)
+                .padding(.bottom, 8)
             }
-            .padding(.leading, DrawerMetrics.textLeading)
-            .padding(.trailing, DrawerMetrics.hInset)
-            .padding(.top, 14)
-            .padding(.bottom, 8)
 
             List {
                 // The work leads the rail — projects and tasks — ABOVE the Workspaces and set apart
@@ -721,6 +721,55 @@ private struct NavigationDrawer: View {
         // One level below the content card's background (ChatGPT-style), so the undimmed white card
         // separates from the drawer in light mode and the shadow band stays visible in dark mode.
         .background(drawerSurface)
+        // On the iPad nothing slides over the rail to cast that shadow: the list column simply sits
+        // beside it, near-white on near-white, so a hairline marks the column's edge instead.
+        .overlay(alignment: .trailing) {
+            if inSidebarColumn {
+                Rectangle()
+                    .fill(Color(uiColor: .separator))
+                    .frame(width: 0.5)
+                    .ignoresSafeArea()
+            }
+        }
+        .toolbar {
+            if inSidebarColumn { columnBar }
+        }
+        // Only the iPad column has a bar for this to set: one row, carrying `columnBar`'s title.
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var drawerTitle: some View {
+        Text("Orbit")
+            .font(.title2.weight(.bold))
+    }
+
+    /// The ⌘K palette's touch entry point: jump to any session, in any workspace. iPad keyboards get
+    /// ⌘K itself as well.
+    private func searchButton(@ViewBuilder _ label: () -> some View) -> some View {
+        Button {
+            close()
+            model.searchOpen = true
+        } label: {
+            label()
+        }
+        .accessibilityLabel("Search sessions")
+        .keyboardShortcut("k", modifiers: .command)
+    }
+
+    /// The header, on the iPad column's bar: the title drawn on the bar itself — off the shared glass
+    /// (iOS 26), as the session list's workspace title is — and the search button beside the system's
+    /// sidebar toggle.
+    @ToolbarContentBuilder
+    private var columnBar: some ToolbarContent {
+        if #available(iOS 26.0, *) {
+            ToolbarItem(placement: .topBarLeading) { drawerTitle }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .topBarLeading) { drawerTitle }
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            searchButton { Image(systemName: "magnifyingglass") }
+        }
     }
 
     // MARK: Action bar
@@ -813,7 +862,7 @@ private struct NavigationDrawer: View {
     private func sectionRow(_ section: AppSection) -> some View {
         let selected = section == model.selectedSection
         return Button {
-            if section == .tasks {
+            if section == .tasks && !inSidebarColumn {
                 model.selectedTaskID = nil
                 model.taskListsDirectoryPresented = false
                 model.tasks?.selectScope(.all)
@@ -847,7 +896,7 @@ private struct NavigationDrawer: View {
         let waiting = model.projects?.needsYouCount ?? 0
         return Button {
             model.selectedSection = .projects
-            model.nav.popToRoot()
+            if !inSidebarColumn { model.nav.popToRoot() }
             close()
         } label: {
             pill(selected: selected) {
@@ -884,7 +933,7 @@ private struct NavigationDrawer: View {
         let waiting = model.wiki?.proposalsToReview ?? 0
         return Button {
             model.selectedSection = .wiki
-            model.nav.popToRoot()
+            if !inSidebarColumn { model.nav.popToRoot() }
             close()
         } label: {
             pill(selected: selected) {

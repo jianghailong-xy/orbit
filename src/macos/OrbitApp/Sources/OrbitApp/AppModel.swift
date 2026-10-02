@@ -91,6 +91,13 @@ final class AppModel {
     /// Latches the one-shot default-landing resolution so it runs only after the first successful
     /// agent-list load, and never overrides a later user/deep-link choice.
     private var didResolveDefaultLanding = false
+    /// The workspace a cold launch landed on from its snapshot (`restoreLaunchSnapshot`) before the
+    /// workspace fetch answered. While it is still the one selected nobody has chosen anything, so
+    /// `resolveDefaultLanding` decides afresh once the fetch succeeds.
+    private var provisionalLandingAgentID: String?
+    /// Whether the launch landing is still to come — the workspace pane then keeps its spinner rather
+    /// than asking for a pick the landing is about to make (`AgentContentColumn`).
+    var launchLandingPending: Bool { !didResolveDefaultLanding }
     /// Whether Settings is up as a sheet (iOS) — a read of the navigation state like every other
     /// fact about what is on screen. On iOS Settings is presented over the section you are in rather
     /// than switched to: the drawer's gear and the iPad sidebar's row both set this, so closing it
@@ -323,6 +330,11 @@ final class AppModel {
     private static let runnerSnapshotRefreshInterval: TimeInterval = 15
     #endif
     private var lastSnapshot: [Session]?
+    /// True from a cold launch's restore (`restoreLaunchSnapshot`) until the first fetched Open
+    /// snapshot lands. The list in hand until then is the previous run's, or built on it by an
+    /// in-place update, and a diff against it would announce everything that changed while the app
+    /// was gone — so it never becomes `lastSnapshot`, and that first fetch only primes.
+    private var openListFromLaunchSnapshot = false
     /// Sessions known to be leaving Open because somebody FILED them (completed / trashed), rather
     /// than because a run finished. Filing drops the row from Open, which the snapshot diff would
     /// otherwise read as the run finishing and announce with a "Session finished" banner — reporting
@@ -379,12 +391,16 @@ final class AppModel {
         tokenStore = InMemoryTokenStore()
         #endif
 
-        // Restore the last instance; if its token is still in the Keychain, skip the login screen.
+        // Restore the last instance; if its token is still in the Keychain, skip the login screen —
+        // and draw the first frame from what the last run left rather than from nothing.
         if let saved = UserDefaults.standard.string(forKey: Self.instanceKey),
            let url = ServerURL.normalize(saved) {
             instanceField = saved
             configure(url)
-            if tokenStore.token(for: url) != nil { signedIn = true }
+            if tokenStore.token(for: url) != nil {
+                signedIn = true
+                restoreLaunchSnapshot()
+            }
         }
     }
 
@@ -405,6 +421,9 @@ final class AppModel {
     private(set) var wiki: WikiModel?
     /// Warm cache of open consoles + their on-disk transcript store, scoped to this instance.
     private(set) var consoleRegistry: ConsoleRegistry?
+    /// What the next cold launch draws first (`persistLaunchSnapshot` / `restoreLaunchSnapshot`),
+    /// scoped to this instance.
+    @ObservationIgnored private var launchSnapshots: LaunchSnapshotStore?
     #if os(macOS)
     /// The local runner this Mac may host. Shared between the menu-bar tray (status + quick
     /// Start/Stop) and the runner-manager window (log + enroll). Created per instance. macOS-only:
@@ -458,6 +477,7 @@ final class AppModel {
         wiki = WikiModel(baseURL: url, tokenStore: tokenStore)
         consoleRegistry = ConsoleRegistry(baseURL: url, tokenStore: tokenStore,
                                           store: ConsoleRegistry.defaultStore(for: url))
+        launchSnapshots = LaunchSnapshotStore.defaultStore(for: url)
         // A console's fleeting confirmations ("Merged into main", "Committed changes") ride the app's
         // one toast host, not the status line above the composer — see `showToast`.
         consoleRegistry?.onToast = { [weak self] request, sessionID in
@@ -669,6 +689,8 @@ final class AppModel {
         libraryRefreshQueue = CoalescedRefreshQueue()
         controlPlaneLive = false
         consoleRegistry?.reset()   // persist open transcripts, drop the warm cache
+        // The account's lists leave with it: the next launch here may be someone else's.
+        launchSnapshots?.remove()
         // Cards read from this account are not ones to draw against the next: the store behind them
         // holds its answers, and a new sign-in builds a new one anyway.
         linkCards?.removeAll()
@@ -694,6 +716,7 @@ final class AppModel {
         sessionDetails.removeAll()
         resetNavigation()
         lastSnapshot = nil
+        openListFromLaunchSnapshot = false
         menuSummary = .empty
         updateDockBadge(nil)
         // Clear the write-skip trackers so the next sign-in's first snapshot always reconciles the
@@ -715,6 +738,7 @@ final class AppModel {
         selectedSection = .agents      // runs the section switch's own housekeeping first
         nav = NavState()               // then clears every section's stack with it
         didResolveDefaultLanding = false
+        provisionalLandingAgentID = nil
         selectedTaskID = nil
         selectedAgentID = nil
     }
@@ -766,9 +790,9 @@ final class AppModel {
         #endif
         pollTask = Task { @MainActor [weak self] in
             // A restored-token launch sets `signedIn` in `init` without going through `login()`, so
-            // `user` is still nil — prime it once so the sidebar account footer shows the real name
-            // instead of the "Account" placeholder.
-            if let self, self.user == nil { self.user = try? await self.api?.me() }
+            // `user` is nil or the launch snapshot's copy — read it once so the account footer shows
+            // the real name and the preferences are this run's. A failed read keeps what is there.
+            if let self, let me = try? await self.api?.me() { self.user = me }
             while !Task.isCancelled {
                 if let self { await self.loadSessions() }
                 if let self {
@@ -1231,7 +1255,9 @@ final class AppModel {
     func loadSessions() async {
         guard let api else { return }
         do {
-            applySessionSnapshot(try await api.listSessions(view: .open))
+            let list = try await api.listSessions(view: .open)
+            openListFromLaunchSnapshot = false
+            applySessionSnapshot(list)
         } catch APIError.unauthorized {
             logout()
         } catch {
@@ -1270,7 +1296,7 @@ final class AppModel {
             let present = Set(list.map(\.id))
             filedSessions.formIntersection(present)
         }
-        lastSnapshot = list
+        if !openListFromLaunchSnapshot { lastSnapshot = list }
         // Only cached cold-route records are reconciled; the Open list itself remains the
         // primary store. If that row later leaves a loaded scope, its fallback is still the
         // newest lifecycle/capability snapshot we observed rather than the original fetch.
@@ -1281,19 +1307,7 @@ final class AppModel {
         // it avoids. The badge / notification reconciles below deliberately stay outside this gate:
         // they have their own first-run rules, and a launch whose first snapshot happens to match
         // still has to reconcile whatever a silent push left on the icon.
-        if list != sessions {
-            sessions = list
-            needsYouSessions = SessionGrouping.group(list).needsYou
-            agentNeedsYou = NeedsYouLogic.byAgent(list)
-            #if os(iOS)
-            runningWorkspaceIDs = WorkspaceActivityLogic.runningWorkspaceIDs(list)
-            jobWorkspaceIDs = WorkspaceActivityLogic.jobWorkspaceIDs(list)
-            projectCoordinators = ProjectAttention.coordinatorPulses(list)
-            #endif
-            // The agent pane's Open list is this same snapshot narrowed to one agent, so hand it over
-            // here instead of leaving it to fetch the identical payload on its own timer.
-            agents?.applyOpenSnapshot(list)
-        }
+        if list != sessions { adoptOpenList(list) }
         let summary = MenuBar.summary(from: list)
         if summary != menuSummary { menuSummary = summary }
         if !didWriteBadge || lastBadge != summary.badge {
@@ -1320,6 +1334,23 @@ final class AppModel {
             }
         }
         #endif
+    }
+
+    /// The Open list and everything the drawer and the session lists derive from it. Written by a
+    /// fetched snapshot (`applySessionSnapshot`) and by a cold launch's restore, which draws from the
+    /// previous run's list without announcing anything from it.
+    private func adoptOpenList(_ list: [Session]) {
+        sessions = list
+        needsYouSessions = SessionGrouping.group(list).needsYou
+        agentNeedsYou = NeedsYouLogic.byAgent(list)
+        #if os(iOS)
+        runningWorkspaceIDs = WorkspaceActivityLogic.runningWorkspaceIDs(list)
+        jobWorkspaceIDs = WorkspaceActivityLogic.jobWorkspaceIDs(list)
+        projectCoordinators = ProjectAttention.coordinatorPulses(list)
+        #endif
+        // The agent pane's Open list is this same snapshot narrowed to one agent, so hand it over
+        // here instead of leaving it to fetch the identical payload on its own timer.
+        agents?.applyOpenSnapshot(list)
     }
 
     /// The agent a session runs as, for scoping the composer's `/` autocomplete. Cold Completed /
@@ -2152,6 +2183,9 @@ final class AppModel {
     /// an agent, a session or another section is respected. Decided only off a successful agent
     /// fetch: an offline launch leaves it unlatched, and the control plane's reconnect reload decides
     /// instead. The rules live in `LoadFailureLogic.defaultLanding`.
+    ///
+    /// A landing the launch snapshot made is decided again here, unless something has been opened
+    /// over it since — a draft or a console makes it a place someone chose to be.
     private func resolveDefaultLanding() {
         guard !didResolveDefaultLanding, let agents else { return }
         let landing = LoadFailureLogic.defaultLanding(
@@ -2160,14 +2194,48 @@ final class AppModel {
             lastAgentID: UserDefaults.standard.string(forKey: Self.lastAgentKey),
             section: selectedSection,
             selectedAgentID: selectedAgentID,
-            selectedSessionID: selectedAgentSessionID)
+            selectedSessionID: selectedAgentSessionID,
+            provisionalAgentID: nav.sectionAtRoot ? provisionalLandingAgentID : nil)
         switch landing {
         case .undecided: return
         case .keepCurrent: break
-        case .agent(let id): selectedAgentID = id
+        case .agent(let id): if selectedAgentID != id { selectedAgentID = id }
         case .runners: selectedSection = .runners
         }
         didResolveDefaultLanding = true
+        provisionalLandingAgentID = nil
+    }
+
+    /// Draw a cold launch from what the previous run left (`persistLaunchSnapshot`): the account, the
+    /// workspace list and the Open sessions, landed on the workspace you were in — so the first frame
+    /// is that workspace's session list rather than a spinner. Nothing here is treated as an answer:
+    /// the launch's own fetches replace every list as they land, and the landing made here is only
+    /// provisional (see `resolveDefaultLanding`). Nothing is announced off this list either: see
+    /// `openListFromLaunchSnapshot`.
+    private func restoreLaunchSnapshot() {
+        guard let snapshot = launchSnapshots?.load(), let agents else { return }
+        let landing = snapshot.landingAgentID(
+            lastAgentID: UserDefaults.standard.string(forKey: Self.lastAgentKey))
+        user = snapshot.user
+        // Points the landing's list at its Open rows, which `adoptOpenList` then fills.
+        agents.adoptLaunchSnapshot(snapshot, showing: landing)
+        openListFromLaunchSnapshot = true
+        adoptOpenList(snapshot.openSessions)
+        guard let landing else { return }
+        provisionalLandingAgentID = landing
+        selectedAgentID = landing
+    }
+
+    /// Write what the next cold launch draws first. Called as the app leaves the foreground — the
+    /// last moment it is sure of the CPU — and synchronous for the same reason
+    /// `ConsoleRegistry.persistAll` is. Only once this run's workspace fetch has answered: a run that
+    /// never reached the server leaves the previous snapshot as it was.
+    func persistLaunchSnapshot() {
+        guard signedIn, let agents, agents.loadState.hasLoaded, let launchSnapshots else { return }
+        launchSnapshots.save(LaunchSnapshot(user: user, agents: agents.items,
+                                            runnerNames: agents.runnerNames,
+                                            runnerOrder: agents.runnerOrder,
+                                            openSessions: sessions))
     }
 
     func handle(_ intent: AppIntent) {

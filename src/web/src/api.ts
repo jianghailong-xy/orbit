@@ -5,6 +5,8 @@ import type {
   OpenItemDeliveryCard,
   ProjectStartedCard,
   SessionCapabilities,
+  SessionMessageCard,
+  SessionRequestView,
   SessionTurnIntent,
   SessionTurnPlacement,
 } from '@orbit/shared';
@@ -378,6 +380,13 @@ export const createInteractiveSession = (body: {
     },
   });
 
+/** Start the server-owned repair conversation for a merge recovery. */
+export const createMergeRepairSession = (sessionId: string, preparePR = false) =>
+  api<MergeRepairSession>(`/sessions/${sessionId}/merge-repair`, {
+    method: 'POST',
+    body: preparePR ? { preparePR: true } : {},
+  });
+
 /** Import a local Claude Code transcript as a session of a workspace — the workspace-settings
  *  entry for `orbit session import`. The runner locates the transcript on its own disk, replays
  *  it into Orbit, and resumes the conversation when the next message is sent. The create answers
@@ -611,6 +620,10 @@ export interface ActiveSessionTurn {
   openItemDelivery?: OpenItemDeliveryCard;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStartedCard;
+  /** Another Orbit session's message (`SessionMessageCard`): who sent it, as the runner's echo will
+   *  carry it. Its words are that session's, not the reader's. Absent on every turn nobody's session
+   *  sent. */
+  sessionMessage?: SessionMessageCard;
   /** The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
    *  delivery — so nobody typed its words. Absent on every turn somebody sent. */
   authoredByOrbit?: true;
@@ -1224,6 +1237,19 @@ export type SessionListItem = Record<string, any> & {
   status?: string | null;
 };
 
+/** The repair conversation attached to a merge recovery on its parent session. */
+export interface MergeRepairSession {
+  id: string;
+  title?: string | null;
+  runState?: string | null;
+  runStatus?: string | null;
+  status?: string | null;
+  lifecycleState?: string | null;
+  sessionState?: string | null;
+  error?: string | null;
+  completedAt?: string | null;
+}
+
 /** A single session's detail, as returned by GET /sessions/:id. Only the fields the web
  *  reads are typed; `branch`/`baseSha`/`changedFiles`/`isolationStatus` carry the
  *  per-session git worktree result (null until the runner reports completion). */
@@ -1298,6 +1324,7 @@ export interface SessionDetail {
   mergeStatus?: 'pending' | 'merged' | 'conflict' | 'error' | null;
   mergeError?: string | null;
   mergeRecovery?: MergeRecovery | null;
+  mergeRepairSession?: MergeRepairSession | null;
   mergeRecoveryAction?: MergeRecoveryAction | null;
   mergeRecoverySupported?: boolean;
   mergedAt?: string | null;
@@ -1347,6 +1374,10 @@ export interface SessionDetail {
  *  resolve the runner behind a `/sessions/:id` deep link and show its worktree output. */
 export const getSession = (idOrPublicId: string) =>
   api<SessionDetail>(`/sessions/${idOrPublicId}`);
+
+/** One session request as it stands now — the state a request card shows (lib/sessionRequest). */
+export const getSessionRequest = (requestId: string) =>
+  api<SessionRequestView>(`/session-requests/${encodeURIComponent(requestId)}`);
 
 /**
  * Open (or return) the conversation a task list is steered from.

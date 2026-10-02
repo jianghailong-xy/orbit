@@ -761,7 +761,7 @@ func cmdResume(args []string) {
 		}
 		args = append(args, "resume", "--include-non-interactive", sessionID)
 		cmd = exec.Command("codex", args...)
-		if state.Shared {
+		if state.CodexHome != "" {
 			cmd.Env = envWithValue(os.Environ(), "CODEX_HOME", state.CodexHome)
 		}
 	case providerKimi:

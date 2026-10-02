@@ -20,20 +20,23 @@ package main
 //
 // Two things make it cheap enough to keep in the default suite:
 //
-//   - The control frames themselves start no turn. The model probe opens one credential-free
-//     turn only to read the CLI's authoritative system/init model after set_model; the CLI
-//     reports that state before its synthetic signed-out answer, so no API request or token is
-//     involved.
+//   - The control frames themselves start no turn. The model probe opens one turn only to read
+//     the CLI's authoritative system/init model after set_model; the CLI reports that state
+//     before the turn's first API call, which the probe's own API answers (below).
 //   - The control channel is serviced before authentication matters — but set_model's model
-//     argument is not. 2.1.270 validates an id it cannot resolve locally against the API, so
-//     on a config dir with no credentials in it those answer "Unable to validate model: Could
-//     not resolve authentication method". set_permission_mode, and set_model's own argument
-//     checks, still answer with no credentials at all (verified against 2.1.241, and again
-//     against 2.1.270, on an empty HOME); only the id lookup reaches out, which is why the
-//     probes move a model this CLI resolves offline (realClaudeTargetModel). So nothing here
-//     borrows the machine's login and "signed out" is still not a skip condition — a skip for
-//     it would be dead code hiding a real regression. If a future CLI does gate the control
-//     channel itself behind a login, these fail loudly with its own stderr.
+//     argument is not. The CLI validates an id it cannot resolve locally against the API, and
+//     which ids it resolves locally moves with every release: claude-opus-5 did on 2.1.270
+//     and does not on 2.1.286 (only the bare aliases still do, each to whatever id that
+//     release maps it to), so on a config dir with no credentials in it set_model answers
+//     "Unable to validate model: Could not resolve authentication method".
+//     set_permission_mode, and set_model's own argument checks, still answer with no
+//     credentials at all (verified against 2.1.241, 2.1.270 and 2.1.286, on an empty HOME).
+//     So every probe's CLI is pointed at a loopback Anthropic API with a throwaway token
+//     (realClaudeLoopbackAPI), the same door the request-body probes use: the validation
+//     call is answered there, nothing borrows the machine's login, nothing reaches the
+//     network, and "signed out" is still not a skip condition — a skip for it would be dead
+//     code hiding a real regression. If a future CLI does gate the control channel itself
+//     behind a login, these fail loudly with its own stderr.
 //
 // The one reason to skip is a CLI that is not installed, and the skip says so out loud.
 
@@ -45,6 +48,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
@@ -63,17 +68,13 @@ const (
 
 	// The two model ids the set_model probes move between: the process is spawned on one
 	// and asked for the other, so an init readback left on the spawn model cannot pass.
-	// Haiku is the spawn model so that a probe that somehow did reach an API would be the
-	// cheapest one available; --model is not validated at spawn, so the spawn id does not
-	// have to be one the CLI can resolve offline.
+	// Haiku is the spawn model so that a probe that somehow did reach a real API would be the
+	// cheapest one available; --model is not validated at spawn.
 	//
-	// The target does have to be. set_model is the one frame here whose argument 2.1.270
-	// checks against the API, and a probe with no credentials cannot pass that check:
-	// measured on 2.1.270 against an empty config dir, "claude-opus-5" and the aliases
-	// opus/sonnet/haiku answer success, while "claude-sonnet-5", "claude-haiku-4-5" and
-	// "claude-fable-5-1" answer "Unable to validate model: Could not resolve authentication
-	// method". claude-opus-5 is also the id Orbit sends by default, so the frame under test
-	// stays the one production really writes, and system/init reads it back verbatim.
+	// set_model is the one frame here whose argument the CLI checks against the API, which
+	// the probe's loopback API answers (realClaudeLoopbackAPI). claude-opus-5 is the id Orbit
+	// sends by default, so the frame under test stays the one production really writes, and
+	// system/init reads it back verbatim.
 	realClaudeSpawnModel  = "claude-haiku-4-5-20251001"
 	realClaudeTargetModel = "claude-opus-5"
 )
@@ -84,6 +85,7 @@ const (
 // naming it. A success not followed by one would be a change that was acknowledged and not
 // made.
 func TestRealClaudeAcceptsASetPermissionMode(t *testing.T) {
+	t.Parallel()
 	agent := realClaudeContractAgent()
 	p := startRealClaudeProbe(t, agent)
 
@@ -110,6 +112,7 @@ func TestRealClaudeAcceptsASetPermissionMode(t *testing.T) {
 // to it is to throw the process away and re-spawn. Both halves are asserted, because a
 // refusal whose text goes missing degrades the same way while telling the user nothing.
 func TestRealClaudeRefusesAnUnknownPermissionMode(t *testing.T) {
+	t.Parallel()
 	agent := realClaudeContractAgent()
 	p := startRealClaudeProbe(t, agent)
 
@@ -151,6 +154,7 @@ func TestRealClaudeRefusesAnUnknownPermissionMode(t *testing.T) {
 // authoritative readback: it names the model the new turn will use, so an unchanged or
 // wrongly applied request still fails this assertion.
 func TestRealClaudeAcceptsASetModel(t *testing.T) {
+	t.Parallel()
 	agent := realClaudeContractAgent()
 	p := startRealClaudeProbe(t, agent)
 
@@ -180,6 +184,7 @@ func TestRealClaudeAcceptsASetModel(t *testing.T) {
 // would turn every model switch in production into a re-spawn. Both sides are checked
 // here, because the omission only means anything if the engine is the one enforcing it.
 func TestRealClaudeTakesASetModelWithNoSystemPrompt(t *testing.T) {
+	t.Parallel()
 	agent := realClaudeContractAgent()
 	p := startRealClaudeProbe(t, agent)
 
@@ -309,11 +314,15 @@ func startRealClaudeProbe(t *testing.T, agent AgentExecConfig) *realClaudeProbe 
 	// Nothing a probe does may touch this machine's own Claude Code state. Both dirs are
 	// redirected: CLAUDE_CONFIG_DIR is where the CLI keeps credentials, settings and the
 	// session files it writes, and HOME is where it looks when that is unset. They are left
-	// EMPTY rather than seeded from the real ones — no credential is borrowed because none
-	// is needed — so a probe can neither read the user's login nor leave a session in their
-	// history, and both dirs go away with the test.
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	// EMPTY rather than seeded from the real ones — no credential is borrowed; the only one
+	// the CLI gets is the loopback API's throwaway token below — so a probe can neither read
+	// the user's login nor leave a session in their history, and both dirs go away with the
+	// test. All of it is the CLI's environment, layered over the runner's the way a session's
+	// own env is (envWithAgent), and none of it the test process's: probes run in parallel.
+	agent.Env = map[string]string{
+		"HOME":              t.TempDir(),
+		"CLAUDE_CONFIG_DIR": t.TempDir(),
+	}
 	// The model test opens one turn to obtain system/init. Make the empty config decisive:
 	// inherited API, OAuth, gateway or cloud-provider credentials must not turn that local
 	// state readback into a paid external request.
@@ -331,8 +340,12 @@ func startRealClaudeProbe(t *testing.T, agent AgentExecConfig) *realClaudeProbe 
 		"CLAUDE_CODE_USE_MANTLE",
 		"CLAUDE_CODE_USE_VERTEX",
 	} {
-		t.Setenv(key, "")
+		agent.Env[key] = ""
 	}
+	// The one API the CLI is given instead, over the cleared ones.
+	api := realClaudeLoopbackAPI(t)
+	agent.Env["ANTHROPIC_BASE_URL"] = api.URL
+	agent.Env["ANTHROPIC_AUTH_TOKEN"] = "orbit-setconfig-probe"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &ClaimedSession{
@@ -359,6 +372,39 @@ func startRealClaudeProbe(t *testing.T, agent AgentExecConfig) *realClaudeProbe 
 	return p
 }
 
+// realClaudeLoopbackAPI is the Anthropic API a probe's CLI is pointed at. set_model checks its
+// id with one non-streaming completion, answered here as a success for whatever model it
+// names; the readback turn's streaming call gets a canned answer, so the CLI has nothing to
+// retry. Everything else — `HEAD /api/hello` is its reachability check — is waved through.
+func realClaudeLoopbackAPI(t *testing.T) *httptest.Server {
+	t.Helper()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || !strings.HasSuffix(r.URL.Path, "/v1/messages") {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{}`))
+			return
+		}
+		var req struct {
+			Model  string `json:"model"`
+			Stream bool   `json:"stream"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		if req.Stream {
+			writeCannedStream(w, textReply("DONE"))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id": "msg_probe", "type": "message", "role": "assistant", "model": req.Model,
+			"content":     []interface{}{map[string]interface{}{"type": "text", "text": "DONE"}},
+			"stop_reason": "end_turn", "stop_sequence": nil,
+			"usage": map[string]interface{}{"input_tokens": 1, "output_tokens": 1},
+		})
+	}))
+	t.Cleanup(api.Close)
+	return api
+}
+
 // requireRealClaude resolves the binary a session would really be spawned with, or skips.
 //
 // Skipping is the only thing that works on a machine with no engine installed, but a
@@ -377,8 +423,9 @@ func requireRealClaude(t *testing.T) string {
 		t.Skipf("no %q binary in %v or anywhere on PATH, so the setconfig control frames are NOT verified against a real engine on this machine (searched %s)",
 			providerClaude, engineInstallerDirs(home), enginePath)
 	}
-	// spawnClaude resolves "claude" off the process PATH, so hand it the one that found this.
-	t.Setenv("PATH", enginePath)
+	// spawnClaude resolves "claude" off the process PATH, which TestMain has already given the
+	// same installer dirs — so it spawns the one that found this, with no t.Setenv a parallel
+	// probe could not make.
 	t.Logf("driving %s (%s)", exe, engineVersion(exe))
 	return exe
 }
@@ -423,8 +470,8 @@ func (p *realClaudeProbe) request(subtype string, payload map[string]interface{}
 
 // startReadbackTurn asks the already-configured process for the first handshake that can
 // authoritatively name its active model. It uses the same user frame and runtime queue as
-// a production turn; credentials were removed before spawn, so the CLI stops locally after
-// reporting init instead of sending this probe to an API.
+// a production turn; the CLI reports init before its first API call, which goes to the
+// probe's loopback API (realClaudeLoopbackAPI) rather than to any real one.
 func (p *realClaudeProbe) startReadbackTurn() {
 	p.t.Helper()
 	if err := p.rt.send(userFrame(p.sessionID, []map[string]interface{}{

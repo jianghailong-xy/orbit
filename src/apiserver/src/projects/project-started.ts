@@ -44,7 +44,8 @@ import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
  * §2 — ONCE PER FACT, AND NEVER A REVIVAL
  * =======================================
  * Starts and resumes are keyed by what the press wrote, so a replay collapses onto the turn already
- * written. Pause uses the same prefix and fact rule through `projectPausedTurnId`. A
+ * written. Pause uses the same prefix and fact rule through `projectPausedTurnId`, and so does an
+ * owner's DONE that stopped standing (`projectReopenedTurnId`, keyed by the record and why). A
  * conversation that has ended is not revived to be told (`sessionHasEnded`), and a project with no
  * conversation has nobody to tell. A turn is a notification, not an interrupt: a coordinator in the
  * middle of a turn reads this when that turn ends.
@@ -103,6 +104,44 @@ export function projectStartedTurnId(projectId: string, start: ProjectStart): st
 /** The one turn that says the owner paused this pause episode. It deliberately has no start card. */
 export function projectPausedTurnId(projectId: string, pausedAt: Date): string {
   return `${PROJECT_STARTED_TURN_PREFIX}pause:${projectId}:${pausedAt.getTime()}`;
+}
+
+/** Why an owner's DONE stopped standing (`project-done-derived.ts`): the criteria it was recorded
+ *  against changed, or a task serving one of them was reopened after it was recorded. */
+export type ProjectReopenReason =
+  | { kind: 'CRITERIA_CHANGED'; currentDigest: string }
+  | { kind: 'SERVING_TASK_REOPENED'; taskId: string; taskTitle: string };
+
+/** The one turn that says this owner's record was reopened, keyed by the record and the reason. It
+ *  deliberately has no start card. */
+function projectReopenedTurnId(
+  projectId: string,
+  doneAt: Date,
+  reason: ProjectReopenReason,
+): string {
+  const fact = reason.kind === 'CRITERIA_CHANGED'
+    ? `criteria:${reason.currentDigest}`
+    : `task:${reason.taskId}`;
+  return `${PROJECT_STARTED_TURN_PREFIX}reopened:${projectId}:${doneAt.getTime()}:${fact}`;
+}
+
+/** What the coordinator is told: the fact, why, and that recording it done again is the owner's. */
+function projectReopenedMessage(input: {
+  projectId: string;
+  projectTitle: string;
+  reason: ProjectReopenReason;
+}): string {
+  const why = input.reason.kind === 'CRITERIA_CHANGED'
+    ? 'its acceptance criteria changed after the owner recorded it done, so that record no longer '
+      + 'covers the criteria that stand now'
+    : `“${input.reason.taskTitle}” (${uuidToBase62(input.reason.taskId)}), a task serving one of `
+      + 'its criteria, was reopened after the owner recorded it done';
+  return [
+    'From Orbit · project reopened',
+    `Project “${input.projectTitle}” (${uuidToBase62(input.projectId)}) is OPEN again: ${why}.`,
+    'The owner’s DONE record no longer stands. Read the criteria and the work as they are now; '
+      + 'when the project is done again, ask the owner to record it — that is theirs to do.',
+  ].join('\n\n');
 }
 
 /** The start or resume a turn tells of, as its key names it. */
@@ -321,7 +360,7 @@ interface LiveCoordinatorProject {
 
 /** The existing conversation that may receive a notification; an ended one is never revived. */
 async function liveCoordinatorProject(
-  prisma: PrismaService,
+  prisma: Pick<PrismaService, 'project'>,
   ownerId: string,
   projectId: string,
 ): Promise<LiveCoordinatorProject | null> {
@@ -417,6 +456,32 @@ export async function tellCoordinatorProjectPaused(
     project.sessionId,
     clientTurnId,
     projectPausedMessage({ projectId: input.projectId, projectTitle: project.title }),
+  );
+}
+
+/**
+ * Tell the project's coordinator conversation that the owner's DONE was reopened, and why.
+ *
+ * Null when nobody was told: the project has no conversation, it has ended, or `createTurn`
+ * refused for a state of the world rather than a fault. A fault is thrown.
+ */
+export async function tellCoordinatorProjectReopened(
+  prisma: Pick<PrismaService, 'project'>,
+  sessions: SessionsService,
+  input: { ownerId: string; projectId: string; doneAt: Date; reason: ProjectReopenReason },
+): Promise<{ sessionId: string; clientTurnId: string } | null> {
+  const project = await liveCoordinatorProject(prisma, input.ownerId, input.projectId);
+  if (!project) return null;
+  return createCoordinatorNotification(
+    sessions,
+    input.ownerId,
+    project.sessionId,
+    projectReopenedTurnId(input.projectId, input.doneAt, input.reason),
+    projectReopenedMessage({
+      projectId: input.projectId,
+      projectTitle: project.title,
+      reason: input.reason,
+    }),
   );
 }
 

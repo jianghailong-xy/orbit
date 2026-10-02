@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Alert, Button, Input, Modal, Tag, Typography } from 'antd';
 import { api } from '../api';
+import { routeId } from '../lib/idCodec';
 
 /**
  * The Blockers card on the project page (mock 6, docs/mocks/project-progress/): every open
@@ -23,9 +24,13 @@ export interface ProjectBlocker {
   subjectId: string;
   /** The task's title when the blocker is about a task. */
   subjectTitle: string | null;
+  /** The task's own explanation, when it argued that a criterion did not apply. */
+  agentArgument?: string | null;
   /** The criterion that task is filed against, as it stands today. */
   criterionOrdinal: number | null;
   criterionRevision: number | null;
+  /** The current wording of the criterion, when the task still points at one. */
+  criterionText?: string | null;
   detail: { reason?: string; paths?: string[] } & Record<string, unknown>;
   firstSeenAt: string;
   resolvedAt: string | null;
@@ -61,7 +66,7 @@ const REASON_HEADLINE: Readonly<Record<string, Headline>> = {
   CRITERION_EXEMPTION_ARGUED: {
     tag: 'Needs your decision',
     color: 'gold',
-    title: 'It argues a criterion doesn’t apply to it',
+    title: 'Agent says this criterion doesn’t apply',
   },
   MERGE_REFUSED_BY_GIT: { tag: 'Merge conflict', color: 'red', title: 'Git refused to merge it' },
 };
@@ -98,9 +103,49 @@ export function blockerSubjectLine(blocker: ProjectBlocker): string | null {
   return parts.length > 0 ? parts.join(' · ') : null;
 }
 
+interface DecisionPrompt {
+  question: string;
+  acceptLabel: string;
+  keepLabel: string;
+}
+
+/** The question the card should make legible before a person writes a resolution note. */
+const DECISION_PROMPTS: Readonly<Record<string, DecisionPrompt>> = {
+  CRITERION_EXEMPTION_ARGUED: {
+    question: 'Does the agent’s explanation make this criterion inapplicable to this work?',
+    acceptLabel: 'Accept the explanation',
+    keepLabel: 'Leave it open',
+  },
+  OUTSIDE_DECLARED_SCOPE: {
+    question: 'Are these extra files part of the delivery you want to accept?',
+    acceptLabel: 'Accept these files',
+    keepLabel: 'Leave it open',
+  },
+  ACCEPTANCE_STANDARD_MOVED: {
+    question: 'Does this delivery satisfy the criterion as it reads today?',
+    acceptLabel: 'Confirm it meets the criterion',
+    keepLabel: 'Leave it open',
+  },
+  MERGE_REFUSED_BY_GIT: {
+    question: 'Has the merge conflict been resolved and checked?',
+    acceptLabel: 'Mark the conflict resolved',
+    keepLabel: 'Leave it open',
+  },
+};
+
+export function blockerDecisionPrompt(blocker: ProjectBlocker): DecisionPrompt | null {
+  const reason = blocker.detail?.reason;
+  return typeof reason === 'string' ? DECISION_PROMPTS[reason] ?? null : null;
+}
+
 function pathsOf(blocker: ProjectBlocker): string[] {
   const paths = blocker.detail?.paths;
   return Array.isArray(paths) ? paths.filter((path): path is string => typeof path === 'string') : [];
+}
+
+function showsCriterion(blocker: ProjectBlocker): boolean {
+  const reason = blocker.detail?.reason;
+  return reason === 'CRITERION_EXEMPTION_ARGUED' || reason === 'ACCEPTANCE_STANDARD_MOVED';
 }
 
 const PATHS_SHOWN = 2;
@@ -180,6 +225,9 @@ function BlockerRow({
   const subject = blockerSubjectLine(blocker);
   const paths = pathsOf(blocker);
   const pathsLine = blockerPathsLine(paths);
+  const prompt = blockerDecisionPrompt(blocker);
+  const criterionVisible = showsCriterion(blocker);
+  const taskPublicId = blocker.subjectType === 'TASK' ? routeId(blocker.subjectId) : null;
   return (
     <li className="project-blockers-row">
       <div className="project-blockers-main">
@@ -187,20 +235,49 @@ function BlockerRow({
           <Tag color={headline.color}>{headline.tag}</Tag>
           <span>{headline.title}</span>
         </div>
-        {subject ? <div className="project-blockers-subject">{subject}</div> : null}
-        <div className="project-blockers-action">{blocker.requiredAction}</div>
-        {pathsLine ? (
-          <div className="project-blockers-paths" title={paths.join('\n')}>
-            {pathsLine}
+        {subject ? (
+          <div className="project-blockers-subject">
+            {taskPublicId ? (
+              <a href={`/tasks/${encodeURIComponent(taskPublicId)}`}>{subject}</a>
+            ) : subject}
           </div>
+        ) : null}
+        {prompt ? <div className="project-blockers-question">{prompt.question}</div> : null}
+        {blocker.agentArgument?.trim() && blocker.detail?.reason === 'CRITERION_EXEMPTION_ARGUED' ? (
+          <details className="project-blockers-evidence" open>
+            <summary>Agent’s explanation</summary>
+            <p>{blocker.agentArgument.trim()}</p>
+          </details>
+        ) : null}
+        {criterionVisible && blocker.criterionText?.trim() ? (
+          <details className="project-blockers-evidence" open>
+            <summary>
+              {blocker.criterionOrdinal != null
+                ? `Current criterion ${blocker.criterionOrdinal}`
+                : 'Current criterion'}
+            </summary>
+            <p>{blocker.criterionText.trim()}</p>
+          </details>
+        ) : null}
+        <div className="project-blockers-next">
+          <span>Next step</span>
+          {blocker.requiredAction}
+        </div>
+        {pathsLine ? (
+          <details className="project-blockers-files">
+            <summary className="project-blockers-paths">{pathsLine}</summary>
+            <ul>
+              {paths.map((path) => <li key={path}><code>{path}</code></li>)}
+            </ul>
+          </details>
         ) : null}
       </div>
       <div className="project-blockers-side">
         <time className="project-blockers-age" dateTime={blocker.firstSeenAt}>
           {sinceLabel(blocker.firstSeenAt, now)}
         </time>
-        <Button size="small" onClick={onResolve}>
-          Resolve…
+        <Button size="small" type={prompt ? 'primary' : 'default'} onClick={onResolve}>
+          {prompt ? 'Review…' : 'Resolve…'}
         </Button>
       </div>
     </li>
@@ -243,18 +320,21 @@ function ResolveBlockerDialog({
   const subject = blocker
     ? [blockerHeadline(blocker).title, blocker.subjectTitle].filter(Boolean).join(' · ')
     : '';
+  const prompt = blocker ? blockerDecisionPrompt(blocker) : null;
+  const paths = blocker ? pathsOf(blocker) : [];
+  const criterionVisible = blocker ? showsCriterion(blocker) : false;
 
   return (
     <Modal
       open={blocker !== null}
-      title="Resolve this blocker"
+      title={prompt ? 'Review this blocker' : 'Resolve this blocker'}
       closable={false}
       onCancel={cancel}
       footer={
         <div className="project-blockers-dialog-foot">
-          <span className="project-blockers-dialog-note">Recorded with your name and this reason</span>
+          <span className="project-blockers-dialog-note">Accepting records your name and note</span>
           <Button onClick={cancel} disabled={resolve.isPending}>
-            Cancel
+            {prompt?.keepLabel ?? 'Cancel'}
           </Button>
           <Button
             type="primary"
@@ -264,7 +344,7 @@ function ResolveBlockerDialog({
               if (blocker && trimmed !== '') resolve.mutate({ blocker, reason: trimmed });
             }}
           >
-            Resolve
+            {prompt?.acceptLabel ?? 'Resolve'}
           </Button>
         </div>
       }
@@ -272,8 +352,34 @@ function ResolveBlockerDialog({
       {blocker ? (
         <>
           <div className="project-blockers-dialog-subject">{subject}</div>
+          {prompt ? (
+            <div className="project-blockers-dialog-question">
+              <span className="project-blockers-dialog-kicker">Your decision</span>
+              {prompt.question}
+            </div>
+          ) : null}
+          {blocker.agentArgument?.trim() && blocker.detail?.reason === 'CRITERION_EXEMPTION_ARGUED' ? (
+            <div className="project-blockers-dialog-evidence">
+              <span className="project-blockers-dialog-kicker">Agent’s explanation</span>
+              <p>{blocker.agentArgument.trim()}</p>
+            </div>
+          ) : null}
+          {criterionVisible && blocker.criterionText?.trim() ? (
+            <div className="project-blockers-dialog-evidence">
+              <span className="project-blockers-dialog-kicker">Current criterion</span>
+              <p>{blocker.criterionText.trim()}</p>
+            </div>
+          ) : null}
+          {paths.length > 0 ? (
+            <div className="project-blockers-dialog-evidence">
+              <span className="project-blockers-dialog-kicker">Files this blocker names</span>
+              <ul>
+                {paths.map((path) => <li key={path}><code>{path}</code></li>)}
+              </ul>
+            </div>
+          ) : null}
           <label className="project-blockers-dialog-label" htmlFor={fieldId}>
-            Why is it no longer blocking?
+            {prompt ? 'What did you verify?' : 'Why is it no longer blocking?'}
           </label>
           <Input.TextArea
             id={fieldId}

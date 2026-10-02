@@ -66,6 +66,8 @@ const job = (facts: Partial<{
   mainSyncSha: string | null;
   targetShaBefore: string | null;
   upstreamSha: string | null;
+  sourceOnUpstream: boolean | null;
+  receiptIds: string[];
   sourceRef: string;
   startedAt: Date | null;
   session: Partial<typeof FINISHED_CLEAN> | null;
@@ -74,6 +76,8 @@ const job = (facts: Partial<{
   mainSyncSha: facts.mainSyncSha ?? null,
   targetShaBefore: facts.targetShaBefore ?? 'the-upstream-tip',
   upstreamSha: facts.upstreamSha ?? 'the-upstream-tip',
+  sourceOnUpstream: facts.sourceOnUpstream === undefined ? null : facts.sourceOnUpstream,
+  receiptIds: facts.receiptIds ?? ['the-receipt-the-answer-wrote'],
   sourceRef: facts.sourceRef ?? 'refs/heads/orbit/the-branch',
   startedAt: facts.startedAt === undefined ? AFTER_THE_SESSION_FINISHED : facts.startedAt,
   session: facts.session === null ? null : { ...FINISHED_CLEAN, ...facts.session },
@@ -355,6 +359,47 @@ test('the line’s answer counts only about the branch the work ended on, after 
     + 'work left beside it, is not "this task never had a commit of its own" — each of these withholds '
     + 'exactly as the task did before the exemption existed, and none of them is a guess in the '
     + 'other direction');
+});
+
+test('a NOTHING_TO_LAND counts only on the runner’s measurement that the tip is on the upstream', () => {
+  // Every row: one piece on main, and one whose only answer from the line is NOTHING_TO_LAND, with
+  // the project-line receipt that answer writes for a task that has no work of its own anywhere.
+  const nothingToLand = (id: string, facts: Parameters<typeof job>[0]) => ({ id, servingTasks: [
+    serving([MERGED_INTO_MAIN]),
+    serving([ALREADY_MERGED_INTO_PROJECT_BRANCH], { jobs: [job({ state: 'NOTHING_TO_LAND', ...facts })] }),
+  ] });
+  assert.deepEqual(criterionLanding([
+    // The rollout task of 2026-10-01: an empty branch offered to a line already AHEAD of main —
+    // which the old inference could never read — and the runner measured its tip on main.
+    nothingToLand('measured-on-the-upstream', { ...ON_A_LINE_THAT_MOVED, sourceOnUpstream: true }),
+    // The same empty branch forked from the project line: nothing on the branch, and still not on main.
+    nothingToLand('measured-off-the-upstream', { ...ON_A_LINE_THAT_MOVED, sourceOnUpstream: false }),
+    // Not measured — a row from before 0346, or an older runner — even with the line AT the
+    // upstream: the state is not the fact, and the inference is no longer read for it.
+    nothingToLand('not-measured', {}),
+    // Measured on the upstream, and still about one branch at one moment: a session that never
+    // finished (it died, or is still going), and one whose HEAD ended on a branch never offered.
+    nothingToLand('the-session-never-finished', { sourceOnUpstream: true, session: { finishedAt: null } }),
+    nothingToLand('head-ended-elsewhere',
+      { sourceOnUpstream: true, session: { worktreeBranch: 'feat/where-the-work-went' } }),
+    // Measured on the upstream, about an empty branch the line was handed while another session of
+    // the task had reported work on its own branch: the answer wrote no receipt (J8), because the
+    // task has commits of its own — they are just not on the branch the line looked at.
+    { id: 'its-work-is-on-another-branch', servingTasks: [
+      serving([MERGED_INTO_MAIN]),
+      serving([], { jobs: [job({ state: 'NOTHING_TO_LAND', sourceOnUpstream: true, receiptIds: [] })] }),
+    ] },
+  ], PROJECT_BRANCH), [
+    { definitionId: 'measured-on-the-upstream', landing: 'LANDED' },
+    { definitionId: 'measured-off-the-upstream', landing: 'ON_INTEGRATION_LINE' },
+    { definitionId: 'not-measured', landing: 'ON_INTEGRATION_LINE' },
+    { definitionId: 'the-session-never-finished', landing: 'ON_INTEGRATION_LINE' },
+    { definitionId: 'head-ended-elsewhere', landing: 'ON_INTEGRATION_LINE' },
+    { definitionId: 'its-work-is-on-another-branch', landing: 'UNKNOWN' },
+  ], 'a NOTHING_TO_LAND is let out of the roll-up on the runner’s measurement that the tip is on the '
+    + 'upstream, of the branch the work ended on, after it ended, with no work of the task’s reported '
+    + 'anywhere else — and on nothing else: not the state, not the line having been at the upstream, '
+    + 'not a session or task status');
 });
 
 test('a declaration is still the whole of §1.1’s first half, whatever the line says', () => {

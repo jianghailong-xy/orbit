@@ -32,6 +32,10 @@ test('a file in the session’s own directories is an artifact', () => {
     // Percent-encoded on the way in (a markdown link may be), decoded before the checks.
     ['percent-encoded', `/root/.orbit/worktrees/${SESSION}/docs%2Fmocks%2Fcard.png`,
       `/root/.orbit/worktrees/${SESSION}`, `/root/.orbit/worktrees/${SESSION}/docs/mocks/card.png`],
+    ['a source link with one line', `/root/.orbit/worktrees/${SESSION}/src/web/ProjectBlockers.tsx:106`,
+      `/root/.orbit/worktrees/${SESSION}`, `/root/.orbit/worktrees/${SESSION}/src/web/ProjectBlockers.tsx`],
+    ['a source link with a line range', `/root/.orbit/worktrees/${SESSION}/src/web/ProjectBlockers.tsx:106-120`,
+      `/root/.orbit/worktrees/${SESSION}`, `/root/.orbit/worktrees/${SESSION}/src/web/ProjectBlockers.tsx`],
   ] as const) {
     const resolved = resolveLegacyArtifactPath(SESSION, raw);
     assert.ok(resolved, `${name} was refused`);

@@ -29,7 +29,13 @@ struct ToolFailureSummary {
             tool = nil
             detail = rest.trimmingCharacters(in: .whitespacesAndNewlines)
         } else {
-            return nil
+            // Tool-router failures that are not verification failures still carry the tool name
+            // immediately after `error=` (for example `view_image.detail ...`). Keep them on the
+            // same compact tool row instead of falling back to a raw red log line.
+            let token = rest.split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == ":" }).first
+            guard let token, !token.isEmpty else { return nil }
+            tool = token.split(separator: ".", maxSplits: 1).first.map(String.init)
+            detail = rest.trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
         var path: String?
@@ -51,8 +57,10 @@ struct ToolFailureSummary {
             reason = "Expected lines not found"
         } else if lower.hasPrefix("failed to parse function arguments") {
             reason = detail
-        } else {
+        } else if lowerRest.contains("verification failed:") {
             reason = "Patch verification failed"
+        } else {
+            reason = detail
         }
         return ToolFailureSummary(tool: tool, path: path, reason: reason)
     }
@@ -66,27 +74,43 @@ struct ToolFailureCardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 7) {
+                Image(systemName: "chevron.right")
+                    .font(.orbitMeta.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
                 Image(systemName: "wrench.and.screwdriver")
+                    .font(.orbitMeta)
                     .foregroundStyle(.red)
+                    .frame(width: 20, height: 20)
+                    .background(Color.red.opacity(0.14), in: RoundedRectangle(cornerRadius: 5))
                 Text(summary.tool ?? "Tool call")
                     .font(.orbitMono.weight(.semibold))
-                Spacer(minLength: 0)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
                 Text("Failed")
-                    .font(.orbitSectionLabel.weight(.semibold))
+                    .font(.orbitLabel)
                     .foregroundStyle(.red)
-                    .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(Color.red.opacity(0.12), in: Capsule())
+                    .lineLimit(1)
+                ToolStatusGlyph(status: .error)
+                Spacer(minLength: 0)
             }
+            .contentShape(Rectangle())
+            .onTapGesture { expanded.toggle() }
             if let path = summary.path {
                 Text(path)
                     .font(.orbitMonoFine)
                     .foregroundStyle(.secondary)
-                    .padding(.leading, 22)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                    .padding(.leading, 58)
                     .textSelection(.enabled)
             }
             Text(summary.reason)
-                .font(.orbitLabel.weight(.medium))
-                .padding(.leading, 22)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .padding(.leading, 58)
             Button {
                 expanded.toggle()
             } label: {
@@ -99,7 +123,7 @@ struct ToolFailureCardView: View {
                 .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .padding(.leading, 20)
+            .padding(.leading, 56)
             if expanded {
                 Text(message)
                     .font(.orbitMonoFine)
@@ -107,18 +131,19 @@ struct ToolFailureCardView: View {
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
-                    .background(Color.gray.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
+                    .background(Color.gray.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                    .padding(.leading, 58)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 11).padding(.vertical, 9)
-        .background(Color.red.opacity(0.055), in: RoundedRectangle(cornerRadius: 9))
+        .padding(.leading, 11)
+        .padding(.trailing, 10)
+        .padding(.vertical, 6)
+        .background(Color.clear)
         .overlay(alignment: .leading) {
             Rectangle().fill(Color.red).frame(width: 3)
         }
-        .overlay {
-            RoundedRectangle(cornerRadius: 9).stroke(Color.red.opacity(0.25), lineWidth: 1)
-        }
+        .animation(nil, value: expanded)
     }
 }
 

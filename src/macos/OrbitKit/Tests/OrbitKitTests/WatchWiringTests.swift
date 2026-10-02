@@ -70,8 +70,10 @@ final class WatchWiringTests: XCTestCase {
         XCTAssertTrue(card.contains("summary.lineParts"))
         XCTAssertTrue(card.contains("WatchProjection.stripPill(target)"))
         XCTAssertTrue(card.contains("WatchProjection.stripGlyph(target)"))
-        // Opened, each watch is the browser's one sentence, and the line it adds while unchecked.
-        XCTAssertTrue(card.contains("WatchProjection.stripSentence(for: watch, now: now)"))
+        // Opened, the card lists targets and only adds the freshness line while unchecked; the
+        // long resume sentence is intentionally omitted.
+        XCTAssertFalse(card.contains("WatchProjection.stripSentence(for: watch, now: now)"),
+                       "the card should not repeat the resume sentence above every target")
         XCTAssertTrue(card.contains("WatchProjection.stripStaleLine(for: watch, now: now)"))
         for borrowed in ["BackgroundTrayView", "bgRunningLabel", "Background process", "\"terminal\""] {
             XCTAssertFalse(card.contains(borrowed), "the Watching card borrows \(borrowed)")

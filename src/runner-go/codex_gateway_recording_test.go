@@ -159,6 +159,7 @@ func recordedResponsesStream(model string) []byte {
 }
 
 func TestRealCodexThroughThePoolGateway(t *testing.T) {
+	t.Parallel()
 	exe, err := exec.LookPath("codex")
 	if err != nil {
 		t.Skip("no codex on PATH; this recording needs a real app-server")

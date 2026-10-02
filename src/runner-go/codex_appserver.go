@@ -163,10 +163,11 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		emit(evError, map[string]interface{}{"message": "failed to prepare codex state: " + err.Error()})
 		return stFailed, true, false
 	}
-	if state.Shared {
+	if state.CodexHome != "" {
 		// Once selected, both the SQLite partition and the rollout/config source
 		// remain sticky. This prevents a later HOME change from backfilling a new
-		// account's history into the existing partition.
+		// account's history into the existing partition. A credential-isolated
+		// session's is the home of its own (isolatedCodexStateForEnv).
 		processEnv = envWithValue(processEnv, "CODEX_HOME", state.CodexHome)
 	}
 	// Plan usage is kept per account slot. A session's rolling rate limits refresh the windows of the
@@ -188,18 +189,22 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			return stFailed, true, false
 		}
 	}
-	// Shared state has already crossed the expensive backfill gate. Legacy and
-	// credential-isolated state may still need that work, so keep the same bounded
-	// long window instead of reintroducing the old two-minute interruption.
+	// Shared state has already crossed the expensive backfill gate, and an isolated
+	// home has no history to backfill. Legacy state may still need that work, so keep
+	// the same bounded long window instead of reintroducing the old two-minute
+	// interruption.
 	initTimeout := codexConnectionInitTimeout
-	if !state.Shared {
+	if state.Layout == codexStateLayoutLegacy {
 		initTimeout = codexStateInitTimeout
 	}
 	app, err := startReadyCodexAppServer(ctx, state, initTimeout, func() (*codexAppServer, error) {
 		return startCodexAppServer(ctx, job, execDir, state.Dir, processEnv, emit,
 			func(approvalCtx context.Context, request codexApprovalRequest, params map[string]interface{}) bool {
-				return bridgeCodexApprovalWithContext(approvalCtx, t, job, request, params,
-					codexAutoApprovalContextFor(execDir, upDir))
+				autoContext := codexAutoApprovalContextFor(execDir, upDir)
+				if job.WT != nil && job.WT.RepoDir != "" {
+					autoContext = codexAutoApprovalContextFor(execDir, upDir, job.WT.RepoDir)
+				}
+				return bridgeCodexApprovalWithContext(approvalCtx, t, job, request, params, autoContext)
 			})
 	})
 	if err != nil {
@@ -388,10 +393,16 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			case <-app.done:
 				return
 			case msg := <-app.notifications:
-				handleCodexAppNotification(threadID, msg, emit, &activeMu, &active, finalizeActive, func(codexTurnID string) {
+				handleCodexAppNotificationWithImageFallback(threadID, msg, emit, &activeMu, &active, finalizeActive, func(codexTurnID string) {
 					recordCodexTurnID("", codexTurnID)
 				}, func(text string) string {
 					return rewriteLocalMarkdownImages(workerCtx, t, job.SessionID, text, []string{execDir, upDir, genImagesDir})
+				}, func(path string) string {
+					staged := stageCodexGeneratedImage(path, genImagesDir, upDir)
+					if staged == "" {
+						return ""
+					}
+					return fmt.Sprintf("![generated image](%s)", staged)
 				}, sessionRateLimits, steerDispatch.acknowledge)
 				activeMu.Lock()
 				tokens := 0
@@ -1127,11 +1138,16 @@ func (a *codexAppServer) injectAgentContext(
 	return err
 }
 
-func codexInjectedAgentItems(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) []map[string]interface{} {
+func codexAgentContext(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) string {
 	context := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches)
 	if strings.TrimSpace(context) == "" {
-		return nil
+		return codexImageDeliveryInstructions
 	}
+	return context + "\n\n" + codexImageDeliveryInstructions
+}
+
+func codexInjectedAgentItems(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) []map[string]interface{} {
+	context := codexAgentContext(agent, executable, insideRecordedWork, watches)
 	return []map[string]interface{}{
 		{
 			"type": "message",
@@ -1283,6 +1299,10 @@ func codexAgentAdditionalContext(
 ) map[string]interface{} {
 	context := map[string]interface{}{}
 	prefix := fmt.Sprintf("orbit_%08d_", generation)
+	context[prefix+"image_delivery"] = map[string]interface{}{
+		"kind":  "application",
+		"value": codexImageDeliveryInstructions,
+	}
 	if instruction := orbitCLIInstructions(executable, insideRecordedWork, watches); instruction != "" {
 		context[prefix+"cli"] = map[string]interface{}{
 			"kind":  "application",
@@ -1301,10 +1321,7 @@ func codexAgentAdditionalContext(
 }
 
 func codexLegacyAgentContext(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) string {
-	context := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches)
-	if strings.TrimSpace(context) == "" {
-		return ""
-	}
+	context := codexAgentContext(agent, executable, insideRecordedWork, watches)
 	return "<orbit_application_context>\n" + context + "\n</orbit_application_context>"
 }
 
@@ -1699,6 +1716,10 @@ func codexNotificationThreadID(msg codexRPCMessage) string {
 // onSteerAck is called with the Orbit turn id of a mid-turn message Codex has just echoed back,
 // which is that message's only answer — it has no result of its own (codex_steer.go).
 func handleCodexAppNotification(threadID string, msg codexRPCMessage, emit emitFn, activeMu *sync.Mutex, active **codexAppActiveTurn, finalize func(codexTurnResult), onTurnStarted func(string), processAssistant assistantTextProcessor, onRateLimits func(map[string]interface{}), onSteerAck func(string)) {
+	handleCodexAppNotificationWithImageFallback(threadID, msg, emit, activeMu, active, finalize, onTurnStarted, processAssistant, nil, onRateLimits, onSteerAck)
+}
+
+func handleCodexAppNotificationWithImageFallback(threadID string, msg codexRPCMessage, emit emitFn, activeMu *sync.Mutex, active **codexAppActiveTurn, finalize func(codexTurnResult), onTurnStarted func(string), processAssistant assistantTextProcessor, imageFallback generatedImageFallback, onRateLimits func(map[string]interface{}), onSteerAck func(string)) {
 	// Empty is accepted for compatibility with older app-server notifications that were not
 	// thread-scoped. Current turn/item notifications always carry threadId; when present it is
 	// authoritative and child-thread activity must stay out of the Orbit root session.
@@ -1753,7 +1774,7 @@ func handleCodexAppNotification(threadID string, msg codexRPCMessage, emit emitF
 		item := mapValue(firstPresent(params, "item"))
 		activeMu.Lock()
 		if *active != nil {
-			handleCodexItem(map[string]interface{}{"item": item}, emit, &(*active).result, &(*active).fullText, false, processAssistant)
+			handleCodexItemWithImageFallback(map[string]interface{}{"item": item}, emit, &(*active).result, &(*active).fullText, false, processAssistant, imageFallback)
 		}
 		activeMu.Unlock()
 		reportCodexSteerEcho(activeMu, active, item, onSteerAck)
@@ -1777,7 +1798,7 @@ func handleCodexAppNotification(threadID string, msg codexRPCMessage, emit emitF
 					emit(evThinking, map[string]interface{}{"text": text})
 				}
 			} else {
-				handleCodexItem(map[string]interface{}{"item": item}, emit, &(*active).result, &(*active).fullText, true, processAssistant)
+				handleCodexItemWithImageFallback(map[string]interface{}{"item": item}, emit, &(*active).result, &(*active).fullText, true, processAssistant, imageFallback)
 			}
 		}
 		activeMu.Unlock()

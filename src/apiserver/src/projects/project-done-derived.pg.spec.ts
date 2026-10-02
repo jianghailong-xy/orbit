@@ -205,6 +205,14 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
     return rows[0]!.status;
   }
 
+  async function storedDoneBy(): Promise<string | null> {
+    const { rows } = await sql.query<{ done_by: string | null }>(
+      `SELECT "done_by" FROM "project" WHERE "id" = $1::uuid`, [projectId],
+    );
+    assert.equal(rows.length, 1, 'the project must still exist');
+    return rows[0]!.done_by;
+  }
+
   /** What the projection says today, and — when it is not DONE — every clause holding it back. */
   async function withheld(): Promise<DerivedDoneWithheld[]> {
     return (await readDerivedProjectDone(prisma as unknown as PrismaService, ownerId, projectId))
@@ -365,6 +373,7 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
     assert.equal(await storedStatus(), ProjectStatus.DONE,
       'both inputs hold, so the column says so — and it says so because the rows say so, not '
         + 'because a request asked for it');
+    assert.equal(await storedDoneBy(), 'DERIVED', 'a projected DONE records DERIVED provenance');
     assert.deepEqual(await withheld(), []);
   });
 
@@ -414,6 +423,8 @@ test('project.status = DONE is projected from confirmed criteria that landed, an
       'the criterion is no longer met, so the column may not go on asserting that it is: a '
         + 'projection that could only ever set DONE would be a latch, and a latch is a decision '
         + 'rather than a reading');
+    assert.equal(await storedDoneBy(), null,
+      'and the DERIVED record goes with it: who recorded a DONE is a fact about a DONE');
     assert.deepEqual(await withheld(), ['CRITERION_UNSATISFIED', 'CRITERION_UNLANDED'],
       'both clauses, and neither is redundant: a task nobody has finished has not settled, and a '
         + 'task with no merge receipt leaves its criterion’s landing UNKNOWN — the landing lane is '

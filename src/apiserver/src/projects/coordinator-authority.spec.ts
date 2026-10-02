@@ -212,6 +212,38 @@ test('naming no criterion is reported ahead of the budget', () => {
   assert.equal(refusal?.code, 'TASK_CRITERION_UNDECLARED');
 });
 
+// Project closing, D5: the judgment a settled project opens checks that the work reached the
+// upstream, and while a landing or a merge into it is still running there is nothing for it to file.
+// Asked first — ahead of the criterion and the budget — because what it says is that there is no
+// work to name a criterion for yet.
+test('a settled project’s judgment opens no task while a landing is in flight', () => {
+  const refusal = refuseTaskOpening('JUDGMENT', {
+    ...OPENING,
+    declaredCriterionKey: undefined,
+    openedFor: 'PROJECT_TASKS_SETTLED',
+    landingInFlight: true,
+  });
+  assert.equal(refusal?.code, 'TASK_LANDING_IN_FLIGHT');
+  assert.equal(refusal?.action, 'OPEN_TASK');
+  assert.equal(refusal?.tier, 'COORDINATOR_BOUNDED');
+  assert.equal(refusal?.requiredAction, 'WAIT_FOR_THE_LANDING');
+  assert.ok(AUTHORITY_REFUSAL_CODES.includes(refusal!.code));
+  assert.ok(AUTHORITY_REQUIRED_ACTIONS.includes(refusal!.requiredAction));
+  assert.match(refusal!.message, /never give one a criterionKey/);
+  // Once nothing is landing, the same judgment is bounded exactly as before.
+  assert.equal(refuseTaskOpening('JUDGMENT', {
+    ...OPENING, openedFor: 'PROJECT_TASKS_SETTLED', landingInFlight: false,
+  }), null);
+  // And the rule is the settled project's judgment's alone: one opened for a stranded criterion
+  // files its replacement while some other task's work lands.
+  assert.equal(refuseTaskOpening('JUDGMENT', {
+    ...OPENING, openedFor: 'ATTEMPT_ENDED_UNSETTLED', landingInFlight: true,
+  }), null);
+  assert.equal(refuseTaskOpening('NON_JUDGMENT', {
+    ...OPENING, openedFor: 'PROJECT_TASKS_SETTLED', landingInFlight: true,
+  }), null);
+});
+
 test('a NON_JUDGMENT principal opens tasks with no criterion and no budget', () => {
   assert.equal(
     refuseTaskOpening('NON_JUDGMENT', {

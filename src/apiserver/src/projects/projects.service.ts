@@ -105,6 +105,15 @@ import {
   refuseSessionAuthoredCriteriaDecision,
 } from './coordinator-authority';
 import { withSessionState } from '../sessions/session-state';
+import { chargeSessionMessage, SessionMessageRateLimited } from '../sessions/session-message';
+import {
+  chargeOpenRequest,
+  recordSessionRequest,
+  selfRequestRefusal,
+  type SessionRequestAsk,
+  sessionRequestReceipt,
+  TooManyOpenRequests,
+} from '../sessions/session-request';
 import { SessionsService, type SessionReceiveBlockedReason } from '../sessions/sessions.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { coordinatorFuseUsage, readCoordinatorWakeups } from './coordinator-progress';
@@ -128,10 +137,12 @@ import {
 } from './project-criterion-satisfaction';
 import {
   type CriterionLanding,
-  criterionLanding,
   landingBranchesFor,
-  readCriterionLandingFacts,
 } from './project-criterion-landing';
+import {
+  readCriterionLandingReasonFacts,
+  readInFlightLandingJobs,
+} from './criterion-landing-reason';
 import {
   configureProjectIntegration,
   type IntegrationSettings,
@@ -152,6 +163,8 @@ import {
   type CriterionIndependenceAnswer,
 } from './project-criterion-independence';
 import {
+  NO_DONE_RECORD,
+  criterionLandingWithReasons,
   derivedDoneFromLanes,
   readStandardSetConfirmationState,
   storeDerivedProjectStatus,
@@ -409,6 +422,9 @@ const PROJECT_LIST_SELECT = {
   id: true,
   title: true,
   status: true,
+  doneBy: true,
+  doneAt: true,
+  acceptedGaps: true,
   goal: true,
   createdAt: true,
   updatedAt: true,
@@ -2430,6 +2446,7 @@ export class ProjectsService {
       satisfaction,
       landingFacts,
       codebase,
+      inFlight,
       independence,
       blockers,
       standardSetConfirmation,
@@ -2462,11 +2479,16 @@ export class ProjectsService {
       // above rather than per criterion or per task. It is a second call because the lane is bolted
       // on beside the derivation instead of inside it, which is what keeps the three clauses out of
       // reach of it; its cost is one findMany whose nested select carries every serving task's
-      // merge receipts, so it is bounded by this project's criteria and not by its work.
-      readCriterionLandingFacts(this.prisma, ownerId, id),
+      // merge receipts, so it is bounded by this project's criteria and not by its work. It carries
+      // each serving task's newest work session too, one relation further down, which is what a
+      // criterion's landing reason reads beside the receipts (`criterion-landing-reason.ts`).
+      readCriterionLandingReasonFacts(this.prisma, ownerId, id),
       // The project's binding, one statement: which two branches those receipts count on, and the
       // integration line this read serves beside the criteria.
       readProjectCodebase(this.prisma, id),
+      // And the landings and merges into the upstream queued or running, one statement: the one
+      // input of a landing reason that is not about any one criterion's work (IN_FLIGHT).
+      readInFlightLandingJobs(this.prisma, id),
       // And the independence lane, in the same batch and on the same terms. Two findManys rather
       // than one — the criteria with their serving work's sessions, and this project's authorship
       // rows — because 0251 deliberately puts no foreign key on `definition_id`, so Prisma has no
@@ -2483,7 +2505,11 @@ export class ProjectsService {
       // the column says what it says instead of re-deriving the rule for itself.
       readStandardSetConfirmationState(this.prisma, project.acceptanceCriterionDefinitions, id),
     ]);
-    const landingAnswers = criterionLanding(landingFacts, landingBranchesFor(codebase));
+    const landingAnswers = criterionLandingWithReasons(
+      landingFacts,
+      landingBranchesFor(codebase),
+      inFlight,
+    );
     const answered = new Map(satisfaction.map((row) => [row.definitionId, row]));
     const landed = new Map(landingAnswers.map((row) => [row.definitionId, row.landing]));
     const independent = new Map(independence.map((row) => [row.definitionId, row]));
@@ -3229,6 +3255,11 @@ export class ProjectsService {
     const data: Prisma.ProjectUpdateInput = {
       ...(dto.title !== undefined ? { title: dto.title } : {}),
       ...(dto.status !== undefined ? { status: dto.status } : {}),
+      // Who recorded a DONE is a fact about a DONE: a project this write takes out of it carries no
+      // record of one (`project.done_*`, migration 0345).
+      ...(dto.status !== undefined && dto.status !== SharedProjectStatus.DONE
+        ? NO_DONE_RECORD
+        : {}),
       ...(dto.goal !== undefined ? { goal: ProjectsService.blankToNull(dto.goal) } : {}),
       ...(dto.instructions !== undefined
         ? { instructions: ProjectsService.blankToNull(dto.instructions) }
@@ -3631,7 +3662,9 @@ export class ProjectsService {
    * stored must no more un-state them than a wake that could not be delivered un-records a merge.
    */
   private async reprojectProjectStatus(ownerId: string, projectId: string): Promise<void> {
-    await storeDerivedProjectStatus(this.prisma, ownerId, projectId).catch((e) =>
+    await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
+      sessions: this.sessions,
+    }).catch((e) =>
       this.logger.warn(`derived project status not re-projected after a criteria edit: ${
         (e as { message?: string })?.message ?? String(e)}`),
     );
@@ -4281,6 +4314,11 @@ export class ProjectsService {
    * supplied by the runner door, which holds that dependency) and runs under the same lock and in the
    * same transaction as the turn: a retry that observes the durable key spends nothing.
    *
+   * WHO IT IS FROM is the acting session, written on the turn as its sender — the same column, and
+   * the same hourly limit between the two sessions, `session_send` has (sessions/session-message.ts).
+   * The limit is charged beside the steer against the conversation this resolved, and is the one
+   * refusal that leaves as itself rather than as an undelivered message.
+   *
    * WHAT IT REFUSES, and this is the distinction the code above exists for: a landing that cannot
    * open does not come back here as anything of this method's making — `ensureCoordinator`'s
    * delegation raises `COORDINATOR_UNAVAILABLE`, whose addressee is the account owner. A write that
@@ -4306,6 +4344,12 @@ export class ProjectsService {
        * turn, so a retry that replays its key never reaches it.
        */
       chargeSteer?: (sessionId: string, tx: Prisma.TransactionClient) => Promise<void>;
+      /**
+       * The message asks for a reply (contract §3.1, sessions/session-request.ts). The request names
+       * the conversation this call DELIVERS to and stays with it: a later rotation does not move it,
+       * and its outcome is then RECIPIENT_ENDED.
+       */
+      ask?: SessionRequestAsk;
     },
   ): Promise<{
     sessionId: string;
@@ -4317,15 +4361,39 @@ export class ProjectsService {
     replaceReason?: SessionReceiveBlockedReason;
     /** The turn the message became, by the key the caller can repeat. */
     turn: { clientTurnId: string };
+    /** The request the message is, and its deadline, when it asked for a reply. */
+    requestId?: string;
+    replyBy?: string;
   }> {
     const resolved = await this.ensureCoordinator(ownerId, id, actingSessionId);
+    const ask = opts?.ask ?? null;
+    // A coordinator asking its own project's coordinator is asking itself (§3.1).
+    if (ask && resolved.sessionId === actingSessionId) throw selfRequestRefusal();
     const turn = { clientTurnId, content: message };
-    const charge = opts?.chargeSteer
-      ? {
-          participateSendTransaction: (tx: Prisma.TransactionClient) =>
-            opts.chargeSteer!(resolved.sessionId, tx),
-        }
-      : undefined;
+    const charge = {
+      // The message is the acting session's (contract §2.1), signed with the identity the runner door
+      // proved — the same column `session_send` writes.
+      senderSessionId: actingSessionId,
+      // §2.4's hourly limit is charged against the conversation this call resolved, the way the
+      // steer is: the pair is (caller → this coordinator), however the caller addressed it.
+      participateSendTransaction: async (tx: Prisma.TransactionClient) => {
+        await chargeSessionMessage(tx, actingSessionId, resolved.sessionId);
+        if (ask) await chargeOpenRequest(tx, actingSessionId);
+        await opts?.chargeSteer?.(resolved.sessionId, tx);
+      },
+      ...(ask
+        ? {
+            onTurnWritten: (tx: Prisma.TransactionClient, written: { id: string; clientTurnId: string; content: string | null }) =>
+              recordSessionRequest(tx, {
+                ownerId,
+                fromSessionId: actingSessionId,
+                toSessionId: resolved.sessionId,
+                turn: written,
+                ask,
+              }),
+          }
+        : {}),
+    };
     try {
       // One branch, and it is the send door's own: `resume` is the only verb that may write to a
       // conversation whose run has ended (it revives it), and `createTurn` is the only one that may
@@ -4338,6 +4406,11 @@ export class ProjectsService {
         await this.sessions.createTurn(ownerId, resolved.sessionId, turn, charge);
       }
     } catch (e) {
+      // The one refusal that is the CALLER's and not the delivery's: it has messaged this
+      // coordinator as often as one session may in an hour. Said as itself, because what to do next
+      // — wait with session_await rather than ask again — is the opposite of what an undelivered
+      // message asks for. The fifty-open-requests refusal is the caller's in the same way.
+      if (e instanceof SessionMessageRateLimited || e instanceof TooManyOpenRequests) throw e;
       // The refusals a send gives for an ordinary state of the world rather than a fault: the
       // conversation is gone, it ended or is being written right now (`SessionNotSendable` is one of
       // these), its workspace is gone or disabled, it runs on no runner, the attempt budget refused
@@ -4359,7 +4432,14 @@ export class ProjectsService {
       }
       throw e;
     }
-    return { ...resolved, turn: { clientTurnId } };
+    // What the send answers beside the delivery when it was a request: the request and its deadline,
+    // read by the key the turn went under so a replay answers the request it already made.
+    const receipt = await sessionRequestReceipt(this.prisma, resolved.sessionId, clientTurnId, ask != null);
+    if (receipt) {
+      this.realtime?.publishSessionUpdated(actingSessionId);
+      this.realtime?.publishSessionUpdated(resolved.sessionId);
+    }
+    return { ...resolved, turn: { clientTurnId }, ...(receipt ?? {}) };
   }
 
   /**

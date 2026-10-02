@@ -2,8 +2,8 @@ import SwiftUI
 import OrbitKit
 
 /// The app shell: a three-column split mirroring the web AppShell — navigation/Workspaces, the
-/// selected section's list, and a detail pane. Regular iPad groups the first column into Workspaces
-/// and Manage; macOS preserves its disclosure-style source list.
+/// selected section's list, and a detail pane. On iPad the first column is the iPhone's navigation
+/// drawer itself; macOS preserves its disclosure-style source list.
 struct MainView: View {
     @Environment(AppModel.self) private var model
     /// Whether the first column is on screen. It routes — app sections plus a workspace picker —
@@ -23,10 +23,10 @@ struct MainView: View {
     var body: some View {
         @Bindable var model = model
         NavigationSplitView(columnVisibility: $columnVisibility) {
-            SectionSidebar(isAdmin: model.user?.role == "ADMIN")
-                // Wide enough that a workspace and its runner subtitle both survive: two rows can
-                // share a name ("orbit" on two different runners) and the runner is what tells
-                // them apart, so truncating it costs the only distinguishing text on the row.
+            sidebar
+                // Wide enough that a workspace and its runner both survive: two rows can share a
+                // name ("orbit" on two different runners) and the runner is what tells them apart,
+                // so truncating it costs the only distinguishing text on the row.
                 .navigationSplitViewColumnWidth(min: 260, ideal: 320, max: 360)
         } content: {
             SectionContent(section: model.selectedSection)
@@ -55,28 +55,38 @@ struct MainView: View {
         .onChange(of: model.focusedConsoleSessionID, initial: true) { _, _ in model.syncConsoleFocus() }
         .toastHost()
     }
+
+    /// The first column. The iPad seats the phone's drawer here — the same rows, counts, state marks
+    /// and New session / Settings bar, so the two are one rail — and it closes nothing, since this
+    /// column stays until its own toggle hides it. macOS keeps its source list.
+    @ViewBuilder
+    private var sidebar: some View {
+        #if os(iOS)
+        NavigationDrawer(close: {}, live: true, inSidebarColumn: true)
+        #else
+        SectionSidebar(isAdmin: model.user?.role == "ADMIN")
+        #endif
+    }
 }
 
-/// UI-only selection for the source-list sidebar: a top-level section or a specific Workspace.
-/// iPad renders Workspaces directly; macOS keeps them inside its historical disclosure row.
+#if os(macOS)
+/// UI-only selection for the macOS source list: a top-level section or a specific Workspace, which
+/// sits inside the historical Workspaces disclosure row.
 enum SidebarSelection: Hashable {
     case section(AppSection)
     case agent(String)
 }
 
-/// The leftmost rail, now a source list. iPad leads with the work (Projects, Tasks, Wiki), then grouped,
-/// first-level Workspace rows, and keeps Following and the administrative destinations under Manage;
-/// macOS retains its expandable, runner-grouped Workspaces section. Admin is role-gated on both.
+/// macOS's leftmost rail, a source list: the sections in order, with an expandable, runner-grouped
+/// Workspaces section among them. Admin is role-gated.
 struct SectionSidebar: View {
     @Environment(AppModel.self) private var model
     let isAdmin: Bool
-    #if !os(iOS)
     @State private var agentsExpanded = true
-    #endif
 
     /// Bridge the two model fields (`selectedSection` + `selectedAgentID`) to the List's single
-    /// selection. A Workspace is the only `.agents` destination that carries a detail; on macOS the
-    /// disclosure parent remains untagged, while iPad presents these same tagged rows directly.
+    /// selection. A Workspace is the only `.agents` destination that carries a detail; the
+    /// disclosure parent remains untagged.
     private var selection: Binding<SidebarSelection?> {
         Binding(
             get: {
@@ -85,12 +95,6 @@ struct SectionSidebar: View {
             },
             set: { value in
                 switch value {
-                #if os(iOS)
-                // Settings is a sheet over the section on iOS, never the section: choosing it here
-                // leaves the columns on the page they show.
-                case .section(.settings):
-                    model.settingsPresented = true
-                #endif
                 case .section(let s):
                     model.selectedSection = s
                 case .agent(let id):
@@ -106,35 +110,8 @@ struct SectionSidebar: View {
         // Touch the driving fields so Observation re-renders the rail (and re-reads `selection`)
         // when the section/agent changes from outside the sidebar, e.g. a deep-link route.
         _ = (model.selectedSection, model.selectedAgentID)
-        #if !os(iOS)
         let shortcutIndex = model.agentShortcutIndex   // agentID → ⌘N slot, computed once per render
-        #endif
         return List(selection: selection) {
-            #if os(iOS)
-            // The work leads — projects and tasks — above the Workspaces and set apart from them,
-            // the same order as the iPhone drawer.
-            Section {
-                ForEach(AppSection.workSections) { section in
-                    Label(section.title, systemImage: section.systemImage)
-                        .tag(SidebarSelection.section(section))
-                }
-            }
-
-            Section {
-                workspaceRows
-            } header: {
-                Text("Workspaces").textCase(nil)
-            }
-
-            Section {
-                ForEach(AppSection.managementSections(isAdmin: isAdmin)) { section in
-                    Label(section.title, systemImage: section.systemImage)
-                        .tag(SidebarSelection.section(section))
-                }
-            } header: {
-                Text("Manage").textCase(nil)
-            }
-            #else
             ForEach(AppSection.visible(isAdmin: isAdmin)) { section in
                 if section == .agents {
                     agentsDisclosure(shortcutIndex: shortcutIndex)
@@ -143,7 +120,6 @@ struct SectionSidebar: View {
                         .tag(SidebarSelection.section(section))
                 }
             }
-            #endif
         }
         .navigationTitle("Orbit")
         .safeAreaInset(edge: .bottom, spacing: 0) {
@@ -166,21 +142,6 @@ struct SectionSidebar: View {
         }
     }
 
-    #if os(iOS)
-    @ViewBuilder
-    private var workspaceRows: some View {
-        if let agents = model.agents, !agents.items.isEmpty {
-            ForEach(agents.orderedItems) { workspace in
-                AgentRowView(agent: workspace)
-                    .tag(SidebarSelection.agent(workspace.id))
-            }
-        } else {
-            Text(emptyWorkspacesText("No workspaces"))
-                .font(.orbitLabel)
-                .foregroundStyle(.secondary)
-        }
-    }
-    #else
     private func agentsDisclosure(shortcutIndex: [String: Int]) -> some View {
         DisclosureGroup(isExpanded: $agentsExpanded) {
             if let agents = model.agents, !agents.items.isEmpty {
@@ -201,7 +162,6 @@ struct SectionSidebar: View {
             Label(AppSection.agents.title, systemImage: AppSection.agents.systemImage)
         }
     }
-    #endif
 }
 
 /// Pinned to the bottom of the sidebar, mirroring the web's `tp-user` footer: a monogram avatar
@@ -230,12 +190,6 @@ struct AccountFooter: View {
                     .lineLimit(1)
                     .foregroundStyle(.primary)
                 Spacer(minLength: 0)
-                #if os(iOS)
-                Image(systemName: "chevron.forward")
-                    .font(.orbitMeta.weight(.semibold))
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
-                #endif
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
@@ -249,6 +203,7 @@ struct AccountFooter: View {
         .menuIndicator(.hidden)
     }
 }
+#endif
 
 /// The signed-in account's avatar: its profile photo once the app has it (`AppModel.avatarImage`),
 /// else the name's first letter. The sidebar's footer draws it at row size; Settings draws it large.

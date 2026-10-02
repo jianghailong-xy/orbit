@@ -29,6 +29,11 @@ const REF_TASK = `<referenced-task id="550e8400-e29b-41d4-a716-446655440000">
   状态   DONE
 </referenced-task>`;
 
+// The shape session-message.ts appends to another session's message (docs/session-request-reply-contract.md §2.2).
+const SESSION_MESSAGE = `<orbit-session-message from-session="34YCLEOsvlZDk31Ma1xAy" from-title="会话间消息参数与回复设计" from-agent="orbit" task="34YR26Xq9PRtbB4nPYmPq">
+这条消息来自另一个 Orbit 会话，不是账号 owner 本人。
+</orbit-session-message>`;
+
 const COORDINATOR = `<orbit_project_coordinator_context>
   你是项目（id: 4gfFCpGvM8ZoqYTZwH3cCB）的协调会话。
   这里用来协调任务，不是替任务干活。
@@ -70,6 +75,11 @@ describe('describeNote', () => {
     expect(describeNote(`\n\n${BACKGROUND_JOBS}`)).toBe('background jobs');
     expect(describeNote(CONDITIONS)).toBe('list conditions');
     expect(describeNote(COORDINATOR)).toBe('project coordinator context');
+  });
+
+  it('names the block that says another session sent the message, beside what else rode along', () => {
+    expect(describeNote(`\n\n${SESSION_MESSAGE}`)).toBe('session message');
+    expect(describeNote(`\n\n${SESSION_MESSAGE}\n\n${BACKGROUND_JOBS}`)).toBe('session message, background jobs');
   });
 
   it('says how many notes the wiki context holds, off the count the block carries', () => {

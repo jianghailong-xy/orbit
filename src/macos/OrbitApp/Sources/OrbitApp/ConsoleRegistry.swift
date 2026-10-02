@@ -43,6 +43,14 @@ final class ConsoleRegistry {
     private var savedSeq: [String: Int] = [:]
     /// Records a link asked a console to open at, held until that console is made (`openRecord`).
     private var pendingRecords: [String: String] = [:]
+    /// Merges and commits a console here asked for that the runner hasn't answered yet. They're
+    /// followed here, not in the console: its poll stops with its focus, so leaving the session
+    /// meant the result card never came — or came late, the next time the session was opened. From
+    /// here it reaches `onToast` wherever the user is by then, as web's does.
+    private var pendingOperations = PendingSessionOperations()
+    private var operationsPoll: Task<Void, Never>?
+    /// For that poll — each console reads through its own.
+    private let api: APIClient
 
     init(baseURL: URL, tokenStore: TokenStore, store: TranscriptPersisting, capacity: Int = 12) {
         self.baseURL = baseURL
@@ -50,6 +58,7 @@ final class ConsoleRegistry {
         self.store = store
         self.attachments = AttachmentImageStore(baseURL: baseURL, tokenStore: tokenStore)
         self.lru = LRUOrder(capacity: capacity)
+        self.api = APIClient(baseURL: baseURL, tokenStore: tokenStore)
     }
 
     /// Application Support/Orbit/Transcripts/<host> — scoped per instance so two servers never
@@ -161,6 +170,10 @@ final class ConsoleRegistry {
         models.removeAll()
         savedSeq.removeAll()
         lru = LRUOrder(capacity: lru.capacity)
+        // A result read after sign-out would land on whoever signs in next.
+        operationsPoll?.cancel()
+        operationsPoll = nil
+        pendingOperations = PendingSessionOperations()
     }
 
     /// Forget a session the server authoritatively says no longer exists (a cross-client purge).
@@ -183,9 +196,54 @@ final class ConsoleRegistry {
         let model = ConsoleModel(sessionID: sessionID, agentID: agentID, baseURL: baseURL,
                                  tokenStore: tokenStore, attachments: attachments, restoring: restored)
         model.onToast = { [weak self] request in self?.onToast(request, sessionID) }
+        model.worktree.onAccepted = { [weak self] kind in self?.follow(kind, in: sessionID) }
+        model.worktree.onDetail = { [weak self] detail in
+            guard let self,
+                  let settled = self.pendingOperations.settle(sessionID: sessionID, with: detail) else { return }
+            self.report(settled, detail)
+        }
         wireAccountDefaults(model)
         if let record = pendingRecords.removeValue(forKey: sessionID) { model.openRecord(record) }
         return model
+    }
+
+    private func follow(_ kind: PendingSessionOperations.Kind, in sessionID: String) {
+        pendingOperations.track(kind, sessionID: sessionID)
+        guard operationsPoll == nil else { return }
+        operationsPoll = Task { [weak self] in await self?.pollOperations() }
+    }
+
+    /// Read each followed session at web's cadence for the same watch (a 3s `refetchInterval`) until
+    /// nothing is left to follow.
+    private func pollOperations() async {
+        while !Task.isCancelled, !pendingOperations.isEmpty {
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            for operation in pendingOperations.operations where !Task.isCancelled {
+                do {
+                    let detail = try await api.sessionDetail(operation.sessionID)
+                    guard let settled = pendingOperations.settle(operation, with: detail) else { continue }
+                    report(settled, detail)
+                    // This read beat the bar's own poll to the answer; the bar on screen reads it too
+                    // rather than trail the card by up to a poll.
+                    if settled.sessionID == streamingSessionID {
+                        await models[settled.sessionID]?.worktree.loadDetail()
+                    }
+                } catch APIError.http(let status, _) where status == 404 {
+                    pendingOperations.drop(operation)   // deleted: there's no result left to report
+                } catch APIError.unauthorized {
+                    pendingOperations.drop(operation)   // signed out: nobody left to report it to
+                } catch {
+                    // Transient — the next pass asks again.
+                }
+            }
+        }
+        // `reset` lets go of the poll it cancels; by now the slot may hold a newer one.
+        if !Task.isCancelled { operationsPoll = nil }
+    }
+
+    private func report(_ operation: PendingSessionOperations.Operation, _ detail: SessionDetail) {
+        guard let card = WorktreeModel.resultCard(of: operation.kind, in: detail) else { return }
+        onToast(card, operation.sessionID)
     }
 
     /// Hand a console the account's permission default (read late — the `user` payload primes

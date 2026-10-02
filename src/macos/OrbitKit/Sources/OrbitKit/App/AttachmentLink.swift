@@ -12,6 +12,18 @@ import Foundation
 public enum AttachmentLink {
     public static let scheme = "orbit-attachment"
 
+    /// Source references often add a location after the file name (`:line` or `:line-line`).
+    /// The location is useful to a reader, but it is not part of the path the artifact endpoint
+    /// reads. Keep this in the shared parser so web, iOS and macOS agree on the file name and type.
+    private static let sourceLineSuffix = try! NSRegularExpression(
+        pattern: #":\d+(?::\d+)?(?:-\d+(?::\d+)?)?$"#
+    )
+
+    public static func pathWithoutSourceLocation(_ path: String) -> String {
+        let range = NSRange(path.startIndex..<path.endIndex, in: path)
+        return sourceLineSuffix.stringByReplacingMatches(in: path, range: range, withTemplate: "")
+    }
+
     /// The attachment id in an `orbit-attachment:<id>` link, or nil for any other URL. Strips the
     /// scheme, trims, and keeps the leading non-whitespace run (web's parse).
     public static func attachmentID(_ url: URL) -> String? {
@@ -43,6 +55,26 @@ public enum AttachmentLink {
         return ["/root/", "/home/", "/tmp/", "/Users/"].contains { path.hasPrefix($0) }
     }
 
+    /// True for a Markdown destination that represents a file rather than a web page. In addition
+    /// to runner-local paths and bearer-protected attachments, accept the relative source paths
+    /// agents commonly cite (`src/web/.../Transcript.tsx`). Those links cannot be fetched unless the
+    /// server gives us an absolute session artifact path, but they still deserve a file affordance
+    /// instead of looking like a dead blue web link.
+    public static func isFileReference(_ url: URL) -> Bool {
+        if attachmentID(url) != nil || isRunnerLocalPath(url) { return true }
+        guard url.scheme == nil, url.host == nil, !url.absoluteString.contains("?"),
+              !url.absoluteString.contains("#") else { return false }
+        let path = pathWithoutSourceLocation(url.path.isEmpty ? url.absoluteString : url.path)
+        guard !path.hasPrefix("/") else { return false }
+        let ext = path.split(separator: ".").last.map(String.init)?.lowercased() ?? ""
+        return [
+            "bmp", "c", "cc", "cpp", "csv", "css", "doc", "docx", "gif", "go", "h", "heic", "heif",
+            "hpp", "html", "java", "jpeg", "jpg", "js", "json", "jsx", "kt", "md", "mjs", "pdf",
+            "png", "ppt", "pptx", "py", "rs", "sh", "sql", "svg", "swift", "tif", "tiff", "ts", "tsx",
+            "txt", "vue", "webp", "xls", "xlsx", "xml", "yaml", "yml", "zip",
+        ].contains(ext)
+    }
+
     /// The path of a file the control plane can still serve for `sessionID`, when a transcript names
     /// one — the file an agent drew, linked by where it wrote it. Nil for everything else, which is
     /// the great majority of runner-local paths.
@@ -68,7 +100,7 @@ public enum AttachmentLink {
         // client fetching nothing while the server, the runner and the web (which never compares
         // ids) all answered fine.
         guard let wanted = PublicID.toUUID(sessionID) else { return nil }
-        let path = url.path.isEmpty ? url.absoluteString : url.path
+        let path = pathWithoutSourceLocation(url.path.isEmpty ? url.absoluteString : url.path)
         let parts = path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
         for i in parts.indices where i + 3 < parts.count {
             guard parts[i] == ".orbit", parts[i + 1] == "uploads" || parts[i + 1] == "worktrees" else {
@@ -95,14 +127,16 @@ public enum AttachmentLink {
     /// SVG is deliberately absent: web draws it, but neither native client's `PlatformImage(data:)`
     /// decodes it, so fetching one here would only produce the chip it started as.
     public static func looksLikeImage(path: String) -> Bool {
-        let ext = (path.split(separator: ".").last.map(String.init) ?? "").lowercased()
+        let clean = pathWithoutSourceLocation(path)
+        let ext = (clean.split(separator: ".").last.map(String.init) ?? "").lowercased()
         return ["png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "bmp", "tif", "tiff"].contains(ext)
     }
 
     /// The file name at the end of a path — what a save or a share sheet should call it, since the
     /// artifact route serves the bytes without one.
     public static func fileName(inPath path: String) -> String {
-        let leaf = path.split(separator: "/").last.map(String.init) ?? ""
+        let clean = pathWithoutSourceLocation(path)
+        let leaf = clean.split(separator: "/").last.map(String.init) ?? ""
         return leaf.isEmpty ? "file" : leaf.removingPercentEncoding ?? leaf
     }
 

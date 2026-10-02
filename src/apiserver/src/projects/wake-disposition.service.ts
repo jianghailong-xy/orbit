@@ -20,7 +20,11 @@ import {
 } from './blocker-disposition';
 import { CoordinatorDeliveryService } from './coordinator-delivery.service';
 import { CoordinatorJudgmentService } from './coordinator-judgment.service';
-import { WakeFact, criterionSubjectId } from './coordinator-wake';
+import {
+  WakeFact,
+  criterionSubjectId,
+  projectBlockerRaisedFact,
+} from './coordinator-wake';
 import type { WakeAuthorizer } from './coordinator-wake.service';
 import { probeMainTip, type MainTipAnswer } from './main-tip-probe';
 import {
@@ -45,7 +49,7 @@ import { CriterionState, criterionCoverage, wakeDisposition } from './wake-dispo
 export interface RaisedBlocker extends BlockerDisposition {
   /** The work the blocker is about. */
   taskId: string;
-  /** The row, or `null` when this episode was already open and this delivery added nothing. */
+  /** The episode row, including the existing row when this delivery added nothing. */
   blockerId: string | null;
 }
 
@@ -417,6 +421,40 @@ export class WakeDispositionService {
     };
   }
 
+  /** Deliver the human-owned episode to Automatic's standing coordinator after it is committed. */
+  async notifyCoordinatorOfBlocker(fact: WakeFact, blocker: RaisedBlocker): Promise<void> {
+    if (!blocker.blockerId) return;
+    const task = await this.prisma.task.findUnique({
+      where: { id: blocker.taskId },
+      select: {
+        title: true,
+        completionCriterionOverrideReason: true,
+        criterionDefinition: { select: { ordinal: true, revision: true, text: true } },
+      },
+    });
+    if (!task) return;
+    await this.deliveries.deliverBlocker(projectBlockerRaisedFact({
+      projectId: fact.projectId,
+      blockerId: blocker.blockerId,
+      taskId: blocker.taskId,
+      detail: {
+        blockerId: blocker.blockerId,
+        blockerKind: blocker.kind,
+        reason: blocker.reason,
+        requiredAction: REQUIRED_ACTION[blocker.reason],
+        taskTitle: task.title,
+        agentArgument: blocker.reason === 'CRITERION_EXEMPTION_ARGUED'
+          ? task.completionCriterionOverrideReason
+          : null,
+        criterionOrdinal: task.criterionDefinition?.ordinal ?? null,
+        criterionRevision: task.criterionDefinition?.revision ?? null,
+        criterionText: task.criterionDefinition?.text ?? null,
+        paths: blocker.paths,
+        sourceEvent: fact.event,
+      },
+    }));
+  }
+
   /**
    * The same question, asked without writing anything.
    *
@@ -558,7 +596,16 @@ export class WakeDispositionService {
         ON CONFLICT ("project_id", "dedupe_key") WHERE "resolved_at" IS NULL DO NOTHING
         RETURNING "id"
       `);
-      return rows[0]?.id ?? null;
+      if (rows[0]?.id) return rows[0].id;
+      const existing = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT blocker."id"
+          FROM "project_blocker" blocker
+         WHERE blocker."project_id" = ${projectId}::uuid
+           AND blocker."dedupe_key" = ${dedupeKey}
+           AND blocker."resolved_at" IS NULL
+         LIMIT 1
+      `);
+      return existing[0]?.id ?? null;
     }, loggedRetry(this.logger, 'wakeDisposition.raiseBlocker'));
   }
 

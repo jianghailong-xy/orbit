@@ -81,6 +81,7 @@ func init() {
 		claudeAccountLoginCapabilityV1,
 		claudeAccountRemoveCapabilityV1,
 		claudeAccountMoveCapabilityV1,
+		sessionMoveCapabilityV1,
 		wikiMaintenanceRunV1,
 	}, declaredSteerCapabilities()...), ",")
 }
@@ -1427,6 +1428,25 @@ func (t *Transport) resolveOpenItem(sessionID, id, itemID, note string) (json.Ra
 	return out, err
 }
 
+// retryIntegration asks for the next generation of a DONE task's failed landing, as the acting
+// session (contract §2.3 J-T1b). The session header is the authority the server checks against the
+// project's coordinator pointer; the reason travels as the body and is kept on the new generation and
+// on every item it supersedes. A refusal — in flight, the owner's, not this project's — travels as the
+// server raised it.
+func (t *Transport) retryIntegration(sessionID, id, taskID, reason string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(taskID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/tasks/"+url.PathEscape(taskID)+"/integration/retry",
+		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 func (t *Transport) taskDependencyGraph(id string, maxDepth, maxNodes int) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
@@ -1843,6 +1863,18 @@ func (t *Transport) sendSessionMessage(callerSessionID, orchestrationToken, id s
 	}
 	var out json.RawMessage
 	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/turns", body, &out, callerSessionID, orchestrationToken)
+	return out, err
+}
+
+// sendSessionReply answers a session request this session was sent (`session_reply`,
+// docs/session-request-reply-contract.md §3.2). Only the session the request was sent to may answer
+// it, which the server reads off the same orchestration credential every session verb carries.
+func (t *Transport) sendSessionReply(callerSessionID, orchestrationToken, requestID string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(requestID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration("POST", "/runner/session-requests/"+url.PathEscape(requestID)+"/reply", body, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 

@@ -170,6 +170,7 @@ import {
   type AuthorityRequiredAction,
 } from '../projects/coordinator-authority';
 import { criteriaFromDefinitions, criterionKeyOf } from '../projects/project-acceptance';
+import { landingInFlight } from '../projects/project-looks-finished';
 import {
   AUTO_RUN_RETRY_BACKOFF_MS,
   MAX_AUTO_RUN_FAILURES,
@@ -262,6 +263,12 @@ import {
   taskCriterionChangeRefusalBody,
   taskSelfRewrittenStandardRefusalBody,
 } from './task-completion-criterion-change-guard';
+import {
+  normaliseCodelessReason,
+  readTaskCommitEvidence,
+  taskCodelessHasCommitsBody,
+  taskCodelessReasonRequiredBody,
+} from './task-codeless';
 import {
   criterionAsksForOwnerConfirmation,
   ownerConfirmationNotDelegatedBody,
@@ -1980,7 +1987,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         select: { ownerId: true },
       }).catch(() => null);
       if (!project) continue;
-      await storeDerivedProjectStatus(this.prisma, project.ownerId, projectId).catch((e) =>
+      await storeDerivedProjectStatus(this.prisma, project.ownerId, projectId, {
+        sessions: this.sessions,
+      }).catch((e) =>
         this.logger.warn(`derived project status not reconciled: ${e?.message ?? e}`),
       );
     }
@@ -3946,6 +3955,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // INSERT entirely, exactly as every task written before they existed.
       criterionDefinitionId: criterionDeclaration?.criterionDefinitionId,
       criterionRevision: criterionDeclaration?.criterionRevision,
+      // SR5's declaration, made with the task: no reason is asked for a task's first statement of
+      // what it is (`task-codeless.ts`). Omitted leaves the column default, false.
+      codeless: dto.codeless,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       // Omitted means unscheduled. The `undefined` is what makes that true without a default:
       // Prisma leaves the column out of the INSERT, so the row is born NULL exactly as every task
@@ -5152,10 +5164,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!actingSessionId || items.length === 0) return;
     const acting = await this.prisma.session.findFirst({
       where: { id: actingSessionId, ownerId },
-      select: { dispatchOrigin: true },
+      select: {
+        dispatchOrigin: true,
+        // The fact this judgment was opened for — the wake that OPENED it, as the scope derivation
+        // reads it — because a settled project's judgment files nothing while the project's work is
+        // still landing (`refuseTaskOpening`).
+        coordinatorWakes: {
+          where: { status: 'SESSION_OPENED' }, select: { event: true }, take: 1,
+        },
+      },
     });
     const principal = authorityPrincipal(acting?.dispatchOrigin);
     if (principal !== 'JUDGMENT') return;
+    const openedFor = acting?.coordinatorWakes?.[0]?.event ?? null;
     const byProject = new Map<string, Array<{
       criterionKey?: string;
       completionCriterion?: TaskCompletionCriterionValue | null;
@@ -5200,6 +5221,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           creatorSession: { dispatchOrigin: SessionDispatchOrigin.PROJECT_COORDINATOR },
         },
       });
+      // Asked only of the judgment it applies to: a settled project's.
+      const landing = openedFor === 'PROJECT_TASKS_SETTLED'
+        && await landingInFlight(this.prisma, projectId);
       for (const item of group) {
         const refusal = refuseTaskOpening(principal, {
           completionCriterion: item.completionCriterion,
@@ -5208,6 +5232,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           openedInWindow,
           opening: group.length,
           budgetPerDay: project.sessionBudgetPerDay,
+          openedFor,
+          landingInFlight: landing,
         });
         if (refusal) throw new ForbiddenException(refusal);
       }
@@ -8260,6 +8286,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // write below). A stored change record never stops describing it, so it is not that prose.
     const clearsStaleOverrideReason = attachesVerifier
       && readTaskCriterionChange(before.completionCriterionOverrideReason) == null;
+    // The codeless door (`task-codeless.ts`): turning an existing task codeless takes it out of its
+    // criterion's landing conjunction, so it is asked why, and refused for a task whose commits are
+    // already somewhere — those are work that has to land. Only the change is questioned: re-sending
+    // the value the task has, or taking the declaration back, writes no reason and needs none.
+    // Before the transaction, like every refusal on this path.
+    const declaresCodeless = dto.codeless === true && !before.codeless;
+    const withdrawsCodeless = dto.codeless === false && before.codeless;
+    let codelessReason: string | null = null;
+    if (declaresCodeless) {
+      codelessReason = normaliseCodelessReason(dto.codelessReason);
+      if (codelessReason == null) throw new BadRequestException(taskCodelessReasonRequiredBody());
+      const commits = await readTaskCommitEvidence(this.prisma, id);
+      if (commits.length > 0) throw new ConflictException(taskCodelessHasCommitsBody(commits));
+    }
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
@@ -8398,6 +8438,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // licence to erase how this task came to carry the criterion it has.
       completionCriterionOverrideReason:
         criterionChangeRecord ?? (clearsStaleOverrideReason ? null : undefined),
+      // The declaration and its reason move together: written with the reason the door above
+      // asked for, and taken back with it — a reason left on a task that lands again would be
+      // explaining a declaration it no longer makes.
+      codeless: declaresCodeless || withdrawsCodeless ? dto.codeless : undefined,
+      codelessReason: declaresCodeless ? codelessReason : withdrawsCodeless ? null : undefined,
       // Three-state like the pins above: omitted keeps the conclusion, null revokes it. Revoking is
       // a real operation rather than an undo — a subject completed by VERIFICATION_PASSED goes back
       // to OPEN on the next reconcile, which is the point of storing the verdict rather than

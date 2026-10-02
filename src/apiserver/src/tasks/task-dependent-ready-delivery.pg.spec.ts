@@ -698,10 +698,11 @@ test('(e) the database accepts exactly the live and retired events: those that w
     const stack = await connect();
     try {
       // The closed set this unit states, against the one it replaced.
-      // Written for 0299; 0303 added a second spelling, and it is listed here rather than
+      // Written for 0299; later events are listed here rather than
       // loosened: every event that was live before DEPENDENT_READY is still unchanged.
       assert.deepEqual(
-        [...COORDINATOR_WAKE_EVENTS], [...LIVE_BEFORE, 'DEPENDENT_READY', 'PROJECT_SETTLED_UNMERGED'],
+        [...COORDINATOR_WAKE_EVENTS],
+        [...LIVE_BEFORE, 'DEPENDENT_READY', 'PROJECT_SETTLED_UNMERGED', 'PROJECT_BLOCKER_RAISED'],
         'the live set is not the one it was plus the events added since');
 
       // The CHECK as the migrated database holds it — not the migration's text, which is what

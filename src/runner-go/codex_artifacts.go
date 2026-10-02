@@ -79,6 +79,32 @@ func codexGeneratedImagesDir(env []string, cwd string) string {
 	return filepath.Join(home, "generated_images")
 }
 
+// stageCodexGeneratedImage keeps a generated image in the session's own uploads directory when
+// the control-plane attachment upload is temporarily unavailable. The uploads directory is both
+// outside the worktree (so it cannot enter a commit) and an allowed legacy-artifact root (so the
+// clients can fetch the bytes while the normal flush or artifact-request path retries the
+// attachment upload.
+func stageCodexGeneratedImage(path, generatedRoot, uploadRoot string) string {
+	if path == "" || generatedRoot == "" || uploadRoot == "" {
+		return ""
+	}
+	if !pathWithinRoots(path, []string{generatedRoot}) || !strings.HasPrefix(attachmentMime(path), "image/") {
+		return ""
+	}
+	if err := os.MkdirAll(uploadRoot, 0o755); err != nil {
+		return ""
+	}
+	destination := filepath.Join(uploadRoot, filepath.Base(path))
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	if err := os.WriteFile(destination, data, 0o644); err != nil {
+		return ""
+	}
+	return destination
+}
+
 func skipMarkdownAttachmentSrc(src string) bool {
 	lower := strings.ToLower(strings.TrimSpace(src))
 	return lower == "" ||

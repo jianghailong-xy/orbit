@@ -302,6 +302,13 @@ func readFrames(t *testing.T, stdout io.Reader) <-chan map[string]interface{} {
 
 func waitFrameType(t *testing.T, frames <-chan map[string]interface{}, frameType string) map[string]interface{} {
 	t.Helper()
+	return waitFrameTypeWithin(t, frames, frameType, fakeClaudeTimeout)
+}
+
+// waitFrameTypeWithin is waitFrameType for a CLI slower than the fake: a real one, which on a
+// loaded machine can take longer than fakeClaudeTimeout just to start.
+func waitFrameTypeWithin(t *testing.T, frames <-chan map[string]interface{}, frameType string, within time.Duration) map[string]interface{} {
+	t.Helper()
 	for {
 		select {
 		case m, ok := <-frames:
@@ -311,7 +318,7 @@ func waitFrameType(t *testing.T, frames <-chan map[string]interface{}, frameType
 			if m["type"] == frameType {
 				return m
 			}
-		case <-time.After(fakeClaudeTimeout):
+		case <-time.After(within):
 			t.Fatalf("timed out waiting for a %q frame", frameType)
 		}
 	}

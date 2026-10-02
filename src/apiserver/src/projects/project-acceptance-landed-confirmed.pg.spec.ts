@@ -370,8 +370,14 @@ async function recordLandingThroughTheDoor(stack: Stack, f: Fixture, taskId: str
 /**
  * Walk the project to the last receipt, in the order production runs in: work filed against both
  * criteria, the routing work already on main, both settled — so the last task settles with the
- * suite work still on a branch and the settled fact is spent on a judgment session — and then the
- * missing receipt through the door, with no task write anywhere near it.
+ * suite work still on a branch — and then the missing receipt through the door, with no task write
+ * anywhere near it.
+ *
+ * Where the settled fact goes before that receipt is the closing guardrail's (project closing, D5):
+ * a project whose every criterion the projection counts as met, with nothing running, open or
+ * landing, LOOKS finished, and the fact is handed to the standing conversation with its reasons;
+ * one with a criterion the projection does not count — (4)'s stale declaration — is judged, as it
+ * always was. Either way it is not carded.
  *
  * Answers the readings a case needs from either side of that receipt: the projection's withheld
  * clauses just before it, and every message the standing conversation was sent because of it.
@@ -391,20 +397,35 @@ async function walkToTheLastReceipt(
   await settle(stack.db, routingWork);
   await settle(stack.db, suiteWork);
 
+  const looksFinished = (await readDerivedProjectDone(
+    stack.db as unknown as PrismaService, f.ownerId, f.projectId,
+  )).criteria.every((criterion) => criterion.satisfied);
   assert.deepEqual(
     await stack.producer.afterCommit([f.projectId]),
-    [{ projectId: f.projectId, outcome: 'OPENED' }],
-    'the settled project was carded while one criterion was still off the branch',
+    [{ projectId: f.projectId, outcome: looksFinished ? 'DELIVERED' : 'OPENED' }],
+    'a finished-looking project goes to its coordinator, and any other is judged',
   );
+  assert.deepEqual(await landedWakes(stack.db, f.projectId), [],
+    'the settled project was carded while one criterion was still off the branch');
   const withheldBefore = await withheld(stack, f);
   const told = await coordinatorMessages(stack.db, f);
-  assert.deepEqual(told, [], 'the standing conversation was told something before the receipt');
+  assert.equal(told.length, looksFinished ? 1 : 0,
+    'the standing conversation was told something before the receipt other than why the project '
+    + 'looks finished and is not done');
+  if (looksFinished) {
+    assert.match(told[0]!.content ?? '', /看起来做完了，但 Orbit 自己记不了 Done/);
+    // The coordinator reads it and goes to get the suite work onto main — what its runner does
+    // with a queued turn. A conversation still holding a message it has not read refuses the next
+    // one (`coordinator-delivery.service.ts` §2.1), and the conversation the receipt below reaches
+    // is one that has read this.
+    await coordinatorReads(stack.db, f);
+  }
   assert.equal(await storedStatus(stack.db, f), ProjectStatus.OPEN,
     'the column must not say DONE before the last receipt, or nothing after it is evidence');
 
   await recordLandingThroughTheDoor(stack, f, suiteWork, 'suite');
 
-  const said = await coordinatorMessages(stack.db, f);
+  const said = (await coordinatorMessages(stack.db, f)).slice(told.length);
   assert.equal(said.length, 1, 'the last receipt did not put exactly one message on the conversation');
   const wakes = await landedWakes(stack.db, f.projectId);
   assert.equal(wakes.length, 1, 'the last receipt derived no PROJECT_ACCEPTANCE_LANDED fact');
@@ -416,6 +437,23 @@ async function walkToTheLastReceipt(
     'the message on the conversation is not the one the fact was delivered as',
   );
   return { withheldBefore, message: said[0]!.content ?? '', wake: wakes[0]! };
+}
+
+/**
+ * The coordinator takes and answers what it was handed, the way its runner does: the queued turn is
+ * delivered and answered, and the conversation is parked between turns again. The fixture stands in
+ * for the runner, not for the product.
+ */
+async function coordinatorReads(db: PrismaClient, f: Fixture): Promise<void> {
+  const now = new Date();
+  await db.conversationTurn.updateMany({
+    where: { sessionId: f.coordinatorSessionId, status: 'PENDING' },
+    data: { status: 'ANSWERED', deliveredAt: now, answeredAt: now },
+  });
+  await db.session.update({
+    where: { id: f.coordinatorSessionId },
+    data: { status: RunStatus.AWAITING_INPUT },
+  });
 }
 
 /** The stored column, past every service that could compute a nicer answer on the way out. */

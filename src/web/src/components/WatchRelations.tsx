@@ -19,7 +19,6 @@ import {
   linkId,
   progressOf,
   stripCounts,
-  stripSentence,
   stripStaleLine,
   targetHref,
   thresholdOf,
@@ -212,10 +211,9 @@ export function SessionWatchBadges({ sessionId }: { sessionId: string }) {
  * processes tray's own shell (`.bg-tray`), so the stack above the composer reads as one system, the
  * way Tasks created here does. Always one line first: a lone target by name with where it stands, in
  * its own list's pill; several by what the wait needs, with Tasks created here's sentence over where
- * they stand. Opened, each watch is one sentence — what it waits for, and the deadline that resumes
- * this session anyway — over the targets it waits on, each opening its own page; a lone target is
- * already on the line, so it gets a way to it instead. Read-only: a wait is changed by talking to the
- * agent, and Pause/Stop live on the Following page. Its own card on purpose — a watch is not a
+ * they stand. Opened, each watch lists its targets and only adds a freshness reminder when needed; a
+ * lone target is already on the line, so it gets a way to it instead. Read-only: a wait is changed
+ * by talking to the agent, and Pause/Stop live on the Following page. Its own card on purpose — a watch is not a
  * process, and contract §9.2 keeps it out of the Background processes tray beside it.
  */
 export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
@@ -330,8 +328,8 @@ function WatchTargetPill({ target }: { target: WatchTargetView }) {
 }
 
 /**
- * One watch in the opened strip: its sentence, the line it adds when nobody is checking it, and —
- * when the line above names no one target — the targets it waits on, each opening its own page. What
+ * One watch in the opened strip: its targets and the line it adds when nobody is checking it; when
+ * the line above names no one target, each target opens its own page. What
  * the condition has already met goes first, a stable sort, so the watch's own order holds within each
  * group.
  */
@@ -342,10 +340,11 @@ function StripWatch({ watch, now, listsTargets }: { watch: WatchView; now: numbe
     .sort((a, b) => Number(a.state !== 'SATISFIED') - Number(b.state !== 'SATISFIED'));
   return (
     <div className="watch-strip-watch" data-watch-id={watch.id}>
-      <div className="watch-say">
-        {stripSentence(watch, now)}
-        {stale && <span className="watch-say-stale">{stale}</span>}
-      </div>
+      {stale && (
+        <div className="watch-say">
+          <span className="watch-say-stale">{stale}</span>
+        </div>
+      )}
       {listsTargets &&
         targets.map((t) => (
           <Link

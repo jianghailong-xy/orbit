@@ -81,6 +81,11 @@ import type { TaskStartCard as TaskStart } from '@orbit/shared';
 import { TaskStartCard } from './TaskStartCard';
 import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
+import { parseSessionMessage } from '../lib/sessionMessage';
+import type { SessionMessageCard as SessionMessage, SessionReplyCard as SessionReply } from '@orbit/shared';
+import { SessionMessageCard } from './SessionMessageCard';
+import { parseSessionReplies, withoutReplyBlocks } from '../lib/sessionRequest';
+import { SessionReplyCards } from './SessionReplyCard';
 import { parseBackgroundJobs, summarizeBackgroundJobs } from '../lib/backgroundJobs';
 import { parseReferencedTasks, summarizeReferencedTasks } from '../lib/referencedTask';
 import { parseWikiContext } from '../lib/wikiContext';
@@ -343,6 +348,13 @@ type TextNode = {
   // The message telling the coordinator its project was started, when the control plane recorded
   // the facts beside the echo (`projectStarted`, lib/projectStarted). Nobody's message either.
   startedCard?: Started;
+  // Another Orbit session's message, when the control plane recorded which session sent it beside
+  // the echo (`sessionMessage`, lib/sessionMessage). Somebody's words, but not the reader's: drawn
+  // as "From [that session]" instead of the owner's bubble.
+  sessionMessage?: SessionMessage;
+  // The outcomes of this session's own requests the turn handed back, when the control plane
+  // recorded them beside the echo (`sessionReplies`, lib/sessionRequest). Drawn as reply cards.
+  sessionReplies?: SessionReply[];
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
@@ -412,7 +424,17 @@ function parseToolFailureSummary(message: string): ToolFailureSummary | undefine
     // associate it with the most recent unresolved tool_use; if there is no such call, keep the
     // message as a generic folded failure card instead of exposing a raw red log row.
     const generic = /^error=(failed to parse function arguments\b[\s\S]*)$/i.exec(tail.trim());
-    return generic ? { tool: '', reason: generic[1].trim() } : undefined;
+    if (generic) return { tool: '', reason: generic[1].trim() };
+
+    // Some runtime/tool-router failures do not use the verification wording above, but still
+    // identify the tool immediately after `error=` (for example `view_image.detail ...`). Keep
+    // these failures on the same compact tool row so a long tracing line never becomes a red
+    // paragraph in the transcript.
+    const detail = tail.replace(/^error=/i, '').trim();
+    const token = /^([\w.-]+)/.exec(detail)?.[1];
+    if (token) return { tool: token.split('.')[0], reason: detail };
+
+    return undefined;
   }
 
   const detail = match[2].trim();
@@ -705,6 +727,8 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         const retriedTaskStart = taskStartForRetry(parent, text);
         const taskStart = taskStartFromPayload ?? retriedTaskStart;
         const startedCard = parseProjectStarted(p) ?? undefined;
+        const sessionMessage = parseSessionMessage(p) ?? undefined;
+        const sessionReplies = parseSessionReplies(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
@@ -726,6 +750,8 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             itemCard,
             taskStart,
             startedCard,
+            sessionMessage,
+            sessionReplies,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
@@ -1229,6 +1255,40 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
   const exporting = useContext(ExportCtx);
   switch (node.kind) {
     case 'user': {
+      // Another Orbit session's message (`session_send` / `project_send`): somebody's words, but not
+      // the reader's, so not the reader's bubble. Who sent it is what the control plane recorded
+      // beside the echo (lib/sessionMessage), so it is asked first — before anything is read out of
+      // the words themselves, which are the sending agent's to choose. No payload, the old reading.
+      if (node.sessionMessage) {
+        return (
+          <SessionMessageCard
+            card={node.sessionMessage}
+            text={node.text}
+            seq={node.seq}
+            ts={node.ts}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+          />
+        );
+      }
+      // The outcomes of this session's requests, handed back (lib/sessionRequest): a reply turn
+      // carries nobody's words, and a message of the owner's may carry outcomes that were held for
+      // it — then the owner's words are their bubble, first, and the outcomes follow as cards. What
+      // else delivery appended folds into the cards, as it does everywhere.
+      if (node.sessionReplies) {
+        const rest = withoutReplyBlocks(node.note);
+        return (
+          <>
+            {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
+            <SessionReplyCards
+              cards={node.sessionReplies}
+              seq={node.seq}
+              ts={node.ts}
+              attached={rest !== '' && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
+            />
+          </>
+        );
+      }
       // A turn a watch queued is the watch's to show, not a message the user typed.
       const wake = parseWatchWake(node.text);
       if (wake) {
@@ -1384,23 +1444,48 @@ function ToolFailureCard({
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="chat-error-card" data-seq={node.seq}>
-      <div className="chat-error-card-head">
-        <ToolOutlined className="chat-error-card-icon" />
-        <strong>{summary.tool || 'Tool call'}</strong>
-        <span className="chat-error-card-status">Failed</span>
-        {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
-      </div>
-      {summary.path && <div className="chat-error-card-path">{summary.path}</div>}
-      <div className="chat-error-card-reason">{summary.reason}</div>
-      <button
-        className="chat-error-card-disclosure"
-        type="button"
+      <div
+        className="chat-tool-row chat-error-card-head"
+        role="button"
+        tabIndex={0}
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setExpanded((value) => !value);
+          }
+        }}
       >
-        <RightOutlined rotate={expanded ? 90 : 0} />
-        {expanded ? 'Hide full log' : 'Show full log'}
-      </button>
+        <span className="chat-tool-caret">
+          <RightOutlined rotate={expanded ? 90 : 0} />
+        </span>
+        <span className="chat-tool-icon chat-error-card-icon">
+          <ToolOutlined />
+        </span>
+        <strong className="chat-tool-name">{summary.tool || 'Tool call'}</strong>
+        <span className="chat-tool-summary chat-error-card-status">Failed</span>
+        <CloseCircleFilled className="chat-tool-status err" />
+        {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
+      </div>
+      <div className="chat-error-card-detail">
+        {summary.path && <div className="chat-error-card-path">{summary.path}</div>}
+        <div className="chat-error-card-reason" title={summary.reason}>
+          {summary.reason}
+        </div>
+        <button
+          className="chat-error-card-disclosure"
+          type="button"
+          aria-expanded={expanded}
+          onClick={(event) => {
+            event.stopPropagation();
+            setExpanded((value) => !value);
+          }}
+        >
+          <RightOutlined rotate={expanded ? 90 : 0} />
+          {expanded ? 'Hide full log' : 'Show full log'}
+        </button>
+      </div>
       {expanded && <pre className="chat-error-card-log">{node.message}</pre>}
     </div>
   );
@@ -1779,7 +1864,7 @@ function AutoRetryCard({
 // Collapse a user bubble past this many characters: a pasted blob would otherwise parse and lay
 // out as one giant node and stall the transcript. The composer caps input well above this;
 // resumed/old sessions can still carry big messages.
-const USER_BUBBLE_TRUNCATE = 6000;
+export const USER_BUBBLE_TRUNCATE = 6000;
 
 // User message bubble. The text is Markdown-rendered by the same `MD` renderer as the assistant
 // turn: the messages sent here are mostly long structured prompts (headings, lists, fenced
@@ -1963,6 +2048,50 @@ export function AttachmentImage({
   );
 }
 
+// A legacy artifact request can wait on a runner to copy a path into the control plane. Keep that
+// wait finite in the browser: an offline runner used to leave a clicked chip spinning forever, and
+// the catch below could never turn it into a retryable state. If the server eventually answers an
+// already-timed-out request, release the object URL rather than leaking it.
+const FILE_RESOLVE_TIMEOUT_MS = 15_000;
+
+function resolveFileObjectUrl(
+  resolve: (key: string) => Promise<string>,
+  key: string,
+): Promise<string> {
+  return new Promise((fulfil, reject) => {
+    let finished = false;
+    const timer = setTimeout(() => {
+      finished = true;
+      reject(new Error('file request timed out'));
+    }, FILE_RESOLVE_TIMEOUT_MS);
+    let request: Promise<string>;
+    try {
+      request = resolve(key);
+    } catch (error) {
+      clearTimeout(timer);
+      reject(error);
+      return;
+    }
+    request.then(
+      (url) => {
+        if (finished) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        finished = true;
+        clearTimeout(timer);
+        fulfil(url);
+      },
+      (error) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 function ResolvedAttachmentImage({
   id,
   className,
@@ -1985,7 +2114,7 @@ function ResolvedAttachmentImage({
     if (exp) return; // export: bytes are pre-resolved into the data-URL map, no live fetch
     let active = true;
     let made: string | null = null;
-    resolve(id)
+    resolveFileObjectUrl(resolve, id)
       .then((u) => {
         if (active) {
           made = u;
@@ -2015,6 +2144,7 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   const resolve = useContext(AttachmentResolverContext);
   const exp = useContext(ExportCtx);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const label = name || 'file';
   // Static export: the download endpoint is bearer-guarded and non-image files aren't
   // embedded, so surface the attachment's name as an inert chip rather than a dead button.
@@ -2028,9 +2158,10 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   }
   const download = async (): Promise<void> => {
     if (busy) return;
+    setFailed(false);
     setBusy(true);
     try {
-      const objUrl = await resolve(id);
+      const objUrl = await resolveFileObjectUrl(resolve, id);
       const a = document.createElement('a');
       a.href = objUrl;
       a.download = label;
@@ -2039,14 +2170,23 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
       a.remove();
       setTimeout(() => URL.revokeObjectURL(objUrl), 10_000);
     } catch {
-      /* leave the chip in place so the user can retry */
+      // Keep the chip retryable, but make a failed fetch visible. Previously this catch left a
+      // clicked chip indistinguishable from an unclicked one, which looked like a dead control.
+      setFailed(true);
     } finally {
       setBusy(false);
     }
   };
   return (
-    <button type="button" className="chat-file" onClick={download} title={`Download ${label}`}>
-      {busy ? <LoadingOutlined spin /> : <PaperClipOutlined />}
+    <button
+      type="button"
+      className={`chat-file${failed ? ' is-error' : ''}`}
+      onClick={download}
+      title={failed ? `Retry download ${label}` : `Download ${label}`}
+      aria-label={failed ? `Retry download ${label}` : `Download ${label}`}
+      data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
+    >
+      {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
       <span className="chat-file-name">{label}</span>
     </button>
   );
@@ -2214,6 +2354,12 @@ function looksLikeImagePath(src: string): boolean {
   return /\.(?:png|jpe?g|gif|webp|heic|heif|bmp|tiff?)$/i.test(src.split(/[?#]/)[0] ?? src);
 }
 
+// Source references often add `:line` (or `:line-line`) after the file name. It is useful to the
+// reader, but the artifact route and the runner need the path without that location hint.
+function artifactPathFromLink(src: string): string {
+  return src.replace(/:\d+(?::\d+)?(?:-\d+(?::\d+)?)?$/, '');
+}
+
 function isLegacyArtifactSrc(src: string): boolean {
   return isLocalFileSrc(src) && /\/\.orbit\/(?:uploads|worktrees)\/[0-9a-z-]{16,}\//i.test(src);
 }
@@ -2240,10 +2386,11 @@ function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }
     );
   }
   if (typeof src === 'string' && isLegacyArtifactSrc(src)) {
-    if (looksLikeImagePath(src)) {
-      return <LocalArtifactImage artifactPath={src} alt={typeof alt === 'string' ? alt : 'Image'} />;
+    const artifactPath = artifactPathFromLink(src);
+    if (looksLikeImagePath(artifactPath)) {
+      return <LocalArtifactImage artifactPath={artifactPath} alt={typeof alt === 'string' ? alt : 'Image'} />;
     }
-    return <LocalArtifactFile artifactPath={src} label={fileLabel(src)} />;
+    return <LocalArtifactFile artifactPath={artifactPath} label={fileLabel(artifactPath)} />;
   }
   if (typeof src === 'string' && isLocalImageSrc(src)) {
     return (
@@ -2273,7 +2420,7 @@ function LocalArtifactImage({ artifactPath, alt }: { artifactPath: string; alt: 
     if (!resolve || exp) return;
     let active = true;
     let made: string | null = null;
-    resolve(artifactPath)
+    resolveFileObjectUrl(resolve, artifactPath)
       .then((u) => {
         if (active) {
           made = u;
@@ -2309,6 +2456,7 @@ function LocalArtifactFile({
   const resolve = useContext(ArtifactResolverContext);
   const exp = useContext(ExportCtx);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const shown = label || fileLabel(artifactPath);
   const filename = downloadName || fileLabel(artifactPath);
   if (!resolve || exp) {
@@ -2321,9 +2469,10 @@ function LocalArtifactFile({
   }
   const download = async (): Promise<void> => {
     if (busy) return;
+    setFailed(false);
     setBusy(true);
     try {
-      const objUrl = await resolve(artifactPath);
+      const objUrl = await resolveFileObjectUrl(resolve, artifactPath);
       const a = document.createElement('a');
       a.href = objUrl;
       a.download = filename;
@@ -2332,14 +2481,23 @@ function LocalArtifactFile({
       a.remove();
       setTimeout(() => URL.revokeObjectURL(objUrl), 10_000);
     } catch {
-      /* keep the chip retryable */
+      // The artifact endpoint may refuse a stale path or an offline runner. Surface that state so
+      // the user knows the click was handled and can retry when the runner is back.
+      setFailed(true);
     } finally {
       setBusy(false);
     }
   };
   return (
-    <button type="button" className="chat-file" onClick={download} title={`Download ${filename}`}>
-      {busy ? <LoadingOutlined spin /> : <PaperClipOutlined />}
+    <button
+      type="button"
+      className={`chat-file${failed ? ' is-error' : ''}`}
+      onClick={download}
+      title={failed ? `Retry download ${filename}` : `Download ${filename}`}
+      aria-label={failed ? `Retry download ${filename}` : `Download ${filename}`}
+      data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
+    >
+      {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
       <span className="chat-file-name">{shown}</span>
     </button>
   );
@@ -2360,11 +2518,18 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
     return <AttachmentFile id={id} name={name} />;
   }
   if (typeof href === 'string' && isLegacyArtifactSrc(href)) {
+    // Older replies used ordinary links for generated images. Treat those the same as the image
+    // form so a labelled `[preview](...png)` does not degrade to a download chip forever.
+    const artifactPath = artifactPathFromLink(href);
+    const label = nodeText(children).trim() || fileLabel(artifactPath);
+    if (looksLikeImagePath(artifactPath)) {
+      return <LocalArtifactImage artifactPath={artifactPath} alt={label} />;
+    }
     return (
       <LocalArtifactFile
-        artifactPath={href}
-        label={nodeText(children).trim() || fileLabel(href)}
-        downloadName={fileLabel(href)}
+        artifactPath={artifactPath}
+        label={label}
+        downloadName={fileLabel(artifactPath)}
       />
     );
   }
@@ -3585,8 +3750,10 @@ const safeJson = (v: any): string => {
   }
 };
 
-// A tool_result's content is either a string or an array of content blocks
-// (text/image/...). Flatten it to displayable text.
+// A tool_result's content is either a string, an array of content blocks
+// (text/image/...), or an MCP CallToolResult wrapper whose `content` holds that array. Flatten it
+// to displayable text. The wrapper matters for Codex: its app-server can pass the whole MCP result
+// through, so an image is one level below the value the runner stores on the event.
 // Exported so the background-process tray can flatten a Read-on-output result the same way.
 export function resultText(content: any): string {
   if (content == null) return '';
@@ -3596,21 +3763,77 @@ export function resultText(content: any): string {
       .map((b: any) => {
         if (typeof b === 'string') return b;
         if (b && b.type === 'text') return b.text ?? '';
-        if (b && b.type === 'image') return ''; // rendered inline by resultImages()
+        if (isResultImageBlock(b)) return ''; // rendered inline by resultImages()
+        if (hasResultImage(b)) return resultText(b);
         return safeJson(b);
       })
       .filter((s) => s !== '')
       .join('\n');
   }
+  if (isResultImageBlock(content)) return '';
+  // Do not stringify an image-bearing MCP wrapper: that would put the base64 payload into a
+  // <pre>, which is both unreadable and wide enough to stretch the transcript. Keep any text the
+  // wrapper carries alongside the image, and let resultImages render the picture separately.
+  if (hasResultImage(content)) {
+    return resultWrapperValues(content)
+      .map((value) => resultText(value))
+      .filter((text) => text !== '')
+      .join('\n');
+  }
   return safeJson(content);
+}
+
+const RESULT_WRAPPER_KEYS = ['content', 'result', 'output', 'structuredContent'] as const;
+
+function isResultImageBlock(value: any): boolean {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    (value.type === 'image' ||
+      value.type === 'input_image' ||
+      value.type === 'image_url' ||
+      typeof value.image_url === 'string' ||
+      typeof value.imageUrl === 'string' ||
+      (value.image_url && typeof value.image_url === 'object'))
+  );
+}
+
+function resultWrapperValues(content: any): any[] {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return [];
+  return RESULT_WRAPPER_KEYS.filter((key) => Object.prototype.hasOwnProperty.call(content, key)).map(
+    (key) => content[key],
+  );
+}
+
+/** Find image blocks in either Anthropic's direct array or an MCP result wrapper. */
+function resultImageBlocks(content: any): any[] {
+  const found: any[] = [];
+  const seen = new Set<any>();
+  const visit = (value: any, depth: number) => {
+    if (value == null || depth > 4) return;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, depth + 1);
+      return;
+    }
+    if (typeof value !== 'object' || seen.has(value)) return;
+    seen.add(value);
+    if (isResultImageBlock(value)) {
+      found.push(value);
+      return;
+    }
+    for (const nested of resultWrapperValues(value)) visit(nested, depth + 1);
+  };
+  visit(content, 0);
+  return found;
 }
 
 // Whether a tool_result carries an image at all — including one the server emptied of its bytes
 // because it was too big to ship inline (see the apiserver's MAX_IMAGE_PAYLOAD). The block outlives
 // that clip, keeping its type and media_type, exactly so this stays true: a screenshot still opens
-// its card on arrival, and the open card refetches the payload whole.
+// its card on arrival, and the open card refetches the payload whole. MCP results may wrap the same
+// block in `{ content: [...] }` (or `{ result: { content: [...] } }`), so inspect those wrappers too.
 export function hasResultImage(content: any): boolean {
-  return Array.isArray(content) && content.some((b) => b && b.type === 'image');
+  return resultImageBlocks(content).length > 0;
 }
 
 // Inline images carried by a tool_result's content blocks — e.g. Read on a .png, or an
@@ -3618,11 +3841,18 @@ export function hasResultImage(content: any): boolean {
 // runner, so render it as a data URL. A block whose data the server clipped yields nothing
 // here until the untrimmed payload lands. A plain-text result yields [].
 function resultImages(content: any): string[] {
-  if (!Array.isArray(content)) return [];
   const urls: string[] = [];
-  for (const b of content) {
-    const s = b && b.type === 'image' ? b.source : null;
-    if (s && s.data && s.media_type) urls.push(`data:${s.media_type};base64,${s.data}`);
+  for (const block of resultImageBlocks(content)) {
+    const source = block.source && typeof block.source === 'object' ? block.source : undefined;
+    const data = source?.data ?? block.data;
+    const mime = source?.media_type ?? source?.mimeType ?? block.media_type ?? block.mimeType;
+    const imageUrl = block.image_url && typeof block.image_url === 'object' ? block.image_url.url : block.image_url;
+    const directUrl = imageUrl ?? block.imageUrl ?? source?.url ?? block.url;
+    if (typeof directUrl === 'string' && directUrl) {
+      urls.push(directUrl);
+    } else if (typeof data === 'string' && data && typeof mime === 'string' && mime) {
+      urls.push(data.startsWith('data:') ? data : `data:${mime};base64,${data}`);
+    }
   }
   return urls;
 }

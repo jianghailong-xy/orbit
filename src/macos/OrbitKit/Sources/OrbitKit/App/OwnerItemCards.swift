@@ -497,9 +497,9 @@ public enum ExceptionCards {
         return .open(row)
     }
 
-    /// Whether this card is still something waiting on the reader — what a count of open items
-    /// would use. Not drawn by any bar today: the browser's rail points at decisions, not at
-    /// exceptions (§7.6 V13's `needsDecisionCount`), and this is the same rule.
+    /// Whether this card is still something waiting on the reader — what the console's in-session
+    /// bar counts (`ConsoleModel.openBelowRows`). The browser's pinned line points at the same cards
+    /// (`isOwnerExceptionCard` in `ProjectProgressStatus.tsx`).
     public static func isOpen(_ standing: OwnerItemStanding) -> Bool {
         if case .open = standing { return true }
         return false

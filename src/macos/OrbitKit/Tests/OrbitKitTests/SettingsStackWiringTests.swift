@@ -75,8 +75,8 @@ final class SettingsStackWiringTests: XCTestCase {
             .joined(separator: "\n")
     }
 
-    /// Choosing Settings on iOS presents it; it never becomes the section. The two ways in — the
-    /// drawer's gear on iPhone, the sidebar's row on iPad — both raise the sheet, and the section
+    /// Choosing Settings on iOS presents it; it never becomes the section. The one way in is the
+    /// drawer's gear — on iPhone, and on iPad, whose sidebar is the same drawer — and the section
     /// switch itself stays what it was (`NavigationEntrancesWiringTests` holds it to that).
     func testSettingsIsASheetOverTheSectionOnIOS() throws {
         let root = code(try source("src/ios/Sources/OrbitiOSApp.swift"))
@@ -91,12 +91,10 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertFalse(arm.contains("NavigationStack"), "no second stack for a section that is never shown")
 
         let main = code(try appSource("Views/MainView.swift"))
-        let sidebar = try slice(main, from: "private var selection: Binding<SidebarSelection?> {",
-                                to: "case .section(let s):")
-        let guardRange = try XCTUnwrap(sidebar.range(of: "#if os(iOS)"), "the sidebar's interception is iOS-only")
-        let present = try XCTUnwrap(sidebar.range(of: "case .section(.settings):\n                    model.settingsPresented = true"),
-                                    "choosing Settings in the iPad sidebar raises the sheet")
-        XCTAssertLessThan(guardRange.lowerBound, present.lowerBound)
+        XCTAssertTrue(main.contains("NavigationDrawer(close: {}, live: true, inSidebarColumn: true)"),
+                      "the iPad's sidebar is the drawer, gear and all")
+        XCTAssertFalse(main.contains("model.settingsPresented = true"),
+                       "no second way in beside the gear: the macOS source list has none to intercept")
         let content = try slice(main, from: "struct SectionContent: View {", to: "struct SectionDetail: View {")
         let contentArm = try slice(content, from: "case .settings:", to: "case .admin:")
         XCTAssertTrue(contentArm.contains("EmptyView()") && contentArm.contains("SettingsView()"),
@@ -239,7 +237,7 @@ final class SettingsStackWiringTests: XCTestCase {
     }
 
     /// The photo is drawn wherever the account's avatar is: Settings' header on iOS, the sidebar's
-    /// account row (macOS and iPad), and macOS Settings — which also sets it, removes it, and renames.
+    /// account row on macOS, and macOS Settings — which also sets it, removes it, and renames.
     func testTheAccountsPhotoIsDrawnAndSetEverywhereItsAvatarIs() throws {
         let main = code(try appSource("Views/MainView.swift"))
         let footer = try slice(main, from: "struct AccountFooter: View {", to: "struct AccountAvatar: View {")

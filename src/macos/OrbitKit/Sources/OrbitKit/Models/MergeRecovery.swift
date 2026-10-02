@@ -5,6 +5,21 @@ public struct MergeRecoveryCommit: Codable, Equatable, Sendable {
     public let subject: String
     public let author: String
     public let date: String
+    /// Two or more parents. Absent from runners that predate it.
+    public let merge: Bool?
+}
+
+/// Where a commit the push adds comes from (web's `mergeRecoveryCommitOrigin`).
+public enum MergeRecoveryCommitOrigin: Equatable, Sendable {
+    case localOnly, merge, session
+
+    public var label: String {
+        switch self {
+        case .localOnly: return "Local-only"
+        case .merge: return "Merge commit"
+        case .session: return "This session"
+        }
+    }
 }
 
 /// One button of the merge-recovery review sheet.
@@ -65,6 +80,9 @@ public struct MergeRecovery: Codable, Equatable, Sendable {
     public let conflicts: [String]?
     public let localCommits: [MergeRecoveryCommit]?
     public let remoteCommits: [MergeRecoveryCommit]?
+    /// Exactly what the push adds to origin/<target>, newest first. Absent from older runners and
+    /// past the runner's commit cap; the sheet then lists the local-only commits alone.
+    public let pushCommits: [MergeRecoveryCommit]?
     public let patch: String?
     public let addsMergeCommit: Bool?
     public let checkedAt: String?
@@ -89,6 +107,68 @@ public struct MergeRecovery: Codable, Equatable, Sendable {
         if code == "FETCH_FAILED" { return "Could not check the remote" }
         if ["PUSH_FAILED", "REMOTE_NOT_VERIFIED"].contains(code) { return "Could not confirm the target push" }
         return "\(targetBranch) needs synchronization"
+    }
+
+    /// Local-only first: an unpublished local merge is still unpublished.
+    public func origin(of commit: MergeRecoveryCommit) -> MergeRecoveryCommitOrigin {
+        if localCommits?.contains(where: { $0.sha == commit.sha }) == true { return .localOnly }
+        return commit.merge == true ? .merge : .session
+    }
+
+    /// The push's commits the sheet lists inline: every local-only and merge commit — what the review
+    /// is for — and this session's first few; the rest wait behind one row. Git log's order.
+    public func inlinePushCommits(sessionLimit: Int = 5) -> (shown: [MergeRecoveryCommit], hidden: Int) {
+        var sessions = 0
+        let all = pushCommits ?? []
+        let shown = all.filter { commit in
+            guard origin(of: commit) == .session else { return true }
+            sessions += 1
+            return sessions <= sessionLimit
+        }
+        return (shown, all.count - shown.count)
+    }
+
+    /// Local target against origin/target, once a check has listed both sides (web's
+    /// `mergeRecoveryTargetRelation`). The runner leaves an empty list out, so two absent lists only
+    /// mean "same" when the tips agree; otherwise they went unread.
+    public var targetRelation: String? {
+        guard let localSha, let remoteSha,
+              localSha == remoteSha || localCommits != nil || remoteCommits != nil else { return nil }
+        let t = targetBranch
+        let ahead = localSha == remoteSha ? 0 : localCommits?.count ?? 0
+        let behind = localSha == remoteSha ? 0 : remoteCommits?.count ?? 0
+        switch (ahead, behind) {
+        case (0, 0): return "Local \(t) matches origin/\(t)"
+        case (_, 0): return "Local \(t) is \(ahead) ahead of origin/\(t)"
+        case (0, _): return "Local \(t) is \(behind) behind origin/\(t)"
+        default: return "Local \(t): \(ahead) ahead, \(behind) behind origin/\(t)"
+        }
+    }
+
+    /// How the push lands, under the commits it adds.
+    public var landingNote: String {
+        let t = targetBranch
+        let local = localCommits?.count ?? 0
+        return (addsMergeCommit == true ? "A merge commit joins both histories; nothing already on origin/\(t) is rewritten."
+                : "Fast-forward push: nothing already on origin/\(t) is rewritten.")
+            + (local == 0 ? "" : " Includes \(local) local-only \(local == 1 ? "commit that was" : "commits that were") never pushed.")
+    }
+
+    /// The sheet's closing note: what the check proved and, for a ready candidate, the way to a PR.
+    /// It speaks of local-only commits only when some go out and no push list has said so already.
+    public var reviewNote: String? {
+        var parts: [String] = []
+        if let check {
+            parts.append(check.status == "unconfigured" ? "Git preview only; no merge check is configured."
+                         : check.status == "passed" ? "Configured merge check passed." : "Configured merge check failed.")
+        }
+        if ready {
+            if (pushCommits ?? []).isEmpty, localCommits?.isEmpty == false {
+                parts.append("The local-only commits above will be pushed with this session’s changes.")
+            }
+            parts.append("For linear history or required PRs, prepare a PR candidate instead.")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " ")
     }
 
     /// The review sheet's buttons — the same steps, titles and gates the inline card had (and web's

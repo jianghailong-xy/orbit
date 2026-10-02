@@ -311,6 +311,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// are already inside `pendingApprovals`; this says which they are, so the bar can name one and
     /// open its card. Empty (or nil, from an older control plane) when none.
     public let ownerItems: [SessionOwnerItem]?
+    /// Who this conversation is waiting on for a reply, and who is waiting on it (session requests,
+    /// `SessionRequestCopy.peersLine`). Nil from an older control plane; empty when none is open.
+    public let awaitingReplyFrom: [SessionRequestPeer]?
+    public let owesReplyTo: [SessionRequestPeer]?
     /// The task whose run this is; nil for an ordinary conversation. It is how the console finds the
     /// question it may have to draw a card for (`OwnerConfirmation.swift`) — a card is drawn in the
     /// run's own session, and only there.
@@ -465,6 +469,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
+        awaitingReplyFrom = try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .awaitingReplyFrom)
+        owesReplyTo = try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .owesReplyTo)
         taskId = try values.decodeIfPresent(String.self, forKey: .taskId)
         branch = try values.decodeIfPresent(String.self, forKey: .branch)
         updatedAt = try values.decodeIfPresent(String.self, forKey: .updatedAt)
@@ -517,7 +523,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
                 poolMemberProviderId: String? = nil, poolKeyId: String? = nil,
                 codexAccount: String? = nil, codexAccountPinned: Bool? = nil,
-                claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil) {
+                claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil,
+                awaitingReplyFrom: [SessionRequestPeer]? = nil, owesReplyTo: [SessionRequestPeer]? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -540,6 +547,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.pendingApprovals = pendingApprovals
         self.waitingKind = waitingKind
         self.ownerItems = ownerItems
+        self.awaitingReplyFrom = awaitingReplyFrom
+        self.owesReplyTo = owesReplyTo
         self.taskId = taskId
         self.branch = branch
         self.updatedAt = updatedAt
@@ -766,6 +775,12 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// held raw for `ProjectStarted.parseCard` — the reader the echo's payload is read by.
     public let projectStarted: JSONValue?
     public var startedCard: ProjectStarted? { ProjectStarted.parseCard(projectStarted) }
+    /// Who sent this turn, when it is another Orbit session's message (`sessionMessage`) — held raw
+    /// for `SessionMessage.parseCard`, the reader the echo's payload is read by, so the card drawn
+    /// while the message waits is the one its echo is drawn as. Nil on every turn nobody's session
+    /// sent, and from a server that predates the field.
+    public let sessionMessage: JSONValue?
+    public var senderCard: SessionMessage? { SessionMessage.parseCard(sessionMessage) }
     /// The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
     /// predates the field.
@@ -773,13 +788,15 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
 
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
-                projectStarted: JSONValue? = nil, authoredByOrbit: Bool? = nil) {
+                projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
+                authoredByOrbit: Bool? = nil) {
         self.turnId = turnId
         self.kind = kind
         self.content = content
         self.attachments = attachments
         self.openItemDelivery = openItemDelivery
         self.projectStarted = projectStarted
+        self.sessionMessage = sessionMessage
         self.authoredByOrbit = authoredByOrbit
     }
 }
@@ -832,6 +849,12 @@ public struct CreateSessionRequest: Codable, Sendable {
         self.codexAccount = codexAccount
         self.claudeAccount = claudeAccount
     }
+}
+
+/// POST /sessions/:id/merge-repair — the server derives the prompt from the current recovery.
+public struct MergeRepairRequest: Codable, Sendable {
+    public let preparePR: Bool
+    public init(preparePR: Bool = false) { self.preparePR = preparePR }
 }
 
 /// The durable approval record (GET /sessions/:id/approvals). Distinct from the live
@@ -898,20 +921,23 @@ public struct PermissionRule: Codable, Equatable, Sendable {
     }
 }
 
-/// POST /sessions/:id/approvals/:approvalId/decision
+/// POST /sessions/:id/approvals/:approvalId/decision. Mirrors `ApprovalDecisionRequest` in
+/// src/shared/src/dto.ts, key for key: the control plane reads nothing else.
 public struct ApprovalDecisionRequest: Codable, Sendable {
     public let behavior: ApprovalBehavior
     public let message: String?
     /// AskUserQuestion answers: question text → selected labels.
     public let answers: [String: [String]]?
-    /// Optional "remember this kind" rule.
-    public let rememberRule: PermissionRule?
+    /// Optional "remember these kinds" rules, one per distinct sub-command of a Bash line. The
+    /// single `rememberRule` this used to send has not been read by the server since June 2026,
+    /// which made every "Allow & remember" a plain Allow.
+    public let rememberRules: [PermissionRule]?
     public init(behavior: ApprovalBehavior, message: String? = nil,
-                answers: [String: [String]]? = nil, rememberRule: PermissionRule? = nil) {
+                answers: [String: [String]]? = nil, rememberRules: [PermissionRule]? = nil) {
         self.behavior = behavior
         self.message = message
         self.answers = answers
-        self.rememberRule = rememberRule
+        self.rememberRules = rememberRules
     }
 }
 
@@ -959,6 +985,25 @@ public struct SessionDetailAgent: Codable, Equatable, Sendable {
     }
 }
 
+/// The newest repair conversation attached to a merge recovery. It is projected onto the parent
+/// detail so the review sheet can keep showing live progress after the app navigates away.
+public struct MergeRepairSession: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let title: String?
+    public let status: RunStatus?
+    public let runStatus: RunStatus?
+    public let sessionState: SessionState?
+    public let runState: SessionRunState?
+    public let lifecycleState: SessionLifecycleState?
+    public let error: String?
+    public let completedAt: String?
+
+    public var effectiveRunStatus: RunStatus? { runStatus ?? status }
+    public var effectiveRunState: SessionRunState? {
+        SessionRunState.resolveOptional(runState, legacy: sessionState, status: effectiveRunStatus)
+    }
+}
+
 /// GET /sessions/:id — a single session's detail. Only the worktree-status-bar fields are typed
 /// (Codable ignores the rest of the payload); they mirror the same-named fields on web's
 /// `SessionDetail` and drive `WorktreeBarLogic`. The runner reports the live state each heartbeat
@@ -990,6 +1035,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public let mergeStatus: String?
     public let mergeError: String?
     public let mergeRecovery: MergeRecovery?
+    public let mergeRepairSession: MergeRepairSession?
     public let mergeRecoverySupported: Bool?
     public let workspace: SessionDetailAgent?
     /// The branch the last merge targeted (nil = the runner's auto-detected default).
@@ -1051,6 +1097,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         mergeStatus = try values.decodeIfPresent(String.self, forKey: .mergeStatus)
         mergeError = try values.decodeIfPresent(String.self, forKey: .mergeError)
         mergeRecovery = try values.decodeIfPresent(MergeRecovery.self, forKey: .mergeRecovery)
+        mergeRepairSession = try values.decodeIfPresent(MergeRepairSession.self, forKey: .mergeRepairSession)
         mergeRecoverySupported = try values.decodeIfPresent(Bool.self, forKey: .mergeRecoverySupported)
         workspace = try values.decodeIfPresent(SessionDetailAgent.self, forKey: .workspace)
         mergeTarget = try values.decodeIfPresent(String.self, forKey: .mergeTarget)
@@ -1074,6 +1121,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 changedFiles: [SessionChangedFile]? = nil, worktreeDirty: Bool? = nil,
                 mergeStatus: String? = nil, mergeError: String? = nil, mergeTarget: String? = nil,
                 mergeRecovery: MergeRecovery? = nil, mergeRecoverySupported: Bool? = nil,
+                mergeRepairSession: MergeRepairSession? = nil,
                 workspace: SessionDetailAgent? = nil,
                 mergeTargets: [String]? = nil, branchMerged: Bool? = nil, worktreeBranch: String? = nil,
                 commitStatus: String? = nil, commitError: String? = nil,
@@ -1094,6 +1142,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.mergeStatus = mergeStatus
         self.mergeError = mergeError
         self.mergeRecovery = mergeRecovery
+        self.mergeRepairSession = mergeRepairSession
         self.mergeRecoverySupported = mergeRecoverySupported
         self.workspace = workspace
         self.mergeTarget = mergeTarget

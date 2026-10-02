@@ -200,6 +200,30 @@ export class CoordinatorDeliveryService {
   }
 
   /**
+   * Tell Automatic's standing coordinator that a human-owned blocker was raised.
+   *
+   * This uses the same wake ledger and carrier as every other coordinator notification, but its
+   * authorizer deliberately checks only the Automatic switch. A blocker notification is an
+   * explanation of a human decision, not a coordinator judgment and must not spend convergence
+   * budget before the coordinator has even read it.
+   */
+  async deliverBlocker(fact: WakeFact): Promise<CoordinatorDeliveryOutcome> {
+    return this.queue(fact, this.authorizeBlocker);
+  }
+
+  private readonly authorizeBlocker: WakeAuthorizer = async (fact) => {
+    const project = await this.prisma.project.findUnique({
+      where: { id: fact.projectId },
+      select: { coordinatorEnabled: true },
+    });
+    if (!project) return { allowed: false, refusalCode: 'PROJECT_GONE' };
+    if (!project.coordinatorEnabled) {
+      return { allowed: false, refusalCode: 'COORDINATOR_DISABLED' };
+    }
+    return { allowed: true };
+  };
+
+  /**
    * Deliver one committed fact as a QUEUED turn on the standing conversation — contract §0.3 G6's
    * carrier, which `deliver` above predates.
    *
@@ -254,7 +278,12 @@ export class CoordinatorDeliveryService {
     try {
       const project = await this.prisma.project.findUnique({
         where: { id: fact.projectId },
-        select: { ownerId: true, title: true, coordinatorSessionId: true },
+        select: {
+          ownerId: true,
+          title: true,
+          coordinatorSessionId: true,
+          exceptionEscalationSeconds: true,
+        },
       });
       if (!project) return this.refuse(wakeId, idempotencyKey, DELIVERY_PROJECT_GONE);
       if (!project.coordinatorSessionId) {
@@ -310,7 +339,13 @@ export class CoordinatorDeliveryService {
   private async message(fact: WakeFact): Promise<CoordinatorMessageOutcome> {
     const project = await this.prisma.project.findUnique({
       where: { id: fact.projectId },
-      select: { id: true, ownerId: true, title: true, coordinatorSessionId: true },
+      select: {
+        id: true,
+        ownerId: true,
+        title: true,
+        coordinatorSessionId: true,
+        exceptionEscalationSeconds: true,
+      },
     });
     if (!project) return { outcome: 'REFUSED', refusalCode: DELIVERY_PROJECT_GONE };
     if (!project.coordinatorSessionId) {
@@ -412,16 +447,23 @@ export class CoordinatorDeliveryService {
    * standing it is folded from, are read here: after the claim, as the message is written, off the
    * client this service already holds, and from the same batch `project-done-derived.ts` stores the
    * column from. Not by the producer: it changes what the message says and nothing about which fact
-   * it is or whether it is delivered. Every other fact renders from itself.
+   * it is or whether it is delivered.
+   *
+   * `PROJECT_TASKS_SETTLED` reaches this conversation only when the project looks finished and
+   * DONE is still withheld (`project-looks-finished.ts`), and its message is the reasons — every
+   * criterion's landing reason, from the same reading — and the project's escalation window. Every
+   * other fact renders from itself.
    */
   private async render(
     fact: WakeFact,
-    project: { ownerId: string; title: string },
+    project: { ownerId: string; title: string; exceptionEscalationSeconds: number },
   ): Promise<string> {
-    const reading = fact.event === 'PROJECT_ACCEPTANCE_LANDED'
+    const reading = fact.event === 'PROJECT_ACCEPTANCE_LANDED' || fact.event === 'PROJECT_TASKS_SETTLED'
       ? await readDerivedProjectDoneReading(this.prisma, project.ownerId, fact.projectId)
       : null;
-    return buildCoordinatorDeliveryMessage(fact, project.title, reading);
+    return buildCoordinatorDeliveryMessage(fact, project.title, reading, {
+      escalationSeconds: project.exceptionEscalationSeconds,
+    });
   }
 
   private async refuse(

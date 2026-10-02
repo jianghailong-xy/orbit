@@ -28,6 +28,17 @@ final class AttachmentLinkTests: XCTestCase {
         XCTAssertFalse(AttachmentLink.isRunnerLocalPath(URL(string: "/tmp/x.png?v=1")!))
     }
 
+    func testSourceReferencesAreFileLinksAndLocationsDoNotChangeTheName() {
+        XCTAssertTrue(AttachmentLink.isFileReference(URL(string: "src/web/src/components/Transcript.tsx:106")!))
+        XCTAssertTrue(AttachmentLink.isFileReference(URL(string: "src/apiserver/src/sessions/migration.sql")!))
+        XCTAssertTrue(AttachmentLink.isFileReference(URL(string: "docs/preview.png")!))
+        XCTAssertFalse(AttachmentLink.isFileReference(URL(string: "https://example.com/readme.ts")!))
+        XCTAssertFalse(AttachmentLink.isFileReference(URL(string: "/tasks/abc")!))
+        XCTAssertFalse(AttachmentLink.isFileReference(URL(string: "/tasks/read.ts")!))
+        XCTAssertEqual(AttachmentLink.pathWithoutSourceLocation("/tmp/card.png:12-14"), "/tmp/card.png")
+        XCTAssertEqual(AttachmentLink.fileName(inPath: "/root/work/Transcript.tsx:106"), "Transcript.tsx")
+    }
+
     /// The one kind of runner-local path that is not hopeless: a file in the session's own
     /// directories, which the artifact route can fetch (the runner reads it). Everything else — the
     /// generated-images dir, /tmp, another session's checkout — stays a chip, because the API would
@@ -55,6 +66,11 @@ final class AttachmentLinkTests: XCTestCase {
             AttachmentLink.runnerArtifactPath(
                 URL(string: "/root/.orbit/worktrees/\(session)/docs/mocks/card.png")!, sessionID: session),
             "/root/.orbit/worktrees/\(session)/docs/mocks/card.png")
+        XCTAssertEqual(
+            AttachmentLink.runnerArtifactPath(
+                URL(string: "/root/.orbit/worktrees/\(session)/src/web/src/components/Transcript.tsx:106")!,
+                sessionID: session),
+            "/root/.orbit/worktrees/\(session)/src/web/src/components/Transcript.tsx")
         XCTAssertEqual(
             AttachmentLink.runnerArtifactPath(
                 URL(string: "/root/.orbit/uploads/\(session)/drill/out.json")!, sessionID: session),
@@ -95,6 +111,7 @@ final class AttachmentLinkTests: XCTestCase {
             "/root/.orbit/worktrees/s/docs/mocks/card.JPEG",
             "/tmp/shot.heic",
             "/tmp/anim.webp",
+            "/tmp/shot.png:12",
         ] {
             XCTAssertTrue(AttachmentLink.looksLikeImage(path: path), path)
         }

@@ -56,8 +56,8 @@ const CENSUS = 'projects/project-status-write-sites.spec.ts';
  * out what the baseline is has no opinion at all — the copy IS the evidence, and a reviewer checks
  * it with `git show`.
  *
- * TWO ENTRIES, AND WHY THE SECOND ONE IS NOT WHAT THIS FILE WAS WATCHING FOR
- * =========================================================================
+ * THREE ENTRIES, AND WHY THE LATER TWO ARE NOT WHAT THIS FILE WAS WATCHING FOR
+ * ===========================================================================
  * For the coordinator-autonomy work this was one entry, the endpoint an owner calls, held to
  * `59f674e2`. That claim was kept: none of that work added a status writer, and a reviewer can
  * still check it — the single-entry declaration is at `59f674e2` and it is unchanged through
@@ -71,21 +71,32 @@ const CENSUS = 'projects/project-status-write-sites.spec.ts';
  * is that projection: it takes no `status` from any caller, and what a session may ASK for is
  * unchanged and still refused by `refuseProjectStatusWrite`.
  *
- * What this file goes on doing is unchanged too, and it is the reason the entry could not be added
+ * The third entry is the same kind of edit. On 2026-10-01 the account owner decided (D3 of the
+ * project-closing redesign, project 34Y7My8sqhKLWtmCQYv1l) that a project the projection cannot
+ * prove done is recorded done by the owner in person, once, and that the projection must not take
+ * that record away on an ordinary task write, merge receipt or confirmation.
+ * `projects/project-acceptance.service.ts#recordProjectDone` is that door: `POST /projects/:id/done`,
+ * refused whole from a session, writing DONE with `done_by = 'OWNER'` under a compare-and-set on
+ * the criteria seal. It takes `status` from nobody either — the value it writes is fixed — and what
+ * a session may ASK for is still refused.
+ *
+ * What this file goes on doing is unchanged too, and it is the reason neither entry could be added
  * quietly: the sibling census could not have grown by one entry without this comparison failing
- * and somebody having to write down which decision the new entry came from. A third entry needs
+ * and somebody having to write down which decision the new entry came from. A fourth entry needs
  * the same, and re-baselining without that paragraph is the failure this file exists to make
  * visible.
  */
 const BASELINE_DECLARATION =
-  "const FROZEN_WRITE_SITES: readonly string[] = ['projects/project-done-derived.ts#storeDerivedProjectStatus', 'projects/projects.service.ts#update'];";
+  "const FROZEN_WRITE_SITES: readonly string[] = ['projects/project-acceptance.service.ts#recordProjectDone', 'projects/project-done-derived.ts#storeDerivedProjectStatus', 'projects/projects.service.ts#update'];";
 
 /**
  * The revisions the copy above was taken from, so the checks a reviewer runs are written down:
- * the one-entry declaration at the first, and the entry added by the projection at the second.
+ * the one-entry declaration at the first, the entry added by the projection at the second, and the
+ * owner's door at the third.
  */
 const BASELINE_REVISION = '59f674e2';
 const PROJECTION_REVISION = 'the 2026-09-08 project-done-derived unit';
+const OWNER_DONE_REVISION = 'the 2026-10-01 owner-done door (migration 0345)';
 
 /**
  * The whole `FROZEN_WRITE_SITES` statement in a source, or `null` when it declares none.
@@ -114,7 +125,8 @@ test('(a) the frozen write-site list is what it was before this work started', (
     declared,
     BASELINE_DECLARATION,
     `${CENSUS}'s frozen list differs from the one written down here (the owner endpoint at `
-    + `${BASELINE_REVISION}, the projection from ${PROJECTION_REVISION}); a project that added a `
+    + `${BASELINE_REVISION}, the projection from ${PROJECTION_REVISION}, the owner's door from `
+    + `${OWNER_DONE_REVISION}); a project that added a `
     + 'way to write project.status and appended it here would read exactly like this',
   );
 
@@ -123,6 +135,7 @@ test('(a) the frozen write-site list is what it was before this work started', (
   const entries = entriesOf(declared);
   assert.ok(entries.length > 0, 'the frozen baseline is empty');
   assert.deepEqual(entries, [
+    'projects/project-acceptance.service.ts#recordProjectDone',
     'projects/project-done-derived.ts#storeDerivedProjectStatus',
     'projects/projects.service.ts#update',
   ]);

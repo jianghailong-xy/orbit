@@ -40,6 +40,8 @@ function sessionRow(coordinatorForProject: { id: string; title: string } | null)
     tagLinks: [],
     // Read by the detail for the background-job count it reports beside the row's own arrays.
     runningBgJobs: [],
+    // The detail's newest merge-repair child, which this session has none of.
+    children: [],
     coordinatorForProject,
   };
 }

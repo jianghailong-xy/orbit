@@ -1,4 +1,4 @@
-import { mergeRecoveryPrompt, type MergeRecoveryAction } from '@orbit/shared';
+import { type MergeRecoveryAction } from '@orbit/shared';
 import {
   ArrowDownOutlined,
   ArrowLeftOutlined,
@@ -28,6 +28,7 @@ import {
   PlusOutlined,
   PushpinFilled,
   PushpinOutlined,
+  RightOutlined,
   SearchOutlined,
   ThunderboltOutlined,
   UndoOutlined,
@@ -39,6 +40,7 @@ import {
   referenceToken,
   type ReferenceMap,
 } from '../lib/composerRefs';
+import { requestPeersLine } from '../lib/sessionRequest';
 import { settleThinking } from '../lib/thinkingDraft';
 import {
   READER_INPUT_GRACE_MS,
@@ -174,6 +176,7 @@ import { BackgroundWakeCard } from './BackgroundWakeCard';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import { ProjectStartedCard } from './ProjectStartedCard';
+import { SessionMessageCard } from './SessionMessageCard';
 import { parseWatchWake, watchingCountWord, watchingWord } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { returnsToComposer } from '../lib/queuedTurnRestore';
@@ -195,6 +198,7 @@ import {
   cancelQueuedTurn,
   adoptSessionBranch,
   commitSession,
+  createMergeRepairSession,
   createInteractiveSession,
   decideApproval,
   deleteSession,
@@ -241,7 +245,7 @@ import {
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
 import { CoordinatorQuestions } from './CoordinatorQuestionCard';
-import { ItemAsCard, exceptionCardRows } from './ProjectProgressStatus';
+import { ItemAsCard, exceptionCardRows, isOwnerExceptionCard } from './ProjectProgressStatus';
 import {
   ProjectPromotion,
   ProjectPromotionCard,
@@ -296,6 +300,7 @@ import { PlanUsageIndicator } from './PlanUsageIndicator';
 import type {
   OpenItemDeliveryCard as OpenItemDelivery,
   ProjectStartedCard as ProjectStarted,
+  SessionMessageCard as SessionMessage,
   SessionTurnIntent,
   SessionTurnPlacement,
   WatchView,
@@ -436,6 +441,9 @@ export interface QueuedTurn {
   openItemDelivery?: OpenItemDelivery;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStarted;
+  /** Another Orbit session's message, and who sent it (`ActiveSessionTurn.sessionMessage`): drawn as
+   *  the "From [that session]" card its echo will be, and never handed back to the reader's composer. */
+  sessionMessage?: SessionMessage;
   /** The control plane wrote this turn itself, so nobody typed it (`ActiveSessionTurn.authoredByOrbit`). */
   authoredByOrbit?: true;
 }
@@ -707,6 +715,9 @@ const SESSION_COL_KEY = 'orbit.sessionColWidth';
 const SESSION_COL_MIN = 200;
 const SESSION_COL_MAX = 560;
 const SESSION_COL_DEFAULT = 320;
+
+// Whether the session list's Pinned section is folded to its heading, persisted across reloads.
+const PINNED_COLLAPSED_KEY = 'orbit.sessionPinnedCollapsed';
 
 // Delay the SSE (re)connect on a session switch so holding the arrow keys to scrub
 // the list doesn't open-then-immediately-close a connection per session skipped past.
@@ -1034,6 +1045,17 @@ export function SessionTitleRow({ session: s, hoverTipOpen = false }: { session:
   );
 }
 
+/**
+ * Who this row is waiting on for a reply, and who is waiting on it (session requests, contract §6):
+ * "Waiting on Worker 2 · Owes a reply to Coordinator". Read off the row's own `awaitingReplyFrom` /
+ * `owesReplyTo`, which every list read and every live summary carries; nothing when neither is open.
+ */
+export function SessionRequestsLine({ session: s }: { session: any }) {
+  const text = requestPeersLine(s.awaitingReplyFrom, s.owesReplyTo);
+  if (!text) return null;
+  return <div className="session-requests" title={text}>{text}</div>;
+}
+
 /** Compact tag summary for a session-list row. The first tag is the one users can scan; the
  * fixed count survives when that name has to ellipsize, and a container query swaps to the total
  * count when the resizable session column becomes too narrow to show a useful name. */
@@ -1114,15 +1136,27 @@ export function statusLabel(session: any, watching?: string | null): string {
   return queuedLabel(session); // PENDING
 }
 
+// What a failed session's glyph says — StatusIcon's FAILED tooltips, word for word: the error
+// itself where the header says only "Failed".
+function failedTitle(session: any): string {
+  if (sessionRetryPending(session)) return 'Retrying — the run resumes on its own';
+  const err: string = typeof session.error === 'string' ? session.error : '';
+  if (err.toLowerCase().includes('offline')) return 'Disconnected — runner went offline';
+  return err || 'Failed';
+}
+
 /**
  * The word an Orbit link card says for the session it links to: the header's own, with the watching
- * word a session list row would give it. A preview carries the counts rather than the watch rows, so
+ * word a session list row would give it — except a failure, which says what its glyph says (the
+ * error itself), as the native card does. A preview carries the counts rather than the watch rows, so
  * `watchingCountWord` says what the strip says from what the card was handed.
  *
  * Module-level and not a closure: it is handed to every card of the conversation through the cards
  * context, and a fresh function on every render would re-render every one of them.
  */
-function orbitLinkStateWord(row: any): string {
+export function orbitLinkStateWord(row: any): string {
+  // A decision waiting on the owner still outranks the failure, in the order `statusLabel` keeps.
+  if (sessionRunStateOf(row) === 'FAILED' && !((row?.pendingApprovals ?? 0) > 0)) return failedTitle(row);
   return statusLabel(row, watchingCountWord(row?.watching));
 }
 
@@ -1592,6 +1626,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Both are view-local UI state (not persisted) — the same as the native list.
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [groupByTag, setGroupByTag] = useState(false);
+  // The Pinned section folds to its heading, as Notes' Pinned does (and as on iOS). Unlike those two
+  // it is persisted, so a reload doesn't unfold it.
+  const [pinnedCollapsed, setPinnedCollapsed] = useState(
+    () => localStorage.getItem(PINNED_COLLAPSED_KEY) === '1',
+  );
+  const togglePinned = (): void => {
+    const next = !pinnedCollapsed;
+    setPinnedCollapsed(next);
+    localStorage.setItem(PINNED_COLLAPSED_KEY, next ? '1' : '0');
+  };
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null); // session row whose action menu is open
   // Touch swipe actions for session rows: hover has no touch equivalent, so on mobile the row's
   // actions sit behind a swipe instead, laid out like the iOS list (lib/sessionSwipe) — swipe right
@@ -1830,6 +1874,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const [stuck, setStuck] = useState<
     { seq: string | null; label: string; text: string; loading?: boolean } | null
   >(null);
+  // The exception cards scrolled wholly above the viewport, by item id and space-joined so an
+  // unchanged answer is no re-render: which way the pinned line's press goes to reach one.
+  const [openItemsAbove, setOpenItemsAbove] = useState('');
   // Smart auto-scroll: only keep pinned to the bottom when the user is already there, so
   // reading history (or jumping to the sticky prompt) isn't yanked back by streaming updates.
   const atBottomRef = useRef(true);
@@ -1997,6 +2044,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // Near the top with older history still on the server → pull in the next page.
     if (top < LOAD_OLDER_AT) loadOlder();
     const topY = el.getBoundingClientRect().top;
+    setOpenItemsAbove(
+      Array.from(el.querySelectorAll<HTMLElement>('[data-open-item]'))
+        .filter((card) => card.getBoundingClientRect().bottom <= topY + 1)
+        .map((card) => card.getAttribute('data-open-item'))
+        .join(' '),
+    );
     // A turn a watch or the control plane queued is one of these too — it is where the answer under
     // it starts, so it is where the bar has to point — but it is no bubble and nobody typed it, so
     // its card hands over what to call it (`data-sticky-label` / `data-sticky-text`). Its queued
@@ -2164,6 +2217,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         (detail.mergeStatus === 'pending' || detail.commitStatus === 'pending')
       )
         return 3000;
+      const repairState = detail?.mergeRepairSession?.runState
+        ?? detail?.mergeRepairSession?.runStatus
+        ?? detail?.mergeRepairSession?.status;
+      if (['PENDING', 'QUEUED', 'RUNNING'].includes(String(repairState).toUpperCase())) return 3000;
       // A deep-linked/Completed ENDING row may already be absent from the Open list. Keep polling
       // its own current detail until terminal instead of relying solely on selectedFromList.
       return shouldPollSessionDetail(selectedId, detail, selectedFromList) ? 5000 : false;
@@ -2453,8 +2510,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           }))
         : sessionTimeSections(visibleSessions, {
             pinnedFirst: view === 'open' && !tagFilter,
-          }).map((s) => ({ key: s.title, tag: null as SessionTagRef | null, ...s })),
-    [visibleSessions, groupByTag, view, tagFilter],
+          }).map((s) => ({
+            key: s.title,
+            tag: null as SessionTagRef | null,
+            ...s,
+            // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
+            sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
+          })),
+    [visibleSessions, groupByTag, view, tagFilter, pinnedCollapsed],
   );
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
@@ -3247,6 +3310,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               // this row paints is the card the runner's echo will replace it with.
               ...(row.openItemDelivery ? { openItemDelivery: row.openItemDelivery } : {}),
               ...(row.projectStarted ? { projectStarted: row.projectStarted } : {}),
+              // …and another session's message, drawn "From [that session]" rather than as the
+              // reader's own bubble while its echo is on the way.
+              ...(row.sessionMessage ? { sessionMessage: row.sessionMessage } : {}),
             }))
             .filter(
               (turn) => !acceptedUserTurnLanded(turn, selectedId, accRef.current),
@@ -4311,6 +4377,28 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     [coordinatedProjectId, openItems.data, openItems.dataUpdatedAt, transcriptEvents],
   );
 
+  // Which of those cards the owner answers by pressing — an exception that became theirs, the pause
+  // only they can lift — for the pinned line to point at: drawn among the messages rather than at the
+  // foot, one of these that scrolled away had nothing pointing at it, while the phone's bar did (the
+  // account owner's report, 2026-10-02). The rows the inserts above draw and no others, so a press
+  // always has a card to arrive at.
+  const ownerExceptionRows = useMemo(
+    () =>
+      coordinatedProjectId
+        ? exceptionCardRows(openItems.data, transcriptEvents)
+          .filter(({ row, anchor }) => anchor !== null && isOwnerExceptionCard(row))
+          .map(({ row }) => row)
+        : [],
+    [coordinatedProjectId, openItems.data, transcriptEvents],
+  );
+  // Which side of the reader each sits on is measured on scroll, and a card can arrive or go on its
+  // read's own clock without the conversation moving — so a change in which cards there are is a
+  // reason to measure again.
+  const ownerExceptionIds = ownerExceptionRows.map((row) => row.itemId).join(' ');
+  useEffect(() => {
+    measure();
+  }, [ownerExceptionIds, measure]);
+
   // The candidate a check blocked, drawn at the moment it was blocked instead of at the bottom of
   // this pane — where it sat, under every later message, for as long as the block stood, and in a
   // conversation started long afterwards; the owner's report, 2026-09-24 (`promotionRecordMoment`
@@ -5371,17 +5459,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   });
   const repairRecoveryMut = useMutation({
     mutationFn: (preparePr: boolean) => {
-      if (!detailForSelected?.mergeRecovery || !detailForSelected.workspace?.id) throw new Error('No repair context');
-      return createInteractiveSession({
-        workspaceId: detailForSelected.workspace.id,
-        assignedRunnerId: detailForSelected.assignedRunnerId ?? undefined,
-        provider: detailForSelected.provider ?? undefined,
-        prompt: mergeRecoveryPrompt(detailForSelected.mergeRecovery, preparePr),
-      });
+      if (!selectedId || !detailForSelected?.mergeRecovery) throw new Error('No repair context');
+      return createMergeRepairSession(selectedId, preparePr);
     },
     onSuccess: (session) => {
-      message.sessionNotice({ sessionId: session.id, sessionTitle: 'Merge repair', event: 'merge-repair',
-        headline: 'Repair session started', detail: 'Return to the original session to check and review the completed repair.', tone: 'info' });
+      if (selectedId) {
+        qc.setQueryData<any>(['session', selectedId], (old: any) =>
+          old ? { ...old, mergeRepairSession: session } : old,
+        );
+        void qc.invalidateQueries({ queryKey: ['session', selectedId], exact: true });
+      }
+      message.sessionNotice({ sessionId: session.id, sessionTitle: session.title ?? 'Merge repair', event: 'merge-repair',
+        headline: 'Repair session started', detail: 'Opening the repair session.', tone: 'info' });
+      navigate(`/sessions/${encodeId(session.id)}`);
       void qc.invalidateQueries({ queryKey: ['sessions'] });
     },
     onError: (e: Error) => message.error(e.message),
@@ -7230,12 +7320,27 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           )}
           {sections.map((sec) => (
             <Fragment key={sec.key}>
-              <div className="session-section-head">
-                {sec.tag && (
-                  <span className="session-section-dot" style={{ background: sec.tag.color }} />
-                )}
-                {sec.title}
-              </div>
+              {sec.key === 'Pinned' ? (
+                <button
+                  type="button"
+                  className="session-section-head session-section-fold"
+                  aria-expanded={!pinnedCollapsed}
+                  onClick={togglePinned}
+                >
+                  {sec.title}
+                  <RightOutlined
+                    className={`session-section-chev${pinnedCollapsed ? '' : ' open'}`}
+                    aria-hidden
+                  />
+                </button>
+              ) : (
+                <div className="session-section-head">
+                  {sec.tag && (
+                    <span className="session-section-dot" style={{ background: sec.tag.color }} />
+                  )}
+                  {sec.title}
+                </div>
+              )}
               {sec.sessions.map((s) => {
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
                 const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
@@ -7372,6 +7477,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                             {line.text}
                           </div>
                         </div>
+                        <SessionRequestsLine session={s} />
                       </div>
                     </div>
                     <div className="session-right">
@@ -7793,6 +7899,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   }
                 : null
             }
+            // The exception cards the owner presses, with how long each has been theirs and which
+            // side of the reader it sits on now: unlike a question, one can be above.
+            exceptions={ownerExceptionRows.map((row) => ({
+              row,
+              ageSeconds: Math.max(
+                0,
+                Math.floor((Date.now() - Date.parse(row.escalatedAt ?? row.waitingSince)) / 1000),
+              ),
+              above: openItemsAbove.split(' ').includes(row.itemId),
+            }))}
             // The strip states the fact and this takes the reader to the one place it can be
             // answered: the card the server delivered into this conversation. A second set of
             // buttons up here would be two faces racing for one answer.
@@ -8062,15 +8178,40 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 />
               ))}
               {!selectedTrashed && visibleQueuedTurns.map((q) => {
+                // Another Orbit session's message is asked about FIRST, off the card the snapshot
+                // carried, before anything is read out of its words — which are the sending agent's to
+                // choose, and could take the shape of a wake below (the transcript's own order,
+                // NodeView).
+                const fromSession = q.sessionMessage ?? null;
                 // A wake a watch queued is the card the transcript draws once a runner takes it
                 // (NodeView), so it keeps that shape when it lands and its JSON stays folded. How
                 // its delivery stands is the queue's line to say, as for every queued row.
-                const wake = parseWatchWake(q.content);
+                const wake = fromSession ? null : parseWatchWake(q.content);
                 // A wake the control plane queued for a background job's news, or for a wakeup coming
                 // due, is nobody's message either: it gets the line the transcript draws once a
                 // runner takes it. Withdrawing it is an ordinary cancel — nothing re-sends it.
-                const background = wake ? null : parseBackgroundWake(q.content);
-                return wake ? (
+                const background = fromSession || wake ? null : parseBackgroundWake(q.content);
+                return fromSession ? (
+                  // Drawn "From [that session]" while it waits, as the transcript draws it once a
+                  // runner takes it. Cancel withdraws it and hands nothing back to the composer — the
+                  // words are the sending session's (`returnsToComposer`) — and there is no Put back
+                  // for the same reason.
+                  <SessionMessageCard
+                    key={q.turnId}
+                    card={fromSession}
+                    text={q.content}
+                    ts={q.createdAt}
+                    queued={
+                      <QueuedTurnMeta
+                        placement={q.placement}
+                        delivery={q.delivery}
+                        deliveryCode={q.deliveryCode}
+                        deliveryReason={q.deliveryReason}
+                        onCancel={() => cancelQueued(q.turnId)}
+                      />
+                    }
+                  />
+                ) : wake ? (
                   <WatchWakeCard
                     key={q.turnId}
                     wake={wake}
@@ -8345,6 +8486,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             recoveryAction, previewId,
           }) : undefined}
           onRepairRecovery={(preparePr) => repairRecoveryMut.mutate(preparePr)}
+          repairStarting={repairRecoveryMut.isPending}
+          onOpenRepair={detailForSelected?.mergeRepairSession ? () => navigate(`/sessions/${encodeId(detailForSelected.mergeRepairSession!.id)}`) : undefined}
           resolving={resolveMut.isPending}
           onResolveInSession={
             selectedId && detailForSelected?.branch

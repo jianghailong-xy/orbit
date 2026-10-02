@@ -64,11 +64,15 @@ type integrationResult struct {
 	LandedSha       string
 	LandedTreeSha   string
 	AheadOfUpstream *int
-	FilesChanged    *int
-	Checks          []IntegrationCheckResult
-	Conflicts       []string
-	ErrorCode       string
-	ErrorDetail     map[string]any
+	// SourceOnUpstream is set with NOTHING_TO_LAND, and only there: whether the source tip is an
+	// ancestor of the upstream tip this job fetched (migration 0346). It is the one fact the control
+	// plane lets such an answer out of a criterion's landing on — see J-S3 below.
+	SourceOnUpstream *bool
+	FilesChanged     *int
+	Checks           []IntegrationCheckResult
+	Conflicts        []string
+	ErrorCode        string
+	ErrorDetail      map[string]any
 }
 
 // integrationReporter is what runIntegrationJob tells about each step it reaches. The runloop
@@ -218,6 +222,14 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 			// Nothing to land, and nothing was pushed: the absorb commit is discarded with the
 			// worktree, exactly as in the answer below.
 			result.State, result.Phase = "NOTHING_TO_LAND", "REBASE"
+			// And where that empty tip IS, measured rather than inferred. "Contained in the base"
+			// says the tip is inside the TARGET, which on a project branch ahead of main is not
+			// main: a branch forked from the line holds nothing of its own and is still not on the
+			// upstream. The control plane lets this answer out of a criterion's landing only when
+			// the tip is an ancestor of the upstream tip fetched above (2026-10-01: a rollout task
+			// with no commit, on a line ahead of main, held its criterion off LANDED for ever).
+			onUpstream := isAncestor(scratch, sourceSha, upstreamSha)
+			result.SourceOnUpstream = &onUpstream
 			return result
 		}
 		// Nothing to land, and the absorb commit is discarded with the worktree: a merge of
@@ -878,24 +890,25 @@ func runIntegrationJobAndReport(t *Transport, job IntegrationJobCommand) {
 		})
 	})
 	body := IntegrationJobResultRequest{
-		ClaimGeneration: job.ClaimGeneration,
-		LeaseOwner:      job.LeaseOwner,
-		State:           result.State,
-		Phase:           result.Phase,
-		SourceSha:       result.SourceSha,
-		TargetShaBefore: result.TargetShaBefore,
-		UpstreamSha:     result.UpstreamSha,
-		MainSyncSha:     result.MainSyncSha,
-		TestedSha:       result.TestedSha,
-		TestedTreeSha:   result.TestedTreeSha,
-		LandedSha:       result.LandedSha,
-		LandedTreeSha:   result.LandedTreeSha,
-		AheadOfUpstream: result.AheadOfUpstream,
-		FilesChanged:    result.FilesChanged,
-		Checks:          result.Checks,
-		Conflicts:       result.Conflicts,
-		ErrorCode:       result.ErrorCode,
-		ErrorDetail:     result.ErrorDetail,
+		ClaimGeneration:  job.ClaimGeneration,
+		LeaseOwner:       job.LeaseOwner,
+		State:            result.State,
+		Phase:            result.Phase,
+		SourceSha:        result.SourceSha,
+		TargetShaBefore:  result.TargetShaBefore,
+		UpstreamSha:      result.UpstreamSha,
+		MainSyncSha:      result.MainSyncSha,
+		TestedSha:        result.TestedSha,
+		TestedTreeSha:    result.TestedTreeSha,
+		LandedSha:        result.LandedSha,
+		LandedTreeSha:    result.LandedTreeSha,
+		AheadOfUpstream:  result.AheadOfUpstream,
+		SourceOnUpstream: result.SourceOnUpstream,
+		FilesChanged:     result.FilesChanged,
+		Checks:           result.Checks,
+		Conflicts:        result.Conflicts,
+		ErrorCode:        result.ErrorCode,
+		ErrorDetail:      result.ErrorDetail,
 	}
 	for attempt := 0; attempt < 5; attempt++ {
 		answer, err := t.integrationJobResult(job.JobID, body)

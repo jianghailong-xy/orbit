@@ -12,10 +12,10 @@ import OrbitKit
 // Settings window and the whole form in `SettingsView`.
 
 extension View {
-    /// Hosts Settings. The drawer's gear and the iPad sidebar's Settings row open this sheet instead
-    /// of switching section (`AppModel.settingsPresented`), so closing it lands on the page it
-    /// covered. Applied at the signed-in root, beside the ⌘K palette, so both shells
-    /// share it.
+    /// Hosts Settings. The drawer's gear — on iPhone, and in the iPad's sidebar, which is the same
+    /// drawer — opens this sheet instead of switching section (`AppModel.settingsPresented`), so
+    /// closing it lands on the page it covered. Applied at the signed-in root, beside the ⌘K
+    /// palette, so both shells share it.
     func settingsSheet(_ model: AppModel) -> some View {
         @Bindable var model = model
         return sheet(isPresented: $model.settingsPresented) { SettingsSheet() }
