@@ -70,3 +70,51 @@ describe('the background-process status glyph', () => {
     expect(subagent).not.toContain('status-glyph-active');
   });
 });
+
+/**
+ * A session a live watch will resume: the glyph the screenshot found reading "Waiting for your reply"
+ * over a session nobody was asking anything of. It takes the strip's eye, still and grey — a wake is
+ * coming, nothing here is running, and nobody is being asked — and the native port's
+ * `SessionStatusGlyph` draws the same `eye` in the same place.
+ */
+describe('the watching status glyph', () => {
+  const parked = {
+    status: 'AWAITING_INPUT',
+    engineTurnActive: false,
+    runningSubagentCount: 0,
+    pendingApprovals: 0,
+  };
+
+  it('is the eye, not the reply bubble', () => {
+    expect(renderToStaticMarkup(<StatusIcon session={parked} />)).toContain('anticon-message');
+    const html = renderToStaticMarkup(<StatusIcon session={parked} watching="Watching 1 target" />);
+    expect(html).toContain('anticon-eye');
+    expect(html).not.toContain('anticon-message');
+    expect(html).not.toContain('status-glyph-active');
+  });
+
+  it('outranks a process the workspace left up, breathing or not', () => {
+    const html = renderToStaticMarkup(
+      <StatusIcon session={{ ...parked, runningBgCount: 1, runningBgJobCount: 1 }} watching="Watching 1 target" />,
+    );
+    expect(html).toContain('anticon-eye');
+    expect(html).not.toContain('anticon-code');
+    expect(html).not.toContain('status-glyph-active');
+  });
+
+  it('never hides work of its own or a question for the reader', () => {
+    const subagent = renderToStaticMarkup(
+      <StatusIcon session={{ ...parked, runningSubagentCount: 1 }} watching="Watching 1 target" />,
+    );
+    const turn = renderToStaticMarkup(
+      <StatusIcon session={{ ...parked, engineTurnActive: true }} watching="Watching 1 target" />,
+    );
+    const asking = renderToStaticMarkup(
+      <StatusIcon session={{ ...parked, pendingApprovals: 1 }} watching="Watching 1 target" />,
+    );
+    expect(subagent).toContain('anticon-loading');
+    expect(turn).toContain('anticon-loading');
+    expect(asking).toContain('anticon-pause-circle');
+    for (const html of [subagent, turn, asking]) expect(html).not.toContain('anticon-eye');
+  });
+});

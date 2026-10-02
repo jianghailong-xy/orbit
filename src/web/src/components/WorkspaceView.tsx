@@ -178,7 +178,14 @@ import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import { ProjectStartedCard } from './ProjectStartedCard';
 import { SessionMessageCard } from './SessionMessageCard';
-import { parseWatchWake, watchingCountWord, watchingWord } from '../lib/watches';
+import {
+  parseWatchWake,
+  sessionWatching,
+  watchingCountWord,
+  watchingSessions,
+  watchingWord,
+  type SessionWatching,
+} from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { returnsToComposer } from '../lib/queuedTurnRestore';
 import type { BgShell } from '../lib/backgroundShells';
@@ -882,11 +889,11 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
 // surface its current state — the tool in flight, that it's blocked on you, or a bare
 // "Running…" — so the row never collapses to just a title with no sign of progress.
 // Otherwise it's the flattened last reply, falling back to the run's own state word.
-// `tone` drives the colour: blue = working, amber = needs you, grey = queued or a
-// left-up background process, default = reply content.
+// `tone` drives the colour: blue = working, amber = needs you, grey = queued, a left-up
+// background process or a watch that will resume it, default = reply content.
 type SessionLine = {
   text: string;
-  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background';
+  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching';
 };
 // The line for a message of YOURS the workspace hasn't answered yet. Prefixed, because the preview
 // line is otherwise the workspace's voice: unmarked, a message you sent and a reply to it read
@@ -948,7 +955,9 @@ const waitingLabel = (s: any): string => {
   return 'Waiting for approval';
 };
 
-export const sessionLine = (s: any, live: boolean): SessionLine => {
+// `watching` is this session as an observer — what its row says about the live watches that will
+// resume it (lib/watches `watchingSessions`) — and absent wherever a caller holds no watches.
+export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | null): SessionLine => {
   const state = sessionRunStateOf(s);
   // Somebody is waiting on YOU here, which outranks everything else the row could say: every other
   // line reports what the workspace is doing, and this one is the only one you can act on.
@@ -986,8 +995,12 @@ export const sessionLine = (s: any, live: boolean): SessionLine => {
   // parent at AWAITING_INPUT while it runs, so this (not the RUNNING branch) is what usually
   // surfaces "Running Agent…".
   const parked = live ? parkedWorkLabel(s) : null;
-  if (parked)
-    return { text: `${parked.text}…`, tone: parked.kind === 'subagent' ? 'running' : 'background' };
+  if (parked?.kind === 'subagent') return { text: `${parked.text}…`, tone: 'running' };
+  // Parked on a live watch that will resume it: not idle, not waiting on you, and — whatever else it
+  // left running — not a background process (contract §9.2). Said in the strip's own line, so the row
+  // and the strip above its composer read the same.
+  if (live && watching && state === 'AWAITING_INPUT') return { text: watching.line, tone: 'watching' };
+  if (parked) return { text: `${parked.text}…`, tone: 'background' };
   // A message that never got an answer — the turn was interrupted, or failed, before any reply
   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
   // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
@@ -1175,7 +1188,10 @@ export function orbitLinkStateWord(row: any): string {
 // connection, not a crash, so it gets the neutral disconnect glyph, not a red X.
 // New payloads carry the authoritative runState. The resolver retains a centralized fallback
 // for old servers whose raw status collapses graceful ends to CANCELLED.
-export function StatusIcon({ session }: { session: any }) {
+//
+// `watching` is the word for the live watches that will resume this session (`statusLabel`'s), and
+// absent wherever a caller holds no watches.
+export function StatusIcon({ session, watching }: { session: any; watching?: string | null }) {
   const state = sessionRunStateOf(session);
   const fontSize = 16;
   // First, and outside the generating gate — see `statusLabel`. The glyph and the label branch in
@@ -1217,6 +1233,16 @@ export function StatusIcon({ session }: { session: any }) {
     // that will end), still while the only thing up is a `service`. Never spinning: the shape and
     // the colour keep meaning "not the agent working", and only the motion says "work is happening
     // here", which is the one claim a left-up process cannot make.
+    //
+    // Parked on a live watch, below a sub-workspace and above a left-up process: a wake is coming,
+    // so neither the reply bubble nor the terminal fits — a watch is not a process (contract §9.2).
+    // The strip's eye, still, because nothing here is running.
+    if (watching && work?.kind !== 'subagent')
+      return (
+        <Tooltip title={watching}>
+          <EyeOutlined style={{ color: 'var(--text-3)', fontSize }} />
+        </Tooltip>
+      );
     if (work)
       return (
         <Tooltip title={work.text}>
@@ -2304,6 +2330,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ? watchingWord(watchesForHeaderQ.data as WatchView[], selectedId)
         : null,
     [watchesForHeaderQ.data, selectedId],
+  );
+  // The same read for every row of the list: what each session a watch will resume says about the
+  // wait, so a row, the header and the strip cannot disagree about it either.
+  const watchingBySession = useMemo(
+    () => watchingSessions(Array.isArray(watchesForHeaderQ.data) ? (watchesForHeaderQ.data as WatchView[]) : []),
+    [watchesForHeaderQ.data],
   );
   // The project this conversation coordinates, if any — see projectBackLink. Read the merged row
   // so a fresh detail can enrich (or correct) the compact list snapshot during rolling upgrades.
@@ -7456,7 +7488,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 // The selected row may have a fresher detail payload than the list poll. Use the
                 // merged row for both status surfaces so the banner and its list warning point at
                 // the same canonical obligation during that refresh gap.
-                const line = sessionLine(actionSession, openable);
+                const watching = sessionWatching(watchingBySession, s.id);
+                const line = sessionLine(actionSession, openable, watching);
                 const drag = swipeDrag?.id === s.id ? swipeDrag : null;
                 const swipeTx = drag
                   ? drag.dx
@@ -7525,7 +7558,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       style={swipeTx ? { transform: `translateX(${swipeTx}px)` } : undefined}
                     >
                       <span className="session-icon">
-                        <StatusIcon session={actionSession} />
+                        <StatusIcon session={actionSession} watching={watching?.word} />
                       </span>
                       <div className="session-main">
                         <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
