@@ -50,6 +50,8 @@ function approvalPrisma() {
     session: { findMany: async (): Promise<Array<{ id: string }>> => [{ id: 's-blocked' }] },
     // Overridden per test with the rows that half should or should not count.
     projectOpenItem: { findMany: async (): Promise<any[]> => [] },
+    // Which of those rows nobody owes any more (`openItemsNoLongerOwed`): none, here.
+    $queryRaw: async (): Promise<Array<{ id: string }>> => [],
   };
 }
 
@@ -446,6 +448,8 @@ function ownerItemHarness(
   const sent: { body: string; collapseId?: string }[] = [];
   const prisma = {
     projectOpenItem: { findUnique: async () => item },
+    // Whether the item is one nobody owes any more (`openItemsNoLongerOwed`): it is still owed.
+    $queryRaw: async (): Promise<Array<{ id: string }>> => [],
     projectPromotion: { findUnique: async () => promotion },
     deviceToken: { findMany: async () => [{ token: 'device', environment: 'sandbox' }] },
   };
