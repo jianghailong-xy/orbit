@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, RunStatus, TaskStatus } from '@prisma/client';
+import { Prisma, TaskStatus } from '@prisma/client';
 import {
   SESSION_CREATED_TASKS_DEFAULT_LIMIT,
   SESSION_CREATED_TASKS_MAX_LIMIT,
@@ -7,6 +7,7 @@ import {
   type SessionCreatedTasks,
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { sessionCarriesTaskSql } from '../sessions/task-work-carrier';
 import { TasksService } from './tasks.service';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -66,8 +67,8 @@ interface PickedRow {
  *    SESSION_CREATED_TASKS_MAX_HOPS; a successor that was deleted empties the pointer (SET NULL),
  *    so that task simply draws itself.
  *  - `running`/`queued` are `TasksService.withRunning`'s, the task list's and the link card's. The
- *    statement only has to know which rows COULD be live — the ones with a PENDING or RUNNING
- *    session, as many as the owner has runs live or queued, not as many as the session has tasks —
+ *    statement only has to know which rows COULD be live — the ones a work session carries, as many
+ *    as the owner has runs live, queued or waiting to be woken, not as many as the session has tasks —
  *    and returns all of those plus the first `limit` of the rest in status order. Every other row
  *    has no live session, so its group is its status, and the page is exact once the live ones are
  *    placed by the flags.
@@ -136,13 +137,14 @@ export class SessionCreatedTasksService {
          WHERE t."creator_session_id" IS DISTINCT FROM ${sessionId}::uuid
             OR ${takenOver('t')} IS TRUE
       ),
-      -- The tasks withRunning could call running or queued: the same sessions it groups.
+      -- The tasks withRunning could call running or queued: the same carriers it reads
+      -- (sessions/task-work-carrier.ts), parked sessions with something to wake them included.
       busy AS (
-        SELECT DISTINCT s."task_id"
-          FROM "session" s
-         WHERE s."owner_id" = ${ownerId}::uuid
-           AND s."task_id" IS NOT NULL
-           AND s."status" IN (${RunStatus.PENDING}::run_status, ${RunStatus.RUNNING}::run_status)
+        SELECT DISTINCT carrier."task_id"
+          FROM "session" carrier
+         WHERE carrier."owner_id" = ${ownerId}::uuid
+           AND carrier."task_id" IS NOT NULL
+           AND ${Prisma.raw(sessionCarriesTaskSql('carrier'))}
       ),
       tally AS (
         SELECT count(*)::int AS "total",

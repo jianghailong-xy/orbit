@@ -1,39 +1,51 @@
 import XCTest
 @testable import OrbitKit
 
-/// The session list's refresh spinner, kept off the bands pinned over the list: moved under them
-/// while its band overlaps them, left alone once a refresh has moved them below it — and the list a
-/// finished refresh left a little past its top, sent back there. The numbers are the iOS 26.5
-/// simulator's (iPhone 17 Pro), where the control's band hangs under the navigation bar at 116–176
-/// and the "… needs you" bar is 38.3pt tall.
+/// The session list's needs-you bar, pinned, with the refresh spinner always under it: the band
+/// moved below the bar while they overlap, the bar drawn back up while a refresh has iOS lay it
+/// out lower — and the list a finished refresh left a little past its top, sent back there. The
+/// numbers are the iOS 26.5 simulator's (iPhone 17 Pro), where the control's band hangs under the
+/// navigation bar at 116–176 and the bar is 38.3pt tall.
 final class RefreshControlClearanceTests: XCTestCase {
     private func shift(bandsTop: Double, bandsBottom: Double) -> Double {
         RefreshControlClearance.shift(bandTop: 116, bandBottom: 176,
                                       bandsTop: bandsTop, bandsBottom: bandsBottom)
     }
 
+    private func lift(bandsTop: Double) -> Double {
+        RefreshControlClearance.lift(bandTop: 116, bandBottom: 176, bandsTop: bandsTop)
+    }
+
     func testMidPullTheBandMovesUnderTheNeedsYouBar() {
+        XCTAssertEqual(lift(bandsTop: 116), 0, "the bar is where it rests")
         XCTAssertEqual(shift(bandsTop: 116, bandsBottom: 154.3), 38.3, accuracy: 0.001)
     }
 
-    func testOnceTheRefreshHasMovedTheBarBelowTheBandNothingMoves() {
-        // iOS folds the band into the navigation bar and drops the bar to 176–214.3: a shift now
-        // would put the spinner back on it.
-        XCTAssertEqual(shift(bandsTop: 176, bandsBottom: 214.3), 0)
+    func testThroughTheRefreshTheBarIsDrawnBackUpAndTheBandStaysUnderIt() {
+        // iOS folds the band into the navigation bar and lays the bar out at 176–214.3.
+        XCTAssertEqual(lift(bandsTop: 176), 60, "back where it rests")
+        XCTAssertEqual(shift(bandsTop: 176, bandsBottom: 214.3), 38.3, accuracy: 0.001,
+                       "the same shift as mid-pull: nothing moves as the refresh starts or ends")
     }
 
     func testWithNothingWaitingNothingMoves() {
         XCTAssertEqual(shift(bandsTop: 116, bandsBottom: 116), 0)
+        XCTAssertEqual(shift(bandsTop: 176, bandsBottom: 176), 0, "nor while it refreshes")
     }
 
     func testBandsTallerThanTheBandAreClearedToTheirBottom() {
         // The iPad's scope picker over the bar: the band starts where they end, not one band lower.
         XCTAssertEqual(shift(bandsTop: 116, bandsBottom: 202), 86, accuracy: 0.001)
+        XCTAssertEqual(shift(bandsTop: 176, bandsBottom: 262), 86, accuracy: 0.001)
     }
 
     func testBandsThatOnlyTouchTheBandMoveNothing() {
         XCTAssertEqual(shift(bandsTop: 62, bandsBottom: 116), 0, "ending where the band starts")
-        XCTAssertEqual(shift(bandsTop: 176, bandsBottom: 230), 0, "starting where the band ends")
+    }
+
+    func testBandsAreNeverDrawnUpFurtherThanARefreshPushesThem() {
+        XCTAssertEqual(lift(bandsTop: 236), 60, "anything past one band is not the refresh's doing")
+        XCTAssertEqual(lift(bandsTop: 62), 0, "and bands above where they rest stay there")
     }
 
     // MARK: after the refresh

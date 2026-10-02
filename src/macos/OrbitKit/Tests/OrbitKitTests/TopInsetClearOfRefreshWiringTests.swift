@@ -62,6 +62,20 @@ final class TopInsetClearOfRefreshWiringTests: XCTestCase {
                       "empty bands still report a frame, so a gone notice stops moving the control")
     }
 
+    func testTheBandsStayPutWhileARefreshRuns() throws {
+        let modifier = code(try appSource("Views/TopInsetClearOfRefresh.swift"))
+        XCTAssertTrue(modifier.contains(".visualEffect { [restingBand] content, proxy in"),
+                      "drawn back up in the same pass as the layout that pushed them down")
+        XCTAssertTrue(modifier.contains("RefreshControlClearance.lift("),
+                      "by the tested rule: as far as the refresh pushed them, and no further")
+        XCTAssertTrue(modifier.contains("bandsTop: proxy.frame(in: .global).minY"),
+                      "from the frame this layout gave them, not from state set after it")
+        let lift = try XCTUnwrap(modifier.range(of: ".visualEffect { [restingBand]"))
+        let read = try XCTUnwrap(modifier.range(of: ".onGeometryChange(for: CGRect.self)"))
+        XCTAssertLessThan(lift.lowerBound, read.lowerBound,
+                          "the frame is read outside the lift, where a refresh's start and end move it")
+    }
+
     func testAListAFinishedRefreshLeftPastItsTopGoesBackUnlessTheReaderTookIt() throws {
         let modifier = code(try appSource("Views/TopInsetClearOfRefresh.swift"))
         XCTAssertTrue(modifier.contains("if wasRefreshing, !control.isRefreshing { refreshEnded() }"),

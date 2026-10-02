@@ -36,6 +36,7 @@ import {
   predicateFor,
   progressOf,
   resumeWatch,
+  sessionWatching,
   stripCounts,
   stripSentence,
   stripStaleLine,
@@ -48,6 +49,7 @@ import {
   watchStateCopy,
   watchesFollowedBy,
   watchesFollowing,
+  watchingSessions,
   watchingWord,
 } from './watches';
 
@@ -487,6 +489,28 @@ describe('the word for a session parked on a watch', () => {
       watchingWord([observing({ id: 'a', state: 'PAUSED' }), observing({ id: 'b' })], OBSERVER),
     ).toBe('Watching 1 target');
   });
+
+  /**
+   * The session list asks once for every row, so the set it groups by must be the header's: a row
+   * that read a notifying watch as a wait would put an eye on a session no wake is coming to.
+   */
+  it('gives the list the same sessions, under either spelling of their id', () => {
+    const sessions = watchingSessions([
+      observing({ id: 'live', targets: [target('t1', { targetTitle: 'Ship it' })] }),
+      observing({ id: 'ended', state: 'MATCHED', observerSessionId: 'endedObserver' }),
+      observing({ id: 'notify', action: 'NOTIFY_USER', observerSessionId: 'notifyingObserver' }),
+    ]);
+    // The UUID and the base62 public id are the same session.
+    expect(sessionWatching(sessions, OBSERVER)).toEqual({ word: 'Watching 1 target', line: 'Watching Ship it' });
+    expect(sessionWatching(sessions, uuidToBase62(OBSERVER))?.line).toBe('Watching Ship it');
+    expect(watchingWord([observing({ targets: [target('t1')] })], OBSERVER)).toBe(
+      sessionWatching(sessions, OBSERVER)?.word,
+    );
+    // A watch that has matched resumes nobody any more, and a notifying one never resumes its observer.
+    expect(sessionWatching(sessions, 'endedObserver')).toBeNull();
+    expect(sessionWatching(sessions, 'notifyingObserver')).toBeNull();
+    expect(sessions.size).toBe(1);
+  });
 });
 
 describe('the editor', () => {
@@ -678,6 +702,22 @@ describe('the Watching strip, in the words both clients say', () => {
     sentences: Array<{ case: string; state: WatchView['state']; predicate: WatchPredicate; targets: string[]; expiresAt: string; sentence: string }>;
     stale: Array<{ case: string; state: WatchView['state']; lastEvaluatedAt: string | null; createdAt: string; line: string | null }>;
     counts: Array<{ case: string; targets: Array<{ kind: 'TASK' | 'SESSION'; status: WatchTargetView['targetStatus'] }>; line: string }>;
+    rows: Array<{
+      case: string;
+      watches: Array<{
+        state: WatchView['state'];
+        predicate: WatchPredicate;
+        targets: Array<{
+          id: string;
+          kind: 'TASK' | 'SESSION';
+          title: string;
+          state?: WatchTargetView['state'];
+          status: WatchTargetView['targetStatus'];
+        }>;
+      }>;
+      word: string;
+      line: string;
+    }>;
     sessionWords: Record<string, string>;
   };
   const now = Date.parse(fixture.now);
@@ -713,6 +753,32 @@ describe('the Watching strip, in the words both clients say', () => {
 
   it('words a session target the way its own header does', () => {
     expect(SESSION_TARGET_WORDS).toEqual(fixture.sessionWords);
+  });
+
+  it('gives a session list row the strip’s line, and the header’s word for its glyph', () => {
+    expect(fixture.rows.length).toBeGreaterThan(8);
+    const observer = 'observerSession';
+    for (const c of fixture.rows) {
+      const watches = c.watches.map((w, i) =>
+        watch({
+          id: `w${i}`,
+          action: 'RESUME_SESSION',
+          observerType: 'SESSION',
+          observerSessionId: observer,
+          state: w.state,
+          predicate: w.predicate,
+          targets: w.targets.map((t) =>
+            target(t.id, {
+              targetKind: t.kind,
+              targetTitle: t.title,
+              targetStatus: t.status,
+              state: t.state ?? 'OBSERVED',
+            }),
+          ),
+        }),
+      );
+      expect(sessionWatching(watchingSessions(watches), observer), c.case).toEqual({ word: c.word, line: c.line });
+    }
   });
 
   it('reads the leaves in the words the rest of the page reads them in', () => {

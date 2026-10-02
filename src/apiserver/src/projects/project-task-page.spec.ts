@@ -49,12 +49,14 @@ function serviceWith(opts: {
     parentWhere: any[];
     graph: any[];
     overlays: any[];
+    carriers: any[];
     integration: any[];
   } = {
     findMany: [],
     parentWhere: [],
     graph: [],
     overlays: [],
+    carriers: [],
     integration: [],
   };
   const service = new ProjectsService({
@@ -76,6 +78,12 @@ function serviceWith(opts: {
       // this file cannot tell apart from another would make the counts below meaningless.
       if (rendered.includes('"isCode"')) {
         calls.integration.push(sql);
+        return [];
+      }
+      // Why a RUNNING row is running: the sessions carrying the page's tasks, read once beside
+      // the lanes (sessions/task-work-carrier.ts) rather than once per row.
+      if (rendered.includes('"runReason"')) {
+        calls.carriers.push(sql);
         return [];
       }
       // taskPage also reads the canonical work-state overlay through the same Prisma raw-query
@@ -504,6 +512,7 @@ test('every row carries all four dependency fields, and the graph is read once p
   // One pass for the page, not one per row — the whole reason the level is computed in SQL.
   assert.equal(calls.graph.length, 1);
   assert.equal(calls.overlays.length, 1, 'the separate work-state overlay is still read once');
+  assert.equal(calls.carriers.length, 1, 'and its run reasons once beside it');
   assert.equal(calls.integration.length, 1, 'and so is the integration pass');
 });
 

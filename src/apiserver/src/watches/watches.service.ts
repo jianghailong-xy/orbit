@@ -9,7 +9,7 @@ import {
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
   SessionRunState,
   WATCH_ATTENTION_EXPIRED_ACTIONS,
@@ -33,6 +33,7 @@ import {
 import { loggedRetry, transactionRetryDelayMs, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { readTaskWorkCarriers, taskRunOverlay } from '../sessions/task-work-carrier';
 import { CreateWatchDto, UpdateWatchDto } from './dto';
 import { countWatchCreate, countWatchDuplicateSuppressed, countWatchRedrive, countWatchRolloutRefusal } from './watch-metrics';
 import {
@@ -406,7 +407,7 @@ export class WatchesService {
     ];
     const sessionIds = idsOf('SESSION');
     const taskIds = idsOf('TASK');
-    const [sessions, tasks, busy] = await Promise.all([
+    const [sessions, tasks, carriers] = await Promise.all([
       sessionIds.length === 0
         ? []
         : this.prisma.session.findMany({
@@ -420,15 +421,13 @@ export class WatchesService {
             select: { id: true, title: true, status: true },
           }),
       taskIds.length === 0
-        ? []
-        : this.prisma.session.groupBy({
-            by: ['taskId', 'status'],
-            where: { ownerId, taskId: { in: taskIds }, status: { in: [RunStatus.PENDING, RunStatus.RUNNING] } },
-            _count: { _all: true },
-          }),
+        ? new Map<string, never>()
+        : readTaskWorkCarriers(
+            this.prisma,
+            Prisma.sql`carrier."owner_id" = ${ownerId}::uuid
+              AND carrier."task_id" IN (${Prisma.join(taskIds.map((id) => Prisma.sql`${id}::uuid`))})`,
+          ),
     ]);
-    const running = new Set(busy.filter((b) => b.status === RunStatus.RUNNING).map((b) => b.taskId));
-    const queued = new Set(busy.filter((b) => b.status === RunStatus.PENDING).map((b) => b.taskId));
     const read = new Map<string, { title: string | null; status: WatchTargetStatusView }>();
     for (const row of sessions) {
       const state = deriveSessionRunState({ status: row.status, endReason: row.endReason });
@@ -442,11 +441,10 @@ export class WatchesService {
       });
     }
     for (const row of tasks) {
-      // A task with both is simply running: `queued` only means something while nothing runs yet.
-      const on = running.has(row.id);
+      const { running, queued } = taskRunOverlay(carriers.get(row.id));
       read.set(`TASK:${row.id}`, {
         title: row.title,
-        status: { status: row.status, running: on, queued: queued.has(row.id) && !on },
+        status: { status: row.status, running, queued },
       });
     }
     return watches.map((watch) => ({

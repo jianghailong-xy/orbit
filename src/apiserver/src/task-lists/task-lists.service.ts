@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { CreatorType, RunStatus } from '@prisma/client';
+import { CreatorType, Prisma, RunStatus } from '@prisma/client';
 import {
   classifyFailure,
   FailureCause,
@@ -13,6 +13,12 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { SessionsService } from '../sessions/sessions.service';
+import {
+  countTaskWorkCarriers,
+  readTaskWorkCarriers,
+  taskCarriedSql,
+  taskRunOverlay,
+} from '../sessions/task-work-carrier';
 import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
 import { TaskListPauseProjectorService } from './task-list-pause-projector.service';
 import {
@@ -130,20 +136,19 @@ export class TaskListsService {
         taskDoneCount: true,
       },
     });
-    // `runningTasks` = how many of the list's tasks are actually executing right now:
-    // a task with a busy (PENDING/RUNNING) session. Same liveness notion the task
-    // detail panel uses for its 执行中 state — IN_PROGRESS is just a label, not a live
-    // run. One grouped query keeps this O(1) regardless of list count.
+    // `runningTasks` = how many of the list's tasks are actually being worked right now: a task
+    // a work session carries — queued, running a turn, or parked waiting for something that will
+    // wake it (sessions/task-work-carrier.ts). Same liveness notion the task detail panel uses for
+    // its 执行中 state — IN_PROGRESS is just a label, not a live run. One grouped query keeps this
+    // O(1) regardless of list count.
     const listIds = lists.map((l) => l.id);
     const [grouped, outside] = await Promise.all([
-      this.prisma.task.groupBy({
-        by: ['listId'],
-        where: {
-          listId: { in: listIds },
-          sessions: { some: { status: { in: [RunStatus.PENDING, RunStatus.RUNNING] } } },
-        },
-        _count: { _all: true },
-      }),
+      this.prisma.$queryRaw<Array<{ listId: string; count: number }>>(Prisma.sql`
+        SELECT t."list_id" AS "listId", count(*)::int AS "count"
+          FROM "task" t
+         WHERE t."list_id" = ANY(${listIds}::uuid[])
+           AND ${Prisma.raw(taskCarriedSql('t'))}
+         GROUP BY t."list_id"`),
       // How many of each list's tasks are filed under no project. The Tasks page lists only those,
       // so a list whose every task is some project's belongs on that project's page instead. Read
       // through the project_id index's NULL entries — the few hundred standalone tasks, not the
@@ -154,7 +159,7 @@ export class TaskListsService {
         _count: { _all: true },
       }),
     ]);
-    const running = new Map(grouped.map((g) => [g.listId, g._count._all]));
+    const running = new Map(grouped.map((g) => [g.listId, g.count]));
     const outsideProjects = new Map(outside.map((g) => [g.listId, g._count._all]));
     // `completed` = the whole list is finished: it has at least one task and every
     // task is DONE. Both numbers are maintained columns on the list row, so the
@@ -208,18 +213,14 @@ export class TaskListsService {
     const tasks = await this.resolveTaskCreators(list.tasks);
     // Tag each task with the same live-run and dependency-gate fields as the Active view,
     // so its row keeps the running/queued treatment and lock indicator in sync.
-    const [busy, dependencies] = tasks.length
+    const [carriers, dependencies] = tasks.length
       ? await Promise.all([
-          this.prisma.session.groupBy({
-            by: ['taskId', 'status'],
-            where: {
-              ownerId,
-              taskId: { not: null },
-              task: { is: { listId: id } },
-              status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
-            },
-            _count: { _all: true },
-          }),
+          readTaskWorkCarriers(
+            this.prisma,
+            Prisma.sql`carrier."owner_id" = ${ownerId}::uuid
+              AND carrier."task_id" IN (
+                SELECT list_task."id" FROM "task" list_task WHERE list_task."list_id" = ${id}::uuid)`,
+          ),
           this.prisma.taskDependency.findMany({
             where: { task: { ownerId, listId: id } },
             select: {
@@ -229,13 +230,7 @@ export class TaskListsService {
             },
           }),
         ])
-      : [[], []];
-    const running = new Set(
-      busy.filter((b) => b.status === RunStatus.RUNNING).map((b) => b.taskId),
-    );
-    const queued = new Set(
-      busy.filter((b) => b.status === RunStatus.PENDING).map((b) => b.taskId),
-    );
+      : [new Map(), []];
     // §13.3 DEP. The Ready tab must never offer a run the API would reject, so it asks the same
     // question the Run button does — including "is this prerequisite a CHECK, and did it pass".
     const epochs = await loadVerificationEpochGates(
@@ -259,8 +254,7 @@ export class TaskListsService {
         const dependencyState = computeDependencyState(prerequisites.get(t.id) ?? []);
         return {
           ...t,
-          running: running.has(t.id),
-          queued: queued.has(t.id) && !running.has(t.id),
+          ...taskRunOverlay(carriers.get(t.id)),
           dependencyState,
           blocked: !canRun(dependencyState),
         };
@@ -575,9 +569,11 @@ export class TaskListsService {
         where: { listId: id },
         _count: { _all: true },
       }),
-      this.prisma.session.count({
-        where: { task: { listId: id }, status: { in: [RunStatus.PENDING, RunStatus.RUNNING] } },
-      }),
+      countTaskWorkCarriers(
+        this.prisma,
+        Prisma.sql`carrier."task_id" IN (
+          SELECT list_task."id" FROM "task" list_task WHERE list_task."list_id" = ${id}::uuid)`,
+      ),
       this.prisma.session.aggregate({
         where: { task: { listId: id } },
         _max: { createdAt: true },
@@ -612,7 +608,8 @@ export class TaskListsService {
     return {
       ...list,
       tasksByStatus: Object.fromEntries(byStatus.map((r) => [r.status, r._count._all])),
-      // Sessions currently holding a slot, and when this list last started anything at all —
+      // Sessions carrying the list's tasks — running a turn, queued for one, or parked waiting
+      // for something that will wake them — and when this list last started anything at all:
       // together these are the stall signal, so a foreman can confirm what woke it.
       liveSessions: live,
       lastRunStartedAt: lastRunAt._max.createdAt,

@@ -5539,7 +5539,6 @@ model PoolCodexLogin {
   usageReadAt     DateTime?    @map("usage_read_at")
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
-  tokens          PoolLoginToken[]
 
   @@id([poolId, accountId])
   @@map("pool_codex_login")
@@ -5548,25 +5547,23 @@ model PoolCodexLogin {
 /// A session token of a Codex pool of one person's own (migration 0324) — the login pools' twin of
 /// PoolGatewayToken, which cannot hold one: its person is a row of `provider_pool_person`, and a login
 /// pool has no people. Only the hash is stored. (pool_id, user_id) → provider_pool(id, owner_id) holds its
-/// person to the pool's owner; (pool_id, account_id) → pool_codex_login binds it to the account its claim
-/// found, so taking that account out of the pool deletes it (a token minted while the pool held no
-/// account has none, and is answered with that); and its session's deletion deletes it too.
+/// person to the pool's owner; its session's deletion deletes it too. It names no account (migration
+/// 0355): what a request of its goes out on is the account its session is on (`session.pool_codex_account_id`),
+/// read by the gateway at every request, so taking one account out of the pool leaves the token alone and
+/// a session that moved to another account sends on that one.
 model PoolLoginToken {
-  id        String          @id @default(uuid(7)) @db.Uuid
-  tokenHash String          @unique @map("token_hash")
-  poolId    String          @map("pool_id") @db.Uuid
-  userId    String          @map("user_id") @db.Uuid
-  pool      ProviderPool    @relation(fields: [poolId, userId], references: [id, ownerId], onDelete: Cascade, onUpdate: NoAction)
-  accountId String?         @map("account_id")
-  login     PoolCodexLogin? @relation(fields: [poolId, accountId], references: [poolId, accountId], onDelete: Cascade, onUpdate: NoAction)
-  sessionId String          @map("session_id") @db.Uuid
-  session   Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  createdAt DateTime        @default(now()) @map("created_at")
-  expiresAt DateTime        @map("expires_at")
-  revokedAt DateTime?       @map("revoked_at")
+  id        String       @id @default(uuid(7)) @db.Uuid
+  tokenHash String       @unique @map("token_hash")
+  poolId    String       @map("pool_id") @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  pool      ProviderPool @relation(fields: [poolId, userId], references: [id, ownerId], onDelete: Cascade, onUpdate: NoAction)
+  sessionId String       @map("session_id") @db.Uuid
+  session   Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdAt DateTime     @default(now()) @map("created_at")
+  expiresAt DateTime     @map("expires_at")
+  revokedAt DateTime?    @map("revoked_at")
 
   @@index([sessionId])
-  @@index([poolId, accountId])
   @@map("pool_login_token")
 }
 
