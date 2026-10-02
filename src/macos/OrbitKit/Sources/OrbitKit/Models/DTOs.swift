@@ -904,20 +904,23 @@ public struct PermissionRule: Codable, Equatable, Sendable {
     }
 }
 
-/// POST /sessions/:id/approvals/:approvalId/decision
+/// POST /sessions/:id/approvals/:approvalId/decision. Mirrors `ApprovalDecisionRequest` in
+/// src/shared/src/dto.ts, key for key: the control plane reads nothing else.
 public struct ApprovalDecisionRequest: Codable, Sendable {
     public let behavior: ApprovalBehavior
     public let message: String?
     /// AskUserQuestion answers: question text → selected labels.
     public let answers: [String: [String]]?
-    /// Optional "remember this kind" rule.
-    public let rememberRule: PermissionRule?
+    /// Optional "remember these kinds" rules, one per distinct sub-command of a Bash line. The
+    /// single `rememberRule` this used to send has not been read by the server since June 2026,
+    /// which made every "Allow & remember" a plain Allow.
+    public let rememberRules: [PermissionRule]?
     public init(behavior: ApprovalBehavior, message: String? = nil,
-                answers: [String: [String]]? = nil, rememberRule: PermissionRule? = nil) {
+                answers: [String: [String]]? = nil, rememberRules: [PermissionRule]? = nil) {
         self.behavior = behavior
         self.message = message
         self.answers = answers
-        self.rememberRule = rememberRule
+        self.rememberRules = rememberRules
     }
 }
 

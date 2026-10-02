@@ -1,9 +1,20 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { bashCommandRules, bashPrefix, bashSegments } from './bashRules';
 
 // Just the prefixes, for readable assertions (the rules are `${prefix}:*`).
 const prefixesOf = (cmd: string): (string | undefined)[] =>
   bashCommandRules(cmd).map((r) => r.ruleContent?.replace(/:\*$/, ''));
+
+/**
+ * `bash-rules.fixture.json` is what "always allow" remembers from a command, and both clients are
+ * proved against it: this walks it through `bashCommandRules`, which the web card calls, and
+ * OrbitKit's `ApprovalRememberParityTests` walks the same file through the native port.
+ */
+const fixture = JSON.parse(
+  readFileSync(path.join(__dirname, 'bash-rules.fixture.json'), 'utf8'),
+) as { cases: Array<{ name: string; command: string; rules: string[] }> };
 
 describe('bashSegments', () => {
   it('splits on ; && || and single |', () => {
@@ -59,45 +70,29 @@ describe('bashPrefix', () => {
 });
 
 describe('bashCommandRules', () => {
-  it('is empty for a blank command', () => {
-    expect(bashCommandRules('')).toEqual([]);
-    expect(bashCommandRules('   ')).toEqual([]);
-  });
-
   it('shapes each rule as `${prefix}:*` under Bash', () => {
     expect(bashCommandRules('git add -A')).toEqual([{ toolName: 'Bash', ruleContent: 'git add:*' }]);
   });
 
-  it('does not turn a shell wrapper into a wrapper-wide standing grant', () => {
-    expect(bashCommandRules("/bin/bash -lc 'git status'")).toEqual([]);
-    expect(bashCommandRules('cd /repo && /bin/bash -lc "git status"')).toEqual([]);
+  it('remembers what bash-rules.fixture.json says, case by case', () => {
+    expect(fixture.cases.length).toBeGreaterThan(0);
+    for (const c of fixture.cases) {
+      expect(prefixesOf(c.command), c.name).toEqual(c.rules);
+    }
   });
 
-  it('dedupes a sub-command that recurs across the line', () => {
-    expect(prefixesOf('git add a; git status; git add b')).toEqual(['git add', 'git status']);
-  });
-
-  it('treats a bareword second word as a sub-command (so `npm install` stays narrow)', () => {
-    // The heuristic that makes `git commit` distinct from `git diff` also narrows
-    // `echo a` to `echo a` — quoted args (as in real echos) fall back to bare `echo`.
-    expect(prefixesOf('npm install; npm run build')).toEqual(['npm install', 'npm run']);
-    expect(prefixesOf('echo "a"; echo "b"')).toEqual(['echo']);
-  });
-
-  it('remembers EVERY sub-command of a compound line, not just the leading cd', () => {
-    // The exact command from the approval card in the bug report.
-    const cmd =
-      'cd /root/.orbit/worktrees/019f04fc; git add -A src/macos; ' +
-      'echo "=== any isSystem refs left anywhere? ==="; ' +
-      'grep -rn "isSystem" src/macos || echo "(none — good)"; ' +
-      'echo "=== any conflict markers left? ==="; ' +
-      'grep -rn "^<<<<<<<\\|^=======\\|^>>>>>>>" src/macos || echo "(none — good)"; ' +
-      'echo "=== unmerged files? ==="; git diff --name-only --diff-filter=U || true; ' +
-      'echo "(empty = all resolved)"';
-    expect(prefixesOf(cmd)).toEqual(['cd', 'git add', 'echo', 'grep', 'git diff', 'true']);
-  });
-
-  it('keeps a quoted separator from fragmenting a sub-command', () => {
-    expect(prefixesOf('cd /x && git commit -m "a;b"')).toEqual(['cd', 'git commit']);
+  it('keeps the cases the fixture exists for', () => {
+    // So a case deleted in passing is a failure at both ends rather than one fewer line of output.
+    const names = fixture.cases.map((c) => c.name);
+    expect(new Set(names).size).toBe(names.length);
+    for (const required of [
+      "Codex's shell wrapper is never remembered",
+      'the card from 2026-10-02',
+      'a wrapper anywhere in a compound line refuses the whole line',
+      'every sub-command of a compound line, not just the leading cd',
+      'a quoted separator does not split a sub-command',
+    ]) {
+      expect(names.some((n) => n.startsWith(required)), required).toBe(true);
+    }
   });
 });
