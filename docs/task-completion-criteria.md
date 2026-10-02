@@ -18,7 +18,10 @@ priority order or an escalation chain:
   inside a project or outside one. The owner is asked on a card in that run's own session when a run
   of the task DECLARES its work finished (`task_request_confirmation`, and only from the task's own
   execution session, inside a turn) and then stops working — nothing executable queued behind the
-  turn, no background job or sub-workspace of its own in flight, no wake-up it asked for. A run that
+  turn, no background job or sub-workspace of its own in flight, no wake-up it asked for. The card
+  shows what the run said in the turn it declared in, and what confirming sets off, computed by the
+  server (`ifConfirmed` on `GET /tasks/:taskId/owner-confirmation`): the dependents the DONE starts,
+  whether the run's branch is on main, how the work lands, and the session the DONE ends. A run that
   declares nothing is never carded: the task stays OPEN and is confirmed from its detail panel, which
   is also where a task no run is waiting on has always been confirmed. `Send back` needs a reason,
   which is delivered to that session as the owner's next message while the task stays open; the next
