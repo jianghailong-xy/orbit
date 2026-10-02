@@ -572,7 +572,8 @@ export type UnrunSessionRequests =
    * (§4) — and whose turn in flight is still its runner's to finish.
    *
    * `retryArmed`: the run has a retry armed, so the same session goes on, and the retry's re-send is
-   * the next turn it is handed. `failedTurnKey`: the turn whose failure is ending the run, already
+   * the next turn it is handed — which is why the request on that turn is kept OPEN rather than closed
+   * UNDELIVERED (criterion 18). `failedTurnKey`: the turn whose failure is ending the run, already
    * acknowledged by the time this runs — what it carried was not read through either.
    */
   | { code: 'SESSION_ENDED'; closesRequests: boolean; retryArmed: boolean; failedTurnKey?: string };
@@ -584,7 +585,9 @@ export type UnrunSessionRequests =
  *
  * Two kinds of turn are taken. A REQUEST another session sent here that no engine read is closed
  * UNDELIVERED, with what took it: one still queued, and — when a run is ending — a steer still in
- * flight that the engine never acknowledged. A turn of this session as an ASKER may carry outcomes
+ * flight that the engine never acknowledged. The one exception is the turn the retry re-sends (§8
+ * criterion 18): its request stays OPEN and goes with the re-sent turn, because those words are not
+ * being dropped. A turn of this session as an ASKER may carry outcomes
  * back to it — a reply turn still queued, or any turn they were written into when it was handed out —
  * and those outcomes are not lost with it, nor with the turn whose failure is ending the run. When
  * the session lives on — interrupted, the owner withdrew the turn, or a retry is armed — they are held
@@ -620,7 +623,18 @@ export async function settleUnrunSessionRequests(
     });
   }
   if (ending && !unrun.closesRequests) return;
-  const queued = unrunTurns.filter((turn) => turn.status === 'PENDING').map((turn) => turn.id);
+  // §8 criterion 18: a turn the auto-retry is going to re-send is not lost with the queue. The turn
+  // whose failure ended the run is the one the sweep re-sends — an engine that produced nothing comes
+  // back as the same message on the sweeper's own ladder — and the request it carries travels with it
+  // (`moveSessionRequestToTurn`). Closing it UNDELIVERED would tell the asker the request was dropped
+  // for good, and the block on the re-sent turn would say it is closed, which is the one reading the
+  // retry exists to avoid. Without a retry armed the words really are gone and it is UNDELIVERED.
+  const resent = ending && unrun.retryArmed && unrun.failedTurnKey
+    ? new Set(unrunTurns.filter((turn) => turn.clientTurnId === unrun.failedTurnKey).map((turn) => turn.id))
+    : null;
+  const queued = unrunTurns
+    .filter((turn) => turn.status === 'PENDING' && !resent?.has(turn.id))
+    .map((turn) => turn.id);
   if (queued.length > 0) {
     await tx.sessionRequest.updateMany({
       where: { toSessionId: sessionId, turnId: { in: queued }, state: 'OPEN' },
@@ -680,23 +694,46 @@ export async function hasHeldSessionReplies(
 }
 
 /**
- * §4.3, §8 criterion 17: a session a transient failure stopped — the provider failed its turn, or its
- * quota ran out and it parked idle — with an auto-retry armed. It has NOT ended: the retry re-sends the
- * turn that failed, and an outcome of its own requests is said on that turn. Nor is it to be handed a
- * reply turn of its own meanwhile: a new turn disarms the retry (`createTurn`), and the message the
- * failure killed would never be re-sent. The shapes the auto-retry sweep re-sends from (its `due`), read
- * off one row.
+ * How long a claim (`retry_claimed_at`) is believed. The sweep writes the turn it claimed the retry
+ * for in the next transaction — seconds, even with attachments to copy — so a claim older than this
+ * is one whose writer died between the two, and that session is not coming back on its own: believing
+ * it anyway would hold an outcome for a turn that will never be handed, and say nothing on the task.
+ * Bounded rather than cleared, because there is nobody left to clear it.
  */
-export function awaitsAutoRetry(session: {
-  status: string;
-  retryAt: Date | null;
-  cancelRequestedAt: Date | null;
-  completedAt: Date | null;
-  archivedAt: Date | null;
-  deletedAt: Date | null;
-}): boolean {
-  if (session.retryAt == null || session.deletedAt || session.completedAt || session.archivedAt) return false;
-  return session.status === 'FAILED' || (session.status === 'AWAITING_INPUT' && session.cancelRequestedAt == null);
+export const RETRY_CLAIM_WINDOW_MS = 10 * 60_000;
+
+/**
+ * §4.3, §8 criteria 17 and 20: a session a transient failure stopped — the provider failed its turn, or
+ * its quota ran out and it parked idle — with an auto-retry armed, or with one the sweep has CLAIMED
+ * and not yet re-sent. It has NOT ended: the retry re-sends the turn that failed, and an outcome of its
+ * own requests is said on that turn. Nor is it to be handed a reply turn of its own meanwhile: a new
+ * turn disarms the retry (`createTurn`), and the message the failure killed would never be re-sent. The
+ * shapes the auto-retry sweep re-sends from (its `due`), read off one row.
+ *
+ * The claim is the one that needs saying: the claim clears `retry_at` in the same statement that spends
+ * an attempt, and the re-sent turn is written a moment later — in between, the row looks exactly like a
+ * retry that was given up (`retry_at` NULL, still parked). Reading that window as "ended" wrote the
+ * asker's task a comment saying its request would never be answered, and then the retry's turn said the
+ * outcome as well: told twice, and once wrongly.
+ */
+export function awaitsAutoRetry(
+  session: {
+    status: string;
+    retryAt: Date | null;
+    retryClaimedAt: Date | null;
+    cancelRequestedAt: Date | null;
+    completedAt: Date | null;
+    archivedAt: Date | null;
+    deletedAt: Date | null;
+  },
+  now: Date = new Date(),
+): boolean {
+  if (session.deletedAt || session.completedAt || session.archivedAt) return false;
+  const parked = session.status === 'FAILED'
+    || (session.status === 'AWAITING_INPUT' && session.cancelRequestedAt == null);
+  if (!parked) return false;
+  if (session.retryAt != null) return true;
+  return session.retryClaimedAt != null && now.getTime() - session.retryClaimedAt.getTime() < RETRY_CLAIM_WINDOW_MS;
 }
 
 /**

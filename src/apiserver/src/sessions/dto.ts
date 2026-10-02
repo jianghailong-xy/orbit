@@ -141,12 +141,6 @@ export interface MergeRepairDto {
   preparePR?: boolean;
 }
 
-/** POST /sessions/:id/retry-message — the failure card's Retry, asking the server to re-send. */
-export interface SessionRetryResendDto {
-  /** Client-supplied idempotency key (UUID): a retried request answers with the turn it wrote. */
-  clientTurnId: string;
-}
-
 export interface SessionArmRetryDto {
   /** When the re-send should fire (ISO). Supplied by the caller because disarming cleared the
    *  only copy the server had; the client re-derives it from the failing reply with the same
@@ -221,9 +215,9 @@ export class RecordMergeReceiptDto {
  * `POST /sessions/:id/move` (docs/session-folders-move-design.md §5.4). A class, so the global
  * ValidationPipe decodes both ids from whichever spelling a client sends (`IsPublicId`).
  *
- * Only the folder half exists so far: `workspaceId` may be omitted or name the session's own
- * workspace, and `folderId` names a folder of that workspace — or, null or omitted, none, which is
- * how a session leaves its folder.
+ * `workspaceId` omitted, or naming the session's own workspace, files it: `folderId` names a folder
+ * of that workspace — or, null or omitted, none, which is how a session leaves its folder. Naming
+ * another workspace moves the session there, into `folderId` (a folder of that workspace) or none.
  */
 export class MoveSessionDto {
   @IsOptional() @IsPublicId() workspaceId?: string;

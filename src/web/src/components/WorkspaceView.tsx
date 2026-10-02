@@ -326,7 +326,6 @@ import {
   type AccountEngine,
 } from '@orbit/shared';
 import { lastTypedUserMessage } from '../lib/deliveredMessage';
-import { compatibleUuid } from '../lib/uuid';
 import { planUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
@@ -6619,12 +6618,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // as the words, or off the server's answer when the window held none.
   const retryFromSession = retryText ? retry.sessionMessage : serverRetry?.sessionMessage;
   const resendFromSession = useMutation({
-    mutationFn: (sessionId: string) => resendSessionRetryMessage(sessionId, compatibleUuid()),
+    mutationFn: (sessionId: string) => resendSessionRetryMessage(sessionId),
     onSuccess: (_answer, sessionId) => qc.invalidateQueries({ queryKey: ['session', sessionId] }),
     onError: (e: Error) => message.error(e.message || 'Could not re-send that message'),
   });
   const resendFromSessionMutate = resendFromSession.mutate;
   const sendMutate = send.mutate;
+  // §2.1, §8 criterion 19: a Retry already in flight is not offered a second time. The server is
+  // idempotent on the failed message, so a second click could not queue a second turn for one — but
+  // the owner's own message goes through the send door, where a second call would be a second turn,
+  // and either way the button must not promise an attempt it is not making. Both cards draw it
+  // disabled from this, and both handlers refuse a re-entry that reaches them anyway.
+  const retryInFlight = send.isPending || resendFromSession.isPending;
   const authErrorHelp: AuthErrorHelp = useMemo(
     () => ({
       provider: shownProvider,
@@ -6633,9 +6638,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       onRetry:
         retryText && !selectedTrashed && !selectedMissing
           ? retry.sessionMessage && selectedId
-            ? () => resendFromSessionMutate(selectedId)
-            : () => sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds })
+            ? () => {
+                if (retryInFlight) return;
+                resendFromSessionMutate(selectedId);
+              }
+            : () => {
+                if (retryInFlight) return;
+                sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds });
+              }
           : undefined,
+      retryDisabled: retryInFlight,
       retryText,
       // The provider gallery, not a preset vendor: the engine narrows it to a runtime, not to
       // whose key the user actually holds.
@@ -6649,6 +6661,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runner.id,
       retry,
       retryText,
+      retryInFlight,
       selectedId,
       selectedTrashed,
       selectedMissing,
@@ -6703,15 +6716,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       onRetry:
         autoRetryText && !selectedTrashed && !selectedMissing
           ? retryFromSession && selectedId
-            ? () => resendFromSessionMutate(selectedId)
-            : () =>
+            ? () => {
+                if (retryInFlight) return;
+                resendFromSessionMutate(selectedId);
+              }
+            : () => {
+                if (retryInFlight) return;
                 sendMutate({
                   content: autoRetryText,
                   images: [],
                   attachmentIds: retry.attachmentIds,
                   source: 'autoRetry',
-                })
+                });
+              }
           : undefined,
+      retryDisabled: retryInFlight,
       retryText: autoRetryText,
       // The card's own Retry goes through `send`, so its refusal arrives in the same handler as a
       // typed message's. Handed to the card rather than left to the toast: it is the card's offer
@@ -6744,6 +6763,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       detailForSelected?.retryAt,
       detailForSelected?.retryAttempts,
       autoRetryText,
+      retryInFlight,
       retryFromSession,
       runConflict?.conflict,
       selectedTrashed,

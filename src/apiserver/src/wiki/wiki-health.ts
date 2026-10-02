@@ -3,6 +3,7 @@ import {
   wikiMaintenanceLook,
   wikiMaintenanceSettings,
   type WikiCursorOutcome,
+  type WikiMaintenanceFailureKind,
   type WikiMaintenanceHealth,
   type WikiMaintenanceHeldReason,
   type WikiSpaceHealth,
@@ -74,24 +75,29 @@ export class WikiHealth {
         : null,
       running: await this.running(ownerId, spaceId),
       lastRun: await this.lastRun(ownerId, spaceId),
+      lastFailure: await this.lastFailure(ownerId, spaceId),
     };
     return { spaceId, entries, maintenance: { look: wikiMaintenanceLook(maintenance, now), ...maintenance } };
   }
 
-  /** The run under way: the latest that started and has not ended, while its task has not ended either. */
+  /**
+   * The run under way: the latest that started and has not ended, while its task has not ended either —
+   * started when its latest attempt did (a retry's or a rerun's start, not the run's first).
+   */
   private async running(ownerId: string, spaceId: string): Promise<WikiMaintenanceHealth['running']> {
     const run = await this.prisma.wikiMaintenanceRun.findFirst({
       where: { ownerId, spaceId, startedAt: { not: null }, endedAt: null },
       orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
-      select: { taskId: true, sessionId: true, startedAt: true },
+      select: { taskId: true, sessionId: true, startedAt: true, lastStartedAt: true },
     });
-    if (!run?.startedAt) return null;
+    const startedAt = run?.lastStartedAt ?? run?.startedAt;
+    if (!run || !startedAt) return null;
     // A run whose session died without saying how it ended leaves its row open; its task has ended.
     const task = await this.prisma.task.findFirst({
       where: { id: run.taskId, ownerId, status: { in: ['OPEN', 'IN_PROGRESS'] } },
       select: { id: true },
     });
-    return task ? { sessionId: run.sessionId, startedAt: run.startedAt.toISOString() } : null;
+    return task ? { sessionId: run.sessionId, startedAt: startedAt.toISOString() } : null;
   }
 
   /** The run that ended last, and how: the session the status line's View run opens. */
@@ -103,6 +109,27 @@ export class WikiHealth {
     });
     return run?.endedAt
       ? { sessionId: run.sessionId, outcome: (run.outcome as WikiCursorOutcome | null) ?? null, endedAt: run.endedAt.toISOString() }
+      : null;
+  }
+
+  /**
+   * Of the runs whose latest attempt failed, the one that ended last, and whose failure it was (contract
+   * `maintenance.job.recovery.failureKinds`): what a client tells the platform failing from the run failing
+   * by. A run row says how its latest attempt ended, so a run that failed and then succeeded is none of them.
+   */
+  private async lastFailure(ownerId: string, spaceId: string): Promise<WikiMaintenanceHealth['lastFailure']> {
+    const run = await this.prisma.wikiMaintenanceRun.findFirst({
+      where: { ownerId, spaceId, outcome: { in: ['failed', 'truncated'] }, endedAt: { not: null } },
+      orderBy: [{ endedAt: 'desc' }, { id: 'desc' }],
+      select: { sessionId: true, failureKind: true, error: true, endedAt: true },
+    });
+    return run?.endedAt
+      ? {
+        kind: run.failureKind === 'infra' ? 'infra' : ('content' as WikiMaintenanceFailureKind),
+        reason: run.error,
+        at: run.endedAt.toISOString(),
+        sessionId: run.sessionId,
+      }
       : null;
   }
 }

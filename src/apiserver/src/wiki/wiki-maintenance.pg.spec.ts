@@ -42,6 +42,8 @@
  */
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { after, test } from 'node:test';
 
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
@@ -51,6 +53,7 @@ import type { PrismaClient } from '@prisma/client';
 import {
   RunEventType,
   WIKI_MAINTENANCE_JOB,
+  WIKI_MAINTENANCE_RECOVERY,
   WIKI_MAINTENANCE_RULES,
   WIKI_REVIEW_RULES,
   toUuid,
@@ -67,6 +70,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { encryptSecret } from '../providers/provider-crypto';
 import type { PushService } from '../push/push.service';
+import type { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
 import { RunnerWikiDocsController } from '../runner-api/runner-wiki-docs.controller';
@@ -74,11 +78,21 @@ import { RunnerWikiMaintainController } from '../runner-api/runner-wiki-maintain
 import { RunnerWikiMaintenanceController } from '../runner-api/runner-wiki-maintenance.controller';
 import { RunnerWikiPlanController } from '../runner-api/runner-wiki-plan.controller';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
+import { SessionsService } from '../sessions/sessions.service';
+import { TasksService } from '../tasks/tasks.service';
 import { WikiController } from './wiki.controller';
 import { WikiDocs } from './wiki-docs';
 import { WikiDocsController } from './wiki-docs.controller';
+import { WikiHealth } from './wiki-health';
 import { WikiMaintenance } from './wiki-maintenance';
-import { considerWikiMaintenance, WikiMaintenanceTrigger, wikiMaintenanceHintFor, type WikiMaintenanceHint } from './wiki-maintenance-run';
+import {
+  considerWikiMaintenance,
+  WIKI_RUN_NOT_REPORTED,
+  WikiMaintenanceTrigger,
+  wikiMaintenanceFailureKindOf,
+  wikiMaintenanceHintFor,
+  type WikiMaintenanceHint,
+} from './wiki-maintenance-run';
 import { wikiMaintenanceRunsToday } from './wiki-maintenance-session';
 import { WikiPlans } from './wiki-plan';
 import { WikiPlanJobFacts, wikiPlanJobHintFor } from './wiki-plan-job';
@@ -1780,3 +1794,325 @@ for (const kind of ['build', 'draft'] as const) {
     assert.equal(await runsOf(h, s), 2);
   });
 }
+
+// ── 10. a task that died holds the list no more (contract `maintenance.job.recovery`) ───────────
+
+const runRow = (h: Harness, taskId: string) => h.prisma.wikiMaintenanceRun.findUniqueOrThrow({ where: { taskId } });
+
+/** The run's session as the dispatcher's scheduled scan starts it — its runAt consumed — and the run's start read. */
+async function dispatched(h: Harness, s: Space, taskId: string): Promise<string> {
+  await h.sql.query(`UPDATE "task" SET "run_at" = NULL WHERE "id" = $1`, [taskId]);
+  const run = await session(h, s.owner.id, { workspaceId: s.workspaceId, runnerId: s.machine.id, taskId, status: 'RUNNING', lastTurnAt: minutesAgo(1) });
+  expectStatus(await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/run`), 200, 'the run reads where it starts');
+  return run;
+}
+
+/**
+ * What the reaper does to a run whose runner went away mid-turn (realtime/reaper.service.ts): the session
+ * FAILED `runner offline`, `minutes` ago — and, its task opting into auto-run, no retry of its own armed — and
+ * the task back to OPEN.
+ */
+async function reapedOffline(h: Harness, taskId: string, sessionId: string, minutes: number): Promise<void> {
+  await h.sql.query(
+    `UPDATE "session" SET "status" = 'FAILED', "error" = 'runner offline', "finished_at" = $2, "updated_at" = now() WHERE "id" = $1`,
+    [sessionId, utc(minutesAgo(minutes))],
+  );
+  await h.sql.query(`UPDATE "task" SET "status" = 'OPEN' WHERE "id" = $1`, [taskId]);
+}
+
+const statusOf = (): NormalizedRunEvent => ({ seq: 0, type: RunEventType.STATUS, ts: new Date().toISOString(), payload: {} }) as NormalizedRunEvent;
+
+test('a task whose session was reaped runner offline is started again once, and closed FAILED when that dies too; the next fact makes the next run', { skip }, async () => {
+  const h = await boot();
+  const s = await maintainedSpace(h, 'offline');
+  const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  const made = await consider(h, s, hintOf([sessions[0]!]));
+  assert.equal(made.made, true);
+  if (!made.made) return;
+  const first = await dispatched(h, s, made.taskId);
+  const { startedAt } = await runRow(h, made.taskId);
+  assert.ok(startedAt);
+
+  // While its session runs, a fact waits for it, as ever, and nothing is settled.
+  const meanwhile = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(9) });
+  assert.deepEqual(await consider(h, s, hintOf([meanwhile])), { made: false, spaceId: s.spaceId, why: 'unfinished' });
+
+  // The runner restarts mid-turn (2026-10-02 01:47): the session ends `runner offline`, the task stays OPEN
+  // with its runAt long consumed — nothing would ever start it again. The session's own end is the hint.
+  await reapedOffline(h, made.taskId, first, 2);
+  const before = h.announced.length;
+  await h.trigger.take(first, statusOf());
+  await h.trigger.idle();
+  const rerun = await h.prisma.task.findUniqueOrThrow({ where: { id: made.taskId }, select: { status: true, runAt: true } });
+  assert.equal(rerun.status, 'OPEN', 'an infra death is started again, not closed');
+  const died = (await h.prisma.session.findUniqueOrThrow({ where: { id: first }, select: { finishedAt: true } })).finishedAt!;
+  assert.ok(rerun.runAt, 'with a runAt the dispatcher keeps');
+  assert.equal(rerun.runAt.getTime(), died.getTime() + WIKI_MAINTENANCE_RECOVERY.rerunAfterMinutes * 60_000,
+    'no sooner than rerunAfterMinutes after its session ended');
+  assert.ok(h.announced.slice(before).some((a) => a.ownerId === s.owner.id && a.type === RunEventType.TASK_CHANGED
+    && JSON.stringify(a.change).includes(made.taskId)), 'and announced');
+  let row = await runRow(h, made.taskId);
+  assert.deepEqual([row.outcome, row.failureKind, row.reruns, row.attempts], ['failed', 'infra', 1, 1]);
+  assert.equal(row.error, 'Its session ended failed: runner offline.');
+  assert.equal(row.rerunAt?.getTime(), rerun.runAt.getTime());
+  assert.ok(row.endedAt && row.endedAt >= startedAt, 'the row never ends before it began');
+  // The health says whose the failure was.
+  const { maintenance: health } = await new WikiHealth(h.prisma as unknown as PrismaService).read(s.owner.id, s.spaceId);
+  assert.deepEqual([health.lastFailure?.kind, health.lastFailure?.reason], ['infra', 'Its session ended failed: runner offline.']);
+
+  // Settling the same death again changes nothing; a fact before the rerun is due waits for it.
+  const again = await consider(h, s, hintOf([first]));
+  assert.equal(again.settled, undefined, `nothing is settled twice: ${JSON.stringify(again)}`);
+  const waiting = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(7) });
+  assert.deepEqual(await consider(h, s, hintOf([waiting])), { made: false, spaceId: s.spaceId, why: 'unfinished' }, 'the rerun holds the list');
+  assert.equal((await maintenanceTasks(h, s)).length, 1);
+
+  // The dispatcher starts it once due — a new session of the same task — and the run starts once more: the
+  // first start kept, the attempt counted, the attempt before it no longer the row's end.
+  const second = await dispatched(h, s, made.taskId);
+  row = await runRow(h, made.taskId);
+  assert.deepEqual([row.attempts, row.outcome, row.failureKind, row.endedAt, row.error], [2, null, null, null, null]);
+  assert.equal(row.startedAt?.getTime(), startedAt.getTime(), 'the first start is kept');
+  assert.ok(row.lastStartedAt && row.lastStartedAt >= startedAt);
+  assert.equal(row.sessionId, second);
+
+  // It dies too: the rerun is spent, so the task is closed FAILED, its run's end written, and the list free.
+  await reapedOffline(h, made.taskId, second, 1);
+  const closed = await consider(h, s, hintOf([second]));
+  assert.deepEqual(closed.settled, { rerun: [], closed: [made.taskId] }, `the task is closed: ${JSON.stringify(closed)}`);
+  assert.equal((await h.prisma.task.findUniqueOrThrow({ where: { id: made.taskId } })).status, 'FAILED');
+  row = await runRow(h, made.taskId);
+  assert.deepEqual([row.outcome, row.failureKind, row.reruns, row.attempts], ['failed', 'infra', 1, 2]);
+  assert.ok(row.endedAt && row.lastStartedAt && row.endedAt >= row.lastStartedAt, 'ended no earlier than its last start');
+
+  // The next fact makes the next run, from the same cursor.
+  const next = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(5) });
+  const after = await consider(h, s, hintOf([next]));
+  assert.equal(after.made, true, `the next fact makes the next run: ${JSON.stringify(after)}`);
+  if (!after.made) return;
+  assert.equal(after.due, 'backlog', 'the cursor did not move, so the space is as due as it was');
+  assert.equal((await maintenanceTasks(h, s)).length, 2);
+});
+
+/**
+ * The dispatcher the platform runs once a minute (TasksService's reconcile timer), over the spec's database: the
+ * reconcile sweep — the retry policy's re-arm and the two auto-run scans — and then the scheduled sweep.
+ */
+function dispatcher(h: Harness): () => Promise<void> {
+  const prisma = h.prisma as unknown as PrismaService;
+  const quiet = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
+  const sessions = new SessionsService(prisma, { notifySessionQueued: () => undefined } as unknown as QueueService, quiet);
+  const tasks = new TasksService(prisma, sessions, quiet) as unknown as {
+    reconcileReadyTasks(): Promise<void>;
+    dispatchDueScheduledTasks(): Promise<void>;
+  };
+  return async () => {
+    await tasks.reconcileReadyTasks();
+    await tasks.dispatchDueScheduledTasks();
+  };
+}
+
+const sessionsOf = (h: Harness, taskId: string) => h.prisma.session.findMany({
+  where: { taskId },
+  orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  select: { id: true, status: true, assignedRunnerId: true },
+});
+
+test('the dispatcher alone never starts a maintenance task whose session died — no edge, no project, its runAt spent — and starts the rerun the settling schedules, once', { skip }, async () => {
+  const h = await boot();
+  const s = await maintainedSpace(h, 'dispatcher');
+  const sweep = dispatcher(h);
+  const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  const made = await consider(h, s, hintOf([sessions[0]!]));
+  assert.equal(made.made, true, JSON.stringify(made));
+  if (!made.made) return;
+  // What the dispatch needs that the space's fixture does not lay down: the provider the task is pinned to,
+  // configured — a dispatch refuses one the owner does not have — and the workspace's runner, online: wikova
+  // on 2026-10-02. Written here, after the task was made, so that no plan job asks for the list first.
+  await h.prisma.modelProvider.create({
+    data: {
+      slug: 'local-vllm', label: 'Local vLLM', runtime: 'claude', baseUrl: 'http://127.0.0.1:8000',
+      apiKeyEnc: encryptSecret(`vllm-key-${randomUUID()}`), models: [{ value: 'qwen3.8-27b-fp8', label: 'Qwen3.8 27B', contextWindow: 131072 }],
+      defaultModel: 'qwen3.8-27b-fp8', enabled: true, ownerId: s.owner.id,
+    },
+  });
+  await h.sql.query(`UPDATE "workspace" SET "runner_id" = $1 WHERE "id" = $2`, [s.machine.id, s.workspaceId]);
+  await h.sql.query(`UPDATE "runner" SET "status" = 'ONLINE', "last_heartbeat_at" = now() WHERE "id" = $1`, [s.machine.id]);
+
+  // Made with runAt now, it is started by the scheduled sweep, as 01a0f9ea was at 00:01:31: one session, the
+  // runAt spent, and the one receipt the task will ever have, `sched:<task>:0`.
+  await sweep();
+  let runs = await sessionsOf(h, made.taskId);
+  assert.equal(runs.length, 1, 'the scheduled sweep starts the task');
+  assert.equal((await h.prisma.task.findUniqueOrThrow({ where: { id: made.taskId } })).runAt, null, 'its runAt spent');
+  const receipts = await h.sql.query<{ token: string }>(
+    `SELECT "request_token" AS token FROM "task_run_request" WHERE "request_token" LIKE $1`, [`%${made.taskId}%`]);
+  assert.deepEqual(receipts.rows.map((one) => one.token), [`sched:${made.taskId}:0`]);
+
+  // The runner restarts mid-turn, eleven minutes ago (01:47–01:50): the reaper ends the session `runner
+  // offline` with no retry of its own armed — its task opts into auto-run — and the task stays OPEN.
+  await h.sql.query(`UPDATE "session" SET "status" = 'RUNNING' WHERE "id" = $1`, [runs[0]!.id]);
+  await reapedOffline(h, made.taskId, runs[0]!.id, 11);
+
+  // Until this change that was the end of it: the retry policy re-arms only a `dep:` moment, and each of the
+  // three scans needs what the task has not — an edge, a project, a runAt — so no sweep starts it again.
+  await sweep();
+  await sweep();
+  assert.equal((await sessionsOf(h, made.taskId)).length, 1, 'nothing in the dispatcher starts it again by itself');
+
+  // The settling — the dead session's end is the hint — gives it a runAt past the backoff, which has passed
+  // here; the next scheduled sweep starts the rerun, queued for the space's runner, and only once.
+  const settled = await consider(h, s, hintOf([runs[0]!.id]));
+  assert.deepEqual(settled.settled, { rerun: [made.taskId], closed: [] }, JSON.stringify(settled));
+  await sweep();
+  runs = await sessionsOf(h, made.taskId);
+  assert.equal(runs.length, 2, 'the dispatcher starts the rerun');
+  assert.deepEqual([runs[1]!.status, runs[1]!.assignedRunnerId], ['PENDING', s.machine.id],
+    'queued for the space\'s runner, which claims it once it is online');
+  assert.equal((await h.prisma.task.findUniqueOrThrow({ where: { id: made.taskId } })).runAt, null, 'the rerun\'s runAt spent');
+  await sweep();
+  assert.equal((await sessionsOf(h, made.taskId)).length, 2, 'once');
+});
+
+test('a task whose session died of something not the platform\'s is closed at once; one not yet started, or whose own retry is armed, is waited for', { skip }, async () => {
+  const h = await boot();
+  const s = await maintainedSpace(h, 'content-death');
+  const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  const made = await consider(h, s, hintOf([sessions[0]!]));
+  assert.equal(made.made, true);
+  if (!made.made) return;
+  // Made and not yet dispatched: no session of it has run, so nothing died — it waits for its dispatch.
+  const fact = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(9) });
+  await h.sql.query(`UPDATE "task" SET "run_at" = NULL WHERE "id" = $1`, [made.taskId]);
+  assert.deepEqual(await consider(h, s, hintOf([fact])), { made: false, spaceId: s.spaceId, why: 'unfinished' });
+
+  const run = await dispatched(h, s, made.taskId);
+  // Its turn failed and the session's own retry is armed: AutoRetryService resumes it, so it is not dead.
+  await h.sql.query(`UPDATE "session" SET "status" = 'FAILED', "error" = 'API Error: 529 overloaded', "retry_at" = $2 WHERE "id" = $1`,
+    [run, utc(new Date(Date.now() + 120_000))]);
+  assert.deepEqual(await consider(h, s, hintOf([run])), { made: false, spaceId: s.spaceId, why: 'unfinished' });
+
+  // A turn the model's API refused (a 400) and no retry: the run's own failure, which a rerun would only repeat.
+  await h.sql.query(`UPDATE "session" SET "num_turns" = 1, "retry_at" = NULL, "error" = $2, "finished_at" = $3 WHERE "id" = $1`,
+    [run, 'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long"}}', utc(minutesAgo(1))]);
+  const settled = await consider(h, s, hintOf([run]));
+  assert.deepEqual(settled.settled, { rerun: [], closed: [made.taskId] }, `closed at once: ${JSON.stringify(settled)}`);
+  assert.equal((await h.prisma.task.findUniqueOrThrow({ where: { id: made.taskId } })).status, 'FAILED');
+  const row = await runRow(h, made.taskId);
+  assert.deepEqual([row.outcome, row.failureKind, row.reruns], ['failed', 'content', 0]);
+  assert.match(row.error ?? '', /^Its session ended failed: API Error: 400/u);
+
+  // Whose a session's end says its failure was.
+  for (const infra of ['runner offline', 'claude runtime not initialized', 'ENOSPC: No space left on device', 'API Error: 529 overloaded',
+    'connect ECONNREFUSED 127.0.0.1:3000', 'POST /runner/sessions/x/turn-complete -> 502 Bad Gateway']) {
+    assert.equal(wikiMaintenanceFailureKindOf(infra), 'infra', infra);
+  }
+  for (const content of ['API Error: 400 prompt is too long', 'This Wiki maintenance run did not start: maintenance is off in its space.',
+    'the run reached its limit of 120 model turns', '', null]) {
+    assert.equal(wikiMaintenanceFailureKindOf(content), 'content', String(content));
+  }
+});
+
+test('a run whose task ended without it saying how is given that end — and the migration gives every such row it found the same', { skip }, async () => {
+  const h = await boot();
+  const s = await maintainedSpace(h, 'orphan');
+  const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  const made = await consider(h, s, hintOf([sessions[0]!]));
+  assert.equal(made.made, true);
+  if (!made.made) return;
+  const run = await dispatched(h, s, made.taskId);
+  // Its verify and its finish got 500 on a full disk, its check failed, and its task with it (2026-10-01 13:33).
+  await h.sql.query(`UPDATE "task" SET "status" = 'FAILED', "updated_at" = now() WHERE "id" = $1`, [made.taskId]);
+  await h.sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED' WHERE "id" = $1`, [run]);
+  assert.equal((await runRow(h, made.taskId)).outcome, null, 'the run never said how it ended');
+  // Two rows that are not orphans: one whose task has not ended, one that said how it ended.
+  const open = await task(h, s.owner.id, { listId: s.listId });
+  const reported = await task(h, s.owner.id, { status: 'FAILED', listId: s.listId });
+  await h.sql.query(`INSERT INTO "wiki_maintenance_run"("id","space_id","owner_id","task_id") VALUES ($1,$2,$3,$4)`, [randomUUID(), s.spaceId, s.owner.id, open]);
+  await h.sql.query(
+    `INSERT INTO "wiki_maintenance_run"("id","space_id","owner_id","task_id","outcome","failure_kind","error","ended_at")
+     VALUES ($1,$2,$3,$4,'failed','content','verify: 1 op was left without a verdict',now())`,
+    [randomUUID(), s.spaceId, s.owner.id, reported]);
+
+  // The next hint of the owner gives it its end.
+  const fact = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(6) });
+  await consider(h, s, hintOf([fact]));
+  const orphan = await runRow(h, made.taskId);
+  assert.deepEqual([orphan.outcome, orphan.failureKind, orphan.error], ['failed', 'infra', WIKI_RUN_NOT_REPORTED]);
+  assert.equal(WIKI_RUN_NOT_REPORTED, 'The run did not report its end.');
+  assert.ok(orphan.endedAt && orphan.lastStartedAt && orphan.endedAt >= orphan.lastStartedAt, 'ended no earlier than it last started');
+  assert.equal((await runRow(h, open)).outcome, null, 'a run whose task has not ended is not touched');
+  assert.equal((await runRow(h, reported)).error, 'verify: 1 op was left without a verdict', 'nor one that said how it ended');
+
+  // The rows the migration found as servers before it left them: an orphan, a row two attempts wrote (its
+  // end before its start), and two failures reported before failures had a kind — the run's own, and a 500
+  // (2026-09-29, the changesets route). Its CHECKs come off, the rows go in as they stood, and the
+  // migration — every statement of which can run twice — runs again.
+  await h.sql.query(`ALTER TABLE "wiki_maintenance_run" DROP CONSTRAINT "wiki_maintenance_run_failure_kind_check",
+                                                      DROP CONSTRAINT "wiki_maintenance_run_attempts_check"`);
+  const legacy = { orphan: await task(h, s.owner.id, { status: 'CANCELLED', listId: s.listId }), twice: await task(h, s.owner.id, { listId: s.listId }),
+    kindless: await task(h, s.owner.id, { status: 'FAILED', listId: s.listId }),
+    server: await task(h, s.owner.id, { status: 'FAILED', listId: s.listId }) };
+  const twiceSession = await session(h, s.owner.id, { workspaceId: s.workspaceId, taskId: legacy.twice, status: 'FAILED' });
+  const { rows: [{ created_at: firstSessionAt }] } = await h.sql.query<{ created_at: string }>(
+    `SELECT to_char("created_at", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS created_at FROM "session" WHERE "id" = $1`, [twiceSession]);
+  await h.sql.query(
+    `INSERT INTO "wiki_maintenance_run"("id","space_id","owner_id","task_id","started_at","outcome","error","ended_at") VALUES
+       ($1,$4,$5,$6,now() - interval '2 hours',NULL,NULL,NULL),
+       ($2,$4,$5,$7,now() - interval '1 day','failed','verify: 1 op was left without a verdict',now() - interval '2 days'),
+       ($3,$4,$5,$8,now() - interval '3 hours','failed','extract: the model answered nothing',now() - interval '2 hours'),
+       ($9,$4,$5,$10,now() - interval '5 hours','failed',$11,now() - interval '4 hours')`,
+    [randomUUID(), randomUUID(), randomUUID(), s.spaceId, s.owner.id, legacy.orphan, legacy.twice, legacy.kindless,
+      randomUUID(), legacy.server, 'propose: orbit wiki maintain: POST /runner/wiki/spaces/x/maintenance/changesets -> 500 {"statusCode":500}']);
+  await h.sql.query(readFileSync(path.join(__dirname, '../../prisma/migrations/0356_wiki_maintenance_run_attempts/migration.sql'), 'utf8'));
+  const swept = await runRow(h, legacy.orphan);
+  assert.deepEqual([swept.outcome, swept.failureKind, swept.error, swept.attempts], ['failed', 'infra', WIKI_RUN_NOT_REPORTED, 1]);
+  assert.ok(swept.endedAt && swept.startedAt && swept.endedAt >= swept.startedAt);
+  const twice = await runRow(h, legacy.twice);
+  assert.equal(twice.attempts, 2, 'two attempts on one row');
+  assert.equal(twice.startedAt?.toISOString(), firstSessionAt, 'its first start is its task\'s first session');
+  assert.ok(twice.lastStartedAt && twice.endedAt && twice.startedAt && twice.endedAt >= twice.startedAt && twice.lastStartedAt > twice.endedAt,
+    'the second start is the latest, and the row ends no earlier than it began');
+  assert.deepEqual([twice.outcome, twice.failureKind], ['failed', 'content'], 'what the first attempt said stays');
+  const kindless = await runRow(h, legacy.kindless);
+  assert.deepEqual([kindless.failureKind, kindless.error, kindless.attempts], ['content', 'extract: the model answered nothing', 1]);
+  assert.equal((await runRow(h, legacy.server)).failureKind, 'infra', 'a 500 the run reported is the platform\'s, read off its error');
+  assert.equal((await runRow(h, open)).outcome, null, 'the migration leaves a run whose task has not ended as it was');
+  const checks = await h.sql.query(`SELECT conname FROM pg_constraint WHERE conname LIKE 'wiki_maintenance_run_%_check' ORDER BY conname`);
+  assert.deepEqual(checks.rows.map((one: { conname: string }) => one.conname),
+    ['wiki_maintenance_run_attempts_check', 'wiki_maintenance_run_failure_kind_check'], 'and its CHECKs hold again');
+});
+
+test('a session\'s retry of its run keeps the run\'s first start and counts the attempt, and the row never ends before it began', { skip }, async () => {
+  const h = await boot();
+  const s = await maintainedSpace(h, 'retry');
+  const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  const made = await consider(h, s, hintOf([sessions[0]!]));
+  assert.equal(made.made, true);
+  if (!made.made) return;
+  const run = await dispatched(h, s, made.taskId);
+  const first = await runRow(h, made.taskId);
+  assert.deepEqual([first.attempts, first.lastStartedAt?.getTime()], [1, first.startedAt?.getTime()]);
+  const finish = (error: string) => call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/finish`, {
+    outcome: 'failed', error, report: { stoppedAt: 'verify', ops: { refused: 0 } },
+  });
+  expectStatus(await finish('verify: 1 op was left without a verdict'), 200, 'the first attempt fails');
+  const failed = await runRow(h, made.taskId);
+  assert.ok(failed.endedAt);
+
+  // The session runs it once more (the one retry its prompt allows), a little later.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expectStatus(await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/run`), 200, 'the retry starts');
+  const retried = await runRow(h, made.taskId);
+  assert.equal(retried.startedAt?.getTime(), first.startedAt?.getTime(), 'the run\'s first start is not overwritten');
+  assert.equal(retried.attempts, 2);
+  assert.ok(retried.lastStartedAt && retried.lastStartedAt > failed.endedAt, 'the retry\'s start is the latest');
+  assert.deepEqual([retried.outcome, retried.endedAt, retried.error, retried.failureKind], [null, null, null, null],
+    'the row says the retry is under way, not how the attempt before it ended');
+
+  expectStatus(await finish('verify: 2 ops were left without a verdict'), 200, 'the retry fails too');
+  const ended = await runRow(h, made.taskId);
+  assert.ok(ended.endedAt && ended.startedAt && ended.endedAt >= ended.lastStartedAt! && ended.endedAt >= ended.startedAt,
+    'it ends after the retry began, so never before the run began');
+  assert.deepEqual([ended.outcome, ended.failureKind, ended.error], ['failed', 'content', 'verify: 2 ops were left without a verdict']);
+});

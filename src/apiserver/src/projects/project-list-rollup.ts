@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client';
 import type { ProjectStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { sessionCarriesTaskSql } from '../sessions/task-work-carrier';
 import { everyPrerequisiteDoneOrRetiredSql } from '../tasks/task-dependencies';
 import type { ProjectPanoramaBuckets } from './project-panorama';
 import { projectTaskWorkStateSql } from './project-task-work-state';
@@ -29,6 +30,18 @@ export function emptyProjectListRollup(): ProjectListRollup {
     },
     lastActivityAt: null,
   };
+}
+
+/** One rail row: work in flight, and the newest task write that orders the row. */
+export interface ProjectSidebarRollup {
+  /**
+   * The one lane the rail draws, under the same name the index reports it by. A rail that read
+   * `running` off the row while the page read `buckets.running` would be a second spelling of one
+   * fact, and the two would part company the first time either moved.
+   */
+  buckets: { running: number };
+  /** The same instant the index reports, or null when the project has never contained a task. */
+  lastActivityAt: Date | null;
 }
 
 interface RollupRow {
@@ -129,5 +142,92 @@ export async function readProjectListRollups(
       },
       lastActivityAt: row.lastActivityAt,
     },
+  ]));
+}
+
+interface SidebarRollupRow {
+  projectId: string;
+  running: number;
+  lastActivityAt: Date | null;
+}
+
+/**
+ * The rail's two facts — work in flight and the newest task write — for the OPEN projects of one
+ * owner.
+ *
+ * `GET /projects/sidebar` serves what the web sidebar's Projects group draws, and that group is
+ * polled every 15 seconds by every open tab, so this read may not cost what the index costs. The
+ * index answers it by classifying every task of every project into seven lanes; the rail draws one
+ * of those lanes, and this reads that one.
+ *
+ * The expression is the SAME `projectTaskWorkStateSql`, un-narrowed — a rail dot lit by a second
+ * reading of IN_PROGRESS while the index calls the same project Ready is the drift the shared
+ * expression exists to prevent. What is narrowed is the POPULATION it runs on, and the classifier
+ * itself says which rows those are: RUNNING is reachable only for a task that is IN_PROGRESS or
+ * that a work session still carries, so the candidates are picked by that disjunction first and the
+ * CASE runs on the handful it returns. The set is a SUPERSET of RUNNING, so every RUNNING row is
+ * in it; and a row it leaves out can only be classified BLOCKED, READY, DONE, FAILED, CANCELLED or
+ * AWAITING_VERIFICATION — never RUNNING, so leaving it out changes no count.
+ *
+ * "Carries" is `sessionCarriesTaskSql`, spliced rather than spelled again, and this read is why
+ * that module says nobody should spell it: the first draft of this query listed PENDING and RUNNING
+ * sessions, which was true until 2026-10-02 made a session parked at AWAITING_INPUT with a wake
+ * source carry its task too. The rail then reported one running task for a project the index called
+ * three, and only a comparison against the index's own answer showed it.
+ *
+ * The CASE cannot simply be dropped for the candidate set either, and a verification GATE ROW left
+ * IN_PROGRESS is why: a gate is judged before its stored status, so one with no passing check
+ * classifies AWAITING_VERIFICATION and is not work in flight however its row reads.
+ *
+ * `lastActivityAt` is `max(updated_at)` over the project's tasks — the index's own value, not a
+ * stand-in like `Project.updatedAt`, which does not move when work does. It is the part of this
+ * read that still walks every task of every open project, and it is why this is not free.
+ * `taskCount > 0` is not asked for here: a project with no tasks is an empty aggregate and the
+ * caller reads it as zero and null, like the index does.
+ */
+export async function readProjectSidebarRollups(
+  prisma: PrismaService,
+  ownerId: string,
+): Promise<Map<string, ProjectSidebarRollup>> {
+  // No `readyCandidates`: that option narrows the READY arm, which this count never reads, and
+  // the plain expression is the one every other surface reads.
+  const workState = Prisma.raw(projectTaskWorkStateSql('t'));
+  // Spliced, never spelled again: this is the classifier's own answer to which sessions hold work.
+  const carried = Prisma.raw(sessionCarriesTaskSql('work_session'));
+
+  const rows = await prisma.$queryRaw<SidebarRollupRow[]>(Prisma.sql`
+    SELECT proj."id" AS "projectId",
+           (SELECT count(*)::int
+              FROM "task" t
+             WHERE t."owner_id" = ${ownerId}::uuid
+               AND t."project_id" = proj."id"
+               AND t."id" IN (
+                 SELECT candidate."id"
+                   FROM "task" candidate
+                  WHERE candidate."owner_id" = ${ownerId}::uuid
+                    AND candidate."project_id" = proj."id"
+                    AND candidate."status" = 'IN_PROGRESS'::"task_status"
+                 UNION ALL
+                 SELECT work_session."task_id"
+                   FROM "session" work_session
+                  WHERE work_session."owner_id" = ${ownerId}::uuid
+                    AND work_session."task_id" IS NOT NULL
+                    AND ${carried}
+               )
+               AND (${workState}) = 'RUNNING') AS "running",
+           activity."lastActivityAt"
+      FROM "project" proj
+     CROSS JOIN LATERAL (
+       SELECT max(t."updated_at") AS "lastActivityAt"
+         FROM "task" t
+        WHERE t."owner_id" = ${ownerId}::uuid
+          AND t."project_id" = proj."id"
+     ) activity
+     WHERE proj."owner_id" = ${ownerId}::uuid
+       AND proj."status" = 'OPEN'::"project_status"`);
+
+  return new Map(rows.map((row) => [
+    row.projectId,
+    { buckets: { running: row.running }, lastActivityAt: row.lastActivityAt },
   ]));
 }

@@ -38,7 +38,14 @@ public enum NavOrigin: Hashable, Sendable {
 /// you got there are the same value.
 public enum NavNode: Hashable, Sendable {
     case console(sessionID: String, origin: NavOrigin)
-    case compose(agentID: String)
+    /// The new-session draft. `folderID` is the folder whose page opened it — the session it
+    /// creates is filed in that folder (`POST /sessions` with a `folderId`, design §3.3) — or nil
+    /// for a draft opened from a workspace's own list.
+    case compose(agentID: String, folderID: String?)
+    /// One folder's page (docs/session-folders-move-design.md §3.3): a workspace's folder row at the
+    /// top of its session list opens the sessions filed in that folder. iOS only — macOS and web
+    /// show no folders (§1).
+    case folder(SessionFolderAddress)
     case taskDetail(taskID: String)
     case taskListsDirectory
     case runnerDetail(runnerID: String)
@@ -180,6 +187,25 @@ public struct NavState: Equatable, Sendable {
     public var projectFromDrawer: Bool {
         if case .projectDetail(_, .drawer) = path.last { return true }
         return false
+    }
+
+    // The folder pages, read two ways because the two shells show them in two places (design §3.3).
+    // A phone pushes the folder as a page, so it is showing when it is the frame on top; a wide
+    // shell's session column has no stack, so the folder is the frame the *list* shows — the one at
+    // the bottom — while the console the detail pane follows rides above it. Each shell reads its
+    // own, and both are total reads of the same stack, so neither can disagree with the other.
+
+    /// The folder page showing on a phone: the frame on top is a folder's.
+    public var folderPage: SessionFolderAddress? {
+        if case .folder(let address) = path.last { return address }
+        return nil
+    }
+
+    /// The folder the wide shells' session column is showing: the frame at the bottom of the
+    /// section's stack is a folder's. The detail pane's console, when one is open, sits above it.
+    public var folderColumn: SessionFolderAddress? {
+        if case .folder(let address) = path.first { return address }
+        return nil
     }
 
     // The three single-layer sections — Following, Runners, Admin — push exactly one kind of page,
@@ -357,6 +383,55 @@ public struct NavState: Equatable, Sendable {
         }
     }
 
+    // MARK: - Folders (design §3.3)
+
+    /// Open a folder's page from a workspace's session list. The folder is the page the *list*
+    /// shows, which is the frame at the bottom of the section's stack: a phone has nothing under
+    /// it, so it lands on top and the system back returns to the workspace's list; a wide shell's
+    /// session column draws it while the detail pane keeps whatever console it was showing. Any
+    /// folder already open is left behind — one folder's page at a time.
+    public mutating func enterFolder(_ address: SessionFolderAddress) {
+        var frames = path
+        frames.removeAll { if case .folder = $0 { return true }; return false }
+        frames.insert(.folder(address), at: 0)
+        path = frames
+    }
+
+    /// Back out of a folder's page — a wide shell's column back button, or a folder that was
+    /// deleted under the page. Only the folder's frame goes: a console the detail pane is showing
+    /// stays on the stack and on screen. `folderID` nil leaves any folder (there is ever one).
+    public mutating func leaveFolder(_ folderID: String? = nil) {
+        path = path.filter { frame in
+            guard case .folder(let address) = frame else { return true }
+            return folderID.map { $0 != address.folderID } ?? false
+        }
+    }
+
+    /// The new-session draft's frame, opened from a list or from a folder's page. A draft over a
+    /// folder's page is pushed *over* it — the back swipe returns to the folder, and the session it
+    /// creates is filed in it — while one opened from a list replaces the page the detail pane is
+    /// showing, as it always did.
+    public mutating func openDraft(agentID: String, folderID: String?) {
+        let node = NavNode.compose(agentID: agentID, folderID: folderID)
+        if folderPage != nil {
+            withPath { $0.append(node) }
+        } else {
+            replaceTop(with: node)
+        }
+    }
+
+    /// Select a session's console in a three-column shell: it replaces the page the detail pane
+    /// shows — or, with a folder's page showing, is pushed over it, so the folder stays the page
+    /// the session list draws beside the console. Every other frame behaves exactly as
+    /// ``replaceTop(with:)``.
+    public mutating func selectConsole(_ node: NavNode) {
+        if folderPage != nil {
+            withPath { $0.append(node) }
+        } else {
+            replaceTop(with: node)
+        }
+    }
+
     /// Back to `sessionID`'s console when it is the page directly under the one on top: the
     /// conversation a phone opened its project's page over. Going to that conversation again is a
     /// pop, so the stack reads conversation › project page instead of growing a second copy of the
@@ -417,6 +492,22 @@ public struct NavState: Equatable, Sendable {
         var p = path
         change(&p)
         stacks[section] = p.isEmpty ? nil : p
+    }
+}
+
+/// A folder's page, as the frame that shows it spells it (docs/session-folders-move-design.md
+/// §3.3): which folder, the workspace it belongs to (the page says whose it is, and files the
+/// sessions it creates there), and the scope of the list it was opened from — Open's page lists the
+/// open sessions in the folder, Completed's the completed ones, for as long as the page is up.
+public struct SessionFolderAddress: Hashable, Sendable {
+    public let folderID: String
+    public let agentID: String
+    public let view: SessionView
+
+    public init(folderID: String, agentID: String, view: SessionView) {
+        self.folderID = folderID
+        self.agentID = agentID
+        self.view = view
     }
 }
 

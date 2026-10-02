@@ -1350,6 +1350,14 @@ model Session {
   // answers with something that is not one of those failures — not merely when a retry is
   // dispatched, which would let a provider that fails identically every time loop unbounded.
   retryAttempts        Int       @default(0) @map("retry_attempts")
+  // When the auto-retry sweep CLAIMED this retry — cleared `retry_at` and began writing the turn
+  // that fulfils it (migration 0354, docs/session-request-reply-contract.md §8 criterion 20).
+  // Between the claim and that turn the row is parked with `retry_at` NULL, which is also what a
+  // retry given up looks like; this is the fact that tells them apart (`awaitsAutoRetry`). NULL =
+  // no claim in flight. Cleared by the turn the resume writes, a re-arm, a disarm and the attempt
+  // a give-up hands back; a reader also treats a claim older than `RETRY_CLAIM_WINDOW_MS` as dead,
+  // so a sweep that died mid-claim cannot leave a session reading as on-its-way forever.
+  retryClaimedAt       DateTime? @map("retry_claimed_at")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 
@@ -6301,6 +6309,7 @@ model WikiMaintenanceRun {
   expectKind      String?   @map("expect_kind")
   expectRef       String?   @map("expect_ref")
   sessionId       String?   @map("session_id") @db.Uuid
+  /// The run's first start, never written again (migration 0356): a retry or a rerun is `lastStartedAt`.
   startedAt       DateTime? @map("started_at") @db.Timestamptz(3)
   endedAt         DateTime? @map("ended_at") @db.Timestamptz(3)
   /// `succeeded` | `failed` | `truncated`, as the run reported it.
@@ -6309,6 +6318,14 @@ model WikiMaintenanceRun {
   opsRefused      Int?      @map("ops_refused")
   report          Json?
   error           String?
+  /// How many times a session started the run, and the latest of them (contract `maintenance.job.recovery.attempts`).
+  attempts        Int       @default(0)
+  lastStartedAt   DateTime? @map("last_started_at") @db.Timestamptz(3)
+  /// `infra` | `content` — whose a failed or truncated run's failure was; set exactly when the outcome is one of those.
+  failureKind     String?   @map("failure_kind")
+  /// How many times the platform started the run's task again after its session died of an infra failure.
+  reruns          Int       @default(0)
+  rerunAt         DateTime? @map("rerun_at") @db.Timestamptz(3)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 

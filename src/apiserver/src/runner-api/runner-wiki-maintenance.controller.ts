@@ -97,7 +97,11 @@ export class RunnerWikiMaintenanceController {
     // A run that did not succeed is its task's too: a run cut short by its turn limit says so here, and
     // `orbit wiki check` reads it off the run's row (contract `maintenance.job.check`).
     if (answer.outcome !== 'succeeded') {
-      await noteWikiMaintenanceRunEnd(this.prisma, runner.ownerId, id, sessionId, { outcome: answer.outcome, error: dto.error ?? null });
+      await noteWikiMaintenanceRunEnd(this.prisma, runner.ownerId, id, sessionId, {
+        outcome: answer.outcome,
+        error: dto.error ?? null,
+        failureKind: dto.failureKind ?? null,
+      });
     }
     return answer;
   }

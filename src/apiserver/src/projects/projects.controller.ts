@@ -96,6 +96,23 @@ export class ProjectsController {
     return this.projects.list(user.userId, this.parseStatus(status));
   }
 
+  /**
+   * The projects the web sidebar's Projects group draws — `running`, what waits on the reader, and
+   * the newest activity that orders the rows.
+   *
+   * A read of its own rather than a filter over `GET /projects`, because the rail asks four
+   * questions of a project and the index answers seven task lanes, the integration line and the
+   * whole attention summary to reach them. The rail polls every 15 seconds from every open tab,
+   * which made that difference the largest single consumer of the database (2026-09-29).
+   *
+   * Declared before `:id` so the static path is matched as itself: Nest takes routes in
+   * declaration order, and `sidebar` fed to the id pipe is a 400, not a project.
+   */
+  @Get('sidebar')
+  sidebar(@CurrentUser() user: AuthUser) {
+    return this.projects.listSidebar(user.userId);
+  }
+
   @Get(':id')
   get(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.projects.get(user.userId, id);

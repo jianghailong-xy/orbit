@@ -48,7 +48,7 @@ const project = (id: string, title: string, over: Partial<SidebarProject> = {}):
   ...over,
 });
 
-/** `GET /projects?status=OPEN` — in the server's order, newest project first, which is not the rail's. */
+/** `GET /projects/sidebar` — in the server's order, newest project first, which is not the rail's. */
 const OPEN_PROJECTS: SidebarProject[] = [
   project(POSTGRES, 'Postgres 性能与容量治理', { lastActivityAt: ago(6 * DAY) }),
   project(FINEWEB, 'FineWeb × Common Crawl → RocksDB 语料库', {
@@ -81,7 +81,7 @@ function RouterProbe() {
 function serve(projects: SidebarProject[] = OPEN_PROJECTS, avatarUpdatedAt: string | null = null) {
   vi.mocked(api).mockImplementation((async (path: string) => {
     requested.push(path);
-    if (path === '/projects?status=OPEN') return projects;
+    if (path === '/projects/sidebar') return projects;
     if (path === '/runners') return [];
     if (path === '/workspaces') return [];
     if (path === '/sessions/counts') return [];

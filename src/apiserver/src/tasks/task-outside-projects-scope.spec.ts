@@ -229,6 +229,8 @@ test('each list says how many of its tasks are filed under no project', async ()
           return [];
         },
       },
+      // The lists' running counts, which nothing here is.
+      $queryRaw: async () => [],
     } as never,
     { publishForUser: () => undefined } as never,
     {} as never,
@@ -245,16 +247,18 @@ test('each list says how many of its tasks are filed under no project', async ()
 
 test('a running row says when its oldest live run began; a queued one says nothing', async () => {
   const started = new Date('2026-09-26T07:58:00Z');
+  // The work sessions carrying the two rows (sessions/task-work-carrier.ts): one running since
+  // `started`, one queued and never started. Every other raw read answers as the harness's does.
+  const carrier = (taskId: string, status: string, startedAt: Date | null) => ({
+    taskId, sessionId: `session-${taskId}`, status, runReason: 'TURN',
+    runningBgJobs: [], runningBgJobActivity: {}, startedAt,
+  });
   const { service } = harness(
     [row(WAITING, 'EXECUTABLE', 'IN_PROGRESS'), row(PLAIN, 'EXECUTABLE', 'OPEN')],
     {
-      session: {
-        groupBy: async () => [
-          { taskId: WAITING, status: 'RUNNING', _count: { _all: 1 }, _min: { startedAt: started } },
-          { taskId: PLAIN, status: 'PENDING', _count: { _all: 1 }, _min: { startedAt: null } },
-        ],
-        findMany: async () => [],
-      },
+      $queryRaw: recordingQueryRaw((sql) => (sql.includes('"runReason"')
+        ? [carrier(WAITING, 'RUNNING', started), carrier(PLAIN, 'PENDING', null)]
+        : [{ count: 4 }])).$queryRaw,
     },
   );
 

@@ -40,6 +40,14 @@ import { SessionNotSendable, SessionsService } from './sessions.service';
  */
 export type SessionReplyHandOff = 'QUEUED' | 'MERGED' | 'HELD' | 'ALREADY' | 'DEFERRED';
 
+/**
+ * What `tellStoppedAsker` did with an outcome it was told to say (§8 criterion 21): `COMMENTED` on the
+ * task the asker ran and never will read (§4.3), `HANDED_BACK` to an asker that is merely idle (§4.2),
+ * `WAITED` because it has been armed again — the retry's turn says it — and `ALREADY` when another
+ * pass got there first.
+ */
+export type StoppedAskerTold = 'COMMENTED' | 'HANDED_BACK' | 'WAITED' | 'ALREADY';
+
 /** The id of the one comment that tells an ended asker's task what its request came to (§4.3). */
 export function sessionReplyCommentId(requestId: string): string {
   return derivedUuid(`session-request:v1:reply-comment:${requestId}`);
@@ -244,7 +252,8 @@ export class SessionRequestService {
       const asker = await tx.session.findFirst({
         where: { id: request.fromSessionId, ownerId: request.ownerId },
         select: {
-          status: true, retryAt: true, cancelRequestedAt: true, completedAt: true, archivedAt: true, deletedAt: true,
+          status: true, retryAt: true, retryClaimedAt: true, cancelRequestedAt: true,
+          completedAt: true, archivedAt: true, deletedAt: true,
         },
       });
       if (!asker || !awaitsAutoRetry(asker)) return null;
@@ -258,22 +267,66 @@ export class SessionRequestService {
 
   /**
    * The request worker's, for an outcome migration 0352 marked: held for an asker that has since
-   * stopped for good — the retry it waited on was given up, or it ended — so there is no next turn to
-   * say it on, and §4.3 says it on the task the asker ran. The mark is cleared by a compare-and-set
-   * once that is done; the comment is keyed by the request, so a pass that does it twice writes it once.
-   * Answers whether this call cleared the mark.
+   * stopped — the retry it waited on was given up, or it ended. Which of the two it was is read off the
+   * asker NOW, not off the statement that marked it (§8 criterion 21), because the same "stopped"
+   * covers two states with different endings:
+   *
+   *   - it has ENDED — a FAILED run with no retry, cancelled, completed, in Trash: §4.3. No turn is
+   *     coming, so the outcome goes on the task the asker ran as a comment, keyed by the request so a
+   *     pass that does it twice writes it once;
+   *   - it is merely IDLE — parked and live: §4.2. It can take a turn, so the outcome goes back to it
+   *     as a reply turn like any other, and about a task it never ran as readily as about one it did.
+   *     The hold was for the retry's turn; with the retry gone it is released first, so the ordinary
+   *     hand-off says it (`handOff`, which queues or merges the reply turn).
+   *
+   * An asker that has been armed again in the meantime waits: the retry's turn says the outcome, and
+   * whichever turn takes it clears the mark (`attachHeldReplies`, `appendSessionRepliesContext`).
    */
-  async commentForStoppedAsker(requestId: string): Promise<boolean> {
+  async tellStoppedAsker(requestId: string): Promise<StoppedAskerTold> {
     const request = await this.prisma.sessionRequest.findUnique({ where: { id: requestId } });
-    if (!request?.replyCommentDueAt || request.replyClientTurnId) return false;
+    if (!request?.replyCommentDueAt || request.replyClientTurnId || !request.replyHeldAt) return 'ALREADY';
     const asker = await this.prisma.session.findFirst({
       where: { id: request.fromSessionId, ownerId: request.ownerId },
-      select: { title: true, taskId: true },
+      select: {
+        title: true, taskId: true, status: true, endReason: true, cancelRequestedAt: true, retryAt: true,
+        retryClaimedAt: true, completedAt: true, archivedAt: true, deletedAt: true,
+      },
     });
-    if (asker?.taskId) await this.commentOnAskerTask(request, { title: asker.title, taskId: asker.taskId }, 'STOPPED');
+    // The asker's row is gone: nothing left to tell, and the mark is cleared so a request that
+    // outlived its asker is not re-read by every pass for ever (the FK is the recipient's, 0350).
+    if (!asker) {
+      await this.clearMark(request);
+      return 'ALREADY';
+    }
+    if (awaitsAutoRetry(asker)) return 'WAITED';
+    if (!sessionHasEnded(asker) && !asker.cancelRequestedAt) {
+      if (!(await this.releaseHeld(request.id))) return 'ALREADY';
+      await this.handOff(request.id);
+      return 'HANDED_BACK';
+    }
+    if (asker.taskId) await this.commentOnAskerTask(request, { title: asker.title, taskId: asker.taskId }, 'STOPPED');
+    return (await this.clearMark(request)) ? 'COMMENTED' : 'ALREADY';
+  }
+
+  /** Answer migration 0352's mark, by a compare-and-set on the mark as it was read. */
+  private async clearMark(request: SessionRequest): Promise<boolean> {
     const { count } = await this.prisma.sessionRequest.updateMany({
       where: { id: request.id, replyCommentDueAt: request.replyCommentDueAt, replyClientTurnId: null },
       data: { replyCommentDueAt: null },
+    });
+    return count === 1;
+  }
+
+  /**
+   * §4.2, §8 criterion 21: let go of an outcome held for an asker that turned out to be merely idle —
+   * its retry given up while it stayed parked and live. A compare-and-set on the row still being held
+   * and on no turn, so a pass racing another releases it once; the mark goes with the hold, because
+   * what it stood for ("no next turn is coming") is exactly what this just decided is not true.
+   */
+  private async releaseHeld(requestId: string): Promise<boolean> {
+    const { count } = await this.prisma.sessionRequest.updateMany({
+      where: { id: requestId, state: { not: 'OPEN' }, replyClientTurnId: null, replyHeldAt: { not: null } },
+      data: { replyHeldAt: null, replyCommentDueAt: null },
     });
     return count === 1;
   }
@@ -291,7 +344,7 @@ export class SessionRequestService {
       where: { id: request.fromSessionId, ownerId: request.ownerId },
       select: {
         title: true, taskId: true, status: true, endReason: true, cancelRequestedAt: true, retryAt: true,
-        completedAt: true, archivedAt: true, deletedAt: true,
+        retryClaimedAt: true, completedAt: true, archivedAt: true, deletedAt: true,
       },
     });
     if (!asker?.taskId) return;

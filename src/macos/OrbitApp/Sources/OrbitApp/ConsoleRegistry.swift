@@ -85,6 +85,8 @@ final class ConsoleRegistry {
     /// and its `send()` calls `createSession`, reporting the result via `onCreated` so the caller can
     /// open the live console. Shares the instance attachment cache so a pasted image previews
     /// instantly once that console opens. Not added to `models` — there's no sessionID to key it by.
+    /// `folderID` is the folder whose page opened this draft (a folder page's ✎): the session it
+    /// creates is filed in that folder as it is created (design §3.3). Nil from a list.
     func draftModel(for agent: Agent, defaultModel: String,
                     configuredProviders: [ConfiguredProvider] = [],
                     configuredProvidersLoaded: Bool = false,
@@ -92,6 +94,7 @@ final class ConsoleRegistry {
                     sharedPools: [SharedPool] = [],
                     modelCatalog: RunnerModelCatalog? = nil,
                     accountDefaultEffort: String? = nil,
+                    folderID: String? = nil,
                     onCreated: @escaping (Session) -> Void) -> ConsoleModel {
         let seed = AgentDefaults.newSessionModel(
             for: agent.defaultProvider, accountModels: accountDefaultModels(), fallback: defaultModel,
@@ -103,6 +106,7 @@ final class ConsoleRegistry {
                                  providerPools: providerPools,
                                  sharedPools: sharedPools,
                                  modelCatalog: modelCatalog, accountDefaultEffort: accountDefaultEffort,
+                                 folderID: folderID,
                                  baseURL: baseURL, tokenStore: tokenStore, attachments: attachments)
         model.onSessionCreated = onCreated
         model.onToast = { [weak self] request in self?.onToast(request, nil) }

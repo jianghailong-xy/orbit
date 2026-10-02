@@ -939,22 +939,31 @@ test('one session’s message to another is signed, delivered as such, and bound
       });
 
       const steersBefore = steers.length;
-      const key = randomUUID();
-      const resent = await door.resendRetryMessage(user, recipient, { clientTurnId: key });
-      assert.equal(await senderOf(recipient, key), worker, 'the re-send went out in the owner’s name');
+      const resent = await door.resendRetryMessage(user, recipient);
+      const resentTurn = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: resent.turnId } });
+      assert.equal(await senderOf(recipient, resentTurn.clientTurnId), worker, 'the re-send went out in the owner’s name');
       assert.equal((await prisma.sessionRequest.findUniqueOrThrow({ where: { id: request.id } })).turnId, resent.turnId,
         'the request stayed on the turn that failed');
       assert.equal(steers.length, steersBefore, 'the re-send was charged as a steer');
       assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).retryAt, null,
         'the armed retry would send it a second time');
-      // A replay of the click — a lost response, a double tap — is its receipt, not a second re-send.
-      assert.equal((await door.resendRetryMessage(user, recipient, { clientTurnId: key })).turnId, resent.turnId);
+      // §8 criterion 19: pressing again — a lost response, a double tap — is the turn already
+      // queued, not a second one. Pressed here, at the instant the runner has taken the re-send and
+      // its echo has not yet moved what "the failed message" is: the session is running again, so
+      // with a key minted per click — what this door took before — the second press went through the
+      // live path and queued a second, signed, uncharged copy of the same message. Called with a
+      // body an older client still sends: this door takes no key, and ignores it.
+      const clickAgain = door.resendRetryMessage.bind(door) as unknown as (
+        user: unknown, id: string, body?: { clientTurnId?: string },
+      ) => Promise<{ turnId: string }>;
+      const redelivered = await claimAndPoll(recipient);
+      assert.equal(redelivered.json.turnId, resent.turnId);
+      assert.equal((await clickAgain(user, recipient, { clientTurnId: randomUUID() })).turnId, resent.turnId,
+        'a second press queued a second turn for one failed message');
       assert.equal((await turnsOf(recipient)).filter((turn) => turn.content === words).length, 2,
         'the failed turn and its one re-send');
 
       // The engine reads the worker's request again: the words, then the block, asking for a reply.
-      const redelivered = await claimAndPoll(recipient);
-      assert.equal(redelivered.json.turnId, resent.turnId);
       const content = String(redelivered.json.content ?? '');
       assert.ok(content.startsWith(`${words}\n\n<orbit-session-message from-session="${uuidToBase62(worker)}"`),
         `the engine was handed something else:\n${content}`);
@@ -962,6 +971,12 @@ test('one session’s message to another is signed, delivered as such, and bound
       assert.match(content, new RegExp(`session_reply\\(requestId="${request.requestId}"\\)`));
       const stored = await echo(recipient, 2, redelivered.json.turnId, { text: content });
       assert.equal((stored.sessionMessage as Record<string, unknown>).requestId, request.requestId);
+      // …and once that echo has moved what a Retry would re-send to the re-sent turn itself, a press
+      // is STILL that turn: the failed message is the one it re-sent, and the key names it (§2.1).
+      assert.equal((await clickAgain(user, recipient, { clientTurnId: randomUUID() })).turnId, resent.turnId,
+        'a press after the engine took the re-send queued a second turn');
+      assert.equal((await turnsOf(recipient)).filter((turn) => turn.content === words).length, 2,
+        'the failed turn and its one re-send');
 
       // Charged to nobody's hour: with the request, nineteen more from the worker make twenty, and the
       // next is refused — the re-send is none of them.
@@ -977,31 +992,31 @@ test('one session’s message to another is signed, delivered as such, and bound
       const recipient = await session('the conversation a provider error failed on the request');
       const request = await ask(worker, recipient, 'cut the release branch?', 'card-revive-1');
       await failAndArm(recipient, RunStatus.FAILED);
-      const key = randomUUID();
-      const resent = await door.resendRetryMessage(user, recipient, { clientTurnId: key });
+      const resent = await door.resendRetryMessage(user, recipient);
       assert.equal(resent.revived, true, 'the failed run was not revived');
-      assert.equal(await senderOf(recipient, key), worker);
+      const resentTurn = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: resent.turnId } });
+      assert.equal(await senderOf(recipient, resentTurn.clientTurnId), worker);
       assert.equal((await prisma.sessionRequest.findUniqueOrThrow({ where: { id: request.id } })).turnId, resent.turnId);
       assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).status, RunStatus.PENDING);
     }
   });
 
-  await t.test('the Retry door takes a key of the caller’s own and nothing else', async () => {
+  await t.test('the Retry door names no key of the caller’s: the server derives it from the failed message', async () => {
     const recipient = await session('a conversation the door is asked about');
     const door = new SessionsController(
       sessions, prisma as unknown as PrismaService, realtime as never, {} as never, {} as never, autoRetry,
     );
     const user = { userId: ownerId } as never;
-    for (const clientTurnId of [undefined, '', '   ', `${AUTO_RETRY_TURN_KEY_PREFIX}mine`]) {
-      assert.throws(() => door.resendRetryMessage(user, recipient, { clientTurnId } as never), (error: unknown) => {
-        assert.equal((error as { getStatus?: () => number }).getStatus?.(), 400);
+    // Nothing to re-send is refused as itself, whatever body arrives with the call — including the
+    // `clientTurnId` an older client still mints, which is ignored rather than refused (§2.1).
+    const call = door.resendRetryMessage.bind(door) as unknown as (
+      user: unknown, id: string, body?: { clientTurnId?: string },
+    ) => Promise<unknown>;
+    for (const extra of [{}, { clientTurnId: randomUUID() }, { clientTurnId: `${AUTO_RETRY_TURN_KEY_PREFIX}mine` }]) {
+      await assert.rejects(() => call(user, recipient, extra), (error: unknown) => {
+        assert.equal((error as { getStatus?: () => number }).getStatus?.(), 409);
         return true;
-      }, `the door took ${JSON.stringify(clientTurnId)}`);
+      }, `the door answered something else for ${JSON.stringify(extra)}`);
     }
-    // Nothing to re-send is refused as itself.
-    await assert.rejects(() => door.resendRetryMessage(user, recipient, { clientTurnId: randomUUID() }), (error: unknown) => {
-      assert.equal((error as { getStatus?: () => number }).getStatus?.(), 409);
-      return true;
-    });
   });
 });
