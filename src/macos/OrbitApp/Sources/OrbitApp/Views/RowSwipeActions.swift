@@ -93,6 +93,9 @@ private struct CircleSwipeRow: ViewModifier {
     private static let cardRadius: CGFloat = 24
     /// The list's separator, as iOS 26 draws it under a plain row: 1pt, across the row's content.
     private static let separator: CGFloat = 1
+    /// How a button follows the size the row's position gives it, and how it lands once whole.
+    private static let following = Animation.spring(response: 0.28, dampingFraction: 1)
+    private static let landing = Animation.spring(response: 0.3, dampingFraction: 0.72)
 
     private func slots(of actions: [RowSwipeAction]) -> [Double] {
         actions.map { Double(slotWidths[$0.id] ?? Self.slot) }
@@ -231,7 +234,11 @@ private struct CircleSwipeRow: ViewModifier {
     }
 
     /// A button, grown in as far as `reveal` says: the circle and its title scale together about the
-    /// middle of the pair, and fade in a little ahead of their size.
+    /// middle of the pair, and fade in a little ahead of their size. Like the system's, a button
+    /// doesn't jump to the size the row's position gives it but springs after it — trailing a fast
+    /// pull, growing on after the finger lets go, overshooting a few percent as it lands whole, and
+    /// shrinking all at once as the row shuts (recorded: 104% before settling, all three at ~75%
+    /// partway shut).
     private func circle(_ action: RowSwipeAction, reveal: Double) -> some View {
         // Held past the full-swipe point, the button that will run grows a little and its
         // neighbours step aside.
@@ -247,6 +254,7 @@ private struct CircleSwipeRow: ViewModifier {
         .accessibilityLabel(action.title)
         .scaleEffect(max(reveal, 0.01))   // never a singular transform
         .opacity(armed && !fullSwipeTarget ? 0 : RowSwipeGeometry.revealOpacity(reveal))
+        .animation(reveal >= 1 ? Self.landing : Self.following, value: reveal)
         .animation(.snappy(duration: 0.2), value: armed)
     }
 

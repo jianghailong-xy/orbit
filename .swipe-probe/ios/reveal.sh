@@ -57,6 +57,11 @@ for t in Notes Native Circles; do
     ffmpeg -loglevel error -i "$OUT/rec-$t.mp4" \
       -vf "crop=iw:600:0:600,scale=iw/2:-1,mpdecimate=hi=256:lo=128:frac=0.05" -fps_mode vfr -q:v 3 \
       "$OUT/frames-$t/%04d.jpg" || true
+    # And the last 28s (the drags, after the launch) at a steady 30 fps, for strips in real time.
+    mkdir -p "$OUT/frames30-$t"
+    ffmpeg -loglevel error -sseof -28 -i "$OUT/rec-$t.mp4" \
+      -vf "fps=30,crop=iw:600:0:600,scale=iw/2:-1" -q:v 4 "$OUT/frames30-$t/%04d.jpg" || true
+    echo "   steady frames: $(ls "$OUT/frames30-$t" | wc -l)"
     echo "   frames: $(ls "$OUT/frames-$t" | wc -l)"
   fi
 done
