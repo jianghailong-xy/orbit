@@ -332,10 +332,11 @@ public final class APIClient: @unchecked Sendable {
     /// Re-send that message now, the way the automatic retry does — the Retry's door when the words are
     /// another Orbit session's (`RetryMessage.sessionMessage`, `RetryRoute`): the server sends them as
     /// that session's, signed and with the request they were, instead of this client sending them again
-    /// in the owner's name (docs/session-request-reply-contract.md §2.1). Web parity:
-    /// `resendSessionRetryMessage`.
-    public func resendRetryMessage(sessionID: String, clientTurnId: String) async throws -> TurnAccepted {
-        try await post("sessions/\(sessionID)/retry-message", body: RetryResendRequest(clientTurnId: clientTurnId))
+    /// in the owner's name (docs/session-request-reply-contract.md §2.1). No key is sent: the server
+    /// derives one from the failed message, so a second press — a double tap, a response lost and sent
+    /// again — is the turn already queued (criterion 19). Web parity: `resendSessionRetryMessage`.
+    public func resendRetryMessage(sessionID: String) async throws -> TurnAccepted {
+        try await post("sessions/\(sessionID)/retry-message", body: RetryResendRequest())
     }
 
     /// Turn off / put back the retry a spent quota or a transient provider error armed on this

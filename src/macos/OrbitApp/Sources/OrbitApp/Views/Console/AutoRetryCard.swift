@@ -136,7 +136,9 @@ struct AutoRetryCardView: View {
             }
             Button(title) { Task { await console.retryLastMessage() } }
                 .buttonStyle(.bordered)
-                .disabled(console.sending)
+                // A press already in flight is not offered a second one: `retryInFlight` is set the
+                // moment the first lands, before `send` has committed to anything (criterion 19).
+                .disabled(console.sending || console.retryInFlight)
             if let note = s.retryNowNote {
                 Text(note).font(.orbitMeta).foregroundStyle(.secondary)
             }
