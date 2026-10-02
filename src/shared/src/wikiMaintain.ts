@@ -23,6 +23,26 @@ export const WIKI_MAINTENANCE_JOB = {
   adoptOpsMax: 50,
 } as const;
 
+/**
+ * Whose failure a failed maintenance run was (contract `maintenance.job.recovery.failureKinds`), as its run
+ * row and the space's health say it: `infra` — the platform under the run: its runner went offline, its
+ * engine never came up, the server answered 5xx or could not be reached, the disk filled — or `content` —
+ * the run's own: what it read, what the model answered, what the server refused, its turn limit. Only an
+ * infra failure is run again by the platform.
+ */
+export const WIKI_MAINTENANCE_FAILURE_KINDS = ['infra', 'content'] as const;
+export type WikiMaintenanceFailureKind = (typeof WIKI_MAINTENANCE_FAILURE_KINDS)[number];
+
+/** The numbers a maintenance task that died is recovered by (contract `maintenance.job.recovery.rules`). */
+export const WIKI_MAINTENANCE_RECOVERY = {
+  /** A task whose session died of an infra failure is started again no sooner than this after the session ended… */
+  rerunAfterMinutes: 10,
+  /** …and this many times at most: a rerun that dies too, or a death of any other kind, closes the task FAILED. */
+  rerunsMax: 1,
+  /** The longest `orbit wiki maintain` waits for a server that answers 5xx or not at all before it ends the run. */
+  serverWaitMinutes: 15,
+} as const;
+
 /** What made a maintenance task: the backlog reached the threshold, or its oldest fact the age. */
 export const WIKI_MAINTENANCE_DUE = ['backlog', 'age'] as const;
 export type WikiMaintenanceDue = (typeof WIKI_MAINTENANCE_DUE)[number];

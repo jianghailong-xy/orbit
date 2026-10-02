@@ -1621,6 +1621,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // build reads every item row once and writes none. (Written as 0350 on its own branch and
       // renumbered before it landed: 0349 to 0352 are the four just above.)
       '0353_project_open_item_promotion_open_idx',
+      // A retry the sweeper has claimed and not yet re-sent (0354): one nullable column with no
+      // default on `session` (`retry_claimed_at`), which every stored row reads NULL for. Read
+      // against every claim above: one `ALTER TABLE "session" ADD COLUMN` and nothing else — no
+      // function, trigger, type, constraint or index is created, replaced or dropped, so it is not
+      // another writer of the DONE fence and names none of the six preserved objects. `session` is
+      // named only as the table the column is added to, and it is not a preserved relation; no
+      // `task`, `project` or `project_acceptance_*` object is named, so the 0177 pair and every
+      // stored task and criterion row are out of its reach. No INSERT, UPDATE or DELETE: the column
+      // is added, and the code that fills it writes the session row it already writes.
+      '0354_session_retry_claimed',
       // A login pool's session token stops naming a ChatGPT account (0355): `pool_login_token` loses
       // `account_id`, with the (pool_id, account_id) → pool_codex_login foreign key and the index over
       // that pair. Read against every claim above: it ALTERs one table, 0324's `pool_login_token`, which
@@ -1631,7 +1641,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // created, replaced or dropped, so it is not another writer of the DONE fence and names none of
       // the six preserved objects. No INSERT, UPDATE or DELETE. (Written as 0348 on its own branch and
       // renumbered before it landed: 0348 to 0353 are the six just above.)
-      '0355_pool_login_token_unbind_account'],
+      '0355_pool_login_token_unbind_account',
+      // A maintenance run's attempts, its platform rerun and whose its failure was: five `ADD COLUMN`s on
+      // `wiki_maintenance_run` (two INTEGER NOT NULL DEFAULT 0, catalog-only; three nullable, no default),
+      // and two CHECKs added after the backfill makes every stored row satisfy them. Its UPDATEs write
+      // `wiki_maintenance_run` alone: `task` is read for its status and `session` for its created_at, and
+      // neither is written, locked beyond the read, altered or dropped — so the 0177 pair, every stored
+      // task and criterion row and the six preserved objects are out of its reach. No function, trigger
+      // or type is created, replaced or dropped, so it is not another writer of the DONE fence. (Written
+      // as 0354 on its own branch and renumbered before it landed: 0354 is spelled by another branch not
+      // yet landed, and 0355 is the one just above.)
+      '0356_wiki_maintenance_run_attempts'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

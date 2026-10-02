@@ -301,7 +301,8 @@ struct AuthErrorCardView: View {
                 .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
             Button("Retry — re-send my last message") { Task { await retry() } }
                 .buttonStyle(.bordered)
-                .disabled(console.sending)
+                // A press already in flight is not offered a second one (criterion 19).
+                .disabled(console.sending || console.retryInFlight)
         }
     }
 

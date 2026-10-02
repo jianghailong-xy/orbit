@@ -180,6 +180,8 @@ export interface AuthErrorHelp {
   runnerId?: string;
   /** Re-send the last user message, once the user has signed back in. */
   onRetry?: () => void;
+  /** A re-send is already in flight, so the button offers none: one failure, one attempt. */
+  retryDisabled?: boolean;
   /** What that re-send would say, so the card can show it rather than make the user trust it. */
   retryText?: string;
   /** Open Providers — the other way back in, and the only one when the rejected credential is
@@ -1574,7 +1576,12 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
               (the card is the whole session). Quote it, clamped, so the button is a decision
               rather than a leap of faith. */}
           {help.retryText && <div className="chat-authfix-last">{help.retryText}</div>}
-          <button className="chat-authfix-retry" onClick={help.onRetry} type="button">
+          <button
+            className="chat-authfix-retry"
+            onClick={help.onRetry}
+            disabled={help.retryDisabled}
+            type="button"
+          >
             Retry — re-send my last message
           </button>
         </>
@@ -1603,6 +1610,8 @@ export interface AutoRetryHelp {
   attempts?: number;
   /** Re-send the message now, without waiting. */
   onRetry?: () => void;
+  /** A re-send is already in flight, so the button offers none: one failure, one attempt. */
+  retryDisabled?: boolean;
   /** What that re-send would say. */
   retryText?: string;
   /**
@@ -1843,6 +1852,7 @@ function AutoRetryCard({
               className="chat-quota-retry"
               data-primary={!armed}
               onClick={help.onRetry}
+              disabled={help.retryDisabled}
               type="button"
             >
               {armed ? 'Retry now anyway' : 'Retry now'}

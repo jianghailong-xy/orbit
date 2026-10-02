@@ -80,8 +80,10 @@ import {
   WIKI_MAINTENANCE_DOCS_RULES,
   WIKI_MAINTENANCE_DOCS_SKIPPED,
   WIKI_MAINTENANCE_DUE,
+  WIKI_MAINTENANCE_FAILURE_KINDS,
   WIKI_MAINTENANCE_HELD_REASONS,
   WIKI_MAINTENANCE_JOB,
+  WIKI_MAINTENANCE_RECOVERY,
   wikiMaintenanceCheckCommand,
   wikiMaintenanceRunSessions,
   type WikiMaintenanceReport,
@@ -770,6 +772,20 @@ describe('wiki contract', () => {
     const notMade: string[] = job.trigger.notMade;
     expect(notMade.some((why) => why.startsWith('a plan job of the space is queued for the list (plan.jobs.staggered): it goes first'))).toBe(true);
     expect(job.trigger.lock).toMatch(/the space's queued plan jobs/u);
+    // A task whose session died holds the list no more (2026-10-02): it is rerun once or closed first.
+    expect(notMade.some((why) => why.includes('is not dead (maintenance.job.recovery.deadTask)'))).toBe(true);
+    expect(job.recovery.rules).toEqual(WIKI_MAINTENANCE_RECOVERY);
+    expect(job.recovery.failureKinds).toEqual([...WIKI_MAINTENANCE_FAILURE_KINDS]);
+    expect(WIKI_MAINTENANCE_RECOVERY.rerunAfterMinutes).toBeGreaterThanOrEqual(10);
+    expect(WIKI_MAINTENANCE_RECOVERY.rerunsMax).toBe(1);
+    expect(job.recovery.deadTask).toMatch(/no session of it is PENDING, RUNNING, AWAITING_INPUT or INTERRUPTED/u);
+    expect(job.recovery.rerun).toMatch(/rules\.rerunAfterMinutes after its session ended/u);
+    expect(job.recovery.close).toMatch(/the task is set FAILED/u);
+    expect(job.recovery.orphan).toMatch(/The run did not report its end\./u);
+    expect(job.recovery.attempts).toMatch(/startedAt, never written again/u);
+    expect(job.recovery.inSession).toMatch(/rules\.serverWaitMinutes at most/u);
+    expect(job.recovery.migration).toMatch(/0356_wiki_maintenance_run_attempts/u);
+    expect(CONTRACT.maintenance.cursor.advance.body.failureKind).toMatch(/when it is not said, read off its error/u);
     // The task's one criterion is the check, in exactly the shape the server writes it.
     expect(job.task.completionCriterion).toBe('EXECUTABLE');
     expect(job.task.acceptanceCommand).toBe(wikiMaintenanceCheckCommand('<id>', '<token>'));
@@ -819,8 +835,11 @@ describe('wiki contract', () => {
     expect(health.looks).toEqual([...WIKI_MAINTENANCE_LOOKS]);
     expect(keysOf(health.maintenance)).toEqual([
       'enabled', 'look', 'lastOkAt', 'lastRunAt', 'consecutiveFailures', 'backlog', 'oldestPendingAt', 'lagSeconds',
-      'dailyLimitReached', 'held', 'running', 'lastRun',
+      'dailyLimitReached', 'held', 'running', 'lastRun', 'lastFailure',
     ]);
+    // Whose the last failure was, so a client can tell the platform failing from the run failing.
+    expect(health.maintenance.lastFailure).toMatch(/\{kind, reason, at, sessionId\}/u);
+    expect(health.maintenance.lastFailure).toMatch(/maintenance\.job\.recovery\.failureKinds/u);
     expect(health.notify.afterFailures).toBe(WIKI_MAINTENANCE_HEALTH.notifyAfterFailures);
     expect(health.notify.once).toMatch(/exactly afterFailures/u);
     expect(health.notify.reset).toMatch(/back to 0/u);
