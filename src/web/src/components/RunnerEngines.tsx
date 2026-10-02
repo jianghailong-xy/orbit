@@ -202,12 +202,14 @@ function signedIn(health: RunnerEngineHealth): boolean {
  *  login that is not signed in, whose last reading is about sessions that can no longer start. */
 interface Quota {
   windows: PlanUsageDisplayRow[];
-  /** "Usage as of 17:44 · 7h ago", once the reading has stopped keeping up. */
+  /** "Usage as of 17:44 · 7h ago", once the reading is older than the runner's reads. */
   stale: string | null;
 }
 
 /** Older than this, a reading has missed three of the runner's reads (every 5 min with a session
- *  running, every 10 without) — it has stopped refreshing, not merely not caught up yet. */
+ *  running, every 10 without, when any workspace there defaults to the engine) and is said to be as
+ *  of then. Not that anything is wrong: an engine no workspace defaults to is read only while one of
+ *  its sessions runs, so its idle reading is often this old. */
 const STALE_QUOTA_MS = 30 * 60_000;
 
 function quotaOf(kind: RowKind, snapshot: PlanUsageSnapshot | null, online: boolean, now: number): Quota {

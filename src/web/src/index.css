@@ -13138,11 +13138,13 @@ button.chat-jump-start:hover {
   color: var(--text-3);
   white-space: nowrap;
 }
-/* A reading that stopped refreshing: the numbers above are as of then, not now. */
+/* A reading older than the runner's reads: the numbers above are as of then, not now. A fact in the
+   resets' grey, not a warning — a runner reads an engine no workspace defaults to only while one of
+   its sessions runs, so an idle Codex login's reading is often this old with nothing wrong. */
 .re-stale {
   margin-top: 8px;
   font-size: 11px;
-  color: var(--warning);
+  color: var(--text-3);
 }
 .re-status {
   min-width: 0;
