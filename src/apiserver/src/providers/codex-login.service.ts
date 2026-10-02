@@ -330,8 +330,10 @@ export class CodexLoginService implements OnModuleDestroy {
 
   /**
    * The owner takes one account out of the pool: its row goes, and with it the only copy this server
-   * holds of its tokens — and the session tokens bound to it, by their foreign key (migration 0324). The
-   * account is named by its fingerprint, `…AB12`, as every response names it; with none, it is the pool's
+   * holds of its tokens. The pool's session tokens are not touched — none of them names an account since
+   * migration 0355 — so a session that was running on it keeps its token and is answered by the gateway
+   * as a pool holding no account, until a claim moves it. The account is named by its fingerprint,
+   * `…AB12`, as every response names it; with none, it is the pool's
    * first — its `login`, the account a page that names one shows. Every other account the pool holds
    * stays as it is, and so does a sign-in in flight: it is no account until it is stored. What a session
    * does next is the claim's business, as for a pool deleted under it. An account the pool does not hold

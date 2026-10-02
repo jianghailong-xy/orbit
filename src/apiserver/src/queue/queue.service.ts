@@ -939,12 +939,13 @@ export class QueueService {
    *
    * The engine gets the pool gateway as its OpenAI endpoint and a session token minted here as its key
    * (shared-pool.ts sharedPoolExecRow) — never the login, which only the gateway ever reads, decrypts or
-   * refreshes. The token is bound to the account the pool holds now, and that account is recorded on the
-   * session (`pool_codex_account_id`), which is how a session says which account it ran on. There is no
-   * choosing: a session runs on the pool's first account, and is never moved to another — a spent
-   * account is waited for (loginPoolRetryAt), a signed-out one is its owner's to sign in again. A pool
-   * holding no account still dispatches here, on a token bound to none, and the gateway answers why —
-   * rather than on the runner's own login, which is exactly what a login pool is not. At the claim
+   * refreshes. The account the pool holds now is recorded on the session (`pool_codex_account_id`), which
+   * is how a session says which account it ran on — and, since migration 0355, the only thing that says
+   * it: the token names no account, and the gateway sends every request of the token on whichever account
+   * its session is on then. There is no choosing: a session runs on the pool's first account, and is
+   * never moved to another — a spent account is waited for (loginPoolRetryAt), a signed-out one is its
+   * owner's to sign in again. A pool holding no account still dispatches here, and the gateway answers
+   * why — rather than on the runner's own login, which is exactly what a login pool is not. At the claim
    * (`atClaim`), a line the gateway owed the session is given its carrier.
    *
    * Every door that builds such a session's engine environment resolves it here — the claim, a restarted
@@ -965,7 +966,7 @@ export class QueueService {
     }
     const token = await mintPoolLoginToken(
       db,
-      { poolId: pool.id, userId: session.ownerId, sessionId: session.id, accountId },
+      { poolId: pool.id, userId: session.ownerId, sessionId: session.id },
       new Date(),
     );
     // A line the gateway owed this session — its account spent or signed out — is said before the turn
