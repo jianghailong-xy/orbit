@@ -10,7 +10,8 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { countBacklog, spaceScope, type FactPosition } from './wiki-maintenance';
-import { wikiMaintenanceRunsToday } from './wiki-maintenance-session';
+import { wikiMaintenanceCatchUpOf, wikiMaintenanceRunsToday } from './wiki-maintenance-session';
+import { wikiMaintenanceProviderIsLocal } from './wiki-maintenance-settings';
 
 /**
  * A space's health, as the Wiki home's status line reads it (contracts/wiki.contract.json
@@ -60,6 +61,11 @@ export class WikiHealth {
       oldestPendingAt = counted.oldestPendingAt;
     }
     const today = await wikiMaintenanceRunsToday(this.prisma, ownerId, spaceId, now);
+    // A run made in active catch-up on a local endpoint is not counted against the day (contract
+    // `maintenance.job.catchUp.dailyLimit`): while that holds, the day's limit holds no run back.
+    const uncounted = settings.enabled
+      && (await wikiMaintenanceCatchUpOf(this.prisma, ownerId, spaceId, oldestPendingAt, now)).state === 'active'
+      && (await wikiMaintenanceProviderIsLocal(this.prisma, ownerId, settings.provider));
 
     const maintenance: Omit<WikiMaintenanceHealth, 'look'> = {
       enabled: settings.enabled,
@@ -69,7 +75,7 @@ export class WikiHealth {
       backlog,
       oldestPendingAt: oldestPendingAt?.toISOString() ?? null,
       lagSeconds: oldestPendingAt ? Math.max(0, Math.floor((now.getTime() - oldestPendingAt.getTime()) / 1000)) : 0,
-      dailyLimitReached: today.remaining <= 0,
+      dailyLimitReached: !uncounted && today.remaining <= 0,
       held: cursor?.heldReason && cursor.heldAt
         ? { reason: cursor.heldReason as WikiMaintenanceHeldReason, at: cursor.heldAt.toISOString() }
         : null,

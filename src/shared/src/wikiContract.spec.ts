@@ -77,6 +77,8 @@ import {
   type WikiArticleView,
 } from './wikiArticles';
 import {
+  WIKI_MAINTENANCE_CATCH_UP,
+  WIKI_MAINTENANCE_CATCH_UP_STATES,
   WIKI_MAINTENANCE_DOCS_RULES,
   WIKI_MAINTENANCE_DOCS_SKIPPED,
   WIKI_MAINTENANCE_DUE,
@@ -84,10 +86,13 @@ import {
   WIKI_MAINTENANCE_HELD_REASONS,
   WIKI_MAINTENANCE_JOB,
   WIKI_MAINTENANCE_RECOVERY,
+  wikiMaintenanceBehind,
   wikiMaintenanceCheckCommand,
+  wikiMaintenanceEndpointIsLocal,
   wikiMaintenanceRunSessions,
   type WikiMaintenanceReport,
 } from './wikiMaintain';
+import { PROVIDER_PRESETS } from './providerPresets';
 import { WIKI_MAINTENANCE_HEALTH, WIKI_MAINTENANCE_LOOKS, wikiMaintenanceLook } from './wikiHealth';
 import {
   WIKI_DOC_BLOCK_KINDS,
@@ -824,6 +829,80 @@ describe('wiki contract', () => {
     expect(size('tiered', 100_000)).toBe(WIKI_MAINTENANCE_JOB.runSessionsMax);
     expect(size('manual', 0)).toBe(Math.floor(WIKI_LIMITS.opsPerSession / 6));
     expect(size('manual', 0, WIKI_LIMITS.pendingOpsPerSpace - 5)).toBe(0);
+  });
+
+  it('ships criterion 3 revision 4: the cursor moves once the ops are recorded, and a space behind catches up', () => {
+    const job = CONTRACT.maintenance.job;
+    // The step order of revision 4: … propose → cursor advance (past the sessions whose ops were recorded) → verify →
+    // anchors → docs, and a failure after the advance still fails the run, its check with it.
+    const steps: string[] = job.run.steps;
+    const at = (name: string) => steps.findIndex((step) => step.startsWith(`${name}:`));
+    expect(at('advance')).toBe(at('propose') + 1);
+    expect(at('verify')).toBe(at('advance') + 1);
+    expect(steps[at('advance')]).toMatch(/POST …\/maintenance\/advance/u);
+    expect(steps[at('advance')]).toMatch(/the next run does not read those sessions again/u);
+    expect(job.routes.advance).toBe('POST /api/runner/wiki/spaces/:id/maintenance/advance');
+    expect(CONTRACT.agentSurface.doors.runner.maintenanceRoutes).toContain(job.routes.advance);
+    expect(job.run.failure).toMatch(/Before the ops are recorded — any step up to propose, a run cut short — the cursor does not move/u);
+    expect(job.run.failure).toMatch(/the run still ends failed, the report says so \(cursorAdvanced\), and its check fails/u);
+    expect(job.report).toMatch(/cursorAdvanced/u);
+    expect(job.check.advancedThenFailed).toMatch(/reached is true, and the run ended failed — 1/u);
+    expect(job.check.passes).toMatch(/the cursor did not advance, or an op did not pass its checks: non-zero/u);
+    expect(job.cli.maintainPrecondition).toMatch(/moves the cursor only past the sessions whose ops it recorded/u);
+    expect(CONTRACT.maintenance.run.truncated).toMatch(/no further than past the ops the run had recorded/u);
+    const report: WikiMaintenanceReport = { sessions: 0, dossiers: 0, unchanged: 0, offTopic: 0,
+      entries: { extracted: 0, kept: 0, dropped: 0, foreign: 0, principles: 0 },
+      ops: { proposed: 0, recorded: 0, refused: 0, selfCheckDropped: 0, heldBack: 0, heldBackByBreaker: 0, applied: 0, waiting: 0 },
+      tokens: { input: 0, output: 0, calls: 0 }, seconds: 0, stoppedAt: 'anchors', cursorAdvanced: true };
+    expect(report.cursorAdvanced).toBe(true);
+
+    // Catch-up: its numbers, its states, its migration, and the rules the trigger, the day and the documents follow.
+    const catchUp = job.catchUp;
+    expect(catchUp.rules).toEqual(WIKI_MAINTENANCE_CATCH_UP);
+    expect(catchUp.states).toEqual([...WIKI_MAINTENANCE_CATCH_UP_STATES]);
+    expect(WIKI_MAINTENANCE_CATCH_UP.behindHours).toBe(24);
+    expect(WIKI_MAINTENANCE_CATCH_UP.pauseAfterFailures).toBe(3);
+    expect(catchUp.migration).toMatch(/0357_wiki_maintenance_catch_up/u);
+    expect(existsSync(path.join(__dirname, '../../..', catchUp.migration))).toBe(true);
+    expect(catchUp.behind).toMatch(/no clock starts anything/u);
+    expect(catchUp.trigger).toMatch(/the end of the space's latest run is itself a fact that makes the next run, with no other new fact/u);
+    expect(catchUp.dailyLimit).toMatch(/not counted against settings\.maintenance\.dailyRunLimit when the provider it is pinned to is a local endpoint, or when it failed/u);
+    expect(catchUp.dailyLimit).toMatch(/one on a public provider that did not fail counts/u);
+    expect(catchUp.paused).toMatch(/last rules\.pauseAfterFailures runs that ended all failed/u);
+    expect(catchUp.docs).toMatch(/docs\.skipped catching_up/u);
+    expect(job.docs.skipped).toContain('catching_up');
+    expect(steps[at('docs')]).toMatch(/docs\.skipped catching_up/u);
+    const notMade: string[] = job.trigger.notMade;
+    expect(notMade.some((why) => why.includes('the end of its latest run is one (maintenance.job.catchUp.trigger)'))).toBe(true);
+    expect(notMade.some((why) => why.includes('the run would count (maintenance.job.catchUp.dailyLimit)'))).toBe(true);
+    expect(job.held.daily_limit_reached).toMatch(/maintenance\.job\.catchUp\.dailyLimit/u);
+    expect(CONTRACT.space.settings.maintenance.keys.dailyRunLimit).toMatch(/maintenance\.job\.catchUp\.dailyLimit/u);
+    expect(CONTRACT.maintenance.health.maintenance.dailyLimitReached).toMatch(/maintenance\.job\.catchUp\.dailyLimit/u);
+
+    // Behind: the oldest pending fact older than the hours — not at them — and nothing pending is never behind.
+    const now = new Date('2026-10-02T06:36:00.000Z');
+    const hoursAgo = (hours: number, ms = 0) => new Date(now.getTime() - hours * 3_600_000 - ms);
+    expect(wikiMaintenanceBehind(null, now)).toBe(false);
+    expect(wikiMaintenanceBehind(hoursAgo(WIKI_MAINTENANCE_CATCH_UP.behindHours), now)).toBe(false);
+    expect(wikiMaintenanceBehind(hoursAgo(WIKI_MAINTENANCE_CATCH_UP.behindHours, 1), now)).toBe(true);
+    expect(wikiMaintenanceBehind(hoursAgo(13 * 24), now)).toBe(true);
+
+    // A local endpoint: this machine or a private network, judged by the host the provider's base URL names.
+    for (const local of ['http://127.0.0.1:8000', 'http://localhost:8000/v1', 'http://LOCALHOST', 'http://gpu.localhost:8000',
+      'http://127.10.0.3', 'http://10.0.4.2:8000', 'http://172.16.0.1', 'http://172.31.255.254', 'http://192.168.1.20:8000/anthropic',
+      'http://169.254.3.4', 'http://[::1]:8000', 'http://[0:0:0:0:0:0:0:1]', 'http://[fd12:3456::7]:8000', 'http://[fe80::1]',
+      'http://user:secret@127.0.0.1:8000']) {
+      expect(wikiMaintenanceEndpointIsLocal(local), local).toBe(true);
+    }
+    for (const remote of ['https://api.anthropic.com', 'https://api.deepseek.com/anthropic', 'http://gpu-box:8000', 'http://8.8.8.8',
+      'http://172.32.0.1', 'http://172.15.255.255', 'http://192.169.0.1', 'http://11.0.0.1', 'http://[2001:db8::1]', 'http://[::]',
+      'http://localhost.example.com', 'http://127.0.0.1.nip.io', '127.0.0.1:8000', '', null, undefined]) {
+      expect(wikiMaintenanceEndpointIsLocal(remote), String(remote)).toBe(false);
+    }
+    // No vendor preset is a local endpoint: each is its vendor's API, which bills.
+    for (const preset of PROVIDER_PRESETS) expect(wikiMaintenanceEndpointIsLocal(preset.baseUrl), preset.slug).toBe(false);
+    expect(catchUp.localEndpoint).toMatch(/presetSlug null/u);
+    expect(catchUp.localEndpoint).toMatch(/local-vllm at http:\/\/127\.0\.0\.1:8000 is local/u);
   });
 
   it('reads a space\'s health the way the contract states it, and tells the owner once a streak', () => {
