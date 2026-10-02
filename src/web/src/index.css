@@ -7832,6 +7832,20 @@ button.chat-jump-start:hover {
   background: var(--brand-strong);
   color: #fff;
 }
+/* A Retry already in flight (docs/session-request-reply-contract.md §2.1, §8 criterion 19): the
+   button stays where it was and stops offering, so a double tap cannot read as two attempts.
+   Placed after the variants above so it wins their hovers at equal specificity. */
+.chat-authfix-retry:disabled,
+.chat-quota-retry:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.chat-authfix-retry:disabled:hover,
+.chat-quota-retry:disabled:hover {
+  border-color: var(--border);
+  background: var(--bg-raised);
+  color: var(--text-1);
+}
 .chat-quota-note {
   color: var(--text-3);
   font-size: 11.5px;
