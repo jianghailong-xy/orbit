@@ -256,7 +256,7 @@ final class RetrySendWiringTests: XCTestCase {
 
         let resend = try section(console, from: "private func resendFromSession() async {",
                                  to: "// MARK: auto-retry")
-        XCTAssertTrue(resend.contains("try await api.resendRetryMessage(sessionID: sessionID, clientTurnId:"),
+        XCTAssertTrue(resend.contains("try await api.resendRetryMessage(sessionID: sessionID)"),
                       "the server's re-send is what the route promises")
         XCTAssertFalse(resend.contains("send(overrideText:"))
         XCTAssertFalse(resend.contains("postTurn("), "the re-send reached the owner's turn door")
@@ -278,6 +278,41 @@ final class RetrySendWiringTests: XCTestCase {
         let signIn = try section(try source(Self.signInPath), from: "private func retry() async {", to: "}")
         XCTAssertTrue(signIn.contains("await console.retryLastMessage()"),
                       "the sign-in card's Retry no longer goes through retryLastMessage")
+    }
+
+    /// One failed message, one attempt (§2.1, §8 criterion 19).
+    ///
+    /// The press is remembered the moment it lands — before `send` has re-read the session's status,
+    /// which is the gap a double tap falls into — and it is raised on BOTH routes: the server re-send
+    /// and the client's own send. Both cards then draw the button disabled for as long as it stands,
+    /// and the re-send carries no key of its own, so a second press cannot spell a second turn even if
+    /// one reaches the server.
+    func testARetryInFlightIsNotOfferedASecondOne() throws {
+        let console = try source(Self.consolePath)
+        let retry = try section(console, from: "func retryLastMessage() async {",
+                                to: "private func resendFromSession() async {")
+        XCTAssertTrue(retry.contains("guard !sending, !retryInFlight else { return }"),
+                      "a second press is routed while the first is still on its way")
+        let serverCase = try section(retry, from: "case .serverResend:", to: "case .send(")
+        XCTAssertTrue(serverCase.contains("retryInFlight = true"),
+                      "the server re-send leaves the button armed while it waits for an answer")
+        let sendCase = try section(retry, from: "case .send(let text):", to: "await send(overrideText:")
+        XCTAssertTrue(sendCase.contains("retryInFlight = true"),
+                      "the owner's own re-send leaves the button armed while its send runs")
+
+        // No key of the client's: the server derives one from the failed message (criterion 19).
+        let resend = try section(console, from: "private func resendFromSession() async {",
+                                 to: "// MARK: auto-retry")
+        XCTAssertFalse(resend.contains("clientTurnId"),
+                       "the re-send still names a key of its own, which a second press would "
+                           + "spell differently")
+
+        for (path, card) in [(Self.cardPath, "the provider-failure card"),
+                             (Self.signInPath, "the sign-in card")] {
+            let source = try source(path)
+            XCTAssertTrue(source.contains(".disabled(console.sending || console.retryInFlight)"),
+                          "\(card)'s Retry is still offered while its own press is in flight")
+        }
     }
 
     /// iOS has no copy of its own: its target compiles the macOS shell's sources in place, so the routing

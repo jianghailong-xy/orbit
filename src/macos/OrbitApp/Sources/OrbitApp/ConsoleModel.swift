@@ -144,6 +144,12 @@ final class ConsoleModel {
     /// WHERE the answer is shown, which is the difference between an answer and a notification.
     private var runConflictFromRetry = false
     private var sendingAutoRetry = false
+    /// A Retry the reader has already pressed, from the press until what it asked for is out (or its
+    /// send failed). Set at the top of `retryLastMessage`, BEFORE the send it routes to: `send` sets
+    /// `sending` only after it has re-read the session's status, and a double tap lands inside that
+    /// gap — two tests over the same failed message, which is what §2.1 criterion 19 forbids. Both
+    /// cards draw their Retry disabled while this is true, beside `sending`.
+    private(set) var retryInFlight = false
 
     /// The refusal the auto-retry card shows instead of its Retry button.
     ///
@@ -2235,14 +2241,18 @@ final class ConsoleModel {
         // the same bubble. When it holds none — a run's message is thousands of events behind the
         // window — the server's words stand in, and there are no files to carry with them.
         let last = lastUserMessage
-        guard !sending else { return }
+        guard !sending, !retryInFlight else { return }
         switch RetryRoute.of(loadedText: last.text, loadedSender: last.sessionMessage,
                              serverText: serverRetryText, serverSender: serverRetrySender) {
         case .nothing:
             return
         case .serverResend:
+            retryInFlight = true
+            defer { retryInFlight = false }
             await resendFromSession()
         case .send(let text):
+            retryInFlight = true
+            defer { retryInFlight = false }
             sendingAutoRetry = true
             defer { sendingAutoRetry = false }
             await send(overrideText: text, overrideAttachments: last.attachments)
@@ -2252,12 +2262,14 @@ final class ConsoleModel {
     /// The Retry of another Orbit session's message: the server re-sends it as the automatic retry
     /// would — that session's, signed and with the request it was, charged to nobody's hourly limit
     /// (docs/session-request-reply-contract.md §2.1). Never through `send`, which would say the words
-    /// again in the owner's name. Web parity: `resendSessionRetryMessage`.
+    /// again in the owner's name. It carries no key: the server derives one from the failed message,
+    /// so a second press is the turn already queued (criterion 19). Web parity:
+    /// `resendSessionRetryMessage`.
     private func resendFromSession() async {
         sending = true
         defer { sending = false }
         do {
-            _ = try await api.resendRetryMessage(sessionID: sessionID, clientTurnId: UUID().uuidString)
+            _ = try await api.resendRetryMessage(sessionID: sessionID)
             statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
         } catch {
             statusMessage = ComposerLogic.sendFailureMessage(error)
