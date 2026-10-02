@@ -6692,7 +6692,11 @@ button.chat-jump-start:hover {
 .olc-head > :not(.olc-kind) {
   margin-left: auto;
 }
+/* The type's name keeps its width and the state beside it gives way: a failed session's state is its
+   error, which can run to a sentence, and a pill held at its full length pushed the card out of its
+   bubble. */
 .olc-kind {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -6712,6 +6716,9 @@ button.chat-jump-start:hover {
   font-size: 12px;
 }
 .olc-state {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 1px 7px;
   border: 1px solid;
   border-radius: 999px;
@@ -6816,6 +6823,16 @@ button.chat-jump-start:hover {
   border-top: 1px solid var(--border-subtle);
   font-size: 12.5px;
   color: var(--text-2);
+}
+/* One line, like the native card's: a failed coordinator's word is its error. */
+.olc-foot-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.olc-foot-time {
+  flex: none;
 }
 .olc-foot-arrow {
   margin-left: auto;
