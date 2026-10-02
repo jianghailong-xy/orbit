@@ -1620,7 +1620,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // every stored task and criterion row are out of its reach. No INSERT, UPDATE or DELETE: the
       // build reads every item row once and writes none. (Written as 0350 on its own branch and
       // renumbered before it landed: 0349 to 0352 are the four just above.)
-      '0353_project_open_item_promotion_open_idx'],
+      '0353_project_open_item_promotion_open_idx',
+      // A login pool's session token stops naming a ChatGPT account (0355): `pool_login_token` loses
+      // `account_id`, with the (pool_id, account_id) → pool_codex_login foreign key and the index over
+      // that pair. Read against every claim above: it ALTERs one table, 0324's `pool_login_token`, which
+      // is none of the preserved relations, so no `task`, `session`, `project` or `project_acceptance_*`
+      // object is named and the 0177 pair and every stored task and criterion row are out of its reach.
+      // The pool-owner fence on that same table — (pool_id, user_id) → provider_pool(id, owner_id) — is
+      // not named, and the dropped column is no part of it. No function, trigger, type or enum is
+      // created, replaced or dropped, so it is not another writer of the DONE fence and names none of
+      // the six preserved objects. No INSERT, UPDATE or DELETE. (Written as 0348 on its own branch and
+      // renumbered before it landed: 0348 to 0353 are the six just above.)
+      '0355_pool_login_token_unbind_account'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
