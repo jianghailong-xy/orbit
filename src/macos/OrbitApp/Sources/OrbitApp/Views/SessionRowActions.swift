@@ -9,6 +9,9 @@ import OrbitKit
 //         Trash)
 //       – trailing (swipe left)  → Delete, red, destructive, and `allowsFullSwipe: false` so a
 //         stray full swipe can't fire it — the user must tap the revealed button.
+//     On iOS 26 the compact list's rows draw these themselves as circles (`circleSwipeActions`):
+//     the system draws its own at this row's height as squashed capsules. Both are drawn from the
+//     same action lists.
 //   • contextMenu — the cross-platform "source of truth": the same actions on a long-press (iOS) or
 //     right-click (macOS), so they're discoverable and reachable by VoiceOver, and so macOS (where
 //     row swiping is awkward) still has them.
@@ -18,6 +21,9 @@ import OrbitKit
 
 private struct SessionRowActions: ViewModifier {
     @Environment(AppModel.self) private var model
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     let session: Session
     /// The tab this row is shown under; `nil` means an Open-list surface.
     /// `.completed` and `.trash` swap the positive action from Complete to Move to Open; `.trash` also
@@ -43,27 +49,7 @@ private struct SessionRowActions: ViewModifier {
     private var isPinned: Bool { session.pinnedAt != nil }
 
     func body(content: Content) -> some View {
-        content
-            .swipeActions(edge: .leading, allowsFullSwipe: canPerformPositiveAction) {
-                positiveButton
-                if !isTrash { pinButton }
-            }
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                deleteButton
-            }
-            .contextMenu {
-                // Rename stays out of the swipe actions — it opens an editor rather than performing
-                // the action, which is not what a swipe promises. Trash matches web, where the
-                // header title isn't editable for a trashed session.
-                if !isTrash { renameButton }
-                if !isTrash { pinButton }
-                if !isTrash, let onTag {
-                    Button { onTag() } label: { Label("Tags…", systemImage: "tag") }
-                }
-                positiveButton
-                Divider()
-                deleteButton
-            }
+        swipeable(content)
             .sessionRenameAlert(isPresented: $renaming, draft: $renameDraft, sessionID: session.id)
             .confirmationDialog("Delete permanently?", isPresented: $confirmPurge, titleVisibility: .visible) {
                 Button("Delete Permanently", role: .destructive) { model.purgeSession(session.id) }
@@ -73,21 +59,66 @@ private struct SessionRowActions: ViewModifier {
             }
     }
 
-    @ViewBuilder private var positiveButton: some View {
-        if isCompleted || isTrash {
-            Button { model.moveSessionToOpen(session.id) } label: {
-                Label("Move to Open", systemImage: "tray.and.arrow.up")
-            }
-            .tint(.blue)
-            .disabled(!canRestore)
+    /// The compact list's rows draw their own circles on iOS 26. The regular-width list keeps the
+    /// system's buttons: its rows are selected in place, and the circles draw the row's separators
+    /// themselves, which a selected row's would need to follow.
+    @ViewBuilder private func swipeable(_ content: Content) -> some View {
+        #if os(iOS)
+        if #available(iOS 26.0, *),
+           SessionListPresentation.resolve(isCompactWidth: horizontalSizeClass == .compact) == .compact {
+            content
+                .contextMenu { menu }
+                .circleSwipeActions(id: session.id, leading: leadingActions, trailing: trailingActions,
+                                    leadingFullSwipe: canPerformPositiveAction)
         } else {
-            Button { model.completeSession(session.id) } label: {
-                Label(SessionCompletionPresentation.actionTitle,
-                      systemImage: "checkmark.circle")
-            }
-            .tint(.green)
-            .disabled(!canComplete)
+            systemSwipeActions(content)
         }
+        #else
+        systemSwipeActions(content)
+        #endif
+    }
+
+    private func systemSwipeActions(_ content: Content) -> some View {
+        content
+            .swipeActions(edge: .leading, allowsFullSwipe: canPerformPositiveAction) {
+                ForEach(leadingActions) { button($0) }
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                ForEach(trailingActions) { button($0) }
+            }
+            .contextMenu { menu }
+    }
+
+    @ViewBuilder private var menu: some View {
+        // Rename stays out of the swipe actions — it opens an editor rather than performing
+        // the action, which is not what a swipe promises. Trash matches web, where the
+        // header title isn't editable for a trashed session.
+        if !isTrash { renameButton }
+        if !isTrash { button(pinAction) }
+        if !isTrash, let onTag {
+            Button { onTag() } label: { Label("Tags…", systemImage: "tag") }
+        }
+        button(positiveAction)
+        Divider()
+        button(deleteAction)
+    }
+
+    /// Each side's swipe actions from the screen edge inward; the first leading one is what a full
+    /// swipe performs.
+    private var leadingActions: [RowSwipeAction] {
+        isTrash ? [positiveAction] : [positiveAction, pinAction]
+    }
+
+    private var trailingActions: [RowSwipeAction] { [deleteAction] }
+
+    private var positiveAction: RowSwipeAction {
+        if isCompleted || isTrash {
+            return RowSwipeAction(title: "Move to Open", systemImage: "tray.and.arrow.up", tint: .blue,
+                                  isEnabled: canRestore) { model.moveSessionToOpen(session.id) }
+        }
+        return RowSwipeAction(title: SessionCompletionPresentation.actionTitle,
+                              systemImage: "checkmark.circle", tint: .green,
+                              isEnabled: canComplete) { model.completeSession(session.id) }
     }
 
     private var renameButton: some View {
@@ -99,23 +130,28 @@ private struct SessionRowActions: ViewModifier {
         }
     }
 
-    private var pinButton: some View {
-        Button { model.setPinned(session, pinned: !isPinned) } label: {
-            Label(isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash" : "pin")
-        }
-        .tint(.indigo)
+    private var pinAction: RowSwipeAction {
+        RowSwipeAction(title: isPinned ? "Unpin" : "Pin", systemImage: isPinned ? "pin.slash" : "pin",
+                       tint: .indigo) { model.setPinned(session, pinned: !isPinned) }
     }
 
-    @ViewBuilder private var deleteButton: some View {
+    private var deleteAction: RowSwipeAction {
         if isTrash {
-            Button(role: .destructive) { confirmPurge = true } label: {
-                Label("Delete Permanently", systemImage: "trash.slash")
-            }
-        } else {
-            Button(role: .destructive) { model.deleteSession(session.id) } label: {
-                Label("Delete", systemImage: "trash")
-            }
+            return RowSwipeAction(title: "Delete Permanently", systemImage: "trash.slash", tint: .red,
+                                  role: .destructive) { confirmPurge = true }
         }
+        return RowSwipeAction(title: "Delete", systemImage: "trash", tint: .red,
+                              role: .destructive) { model.deleteSession(session.id) }
+    }
+
+    /// An action as a system button: a swipe button (a destructive one is the system's red) or a
+    /// context-menu item.
+    private func button(_ action: RowSwipeAction) -> some View {
+        Button(role: action.role, action: action.perform) {
+            Label(action.title, systemImage: action.systemImage)
+        }
+        .tint(action.role == .destructive ? nil : action.tint)
+        .disabled(!action.isEnabled)
     }
 }
 
