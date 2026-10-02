@@ -1,6 +1,11 @@
 import { ConflictException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { uuidToBase62, type SessionMessageCard } from '@orbit/shared';
+import {
+  uuidToBase62,
+  type SessionMessageCard,
+  type SessionReplyOption,
+  type SessionRequestState,
+} from '@orbit/shared';
 
 /**
  * One Orbit session's message to another, and what the platform says about who sent it
@@ -114,7 +119,7 @@ export const SESSION_MESSAGE_BLOCK_TAG = 'orbit-session-message';
  * anybody's text, and one holding a quote, a `<` or a newline would otherwise end the attribute, or
  * the block, early — and `describeNote` on every client reads the block's shape.
  */
-function attribute(value: string): string {
+export function attribute(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/"/g, '&quot;')
@@ -123,20 +128,64 @@ function attribute(value: string): string {
     .replace(/\s*[\r\n]+\s*/g, ' ');
 }
 
-/** §2.2: the block the engine reads after another session's message. */
-export function sessionMessageBlock(sender: Sender): string {
+/**
+ * The request a message is, when its sender asked for a reply (session-request.ts) — what the block
+ * says beside it so the recipient knows it is being waited on, how to answer and by when.
+ */
+export interface RequestForBlock {
+  id: string;
+  replyBy: Date;
+  options: SessionReplyOption[] | null;
+  state: SessionRequestState;
+}
+
+/**
+ * §2.2: the block the engine reads after another session's message — and §3.3, the lines a request
+ * adds to it: its id and deadline, how to answer, what happens when it is not answered, and the
+ * options by index when it offered any. A request that already came to an outcome by the time its
+ * message is read (it waited in the queue past its deadline) says so instead of asking for an answer
+ * nobody can give any more.
+ */
+export function sessionMessageBlock(sender: Sender, request?: RequestForBlock | null): string {
   const attributes = [
     `from-session="${uuidToBase62(sender.id)}"`,
     `from-title="${attribute(sender.title)}"`,
     `from-agent="${attribute(sender.workspace?.name ?? '')}"`,
     // A sender that runs no task has none to name.
     ...(sender.taskId ? [`task="${uuidToBase62(sender.taskId)}"`] : []),
+    ...(request
+      ? [`request-id="${uuidToBase62(request.id)}"`, `reply-by="${request.replyBy.toISOString().replace(/\.\d{3}Z$/, 'Z')}"`]
+      : []),
   ];
   return [
     `<${SESSION_MESSAGE_BLOCK_TAG} ${attributes.join(' ')}>`,
     '这条消息来自另一个 Orbit 会话，不是账号 owner 本人。',
+    ...(request ? requestLines(request) : []),
     `</${SESSION_MESSAGE_BLOCK_TAG}>`,
   ].join('\n');
+}
+
+function requestLines(request: RequestForBlock): string[] {
+  const requestId = uuidToBase62(request.id);
+  if (request.state !== 'OPEN') {
+    return [`对方曾要求回复，但这条请求已经以 ${request.state} 结案，不必再调用 session_reply。`];
+  }
+  const lines = [
+    `对方在等你回复：处理完后调用 session_reply(requestId="${requestId}") 回答；做不到也用它说明原因。`,
+    '如果你空闲下来时还没回复，平台会以 NO_REPLY 结案，并把你最后一段输出转给对方。',
+  ];
+  if (request.options) {
+    lines.push('对方给了几个选项：回复时用 option 传你选的下标，也可以同时用 message 补充说明。');
+    request.options.forEach((option, index) => {
+      lines.push(`${index}. ${oneLine(option.label)}${option.description ? `：${oneLine(option.description)}` : ''}`);
+    });
+  }
+  return lines;
+}
+
+/** An option's words on one line of the block, so a newline in them cannot end it early. */
+function oneLine(value: string): string {
+  return value.replace(/\s*[\r\n]+\s*/g, ' ');
 }
 
 /**
@@ -156,10 +205,11 @@ export async function appendSessionMessageContext(
   ownerId: string,
   senderSessionId: string,
   content: string | null | undefined,
+  request?: RequestForBlock | null,
 ): Promise<string | null | undefined> {
   const sender = await readSender(tx, ownerId, senderSessionId);
   if (!sender) return content;
-  return `${content ?? ''}\n\n${sessionMessageBlock(sender)}`;
+  return `${content ?? ''}\n\n${sessionMessageBlock(sender, request)}`;
 }
 
 /**
@@ -170,6 +220,8 @@ export async function readSessionMessageCard(
   db: Pick<Prisma.TransactionClient, 'session'>,
   ownerId: string,
   senderSessionId: string,
+  /** The request the turn carries (session-request.ts), when its sender asked for a reply. */
+  requestId?: string | null,
 ): Promise<SessionMessageCard | null> {
   const sender = await readSender(db, ownerId, senderSessionId);
   if (!sender) return null;
@@ -178,5 +230,8 @@ export async function readSessionMessageCard(
     fromTitle: sender.title,
     fromAgentName: sender.workspace?.name ?? '',
     ...(sender.taskId ? { fromTaskId: sender.taskId } : {}),
+    // The public spelling, written here: `requestId` is a name the public-id codec never translates
+    // (it is the manual project trigger's fence there), so the card carries the address as it is read.
+    ...(requestId ? { requestId: uuidToBase62(requestId) } : {}),
   };
 }

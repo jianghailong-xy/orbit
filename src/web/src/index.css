@@ -4742,6 +4742,16 @@ html[data-theme='dark'] .session-tag-chip {
 /* Last assistant reply, flattened to one line. Shares the second line with the row's tags
    (.session-sub owns the spacing above) — darker than the time so it reads as content,
    not metadata. */
+/* Who a session list row is waiting on for a reply, and who is waiting on it (session requests). */
+.session-requests {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--brand);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .session-preview {
   flex: 1;
   min-width: 0;
@@ -17228,6 +17238,121 @@ button.chat-jump-start:hover {
   margin-top: 4px;
   color: var(--warning);
   font-size: 12px;
+}
+/* A message that asks for a reply (session requests): what it asks, by when, and where it stands —
+   read live, so the state word moves while the card does not. */
+.smc-request {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.smc-request-asks {
+  font-weight: 600;
+}
+.smc-request-state {
+  padding: 0 8px;
+  border: 1px solid var(--bg-hover-strong);
+  border-radius: 9px;
+  line-height: 18px;
+  font-size: 11px;
+}
+.smc-request-state-open {
+  border-color: var(--brand-border);
+  color: var(--brand);
+}
+.smc-request-state-replied {
+  border-color: var(--success);
+  color: var(--success);
+}
+.smc-request-state-no_reply,
+.smc-request-state-recipient_ended,
+.smc-request-state-expired,
+.smc-request-state-undelivered {
+  color: var(--warning);
+}
+
+/* The outcomes of this session's own requests, handed back (SessionReplyCard.tsx): the platform's
+   turn, so the agent's side of the transcript, in the brand tone. */
+.src-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+}
+.src {
+  width: min(560px, 88%);
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+}
+.src-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.src-mark {
+  flex: none;
+  color: var(--brand);
+}
+.src-from {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.src-outcome {
+  flex: none;
+  padding: 0 8px;
+  border: 1px solid var(--bg-hover-strong);
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--warning);
+}
+.src-outcome-replied {
+  border-color: var(--success);
+  color: var(--success);
+}
+.src-asked,
+.src-chose,
+.src-note {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.src-label {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.src-body,
+.src-excerpt {
+  margin-top: 6px;
+}
+.src-excerpt {
+  padding-left: 8px;
+  border-left: 2px solid var(--bg-hover-strong);
+  color: var(--text-2);
+}
+.src-meta {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bg-hover-strong);
+  color: var(--text-3);
+  font-size: 11px;
+}
+.src-meta a {
+  color: var(--brand);
+  text-decoration: none;
 }
 
 /* The message telling a coordinator its project was started (ProjectStartedCard.tsx): the exception

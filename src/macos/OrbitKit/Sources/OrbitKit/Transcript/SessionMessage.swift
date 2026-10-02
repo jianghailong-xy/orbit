@@ -24,13 +24,19 @@ public struct SessionMessage: Sendable, Equatable, Codable {
     public let fromAgentName: String
     /// The task the sending session runs; nil when it runs none.
     public let fromTaskId: String?
+    /// The request this message is, when its sender asked for a reply (`expectReply`) — the
+    /// request's public id; nil on every message that asked for none. Its state is not here: the
+    /// card reads it live (`SessionRequestView`), because the stored event never changes and the
+    /// state does.
+    public let requestId: String?
 
     public init(fromSessionId: String, fromTitle: String = "", fromAgentName: String = "",
-                fromTaskId: String? = nil) {
+                fromTaskId: String? = nil, requestId: String? = nil) {
         self.fromSessionId = fromSessionId
         self.fromTitle = fromTitle
         self.fromAgentName = fromAgentName
         self.fromTaskId = fromTaskId
+        self.requestId = requestId
     }
 
     /// The card a `user` event's payload carries, or nil for the ordinary case — every turn the
@@ -46,10 +52,12 @@ public struct SessionMessage: Sendable, Equatable, Codable {
         guard case .object(let card)? = value,
               let from = card["fromSessionId"]?.stringValue, !from.isEmpty else { return nil }
         let task = card["fromTaskId"]?.stringValue
+        let request = card["requestId"]?.stringValue
         return SessionMessage(fromSessionId: from,
                               fromTitle: card["fromTitle"]?.stringValue ?? "",
                               fromAgentName: card["fromAgentName"]?.stringValue ?? "",
-                              fromTaskId: task?.isEmpty == false ? task : nil)
+                              fromTaskId: task?.isEmpty == false ? task : nil,
+                              requestId: request?.isEmpty == false ? request : nil)
     }
 }
 

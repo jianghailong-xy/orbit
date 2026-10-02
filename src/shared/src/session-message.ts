@@ -21,4 +21,11 @@ export interface SessionMessageCard {
   fromAgentName: string;
   /** The task the sending session runs, absent when it runs none. */
   fromTaskId?: string;
+  /**
+   * The request this message is, when the sender asked for a reply (`expectReply`,
+   * docs/session-request-reply-contract.md §3) — the request's public id, absent on every message
+   * that asked for none. Its state is not here: a stored event never changes, and the state does, so
+   * a client reads it from `GET /session-requests/:id` (`SessionRequestView`).
+   */
+  requestId?: string;
 }

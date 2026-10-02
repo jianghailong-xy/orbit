@@ -1297,6 +1297,18 @@ struct TranscriptItemView: View {
                 ProjectStartedCardView(card: started, text: b.text, ts: b.ts,
                                        undelivered: b.undelivered || b.delivery == "failed",
                                        attached: b.attached)
+            } else if let replies = b.sessionReplies, !replies.isEmpty {
+                // The outcomes of this session's own requests, handed back (`sessionReplies`,
+                // `SessionReply.parse`): a reply turn carries nobody's words, and a message of the
+                // owner's may carry outcomes that were held for it — then the owner's words are their
+                // bubble, first, and the outcomes follow as cards, with what else delivery appended
+                // folded into them (web parity: NodeView).
+                VStack(alignment: .leading, spacing: 6) {
+                    if !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        UserBubbleView(bubble: withoutNote(b))
+                    }
+                    SessionReplyCardsView(replies: replies, ts: b.ts, attached: replyRest(b))
+                }
             } else if let wake = WatchWakeText.parse(b.text) {
                 // A turn a watch queued is the watch's to show, not a message the user typed: it opens
                 // with a raw UUID and carries the whole payload the agent read (web parity: NodeView).
@@ -1364,6 +1376,12 @@ struct TranscriptItemView: View {
     /// its other blocks instead of repeating the wake beneath the card.
     private func attachedRest(_ wake: BackgroundWake) -> (kind: String, text: String)? {
         wake.rest.isEmpty ? nil : (kind: describeNote(wake.rest), text: wake.rest)
+    }
+
+    /// What the reply cards did NOT take from a turn's note, as the entry folded inside them.
+    private func replyRest(_ bubble: UserBubble) -> (kind: String, text: String)? {
+        let rest = SessionReply.withoutReplyBlocks(bubble.note)
+        return rest.isEmpty ? nil : (kind: describeNote(rest), text: rest)
     }
 
     /// The same bubble with the note taken off it: all of it is the card's now, so leaving it here

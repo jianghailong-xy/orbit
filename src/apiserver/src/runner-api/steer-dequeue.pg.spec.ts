@@ -138,6 +138,10 @@ function pgTx() {
       findMany: async () => [],
       updateMany: async () => ({ count: 1 }),
     },
+    sessionRequest: {
+      updateMany: async () => ({ count: 0 }),
+      findMany: async () => [],
+    },
   };
 }
 

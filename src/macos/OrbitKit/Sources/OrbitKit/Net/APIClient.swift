@@ -160,6 +160,11 @@ public final class APIClient: @unchecked Sendable {
 
     public func session(_ id: String) async throws -> Session { try await get("sessions/\(id)") }
 
+    /// One session request as it stands now — the state a request card shows (`SessionRequestView`).
+    public func sessionRequest(_ id: String) async throws -> SessionRequestView {
+        try await get("session-requests/\(id)")
+    }
+
     /// Per-workspace Open-session tallies used by the runner page's workspace rows.
     public func sessionCounts() async throws -> [WorkspaceSessionCounts] {
         try await get("sessions/counts")

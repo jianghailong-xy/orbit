@@ -44,6 +44,10 @@ struct SessionMessageCardView: View {
                     .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
             }
             foot
+            if let requestId = card.requestId {
+                // The message asks for a reply: what it asks, by when, and where it stands — read live.
+                SessionRequestStatusView(requestId: requestId)
+            }
             if undelivered {
                 // Amber, not red: the message was handed to a session that has not confirmed it.
                 Text(SessionMessageCard.undelivered)

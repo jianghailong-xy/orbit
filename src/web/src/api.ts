@@ -5,6 +5,7 @@ import type {
   OpenItemDeliveryCard,
   ProjectStartedCard,
   SessionCapabilities,
+  SessionRequestView,
   SessionTurnIntent,
   SessionTurnPlacement,
 } from '@orbit/shared';
@@ -1368,6 +1369,10 @@ export interface SessionDetail {
  *  resolve the runner behind a `/sessions/:id` deep link and show its worktree output. */
 export const getSession = (idOrPublicId: string) =>
   api<SessionDetail>(`/sessions/${idOrPublicId}`);
+
+/** One session request as it stands now — the state a request card shows (lib/sessionRequest). */
+export const getSessionRequest = (requestId: string) =>
+  api<SessionRequestView>(`/session-requests/${encodeURIComponent(requestId)}`);
 
 /**
  * Open (or return) the conversation a task list is steered from.

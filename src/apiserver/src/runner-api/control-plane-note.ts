@@ -1,4 +1,10 @@
-import type { OpenItemDeliveryCard, ProjectStartedCard, SessionMessageCard, TaskStartCard } from '@orbit/shared';
+import type {
+  OpenItemDeliveryCard,
+  ProjectStartedCard,
+  SessionMessageCard,
+  SessionReplyCard,
+  TaskStartCard,
+} from '@orbit/shared';
 
 import { buildResumeContinuation } from './resume-continuation';
 
@@ -124,5 +130,22 @@ export function withSessionMessage(
   const stored = { ...payload };
   delete stored.sessionMessage;
   if (card !== null) stored.sessionMessage = card;
+  return stored;
+}
+
+/**
+ * And for the outcomes of the session's own requests that its turn handed back
+ * (`sessionReplies`, sessions/session-request.ts): one card per outcome the turn carried, read off
+ * the request rows when the echo is stored. Absent for every turn that carried none, and a card
+ * arriving from the runner is dropped, as every card here is.
+ */
+export function withSessionReplies(
+  payload: Record<string, unknown>,
+  cards: readonly SessionReplyCard[] | null,
+): Record<string, unknown> {
+  if (typeof payload?.text !== 'string') return payload;
+  const stored = { ...payload };
+  delete stored.sessionReplies;
+  if (cards && cards.length > 0) stored.sessionReplies = cards;
   return stored;
 }

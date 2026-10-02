@@ -22,6 +22,7 @@ export function parseSessionMessage(payload: unknown): SessionMessageCard | null
     fromTitle: typeof card.fromTitle === 'string' ? card.fromTitle : '',
     fromAgentName: typeof card.fromAgentName === 'string' ? card.fromAgentName : '',
     ...(typeof card.fromTaskId === 'string' && card.fromTaskId !== '' ? { fromTaskId: card.fromTaskId } : {}),
+    ...(typeof card.requestId === 'string' && card.requestId !== '' ? { requestId: card.requestId } : {}),
   };
 }
 

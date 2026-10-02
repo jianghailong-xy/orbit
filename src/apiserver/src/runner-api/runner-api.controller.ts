@@ -229,6 +229,15 @@ import {
 import { nextAutoRetryAt } from '../sessions/auto-retry.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import { appendSessionMessageContext, readSessionMessageCard } from '../sessions/session-message';
+import { SessionRequestService } from '../sessions/session-request.service';
+import {
+  appendSessionRepliesContext,
+  closeUnansweredRequests,
+  readRequestForBlock,
+  readSessionReplyCards,
+  readTurnRequestIds,
+  settleUnrunSessionRequests,
+} from '../sessions/session-request';
 import {
   recordOwnerConfirmationRequest,
   runStoppedWorking,
@@ -241,6 +250,7 @@ import {
   withOpenItemDelivery,
   withProjectStarted,
   withSessionMessage,
+  withSessionReplies,
   withTaskStart,
 } from './control-plane-note';
 import { readTaskStartCard } from '../tasks/task-start-card';
@@ -667,6 +677,12 @@ export class RunnerApiController {
      * promotion service simply offers nothing, and the next landing asks again.
      */
     @Optional() private readonly promotions?: ProjectPromotionService,
+    /**
+     * Hands a session request's outcome back to the session that asked, after the transaction that
+     * wrote it (sessions/session-request.service.ts). `@Optional()` for the same reason as the rest of
+     * this list; an outcome not handed off here is handed off by the request worker's next pass.
+     */
+    @Optional() private readonly sessionRequests?: SessionRequestService,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
@@ -3136,12 +3152,16 @@ export class RunnerApiController {
           // the block is recorded as the control plane's note. A steer gets it too — it is a message
           // like any other, only written into the turn already running — and a re-delivery does not:
           // its continuation is the platform's words, and the engine already read the block once.
+          //
+          // A message that asks for a reply says so in the same block (session-request.ts, contract
+          // §3.3): which request it is, by when, and how to answer it.
           if (t.senderSessionId && sessionContext) {
             content = (await appendSessionMessageContext(
               tx,
               sessionContext.ownerId,
               t.senderSessionId,
               content,
+              await readRequestForBlock(tx, sessionId, t.id),
             )) ?? content;
           }
           // A list's console also carries back what the control plane noticed while nobody was
@@ -3163,6 +3183,15 @@ export class RunnerApiController {
         if (t.kind === 'message' && isBackgroundWakeTurn(t.clientTurnId)) {
           content = (await appendBackgroundWakeContext(tx, sessionId, t.clientTurnId, content)) ?? content;
           content = (await appendScheduledWakeupContext(tx, sessionId, t.clientTurnId, content)) ?? content;
+        }
+        // The outcomes of this session's own requests, handed back to it (session-request.ts, contract
+        // §4.2): a `session-reply:` turn carries nothing else, and any message turn also carries the
+        // outcomes held for this session's next turn — the ones whose reply turn an interrupt dropped,
+        // or that came back while it had ended. Outside the first-delivery branch for the reason the
+        // wake is: a reply turn handed out again after its runner died still has to say what it is
+        // for. Not best-effort: for a reply turn this block IS the turn.
+        if (t.kind === 'message') {
+          content = (await appendSessionRepliesContext(tx, sessionId, t.clientTurnId, content)) ?? content;
         }
         // The background work this session left running, said to the engine that comes back to it.
         // Outside the branch above on purpose: a re-delivery replaced the person's text with a
@@ -3748,6 +3777,9 @@ export class RunnerApiController {
           // run ends not the end of the run (`runStoppedWorking`). Read with the row.
           runningBgJobs: true,
           runningSubagents: true,
+          // What a request this turn leaves unanswered is closed with (NO_REPLY, below): the last
+          // thing the session said, which the events flushed before this completion have written.
+          lastAssistantText: true,
         },
       });
       // Read the row being completed before changing it. A reserved shell turn is the one path
@@ -4499,6 +4531,18 @@ export class RunnerApiController {
       if (failSession) {
         await retireSessionInboxGeneration(tx, sessionId);
       }
+      // NO_REPLY (contract §4.1): the turn has settled, the session is idle and its run goes on. Each
+      // request it has read and not answered is closed with its last words — unless something will
+      // still wake it, in which case it may yet answer and the request waits (session-request.ts).
+      // Judged here, under the lock and in the transaction that parked it, so an answer racing this
+      // completion and this judgment meet on the request row and only one of them is the outcome.
+      const requestsClosed = !failSession && nextStatus === RunStatus.AWAITING_INPUT
+        ? await closeUnansweredRequests(tx, {
+            id: sessionId,
+            runningBgJobs: current.runningBgJobs,
+            lastAssistantText: current.lastAssistantText,
+          })
+        : [];
       // Per-file unified diffs to the side table (never on the session row, so the detail/
       // list payload stays small) — fetched on demand when the user opens a file's diff.
       if (dto.changedDiff !== undefined) {
@@ -4541,6 +4585,11 @@ export class RunnerApiController {
         // An exception item queued for this conversation goes the same way: taken back unrun, and —
         // because this run is over — to the account owner (projects/project-open-item.ts).
         await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
+        // And what rides on session requests (session-request.ts): the park above has already let
+        // migration 0347's trigger close what the run's end closes, so a request still OPEN in the
+        // queue belongs to a run with a retry armed, and is UNDELIVERED; outcomes queued back to this
+        // session as an asker are let go to be held for it.
+        await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: true });
         // Drain queued turns so nothing can be leased after the session ends.
         await tx.conversationTurn.updateMany({
           where: { sessionId, status: { not: 'ANSWERED' } },
@@ -4584,8 +4633,17 @@ export class RunnerApiController {
         taskId: current.taskId,
         taskOwnerId: current.ownerId,
         taskCompleted: acceptanceTaskCompleted,
+        requestsClosed,
       };
     }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
+    // The NO_REPLY outcomes this completion wrote, handed back to the sessions that asked. After the
+    // commit and outside it: a hand-off writes the ASKER's conversation, under the asker's lock, and
+    // holding this session's lock while waiting for that one is how two sessions asking each other
+    // would deadlock. One lost here — a crash between the two — is handed off by the worker's next
+    // pass, which looks for exactly that (session-request.worker.ts).
+    if ('requestsClosed' in finalized && finalized.requestsClosed && finalized.requestsClosed.length > 0) {
+      await this.sessionRequests?.handOffQuietly(finalized.requestsClosed);
+    }
     // The immediate completion edge for a task the comparison above just settled DONE. The ACK
     // transaction is authoritative and idempotent: only its first compare-and-set reports
     // taskCompleted. A process crash here loses latency, not work, because the periodic READY
@@ -4849,12 +4907,23 @@ export class RunnerApiController {
       // drawn as "from [that session]" rather than as the owner's own message (session-message.ts,
       // contract §2.3). Read off the turn's sender column, so a batch of the owner's messages reads
       // nothing here.
+      //
+      // A message that asked for a reply names its request on the card (session-request.ts), and a
+      // client reads the request's state from there: the card is stored once and the state moves.
       const sessionMessageCards = new Map<string, SessionMessageCard>();
-      for (const turn of userTurns) {
-        if (!turn.senderSessionId) continue;
-        const card = await readSessionMessageCard(tx, session.ownerId, turn.senderSessionId);
+      const signed = userTurns.filter((turn) => turn.senderSessionId);
+      const requestOfTurn = await readTurnRequestIds(tx, sessionId, signed.map((turn) => turn.id));
+      for (const turn of signed) {
+        const card = await readSessionMessageCard(
+          tx, session.ownerId, turn.senderSessionId!, requestOfTurn.get(turn.id),
+        );
         if (card) sessionMessageCards.set(turn.id, card);
       }
+      // The outcomes of this session's own requests that a turn handed back to it — drawn as reply
+      // cards rather than as the owner's words, because the turn carries nobody's (contract §4.2).
+      const replyCards = await readSessionReplyCards(
+        tx, sessionId, userTurns.map((turn) => turn.clientTurnId),
+      );
       // And the turns telling a coordinator its project was started, by the same kind of key
       // (`project-started:v1:`, project-started.ts) — read for those turns and no others.
       const startedCards = new Map<string, ProjectStartedCard>();
@@ -4885,6 +4954,11 @@ export class RunnerApiController {
         e.payload = withSessionMessage(
           e.payload,
           (e.turnId ? sessionMessageCards.get(e.turnId) : undefined) ?? null,
+        );
+        const echoed = e.turnId ? userTurns.find((turn) => turn.id === e.turnId) : undefined;
+        e.payload = withSessionReplies(
+          e.payload,
+          (echoed ? replyCards.get(echoed.clientTurnId) : undefined) ?? null,
         );
       }
       // A move between account-pool members is said on the first engine start after it — the first
@@ -5635,6 +5709,9 @@ export class RunnerApiController {
       });
       // And an exception item queued for this conversation (projects/project-open-item.ts).
       await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
+      // And what rides on session requests, after the status write above, for the reason the failed
+      // turn's drain gives (sessions/session-request.ts).
+      await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: true });
       // Drain any queued turns so nothing can be leased after the session ends.
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },

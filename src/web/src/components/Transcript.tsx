@@ -82,8 +82,10 @@ import { TaskStartCard } from './TaskStartCard';
 import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseSessionMessage } from '../lib/sessionMessage';
-import type { SessionMessageCard as SessionMessage } from '@orbit/shared';
+import type { SessionMessageCard as SessionMessage, SessionReplyCard as SessionReply } from '@orbit/shared';
 import { SessionMessageCard } from './SessionMessageCard';
+import { parseSessionReplies, withoutReplyBlocks } from '../lib/sessionRequest';
+import { SessionReplyCards } from './SessionReplyCard';
 import { parseBackgroundJobs, summarizeBackgroundJobs } from '../lib/backgroundJobs';
 import { parseReferencedTasks, summarizeReferencedTasks } from '../lib/referencedTask';
 import { parseWikiContext } from '../lib/wikiContext';
@@ -350,6 +352,9 @@ type TextNode = {
   // the echo (`sessionMessage`, lib/sessionMessage). Somebody's words, but not the reader's: drawn
   // as "From [that session]" instead of the owner's bubble.
   sessionMessage?: SessionMessage;
+  // The outcomes of this session's own requests the turn handed back, when the control plane
+  // recorded them beside the echo (`sessionReplies`, lib/sessionRequest). Drawn as reply cards.
+  sessionReplies?: SessionReply[];
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
@@ -723,6 +728,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         const taskStart = taskStartFromPayload ?? retriedTaskStart;
         const startedCard = parseProjectStarted(p) ?? undefined;
         const sessionMessage = parseSessionMessage(p) ?? undefined;
+        const sessionReplies = parseSessionReplies(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
@@ -745,6 +751,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             taskStart,
             startedCard,
             sessionMessage,
+            sessionReplies,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
@@ -1262,6 +1269,24 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
             attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
           />
+        );
+      }
+      // The outcomes of this session's requests, handed back (lib/sessionRequest): a reply turn
+      // carries nobody's words, and a message of the owner's may carry outcomes that were held for
+      // it — then the owner's words are their bubble, first, and the outcomes follow as cards. What
+      // else delivery appended folds into the cards, as it does everywhere.
+      if (node.sessionReplies) {
+        const rest = withoutReplyBlocks(node.note);
+        return (
+          <>
+            {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
+            <SessionReplyCards
+              cards={node.sessionReplies}
+              seq={node.seq}
+              ts={node.ts}
+              attached={rest !== '' && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
+            />
+          </>
         );
       }
       // A turn a watch queued is the watch's to show, not a message the user typed.

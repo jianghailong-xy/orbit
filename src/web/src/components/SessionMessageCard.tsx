@@ -1,7 +1,15 @@
 import { useContext, useState, type ReactNode } from 'react';
 import { MessageOutlined } from '@ant-design/icons';
+import { useQuery } from '@tanstack/react-query';
 import type { SessionMessageCard as Card } from '@orbit/shared';
 import { routeId } from '../lib/idCodec';
+import { sessionRequestQuery } from '../lib/queries';
+import {
+  SESSION_REQUEST_ASKS,
+  SESSION_REQUEST_DUE,
+  SESSION_REQUEST_STATE_LABEL,
+  formatReplyBy,
+} from '../lib/sessionRequest';
 import {
   SESSION_MESSAGE_FROM,
   SESSION_MESSAGE_NOT_YOU,
@@ -92,9 +100,36 @@ export function SessionMessageCard({
             </>
           )}
         </div>
+        {card.requestId && (exporting
+          ? <div className="smc-request"><span className="smc-request-asks">{SESSION_REQUEST_ASKS}</span></div>
+          : <SessionRequestStatus requestId={card.requestId} />)}
         {undelivered && <div className="smc-undelivered">{SESSION_MESSAGE_UNDELIVERED}</div>}
         {attached}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The request a message is, as it stands now: "Asked for a reply · due 18:00", and its state — waiting,
+ * or which of the five outcomes it came to. Read live (`GET /session-requests/:id`), because the card
+ * is stored once and the state moves; refreshed by every session event and, while it waits, by a poll.
+ * Read-only on purpose: the owner does not answer for the session (contract §9.3).
+ */
+export function SessionRequestStatus({ requestId }: { requestId: string }) {
+  const request = useQuery(sessionRequestQuery(requestId));
+  const view = request.data;
+  return (
+    <div className="smc-request" data-state={view?.state}>
+      <span className="smc-request-asks">{SESSION_REQUEST_ASKS}</span>
+      {view?.replyBy && view.state === 'OPEN' && (
+        <span className="smc-request-due">{` · ${SESSION_REQUEST_DUE} ${formatReplyBy(view.replyBy)}`}</span>
+      )}
+      {view && (
+        <span className={`smc-request-state smc-request-state-${view.state.toLowerCase()}`}>
+          {SESSION_REQUEST_STATE_LABEL[view.state]}
+        </span>
+      )}
     </div>
   );
 }
