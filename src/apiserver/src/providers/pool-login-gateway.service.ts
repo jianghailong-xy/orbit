@@ -100,7 +100,7 @@ type Refreshed =
  *   open, moved to another provider or not its token's person's, the account it was bound to taken out of
  *   the pool, or the pool deleted — the last two delete the token row itself — is 401.
  * - WHAT: only the ALLOWED paths; anything else is 403.
- * - WHICH ACCOUNT: the one the pool holds. There is never another to choose or move to.
+ * - WHICH ACCOUNT: the one the token is bound to, else the pool's first. A session is never moved to another.
  * - FRESHNESS: an access token about to expire is refreshed first, and one the backend answers 401 is
  *   refreshed and the request sent again once — the codex CLI's own recovery, on the same OAuth client and
  *   the same request (`refreshRequestBody`). This is the only place the pair is rotated, one refresh at a
@@ -299,7 +299,7 @@ export class PoolLoginGatewayService {
 
   /** The login is refused for good: signed out, the session told, and the request answered with that. */
   private async signedOut(res: Response, caller: Caller, login: GatewayLogin, reason: string): Promise<void> {
-    await this.logins.markSignedOut(caller.poolId, reason);
+    await this.logins.markSignedOut(caller.poolId, login.accountId, reason);
     await this.owe(caller.sessionId, loginSignedOutNotice(login, caller.poolLabel));
     refuse(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel));
     this.log.log(`session ${caller.sessionId} account ${maskedAccount(login.accountId)}: refused by OpenAI — signed out`);

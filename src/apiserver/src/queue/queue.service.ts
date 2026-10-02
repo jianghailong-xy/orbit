@@ -756,7 +756,8 @@ export class QueueService {
    * the 429 went back), while it is ahead. Null otherwise — the account is not spent, and the failure
    * follows the ordinary rules; or it is signed out, which only its owner's signing in again mends — and
    * when `session` is on no login pool of its owner's. Decided from the account as the database holds it,
-   * not from the words the engine ended with. The session is never moved: the pool has no other account.
+   * not from the words the engine ended with. The session is never moved: it runs on the pool's first
+   * account.
    */
   async loginPoolRetryAt(
     db: Prisma.TransactionClient | PrismaService,
@@ -835,8 +836,8 @@ export class QueueService {
         engine: true,
         // A `codex` pool of one's own holds a ChatGPT login instead of members (migration 0323): what
         // decides whether it can run is this row's state, never a quota reading — and what it waits for
-        // is the reset the backend named (`spent_until`, migration 0324). The flow keeps one; the oldest
-        // is the one, should there be more.
+        // is the reset the backend named (`spent_until`, migration 0324). A pool may hold several, one
+        // per account signed in; the oldest is the one its sessions run on.
         logins: {
           orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
           select: { accountId: true, email: true, state: true, spentUntil: true },
@@ -940,7 +941,7 @@ export class QueueService {
    * (shared-pool.ts sharedPoolExecRow) — never the login, which only the gateway ever reads, decrypts or
    * refreshes. The token is bound to the account the pool holds now, and that account is recorded on the
    * session (`pool_codex_account_id`), which is how a session says which account it ran on. There is no
-   * choosing: a login pool holds one account, and a session on it is never moved to another — a spent
+   * choosing: a session runs on the pool's first account, and is never moved to another — a spent
    * account is waited for (loginPoolRetryAt), a signed-out one is its owner's to sign in again. A pool
    * holding no account still dispatches here, on a token bound to none, and the gateway answers why —
    * rather than on the runner's own login, which is exactly what a login pool is not. At the claim
