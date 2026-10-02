@@ -1560,6 +1560,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none
       // of the six preserved objects. No INSERT, UPDATE or DELETE.
       '0347_drop_session_token_sums',
+      // Session folders (0348, docs/session-folders-move-design.md §3.1): one new table,
+      // `session_folder` (foreign keys to `user` and `workspace`, both ON DELETE CASCADE, a unique
+      // index on (workspace_id, name) and an index on owner_id), and one nullable UUID column with
+      // no default on `session`, `folder_id`, catalog-only, with its index and a foreign key into
+      // the new table ON DELETE SET NULL. Read against every claim above: no `task`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and
+      // criterion row are out of its reach. No function, trigger or type is created, replaced or
+      // dropped — so it is not another writer of the DONE fence and names none of the six preserved
+      // objects. No INSERT, UPDATE or DELETE: the new table starts empty and every session reads
+      // NULL. (0343 is the delivery review's, as said above, and 0347 is the token-sum drop just
+      // above, so this took the next number nobody used.)
+      '0348_session_folder',
       // Who sent a turn: one nullable UUID column with no default on `conversation_turn`
       // (`sender_session_id`, deliberately no foreign key) and one partial index on it. Read against
       // every claim above: `conversation_turn` is not among the preserved relations and nothing else
