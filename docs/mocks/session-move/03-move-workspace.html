@@ -1,0 +1,126 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>board</title>
+<link rel="stylesheet" href="board.css"><script src="icons.js"></script></head>
+<body>
+<h1>搬到其他 Workspace：搬走的是对话，代码留在原地</h1>
+<p class="lede">下一条消息在新 Workspace 的目录、runner 和设置下继续这段对话。到目前为止的改动留在原 Workspace 仓库里这个会话的分支上，不删除，也不带走。会话要先结束才能搬：结束时 runner 会把没提交的改动收成一次提交。空闲的会话一步完成 <b>End and Move</b>。</p>
+
+<div class="row3">
+  <!-- ① drill down -->
+  <div class="col">
+    <div class="cap"><span class="tag new">新增</span>① 在 Move 面板里点一个 Workspace</div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="status"><span>10:04</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="scrim"></div>
+      <div class="sheet" style="top:62px">
+        <div class="grab"></div>
+        <div class="shead"><div class="sbtnl"><div class="glass gcirc" style="width:40px;height:40px;background:rgba(120,120,128,.32)"><i data-ic="chevl" data-s="18" data-c="#fff"></i></div></div><div class="st">wikova-develop</div><div class="sbtnr"><div class="pillbtn">Done</div></div></div>
+        <div class="subject">审查导入逻辑避免侵入用户身份</div>
+        <div class="gh">Folder in wikova-develop</div>
+        <div class="group">
+          <div class="grow"><span class="gi"><i data-ic="tray" data-s="22" data-c="#8e8e93"></i></span><span class="gn">No Folder</span></div>
+          <div class="grow"><span class="gi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="gn">Bugs</span><span class="gc">12</span></div>
+          <div class="grow"><span class="gi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="gn">Infra</span><span class="gc">3</span></div>
+          <div class="grow blue"><span class="gi"><i data-ic="folderplus" data-s="22" data-c="#0a84ff"></i></span><span class="gn">New Folder…</span></div>
+        </div>
+        <div class="gf">Same runner (wikova). The conversation carries over as it is. The agent works in /srv/wikova-develop from your next message.</div>
+      </div>
+      <div class="home"></div>
+    </div></div>
+    <ul class="notes">
+      <li>点进去先选放在那边的哪个文件夹（或 No Folder），再弹确认。</li>
+      <li>底部一句话说清楚换到哪台 runner、对话怎么接：同一台是<b>原样接上</b>；换 runner 的 Claude 会话是<b>重建</b>（较早的部分是摘要）。</li>
+      <li>只在同一个 Workspace 里换文件夹不需要确认；跨 Workspace 一定确认。</li>
+    </ul>
+  </div>
+
+  <!-- ② confirm -->
+  <div class="col">
+    <div class="cap"><span class="tag new">新增</span>② 确认（空闲会话：End and Move）</div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="status"><span>10:04</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="sheet" style="top:62px">
+        <div class="grab"></div>
+        <div class="shead"><div class="sbtnl"><div class="glass gcirc" style="width:40px;height:40px;background:rgba(120,120,128,.32)"><i data-ic="chevl" data-s="18" data-c="#fff"></i></div></div><div class="st">wikova-develop</div><div class="sbtnr"><div class="pillbtn">Done</div></div></div>
+        <div class="subject">审查导入逻辑避免侵入用户身份</div>
+        <div class="gh">Folder in wikova-develop</div>
+        <div class="group">
+          <div class="grow"><span class="gi"><i data-ic="tray" data-s="22" data-c="#8e8e93"></i></span><span class="gn">No Folder</span></div>
+          <div class="grow"><span class="gi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="gn">Bugs</span><span class="gc">12</span></div>
+          <div class="grow"><span class="gi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="gn">Infra</span><span class="gc">3</span></div>
+        </div>
+      </div>
+      <div class="scrim2"></div>
+      <div class="alert" style="width:318px">
+        <div class="at">Move to wikova-develop?</div>
+        <div class="am">The conversation moves with it. Your next message continues it in wikova-develop.<br><br>
+          <b>3 changed files</b> aren’t merged into main yet. They stay on branch <b>orbit/review-import-3fa21c</b> in orbit.<br><br>
+          The session ends first.</div>
+        <div class="ab"><div>Cancel</div><div class="pri">End and Move</div></div>
+      </div>
+      <div class="home"></div>
+    </div></div>
+    <ul class="notes">
+      <li>正文按情况拼：有没合并的改动就点名文件数和分支；换 runner 的 Claude 会话加一句 <i>Earlier parts of the conversation are summarized for the agent.</i></li>
+      <li>已经结束的会话按钮是 <b>Move</b>；空闲没结束的是 <b>End and Move</b>：先结束（原 runner 收尾提交），再搬。</li>
+      <li>搬完 toast <b>Moved to wikova-develop</b>，会话从当前列表消失，出现在那边。</li>
+    </ul>
+  </div>
+
+  <!-- ③ blocked -->
+  <div class="col">
+    <div class="cap"><span class="tag n">不能搬时</span>③ 例：一个 Codex 会话</div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="status"><span>10:04</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="scrim"></div>
+      <div class="sheet" style="top:62px">
+        <div class="grab"></div>
+        <div class="shead"><div class="sbtnl"></div><div class="st">Move</div><div class="sbtnr"><div class="pillbtn">Done</div></div></div>
+        <div class="subject">发布 0.1.172</div>
+        <div class="gh">Folder in orbit</div>
+        <div class="group">
+          <div class="grow"><span class="gi"><i data-ic="tray" data-s="22" data-c="#8e8e93"></i></span><span class="gn">No Folder</span><span class="check"><i data-ic="check" data-s="20" data-c="#0a84ff"></i></span></div>
+          <div class="grow"><span class="gi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="gn">Release</span><span class="gc">4</span></div>
+          <div class="grow blue"><span class="gi"><i data-ic="folderplus" data-s="22" data-c="#0a84ff"></i></span><span class="gn">New Folder…</span></div>
+        </div>
+        <div class="gh">Move to Another Workspace</div>
+        <div class="group">
+          <div class="grow"><span class="gi"><span class="avatar" style="background:#2bb3a3">G</span></span><span class="gn">wikova-develop<div class="s">Codex · wikova</div></span><i data-ic="chevr" data-s="13" data-c="#6b6b70"></i></div>
+          <div class="grow off"><span class="gi"><span class="avatar" style="background:#4a4f57;opacity:.45">X</span></span><span class="gn">Wikids AI 游戏模拟器<div class="s">Codex keeps this conversation on wikova</div></span></div>
+          <div class="grow off"><span class="gi"><span class="avatar" style="background:#d9774b;opacity:.45">S</span></span><span class="gn">site<div class="s">mac-mini can’t run Codex</div></span></div>
+        </div>
+        <div class="gf">A Codex conversation stays on the runner it ran on, so only workspaces on wikova are open.</div>
+      </div>
+      <div class="home"></div>
+    </div></div>
+    <ul class="notes">
+      <li>不能去的 Workspace 置灰，灰字写原因（服务端给）。</li>
+      <li>会话本身不能搬时，这一组整体置灰，组下写一句原因，例如 <i>Stop the session first.</i>、<i>A task run stays in its task’s workspace.</i></li>
+      <li>文件夹那一组永远可用，运行中也能换文件夹。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="box">
+  <h2>能不能搬：规则一览</h2>
+  <table>
+    <tr><th>情况</th><th>结果</th><th>原因</th></tr>
+    <tr><td>正在跑 / 有排队的消息 / 在等审批</td><td class="no">不能</td><td>先停下。搬家要等原 runner 收尾提交。</td></tr>
+    <tr><td>正在结束 / 合并或提交进行中 / 合并修复没处理完 / 等自动重试</td><td class="mid">暂时不能</td><td>等它做完再试。</td></tr>
+    <tr><td>空闲，还没结束</td><td class="mid">能，End and Move</td><td>先结束（原 runner 必须在线），再搬。</td></tr>
+    <tr><td>已结束 / 已完成（Completed）</td><td class="ok">能</td><td>—</td></tr>
+    <tr><td>回收站 / 导入中 / 任务的执行会话 / 项目的协调会话</td><td class="no">不能</td><td>回收站先恢复；任务和项目的会话归属由任务、项目决定。</td></tr>
+    <tr><td>派生出来的子会话</td><td class="ok">能</td><td>子会话本来就可以建在别的 Workspace。</td></tr>
+    <tr><td>Claude，同一台 runner</td><td class="ok">能，对话原样接上</td><td>runner 把对话记录搬到新目录。</td></tr>
+    <tr><td>Claude，换 runner</td><td class="ok">能，对话重建</td><td>用 Orbit 存的记录重建：最近约 10 万 token 原样，更早的是摘要。</td></tr>
+    <tr><td>Codex，同一台 runner</td><td class="ok">能</td><td>按 thread 接上。</td></tr>
+    <tr><td>Codex 换 runner；Kimi、OpenCode</td><td class="no">本期不能</td><td>对话只存在原机器上 / 续接方式还没验证。</td></tr>
+    <tr><td>目标 runner 还没升级到支持搬家的版本</td><td class="no">不能</td><td>不升级的话，同一台机器搬到另一个仓库时 agent 会继续改旧仓库。</td></tr>
+    <tr><td>代码改动</td><td>留在原地</td><td>留在原仓库这个会话的分支上；新 Workspace 从自己仓库的最新代码新建检出（分支名不变）。</td></tr>
+    <tr><td>同一台 runner、两个 Workspace 是同一个仓库</td><td class="ok">代码也连着</td><td>检出原样接上。</td></tr>
+  </table>
+</div>
+</body></html>

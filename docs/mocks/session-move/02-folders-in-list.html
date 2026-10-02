@@ -1,0 +1,134 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>board</title>
+<link rel="stylesheet" href="board.css"><script src="icons.js"></script></head>
+<body>
+<h1>文件夹在会话列表里怎么呈现</h1>
+<p class="lede">文件夹属于某个 Workspace，排在列表最上面；一个会话最多在一个文件夹里。进了文件夹的会话不再出现在下面的时间分组里，所以文件夹行要替里面的会话报状态：有会话等你时显示琥珀色数字，有会话在跑时显示转圈，和抽屉里 Workspace 行的规则一样。点文件夹行进入单独的文件夹页（方案 B，已选）；方案 A 留作记录。</p>
+
+<div class="row3">
+  <!-- A inline -->
+  <div class="col">
+    <div class="cap"><span class="tag n">方案 A · 未选</span>点文件夹行，原地展开</div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="status"><span>10:04</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="nav">
+        <div class="glass gcirc"><i data-ic="ham" data-s="22" data-c="#fff"></i></div>
+        <div class="navtitle">orbit <i data-ic="chevd" data-s="14" data-c="#98989f"></i></div>
+        <div class="spacer"></div>
+        <div class="glass gcap"><i data-ic="filter" data-s="22" data-c="#fff"></i><i data-ic="compose" data-s="22" data-c="#fff"></i></div>
+      </div>
+      <div class="search"><i data-ic="search" data-s="18" data-c="#8e8e93"></i>Search sessions</div>
+      <div class="list">
+        <div class="frow"><span class="fi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="name">Release</span><span class="needs">1</span><span class="cnt">4</span><span class="chev"><i data-ic="chevr" data-s="13" data-c="#6b6b70"></i></span></div>
+        <div class="frow"><span class="fi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="name">iOS polish</span><i data-ic="spin" data-s="17" data-c="#8e8e93"></i><span class="cnt">8</span><span class="chev"><i data-ic="chevd" data-s="15" data-c="#6b6b70"></i></span></div>
+        <div class="srow inner"><div class="t"><span class="title">审查导入逻辑避免侵入用户身份</span><span class="time">13h</span></div>
+          <div class="sub"><span class="chip or">代码审查</span><span class="pv">已记住：后续默认直接合入 main…</span></div></div>
+        <div class="srow inner"><div class="t"><span class="title"><i data-ic="spin" data-s="13" data-c="#8e8e93"></i> 抽屉 Workspace 行状态列</span><span class="time">now</span></div>
+          <div class="sub"><span class="chip bl">iOS</span><span class="pv">正在跑模拟器截图…</span></div></div>
+        <div class="srow inner"><div class="t"><span class="title">标题槽改成 Workspace 切换器</span><span class="time">2d</span></div>
+          <div class="sub"><span class="chip bl">iOS</span><span class="pv">长名字改放 leading，B 方案已落地…</span></div></div>
+        <div class="frow" style="height:44px;color:#8e8e93;font-size:15px"><span class="fi"></span><span class="name" style="padding-left:32px">Show 5 More</span></div>
+        <div class="frow"><span class="fi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="name">Wiki</span><span class="cnt">2</span><span class="chev"><i data-ic="chevr" data-s="13" data-c="#6b6b70"></i></span></div>
+        <div class="sh">Today</div>
+        <div class="srow"><div class="t"><span class="title">iOS 会话列表左滑按钮</span><span class="time">2m</span></div>
+          <div class="sub"><span class="chip bl">iOS</span><span class="pv">正在梳理代码：左滑按钮在 SessionRowActions…</span></div></div>
+        <div class="srow"><div class="t"><span class="title">滑动按钮圆形设计</span><span class="time">35m</span></div>
+          <div class="sub"><span class="chip bl">iOS</span><span class="pv">收到，做 B。先摸清现有代码和约束…</span></div></div>
+      </div>
+      <div class="home"></div>
+    </div></div>
+    <ul class="notes">
+      <li>箭头朝右 = 收起，朝下 = 展开；展开的会话缩进一档，最多先露 3 条，多的点 <b>Show 5 More</b>。展开状态本机记住。</li>
+      <li>里面的会话和外面完全一样：点开进对话，左滑右滑、长按都在。</li>
+      <li>iPhone 和 iPad 三栏<b>同一套</b>，不新增页面和返回逻辑，改动最小。</li>
+      <li>代价：文件夹多、又都展开时，时间分组会被挤到下面。</li>
+    </ul>
+  </div>
+
+  <!-- B push -->
+  <div class="col">
+    <div class="cap"><span class="tag new">方案 B · 已选</span>点文件夹行，进入文件夹页</div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="status"><span>10:04</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="nav">
+        <div class="glass gcirc"><i data-ic="chevl" data-s="20" data-c="#fff"></i></div>
+        <div class="navtitle" style="flex-direction:column;align-items:flex-start;gap:0;line-height:1.15">iOS polish<small>orbit</small></div>
+        <div class="spacer"></div>
+        <div class="glass gcap"><i data-ic="ellipsis" data-s="22" data-c="#fff"></i><i data-ic="compose" data-s="22" data-c="#fff"></i></div>
+      </div>
+      <div class="list" style="top:118px">
+        <div class="sh">Today</div>
+        <div class="srow"><div class="t"><span class="title"><i data-ic="spin" data-s="13" data-c="#8e8e93"></i> 抽屉 Workspace 行状态列</span><span class="time">now</span></div>
+          <div class="sub"><span class="chip bl">iOS</span><span class="pv">正在跑模拟器截图…</span></div></div>
+        <div class="srow"><div class="t"><span class="title">审查导入逻辑避免侵入用户身份</span><span class="time">13h</span></div>
+          <div class="sub"><span class="chip or">代码审查</span><span class="pv">已记住：后续默认直接合入 main…</span></div></div>
+        <div class="sh">Previous 7 Days</div>
+        <div class="srow"><div class="t"><span class="title">标题槽改成 Workspace 切换器</span><span class="time">2d</span></div>
+          <div class="sub"><span class="chip bl">iOS</span><span class="pv">长名字改放 leading，B 方案已落地…</span></div></div>
+        <div class="srow"><div class="t"><span class="title">图片长按菜单 iOS 26 样式</span><span class="time">3d</span></div>
+          <div class="sub"><span class="chip bl">iOS</span><span class="pv">保留原生菜单，回退自绘卡片…</span></div></div>
+        <div class="srow"><div class="t"><span class="title">设置改成 sheet</span><span class="time">4d</span></div>
+          <div class="sub"><span class="chip bl">iOS</span><span class="pv">macOS 仍保留整页表单…</span></div></div>
+        <div class="srow"><div class="t"><span class="title">Toast 浮在导航栏下</span><span class="time">5d</span></div>
+          <div class="sub"><span class="chip bl">iOS</span><span class="pv">不再压住输入框…</span></div></div>
+        <div class="srow"><div class="t"><span class="title">会话重命名入口</span><span class="time">6d</span></div>
+          <div class="sub"><span class="chip bl">iOS</span><span class="pv">点标题改名，行菜单也能改…</span></div></div>
+        <div class="srow"><div class="t"><span class="title">抽屉底部 New session 胶囊</span><span class="time">6d</span></div>
+          <div class="sub"><span class="chip bl">iOS</span><span class="pv">设置按钮移到右侧圆钮…</span></div></div>
+      </div>
+      <div class="home"></div>
+    </div></div>
+    <ul class="notes">
+      <li>文件夹是单独一页：返回键回到 orbit，<b>⋯</b> 里是 Rename / Delete Folder，<b>✎</b> 新建的会话直接落在这个文件夹。</li>
+      <li>文件夹内容多时更清爽，最接近你截图里 ChatGPT 的做法。</li>
+      <li>代价：iPad 三栏的中间栏现在没有自己的导航栈，要另做一套“进文件夹 / 返回”，和 iPhone 是两条路，工作量和出错面都比 A 大。</li>
+    </ul>
+  </div>
+
+  <!-- manage -->
+  <div class="col">
+    <div class="cap"><span class="tag n">管理</span>长按文件夹行</div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="status"><span>10:04</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="nav">
+        <div class="glass gcirc"><i data-ic="ham" data-s="22" data-c="#fff"></i></div>
+        <div class="navtitle">orbit <i data-ic="chevd" data-s="14" data-c="#98989f"></i></div>
+        <div class="spacer"></div>
+        <div class="glass gcap"><i data-ic="filter" data-s="22" data-c="#fff"></i><i data-ic="compose" data-s="22" data-c="#fff"></i></div>
+      </div>
+      <div class="search"><i data-ic="search" data-s="18" data-c="#8e8e93"></i>Search sessions</div>
+      <div class="list">
+        <div class="frow"><span class="fi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="name">Release</span><span class="cnt">4</span><span class="chev"><i data-ic="chevr" data-s="13" data-c="#6b6b70"></i></span></div>
+        <div class="frow"><span class="fi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="name">iOS polish</span><span class="cnt">8</span><span class="chev"><i data-ic="chevr" data-s="13" data-c="#6b6b70"></i></span></div>
+        <div class="sh">Today</div>
+        <div class="srow"><div class="t"><span class="title">iOS 会话列表左滑按钮</span><span class="time">2m</span></div>
+          <div class="sub"><span class="chip bl">iOS</span><span class="pv">正在梳理代码…</span></div></div>
+      </div>
+      <div class="blur"></div>
+      <div class="lift" style="top:212px;height:52px;background:#1c1c1e;border-radius:18px">
+        <div class="frow" style="height:52px"><span class="fi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="name">Release</span><span class="cnt">4</span><span class="chev"><i data-ic="chevr" data-s="13" data-c="#6b6b70"></i></span></div>
+      </div>
+      <div class="cmenu" style="top:274px;left:18px">
+        <div class="mi"><span class="ic"><i data-ic="pencil" data-s="20" data-c="#fff"></i></span>Rename…</div>
+        <div class="mi red"><span class="ic"><i data-ic="trash" data-s="20" data-c="#ff453a"></i></span>Delete Folder…</div>
+      </div>
+      <div class="anno-l" style="left:122px;top:416px;background:#5a5a62">选 Delete Folder… 之后 ↓</div>
+      <div class="alert" style="top:560px">
+        <div class="at">Delete “Release”?</div>
+        <div class="am">The 4 sessions in it move back to the list. No session is deleted.</div>
+        <div class="ab"><div>Cancel</div><div class="des">Delete</div></div>
+      </div>
+      <div class="home"></div>
+    </div></div>
+    <ul class="notes">
+      <li>长按文件夹行：<b>Rename…</b>、<b>Delete Folder…</b>。删文件夹只删“夹子”，里面的会话回到列表，不进回收站。</li>
+      <li>新建文件夹的入口：Move 面板里的 <b>New Folder…</b>，和右上角 ≡ 菜单里的 <b>New Folder…</b>。</li>
+      <li>文件夹按名字排序；同一个 Workspace 里不能重名。</li>
+      <li>按标签筛选或 Group by Tag 时文件夹收起不显示，列表平铺，避免两套分组叠在一起。Trash 也平铺。</li>
+    </ul>
+  </div>
+</div>
+</body></html>
