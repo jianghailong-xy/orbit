@@ -151,11 +151,18 @@ public enum NeedsYouLogic {
     /// (`SessionGrouping.countsOnlyAStart`).
     public static func byAgent(_ sessions: [Session]) -> [String: Int] {
         var counts: [String: Int] = [:]
-        for s in sessions where (s.pendingApprovals ?? 0) > 0 && !SessionGrouping.countsOnlyAStart(s) {
+        for s in sessions where isCounted(s) {
             guard let id = s.agent?.id ?? s.agentId else { continue }
             counts[id, default: 0] += 1
         }
         return counts
+    }
+
+    /// Whether one session counts toward a navigation row's number: the drawer's per-agent badge
+    /// above, and a folder row's (`SessionFolderGrouping`), so the two can't count a session
+    /// differently.
+    static func isCounted(_ s: Session) -> Bool {
+        (s.pendingApprovals ?? 0) > 0 && !SessionGrouping.countsOnlyAStart(s)
     }
 
     /// The banner for a screen showing `focused`, or nil when nothing elsewhere is waiting.

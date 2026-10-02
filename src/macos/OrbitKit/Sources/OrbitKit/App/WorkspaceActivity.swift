@@ -10,7 +10,7 @@ public enum WorkspaceActivityLogic {
     public static func runningWorkspaceIDs(_ sessions: [Session]) -> Set<String> {
         var ids: Set<String> = []
         for session in sessions {
-            guard case .spinner = SessionStatusGlyph.make(for: session).shape,
+            guard isRunning(session),
                   let id = session.agent?.id ?? session.agentId
             else { continue }
             ids.insert(id)
@@ -27,12 +27,24 @@ public enum WorkspaceActivityLogic {
     public static func jobWorkspaceIDs(_ sessions: [Session]) -> Set<String> {
         var ids: Set<String> = []
         for session in sessions {
-            guard SessionStatusGlyph.make(for: session).pulse,
+            guard isRunningJob(session),
                   let id = session.agent?.id ?? session.agentId
             else { continue }
             ids.insert(id)
         }
         return ids
+    }
+
+    /// One session's half of `runningWorkspaceIDs`: its row draws the spinner. A folder row reads
+    /// the same answer for the sessions filed in it (`SessionFolderGrouping`).
+    static func isRunning(_ session: Session) -> Bool {
+        if case .spinner = SessionStatusGlyph.make(for: session).shape { return true }
+        return false
+    }
+
+    /// One session's half of `jobWorkspaceIDs`: its row's glyph breathes.
+    static func isRunningJob(_ session: Session) -> Bool {
+        SessionStatusGlyph.make(for: session).pulse
     }
 }
 
