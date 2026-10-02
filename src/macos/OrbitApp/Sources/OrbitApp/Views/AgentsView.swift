@@ -898,11 +898,28 @@ struct AgentConsoleDetail: View {
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
+
+    /// Whether the pane shows the new-session draft: the one ✎ or ⌘N put on the stack, and on iOS the
+    /// stack's root as well. An iPad's detail column is always on screen, so an empty stack would leave
+    /// half of it saying "Select a session" — web's right pane composes when nothing is selected. It is
+    /// this view's reading of the root rather than a `.compose` frame the model pushes: both shells
+    /// share the stack, and a frame pushed for this one would open the phone's on a draft instead of
+    /// its list once the window narrows. macOS keeps its placeholder.
+    private var showsDraft: Bool {
+        #if os(iOS)
+        return app.composingAgentSession || app.sectionAtRoot
+        #else
+        return app.composingAgentSession
+        #endif
+    }
+
     var body: some View {
-        if app.composingAgentSession, let registry = app.consoleRegistry, let agents = app.agents,
+        if showsDraft, let registry = app.consoleRegistry, let agents = app.agents,
            let id = app.selectedAgentID, let agent = agents.agent(id) {
             // Draft compose state: the same ComposerView a live console uses, but its send creates a
-            // new session, after which we open that session's console.
+            // new session, after which we open that session's console. One branch for both drafts, so
+            // ✎ over the root's keeps what was typed — and only the one asked for takes focus: a
+            // keyboard raised on every launch and workspace switch would cover half the screen.
             NewSessionView(agent: agent, registry: registry,
                            defaultModel: agents.effectiveDefaultModel(for: agent),
                            configuredProviders: agents.configuredProviders,
@@ -910,7 +927,8 @@ struct AgentConsoleDetail: View {
                            providerPools: agents.providerPools,
                            sharedPools: agents.sharedPools,
                            modelCatalog: agents.modelCatalog(for: agent.runnerId),
-                           defaultEffort: app.user?.preferences?.defaultEffort) { session in
+                           defaultEffort: app.user?.preferences?.defaultEffort,
+                           focusesComposer: app.composingAgentSession) { session in
                 app.openCreatedAgentSession(session)
             }
             // Rebuild when settings change the selected Agent's execution identity/defaults too;
@@ -977,6 +995,10 @@ struct NewSessionView: View {
     /// seed the effort pill so a value picked on web/another device carries here. Optional because
     /// a restored-token launch primes `user` asynchronously — the seed below reacts to it arriving.
     let defaultEffort: String?
+    /// Whether the composer takes focus as it appears: true wherever someone asked for the draft. An
+    /// iPad's detail column also draws it unasked, at the root of the stack (`AgentConsoleDetail`),
+    /// and ✎ then turns this on for that same view.
+    let focusesComposer: Bool
     @State private var draft: ConsoleModel
     @Environment(AppModel.self) private var app
     @State private var showSwitcher = false
@@ -989,6 +1011,7 @@ struct NewSessionView: View {
          sharedPools: [SharedPool] = [],
          modelCatalog: RunnerModelCatalog? = nil,
          defaultEffort: String? = nil,
+         focusesComposer: Bool = true,
          onCreated: @escaping (Session) -> Void) {
         self.agent = agent
         self.defaultModel = defaultModel
@@ -998,6 +1021,7 @@ struct NewSessionView: View {
         self.sharedPools = sharedPools
         self.modelCatalog = modelCatalog
         self.defaultEffort = defaultEffort
+        self.focusesComposer = focusesComposer
         _draft = State(initialValue: registry.draftModel(
             for: agent, defaultModel: defaultModel,
             configuredProviders: configuredProviders,
@@ -1107,7 +1131,7 @@ struct NewSessionView: View {
                     }
                     .padding(.bottom, .composerBandGap)
                 }
-                ComposerView(console: draft, autoFocus: true)
+                ComposerView(console: draft, autoFocus: focusesComposer)
             }
         }
         #if os(iOS)
