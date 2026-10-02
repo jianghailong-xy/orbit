@@ -207,17 +207,3 @@ export function codexLoginUnavailableReason(
   }
   return null;
 }
-
-/**
- * When work on a Codex pool of one's own can go again, for the brakes that hold work back rather than send
- * it (QueueService.accountPoolResumesAt): while the account's usage limit is reached — `spentUntil`, the
- * reset the Codex backend named, still ahead — at that reset; `now` otherwise. Null while the pool holds no
- * account or its account is signed out: nothing comes back by waiting, only by its owner signing in.
- */
-export function loginPoolResumesAt(
-  account: { state: string; spentUntil: Date | null } | null,
-  now: Date,
-): Date | null {
-  if (!account || account.state !== 'ACTIVE') return null;
-  return account.spentUntil && account.spentUntil.getTime() > now.getTime() ? account.spentUntil : now;
-}

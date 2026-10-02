@@ -9,10 +9,11 @@ import type { RealtimeService } from '../realtime/realtime.service';
  * `init` / `resumed` the runner reports (RunnerApiController.events) — never a run event of this server's
  * own: the runner numbers a session's events, and a row written here would take the seq its next event is
  * about to use (server-must-not-insert-run-event-rows). The line is owed by the claim that moves a
- * shared-pool session onto another key (QueueService.resolveSharedPool) and by the pool gateway when a
- * login pool's account is spent or signed out (PoolLoginGatewayService, `owe`); the carrier is queued by
- * the claim that follows it. A plain class rather than a provider, since those two live on either side of
- * the ProvidersModule → QueueModule import.
+ * shared-pool session onto another key (QueueService.resolveSharedPool) or a login-pool session onto
+ * another account (QueueService.resolveLoginPool), and by the pool gateway when a login pool's account is
+ * spent or signed out (PoolLoginGatewayService, `owe`); the carrier is queued by the claim that follows it.
+ * A plain class rather than a provider, since those two live on either side of the ProvidersModule →
+ * QueueModule import.
  */
 export class PoolNotices {
   private readonly logger = new Logger('PoolNotices');

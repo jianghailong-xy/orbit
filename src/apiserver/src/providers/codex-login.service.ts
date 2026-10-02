@@ -390,8 +390,9 @@ export class CodexLoginService implements OnModuleDestroy {
   /**
    * The Codex backend said this account's usage limit is reached, until `until` (the pool gateway, P3-b,
    * off a 429 `usage_limit_reached`): recorded — with the window reading that came with it — so the
-   * session's retry waits for that reset (QueueService.loginPoolRetryAt) and the page can say when. No
-   * session is moved to another account. No route reaches it.
+   * session's retry waits for that reset, or goes to another account that can run
+   * (QueueService.loginPoolRetryAt), and the page can say when. No session is moved here: the claim that
+   * next runs it moves it (QueueService.resolveLoginPool). No route reaches it.
    */
   async markSpent(poolId: string, accountId: string, until: Date, usage: PlanUsageSnapshot | null, at: Date): Promise<void> {
     const { count } = await this.prisma.poolCodexLogin.updateMany({
