@@ -12,6 +12,7 @@ export * from './link-preview';
 export * from './realtime';
 export * from './models';
 export * from './mergeRecovery';
+export * from './owner-confirmation';
 export * from './planUsage';
 export * from './project-progress';
 export * from './project-done';

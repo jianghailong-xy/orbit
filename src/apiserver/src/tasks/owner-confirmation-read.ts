@@ -1,6 +1,7 @@
 import { TaskStatus } from '@prisma/client';
 import type { CreatorType, Prisma as PrismaTypes } from '@prisma/client';
-import { RunEventType } from '@orbit/shared';
+import { RunEventType, type OwnerConfirmationIfConfirmed } from '@orbit/shared';
+import { readIfConfirmed, type DependentReleaseReader } from './owner-confirmation-if-confirmed';
 import type { TaskCompletionCriterionValue } from './task-completion-criterion';
 import {
   OWNER_CONFIRMATION_UNSETTLED_STATUSES,
@@ -30,7 +31,7 @@ import {
 
 const UNSETTLED: TaskStatus[] = OWNER_CONFIRMATION_UNSETTLED_STATUSES.map((status) => TaskStatus[status]);
 
-/** What a run said when it ended the turn the owner is asked about: its last assistant message. */
+/** What a run said in the turn it declared the work finished: its last assistant message there. */
 export interface OwnerConfirmationReport {
   text: string;
   reportedAt: Date;
@@ -71,6 +72,8 @@ export interface OwnerConfirmationView {
   acceptanceCriteria: string | null;
   /** Null unless the task declares OWNER_CONFIRMED, has not settled, and a run is waiting on it. */
   waiting: OwnerConfirmationWaiting | null;
+  /** What confirming sets off (`owner-confirmation-if-confirmed.ts`); null whenever `waiting` is. */
+  ifConfirmed: OwnerConfirmationIfConfirmed | null;
   /** Every decision recorded about this task, oldest first. */
   decisions: RecordedOwnerDecision[];
 }
@@ -217,23 +220,44 @@ export function latestOwnerConfirmationRequest(tx: PrismaTypes.TransactionClient
       sessionId: true,
       turnId: true,
       requestedAt: true,
+      claim: { select: { turnId: true } },
       decisions: { select: { id: true }, take: 1 },
     },
   });
 }
 
 /**
- * The last thing the run said in the turn a request is about.
+ * The last thing the run said in the turn it declared the work finished in — the report the owner
+ * is asked about.
+ *
+ * The DECLARING turn, not the turn the run stopped in: a run that declared and then went on — a
+ * `bg_run` job's wake, a follow-up that was queued — stops in a turn that only says so, and that
+ * sentence used to stand in front of the report (2026-10-02: a wake's opening line took the card's
+ * first 240 characters). A request recorded under 0267's rule has no declaration (`claim` null,
+ * before 0295) and keeps the turn it was asked in; so does a declaring turn that said nothing.
  *
  * Read from the run's own `assistant` events rather than the session's `lastAssistantText`, which a
  * later turn overwrites: a receipt drawn a week later still says what the owner was shown.
  */
 export async function ownerConfirmationReport(
   tx: PrismaTypes.TransactionClient,
-  request: { sessionId: string; turnId: string },
+  request: { sessionId: string; turnId: string; claim?: { turnId: string } | null },
+): Promise<OwnerConfirmationReport | null> {
+  const declared = request.claim?.turnId;
+  if (declared && declared !== request.turnId) {
+    const said = await lastAssistantText(tx, request.sessionId, declared);
+    if (said) return said;
+  }
+  return lastAssistantText(tx, request.sessionId, request.turnId);
+}
+
+async function lastAssistantText(
+  tx: PrismaTypes.TransactionClient,
+  sessionId: string,
+  turnId: string,
 ): Promise<OwnerConfirmationReport | null> {
   const events = await tx.runEvent.findMany({
-    where: { sessionId: request.sessionId, turnId: request.turnId, type: RunEventType.ASSISTANT },
+    where: { sessionId, turnId, type: RunEventType.ASSISTANT },
     orderBy: { seq: 'desc' },
     take: 20,
     select: { payload: true, createdAt: true },
@@ -247,11 +271,15 @@ export async function ownerConfirmationReport(
   return null;
 }
 
-/** The whole confirmation state of one task, or null when this owner has no such task. */
+/**
+ * The whole confirmation state of one task, or null when this owner has no such task. `releases` is
+ * the completion edge the card's released tasks are read from; without it they are left out.
+ */
 export async function readOwnerConfirmation(
   tx: PrismaTypes.TransactionClient,
   ownerId: string,
   taskId: string,
+  releases?: DependentReleaseReader,
 ): Promise<OwnerConfirmationView | null> {
   const task = await tx.task.findFirst({
     where: { id: taskId, ownerId },
@@ -285,7 +313,7 @@ export async function readOwnerConfirmation(
       decidedAt: true,
       decidedByType: true,
       requestId: true,
-      request: { select: { sessionId: true, turnId: true } },
+      request: { select: { sessionId: true, turnId: true, claim: { select: { turnId: true } } } },
     },
   });
   const decisions: RecordedOwnerDecision[] = [];
@@ -301,6 +329,14 @@ export async function readOwnerConfirmation(
       report: row.request ? await ownerConfirmationReport(tx, row.request) : null,
     });
   }
+  const waiting = asked && latest
+    ? {
+      requestId: asked.requestId,
+      sessionId: asked.sessionId,
+      requestedAt: latest.requestedAt,
+      report: await ownerConfirmationReport(tx, latest),
+    }
+    : null;
   return {
     taskId: task.id,
     title: task.title,
@@ -308,13 +344,9 @@ export async function readOwnerConfirmation(
     projectId: task.projectId,
     completionCriterion: task.completionCriterion as TaskCompletionCriterionValue,
     acceptanceCriteria: task.acceptanceCriteria,
-    waiting: asked && latest
-      ? {
-        requestId: asked.requestId,
-        sessionId: asked.sessionId,
-        requestedAt: latest.requestedAt,
-        report: await ownerConfirmationReport(tx, latest),
-      }
+    waiting,
+    ifConfirmed: waiting
+      ? await readIfConfirmed(tx, { ownerId, taskId, sessionId: waiting.sessionId }, releases)
       : null,
     decisions,
   };
