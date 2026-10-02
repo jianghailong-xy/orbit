@@ -132,3 +132,48 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             build
+
+  # TEMPORARY — an evidence run, not a gate; this branch is never merged. `.move-probe/` hosts the
+  # real iOS session list against a fixture API and photographs the Move panel's Move to Another
+  # Workspace — the workspaces a session can and can't go to, a workspace's page, the Move and End
+  # and Move confirmations, the toast and the list without the row (see .move-probe/README.md).
+  workspace-move-shots-ios:
+    name: Move to Another Workspace probe (iOS)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Build, test and capture
+        run: bash .move-probe/ios/run.sh
+      - name: Upload the captures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: workspace-move-shots-ios
+          path: .move-probe/ios/shots
+          if-no-files-found: error
+
+  # TEMPORARY, with the probe: the macOS gate's `swift build` of OrbitApp on its own, since the gate
+  # stops at OrbitKit's tests on this base (six parity cases red before this branch) and never reaches it.
+  orbitapp-macos-build:
+    name: OrbitApp build (macOS, probe)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Build OrbitApp
+        working-directory: src/macos/OrbitApp
+        run: swift build
