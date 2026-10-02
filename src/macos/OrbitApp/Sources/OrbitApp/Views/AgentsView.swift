@@ -480,12 +480,13 @@ struct AgentPanes: View {
         //
         // Not a bare `.safeAreaInset`: on iOS 26 the pull's spinner hangs under the navigation
         // bar, in the band these sit in, and a pull drew it over the needs-you bar; the modifier
-        // also puts the list back at its top when a refresh leaves it just past there (see
-        // `topInsetClearOfRefresh`). Also tried on the iOS 26.5 simulator and dropped: the bands
-        // stacked above the list instead (the pull pushed them down 60pt and no spinner showed),
-        // `.safeAreaBar` (the list would no longer pull, nor stay scrolled), and the needs-you bar
-        // as the list's first row (it scrolls away, and a finished refresh left the list settled
-        // with it half under the navigation bar).
+        // keeps these put and the spinner under them, pull and refresh alike, and puts the list
+        // back at its top when a refresh leaves it just past there (see `topInsetClearOfRefresh`).
+        // Also tried on the iOS 26.5 simulator and dropped: the bands stacked above the list
+        // instead (the pull pushed them down 60pt and no spinner showed), `.safeAreaBar` (the list
+        // would no longer pull, nor stay scrolled), and the needs-you bar as the list's first row
+        // (it scrolls away, and a finished refresh left the list settled with it half under the
+        // navigation bar).
         .topInsetClearOfRefresh {
             VStack(spacing: 0) {
                 if listPresentation.showsPersistentScope {
