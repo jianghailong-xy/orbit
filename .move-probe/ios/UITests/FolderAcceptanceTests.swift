@@ -177,8 +177,8 @@ final class FolderAcceptanceTests: ProbeCase {
 
     // MARK: 4. A name the workspace already has
 
-    /// “Release” again — from the ≡ menu, from the Move panel, and as a rename of iOS polish: each
-    /// is refused, and the alert says why in a sentence. The folders stay as they were.
+    /// “Release” again — from the ≡ menu and from the Move panel: each is refused, and the alert says
+    /// why in a sentence. The folders stay as they were.
     func test5DuplicateName() {
         let app = launch(dark: true)
         openListMenu(app)
@@ -195,21 +195,45 @@ final class FolderAcceptanceTests: ProbeCase {
         alertButton(app, create)
         refusal(app, couldNotCreate, "accept-4-4-panel-duplicate-refused")
         tap(app, "Done")
-        settle(1)
+        settle(1.5)
+        shot("accept-4-5-list-unchanged")
+        note("after the refusals: \(folderCounts(app))")
+        XCTAssertTrue(folderRowExists(app, release), "Release is still the one folder of that name")
+        XCTAssertTrue(folderRowExists(app, polish), "and iOS polish is still there")
+        saveState("accept-4-state-after-create.json")
+        app.terminate()
+    }
 
+    /// Renaming iOS polish to “Release” is refused the same way, in a sentence, and the folder keeps
+    /// its name. From a freshly launched list, as test3's long press is (round 1 pressed right after
+    /// the Move panel closed, and the press landed as a tap that opened the folder's page — whose ⋯
+    /// offers the same Rename…, the fallback here).
+    func test6DuplicateRename() {
+        let app = launch(dark: true)
         folderMenu(app, polish)
+        if !app.buttons[renameItem].exists, app.buttons["Folder actions"].waitForExistence(timeout: 3) {
+            note("6: the press opened the folder's page; renaming from its ⋯")
+            app.buttons["Folder actions"].tap()
+            settle(1.2)
+        }
         tap(app, renameItem)
         let alert = app.alerts[renameTitle]
-        if !alert.waitForExistence(timeout: 8) { note("4: no rename prompt") }
+        if !alert.waitForExistence(timeout: 8) {
+            note("6: no rename prompt")
+            write(app.debugDescription, "missing-rename-prompt-6.txt")
+        }
+        XCTAssertTrue(alert.exists, "Rename… opens the system's name prompt")
         replace(app, alert.textFields.firstMatch, with: release)
+        shot("accept-4-6-rename-prompt-duplicate")
         alert.buttons[saveButton].tap()
-        refusal(app, couldNotRename, "accept-4-5-rename-duplicate-refused")
+        refusal(app, couldNotRename, "accept-4-7-rename-duplicate-refused")
+        if app.buttons["Folder actions"].exists { goBack(app) }
         settle(1.5)
-        shot("accept-4-6-list-unchanged")
-        note("after the refusals: \(folderCounts(app))")
-        XCTAssertTrue(folderRowExists(app, release), "Release is still there")
-        XCTAssertTrue(folderRowExists(app, polish), "and so is iOS polish, unrenamed")
-        saveState("accept-4-state-after.json")
+        shot("accept-4-8-list-unchanged")
+        note("after the refusal: \(folderCounts(app))")
+        XCTAssertTrue(folderRowExists(app, polish), "iOS polish keeps its name")
+        XCTAssertTrue(folderRowExists(app, release), "and Release is still there")
+        saveState("accept-4-state-after-rename.json")
         app.terminate()
     }
 
