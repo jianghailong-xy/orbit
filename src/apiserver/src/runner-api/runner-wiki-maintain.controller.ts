@@ -117,6 +117,7 @@ export class RunnerWikiMaintainController {
       to: dto.to ?? null,
       outcome: dto.outcome,
       error: dto.error ?? null,
+      failureKind: dto.failureKind ?? null,
       report: dto.report ?? null,
     });
   }

@@ -6245,6 +6245,7 @@ model WikiMaintenanceRun {
   expectKind      String?   @map("expect_kind")
   expectRef       String?   @map("expect_ref")
   sessionId       String?   @map("session_id") @db.Uuid
+  /// The run's first start, never written again (migration 0354): a retry or a rerun is `lastStartedAt`.
   startedAt       DateTime? @map("started_at") @db.Timestamptz(3)
   endedAt         DateTime? @map("ended_at") @db.Timestamptz(3)
   /// `succeeded` | `failed` | `truncated`, as the run reported it.
@@ -6253,6 +6254,14 @@ model WikiMaintenanceRun {
   opsRefused      Int?      @map("ops_refused")
   report          Json?
   error           String?
+  /// How many times a session started the run, and the latest of them (contract `maintenance.job.recovery.attempts`).
+  attempts        Int       @default(0)
+  lastStartedAt   DateTime? @map("last_started_at") @db.Timestamptz(3)
+  /// `infra` | `content` — whose a failed or truncated run's failure was; set exactly when the outcome is one of those.
+  failureKind     String?   @map("failure_kind")
+  /// How many times the platform started the run's task again after its session died of an infra failure.
+  reruns          Int       @default(0)
+  rerunAt         DateTime? @map("rerun_at") @db.Timestamptz(3)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 

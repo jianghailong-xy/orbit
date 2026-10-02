@@ -308,16 +308,21 @@ async function pageToExpected(h: Harness, s: Space, run: string, expect: string)
   throw new Error('the pages never ended');
 }
 
-/** A run reporting that it did not succeed: through the cursor route (a truncated turn) or the finish route. */
-async function fail(h: Harness, s: Space, run: string, via: 'cursor' | 'finish', error: string): Promise<void> {
+/**
+ * A run reporting that it did not succeed: through the cursor route (a truncated turn) or the finish route —
+ * saying whose the failure was when `failureKind` is given, as `orbit wiki maintain` does since migration 0354.
+ */
+async function fail(h: Harness, s: Space, run: string, via: 'cursor' | 'finish', error: string, failureKind?: 'infra' | 'content'): Promise<void> {
   const answer = via === 'cursor'
     ? await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/cursor`, {
       outcome: 'truncated',
       error,
+      ...(failureKind ? { failureKind } : {}),
     })
     : await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/finish`, {
       outcome: 'failed',
       error,
+      ...(failureKind ? { failureKind } : {}),
       report: { stoppedAt: 'extract', ops: { refused: 0 } },
     });
   expectStatus(answer, 200, `a failed run is recorded through the ${via} route`);
@@ -380,6 +385,7 @@ test('the status line\'s read: every active entry of the space, and maintenance 
     held: null,
     running: null,
     lastRun: null,
+    lastFailure: null,
   }, 'a space whose maintenance is off counts nothing');
   const cursors = await h.sql.query(`SELECT 1 FROM "wiki_cursor" WHERE "space_id" = $1`, [s.spaceId]);
   assert.equal(cursors.rowCount, 0, 'the read writes nothing, not even the cursor row');
@@ -486,6 +492,44 @@ test('three failed runs in a row tell the owner once; a success sets the streak 
   assert.equal((await readHealth(h, s)).maintenance.consecutiveFailures, 5, 'every racing report counted');
   assert.equal(pushesFor(h, s).length, 3, 'and the streak told the owner exactly once');
   assert.equal(pushesFor(h, s)[2]!.failures, threshold);
+});
+
+// ── whose the last failure was ──────────────────────────────────────────────────────────────────
+
+test('the last failure says whose it was — the platform\'s or the run\'s — and why, until the run that failed succeeds', { skip }, async () => {
+  const h = await boot();
+  const s = await space(h, 'health-kind', { dailyRunLimit: 48 });
+  const { run, expect } = await startRun(h, s);
+  assert.equal((await readHealth(h, s)).maintenance.lastFailure, null, 'no run of the space has failed yet');
+
+  // The run stopped on the server: `orbit wiki maintain` says so, and the health tells it from the run's own.
+  await fail(h, s, run, 'finish', 'verify: POST /runner/wiki/spaces/x/verifications -> 500', 'infra');
+  const infra = await readHealth(h, s);
+  assert.equal(infra.maintenance.lastFailure.kind, 'infra');
+  assert.equal(infra.maintenance.lastFailure.reason, 'verify: POST /runner/wiki/spaces/x/verifications -> 500');
+  assert.equal(toUuid(infra.maintenance.lastFailure.sessionId), run);
+  assert.equal(infra.maintenance.lastFailure.at, infra.maintenance.lastRun.endedAt, 'it is the run that ended last');
+  const row = (await h.sql.query<{ failure_kind: string; outcome: string }>(
+    `SELECT "failure_kind","outcome" FROM "wiki_maintenance_run" WHERE "session_id" = $1`, [run])).rows[0]!;
+  assert.deepEqual([row.outcome, row.failure_kind], ['failed', 'infra'], 'the run row keeps whose the failure was');
+
+  // A failure that says nothing of whose it was — a runner older than the field — is read off its error: a 500
+  // is the platform's, and a turn limit the run's own.
+  await fail(h, s, run, 'finish', 'self-check: orbit wiki maintain: POST /runner/wiki/spaces/x/maintenance/changesets -> 500');
+  assert.equal((await readHealth(h, s)).maintenance.lastFailure.kind, 'infra', 'an older runner\'s 500');
+  await fail(h, s, run, 'cursor', 'the run reached its limit of 120 model turns');
+  const content = await readHealth(h, s);
+  assert.deepEqual([content.maintenance.lastFailure.kind, content.maintenance.lastFailure.reason],
+    ['content', 'the run reached its limit of 120 model turns']);
+
+  // The same run's retry succeeds: its row says how its latest attempt ended, and no failure stands.
+  await succeed(h, s, run, await pageToExpected(h, s, run, expect));
+  const ok = await readHealth(h, s);
+  assert.equal(ok.maintenance.lastRun.outcome, 'succeeded');
+  assert.equal(ok.maintenance.lastFailure, null, 'the run that failed succeeded since');
+  assert.equal((await h.sql.query<{ failure_kind: string | null }>(
+    `SELECT "failure_kind" FROM "wiki_maintenance_run" WHERE "session_id" = $1`, [run])).rows[0]!.failure_kind, null,
+    'a succeeded run has no failure kind');
 });
 
 // ── 3. another account reads nothing ────────────────────────────────────────────────────────────
