@@ -7,7 +7,8 @@
 # move a session between them. Moves, renames, deletes and new folders are kept in memory until
 # POST /__reset, which each UI test calls before it launches the app. A new session created from a
 # folder's page is kept too, so the list shows it where it landed. Everything else is a 404, which
-# the app treats as an older server. Every request is logged.
+# the app treats as an older server. Every request is logged. GET /__state dumps what it holds (the
+# acceptance probe reads it before and after a step).
 import copy
 import json
 import sys
@@ -125,6 +126,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         url = urlparse(self.path)
         parts = [p for p in url.path.split("/") if p]
+        # The acceptance probe's witness: every session the stub holds, per tab, with the folder
+        # it is filed in, and every folder — read before and after a step to show what it changed.
+        if parts == ["__state"]:
+            return self.send(200, {
+                "folders": sorted(STATE["folders"], key=lambda f: (f["name"], f["id"])),
+                "sessions": {view: [{"id": r["id"], "title": r["title"], "lifecycleState": r["lifecycleState"],
+                                     "folderId": r["folderId"]} for r in rows]
+                             for view, rows in STATE["sessions"].items()},
+            })
         if parts == ["api", "agents"]:
             return self.send(200, [AGENT])
         if parts == ["api", "sessions"]:

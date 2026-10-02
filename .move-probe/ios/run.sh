@@ -53,7 +53,8 @@ echo "==> iPad:   $(echo "$IPAD" | cut -f2)  runtime: $(echo "$IPAD" | cut -f3)"
 [ -n "$IPAD_UDID" ] || { echo "no iPad simulator"; exit 1; }
 
 xcodegen generate >/dev/null
-for UDID in "$IPHONE_UDID" "$IPAD_UDID"; do
+# The acceptance pass is the phone alone (FolderAcceptanceTests); the iPad stays shut.
+for UDID in "$IPHONE_UDID"; do
   xcrun simctl boot "$UDID" 2>/dev/null || true
   xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
   xcrun simctl status_bar "$UDID" override --time "10:04" --batteryState charged --batteryLevel 100 \
@@ -82,13 +83,12 @@ run_pass() {  # $1 = label, $2 = device udid, $3... = -only-testing arguments
 }
 
 run_pass iphone "$IPHONE_UDID" \
-  -only-testing:MoveProbeUITests/MoveShotTests \
-  -only-testing:MoveProbeUITests/FolderShotTests
-run_pass ipad "$IPAD_UDID" \
-  -only-testing:MoveProbeUITests/FolderIPadShotTests
+  -only-testing:MoveProbeUITests/FolderAcceptanceTests
 
 echo "==> requests the app made:"
 cat "$OUT/requests.log" || true
+echo "==> the fixture's state around the delete:"
+for f in "$OUT"/accept-3-state-*.json; do echo "--- $f"; cat "$f" || true; done
 echo "==> shots:"
 ls -la "$OUT" || true
 ls "$OUT"/*.png >/dev/null 2>&1 || { echo "no pictures were taken"; exit 1; }

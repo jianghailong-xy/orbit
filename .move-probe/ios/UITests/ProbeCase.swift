@@ -90,7 +90,9 @@ class ProbeCase: XCTestCase {
     /// failure: the stub starts out in exactly that state anyway.
     func resetStub() {
         for attempt in 1...3 {
-            var request = URLRequest(url: URL(string: "http://127.0.0.1:8765/__reset")!)
+            // The test's name rides along, so the stub's request log reads test by test.
+            let test = name.components(separatedBy: CharacterSet.alphanumerics.inverted).joined()
+            var request = URLRequest(url: URL(string: "http://127.0.0.1:8765/__reset?for=\(test)")!)
             request.httpMethod = "POST"
             request.timeoutInterval = 10
             let answered = DispatchSemaphore(value: 0)
@@ -107,6 +109,31 @@ class ProbeCase: XCTestCase {
 
     final class StatusBox: @unchecked Sendable {
         var code: Int?
+        var body: Data?
+    }
+
+    /// What the fixture API holds right now — every session per tab with its folder, and every
+    /// folder (`GET /__state`) — written next to the pictures, so a step's effect on the data can be
+    /// read off the files taken before and after it.
+    func saveState(_ file: String) {
+        var request = URLRequest(url: URL(string: "http://127.0.0.1:8765/__state")!)
+        request.timeoutInterval = 10
+        let answered = DispatchSemaphore(value: 0)
+        let box = StatusBox()
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            box.code = (response as? HTTPURLResponse)?.statusCode
+            box.body = data
+            answered.signal()
+        }.resume()
+        _ = answered.wait(timeout: .now() + 15)
+        guard box.code == 200, let data = box.body,
+              let json = try? JSONSerialization.jsonObject(with: data),
+              let pretty = try? JSONSerialization.data(withJSONObject: json, options: [.prettyPrinted, .sortedKeys]),
+              let text = String(data: pretty, encoding: .utf8) else {
+            note("state \(file): \(box.code.map(String.init) ?? "no answer")")
+            return
+        }
+        write(text, file)
     }
 
     /// The Move panel the tap opened: its title, once its folders are in.
