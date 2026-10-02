@@ -1,14 +1,14 @@
 import Foundation
 
-/// A Codex pool of the user's own ChatGPT account (migration 0323) on iOS — the web's `withLogin`
-/// (lib/codexLogin.ts) and its pool page (`CodexPoolPage` in ProviderPoolPage.tsx) in their words: the
-/// one account it runs on, where that account stands, its windows with when each resets, and what its
-/// owner — the only person who ever sees the pool — can do about it. `CodexSignInCopyParityTests` holds
-/// every word here to the web source.
+/// A Codex pool of the user's own ChatGPT accounts (migration 0323) on iOS — the web's `withLogin`
+/// (lib/codexLogin.ts) and its pool page (`CodexPoolPage` in ProviderPoolPage.tsx) in their words: every
+/// account it holds, where each one stands, its windows with when each resets, and what its owner — the
+/// only person who ever sees the pool — can do about them. `CodexSignInCopyParityTests` holds every word
+/// here to the web source.
 public enum CodexLoginPool {
     // MARK: drawing it as a pool
 
-    /// A Codex pool of one's own: one ChatGPT account, not a set of member keys.
+    /// A Codex pool of one's own: ChatGPT accounts, not a set of member keys.
     public static func isLoginPool(_ pool: ProviderPool) -> Bool {
         pool.engine == "codex" && pool.shared == nil
     }
@@ -17,18 +17,39 @@ public enum CodexLoginPool {
     public static let notSignedIn = "Not signed in"
     public static let signedOutWords = "Signed out"
 
-    /// The pool's one member, read off its account, and what the pool says of itself (web's
+    /// Every account the pool holds, oldest first (web's `poolLogins`): the server's `logins`, and — from
+    /// an older server, which names only one — the pool's `login` as that one.
+    public static func logins(_ pool: ProviderPool) -> [CodexLogin] {
+        logins(pool.logins, login: pool.login)
+    }
+
+    static func logins(_ logins: [CodexLogin]?, login: CodexLogin?) -> [CodexLogin] {
+        logins ?? login.map { [$0] } ?? []
+    }
+
+    /// The pool's members, one per account it holds, and what the pool says of itself (web's
     /// `withLogin`): why nothing can run, and until when a spent account waits.
-    static func drawn(slug: String, login: CodexLogin?, now: Date = Date())
+    static func drawn(slug: String, logins: [CodexLogin], now: Date = Date())
         -> (members: [PoolMember], unavailable: String?, resetsAt: String?) {
-        guard let login else { return ([], notSignedIn, nil) }
+        guard !logins.isEmpty else { return ([], notSignedIn, nil) }
+        let members = logins.enumerated().map { index, login in
+            member(slug: slug, login: login, first: index == 0, now: now)
+        }
+        // Only ever a mark of the pool as a whole: the EARLIEST of the spent accounts' resets — one
+        // account freeing up is enough for work to continue.
+        let resetsAt = members.compactMap(\.resetsAt)
+            .min { (RelativeTime.parse($0) ?? .distantFuture) < (RelativeTime.parse($1) ?? .distantFuture) }
+        return (members, members[0].state == .signedOut ? signedOutWords : nil, resetsAt)
+    }
+
+    /// One of the pool's accounts as a member of it. The first is the account its sessions run on — the
+    /// server's `login` — so it is the one a session starting now uses, and the row that says NEXT.
+    private static func member(slug: String, login: CodexLogin, first: Bool, now: Date) -> PoolMember {
         let state = state(login, now: now)
-        let resetsAt = state == .spent ? spentUntil(login, now: now) ?? nil : nil
-        let member = PoolMember(id: "login:\(login.fingerprint)", slug: slug, label: name(login),
-                                presetSlug: "openai", enabled: true, planUsage: login.usage,
-                                state: state, resetsAt: resetsAt, next: state == .available,
-                                login: login)
-        return ([member], state == .signedOut ? signedOutWords : nil, resetsAt)
+        return PoolMember(id: "login:\(login.fingerprint)", slug: slug, label: name(login),
+                          presetSlug: "openai", enabled: true, planUsage: login.usage, state: state,
+                          resetsAt: state == .spent ? spentUntil(login, now: now) ?? nil : nil,
+                          next: first && state == .available, login: login)
     }
 
     /// Where the account stands: OpenAI's refusal first, then a used-up window, else it runs.
@@ -83,49 +104,62 @@ public enum CodexLoginPool {
     /// Why a signed-out account is out, and what brings it back.
     public static let signedOutReason = "OpenAI signed this account out — sign in again to put it back in the pool."
 
+    /// Whether the account's row wears NEXT (`SharedPoolPage.nextChip`, web's `LoginRow`): with one
+    /// account there is nothing to choose between, so the mark would say nothing.
+    public static func showsNext(_ member: PoolMember, in pool: ProviderPool) -> Bool {
+        member.next && pool.members.count > 1
+    }
+
     // MARK: its page
 
     public static let pageTitle = "Codex pool"
     public static let justMe = "Just me"
-    public static let accountHeader = "Account"
-    /// The web page's sentence under the pool's name; on a phone, the Account section's footer.
-    public static let accountFooter = "Sessions run on your own ChatGPT account, and its sign-in stays on the Orbit server."
+    /// The Accounts card's head, beside how many accounts the pool holds.
+    public static let accountsHeader = "Accounts"
+    /// The web page's sentence under the pool's name, after whose it is and how many of its accounts can
+    /// run (`summary`); on a phone, the Accounts section's footer.
+    public static let accountsFooter = "Each session starts on the account whose quota resets soonest, and stays on it until that one runs out."
     public static let noAccount = "No account yet — no session can start on this pool until you sign in with ChatGPT."
-    public static let signIn = "Sign in with ChatGPT"
+    /// Always on the page: a pool of one's own takes one account after another, and a signed-out one
+    /// comes back from its row (`signInAgain`).
+    public static let addAccount = "Add account"
     public static let signInAgain = "Sign in again"
 
-    /// The Account header's trailing words (web's `PoolGauge`): the account, named — one account is no
-    /// "next" — or, with nothing to run on, when it frees up or why.
-    public static func headline(_ pool: ProviderPool, now: Date = Date(), timeZone: TimeZone = .current) -> String {
-        if let member = pool.members.first(where: \.next) { return member.label }
-        if let unavailable = pool.unavailable { return unavailable }
-        return ProviderPools.spentNote(pool, now: now, timeZone: timeZone) ?? "No account can run"
+    /// Whose the pool is and how many of its accounts a session could start on now — "Just me · 2 of 2
+    /// accounts available", the web card's head and the page's line under the pool's name alike.
+    public static func summary(_ pool: ProviderPool) -> String {
+        "\(justMe) · \(ProviderPools.pageSubtitle(pool))"
     }
 
-    /// The Providers row's second line: whose pool it is, and the account it runs on.
-    public static func overviewLine(_ pool: ProviderPool) -> String {
-        guard let login = pool.login else { return justMe }
-        return "\(justMe) · \(name(login))"
-    }
-
-    /// The Providers row's value: where the account stands, or why there is none to run on.
+    /// The Providers row's value: the head's gauge (web's `PoolGauge`) less the account's name, which a
+    /// phone's row has no room for — the tightest window of the account the next session starts on — or,
+    /// with none to start on, when the first frees up or why.
     public static func overviewValue(_ pool: ProviderPool, now: Date = Date(), timeZone: TimeZone = .current) -> String {
-        if let unavailable = pool.unavailable { return unavailable }
-        guard let member = pool.members.first else { return notSignedIn }
-        return ProviderPools.memberStatus(member, now: now, timeZone: timeZone).label
+        ProviderPools.headGauge(pool)?.label ?? ProviderPools.headline(pool, now: now, timeZone: timeZone)
     }
 
     // MARK: signing out, deleting
 
     public static let signOut = "Sign out"
+    /// The row's sign-out mark, named for a screen reader.
+    public static func signOutLabel(_ login: CodexLogin) -> String { "Sign out \(name(login))" }
     public static func signOutTitle(_ login: CodexLogin) -> String { "Sign out \(name(login))?" }
-    public static let signOutNote = "Its sign-in is deleted from the Orbit server, and no session runs on this pool until you sign in again."
-    public static func signedOut(_ login: CodexLogin?) -> String {
-        "\(login.map(name) ?? "The account") is signed out"
+    /// What signing one account out does: with others in the pool it keeps running on them, said in the
+    /// plural when more than one stays; the only one, and nothing runs on the pool.
+    public static func signOutNote(_ pool: ProviderPool) -> String {
+        let others = pool.members.count - 1
+        guard others > 0 else {
+            return "Its sign-in is deleted from the Orbit server, and no session runs on this pool until you sign in again."
+        }
+        return "Its sign-in is deleted from the Orbit server, and no session runs on it until you sign in again — "
+            + "\(pool.label) keeps running on its other account\(others == 1 ? "" : "s")."
     }
+    public static func signedOut(_ login: CodexLogin) -> String { "\(name(login)) is signed out" }
 
     public static let deletePool = "Delete pool"
     public static func deleteTitle(_ pool: ProviderPool) -> String { "Delete \(pool.label)?" }
     public static let delete = "Delete"
-    public static let deleteNote = "Its ChatGPT sign-in is deleted from the Orbit server with it."
+    public static func deleteNote(_ pool: ProviderPool) -> String {
+        "Its ChatGPT sign-in\(logins(pool).count == 1 ? " is" : "s are") deleted from the Orbit server with it."
+    }
 }
