@@ -40,6 +40,7 @@ import {
   referenceToken,
   type ReferenceMap,
 } from '../lib/composerRefs';
+import { requestPeersLine } from '../lib/sessionRequest';
 import { settleThinking } from '../lib/thinkingDraft';
 import {
   READER_INPUT_GRACE_MS,
@@ -175,6 +176,7 @@ import { BackgroundWakeCard } from './BackgroundWakeCard';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import { ProjectStartedCard } from './ProjectStartedCard';
+import { SessionMessageCard } from './SessionMessageCard';
 import { parseWatchWake, watchingCountWord, watchingWord } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { returnsToComposer } from '../lib/queuedTurnRestore';
@@ -298,6 +300,7 @@ import { PlanUsageIndicator } from './PlanUsageIndicator';
 import type {
   OpenItemDeliveryCard as OpenItemDelivery,
   ProjectStartedCard as ProjectStarted,
+  SessionMessageCard as SessionMessage,
   SessionTurnIntent,
   SessionTurnPlacement,
   WatchView,
@@ -438,6 +441,9 @@ export interface QueuedTurn {
   openItemDelivery?: OpenItemDelivery;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStarted;
+  /** Another Orbit session's message, and who sent it (`ActiveSessionTurn.sessionMessage`): drawn as
+   *  the "From [that session]" card its echo will be, and never handed back to the reader's composer. */
+  sessionMessage?: SessionMessage;
   /** The control plane wrote this turn itself, so nobody typed it (`ActiveSessionTurn.authoredByOrbit`). */
   authoredByOrbit?: true;
 }
@@ -1037,6 +1043,17 @@ export function SessionTitleRow({ session: s, hoverTipOpen = false }: { session:
       <CoordinatorBadge projectId={s.projectId} />
     </div>
   );
+}
+
+/**
+ * Who this row is waiting on for a reply, and who is waiting on it (session requests, contract §6):
+ * "Waiting on Worker 2 · Owes a reply to Coordinator". Read off the row's own `awaitingReplyFrom` /
+ * `owesReplyTo`, which every list read and every live summary carries; nothing when neither is open.
+ */
+export function SessionRequestsLine({ session: s }: { session: any }) {
+  const text = requestPeersLine(s.awaitingReplyFrom, s.owesReplyTo);
+  if (!text) return null;
+  return <div className="session-requests" title={text}>{text}</div>;
 }
 
 /** Compact tag summary for a session-list row. The first tag is the one users can scan; the
@@ -3284,6 +3301,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               // this row paints is the card the runner's echo will replace it with.
               ...(row.openItemDelivery ? { openItemDelivery: row.openItemDelivery } : {}),
               ...(row.projectStarted ? { projectStarted: row.projectStarted } : {}),
+              // …and another session's message, drawn "From [that session]" rather than as the
+              // reader's own bubble while its echo is on the way.
+              ...(row.sessionMessage ? { sessionMessage: row.sessionMessage } : {}),
             }))
             .filter(
               (turn) => !acceptedUserTurnLanded(turn, selectedId, accRef.current),
@@ -7426,6 +7446,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                             {line.text}
                           </div>
                         </div>
+                        <SessionRequestsLine session={s} />
                       </div>
                     </div>
                     <div className="session-right">
@@ -8116,15 +8137,40 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 />
               ))}
               {!selectedTrashed && visibleQueuedTurns.map((q) => {
+                // Another Orbit session's message is asked about FIRST, off the card the snapshot
+                // carried, before anything is read out of its words — which are the sending agent's to
+                // choose, and could take the shape of a wake below (the transcript's own order,
+                // NodeView).
+                const fromSession = q.sessionMessage ?? null;
                 // A wake a watch queued is the card the transcript draws once a runner takes it
                 // (NodeView), so it keeps that shape when it lands and its JSON stays folded. How
                 // its delivery stands is the queue's line to say, as for every queued row.
-                const wake = parseWatchWake(q.content);
+                const wake = fromSession ? null : parseWatchWake(q.content);
                 // A wake the control plane queued for a background job's news, or for a wakeup coming
                 // due, is nobody's message either: it gets the line the transcript draws once a
                 // runner takes it. Withdrawing it is an ordinary cancel — nothing re-sends it.
-                const background = wake ? null : parseBackgroundWake(q.content);
-                return wake ? (
+                const background = fromSession || wake ? null : parseBackgroundWake(q.content);
+                return fromSession ? (
+                  // Drawn "From [that session]" while it waits, as the transcript draws it once a
+                  // runner takes it. Cancel withdraws it and hands nothing back to the composer — the
+                  // words are the sending session's (`returnsToComposer`) — and there is no Put back
+                  // for the same reason.
+                  <SessionMessageCard
+                    key={q.turnId}
+                    card={fromSession}
+                    text={q.content}
+                    ts={q.createdAt}
+                    queued={
+                      <QueuedTurnMeta
+                        placement={q.placement}
+                        delivery={q.delivery}
+                        deliveryCode={q.deliveryCode}
+                        deliveryReason={q.deliveryReason}
+                        onCancel={() => cancelQueued(q.turnId)}
+                      />
+                    }
+                  />
+                ) : wake ? (
                   <WatchWakeCard
                     key={q.turnId}
                     wake={wake}

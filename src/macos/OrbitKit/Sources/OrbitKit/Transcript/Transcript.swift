@@ -145,6 +145,15 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// the facts beside this turn's echo (`projectStarted`, see `ProjectStarted.parse`). Nobody's
     /// message either: the console draws the card, with `text` folded inside it.
     public var startedCard: ProjectStarted?
+    /// Another Orbit session's message, when the control plane recorded which session sent it beside
+    /// this turn's echo (`sessionMessage`, see `SessionMessage.parse`). Somebody's words, but not the
+    /// reader's: the console draws "From [that session]" instead of the owner's bubble. Nil for every
+    /// turn the owner typed, and for every message stored before the payload existed.
+    public var sessionMessage: SessionMessage?
+    /// The outcomes of this session's own requests the turn handed back, when the control plane
+    /// recorded them beside the echo (`sessionReplies`, see `SessionReply.parse`). Nobody typed them:
+    /// the console draws a reply card per outcome. Nil for every other turn.
+    public var sessionReplies: [SessionReply]?
     /// The control plane wrote this queued turn itself (`QueuedTurnInfo.authoredByOrbit`), so nobody
     /// typed it: taken off the queue unrun, it hands nothing back to the composer.
     public var authoredByOrbit: Bool
@@ -165,7 +174,9 @@ public struct UserBubble: Equatable, Sendable, Codable {
                 undelivered: Bool = false, note: String? = nil,
                 steer: Bool = false, delivery: String? = nil, itemCard: OpenItemDelivery? = nil,
                 taskStart: TaskStart? = nil,
-                startedCard: ProjectStarted? = nil, authoredByOrbit: Bool = false) {
+                startedCard: ProjectStarted? = nil, sessionMessage: SessionMessage? = nil,
+                sessionReplies: [SessionReply]? = nil,
+                authoredByOrbit: Bool = false) {
         self.id = id
         self.text = text
         self.attachments = attachments
@@ -181,6 +192,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.itemCard = itemCard
         self.taskStart = taskStart
         self.startedCard = startedCard
+        self.sessionMessage = sessionMessage
+        self.sessionReplies = sessionReplies
         self.authoredByOrbit = authoredByOrbit
     }
 
@@ -188,7 +201,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
     // rehydrate (those keys just default) instead of discarding the whole cached session.
     enum CodingKeys: String, CodingKey {
         case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
-        case note, steer, delivery, itemCard, taskStart, startedCard, authoredByOrbit
+        case note, steer, delivery, itemCard, taskStart, startedCard, sessionMessage, sessionReplies
+        case authoredByOrbit
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -210,6 +224,10 @@ public struct UserBubble: Equatable, Sendable, Codable {
         // Same for the task-start card: a snapshot from before it existed keeps the bubble.
         taskStart = try? c.decodeIfPresent(TaskStart.self, forKey: .taskStart)
         startedCard = try? c.decodeIfPresent(ProjectStarted.self, forKey: .startedCard)
+        // And for who sent a message: a snapshot from before it existed keeps the bubble.
+        sessionMessage = try? c.decodeIfPresent(SessionMessage.self, forKey: .sessionMessage)
+        // And for the outcomes a turn handed back: a snapshot from before they existed keeps its reading.
+        sessionReplies = try? c.decodeIfPresent([SessionReply].self, forKey: .sessionReplies)
         authoredByOrbit = (try? c.decodeIfPresent(Bool.self, forKey: .authoredByOrbit)) ?? false
     }
 }

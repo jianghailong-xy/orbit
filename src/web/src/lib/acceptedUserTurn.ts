@@ -1,4 +1,4 @@
-import type { OpenItemDeliveryCard, ProjectStartedCard } from '@orbit/shared';
+import type { OpenItemDeliveryCard, ProjectStartedCard, SessionMessageCard } from '@orbit/shared';
 
 /** A user turn the API accepted but whose durable `user` event has not reached this tab yet. */
 export interface AcceptedUserTurn {
@@ -19,6 +19,9 @@ export interface AcceptedUserTurn {
   openItemDelivery?: OpenItemDeliveryCard;
   /** The same for the message telling a coordinator its project was started (lib/projectStarted). */
   projectStarted?: ProjectStartedCard;
+  /** And for another Orbit session's message (lib/sessionMessage): the placeholder is drawn "From
+   *  [that session]", as its echo will be, rather than as the reader's own bubble. */
+  sessionMessage?: SessionMessageCard;
 }
 
 export interface UserTurnEvent {
@@ -120,6 +123,7 @@ export function acceptedUserTurnEvent(
       // replaces. Whoever built the row (`source`) the render is the same.
       ...(turn.openItemDelivery ? { openItemDelivery: turn.openItemDelivery } : {}),
       ...(turn.projectStarted ? { projectStarted: turn.projectStarted } : {}),
+      ...(turn.sessionMessage ? { sessionMessage: turn.sessionMessage } : {}),
     },
   };
 }

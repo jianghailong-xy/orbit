@@ -114,6 +114,11 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     /// nothing is waiting any more — which is how the Needs-you bar lets go of a card somebody
     /// answered — and `.some(items)` is what is waiting now.
     public let ownerItems: [SessionOwnerItem]??
+    /// The sessions this one asked for a reply and still waits on, and the ones waiting on it
+    /// (session requests). Doubly optional for `ownerItems`' reason: `nil` is an older control plane
+    /// that never sends the key, `.some([])` is this server saying none is open any more.
+    public let awaitingReplyFrom: [SessionRequestPeer]??
+    public let owesReplyTo: [SessionRequestPeer]??
     public let lastTurnAt: String?
     /// When the server will re-send the message this run's failure killed — part of the summary
     /// because it is part of what `runState == .failed` means (see `Session.retryPending`).
@@ -167,6 +172,12 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
         // a statement ("nothing is waiting on you here") and a missing key is not.
         ownerItems = values.contains(.ownerItems)
             ? .some(try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems) ?? [])
+            : nil
+        awaitingReplyFrom = values.contains(.awaitingReplyFrom)
+            ? .some((try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .awaitingReplyFrom)) ?? [])
+            : nil
+        owesReplyTo = values.contains(.owesReplyTo)
+            ? .some((try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .owesReplyTo)) ?? [])
             : nil
         lastTurnAt = try values.decodeIfPresent(String.self, forKey: .lastTurnAt)
         retryAt = values.contains(.retryAt)

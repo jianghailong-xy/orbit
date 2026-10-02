@@ -101,6 +101,8 @@ const TAG_LABEL: Record<string, string> = {
   orbit_project_coordinator_context: 'project coordinator context',
   'list-conditions': 'list conditions',
   'background-jobs': 'background jobs',
+  'orbit-session-message': 'session message',
+  'orbit-session-reply': 'session reply',
 };
 
 /** The wiki context block, whose line says how much it holds rather than only what it is. Exported

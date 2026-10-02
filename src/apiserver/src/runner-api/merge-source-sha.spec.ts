@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { RunnerStatus, RunStatus as SharedRunStatus } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
+import { noSessionRequests } from '../test-support/prisma-transaction-double';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
@@ -326,6 +327,7 @@ function turnHarness(branchSha?: string) {
   }> = [];
   const tx = {
     $queryRaw: async () => [{ id: SESSION_ID, leaseOwnerMatches: true }],
+    sessionRequest: noSessionRequests(),
     conversationTurn: {
       findMany: async () => [],
       updateMany: async () => ({ count: 1 }),
