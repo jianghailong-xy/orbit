@@ -155,7 +155,10 @@ jobs:
       - name: Toolchain
         run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
       - name: Build, test and capture
-        run: bash .swipe-probe/ios/reveal.sh
+        run: bash .swipe-probe/ios/run.sh
+      - name: Record the swipes
+        if: always()
+        run: OUT=$PWD/.swipe-probe/ios/shots/reveal bash .swipe-probe/ios/reveal.sh
       - name: Upload the captures
         if: always()
         uses: actions/upload-artifact@v7

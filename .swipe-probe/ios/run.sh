@@ -38,7 +38,7 @@ echo "==> building and testing"
 STATUS=0
 TEST_RUNNER_SHOTS_DIR="$OUT" xcodebuild test -project SwipeProbe.xcodeproj -scheme SwipeProbe \
   -destination "id=$UDID" -derivedDataPath .dd -resultBundlePath results/SwipeProbe.xcresult \
-  > build.log 2>&1 || STATUS=$?
+  -skip-testing:SwipeProbeUITests/RevealTests > build.log 2>&1 || STATUS=$?
 grep -E "Test Case|Executed|error:|failed|passed" build.log | tail -40 || true
 if [ "$STATUS" -ne 0 ]; then
   echo "==> xcodebuild exited $STATUS; last 120 lines:"

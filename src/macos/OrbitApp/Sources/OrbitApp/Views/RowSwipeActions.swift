@@ -135,7 +135,8 @@ private struct CircleSwipeRow: ViewModifier {
                 }
             }
             .padding(.vertical, Self.rowInset)
-            .background { if offset != 0 { card } }
+            // The card stays until the row is home, as the system's does, and then fades.
+            .background { if offset != 0 || shownSide != nil { card } }
             .overlay { if offset != 0 || shared?.openID != nil { closer } }
             .offset(x: offset)
             .overlay(alignment: .bottom) {
@@ -302,6 +303,14 @@ private struct CircleSwipeRow: ViewModifier {
         settle(geometry.rest(offset: lifted, velocity: velocity))
     }
 
+    /// Once a shutting row is home, its card and buttons go — the card fades out from under it — and
+    /// it stops being the list's open row, so the separators either side come back only now.
+    private func putAway() {
+        guard offset == 0 else { return }
+        withAnimation(.easeOut(duration: 0.15)) { shownSide = nil }
+        if shared?.openID == id { shared?.openID = nil }
+    }
+
     private func settle(_ rest: RowSwipeGeometry.Rest) {
         let target = geometry.offset(at: rest)
         switch rest {
@@ -310,10 +319,7 @@ private struct CircleSwipeRow: ViewModifier {
             shownSide = rest == .leading ? .leading : .trailing
             withAnimation(.snappy) { offset = target }
         case .closed:
-            if shared?.openID == id { shared?.openID = nil }
-            withAnimation(.snappy) { offset = 0 } completion: {
-                if offset == 0 { shownSide = nil }
-            }
+            withAnimation(.snappy) { offset = 0 } completion: { putAway() }
         case .fullSwipe:
             if shared?.openID == id { shared?.openID = nil }
             let action = leading[0]
@@ -322,9 +328,7 @@ private struct CircleSwipeRow: ViewModifier {
                 // A completed or reopened row leaves the list; one that stays (the request failed)
                 // comes back once the list has had its chance to drop it.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    withAnimation(.snappy) { offset = 0 } completion: {
-                        if offset == 0 { shownSide = nil }
-                    }
+                    withAnimation(.snappy) { offset = 0 } completion: { putAway() }
                 }
             }
         }
