@@ -14,6 +14,7 @@ export * from './models';
 export * from './mergeRecovery';
 export * from './planUsage';
 export * from './project-progress';
+export * from './project-done';
 export * from './project-start';
 export * from './providerPresets';
 export * from './providerTransport';

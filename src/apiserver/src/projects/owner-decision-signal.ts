@@ -6,6 +6,7 @@ import { readWaitingOwnerConfirmations } from '../tasks/owner-confirmation-read'
 import { CRITERIA_WEAKENING_EFFECT_CLASS } from './criteria-weakening-intent';
 import { stillUnanswered } from './criteria-pending-decisions';
 import { ownerItemKind } from './project-open-item';
+import { projectsToRecordAsDone } from './project-looks-finished';
 import {
   projectsAwaitingStandardSetConfirmation,
   projectsReadyToStart,
@@ -92,7 +93,9 @@ export type OwnerDecisionKind =
   | 'PROJECT_DECISION'
   | 'OWNER_CONFIRMATION'
   | 'OWNER_ITEM'
-  | 'START_REQUEST';
+  | 'START_REQUEST'
+  | 'DONE_REQUEST'
+  | 'RECORD_AS_DONE';
 
 export interface OwnerDecisionSignal {
   /** The conversation to open: the project's bound coordinator, or the waiting task's own session.
@@ -129,6 +132,7 @@ export async function readOwnerDecisionSignals(
   return [
     ...(await readProjectDecisionSignals(tx, ownerId, sessionIds)),
     ...(await readOwnerItemSignals(tx, ownerId, sessionIds)),
+    ...(await readRecordAsDoneSignals(tx, ownerId, sessionIds)),
     ...confirmations.map((waiting) => ({
       sessionId: waiting.sessionId,
       projectId: waiting.projectId,
@@ -419,6 +423,54 @@ export function sessionWaitingKind(
   if (decisions.kinds.size !== 1) return null;
   const [only] = decisions.kinds;
   return only === 'OWNER_CONFIRMATION' || only === 'OWNER_ITEM' || only === 'START_REQUEST'
+    || only === 'DONE_REQUEST' || only === 'RECORD_AS_DONE'
     ? only
     : null;
+}
+
+/**
+ * The projects whose coordinator was told they look finished and did not ask to have them recorded
+ * done in time — the owner's "Record as done…" (project closing, D5) — on the conversation the card
+ * is drawn in.
+ *
+ * `RECORD_AS_DONE` is its own kind because it is none of the others: no item escalated, nobody
+ * asked, and what the owner is offered is the "Is this project done?" card filled in by Orbit rather
+ * than by a request. When to show it is `projectsToRecordAsDone`'s, read at this instant: the
+ * project's `exceptionEscalationSeconds` after the delivery, while there is still no valid request
+ * and the project still looks finished.
+ *
+ * Asked only of OPEN projects with a coordinator conversation the owner has not filed away, for the
+ * reason every signal here is: a badge points somewhere.
+ */
+async function readRecordAsDoneSignals(
+  tx: Prisma.TransactionClient,
+  ownerId: string,
+  sessionIds: readonly string[] | undefined,
+): Promise<OwnerDecisionSignal[]> {
+  const coordinated = await tx.project.findMany({
+    where: {
+      ownerId,
+      status: 'OPEN',
+      coordinatorSessionId: sessionIds ? { in: [...sessionIds] } : { not: null },
+      coordinatorSession: { completedAt: null, archivedAt: null, deletedAt: null },
+    },
+    select: { id: true, coordinatorSessionId: true },
+  });
+  if (coordinated.length === 0) return [];
+  const due = await projectsToRecordAsDone(
+    tx,
+    ownerId,
+    coordinated.map((project) => project.id),
+    new Date(),
+  );
+  return coordinated.flatMap((project) => (
+    due.has(project.id) && project.coordinatorSessionId != null
+      ? [{
+        sessionId: project.coordinatorSessionId,
+        projectId: project.id,
+        count: 1,
+        kind: 'RECORD_AS_DONE' as const,
+      }]
+      : []
+  ));
 }

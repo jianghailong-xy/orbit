@@ -85,6 +85,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'integrationJobId',
   'promotionId',
   'fuseEpisodeId',
+  // A landing run again on purpose (`integration_retry`, migration 0344): the failed generation the
+  // new one reruns, the conversation that asked, and the open items the rerun superseded — each an
+  // address a reader follows to the job, the session or the item.
+  'retryOfJobId',
+  'retryRequestedBySessionId',
+  'supersededItemIds',
   // What a promotion is made of (migration 0285). Every one of them is an address a reader of the
   // card follows: the tasks the merge would carry, the two jobs that checked and landed it, the
   // account owner who confirmed it, the card itself, and the receipts it wrote. None is a fence —

@@ -154,6 +154,14 @@ func TestMCPProjectIDCannotEscapeTheProjectRoute(t *testing.T) {
 // the same credential and belongs in the same block. That is a decision, not an inheritance: a
 // project tool that appears here without spending orchestration would be one offered under a grant
 // it does not use.
+//
+// The close-redo's D1 (migration 0346) is a decision of the same kind, made the other way: it adds
+// NO tool here. Saying that a piece of work produces no code is a fact about the TASK, so it rides
+// task_create, task_create_batch and task_update (`codeless`, with `codelessReason` on the edit
+// door); and the measurement that lets a zero-commit task's NOTHING_TO_LAND out of its criterion's
+// landing is the runner's own, carried on the integration job's result (`sourceOnUpstream`). A
+// project-level door for either would let a coordinator exempt work from its criterion without
+// touching the task it is exempting, which is the one thing the declaration must not be.
 func TestMCPExposesExactlyTheProjectTools(t *testing.T) {
 	for _, tc := range []struct {
 		tools         []map[string]interface{}
@@ -206,6 +214,13 @@ func TestMCPExposesExactlyTheProjectTools(t *testing.T) {
 		}
 		if len(seen) != 0 {
 			t.Fatalf("unexpected project tools exposed (orchestration=%v): %#v", tc.orchestration, seen)
+		}
+		// D1's absence from the list above is a decision only while the task doors carry the
+		// declaration it would otherwise have been — in every tool set this census reads.
+		for _, name := range []string{"task_create", "task_update"} {
+			if _, ok := mcpToolProps(tc.tools, name)["codeless"]; !ok {
+				t.Fatalf("%s carries no codeless declaration (orchestration=%v)", name, tc.orchestration)
+			}
 		}
 	}
 }

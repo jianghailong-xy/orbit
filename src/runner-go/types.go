@@ -436,24 +436,27 @@ type IntegrationUpstreamMoved struct {
 // IntegrationJobResultRequest is what the job came to, with everything a reader needs to check
 // that what landed is what was tested.
 type IntegrationJobResultRequest struct {
-	ClaimGeneration string                   `json:"claimGeneration"`
-	LeaseOwner      string                   `json:"leaseOwner"`
-	State           string                   `json:"state"`
-	Phase           string                   `json:"phase,omitempty"`
-	SourceSha       string                   `json:"sourceSha,omitempty"`
-	TargetShaBefore string                   `json:"targetShaBefore,omitempty"`
-	UpstreamSha     string                   `json:"upstreamSha,omitempty"`
-	MainSyncSha     string                   `json:"mainSyncSha,omitempty"`
-	TestedSha       string                   `json:"testedSha,omitempty"`
-	TestedTreeSha   string                   `json:"testedTreeSha,omitempty"`
-	LandedSha       string                   `json:"landedSha,omitempty"`
-	LandedTreeSha   string                   `json:"landedTreeSha,omitempty"`
-	AheadOfUpstream *int                     `json:"aheadOfUpstream,omitempty"`
-	FilesChanged    *int                     `json:"filesChanged,omitempty"`
-	Checks          []IntegrationCheckResult `json:"checks,omitempty"`
-	Conflicts       []string                 `json:"conflicts,omitempty"`
-	ErrorCode       string                   `json:"errorCode,omitempty"`
-	ErrorDetail     map[string]any           `json:"errorDetail,omitempty"`
+	ClaimGeneration string `json:"claimGeneration"`
+	LeaseOwner      string `json:"leaseOwner"`
+	State           string `json:"state"`
+	Phase           string `json:"phase,omitempty"`
+	SourceSha       string `json:"sourceSha,omitempty"`
+	TargetShaBefore string `json:"targetShaBefore,omitempty"`
+	UpstreamSha     string `json:"upstreamSha,omitempty"`
+	MainSyncSha     string `json:"mainSyncSha,omitempty"`
+	TestedSha       string `json:"testedSha,omitempty"`
+	TestedTreeSha   string `json:"testedTreeSha,omitempty"`
+	LandedSha       string `json:"landedSha,omitempty"`
+	LandedTreeSha   string `json:"landedTreeSha,omitempty"`
+	AheadOfUpstream *int   `json:"aheadOfUpstream,omitempty"`
+	// With NOTHING_TO_LAND: whether the source tip is an ancestor of the upstream, as this runner
+	// measured it. Absent on every other answer, which the control plane reads as "not measured".
+	SourceOnUpstream *bool                    `json:"sourceOnUpstream,omitempty"`
+	FilesChanged     *int                     `json:"filesChanged,omitempty"`
+	Checks           []IntegrationCheckResult `json:"checks,omitempty"`
+	Conflicts        []string                 `json:"conflicts,omitempty"`
+	ErrorCode        string                   `json:"errorCode,omitempty"`
+	ErrorDetail      map[string]any           `json:"errorDetail,omitempty"`
 }
 
 // IntegrationJobResultResponse is the control plane's answer: whether it took the result.

@@ -23,6 +23,8 @@ import {
 } from 'class-validator';
 import {
   ProjectStatus,
+  type AcceptedGap,
+  type ProjectDoneRequestBody,
   type ProjectStartRequestBody,
   type StartProjectRequestBody,
 } from '@orbit/shared';
@@ -30,6 +32,7 @@ import { IsPublicId } from '../common/public-id';
 import { MAX_TASK_CRITERION_OVERRIDE_REASON_CHARS } from '../tasks/task-criterion-shape-advice';
 import { MAX_BLOCKER_RESOLUTION_REASON_CHARS } from './project-blocker-resolution';
 import { MAX_OPEN_ITEM_RESOLUTION_NOTE, MAX_QUESTION_CHARS } from './project-open-item';
+import { MAX_INTEGRATION_RETRY_REASON } from './project-integration-retry';
 import { MAX_START_REQUEST_WHY } from './project-start-request';
 import type { IntegrationLine, IntegrationSettings } from './project-integration-line';
 
@@ -427,6 +430,26 @@ export class ConfirmAcceptanceCriteriaDto {
 }
 
 /**
+ * `POST /projects/:id/done` (`@orbit/shared` `ProjectDoneRequestBody`): the account owner recording
+ * the project done — the version of the criteria they read, the request the card was drawn from if
+ * there was one, and the gaps they accepted.
+ */
+export class DoneProjectDto implements ProjectDoneRequestBody {
+  /** The coordinator's `DONE_REQUEST` this press answers; absent or null when the owner records it
+   *  done without being asked. */
+  @IsOptional() @IsPublicId() requestId?: string | null;
+
+  @Matches(SHA256_DIGEST_PATTERN, {
+    message: 'criteriaDigest must be the 64-character sha256 digest of the criteria set being recorded done',
+  })
+  criteriaDigest!: string;
+
+  /** One per criterion Orbit could not prove, each kept as it was sent. */
+  @IsArray() @ArrayMaxSize(MAX_PROJECT_ACCEPTANCE_CRITERIA_ITEMS) @IsObject({ each: true })
+  acceptedGaps!: AcceptedGap[];
+}
+
+/**
  * `POST /projects/:id/start` (`@orbit/shared` `StartProjectRequestBody`): the version of the
  * criteria the owner read, and every setting the project is to run with — each one required,
  * because a start writes the whole set and a field left out would be a setting nobody chose.
@@ -608,6 +631,16 @@ export class AnswerOpenItemDto {
  */
 export class ResolveOpenItemDto {
   @IsString() @MinLength(1) @MaxLength(MAX_OPEN_ITEM_RESOLUTION_NOTE) note!: string;
+}
+
+/**
+ * The project's coordinator running one of its failed landings again (`integration_retry`, contract
+ * §2.3 J-T1b). One field, required for the reason the hand-close's note is: a rerun is a decision
+ * that the red was not the delivery's, and the sentence saying why is what the record keeps. The
+ * service restates the requirement — a blank reason is refused there too — and the length.
+ */
+export class RetryIntegrationDto {
+  @IsString() @MinLength(1) @MaxLength(MAX_INTEGRATION_RETRY_REASON) reason!: string;
 }
 
 export class RecordMergeEvidenceDto {

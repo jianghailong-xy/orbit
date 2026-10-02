@@ -677,6 +677,30 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult("The item is closed, with your reason on it.\n"+prettyJSON(raw), false)
 
+	case "integration_retry":
+		id := getString(args, "projectId")
+		taskID := getString(args, "taskId")
+		if id == "" || taskID == "" {
+			return toolResult("projectId and taskId are required", true)
+		}
+		reason := strings.TrimSpace(getString(args, "reason"))
+		if reason == "" {
+			return toolResult("reason is required: say why running this landing again will come out "+
+				"differently. The platform never reruns a failed landing by itself, so a rerun nobody "+
+				"explained is exactly the silent retry it refuses to make", true)
+		}
+		// The acting session IS the authority, as it is for open_item_resolve: the server checks it
+		// against the project's own coordinator pointer, and refuses — with the reason — a landing
+		// that is in flight, a failure that is the account owner's, or a task of another project.
+		raw, err := s.t.retryIntegration(s.sessionID, id, taskID, reason)
+		if err != nil {
+			return toolResult("integration retry failed: "+err.Error(), true)
+		}
+		return toolResult("The next generation of this task's landing is queued, with your reason on it, "+
+			"and the open items about the failed one are superseded. It lands on the project branch "+
+			"and goes on to the merge check like any landing; if it fails, a new item reaches you on "+
+			"its own.\n"+prettyJSON(raw), false)
+
 	case "task_dependency_graph":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -732,7 +756,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
 		if err := requireHandoffNamesItsDestination(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
@@ -777,7 +801,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
+			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
 			// Per item, because a crossing is per item: one plan can file most of its work at home
 			// and one piece of it over the line, and the item that crosses is the one that has to
 			// name where it is going.
@@ -824,7 +848,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "runAt", "provider", "model", "acceptanceCriteria", "criterionKey", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "priority", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason", "handoff")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "runAt", "provider", "model", "acceptanceCriteria", "criterionKey", "codeless", "codelessReason", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "priority", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason", "handoff")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -2184,6 +2208,36 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"type":        []string{"string", "null"},
 		"description": "Omit to leave the schedule as it is, null to cancel it, a date-time to set or move it. " + runAtDescription,
 	}
+	// SR5's escape hatch (`codeless`), on the three task doors. Stated here once per door so what it
+	// costs to declare cannot drift between task_create, the batch items and task_update: nothing at
+	// creation, and on an existing task a reason — and never for one that already has commits.
+	createCodelessProp := map[string]interface{}{
+		"type": "boolean",
+		"description": "Declare that this task produces no code — a rollout, a walkthrough, a verification, " +
+			"research — even though its project is bound to a codebase. A codeless task resolves no source " +
+			"and takes no part in its acceptance criterion's landing: the criterion does not wait for its " +
+			"work to reach main, where a task with no commit to land would hold it off LANDED, and the project " +
+			"off done. Omit it for work that commits code. No reason is needed here; turning an existing task " +
+			"codeless later is task_update with codeless and codelessReason, and is refused for a task that " +
+			"already has commits of its own.",
+	}
+	updateCodelessProp := map[string]interface{}{
+		"type": "boolean",
+		"description": "true declares that this task produces no code, so it takes no part in its " +
+			"acceptance criterion's landing and the criterion stops waiting for its work to reach main. It " +
+			"needs codelessReason in the same call (refused TASK_CODELESS_REASON_REQUIRED without it), and " +
+			"is refused TASK_CODELESS_HAS_COMMITS for a task that already has commits of its own — a merge " +
+			"that moved a target, or a work session that reported changes on its branch: that work has to " +
+			"land. false takes the declaration back and needs no reason. Omit to leave it; re-sending the " +
+			"value the task already has changes nothing.",
+	}
+	codelessReasonProp := map[string]interface{}{
+		"type":      "string",
+		"maxLength": 2000,
+		"description": "Why this task produces no code, in a sentence. Required exactly when this call " +
+			"turns the task codeless; stored on the task beside the declaration (task_get returns it as " +
+			"codelessReason) and cleared when the declaration is taken back. Ignored on any other call.",
+	}
 	// The verifier to write BESIDE this subject, in the same call. Deliberately not part of
 	// taskCreateProps: the batch door pairs its own items with verifiesRef, the server refuses this
 	// field on a batch item, and a schema that advertised it there would invite a call that cannot
@@ -2220,6 +2274,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"parentTaskId":       parentTaskIDProp,
 			"acceptanceCriteria": acceptanceCriteriaProp,
 			"criterionKey":       criterionKeyProp,
+			"codeless":           createCodelessProp,
 			"completionCriterion": map[string]interface{}{
 				"type":        "string",
 				"enum":        []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT", "OWNER_CONFIRMED"},
@@ -2784,8 +2839,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"assignee is not on a runner, a project branch asked for with no repository to hold it. " +
 				"Fix them all and call again. If it is ready, the request is filed and this returns AT " +
 				"ONCE — it does not wait for the owner — with the request's itemId and any warnings: " +
-				"tasks set to start by hand (autoRunWhenReady=false), and Automatic on a project branch " +
-				"with no merge check. The owner then sees a \"Start this project?\" card with your " +
+				"a criterion served only by work that looks like it produces no code (OWNER_CONFIRMED, or " +
+				"EVIDENCE_JUDGMENT with no acceptance command) and does not declare codeless; tasks set " +
+				"to start by hand (autoRunWhenReady=false); and Automatic on a project branch with no " +
+				"merge check. Declare the work that commits nothing codeless before asking, and the " +
+				"first goes away. The owner then sees a \"Start this project?\" card with your " +
 				"settings as suggestions, may change any of them, and presses Start; you are told when " +
 				"the project starts. Suggest what you would choose and say why in one sentence. Asking " +
 				"again replaces the open request, and changing the plan before the start — tasks, " +
@@ -2870,6 +2928,41 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			}, "projectId", "itemId", "note"),
 		},
 		{
+			"name": "integration_retry",
+			"description": "Run one of your project's failed landings again: a task that is DONE " +
+				"whose newest landing onto the project's integration line ended CHECK_FAILED (a check " +
+				"on the combined tree disagreed, or ran out of time — CHECK_TIMED_OUT) or ERROR (the " +
+				"integration machinery stopped). This is the only way such a landing is attempted again: " +
+				"the platform never reruns one by itself, and task_start runs the task again on a new " +
+				"branch without ever queueing another landing of the work it finished. It is a decision, " +
+				"not a reflex — read the item first, and rerun only when you can say why this run will " +
+				"come out differently (the merge check's baseline was repaired, the check timed out, the " +
+				"machinery failed). A red that belongs to the delivery is sent back (task_reopen) or " +
+				"replaced instead, and a CONFLICT is refused here: only a branch that changed answers " +
+				"one. Queues exactly one new generation of the task's landing, which carries your " +
+				"reason and the failure class it reruns, and supersedes your open items about the failed " +
+				"one with your reason on them. Refused with the reason when a landing of the task is " +
+				"already queued or running, when the failure's item is the account owner's (escalated, " +
+				"or a project that is not Automatic), when the owner has an open blocker on the task, or " +
+				"when the task is not this project's. Only the conversation the project is coordinated " +
+				"from may call it.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project you coordinate, as shown in its web UI URL (/projects/<id>).",
+				},
+				"taskId": map[string]interface{}{
+					"type":        "string",
+					"description": "The DONE task whose failed landing to run again.",
+				},
+				"reason": map[string]interface{}{
+					"type": "string",
+					"description": "Why this run will come out differently — what changed since the failed " +
+						"one. Up to 2000 characters; it stays on the new landing and on every item it supersedes.",
+				},
+			}, "projectId", "taskId", "reason"),
+		},
+		{
 			"name": "project_delete",
 			"description": "Permanently delete an empty project in the account this runner belongs " +
 				"to. This cannot be undone. A project that still holds tasks is refused atomically: " +
@@ -2915,7 +3008,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_create",
-			"description": "Create ONE task (attributed to this agent). Newly discovered work belongs here by default — see project_create for the narrow case (a plan already worked out that comes to 4+ dependent steps, or work that plainly wants several agents over days) worth proposing a project for instead. Proposing one does not block this call: if the answer is no, or you did not ask, a task is the right record. Creating several related tasks after that decision? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately, or pass runAt to have the server start it at a set time. It first puts a confirmation card in front of the user and BLOCKS until they answer: nothing is written if they decline, so do not create it another way. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Ask what would settle THIS task before you write it, and pass the answer as `acceptanceCriteria` — the observable result a reader who did not watch the work can verify, as opposed to `description`, which says what work to perform. If the person you are working with has not told you, do NOT call this tool yet: ask them in the conversation — offer what you would propose, if that helps them answer — and end your turn with the question. The criteria are theirs to state, and the confirmation card this call raises is not where they become theirs: it is a yes/no on a task whose criteria were already agreed by the time it appears. Filing criteria you wrote alone is the one way this goes wrong, because every later reader takes them for the person's own standard. Where a single command decides it — a test suite, a build, a lint — pass `acceptanceCommand` with `acceptanceExpectedExitCode` as well: the task's own session runs it, and the server derives DONE or FAILED from the exit code, so the task settles itself and no person is asked to read anything. That is what the question buys. A task filed with neither leaves the session that did the work no legal way to finish it, and the attempt ends at ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH — a human is handed the evidence to judge by hand, which is the outcome this field exists to make unnecessary. When the person genuinely cannot say yet what would prove the work done, file the task without one and record the criteria with task_update once the work says what they are — an unproven task is an ordinary task — but never write criteria they did not state. Always declare completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred by this runner write, and related command, policy, or verifier fields do not replace the declaration. A row declaring VERIFICATION with completionPolicy VERIFICATION_PASSED is a pure gate: it is NOT dispatchable — a manual execute is refused with 409 and auto-dispatch passes over it — so declare MANUAL on a row that has work of its own. The server never files the verifier for you either: pass `verification: {title, assigneeId}` in this same call to write the check beside its subject. If TASK_CRITERION_SHAPE_ADVICE questions the chosen criterion, adopt its suggestedCriterion or retry with a non-blank completionCriterionOverrideReason, which is stored for later readers. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Prerequisites name the SUBJECT of the work, not its verification task — the server already holds a dependency on a verified task until its check PASSES.",
+			"description": "Create ONE task (attributed to this agent). Newly discovered work belongs here by default — see project_create for the narrow case (a plan already worked out that comes to 4+ dependent steps, or work that plainly wants several agents over days) worth proposing a project for instead. Proposing one does not block this call: if the answer is no, or you did not ask, a task is the right record. Creating several related tasks after that decision? Use task_create_batch instead — it writes them, and the dependency edges between them, in a single atomic call. This only records the task; call task_start when it should run immediately, or pass runAt to have the server start it at a set time. It first puts a confirmation card in front of the user and BLOCKS until they answer: nothing is written if they decline, so do not create it another way. Always write `description` as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps). assigneeId defaults to this agent when omitted (pass null to leave it unassigned). assigneeId/listId/projectId/parentTaskId must be owned by the caller; dueDate is an ISO date string. Pass `projectId` to file the task under a project — orthogonal to listId, which decides dispatch policy, where the project states what the work is for. Pass `parentTaskId` to make it a subtask of an existing task, which must be in the same project as this one — a subtask of a project's task normally passes both, since the project is not inherited from the parent. Ask what would settle THIS task before you write it, and pass the answer as `acceptanceCriteria` — the observable result a reader who did not watch the work can verify, as opposed to `description`, which says what work to perform. If the person you are working with has not told you, do NOT call this tool yet: ask them in the conversation — offer what you would propose, if that helps them answer — and end your turn with the question. The criteria are theirs to state, and the confirmation card this call raises is not where they become theirs: it is a yes/no on a task whose criteria were already agreed by the time it appears. Filing criteria you wrote alone is the one way this goes wrong, because every later reader takes them for the person's own standard. Where a single command decides it — a test suite, a build, a lint — pass `acceptanceCommand` with `acceptanceExpectedExitCode` as well: the task's own session runs it, and the server derives DONE or FAILED from the exit code, so the task settles itself and no person is asked to read anything. That is what the question buys. A task filed with neither leaves the session that did the work no legal way to finish it, and the attempt ends at ATTEMPT_ENDED_WITHOUT_JUDGMENT_PATH — a human is handed the evidence to judge by hand, which is the outcome this field exists to make unnecessary. When the person genuinely cannot say yet what would prove the work done, file the task without one and record the criteria with task_update once the work says what they are — an unproven task is an ordinary task — but never write criteria they did not state. Always declare completionCriterion explicitly; EVIDENCE_JUDGMENT is available but never inferred by this runner write, and related command, policy, or verifier fields do not replace the declaration. A row declaring VERIFICATION with completionPolicy VERIFICATION_PASSED is a pure gate: it is NOT dispatchable — a manual execute is refused with 409 and auto-dispatch passes over it — so declare MANUAL on a row that has work of its own. The server never files the verifier for you either: pass `verification: {title, assigneeId}` in this same call to write the check beside its subject. If TASK_CRITERION_SHAPE_ADVICE questions the chosen criterion, adopt its suggestedCriterion or retry with a non-blank completionCriterionOverrideReason, which is stored for later readers. To order work, pass `dependsOnTaskIds` to declare prerequisites natively — do NOT bake ordering into the description as manual preconditions. Prerequisites name the SUBJECT of the work, not its verification task — the server already holds a dependency on a verified task until its check PASSES. Pass `codeless: true` for work that produces no code — a rollout, a walkthrough, a verification, research — so the acceptance criterion it serves does not wait for a commit that will never exist.",
 			"inputSchema": func() map[string]interface{} {
 				props := taskCreateProps()
 				// On the single door only: see verificationProp.
@@ -2971,7 +3064,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_update",
-			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, or OWNER_CONFIRMED path, and an OWNER_CONFIRMED task is confirmed only by the account owner in the Orbit app. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected, and the account owner's to make: a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project, and a declared crossing waits on the owner as CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING (read the row with project_crossings). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/runAt/provider/model to clear them.",
+			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, or OWNER_CONFIRMED path, and an OWNER_CONFIRMED task is confirmed only by the account owner in the Orbit app. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected, and the account owner's to make: a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project, and a declared crossing waits on the owner as CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING (read the row with project_crossings). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/runAt/provider/model to clear them. `codeless: true` declares that the task produces no code, which takes it out of its acceptance criterion's landing: it needs `codelessReason` in the same call, and is refused for a task that already has commits of its own.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId":             taskIDProp,
 				"title":              str,
@@ -2988,6 +3081,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"model":              modelProp,
 				"acceptanceCriteria": updateAcceptanceCriteriaProp,
 				"criterionKey":       updateCriterionKeyProp,
+				"codeless":           updateCodelessProp,
+				"codelessReason":     codelessReasonProp,
 				"completionCriterion": map[string]interface{}{
 					"type":        "string",
 					"enum":        []string{"EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT", "OWNER_CONFIRMED"},

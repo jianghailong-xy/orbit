@@ -54,8 +54,19 @@ const SRC = path.resolve(__dirname, '../../src');
  * the derivation should be built. This entry is that reversal, not an erosion of the
  * promise: what a session may ASK for is unchanged and still refused by r2's
  * `refuseProjectStatusWrite`, and a third entry still has to be explained before it is added.
+ *
+ * THE THIRD ENTRY, AND THE DECISION THAT PUT IT THERE
+ * ===================================================
+ * `projects/project-acceptance.service.ts#recordProjectDone` is the owner's door,
+ * `POST /projects/:id/done`, added on 2026-10-01 (migration 0345). The account owner decided that
+ * a project the projection cannot prove done is recorded done by the owner in person, once, with
+ * the gaps they accepted — and that the projection then leaves that record alone on ordinary task
+ * writes, merge receipts and confirmations. It writes one fixed value, DONE with
+ * `done_by = 'OWNER'`, under a compare-and-set on the criteria seal, and it is refused whole by
+ * the same `refuseProjectStatusWrite` when an acting session is on the request. A fourth entry
+ * still has to be explained before it is added.
  */
-const FROZEN_WRITE_SITES: readonly string[] = ['projects/project-done-derived.ts#storeDerivedProjectStatus', 'projects/projects.service.ts#update'];
+const FROZEN_WRITE_SITES: readonly string[] = ['projects/project-acceptance.service.ts#recordProjectDone', 'projects/project-done-derived.ts#storeDerivedProjectStatus', 'projects/projects.service.ts#update'];
 
 /** The Prisma model writes whose input can carry a `status`. Reads are absent on purpose. */
 const PRISMA_PROJECT_WRITE =

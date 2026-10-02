@@ -1967,6 +1967,18 @@ model Project {
 
   status ProjectStatus @default(OPEN)
 
+  /// Who recorded the project DONE (migration 0345): 'OWNER', the account owner in person on
+  /// `POST /projects/:id/done`, or 'DERIVED', the projection from committed facts
+  /// (`project-done-derived.ts`); null while neither has. An OWNER record survives ordinary task
+  /// writes, merge receipts and confirmations — only the criteria changing, or a task serving one
+  /// being reopened, reopens it. Present exactly with `doneAt`.
+  doneBy             String?   @map("done_by")
+  doneAt             DateTime? @map("done_at") @db.Timestamptz(3)
+  /// The seal of the criteria the DONE was recorded against.
+  doneCriteriaDigest String?   @map("done_criteria_digest") @db.Char(64)
+  /// The gaps the owner accepted when recording it done, as the card sent them (`AcceptedGap[]`).
+  acceptedGaps       Json      @default("[]") @map("accepted_gaps")
+
   /// The session this project is coordinated from — one durable conversation per project.
   ///
   /// Written in either of two places, meaning the same thing in both. A project recorded from
@@ -2330,6 +2342,10 @@ model ProjectIntegrationJob {
   landedSha       String? @map("landed_sha") @db.Char(40)
   landedTreeSha   String? @map("landed_tree_sha") @db.Char(40)
   aheadOfUpstream Int?    @map("ahead_of_upstream")
+  /// The runner's measurement, taken when it answers NOTHING_TO_LAND, of whether the source tip is
+  /// an ancestor of the upstream (migration 0346). The only fact on which §1.4 lets such an answer
+  /// out of a criterion's roll-up; NULL is "not measured" and withholds.
+  sourceOnUpstream Boolean? @map("source_on_upstream")
 
   /// `[{ name, command, expectedExitCode, exitCode, timedOut, durationMs, outputTail }]`.
   checks      Json     @default("[]")
@@ -2343,6 +2359,16 @@ model ProjectIntegrationJob {
   /// against; an upstream that moved is handed back to the owner untouched (M-T12). Kept on the job
   /// as well as on the promotion because the job is the record of what was sent out to be pushed.
   confirmedAutomatically Boolean @default(false) @map("confirmed_automatically")
+
+  /// A LAND_TASK generation a coordinator asked for through `integration_retry` (migration 0344,
+  /// contract §2.3 J-T1b): the failed generation it runs again, what that one failed of
+  /// (CHECK_FAILED, CHECK_TIMED_OUT or ERROR), the reason given, and the conversation that asked.
+  /// All four or none, held by a CHECK. `retryOfJobId` is a history reference with no relation: a
+  /// terminal job is never rewritten, so nothing may SET NULL it.
+  retryOfJobId              String? @map("retry_of_job_id") @db.Uuid
+  retryFailureClass         String? @map("retry_failure_class")
+  retryReason               String? @map("retry_reason")
+  retryRequestedBySessionId String? @map("retry_requested_by_session_id") @db.Uuid
 
   /// `ij:v1:<kind>:<taskId or promotionId>:<generation>` — enqueue is idempotent on the fact. The one
   /// exception is the landing J-T1e owes the work, keyed by the work's generation instead
@@ -4086,6 +4112,11 @@ model Task {
   /// dependent task's containment set (SR27): a "write the docs" prerequisite must not make the
   /// task after it demand a checkpoint that was never going to exist.
   codeless           Boolean  @default(false)
+  /// Why a task that already existed was declared `codeless` (migration 0346). The doors refuse that
+  /// edit without one, and refuse it outright for a task with commits of its own, because the
+  /// declaration takes the task out of its criterion's landing conjunction. NULL on a task that is
+  /// not codeless, and on one created codeless — creating it so is the first statement, not a change.
+  codelessReason     String?  @map("codeless_reason")
   /// The refusal this task's most recent start met before its run could begin (migration 0298):
   /// a `TaskDispatchRefusal` (@orbit/shared) — the §10.1 code and its fixAction, when, which run,
   /// the commit it stood on and the prerequisite commits that commit did not contain. NULL when

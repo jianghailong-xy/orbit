@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 
 const PROJECT = randomUUID();
+const OWNER = randomUUID();
 
 /** One stated criterion as the producer's own query reads it back. */
 interface StatedCriterion {
@@ -19,10 +20,22 @@ function producerFixture(
   statuses: string[],
   coordinatorEnabled = true,
   criteria: StatedCriterion[] = [],
-  options: { tallyMissesOpenWork?: boolean } = {},
+  options: {
+    tallyMissesOpenWork?: boolean;
+    /** A landing or a merge into the upstream queued or running in the project. */
+    landingInFlight?: boolean;
+    /** An open item in the project — somebody already handling something. */
+    openItem?: boolean;
+  } = {},
 ) {
   const order: string[] = [];
   const facts: Array<{ event: string; projectId: string; detail?: unknown }> = [];
+  // Stable across reads: the projection folds several reads of the same criteria by their ids.
+  const stated = criteria.map((criterion) => ({
+    criterion,
+    id: randomUUID(),
+    serving: criterion.servingStatuses.map((status) => ({ id: randomUUID(), status })),
+  }));
   const prisma = {
     // The 0282 tally, as the triggers maintain it: whatever the statuses say, unless the fixture
     // is asked for the one shape the producer has to survive — a tally that has fallen behind.
@@ -48,15 +61,29 @@ function producerFixture(
       },
     },
     projectAcceptanceCriterionDefinition: {
+      // One superset row per criterion, whichever read asks: the producer's roster, and — when the
+      // project looks finished — every lane the projection reads (`project-looks-finished.ts`).
       findMany: async () => {
         order.push('criteria-read');
-        return criteria.map((criterion) => ({
-          id: randomUUID(),
+        return stated.map(({ criterion, id, serving }, ordinal) => ({
+          id,
+          ordinal: ordinal + 1,
           text: criterion.text,
-          servingTasks: criterion.servingStatuses.map((status, index) => ({
-            id: randomUUID(),
+          verificationMethod: 'A person reads it',
+          completionCriterionOverrideReason: null,
+          revision: 1,
+          contentHash: 'c'.repeat(64),
+          servingTasks: serving.map((task, index) => ({
+            id: task.id,
             title: `serving ${index + 1}`,
-            status,
+            status: task.status,
+            criterionDefinitionId: id,
+            criterionRevision: 1,
+            completionCriterion: 'EXECUTABLE',
+            verifiesTaskId: null,
+            verdict: null,
+            verifiedBy: [],
+            completionEvidence: [],
             codeless: false,
             mergeReceipts: criterion.landed
               ? [{ result: 'MERGED', targetBranch: 'main' }]
@@ -65,6 +92,7 @@ function producerFixture(
             // fixture is about is the receipts, and the landing fold reads an empty record of the
             // line's own as "nothing said", not as "nothing to land".
             integrationJobs: [],
+            sessions: [{ id: randomUUID(), isolationStatus: 'worktree', branch: `orbit/${task.id}` }],
           })),
         }));
       },
@@ -74,11 +102,34 @@ function producerFixture(
     // master, which is what the receipts above already name.
     projectCodebase: { findFirst: async () => null },
     project: {
-      findUnique: async () => {
+      findUnique: async (args: { select: Record<string, unknown> }) => {
+        // Two different questions of the same row: the guardrail's (is it still OPEN, and whose)
+        // and the authorization after the claim (is the coordinator on).
+        if ('status' in args.select) {
+          order.push('finish-read');
+          return { ownerId: OWNER, status: 'OPEN' };
+        }
         order.push('authorization-read');
         return { coordinatorEnabled };
       },
     },
+    projectIntegrationJob: {
+      // The producer's own question, before anybody is told anything.
+      findFirst: async () => {
+        order.push('inflight-read');
+        return options.landingInFlight ? { id: randomUUID() } : null;
+      },
+      // The projection's, for the IN_FLIGHT landing reason.
+      findMany: async () => [],
+    },
+    projectOpenItem: {
+      findFirst: async () => {
+        order.push('open-items-read');
+        return options.openItem ? { id: randomUUID() } : null;
+      },
+    },
+    projectCriteriaAuthorship: { findMany: async () => [] },
+    projectStandardSetConfirmation: { findFirst: async () => null },
   };
   const judgments = {
     wake: async (fact: (typeof facts)[number], authorize: (
@@ -108,7 +159,27 @@ function producerFixture(
   };
   /** The other terminal, recording what it was handed rather than writing to a conversation. */
   const carded: typeof facts = [];
+  /** And the third: a settled fact queued on the standing conversation because it looks finished. */
+  const queued: typeof facts = [];
   const deliveries = {
+    queue: async (fact: (typeof facts)[number], authorize: (
+      fact: (typeof facts)[number],
+      claim: { wakeId: string; idempotencyKey: string },
+    ) => Promise<{ allowed: boolean; refusalCode?: string }>) => {
+      order.push('queue-claimed');
+      queued.push(fact);
+      const decision = await authorize(fact, { wakeId: randomUUID(), idempotencyKey: 'key' });
+      order.push('authorized');
+      return decision.allowed
+        ? {
+            outcome: 'DELIVERED', wakeId: randomUUID(), idempotencyKey: 'key',
+            sessionId: randomUUID(), clientTurnId: randomUUID(),
+          }
+        : {
+            outcome: 'REFUSED', wakeId: randomUUID(), idempotencyKey: 'key',
+            refusalCode: decision.refusalCode!,
+          };
+    },
     deliver: async (fact: (typeof facts)[number], authorize: (
       fact: (typeof facts)[number],
       claim: { wakeId: string; idempotencyKey: string },
@@ -137,6 +208,7 @@ function producerFixture(
     ),
     facts,
     carded,
+    queued,
     order,
   };
 }
@@ -194,9 +266,10 @@ test('committed terminal rows deliver one project fact and authorize only after 
   assert.equal(fixture.facts[0].projectId, PROJECT);
   assert.deepEqual(
     fixture.order,
-    ['tally-read', 'tasks-read', 'criteria-read', 'wake-claimed', 'authorization-read',
-      'convergence', 'authorized'],
-    'T2 requires claim before authorization, and the criteria read is not an authorization',
+    ['tally-read', 'tasks-read', 'criteria-read', 'inflight-read', 'wake-claimed',
+      'authorization-read', 'convergence', 'authorized'],
+    'T2 requires claim before authorization, and neither the criteria read nor the in-flight '
+    + 'read is an authorization',
   );
 });
 
@@ -207,8 +280,8 @@ test('a disabled coordinator refuses after claim instead of opening a judgment',
     { projectId: PROJECT, outcome: 'REFUSED' },
   ]);
   assert.deepEqual(fixture.order, [
-    'tally-read', 'tasks-read', 'criteria-read', 'wake-claimed', 'authorization-read',
-    'authorized',
+    'tally-read', 'tasks-read', 'criteria-read', 'inflight-read', 'wake-claimed',
+    'authorization-read', 'authorized',
   ]);
 });
 
@@ -242,16 +315,72 @@ test('a settled project whose criteria are all satisfied and landed is carded, n
   );
 });
 
+/** One criterion met and on the branch, the other met and not: every criterion satisfied, one
+ *  of them not on the default branch by a receipt — the shape a finished-looking project has. */
+const MET_ONE_OFF_THE_BRANCH: StatedCriterion[] = [
+  { text: '路由行为符合设计', servingStatuses: ['DONE'], landed: true },
+  { text: '全量服务测试通过', servingStatuses: ['DONE'], landed: false },
+];
+
+test('a project that looks finished is handed to its standing coordinator, not judged', async () => {
+  // Every criterion met, nothing running, no open item, nothing landing — and one criterion that no
+  // receipt puts on the default branch, so DONE is withheld. The same fact the judgment would have
+  // spent goes to the conversation that can ask for the project to be recorded done (D5).
+  const fixture = producerFixture(['DONE', 'CANCELLED'], true, MET_ONE_OFF_THE_BRANCH);
+
+  assert.deepEqual(await fixture.producer.afterCommit([PROJECT]), [
+    { projectId: PROJECT, outcome: 'DELIVERED' },
+  ]);
+  assert.deepEqual(fixture.facts, [], 'a finished-looking project was judged');
+  assert.deepEqual(fixture.carded, [], 'and it is not the confirmation card either');
+  assert.equal(fixture.queued.length, 1);
+  assert.equal(fixture.queued[0].event, 'PROJECT_TASKS_SETTLED',
+    'the fact the judgment would have spent, not a new kind of wake');
+  assert.deepEqual(
+    fixture.order.slice(0, 5),
+    ['tally-read', 'tasks-read', 'criteria-read', 'inflight-read', 'finish-read'],
+    'nothing is landing is asked first, then whether the project still looks finished',
+  );
+  assert.deepEqual(
+    fixture.order.slice(-4),
+    ['queue-claimed', 'authorization-read', 'convergence', 'authorized'],
+    'and it is claimed before it is authorized, exactly as the judgment is',
+  );
+});
+
+test('while a landing is in flight, a settled project is neither judged nor told anything', async () => {
+  // The gap 2026-10-01 filed a needless "merge into main" task in: the work is on its way to the
+  // upstream, and the job's own result re-derives this fact when it ends.
+  for (const criteria of [MET_ONE_OFF_THE_BRANCH, []]) {
+    const fixture = producerFixture(['DONE', 'CANCELLED'], true, criteria, { landingInFlight: true });
+
+    assert.deepEqual(await fixture.producer.afterCommit([PROJECT]), [
+      { projectId: PROJECT, outcome: 'LANDING_IN_FLIGHT' },
+    ]);
+    assert.deepEqual([fixture.facts, fixture.carded, fixture.queued], [[], [], []],
+      'nothing was claimed, so no key is spent');
+    assert.deepEqual(fixture.order, ['tally-read', 'tasks-read', 'criteria-read', 'inflight-read']);
+  }
+});
+
+test('an open item keeps a finished-looking project with the judgment, as before', async () => {
+  const fixture = producerFixture(['DONE'], true, MET_ONE_OFF_THE_BRANCH, { openItem: true });
+
+  assert.deepEqual(await fixture.producer.afterCommit([PROJECT]), [
+    { projectId: PROJECT, outcome: 'OPENED' },
+  ]);
+  assert.deepEqual(fixture.queued, []);
+  assert.equal(fixture.facts.length, 1);
+});
+
 /**
  * The clause the settled fact alone cannot supply. Each case moves ONE dimension away from the
  * carded fixture above and asserts the fact goes back to the judgment branch — so "no card" is a
- * statement about that dimension rather than about a producer that never cards anything.
+ * statement about that dimension rather than about a producer that never cards anything. A
+ * criterion whose work is still on a branch is not among them any more: every criterion met and
+ * one off the branch is the finished-looking project above.
  */
 for (const [why, criteria] of [
-  ['a criterion whose work is still on a branch', [
-    { text: '路由行为符合设计', servingStatuses: ['DONE'], landed: true },
-    { text: '全量服务测试通过', servingStatuses: ['DONE'], landed: false },
-  ]],
   ['a criterion no work serves', [
     { text: '路由行为符合设计', servingStatuses: ['DONE'], landed: true },
     { text: '全量服务测试通过', servingStatuses: [], landed: true },
@@ -268,6 +397,7 @@ for (const [why, criteria] of [
       { projectId: PROJECT, outcome: 'OPENED' },
     ]);
     assert.deepEqual(fixture.carded, [], 'the project was asked to confirm an unmet ruler');
+    assert.deepEqual(fixture.queued, [], 'nor was it handed over as finished');
     assert.equal(fixture.facts.length, 1, 'and the fact was not spent on the judgment either');
   });
 }

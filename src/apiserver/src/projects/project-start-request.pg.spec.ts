@@ -17,7 +17,11 @@
  *       START_REQUEST_NOT_READY and files nothing, and one request can be refused by several at
  *       once, every finding in the one answer;
  *   (2) the two warnings — tasks set to start by hand, listed by id and title, and Automatic on a
- *       project branch with no merge check — do not refuse: the request is filed and carries them;
+ *       project branch with no merge check — do not refuse: the request is filed and carries them.
+ *       The third, a criterion served only by work that looks codeless and does not declare it
+ *       (0346), is held to its cases in `criterion-landing-codeless.pg.spec.ts`; every plan here is
+ *       EXECUTABLE work, so the exact warning lists below are also its control — code work is not
+ *       warned about;
  *   (3) a session that does not coordinate the project is refused 403 and files nothing — and the
  *       one that does is not refused for the Automatic switch being off;
  *   (4) a project that has started is 409 PROJECT_ALREADY_STARTED;

@@ -176,8 +176,18 @@ test('PROJECT_TASKS_SETTLED carries the merge-evidence order and stops where the
     assert.equal(opening.includes(gone), false,
       `the settlement opening still names ${gone}, which 0229 removed`);
   }
-  assert.match(opening, /task_create.*criterionKey/);
   assert.match(opening, /task_comment 中升级给人/);
+  // It used to tell the session to file a "merge and record main evidence" task against a
+  // criterion, and on 2026-10-01 one did — in the gap between the work landing on the project branch
+  // and that branch reaching main, against a criterion that was already met (D5). It now says to
+  // look for the landing first, and that such a task is not a judgment's to open.
+  assert.equal(opening.includes('合并并录入主干证据'), false, 'the merge-task instruction is back');
+  assert.match(opening, /LAND_TASK、CHECK_PROMOTION、LAND_PROMOTION 排队或在跑——那就什么都不开，结束本轮/);
+  assert.match(opening, /TASK_LANDING_IN_FLIGHT/);
+  assert.match(opening, /不开“合进 main”的任务/);
+  assert.match(opening, /不服务任何验收标准，不得带 criterionKey/);
+  // And it says what the work that IS still missing is filed with: the criterion it serves.
+  assert.match(opening, /task_create 开普通任务，带上它服务的那条 criterionKey/);
   // And it says the removal out loud rather than leaving the session to infer it from an absence.
   assert.match(opening, /没有任何东西会判定这些验收标准/);
   assert.match(opening, /status 你也写不了/);
@@ -294,6 +304,7 @@ function readingOf(
       independence: 'INDEPENDENT',
       conflicts: [],
       remedy: null,
+      landingReason: null,
     }], standing.state),
     satisfaction: [{
       definitionId: DEFINITION,
@@ -302,6 +313,7 @@ function readingOf(
       satisfied,
       unmet: unmet.map((clause) => ({ clause, heldUpBy: [] })),
     }],
+    inFlight: [],
   };
 }
 
@@ -407,4 +419,57 @@ test('the judgment reducer owns no timer', () => {
       );
     }
   }
+});
+
+/**
+ * A project that LOOKS finished (project closing, D5): the settled fact, delivered to the standing
+ * conversation because every criterion is met and nothing is running, open or landing — and the
+ * projection still withholds DONE. The message names every criterion Orbit cannot prove, by its
+ * words, key and landing reason, counts them the way the projection counts them, asks for one of
+ * two things, and says what happens when neither is done.
+ *
+ * The delivery itself, over the real producer and conversation, is
+ * `project-looks-finished.pg.spec.ts`; this one runs where that one skips.
+ */
+test('a project that looks finished is told why it is not done, and the two things it can do', () => {
+  const OFF = randomUUID();
+  const settled = projectTasksSettledFact(PROJECT, [{ taskId: TASK, status: 'DONE' }], [
+    { key: criterionKeyOf(DEFINITION), text: '条件 ab12', satisfied: true, landing: 'LANDED', serving: [] },
+    {
+      key: criterionKeyOf(OFF), text: '上线走查', satisfied: true, landing: 'ON_INTEGRATION_LINE',
+      serving: [],
+    },
+  ])!;
+  const standing = standardSetConfirmationStanding(VERSION, CONFIRMATION);
+  const answer = { satisfied: true, independence: 'INDEPENDENT' as const, remedy: null };
+  const reading: DerivedProjectDoneReading = {
+    standing,
+    derived: deriveProjectDone([
+      { ...answer, conflicts: [], definitionId: DEFINITION, landing: 'LANDED', landingReason: null },
+      {
+        ...answer, conflicts: [], definitionId: OFF, landing: 'ON_INTEGRATION_LINE',
+        landingReason: 'NOTHING_TO_LAND',
+      },
+    ], standing.state),
+    satisfaction: [],
+    inFlight: [],
+  };
+
+  const message = buildCoordinatorDeliveryMessage(settled, '收尾', reading, { escalationSeconds: 7200 });
+
+  assert.match(message, /看起来做完了，但 Orbit 自己记不了 Done/);
+  // The one criterion Orbit cannot prove, named the way the coordinator files work against it.
+  assert.match(message, new RegExp(`「上线走查」（key ${criterionKeyOf(OFF)}）：NOTHING_TO_LAND——`));
+  assert.equal(message.includes('「条件 ab12」'), false, 'a criterion on main by its own work is no gap');
+  assert.match(message, /CRITERION_UNLANDED/);
+  // Counted once, by the projection: the line is its `counts`, not a second tally.
+  assert.match(message, /2 条验收标准 · 2 条已满足 · 1 条在 main 上 · 1 条 NOTHING_TO_LAND/);
+  // The two things it may do, and what each means.
+  assert.match(message, /请求收尾：[^\n]*project_request_done/);
+  assert.match(message, /去干活：[^\n]*不要给它 criterionKey/);
+  assert.match(message, /零提交的任务不要靠 merge_receipt 补回执/);
+  // And what happens when it does neither.
+  assert.match(message, /exceptionEscalationSeconds（现在是 7200 秒）还没有收尾请求/);
+  assert.match(message, /Needs you 里会出现 Record as done…/);
+  assert.match(message, /PROJECT_STATUS_NOT_SESSION_WRITABLE/);
 });

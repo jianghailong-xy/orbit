@@ -1522,7 +1522,35 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // One more accepted `project_coordinator_wake.event` spelling. The CHECK is widened to admit
       // the blocker notification, but no wake row is backfilled or rewritten, and none of the
       // preserved task, session or acceptance relations is named.
-      '0342_project_blocker_coordinator_wake'],
+      '0342_project_blocker_coordinator_wake',
+      // A landing run again on purpose (`integration_retry`): four nullable columns with no default
+      // on `project_integration_job` (`retry_of_job_id`, `retry_failure_class`, `retry_reason`,
+      // `retry_requested_by_session_id`, catalog-only) and four CHECKs every stored row satisfies
+      // because all four read NULL in it. Read against every claim above: no `task`, `session`,
+      // `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored task
+      // and criterion row are out of its reach. No function, trigger or type is created, replaced or
+      // dropped — so it is not another writer of the DONE fence and names none of the six preserved
+      // objects. No INSERT, UPDATE or DELETE: nothing is backfilled. (0343 is left to the unlanded
+      // delivery-review migration of the same project's branch that already spells it.)
+      '0344_integration_job_retry',
+      // The owner DONE record (0345): four columns on `project` plus CHECKs for its provenance,
+      // digest and accepted-gap array. Existing DONE rows are backfilled only in those new columns
+      // as DERIVED; no task, criterion, confirmation or judgment row is rewritten. The two
+      // `project_open_item` CHECKs are widened for DONE_REQUEST and every existing item satisfies
+      // them. No trigger, function or type is created, replaced or dropped, so the preserved DONE
+      // writer fence and all task/acceptance data remain untouched.
+      '0345_project_owner_done',
+      // `task.codeless_reason` and `project_integration_job.source_on_upstream` (0346): one nullable
+      // TEXT column on `task` and one nullable BOOLEAN on `project_integration_job`, both with no
+      // default, no NOT NULL and no constraint — so, like 0236 and 0298, it ALTERs the table the
+      // 0177 pair lives on and reaches no stored row: every existing task and job reads NULL,
+      // nothing is backfilled, and `task.acceptance_command`, `task.acceptance_expected_exit_code`,
+      // `task_executable_acceptance_pair` and `task_completion_criterion` are not named. No
+      // function, trigger, type, index or constraint is created, replaced or dropped — no `CREATE
+      // OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the
+      // six preserved objects — and it has no INSERT, UPDATE or DELETE. No `project_acceptance_*`
+      // object is named.
+      '0346_codeless_and_source_on_upstream'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -21,6 +21,7 @@ import {
   ResolveOpenItemDto,
   ConfirmAcceptanceCriteriaDto,
   CreateProjectDto,
+  DoneProjectDto,
   DecideCriteriaChangeDto,
   DecideProjectHandoffDto,
   OpenProjectCoordinatorDto,
@@ -403,6 +404,21 @@ export class ProjectsController {
     @Headers('x-orbit-session-id') actingSessionId: string | undefined,
   ) {
     return this.acceptance.startProject(user.userId, id, dto, actingSessionId);
+  }
+
+  /**
+   * Record as done: the account owner records the project DONE in person
+   * (`ProjectAcceptanceService.recordProjectDone`). A request carrying an acting session is refused
+   * whole, and a seal or a request that has moved is a 409 that writes nothing.
+   */
+  @Post(':id/done')
+  done(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: DoneProjectDto,
+    @Headers('x-orbit-session-id') actingSessionId: string | undefined,
+  ) {
+    return this.acceptance.recordProjectDone(user.userId, id, dto, actingSessionId);
   }
 
   /**
