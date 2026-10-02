@@ -39,6 +39,11 @@ xcrun simctl boot "$UDID" 2>/dev/null || true
 xcrun simctl bootstatus "$UDID" -b >/dev/null 2>&1 || true
 xcrun simctl status_bar "$UDID" override --time "10:04" --batteryState charged --batteryLevel 100 \
   2>/dev/null || true
+# The first keyboard a fresh simulator shows is covered by the slide-to-type tip; mark it seen (the UI
+# test also taps its Continue if it still comes up).
+for domain in com.apple.Preferences com.apple.keyboard.preferences; do
+  xcrun simctl spawn "$UDID" defaults write "$domain" DidShowContinuousPathIntroduction -bool true 2>/dev/null || true
+done
 
 echo "==> building and testing"
 STATUS=0

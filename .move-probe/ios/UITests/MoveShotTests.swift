@@ -216,15 +216,28 @@ final class MoveShotTests: XCTestCase {
         return app
     }
 
+    /// Put the fixture API back as it starts. Round 1's very first reset went unanswered for 15s (the
+    /// next six answered at once), so it is asked up to three times and a miss is a note, not a
+    /// failure: the stub starts out in exactly that state anyway.
     private func resetStub() {
-        var request = URLRequest(url: URL(string: "http://127.0.0.1:8765/__reset")!)
-        request.httpMethod = "POST"
-        let done = expectation(description: "fixture reset")
-        URLSession.shared.dataTask(with: request) { _, _, error in
-            if let error { self.note("reset failed: \(error)") }
-            done.fulfill()
-        }.resume()
-        wait(for: [done], timeout: 15)
+        for attempt in 1...3 {
+            var request = URLRequest(url: URL(string: "http://127.0.0.1:8765/__reset")!)
+            request.httpMethod = "POST"
+            request.timeoutInterval = 10
+            let answered = DispatchSemaphore(value: 0)
+            let status = StatusBox()
+            URLSession.shared.dataTask(with: request) { _, response, _ in
+                status.code = (response as? HTTPURLResponse)?.statusCode
+                answered.signal()
+            }.resume()
+            _ = answered.wait(timeout: .now() + 15)
+            if status.code == 200 { return }
+            note("reset \(attempt): \(status.code.map(String.init) ?? "no answer")")
+        }
+    }
+
+    private final class StatusBox: @unchecked Sendable {
+        var code: Int?
     }
 
     /// The Move panel the tap opened: its title, once its folders are in.
@@ -282,8 +295,16 @@ final class MoveShotTests: XCTestCase {
         }
         let field = alert.textFields.firstMatch
         field.tap()
+        // A fresh simulator covers its first keyboard with the slide-to-type tip; put it away so
+        // the picture shows the keyboard.
+        let tip = app.buttons["Continue"]
+        if tip.waitForExistence(timeout: 2) {
+            note("put away the keyboard's slide-to-type tip")
+            tip.tap()
+            settle(0.5)
+        }
         field.typeText(text)
-        settle(0.5)
+        settle(0.8)
     }
 
     private func alertButton(_ app: XCUIApplication, _ label: String) {
