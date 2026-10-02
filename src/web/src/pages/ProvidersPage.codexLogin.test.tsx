@@ -230,7 +230,8 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     expect(head.querySelector('.re-summary')?.textContent).toBe('Just me');
     // One account to start on: it is named, not "next".
     expect(head.querySelector('.pool-gauge-name')?.textContent).toBe('lin@example.com');
-    expect(head.querySelector('.pool-gauge-pct')?.textContent).toBe('23%');
+    // Its tightest window, by name: the weekly one at 41%, ahead of the 5-hour one at 23%.
+    expect(head.querySelector('.pool-gauge-pct')?.textContent).toBe('Weekly 41%');
 
     expect(row().querySelector('.re-name')?.textContent).toBe('lin@example.com');
     expect(row().querySelector('.pool-key-mask')?.textContent).toBe('ChatGPT Plus · …AB12');
@@ -268,6 +269,80 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
     expect(container.querySelector('.pool-gauge')?.textContent).toBe(`All spent · resets ${formatResetTime(IN_AN_HOUR)}`);
   });
 
+  it('still says when it frees up once its weekly window is spent — not a reading of either window', async () => {
+    pools = [
+      codexPool(
+        account({
+          usage: {
+            provider: 'codex',
+            primary: { utilization: 6, resetsAt: IN_AN_HOUR, windowDurationMins: 300 },
+            secondary: { utilization: 100, resetsAt: IN_THREE_DAYS, windowDurationMins: 10080 },
+          },
+        }),
+      ),
+    ];
+    await mount('/providers');
+    expect(row().querySelector('.pool-status')?.textContent).toBe(`Spent · resets ${formatResetTime(IN_THREE_DAYS)}`);
+    expect(container.querySelector('.pool-gauge')?.textContent).toBe(
+      `All spent · resets ${formatResetTime(IN_THREE_DAYS)}`,
+    );
+    expect(container.querySelector('.pool-gauge-pct')).toBeNull();
+  });
+
+  it('heads the card and its page with the window closest to its limit: Weekly 97% in orange, beside 5h at 6%', async () => {
+    pools = [
+      codexPool(
+        account({
+          usage: {
+            provider: 'codex',
+            primary: { utilization: 6, resetsAt: IN_AN_HOUR, windowDurationMins: 300 },
+            secondary: { utilization: 97, resetsAt: IN_THREE_DAYS, windowDurationMins: 10080 },
+          },
+        }),
+      ),
+    ];
+    await mount('/providers');
+    const gauge = container.querySelector<HTMLElement>('.pool-sec .pool-card .re-head .pool-gauge')!;
+    expect(gauge.querySelector('.pool-gauge-name')?.textContent).toBe('lin@example.com');
+    expect(gauge.querySelector('.pool-gauge-pct')?.textContent).toBe('Weekly 97%');
+    // Nearly spent: the reading turns orange with its bar.
+    expect(gauge.querySelector('.pool-gauge-pct')?.classList.contains('near-limit')).toBe(true);
+    expect(gauge.querySelector('.runner-util')?.classList.contains('full')).toBe(true);
+    expect(gauge.querySelector<HTMLElement>('.runner-util-fill')?.style.width).toBe('97%');
+    // The account's row still draws each of its windows.
+    expect(Array.from(row().querySelectorAll('.pool-login-window')).map((el) => el.textContent)).toEqual([
+      `5h limit6%resets ${formatResetTime(IN_AN_HOUR)}`,
+      `Weekly limit97%resets ${formatResetTime(IN_THREE_DAYS)}`,
+    ]);
+
+    await act(async () => root.unmount());
+    container.remove();
+    await mount(AT);
+    const head = container.querySelector<HTMLElement>('.pool-detail .re-head .pool-gauge')!;
+    expect(head.querySelector('.pool-gauge-pct')?.textContent).toBe('Weekly 97%');
+    expect(head.querySelector('.pool-gauge-pct')?.classList.contains('near-limit')).toBe(true);
+  });
+
+  it('reads the 5-hour window when that one is the tighter', async () => {
+    pools = [
+      codexPool(
+        account({
+          usage: {
+            provider: 'codex',
+            primary: { utilization: 64, resetsAt: IN_AN_HOUR, windowDurationMins: 300 },
+            secondary: { utilization: 41, resetsAt: IN_THREE_DAYS, windowDurationMins: 10080 },
+          },
+        }),
+      ),
+    ];
+    await mount('/providers');
+    const gauge = container.querySelector<HTMLElement>('.pool-sec .pool-card .re-head .pool-gauge')!;
+    expect(gauge.querySelector('.pool-gauge-pct')?.textContent).toBe('5h 64%');
+    expect(gauge.querySelector('.pool-gauge-pct')?.classList.contains('near-limit')).toBe(false);
+    expect(gauge.querySelector('.runner-util')?.classList.contains('full')).toBe(false);
+    expect(gauge.querySelector<HTMLElement>('.runner-util-fill')?.style.width).toBe('64%');
+  });
+
   it('signs an account OpenAI signed out in again from its card, as that account', async () => {
     pools = [codexPool(account({ state: 'SIGNED_OUT', lastError: 'refresh_token_reused' }))];
     await mount('/providers');
@@ -303,7 +378,9 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
       'Its ChatGPT sign-in is deleted from the Orbit server with it.',
     );
 
-    // Signing it out asks first, and says what it costs.
+    // Signing it out is a quiet mark — grey until it is pointed at (index.css) — that asks first, and
+    // says what it costs.
+    expect(labelled('Sign out lin@example.com')[0].classList.contains('pool-signout')).toBe(true);
     await click(labelled('Sign out lin@example.com')[0]);
     const confirm = document.body.querySelector<HTMLElement>('.ant-popover:not(.ant-popover-hidden)')!;
     expect(confirm.querySelector('.ant-popconfirm-title')?.textContent).toBe('Sign out lin@example.com?');

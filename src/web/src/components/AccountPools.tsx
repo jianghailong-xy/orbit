@@ -20,6 +20,7 @@ import {
   type ProviderPool,
 } from '../lib/providerPools';
 import type { ProviderRow } from '../lib/providerAdmin';
+import { compactWindowLabel } from '../lib/sessionProviderChoices';
 import {
   allOutOfBudget,
   canRemoveKey,
@@ -79,10 +80,10 @@ export function PoolEngineMark({ pool, size = 18 }: { pool: ProviderPool; size?:
 }
 
 /**
- * The head's gauge: the member the next session runs on, by name, with its own 5-hour bar — the
- * pool's real answer, where an average would show half a quota no account has. With no member to
- * run on it says when the first one frees up (the earliest reset, not the latest), and with none
- * that can run at all, why (the server's `unavailable`).
+ * The head's gauge: the member the next session runs on, by name, with the bar of its tightest window
+ * and that window's name ("Weekly 97%") — the pool's real answer, where an average would show half a
+ * quota no account has. With no member to run on it says when the first one frees up (the earliest
+ * reset, not the latest), and with none that can run at all, why (the server's `unavailable`).
  */
 export function PoolGauge({ pool }: { pool: ProviderPool }) {
   const head = poolHeadline(pool);
@@ -115,7 +116,9 @@ export function PoolGauge({ pool }: { pool: ProviderPool }) {
           <span className={`runner-util ${quota.nearLimit ? 'full' : ''}`}>
             <span className="runner-util-fill" style={{ width: `${quota.percent}%` }} />
           </span>
-          <span className="pool-gauge-pct">{quota.percent}%</span>
+          <span className={`pool-gauge-pct${quota.nearLimit ? ' near-limit' : ''}`}>
+            {`${compactWindowLabel(quota.label)} ${quota.percent}%`}
+          </span>
         </>
       ) : member.key ? null : (
         // A key with no cap has nothing to fill; an account that reports no quota says so.
@@ -375,6 +378,7 @@ function LoginRow({ member, actions }: { member: PoolMember; actions: LoginActio
               size="small"
               type="text"
               danger
+              className="pool-signout"
               icon={<LogoutOutlined />}
               aria-label={`Sign out ${member.label}`}
             />

@@ -175,13 +175,20 @@ export function sessionPoolAccount(
   return next ? { member: next, current: false } : null;
 }
 
-/** The gauge a member row shows: the window that stopped a spent member, else the 5-hour window
- *  the pool ranks its members by. */
+/** The gauge a member row shows: the window that stopped a spent member, else the one closest to its
+ *  limit — a 5-hour window at 6% says nothing of a weekly one at 97%, which stops the account first.
+ *  A tie goes to the first of them, the 5-hour window. */
 export function memberQuota(member: PoolMember): PlanUsageDisplayRow | null {
   if (!member.planUsage) return null;
   const rows = planUsageRows(member.planUsage);
   const binding = member.state === 'SPENT' ? rows.find((row) => row.window.utilization >= 100) : undefined;
-  return binding ?? rows.find((row) => row.key === 'fiveHour') ?? rows[0] ?? null;
+  return (
+    binding ??
+    rows.reduce<PlanUsageDisplayRow | null>(
+      (tightest, row) => (!tightest || row.window.utilization > tightest.window.utilization ? row : tightest),
+      null,
+    )
+  );
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
