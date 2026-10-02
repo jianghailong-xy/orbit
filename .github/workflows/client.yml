@@ -78,8 +78,8 @@ jobs:
 
   macos:
     name: macOS (build + test)
-    # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    # TEMPORARY, shots branch only: this round records the swipe; the macOS build passed already.
+    if: false
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
@@ -141,7 +141,7 @@ jobs:
   # .swipe-probe/README.md).
   swipe-shots-ios:
     name: Swipe probe (iOS session row actions)
-    if: false
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-26
     timeout-minutes: 50
     steps:
@@ -155,7 +155,7 @@ jobs:
       - name: Toolchain
         run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
       - name: Build, test and capture
-        run: bash .swipe-probe/ios/run.sh
+        run: bash .swipe-probe/ios/reveal.sh
       - name: Upload the captures
         if: always()
         uses: actions/upload-artifact@v7

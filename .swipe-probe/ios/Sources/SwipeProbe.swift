@@ -13,7 +13,9 @@ struct SwipeProbeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ProbeRoot()
+            Group {
+                if Probe.arg("-variant") == "notes" { NotesProbe() } else { ProbeRoot() }
+            }
                 .environment(model)
                 .preferredColorScheme(ProcessInfo.processInfo.arguments.contains("-dark") ? .dark : .light)
         }
@@ -159,4 +161,60 @@ enum Probe {
         session("s8", "数据库性能与容量治理", "CONFIRM 已判，再跑一轮基准。", hoursAgo: 56,
                 tags: [("性能", "#AF52DE"), ("配置", "#AF52DE")]),
     ]
+}
+
+/// The reference: Notes' list as the system draws it — inset grouped, ~80pt two-line rows, and the
+/// system's own swipe actions (Share / Move / Delete to the left, Pin to the right), whose buttons come
+/// out round at that height. Recorded mid-swipe to see how the system grows and drops its buttons.
+struct NotesProbe: View {
+    @State private var log: [String] = []
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(Probe.notes, id: \.self) { title in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(title).font(.headline).lineLimit(1)
+                            Text("09:41  The quick brown fox jumps over the lazy dog")
+                                .font(.subheadline).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                        .padding(.vertical, 3)
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) { log.append("Delete") } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                            Button { log.append("Move") } label: { Label("Move", systemImage: "folder") }
+                                .tint(.indigo)
+                            Button { log.append("Share") } label: {
+                                Label("Share", systemImage: "square.and.arrow.up")
+                            }
+                            .tint(.blue)
+                        }
+                        .swipeActions(edge: .leading) {
+                            Button { log.append("Pin") } label: { Label("Pin", systemImage: "pin") }
+                                .tint(.orange)
+                        }
+                    }
+                } header: {
+                    Text("Today")
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Notes")
+            .safeAreaInset(edge: .bottom) {
+                Text("log: " + (log.isEmpty ? "-" : log.joined(separator: " | ")))
+                    .font(.caption.monospaced())
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(.bar)
+                    .accessibilityIdentifier("log")
+            }
+        }
+    }
+}
+
+extension Probe {
+    static let notes = ["Shopping list", "梳理导入流程，避免覆盖用户设置", "Trip ideas", "Meeting notes",
+                        "Book recommendations", "Recipes to try"]
 }
