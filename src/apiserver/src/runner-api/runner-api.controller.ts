@@ -5939,14 +5939,15 @@ export class RunnerApiController {
   }
 
   /** Startup worktree GC support: given the session ids of leftover checkouts on the runner,
-   *  return which are safe to remove. A checkout is kept while its session still exists and is
-   *  neither Completed nor deleted — it stays resumable, so idle-parked sessions
-   *  survive a runner restart. Everything else (Completed, deleted, or missing) is
-   *  removable leftover. */
+   *  return which are safe to remove. A checkout is kept while its session still exists, is
+   *  neither Completed nor deleted, and is still assigned to this runner — it stays resumable, so
+   *  idle-parked sessions survive a runner restart. Everything else (Completed, deleted, missing,
+   *  or moved to a workspace on another runner — docs/session-folders-move-design.md §5.4) is
+   *  removable leftover. The runner keeps a checkout's branch, and never removes a dirty one. */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/worktrees-removable')
   async worktreesRemovable(
-    @CurrentRunner() _runner: { id: string },
+    @CurrentRunner() runner: { id: string },
     @Body() dto: WorktreesRemovableRequest,
   ): Promise<WorktreesRemovableResponse> {
     const ids = (dto.ids ?? []).slice(0, 1000);
@@ -5959,6 +5960,7 @@ export class RunnerApiController {
             completedAt: null,
             archivedAt: null,
             deletedAt: null,
+            OR: [{ assignedRunnerId: null }, { assignedRunnerId: runner.id }],
           },
           select: { id: true },
         })

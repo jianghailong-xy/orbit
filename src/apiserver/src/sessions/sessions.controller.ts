@@ -651,9 +651,16 @@ export class SessionsController {
     return this.sessions.unpin(user.userId, id);
   }
 
-  /** File this session in one of its workspace's folders, or in none (`folderId` null or omitted).
-   *  A `workspaceId` other than the session's own is a 409 until moving between workspaces exists.
-   *  See SessionsService.move. */
+  /** What the Move panel shows: this workspace's folders, the other workspaces the session can or
+   *  cannot move to and why, and whether it has to be ended first. See SessionsService.moveTargets. */
+  @Get(':id/move-targets')
+  moveTargets(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.moveTargets(user.userId, id);
+  }
+
+  /** File this session in one of its workspace's folders, or in none (`folderId` null or omitted);
+   *  with a `workspaceId` other than its own, move an ended session to that workspace (and folder).
+   *  A move the rules refuse is a 409 with the reason. See SessionsService.move. */
   @Post(':id/move')
   move(
     @CurrentUser() user: AuthUser,
