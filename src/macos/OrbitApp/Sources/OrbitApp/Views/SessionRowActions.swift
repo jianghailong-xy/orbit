@@ -8,7 +8,9 @@ import OrbitKit
 //       – leading  (swipe right) → the positive actions: Complete/Pin (Move to Open in Completed and
 //         Trash)
 //       – trailing (swipe left)  → Delete, red, destructive, and `allowsFullSwipe: false` so a
-//         stray full swipe can't fire it — the user must tap the revealed button.
+//         stray full swipe can't fire it — the user must tap the revealed button. On iOS, Share
+//         (blue) sits inside it and opens the session page's share panel; Trash has none, since a
+//         trashed session can't be shared (docs/share-links-design.md §3).
 //     On iOS 26 the compact list's rows draw these themselves as circles (`circleSwipeActions`):
 //     the system draws its own at this row's height as squashed capsules. Both are drawn from the
 //     same action lists.
@@ -33,6 +35,9 @@ private struct SessionRowActions: ViewModifier {
     /// Opens the tag picker for this row (set by the list, which owns the sheet). `nil` on surfaces
     /// without a tag library on hand, where the "Tags…" item is hidden.
     let onTag: (() -> Void)?
+    /// Hands this row to the list, which owns the share panel's sheet. Read on iOS only — see
+    /// `shareAction`.
+    let onShare: (() -> Void)?
     /// Gates the irreversible "Delete Permanently" behind a confirmation (Trash only), mirroring
     /// web's modal. Per-row state: only the row whose button was tapped presents the dialog.
     @State private var confirmPurge = false
@@ -99,6 +104,12 @@ private struct SessionRowActions: ViewModifier {
             Button { onTag() } label: { Label("Tags…", systemImage: "tag") }
         }
         button(positiveAction)
+        // Share…, as the task and project menus spell the item that opens this same panel.
+        if let shareAction {
+            Button(action: shareAction.perform) {
+                Label(SharePanelCopy.share, systemImage: shareAction.systemImage)
+            }
+        }
         Divider()
         button(deleteAction)
     }
@@ -109,7 +120,21 @@ private struct SessionRowActions: ViewModifier {
         isTrash ? [positiveAction] : [positiveAction, pinAction]
     }
 
-    private var trailingActions: [RowSwipeAction] { [deleteAction] }
+    private var trailingActions: [RowSwipeAction] {
+        if let shareAction { return [deleteAction, shareAction] }
+        return [deleteAction]
+    }
+
+    /// The session page's share panel, which the list presents for this row. iOS only — the Mac
+    /// shares from the session page's window toolbar — and never in Trash.
+    private var shareAction: RowSwipeAction? {
+        #if os(iOS)
+        guard !isTrash, let onShare else { return nil }
+        return RowSwipeAction(title: "Share", systemImage: "square.and.arrow.up", tint: .blue, perform: onShare)
+        #else
+        return nil
+        #endif
+    }
 
     private var positiveAction: RowSwipeAction {
         if isCompleted || isTrash {
@@ -158,8 +183,10 @@ private struct SessionRowActions: ViewModifier {
 extension View {
     /// Attach the pin / complete-or-move-to-open / delete actions to a session row.
     /// `onTag`, when provided, adds a "Tags…" context-menu item that opens the list-owned tag picker.
+    /// `onShare`, when provided, adds Share to the swipe and the menu on iOS, outside Trash; it hands
+    /// the row to the list that presents the share panel.
     func sessionRowActions(_ session: Session, scope: SessionView? = nil,
-                           onTag: (() -> Void)? = nil) -> some View {
-        modifier(SessionRowActions(session: session, scope: scope, onTag: onTag))
+                           onTag: (() -> Void)? = nil, onShare: (() -> Void)? = nil) -> some View {
+        modifier(SessionRowActions(session: session, scope: scope, onTag: onTag, onShare: onShare))
     }
 }
