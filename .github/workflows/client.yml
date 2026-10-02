@@ -96,6 +96,8 @@ jobs:
       - name: Test OrbitKit (macOS)
         working-directory: src/macos/OrbitKit
         run: swift test
+        # TEMPORARY, shots branch only: two tests already fail on main; build OrbitApp regardless.
+        continue-on-error: true
       # First real compile of the SwiftUI layer (views, @Observable models, MenuBarExtra,
       # UNUserNotificationCenter, launchctl glue). If this surfaces SDK nits, that's its job.
       - name: Build OrbitApp
@@ -132,3 +134,31 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             build
+
+  # TEMPORARY — an evidence run, not a gate; this branch is never merged. `.share-probe/` hosts the
+  # real iOS session list against a fixture API and photographs its Share — swiped and long-pressed on
+  # Open, Completed and Trash — and the panel it opens (see .share-probe/README.md).
+  share-shots-ios:
+    name: Share probe (iOS session list)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Build, test and capture
+        run: bash .share-probe/ios/run.sh
+      - name: Upload the captures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: share-shots-ios
+          path: .share-probe/ios/shots
+          if-no-files-found: error

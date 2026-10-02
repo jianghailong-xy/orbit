@@ -1,0 +1,70 @@
+# TEMPORARY evidence probe (see ../README.md). The iOS app's own shared sources and shell, with this
+# probe's entry point in place of OrbitiOSApp.
+name: ShareProbe
+options:
+  bundleIdPrefix: io.orbitd
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  OrbitKit:
+    path: ../../src/macos/OrbitKit
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+targets:
+  ShareProbe:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: ../../src/ios/Support/Assets.xcassets
+      - path: ../../src/ios/Sources
+        name: Shell
+        excludes:
+          - "OrbitiOSApp.swift"
+      - path: ../../src/macos/OrbitApp/Sources/OrbitApp
+        name: Shared
+        excludes:
+          - "OrbitApp.swift"
+          - "HotKeyManager.swift"
+          - "UpdaterModel.swift"
+          - "RunnerControl.swift"
+          - "Views/RunnerControlPane.swift"
+          - "Views/MenuBarContent.swift"
+    dependencies:
+      - package: OrbitKit
+        product: OrbitKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.shareprobe
+        PRODUCT_NAME: ShareProbe
+        # Only the plain-http exception for the stub on localhost; the rest is generated.
+        INFOPLIST_FILE: Info.plist
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+  ShareProbeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: ShareProbe
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.shareprobe.uitests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  ShareProbe:
+    build:
+      targets:
+        ShareProbe: all
+        ShareProbeUITests: [test]
+    test:
+      targets:
+        - ShareProbeUITests
