@@ -83,7 +83,8 @@ before(async () => {
       lease_generation uuid,
       send_intent text,
       target_turn_id uuid,
-      coordinator_context_key text
+      coordinator_context_key text,
+      sender_session_id uuid
     );
   `);
 });
@@ -136,6 +137,10 @@ function pgTx() {
     conversationTurn: {
       findMany: async () => [],
       updateMany: async () => ({ count: 1 }),
+    },
+    sessionRequest: {
+      updateMany: async () => ({ count: 0 }),
+      findMany: async () => [],
     },
   };
 }

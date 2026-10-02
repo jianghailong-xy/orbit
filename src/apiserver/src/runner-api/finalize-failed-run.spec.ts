@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { RunStatus as SharedRunStatus, type RunFinalizeRequest } from '@orbit/shared';
 import { RunnerApiController } from './runner-api.controller';
+import { noSessionRequests } from '../test-support/prisma-transaction-double';
 
 /**
  * What finalize does with a run that failed: whether its checkout is worth keeping, and whether
@@ -52,6 +53,7 @@ function makeController(
         return { count: 1 };
       },
     },
+    sessionRequest: noSessionRequests(),
     conversationTurn: { updateMany: async (args: {
       where: Record<string, unknown>;
       data: Record<string, unknown>;

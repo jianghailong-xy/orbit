@@ -1550,7 +1550,25 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the
       // six preserved objects — and it has no INSERT, UPDATE or DELETE. No `project_acceptance_*`
       // object is named.
-      '0346_codeless_and_source_on_upstream'],
+      '0346_codeless_and_source_on_upstream',
+      // Session requests (0347): one new table, `session_request`, whose one foreign key is to the
+      // recipient `session` row (ON DELETE CASCADE), with CHECKs and partial indexes of its own; a
+      // BEFORE UPDATE guard on that table that keeps an outcome from being rewritten; and an AFTER
+      // UPDATE trigger on `session` that closes the OPEN requests naming an ended session as their
+      // recipient. Read against every claim above: no `task`, `project` or `project_acceptance_*`
+      // object is named, so the 0177 pair and every stored task and criterion row are out of its
+      // reach; the session trigger writes only `session_request`, which starts empty, and is not
+      // another writer of the DONE fence nor any of the six preserved objects. No INSERT, UPDATE or
+      // DELETE of an existing row: nothing is backfilled.
+      '0347_session_request',
+      // Who sent a turn: one nullable UUID column with no default on `conversation_turn`
+      // (`sender_session_id`, deliberately no foreign key) and one partial index on it. Read against
+      // every claim above: `conversation_turn` is not among the preserved relations and nothing else
+      // is named — no `task`, `session`, `project` or `project_acceptance_*` object, no function,
+      // trigger or type created, replaced or dropped, and no INSERT, UPDATE or DELETE. (Written as
+      // 0343 on its own branch and renumbered before it landed: 0343 is the delivery review's, as
+      // said above, and 0348 is spelled by the unlanded session-folders branch.)
+      '0349_conversation_turn_sender_session'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -619,7 +619,8 @@ struct TranscriptView: View {
     /// A turn the bar may point back at: asked already, and the head of a round rather than a line inside one.
     private func namesAQuestion(_ b: UserBubble) -> Bool {
         !b.queued && StickySummary.isAnchor(text: b.text, note: b.note, itemCard: b.itemCard,
-                                            taskStart: b.taskStart, startedCard: b.startedCard)
+                                            taskStart: b.taskStart, startedCard: b.startedCard,
+                                            sessionMessage: b.sessionMessage)
     }
 
     private var stuckBubble: UserBubble? {
@@ -758,7 +759,8 @@ struct TranscriptView: View {
         // card reading "not typed by you".
         let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
                                        taskStart: bubble.taskStart,
-                                       startedCard: bubble.startedCard)
+                                       startedCard: bubble.startedCard,
+                                       sessionMessage: bubble.sessionMessage)
         // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
         return CoastingButton {
             #if os(iOS)
@@ -1249,15 +1251,25 @@ struct TranscriptItemView: View {
     var body: some View {
         switch item {
         case .user(let b):
+            // Another Orbit session's message (`session_send` / `project_send`): somebody's words,
+            // but not the reader's, so not the reader's bubble. Who sent it is what the control plane
+            // recorded beside the echo (`sessionMessage`, `SessionMessage.parse`), so it is asked
+            // FIRST — before anything is read out of the words, which are the sending agent's to
+            // choose — as the browser asks it (`NodeView`). No payload, the old reading.
+            //
             // An exception item's delivery is the control plane's too, and for a stronger reason
             // than the wakes below: nobody typed it at all. What the turn says is a paragraph
             // written for the AGENT — the tools to call, the ids to call them with — so drawing it
             // as a message is both wrong about who sent it and unreadable as a record: the item's
             // kind, its title, the files a merge conflicted on and whether the work has landed are
             // all in the payload recorded beside it (`openItemDelivery`, `OpenItemDelivery.parse`).
-            // With no payload the turn keeps its old reading — this is checked FIRST, as the browser
-            // checks it (`NodeView`).
-            if let card = b.itemCard {
+            // With no payload the turn keeps its old reading — this is checked before the wakes, as
+            // the browser checks it (`NodeView`).
+            if let card = b.sessionMessage {
+                SessionMessageCardView(card: card, text: b.text, ts: b.ts,
+                                       undelivered: b.undelivered || b.delivery == "failed",
+                                       attached: b.attached)
+            } else if let card = b.itemCard {
                 // The note the same turn carried rides inside the card (`b.attached`): nobody typed
                 // this turn either, so the control plane's words do not go back into a bubble in the
                 // reader's own name — the same rule the wake card applies to a mixed note.
@@ -1285,6 +1297,18 @@ struct TranscriptItemView: View {
                 ProjectStartedCardView(card: started, text: b.text, ts: b.ts,
                                        undelivered: b.undelivered || b.delivery == "failed",
                                        attached: b.attached)
+            } else if let replies = b.sessionReplies, !replies.isEmpty {
+                // The outcomes of this session's own requests, handed back (`sessionReplies`,
+                // `SessionReply.parse`): a reply turn carries nobody's words, and a message of the
+                // owner's may carry outcomes that were held for it — then the owner's words are their
+                // bubble, first, and the outcomes follow as cards, with what else delivery appended
+                // folded into them (web parity: NodeView).
+                VStack(alignment: .leading, spacing: 6) {
+                    if !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        UserBubbleView(bubble: withoutNote(b))
+                    }
+                    SessionReplyCardsView(replies: replies, ts: b.ts, attached: replyRest(b))
+                }
             } else if let wake = WatchWakeText.parse(b.text) {
                 // A turn a watch queued is the watch's to show, not a message the user typed: it opens
                 // with a raw UUID and carries the whole payload the agent read (web parity: NodeView).
@@ -1352,6 +1376,12 @@ struct TranscriptItemView: View {
     /// its other blocks instead of repeating the wake beneath the card.
     private func attachedRest(_ wake: BackgroundWake) -> (kind: String, text: String)? {
         wake.rest.isEmpty ? nil : (kind: describeNote(wake.rest), text: wake.rest)
+    }
+
+    /// What the reply cards did NOT take from a turn's note, as the entry folded inside them.
+    private func replyRest(_ bubble: UserBubble) -> (kind: String, text: String)? {
+        let rest = SessionReply.withoutReplyBlocks(bubble.note)
+        return rest.isEmpty ? nil : (kind: describeNote(rest), text: rest)
     }
 
     /// The same bubble with the note taken off it: all of it is the card's now, so leaving it here

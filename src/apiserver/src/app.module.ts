@@ -29,6 +29,7 @@ import { OutcomeReconcilerHttpModule } from './outcome-reconciler/outcome-reconc
 import { WatchEvaluatorModule } from './watches/watch-evaluator.module';
 import { WatchDeliveryModule } from './watches/watch-delivery.module';
 import { ScheduledWakeupModule } from './runner-api/scheduled-wakeup.module';
+import { SessionRequestWorkerModule } from './sessions/session-request-worker.module';
 import { WikiModule } from './wiki/wiki.module';
 
 @Module({
@@ -61,6 +62,7 @@ import { WikiModule } from './wiki/wiki.module';
     WatchEvaluatorModule,
     WatchDeliveryModule,
     ScheduledWakeupModule,
+    SessionRequestWorkerModule,
     WikiModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs

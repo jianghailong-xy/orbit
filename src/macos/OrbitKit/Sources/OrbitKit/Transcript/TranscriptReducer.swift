@@ -1083,6 +1083,12 @@ public struct TranscriptReducer: Sendable, Codable {
         // The message telling the coordinator its project was started, by the same rule
         // (`projectStarted`, `ProjectStarted.parse`).
         let startedCard = ProjectStarted.parse(ev.payload)
+        // And who sent it, when it was another Orbit session (`sessionMessage`, `SessionMessage.parse`):
+        // what the control plane recorded, never a reading of the words.
+        let sessionMessage = SessionMessage.parse(ev.payload)
+        // And the outcomes of this session's own requests a turn handed back (`sessionReplies`,
+        // `SessionReply.parse`), by the same rule.
+        let sessionReplies = SessionReply.parse(ev.payload)
         // The runner echoes `attachments` (an array of `{id, mime, name}`) on the durable user
         // event, NOT `attachmentIds` — parse those so the bubble can render images / file chips
         // after a reload (web reads the same field).
@@ -1117,6 +1123,8 @@ public struct TranscriptReducer: Sendable, Codable {
                 b.itemCard = itemCard
                 b.taskStart = taskStart
                 b.startedCard = startedCard
+                b.sessionMessage = sessionMessage
+                b.sessionReplies = sessionReplies
                 if !atts.isEmpty { b.attachments = atts }   // durable refs carry mime; keep ids if absent
                 b.ts = ev.ts ?? b.ts
                 b.steer = b.steer || steer
@@ -1137,7 +1145,9 @@ public struct TranscriptReducer: Sendable, Codable {
                                             note: recorded?.note,
                                             steer: steer, delivery: delivery,
                                             itemCard: itemCard, taskStart: taskStart,
-                                            startedCard: startedCard)))
+                                            startedCard: startedCard,
+                                            sessionMessage: sessionMessage,
+                                            sessionReplies: sessionReplies)))
     }
 
     private mutating func appendInterrupt(seq: Int, dropsQueue: Bool) {

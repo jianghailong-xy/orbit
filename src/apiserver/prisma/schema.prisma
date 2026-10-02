@@ -1353,6 +1353,8 @@ model Session {
   turns                 ConversationTurn[]
   backgroundJobWakes    BackgroundJobWake[]
   scheduledWakeups      SessionScheduledWakeup[]
+  /// The requests other sessions have asked of this one (session_request.to_session_id).
+  receivedRequests      SessionRequest[] @relation("SessionRequestRecipient")
   poolGatewayTokens     PoolGatewayToken[]
   poolLoginTokens       PoolLoginToken[]
   poolLoginUsage        PoolLoginUsage[]
@@ -1775,6 +1777,15 @@ model ConversationTurn {
   /// Runtime-authored USER acknowledgement, persisted by event ingest before turn-complete.
   deliveryAcknowledgedAt DateTime? @map("delivery_acknowledged_at")
   content         String? // user message text (null for interrupt/end)
+  /// The session that sent this turn, when it is one Orbit session's message to another
+  /// (`session_send`, `project_send` — docs/session-request-reply-contract.md §2.1). Written only
+  /// by those two runner doors, from the caller's own identity and never from a request body; null
+  /// is every other turn: the account owner, a headless credential, the platform's own deliveries.
+  /// Deliberately not a relation: a foreign key would lock the sender's row under the recipient's,
+  /// and two sessions messaging each other would deadlock (migration 0349). The partial index the
+  /// hourly limit counts with (`conversation_turn_sender_session_id_idx`) lives in that migration,
+  /// because schema.prisma cannot express a partial index.
+  senderSessionId String?   @map("sender_session_id") @db.Uuid
   status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED
   deliveredAt     DateTime? @map("delivered_at")
   leaseDeadlineAt DateTime? @map("lease_deadline_at")
@@ -1854,6 +1865,49 @@ model SessionScheduledWakeup {
   /// The worker's read: waiting and due (partial on PENDING in the migration).
   @@index([dueAt], map: "session_scheduled_wakeup_due_idx")
   @@map("session_scheduled_wakeup")
+}
+
+/// One Orbit session asking another for a reply: a `session_send` / `project_send` that carried
+/// `expectReply` (docs/session-request-reply-contract.md §3–§5; sessions/session-request.ts). OPEN
+/// until it comes to exactly one outcome — REPLIED, NO_REPLY, RECIPIENT_ENDED, EXPIRED or
+/// UNDELIVERED — written by a compare-and-set on OPEN and never rewritten (migration 0347's guard).
+/// The outcome is then handed back to the asking session on a `session-reply:` turn
+/// (`replyClientTurnId`), or held on the row for its next turn (`replyHeldAt`).
+///
+/// The asking session is deliberately not a relation, for the reason `ConversationTurn.senderSessionId`
+/// is not one: the request is written under the RECIPIENT's row lock, and a key to the asker would
+/// take that row too. The partial indexes the workers and reads use live in migration 0347.
+model SessionRequest {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  ownerId           String    @map("owner_id") @db.Uuid
+  fromSessionId     String    @map("from_session_id") @db.Uuid
+  toSessionId       String    @map("to_session_id") @db.Uuid
+  toSession         Session   @relation("SessionRequestRecipient", fields: [toSessionId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "session_request_to_session_fkey")
+  /// The turn carrying the request in the recipient's conversation, and the key it was written under.
+  turnId            String    @map("turn_id") @db.Uuid
+  clientTurnId      String    @map("client_turn_id")
+  /// The first 200 characters of the request.
+  requestPreview    String    @map("request_preview")
+  /// `[{ label, description? }]`, two to four of them, or null.
+  options           Json?
+  replyBy           DateTime  @map("reply_by") @db.Timestamptz(3)
+  /// OPEN | REPLIED | NO_REPLY | RECIPIENT_ENDED | EXPIRED | UNDELIVERED
+  state             String    @default("OPEN")
+  replyText         String?   @map("reply_text")
+  replyOption       Int?      @map("reply_option")
+  /// The recipient's last words, for every outcome but REPLIED.
+  excerpt           String?
+  closeReason       String?   @map("close_reason")
+  closedAt          DateTime? @map("closed_at") @db.Timestamptz(3)
+  /// The asking session's turn that carries (or carried) the outcome back to it.
+  replyClientTurnId String?   @map("reply_client_turn_id")
+  /// The outcome is kept on the row for the asker's next turn: it had ended, or its reply turn was
+  /// taken off its queue.
+  replyHeldAt       DateTime? @map("reply_held_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([toSessionId, clientTurnId], map: "session_request_turn_key")
+  @@map("session_request")
 }
 
 // Binary blob storage (currently web-composer image uploads) kept in-DB as bytea.

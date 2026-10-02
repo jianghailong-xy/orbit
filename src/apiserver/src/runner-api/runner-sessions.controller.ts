@@ -18,6 +18,17 @@ import { RunnerSessionScope, SessionsService } from '../sessions/sessions.servic
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { RecordMergeReceiptDto } from '../sessions/dto';
 import { assertClientTurnIdNotReserved } from '../sessions/watch-turn-key';
+import { chargeSessionMessage } from '../sessions/session-message';
+import {
+  chargeOpenRequest,
+  HEADLESS_REQUEST_REFUSAL,
+  readRequestAsk,
+  recordSessionRequest,
+  selfRequestRefusal,
+  type SessionReplyInput,
+  type SessionRequestParams,
+} from '../sessions/session-request';
+import { SessionRequestService } from '../sessions/session-request.service';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { SessionAttemptService } from '../projects/session-attempt.service';
 import { SessionLifecycleActor } from '../projects/attempt-budget';
@@ -78,6 +89,13 @@ export class RunnerSessionsController {
      * spawn, which is what that spec and every other one here is about.
      */
     @Optional() private readonly fuse?: ProjectFuseService,
+    /**
+     * Session requests (sessions/session-request.service.ts): the receipt a send that asked for a
+     * reply answers with, and the reply door. `@Optional()` for the reason `fuse` is: the specs that
+     * build this controller by hand pass what their case is about, and a send that asks for no reply
+     * goes exactly as it did before without it.
+     */
+    @Optional() private readonly requests?: SessionRequestService,
   ) {}
 
   /**
@@ -299,9 +317,19 @@ export class RunnerSessionsController {
     @Headers('x-orbit-session-id') callingSessionId: string | undefined,
     @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
     @Param('id', PublicIdPipe) id: string,
-    @Body() dto: { message: string; clientTurnId?: string; resumeIfEnded?: boolean },
+    @Body() dto: { message: string; clientTurnId?: string; resumeIfEnded?: boolean } & SessionRequestParams,
   ) {
     const resumeIfEnded = dto.resumeIfEnded === true;
+    // `expectReply` and its two companions (contract §3.1): null when the message asks for no reply,
+    // which is every send that does not say so — and then nothing below differs from a plain send.
+    const ask = readRequestAsk(dto);
+    if (ask && !this.requests) {
+      throw new Error('a session request needs SessionRequestService, which this controller was built without');
+    }
+    // The session this message is FROM, when there is one: the caller the orchestration credential
+    // just proved, and nothing a body could say. A headless credential is nobody's session, so its
+    // message carries no sender — as the owner's own does not (session-message.ts).
+    let senderSessionId: string | undefined;
     if (isHeadlessCaller(callingSessionId)) {
       // Reviving spawns an engine and takes a runner slot, which puts it with the lifecycle verbs
       // below rather than with `send` — and those have no headless path at all. Refused loudly
@@ -313,6 +341,9 @@ export class RunnerSessionsController {
           'resumeIfEnded requires a calling session; a headless credential may only send',
         );
       }
+      // The same line for a request: its outcome comes back as a turn of the asking session, and a
+      // headless credential is nobody's session (§3.1).
+      if (ask) throw new ForbiddenException(HEADLESS_REQUEST_REFUSAL);
       await this.sessions.assertHostedByRunner(
         runner.ownerId,
         this.headlessScope(runner, grant, 'session:send'),
@@ -320,7 +351,8 @@ export class RunnerSessionsController {
       );
     } else {
       this.assertNoServiceToken(grant);
-      await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+      senderSessionId = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+      if (ask && senderSessionId === id) throw selfRequestRefusal();
     }
     const actor = RunnerSessionsController.actor(callingSessionId);
     // Same idempotency key every other entry point sends. A caller that retries a request it
@@ -339,6 +371,7 @@ export class RunnerSessionsController {
     // and while the routing protocol was rollout-gated the request was refused outright.
     const turn = { clientTurnId, content: dto.message };
     const charge = {
+      senderSessionId,
       // AU3/TH3, but only for a NEW turn that has already passed idempotency and placement. The
       // callback runs under createTurn's Session lock and in its transaction: a retry observes the
       // durable clientTurnId first and spends nothing, while a refusal rolls back both charge and
@@ -346,8 +379,29 @@ export class RunnerSessionsController {
       //
       // Carried onto the resume route unchanged. A steer the budget refuses must not become
       // affordable by reviving the session it was aimed at instead.
-      participateSendTransaction: (tx: Prisma.TransactionClient) =>
-        this.attempts.chargeSteer(runner.ownerId, id, actor, tx),
+      //
+      // The session-to-session hourly limit is charged at the same boundary and for the same
+      // reason (contract §2.4): a retry of a counted message is not another message.
+      participateSendTransaction: async (tx: Prisma.TransactionClient) => {
+        if (senderSessionId) await chargeSessionMessage(tx, senderSessionId, id);
+        // §3.1's backpressure, at the same boundary: a retry of a request is not another request.
+        if (ask) await chargeOpenRequest(tx, senderSessionId!);
+        await this.attempts.chargeSteer(runner.ownerId, id, actor, tx);
+      },
+      // The request beside the turn that carries it, in the transaction that writes the turn and on
+      // either branch below — a request is no less one for having revived its recipient.
+      ...(ask
+        ? {
+            onTurnWritten: (tx: Prisma.TransactionClient, written: { id: string; clientTurnId: string; content: string | null }) =>
+              recordSessionRequest(tx, {
+                ownerId: runner.ownerId,
+                fromSessionId: senderSessionId!,
+                toSessionId: id,
+                turn: written,
+                ask,
+              }),
+          }
+        : {}),
     };
     // Opt-in, unlike the browser's composer, which decides this for a person who is watching and
     // can see the session come back up. Here the caller is an agent: reviving burns tokens and
@@ -355,8 +409,45 @@ export class RunnerSessionsController {
     // message onto a fresh session instead. `resume` is a superset of `createTurn` — it delegates
     // to it verbatim when the row turns out to still be live — so this is the same send when
     // there is nothing to revive.
-    if (resumeIfEnded) return this.sessions.resume(runner.ownerId, id, turn, charge);
-    return this.sessions.createTurn(runner.ownerId, id, turn, charge);
+    const sent = resumeIfEnded
+      ? await this.sessions.resume(runner.ownerId, id, turn, charge)
+      : await this.sessions.createTurn(runner.ownerId, id, turn, charge);
+    // The send returns at once; a request's answer comes back later as a turn of the caller (§3.1).
+    // What it answers now is how to recognise that answer: the request and its deadline.
+    const receipt = senderSessionId && this.requests
+      ? await this.requests.receipt(id, clientTurnId, ask != null, senderSessionId)
+      : null;
+    return receipt ? { ...sent, ...receipt } : sent;
+  }
+
+  /**
+   * `session_reply` (contract §3.2): the session a request was sent to answers it. Only that session
+   * may — the orchestration credential proves which session is calling, and any other is refused —
+   * so there is no headless path and no service token. The answer goes back to the asker as a turn
+   * of its own; a request that already has an outcome is refused 409 REQUEST_CLOSED with it.
+   *
+   * The parameter is `id`: `requestId` is a name the public-id codec never translates.
+   */
+  @Post('session-requests/:id/reply')
+  async replyToRequest(
+    @CurrentRunner() runner: Runner,
+    @CurrentServiceGrant() grant: ServiceTokenGrant | undefined,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Headers('x-orbit-session-token') orchestrationToken: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: SessionReplyInput,
+  ) {
+    if (isHeadlessCaller(callingSessionId)) {
+      throw new ForbiddenException(
+        'session_reply requires a calling session: only the session a request was sent to can answer it',
+      );
+    }
+    this.assertNoServiceToken(grant);
+    const caller = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    if (!this.requests) {
+      throw new Error('session_reply needs SessionRequestService, which this controller was built without');
+    }
+    return this.requests.reply(runner.ownerId, caller, id, { message: dto?.message, option: dto?.option });
   }
 
   // The lifecycle verbs below have NO headless path by design. They are the most damaging

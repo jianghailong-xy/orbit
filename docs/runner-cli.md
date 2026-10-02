@@ -51,6 +51,22 @@ orbit session delete <session-id> --json
 Session deletion moves the session to Trash and retains its data so a human can restore it. It does not expose
 the permanent purge operation to agents.
 
+A session can ask another for a reply. The send still returns at once, with `requestId` and `replyBy`; the
+outcome — the answer, or why there is none (`NO_REPLY`, `RECIPIENT_ENDED`, `EXPIRED`, `UNDELIVERED`) — comes
+back to the asking session later as a turn of its own, exactly once. The session that was asked answers with
+`orbit session reply` (the MCP tool is `session_reply`), using the `request-id` its message arrived with:
+
+```bash
+orbit session send <session-id> --message "Merge now or wait for review?" --expect-reply \
+  --reply-options '[{"label":"merge now"},{"label":"wait","description":"until review"}]' \
+  --reply-within-seconds 3600 --json
+orbit session reply <request-id> --option 1 --message "the reviewer is back at 3" --json
+```
+
+`orbit project send <project-id> --expect-reply` asks the project's coordinator the same way; the request
+stays with the coordinator conversation it was delivered to. Requests need a calling session — a reply needs a
+conversation to come back to — so the headless runner credential cannot make one.
+
 `--agent-name` selects the Orbit agent (project directory and runner configuration) that should execute the
 session. Check `orbit capabilities --json` instead of assuming a session operation is authorized.
 

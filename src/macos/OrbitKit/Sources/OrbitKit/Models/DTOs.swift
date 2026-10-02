@@ -311,6 +311,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// are already inside `pendingApprovals`; this says which they are, so the bar can name one and
     /// open its card. Empty (or nil, from an older control plane) when none.
     public let ownerItems: [SessionOwnerItem]?
+    /// Who this conversation is waiting on for a reply, and who is waiting on it (session requests,
+    /// `SessionRequestCopy.peersLine`). Nil from an older control plane; empty when none is open.
+    public let awaitingReplyFrom: [SessionRequestPeer]?
+    public let owesReplyTo: [SessionRequestPeer]?
     /// The task whose run this is; nil for an ordinary conversation. It is how the console finds the
     /// question it may have to draw a card for (`OwnerConfirmation.swift`) — a card is drawn in the
     /// run's own session, and only there.
@@ -465,6 +469,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
+        awaitingReplyFrom = try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .awaitingReplyFrom)
+        owesReplyTo = try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .owesReplyTo)
         taskId = try values.decodeIfPresent(String.self, forKey: .taskId)
         branch = try values.decodeIfPresent(String.self, forKey: .branch)
         updatedAt = try values.decodeIfPresent(String.self, forKey: .updatedAt)
@@ -517,7 +523,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
                 poolMemberProviderId: String? = nil, poolKeyId: String? = nil,
                 codexAccount: String? = nil, codexAccountPinned: Bool? = nil,
-                claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil) {
+                claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil,
+                awaitingReplyFrom: [SessionRequestPeer]? = nil, owesReplyTo: [SessionRequestPeer]? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -540,6 +547,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.pendingApprovals = pendingApprovals
         self.waitingKind = waitingKind
         self.ownerItems = ownerItems
+        self.awaitingReplyFrom = awaitingReplyFrom
+        self.owesReplyTo = owesReplyTo
         self.taskId = taskId
         self.branch = branch
         self.updatedAt = updatedAt

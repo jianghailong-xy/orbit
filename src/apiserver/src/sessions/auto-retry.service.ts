@@ -26,6 +26,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { deriveSessionCapabilities } from './session-state';
 import { SessionsService } from './sessions.service';
 import { isBackgroundWakeTurn } from '../runner-api/background-job-wake';
+import { isSessionReplyTurn } from './session-request';
 import { runAccount } from '../providers/plan-usage-accounts';
 import {
   classifyTransactionError,
@@ -790,8 +791,11 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       if (event.turnId && durableTurns.has(event.turnId)) {
         // A background job's wake (runner-api/background-job-wake.ts) carries nobody's words, and
         // stepping past it would re-send what the person said before it — a message already
-        // answered. There is nothing to re-send; the job's end stays in its durable event.
-        if (isBackgroundWakeTurn(turns.find((turn) => turn.id === event.turnId)?.clientTurnId)) break;
+        // answered. There is nothing to re-send; the job's end stays in its durable event. A turn
+        // handing back the outcome of a session request is the same (sessions/session-request.ts):
+        // the outcome stays on its request row.
+        const keyOfTurn = turns.find((turn) => turn.id === event.turnId)?.clientTurnId;
+        if (isBackgroundWakeTurn(keyOfTurn) || isSessionReplyTurn(keyOfTurn)) break;
         const original = executableFor(event.turnId);
         if (original?.content.trim()) {
           chosen = event;
