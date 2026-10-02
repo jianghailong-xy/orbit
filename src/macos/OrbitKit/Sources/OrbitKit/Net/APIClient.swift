@@ -474,11 +474,17 @@ public final class APIClient: @unchecked Sendable {
     /// "not recorded" — needs the code rather than the prose. Nil for anything that is not a refusal
     /// with a code: a transport error, an HTML error page, a body from something that is not Orbit.
     public static func refusalCode(_ error: Error) -> String? {
+        refusalString(error, "code")
+    }
+
+    /// One of a refusal's own fields, when the error carries it as a string — `code`, or what a door
+    /// names beside it, such as the account a duplicate sign-in turned out to be (`email`).
+    public static func refusalString(_ error: Error, _ field: String) -> String? {
         guard case APIError.http(_, let body) = error, let body,
               let data = body.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
-        return object["code"] as? String
+        return object[field] as? String
     }
 
     /// Why a request didn't go through, as the tail of one English sentence — the prose half of
@@ -1091,10 +1097,12 @@ public final class APIClient: @unchecked Sendable {
     public func cancelCodexLogin(poolID: String) async throws -> CodexLoginPoll {
         try await delete("providers/pools/\(poolID)/codex-login")
     }
-    /// Sign the pool's account out: the server deletes the sign-in it held.
+    /// Sign one of the pool's accounts out, named by its fingerprint (`…AB12`, as every response names
+    /// it): the server deletes the sign-in it held, and the pool's other accounts stay.
     @discardableResult
-    public func signOutCodexLogin(poolID: String) async throws -> CodexLoginSignOut {
-        try await delete("providers/pools/\(poolID)/codex-login/account")
+    public func signOutCodexLogin(poolID: String, fingerprint: String) async throws -> CodexLoginSignOut {
+        try await delete("providers/pools/\(poolID)/codex-login/account",
+                         query: [URLQueryItem(name: "fingerprint", value: fingerprint)])
     }
 
     // MARK: shared pools (GET/POST/PATCH/DELETE /api/providers/shared-pools)
@@ -1438,8 +1446,8 @@ public final class APIClient: @unchecked Sendable {
     }
 
     /// DELETE with a decoded response (e.g. cancelling a sign-in, which answers with the cleared state).
-    private func delete<T: Decodable>(_ path: String) async throws -> T {
-        let data = try await send(makeRequest(path, method: "DELETE", body: Optional<Empty>.none))
+    private func delete<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
+        let data = try await send(makeRequest(path, method: "DELETE", query: query, body: Optional<Empty>.none))
         return try decoder.decode(T.self, from: data)
     }
 
