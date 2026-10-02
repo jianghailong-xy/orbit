@@ -26,7 +26,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { deriveSessionCapabilities } from './session-state';
 import { SessionsService } from './sessions.service';
 import { isBackgroundWakeTurn } from '../runner-api/background-job-wake';
-import { isSessionReplyTurn } from './session-request';
+import { hasHeldSessionReplies, isSessionReplyTurn, SESSION_REPLY_TURN_PREFIX } from './session-request';
 import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
 import { runAccount } from '../providers/plan-usage-accounts';
 import {
@@ -422,12 +422,17 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
 
-        const { content, attachmentsOf, senderSessionId } = await this.messageToResend(
+        const { content, attachmentsOf, senderSessionId, sessionReplies } = await this.messageToResend(
           session.id,
           session.prompt,
           session.numTurns,
         );
-        if (!content) {
+        // A failed turn that handed back the outcomes of this session's own requests is re-sent as
+        // what it was: a reply turn, nobody's words, the outcomes its failure held for this session
+        // written in at delivery (sessions/session-request.ts). Only while some are held — with none,
+        // it would wake the session to say nothing.
+        const resendsReplies = sessionReplies && await hasHeldSessionReplies(this.prisma, session.id);
+        if (!content && !resendsReplies) {
           // Nothing to re-send (no user message, no opening prompt to fall back on). Sending
           // an invented "continue" would be us writing in the user's voice.
           await this.disarm(session.id, session.status, 'nothing to re-send');
@@ -497,7 +502,11 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
               attachmentIds,
               // The platform's own key space (watch-turn-key.ts): what the hourly limit between two
               // sessions leaves out, because the session whose message this is did not send it again.
-              clientTurnId: `${AUTO_RETRY_TURN_KEY_PREFIX}${randomUUID()}`,
+              // A reply turn's re-send is one again, so its outcomes are found, merged and drawn as
+              // what they are.
+              clientTurnId: resendsReplies
+                ? `${SESSION_REPLY_TURN_PREFIX}retry:${randomUUID()}`
+                : `${AUTO_RETRY_TURN_KEY_PREFIX}${randomUUID()}`,
             },
             // Another session's message is still that session's when it is re-sent: without its
             // sender the recipient reads it as the account owner's (contract §2.1). Nothing else is
@@ -700,6 +709,9 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * `senderSessionId` is who sent it, when that turn was another Orbit session's message
    * (session-message.ts): the re-send is still that session's, and delivered without its sender it
    * would read as the account owner's. Null for every message nobody's session sent.
+   *
+   * `sessionReplies` says the latest turn handed back the outcomes of this session's own requests: it
+   * has no words to re-send, and the sweep re-sends it as a reply turn when its outcomes are held.
    */
   private async messageToResend(
     sessionId: string,
@@ -709,6 +721,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     content: string;
     attachmentsOf: string | null;
     senderSessionId: string | null;
+    sessionReplies?: true;
   }> {
     // The user events themselves, not a tail of the whole stream: the latest one is near the
     // end only on a short turn. One workspace turn emits hundreds of tool/system events after the
@@ -815,10 +828,14 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         // A background job's wake (runner-api/background-job-wake.ts) carries nobody's words, and
         // stepping past it would re-send what the person said before it — a message already
         // answered. There is nothing to re-send; the job's end stays in its durable event. A turn
-        // handing back the outcome of a session request is the same (sessions/session-request.ts):
-        // the outcome stays on its request row.
+        // handing back the outcomes of session requests carries nobody's words either, and stepping
+        // past it is wrong for the same reason; what it said is on the request rows, where its
+        // failure held it, and the sweep re-sends it as a reply turn (sessions/session-request.ts).
         const keyOfTurn = turns.find((turn) => turn.id === event.turnId)?.clientTurnId;
-        if (isBackgroundWakeTurn(keyOfTurn) || isSessionReplyTurn(keyOfTurn)) break;
+        if (isSessionReplyTurn(keyOfTurn)) {
+          return { content: '', attachmentsOf: null, senderSessionId: null, sessionReplies: true };
+        }
+        if (isBackgroundWakeTurn(keyOfTurn)) break;
         const original = executableFor(event.turnId);
         if (original?.content.trim()) {
           chosen = event;

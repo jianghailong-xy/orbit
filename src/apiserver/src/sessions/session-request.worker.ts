@@ -13,9 +13,10 @@ import { SessionRequestService } from './session-request.service';
  *      (`expireSessionRequest`) — a compare-and-set, so an answer that lands first stands;
  *   2. hands back every outcome that is on no turn of its asker's and was never held
  *      (`SessionRequestService.handOff`): what step 1 just closed, what migration 0350's trigger closed
- *      when a recipient's run ended (no application code is there to hand it off), what an interrupt
- *      or a withdrawal closed inside SessionsService, and anything a crash cut off between an outcome
- *      committing and its hand-off.
+ *      when a recipient's run ended (no application code is there to hand it off), what an interrupt,
+ *      a withdrawal or a drain closed inside its own transaction, and anything a crash or a failed
+ *      hand-off cut off between an outcome committing and its hand-off — a `session_reply` among
+ *      them, which answers its caller as soon as REPLIED commits (`handOffQuietly`).
  *
  * Shaped like the scheduled-wakeup worker (runner-api/scheduled-wakeup.worker.ts): one loop per replica,
  * never two passes at once, and nothing but compare-and-sets underneath, so replicas racing for the

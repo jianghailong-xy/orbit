@@ -233,6 +233,7 @@ import { SessionRequestService } from '../sessions/session-request.service';
 import {
   appendSessionRepliesContext,
   closeUnansweredRequests,
+  closeUnreadSteerRequests,
   readRequestForBlock,
   readSessionReplyCards,
   readTurnRequestIds,
@@ -3991,6 +3992,14 @@ export class RunnerApiController {
               : {}),
           },
         });
+        // A steer the engine never took takes the request it carried with it (session-request.ts):
+        // no engine read it, so it is UNDELIVERED — not left OPEN for the next settle to read as
+        // received. A CURRENT_WORK one the engine acknowledged before whatever failed was read.
+        const requestsClosed = acked.count > 0
+          && dto.status === RunStatus.FAILED
+          && steering.deliveryStatus !== 'ACKNOWLEDGED'
+          ? await closeUnreadSteerRequests(tx, sessionId, [dto.turnId])
+          : [];
         return {
           applied: acked.count > 0,
           steer: true,
@@ -3998,6 +4007,7 @@ export class RunnerApiController {
           status: current.status,
           failSession: false,
           retryAt: current.retryAt,
+          requestsClosed,
         };
       }
       // A turn that failed mid-run (e.g. an API/content-filter error the workspace couldn't
@@ -4582,9 +4592,16 @@ export class RunnerApiController {
         await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
         // And what rides on session requests (session-request.ts): the park above has already let
         // migration 0350's trigger close what the run's end closes, so a request still OPEN in the
-        // queue belongs to a run with a retry armed, and is UNDELIVERED; outcomes queued back to this
-        // session as an asker are let go to be held for it.
-        await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: true });
+        // queue, or on a steer the engine never confirmed, belongs to a run with a retry armed, and
+        // is UNDELIVERED. Outcomes handed back to this session as an asker that it did not read
+        // through — on a turn still queued or in flight, or on the turn that just failed — are held
+        // for the retry's re-send when one is armed, and let go to be held for it otherwise.
+        await settleUnrunSessionRequests(tx, sessionId, {
+          code: 'SESSION_ENDED',
+          closesRequests: true,
+          retryArmed: (retryArmAt ?? current.retryAt) != null,
+          failedTurnKey: completedTurn?.clientTurnId,
+        });
         // Drain queued turns so nothing can be leased after the session ends.
         await tx.conversationTurn.updateMany({
           where: { sessionId, status: { not: 'ANSWERED' } },
@@ -4631,11 +4648,12 @@ export class RunnerApiController {
         requestsClosed,
       };
     }, loggedRetry(this.logger, 'runnerApi.turnComplete'));
-    // The NO_REPLY outcomes this completion wrote, handed back to the sessions that asked. After the
-    // commit and outside it: a hand-off writes the ASKER's conversation, under the asker's lock, and
-    // holding this session's lock while waiting for that one is how two sessions asking each other
-    // would deadlock. One lost here — a crash between the two — is handed off by the worker's next
-    // pass, which looks for exactly that (session-request.worker.ts).
+    // The outcomes this completion wrote — NO_REPLY as a turn settled, UNDELIVERED as a steer failed —
+    // handed back to the sessions that asked. After the commit and outside it: a hand-off writes the
+    // ASKER's conversation, under the asker's lock, and holding this session's lock while waiting for
+    // that one is how two sessions asking each other would deadlock. One lost here — a crash between
+    // the two — is handed off by the worker's next pass, which looks for exactly that
+    // (session-request.worker.ts).
     if ('requestsClosed' in finalized && finalized.requestsClosed && finalized.requestsClosed.length > 0) {
       await this.sessionRequests?.handOffQuietly(finalized.requestsClosed);
     }
@@ -5705,8 +5723,13 @@ export class RunnerApiController {
       // And an exception item queued for this conversation (projects/project-open-item.ts).
       await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
       // And what rides on session requests, after the status write above, for the reason the failed
-      // turn's drain gives (sessions/session-request.ts).
-      await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: true });
+      // turn's drain gives (sessions/session-request.ts) — the turn still in flight included, since
+      // the drain below answers it without its engine having finished it.
+      await settleUnrunSessionRequests(tx, sessionId, {
+        code: 'SESSION_ENDED',
+        closesRequests: true,
+        retryArmed: retryAt != null,
+      });
       // Drain any queued turns so nothing can be leased after the session ends.
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },

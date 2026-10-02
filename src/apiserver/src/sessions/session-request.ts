@@ -35,7 +35,9 @@ import { SESSION_REPLY_TURN_KEY_PREFIX } from './watch-turn-key';
  *   EXPIRED          `replyBy` passed (`expireSessionRequest`, the worker);
  *   UNDELIVERED      the turn carrying it was taken off the recipient's queue before any engine read
  *                    it — an interrupt dropping the queue, the owner withdrawing it
- *                    (`settleUnrunSessionRequests`).
+ *                    (`settleUnrunSessionRequests`) — or it was a steer the engine never confirmed:
+ *                    the runner failed to write it into the running turn, or the run failed with it
+ *                    still in flight (`closeUnreadSteerRequests`).
  *
  * Migration 0350's guard refuses any later rewrite of an outcome, so "first wins" is the database's
  * rule and not only this file's.
@@ -47,8 +49,10 @@ import { SESSION_REPLY_TURN_KEY_PREFIX } from './watch-turn-key';
  * that turn is still queued join it, so five workers answering at once wake the asker once. An asker
  * that has ended is not revived for it (§4.3): the outcome is held on the row, and a comment goes on
  * the task the asker ran. An asker interrupted with the reply turn still queued loses that turn with
- * the rest of its queue — stopping means stopping — and the outcome is held the same way. Either way a
- * held outcome is written into the next turn the asker IS handed, so none is lost.
+ * the rest of its queue — stopping means stopping — and the outcome is held the same way. So is one
+ * whose turn the asker never read through: the turn failed, or its run ended with it in flight. Either
+ * way a held outcome is written into the next turn the asker IS handed, so none is lost — and a retry
+ * of a failed reply turn is that turn (`hasHeldSessionReplies`, auto-retry.service.ts).
  */
 
 /**
@@ -395,7 +399,14 @@ export function requestClosedRefusal(request: SessionRequest): ConflictException
  *      `service` job (a dev server runs for the life of the session and wakes nobody), and it is what
  *      `runStoppedWorking` reads for the same question about a task's run;
  *   3. a scheduled wakeup still PENDING;
- *   4. a request of its own still OPEN — the answer to it will come back as a turn;
+ *   4. a request of its own whose outcome has not reached it yet — the outcome comes back to it as a
+ *      turn. Still OPEN, unless its recipient is itself waiting on an OPEN request from this session:
+ *      two sessions each waiting for the other's reply wake neither, and counting the wait would hold
+ *      both to the deadline (a longer cycle, A→B→C→A, is left to the deadline). Or closed, with the
+ *      outcome on its way back: on no turn of this session yet and not held, so the hand-off that is
+ *      about to queue it — or the worker after a crash — wakes this session with it. One on a turn
+ *      still queued needs no read here: that turn keeps the session from parking at all, so the
+ *      judgment is never reached;
  *   5. a question it asked the owner AS the project's coordinator (`ask_owner`) still OPEN. The answer
  *      goes to whichever session coordinates the project when it comes, so a question asked by a
  *      conversation that has since been rotated out wakes it no more.
@@ -416,11 +427,26 @@ export async function hasPendingWakeSource(
     select: { id: true },
   });
   if (wakeup) return true;
-  const asked = await tx.sessionRequest.findFirst({
+  const asked = await tx.sessionRequest.findMany({
     where: { fromSessionId: sessionId, state: 'OPEN' },
+    select: { toSessionId: true },
+  });
+  if (asked.length > 0) {
+    const waitingOnThis = new Set((await tx.sessionRequest.findMany({
+      where: {
+        toSessionId: sessionId,
+        state: 'OPEN',
+        fromSessionId: { in: [...new Set(asked.map((request) => request.toSessionId))] },
+      },
+      select: { fromSessionId: true },
+    })).map((request) => request.fromSessionId));
+    if (asked.some((request) => !waitingOnThis.has(request.toSessionId))) return true;
+  }
+  const onItsWay = await tx.sessionRequest.findFirst({
+    where: { fromSessionId: sessionId, state: { not: 'OPEN' }, replyClientTurnId: null, replyHeldAt: null },
     select: { id: true },
   });
-  if (asked) return true;
+  if (onItsWay) return true;
   const question = await tx.projectOpenItem.findFirst({
     where: {
       askedBySessionId: sessionId,
@@ -436,9 +462,21 @@ export async function hasPendingWakeSource(
 /**
  * NO_REPLY (§4.1), judged once each time the recipient's turn settles: in the transaction that parks
  * the session idle, under its row lock (runnerApi.turnComplete). Every OPEN request it has RECEIVED —
- * the turn carrying it was handed to an engine — is closed with what it last said, unless something
- * will still wake it (`hasPendingWakeSource`). A request still queued has not been read and is not
- * judged. Answers the requests this closed, for the asker's hand-off once the transaction commits.
+ * the turn carrying it was handed to an engine, and the engine took it — is closed with what it last
+ * said, unless something will still wake it (`hasPendingWakeSource`). A request still queued has not
+ * been read and is not judged.
+ *
+ * Nor is one on a steer the runner has not settled. A steer's `delivered_at` is stamped when the
+ * runner takes it, before it is written into the running turn, and the turn can end before the
+ * engine reads it — the steer then comes back as a queued message (steer_requeue) or fails. Received
+ * is the runner's word that the engine took it: the steer settled, or a CURRENT_WORK one the engine
+ * acknowledged. One that failed was closed UNDELIVERED as it settled (`closeUnreadSteerRequests`), so a
+ * settled steer whose request is still OPEN here is one the engine read. A steer the engine took only
+ * after this turn's result is judged when a later turn settles, or by the deadline — not as the steer
+ * settles: an engine that read a message after its result is running a turn for it that no completion
+ * here will report, and judging then would close a request it may be answering.
+ *
+ * Answers the requests this closed, for the asker's hand-off once the transaction commits.
  */
 export async function closeUnansweredRequests(
   tx: Prisma.TransactionClient,
@@ -450,7 +488,16 @@ export async function closeUnansweredRequests(
   });
   if (open.length === 0) return [];
   const received = new Set((await tx.conversationTurn.findMany({
-    where: { sessionId: session.id, id: { in: open.map((request) => request.turnId) }, deliveredAt: { not: null } },
+    where: {
+      sessionId: session.id,
+      id: { in: open.map((request) => request.turnId) },
+      deliveredAt: { not: null },
+      OR: [
+        { kind: { not: 'steer' } },
+        { status: 'ANSWERED', deliveryStatus: null },
+        { deliveryStatus: 'ACKNOWLEDGED' },
+      ],
+    },
     select: { id: true },
   })).map((turn) => turn.id));
   const due = open.filter((request) => received.has(request.turnId)).map((request) => request.id);
@@ -471,58 +518,120 @@ export type UnrunSessionRequests =
   /** The account owner withdrew one queued turn. */
   | { code: 'TURN_WITHDRAWN'; turnId: string }
   /**
-   * The session's run is ending and its queue is drained. `closesRequests` is true where the status
+   * The session's run is ending and its turns are drained. `closesRequests` is true where the status
    * write that ends the run has ALREADY happened in this transaction (a failed turn, the runner's
    * finalize, the reaper): migration 0350's trigger has closed every request the end closes, so what
    * is still OPEN here is a run that goes on (a retry is armed), and a request in its queue was never
-   * read. It is false where the drain comes before the status write (`transitionEnd`), whose end the
-   * trigger reads as RECIPIENT_ENDED once it is written — which the contract says wins (§4).
+   * read. Those callers then drain every turn not yet answered, the one in flight among them. It is
+   * false where the drain comes before the status write and takes only the queue (`transitionEnd`),
+   * whose end the trigger reads as RECIPIENT_ENDED once it is written — which the contract says wins
+   * (§4) — and whose turn in flight is still its runner's to finish.
+   *
+   * `retryArmed`: the run has a retry armed, so the same session goes on, and the retry's re-send is
+   * the next turn it is handed. `failedTurnKey`: the turn whose failure is ending the run, already
+   * acknowledged by the time this runs — what it carried was not read through either.
    */
-  | { code: 'SESSION_ENDED'; closesRequests: boolean };
+  | { code: 'SESSION_ENDED'; closesRequests: boolean; retryArmed: boolean; failedTurnKey?: string };
 
 /**
- * What rides on the turns about to be taken off a session's queue unrun (§4, §4.3). Called beside
+ * What rides on the turns about to be taken away unrun (§4, §4.3). Called beside
  * `deadLetterQueuedWatchWakes` and `returnQueuedTurns` — under the session lock, before the turns are
  * deleted or retired, in the same transaction, so a refusal further down rolls this back too.
  *
- * Two kinds of turn are taken. A REQUEST another session queued here was never read: it is closed
- * UNDELIVERED, with what took it. A REPLY turn of this session as an asker carried outcomes back to
- * it, and those outcomes are not lost with it. When the session lives on — interrupted, or the owner
- * withdrew the turn — they are held on their rows for the next turn it is handed: stopping means
- * stopping, so no new reply turn is queued for them. When its run is ending they are let go again,
- * and the hand-off finds an asker that has ended, holds them and writes on its task (§4.3).
+ * Two kinds of turn are taken. A REQUEST another session sent here that no engine read is closed
+ * UNDELIVERED, with what took it: one still queued, and — when a run is ending — a steer still in
+ * flight that the engine never acknowledged. A turn of this session as an ASKER may carry outcomes
+ * back to it — a reply turn still queued, or any turn they were written into when it was handed out —
+ * and those outcomes are not lost with it, nor with the turn whose failure is ending the run. When
+ * the session lives on — interrupted, the owner withdrew the turn, or a retry is armed — they are held
+ * on their rows for the next turn it is handed: stopping means stopping, so no new reply turn is
+ * queued for them, and a retry's re-send is that next turn (a failed reply turn is re-sent as one,
+ * auto-retry.service.ts). When its run is over they are let go again, and the hand-off finds an asker
+ * that has ended, holds them and writes on its task (§4.3).
  */
 export async function settleUnrunSessionRequests(
   tx: Prisma.TransactionClient,
   sessionId: string,
   unrun: UnrunSessionRequests,
 ): Promise<void> {
+  const ending = unrun.code === 'SESSION_ENDED';
+  const drainsInFlight = ending && unrun.closesRequests;
   const unrunTurns = await tx.conversationTurn.findMany({
     where: {
       sessionId,
       kind: { in: ['message', 'steer'] },
-      status: 'PENDING',
+      status: drainsInFlight ? { in: ['PENDING', 'IN_FLIGHT'] } : 'PENDING',
       ...(unrun.code === 'TURN_WITHDRAWN' ? { id: unrun.turnId } : {}),
     },
-    select: { id: true, clientTurnId: true },
+    select: { id: true, clientTurnId: true, kind: true, status: true, deliveryStatus: true },
   });
-  if (unrunTurns.length === 0) return;
-  const replyTurns = unrunTurns.filter((turn) => isSessionReplyTurn(turn.clientTurnId)).map((turn) => turn.clientTurnId);
-  if (replyTurns.length > 0) {
+  const carriers = [
+    ...unrunTurns.filter((turn) => turn.kind === 'message').map((turn) => turn.clientTurnId),
+    ...(ending && unrun.failedTurnKey ? [unrun.failedTurnKey] : []),
+  ];
+  if (carriers.length > 0) {
     await tx.sessionRequest.updateMany({
-      where: { fromSessionId: sessionId, replyClientTurnId: { in: replyTurns } },
-      data: { replyClientTurnId: null, replyHeldAt: unrun.code === 'SESSION_ENDED' ? null : new Date() },
+      where: { fromSessionId: sessionId, replyClientTurnId: { in: carriers } },
+      data: { replyClientTurnId: null, replyHeldAt: ending && !unrun.retryArmed ? null : new Date() },
     });
   }
-  if (unrun.code === 'SESSION_ENDED' && !unrun.closesRequests) return;
-  await tx.sessionRequest.updateMany({
-    where: { toSessionId: sessionId, turnId: { in: unrunTurns.map((turn) => turn.id) }, state: 'OPEN' },
-    data: {
-      state: 'UNDELIVERED',
-      closeReason: unrun.code === 'TURN_INTERRUPTED' ? 'INTERRUPTED' : unrun.code === 'TURN_WITHDRAWN' ? 'WITHDRAWN' : 'DRAINED',
-      closedAt: new Date(),
-    },
+  if (ending && !unrun.closesRequests) return;
+  const queued = unrunTurns.filter((turn) => turn.status === 'PENDING').map((turn) => turn.id);
+  if (queued.length > 0) {
+    await tx.sessionRequest.updateMany({
+      where: { toSessionId: sessionId, turnId: { in: queued }, state: 'OPEN' },
+      data: {
+        state: 'UNDELIVERED',
+        closeReason: unrun.code === 'TURN_INTERRUPTED' ? 'INTERRUPTED' : unrun.code === 'TURN_WITHDRAWN' ? 'WITHDRAWN' : 'DRAINED',
+        closedAt: new Date(),
+      },
+    });
+  }
+  await closeUnreadSteerRequests(tx, sessionId, unrunTurns
+    .filter((turn) => turn.kind === 'steer' && turn.status === 'IN_FLIGHT' && turn.deliveryStatus !== 'ACKNOWLEDGED')
+    .map((turn) => turn.id));
+}
+
+/**
+ * UNDELIVERED (§4) for the requests these steers carry: the runner took each one to write it into the
+ * running turn, and the engine never confirmed it — the runner reported it failed (runnerApi.turnComplete,
+ * as the steer settles), or the run failed or was finalized with it still in flight
+ * (`settleUnrunSessionRequests`). Left OPEN, a steer settled that way would read as received, and the
+ * next settle would close a request no engine had read as NO_REPLY. A compare-and-set on OPEN like every
+ * outcome: a run whose end has already closed the request RECIPIENT_ENDED keeps that.
+ *
+ * Answers the requests this closed, for the asker's hand-off once the transaction commits.
+ */
+export async function closeUnreadSteerRequests(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  steerTurnIds: readonly string[],
+): Promise<string[]> {
+  if (steerTurnIds.length === 0) return [];
+  const closed = await tx.sessionRequest.updateManyAndReturn({
+    where: { toSessionId: sessionId, turnId: { in: [...steerTurnIds] }, state: 'OPEN' },
+    data: { state: 'UNDELIVERED', closeReason: 'STEER_UNCONFIRMED', closedAt: new Date() },
+    select: { id: true },
   });
+  return closed.map((request) => request.id);
+}
+
+/**
+ * Whether any outcome of this session's own requests is waiting for a turn to be said on: closed, and
+ * on no turn of it yet — held, or about to be handed back. What decides that the auto-retry sweep
+ * re-sends a failed reply turn as a reply turn rather than dropping it: the turn's own failure held
+ * what it carried (`settleUnrunSessionRequests`), and the re-sent turn says it again at delivery. With
+ * none, a re-sent reply turn would wake the session to say nothing.
+ */
+export async function hasHeldSessionReplies(
+  db: Pick<Prisma.TransactionClient, 'sessionRequest'>,
+  sessionId: string,
+): Promise<boolean> {
+  const held = await db.sessionRequest.findFirst({
+    where: { fromSessionId: sessionId, state: { not: 'OPEN' }, replyClientTurnId: null },
+    select: { id: true },
+  });
+  return held != null;
 }
 
 /**
@@ -686,6 +795,7 @@ const UNDELIVERED_BECAUSE: Record<string, string> = {
   INTERRUPTED: '这条请求没有送到：对方被打断时它还在队列里，随队列一起被清掉了。对方从没看到它。',
   WITHDRAWN: '这条请求没有送到：它还在对方的队列里时，被账号 owner 撤回了。对方从没看到它。',
   DRAINED: '这条请求没有送到：对方正在跑的那一轮失败了，排队中的消息随队列一起被清掉（平台会重试失败的那一轮，但不会重发这条请求）。对方从没看到它。',
+  STEER_UNCONFIRMED: '这条请求没有送到：它本要插进对方正在跑的那一轮，但对方的引擎没有确认收到它——没能写进去，或者那一轮在它送达前就结束了。对方很可能没看到它，需要的话请重新发送。',
 };
 
 /** §4.2: one outcome, as the asker reads it. */

@@ -1895,8 +1895,8 @@ model SessionRequest {
   closedAt          DateTime? @map("closed_at") @db.Timestamptz(3)
   /// The asking session's turn that carries (or carried) the outcome back to it.
   replyClientTurnId String?   @map("reply_client_turn_id")
-  /// The outcome is kept on the row for the asker's next turn: it had ended, or its reply turn was
-  /// taken off its queue.
+  /// The outcome is kept on the row for the asker's next turn: it had ended, its reply turn was taken
+  /// off its queue, or the turn carrying it failed or was drained before its engine finished it.
   replyHeldAt       DateTime? @map("reply_held_at") @db.Timestamptz(3)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 

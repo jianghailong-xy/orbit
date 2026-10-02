@@ -11,9 +11,22 @@
  *   7. Two outcomes arriving before the asker's runner takes the reply turn make one reply turn.
  *   8. An asker that has ended is not revived; the task it ran gets one comment, and handing the
  *      outcome back again writes no second one.
- *   9. A reply turn dropped by an interrupt is said on the asker's next delivered turn.
+ *   9. A reply turn dropped by an interrupt is said on the asker's next delivered turn — and so is
+ *      one the asker never read through: a reply turn that failed on a transient error is retried as
+ *      one, and one its run ended with in flight is said on the next turn it is handed.
  *  10. (here, for the runner doors: the user doors are in session-reply-prefix-doors.spec.ts) the
  *      `session-reply:` prefix is refused as a caller's own key.
+ *
+ * And what the P1 review found (docs/session-request-reply-contract.md §4, §4.1):
+ *
+ *   - a request written into the recipient's running turn (a steer) is received when the engine takes
+ *     it, not when the runner claims it: the turn ending first does not judge it, and the steer coming
+ *     back to the queue as that turn ends — in either order, or at once — leaves it for the turn it
+ *     then runs as. A steer the engine never took closes its request UNDELIVERED;
+ *   - a run whose retry the auto-retry sweep gives up has ended, however the sweep gives up;
+ *   - two sessions waiting on each other's reply wake neither, and an outcome on its way back to a
+ *     session wakes it;
+ *   - `session_reply` succeeds once REPLIED is written, whatever happens to the hand-off after it.
  *
  * The doors are the real controllers with the real orchestration credential; the inbox, the event
  * ingest and the turn completion are the real RunnerApiController methods, called as the runner does.
@@ -36,7 +49,13 @@ import {
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
-import { RunEventType, RunStatus as SharedRunStatus, base62ToUuid, uuidToBase62 } from '@orbit/shared';
+import {
+  RunEventType,
+  RunStatus as SharedRunStatus,
+  TURN_COMPLETE_STEER_REQUEUE,
+  base62ToUuid,
+  uuidToBase62,
+} from '@orbit/shared';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -53,9 +72,11 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { RunnerOrchestrationAuthorizer } from '../runner-api/runner-orchestration-authorizer';
 import { RunnerProjectsController } from '../runner-api/runner-projects.controller';
 import { RunnerSessionsController } from '../runner-api/runner-sessions.controller';
+import { AutoRetryService, BACKOFF_MS } from './auto-retry.service';
 import {
   closeUnansweredRequests,
   MAX_OPEN_REQUESTS_PER_SESSION,
+  replyToSessionRequest,
   REQUEST_CLOSED_CODE,
   SELF_REQUEST_CODE,
   SESSION_REPLY_TURN_PREFIX,
@@ -120,6 +141,8 @@ test('a session asks another for a reply, and every request comes to exactly one
   await prisma.workspace.create({ data: { id: workerWorkspaceId, ownerId, runnerId, name: 'orbit-worker', enabled: true } });
   await prisma.workspace.create({ data: { id: landingWorkspaceId, ownerId, runnerId, name: 'orbit-coordinator', enabled: true } });
   const runner = { id: runnerId, ownerId } as Runner;
+  /** The runner says it is alive: a sweep releases no retry onto a machine it believes is down. */
+  const heartbeat = () => prisma.runner.update({ where: { id: runnerId }, data: { lastHeartbeatAt: new Date() } });
 
   /** A session on this runner, parked between turns — the shape a live orchestrating caller has. */
   async function session(title: string, data: Partial<Prisma.SessionUncheckedCreateInput> = {}): Promise<string> {
@@ -241,6 +264,48 @@ test('a session asks another for a reply, and every request comes to exactly one
       if (turn.kind !== 'message') continue;
       return { turnId: turn.id, content: String(handed.content ?? ''), clientTurnId: turn.clientTurnId };
     }
+  }
+
+  /**
+   * The runner's claim of a steer: a poll from a runner that can write a message into the turn that is
+   * running (a claude session always can). The claim stamps `delivered_at` — and no engine has read the
+   * message yet: the runner still has to write it in and hear back.
+   */
+  async function deliverSteer(sessionId: string): Promise<{ turnId: string; content: string }> {
+    const handed = await (api as unknown as {
+      dequeueTurn: (
+        sessionId: string, runnerId: string, leaseGeneration: string | null, acceptsSteer: boolean,
+      ) => Promise<Record<string, unknown> | null>;
+    }).dequeueTurn.call(api, sessionId, runnerId, null, true);
+    assert.ok(handed, `the inbox of ${sessionId} handed no steer out`);
+    const turn = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: String(handed.turnId) } });
+    assert.equal(turn.kind, 'steer', `the inbox handed out a ${turn.kind}, not the steer`);
+    assert.equal(turn.status, 'IN_FLIGHT');
+    assert.ok(turn.deliveredAt, 'the claim stamped no delivered_at');
+    return { turnId: turn.id, content: String(handed.content ?? '') };
+  }
+
+  /** The runner settles a steer: the engine echoed it, or it could not be delivered. */
+  function settleSteer(sessionId: string, turnId: string, delivered: boolean) {
+    return api.turnComplete({ id: runnerId } as never, sessionId, {
+      turnId,
+      status: delivered ? SharedRunStatus.SUCCEEDED : SharedRunStatus.FAILED,
+      subtype: 'steer',
+      ...(delivered ? {} : { result: 'steer not delivered to the engine: the engine exited before this message was written to it' }),
+    } as never);
+  }
+
+  /** The runner hands a steer back: the engine provably never read it, so it runs as the next message. */
+  function requeueSteer(sessionId: string, turnId: string) {
+    return api.turnComplete({ id: runnerId } as never, sessionId, {
+      turnId, status: SharedRunStatus.SUCCEEDED, subtype: TURN_COMPLETE_STEER_REQUEUE,
+    } as never);
+  }
+
+  /** A recipient in the middle of a turn of its own: the owner's message, handed to its engine. */
+  async function busy(recipient: string): Promise<string> {
+    await sessions.createTurn(ownerId, recipient, { clientTurnId: randomUUID(), content: 'the owner\'s own task' });
+    return (await deliver(recipient)).turnId;
   }
 
   const seqs = new Map<string, number>();
@@ -449,6 +514,62 @@ test('a session asks another for a reply, and every request comes to exactly one
     }
   });
 
+  await t.test('two sessions waiting on each other\'s reply wake neither: both come to NO_REPLY, not to the deadline', async () => {
+    const a = await session('Worker A: asks B, and is asked by B');
+    const b = await session('Worker B: asks A, and is asked by A');
+    const aAsksB = await ask(a, b, 'A asks: which schema version?');
+    const bAsksA = await ask(b, a, 'B asks: which port?');
+    const bReads = await deliver(b);
+    const aReads = await deliver(a);
+    assert.equal(aReads.turnId, (await requestRow(bAsksA.id)).turnId);
+    // A's turn ends without answering. Its own question to B would be a wake source, but B is
+    // waiting on A as well, and neither is going to wake the other: B's question is NO_REPLY.
+    await finish(a, aReads.turnId, 'A: waiting for B to tell me the schema');
+    assert.equal((await requestRow(bAsksA.id)).state, 'NO_REPLY', 'held open by a wait that wakes nobody');
+    assert.equal((await requestRow(aAsksB.id)).state, 'OPEN');
+    // B's turn ends without answering either. That outcome is queued to B behind the turn, so B does
+    // not park, and nothing is judged yet.
+    await finish(b, bReads.turnId, 'B: waiting for A to tell me the port');
+    assert.equal((await requestRow(aAsksB.id)).state, 'OPEN');
+    // B reads that A did not answer, still does not answer A, and settles: judged now.
+    const told = await deliver(b);
+    assert.equal(blocksFor(told.content, bAsksA.id), 1);
+    await finish(b, told.turnId, 'B: A never answered me');
+    const closed = await requestRow(aAsksB.id);
+    assert.equal(closed.state, 'NO_REPLY');
+    assert.equal(closed.excerpt, 'B: A never answered me');
+    // ...and A is told.
+    const toldA = await deliver(a);
+    assert.equal(blocksFor(toldA.content, aAsksB.id), 1);
+    assert.match(toldA.content, /outcome="NO_REPLY"/);
+  });
+
+  await t.test('an outcome on its way back to a session wakes it: what it was asked waits for that turn', async () => {
+    const asker = await session('Worker: asked a question of its own, and is asked one');
+    const helper = await session('Worker: answers the asker');
+    const third = await session('Worker: asks the asker');
+    const own = await ask(asker, helper, 'is the build green?');
+    const incoming = await ask(third, asker, 'and which port?');
+    await deliver(helper);
+    const reading = await deliver(asker);
+    assert.equal(reading.turnId, (await requestRow(incoming.id)).turnId);
+    // The helper's answer is written — the one compare-and-set session_reply makes — and the hand-off
+    // that queues it to the asker has not run yet.
+    await prisma.$transaction((tx) => replyToSessionRequest(tx, {
+      ownerId, callerSessionId: helper, requestId: own.id, reply: { message: 'green' },
+    }));
+    // The asker's turn ends without answering third. The answer on its way back is going to wake it,
+    // so it may yet answer: not NO_REPLY.
+    await finish(asker, reading.turnId, 'checking the build first');
+    assert.equal((await requestRow(incoming.id)).state, 'OPEN', 'judged with an answer on its way to wake it');
+    // The hand-off lands; the asker reads it, still does not answer third, and settles: judged now.
+    assert.equal(await requests.handOff(own.id), 'QUEUED');
+    const back = await deliver(asker);
+    assert.equal(blocksFor(back.content, own.id), 1);
+    await finish(asker, back.turnId, 'the build is green');
+    assert.equal((await requestRow(incoming.id)).state, 'NO_REPLY');
+  });
+
   await t.test('a request the recipient has not read yet is not judged when another turn of it settles', async () => {
     const asker = await session('Worker: asks a busy one');
     const recipient = await session('Worker: busy with something else');
@@ -477,6 +598,133 @@ test('a session asks another for a reply, and every request comes to exactly one
     const read = await deliver(idle);
     await finish(idle, read.turnId, 'main, again');
     assert.equal((await requestRow(queued.id)).state, 'NO_REPLY');
+  });
+
+  // ── 5 + 6. a request written into the recipient's running turn: a steer ──────────────────────
+
+  await t.test('a steer is received when its engine takes it, not when its runner claims it', async () => {
+    // The ordinary order: the engine echoes the steer while its turn runs, and then the turn ends.
+    const asker = await session('Worker: asks a busy one mid-turn');
+    const steered = await session('Worker: busy, and steered');
+    const running = await busy(steered);
+    const request = await ask(asker, steered, 'quick one while you are at it: which branch?');
+    const steer = await deliverSteer(steered);
+    assert.equal(steer.turnId, (await requestRow(request.id)).turnId);
+    assert.match(steer.content, new RegExp(`request-id="${uuidToBase62(request.id)}"`), 'a steer carries its request block too');
+    await settleSteer(steered, steer.turnId, true);
+    await finish(steered, running, 'main — and no session_reply');
+    assert.equal((await requestRow(request.id)).state, 'NO_REPLY');
+
+    // The turn ends before the engine takes the steer. The claim stamped `delivered_at`, but no engine
+    // has read the request, so the turn ending does not judge it...
+    const late = await session('Worker: its turn ends under a steer');
+    const lateRunning = await busy(late);
+    const lateRequest = await ask(asker, late, 'and which port?');
+    const lateSteer = await deliverSteer(late);
+    await finish(late, lateRunning, 'all done before the steer landed');
+    assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: late } })).status, RunStatus.AWAITING_INPUT);
+    assert.equal((await requestRow(lateRequest.id)).state, 'OPEN', 'judged on the runner\'s claim, before any engine read it');
+    // ...and the engine taking it after its turn's result is not a settle either: it is judged when a
+    // later turn settles (or by its deadline).
+    await settleSteer(late, lateSteer.turnId, true);
+    assert.equal((await requestRow(lateRequest.id)).state, 'OPEN');
+    await sessions.createTurn(ownerId, late, { clientTurnId: randomUUID(), content: 'anything else?' });
+    const next = await deliver(late);
+    await finish(late, next.turnId, 'port 8443, and nothing else');
+    const judged = await requestRow(lateRequest.id);
+    assert.equal(judged.state, 'NO_REPLY');
+    assert.equal(judged.excerpt, 'port 8443, and nothing else');
+  });
+
+  await t.test('a steer handed back to the queue and the end of the turn it missed, in either order or at once: the request waits for the message it becomes', async () => {
+    async function round(label: string, order: 'the turn ends first' | 'the steer comes back first' | 'at once') {
+      const asker = await session(`Worker: asks (${label})`);
+      const recipient = await session(`Worker: steered as its turn ends (${label})`);
+      const running = await busy(recipient);
+      const request = await ask(asker, recipient, `which port? (${label})`);
+      const steer = await deliverSteer(recipient);
+      await say(recipient, running, RunEventType.ASSISTANT, { text: `wrapping up (${label})` });
+      const complete = () => api.turnComplete({ id: runnerId } as never, recipient, {
+        turnId: running, status: SharedRunStatus.SUCCEEDED, subtype: 'success', numTurns: 1, costUsd: 0,
+      } as never);
+      if (order === 'the turn ends first') {
+        await complete();
+        assert.equal((await requestRow(request.id)).state, 'OPEN', `${label}: judged while its steer was still out`);
+        await requeueSteer(recipient, steer.turnId);
+      } else if (order === 'the steer comes back first') {
+        await requeueSteer(recipient, steer.turnId);
+        await complete();
+      } else {
+        const [completed, requeued] = await Promise.allSettled([complete(), requeueSteer(recipient, steer.turnId)]);
+        assert.equal(completed.status, 'fulfilled', `${label}: ${String((completed as PromiseRejectedResult).reason)}`);
+        assert.equal(requeued.status, 'fulfilled', `${label}: ${String((requeued as PromiseRejectedResult).reason)}`);
+      }
+      // Whichever came first, the request is OPEN on a message queued to run next...
+      assert.equal((await requestRow(request.id)).state, 'OPEN', `${label}: judged before it was read`);
+      const queued = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: steer.turnId } });
+      assert.equal(queued.kind, 'message');
+      assert.equal(queued.status, 'PENDING');
+      assert.equal(queued.deliveredAt, null);
+      assert.notEqual(
+        (await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).status,
+        RunStatus.AWAITING_INPUT,
+        `${label}: a message is queued behind nothing`,
+      );
+      // ...which the recipient reads as the request it is, and the turn it runs as is what is judged.
+      const handed = await deliver(recipient);
+      assert.equal(handed.turnId, steer.turnId);
+      assert.match(handed.content, new RegExp(`request-id="${uuidToBase62(request.id)}"`));
+      await finish(recipient, handed.turnId, `port 8443 (${label}), and no session_reply`);
+      const closed = await requestRow(request.id);
+      assert.equal(closed.state, 'NO_REPLY', label);
+      assert.equal(closed.excerpt, `port 8443 (${label}), and no session_reply`);
+      await worker.drain();
+      assert.equal((await replyTurnsOf(asker)).length, 1, `${label}: handed back other than once`);
+    }
+    await round('the turn ends first', 'the turn ends first');
+    await round('the steer comes back first', 'the steer comes back first');
+    for (let i = 0; i < 6; i++) await round(`at once ${i}`, 'at once');
+  });
+
+  await t.test('a steer the engine never takes closes its request UNDELIVERED, and the asker is told', async () => {
+    // The runner reports the steer undelivered: it closes as it settles, and the asker is handed that.
+    const asker = await session('Worker: steers a request into a turn that loses it');
+    const recipient = await session('Worker: its engine exits under a steer');
+    const running = await busy(recipient);
+    const request = await ask(asker, recipient, 'still on the migration?');
+    const steer = await deliverSteer(recipient);
+    await settleSteer(recipient, steer.turnId, false);
+    const closed = await requestRow(request.id);
+    assert.equal(closed.state, 'UNDELIVERED');
+    assert.equal(closed.closeReason, 'STEER_UNCONFIRMED');
+    // The turn it was aimed at ending afterwards changes nothing.
+    await finish(recipient, running, 'still on it');
+    assert.equal((await requestRow(request.id)).state, 'UNDELIVERED');
+    assert.equal((await replyTurnsOf(asker)).length, 1, 'the steer\'s own completion handed nothing back');
+    const back = await deliver(asker);
+    assert.equal(blocksFor(back.content, request.id), 1);
+    assert.match(back.content, /outcome="UNDELIVERED"/);
+    assert.match(back.content, /对方的引擎没有确认收到它/);
+
+    // The turn it was joining fails with a retry armed while the steer is still out: the run goes on,
+    // and the drain that answers the steer without its engine takes the request with it.
+    const failing = await session('Worker: its turn fails under a steer, retry armed');
+    const failingRunning = await busy(failing);
+    const drained = await ask(asker, failing, 'and this one?');
+    await deliverSteer(failing);
+    await api.turnComplete({ id: runnerId } as never, failing, {
+      turnId: failingRunning, status: SharedRunStatus.FAILED, subtype: 'error_during_execution',
+      numTurns: 0, costUsd: 0, error: 'the engine never came up',
+    } as never);
+    const failed = await prisma.session.findUniqueOrThrow({ where: { id: failing } });
+    assert.equal(failed.status, RunStatus.FAILED);
+    assert.ok(failed.retryAt, 'no retry was armed — that would be RECIPIENT_ENDED\'s case');
+    const drainedRow = await requestRow(drained.id);
+    assert.equal(drainedRow.state, 'UNDELIVERED');
+    assert.equal(drainedRow.closeReason, 'STEER_UNCONFIRMED');
+    assert.ok((await worker.drain()).handedOff.includes(drained.id));
+    // Disarmed by hand, so this retry is not the one a later case's sweep finds due.
+    await prisma.session.update({ where: { id: failing }, data: { retryAt: null } });
   });
 
   // ── 5. the race ───────────────────────────────────────────────────────────────────────────────
@@ -515,6 +763,40 @@ test('a session asks another for a reply, and every request comes to exactly one
       assert.equal(blocksFor(back.content, request.id), 1);
     }
     assert.ok(outcomes.every((state) => state === 'REPLIED' || state === 'NO_REPLY'));
+  });
+
+  await t.test('session_reply succeeds once REPLIED is written, whatever its hand-off then meets: the worker hands it back', async () => {
+    const asker = await session('Worker: asks; handing its answer back fails');
+    const recipient = await session('Worker: answers');
+    const request = await ask(asker, recipient, 'ready to merge?');
+    await deliver(recipient);
+    // A hand-off that cannot reach the asker's conversation: a fault, not a state of the world.
+    const unreachable = Object.assign(Object.create(sessions) as SessionsService, {
+      createTurn: async () => {
+        throw new Error('Connection terminated unexpectedly');
+      },
+    });
+    const door = new RunnerSessionsController(
+      sessions, orchestration, {} as never, attempts as never, undefined,
+      new SessionRequestService(db, unreachable, realtime as never),
+    );
+    const answered = await door.replyToRequest(
+      runner, undefined, recipient, await orchestration.issue(runnerId, recipient), request.id, { message: 'yes' } as never,
+    );
+    assert.equal(answered.state, 'REPLIED');
+    assert.equal(answered.handOff, 'DEFERRED');
+    const row = await requestRow(request.id);
+    assert.equal(row.state, 'REPLIED');
+    assert.equal(row.replyText, 'yes');
+    assert.equal(row.replyClientTurnId, null);
+    assert.equal(row.replyHeldAt, null);
+    assert.equal((await replyTurnsOf(asker)).length, 0);
+    // The worker's next pass hands it back, once.
+    assert.ok((await worker.drain()).handedOff.includes(request.id));
+    assert.equal((await replyTurnsOf(asker)).length, 1);
+    const back = await deliver(asker);
+    assert.equal(blocksFor(back.content, request.id), 1);
+    assert.match(back.content, /回复：yes/);
   });
 
   // ── 5. RECIPIENT_ENDED ────────────────────────────────────────────────────────────────────────
@@ -568,25 +850,87 @@ test('a session asks another for a reply, and every request comes to exactly one
     assert.match(back.content, /对方的会话已经结束（COMPLETED/);
   });
 
-  await t.test('a run the auto-retry sweep claims has not ended: its requests stay open until the retry is given up', async () => {
-    const asker = await session('Worker: asks one that hits a quota');
-    const recipient = await session('Worker: about to hit a quota');
-    const { id } = await ask(asker, recipient, 'ping');
-    // Its turn fails on a usage limit with a retry armed — the same session goes on; not an end.
-    await prisma.session.update({
-      where: { id: recipient },
-      data: { status: RunStatus.FAILED, retryAt: new Date(Date.now() + 60_000), retryAttempts: 1 },
-    });
-    assert.equal((await requestRow(id)).state, 'OPEN', 'a failure with a retry armed ended the run');
-    // The sweep's claim: the arm cleared and an attempt spent in one statement.
-    await sql.query(
-      `UPDATE "session" SET "retry_at" = NULL, "retry_attempts" = "retry_attempts" + 1 WHERE id = $1::uuid`,
-      [recipient],
-    );
-    assert.equal((await requestRow(id)).state, 'OPEN', 'the sweep claiming its retry ended the run');
-    // The sweep gives up: the arm cleared and no attempt spent.
-    await sql.query(`UPDATE "session" SET "retry_at" = NULL WHERE id = $1::uuid`, [recipient]);
-    assert.equal((await requestRow(id)).state, 'RECIPIENT_ENDED');
+  await t.test('a run with a retry armed has not ended, and the sweep giving the retry up ends it — whichever way it gives up', async () => {
+    const OVERLOADED = 'API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}';
+    /**
+     * A recipient that read a request and then failed on an overloaded provider: the reply arms a
+     * retry, the turn fails, and the run is FAILED with the same session going on — not an end, so
+     * the request is OPEN. The arm is then made the oldest due, so the sweep that follows takes it
+     * first (one release per runner and provider a sweep).
+     */
+    async function failedWithRetry(label: string, data: Partial<Prisma.SessionUncheckedCreateInput> = {}) {
+      const asker = await session(`Worker: asks one that fails (${label})`);
+      const recipient = await session(`Worker: fails with a retry armed (${label})`, data);
+      const request = await ask(asker, recipient, `are you still there? (${label})`);
+      const handed = await deliver(recipient);
+      await say(recipient, handed.turnId, RunEventType.USER, { text: handed.content });
+      await say(recipient, handed.turnId, RunEventType.ASSISTANT, { text: OVERLOADED });
+      await api.turnComplete({ id: runnerId } as never, recipient, {
+        turnId: handed.turnId, status: SharedRunStatus.FAILED, subtype: 'error_during_execution',
+        numTurns: 1, costUsd: 0, error: OVERLOADED,
+      } as never);
+      const failed = await prisma.session.findUniqueOrThrow({ where: { id: recipient } });
+      assert.equal(failed.status, RunStatus.FAILED);
+      assert.ok(failed.retryAt, `${label}: the overload armed no retry`);
+      assert.equal((await requestRow(request.id)).state, 'OPEN', `${label}: a failure with a retry armed ended the run`);
+      await prisma.session.update({ where: { id: recipient }, data: { retryAt: new Date(Date.now() - HOUR) } });
+      return { recipient, request };
+    }
+
+    // The sweep claims the retry — the arm cleared and an attempt spent in one statement — and the
+    // revive goes through: the same session goes on, so nothing has ended.
+    {
+      const { recipient, request } = await failedWithRetry('the retry goes through');
+      await heartbeat();
+      await new AutoRetryService(db, sessions, realtime as never).sweep();
+      const revived = await prisma.session.findUniqueOrThrow({ where: { id: recipient } });
+      assert.equal(revived.retryAt, null, 'the sweep did not take this retry');
+      assert.notEqual(revived.status, RunStatus.FAILED, 'the retry was not sent');
+      assert.equal((await requestRow(request.id)).state, 'OPEN', 'the claim or the revive ended the run');
+    }
+
+    // Given up by handing the attempt back: the sweep claims the retry, the task the run was for is
+    // abandoned before the revive, the revive is refused for it, and the sweep gives the retry up by
+    // putting the attempt it spent back — `retry_attempts` alone, the arm already cleared by the claim.
+    {
+      const taskId = await task('the task a failing run was for');
+      const { recipient, request } = await failedWithRetry('its task is abandoned under the retry', {
+        taskId, startsTaskWork: true,
+      });
+      const before = await prisma.session.findUniqueOrThrow({ where: { id: recipient } });
+      let revives = 0;
+      const abandoning = Object.assign(Object.create(sessions) as SessionsService, {
+        resume: async (...args: Parameters<SessionsService['resume']>) => {
+          revives += 1;
+          await sql.query(
+            `UPDATE "task" SET "status" = 'FAILED', "terminal_reason" = 'ABANDONED' WHERE "id" = $1::uuid`,
+            [taskId],
+          );
+          return sessions.resume(...args);
+        },
+      });
+      await heartbeat();
+      await new AutoRetryService(db, abandoning, realtime as never).sweep();
+      assert.equal(revives, 1, 'the sweep never claimed this retry, so it never reached the revive');
+      const after = await prisma.session.findUniqueOrThrow({ where: { id: recipient } });
+      assert.equal(after.status, RunStatus.FAILED);
+      assert.equal(after.retryAt, null);
+      assert.equal(after.retryAttempts, before.retryAttempts, 'the attempt the claim spent was not handed back');
+      const ended = await requestRow(request.id);
+      assert.equal(ended.state, 'RECIPIENT_ENDED', 'the retry was given up, and its run left open');
+      assert.match(String(ended.closeReason), /^FAILED/);
+    }
+
+    // Given up because every attempt is spent: the sweep disarms it.
+    {
+      const { recipient, request } = await failedWithRetry('its attempts are spent');
+      await prisma.session.update({ where: { id: recipient }, data: { retryAttempts: BACKOFF_MS.length } });
+      assert.equal((await requestRow(request.id)).state, 'OPEN');
+      await heartbeat();
+      await new AutoRetryService(db, sessions, realtime as never).sweep();
+      assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).retryAt, null);
+      assert.equal((await requestRow(request.id)).state, 'RECIPIENT_ENDED');
+    }
   });
 
   // ── 5. EXPIRED ────────────────────────────────────────────────────────────────────────────────
@@ -773,6 +1117,77 @@ test('a session asks another for a reply, and every request comes to exactly one
     await finish(asker, next.turnId);
     await sessions.createTurn(ownerId, asker, { clientTurnId: randomUUID(), content: 'thanks' });
     assert.equal(blocksFor((await deliver(asker)).content, request.id), 0);
+  });
+
+  await t.test('a reply turn that fails on a transient error is retried as a reply turn, and says its outcome again', async () => {
+    const asker = await session('Worker: its reply turn meets an overloaded provider');
+    const recipient = await session('Coordinator: answers');
+    const request = await ask(asker, recipient, 'go or no-go?');
+    await deliver(recipient);
+    assert.equal((await reply(recipient, request.requestId, { message: 'go' })).handOff, 'QUEUED');
+    const handed = await deliver(asker);
+    assert.equal(blocksFor(handed.content, request.id), 1);
+    await say(asker, handed.turnId, RunEventType.USER, { text: handed.content });
+    // The provider is overloaded: the engine says so, which arms a retry, and the turn fails.
+    const overloaded = 'API Error: 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}';
+    await say(asker, handed.turnId, RunEventType.ASSISTANT, { text: overloaded });
+    await api.turnComplete({ id: runnerId } as never, asker, {
+      turnId: handed.turnId, status: SharedRunStatus.FAILED, subtype: 'error_during_execution',
+      numTurns: 1, costUsd: 0, error: overloaded,
+    } as never);
+    const failed = await prisma.session.findUniqueOrThrow({ where: { id: asker } });
+    assert.equal(failed.status, RunStatus.FAILED);
+    assert.ok(failed.retryAt, 'the overload armed no retry');
+    // The turn that carried the outcome failed, so the outcome is not taken for read: it is held for
+    // the turn the retry hands the asker — not handed back to an asker that is waiting for that retry.
+    const held = await requestRow(request.id);
+    assert.equal(held.replyClientTurnId, null, 'the outcome went down with the turn that failed');
+    assert.ok(held.replyHeldAt);
+    assert.ok(!(await worker.drain()).handedOff.includes(request.id));
+    // The retry comes due, and the reply turn is re-sent as one.
+    await prisma.session.update({ where: { id: asker }, data: { retryAt: new Date(Date.now() - HOUR) } });
+    await heartbeat();
+    await new AutoRetryService(db, sessions, realtime as never).sweep();
+    assert.notEqual((await prisma.session.findUniqueOrThrow({ where: { id: asker } })).status, RunStatus.FAILED, 'the retry was not sent');
+    const replyTurns = await replyTurnsOf(asker);
+    assert.equal(replyTurns.length, 2);
+    assert.equal(replyTurns[1].content, '');
+    assert.equal(replyTurns[1].senderSessionId, null);
+    const back = await deliver(asker);
+    assert.equal(back.turnId, replyTurns[1].id);
+    assert.equal(blocksFor(back.content, request.id), 1);
+    assert.match(back.content, /回复：go/);
+    assert.equal((await requestRow(request.id)).replyClientTurnId, replyTurns[1].clientTurnId);
+  });
+
+  await t.test('a reply turn its run ends with in flight is not taken for read: the asker\'s next turn says it', async () => {
+    const asker = await session('Worker: its engine exits while it reads an answer');
+    const recipient = await session('Coordinator: answers');
+    const request = await ask(asker, recipient, 'which migration number is free?');
+    await deliver(recipient);
+    await reply(recipient, request.requestId, { message: '0350' });
+    const handed = await deliver(asker);
+    assert.equal((await requestRow(request.id)).replyClientTurnId, handed.clientTurnId);
+    // The runner finalizes the run with that turn still in flight: its engine is gone, and the drain
+    // answers the turn without it.
+    await api.finalize({ id: runnerId } as never, asker, { status: 'FAILED', error: 'the engine exited' } as never);
+    assert.equal(
+      (await prisma.conversationTurn.findUniqueOrThrow({ where: { id: handed.turnId } })).status,
+      'ANSWERED',
+    );
+    assert.equal((await requestRow(request.id)).replyClientTurnId, null, 'the outcome was taken for read with a turn its engine never finished');
+    // The run is over: the hand-off finds an asker that has ended, and holds the outcome for it.
+    await worker.drain();
+    assert.ok((await requestRow(request.id)).replyHeldAt);
+    assert.equal((await replyTurnsOf(asker)).length, 1, 'an ended asker was queued a reply turn');
+    // The owner takes the conversation up again: the turn that starts says it.
+    const ownerKey = randomUUID();
+    await sessions.resume(ownerId, asker, { content: 'so what did the coordinator say?', clientTurnId: ownerKey });
+    const next = await deliver(asker);
+    assert.equal(next.clientTurnId, ownerKey);
+    assert.ok(next.content.startsWith('so what did the coordinator say?'));
+    assert.equal(blocksFor(next.content, request.id), 1);
+    assert.match(next.content, /回复：0350/);
   });
 
   // ── 3.1: what a send may ask, and what it is refused ─────────────────────────────────────────

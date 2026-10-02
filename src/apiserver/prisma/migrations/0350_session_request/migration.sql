@@ -11,8 +11,9 @@
 --     `state = 'OPEN'`, so whichever arrives first is the outcome and nothing rewrites it.
 --     `reply_client_turn_id` is the `session-reply:` turn of the asking session that carries the
 --     outcome back to it (or the turn it was added to); `reply_held_at` says the outcome was kept on
---     the row instead — the asker had ended, or its reply turn was taken off its queue — to be added to
---     the next turn it is handed.
+--     the row instead — the asker had ended, its reply turn was taken off its queue, or the turn
+--     carrying it failed or was drained before its engine finished it — to be added to the next turn
+--     it is handed.
 --   * `session_request_outcome_guard`: a closed request's outcome is final.
 --   * `session_request_recipient_ended`: every way a session's run ends, or the session is completed
 --     or moved to Trash, closes the requests still waiting on it as RECIPIENT_ENDED — in the statement
@@ -28,7 +29,12 @@
 -- (`retry_at`): the same session goes on, and the trigger fires when the retry is disarmed instead.
 -- Nor has one the auto-retry sweep has just claimed: the claim clears `retry_at` and spends an
 -- attempt in one statement (auto-retry.service.ts), and the next one revives the same session. If
--- that revive is refused, the sweep re-arms or disarms, and a disarm is the end the trigger reads.
+-- that revive is refused, the sweep re-arms or disarms, and a disarm is the end the trigger reads —
+-- or, when the task the run was for was replaced or became a roll-up of its subtasks between the
+-- claim and the revive, it gives the retry up by handing the attempt back: `retry_attempts` alone,
+-- with `retry_at` already NULL. That is an end too, which is why `retry_attempts` is among the
+-- columns the trigger fires on, and why the claim is told apart from it by the attempt it spends
+-- rather than by which columns it wrote.
 --
 -- LOCK ORDER
 -- ==========
@@ -160,7 +166,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER "session_request_recipient_ended"
-  AFTER UPDATE OF "status", "end_reason", "retry_at", "completed_at", "archived_at", "deleted_at"
+  AFTER UPDATE OF "status", "end_reason", "retry_at", "retry_attempts", "completed_at", "archived_at", "deleted_at"
   ON "session"
   FOR EACH ROW
   WHEN (

@@ -6254,7 +6254,7 @@ export class SessionsService {
       // Outcomes queued back to this session as an asker are let go, to be held for it and written on
       // its task. The requests queued here are left to the end itself: the status write below (or the
       // finalize after it) closes them RECIPIENT_ENDED, which wins over UNDELIVERED (session-request.ts).
-      await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: false });
+      await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: false, retryArmed: false });
       if (session.status === RunStatus.PENDING) {
         await tx.session.update({
           where: { id: sessionId },

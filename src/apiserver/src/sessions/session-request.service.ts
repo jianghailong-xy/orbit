@@ -32,9 +32,10 @@ import { SessionNotSendable, SessionsService } from './sessions.service';
 /**
  * Where a request's outcome went (contract §4.2, §4.3): onto a new reply turn of the asker (QUEUED),
  * onto one already queued (MERGED), kept on the row because the asker had ended (HELD) — or
- * somewhere another pass had already put it (ALREADY).
+ * somewhere another pass had already put it (ALREADY). DEFERRED: nowhere yet, because the hand-off
+ * failed; the outcome is safe on its row and the request worker hands it back on its next pass.
  */
-export type SessionReplyHandOff = 'QUEUED' | 'MERGED' | 'HELD' | 'ALREADY';
+export type SessionReplyHandOff = 'QUEUED' | 'MERGED' | 'HELD' | 'ALREADY' | 'DEFERRED';
 
 /** The id of the one comment that tells an ended asker's task what its request came to (§4.3). */
 export function sessionReplyCommentId(requestId: string): string {
@@ -82,7 +83,11 @@ export class SessionRequestService {
       }
       throw requestClosedRefusal(answered.request);
     }
-    const handOff = await this.handOff(answered.request.id);
+    // REPLIED has committed, so the answer is given: what is left is the platform's to deliver, not
+    // the recipient's to retry. A hand-off that fails now is not the caller's failure — reported as
+    // one, a retry would only meet REQUEST_CLOSED — so it is left to the request worker, which hands
+    // back every outcome on no turn and not held (session-request.worker.ts).
+    const [handOff] = await this.handOffQuietly([answered.request.id]);
     return { requestId: uuidToBase62(answered.request.id), state: 'REPLIED', handOff };
   }
 
@@ -171,18 +176,24 @@ export class SessionRequestService {
     return merged ? 'MERGED' : 'QUEUED';
   }
 
-  /** `handOff` for each of these, for a caller with nothing to do about a failure but log it. */
-  async handOffQuietly(requestIds: readonly string[]): Promise<void> {
+  /**
+   * `handOff` for each of these, for a caller with nothing to do about a failure but log it: one that
+   * fails is DEFERRED to the request worker. Answers where each went, in order.
+   */
+  async handOffQuietly(requestIds: readonly string[]): Promise<SessionReplyHandOff[]> {
+    const handedOff: SessionReplyHandOff[] = [];
     for (const requestId of requestIds) {
       try {
-        await this.handOff(requestId);
+        handedOff.push(await this.handOff(requestId));
       } catch (error) {
         this.log.warn(
           `session request ${requestId} was not handed back yet: ${error instanceof Error ? error.message : error}; `
           + 'the request worker tries again',
         );
+        handedOff.push('DEFERRED');
       }
     }
+    return handedOff;
   }
 
   /**
