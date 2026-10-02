@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -68,6 +69,44 @@ func TestWikiPlanClosedSetsAreTheContracts(t *testing.T) {
 		if statuses[code] != status {
 			t.Errorf("refusal %s = %v, this build reads it as %v", code, statuses[code], status)
 		}
+	}
+}
+
+// How a gate reads a closed-set value and names what it refuses is the contract's (`plan.gate.values`): the
+// wrappers it takes off are the ones the contract lists, in its order, and what it names back is a JSON string.
+func TestWikiPlanGateValuesAreTheContracts(t *testing.T) {
+	values := wikiContract(t)["plan"].(map[string]interface{})["gate"].(map[string]interface{})["values"].(string)
+	listed := regexp.MustCompile(`\(([^()]*)\) wrap the whole of it`).FindStringSubmatch(values)
+	if listed == nil {
+		t.Fatalf("plan.gate.values lists no wrappers: %s", values)
+	}
+	shipped := []string{}
+	for _, pair := range wikiWrappers {
+		if pair[0] == pair[1] {
+			shipped = append(shipped, pair[0])
+		} else {
+			shipped = append(shipped, pair[0]+pair[1])
+		}
+	}
+	if declared := strings.Fields(listed[1]); !reflect.DeepEqual(declared, shipped) {
+		t.Errorf("plan.gate.values takes off %v, this build %v", declared, shipped)
+	}
+	for _, phrase := range []string{
+		"writes it as a JSON string", `written as \uXXXX`, "a section's kind, a session condition's entryKinds and topics",
+		"a pair counting as a wrapping only with no more of either inside", "nothing else is read loosely",
+		"The runner's own gate (plan.jobs.run) and a maintenance run's check of its proposal read and write values the same way",
+	} {
+		if !strings.Contains(values, phrase) {
+			t.Errorf("plan.gate.values does not say %q", phrase)
+		}
+	}
+	// What a revision hands the model names projects as the drafting prompts do.
+	revise := wikiContract(t)["plan"].(map[string]interface{})["jobs"].(map[string]interface{})["run"].(map[string]interface{})["revise"].(string)
+	if !strings.Contains(revise, "name their session conditions' projects by title") || !strings.Contains(revise, "never by an id the model would have to copy") {
+		t.Errorf("plan.jobs.run.revise does not say how a revision names projects: %s", revise)
+	}
+	if got := wikiQuote(" `decision`​"); got != "\" `decision`\\u200b\"" {
+		t.Errorf("a refused value is named %s", got)
 	}
 }
 

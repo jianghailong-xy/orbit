@@ -906,7 +906,7 @@ func assembleWikiProposal(plan wikiPlanVersionRead, answer wikiProposalAnswer, i
 	for _, id := range answer.Covers {
 		item, ok := byID[id]
 		if !ok {
-			problems = append(problems, fmt.Sprintf("「覆盖」里的 %s 不是新知识的编号", id))
+			problems = append(problems, fmt.Sprintf("「覆盖」里的 %s 不是新知识的编号", wikiQuote(id)))
 			continue
 		}
 		var fact wikiPlanFact
@@ -933,7 +933,7 @@ func assembleWikiProposal(plan wikiPlanVersionRead, answer wikiProposalAnswer, i
 		sections = append(sections, section)
 	}
 	for _, line := range answer.Stray {
-		problems = append(problems, fmt.Sprintf("「%s」不是这个格式里的一行：删掉它", cutRunes(line, 60)))
+		problems = append(problems, fmt.Sprintf("%s 不是这个格式里的一行：删掉它", wikiQuote(cutRunes(line, 60))))
 	}
 	var doc wikiPlanDoc
 	var category *wikiPlanCategory
@@ -947,14 +947,14 @@ func assembleWikiProposal(plan wikiPlanVersionRead, answer wikiProposalAnswer, i
 			known = known || c.Key == answer.Category
 		}
 		if !known {
-			problems = append(problems, fmt.Sprintf("「大类：%s」不是目录里的大类：原样抄一个大类的 key", answer.Category))
+			problems = append(problems, fmt.Sprintf("「大类」%s 不是目录里的大类：原样抄一个大类的 key", wikiQuote(answer.Category)))
 		}
 		if !wikiSlugPattern.MatchString(answer.Slug) {
-			problems = append(problems, fmt.Sprintf("「slug：%s」不是 slug：小写字母和数字，用连字符连接", answer.Slug))
+			problems = append(problems, fmt.Sprintf("「slug」%s 不是 slug：小写字母和数字，用连字符连接", wikiQuote(answer.Slug)))
 		}
 		for _, existing := range plan.Docs {
 			if existing.Slug == answer.Slug {
-				problems = append(problems, fmt.Sprintf("slug %s 已经是现有的一篇：新篇要用新的 slug，放进现有的一篇就写「放入：%s」", answer.Slug, answer.Slug))
+				problems = append(problems, fmt.Sprintf("slug %s 已经是现有的一篇：新篇要用新的 slug，放进现有的一篇就写「放入：%s」", wikiQuote(answer.Slug), answer.Slug))
 			}
 		}
 		if h.Title == "" || h.Question == "" || len(h.Audience) == 0 || len(h.ScopeIn) == 0 {
@@ -963,7 +963,7 @@ func assembleWikiProposal(plan wikiPlanVersionRead, answer wikiProposalAnswer, i
 		if min, max, ok := wikiPlanRange(h.Length); ok {
 			doc.Length = wikiPlanLength{Min: min, Max: max}
 		} else {
-			problems = append(problems, fmt.Sprintf("「篇幅：%s」不是篇幅：写成 <a–b 字>", h.Length))
+			problems = append(problems, fmt.Sprintf("「篇幅」%s 不是篇幅：写成 <a–b 字>", wikiQuote(h.Length)))
 		}
 		doc.Sections = sections
 	default:
@@ -974,7 +974,7 @@ func assembleWikiProposal(plan wikiPlanVersionRead, answer wikiProposalAnswer, i
 			}
 		}
 		if target == nil {
-			problems = append(problems, fmt.Sprintf("「放入：%s」不是目录里的一篇：原样抄一篇的 slug，或写「放入：新篇」", answer.Target))
+			problems = append(problems, fmt.Sprintf("「放入」%s 不是目录里的一篇：原样抄一篇的 slug，或写「放入：新篇」", wikiQuote(answer.Target)))
 			break
 		}
 		if target.Protected {
@@ -992,14 +992,14 @@ func assembleWikiProposal(plan wikiPlanVersionRead, answer wikiProposalAnswer, i
 // length, and every file, document section, symbol and contract it names.
 func wikiProposalSection(at string, draft wikiPlanSectionDraft, repo *wikiDocRepo) (wikiPlanSection, []string) {
 	var problems []string
-	section := wikiPlanSection{Title: draft.Title, Kind: draft.Kind, Covers: draft.Covers}
-	if !contains(wikiPlanSectionKinds, draft.Kind) {
-		problems = append(problems, fmt.Sprintf("%s的 type「%s」不是节的类型：%s 之一", at, draft.Kind, strings.Join(wikiPlanSectionKinds, "、")))
+	section := wikiPlanSection{Title: draft.Title, Kind: wikiUnwrap(draft.Kind), Covers: draft.Covers}
+	if !contains(wikiPlanSectionKinds, section.Kind) {
+		problems = append(problems, fmt.Sprintf("%s的 type %s 不是节的类型：%s 之一", at, wikiQuote(section.Kind), strings.Join(wikiPlanSectionKinds, "、")))
 	}
 	if min, _, ok := wikiPlanRange(draft.Length); ok {
 		section.Length = min
 	} else {
-		problems = append(problems, fmt.Sprintf("%s的字数「%s」不是数字", at, draft.Length))
+		problems = append(problems, fmt.Sprintf("%s的字数 %s 不是数字", at, wikiQuote(draft.Length)))
 	}
 	if strings.TrimSpace(draft.Covers) == "" {
 		problems = append(problems, fmt.Sprintf("%s缺「讲什么」", at))
@@ -1017,9 +1017,9 @@ func wikiProposalSection(at string, draft wikiPlanSectionDraft, repo *wikiDocRep
 		}
 		if _, ok := repo.docSection(source.Path, heading); !ok {
 			if _, exists := repo.show(source.Path); !exists {
-				problems = append(problems, fmt.Sprintf("%s的文档 %s 在 origin/main 上没有", at, source.Path))
+				problems = append(problems, fmt.Sprintf("%s的文档 %s 在 origin/main 上没有", at, wikiQuote(source.Path)))
 			} else {
-				problems = append(problems, fmt.Sprintf("%s的文档 %s 里没有章节「%s」：原样抄新知识里列出的章节标题，或不写 §", at, source.Path, heading))
+				problems = append(problems, fmt.Sprintf("%s的文档 %s 里没有章节 %s：原样抄新知识里列出的章节标题，或不写 §", at, source.Path, wikiQuote(heading)))
 			}
 		}
 	}
@@ -1030,11 +1030,12 @@ func wikiProposalSection(at string, draft wikiPlanSectionDraft, repo *wikiDocRep
 	}
 	for _, path := range draft.Contracts {
 		if _, ok := repo.contract(path); !ok {
-			problems = append(problems, fmt.Sprintf("%s的契约 %s 在 origin/main 上没有", at, path))
+			problems = append(problems, fmt.Sprintf("%s的契约 %s 在 origin/main 上没有", at, wikiQuote(path)))
 		}
 	}
 	if c := draft.Sessions; c != nil {
-		sessions := &wikiPlanSessions{Projects: c.Projects, Keywords: c.Keywords, AnchorPaths: c.AnchorPaths, EntryKinds: c.EntryKinds, Topics: c.Topics, Evidence: c.Evidence}
+		sessions := &wikiPlanSessions{Projects: c.Projects, Keywords: c.Keywords, AnchorPaths: c.AnchorPaths, EntryKinds: wikiUnwrapAll(c.EntryKinds),
+			Topics: wikiUnwrapAll(c.Topics), Evidence: c.Evidence}
 		if c.Since != "" {
 			since := c.Since
 			sessions.Since = &since
@@ -1044,7 +1045,7 @@ func wikiProposalSection(at string, draft wikiPlanSectionDraft, repo *wikiDocRep
 			sessions.Until = &until
 		}
 		for _, part := range c.Stray {
-			problems = append(problems, fmt.Sprintf("%s的会话条件里「%s」不是其中一项：只有项目、时间、关键词、锚点、kind、主题和要找", at, cutRunes(part, 60)))
+			problems = append(problems, fmt.Sprintf("%s的会话条件里 %s 不是其中一项：只有项目、时间、关键词、锚点、kind、主题和要找", at, wikiQuote(cutRunes(part, 60))))
 		}
 		section.Sources.Sessions = sessions
 	}
@@ -1052,7 +1053,7 @@ func wikiProposalSection(at string, draft wikiPlanSectionDraft, repo *wikiDocRep
 		problems = append(problems, fmt.Sprintf("%s没有写材料来源：机制写「- 文档：」，坑、决策、约定写「- 会话：」", at))
 	}
 	for _, line := range draft.Stray {
-		problems = append(problems, fmt.Sprintf("%s里「%s」不是节的一行：节只有讲什么、文档、代码、契约和会话", at, cutRunes(line, 60)))
+		problems = append(problems, fmt.Sprintf("%s里 %s 不是节的一行：节只有讲什么、文档、代码、契约和会话", at, wikiQuote(cutRunes(line, 60))))
 	}
 	return section, problems
 }

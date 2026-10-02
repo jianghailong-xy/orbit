@@ -560,7 +560,7 @@ describe('wiki contract', () => {
     // and the cursor never moved. The run's own ops now wait as an adopted op does.
     const job = CONTRACT.maintenance.job;
     const verify: string = job.run.steps.find((step: string) => step.startsWith('verify:'));
-    expect(verify).toMatch(/says why the model's last answer was not a verdict and lists the ids duplicateOf may be/u);
+    expect(verify).toMatch(/says why the model's last answer was not a verdict and lists the numbers duplicateOf may be/u);
     expect(verify).toMatch(/read as strictly as the first/u);
     expect(verify).toMatch(/one of the run's own after both passes, or an adopted one — is not live/u);
     expect(verify).toMatch(/fails nothing: the run goes on, succeeds and advances the cursor, and the next run adopts the op/u);
@@ -571,6 +571,39 @@ describe('wiki contract', () => {
     expect(job.report).toMatch(/verification \{verified, failed, waitingForNextRun — /u);
     // orbit wiki verify on its own still exits non-zero for an op left without a verdict; a run does not go by that.
     expect(CONTRACT.agentSurface.verify.unreadable).toMatch(/The command exits non-zero when any op failed\. A maintenance run does not go by that exit/u);
+  });
+
+  it('has the local model name a duplicate by a number of its own, never by an id it would copy wrong', () => {
+    // 09-30 to 10-02: asked to copy a 21-character id, the local model wrote 34XhYj76NhjjOJTEFEtFE as 34XhYj76NhjjOJTEFE
+    // run after run, and its op never got a verdict. It is shown numbers, answers with one, and the command maps it back.
+    const verify = CONTRACT.agentSurface.verify;
+    expect(verify.prompt).toMatch(/each by a number of its own, E1 to En in the order listed, and never by its id/u);
+    expect(verify.prompt).toMatch(/"duplicateOf": the number of the neighbour it duplicates, for a duplicate\}, and the command reports the id that number stands for/u);
+    // Read as strictly as ever: a number is one the prompt listed, and an id is none, whole or cut short.
+    expect(verify.unreadable).toMatch(/A number is one the prompt listed, exactly: an id, whole or cut short, is none, and nothing is guessed from a prefix/u);
+    expect(verify.unreadable).toMatch(/as plan\.gate\.values reads a closed-set value/u);
+    const step: string = CONTRACT.maintenance.job.run.steps.find((s: string) => s.startsWith('verify:'));
+    expect(step).toMatch(/lists the numbers duplicateOf may be/u);
+    expect(step).not.toMatch(/lists the ids/u);
+    // A revision hands the model its documents' projects by title, as every drafting prompt names a project.
+    expect(CONTRACT.plan.jobs.run.revise).toMatch(/name their session conditions' projects by title, as every drafting prompt names a project, and never by an id the model would have to copy/u);
+  });
+
+  it('names what the plan gate refuses as a JSON string, and reads a closed-set value as what its wrapping holds', () => {
+    // 10-01 10:40Z: «`decision` is no kind of entry: one of principle, convention, decision, …» read as decision refused
+    // for being decision, and the model wrote it the same way three rounds running.
+    const values: string = CONTRACT.plan.gate.values;
+    expect(values).toMatch(/writes it as a JSON string — in double quotes, every character that would not show .* written as \\uXXXX/u);
+    expect(values).toMatch(/so a backtick, an invisible character and a space at either end all show/u);
+    for (const field of ["a section's kind", "a session condition's entryKinds and topics", "a declared new field's at", "a fact's kind"]) {
+      expect(values).toContain(field);
+    }
+    expect(values).toMatch(/a pair counting as a wrapping only with no more of either inside; nothing else is read loosely/u);
+    expect(values).toMatch(/Decision, decisions and decision with a zero-width space after it are none/u);
+    expect(values).toMatch(/The runner's own gate \(plan\.jobs\.run\) and a maintenance run's check of its proposal read and write values the same way/u);
+    // The fields it names are the plan's closed sets.
+    expect(CONTRACT.plan.gate.checks).toEqual([...WIKI_PLAN_GATE_CHECKS]);
+    expect(keysOf(CONTRACT.plan.sectionKinds)).toEqual([...WIKI_PLAN_SECTION_KINDS]);
   });
 
   it.each(['entry', 'op', 'changeset', 'source'])('has a consistent %s state machine', (name) => {
