@@ -245,7 +245,7 @@ import {
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
 import { CoordinatorQuestions } from './CoordinatorQuestionCard';
-import { ItemAsCard, exceptionCardRows } from './ProjectProgressStatus';
+import { ItemAsCard, exceptionCardRows, isOwnerExceptionCard } from './ProjectProgressStatus';
 import {
   ProjectPromotion,
   ProjectPromotionCard,
@@ -1874,6 +1874,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const [stuck, setStuck] = useState<
     { seq: string | null; label: string; text: string; loading?: boolean } | null
   >(null);
+  // The exception cards scrolled wholly above the viewport, by item id and space-joined so an
+  // unchanged answer is no re-render: which way the pinned line's press goes to reach one.
+  const [openItemsAbove, setOpenItemsAbove] = useState('');
   // Smart auto-scroll: only keep pinned to the bottom when the user is already there, so
   // reading history (or jumping to the sticky prompt) isn't yanked back by streaming updates.
   const atBottomRef = useRef(true);
@@ -2041,6 +2044,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // Near the top with older history still on the server → pull in the next page.
     if (top < LOAD_OLDER_AT) loadOlder();
     const topY = el.getBoundingClientRect().top;
+    setOpenItemsAbove(
+      Array.from(el.querySelectorAll<HTMLElement>('[data-open-item]'))
+        .filter((card) => card.getBoundingClientRect().bottom <= topY + 1)
+        .map((card) => card.getAttribute('data-open-item'))
+        .join(' '),
+    );
     // A turn a watch or the control plane queued is one of these too — it is where the answer under
     // it starts, so it is where the bar has to point — but it is no bubble and nobody typed it, so
     // its card hands over what to call it (`data-sticky-label` / `data-sticky-text`). Its queued
@@ -4367,6 +4376,28 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       }),
     [coordinatedProjectId, openItems.data, openItems.dataUpdatedAt, transcriptEvents],
   );
+
+  // Which of those cards the owner answers by pressing — an exception that became theirs, the pause
+  // only they can lift — for the pinned line to point at: drawn among the messages rather than at the
+  // foot, one of these that scrolled away had nothing pointing at it, while the phone's bar did (the
+  // account owner's report, 2026-10-02). The rows the inserts above draw and no others, so a press
+  // always has a card to arrive at.
+  const ownerExceptionRows = useMemo(
+    () =>
+      coordinatedProjectId
+        ? exceptionCardRows(openItems.data, transcriptEvents)
+          .filter(({ row, anchor }) => anchor !== null && isOwnerExceptionCard(row))
+          .map(({ row }) => row)
+        : [],
+    [coordinatedProjectId, openItems.data, transcriptEvents],
+  );
+  // Which side of the reader each sits on is measured on scroll, and a card can arrive or go on its
+  // read's own clock without the conversation moving — so a change in which cards there are is a
+  // reason to measure again.
+  const ownerExceptionIds = ownerExceptionRows.map((row) => row.itemId).join(' ');
+  useEffect(() => {
+    measure();
+  }, [ownerExceptionIds, measure]);
 
   // The candidate a check blocked, drawn at the moment it was blocked instead of at the bottom of
   // this pane — where it sat, under every later message, for as long as the block stood, and in a
@@ -7868,6 +7899,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   }
                 : null
             }
+            // The exception cards the owner presses, with how long each has been theirs and which
+            // side of the reader it sits on now: unlike a question, one can be above.
+            exceptions={ownerExceptionRows.map((row) => ({
+              row,
+              ageSeconds: Math.max(
+                0,
+                Math.floor((Date.now() - Date.parse(row.escalatedAt ?? row.waitingSince)) / 1000),
+              ),
+              above: openItemsAbove.split(' ').includes(row.itemId),
+            }))}
             // The strip states the fact and this takes the reader to the one place it can be
             // answered: the card the server delivered into this conversation. A second set of
             // buttons up here would be two faces racing for one answer.
