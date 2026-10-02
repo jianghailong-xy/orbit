@@ -51,6 +51,18 @@ final class EngineErrorsTests: XCTestCase {
                        "not an API error at all")
     }
 
+    /// The runtime's non-streaming retry of a dead stream failing too — verbatim from a DeepSeek
+    /// session. Its "(HTTP 200)" is the fallback's status, not a leading one, so it decides nothing.
+    func testRetryableWhenTheFallbackAfterADeadStreamFailsToo() {
+        XCTAssertTrue(EngineErrors.isRetryableApiErrorText(
+            "API Error: API returned an empty or malformed response (HTTP 200) — check for a proxy or "
+            + "gateway intercepting the request. Response: content-type json, body is JSON but not a "
+            + "Message, size unknown, request-id absent, server other, intermediary headers "
+            + "content-encoding transfer-encoding via x-amz-* x-cache. This was the non-streaming "
+            + "retry of streaming request (no Anthropic request-id), which failed with: watchdog; "
+            + "0 stream events received."))
+    }
+
     /// Codex words its own overload and reports it as the turn's error, with no `API Error` prefix.
     /// Only the whole message counts: a reply quoting it mid-sentence is an ordinary reply.
     func testRetryableInARuntimeSOwnWords() {

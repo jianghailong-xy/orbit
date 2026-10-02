@@ -353,4 +353,32 @@ test('a turn nothing answered goes back in the queue instead of being marked ANS
     });
     assert.equal(after.numTurns, 3, 'and the retry books no second set of numbers');
   });
+
+  await t.test('(7) token counts past int4 do not refuse the completion', async () => {
+    // 2026-10-01: a coordinator's lifetime `sum_cache_read` crossed 2^31-1 inside this write, the
+    // completion rolled back with 22003, and the runner retried the 5xx for 7.5 hours while every
+    // later message queued behind a turn the engine had long finished. Counts this size are what
+    // any increment of an int4 accrual would have refused.
+    const f = await fixture(db, 'overflow');
+    await say(api, f, 1, RunEventType.USER, { text: '把这两张图里的报错讲清楚' });
+    await say(api, f, 2, RunEventType.ASSISTANT, { text: '两张图都是同一个 401。' });
+
+    await api.turnComplete({ id: f.runnerId }, f.sessionId, {
+      turnId: f.turnId,
+      status: SharedRunStatus.SUCCEEDED,
+      subtype: 'success',
+      numTurns: 5,
+      costUsd: 3.24,
+      usage: {
+        input_tokens: 3_000_000_000,
+        output_tokens: 3_000_000_000,
+        cache_creation_input_tokens: 3_000_000_000,
+        cache_read_input_tokens: 3_000_000_000,
+      },
+    });
+
+    const after = await row(f.turnId);
+    assert.equal(after.status, 'ANSWERED', 'the size of a usage report never decides the answer');
+    assert.equal(await poll(api, f), null, 'and nothing is left queued behind it');
+  });
 });

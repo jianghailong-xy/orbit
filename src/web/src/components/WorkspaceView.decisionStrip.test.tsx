@@ -52,3 +52,13 @@ describe('the pending strip is pinned above the conversation', () => {
     expect(insideScroller).not.toContain('<SessionDecisionStrip');
   });
 });
+
+describe('the strip is handed the exception cards the owner presses', () => {
+  it('passes the cards the transcript draws for the owner, and which side of the reader each is on', () => {
+    // The rows the inserts draw, filtered by the cards' own rule — so a press has a card to reach.
+    expect(SOURCE).toContain('isOwnerExceptionCard(row)');
+    expect(SOURCE).toContain('exceptions={ownerExceptionRows.map(');
+    // Measured where the sticky bar is measured, off the handle every exception card carries.
+    expect(SOURCE).toContain("querySelectorAll<HTMLElement>('[data-open-item]')");
+  });
+});

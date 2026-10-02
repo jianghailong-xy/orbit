@@ -619,8 +619,11 @@ op（owner 自己的、reinforce、审阅模式放行的）和等核实的 op（
   low|medium|high|xhigh|max`。出处全都读不到原文的 op 照样问模型：服务端会把结论封顶（§7.5），duplicate 仍能追加出处。模型与端点取会话
   provider 注入的 `ANTHROPIC_MODEL`、`ANTHROPIC_BASE_URL`（配置型 provider 现在也注入 `ANTHROPIC_MODEL`），token 由
   `apiKeyHelper`（`printenv ANTHROPIC_AUTH_TOKEN`）以 Bearer 送出——bare 模式下 `ANTHROPIC_API_KEY` 只走 x-api-key，vLLM 回 401。
-  提示词手写：条目的 kind、标题、摘要、字段，每条出处的原文，以及可被判为重复的条目（op 自己 similar[] 里 active 的，amend 的目标条目）；
-  回答必须是一个 JSON 对象 `{"verdict", "reason", "duplicateOf"}`。**读不成结论就不放行**：不回报、计入失败，op 继续等。
+  提示词手写：条目的 kind、标题、摘要、字段，每条出处的原文，以及可被判为重复的条目（op 自己 similar[] 里 active 的，amend 的目标条目）。
+  可被判为重复的条目只给短编号（按列出的顺序 E1…En），不给 id：本地模型抄 21 位的 id 会抄错——09-30 到 10-02，`34XhYj76NhjjOJTEFEtFE`
+  一再被写成 `34XhYj76NhjjOJTEFE`，这个 op 一直拿不到结论。回答必须是一个 JSON 对象 `{"verdict", "reason", "duplicateOf"}`，duplicateOf
+  填编号，命令把它映射回条目 id 再回报。编号必须是提示里列出的之一、原样：id（完整的或截断的）都不算编号，不按前缀或相似度猜；
+  verdict 与编号的读法同 21.3 的枚举值（只去包裹的反引号、引号和首尾空白）。**读不成结论就不放行**：不回报、计入失败，op 继续等。
   遇到模型端点 401 立即停（真 Claude Code 每次 401 要重试约 3 分钟），space 不再是 Automatic 时停；有 op 没拿到结论就非零退出。
   单独调用时这个退出码的语义不变。维护运行不看它：它在自己的进程里核实本次运行的 op，没结论的再问一遍，仍没结论的不让运行失败（19.4 第 8 步）。
   描述文案把「只核实本会话的 op、绝不手写结论」写成前置条件（`agentSurface.verify.precondition`），逐词测试。
@@ -1069,7 +1072,7 @@ JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端�
    重读这些案卷，扣下的知识不丢，已提议的也不会被重读。这一步不写任何东西，也不让运行失败。
 7. **提议**：`POST …/maintenance/changesets`，origin 为 `maintenance`；此时还有 op 被拒就判失败。
 8. **核实**：Automatic 下走 `orbit wiki verify` 对本次运行自己的 op 的核实，没拿到结论的再核一遍：第二遍的提示里写明上一遍的回答
-   为什么没被收下（例如 duplicateOf 不是列出的条目），并列出 duplicateOf 能填的 id（一条都没列时，说明它不可能是 duplicate）；回答照样
+   为什么没被收下（例如 duplicateOf 不是列出的条目），并列出 duplicateOf 能填的编号（一条都没列时，说明它不可能是 duplicate）；回答照样
    严格解析，不宽读成别的结论。然后接手已结束的会话留下的等核实的 op（§7.4），每次最多 `adoptOpsMax`（50）个，本次运行没抽取过就先为
    它们备好模型。**没拿到结论的 op 不让运行失败**，本次运行自己的（两遍之后）和接手的一样：没结论就不生效，照旧等核实；运行照常往下走、
    以 succeeded 收尾、推进游标，连续失败数不加；本次运行的会话结束后，由下一次运行接手（报告的 `verification.waitingForNextRun`）。
@@ -1228,6 +1231,13 @@ runner-go 在 `wiki_plan.go`，OrbitKit 在 `Models/WikiPlan.swift`。起草作�
   （草稿是 `plan.docs[3].sections[2].sources.sessions.projects[0]`，编辑是 `doc.…` / `section.…`，建议是 `change.doc.…`）；编辑和建议
   会让整个 plan 变成什么样，关于那份结果的错误按结果 plan 的位置写（`plan.docs[20].protected`）。最多列 `rules.errorsMax`（200）条，
   消息里写总数。什么都不存，起草作业把清单交回模型重做。
+- **报错里的值、枚举值的读法**（`plan.gate.values`）：message 里引用请求给的值，一律写成 JSON 字符串——带双引号，看不见的字符
+  （控制字符、格式字符、行与段分隔符、U+0020 以外的空白）写成 `\uXXXX`——让反引号、不可见字符、首尾空白都看得见。起因：10-01 的维护
+  运行里，plan 修改建议三轮都没过闸，报错是 ``…entryKinds[0]: `decision` is no kind of entry: one of principle, convention, decision, …``：
+  模型把值写成了带反引号的 `` `decision` ``，报错没加引号，读起来像「decision 不是 decision」，模型三轮都没改对。枚举类字段（节的
+  kind、会话条件的 entryKinds 与 topics、newFields 的 at、facts 的 kind）校验前去掉首尾空白和包裹整个值的反引号或引号（`` ` `` `"`
+  `'` `“”` `‘’` `「」` `『』` `«»`，可以套几层；成对、且里面不再有同样的符号才算包裹）。只去包裹，不做别的宽读：`` `decision` `` 读作
+  decision，Decision、decisions、后面跟着零宽空格的 decision 照样拒。runner 自己的闸和维护运行对修改建议的检查，读法和写法都一样。
 - **仓库引用不在服务端查**：文件、docs 章节、符号、契约只在 checkout 里有，服务端没有。起草作业在 runner 上、在某个 sha 上核对，随草稿报
   `repoCheck: { sha, checked, missing: [{ kind, ref, at }] }`（`kind` 为 file / docSection / symbol / contract）；服务端原样存在版本上
   （`repo_sha`、`repo_check`），不评判。owner 做出的版本没有 runner 核对过，这两项为空。
@@ -1333,7 +1343,8 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
   存在；正文里「→ x.y」「见 x.y」指向本 plan 的篇）、修订时移出的节只能是约定类（`conventions`）——再交服务端的闸。
   任一道不过，就把逐条错误交回模型、只重做出错的单元，最多 `rules.attemptsMax`（3）轮；仍不过就以非 0 退出并列出错误。
 - **修订**：模型先出新目录（每篇写明由上一版哪些篇组成，以及移到给 agent 的大类的节），只重写合并或新增的篇；只由上一版一篇组成的，
-  沿用它的大纲、去掉移出的节。受保护的篇原样带过去。
+  沿用它的大纲、去掉移出的节。受保护的篇原样带过去。交给模型的上一版的篇（以及重做时交回的那一篇），会话条件里的项目写标题，和起草
+  提示里一样，不写要模型照抄的 id；只有标题和别的项目重名、或者材料里的项目清单可能被截断时，才保留 id。
 - **结束**：`POST …/plan/job/finish`；`orbit wiki plan check` 读作业：结束且成功、版本还在，才退出 0。
 - **门的瞬时故障**：这些调用和 wiki 的其他调用一样走 `Transport.doWiki`：遇到网关 502/503/504、连接或流被重置、回答在路上丢了，
   读、`progress` 与 `finish` 再发（结局可以落两次，见 21.7）。草稿带一个由作业、会话和草稿本身派生的幂等键（21.6），所以也再发

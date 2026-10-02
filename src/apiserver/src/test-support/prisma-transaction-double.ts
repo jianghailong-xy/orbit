@@ -192,3 +192,20 @@ export function currentWorkTerminalizationDouble(
     },
   };
 }
+
+/**
+ * The `sessionRequest` delegate of an account where no session has asked another for a reply
+ * (sessions/session-request.ts): every read finds nothing and every write matches no row. For the
+ * doubles of the paths that now look — the inbox claim, turn completion, the drains, event ingest,
+ * the list rows and the live summary — in specs that are about something else.
+ */
+export function noSessionRequests() {
+  return {
+    findMany: async () => [],
+    findFirst: async () => null,
+    findUnique: async () => null,
+    count: async () => 0,
+    updateMany: async () => ({ count: 0 }),
+    updateManyAndReturn: async () => [],
+  };
+}

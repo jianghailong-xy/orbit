@@ -275,6 +275,7 @@ export function SessionOutputs({
           ))}
       </div>
       {detail.mergeRecovery && <MergeRecoveryPanel recovery={detail.mergeRecovery}
+        branch={detail.branch}
         message={detail.mergeError}
         supported={detail.mergeRecoverySupported === true}
         busy={!!merging || !!turnActive || detail.mergeStatus === 'pending'}

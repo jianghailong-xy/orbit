@@ -69,6 +69,60 @@ final class MergeRecoveryTests: XCTestCase {
         XCTAssertTrue(recovery.repairPrompt(preparePR: true).contains("organize commits on a separate PR candidate"))
     }
 
+    private func commit(_ sha: String, _ subject: String, merge: Bool? = nil) -> [String: Any] {
+        var value: [String: Any] = ["sha": String(repeating: sha, count: 40), "subject": subject, "author": "Orbit", "date": "2026-10-01"]
+        if let merge { value["merge"] = merge }
+        return value
+    }
+
+    /// Each commit the push adds is told apart by where it comes from, and this session's beyond the
+    /// first five wait behind one row — never the local-only commits the review is for.
+    func testThePushListsWhereEachCommitComesFrom() throws {
+        let session = (1...7).map { commit("\($0)", "Session \($0)") }
+        let pushed = session + [commit("f", "Merge origin/develop into develop", merge: true),
+                                commit("b", "Extra local work", merge: false)]
+        let r = try decode(payload(["pushCommits": pushed, "addsMergeCommit": true]))
+        XCTAssertEqual(r.pushCommits?.map { r.origin(of: $0) },
+                       Array(repeating: .session, count: 7) + [.merge, .localOnly])
+        let inline = r.inlinePushCommits()
+        XCTAssertEqual(inline.shown.map(\.subject), (1...5).map { "Session \($0)" }
+                       + ["Merge origin/develop into develop", "Extra local work"])
+        XCTAssertEqual(inline.hidden, 2)
+        XCTAssertEqual(r.landingNote, "A merge commit joins both histories; nothing already on origin/develop is rewritten."
+                       + " Includes 1 local-only commit that was never pushed.")
+        XCTAssertEqual(r.reviewNote, "Git preview only; no merge check is configured."
+                       + " For linear history or required PRs, prepare a PR candidate instead.",
+                       "the push's own note already names the local-only commit")
+    }
+
+    /// The owner's case, 2026-10-01: local develop matched origin/develop and only this session's
+    /// commits went out, yet the sheet's note spoke of "the local-only commits above".
+    func testTheNoteNeverPointsAtLocalOnlyCommitsThatAreNotThere() throws {
+        let matching: [String: Any] = ["remoteSha": String(repeating: "b", count: 40), "localCommits": NSNull()]
+        let r = try decode(payload(matching.merging(["pushCommits": [commit("d", "Session work")]]) { _, new in new }))
+        XCTAssertEqual(r.targetRelation, "Local develop matches origin/develop")
+        XCTAssertEqual(r.landingNote, "Fast-forward push: nothing already on origin/develop is rewritten.")
+        XCTAssertEqual(r.reviewNote, "Git preview only; no merge check is configured."
+                       + " For linear history or required PRs, prepare a PR candidate instead.")
+        XCTAssertEqual(try decode(payload(matching)).reviewNote, r.reviewNote, "nor from a runner that predates the push list")
+        XCTAssertEqual(try decode(payload()).reviewNote, "Git preview only; no merge check is configured."
+                       + " The local-only commits above will be pushed with this session’s changes."
+                       + " For linear history or required PRs, prepare a PR candidate instead.",
+                       "an older runner's sheet lists them on their own, so it still names them")
+    }
+
+    /// Two absent lists mean "the same" only when the tips agree; otherwise nothing was read.
+    func testTheTargetRelationNeedsBothSidesRead() throws {
+        let c = commit("f", "Remote work")
+        XCTAssertEqual(try decode(payload()).targetRelation, "Local develop is 1 ahead of origin/develop")
+        XCTAssertEqual(try decode(payload(["remoteCommits": [c, c]])).targetRelation,
+                       "Local develop: 1 ahead, 2 behind origin/develop")
+        XCTAssertEqual(try decode(payload(["localCommits": NSNull(), "remoteCommits": [c]])).targetRelation,
+                       "Local develop is 1 behind origin/develop")
+        XCTAssertNil(try decode(payload(["localCommits": NSNull()])).targetRelation)
+        XCTAssertNil(try decode(["code": "TARGET_DIVERGED", "targetBranch": "develop"]).targetRelation)
+    }
+
     /// The review sheet pins the step the state asks for, the other steps under it, and keeps
     /// "Check again" in its header whenever checking isn't that step.
     func testTheSheetPinsTheStepTheStateAsksFor() throws {

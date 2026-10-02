@@ -604,6 +604,79 @@ test('the gate stops a field outside the schema, a count outside the target, and
   expectGate(await draft(h, s, 3, planOf(20), { repoCheck: { sha: 'main', checked: 1, missing: [] } }), 'schema', 'repoCheck.sha', 'a sha that is not one');
 });
 
+test('the gate reads a closed-set value as what its wrapping holds, and names what it refuses as a JSON string', { skip }, async () => {
+  // 10-01 10:40Z: a maintenance run's proposal named an entry kind `decision`, in backticks, and the gate refused it
+  // three rounds running with «`decision` is no kind of entry: one of principle, convention, decision, …», which
+  // reads as decision refused for being decision (contract `plan.gate.values`).
+  const h = await boot();
+  const s = await scene(h);
+  type Docs = Array<{ sections: Array<Record<string, unknown> & { sources: { sessions: Record<string, unknown> } }> } & Record<string, unknown>>;
+  const messageAt = (answer: Answer, path: string): string =>
+    (answer.body.errors as Array<{ path: string; message: string }>).find((error) => error.path === path)?.message ?? `(no error at ${path})`;
+
+  // Wrapped in backticks or quotes, spaces around: each passes, and what is stored is bare.
+  const wrapped = planOf(20);
+  const four = (wrapped.docs as Docs)[4];
+  four.sections[0].kind = ' `overview` ';
+  four.sections[2].sources.sessions.entryKinds = ['`decision`', '"pitfall"', '“convention”', '« `recipe` »'];
+  four.sections[2].sources.sessions.topics = ['`wiki`', "'sessions'"];
+  wrapped.newFields = [{ at: '`section`', name: 'evidenceWeight', why: 'the merge step orders material by it' }];
+  four.sections[1].extra = { evidenceWeight: 'decision > receipt' };
+  const passed = await draft(h, s, null, wrapped);
+  expectStatus(passed, 200, 'a draft whose closed-set values are wrapped in backticks or quotes');
+  assert.equal(passed.body.docs[4].sections[0].kind, 'overview');
+  assert.deepEqual(passed.body.docs[4].sections[2].sources.sessions.entryKinds, ['decision', 'pitfall', 'convention', 'recipe']);
+  assert.deepEqual(passed.body.docs[4].sections[2].sources.sessions.topics, ['wiki', 'sessions']);
+  assert.deepEqual(passed.body.newFields, [{ at: 'section', name: 'evidenceWeight', why: 'the merge step orders material by it' }]);
+
+  // Only the wrapping goes: a value that is no member is still refused, and named as a JSON string — its backticks,
+  // an invisible character, a space inside it all shown.
+  const refused = planOf(20);
+  const six = (refused.docs as Docs)[6];
+  six.sections[0].kind = '`essay`';
+  six.sections[2].sources.sessions.entryKinds = ['`dicision`', 'decision​', 'Decision', '`a` and `b`'];
+  six.sections[2].sources.sessions.topics = ['wiki ops'];
+  six.sections[2].sources.sessions.projects = [`\`${PROJECT}\``];
+  (refused.docs as Docs)[2]['title '] = 'Document 2';
+  const answer = await draft(h, s, 1, refused);
+  const at = 'plan.docs[6].sections[2].sources.sessions';
+  for (const [path, message] of [
+    ['plan.docs[6].sections[0].kind', '"essay" is not a section kind: one of overview,'],
+    [`${at}.entryKinds[0]`, '"dicision" is no kind of entry: one of principle, convention, decision, pitfall, recipe, concept'],
+    [`${at}.entryKinds[1]`, '"decision\\u200b" is no kind of entry'],
+    [`${at}.entryKinds[2]`, '"Decision" is no kind of entry'],
+    [`${at}.entryKinds[3]`, '"`a` and `b`" is no kind of entry'],
+    [`${at}.topics[0]`, '"wiki ops" is not a topic of this space'],
+    [`${at}.projects[0]`, `no project of this account is titled "\`${PROJECT}\`" or has that id`],
+    ['plan.docs[2].title ', '"title " is not a field of the plan schema'],
+  ]) {
+    expectGate(answer, path.endsWith('kind') || path.endsWith('title ') ? 'schema' : 'references', path, `the value at ${path}`);
+    assert.ok(messageAt(answer, path).startsWith(message), `${path} says ${JSON.stringify(messageAt(answer, path))}, want it to begin ${JSON.stringify(message)}`);
+  }
+
+  // The proposal of 10-01, sent again: its kind in backticks passes and is kept bare, as is a fact's kind.
+  expectStatus(await confirm(h, s, 1), 200, 'the owner confirms the first draft');
+  const knowledge = await entry(h, s.owner.id, s.spaceId);
+  const extended = docOf(5, 20);
+  (extended.sections as unknown[]).push({
+    title: 'Hand-back convention', kind: 'conventions', covers: 'Rebase onto main, name the branch and the sha, and do not merge.', length: 300,
+    sources: { sessions: { keywords: ['rebase', 'merge'], entryKinds: ['`decision`'], topics: ['`wiki`'], evidence: 'the owner saying how to hand work back' } },
+  });
+  const propose = (doc: Record<string, unknown>): Promise<Answer> => call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/proposals`, {
+    reason: 'A convention the plan has no section for.', change: { doc }, facts: [{ kind: '`entry`', id: knowledge }],
+  });
+  const made = await propose(extended);
+  expectStatus(made, 200, 'the proposal of 10-01, its kind in backticks');
+  assert.deepEqual(made.body.change.doc.sections[3].sources.sessions.entryKinds, ['decision']);
+  assert.deepEqual(made.body.change.doc.sections[3].sources.sessions.topics, ['wiki']);
+  assert.equal(made.body.facts[0].kind, 'entry');
+  const misspelt = docOf(5, 20);
+  (misspelt.sections as unknown[]).push({ title: 'Hand-back convention', kind: 'conventions', covers: 'x', length: 300, sources: { sessions: { entryKinds: ['`dicision`'] } } });
+  const wrong = await propose(misspelt);
+  expectGate(wrong, 'references', 'change.doc.sections[3].sources.sessions.entryKinds[0]', 'a misspelt kind in backticks');
+  assert.ok(messageAt(wrong, 'change.doc.sections[3].sources.sessions.entryKinds[0]').startsWith('"dicision" is no kind of entry: one of'));
+});
+
 test('a protected document stays as it was: a draft that changes it, drops it or protects another is refused', { skip }, async () => {
   const h = await boot();
   const s = await scene(h);

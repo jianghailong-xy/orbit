@@ -150,7 +150,8 @@ public enum SessionLifecycleState: String, Codable, Sendable {
 ///     the owner's precisely because nobody else will take it.
 ///   * `START_REQUEST` — a project nobody has started, whose coordinator has asked to start it: the
 ///     row says `Ready to start` (`StartProject.readyToStart`), over the "Start this project?" card
-///     in the conversation. Nobody is approving anything there either.
+///     in the conversation. Nobody is approving anything there either, and nothing is blocked on
+///     it, so the row is not one of the sessions that need you (`SessionGrouping.countsOnlyAStart`).
 ///
 /// A kind this client does not know decodes as ``unknown`` — and every reader treats it exactly like
 /// a missing one — because a runner and a control plane self-update on their own schedule and a

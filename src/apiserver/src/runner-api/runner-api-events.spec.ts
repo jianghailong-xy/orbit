@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import assert from 'node:assert/strict';
-import { renderRawQuery } from '../test-support/prisma-transaction-double';
+import { renderRawQuery, noSessionRequests } from '../test-support/prisma-transaction-double';
 import { test } from 'node:test';
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
@@ -94,6 +94,7 @@ function makeController(
     approval: {
       updateManyAndReturn: async () => [],
     },
+    sessionRequest: noSessionRequests(),
     conversationTurn: {
       findMany: async (args: { where: { sessionId: string; id: { in: string[] } } }) =>
         Object.entries(stored.turnContents ?? {})

@@ -1,0 +1,146 @@
+/* Mock-only stand-ins for the AntD pieces these boards draw (Tag, Button, Segmented, Switch, Modal,
+   Input, Checkbox) — AntD styles itself in JS, so the shipped index.css can't. Values follow
+   src/web/src/theme.ts (primary #3370ff, radius 6, Modal radius 10); the pool rows themselves are
+   the real .re-card / .pool-row classes from src/web/src/index.css. Not shipped code. */
+body.m { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "PingFang SC", "Noto Sans CJK SC", sans-serif; }
+.m-sheet { width: 1960px; }
+.page { width: 900px; }
+.m-stage.page-stage { padding: 14px 22px 22px; }
+.m-grid2 { gap: 26px; }
+.m-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 22px; align-items: start; }
+.m-notes { font-size: 13px; }
+.m-notes li > span:last-child { min-width: 0; }
+.m-h2 { font-size: 15px; font-weight: 650; margin: 26px 0 10px; }
+.m-tag-before { background: #fdeceb; color: #cf3b35; }
+.m-mark.red { outline-color: var(--error); }
+.m-mark.red > .m-n { background: var(--error); }
+.m-n.red { background: var(--error); }
+
+/* AntD Tag */
+.a-tag { border: 1px solid transparent; }
+.a-tag.green { border-color: #d9f2c4; }
+.a-tag.proc { border-color: #c7dbff; }
+.a-tag.orange { background: #fff7e6; color: #d46b08; border-color: #ffe0b0; }
+.a-tag.red { border-color: #ffd1cc; }
+
+/* AntD Button, small text/icon variants */
+.a-btn.primary { font-weight: 500; }
+.ibtn { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+        border-radius: 6px; color: var(--text-3); }
+.ibtn.danger { color: #f54a45; }
+.ibtn.hover { background: var(--bg-hover); }
+.ibtn svg { width: 15px; height: 15px; }
+
+/* provider tile: the OpenAI glyph on its dark tile, as ProviderTile draws it */
+.tile { flex: none; display: grid; place-items: center; color: #fff;
+        background: linear-gradient(135deg, #4b5158, #1f2226); }
+.tile svg { fill: currentColor; }
+.tile.t28 { width: 28px; height: 28px; border-radius: 7px; }
+.tile.t28 svg { width: 16px; height: 16px; }
+.tile.t26 { width: 26px; height: 26px; border-radius: 7px; }
+.tile.t26 svg { width: 15px; height: 15px; }
+.tile.t24 { width: 24px; height: 24px; border-radius: 6px; }
+.tile.t24 svg { width: 14px; height: 14px; }
+.tile.t18 { width: 18px; height: 18px; border-radius: 5px; }
+.tile.t18 svg { width: 10px; height: 10px; }
+.tile.lockt { background: var(--fill-muted); color: var(--text-3); border: 1px dashed var(--border); }
+.tile.keyt { background: linear-gradient(135deg, #6b7280, #4b5563); }
+
+/* who a credential runs for, under its name */
+.who { display: inline-flex; align-items: center; gap: 3px; color: var(--text-3); white-space: nowrap; }
+.who svg { width: 11px; height: 11px; flex: none; }
+.who.mine { color: var(--text-2); }
+.who.all { color: var(--success); }
+
+/* a row standing for accounts the viewer can't see into */
+.pool-row-locked .re-name { color: var(--text-2); }
+.pool-row-locked { background: var(--bg-subtle); }
+
+/* the pool page's subtitle line, with the pool's state first */
+.pool-sub { color: var(--text-3); font-size: 12px; }
+.pool-sub b { color: var(--text-2); font-weight: 500; }
+
+/* AntD Segmented */
+.seg { display: inline-flex; padding: 2px; border-radius: 6px; background: #f2f3f5; gap: 2px; }
+.seg-i { display: inline-flex; align-items: center; gap: 6px; padding: 2px 12px; border-radius: 4px;
+         font-size: 13px; line-height: 24px; color: var(--text-2); white-space: nowrap; }
+.seg-i.on { background: #fff; color: #3370ff; box-shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 1px 4px -1px rgba(0, 0, 0, .05); font-weight: 500; }
+.seg-i svg { width: 12px; height: 12px; }
+
+/* AntD Switch / Checkbox / Radio */
+.sw { flex: none; position: relative; width: 28px; height: 16px; border-radius: 8px; background: rgba(0, 0, 0, .25); margin-top: 3px; }
+.sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; }
+.sw.on { background: #3370ff; }
+.sw.on::after { left: 14px; }
+.cbx { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-1); }
+.cbx i { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--border); background: #fff; position: relative; flex: none; }
+.cbx.on i { background: #3370ff; border-color: #3370ff; }
+.cbx.on i::after { content: ''; position: absolute; left: 4.5px; top: 1.5px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.rdo { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--border); background: #fff; position: relative; margin-top: 2px; }
+.rdo.on { border-color: #3370ff; border-width: 5px; }
+
+/* AntD Input / tags input */
+.inp { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 32px; padding: 3px 8px;
+       border: 1px solid var(--border); border-radius: 6px; background: #fff; font-size: 13px; color: var(--text-1); }
+.inp.focus { border-color: #3370ff; box-shadow: 0 0 0 2px rgba(51, 112, 255, .1); }
+.inp .ph { color: var(--text-4); }
+.inp .tagv { display: inline-flex; align-items: center; gap: 4px; padding: 0 6px; border-radius: 4px;
+             background: var(--fill-muted); font-size: 12px; line-height: 22px; }
+.inp .tagv::after { content: '×'; color: var(--text-3); }
+.inp .caret { width: 1px; height: 16px; background: var(--text-1); }
+
+/* AntD Modal, drawn open */
+.modal { background: #fff; border-radius: 10px; box-shadow: 0 6px 16px rgba(0, 0, 0, .08), 0 3px 6px -4px rgba(0, 0, 0, .12), 0 9px 28px 8px rgba(0, 0, 0, .05);
+         padding: 20px 24px; border: 1px solid #eceef1; }
+.modal-h { display: flex; align-items: center; justify-content: space-between; margin: 0 0 14px;
+           font-size: 16px; font-weight: 600; color: var(--text-1); }
+.modal-h .x { color: var(--text-3); font-size: 18px; font-weight: 400; line-height: 1; }
+.modal-f { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.modal-backdrop { padding: 26px 24px; border-radius: 12px; background: rgba(0, 0, 0, .06); }
+
+/* "Add account": the two kinds of account, one press each */
+.opt { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1px solid var(--border);
+       border-radius: 10px; background: #fff; }
+.opt + .opt { margin-top: 10px; }
+.opt.on { border-color: #3370ff; background: var(--brand-tint); }
+.opt-t { font-size: 13.5px; font-weight: 600; color: var(--text-1); }
+.opt-s { margin-top: 2px; font-size: 12.5px; line-height: 1.6; color: var(--text-2); }
+.opt-s b { color: var(--text-1); font-weight: 600; }
+
+/* "Who can use it" card */
+.who-card .re-head { gap: 10px; }
+.who-mode { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-bottom: 1px solid var(--border-subtle); }
+.who-mode-h { font-size: 12px; color: var(--text-3); line-height: 1.55; }
+.who-foot { display: flex; gap: 8px; align-items: flex-start; padding: 10px 14px; font-size: 12px; line-height: 1.6;
+            color: var(--text-3); background: var(--bg-subtle); border-top: 1px solid var(--border-subtle); }
+.who-foot svg { flex: none; width: 13px; height: 13px; margin-top: 3px; color: var(--text-3); }
+.who-foot b { color: var(--text-2); font-weight: 600; }
+.who-warn { display: flex; gap: 10px; align-items: center; padding: 10px 14px; font-size: 12.5px; line-height: 1.6;
+            color: var(--text-2); background: var(--warning-bg); border-top: 1px solid var(--warning-border); }
+.who-warn > svg { flex: none; width: 15px; height: 15px; color: var(--warning-solid); }
+.who-warn b { color: var(--text-1); }
+.who-warn .a-btn { margin-left: auto; }
+.pool-person .runs { color: var(--text-3); }
+.pool-person .runs.all { color: var(--text-2); }
+.pool-head-count { margin-left: 6px; font-size: 11.5px; font-weight: 500; color: var(--text-3); }
+.pool-av.c1 { background: #3370ff; } .pool-av.c2 { background: #2ea121; } .pool-av.c3 { background: #e8590c; }
+.pool-av.c4 { background: #c2255c; }
+
+/* a dropdown drawn open under a row's action */
+.menu { position: absolute; right: 0; top: 30px; z-index: 3; min-width: 168px; padding: 4px; border-radius: 8px; background: #fff;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, .08), 0 3px 6px -4px rgba(0, 0, 0, .12), 0 9px 28px 8px rgba(0, 0, 0, .05); }
+.menu-i { padding: 5px 12px; border-radius: 4px; font-size: 13px; color: var(--text-1); white-space: nowrap; }
+.menu-i.danger { color: #f54a45; }
+.menu-i.hover { background: var(--bg-hover); }
+
+/* the review panel's callouts sit on the real page; keep their outline clear of the row's edge */
+.pool-detail .re-row { position: relative; }
+.a-btn.dangerline { color: #f54a45; border-color: #f54a45; }
+.a-btn svg { width: 13px; height: 13px; }
+.provider-back { display: inline-block; }
+/* A callout on a whole card: let its number out past the card's clipping, keeping the rounded corners. */
+.re-card.m-mark { overflow: visible; }
+.re-card.m-mark > .re-head { border-radius: 11px 11px 0 0; }
+.re-card.m-mark > .who-foot, .re-card.m-mark > .who-warn { border-radius: 0 0 11px 11px; }
+.pool-key-mask.open { overflow: visible; }
+.re-row.pool-row-locked { grid-template-columns: minmax(0, 1fr); }

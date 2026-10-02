@@ -283,7 +283,7 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 			// refuses to run in a session at all (cliSessionImport), and the capability document
 			// withholds it from a running agent for the same reason (HeadlessOnly), so there is no
 			// reader here to pre-approve it for.
-			for _, action := range []string{"create", "list", "search", "get", "await", "send", "interrupt", "merge", "end", "complete", "delete"} {
+			for _, action := range []string{"create", "list", "search", "get", "await", "send", "reply", "interrupt", "merge", "end", "complete", "delete"} {
 				rules = append(rules, "Bash("+command+" session "+action+" *)")
 			}
 			// The agent verbs ride the same gate and have no headless form: no service-token scope

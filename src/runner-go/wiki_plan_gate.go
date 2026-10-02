@@ -22,7 +22,10 @@ import (
 //               of the plan's, and every `→ 3.2` or `见 3.2` in the text names a document of this plan.
 //
 // Its errors carry the server's paths (`plan.docs[3].sections[1].sources.code[0].symbols[2]`), so one list
-// of errors — this gate's or the server's — is handed back to the model the same way.
+// of errors — this gate's or the server's — is handed back to the model the same way. As the server's, it
+// reads a closed-set value — a section's kind, an entry kind, a topic — with whatever backticks or quotes
+// wrap the whole of it taken off (wikiUnwrap), and names a value the model wrote as a JSON string
+// (wikiQuote), so what is wrong with it shows (contract `plan.gate.values`).
 
 // wikiPlanAssembled is one round's draft: the plan as it would be sent, which document each is, and what
 // the gate found.
@@ -75,10 +78,10 @@ func (r *wikiPlanRun) assemble() wikiPlanAssembled {
 	for i, cat := range r.cats {
 		path := fmt.Sprintf("plan.categories[%d]", i)
 		if !wikiSlugPattern.MatchString(cat.Key) || len(cat.Key) > 64 {
-			g.fail("schema", path+".key", "%s is not a key: lowercase letters and digits joined by single hyphens", cat.Key)
+			g.fail("schema", path+".key", "%s is not a key: lowercase letters and digits joined by single hyphens", wikiQuote(cat.Key))
 		}
 		if keys[cat.Key] {
-			g.fail("schema", path+".key", "%s is the key of an earlier category", cat.Key)
+			g.fail("schema", path+".key", "%s is the key of an earlier category", wikiQuote(cat.Key))
 		}
 		keys[cat.Key] = true
 		g.text(path+".title", cat.Title, wikiPlanTitleMaxChars, true)
@@ -98,7 +101,7 @@ func (r *wikiPlanRun) assemble() wikiPlanAssembled {
 	for i, unit := range r.units {
 		doc := g.doc(i, unit)
 		if slugs[doc.Slug] {
-			g.fail("schema", fmt.Sprintf("plan.docs[%d].slug", i), "%s is the slug of an earlier document", doc.Slug)
+			g.fail("schema", fmt.Sprintf("plan.docs[%d].slug", i), "%s is the slug of an earlier document", wikiQuote(doc.Slug))
 		}
 		slugs[doc.Slug] = true
 		if len(doc.Extra) > 0 {
@@ -190,7 +193,7 @@ func (g *wikiPlanGate) whole(slugs, keys map[string]bool) {
 		path := fmt.Sprintf("plan.moves[%d]", k)
 		slug, ok := r.baseIDs[move.From]
 		if !ok {
-			g.fail("protected", path, "moves §%d of %s, which the version revised has no document numbered", move.Section, move.From)
+			g.fail("protected", path, "moves §%d of %s, which the version revised has no document numbered", move.Section, wikiQuote(move.From))
 			continue
 		}
 		base := r.baseDocs[slug]
@@ -208,7 +211,7 @@ func (g *wikiPlanGate) whole(slugs, keys map[string]bool) {
 				"category — keep it where it is", move.Section, section.Title, move.From, section.Kind)
 		}
 		if move.Target == nil {
-			g.fail("protected", path, "moves §%d of %s to %s, which is no document of the new catalogue", move.Section, move.From, move.To)
+			g.fail("protected", path, "moves §%d of %s to %s, which is no document of the new catalogue", move.Section, move.From, wikiQuote(move.To))
 			continue
 		}
 		if move.Target.Cat >= len(cats) || !cats[move.Target.Cat].ForAgents {
@@ -243,11 +246,11 @@ func (g *wikiPlanGate) crossRefs(path, text string, refs map[string]string) stri
 	for _, id := range unknown {
 		if slug, ok := refs[id]; ok {
 			g.fail("references", path, "«%s» points at %s, which was `%s` and is no document of this plan any more: point at "+
-				"the document that covers it now, or drop the pointer", cutRunes(text, 80), id, slug)
+				"the document that covers it now, or drop the pointer", cutRunes(text, 80), wikiQuote(id), slug)
 			continue
 		}
 		g.fail("references", path, "«%s» points at %s, which is no document of this plan: name a document by its number in "+
-			"the catalogue, or drop the pointer", cutRunes(text, 80), id)
+			"the catalogue, or drop the pointer", cutRunes(text, 80), wikiQuote(id))
 	}
 	return out
 }
@@ -327,7 +330,7 @@ func (g *wikiPlanGate) doc(i int, unit *wikiPlanUnit) wikiPlanDoc {
 				now, ok := rename(id)
 				if !ok {
 					g.fail("references", fmt.Sprintf("%s.scopeOut[%d]", path, k), "«%s» leaves it to %s, which is no document of "+
-						"this plan: name the document it is left to by its number in the catalogue", cutRunes(item, 80), id)
+						"this plan: name the document it is left to by its number in the catalogue", cutRunes(item, 80), wikiQuote(id))
 					continue
 				}
 				for slug, sid := range g.a.slugIDs {
@@ -346,11 +349,11 @@ func (g *wikiPlanGate) doc(i int, unit *wikiPlanUnit) wikiPlanDoc {
 	if min, max, ok := wikiPlanRange(h.Length); ok {
 		doc.Length = wikiPlanLength{Min: min, Max: max}
 	} else if unit.HasBody || h.Length != "" {
-		g.fail("schema", path+".length", "篇幅 «%s» is not a length: write it as <a–b 字>", h.Length)
+		g.fail("schema", path+".length", "篇幅 %s is not a length: write it as <a–b 字>", wikiQuote(h.Length))
 	}
 	for _, line := range unit.Stray {
-		g.fail("schema", path, "«%s» is not a field of the plan: a document has 标题, 问题, 读者, 含, 不含 and 篇幅, then its "+
-			"sections — drop it", cutRunes(line, 80))
+		g.fail("schema", path, "%s is not a field of the plan: a document has 标题, 问题, 读者, 含, 不含 and 篇幅, then its "+
+			"sections — drop it", wikiQuote(cutRunes(line, 80)))
 	}
 	for j, s := range unit.Sections {
 		doc.Sections = append(doc.Sections, g.section(fmt.Sprintf("%s.sections[%d]", path, j), s, unit.Refs))
@@ -361,14 +364,14 @@ func (g *wikiPlanGate) doc(i int, unit *wikiPlanUnit) wikiPlanDoc {
 
 // section is one section of a document the model wrote, checked.
 func (g *wikiPlanGate) section(path string, s wikiPlanSectionDraft, refs map[string]string) wikiPlanSection {
-	out := wikiPlanSection{Title: s.Title, Kind: s.Kind}
-	if !contains(wikiPlanSectionKinds, s.Kind) {
-		g.fail("schema", path+".kind", "%s is not a section kind: one of %s", s.Kind, strings.Join(wikiPlanSectionKinds, ", "))
+	out := wikiPlanSection{Title: s.Title, Kind: wikiUnwrap(s.Kind)}
+	if !contains(wikiPlanSectionKinds, out.Kind) {
+		g.fail("schema", path+".kind", "%s is not a section kind: one of %s", wikiQuote(out.Kind), strings.Join(wikiPlanSectionKinds, ", "))
 	}
 	if min, _, ok := wikiPlanRange(s.Length); ok {
 		out.Length = min
 	} else {
-		g.fail("schema", path+".length", "字数 «%s» is not a number of characters", s.Length)
+		g.fail("schema", path+".length", "字数 %s is not a number of characters", wikiQuote(s.Length))
 	}
 	out.Covers = g.crossRefs(path+".covers", s.Covers, refs)
 	out.Sources.Docs = s.Docs
@@ -377,7 +380,8 @@ func (g *wikiPlanGate) section(path string, s wikiPlanSectionDraft, refs map[str
 		out.Sources.Contracts = append(out.Sources.Contracts, wikiPlanContractSource{Path: c})
 	}
 	if c := s.Sessions; c != nil {
-		sessions := &wikiPlanSessions{Projects: c.Projects, Keywords: c.Keywords, AnchorPaths: c.AnchorPaths, EntryKinds: c.EntryKinds, Topics: c.Topics, Evidence: c.Evidence}
+		sessions := &wikiPlanSessions{Projects: c.Projects, Keywords: c.Keywords, AnchorPaths: c.AnchorPaths, EntryKinds: wikiUnwrapAll(c.EntryKinds),
+			Topics: wikiUnwrapAll(c.Topics), Evidence: c.Evidence}
 		if c.Since != "" {
 			since := c.Since
 			sessions.Since = &since
@@ -387,14 +391,14 @@ func (g *wikiPlanGate) section(path string, s wikiPlanSectionDraft, refs map[str
 			sessions.Until = &until
 		}
 		for _, part := range c.Stray {
-			g.fail("schema", path+".sources.sessions", "«%s» is not a part of a session condition: it has 项目, 时间, 关键词, 锚点, "+
-				"kind, 主题 and 要找 — drop it", cutRunes(part, 80))
+			g.fail("schema", path+".sources.sessions", "%s is not a part of a session condition: it has 项目, 时间, 关键词, 锚点, "+
+				"kind, 主题 and 要找 — drop it", wikiQuote(cutRunes(part, 80)))
 		}
 		out.Sources.Sessions = sessions
 	}
 	for _, line := range s.Stray {
-		g.fail("schema", path, "«%s» is not a line of a section: a section has 讲什么, 文档, 代码, 契约 and 会话 lines and "+
-			"nothing else — drop it", cutRunes(line, 80))
+		g.fail("schema", path, "%s is not a line of a section: a section has 讲什么, 文档, 代码, 契约 and 会话 lines and "+
+			"nothing else — drop it", wikiQuote(cutRunes(line, 80)))
 	}
 	g.sources(path, out.Sources, true)
 	return out
@@ -403,7 +407,7 @@ func (g *wikiPlanGate) section(path string, s wikiPlanSectionDraft, refs map[str
 // limits is the server's schema check of one document's fields, run here first.
 func (g *wikiPlanGate) limits(path string, doc wikiPlanDoc) {
 	if !wikiSlugPattern.MatchString(doc.Slug) || len(doc.Slug) > 64 {
-		g.fail("schema", path+".slug", "%s is not a slug: lowercase letters and digits joined by single hyphens", doc.Slug)
+		g.fail("schema", path+".slug", "%s is not a slug: lowercase letters and digits joined by single hyphens", wikiQuote(doc.Slug))
 	}
 	g.text(path+".title", doc.Title, wikiPlanTitleMaxChars, true)
 	g.text(path+".question", doc.Question, wikiPlanQuestionMaxChars, true)
@@ -436,7 +440,7 @@ func (g *wikiPlanGate) limits(path string, doc wikiPlanDoc) {
 		if c := s.Sources.Sessions; c != nil {
 			for _, date := range []*string{c.Since, c.Until} {
 				if date != nil && !wikiPlanDateOnly.MatchString(*date) {
-					g.fail("schema", sp+".sources.sessions", "%s is not a date written YYYY-MM-DD", *date)
+					g.fail("schema", sp+".sources.sessions", "%s is not a date written YYYY-MM-DD", wikiQuote(*date))
 				}
 			}
 			if c.Since != nil && c.Until != nil && *c.Until < *c.Since {
@@ -484,14 +488,14 @@ func (g *wikiPlanGate) sources(path string, s wikiPlanSources, fail bool) {
 		p := fmt.Sprintf("%s.sources.docs[%d]", path, k)
 		g.a.repo.Checked++
 		if !r.repo.hasPath(d.Path) {
-			g.miss("file", d.Path, p+".path", fail, "%s is no file of the repository at %s: name a document of the documents' list", d.Path, sha)
+			g.miss("file", d.Path, p+".path", fail, "%s is no file of the repository at %s: name a document of the documents' list", wikiQuote(d.Path), sha)
 			continue
 		}
 		if d.Section != nil && strings.TrimSpace(*d.Section) != "" {
 			g.a.repo.Checked++
 			if !r.repo.hasDocSection(d.Path, *d.Section) {
-				g.miss("docSection", d.Path+" § "+*d.Section, p+".section", fail, "%s has no section «%s» at %s; its sections are: %s",
-					d.Path, *d.Section, sha, wikiPlanOneOf(r.repo.headingsOf(d.Path, 30)))
+				g.miss("docSection", d.Path+" § "+*d.Section, p+".section", fail, "%s has no section %s at %s; its sections are: %s",
+					d.Path, wikiQuote(*d.Section), sha, wikiPlanOneOf(r.repo.headingsOf(d.Path, 30)))
 			}
 		}
 	}
@@ -500,14 +504,14 @@ func (g *wikiPlanGate) sources(path string, s wikiPlanSources, fail bool) {
 		g.a.repo.Checked++
 		if !r.repo.hasPath(c.Path) {
 			g.miss("file", c.Path, p+".path", fail, "%s is no file or directory of the repository at %s: name one the "+
-				"repository's structure lists", c.Path, sha)
+				"repository's structure lists", wikiQuote(c.Path), sha)
 			continue
 		}
 		for m, symbol := range c.Symbols {
 			g.a.repo.Checked++
 			if !r.repo.hasSymbol(c.Path, symbol) {
 				g.miss("symbol", c.Path+": "+symbol, fmt.Sprintf("%s.symbols[%d]", p, m), fail, "%s is no symbol of %s at %s; it "+
-					"declares: %s", symbol, c.Path, sha, wikiPlanOneOf(r.repo.symbolsOf(c.Path, 40)))
+					"declares: %s", wikiQuote(symbol), c.Path, sha, wikiPlanOneOf(r.repo.symbolsOf(c.Path, 40)))
 			}
 		}
 	}
@@ -515,7 +519,7 @@ func (g *wikiPlanGate) sources(path string, s wikiPlanSources, fail bool) {
 		g.a.repo.Checked++
 		if !r.repo.hasPath(c.Path) {
 			g.miss("contract", c.Path, fmt.Sprintf("%s.sources.contracts[%d].path", path, k), fail, "%s is no file of the "+
-				"repository at %s: name one the contracts list has", c.Path, sha)
+				"repository at %s: name one the contracts list has", wikiQuote(c.Path), sha)
 		}
 	}
 	if s.Sessions == nil || !fail {
@@ -533,10 +537,10 @@ func (g *wikiPlanGate) sources(path string, s wikiPlanSources, fail bool) {
 			switch n := titles[project]; {
 			case ids[project]:
 			case n == 0:
-				g.fail("references", fmt.Sprintf("%s.projects[%d]", sp, m), "no project is titled «%s»: name a project exactly "+
-					"as the projects' list writes it, or leave it out", project)
+				g.fail("references", fmt.Sprintf("%s.projects[%d]", sp, m), "no project is titled %s: name a project exactly "+
+					"as the projects' list writes it, or leave it out", wikiQuote(project))
 			case n > 1:
-				g.fail("references", fmt.Sprintf("%s.projects[%d]", sp, m), "%d projects are titled «%s»: leave it out", n, project)
+				g.fail("references", fmt.Sprintf("%s.projects[%d]", sp, m), "%d projects are titled %s: leave it out", n, wikiQuote(project))
 			}
 		}
 	}
@@ -546,12 +550,12 @@ func (g *wikiPlanGate) sources(path string, s wikiPlanSources, fail bool) {
 	}
 	for m, topic := range s.Sessions.Topics {
 		if !topics[topic] {
-			g.fail("references", fmt.Sprintf("%s.topics[%d]", sp, m), "%s is not a topic of this space: %s", topic, r.online.topicsBrief())
+			g.fail("references", fmt.Sprintf("%s.topics[%d]", sp, m), "%s is not a topic of this space: %s", wikiQuote(topic), r.online.topicsBrief())
 		}
 	}
 	for m, kind := range s.Sessions.EntryKinds {
 		if !contains(wikiEntryKinds, kind) {
-			g.fail("references", fmt.Sprintf("%s.entryKinds[%d]", sp, m), "%s is no kind of entry: one of %s", kind, strings.Join(wikiEntryKinds, ", "))
+			g.fail("references", fmt.Sprintf("%s.entryKinds[%d]", sp, m), "%s is no kind of entry: one of %s", wikiQuote(kind), strings.Join(wikiEntryKinds, ", "))
 		}
 	}
 }

@@ -104,6 +104,14 @@ export const RETRYABLE_API_ERROR_MARKERS = [
   // A 529 body says `overloaded_error`; the status check already covers that one, but the
   // runtime also prints the bare word when it has no response to read a status off.
   'overloaded',
+  // The runtime's last resort failing too. When a stream dies, Claude Code asks again without
+  // streaming, and when that answer is not a reply either it says "API returned an empty or
+  // malformed response (HTTP 200) — check for a proxy or gateway intercepting the request. …
+  // This was the non-streaming retry of streaming request …, which failed with: watchdog; 0
+  // stream events received." Seen on DeepSeek (2026-10-02), whose stream stayed silent until
+  // the runtime's watchdog gave up on it. The phrase is the runtime's name for this one error
+  // and is printed nowhere else; the "(HTTP 200)" is the fallback's, not a leading status.
+  'empty or malformed response',
 ];
 
 /**

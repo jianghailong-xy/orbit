@@ -18,22 +18,23 @@ final class Phase2LogicTests: XCTestCase {
 
     // MARK: remember-rule
 
-    func testRememberRule() {
-        let bash = Approvals.rememberRule(toolName: "Bash",
-                                          input: .object(["command": .string("git commit -m x")]))
-        XCTAssertEqual(bash, PermissionRule(toolName: "Bash", ruleContent: "git commit:*"))
-        XCTAssertEqual(bash.map(Approvals.rememberLabel), "git commit")
+    func testRememberRules() {
+        let bash = Approvals.rememberRules(toolName: "Bash",
+                                           input: .object(["command": .string("git commit -m x")]))
+        XCTAssertEqual(bash, [PermissionRule(toolName: "Bash", ruleContent: "git commit:*")])
+        XCTAssertEqual(Approvals.rememberLabel(bash), "git commit")
 
-        XCTAssertNil(Approvals.rememberRule(toolName: "AskUserQuestion", input: .null))
-        XCTAssertNil(Approvals.rememberRule(toolName: "ExitPlanMode", input: .null))
-        XCTAssertNil(Approvals.rememberRule(toolName: "Bash",
-                                            input: .object(["command": .string("|| true")])))
-        XCTAssertNil(Approvals.rememberRule(toolName: "Bash",
-                                            input: .object(["command": .string("/bin/bash -lc 'git status'")])))
+        XCTAssertEqual(Approvals.rememberRules(toolName: "AskUserQuestion", input: .null), [])
+        XCTAssertEqual(Approvals.rememberRules(toolName: "ExitPlanMode", input: .null), [])
+        XCTAssertEqual(Approvals.rememberRules(toolName: "Bash",
+                                               input: .object(["command": .string("(cd /x && ls)")])), [])
+        XCTAssertEqual(Approvals.rememberRules(toolName: "Bash",
+                                               input: .object(["command": .string("/bin/bash -lc 'git status'")])), [])
+        XCTAssertEqual(Approvals.rememberRules(toolName: "Bash", input: .null), [])
 
-        let edit = Approvals.rememberRule(toolName: "Edit", input: .null)
-        XCTAssertEqual(edit, PermissionRule(toolName: "Edit"))
-        XCTAssertEqual(edit.map(Approvals.rememberLabel), "Edit")
+        let edit = Approvals.rememberRules(toolName: "Edit", input: .null)
+        XCTAssertEqual(edit, [PermissionRule(toolName: "Edit")])
+        XCTAssertEqual(Approvals.rememberLabel(edit), "Edit")
     }
 
     // MARK: AskUserQuestion parsing

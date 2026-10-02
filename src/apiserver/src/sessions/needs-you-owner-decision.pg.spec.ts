@@ -57,9 +57,11 @@
  *       drawn only once the coordinator has ASKED (`project_request_start`) — so the paired
  *       negatives are the same project before a single task is filed under it, and then with a task
  *       and no request, which is the state the card used to be inferred from. The request lights the
- *       row as `START_REQUEST` ("Ready to start"). Starting it at the door puts the row back; an edit
- *       that moves the digest of the started project asks again, as a project decision; and a press
- *       the door refuses leaves the count standing, because a count is not a credential.
+ *       row as `START_REQUEST` ("Ready to start") and NOT the workspace tally: nothing is blocked on
+ *       a start, so it is not a session that needs you. Starting it at the door puts the row back; an
+ *       edit that moves the digest of the started project asks again, as a project decision, and that
+ *       one does light the tally; and a press the door refuses leaves the count standing, because a
+ *       count is not a credential.
  *
  *   (8) Its own fixture: a project that LOOKS finished — every criterion met, every task settled,
  *       nothing open or landing — whose coordinator was handed it (project closing, D5) and did
@@ -885,7 +887,10 @@ test('the badge counts the standard set waiting to be confirmed, and falls when 
       'the PARKED coordinator row says somebody is waiting on it — the state this card left dark');
     assert.equal(row.status, RunStatus.AWAITING_INPUT, 'and it is parked, not generating');
     assert.equal(row.waitingKind, 'START_REQUEST', 'and it names what is waiting: a start');
-    assert.equal(await needsYou(), 1, 'and the workspace tally lights with it');
+    // …and that is all it is. The owner starts it when they choose and nothing is blocked until
+    // they do, so it is not one of the sessions that need you (the account owner's report,
+    // 2026-10-02). (7c) lights this same tally off this same row once a real question is asked.
+    assert.equal(await needsYou(), 0, 'a project ready to start lit the workspace tally');
 
     assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), [{
       sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'START_REQUEST',
@@ -898,7 +903,7 @@ test('the badge counts the standard set waiting to be confirmed, and falls when 
     const recorded = await confirm();
     assert.equal(recorded.state, 'CONFIRMED', 'the door recorded the version that stood');
     assert.equal(await countOn(f.coordinatorSessionId), 0, 'and the question the row was lit for is answered');
-    assert.equal(await needsYou(), 0, 'and the workspace tally falls with it');
+    assert.equal(await needsYou(), 0, 'and the workspace tally is still dark');
     assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), []);
   });
 
@@ -911,6 +916,7 @@ test('the badge counts the standard set waiting to be confirmed, and falls when 
       'adding a criterion is not a loosening, so it is applied rather than held');
     assert.equal(await countOn(f.coordinatorSessionId), 1,
       'the set moved under the confirmation, so the owner is asked again');
+    assert.equal(await needsYou(), 1, 'and this one is a question, so the workspace tally lights');
     assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), [{
       sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'PROJECT_DECISION',
     }]);
