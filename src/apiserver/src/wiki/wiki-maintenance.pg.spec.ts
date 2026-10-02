@@ -1921,14 +1921,23 @@ const sessionsOf = (h: Harness, taskId: string) => h.prisma.session.findMany({
 test('the dispatcher alone never starts a maintenance task whose session died — no edge, no project, its runAt spent — and starts the rerun the settling schedules, once', { skip }, async () => {
   const h = await boot();
   const s = await maintainedSpace(h, 'dispatcher');
-  // The maintenance workspace's runner, online: wikova on 2026-10-02.
-  await h.sql.query(`UPDATE "workspace" SET "runner_id" = $1 WHERE "id" = $2`, [s.machine.id, s.workspaceId]);
-  await h.sql.query(`UPDATE "runner" SET "status" = 'ONLINE', "last_heartbeat_at" = now() WHERE "id" = $1`, [s.machine.id]);
   const sweep = dispatcher(h);
   const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
   const made = await consider(h, s, hintOf([sessions[0]!]));
-  assert.equal(made.made, true);
+  assert.equal(made.made, true, JSON.stringify(made));
   if (!made.made) return;
+  // What the dispatch needs that the space's fixture does not lay down: the provider the task is pinned to,
+  // configured — a dispatch refuses one the owner does not have — and the workspace's runner, online: wikova
+  // on 2026-10-02. Written here, after the task was made, so that no plan job asks for the list first.
+  await h.prisma.modelProvider.create({
+    data: {
+      slug: 'local-vllm', label: 'Local vLLM', runtime: 'claude', baseUrl: 'http://127.0.0.1:8000',
+      apiKeyEnc: encryptSecret(`vllm-key-${randomUUID()}`), models: [{ value: 'qwen3.8-27b-fp8', label: 'Qwen3.8 27B', contextWindow: 131072 }],
+      defaultModel: 'qwen3.8-27b-fp8', enabled: true, ownerId: s.owner.id,
+    },
+  });
+  await h.sql.query(`UPDATE "workspace" SET "runner_id" = $1 WHERE "id" = $2`, [s.machine.id, s.workspaceId]);
+  await h.sql.query(`UPDATE "runner" SET "status" = 'ONLINE', "last_heartbeat_at" = now() WHERE "id" = $1`, [s.machine.id]);
 
   // Made with runAt now, it is started by the scheduled sweep, as 01a0f9ea was at 00:01:31: one session, the
   // runAt spent, and the one receipt the task will ever have, `sched:<task>:0`.
