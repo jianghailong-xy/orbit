@@ -58,7 +58,10 @@ public extension Session {
             // DTO. It travels with the status because it qualifies it: the summary that turns a
             // row FAILED is the same one that has to say the failure is being retried, and the
             // summary that ends the retry is what stops the row saying so.
-            retryAt: summary.retryAt
+            retryAt: summary.retryAt,
+            // Absent and null differ here too: a move out of a folder reaches the other clients as
+            // a null, while an older control plane that never sends the key leaves the row's.
+            folderId: summary.folderId
         )
     }
 
@@ -66,6 +69,13 @@ public extension Session {
     /// the server's `session.updated` (and the next list snapshot) confirm it. See `AppModel.renameSession`.
     func settingTitle(_ title: String) -> Session {
         merging(title: title)
+    }
+
+    /// File this row in a folder (nil: in none) before the server confirms the move, so the list and
+    /// the Move panel show it there at once — and, written back with the folder it had, put it back
+    /// when the server refuses. See `AppModel.moveSession`.
+    func settingFolder(_ folderID: String?) -> Session {
+        merging(folderId: .some(folderID))
     }
 
     /// Apply only the projected Project relation. This is safe even for Completed/Trash rows that
@@ -119,7 +129,9 @@ public extension Session {
                          projectTitle: String?? = nil,
                          // Doubly optional so a caller can clear it: `nil` keeps the row's value,
                          // `.some(nil)` writes null. Every other field here means "keep" by nil.
-                         retryAt: String?? = nil) -> Session {
+                         retryAt: String?? = nil,
+                         // Doubly optional for the same reason: `.some(nil)` is "in no folder".
+                         folderId: String?? = nil) -> Session {
         let mergedProjectId = projectId ?? self.projectId
         let mergedProjectTitle = mergedProjectId == nil ? nil : (projectTitle ?? self.projectTitle)
         return Session(id: id,
@@ -176,6 +188,7 @@ public extension Session {
                 claudeAccount: claudeAccount,
                 claudeAccountPinned: claudeAccountPinned,
                 awaitingReplyFrom: awaitingReplyFrom ?? self.awaitingReplyFrom,
-                owesReplyTo: owesReplyTo ?? self.owesReplyTo)
+                owesReplyTo: owesReplyTo ?? self.owesReplyTo,
+                folderId: folderId ?? self.folderId)
     }
 }

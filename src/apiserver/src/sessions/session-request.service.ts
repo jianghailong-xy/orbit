@@ -5,16 +5,18 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { CreatorType, type SessionRequest } from '@prisma/client';
+import { CreatorType, Prisma, type SessionRequest } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { uuidToBase62, type SessionRequestView } from '@orbit/shared';
 
+import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { derivedUuid } from '../projects/project-dispatch-identity';
 import { RealtimeService } from '../realtime/realtime.service';
 import { sessionHasEnded } from '../runner-api/background-job-wake';
 import {
   attachReplyToTurn,
+  awaitsAutoRetry,
   holdReply,
   readSessionRequestView,
   replyToSessionRequest,
@@ -31,9 +33,10 @@ import { SessionNotSendable, SessionsService } from './sessions.service';
 
 /**
  * Where a request's outcome went (contract §4.2, §4.3): onto a new reply turn of the asker (QUEUED),
- * onto one already queued (MERGED), kept on the row because the asker had ended (HELD) — or
- * somewhere another pass had already put it (ALREADY). DEFERRED: nowhere yet, because the hand-off
- * failed; the outcome is safe on its row and the request worker hands it back on its next pass.
+ * onto one already queued (MERGED), kept on the row because the asker had ended or is waiting on its
+ * auto-retry (HELD) — or somewhere another pass had already put it (ALREADY). DEFERRED: nowhere yet,
+ * because the hand-off failed; the outcome is safe on its row and the request worker hands it back on
+ * its next pass.
  */
 export type SessionReplyHandOff = 'QUEUED' | 'MERGED' | 'HELD' | 'ALREADY' | 'DEFERRED';
 
@@ -41,6 +44,9 @@ export type SessionReplyHandOff = 'QUEUED' | 'MERGED' | 'HELD' | 'ALREADY' | 'DE
 export function sessionReplyCommentId(requestId: string): string {
   return derivedUuid(`session-request:v1:reply-comment:${requestId}`);
 }
+
+/** An auto-retry was armed on the asker after the hand-off last looked: the look is taken again. */
+class AskerAwaitsRetry extends Error {}
 
 /**
  * The verbs of a session request that act on more than one session: `session_reply`, and handing an
@@ -135,12 +141,31 @@ export class SessionRequestService {
    * it ever is, and said on the task it ran, in a comment keyed by the request so saying it again
    * writes nothing.
    *
+   * An asker a transient failure stopped with an auto-retry armed has not ended (§8 criterion 17,
+   * `awaitsAutoRetry`), and is not handed a reply turn either: a new turn disarms the retry, and the
+   * message the failure killed would never be re-sent. The outcome is held for the retry's turn, with
+   * nothing said on the task (`holdForRetry`); if the retry is given up instead, migration 0352 marks
+   * it and the request worker says it there (`commentForStoppedAsker`).
+   *
    * Publishes both sessions' rows when it moved anything: the asker stops waiting, the recipient stops
    * owing, and both clients' request cards read the state again.
    */
   async handOff(requestId: string): Promise<SessionReplyHandOff> {
+    // Twice at most: once more when a retry was armed between the look and the turn (below).
+    for (let attempt = 0; ; attempt++) {
+      const handedOff = await this.handOffOnce(requestId, attempt === 0);
+      if (handedOff !== 'RETRY_ARMED') return handedOff;
+    }
+  }
+
+  private async handOffOnce(
+    requestId: string,
+    mayLookAgain: boolean,
+  ): Promise<SessionReplyHandOff | 'RETRY_ARMED'> {
     const request = await this.prisma.sessionRequest.findUnique({ where: { id: requestId } });
     if (!request || request.state === 'OPEN' || request.replyClientTurnId || request.replyHeldAt) return 'ALREADY';
+    const parked = await this.holdForRetry(request);
+    if (parked) return parked;
     const clientTurnId = `${SESSION_REPLY_TURN_PREFIX}${request.id}:${randomUUID().slice(0, 8)}`;
     let merged = false;
     try {
@@ -153,6 +178,9 @@ export class SessionRequestService {
             if (sessionHasEnded(asker) || asker.cancelRequestedAt) {
               throw new SessionNotSendable('the session has ended');
             }
+            // A retry armed since the look above — a quota that ran out a moment ago. The look is
+            // taken again, under the lock it needs.
+            if (mayLookAgain && awaitsAutoRetry(asker)) throw new AskerAwaitsRetry();
             const queued = await undeliveredReplyTurn(tx, request.fromSessionId);
             merged = queued !== null;
             await attachReplyToTurn(tx, request.id, queued?.clientTurnId ?? clientTurnId);
@@ -162,6 +190,7 @@ export class SessionRequestService {
       );
     } catch (error) {
       if (error instanceof SessionReplyHandedOff) return 'ALREADY';
+      if (error instanceof AskerAwaitsRetry) return 'RETRY_ARMED';
       // The asker cannot be written to: it ended, went to Trash or is being cancelled (Conflict), it
       // is gone (Not Found), or its conversation refuses a new turn for any other reason of state
       // (Forbidden, Bad Request) — the set `criteria-decision-reply.ts` treats as "not a turn, then".
@@ -197,22 +226,86 @@ export class SessionRequestService {
   }
 
   /**
+   * §8 criterion 17: an asker a transient failure stopped, with its auto-retry armed, keeps the outcome
+   * for the retry's turn — held, and its task told nothing. Null when the asker is not waiting on one.
+   *
+   * Decided under the asker's row lock, FOR SHARE, which an UPDATE of that row waits for: a retry given
+   * up at the same moment either committed first — seen here, so the outcome goes the way any other
+   * does — or commits after this hold, and migration 0352's trigger finds the outcome held and marks it
+   * for the request worker. Either way, an outcome held for a retry that never comes is said on the task.
+   */
+  private async holdForRetry(request: SessionRequest): Promise<'HELD' | 'ALREADY' | null> {
+    const held = await withTransactionRetry(this.prisma, async (tx) => {
+      await tx.$queryRaw(Prisma.sql`
+        SELECT 1 FROM "session"
+         WHERE "id" = ${request.fromSessionId}::uuid AND "owner_id" = ${request.ownerId}::uuid
+         FOR SHARE
+      `);
+      const asker = await tx.session.findFirst({
+        where: { id: request.fromSessionId, ownerId: request.ownerId },
+        select: {
+          status: true, retryAt: true, cancelRequestedAt: true, completedAt: true, archivedAt: true, deletedAt: true,
+        },
+      });
+      if (!asker || !awaitsAutoRetry(asker)) return null;
+      return holdReply(tx, request.id);
+    }, loggedRetry(this.log, 'sessionRequests.holdForRetry'));
+    if (held === null) return null;
+    if (!held) return 'ALREADY';
+    this.publish(request);
+    return 'HELD';
+  }
+
+  /**
+   * The request worker's, for an outcome migration 0352 marked: held for an asker that has since
+   * stopped for good — the retry it waited on was given up, or it ended — so there is no next turn to
+   * say it on, and §4.3 says it on the task the asker ran. The mark is cleared by a compare-and-set
+   * once that is done; the comment is keyed by the request, so a pass that does it twice writes it once.
+   * Answers whether this call cleared the mark.
+   */
+  async commentForStoppedAsker(requestId: string): Promise<boolean> {
+    const request = await this.prisma.sessionRequest.findUnique({ where: { id: requestId } });
+    if (!request?.replyCommentDueAt || request.replyClientTurnId) return false;
+    const asker = await this.prisma.session.findFirst({
+      where: { id: request.fromSessionId, ownerId: request.ownerId },
+      select: { title: true, taskId: true },
+    });
+    if (asker?.taskId) await this.commentOnAskerTask(request, { title: asker.title, taskId: asker.taskId }, 'STOPPED');
+    const { count } = await this.prisma.sessionRequest.updateMany({
+      where: { id: request.id, replyCommentDueAt: request.replyCommentDueAt, replyClientTurnId: null },
+      data: { replyCommentDueAt: null },
+    });
+    return count === 1;
+  }
+
+  /**
    * §4.3: the asker ended before its request came to anything, so the outcome is said where whoever
    * runs its task next will read it. Written before the hold that marks the hand-off done, and keyed by
    * the request, so a hand-off cut off between the two writes it again as nothing. An asker that ran no
    * task, or is gone, has nowhere to be told — and one that has NOT ended, whose conversation refused
-   * the turn for some other reason of its state, reads the outcome on its next turn instead.
+   * the turn for some other reason of its state, reads the outcome on its next turn instead. So does one
+   * waiting on its auto-retry (§8 criterion 17): it has not ended either.
    */
   private async commentIfAskerEnded(request: SessionRequest): Promise<void> {
     const asker = await this.prisma.session.findFirst({
       where: { id: request.fromSessionId, ownerId: request.ownerId },
       select: {
-        title: true, taskId: true, status: true, endReason: true, cancelRequestedAt: true,
+        title: true, taskId: true, status: true, endReason: true, cancelRequestedAt: true, retryAt: true,
         completedAt: true, archivedAt: true, deletedAt: true,
       },
     });
     if (!asker?.taskId) return;
     if (!sessionHasEnded(asker) && !asker.cancelRequestedAt) return;
+    if (awaitsAutoRetry(asker)) return;
+    await this.commentOnAskerTask(request, { title: asker.title, taskId: asker.taskId }, 'ENDED');
+  }
+
+  /** §4.3's comment itself, on the task the asker ran, keyed by the request. */
+  private async commentOnAskerTask(
+    request: SessionRequest,
+    asker: { title: string; taskId: string },
+    why: 'ENDED' | 'STOPPED',
+  ): Promise<void> {
     const task = await this.prisma.task.findFirst({
       where: { id: asker.taskId, ownerId: request.ownerId },
       select: { id: true, assigneeId: true, creatorType: true, creatorId: true },
@@ -223,7 +316,9 @@ export class SessionRequestService {
       select: { id: true, title: true },
     });
     const body = [
-      `会话「${asker.title}」发出的会话间请求有了结局，但它在那之前已经结束；平台不会为了送回信去复活一段已经结束的对话，所以把结局记在这里。`,
+      why === 'ENDED'
+        ? `会话「${asker.title}」发出的会话间请求有了结局，但它在那之前已经结束；平台不会为了送回信去复活一段已经结束的对话，所以把结局记在这里。`
+        : `会话「${asker.title}」发出的会话间请求有了结局，回信原本留到它的下一轮补上；但它已经停下，不会再有下一轮（它等着的自动重试被放弃了，或会话已经结束）。平台不会为了送回信去复活一段对话，所以把结局记在这里。`,
       '',
       sessionReplyBlock(request, recipient),
     ].join('\n');

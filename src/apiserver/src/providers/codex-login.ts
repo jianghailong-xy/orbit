@@ -1,8 +1,8 @@
 import type { PlanUsageSnapshot } from '@orbit/shared';
 
 /**
- * The account a codex login pool runs on: the owner's own ChatGPT/Codex subscription login, signed in by
- * this server with the official codex CLI and held encrypted (migration 0323,
+ * The accounts a codex login pool holds: each one the owner's own ChatGPT/Codex subscription login, signed
+ * in by this server with the official codex CLI and held encrypted (migration 0323,
  * docs/codex-shared-pool-design.md §2.4–§2.5 in this direction). Nothing in this file holds a token for
  * longer than the call that read it, and nothing it builds carries one: what a response shows of an
  * account is its email and `maskedAccount`'s last four characters.

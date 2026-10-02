@@ -43,6 +43,7 @@ import {
 import { requestPeersLine } from '../lib/sessionRequest';
 import { settleThinking } from '../lib/thinkingDraft';
 import {
+  NEAR_BOTTOM,
   READER_INPUT_GRACE_MS,
   TAIL_SAMPLE_ZERO,
   pinnedToTail,
@@ -177,7 +178,14 @@ import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import { ProjectStartedCard } from './ProjectStartedCard';
 import { SessionMessageCard } from './SessionMessageCard';
-import { parseWatchWake, watchingCountWord, watchingWord } from '../lib/watches';
+import {
+  parseWatchWake,
+  sessionWatching,
+  watchingCountWord,
+  watchingSessions,
+  watchingWord,
+  type SessionWatching,
+} from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { returnsToComposer } from '../lib/queuedTurnRestore';
 import type { BgShell } from '../lib/backgroundShells';
@@ -219,6 +227,7 @@ import {
   getSessionEventPageAfter,
   getSessionEventPageAround,
   getSessionRetryMessage,
+  resendSessionRetryMessage,
   type TranscriptAroundPage,
   renameSession,
   restoreSession,
@@ -317,6 +326,7 @@ import {
   type AccountEngine,
 } from '@orbit/shared';
 import { lastTypedUserMessage } from '../lib/deliveredMessage';
+import { compatibleUuid } from '../lib/uuid';
 import { planUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
@@ -747,6 +757,11 @@ const LOAD_OLDER_AT = 400;
 // deepest session in this deployment, so it bounds a runaway without being a working limit. A
 // session deeper than that keeps the control, and a second press carries on from where it left.
 const JUMP_TO_START_PAGES = 30;
+// How long a pinned transcript's tail has to sit out of view, with no content update in between,
+// before the jump-to-bottom button offers it anyway (`stranded`; the clients' ConsoleView waits the
+// same). The follow a content update triggers lands just after the rows grew, and the gap read in
+// between — the normal state while a reply streams — must not flash the button.
+const STRANDED_AFTER_MS = 400;
 // What the sticky bar calls a turn the person typed. A watch's wake carries its own label on its card
 // instead (`data-sticky-label`), since saying this above a card reading "not typed by you" is the
 // screen contradicting itself — which is what the account owner photographed on 2026-09-17.
@@ -874,11 +889,11 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
 // surface its current state — the tool in flight, that it's blocked on you, or a bare
 // "Running…" — so the row never collapses to just a title with no sign of progress.
 // Otherwise it's the flattened last reply, falling back to the run's own state word.
-// `tone` drives the colour: blue = working, amber = needs you, grey = queued or a
-// left-up background process, default = reply content.
+// `tone` drives the colour: blue = working, amber = needs you, grey = queued, a left-up
+// background process or a watch that will resume it, default = reply content.
 type SessionLine = {
   text: string;
-  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background';
+  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching';
 };
 // The line for a message of YOURS the workspace hasn't answered yet. Prefixed, because the preview
 // line is otherwise the workspace's voice: unmarked, a message you sent and a reply to it read
@@ -940,7 +955,9 @@ const waitingLabel = (s: any): string => {
   return 'Waiting for approval';
 };
 
-export const sessionLine = (s: any, live: boolean): SessionLine => {
+// `watching` is this session as an observer — what its row says about the live watches that will
+// resume it (lib/watches `watchingSessions`) — and absent wherever a caller holds no watches.
+export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | null): SessionLine => {
   const state = sessionRunStateOf(s);
   // Somebody is waiting on YOU here, which outranks everything else the row could say: every other
   // line reports what the workspace is doing, and this one is the only one you can act on.
@@ -978,8 +995,12 @@ export const sessionLine = (s: any, live: boolean): SessionLine => {
   // parent at AWAITING_INPUT while it runs, so this (not the RUNNING branch) is what usually
   // surfaces "Running Agent…".
   const parked = live ? parkedWorkLabel(s) : null;
-  if (parked)
-    return { text: `${parked.text}…`, tone: parked.kind === 'subagent' ? 'running' : 'background' };
+  if (parked?.kind === 'subagent') return { text: `${parked.text}…`, tone: 'running' };
+  // Parked on a live watch that will resume it: not idle, not waiting on you, and — whatever else it
+  // left running — not a background process (contract §9.2). Said in the strip's own line, so the row
+  // and the strip above its composer read the same.
+  if (live && watching && state === 'AWAITING_INPUT') return { text: watching.line, tone: 'watching' };
+  if (parked) return { text: `${parked.text}…`, tone: 'background' };
   // A message that never got an answer — the turn was interrupted, or failed, before any reply
   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
   // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
@@ -1167,7 +1188,10 @@ export function orbitLinkStateWord(row: any): string {
 // connection, not a crash, so it gets the neutral disconnect glyph, not a red X.
 // New payloads carry the authoritative runState. The resolver retains a centralized fallback
 // for old servers whose raw status collapses graceful ends to CANCELLED.
-export function StatusIcon({ session }: { session: any }) {
+//
+// `watching` is the word for the live watches that will resume this session (`statusLabel`'s), and
+// absent wherever a caller holds no watches.
+export function StatusIcon({ session, watching }: { session: any; watching?: string | null }) {
   const state = sessionRunStateOf(session);
   const fontSize = 16;
   // First, and outside the generating gate — see `statusLabel`. The glyph and the label branch in
@@ -1209,6 +1233,16 @@ export function StatusIcon({ session }: { session: any }) {
     // that will end), still while the only thing up is a `service`. Never spinning: the shape and
     // the colour keep meaning "not the agent working", and only the motion says "work is happening
     // here", which is the one claim a left-up process cannot make.
+    //
+    // Parked on a live watch, below a sub-workspace and above a left-up process: a wake is coming,
+    // so neither the reply bubble nor the terminal fits — a watch is not a process (contract §9.2).
+    // The strip's eye, still, because nothing here is running.
+    if (watching && work?.kind !== 'subagent')
+      return (
+        <Tooltip title={watching}>
+          <EyeOutlined style={{ color: 'var(--text-3)', fontSize }} />
+        </Tooltip>
+      );
     if (work)
       return (
         <Tooltip title={work.text}>
@@ -1881,8 +1915,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // reading history (or jumping to the sticky prompt) isn't yanked back by streaming updates.
   const atBottomRef = useRef(true);
   // Render mirror of atBottomRef: drives the floating "jump to bottom" button, which shows
-  // only while the user has scrolled up off the live tail. (The ref alone can't re-render.)
+  // while the user has scrolled up off the live tail (and while `stranded`). (The ref alone
+  // can't re-render.)
   const [atBottom, setAtBottom] = useState(true);
+  // Pinned, but come to rest with the tail out of view: the button's other reason to show. The pin
+  // lets go on a scroll UP alone (tailPinning.ts), so a tail that left the view any other way — the
+  // last card opened under a reader at the bottom, a link card landing — still reads as at the
+  // bottom. Decided by measure() once that has lasted STRANDED_AFTER_MS, on strandTimerRef, which
+  // stays set until the tail is back in view or a content update restarts the wait.
+  const [stranded, setStranded] = useState(false);
+  const strandTimerRef = useRef<number | undefined>(undefined);
   // Last observed scroll geometry, so the scroll handler can tell a genuine user scroll-up from a
   // programmatic re-pin, a late scroll event fired after streaming grew the container, or the
   // scrollTop the browser clamps when content gets SHORTER (see tailPinning.ts).
@@ -2038,6 +2080,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (newerCursorRef.current !== null) {
       atBottomRef.current = false;
       if (el.scrollHeight - top - el.clientHeight < LOAD_OLDER_AT) loadNewer();
+    }
+    // Whether the tail is out of view, whatever put it there, with the pin's own slack — so the
+    // button and the follow agree on where the end is. Only a pinned transcript is decided here (one
+    // the reader scrolled up shows the button already); the tail back in view ends it at once.
+    if (!atBottomRef.current || sample.bottomGap <= NEAR_BOTTOM) {
+      window.clearTimeout(strandTimerRef.current);
+      strandTimerRef.current = undefined;
+      setStranded(false);
+    } else if (strandTimerRef.current === undefined) {
+      strandTimerRef.current = window.setTimeout(() => setStranded(true), STRANDED_AFTER_MS);
     }
     setAtBottom(atBottomRef.current); // React bails out when unchanged, so no per-scroll re-render
     setHasMoreOlder(hasMoreOlderRef.current); // same bail-out; drives the way back to the start
@@ -2278,6 +2330,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ? watchingWord(watchesForHeaderQ.data as WatchView[], selectedId)
         : null,
     [watchesForHeaderQ.data, selectedId],
+  );
+  // The same read for every row of the list: what each session a watch will resume says about the
+  // wait, so a row, the header and the strip cannot disagree about it either.
+  const watchingBySession = useMemo(
+    () => watchingSessions(Array.isArray(watchesForHeaderQ.data) ? (watchesForHeaderQ.data as WatchView[]) : []),
+    [watchesForHeaderQ.data],
   );
   // The project this conversation coordinates, if any — see projectBackLink. Read the merged row
   // so a fresh detail can enrich (or correct) the compact list snapshot during rolling upgrades.
@@ -3224,6 +3282,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     atBottomRef.current = true; // a freshly opened/switched session starts pinned to the latest
     lastSampleRef.current = TAIL_SAMPLE_ZERO;
     setAtBottom(true); // hide the jump-to-bottom button until the new session reports otherwise
+    window.clearTimeout(strandTimerRef.current); // nor is it stranded off a tail not yet drawn
+    strandTimerRef.current = undefined;
+    setStranded(false);
     // Reset tail-first lazy-loading state for the session being opened.
     prependAnchorRef.current = null;
     loadingOlderRef.current = null;
@@ -3988,6 +4049,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const el = scrollRef.current;
     if (!el) return;
     if (atBottomRef.current) el.scrollTo({ top: el.scrollHeight });
+    // A content update restarts the wait for a stranded tail (see `stranded`): the follow just above
+    // closes the gap the new rows opened, and a gap read before it landed must not count.
+    window.clearTimeout(strandTimerRef.current);
+    strandTimerRef.current = undefined;
     measure(); // content grew — the in-view prompt may have just scrolled off the top
   }, [
     transcriptEvents,
@@ -4047,6 +4112,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       if (atBottomRef.current) el.scrollTo({ top: el.scrollHeight });
     });
     ro.observe(el);
+    // Content growing INSIDE the scroller — the last card opened under a reader at the bottom, a link
+    // card landing — neither resizes nor scrolls it, so the tail could leave the view with nothing
+    // re-measuring. Its rows are watched for that, to measure only: whether to follow stays the
+    // content-change effect's call, and following here would pull an opened card out from under the
+    // reader.
+    const rows = new ResizeObserver(() => measure());
+    for (const row of el.children) rows.observe(row);
+    const rowsAddedOrGone = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const row of record.addedNodes) if (row instanceof Element) rows.observe(row);
+        for (const row of record.removedNodes) if (row instanceof Element) rows.unobserve(row);
+      }
+    });
+    rowsAddedOrGone.observe(el, { childList: true });
     // Screenshots load after their <img> lays out at zero height, so the content grows *below*
     // the tail without an events change. `load` doesn't bubble but fires in the capture phase,
     // so one listener on the scroller catches every image and re-pins.
@@ -4060,6 +4139,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       for (const type of readerEvents) el.removeEventListener(type, onReaderInput);
       el.removeEventListener('load', onLoad, { capture: true });
       ro.disconnect();
+      rows.disconnect();
+      rowsAddedOrGone.disconnect();
     };
   }, [selectedId, measure]);
 
@@ -6524,13 +6605,25 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Words only: `retry.attachmentIds` are read off the bubble this page holds, and a page holding
   // no bubble has no files to name — so the fallback re-sends the message's text and nothing else.
   const [retryMessageAskedFor, setRetryMessageAskedFor] = useState<string | null>(null);
-  const serverRetryText =
-    useQuery({
-      queryKey: ['session', selectedId, 'retry-message'],
-      queryFn: () => getSessionRetryMessage(selectedId!),
-      enabled: !!selectedId && retryMessageAskedFor === selectedId,
-    }).data?.text ?? '';
+  const serverRetry = useQuery({
+    queryKey: ['session', selectedId, 'retry-message'],
+    queryFn: () => getSessionRetryMessage(selectedId!),
+    enabled: !!selectedId && retryMessageAskedFor === selectedId,
+  }).data;
+  const serverRetryText = serverRetry?.text ?? '';
   const autoRetryText = retryText || serverRetryText;
+  // Whose words those are. Another Orbit session's are not the reader's to send again: through
+  // `send` they would go out in the owner's name, signed by nobody. So the Retry asks the server to
+  // re-send them as the automatic retry would — that session's, with the request they were, charged
+  // to nobody's hourly limit (docs/session-request-reply-contract.md §2.1). Read off the same bubble
+  // as the words, or off the server's answer when the window held none.
+  const retryFromSession = retryText ? retry.sessionMessage : serverRetry?.sessionMessage;
+  const resendFromSession = useMutation({
+    mutationFn: (sessionId: string) => resendSessionRetryMessage(sessionId, compatibleUuid()),
+    onSuccess: (_answer, sessionId) => qc.invalidateQueries({ queryKey: ['session', sessionId] }),
+    onError: (e: Error) => message.error(e.message || 'Could not re-send that message'),
+  });
+  const resendFromSessionMutate = resendFromSession.mutate;
   const sendMutate = send.mutate;
   const authErrorHelp: AuthErrorHelp = useMemo(
     () => ({
@@ -6539,7 +6632,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runnerId: runner.id,
       onRetry:
         retryText && !selectedTrashed && !selectedMissing
-          ? () => sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds })
+          ? retry.sessionMessage && selectedId
+            ? () => resendFromSessionMutate(selectedId)
+            : () => sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds })
           : undefined,
       retryText,
       // The provider gallery, not a preset vendor: the engine narrows it to a runtime, not to
@@ -6554,9 +6649,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runner.id,
       retry,
       retryText,
+      selectedId,
       selectedTrashed,
       selectedMissing,
       sendMutate,
+      resendFromSessionMutate,
       navigate,
     ],
   );
@@ -6605,13 +6702,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       attempts: detailForSelected?.retryAttempts ?? 0,
       onRetry:
         autoRetryText && !selectedTrashed && !selectedMissing
-          ? () =>
-              sendMutate({
-                content: autoRetryText,
-                images: [],
-                attachmentIds: retry.attachmentIds,
-                source: 'autoRetry',
-              })
+          ? retryFromSession && selectedId
+            ? () => resendFromSessionMutate(selectedId)
+            : () =>
+                sendMutate({
+                  content: autoRetryText,
+                  images: [],
+                  attachmentIds: retry.attachmentIds,
+                  source: 'autoRetry',
+                })
           : undefined,
       retryText: autoRetryText,
       // The card's own Retry goes through `send`, so its refusal arrives in the same handler as a
@@ -6645,10 +6744,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       detailForSelected?.retryAt,
       detailForSelected?.retryAttempts,
       autoRetryText,
+      retryFromSession,
       runConflict?.conflict,
       selectedTrashed,
       selectedMissing,
       sendMutate,
+      resendFromSessionMutate,
       selected?.id,
       selectedId,
       qc,
@@ -7387,7 +7488,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 // The selected row may have a fresher detail payload than the list poll. Use the
                 // merged row for both status surfaces so the banner and its list warning point at
                 // the same canonical obligation during that refresh gap.
-                const line = sessionLine(actionSession, openable);
+                const watching = sessionWatching(watchingBySession, s.id);
+                const line = sessionLine(actionSession, openable, watching);
                 const drag = swipeDrag?.id === s.id ? swipeDrag : null;
                 const swipeTx = drag
                   ? drag.dx
@@ -7456,7 +7558,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       style={swipeTx ? { transform: `translateX(${swipeTx}px)` } : undefined}
                     >
                       <span className="session-icon">
-                        <StatusIcon session={actionSession} />
+                        <StatusIcon session={actionSession} watching={watching?.word} />
                       </span>
                       <div className="session-main">
                         <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
@@ -8422,7 +8524,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               <span className="chat-older-pill">{LOADING_NEWER}</span>
             </div>
           )}
-          {selectedId && !atBottom && (
+          {selectedId && (!atBottom || stranded) && (
             <button
               className="scroll-to-bottom"
               aria-label={detached ? JUMP_TO_LATEST : 'Scroll to bottom'}

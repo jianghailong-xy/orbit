@@ -270,8 +270,9 @@ test('the summary attributes failures, and always reports every bucket', async (
       }),
     },
     task: { groupBy: async () => [] },
+    // The live count: no work session carries any of the list's tasks.
+    $queryRaw: async () => [{ count: 0 }],
     session: {
-      count: async () => 0,
       aggregate: async () => ({ _max: { createdAt: null } }),
       findMany: async () => sessions,
     },

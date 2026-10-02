@@ -94,7 +94,7 @@ export interface AccountChoice {
 
 /** A window's name short enough for a row beside an account's: "5h", "Weekly", "Weekly Opus" — Codex's
  *  "5h limit" and Claude's "5-hour limit" and "Weekly · all models" alike. */
-const compactWindowLabel = (label: string): string =>
+export const compactWindowLabel = (label: string): string =>
   label.replace(/ limit$/, '').replace(/^5-hour$/, '5h').replace(/ · all models$/, '').replace(' · ', ' ');
 
 const ENGINE_LABELS: Record<string, string> = {

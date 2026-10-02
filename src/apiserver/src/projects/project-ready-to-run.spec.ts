@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { sessionCarriesTaskSql, taskCarriedSql } from '../sessions/task-work-carrier';
 import { readProjectReadyToRun } from './project-ready-to-run';
 import { ProjectsService } from './projects.service';
 
@@ -86,9 +87,9 @@ test('the ready queue keeps zero-impact leaves and carries the exact manual-run 
   assert.match(text, /t\.dispatch_hold = false/);
   assert.match(text, /a\.runner_id IS NOT NULL/);
   assert.match(text, /a\.enabled = true/);
-  assert.match(text, /s\.deleted_at IS NULL/);
-  assert.match(text, /s\.starts_task_work = true/);
-  assert.match(text, /s\.status IN \('PENDING'::run_status, 'RUNNING'::run_status\)/);
+  // "No work session carries it", in the one spelling every reader shares — the same one the
+  // active rows below are selected by, so no task can be both.
+  assert.ok(text.includes(`NOT ${taskCarriedSql('t', 'runnable_carrier')}`));
   assert.match(text, /NOT EXISTS \(\s*SELECT 1 FROM task_dependency dep/);
   assert.match(text, /t\.completion_policy = 'MANUAL'::task_completion_policy/);
   assert.match(text, /aggregate_child\.parent_task_id = t\.id/);
@@ -172,12 +173,76 @@ test('queued and running work stays ahead of the remaining ready queue', async (
 
   const [{ text }] = statements;
   assert.match(text, /SELECT DISTINCT ON \(t\.id\)/);
-  assert.match(text, /s\.deleted_at IS NULL/);
-  assert.match(text, /s\.starts_task_work = true/);
+  assert.ok(text.includes(sessionCarriesTaskSql('s')), 'active rows are the carried ones');
   assert.match(text, /s\.id AS "sessionId"/);
-  assert.match(text, /WHEN 'RUNNING'::run_status THEN 'RUNNING'/);
+  // PENDING is still exactly QUEUED; everything else a session carries is RUNNING.
+  assert.match(text, /WHEN 'PENDING'::run_status THEN 'QUEUED'\s+ELSE 'RUNNING'/);
   assert.match(text, /FROM candidates candidate/);
   assert.match(text, /candidate\."activeSince" DESC NULLS LAST/);
+});
+
+test('a running row says why it is running, and when the jobs it waits on went quiet', async () => {
+  const base = {
+    readyCount: 0,
+    queuedCount: 0,
+    runningCount: 3,
+    pausedCount: 0,
+    impactTruncated: false,
+    status: 'OPEN',
+    runState: 'RUNNING',
+    activeSince: new Date('2026-10-02T00:00:00Z'),
+    pausedListId: null,
+    pausedListTitle: null,
+    pausedListReadyCount: null,
+    pausedListAutoRunReadyCount: null,
+    downstreamBlocked: 0,
+  };
+  const now = Date.now();
+  const { prisma, statements } = harness([
+    {
+      ...base,
+      taskId: '00000000-0000-7000-8000-000000000061',
+      title: 'Waiting on a moving job',
+      sessionId: '00000000-0000-7000-8000-000000000071',
+      runReason: 'BACKGROUND_JOB',
+      runningBgJobs: ['bgj_moving'],
+      runningBgJobActivity: { bgj_moving: now - 60_000 },
+    },
+    {
+      ...base,
+      taskId: '00000000-0000-7000-8000-000000000062',
+      title: 'Waiting on a silent job',
+      sessionId: '00000000-0000-7000-8000-000000000072',
+      runReason: 'BACKGROUND_JOB',
+      runningBgJobs: ['bgj_silent'],
+      runningBgJobActivity: { bgj_silent: now - 11 * 60_000 },
+    },
+    {
+      ...base,
+      taskId: '00000000-0000-7000-8000-000000000063',
+      title: 'Waiting on a watch',
+      sessionId: '00000000-0000-7000-8000-000000000073',
+      runReason: 'WAITING',
+      runningBgJobs: [],
+      runningBgJobActivity: {},
+    },
+  ]);
+
+  const result = await readProjectReadyToRun(prisma, OWNER_ID, PROJECT_ID, 5);
+
+  assert.deepEqual(
+    result.items.map(({ title, runState, runReason, runStalled }) =>
+      [title, runState, runReason, runStalled]),
+    [
+      ['Waiting on a moving job', 'RUNNING', 'BACKGROUND_JOB', false],
+      // Still RUNNING — a quiet job is still a process that will wake its session — but flagged.
+      ['Waiting on a silent job', 'RUNNING', 'BACKGROUND_JOB', true],
+      ['Waiting on a watch', 'RUNNING', 'WAITING', false],
+    ],
+  );
+  // Read off the session the active row names, after the ranking, by the shared reason.
+  const [{ text }] = statements;
+  assert.match(text, /LEFT JOIN session run_session ON run_session\.id = ranked\."sessionId"/);
 });
 
 test('otherwise-ready tasks in a paused list remain visible with the list resume scope', async () => {
@@ -214,6 +279,8 @@ test('otherwise-ready tasks in a paused list remain visible with the list resume
       status: 'OPEN',
       runState: 'PAUSED',
       sessionId: null,
+      runReason: null,
+      runStalled: false,
       pausedList: {
         id: LIST_ID,
         title: 'FineWeb downloads',

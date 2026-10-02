@@ -5,7 +5,7 @@ import { countPendingEvidenceJudgments } from '../tasks/pending-evidence-judgmen
 import { readWaitingOwnerConfirmations } from '../tasks/owner-confirmation-read';
 import { CRITERIA_WEAKENING_EFFECT_CLASS } from './criteria-weakening-intent';
 import { stillUnanswered } from './criteria-pending-decisions';
-import { ownerItemKind } from './project-open-item';
+import { openItemsNoLongerOwed, ownerItemKind } from './project-open-item';
 import { projectsToRecordAsDone } from './project-looks-finished';
 import {
   projectsAwaitingStandardSetConfirmation,
@@ -252,7 +252,9 @@ async function readProjectDecisionSignals(
  * with no coordinator bound, or one whose conversation the owner filed away, is not counted here
  * for the same reason a held proposal is not: a lit badge that opens nothing is worse than a dark
  * one. What is counted is decided by `ownerItemKind` and nothing else, so the count, the push and
- * the chip on the project list cannot come to disagree about which items are the owner's.
+ * the chip on the project list cannot come to disagree about which items are the owner's — among
+ * the items still owed (`openItemOwed`): one about a candidate or a task that has moved on waits on
+ * nobody, whether or not anything has closed it yet.
  *
  * THE CONVERSATION, NOT THE SWITCH. `coordinatorEnabled` is deliberately NOT part of this
  * predicate, and it used to be. That column is the authority: whether the coordinator may ACT —
@@ -298,12 +300,13 @@ async function readOwnerItemSignals(
       project: { select: { coordinatorSessionId: true } },
     },
   });
+  const settled = await openItemsNoLongerOwed(tx, rows.map((row) => row.id));
 
   const bySession = new Map<string, OwnerDecisionSignal>();
   for (const row of rows) {
     const kind = ownerItemKind(row);
     const sessionId = row.project.coordinatorSessionId;
-    if (kind === null || sessionId == null) continue;
+    if (kind === null || sessionId == null || settled.has(row.id)) continue;
     const signal = bySession.get(sessionId) ?? {
       sessionId,
       projectId: row.projectId,

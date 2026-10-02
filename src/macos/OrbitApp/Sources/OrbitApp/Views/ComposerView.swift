@@ -104,8 +104,10 @@ struct ComposerView: View {
     #endif
     #if os(iOS)
     // The iOS editor is a UITextView (GrowingTextEditor), not a @FocusState-bound SwiftUI field, so
-    // its first-responder state rides this flag: set it to focus, read it for the box's focus ring.
-    @State private var iosEditing = false
+    // its first-responder state rides the console's `composerEditing`: set it to focus, read it for
+    // the box's focus ring. It lives on the console because a phone's console folds its chrome on it,
+    // and it changes under this animation so the bars move with the keyboard.
+    private static let editingChange = Animation.easeInOut(duration: 0.25)
     @State private var showPhotoPicker = false
     @State private var showFileImporter = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
@@ -179,10 +181,10 @@ struct ComposerView: View {
     }
 
     // Whether the composer box should draw its focused ring/shadow. macOS keys off the field's
-    // @FocusState; iOS off the UITextView editor's begin/end-editing (mirrored into `iosEditing`).
+    // @FocusState; iOS off the UITextView editor's begin/end-editing (mirrored into `composerEditing`).
     private var boxFocused: Bool {
         #if os(iOS)
-        iosEditing
+        console.composerEditing
         #else
         inputFocused
         #endif
@@ -192,7 +194,7 @@ struct ComposerView: View {
     /// sets the flag the UITextView editor observes to become first responder.
     private func requestFocus() {
         #if os(iOS)
-        iosEditing = true
+        withAnimation(Self.editingChange) { console.composerEditing = true }
         #else
         inputFocused = true
         #endif
@@ -353,7 +355,7 @@ struct ComposerView: View {
     private var inputField: some View {
         #if os(iOS)
         GrowingTextEditor(text: $console.composerText, placeholder: placeholder,
-                          maxLines: 6, isEditing: $iosEditing)
+                          maxLines: 6, isEditing: $console.composerEditing.animation(Self.editingChange))
             .frame(maxWidth: .infinity)
         #else
         TextField(placeholder, text: $console.composerText, axis: .vertical)

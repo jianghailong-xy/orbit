@@ -329,6 +329,15 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/retry-message")
     }
 
+    /// Re-send that message now, the way the automatic retry does — the Retry's door when the words are
+    /// another Orbit session's (`RetryMessage.sessionMessage`, `RetryRoute`): the server sends them as
+    /// that session's, signed and with the request they were, instead of this client sending them again
+    /// in the owner's name (docs/session-request-reply-contract.md §2.1). Web parity:
+    /// `resendSessionRetryMessage`.
+    public func resendRetryMessage(sessionID: String, clientTurnId: String) async throws -> TurnAccepted {
+        try await post("sessions/\(sessionID)/retry-message", body: RetryResendRequest(clientTurnId: clientTurnId))
+    }
+
     /// Turn off / put back the retry a spent quota or a transient provider error armed on this
     /// session. Arming is automatic when one of those kills a turn; the POST exists so the card's
     /// switch is a switch and not a one-way trapdoor, and carries the instant because the server
@@ -346,6 +355,28 @@ public final class APIClient: @unchecked Sendable {
         f.formatOptions = [.withInternetDateTime]
         return f
     }()
+
+    // MARK: session folders (docs/session-folders-move-design.md §3)
+
+    /// Every folder the caller has, in every workspace, by name. An older server without the
+    /// endpoint 404s; the caller treats that as "no folders", which leaves the lists flat.
+    public func listSessionFolders() async throws -> [SessionFolder] { try await get("session-folders") }
+    /// Create a folder in one of the caller's workspaces; a name already used there is a 409.
+    public func createSessionFolder(workspaceID: String, name: String) async throws -> SessionFolder {
+        try await post("session-folders", body: CreateSessionFolderRequest(workspaceId: workspaceID, name: name))
+    }
+    /// Rename a folder; returns it as renamed. A name its workspace already has is a 409.
+    public func renameSessionFolder(_ id: String, name: String) async throws -> SessionFolder {
+        try await patch("session-folders/\(id)", body: RenameSessionFolderRequest(name: name))
+    }
+    /// Delete the folder and nothing else: the sessions in it go back to their workspace's list.
+    public func deleteSessionFolder(_ id: String) async throws { try await deleteRaw("session-folders/\(id)") }
+    /// File a session in one of its workspace's folders, or in none (`folderID` nil). Allowed for
+    /// any session outside Trash, a running one included. The server broadcasts `session.updated`,
+    /// whose summary carries the new `folderId`, so the owner's other clients follow.
+    public func moveSession(_ id: String, folderID: String?) async throws {
+        _ = try await postRaw("sessions/\(id)/move", body: MoveSessionRequest(folderId: folderID))
+    }
 
     // MARK: public links — one per session, task or project (docs/share-links-design.md §5)
 

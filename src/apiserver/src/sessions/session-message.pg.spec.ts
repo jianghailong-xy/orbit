@@ -22,6 +22,13 @@
  *      message, and counts with that session's other messages against the pair's hour: the 21st is
  *      refused and leaves the queue as it found it, while a retry of a counted one and a bodyless
  *      interrupt are not messages at all.
+ *  15. (the server's half) The failure card's Retry of another session's message asks the server to
+ *      re-send it, through `POST /sessions/:id/retry-message`: the new turn keeps the sender and the
+ *      request the message was, the engine reads the block again, and nobody is charged — not the
+ *      pair's hour, not a steer. A replay of the click is its receipt.
+ *  16. What one session sent another counts for the hour it was sent in, whatever happens to it next:
+ *      queued messages an interrupt drops, or the owner withdraws, still count, and so do the ones a
+ *      session drops itself with an interrupt that carries one more — the 21st is refused.
  *
  * The doors are the real controllers and the real orchestration credential; the inbox and the event
  * ingest are reached over real HTTP, through the guard and the public-id interceptor main.ts installs.
@@ -46,7 +53,7 @@ import {
   SessionDispatchOrigin,
   SessionRunSource,
 } from '@prisma/client';
-import { uuidToBase62 } from '@orbit/shared';
+import { base62ToUuid, uuidToBase62 } from '@orbit/shared';
 import { Client } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
@@ -75,6 +82,8 @@ import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { TasksService } from '../tasks/tasks.service';
 import { AutoRetryService } from './auto-retry.service';
 import { MergeReceiptService } from './merge-receipt.service';
+import { SessionRequestService } from './session-request.service';
+import { SessionsController } from './sessions.controller';
 import {
   SESSION_MESSAGE_RATE_LIMITED_CODE,
   SESSION_MESSAGES_PER_PAIR_PER_HOUR,
@@ -515,10 +524,13 @@ test('one session’s message to another is signed, delivered as such, and bound
     await sessionSend(chatty, elsewhere, 'a different question', 'elsewhere-1');
 
     // Rolling, not a fixed hour: once the oldest message is more than an hour old, one more fits.
+    // What ages is what was SENT (migration 0351's record), not the turn it was sent as.
     await sql.query(
-      `UPDATE "conversation_turn" SET "created_at" = "created_at" - interval '61 minutes'
-        WHERE "session_id" = $1::uuid AND "client_turn_id" = 'rate-1'`,
-      [busy],
+      `UPDATE "session_message_charge" SET "created_at" = "created_at" - interval '61 minutes'
+        WHERE "id" = (SELECT "id" FROM "session_message_charge"
+                       WHERE "to_session_id" = $1::uuid AND "from_session_id" = $2::uuid
+                       ORDER BY "created_at", "id" LIMIT 1)`,
+      [busy, chatty],
     );
     await sessionSend(chatty, busy, 'how is it going? (21, an hour on)', 'rate-21-later');
     await assert.rejects(() => sessionSend(chatty, busy, 'and again', 'rate-22'), (error: unknown) => {
@@ -691,7 +703,7 @@ test('one session’s message to another is signed, delivered as such, and bound
     assert.ok(resent, 'the sweep re-sent nothing');
     assert.equal(resent.senderSessionId, null, 'the owner’s message was re-sent under a session’s name');
 
-    // A session cannot file its own message under the re-send's key and so step outside the count.
+    // A session cannot file its own message under the re-send's key and pass it off as the platform's.
     const worker = await session('Worker: picks a key');
     await assert.rejects(
       () => sessionSend(worker, recipient, 'uncounted?', `${AUTO_RETRY_TURN_KEY_PREFIX}mine`),
@@ -825,5 +837,171 @@ test('one session’s message to another is signed, delivered as such, and bound
     assert.deepEqual(await sessionInterrupt(chatty, busy), { ok: true });
     const signed = (await turnsOf(busy)).filter((turn) => turn.senderSessionId === chatty);
     assert.equal(signed.length, SESSION_MESSAGES_PER_PAIR_PER_HOUR);
+  });
+
+  // ── 16. what was sent stays sent ───────────────────────────────────────────────────────────────
+
+  /** `busy` in the middle of a turn of the owner's — the shape an interrupt is aimed at: one aimed
+   *  at a session still waiting to be claimed is refused as ended. */
+  async function midTurn(busy: string): Promise<void> {
+    await ownerSend(busy, 'the owner’s own task');
+    await claimAndPoll(busy);
+  }
+
+  /** Twenty messages from `chatty`, each still waiting in `busy`'s queue, none of them read. */
+  async function twentyQueued(chatty: string, busy: string, label: string): Promise<string[]> {
+    for (let i = 1; i <= SESSION_MESSAGES_PER_PAIR_PER_HOUR; i++) {
+      await sessionSend(chatty, busy, `${label} (${i})`, `${label}-${i}`);
+    }
+    const queued = (await turnsOf(busy)).filter((turn) => turn.senderSessionId === chatty);
+    assert.equal(queued.length, SESSION_MESSAGES_PER_PAIR_PER_HOUR);
+    assert.ok(queued.every((turn) => turn.status === 'PENDING'), 'a message was read before it could be dropped');
+    return queued.map((turn) => turn.id);
+  }
+
+  const refusedAsTheTwentyFirst = (error: unknown) => {
+    assert.equal(refusalOf(error).code, SESSION_MESSAGE_RATE_LIMITED_CODE);
+    return true;
+  };
+
+  await t.test('messages an interrupt drops from the queue still count for their hour', async () => {
+    const chatty = await session('Worker: fills a queue');
+    const busy = await session('the session whose queue the owner drops');
+    await midTurn(busy);
+    await twentyQueued(chatty, busy, 'dropped');
+    await sessions.interrupt(ownerId, busy);
+    assert.equal((await turnsOf(busy)).filter((turn) => turn.senderSessionId === chatty).length, 0,
+      'the interrupt dropped nothing, so this proves nothing');
+    await assert.rejects(() => sessionSend(chatty, busy, 'dropped (21)', 'dropped-21'), refusedAsTheTwentyFirst);
+  });
+
+  await t.test('messages the owner withdraws from the queue still count for their hour', async () => {
+    const chatty = await session('Worker: fills a queue the owner empties');
+    const busy = await session('the session whose owner withdraws them');
+    for (const turnId of await twentyQueued(chatty, busy, 'withdrawn')) {
+      await sessions.cancelQueuedTurn(ownerId, busy, turnId);
+    }
+    assert.equal((await turnsOf(busy)).filter((turn) => turn.senderSessionId === chatty).length, 0);
+    await assert.rejects(() => sessionSend(chatty, busy, 'withdrawn (21)', 'withdrawn-21'), refusedAsTheTwentyFirst);
+  });
+
+  await t.test('a session cannot clear its own count by dropping its queued messages with an interrupt', async () => {
+    const chatty = await session('Worker: queues, then interrupts its own queue');
+    const busy = await session('the session it floods');
+    await midTurn(busy);
+    for (let i = 1; i < SESSION_MESSAGES_PER_PAIR_PER_HOUR; i++) {
+      await sessionSend(chatty, busy, `queued (${i})`, `own-${i}`);
+    }
+    // The twentieth is an interrupt's, which drops the nineteen before it.
+    await sessionInterrupt(chatty, busy, 'never mind those — do this (20)', 'own-interrupt-20');
+    const left = (await turnsOf(busy)).filter((turn) => turn.senderSessionId === chatty);
+    assert.deepEqual(left.map((turn) => turn.clientTurnId), ['own-interrupt-20'], 'the interrupt dropped nothing');
+    await assert.rejects(() => sessionSend(chatty, busy, 'and again (21)', 'own-21'), refusedAsTheTwentyFirst);
+    await assert.rejects(() => sessionInterrupt(chatty, busy, 'and again (21)', 'own-interrupt-21'), refusedAsTheTwentyFirst);
+  });
+
+  // ── 15. the failure card's Retry, for another session's message ───────────────────────────────
+
+  await t.test('the failure card’s Retry has the server re-send another session’s message: its sender, its request, nobody charged', async () => {
+    const door = new SessionsController(
+      sessions, prisma as unknown as PrismaService, realtime as never, {} as never, {} as never, autoRetry,
+    );
+    const user = { userId: ownerId } as never;
+    // Asked through a door that records requests (this file's own `sendDoor` was built without them).
+    const askingDoor = new RunnerSessionsController(
+      sessions, orchestration, {} as never, attempts as never, undefined,
+      new SessionRequestService(prisma as unknown as PrismaService, sessions, realtime as never),
+    );
+    const options = [{ label: 'ship it' }, { label: 'hold' }];
+    async function ask(worker: string, recipient: string, words: string, key: string): Promise<{ requestId: string; id: string }> {
+      const asked = await askingDoor.sendMessage(
+        runner, undefined, worker, await orchestration.issue(runnerId, worker), recipient,
+        { message: words, clientTurnId: key, expectReply: true, replyOptions: options } as never,
+      ) as { requestId?: string };
+      assert.ok(asked.requestId, `the send asked for no reply: ${JSON.stringify(asked)}`);
+      return { requestId: String(asked.requestId), id: base62ToUuid(String(asked.requestId)) };
+    }
+
+    // The quota killed the turn the request arrived on, and the card offers "Retry now anyway".
+    {
+      const worker = await session('Worker: asks for a decision');
+      const recipient = await session('the conversation whose turn the quota killed on the request');
+      const words = 'ship it or hold?';
+      const request = await ask(worker, recipient, words, 'card-retry-1');
+      await failAndArm(recipient, RunStatus.AWAITING_INPUT);
+
+      // What the card is told before it offers the button: the words, and whose they are.
+      const offered = await door.retryMessage(user, recipient);
+      assert.equal(offered.text, words);
+      assert.deepEqual(offered.sessionMessage, {
+        fromSessionId: worker, fromTitle: 'Worker: asks for a decision', fromAgentName: 'orbit-worker',
+        requestId: request.requestId,
+      });
+
+      const steersBefore = steers.length;
+      const key = randomUUID();
+      const resent = await door.resendRetryMessage(user, recipient, { clientTurnId: key });
+      assert.equal(await senderOf(recipient, key), worker, 'the re-send went out in the owner’s name');
+      assert.equal((await prisma.sessionRequest.findUniqueOrThrow({ where: { id: request.id } })).turnId, resent.turnId,
+        'the request stayed on the turn that failed');
+      assert.equal(steers.length, steersBefore, 'the re-send was charged as a steer');
+      assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).retryAt, null,
+        'the armed retry would send it a second time');
+      // A replay of the click — a lost response, a double tap — is its receipt, not a second re-send.
+      assert.equal((await door.resendRetryMessage(user, recipient, { clientTurnId: key })).turnId, resent.turnId);
+      assert.equal((await turnsOf(recipient)).filter((turn) => turn.content === words).length, 2,
+        'the failed turn and its one re-send');
+
+      // The engine reads the worker's request again: the words, then the block, asking for a reply.
+      const redelivered = await claimAndPoll(recipient);
+      assert.equal(redelivered.json.turnId, resent.turnId);
+      const content = String(redelivered.json.content ?? '');
+      assert.ok(content.startsWith(`${words}\n\n<orbit-session-message from-session="${uuidToBase62(worker)}"`),
+        `the engine was handed something else:\n${content}`);
+      assert.match(content, new RegExp(`request-id="${request.requestId}" reply-by="`));
+      assert.match(content, new RegExp(`session_reply\\(requestId="${request.requestId}"\\)`));
+      const stored = await echo(recipient, 2, redelivered.json.turnId, { text: content });
+      assert.equal((stored.sessionMessage as Record<string, unknown>).requestId, request.requestId);
+
+      // Charged to nobody's hour: with the request, nineteen more from the worker make twenty, and the
+      // next is refused — the re-send is none of them.
+      for (let i = 2; i <= SESSION_MESSAGES_PER_PAIR_PER_HOUR; i++) {
+        await sessionSend(worker, recipient, `and ${i}`, `card-retry-${i}`);
+      }
+      await assert.rejects(() => sessionSend(worker, recipient, 'and 21', 'card-retry-21'), refusedAsTheTwentyFirst);
+    }
+
+    // The provider failed the run: the Retry revives it, and the re-send is the worker's all the same.
+    {
+      const worker = await session('Worker: asks one the provider fails');
+      const recipient = await session('the conversation a provider error failed on the request');
+      const request = await ask(worker, recipient, 'cut the release branch?', 'card-revive-1');
+      await failAndArm(recipient, RunStatus.FAILED);
+      const key = randomUUID();
+      const resent = await door.resendRetryMessage(user, recipient, { clientTurnId: key });
+      assert.equal(resent.revived, true, 'the failed run was not revived');
+      assert.equal(await senderOf(recipient, key), worker);
+      assert.equal((await prisma.sessionRequest.findUniqueOrThrow({ where: { id: request.id } })).turnId, resent.turnId);
+      assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).status, RunStatus.PENDING);
+    }
+  });
+
+  await t.test('the Retry door takes a key of the caller’s own and nothing else', async () => {
+    const recipient = await session('a conversation the door is asked about');
+    const door = new SessionsController(
+      sessions, prisma as unknown as PrismaService, realtime as never, {} as never, {} as never, autoRetry,
+    );
+    const user = { userId: ownerId } as never;
+    for (const clientTurnId of [undefined, '', '   ', `${AUTO_RETRY_TURN_KEY_PREFIX}mine`]) {
+      assert.throws(() => door.resendRetryMessage(user, recipient, { clientTurnId } as never), (error: unknown) => {
+        assert.equal((error as { getStatus?: () => number }).getStatus?.(), 400);
+        return true;
+      }, `the door took ${JSON.stringify(clientTurnId)}`);
+    }
+    // Nothing to re-send is refused as itself.
+    await assert.rejects(() => door.resendRetryMessage(user, recipient, { clientTurnId: randomUUID() }), (error: unknown) => {
+      assert.equal((error as { getStatus?: () => number }).getStatus?.(), 409);
+      return true;
+    });
   });
 });

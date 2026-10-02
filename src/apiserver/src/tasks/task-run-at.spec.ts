@@ -10,7 +10,7 @@ import {
 } from './tasks.service';
 import { TASK_RUN_TRIGGER } from './task-run-identity';
 import { fakeReceiptStore, withReceiptStore } from './task-run-receipt-fake';
-import { recordingQueryRaw } from './query-raw-test-helper';
+import { recordingQueryRaw, runDoorSessionRead } from './query-raw-test-helper';
 import { CreateTaskDto, UpdateTaskDto } from './dto';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
@@ -840,7 +840,8 @@ function raceFixture(scanEpoch: bigint, readEpoch: bigint, runAt: Date | null = 
   // COMPOSED, not stacked: this double answers `$queryRaw` with the sweep's candidate row, and
   // the receipt's own statements have to keep reaching the receipt.
   const prisma = withReceiptStore({
-    $queryRaw: async () => [
+    // ...and the run door's session reads with what the task has: no run on it.
+    $queryRaw: async (query: unknown) => (runDoorSessionRead(query) ? [] : [
       {
         id: TASK_ID,
         ownerId: OWNER_ID,
@@ -851,7 +852,7 @@ function raceFixture(scanEpoch: bigint, readEpoch: bigint, runAt: Date | null = 
         freeBytes: null,
         minFreeDiskMb: null,
       },
-    ],
+    ]),
     task: {
       findFirst: async () => ({
         id: TASK_ID,

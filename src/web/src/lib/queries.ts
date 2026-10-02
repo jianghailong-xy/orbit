@@ -7,6 +7,7 @@ import type {
   ProjectPromotionView,
   SessionCreatedTasks,
   SessionSearchResponse,
+  TaskRunReason,
   WatchView,
 } from '@orbit/shared';
 import {
@@ -571,6 +572,13 @@ export interface ProjectReadyToRunItem {
   runState: ProjectReadyToRunState;
   /** Active Session for QUEUED/RUNNING rows; null for READY/PAUSED rows. */
   sessionId: string | null;
+  /**
+   * Why a QUEUED/RUNNING row is active: a turn, a background job its run is waiting on, or a
+   * wake-up it is waiting for. Absent from an older server.
+   */
+  runReason?: TaskRunReason | null;
+  /** A RUNNING row whose background jobs have stopped producing output. */
+  runStalled?: boolean;
   /** The list-level action needed before a PAUSED row can expose Run. */
   pausedList: ProjectReadyToRunPausedList | null;
   /** Null only when the project is too large to compute transitive impact safely. */

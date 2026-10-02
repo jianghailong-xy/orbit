@@ -13,6 +13,7 @@ import {
 } from '@orbit/shared';
 
 import { taskLanding, readLandingBranches } from './project-criterion-landing';
+import { LIVE_PROMOTION_STATES } from './project-promotion';
 import type { PrismaService } from '../prisma/prisma.service';
 
 /**
@@ -421,6 +422,77 @@ export const INTEGRATION_ITEM_KINDS: readonly OpenItemKind[] = [
   'INTEGRATION_CHECK_FAILED',
   'INTEGRATION_ERROR',
 ];
+
+/**
+ * Whether an OPEN item is still owed — whether what it is about can still be put right by whoever it
+ * is in front of — as SQL over the `project_open_item` row aliased `alias`. The one definition every
+ * reader that shows or counts open items asks, and the one the escalation tick's backstop closes by
+ * (`ProjectOpenItemEscalationService.reconcile`).
+ *
+ * An item is closed by the transaction that moves what it is about: the task landing, the task going
+ * away, a candidate leaving the live states (§4.2). That is one edge per fact, written at each door,
+ * and a door that misses its edge leaves an item open about something that is gone — escalated to the
+ * owner on the clock, pushed to their phone, counted on the badge and, for an integration item, held
+ * against every later candidate of the project by M-T11 (2026-10-02: a failed check about a superseded
+ * candidate stayed open, with the owner, hours after the project's branch was on main). So the readers
+ * do not take OPEN for owed; they ask this, and an edge missed tomorrow leaves nothing in front of
+ * anybody.
+ *
+ * By what the item names:
+ *  - a merge card (`PROMOTION_APPROVAL`) is owed while its candidate is READY, the one state the
+ *    owner's Merge acts on (`promotionConfirmRefusal`);
+ *  - an INTEGRATION_* item about a candidate, while the candidate is live (`LIVE_PROMOTION_STATES`,
+ *    BLOCKED among them: a blocked candidate is what such an item waits on somebody to fix);
+ *  - an INTEGRATION_* item about a task's landing, while the task is neither cancelled nor replaced —
+ *    the two facts `resolveByFact` answers it with. A task that LANDED is deliberately not among
+ *    them: the item is about landing on this project's line, and that the work reached some other
+ *    branch instead is in no row, so such an item stays owed and the backstop only reports it;
+ *  - anything else — a task's failure, a question, a pause, a request — while it is open: what
+ *    answers those is a person, or a fact this predicate has no row for.
+ *
+ * Parameter-free, like `escalatesAt`: it splices into a statement without moving that statement's
+ * placeholders, and its text is the text `scripts/project-liveness-audit.sql` spells, which has no
+ * TypeScript to call.
+ */
+export function openItemOwed(alias: string): Prisma.Sql {
+  const item = Prisma.raw(`"${alias}"`);
+  const integration = Prisma.raw(INTEGRATION_ITEM_KINDS.map((kind) => `'${kind}'`).join(', '));
+  const live = Prisma.raw(LIVE_PROMOTION_STATES.map((state) => `'${state}'`).join(', '));
+  return Prisma.sql`(CASE
+      WHEN ${item}."promotion_id" IS NOT NULL AND ${item}."kind" = 'PROMOTION_APPROVAL' THEN EXISTS (
+        SELECT 1 FROM "project_promotion" owed_promotion
+         WHERE owed_promotion."id" = ${item}."promotion_id"
+           AND owed_promotion."state" = 'READY')
+      WHEN ${item}."promotion_id" IS NOT NULL AND ${item}."kind" IN (${integration}) THEN EXISTS (
+        SELECT 1 FROM "project_promotion" owed_promotion
+         WHERE owed_promotion."id" = ${item}."promotion_id"
+           AND owed_promotion."state" IN (${live}))
+      WHEN ${item}."task_id" IS NOT NULL AND ${item}."kind" IN (${integration}) THEN EXISTS (
+        SELECT 1 FROM "task" owed_task
+         WHERE owed_task."id" = ${item}."task_id"
+           AND owed_task."status" <> 'CANCELLED'
+           AND owed_task."superseded_by_task_id" IS NULL)
+      ELSE true
+    END)`;
+}
+
+/**
+ * Which of these items nobody owes any more (`openItemOwed`), for a reader that found them through
+ * Prisma and so has no statement to splice the predicate into. One query whatever the number of ids,
+ * and none for an empty list.
+ */
+export async function openItemsNoLongerOwed(
+  db: Prisma.TransactionClient,
+  itemIds: readonly string[],
+): Promise<Set<string>> {
+  if (itemIds.length === 0) return new Set();
+  const rows = await db.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+    SELECT item."id"
+      FROM "project_open_item" item
+     WHERE item."id" IN (${Prisma.join(itemIds.map((id) => Prisma.sql`${id}::uuid`))})
+       AND NOT ${openItemOwed('item')}`);
+  return new Set(rows.map((row) => row.id));
+}
 
 interface ChainReading {
   rootTaskId: string;

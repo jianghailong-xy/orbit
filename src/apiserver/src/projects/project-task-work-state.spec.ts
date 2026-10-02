@@ -90,10 +90,10 @@ test('the READY lane can be narrowed by a caller that already owns the candidate
 });
 
 test('the per-task read narrows READY with the prerequisite guard, as the project index does', async () => {
-  let sql = '';
+  const statements: string[] = [];
   const prisma = {
     $queryRaw: async (query: Prisma.Sql) => {
-      sql = query.sql;
+      statements.push(query.sql);
       return [];
     },
   };
@@ -101,6 +101,8 @@ test('the per-task read narrows READY with the prerequisite guard, as the projec
 
   // The dependency graph hands this read up to 50,000 ids. The guard is what keeps the walk off
   // them: 4.2s for the graph of the 109,875-task project without it, 0.8s with it, same states.
+  // (The other statement is the run-reason read, which classifies nothing.)
+  const sql = statements.find((statement) => statement.includes("THEN 'READY'")) ?? '';
   const ready = readyBranch(sql);
   const guard = ready.indexOf(everyPrerequisiteDoneOrRetiredSql('t'));
   assert.notEqual(guard, -1, 'the READY lane is narrowed by the guard');

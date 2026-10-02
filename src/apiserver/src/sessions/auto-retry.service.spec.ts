@@ -781,8 +781,21 @@ test('a re-send of another session’s message keeps its sender and is charged t
   });
   await service.sweep(NOW);
   assert.deepEqual(resumed, [{ id: 'session-1', content: 'please review the migration' }]);
-  // Exactly the sender: no `participateSendTransaction`, which is where both charges ride.
-  assert.deepEqual(resumedWith.map((call) => call.opts), [{ senderSessionId: 'sender-session-1' }]);
+  // The sender, and no `participateSendTransaction`, which is where both charges ride.
+  const [opts] = resumedWith.map((call) => call.opts as {
+    senderSessionId?: string;
+    participateSendTransaction?: unknown;
+    onTurnWritten?: (tx: unknown, turn: { id: string }) => Promise<void>;
+  });
+  assert.equal(opts.senderSessionId, 'sender-session-1');
+  assert.equal(opts.participateSendTransaction, undefined);
+  // ...and the request those words were, if they were one, moves onto the turn the re-send writes
+  // (§8 criterion 14): one update of the request on the turn re-sent, in that turn's transaction.
+  const moved: unknown[] = [];
+  await opts.onTurnWritten?.({
+    sessionRequest: { updateMany: async (args: unknown) => { moved.push(args); return { count: 1 }; } },
+  }, { id: 'resent-turn' });
+  assert.deepEqual(moved, [{ where: { toSessionId: 'session-1', turnId: 'message-7' }, data: { turnId: 'resent-turn' } }]);
   // Under the platform's own key, which the pair's hourly count leaves out.
   assert.ok(resumedWith[0].clientTurnId.startsWith(AUTO_RETRY_TURN_KEY_PREFIX), resumedWith[0].clientTurnId);
 });
