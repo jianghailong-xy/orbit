@@ -1641,7 +1641,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // created, replaced or dropped, so it is not another writer of the DONE fence and names none of
       // the six preserved objects. No INSERT, UPDATE or DELETE. (Written as 0348 on its own branch and
       // renumbered before it landed: 0348 to 0353 are the six just above.)
-      '0355_pool_login_token_unbind_account'],
+      '0355_pool_login_token_unbind_account',
+      // A maintenance run's attempts, its platform rerun and whose its failure was: five `ADD COLUMN`s on
+      // `wiki_maintenance_run` (two INTEGER NOT NULL DEFAULT 0, catalog-only; three nullable, no default),
+      // and two CHECKs added after the backfill makes every stored row satisfy them. Its UPDATEs write
+      // `wiki_maintenance_run` alone: `task` is read for its status and `session` for its created_at, and
+      // neither is written, locked beyond the read, altered or dropped — so the 0177 pair, every stored
+      // task and criterion row and the six preserved objects are out of its reach. No function, trigger
+      // or type is created, replaced or dropped, so it is not another writer of the DONE fence. (Written
+      // as 0354 on its own branch and renumbered before it landed: 0354 is spelled by another branch not
+      // yet landed, and 0355 is the one just above.)
+      '0356_wiki_maintenance_run_attempts'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
