@@ -31,13 +31,13 @@ import { SESSION_REPLY_TURN_KEY_PREFIX } from './watch-turn-key';
  *                    left that would wake it again (`closeUnansweredRequests`, judged in the
  *                    transaction that parks the session — runnerApi.turnComplete);
  *   RECIPIENT_ENDED  the recipient's run ended, or the session was completed or moved to Trash —
- *                    migration 0347's trigger, in the statement that ended it, whichever path that was;
+ *                    migration 0350's trigger, in the statement that ended it, whichever path that was;
  *   EXPIRED          `replyBy` passed (`expireSessionRequest`, the worker);
  *   UNDELIVERED      the turn carrying it was taken off the recipient's queue before any engine read
  *                    it — an interrupt dropping the queue, the owner withdrawing it
  *                    (`settleUnrunSessionRequests`).
  *
- * Migration 0347's guard refuses any later rewrite of an outcome, so "first wins" is the database's
+ * Migration 0350's guard refuses any later rewrite of an outcome, so "first wins" is the database's
  * rule and not only this file's.
  *
  * HANDED BACK ONCE. An outcome is handed to the asker on a `session-reply:` turn of its conversation
@@ -473,7 +473,7 @@ export type UnrunSessionRequests =
   /**
    * The session's run is ending and its queue is drained. `closesRequests` is true where the status
    * write that ends the run has ALREADY happened in this transaction (a failed turn, the runner's
-   * finalize, the reaper): migration 0347's trigger has closed every request the end closes, so what
+   * finalize, the reaper): migration 0350's trigger has closed every request the end closes, so what
    * is still OPEN here is a run that goes on (a retry is armed), and a request in its queue was never
    * read. It is false where the drain comes before the status write (`transitionEnd`), whose end the
    * trigger reads as RECIPIENT_ENDED once it is written — which the contract says wins (§4).

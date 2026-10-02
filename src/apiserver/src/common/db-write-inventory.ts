@@ -1583,7 +1583,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // safe there: the composite `(entry_id, owner_id)` foreign key takes KEY SHARE on the rank-60
   // entry row rather than reaching the rank-10 user row this transaction must never wait on.
   { at: 'wiki/wiki-push.ts#appendWikiContext', under: 'runnerApi.dequeueTurn — inside the rank-30 Session transaction that already holds this session\'s row FOR UPDATE; it writes only wiki_exposure rows (rank 60) under the entry keys their foreign key takes, so its locks are ascending and its caller\'s retry re-runs it from the rows as the committed world leaves them' },
-  // Session requests (sessions/session-request.ts, migration 0347). Every one of them writes
+  // Session requests (sessions/session-request.ts, migration 0350). Every one of them writes
   // `session_request` rows only (rank 60), and none takes a second session: a request is written and
   // judged under its RECIPIENT's lock, its outcome is handed back under its ASKER's in a transaction of
   // its own, and the table has no foreign key to the asker or the owner for exactly that reason.
@@ -1998,13 +1998,13 @@ export const TRIGGER_WRITE_SOURCES: readonly TriggerWriteSource[] = [
   {"table":"session","trigger":"session_opencode_runner_claim_guard","event":"BEFORE UPDATE OF \"status\"","kind":"ROW/STATEMENT","since":"0080_opencode_runtime","takes":[]},
   {"table":"session","trigger":"session_project_capacity_serialize_insert_delete","event":"BEFORE INSERT OR DELETE","kind":"ROW/STATEMENT","since":"0122_project_dispatch_boundary","takes":["project WRITE"]},
   {"table":"session","trigger":"session_project_capacity_serialize_update","event":"BEFORE UPDATE OF \"status\", \"task_id\", \"deleted_at\"","kind":"ROW/STATEMENT","since":"0122_project_dispatch_boundary","takes":["project WRITE"]},
-  {"table":"session","trigger":"session_request_recipient_ended","event":"AFTER UPDATE OF \"status\", \"end_reason\", \"retry_at\", \"completed_at\", \"archived_at\", \"deleted_at\"","kind":"ROW/STATEMENT","since":"0347_session_request","takes":["session_request WRITE"]},
+  {"table":"session","trigger":"session_request_recipient_ended","event":"AFTER UPDATE OF \"status\", \"end_reason\", \"retry_at\", \"completed_at\", \"archived_at\", \"deleted_at\"","kind":"ROW/STATEMENT","since":"0350_session_request","takes":["session_request WRITE"]},
   {"table":"session","trigger":"session_source_freeze_guard","event":"BEFORE UPDATE OF \"source_state\", \"source_kind\", \"source_codebase_id\", \"source_repo_url\", \"source_root_commit_sha\", \"source_ref\", \"source_revision_sha\", \"source_config_revision\", \"source_ref_authority\", \"source_required_contains\", \"source_base_sha\", \"source_resolved_at\", \"source_resolved_by_runner_id\"","kind":"ROW/STATEMENT","since":"0231_project_codebase_session_source","takes":[]},
   {"table":"session","trigger":"session_superseded_task_guard","event":"BEFORE INSERT","kind":"ROW/STATEMENT","since":"0130_task_supersession_dispatch_guard","takes":["task LOCK"]},
   {"table":"session","trigger":"session_superseded_task_revive_guard","event":"BEFORE UPDATE OF \"status\", \"task_id\", \"dispatch_origin\", \"deleted_at\", \"starts_task_work\"","kind":"ROW/STATEMENT","since":"0130_task_supersession_dispatch_guard","takes":["task LOCK"]},
   {"table":"session_merge_receipt","trigger":"session_merge_receipt_checkpoint_accepted_trg","event":"BEFORE INSERT OR UPDATE","kind":"ROW/STATEMENT","since":"0152_task_checkpoint","takes":[]},
   {"table":"session_merge_receipt","trigger":"session_merge_receipt_immutable_guard","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0128_task_supersession_merge_receipt","takes":[]},
-  {"table":"session_request","trigger":"session_request_outcome_guard","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0347_session_request","takes":[]},
+  {"table":"session_request","trigger":"session_request_outcome_guard","event":"BEFORE UPDATE","kind":"ROW/STATEMENT","since":"0350_session_request","takes":[]},
   {"table":"task","trigger":"project_task_status_count_delete","event":"AFTER DELETE","kind":"ROW/STATEMENT","since":"0282_project_task_status_count","takes":["project_task_status_count WRITE"]},
   {"table":"task","trigger":"project_task_status_count_insert","event":"AFTER INSERT","kind":"ROW/STATEMENT","since":"0282_project_task_status_count","takes":["project_task_status_count WRITE"]},
   {"table":"task","trigger":"project_task_status_count_move","event":"AFTER UPDATE","kind":"ROW/STATEMENT","since":"0282_project_task_status_count","takes":["project_task_status_count WRITE"]},

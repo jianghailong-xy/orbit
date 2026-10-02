@@ -1864,13 +1864,13 @@ model SessionScheduledWakeup {
 /// One Orbit session asking another for a reply: a `session_send` / `project_send` that carried
 /// `expectReply` (docs/session-request-reply-contract.md §3–§5; sessions/session-request.ts). OPEN
 /// until it comes to exactly one outcome — REPLIED, NO_REPLY, RECIPIENT_ENDED, EXPIRED or
-/// UNDELIVERED — written by a compare-and-set on OPEN and never rewritten (migration 0347's guard).
+/// UNDELIVERED — written by a compare-and-set on OPEN and never rewritten (migration 0350's guard).
 /// The outcome is then handed back to the asking session on a `session-reply:` turn
 /// (`replyClientTurnId`), or held on the row for its next turn (`replyHeldAt`).
 ///
 /// The asking session is deliberately not a relation, for the reason `ConversationTurn.senderSessionId`
 /// is not one: the request is written under the RECIPIENT's row lock, and a key to the asker would
-/// take that row too. The partial indexes the workers and reads use live in migration 0347.
+/// take that row too. The partial indexes the workers and reads use live in migration 0350.
 model SessionRequest {
   id                String    @id @default(uuid(7)) @db.Uuid
   ownerId           String    @map("owner_id") @db.Uuid

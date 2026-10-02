@@ -4581,7 +4581,7 @@ export class RunnerApiController {
         // because this run is over — to the account owner (projects/project-open-item.ts).
         await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
         // And what rides on session requests (session-request.ts): the park above has already let
-        // migration 0347's trigger close what the run's end closes, so a request still OPEN in the
+        // migration 0350's trigger close what the run's end closes, so a request still OPEN in the
         // queue belongs to a run with a retry armed, and is UNDELIVERED; outcomes queued back to this
         // session as an asker are let go to be held for it.
         await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: true });

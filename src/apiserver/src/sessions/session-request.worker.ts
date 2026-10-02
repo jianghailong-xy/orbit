@@ -12,7 +12,7 @@ import { SessionRequestService } from './session-request.service';
  *   1. closes EXPIRED every request still OPEN past its `reply_by`, with the recipient as it stood
  *      (`expireSessionRequest`) — a compare-and-set, so an answer that lands first stands;
  *   2. hands back every outcome that is on no turn of its asker's and was never held
- *      (`SessionRequestService.handOff`): what step 1 just closed, what migration 0347's trigger closed
+ *      (`SessionRequestService.handOff`): what step 1 just closed, what migration 0350's trigger closed
  *      when a recipient's run ended (no application code is there to hand it off), what an interrupt
  *      or a withdrawal closed inside SessionsService, and anything a crash cut off between an outcome
  *      committing and its hand-off.

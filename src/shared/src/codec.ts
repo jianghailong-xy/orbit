@@ -200,7 +200,7 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'senderSessionId',
   'fromSessionId',
   'fromTaskId',
-  // The session a request was asked of (`session_request.to_session_id`, migration 0347) — where the
+  // The session a request was asked of (`session_request.to_session_id`, migration 0350) — where the
   // request sits and who answers it, the far end of `fromSessionId` on the same row. An address.
   'toSessionId',
   // The turn a request arrived as in the recipient's transcript, carried on the asker's reply card so

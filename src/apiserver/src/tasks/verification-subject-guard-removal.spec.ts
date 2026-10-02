@@ -279,7 +279,7 @@ const CORE_TRIGGERS_AFTER: Readonly<Record<string, readonly string[]>> = {
     'session_opencode_runner_claim_guard',
     'session_project_capacity_serialize_insert_delete',
     'session_project_capacity_serialize_update',
-    // 0347's session-request close: a session's run ending, or the session being completed or
+    // 0350's session-request close: a session's run ending, or the session being completed or
     // moved to Trash, closes the requests still waiting on it. Another SIBLING change.
     'session_request_recipient_ended',
     // 0231's SOURCE snapshot freeze guard: the selector and the pin are frozen facts, and this is
@@ -313,7 +313,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '0280 added the three `task_list_task_count_*` triggers to `task` — the maintained list '
     + 'count that replaced an unfiltered whole-table aggregate on every read of GET /task-lists — '
     + 'and 43 once 0282 added the three `project_task_status_count_*` triggers to `task`, the same '
-    + 'maintained-count shape for one project\'s per-status tally, and 44 once 0347 added '
+    + 'maintained-count shape for one project\'s per-status tally, and 44 once 0350 added '
     + '`session_request_recipient_ended` to `session`');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
@@ -333,7 +333,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     'the only triggers here newer than 0207 are the ones a later migration installed and kept — '
     + '0220\'s `run_event_ingestion_provenance_guard`, 0231\'s `session_source_freeze_guard`, '
     + '0271\'s `task_progress_epoch_advance`, 0280\'s three `task_list_task_count_*` and 0282\'s '
-    + 'three `project_task_status_count_*`, and 0347\'s `session_request_recipient_ended`. '
+    + 'three `project_task_status_count_*`, and 0350\'s `session_request_recipient_ended`. '
     + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(

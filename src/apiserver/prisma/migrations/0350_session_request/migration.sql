@@ -1,4 +1,4 @@
--- 0347 — session requests: one Orbit session asking another for a reply, and the one outcome every
+-- 0350 — session requests: one Orbit session asking another for a reply, and the one outcome every
 -- such request comes to (docs/session-request-reply-contract.md §3–§5, P1).
 --
 -- WHAT IT ADDS
