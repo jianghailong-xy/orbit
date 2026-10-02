@@ -25,10 +25,12 @@ import { freshRunningBgJobs } from './background-job-activity';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath } from './legacy-artifact-path';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
+import { readSessionMessageCard } from './session-message';
 import {
   isSessionReplyTurn,
   queuedRepliesContent,
   readOpenRequestPeers,
+  readTurnRequestIds,
   settleUnrunSessionRequests,
 } from './session-request';
 
@@ -52,6 +54,7 @@ import {
   MAX_PROMPT_CHARS,
   type OpenItemDeliveryCard,
   type ProjectStartedCard,
+  type SessionMessageCard,
   PermissionMode,
   type PermissionRule,
   ROOT_FALLBACK_PERMISSION_MODE,
@@ -262,6 +265,11 @@ interface ListedQueuedTurn {
   openItemDelivery?: OpenItemDeliveryCard;
   /** The same for the message telling a coordinator its project was started (project-started.ts). */
   projectStarted?: ProjectStartedCard;
+  /** Another Orbit session's message (session-message.ts, contract §2.3): the card the runner's echo
+   *  will carry, so the queue draws "From [that session]" rather than the owner's own bubble — and a
+   *  client taking it off the queue unrun hands none of it back to the owner's composer: the words
+   *  are the sending session's. Absent on every turn nobody's session sent. */
+  sessionMessage?: SessionMessageCard;
   /** The control plane wrote this turn itself (`isOrbitAuthoredTurn`): nobody typed its words, so a
    *  client taking it off the queue unrun hands none of them back to the composer. Absent on every
    *  turn somebody sent. */
@@ -4947,6 +4955,12 @@ export class SessionsService {
       /** Atomic orchestration budget participant. It runs only after a new follow-up's durable
        * idempotency receipt and payload have been checked, inside the Session transaction. */
       participateFollowUpTransaction?: (tx: Prisma.TransactionClient) => Promise<void>;
+      /**
+       * The session the follow-up is a message FROM — see `createTurn`'s own. Set by
+       * `session_interrupt`'s door from the session its orchestration credential proved, and by
+       * nothing else; written on the follow-up turn and never on the interrupt, which says nothing.
+       */
+      senderSessionId?: string;
     },
   ) {
     const content = dto?.content ?? '';
@@ -5102,6 +5116,7 @@ export class SessionsService {
         kind: 'message',
         content,
         clientTurnId: dto!.clientTurnId!,
+        ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
       const nextStatus = statusAfterTurnEnqueued(session.status);
@@ -5210,6 +5225,7 @@ export class SessionsService {
         status: true,
         content: true,
         createdAt: true,
+        senderSessionId: true,
         attachments: { select: { id: true, mimeType: true } },
       },
     });
@@ -5254,9 +5270,11 @@ export class SessionsService {
       // accepted head the native client will not see costs a query.
       const deliveryCards = await this.openItemDeliveryCards(queued.map(({ turn }) => turn));
       const startedCards = await this.projectStartedCards(ownerId, queued.map(({ turn }) => turn));
+      const messageCards = await this.sessionMessageCards(ownerId, id, queued.map(({ turn }) => turn));
       return queued.map(({ turn, content }) => {
         const card = deliveryCards.get(turn.id);
         const started = startedCards.get(turn.id);
+        const message = messageCards.get(turn.id);
         return {
           turnId: turn.id,
           kind: turn.kind,
@@ -5267,6 +5285,7 @@ export class SessionsService {
           })),
           ...(card ? { openItemDelivery: card } : {}),
           ...(started ? { projectStarted: started } : {}),
+          ...(message ? { sessionMessage: message } : {}),
           ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
         };
       });
@@ -5319,10 +5338,12 @@ export class SessionsService {
     // The card an exception item's delivery is, for the rows this snapshot actually returns.
     const deliveryCards = await this.openItemDeliveryCards(activeRows.map(({ turn }) => turn));
     const startedCards = await this.projectStartedCards(ownerId, activeRows.map(({ turn }) => turn));
+    const messageCards = await this.sessionMessageCards(ownerId, id, activeRows.map(({ turn }) => turn));
     const activeTurns: ListedActiveTurn[] = activeRows
       .map(({ turn, placement, content }) => {
         const card = deliveryCards.get(turn.id);
         const started = startedCards.get(turn.id);
+        const message = messageCards.get(turn.id);
         return {
           turnId: turn.id,
           kind: turn.kind,
@@ -5340,6 +5361,7 @@ export class SessionsService {
             : {}),
           ...(card ? { openItemDelivery: card } : {}),
           ...(started ? { projectStarted: started } : {}),
+          ...(message ? { sessionMessage: message } : {}),
           ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
           content,
           createdAt: turn.createdAt.toISOString(),
@@ -5393,6 +5415,31 @@ export class SessionsService {
       const start = projectStartOfTurn(turn.clientTurnId);
       if (!start) continue;
       const card = await readProjectStartedCard(this.prisma, ownerId, start);
+      if (card) cards.set(turn.id, card);
+    }
+    return cards;
+  }
+
+  /** The "From [that session]" card each of these turns carries, by turn id — for the ones another
+   *  Orbit session sent, and nothing at all for a batch of the owner's own messages.
+   *
+   *  Read by the same two calls the ingest path records the runner's echo with
+   *  (`readTurnRequestIds` and `readSessionMessageCard`, runner-api.controller.ts), off the turn's
+   *  sender column, so the card a client draws while the message waits is the one the echo will be
+   *  drawn as — the request it carries included (contract §2.3). */
+  private async sessionMessageCards(
+    ownerId: string,
+    sessionId: string,
+    turns: ReadonlyArray<{ id: string; senderSessionId: string | null }>,
+  ): Promise<Map<string, SessionMessageCard>> {
+    const cards = new Map<string, SessionMessageCard>();
+    const signed = turns.filter((turn) => turn.senderSessionId);
+    if (signed.length === 0) return cards;
+    const requestOfTurn = await readTurnRequestIds(this.prisma, sessionId, signed.map((turn) => turn.id));
+    for (const turn of signed) {
+      const card = await readSessionMessageCard(
+        this.prisma, ownerId, turn.senderSessionId!, requestOfTurn.get(turn.id),
+      );
       if (card) cards.set(turn.id, card);
     }
     return cards;

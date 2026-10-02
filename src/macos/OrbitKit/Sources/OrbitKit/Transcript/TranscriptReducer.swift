@@ -638,6 +638,9 @@ public struct TranscriptReducer: Sendable, Codable {
                 bubble.itemCard = turn.itemCard
                 // And the card a project start is, on the same terms (web parity: `q.projectStarted`).
                 bubble.startedCard = turn.startedCard
+                // And who sent it, when it is another session's message: drawn "From [that session]"
+                // while it waits, and never handed back to the composer (web parity: `q.sessionMessage`).
+                bubble.sessionMessage = turn.senderCard
                 bubble.authoredByOrbit = turn.authoredByOrbit == true
                 reconciled.append(bubble)
             } else {
@@ -647,6 +650,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                              steer: SteerDelivery.isSteerKind(turn.kind),
                                              itemCard: turn.itemCard,
                                              startedCard: turn.startedCard,
+                                             sessionMessage: turn.senderCard,
                                              authoredByOrbit: turn.authoredByOrbit == true))
             }
         }

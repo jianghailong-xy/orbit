@@ -6,6 +6,7 @@ import {
   type SessionReplyOption,
   type SessionRequestState,
 } from '@orbit/shared';
+import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
 
 /**
  * One Orbit session's message to another, and what the platform says about who sent it
@@ -17,10 +18,12 @@ import {
  * recipient read another agent's words as the account owner's, a coordinator could not tell which
  * worker was speaking, and every client drew the message as the owner's own bubble.
  *
- * WHO SENT IT is `conversation_turn.sender_session_id`, written by those two doors and by nothing
- * else, from the session the orchestration credential proved — never from a request body, so no
- * caller can name somebody else as the sender. Null is every other turn: the account owner, a
- * headless credential, the platform's own deliveries.
+ * WHO SENT IT is `conversation_turn.sender_session_id`, written by those two doors and by the message
+ * `session_interrupt` carries (`POST /runner/sessions/:id/interrupt`), from the session the
+ * orchestration credential proved — never from a request body, so no caller can name somebody else as
+ * the sender. Null is every other turn: the account owner, a headless credential, the platform's own
+ * deliveries. The one exception is the auto-retry sweep's re-send of a failed message, which keeps
+ * the sender of the message it re-sends (§2.1).
  *
  * It is said three times, each from that one column:
  *   - to the engine, as a block appended AFTER the message at delivery (`appendSessionMessageContext`),
@@ -57,11 +60,16 @@ export class SessionMessageRateLimited extends ConflictException {}
  * Called from `createTurn`'s `participateSendTransaction` — under the recipient's Session lock, after
  * idempotency and placement, before the turn is written — so a retry that replays a committed
  * `clientTurnId` never reaches it, and two sends to one session are counted one after the other.
- * What is counted is the turns themselves: the sender column on the recipient's turns in the last
- * hour. A refusal rolls back with the turn it was for, so nothing a refusal answered is counted.
+ * `session_interrupt`'s message is charged the same way, from `interrupt`'s
+ * `participateFollowUpTransaction`. What is counted is the turns themselves: the sender column on the
+ * recipient's turns in the last hour. A refusal rolls back with the turn it was for, so nothing a
+ * refusal answered is counted.
  *
- * Only the two session-to-session doors call it. A person's message, a headless credential's and the
- * platform's own deliveries carry no sender, are not counted, and are never refused here.
+ * Only the three session-to-session doors call it. A person's message, a headless credential's and the
+ * platform's own deliveries carry no sender, are not counted, and are never refused here. The one
+ * turn the platform writes WITH a sender is the auto-retry sweep's re-send of a message that failed
+ * (§2.1): the words are still the sending session's, but the session did not send them again, so the
+ * count leaves them out.
  */
 export async function chargeSessionMessage(
   tx: Prisma.TransactionClient,
@@ -75,6 +83,7 @@ export async function chargeSessionMessage(
       // Counted the way the spawn-rate window counts its hour (`SessionsService`
       // SPAWN_RATE_WINDOW_MS): a Prisma DateTime against the column Prisma wrote.
       createdAt: { gt: new Date(Date.now() - SESSION_MESSAGE_WINDOW_MS) },
+      NOT: { clientTurnId: { startsWith: AUTO_RETRY_TURN_KEY_PREFIX } },
     },
   });
   if (sent < SESSION_MESSAGES_PER_PAIR_PER_HOUR) return;

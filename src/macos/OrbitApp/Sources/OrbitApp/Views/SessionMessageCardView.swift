@@ -22,12 +22,18 @@ struct SessionMessageCardView: View {
     var undelivered: Bool = false
     /// What delivery appended to the same turn (a `controlPlaneNote`), as its own folded entry.
     var attached: (kind: String, text: String)?
+    /// Withdraws the message while it is still queued behind the running turn; nil once a runner has
+    /// taken it. Withdrawing hands none of it back to the composer: the words are the sending
+    /// session's, not the reader's (`ComposerLogic.restorableText`).
+    var onCancelQueued: (() -> Void)? = nil
 
     @Environment(\.openURL) private var openURL
     @State private var expanded = false
     /// Collapse a giant message past this many characters, as the owner's own bubble does: one huge
     /// Text lays out synchronously and stalls the console.
     private let truncateAt = 6000
+
+    private var queued: Bool { onCancelQueued != nil }
 
     var body: some View {
         let long = text.count > truncateAt
@@ -54,12 +60,30 @@ struct SessionMessageCardView: View {
                     .font(.orbitMeta).foregroundStyle(.orange)
             }
             if let attached { AttachedNoteEntry(attached: attached) }
+            if let onCancelQueued { queuedFoot(onCancelQueued) }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.tint.opacity(0.28), lineWidth: 1))
+        // Dashed while it is still queued, as the control plane's own cards are.
+        .overlay(
+            RoundedRectangle(cornerRadius: 8).strokeBorder(
+                .tint.opacity(0.28),
+                style: StrokeStyle(lineWidth: 1, dash: queued ? [4, 3] : []))
+        )
+    }
+
+    /// The queue's own line while the message waits behind a running turn: how it stands, and Cancel.
+    private func queuedFoot(_ cancel: @escaping () -> Void) -> some View {
+        HStack(spacing: 8) {
+            Text("Queued").font(.orbitMeta).foregroundStyle(.secondary)
+            Button("Cancel") { cancel() }
+                .buttonStyle(.plain)
+                .font(.orbitMeta)
+                .foregroundStyle(.tint)
+                .contentShape(Rectangle())
+        }
     }
 
     /// "From <session title> · orbit" — who is speaking, before what they said. The title is the way

@@ -42,6 +42,7 @@ export function SessionMessageCard({
   ts,
   undelivered,
   attached,
+  queued,
 }: {
   card: Card;
   /** The sending agent's words, as the recipient was handed them. */
@@ -51,6 +52,9 @@ export function SessionMessageCard({
   undelivered?: boolean;
   /** What delivery appended to the same turn, as its own folded entry. */
   attached?: ReactNode;
+  /** The queue's own line, while the message still waits to be delivered (WorkspaceView's queued
+   *  tail): the card it will be once a runner takes it, with how it stands and Cancel at its foot. */
+  queued?: ReactNode;
 }) {
   // An export is read on paper, where nothing can be unfolded: it gets the whole message.
   const exporting = useContext(ExportCtx) != null;
@@ -67,7 +71,12 @@ export function SessionMessageCard({
     <div className="smc-wrap">
       {/* The sticky bar at the top of the transcript names this turn off these two attributes, the
           way it names every other turn the owner did not type. */}
-      <div className="smc" data-seq={seq} data-sticky-label={sticky.label} data-sticky-text={sticky.text}>
+      <div
+        className={`smc${queued ? ' is-queued' : ''}`}
+        data-seq={seq}
+        data-sticky-label={sticky.label}
+        data-sticky-text={sticky.text}
+      >
         <div className="smc-head">
           <span className="smc-mark"><MessageOutlined /></span>
           <span>{SESSION_MESSAGE_FROM}</span>
@@ -105,6 +114,7 @@ export function SessionMessageCard({
           : <SessionRequestStatus requestId={card.requestId} />)}
         {undelivered && <div className="smc-undelivered">{SESSION_MESSAGE_UNDELIVERED}</div>}
         {attached}
+        {queued && <div className="smc-queued">{queued}</div>}
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import type {
   OpenItemDeliveryCard,
   ProjectStartedCard,
   SessionCapabilities,
+  SessionMessageCard,
   SessionRequestView,
   SessionTurnIntent,
   SessionTurnPlacement,
@@ -619,6 +620,10 @@ export interface ActiveSessionTurn {
   openItemDelivery?: OpenItemDeliveryCard;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStartedCard;
+  /** Another Orbit session's message (`SessionMessageCard`): who sent it, as the runner's echo will
+   *  carry it. Its words are that session's, not the reader's. Absent on every turn nobody's session
+   *  sent. */
+  sessionMessage?: SessionMessageCard;
   /** The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
    *  delivery — so nobody typed its words. Absent on every turn somebody sent. */
   authoredByOrbit?: true;

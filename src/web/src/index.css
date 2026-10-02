@@ -17239,6 +17239,24 @@ button.chat-jump-start:hover {
   color: var(--warning);
   font-size: 12px;
 }
+/* Still waiting to be delivered (WorkspaceView's queued tail): dashed like a queued message, with the
+   queue's status line at its foot — the same shape the delivery and project-start cards take. */
+.smc.is-queued {
+  border-style: dashed;
+}
+.smc-queued {
+  margin-top: 6px;
+}
+.smc-queued .chat-queued-meta {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  row-gap: 2px;
+}
+.smc-queued .chat-queued-why {
+  order: 1;
+  flex-basis: 100%;
+  white-space: normal;
+}
 /* A message that asks for a reply (session requests): what it asks, by when, and where it stands —
    read live, so the state word moves while the card does not. */
 .smc-request {

@@ -76,6 +76,29 @@ final class SessionMessageWiringTests: XCTestCase {
         XCTAssertFalse(user.contains { $0.hasPrefix("#if") }, "the card is drawn on one platform only")
     }
 
+    /// While it waits in the queue it is the same card, asked about before the shapes its words could
+    /// take, with the queue's Cancel at its foot — and nothing else in the queued row draws it.
+    func testTheQueuedRowDrawsTheCardFirstWithItsCancel() throws {
+        let row = statements(try section(try source(Self.consolePath),
+                                         from: "case .queued(let bubble):", to: "case .bottom:"))
+        XCTAssertEqual(row.dropFirst().first, "if let card = bubble.sessionMessage {",
+                       "a queued message from another session is no longer asked about first")
+        XCTAssertEqual(Array(row.dropFirst(2).prefix(5)), [
+            "SessionMessageCardView(card: card, text: bubble.text, ts: bubble.ts,",
+            "undelivered: bubble.undelivered,",
+            "onCancelQueued: bubble.turnId == nil || bubble.steer",
+            "? nil : { Task { await console.cancelQueued(bubble) } })",
+            "} else if let card = bubble.itemCard {",
+        ], "a queued message from another session is not drawn as its card, with its Cancel — and "
+            + "none for a steer, which the server refuses to withdraw")
+        // Cancel is the console's ordinary withdraw, whose composer rule keeps the words out
+        // (`QueuedTurnRestoreTests`); the card offers it only while the message is still queued.
+        let card = statements(try source(Self.cardPath))
+        XCTAssertTrue(card.contains("var onCancelQueued: (() -> Void)? = nil"))
+        XCTAssertTrue(card.contains("if let onCancelQueued { queuedFoot(onCancelQueued) }"),
+                      "the queued card offers no way to withdraw it")
+    }
+
     func testTheBarAndItsAnchorsAreHandedTheSender() throws {
         let console = try source(Self.consolePath)
         let anchor = try section(console, from: "private func namesAQuestion", to: "private var stuckBubble")

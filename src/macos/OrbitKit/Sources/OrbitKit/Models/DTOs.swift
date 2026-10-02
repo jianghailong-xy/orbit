@@ -775,6 +775,12 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// held raw for `ProjectStarted.parseCard` — the reader the echo's payload is read by.
     public let projectStarted: JSONValue?
     public var startedCard: ProjectStarted? { ProjectStarted.parseCard(projectStarted) }
+    /// Who sent this turn, when it is another Orbit session's message (`sessionMessage`) — held raw
+    /// for `SessionMessage.parseCard`, the reader the echo's payload is read by, so the card drawn
+    /// while the message waits is the one its echo is drawn as. Nil on every turn nobody's session
+    /// sent, and from a server that predates the field.
+    public let sessionMessage: JSONValue?
+    public var senderCard: SessionMessage? { SessionMessage.parseCard(sessionMessage) }
     /// The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
     /// predates the field.
@@ -782,13 +788,15 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
 
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
-                projectStarted: JSONValue? = nil, authoredByOrbit: Bool? = nil) {
+                projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
+                authoredByOrbit: Bool? = nil) {
         self.turnId = turnId
         self.kind = kind
         self.content = content
         self.attachments = attachments
         self.openItemDelivery = openItemDelivery
         self.projectStarted = projectStarted
+        self.sessionMessage = sessionMessage
         self.authoredByOrbit = authoredByOrbit
     }
 }

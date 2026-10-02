@@ -5,6 +5,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { uuidToBase62, type SessionMessageCard as Card } from '@orbit/shared';
 import { parseSessionMessage, sessionMessageSticky } from '../lib/sessionMessage';
+import { acceptedUserTurnEvent } from '../lib/acceptedUserTurn';
+import { SessionMessageCard } from './SessionMessageCard';
 import { Transcript, type RunEvent } from './Transcript';
 
 /**
@@ -139,6 +141,38 @@ describe('another session’s message', () => {
       expect(card(), `drew a card from ${JSON.stringify(bad)}`).toBeNull();
       expect(container.querySelector('.chat-user')).not.toBeNull();
     }
+  });
+});
+
+describe('another session’s message, while it waits to be delivered', () => {
+  it('is the same card, dashed, with the queue’s line at its foot and out of the sticky bar’s reach', async () => {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <SessionMessageCard card={CARD} text={SENT} queued={<span className="the-queue-line">Queued</span>} />
+        </MemoryRouter>,
+      );
+    });
+    const el = card()!;
+    expect(el.classList.contains('is-queued')).toBe(true);
+    expect(el.hasAttribute('data-seq'), 'a queued message is no event for ⌘F to land on').toBe(false);
+    expect(el.querySelector('.smc-from')?.textContent).toBe('Worker: criterion 3');
+    expect(el.querySelector('.smc-body .md')?.textContent).toBe(SENT);
+    expect(el.querySelector('.smc-queued .the-queue-line')?.textContent).toBe('Queued');
+    expect(container.querySelector('.chat-user')).toBeNull();
+  });
+
+  it('is drawn as the card while its echo is on the way, from whichever read recovered the row', async () => {
+    const base = { key: 'turn-sent', sessionId: 'session-1', turnId: 'turn-sent', text: SENT, acceptedAt: '2026-10-01T15:40:00.000Z', attachments: [] };
+    for (const source of ['activeSnapshot', 'local'] as const) {
+      const event = acceptedUserTurnEvent({ ...base, source, sessionMessage: CARD }, 0.5);
+      expect(event.payload).toEqual({ text: SENT, sessionMessage: CARD });
+    }
+    await mount([acceptedUserTurnEvent({ ...base, source: 'activeSnapshot', sessionMessage: CARD }, 0.5) as RunEvent]);
+    expect(card()?.querySelector('.smc-from')?.textContent).toBe('Worker: criterion 3');
+    expect(container.querySelector('.chat-user'), 'the placeholder was drawn as the reader’s own bubble').toBeNull();
+    // And a turn the reader typed carries no card at all, as the control plane stores none.
+    expect(acceptedUserTurnEvent({ ...base, source: 'local' }, 0.5).payload).toEqual({ text: SENT });
   });
 });
 

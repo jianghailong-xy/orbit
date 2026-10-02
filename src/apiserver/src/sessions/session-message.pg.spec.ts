@@ -1,6 +1,7 @@
 /**
  * Another Orbit session's message — signed, delivered as such, and bounded — against a real
- * PostgreSQL (docs/session-request-reply-contract.md §8, P0 criteria 1, 2 and 4).
+ * PostgreSQL (docs/session-request-reply-contract.md §8, P0 criteria 1, 2 and 4, and the three gaps
+ * criteria 11–13 close).
  *
  *   1. A turn `session_send` or `project_send` writes carries the calling session as its sender, on
  *      the live write and on the revive alike; one the account owner, a headless credential or the
@@ -11,6 +12,16 @@
  *   4. The 21st message one session sends another inside an hour is refused with 409
  *      SESSION_MESSAGE_RATE_LIMITED — `project_send` counting against the coordinator it resolves —
  *      while a retry of a counted message is not another one, and nobody but a session is counted.
+ *  11. The auto-retry sweep re-sends another session's message as that session's — the sender kept
+ *      on the new turn, the block delivered with it, the card stored beside its echo — on the live
+ *      path and on the revive alike; and as the platform's re-send it is charged to nobody: neither
+ *      the pair's hour nor a steer.
+ *  12. (the server's half) A message another session sent carries its card on both projections of
+ *      the queue while it waits, the request it is included — the card its echo will carry.
+ *  13. `session_interrupt`'s message is signed with the calling session and delivered as its
+ *      message, and counts with that session's other messages against the pair's hour: the 21st is
+ *      refused and leaves the queue as it found it, while a retry of a counted one and a bodyless
+ *      interrupt are not messages at all.
  *
  * The doors are the real controllers and the real orchestration credential; the inbox and the event
  * ingest are reached over real HTTP, through the guard and the public-id interceptor main.ts installs.
@@ -62,6 +73,7 @@ import { RunnerSessionsController } from '../runner-api/runner-sessions.controll
 import { ListEventsService } from '../task-lists/list-events.service';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { TasksService } from '../tasks/tasks.service';
+import { AutoRetryService } from './auto-retry.service';
 import { MergeReceiptService } from './merge-receipt.service';
 import {
   SESSION_MESSAGE_RATE_LIMITED_CODE,
@@ -69,6 +81,7 @@ import {
   sessionMessageBlock,
 } from './session-message';
 import { SessionsService } from './sessions.service';
+import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -209,6 +222,19 @@ test('one session’s message to another is signed, delivered as such, and bound
     );
   }
 
+  /** `session_interrupt` as the runner calls it — always from a session: the verb has no headless
+   *  path. With no message it is a plain interrupt. */
+  async function sessionInterrupt(from: string, to: string, message?: string, clientTurnId?: string) {
+    return sendDoor.interruptSession(
+      runner,
+      undefined,
+      from,
+      await orchestration.issue(runnerId, from),
+      to,
+      message === undefined ? undefined : { message, ...(clientTurnId ? { clientTurnId } : {}) },
+    );
+  }
+
   /** `project_send` as the runner calls it, from a session with its own credential. */
   async function projectSend(from: string, projectId: string, message: string, clientTurnId: string = randomUUID()) {
     return projectDoor.sendToCoordinator(
@@ -309,6 +335,17 @@ test('one session’s message to another is signed, delivered as such, and bound
     await prisma.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
     const delivered = await http('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox`);
     assert.equal(delivered.status, 200, `inbox answered ${delivered.status}: ${delivered.text}`);
+    return delivered;
+  }
+
+  /** The inbox after an interrupt-and-send: the interrupt goes out first, then the message. */
+  async function claimToMessage(sessionId: string): Promise<Answer> {
+    let delivered = await claimAndPoll(sessionId);
+    for (let i = 0; i < 2 && delivered.json.kind !== 'message'; i++) {
+      delivered = await http('GET', `/runner/sessions/${uuidToBase62(sessionId)}/inbox`);
+      assert.equal(delivered.status, 200, `inbox answered ${delivered.status}: ${delivered.text}`);
+    }
+    assert.equal(delivered.json.kind, 'message', `the inbox never handed out the message: ${delivered.text}`);
     return delivered;
   }
 
@@ -531,5 +568,262 @@ test('one session’s message to another is signed, delivered as such, and bound
     });
     const counted = (await turnsOf(coordinatorSessionId)).filter((turn) => turn.senderSessionId === worker);
     assert.equal(counted.length, 20);
+  });
+
+  // ── 11. what the auto-retry sweep re-sends ────────────────────────────────────────────────────
+
+  // The sweep over every armed session there is, built the way the module builds it. It is run with
+  // a `now` of its own, decades back, so it can only ever pick up the rows armed for it below.
+  const autoRetry = new AutoRetryService(prisma as unknown as PrismaService, sessions, realtime as never);
+  let armedAt = new Date('2001-01-01T00:00:00.000Z');
+
+  /** A message the runner took and echoed, whose turn then died on the provider: the turn settled
+   *  and the session parked as `parkedAs` with a retry armed — what ingest's quota and provider-error
+   *  branches leave behind. Answers the instant to sweep at. */
+  async function failAndArm(sessionId: string, parkedAs: RunStatus): Promise<Date> {
+    const delivered = await claimAndPoll(sessionId);
+    await echo(sessionId, 1, delivered.json.turnId, { text: String(delivered.json.content ?? '') });
+    await prisma.conversationTurn.updateMany({
+      where: { sessionId, status: 'IN_FLIGHT' },
+      data: { status: 'ANSWERED', answeredAt: new Date() },
+    });
+    armedAt = new Date(armedAt.getTime() + 60_000);
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: {
+        status: parkedAs, retryAt: armedAt, retryAttempts: 0,
+        // A provider error settles the run FAILED and asks the process to stop (`sweep`'s own note).
+        ...(parkedAs === RunStatus.FAILED ? { cancelRequestedAt: new Date(), finishedAt: new Date() } : {}),
+      },
+    });
+    // A resume refuses a runner that has not been heard from in 90s, and this file runs for minutes.
+    await prisma.runner.update({ where: { id: runnerId }, data: { lastHeartbeatAt: new Date() } });
+    return new Date(armedAt.getTime() + 1_000);
+  }
+
+  const resentOn = async (sessionId: string) =>
+    (await turnsOf(sessionId)).filter((turn) => turn.clientTurnId.startsWith(AUTO_RETRY_TURN_KEY_PREFIX));
+
+  await t.test('the auto-retry sweep re-sends another session’s message as that session’s', async () => {
+    const task = await prisma.task.create({
+      data: {
+        ownerId, title: 'the migration review', creatorType: 'USER', creatorId: ownerId,
+        completionCriterion: 'OWNER_CONFIRMED',
+      },
+      select: { id: true },
+    });
+    const worker = await session('Worker: asks for a review', { taskId: task.id });
+    const recipient = await session('the conversation whose turn the quota killed');
+    const words = 'please review the migration before I merge it';
+    await sessionSend(worker, recipient, words, 'retried-1');
+    const steersBefore = steers.length;
+
+    await autoRetry.sweep(await failAndArm(recipient, RunStatus.AWAITING_INPUT));
+
+    const [resent, ...more] = await resentOn(recipient);
+    assert.ok(resent, 'the sweep re-sent nothing');
+    assert.equal(more.length, 0, 'the sweep re-sent the message twice');
+    assert.equal(resent.content, words);
+    assert.equal(resent.senderSessionId, worker, 'the re-send dropped the sender: it reads as the owner’s');
+    assert.equal(await senderOf(recipient, 'retried-1'), worker, 'the original lost its sender');
+    // The platform's re-send, not the worker's doing: nothing was charged as a steer for it.
+    assert.equal(steers.length, steersBefore, 'the re-send was charged as a steer');
+
+    // While it waits, the queue already draws it as the worker's (criterion 12, the server's half).
+    const [waiting] = (await sessions.listQueuedTurns(ownerId, recipient, 'active'))
+      .filter((row) => row.turnId === resent.id);
+    assert.deepEqual(waiting?.sessionMessage, {
+      fromSessionId: worker, fromTitle: 'Worker: asks for a review', fromAgentName: 'orbit-worker', fromTaskId: task.id,
+    });
+
+    // The engine reads it as the worker's message again: the words, then the block.
+    const redelivered = await claimAndPoll(recipient);
+    const content = String(redelivered.json.content ?? '');
+    const block = sessionMessageBlock({
+      id: worker, title: 'Worker: asks for a review', taskId: task.id, workspace: { name: 'orbit-worker' },
+    });
+    assert.equal(content, `${words}\n\n${block}`, `the engine was handed something else:\n${content}`);
+    const stored = await echo(recipient, 2, redelivered.json.turnId, { text: content });
+    assert.equal(stored.controlPlaneNote, `\n\n${block}`, 'the block was not recorded as the control plane’s note');
+    assert.deepEqual(stored.sessionMessage, {
+      fromSessionId: worker, fromTitle: 'Worker: asks for a review', fromAgentName: 'orbit-worker', fromTaskId: task.id,
+    });
+  });
+
+  await t.test('a re-send that revives the session keeps the sender as well', async () => {
+    const worker = await session('Worker: reports a green build');
+    const recipient = await session('the conversation a provider error failed');
+    await sessionSend(worker, recipient, 'the build is green — please merge', 'revive-retry-1');
+
+    await autoRetry.sweep(await failAndArm(recipient, RunStatus.FAILED));
+
+    const standing = await prisma.session.findUniqueOrThrow({ where: { id: recipient } });
+    assert.equal(standing.status, RunStatus.PENDING, `the failed session was not revived: ${standing.status}`);
+    const [resent] = await resentOn(recipient);
+    assert.ok(resent, 'the sweep re-sent nothing');
+    assert.equal(resent.senderSessionId, worker, 'the revive dropped the sender');
+  });
+
+  await t.test('the re-send is not one more message from that session in the pair’s hour', async () => {
+    const chatty = await session('Worker: whose message failed once');
+    const busy = await session('the session it writes to');
+    await sessionSend(chatty, busy, 'message 1', 'counted-1');
+    await autoRetry.sweep(await failAndArm(busy, RunStatus.AWAITING_INPUT));
+    assert.equal((await resentOn(busy)).length, 1, 'the sweep re-sent nothing');
+
+    // Nineteen more fit: the one it sent and the nineteen make twenty, and the re-send is none of them.
+    for (let i = 2; i <= SESSION_MESSAGES_PER_PAIR_PER_HOUR; i++) {
+      await sessionSend(chatty, busy, `message ${i}`, `counted-${i}`);
+    }
+    await assert.rejects(() => sessionSend(chatty, busy, 'message 21', 'counted-21'), (error: unknown) => {
+      assert.equal(refusalOf(error).code, SESSION_MESSAGE_RATE_LIMITED_CODE);
+      return true;
+    });
+    const signed = (await turnsOf(busy)).filter((turn) => turn.senderSessionId === chatty);
+    assert.equal(signed.length, SESSION_MESSAGES_PER_PAIR_PER_HOUR + 1, 'twenty messages and the one re-send');
+  });
+
+  await t.test('the owner’s own message is re-sent as the owner’s, and the platform’s key is nobody else’s', async () => {
+    const recipient = await session('a conversation only the owner talks to');
+    await ownerSend(recipient, 'the owner’s question');
+    await autoRetry.sweep(await failAndArm(recipient, RunStatus.AWAITING_INPUT));
+    const [resent] = await resentOn(recipient);
+    assert.ok(resent, 'the sweep re-sent nothing');
+    assert.equal(resent.senderSessionId, null, 'the owner’s message was re-sent under a session’s name');
+
+    // A session cannot file its own message under the re-send's key and so step outside the count.
+    const worker = await session('Worker: picks a key');
+    await assert.rejects(
+      () => sessionSend(worker, recipient, 'uncounted?', `${AUTO_RETRY_TURN_KEY_PREFIX}mine`),
+      (error: unknown) => {
+        assert.equal((error as { getStatus?: () => number }).getStatus?.(), 400);
+        return true;
+      },
+    );
+    await assert.rejects(
+      () => sessionInterrupt(worker, recipient, 'uncounted?', `${AUTO_RETRY_TURN_KEY_PREFIX}mine`),
+      (error: unknown) => {
+        assert.equal((error as { getStatus?: () => number }).getStatus?.(), 400);
+        return true;
+      },
+    );
+  });
+
+  // ── 12. the queue, while another session's message waits ──────────────────────────────────────
+
+  await t.test('a waiting message from another session carries its card on both views of the queue', async () => {
+    const worker = await session('Worker: queued behind the owner');
+    const recipient = await session('a conversation with a queue');
+    await ownerSend(recipient, 'the owner goes first');
+    await sessionSend(worker, recipient, 'and then mine', 'queued-1');
+    const [queuedTurn] = (await turnsOf(recipient)).filter((turn) => turn.clientTurnId === 'queued-1');
+    // The request it carries, when its sender asked for a reply: the card names it, as the echo's does.
+    const request = await prisma.sessionRequest.create({
+      data: {
+        ownerId, fromSessionId: worker, toSessionId: recipient, turnId: queuedTurn.id, clientTurnId: 'queued-1',
+        requestPreview: 'and then mine', replyBy: new Date(Date.now() + 60 * 60_000),
+      },
+    });
+    const card = {
+      fromSessionId: worker, fromTitle: 'Worker: queued behind the owner', fromAgentName: 'orbit-worker',
+      requestId: uuidToBase62(request.id),
+    };
+
+    // What the installed native clients read: queued rows only, the owner's accepted head left out.
+    const narrow = await sessions.listQueuedTurns(ownerId, recipient);
+    assert.deepEqual(narrow.map((row) => row.turnId), [queuedTurn.id]);
+    assert.deepEqual(narrow[0].sessionMessage, card);
+    assert.equal(narrow[0].authoredByOrbit, undefined, 'somebody did write it: the worker');
+
+    // What the web reads: the owner's head with no card, the worker's message with its own.
+    const active = await sessions.listQueuedTurns(ownerId, recipient, 'active');
+    assert.equal(active.length, 2);
+    assert.equal(active[0].placement, 'accepted');
+    assert.equal(active[0].sessionMessage, undefined, 'the owner’s message was drawn as another session’s');
+    assert.equal(active[1].turnId, queuedTurn.id);
+    assert.equal(active[1].placement, 'queued');
+    assert.deepEqual(active[1].sessionMessage, card);
+  });
+
+  // ── 13. the message an interrupt carries ──────────────────────────────────────────────────────
+
+  await t.test('session_interrupt’s message is signed with the calling session and delivered as its message', async () => {
+    const worker = await session('Worker: changes course');
+    const recipient = await session('the session being redirected');
+    const words = 'stop — the spec changed, use the v2 endpoint instead';
+    const answer = await sessionInterrupt(worker, recipient, words, 'interrupt-1');
+    assert.ok('turnId' in answer && answer.turnId, `the interrupt filed no message: ${JSON.stringify(answer)}`);
+
+    assert.equal(await senderOf(recipient, 'interrupt-1'), worker, 'the interrupt’s message is not signed');
+    // The interrupt itself says nothing, so it is nobody's message.
+    const control = (await turnsOf(recipient)).filter((turn) => turn.kind === 'interrupt');
+    assert.equal(control.length, 1);
+    assert.equal(control[0].senderSessionId, null);
+    // Charged as a steer as before: the hourly limit came in beside that charge, not instead of it.
+    assert.ok(steers.includes(recipient), 'the steer was no longer charged');
+
+    // While it waits for the interrupt to land, the queue draws it as the worker's.
+    const [waiting] = await sessions.listQueuedTurns(ownerId, recipient, 'active');
+    assert.equal(waiting?.turnId, answer.turnId);
+    assert.deepEqual(waiting?.sessionMessage, {
+      fromSessionId: worker, fromTitle: 'Worker: changes course', fromAgentName: 'orbit-worker',
+    });
+
+    const delivered = await claimToMessage(recipient);
+    const content = String(delivered.json.content ?? '');
+    const block = sessionMessageBlock({
+      id: worker, title: 'Worker: changes course', taskId: null, workspace: { name: 'orbit-worker' },
+    });
+    assert.equal(content, `${words}\n\n${block}`, `the engine was handed something else:\n${content}`);
+    const stored = await echo(recipient, 1, delivered.json.turnId, { text: content });
+    assert.equal(stored.controlPlaneNote, `\n\n${block}`);
+    assert.deepEqual(stored.sessionMessage, {
+      fromSessionId: worker, fromTitle: 'Worker: changes course', fromAgentName: 'orbit-worker',
+    });
+  });
+
+  await t.test('an interrupt’s message counts against the pair’s hour, and the 21st is refused', async () => {
+    const chatty = await session('Worker: keeps redirecting');
+    const busy = await session('the session it keeps redirecting');
+    for (let i = 1; i < SESSION_MESSAGES_PER_PAIR_PER_HOUR; i++) {
+      await sessionSend(chatty, busy, `message ${i}`, `sent-${i}`);
+    }
+    // Read and answered, so the interrupt below has nothing of the worker's left to drop: what is
+    // counted is what was sent.
+    await prisma.conversationTurn.updateMany({ where: { sessionId: busy }, data: { status: 'ANSWERED', answeredAt: new Date() } });
+    await prisma.session.update({ where: { id: busy }, data: { status: RunStatus.AWAITING_INPUT } });
+
+    // The twentieth is an interrupt's, counted with the nineteen sends.
+    const twentieth = await sessionInterrupt(chatty, busy, 'stop and do this instead (20)', 'interrupt-20');
+    assert.equal(await senderOf(busy, 'interrupt-20'), chatty);
+    // The runner takes it, so the session is live again and the next interrupt is judged on the count
+    // alone: one aimed at a session still waiting to be claimed is refused as ended before that.
+    await claimToMessage(busy);
+
+    const before = await turnsOf(busy);
+    await assert.rejects(() => sessionInterrupt(chatty, busy, 'and this (21)', 'interrupt-21'), (error: unknown) => {
+      const refusal = refusalOf(error);
+      assert.equal((error as { getStatus?: () => number }).getStatus?.(), 409);
+      assert.equal(refusal.code, SESSION_MESSAGE_RATE_LIMITED_CODE);
+      assert.equal(refusal.retryable, false);
+      return true;
+    });
+    // Refused before anything was dropped: the twentieth still waits, and no second interrupt was filed.
+    const after = await turnsOf(busy);
+    assert.deepEqual(after.map((turn) => [turn.id, turn.status]), before.map((turn) => [turn.id, turn.status]));
+    // ...and the same pair's ordinary send is refused by the same count.
+    await assert.rejects(() => sessionSend(chatty, busy, 'or this (21)', 'sent-21'), (error: unknown) => {
+      assert.equal(refusalOf(error).code, SESSION_MESSAGE_RATE_LIMITED_CODE);
+      return true;
+    });
+
+    // A retry of the counted interrupt is its receipt, not a 21st message.
+    const replayed = await sessionInterrupt(chatty, busy, 'stop and do this instead (20)', 'interrupt-20');
+    assert.ok('turnId' in twentieth && 'turnId' in replayed);
+    assert.equal(replayed.turnId, twentieth.turnId, 'a retry of the counted interrupt was not its receipt');
+    // A bodyless interrupt carries no message: the limit is not its business.
+    assert.deepEqual(await sessionInterrupt(chatty, busy), { ok: true });
+    const signed = (await turnsOf(busy)).filter((turn) => turn.senderSessionId === chatty);
+    assert.equal(signed.length, SESSION_MESSAGES_PER_PAIR_PER_HOUR);
   });
 });

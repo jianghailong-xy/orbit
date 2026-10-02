@@ -464,7 +464,9 @@ export class RunnerSessionsController {
     @Body() dto?: { message?: string; clientTurnId?: string },
   ) {
     this.assertNoServiceToken(grant);
-    await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
+    // The session the message is FROM, as `session_send` takes it: the caller the orchestration
+    // credential just proved, and nothing a body could say (session-message.ts, contract §2.1).
+    const senderSessionId = await this.orchestration.assert(runner, callingSessionId, orchestrationToken);
     // With a message, this is the same one-transaction "stop that and do this instead" the
     // browser sends (SessionInterruptDto): the follow-up is filed after the interrupt drops
     // what was queued, so it cannot be its own casualty. Bodyless stays a plain interrupt.
@@ -484,8 +486,15 @@ export class RunnerSessionsController {
         : undefined,
       followUp
         ? {
-            participateFollowUpTransaction: (tx) =>
-              this.attempts.chargeSteer(runner.ownerId, id, actor, tx),
+            // The message is one more this session sent that one, counted with its ordinary
+            // messages against the pair's hourly limit (contract §2.4) — inside the transaction that
+            // writes it and past the interrupt's own idempotency receipt, so a retry of a counted
+            // interrupt is not another message, and a refusal leaves the queue as it found it.
+            participateFollowUpTransaction: async (tx) => {
+              if (senderSessionId) await chargeSessionMessage(tx, senderSessionId, id);
+              await this.attempts.chargeSteer(runner.ownerId, id, actor, tx);
+            },
+            senderSessionId,
           }
         : undefined,
     );

@@ -694,7 +694,19 @@ struct TranscriptView: View {
             // checked FIRST as the transcript's own row checks it (`TranscriptItemView`): the shape
             // must not depend on which of the two states the turn is in. A delivery's paragraph is
             // neither of the two wake blocks below, so nothing is shadowed by the order.
-            if let card = bubble.itemCard {
+            //
+            // Another Orbit session's message is asked about before all of them, as the transcript's
+            // row asks it: who sent it is the projection's (`QueuedTurnInfo.senderCard`), and its words
+            // are the sending agent's to choose — they could take a wake's shape. Cancel withdraws it
+            // and hands nothing back to the composer (`ComposerLogic.restorableText`). Not offered for
+            // a steer: `session_send` into a running turn is written into it, and the server refuses
+            // to withdraw what the engine may already be reading (`UserBubbleView` hides it the same way).
+            if let card = bubble.sessionMessage {
+                SessionMessageCardView(card: card, text: bubble.text, ts: bubble.ts,
+                                       undelivered: bubble.undelivered,
+                                       onCancelQueued: bubble.turnId == nil || bubble.steer
+                                           ? nil : { Task { await console.cancelQueued(bubble) } })
+            } else if let card = bubble.itemCard {
                 OpenItemDeliveryCardView(card: card, text: bubble.text, ts: bubble.ts,
                                          undelivered: bubble.undelivered,
                                          onCancelQueued: bubble.turnId == nil

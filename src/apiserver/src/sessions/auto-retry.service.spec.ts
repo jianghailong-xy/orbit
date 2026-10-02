@@ -6,6 +6,7 @@ import { encryptSecret } from '../providers/provider-crypto';
 import { QueueService } from '../queue/queue.service';
 import { AutoRetryService } from './auto-retry.service';
 import type { SessionsService } from './sessions.service';
+import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
 
 const NOW = new Date('2026-08-03T16:25:00Z');
 const PAST = new Date('2026-08-03T16:20:00Z');
@@ -132,6 +133,8 @@ function makeService(
       sendIntent?: string | null;
       targetTurnId?: string | null;
       deliveryStatus?: string | null;
+      /** The session that sent it, when it is another session's message; omitted rows have none. */
+      senderSessionId?: string | null;
     }>;
     /** What the commit-race branch re-reads for this session AFTER a refused resume. */
     raceReadRow?: {
@@ -147,6 +150,8 @@ function makeService(
   const resumed: Array<{ id: string; content: string }> = [];
   // Kept apart from `resumed` so every assertion above stays a statement about the message.
   const resumedAttachments: string[][] = [];
+  // …and so is what else each re-send was handed: the key it went under, and resume()'s options.
+  const resumedWith: Array<{ clientTurnId: string; opts: unknown }> = [];
   const attachments = (opts.attachments ?? []).map((a) => ({ ...a }));
   let copied = 0;
   const prisma = {
@@ -318,6 +323,7 @@ function makeService(
               targetTurnId,
               deliveryStatus: metadata.deliveryStatus ?? null,
               content,
+              senderSessionId: metadata.senderSessionId ?? null,
               targetTurn: targetTurnId && targetTurnId in (opts.turnContents ?? {})
                 ? {
                     id: targetTurnId,
@@ -325,6 +331,7 @@ function makeService(
                     sendIntent: targetMetadata.sendIntent ?? null,
                     deliveryStatus: targetMetadata.deliveryStatus ?? null,
                     content: opts.turnContents?.[targetTurnId] ?? null,
+                    senderSessionId: targetMetadata.senderSessionId ?? null,
                   }
                 : null,
             };
@@ -358,11 +365,13 @@ function makeService(
     resume: async (
       _owner: string,
       id: string,
-      dto: { content: string; attachmentIds?: string[] },
+      dto: { content: string; attachmentIds?: string[]; clientTurnId: string },
+      resumeOpts?: unknown,
     ) => {
       if (opts.resume) await opts.resume();
       resumed.push({ id, content: dto.content });
       resumedAttachments.push(dto.attachmentIds ?? []);
+      resumedWith.push({ clientTurnId: dto.clientTurnId, opts: resumeOpts });
       // What resume() does with them, so the copies a failed re-send must clean up are
       // distinguishable from the ones that became a turn's images.
       for (const attId of dto.attachmentIds ?? []) {
@@ -393,7 +402,7 @@ function makeService(
     realtime as never,
     opts.pool ? poolQueue(opts.pool) : undefined,
   );
-  return { service, updates, resumed, resumedAttachments, attachments, rows, published, settled };
+  return { service, updates, resumed, resumedAttachments, resumedWith, attachments, rows, published, settled };
 }
 
 function row(over: SessionRow = {}): SessionRow {
@@ -759,6 +768,55 @@ test('an armed failed retry follows the latest CURRENT_WORK USER back to its tar
   await service.sweep(NOW);
 
   assert.deepEqual(resumed, [{ id: 'session-1', content: 'the original executable request' }]);
+});
+
+// docs/session-request-reply-contract.md §2.1: another session's message is still that session's when
+// the sweep re-sends it — delivered without its sender it reads as the account owner's — and the
+// re-send is the platform's: charged neither against the pair's hour nor as a steer.
+test('a re-send of another session’s message keeps its sender and is charged to nobody', async () => {
+  const { service, resumed, resumedWith } = makeService([row()], {
+    events: [{ type: 'user', payload: { text: 'echo with the block appended' }, turnId: 'message-7' }],
+    turnContents: { 'message-7': 'please review the migration' },
+    turnMetadata: { 'message-7': { senderSessionId: 'sender-session-1' } },
+  });
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [{ id: 'session-1', content: 'please review the migration' }]);
+  // Exactly the sender: no `participateSendTransaction`, which is where both charges ride.
+  assert.deepEqual(resumedWith.map((call) => call.opts), [{ senderSessionId: 'sender-session-1' }]);
+  // Under the platform's own key, which the pair's hourly count leaves out.
+  assert.ok(resumedWith[0].clientTurnId.startsWith(AUTO_RETRY_TURN_KEY_PREFIX), resumedWith[0].clientTurnId);
+});
+
+test('the owner’s message is re-sent with no sender, under the same platform key', async () => {
+  const { service, resumedWith } = makeService([row()], {
+    events: [{ type: 'user', payload: { text: 'the original message' }, turnId: 'message-7' }],
+    turnContents: { 'message-7': 'the original message' },
+  });
+  await service.sweep(NOW);
+  assert.deepEqual(resumedWith.map((call) => call.opts), [undefined]);
+  assert.ok(resumedWith[0].clientTurnId.startsWith(AUTO_RETRY_TURN_KEY_PREFIX), resumedWith[0].clientTurnId);
+});
+
+test('the sender re-sent is the sender of the words re-sent, not of the steer that pointed at them', async () => {
+  // Another session's CURRENT_WORK steer into the owner's message failed delivery; the retry re-sends
+  // the owner's message, so it goes as the owner's.
+  const { service, resumed, resumedWith } = makeService([row()], {
+    events: [{ type: 'user', payload: { text: 'a steer from elsewhere' }, turnId: 'current-work-9' }],
+    turnContents: {
+      'target-message-8': 'the owner’s request',
+      'current-work-9': 'a steer from elsewhere',
+    },
+    turnMetadata: {
+      'target-message-8': { kind: 'message', sendIntent: 'NEXT_TURN' },
+      'current-work-9': {
+        kind: 'steer', sendIntent: 'CURRENT_WORK', targetTurnId: 'target-message-8', deliveryStatus: 'FAILED',
+        senderSessionId: 'sender-session-1',
+      },
+    },
+  });
+  await service.sweep(NOW);
+  assert.deepEqual(resumed, [{ id: 'session-1', content: 'the owner’s request' }]);
+  assert.deepEqual(resumedWith.map((call) => call.opts), [undefined]);
 });
 
 test('a failed background job wake re-sends nothing, least of all the message before it', async () => {
