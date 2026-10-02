@@ -1,12 +1,15 @@
 import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, RunStatus } from '@prisma/client';
 import {
   RunEventType,
   WIKI_CURSOR_OUTCOMES,
   WIKI_DEFAULT_TOPICS,
+  WIKI_MAINTENANCE_FAILURE_KINDS,
   WIKI_MAINTENANCE_JOB,
+  WIKI_MAINTENANCE_RECOVERY,
   WIKI_MAINTENANCE_RULES,
   WIKI_REVIEW_RULES,
+  isRetryableApiErrorText,
   uuidToBase62,
   wikiMaintenanceCheckCommand,
   wikiMaintenanceRunSessions,
@@ -17,6 +20,7 @@ import {
   type WikiCursorState,
   type WikiMaintenanceCheck,
   type WikiMaintenanceDue,
+  type WikiMaintenanceFailureKind,
   type WikiMaintenanceHeldReason,
   type WikiMaintenanceRunContext,
 } from '@orbit/shared';
@@ -26,6 +30,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { TASK_COMPLETION_FENCE_REVISION } from '../tasks/task-completion-criterion';
+import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
 import {
   afterSql,
   comparePositions,
@@ -77,6 +82,18 @@ import { currentWikiRollout, wikiOnFor } from './wiki-rollout';
  * --expect-cursor <token>`, the position covering the next `runSessions` sessions after the cursor. The
  * run reports how it ended — its outcome, the ops the server refused, its report with the token spend —
  * and the check passes only when the cursor reached that position and the run had no op refused.
+ *
+ * A TASK THAT DIED HOLDS THE LIST NO MORE (contract `maintenance.job.recovery`). A task whose session
+ * ended while the task stayed OPEN — reaped `runner offline` while its runner restarted, an engine that
+ * never came up — has nothing that will ever start it again: the dispatcher's automatic scans start a task
+ * that has prerequisites, or one of a project, or one whose runAt is due, and a maintenance task is none
+ * of those once its first dispatch consumed its runAt; and the reaper arms no retry of a session whose
+ * task opts into auto-run, leaving it to those very scans. On 2026-10-02 such a task held the list for
+ * four hours, every fact answered `unfinished`. So before anything else, every hint settles the list's
+ * dead tasks: one that died of the platform (`infra`) is given a runAt, `rerunAfterMinutes` after its
+ * session ended, and the dispatcher starts it again, once; any other, or one whose rerun died too, is
+ * closed FAILED with its run's end written down. And a run whose task ended without the run saying how is
+ * given that end, so no row is left without one.
  */
 
 // ── The trigger ─────────────────────────────────────────────────────────────────────────────────
@@ -124,13 +141,26 @@ export function wikiMaintenanceHintFor(
   return SESSION_FACT_EVENTS.has(event.type) && UUID.test(runId) ? { ownerId: null, sessionIds: [runId], taskIds: [] } : null;
 }
 
-/** Why a hint made no task, or the task it made. */
+/**
+ * Why a hint made no task, or the task it made — and, only when it did any, what settling the list's dead
+ * tasks did first (`settled`).
+ */
 export type WikiMaintenanceTriggerOutcome =
-  | { made: true; spaceId: string; taskId: string; runId: string; due: WikiMaintenanceDue; expect: string; runSessions: number }
+  | {
+    made: true;
+    spaceId: string;
+    taskId: string;
+    runId: string;
+    due: WikiMaintenanceDue;
+    expect: string;
+    runSessions: number;
+    settled?: WikiMaintenanceSettled;
+  }
   | {
     made: false;
     spaceId: string;
     why: 'off' | 'unfinished' | 'plan_job_queued' | 'no_new_fact' | 'not_due' | 'nothing_settled' | WikiMaintenanceHeldReason;
+    settled?: WikiMaintenanceSettled;
   };
 
 /** The rows `considerWikiMaintenance` reads and writes. */
@@ -148,10 +178,12 @@ export async function considerWikiMaintenance(
   hint: WikiMaintenanceHint,
   now: Date = new Date(),
 ): Promise<WikiMaintenanceTriggerOutcome> {
+  let recovered: WikiMaintenanceSettled | undefined;
   const no = (why: Extract<WikiMaintenanceTriggerOutcome, { made: false }>['why']): WikiMaintenanceTriggerOutcome => ({
     made: false,
     spaceId,
     why,
+    ...(recovered ? { settled: recovered } : {}),
   });
   const space = await prisma.wikiSpace.findFirst({
     where: { id: spaceId, ownerId },
@@ -161,6 +193,10 @@ export async function considerWikiMaintenance(
   const settings = wikiMaintenanceSettings((space.settings as Record<string, unknown> | null)?.maintenance);
   if (!settings.enabled || !settings.workspaceId || !settings.listId) return no('off');
   const listId = settings.listId;
+  // A task of the list that died is started again or closed before anything else is asked: it holds the
+  // list no more (contract `maintenance.job.recovery`). Its own session's end is the hint that gets here.
+  const settling = await settleWikiMaintenanceList(prisma, ownerId, spaceId, listId, now);
+  if (settling.rerun.length > 0 || settling.closed.length > 0) recovered = settling;
   // Cheap first: a run that has not ended is the one this fact waits for.
   if (await unfinishedTask(prisma, ownerId, listId)) return no('unfinished');
   // And a plan job that waits for the list goes before the next run.
@@ -247,7 +283,16 @@ export async function considerWikiMaintenance(
     },
   });
   if ('why' in made) return no(made.why);
-  return { made: true, spaceId, taskId: made.taskId, runId: made.runId, due: why, expect: token, runSessions };
+  return {
+    made: true,
+    spaceId,
+    taskId: made.taskId,
+    runId: made.runId,
+    due: why,
+    expect: token,
+    runSessions,
+    ...(recovered ? { settled: recovered } : {}),
+  };
 }
 
 /**
@@ -360,6 +405,235 @@ async function hold(
   await prisma.wikiCursor.updateMany({ where: { id: cursorId }, data: { heldReason: reason, heldAt: now } });
 }
 
+// ── A task of the list that died ────────────────────────────────────────────────────────────────
+
+const OPEN_TASK = ['OPEN', 'IN_PROGRESS'] as const;
+const OCCUPYING: ReadonlySet<string> = new Set<string>(TASK_OCCUPYING);
+
+/** The end a run whose task ended before it said how is given (contract `maintenance.job.recovery.orphan`). */
+export const WIKI_RUN_NOT_REPORTED = 'The run did not report its end.';
+
+/** The claim's refusal of a run (wiki-maintenance-session.ts): a setting, which a rerun would be refused again for. */
+const REFUSED_AT_CLAIM = /^This Wiki maintenance run did not start\b/u;
+
+/**
+ * Words that say a session's end was the platform's: the reaper's `runner offline` and `<provider> runtime
+ * not initialized`, a disk that filled, a server that answered 5xx or did not answer, an overloaded provider.
+ */
+const INFRA_WORDS: readonly RegExp[] = [
+  /\brunner offline\b/iu,
+  /\bruntime not initialized\b/iu,
+  /\bno space left on device\b|\benospc\b|\bdisk (?:is )?full\b/iu,
+  /\b(?:internal server error|bad gateway|service unavailable|gateway timeout)\b/iu,
+  /->\s*5\d\d\b/u,
+  /\b(?:status|http|answered|returned|api error:?)\s*5\d\d\b/iu,
+  /\b(?:econnrefused|econnreset|etimedout|ehostunreach|enetunreach|epipe)\b/iu,
+  /\b(?:socket hang up|fetch failed|connection (?:refused|reset|closed)|could not be reached|server (?:is )?unavailable)\b/iu,
+  /\boverloaded\b/iu,
+];
+
+/** Whose failure a session's end says it was (contract `maintenance.job.recovery.infra` and `content`). */
+export function wikiMaintenanceFailureKindOf(text: string | null | undefined): WikiMaintenanceFailureKind {
+  const said = (text ?? '').trim();
+  if (!said || REFUSED_AT_CLAIM.test(said)) return 'content';
+  return INFRA_WORDS.some((words) => words.test(said)) || isRetryableApiErrorText(said) ? 'infra' : 'content';
+}
+
+/** What settling the list did: the tasks started again, and the tasks closed. */
+export interface WikiMaintenanceSettled {
+  rerun: string[];
+  closed: string[];
+}
+
+/** How a task's work came to stop, read off its latest session, when nothing can work the task any more. */
+interface Death {
+  status: RunStatus;
+  error: string | null;
+  endReason: string | null;
+  numTurns: number;
+  /** When the latest session ended. */
+  at: Date;
+  /** How many sessions the task has had: a rerun is one more. */
+  sessions: number;
+}
+
+/**
+ * The task's death, or null while something can still work it: a session PENDING, RUNNING, AWAITING_INPUT
+ * or INTERRUPTED, or one whose own retry is armed (AutoRetryService resumes it) — and null for a task no
+ * session has run yet, whose dispatch is still to come (contract `maintenance.job.recovery.deadTask`).
+ */
+async function deathOf(db: Pick<Prisma.TransactionClient, 'session'>, ownerId: string, taskId: string, now: Date): Promise<Death | null> {
+  const sessions = await db.session.findMany({
+    where: { ownerId, taskId },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: {
+      status: true,
+      error: true,
+      endReason: true,
+      numTurns: true,
+      retryAt: true,
+      completedAt: true,
+      deletedAt: true,
+      finishedAt: true,
+      updatedAt: true,
+    },
+  });
+  if (sessions.length === 0) return null;
+  const working = sessions.some(
+    (one) => one.deletedAt === null && (OCCUPYING.has(one.status) || (one.retryAt !== null && one.completedAt === null)),
+  );
+  if (working) return null;
+  const latest = sessions[0]!;
+  return {
+    status: latest.status,
+    error: latest.error,
+    endReason: latest.endReason,
+    numTurns: latest.numTurns,
+    at: latest.finishedAt ?? latest.updatedAt ?? now,
+    sessions: sessions.length,
+  };
+}
+
+/** A run row as the settling reads it. */
+interface RunEnd {
+  id: string;
+  outcome: string | null;
+  failureKind: string | null;
+  error: string | null;
+  startedAt: Date | null;
+  lastStartedAt: Date | null;
+  reruns: number;
+}
+
+/**
+ * Whose failure a death was, and why, in the words the run row keeps. What the run itself said of its end
+ * comes first — its latest attempt reported before its session died — and the session's end otherwise: a
+ * session somebody stopped is not the platform's, and one whose engine never answered a turn is.
+ */
+function verdictOf(death: Death, run: RunEnd | null): { kind: WikiMaintenanceFailureKind; reason: string } {
+  const said = death.error ? redactSecrets(death.error.trim().split('\n', 1)[0]!).text.slice(0, 300).trim() : '';
+  const ended = `its session ended ${death.status.toLowerCase().replace('_', ' ')}${said ? `: ${said}` : ''}`;
+  if (run?.outcome === 'succeeded') return { kind: 'infra', reason: `The run succeeded, but ${ended} before its check ran.` };
+  if (run?.outcome) {
+    return { kind: run.failureKind === 'infra' ? 'infra' : 'content', reason: run.error ?? `The run ended ${run.outcome}.` };
+  }
+  let kind: WikiMaintenanceFailureKind;
+  if (death.status === RunStatus.CANCELLED) kind = 'content';
+  else if (death.status === RunStatus.FAILED && death.numTurns === 0 && !REFUSED_AT_CLAIM.test(death.error ?? '')) kind = 'infra';
+  else kind = wikiMaintenanceFailureKindOf([death.error, death.endReason].filter(Boolean).join(' — '));
+  return { kind, reason: `${ended.charAt(0).toUpperCase()}${ended.slice(1)}.` };
+}
+
+/**
+ * Settle the maintenance list's tasks that died (contract `maintenance.job.recovery`), and give the space's
+ * runs whose tasks ended without saying how that end. Reads first — almost always no task of the list is
+ * open, or the open one is being worked — and decides each dead task under the list's lock.
+ */
+export async function settleWikiMaintenanceList(
+  prisma: PrismaService,
+  ownerId: string,
+  spaceId: string,
+  listId: string,
+  now: Date = new Date(),
+): Promise<WikiMaintenanceSettled> {
+  const settled: WikiMaintenanceSettled = { rerun: [], closed: [] };
+  const open = await prisma.task.findMany({
+    where: { ownerId, listId, status: { in: [...OPEN_TASK] }, runAt: null },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: { id: true },
+  });
+  for (const task of open) {
+    if (!(await deathOf(prisma, ownerId, task.id, now))) continue;
+    const done = await new DeadTaskSettler(prisma).settle({ ownerId, listId, taskId: task.id, now });
+    if (done === 'rerun') settled.rerun.push(task.id);
+    if (done === 'closed') settled.closed.push(task.id);
+  }
+  await closeOrphanRuns(prisma, ownerId, spaceId);
+  return settled;
+}
+
+/**
+ * The one writer of a dead task's settling: a class only so that its retry is labelled like every other.
+ * The list row is locked first (rank 20) — the lock the task maker takes — and the task and its sessions
+ * are read again under it, so a task started or ended meanwhile is left as it now is.
+ */
+class DeadTaskSettler {
+  private readonly logger = new Logger('WikiMaintenanceRecovery');
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async settle(input: { ownerId: string; listId: string; taskId: string; now: Date }): Promise<'rerun' | 'closed' | null> {
+    const { ownerId, listId, taskId, now } = input;
+    return withTransactionRetry(
+      this.prisma,
+      async (tx) => {
+        const [list] = await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT "id" FROM "task_list" WHERE "id" = ${listId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`;
+        if (!list) return null;
+        const open = await tx.task.findFirst({
+          where: { id: taskId, ownerId, listId, status: { in: [...OPEN_TASK] }, runAt: null },
+          select: { id: true },
+        });
+        if (!open) return null;
+        const death = await deathOf(tx, ownerId, taskId, now);
+        if (!death) return null;
+        const run: RunEnd | null = await tx.wikiMaintenanceRun.findUnique({
+          where: { taskId },
+          select: { id: true, outcome: true, failureKind: true, error: true, startedAt: true, lastStartedAt: true, reruns: true },
+        });
+        const verdict = verdictOf(death, run);
+        // A run that never said how its latest attempt ended says it now: no earlier than that attempt began.
+        const began = run?.lastStartedAt ?? run?.startedAt ?? null;
+        const end: Prisma.WikiMaintenanceRunUpdateManyMutationInput = run && run.outcome === null
+          ? {
+            outcome: 'failed',
+            failureKind: verdict.kind,
+            error: verdict.reason,
+            endedAt: began && began > death.at ? began : death.at,
+          }
+          : {};
+        const used = Math.max(run?.reruns ?? 0, death.sessions - 1);
+        if (verdict.kind === 'infra' && used < WIKI_MAINTENANCE_RECOVERY.rerunsMax) {
+          // Started again by the dispatcher's scheduled scan, a new session on the pinned workspace and
+          // provider, once the backoff has passed — and claimed only by its runner, once that is online.
+          const at = new Date(Math.max(now.getTime(), death.at.getTime() + WIKI_MAINTENANCE_RECOVERY.rerunAfterMinutes * 60_000));
+          const moved = await tx.task.updateMany({
+            where: { id: taskId, ownerId, status: { in: [...OPEN_TASK] }, runAt: null },
+            data: { runAt: at },
+          });
+          if (moved.count === 0) return null;
+          if (run) await tx.wikiMaintenanceRun.updateMany({ where: { id: run.id }, data: { reruns: used + 1, rerunAt: at, ...end } });
+          return 'rerun' as const;
+        }
+        const closed = await tx.task.updateMany({
+          where: { id: taskId, ownerId, status: { in: [...OPEN_TASK] }, runAt: null },
+          data: { status: 'FAILED' },
+        });
+        if (closed.count === 0) return null;
+        if (run && run.outcome === null) await tx.wikiMaintenanceRun.updateMany({ where: { id: run.id }, data: end });
+        return 'closed' as const;
+      },
+      loggedRetry(this.logger, 'wiki.maintenanceRecovery'),
+    );
+  }
+}
+
+/**
+ * The space's runs whose tasks ended — DONE, FAILED or CANCELLED — before the runs said how: each is given
+ * outcome failed, failure kind infra and `WIKI_RUN_NOT_REPORTED`, ended no earlier than it last started.
+ * A run that reports its end later still overwrites this, as any later end of a run does.
+ */
+async function closeOrphanRuns(prisma: PrismaService, ownerId: string, spaceId: string): Promise<number> {
+  return prisma.$executeRaw`
+    UPDATE "wiki_maintenance_run" r
+       SET "outcome" = 'failed', "failure_kind" = 'infra', "error" = ${WIKI_RUN_NOT_REPORTED},
+           "ended_at" = GREATEST(t."updated_at" AT TIME ZONE 'UTC', COALESCE(r."last_started_at", r."started_at", r."created_at")),
+           "updated_at" = now()
+      FROM "task" t
+     WHERE r."owner_id" = ${ownerId}::uuid AND r."space_id" = ${spaceId}::uuid AND r."outcome" IS NULL
+       AND t."id" = r."task_id" AND t."owner_id" = r."owner_id" AND t."status"::text IN ('DONE', 'FAILED', 'CANCELLED')`;
+}
+
 /** What the maintenance session reads as its task (UI copy and prompts are English). */
 function maintenanceTaskPrompt(input: {
   spaceRef: string;
@@ -386,7 +660,9 @@ function maintenanceTaskPrompt(input: {
       + 'proposing a change to the plan for what fits no section — and advances the cursor. With no confirmed plan it '
       + 'writes no document. Then report it: task_progress_report with where the run ended, and one task_comment with '
       + 'the summary it printed, its token spend included; if it failed, its last lines. Run nothing else, and do not '
-      + 'retry a failed run more than once.',
+      + 'retry a failed run more than once. When the Orbit server answers 5xx or not at all, it waits for the server '
+      + 'itself before it ends, so a run it says you may run again is safe to run again at once; when it says the '
+      + 'server did not come back, do not run it again — the next run takes the same dossiers.',
   ].join('\n');
 }
 
@@ -472,6 +748,11 @@ export class WikiMaintenanceTrigger implements OnModuleInit, OnModuleDestroy {
     const outcomes: WikiMaintenanceTriggerOutcome[] = [];
     for (const space of spaces) {
       const outcome = await considerWikiMaintenance(this.prisma, ownerId, space.id, hint, now);
+      if (outcome.settled) {
+        const { rerun, closed } = outcome.settled;
+        this.logger.log(`space ${space.id}: dead maintenance tasks — started again ${rerun.join(', ') || 'none'}, closed ${closed.join(', ') || 'none'}`);
+        this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [...rerun, ...closed], resync: false });
+      }
       if (outcome.made) {
         this.logger.log(`space ${space.id}: made maintenance task ${outcome.taskId} (${outcome.due})`);
         this.realtime?.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [outcome.taskId], resync: false });
@@ -530,7 +811,24 @@ export async function wikiMaintenanceRunContext(
   });
   const run = await runOfSession(prisma, ownerId, spaceId, sessionId);
   if (run) {
-    await prisma.wikiMaintenanceRun.updateMany({ where: { id: run.id }, data: { sessionId, startedAt: now } });
+    // One more start (contract `maintenance.job.recovery.attempts`): the first is kept, and what the attempt
+    // before this one said of its end is cleared — the row says how its latest attempt ended, never before
+    // the run began. On 2026-10-02 a session's retry overwrote the start, and the row ended before it began.
+    await prisma.wikiMaintenanceRun.updateMany({
+      where: { id: run.id },
+      data: {
+        sessionId,
+        startedAt: run.startedAt ?? now,
+        lastStartedAt: now,
+        attempts: { increment: 1 },
+        outcome: null,
+        endedAt: null,
+        error: null,
+        failureKind: null,
+        opsRefused: null,
+        report: Prisma.DbNull,
+      },
+    });
   }
   const expect = run?.expectAt && run.expectKind && run.expectRef
     ? encodeCursorToken(spaceId, { at: run.expectAt, kind: run.expectKind as FactPosition['kind'], ref: run.expectRef })
@@ -560,6 +858,8 @@ export interface WikiMaintenanceFinishInput {
   to?: string | null;
   outcome?: WikiCursorOutcome;
   error?: string | null;
+  /** Whose a failure was (contract `maintenance.job.recovery.failureKinds`); read off `error` when it is not said. */
+  failureKind?: WikiMaintenanceFailureKind | null;
   report?: Record<string, unknown> | null;
 }
 
@@ -591,16 +891,27 @@ export async function finishWikiMaintenanceRun(
   if (report !== null && Buffer.byteLength(JSON.stringify(report), 'utf8') > REPORT_MAX_BYTES) {
     throw new BadRequestException(`report is at most ${REPORT_MAX_BYTES} bytes of JSON: counts, not content`);
   }
+  const failureKind = input.failureKind ?? null;
+  if (failureKind !== null && !(WIKI_MAINTENANCE_FAILURE_KINDS as readonly string[]).includes(failureKind)) {
+    throw new BadRequestException(`failureKind must be one of ${WIKI_MAINTENANCE_FAILURE_KINDS.join(', ')}`);
+  }
   const refused = opsRefusedOf(report);
   try {
     const answer = await maintenance.advanceCursor(ownerId, spaceId, { to: input.to ?? '', outcome, error: input.error ?? null }, now);
-    await noteWikiMaintenanceRunEnd(prisma, ownerId, spaceId, sessionId, { outcome, error: input.error ?? null, report, opsRefused: refused }, now);
+    await noteWikiMaintenanceRunEnd(prisma, ownerId, spaceId, sessionId, {
+      outcome,
+      error: input.error ?? null,
+      failureKind,
+      report,
+      opsRefused: refused,
+    }, now);
     return answer;
   } catch (error) {
     const said = (error as { response?: { message?: unknown } }).response?.message;
     await noteWikiMaintenanceRunEnd(prisma, ownerId, spaceId, sessionId, {
       outcome: 'failed',
       error: `the cursor refused the run's advance: ${typeof said === 'string' ? said : (error as Error).message}`,
+      failureKind: 'content',
       report,
       opsRefused: refused,
     }, now);
@@ -623,7 +934,14 @@ export async function noteWikiMaintenanceRunEnd(
   ownerId: string,
   spaceId: string,
   sessionId: string,
-  end: { outcome: WikiCursorOutcome; error: string | null; report?: Record<string, unknown> | null; opsRefused?: number | null },
+  end: {
+    outcome: WikiCursorOutcome;
+    error: string | null;
+    /** Whose a failure was: read off the error when it is not said — a runner older than the field — and nothing for a run that succeeded. */
+    failureKind?: WikiMaintenanceFailureKind | null;
+    report?: Record<string, unknown> | null;
+    opsRefused?: number | null;
+  },
   now: Date = new Date(),
 ): Promise<void> {
   const run = await runOfSession(prisma, ownerId, spaceId, sessionId);
@@ -636,6 +954,7 @@ export async function noteWikiMaintenanceRunEnd(
       startedAt: run.startedAt ?? now,
       endedAt: now,
       outcome: end.outcome,
+      failureKind: end.outcome === 'succeeded' ? null : (end.failureKind ?? wikiMaintenanceFailureKindOf(error)),
       error,
       ...(end.report !== undefined ? { report: (end.report ?? Prisma.DbNull) as Prisma.InputJsonValue } : {}),
       ...(end.opsRefused !== undefined ? { opsRefused: end.opsRefused } : {}),

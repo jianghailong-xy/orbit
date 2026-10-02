@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -82,7 +83,9 @@ var wikiMaintainDescription = wikiMaintainPrecondition + " This is a Wiki mainte
 	"writes again only the sections of the confirmed plan's documents that the entries and origin/main's changes " +
 	"touched (proposing a change to the plan for what fits no section, and writing no document when no plan is " +
 	"confirmed), and advances the cursor. It prints what it did, the token spend included, and exits non-zero when " +
-	"the run failed. Any session but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION."
+	"the run failed. When the Orbit server answers 5xx or nothing at all it waits for it, 15 minutes at most, before " +
+	"the run starts and before it reports a run that stopped on it, and it says whose a failure was and whether the " +
+	"run may be run again. Any session but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION."
 
 var wikiCheckDescription = wikiCheckPrecondition + " This is a Wiki maintenance task's acceptance command: it asks the " +
 	"server whether --space's cursor is at or past the position --expect-cursor names, and whether the run of the task " +
@@ -109,6 +112,10 @@ const (
 	// The local model sits behind a tunnel that drops: a run waits this long for its /health before it gives up.
 	wikiMaintainHealthWait = 3 * time.Minute
 	wikiMaintainHealthPoll = 10 * time.Second
+	// The longest a run waits for an Orbit server that answers 5xx or nothing at all
+	// (`maintenance.job.recovery.rules.serverWaitMinutes`), before it starts and before it reports a run
+	// that stopped on it.
+	wikiMaintainServerWait = 15 * time.Minute
 	// The quote a source carries, at most (`limits.quoteMaxChars`).
 	wikiMaintainQuoteMaxChars = 300
 	// How much of a repository's README tells the model what the repository is.
@@ -285,14 +292,20 @@ type wikiMaintainAnchors struct {
 
 // wikiMaintainSummary is what the command prints, and what --json writes.
 type wikiMaintainSummary struct {
-	SpaceID  string             `json:"spaceId"`
-	Model    string             `json:"model,omitempty"`
-	Outcome  string             `json:"outcome"`
-	Error    string             `json:"error,omitempty"`
-	Advanced bool               `json:"advanced"`
-	Cursor   string             `json:"cursor,omitempty"`
-	Refused  []string           `json:"refused,omitempty"`
-	Report   wikiMaintainReport `json:"report"`
+	SpaceID string `json:"spaceId"`
+	Model   string `json:"model,omitempty"`
+	Outcome string `json:"outcome"`
+	Error   string `json:"error,omitempty"`
+	// FailureKind is whose a failed run's failure was (`maintenance.job.recovery.failureKinds`): infra when
+	// it stopped on the Orbit server or the model's endpoint, content otherwise.
+	FailureKind string `json:"failureKind,omitempty"`
+	// ServerGone is a server that answered 5xx or nothing at all for the whole of wikiMaintainServerWait:
+	// the run could not be told to it, and is not to be run again in this session.
+	ServerGone bool               `json:"serverGone,omitempty"`
+	Advanced   bool               `json:"advanced"`
+	Cursor     string             `json:"cursor,omitempty"`
+	Refused    []string           `json:"refused,omitempty"`
+	Report     wikiMaintainReport `json:"report"`
 }
 
 // wikiMaintainStop is why a run ends before it succeeded: the step, and what went wrong there.
@@ -302,6 +315,21 @@ type wikiMaintainStop struct {
 }
 
 func (s *wikiMaintainStop) Error() string { return s.step + ": " + s.err.Error() }
+
+// serverDown reports a run that stopped because the Orbit server answered 5xx or nothing at all.
+func (s *wikiMaintainStop) serverDown() bool {
+	return wikiServerDown(s.err) || wikiServerDownWords.MatchString(s.err.Error())
+}
+
+// kind is whose the stop was (`maintenance.job.recovery.failureKinds`): the infrastructure's when the Orbit
+// server or the model's endpoint could not answer, the run's own otherwise.
+func (s *wikiMaintainStop) kind() string {
+	var endpoint *wikiMaintainEndpointDown
+	if s.serverDown() || errors.As(s.err, &endpoint) {
+		return "infra"
+	}
+	return "content"
+}
 
 // ── One run ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -353,7 +381,19 @@ func runWikiMaintain(t *Transport, sessionID, spaceID string, opts wikiMaintainO
 	r := &wikiMaintainRun{t: t, sessionID: sessionID, spaceID: spaceID, opts: opts, progress: progress, started: time.Now()}
 	summary := wikiMaintainSummary{SpaceID: spaceID, Outcome: "failed"}
 	raw, err := t.wikiMaintainRunContext(sessionID, spaceID)
+	if err != nil && wikiServerDown(err) && r.awaitServer(err) {
+		// Started while the server was down — the retry the task's prompt allows, on 2026-10-01 spent at
+		// once on the 500 of a server whose disk had filled: it starts once the server answers again.
+		raw, err = t.wikiMaintainRunContext(sessionID, spaceID)
+	}
 	if err != nil {
+		if wikiServerDown(err) {
+			summary.FailureKind, summary.ServerGone = "infra", true
+			summary.Error = "start: the Orbit server did not answer (" + wikiServerDownCause(err) + ")"
+			return summary, fmt.Errorf("orbit wiki maintain: the Orbit server answered 5xx or nothing at all for %s (%s), so nothing "+
+				"was read or proposed: an infrastructure failure, not the run's. Do not run it again in this session: the next "+
+				"run takes the same dossiers", wikiServerWait.budget, wikiServerDownCause(err))
+		}
 		return summary, wikiMaintainCallError(spaceID, err)
 	}
 	if err := json.Unmarshal(raw, &r.context); err != nil {
@@ -371,11 +411,26 @@ func runWikiMaintain(t *Transport, sessionID, spaceID string, opts wikiMaintainO
 		r.report.StoppedAt = stop.step
 		body["outcome"] = "failed"
 		body["error"] = cutRunes(stop.Error(), 2000)
+		body["failureKind"] = stop.kind()
 		summary.Error = stop.Error()
+		summary.FailureKind = stop.kind()
 	}
 	body["report"] = r.report
 	summary.Report = r.report
+	// A run that stopped on the server waits for it before it says so: a failure's report is sent once, and
+	// one sent into a server that is down is lost — as the retry the task's prompt allows would be.
+	if stop != nil && stop.serverDown() && !r.awaitServer(stop.err) {
+		summary.ServerGone = true
+		return summary, fmt.Errorf("orbit wiki maintain: the run failed at %s, and the Orbit server did not come back within %s, "+
+			"so it could not be told: an infrastructure failure, not the run's. Do not run it again in this session: the "+
+			"next run takes the same dossiers", stop, wikiServerWait.budget)
+	}
 	answerRaw, finishErr := t.finishWikiMaintenance(sessionID, spaceID, body)
+	if finishErr != nil && stop == nil && wikiServerDown(finishErr) && r.awaitServer(finishErr) {
+		// A run's report of success may land any number of times (wikiReportsSuccess): once more, now the
+		// server answers, rather than hours of the local model's work thrown away on one 500.
+		answerRaw, finishErr = t.finishWikiMaintenance(sessionID, spaceID, body)
+	}
 	if finishErr != nil {
 		finish := wikiMaintainCallError(spaceID, finishErr)
 		if stop != nil {
@@ -387,11 +442,118 @@ func runWikiMaintain(t *Transport, sessionID, spaceID string, opts wikiMaintainO
 	_ = json.Unmarshal(answerRaw, &answer)
 	summary.Advanced = answer.Advanced
 	summary.Cursor = answer.State.Position
+	if stop != nil && summary.FailureKind == "infra" {
+		return summary, fmt.Errorf("orbit wiki maintain: the run failed at %s; the cursor did not move. The failure was the "+
+			"infrastructure's, not the run's, and the server answers again: the run may be run once more", stop)
+	}
 	if stop != nil {
 		return summary, fmt.Errorf("orbit wiki maintain: the run failed at %s; the cursor did not move", stop)
 	}
 	summary.Outcome = "succeeded"
 	return summary, nil
+}
+
+// ── When the server does not answer ─────────────────────────────────────────────────────────────
+
+// wikiServerWaitPolicy is how a run waits for an Orbit server that answered 5xx or nothing at all
+// (`maintenance.job.recovery.inSession`): it asks again after first, doubling, never more than max apart,
+// for budget at most. wikiServerWait is the one a run uses; a test gives it a clock of its own.
+type wikiServerWaitPolicy struct {
+	first, max, budget time.Duration
+	now                func() time.Time
+	sleep              func(time.Duration)
+}
+
+var wikiServerWait = wikiServerWaitPolicy{
+	first:  5 * time.Second,
+	max:    time.Minute,
+	budget: wikiMaintainServerWait,
+	now:    time.Now,
+	sleep:  time.Sleep,
+}
+
+// wait is the pause before the nth ask: first, doubled n-1 times, and never more than max.
+func (p wikiServerWaitPolicy) wait(n int) time.Duration {
+	if n <= 20 && p.first<<(n-1) < p.max {
+		return p.first << (n - 1)
+	}
+	return p.max
+}
+
+// awaitServer waits for the Orbit server to answer again, asking it a read that changes nothing
+// (wikiServerAnswers), and says so on the run's progress. True once it answers — with anything but a 5xx —
+// and false when the policy's budget ran out first.
+func (r *wikiMaintainRun) awaitServer(cause error) bool {
+	p := wikiServerWait
+	began := p.now()
+	r.say("The Orbit server did not answer (%s): waiting for it, %s at most.", wikiServerDownCause(cause), p.budget)
+	for asks := 1; ; asks++ {
+		wait := p.wait(asks)
+		if p.now().Sub(began)+wait > p.budget {
+			r.say("The Orbit server did not come back within %s.", p.budget)
+			return false
+		}
+		p.sleep(wait)
+		if err := r.t.wikiServerAnswers(r.sessionID, r.spaceID); err == nil || !wikiServerDown(err) {
+			r.say("The Orbit server answers again, after %s.", p.now().Sub(began).Round(time.Second))
+			return true
+		}
+	}
+}
+
+// wikiServerAnswers asks the Orbit server, once and on a connection of its own, one read that changes
+// nothing: a page of one of the session's own ops waiting for their verification. It reads the server's
+// database, so a server whose disk filled is not taken for one that answers, as /api/health would be.
+func (t *Transport) wikiServerAnswers(sessionID, spaceID string) error {
+	if err := validatePathSegmentID(spaceID); err != nil {
+		return err
+	}
+	client := t.wikiClient()
+	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/verifications?limit=1"
+	err := t.doVia(nil, client, http.MethodGet, path, nil, nil, taskOpTimeout, sessionHeader(sessionID))
+	var answer *transportHTTPError
+	if err != nil && !errors.As(err, &answer) {
+		t.wikiRetire(client)
+	}
+	return err
+}
+
+// wikiServerDown reports a call the Orbit server could not answer: a 5xx — the gateway's while the server
+// restarts, or its own 500 while its database is gone (2026-10-01, the disk full) — or no answer at all.
+// Every other answer is the server's word on the request, and is not waited out.
+func wikiServerDown(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return false
+	}
+	var httpErr *transportHTTPError
+	if errors.As(err, &httpErr) {
+		return httpErr.statusCode >= 500 && httpErr.statusCode <= 599
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return true
+	}
+	_, _, transient := wikiTransient(err, "", "", time.Now())
+	return transient
+}
+
+// wikiServerDownWords is a 5xx or a lost connection as it reads once a step has put the call's failure
+// into words of its own.
+var wikiServerDownWords = regexp.MustCompile(`-> 5\d\d\b|\b(?:connection refused|connection reset by peer|server sent GOAWAY|no such host)\b`)
+
+// wikiServerDownCause says what the server did, in a few words: the route and the status it answered, or
+// the transport's failure without the request.
+func wikiServerDownCause(err error) string {
+	var httpErr *transportHTTPError
+	if errors.As(err, &httpErr) {
+		return strings.TrimSpace(fmt.Sprintf("%s %s answered %d %s", httpErr.method, strings.SplitN(httpErr.path, "?", 2)[0],
+			httpErr.statusCode, http.StatusText(httpErr.statusCode)))
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return urlErr.Err.Error()
+	}
+	return err.Error()
 }
 
 // steps runs the pipeline in order, and answers where it stopped, or nil.
@@ -576,7 +738,8 @@ func (r *wikiMaintainRun) model() error {
 }
 
 // wikiMaintainWaitForEndpoint waits for the model's /health to answer 200, at most wikiMaintainHealthWait:
-// the tunnel to the local model drops and comes back.
+// the tunnel to the local model drops and comes back. One that never answered is the infrastructure's
+// failure, not the run's (wikiMaintainEndpointDown).
 func wikiMaintainWaitForEndpoint(baseURL string, progress io.Writer) error {
 	deadline := time.Now().Add(wikiMaintainHealthWait)
 	for {
@@ -585,12 +748,19 @@ func wikiMaintainWaitForEndpoint(baseURL string, progress io.Writer) error {
 			return nil
 		}
 		if time.Now().Add(wikiMaintainHealthPoll).After(deadline) {
-			return err
+			return &wikiMaintainEndpointDown{err: err}
 		}
 		fmt.Fprintf(progress, "The model endpoint is not up yet (%v); waiting.\n", err)
 		time.Sleep(wikiMaintainHealthPoll)
 	}
 }
+
+// wikiMaintainEndpointDown is the model's endpoint not answering for the whole of wikiMaintainHealthWait: the
+// infrastructure under the run failed, not the run (`maintenance.job.recovery.failureKinds`).
+type wikiMaintainEndpointDown struct{ err error }
+
+func (e *wikiMaintainEndpointDown) Error() string { return e.err.Error() }
+func (e *wikiMaintainEndpointDown) Unwrap() error { return e.err }
 
 // wikiMaintainAuthError is the endpoint refusing the token: every call after it would be refused the same way.
 type wikiMaintainAuthError struct{ detail string }
@@ -1752,6 +1922,14 @@ func describeWikiMaintainSummary(s wikiMaintainSummary) string {
 	}
 	if s.Outcome == "succeeded" && r.Ops.HeldBackByBreaker > 0 {
 		b.WriteString(" The breaker held back what the run had no room for: the next run reads those dossiers again.")
+	}
+	switch {
+	case s.ServerGone:
+		fmt.Fprintf(&b, "\nThe Orbit server answered 5xx or nothing at all for %s: an infrastructure failure, not the run's. "+
+			"Do not run it again in this session — the next run takes the same dossiers.", wikiServerWait.budget)
+	case s.Outcome != "succeeded" && s.FailureKind == "infra":
+		b.WriteString("\nThe failure was the infrastructure's — the Orbit server or the model's endpoint — not the run's, and the " +
+			"Orbit server answers again: the run may be run once more.")
 	}
 	return b.String()
 }

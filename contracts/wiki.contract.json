@@ -937,7 +937,7 @@
       "token": "Opaque: the position of the last fact a page covered and the space it belongs to.",
       "advance": {
         "route": "POST /api/runner/wiki/spaces/:id/cursor",
-        "body": { "to": "required: a cursor token", "outcome": "optional: one of outcomes, default succeeded", "error": "optional: why the run did not succeed, at most 2000 characters, redacted" },
+        "body": { "to": "required: a cursor token", "outcome": "optional: one of outcomes, default succeeded", "error": "optional: why the run did not succeed, at most 2000 characters, redacted", "failureKind": "optional: whose failure a run that did not succeed was, one of maintenance.job.recovery.failureKinds; when it is not said, read off its error by the words of maintenance.job.recovery.infra, and content otherwise" },
         "outcomes": ["succeeded", "failed", "truncated"],
         "who": "Maintenance sessions of the space, as the dossier route.",
         "rules": [
@@ -1002,7 +1002,7 @@
         "conditions": "Due when rules.backlogThreshold sessions have a fact after the cursor, or when the oldest fact after it is older than rules.maxPendingAgeHours as the new fact arrives. No clock starts a task: a space that turns due in silence makes its task with its next fact.",
         "notMade": [
           "maintenance is off, or names no workspace or list",
-          "a task of the maintenance list has not ended (OPEN or IN_PROGRESS)",
+          "a task of the maintenance list has not ended (OPEN or IN_PROGRESS) and is not dead (maintenance.job.recovery.deadTask): a dead one is rerun or closed first (recovery.rerun, recovery.close), and only a rerun holds the list",
           "a plan job of the space is queued for the list (plan.jobs.staggered): it goes first — the trigger makes the job's task instead — and the facts wait in the backlog for the first fact after the job's task ended, which these same rules ask",
           "the event names no fact of the space after the cursor: a rename, the maintenance run's own events, another space's work",
           "the space is not due",
@@ -1084,6 +1084,26 @@
         "passes": "The cursor at or past the expected position, and the latest run whose task expects that position ended succeeded with ops.refused 0.",
         "exit": "0 when it passes; 1 otherwise, with each reason a sentence: the cursor before the position, no run expecting it, a run that did not say how it ended or did not succeed, a run that said nothing of its ops, or ops the server refused."
       },
+      "recovery": {
+        "doc": "docs/wiki-contract.md section 19.7",
+        "migration": "src/apiserver/prisma/migrations/0354_wiki_maintenance_run_attempts/migration.sql",
+        "rules": {
+          "rerunAfterMinutes": 10,
+          "rerunsMax": 1,
+          "serverWaitMinutes": 15
+        },
+        "failureKinds": ["infra", "content"],
+        "infra": "The platform under the run failed, not the run: its session ended runner offline, or its engine never came up (<provider> runtime not initialized, a turn that produced nothing), or the server answered 5xx or could not be reached, or the disk filled (No space left on device), or the provider was overloaded. Read off the latest session's end, or said by the run itself (cursor.advance's failureKind).",
+        "content": "Every other failure: what the run read, what the model answered, an op the server refused, a turn limit, a session somebody stopped. A run that reports its failure without saying whose it was — a runner older than this field — is read off its error by the words of infra (a 5xx, a lost connection, a full disk), and is content otherwise.",
+        "deadTask": "A task of the maintenance list that is OPEN or IN_PROGRESS while nothing can still work it: it has had a session, its latest session has ended, no session of it is PENDING, RUNNING, AWAITING_INPUT or INTERRUPTED, no session's own retry is armed, and no runAt waits for it. It holds the list no more.",
+        "who": "The maintenance trigger, at the first hint after the task died — the dead session's own end is one — under the maintenance list's lock, before any other question it asks; plan job tasks of the list are settled the same way. No clock is involved: the hint is the session's end.",
+        "rerun": "An infra death while the run's reruns are under rules.rerunsMax: the same task's runAt is set to the later of now and rules.rerunAfterMinutes after its session ended, and the dispatcher's scheduled scan starts it again — a new session on the pinned workspace and provider, which only its runner claims, once that runner is online. The run row counts it (reruns, rerunAt) and says the death (outcome failed, failureKind infra, error) until the rerun starts. While the runAt waits, the task holds the list.",
+        "close": "A content death, or an infra death whose reruns are spent: the task is set FAILED, and its run row gets outcome failed, failureKind and the reason when it had not said how it ended. The list is free: the next fact makes the next run by the trigger's rules.",
+        "orphan": "A run row with no outcome whose task has ended (DONE, FAILED or CANCELLED) gets outcome failed, failureKind infra and error 'The run did not report its end.', endedAt no earlier than its last start: once by the migration for the rows that existed, and by the trigger for the space's rows at every hint after it.",
+        "attempts": "A run row keeps the first start of the run (startedAt, never written again), the latest (lastStartedAt) and how many starts there were (attempts): one for every GET of context, a session's retry and a platform rerun alike. A start clears what the previous attempt said of its end (outcome, endedAt, error, failureKind, opsRefused, report), so the row says how its latest attempt ended, and endedAt is never before startedAt.",
+        "inSession": "orbit wiki maintain waits for the server, rules.serverWaitMinutes at most, when a call answers 5xx or nothing at all: before the run starts, and before it reports a run that stopped on one, so the one retry the task's prompt allows is never spent on a server that is down. A run that stopped on the server or on its model endpoint reports failureKind infra; one whose server did not come back ends without a report, which the orphan rule closes. The task's prompt keeps its one retry for a run the command says may be run again — the server answers again — and forbids it when the command says the server did not come back.",
+        "field": "wiki_maintenance_run: attempts, last_started_at, failure_kind ('infra' | 'content', set exactly when outcome is failed or truncated), reruns, rerun_at."
+      },
       "routes": {
         "context": "GET /api/runner/wiki/spaces/:id/maintenance/run",
         "propose": "POST /api/runner/wiki/spaces/:id/maintenance/changesets",
@@ -1120,8 +1140,9 @@
         "lagSeconds": "How long ago that fact was, in whole seconds; 0 when there is none.",
         "dailyLimitReached": "The space has made settings.maintenance.dailyRunLimit maintenance tasks since midnight UTC (wikiMaintenanceRunsToday), however they ended: no fact makes another today.",
         "held": "maintenance.job.held as the cursor row keeps it: {reason, at}, or null.",
-        "running": "The run under way — its row has started and not ended, and its task is OPEN or IN_PROGRESS — as {sessionId, startedAt}, or null.",
-        "lastRun": "The run that ended last, as {sessionId, outcome, endedAt}, or null: what View run opens."
+        "running": "The run under way — its row has started and not ended, and its task is OPEN or IN_PROGRESS — as {sessionId, startedAt}, or null; startedAt is when its latest attempt started (maintenance.job.recovery.attempts).",
+        "lastRun": "The run that ended last, as {sessionId, outcome, endedAt}, or null: what View run opens.",
+        "lastFailure": "Of the runs whose latest attempt failed — outcome failed or truncated — the one that ended last, as {kind, reason, at, sessionId}: kind is its failureKind (maintenance.job.recovery.failureKinds), reason its error, at when it ended; null while no run's latest attempt failed. What a client tells the platform failing from the run failing by."
       },
       "looks": ["off", "failing", "running", "behind", "ok"],
       "look": "The first that holds, in the order of looks: off — maintenance is off; failing — consecutiveFailures is more than 0; running — running is not null; behind — the oldest fact after the cursor is older than maintenance.rules.maxPendingAgeHours; ok — none of those (wikiMaintenanceLook).",
