@@ -71,6 +71,7 @@ const (
 // the engine builds with the frame already applied. The control arm waits at the same point
 // and sends nothing.
 func TestRealClaudeEffortFrameMovesTheRequestsOfTheRunningTurn(t *testing.T) {
+	t.Parallel()
 	changed := driveEffortProbe(t, effortProbeSpawnLevel, effortProbeAskedLevel)
 	control := driveEffortProbe(t, effortProbeSpawnLevel, noEffortFrame)
 
@@ -110,6 +111,7 @@ func TestRealClaudeEffortFrameMovesTheRequestsOfTheRunningTurn(t *testing.T) {
 // test: what the default IS belongs to the model, and a hard-coded "high" would go stale the
 // day it changes and would say nothing about the two being the same thing.
 func TestRealClaudeEffortFrameClearsBackToTheModelDefault(t *testing.T) {
+	t.Parallel()
 	cleared := driveEffortProbe(t, effortProbeSpawnLevel, "")
 	spawnedWithout := driveEffortProbe(t, "", noEffortFrame)
 	held := driveEffortProbe(t, effortProbeSpawnLevel, noEffortFrame)
@@ -168,10 +170,9 @@ func driveEffortProbe(t *testing.T, spawnEffort, askFor string) []string {
 	t.Cleanup(api.Close)
 
 	// Nothing here may touch this machine's own Claude Code state, and nothing here needs a
-	// credential: the API this process talks to is the recorder above.
+	// credential: the API this process talks to is the recorder above. The CLI's environment
+	// only, not the test process's: probes run in parallel.
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	if err := os.WriteFile(filepath.Join(home, ".claude.json"),
 		[]byte(`{"hasCompletedOnboarding":true}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -189,6 +190,8 @@ func driveEffortProbe(t *testing.T, spawnEffort, askFor string) []string {
 			// The same door a configured (BYOK) provider comes through, which is why this
 			// needs no test-only hook in the spawn path.
 			Env: map[string]string{
+				"HOME":                 home,
+				"CLAUDE_CONFIG_DIR":    t.TempDir(),
 				"ANTHROPIC_BASE_URL":   api.URL,
 				"ANTHROPIC_AUTH_TOKEN": "orbit-effort-probe",
 			},
@@ -226,6 +229,7 @@ func driveEffortProbe(t *testing.T, spawnEffort, askFor string) []string {
 		rec.releaseFirstCall() // never leave the engine parked on a response
 		cancel()
 		<-done
+		_ = rt.wait() // reap the process and end its writer, rather than leak both
 	})
 
 	if err := rt.send(userFrame(job.SessionUUID, []map[string]interface{}{

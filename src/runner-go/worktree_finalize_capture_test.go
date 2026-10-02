@@ -25,9 +25,14 @@ func lockedIndexWorktree(t *testing.T, session string) *Worktree {
 }
 
 // sessionWorktree builds a real repo plus a linked checkout on the session's own branch, with
-// one uncommitted file standing in for everything the session produced.
+// one uncommitted file standing in for everything the session produced — and a `claude` that
+// declines to write its message, so a permanent end's commit takes its diffstat fallback
+// without anything leaving the machine.
 func sessionWorktree(t *testing.T, session string) *Worktree {
 	t.Helper()
+	bin := t.TempDir()
+	writeFakeBin(t, bin, "claude", "exit 1")
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	repo := initRepo(t)
 	base := mustGit(t, repo, "rev-parse", "HEAD")
 	path := filepath.Join(t.TempDir(), "checkout")

@@ -57,7 +57,40 @@ func TestMain(m *testing.M) {
 		cmdMcp()
 		os.Exit(0)
 	}
+	clearCallingSession()
+	// The PATH the runner service runs with (resolveRunnerEnv): the engine installers' own
+	// directories, which a bare shell need not have. The probes of a real engine run in parallel,
+	// and a parallel test may not set PATH itself.
+	_ = os.Setenv("PATH", runnerEnginePath(userHome(), os.Getenv("PATH")))
 	os.Exit(m.Run())
+}
+
+// callingSessionEnv is the session context the runner exports into everything a session runs
+// (spawnClaude, bgJobEnvPairs): which session, agent and task, what it may orchestrate, and the
+// socket that hosts its background jobs. `go test` started from inside a session inherits all of
+// it, and the code under test reads it: a CLI create there raises its approval card and waits for
+// a human to answer it (askBeforeCreate), which against a stub control plane never happens.
+var callingSessionEnv = []string{
+	"ORBIT_SESSION_ID", "ORBIT_AGENT_ID", "ORBIT_TASK_ID", envSpawnDepth, envMCPOrchestration,
+	envOrchestrationToken, envMCPPermissionPrompt, envWatches, envWiki, envBgSocket, envBgToken, envBgJobID,
+}
+
+// suiteSessionClearedEnv marks a process tree the calling session was already cleared from. A test
+// that re-executes this binary (project_cli_*_exit_linux_test.go) hands its child exactly the
+// session context it means the child to have, and the child's own TestMain must leave that alone.
+// Not ORBIT_-prefixed: those children drop every inherited ORBIT_ variable.
+const suiteSessionClearedEnv = "GO_TEST_ORBIT_SESSION_CLEARED"
+
+// clearCallingSession runs the suite the same inside a session as outside one. A test that needs
+// a session sets its own.
+func clearCallingSession() {
+	if os.Getenv(suiteSessionClearedEnv) != "" {
+		return
+	}
+	for _, key := range callingSessionEnv {
+		_ = os.Unsetenv(key)
+	}
+	_ = os.Setenv(suiteSessionClearedEnv, "1")
 }
 
 // fakeStep is one instruction of a fake CLI script: emit a frame, or block until one
