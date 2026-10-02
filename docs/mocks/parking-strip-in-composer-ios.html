@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<title>停车栏收进输入框（iPhone）</title>
+<style>
+  /* iPhone console geometry in points (1px here = 1pt), measured off the owner's screenshots of
+     2026-10-02 (1179×2556 @3x → 393×852).
+     Typing: nav to y113, needs-you banner y113–151, "Your question" y151–183, band rule y296,
+     cards y308/346/384 (30pt + 8pt gaps), composer card y422–513, keyboard from y524.
+     Not typing: composer card y717–808, home indicator y839.
+     Card language from WorktreeBar.swift / BackgroundTrayView: r8, primary 4% fill, 10% hairline.
+     Render one page at a time: file://…/parking-strip-in-composer-ios.html#p1 (or #p2). */
+  :root { --tint:#2E6AFF; --label:#1F2228; --sec:#8A8A8E; --ter:#C5C5C7; --sep:rgba(60,60,67,.29);
+          --blue:#007AFF; --orange:#FF9500; --green:#34C759; --dgreen:#248A3D; --red:#FF3B30; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:26px 30px 34px; background:#e9ebef; width:940px;
+         font-family:"Nimbus Sans","Noto Sans CJK SC",sans-serif; color:var(--label); }
+  section.page + section.page { margin-top:60px; }
+  h1 { font-size:21px; font-weight:700; margin:0 0 6px; color:#1f2329; }
+  h2 { font-size:16px; font-weight:700; margin:26px 0 10px; color:#1f2329; }
+  .sub { color:#4a4f57; margin:0 0 20px; font-size:13.5px; line-height:1.65; }
+  .sub b, .ann b { color:#1f2329; }
+  .sub code, .why code, .ann code { font-family:"DejaVu Sans Mono",monospace; font-size:11.5px; background:#dfe2e7; border-radius:4px; padding:1px 4px; }
+  .grid { display:grid; grid-template-columns:415px 415px; gap:30px 38px; align-items:start; }
+  .cap { font-size:14px; font-weight:700; margin:0 0 9px; }
+  .cap.before { color:#b3380a; } .cap.after { color:#1a7f37; } .cap.alt { color:#6b4fbb; }
+  .cap span { font-weight:400; color:#646a73; margin-left:6px; font-size:12.5px; }
+  .ann { font-size:12.5px; color:#555b64; margin:10px 4px 0; line-height:1.6; }
+  .ann .big { font-size:15px; font-weight:700; color:#1f2329; }
+  .ann .up { color:#1a7f37; font-weight:700; }
+
+  /* ── phone ─────────────────────────────── */
+  .bezel { padding:11px; background:#1c1c1e; border-radius:66px; box-shadow:0 1px 0 #000, 0 12px 30px rgba(0,0,0,.18); }
+  .screen { position:relative; width:393px; height:852px; border-radius:55px; overflow:hidden; background:#fff; }
+  .abs { position:absolute; }
+  .time { left:46px; top:15px; font-size:17px; font-weight:700; letter-spacing:-.2px; }
+  .island { left:134px; top:11px; width:125px; height:37px; border-radius:20px; background:#000; }
+  .sbar { right:28px; top:19px; display:flex; gap:6px; align-items:center; }
+  .batt { position:relative; width:30px; height:13px; border-radius:4px; background:#000; color:#fff; font-size:10px; font-weight:700; line-height:13px; text-align:center; }
+  .batt::after { content:""; position:absolute; right:-3px; top:4px; width:2px; height:5px; border-radius:0 1px 1px 0; background:#000; opacity:.45; }
+  .navbg { left:0; right:0; top:0; height:113px; background:#fafafa; }
+  .glass { top:59px; width:44px; height:44px; border-radius:22px; background:rgba(255,255,255,.8);
+           box-shadow:0 0 0 .5px rgba(0,0,0,.12), 0 4px 14px rgba(0,0,0,.08); display:flex; align-items:center; justify-content:center; }
+  .navtitle { left:70px; right:70px; top:63px; text-align:center; }
+  .navtitle b { display:block; font-size:17px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .navtitle span { display:block; font-size:12.5px; color:var(--sec); margin-top:3px; white-space:nowrap; }
+  .banner { left:0; right:0; top:113px; height:38px; background:rgb(248,237,226); border-bottom:.5px solid rgb(193,186,179);
+            display:flex; align-items:center; gap:10px; padding:0 14px 0 18px; font-size:17px; white-space:nowrap; }
+  .banner .odot { width:10px; height:10px; border-radius:5px; background:var(--orange); flex:none; }
+  .banner .bt { overflow:hidden; text-overflow:ellipsis; min-width:0; flex:1 1 auto; }
+  .banner svg { flex:none; color:#a7a29c; }
+  .qbar { left:0; right:0; top:151px; height:32px; background:#f7f7f7; border-bottom:.5px solid rgb(192,192,194);
+          display:flex; align-items:center; gap:7px; padding:0 16px; font-size:15px; white-space:nowrap; overflow:hidden; }
+  .qbar .ql { color:var(--sec); flex:none; }
+  .notop .banner, .notop .qbar { display:none; }
+
+  /* transcript, bottom-anchored: whatever the band leaves is what you get to read */
+  .chat { left:16px; right:16px; top:183px; display:flex; flex-direction:column; justify-content:flex-end; overflow:hidden; gap:9px; }
+  .notop .chat { top:113px; }
+  .chat p { margin:0; font-size:17px; line-height:27px; }
+  .chat ul { margin:0; padding:0 0 0 22px; }
+  .chat li { list-style:none; position:relative; font-size:17px; line-height:27px; margin:0 0 6px; }
+  .chat li:last-child { margin-bottom:0; }
+  .chat li::before { content:""; position:absolute; left:-17px; top:12px; width:4px; height:4px; border-radius:2px; background:#9a9aa0; }
+  .chat code { font-family:"DejaVu Sans Mono",monospace; font-size:15px; background:#efefef; border-radius:4px; padding:1px 3px; }
+  .divider { left:0; right:0; height:.5px; background:var(--sep); }
+  .home { left:129.5px; top:839px; width:134px; height:5px; border-radius:3px; background:#000; }
+
+  /* ── today's band cards ─────────────────── */
+  .card { left:16px; width:361px; border-radius:8px; background:rgba(0,0,0,.04); box-shadow:inset 0 0 0 1px rgba(0,0,0,.1); overflow:hidden; }
+  .row { display:flex; align-items:center; gap:8px; height:30px; padding:0 10px; white-space:nowrap; }
+  .t13 { font-size:13px; } .semi { font-weight:700; }
+  .meta { font-size:11px; color:var(--sec); white-space:nowrap; }
+  .tint { color:var(--tint); }
+  .mono { font-family:"DejaVu Sans Mono",monospace; font-size:12.4px; white-space:nowrap; }
+  .gr { color:var(--dgreen); } .rd { color:var(--red); } .dim { color:var(--sec); }
+  .grow { flex:1 1 auto; min-width:0; }
+  .ell { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .ico { color:var(--sec); flex:none; }
+  .chev { color:var(--sec); flex:none; }
+  .bpill { display:inline-flex; align-items:center; gap:4px; padding:2px 6px; border-radius:6px; background:rgba(0,0,0,.05); box-shadow:inset 0 0 0 1px rgba(0,0,0,.1); flex:none; }
+  .merged { color:var(--green); font-size:13px; font-weight:700; flex:none; }
+  /* TaskStatusPill (TasksView.swift): capsule, 6pt dot or a mini spinner, caption2, colour at 15%. */
+  .pill { display:inline-flex; align-items:center; gap:4px; padding:2px 7px; border-radius:99px; font-size:11.5px; white-space:nowrap; flex:none; }
+  .pill i { width:6px; height:6px; border-radius:3px; background:currentColor; }
+  .pill.done { color:var(--dgreen); background:rgba(52,199,89,.15); }
+  .pill.done i { background:var(--green); }
+
+  /* ── composer card ──────────────────────── */
+  .composer { left:16px; width:361px; height:91px; border-radius:24px; background:#fafafa;
+              box-shadow:0 0 0 1px rgba(0,0,0,.2), 0 4px 18px rgba(0,0,0,.06); }
+  .composer.rest { box-shadow:0 0 0 .5px rgba(0,0,0,.13), 0 4px 18px rgba(0,0,0,.07), 0 1px 3px rgba(0,0,0,.04); background:#fff; }
+  .composer .field { padding:15px 16px 8px; height:45px; font-size:17px; line-height:22px; color:rgba(60,60,67,.32); display:flex; align-items:center; }
+  .composer .caret { width:2px; height:22px; background:var(--tint); border-radius:1px; margin-right:1px; }
+  .composer .tb { display:flex; align-items:center; height:46px; padding:6px 8px 8px 8px; font-size:15px; }
+  .composer .plus { width:32px; height:32px; display:flex; align-items:center; justify-content:center; flex:none; color:#8e8e93; }
+  .composer .mode { margin-left:6px; color:var(--sec); font-weight:500; flex:none; }
+  .composer .sp { flex:1 1 auto; min-width:4px; }
+  .composer .model { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .composer .model b { font-weight:700; } .composer .model i { font-style:normal; color:var(--sec); margin-left:4px; }
+  .composer .effort { width:20px; height:4px; border-radius:2px; background:rgba(60,60,67,.16); margin-left:10px; overflow:hidden; flex:none; }
+  .composer .effort span { display:block; width:55%; height:100%; background:var(--tint); }
+  .composer .ring { margin-left:8px; flex:none; }
+  .composer .send { margin-left:10px; width:32px; height:32px; border-radius:16px; background:#c3c3c8; display:flex; align-items:center; justify-content:center; flex:none; color:#fff; }
+
+  /* ── the status button that replaces the band (new) ── */
+  .st { flex:none; margin-left:9px; display:inline-flex; align-items:center; gap:4px; height:28px; padding:0 9px; border-radius:14px;
+        background:rgba(120,120,128,.12); color:var(--label); font-size:13px; font-weight:700; white-space:nowrap; }
+  .st.icon { width:32px; padding:0; justify-content:center; color:#6e6e73; }
+  .st.ok { color:var(--dgreen); background:rgba(52,199,89,.14); }
+  .st.act { color:var(--tint); background:rgba(46,106,255,.13); }
+  .st.bad { color:var(--red); background:rgba(255,59,48,.12); }
+  .spin { flex:none; width:11px; height:11px; border-radius:50%; border:1.8px solid rgba(0,122,255,.22); border-top-color:var(--blue); border-right-color:var(--blue); }
+  .new { outline:2px dashed #e8590c; outline-offset:3px; }
+
+  /* ── keyboard (iOS 26, pinyin) ──────────── */
+  .kb { left:0; right:0; top:524px; bottom:0; background:#e2e3e8; border-radius:28px 28px 0 0; box-shadow:0 -.5px 0 rgba(0,0,0,.12); }
+  .kb .cand { position:absolute; left:0; right:0; top:4px; height:44px; display:flex; align-items:center; padding:0 6px 0 10px; font-size:19px; }
+  .kb .cand span { flex:1 1 auto; text-align:center; }
+  .kb .cand svg { flex:none; margin-left:8px; }
+  .kb .kr { position:absolute; left:4px; right:4px; display:flex; gap:6px; justify-content:center; }
+  .kb .k { height:42px; flex:0 0 32.6px; background:#fff; border-radius:8px; box-shadow:0 1px 0 rgba(0,0,0,.2); display:flex; align-items:center; justify-content:center; font-size:23px; }
+  .kb .k.w { flex-basis:44px; } .kb .k.wide { flex-basis:96px; font-size:17px; } .kb .k.space { flex:1 1 auto; justify-content:flex-end; align-items:flex-end; padding:0 12px 6px 0; font-size:12px; color:#9a9aa0; }
+  .kb .bot { position:absolute; left:34px; right:34px; top:268px; display:flex; justify-content:space-between; color:#1f2228; }
+
+  /* ── sheet ──────────────────────────────── */
+  .dimmer { inset:0; background:rgba(0,0,0,.2); }
+  .sheet { left:8px; right:8px; top:352px; bottom:8px; border-radius:40px; background:#f2f2f7; overflow:hidden;
+           box-shadow:0 0 0 .5px rgba(0,0,0,.08), 0 -6px 30px rgba(0,0,0,.12); }
+  .grab { position:absolute; left:50%; top:6px; width:36px; height:5px; margin-left:-18px; border-radius:3px; background:rgba(60,60,67,.3); }
+  .sh-head { position:relative; height:58px; padding-top:20px; text-align:center; font-size:17px; font-weight:700; }
+  .sh-x { position:absolute; right:14px; top:13px; width:36px; height:36px; border-radius:18px; background:rgba(120,120,128,.16); display:flex; align-items:center; justify-content:center; }
+  .sec-h { display:flex; justify-content:space-between; padding:10px 20px 6px 20px; font-size:12.5px; color:#6e6e73; letter-spacing:.2px; }
+  .grp { margin:0 16px; background:#fff; border-radius:16px; overflow:hidden; }
+  .gr-row { display:flex; align-items:center; gap:10px; min-height:44px; padding:0 14px; position:relative; font-size:15px; white-space:nowrap; }
+  .gr-row + .gr-row::before { content:""; position:absolute; left:14px; right:0; top:0; height:.5px; background:rgba(60,60,67,.18); }
+  .gr-row .age { flex:none; font-size:12px; color:var(--sec); }
+  .gr-row .lnk { color:var(--tint); }
+  .ok-ic { flex:none; width:15px; height:15px; border-radius:50%; background:var(--green); display:flex; align-items:center; justify-content:center; }
+
+  /* ── page 2 ─────────────────────────────── */
+  .states { display:flex; flex-direction:column; gap:16px; }
+  .strip { background:#fff; border-radius:14px; padding:12px 16px 14px; width:415px; }
+  .strip .cap { margin-bottom:8px; font-size:13px; }
+  .strip .composer { position:relative; left:auto; }
+  .order { font-size:12.5px; color:#555b64; line-height:1.6; margin:0 0 4px; }
+  .order b { color:#1f2329; }
+  .why { margin-top:30px; background:#fff; border:1px solid #d5d8dd; border-radius:12px; padding:16px 20px; display:grid;
+         grid-template-columns:repeat(3, 1fr); gap:6px 26px; font-size:13px; line-height:1.65; color:#30343b; }
+  .why h3 { margin:0 0 6px; font-size:14px; color:#1f2329; }
+  .why ul { margin:0; padding-left:17px; }
+  .why li { margin:0 0 5px; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <!-- SF Symbols, redrawn. -->
+  <symbol id="terminal" viewBox="0 0 16 16"><rect x="1.2" y="2.2" width="13.6" height="11.6" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.2 6.2 6.4 8 4.2 9.8M7.6 10.2h4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="task" viewBox="0 0 16 16"><rect x="1.4" y="1.4" width="13.2" height="13.2" rx="2.6" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4.6 8.2 7 10.5l4.6-5.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="branch" viewBox="0 0 16 16"><path d="M5 2.5v11M5 9c0-2.6 6-2 6-5.2V2.5M11 2.5l-2 2M11 2.5l2 2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cr" viewBox="0 0 16 16"><path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cd" viewBox="0 0 16 16"><path d="M3.5 6 8 10.5 12.5 6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="cl" viewBox="0 0 16 16"><path d="M10.5 3 5.5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="sf-share" viewBox="0 0 20 20"><path d="M10 12.5V2.8M6.6 6 10 2.6 13.4 6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M7 8.5H5.6c-.9 0-1.6.7-1.6 1.6v6.3c0 .9.7 1.6 1.6 1.6h8.8c.9 0 1.6-.7 1.6-1.6v-6.3c0-.9-.7-1.6-1.6-1.6H13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="arrowup" viewBox="0 0 16 16"><path d="M8 13.5V3M3.8 7.2 8 3l4.2 4.2" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="sendup" viewBox="0 0 16 16"><path d="M8 13.2V3.4M3.9 7.4 8 3.3l4.1 4.1" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="plus" viewBox="0 0 22 22"><path d="M11 4v14M4 11h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="xmark" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="check" viewBox="0 0 16 16"><path d="M3.2 8.4 6.5 11.6 12.8 4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="excl" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7" fill="currentColor"/><path d="M8 4.2v4.6" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="11.6" r="1.05" fill="#fff"/></symbol>
+  <symbol id="stack" viewBox="0 0 20 20"><rect x="2.5" y="7" width="12.5" height="10" rx="2.4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6 4h9.2c1.3 0 2.3 1 2.3 2.3V13.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="shift" viewBox="0 0 20 20"><path d="M10 3 3 10.5h3.8V17h6.4v-6.5H17z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="del" viewBox="0 0 24 20"><path d="M8 3h12.5c.8 0 1.5.7 1.5 1.5v11c0 .8-.7 1.5-1.5 1.5H8L2 10z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M11 7l6 6M17 7l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="ret" viewBox="0 0 22 18"><path d="M19 3v6.5c0 1-.8 1.8-1.8 1.8H4M8 7l-4 4.3L8 15.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="globe" viewBox="0 0 26 26"><circle cx="13" cy="13" r="11" fill="none" stroke="currentColor" stroke-width="1.6"/><ellipse cx="13" cy="13" rx="5" ry="11" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M2 13h22M4 7.5h18M4 18.5h18" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="mic" viewBox="0 0 20 26"><rect x="6" y="2" width="8" height="14" rx="4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M2.5 12.5c0 4.2 3.4 7.5 7.5 7.5s7.5-3.3 7.5-7.5M10 20v4M6.5 24h7" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+</svg>
+
+<!-- ───────────── shared pieces ───────────── -->
+
+<template id="chrome">
+  <div class="abs navbg"></div>
+  <div class="abs time">6:24</div>
+  <div class="abs island"></div>
+  <div class="abs sbar">
+    <svg width="18" height="11" viewBox="0 0 18 11"><rect x="0" y="7" width="3" height="4" rx=".8"/><rect x="5" y="5" width="3" height="6" rx=".8"/><rect x="10" y="2.5" width="3" height="8.5" rx=".8"/><rect x="15" y="0" width="3" height="11" rx=".8"/></svg>
+    <span class="batt">100</span>
+  </div>
+  <div class="abs glass" style="left:16px"><svg width="20" height="20"><use href="#cl"/></svg></div>
+  <div class="abs glass" style="left:333px"><svg width="20" height="20"><use href="#sf-share"/></svg></div>
+  <div class="abs navtitle"><b>滚动到底按钮显示逻辑</b><span>Waiting for your reply · Open · just now</span></div>
+  <div class="abs banner"><i class="odot"></i><span class="bt">Escalated to you · 项目收尾重做：协调会话自己合分支</span><svg width="14" height="14"><use href="#cr"/></svg></div>
+  <div class="abs qbar"><svg width="13" height="13" style="color:var(--sec);flex:none"><use href="#arrowup"/></svg><span class="ql">Your question</span><span>web 的任务合入 main 了吗</span></div>
+</template>
+
+<template id="talk">
+  <p>Short answer: yes for web, not yet for iOS/macOS.</p>
+  <p>I checked three places before answering: the web task’s own run, <code>main</code> and <code>origin/main</code> after its merge, and this session’s worktree.</p>
+  <p>The web half landed:</p>
+  <ul>
+    <li>Task <i>web：跳到底部按钮只在离底部超过一屏时出现</i> is Done.</li>
+    <li>Its branch was merged into <code>main</code> as <code>5c2e8a1d4</code>.</li>
+    <li>CI on <code>main</code> at that commit: web unit and e2e are green.</li>
+  </ul>
+  <p>So the web side is in <code>main</code> and was pushed to <code>origin/main</code>.</p>
+  <p>The iOS/macOS fix (<code>371031ca9</code>) is still only on this session’s branch. Click Merge on this session to land it.</p>
+</template>
+
+<template id="keyboard">
+  <div class="abs kb">
+    <div class="cand"><span>我</span><span>你</span><span>这个</span><span>是</span><span>好</span><span>请</span><span>是否</span><span>不</span><svg width="18" height="18"><use href="#cd"/></svg></div>
+    <div class="kr" style="top:53px"><span class="k">q</span><span class="k">w</span><span class="k">e</span><span class="k">r</span><span class="k">t</span><span class="k">y</span><span class="k">u</span><span class="k">i</span><span class="k">o</span><span class="k">p</span></div>
+    <div class="kr" style="top:107px"><span class="k">a</span><span class="k">s</span><span class="k">d</span><span class="k">f</span><span class="k">g</span><span class="k">h</span><span class="k">j</span><span class="k">k</span><span class="k">l</span></div>
+    <div class="kr" style="top:161px"><span class="k w"><svg width="20" height="20"><use href="#shift"/></svg></span><span style="width:6px"></span><span class="k">z</span><span class="k">x</span><span class="k">c</span><span class="k">v</span><span class="k">b</span><span class="k">n</span><span class="k">m</span><span style="width:6px"></span><span class="k w"><svg width="24" height="20"><use href="#del"/></svg></span></div>
+    <div class="kr" style="top:215px"><span class="k wide">123</span><span class="k space">拼</span><span class="k wide"><svg width="22" height="18"><use href="#ret"/></svg></span></div>
+    <div class="bot"><svg width="26" height="26"><use href="#globe"/></svg><svg width="20" height="26"><use href="#mic"/></svg></div>
+  </div>
+</template>
+
+<!-- today's band for this session, one line per card -->
+<template id="band-today">
+  <div class="abs card" style="top:0"><div class="row">
+    <svg class="ico" width="12" height="12"><use href="#terminal"/></svg>
+    <span class="t13 semi">Background processes</span><span class="meta">5 total</span>
+    <span class="grow"></span><svg class="chev" width="10" height="10"><use href="#cr"/></svg>
+  </div></div>
+  <div class="abs card" style="top:38px"><div class="row">
+    <svg class="ico" width="12" height="12"><use href="#task"/></svg>
+    <span class="t13 semi" style="flex:none">Tasks created here</span>
+    <span class="meta tint ell grow">web：跳到底部按钮只在离底部超过一屏时出现</span>
+    <span class="pill done"><i></i>Done</span>
+    <svg class="chev" width="10" height="10"><use href="#cr"/></svg>
+  </div></div>
+  <div class="abs card" style="top:76px"><div class="row">
+    <span class="bpill"><svg width="11" height="11" style="color:var(--sec)"><use href="#branch"/></svg><span class="mono"><span class="dim">orbit</span>…<span class="dim">9bab9</span></span></span>
+    <span class="mono ell grow"><span class="gr">+65</span> <span class="rd">−8</span><span class="dim"> · 2 files</span></span>
+    <span class="merged">✓ Merged</span>
+  </div></div>
+</template>
+
+<!-- the composer card; slots filled per phone -->
+<template id="tb-left">
+  <span class="plus"><svg width="22" height="22"><use href="#plus"/></svg></span>
+  <span class="mode">Auto</span>
+</template>
+<template id="tb-right">
+  <span class="sp"></span>
+  <span class="model"><b>Opus 5.5</b><i>Max</i></span>
+  <span class="effort"><span></span></span>
+  <svg class="ring" width="17" height="17" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke="rgba(60,60,67,.16)" stroke-width="2.2"/><path d="M8 2a6 6 0 0 1 6 6" fill="none" stroke="#2E6AFF" stroke-width="2.2" stroke-linecap="round"/></svg>
+  <span class="send"><svg width="16" height="16"><use href="#sendup"/></svg></span>
+</template>
+
+<template id="st-merged"><span class="st ok new">Merged</span></template>
+
+<!-- ═════════════ page 1 ═════════════ -->
+<section class="page" id="p1">
+  <h1>停车栏收进输入框：打字时、平时都不占行</h1>
+  <p class="sub">
+    按你这张打字时的截图量：键盘上面一共只剩 524pt，顶上三条占 183pt，停车栏 <b>126pt</b>，输入框 91pt，对话只剩 <b>113pt</b>，四行字。
+    而这三张卡其实都没事要你管：进程都跑完了，任务 Done，分支也 Merged 了。<br>
+    新做法：输入框上面不再放卡片。停车栏缩成输入框工具栏里的<b>一个状态按钮</b>，只写当下最要紧的那一件事；点它弹出「This session」sheet，原来的几张卡原样在里面。
+    只改 iPhone（<code>hSize == .compact</code>），iPad / Mac / web 不动。
+  </p>
+
+  <div class="grid">
+    <div>
+      <p class="cap before">现状 · 打字时<span>照你的截图重画</span></p>
+      <div class="bezel"><div class="screen">
+        <div data-use="chrome"></div>
+        <div class="abs chat" style="height:101px"><div data-use="talk"></div></div>
+        <div class="abs divider" style="top:296px"></div>
+        <div class="abs" style="left:0;right:0;top:308px"><div data-use="band-today"></div></div>
+        <div class="abs composer" style="top:422px">
+          <div class="field"><i class="caret"></i>Message...</div>
+          <div class="tb"><div data-use="tb-left"></div><div data-use="tb-right"></div></div>
+        </div>
+        <div data-use="keyboard"></div>
+      </div></div>
+      <p class="ann">对话 <span class="big">113pt</span>，四行字；停车栏 126pt，比对话还高。</p>
+    </div>
+
+    <div>
+      <p class="cap after">新 · 打字时<span>输入框上面什么都不放</span></p>
+      <div class="bezel"><div class="screen">
+        <div data-use="chrome"></div>
+        <div class="abs chat" style="height:215px"><div data-use="talk"></div></div>
+        <div class="abs divider" style="top:410px"></div>
+        <div class="abs composer" style="top:422px">
+          <div class="field"><i class="caret"></i>Message...</div>
+          <div class="tb"><div data-use="tb-left"></div><div data-use="st-merged"></div><div data-use="tb-right"></div></div>
+        </div>
+        <div data-use="keyboard"></div>
+      </div></div>
+      <p class="ann">对话 <span class="big">227pt</span> <span class="up">翻倍</span>，八行字。
+        工具栏里的 <b>Merged</b> 就是那三张卡里最要紧的一句。打字时它也在，不用收键盘就能点。</p>
+    </div>
+
+    <div>
+      <p class="cap after">新 · 平时<span>键盘收起</span></p>
+      <div class="bezel"><div class="screen">
+        <div data-use="chrome"></div>
+        <div class="abs chat" style="height:509px"><div data-use="talk"></div></div>
+        <div class="abs divider" style="top:705px"></div>
+        <div class="abs composer rest" style="top:717px">
+          <div class="field">Message...</div>
+          <div class="tb"><div data-use="tb-left"></div><div data-use="st-merged"></div><div data-use="tb-right"></div></div>
+        </div>
+        <div class="abs home"></div>
+      </div></div>
+      <p class="ann">对话 <span class="big">522pt</span>，现状是 408pt <span class="up">+28%</span>。协调会话那种四张卡的，多出 164pt。
+        只有报错、转交这类一次性的卡，还和现在一样出现在输入框上面。</p>
+    </div>
+
+    <div>
+      <p class="cap after">新 · 点状态按钮<span>半屏 sheet，可上拉到全屏</span></p>
+      <div class="bezel"><div class="screen">
+        <div data-use="chrome"></div>
+        <div class="abs chat" style="height:509px"><div data-use="talk"></div></div>
+        <div class="abs divider" style="top:705px"></div>
+        <div class="abs composer rest" style="top:717px">
+          <div class="field">Message...</div>
+          <div class="tb"><div data-use="tb-left"></div><div data-use="st-merged"></div><div data-use="tb-right"></div></div>
+        </div>
+        <div class="abs home"></div>
+        <div class="abs dimmer"></div>
+        <div class="abs sheet">
+          <div class="grab"></div>
+          <div class="sh-head">This session<span class="sh-x"><svg width="13" height="13" style="color:#3c3c43"><use href="#xmark"/></svg></span></div>
+          <div class="sec-h"><span>BRANCH</span></div>
+          <div class="grp">
+            <div class="gr-row"><svg width="14" height="14" style="color:var(--sec);flex:none"><use href="#branch"/></svg><span class="mono ell grow" style="font-size:13px"><span class="dim">orbit/</span>scroll-bottom-ios<span class="dim">-9bab9</span></span><span class="mono" style="flex:none"><span class="gr">+65</span> <span class="rd">−8</span><span class="dim"> · 2 files</span></span></div>
+            <div class="gr-row"><span style="color:var(--dgreen);font-weight:700">✓ Merged into main</span><span class="grow"></span><span class="lnk">View changes ›</span></div>
+          </div>
+          <div class="sec-h"><span>TASKS CREATED HERE</span><span>1/1 done</span></div>
+          <div class="grp">
+            <div class="gr-row"><span class="pill done"><i></i>Done</span><span class="ell grow">web：跳到底部按钮只在离底部超过一屏时出现</span><span class="age">2h ago</span><svg class="chev" width="10" height="10" style="color:var(--ter)"><use href="#cr"/></svg></div>
+            <div class="gr-row"><span class="lnk">View all in Tasks ›</span></div>
+          </div>
+          <div class="sec-h"><span>BACKGROUND PROCESSES</span><span>5 total</span></div>
+          <div class="grp">
+            <div class="gr-row"><span class="ok-ic"><svg width="9" height="9" style="color:#fff"><use href="#check"/></svg></span><span class="mono ell grow" style="font-size:13px">swift test --filter ScrollToBottom</span><span class="age">3h ago</span></div>
+            <div class="gr-row"><span class="ok-ic"><svg width="9" height="9" style="color:#fff"><use href="#check"/></svg></span><span class="mono ell grow" style="font-size:13px">npx vitest run AgentView.scroll</span><span class="age">3h ago</span></div>
+            <div class="gr-row"><span class="ok-ic"><svg width="9" height="9" style="color:#fff"><use href="#check"/></svg></span><span class="mono ell grow" style="font-size:13px">xcodebuild -scheme OrbitiOS build</span><span class="age">4h ago</span></div>
+          </div>
+        </div>
+      </div></div>
+      <p class="ann">原来那几张卡原样在这里：分支（Merge / Commit、失败面板、恢复入口）、Tasks created here、Watching、Background processes。
+        点某一行就关掉 sheet，进到那个页面，返回手势回到对话。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════ page 2 ═════════════ -->
+<section class="page" id="p2">
+  <h1>状态按钮写什么</h1>
+  <p class="sub">按钮只写一件事，按顺序挑最要紧的：<b>失败 › 能合并 / 能提交 › 有在跑的 › 已合并 › 只剩图标</b>。
+    这个会话什么产出都没有时，按钮不出现，工具栏和现在一样。工具栏放不下时，模型名先截断（和输入框那张稿的规矩一样）。</p>
+
+  <div class="grid">
+    <div class="states">
+      <div class="strip">
+        <p class="cap after">有失败<span>红字，压过别的</span></p>
+        <div class="composer rest"><div class="field">Message...</div>
+          <div class="tb"><div data-use="tb-left"></div><span class="st bad">1 failed</span><div data-use="tb-right"></div></div></div>
+      </div>
+      <div class="strip">
+        <p class="cap after">能合并 / 能提交<span>蓝字，点开就是 Merge to main</span></p>
+        <div class="composer rest"><div class="field">Message...</div>
+          <div class="tb"><div data-use="tb-left"></div><span class="st act">Merge</span><div data-use="tb-right"></div></div></div>
+      </div>
+      <div class="strip">
+        <p class="cap after">有在跑的<span>转圈加任务进度（协调会话：2 running · 2/15 done）</span></p>
+        <div class="composer rest"><div class="field">Message...</div>
+          <div class="tb"><div data-use="tb-left"></div><span class="st"><span class="spin"></span>2/15</span><div data-use="tb-right"></div></div></div>
+      </div>
+      <div class="strip">
+        <p class="cap after">已合并<span>绿字</span></p>
+        <div class="composer rest"><div class="field">Message...</div>
+          <div class="tb"><div data-use="tb-left"></div><span class="st ok">Merged</span><div data-use="tb-right"></div></div></div>
+      </div>
+      <div class="strip">
+        <p class="cap after">都结束了，没什么要说的<span>只剩图标，点开还是那张 sheet</span></p>
+        <div class="composer rest"><div class="field">Message...</div>
+          <div class="tb"><div data-use="tb-left"></div><span class="st icon"><svg width="17" height="17"><use href="#stack"/></svg></span><div data-use="tb-right"></div></div></div>
+      </div>
+    </div>
+
+    <div>
+      <p class="cap alt">可选 · 打字时顶上两条也收起<span>和停车栏无关，要不要做你定</span></p>
+      <div class="bezel"><div class="screen notop">
+        <div data-use="chrome"></div>
+        <div class="abs chat" style="height:285px"><div data-use="talk"></div></div>
+        <div class="abs divider" style="top:410px"></div>
+        <div class="abs composer" style="top:422px">
+          <div class="field"><i class="caret"></i>Message...</div>
+          <div class="tb"><div data-use="tb-left"></div><span class="st ok">Merged</span><div data-use="tb-right"></div></div>
+        </div>
+        <div data-use="keyboard"></div>
+      </div></div>
+      <p class="ann">Escalated to you 和 Your question 在打字时也收起，键盘一收就回来。对话 <span class="big">297pt</span>，十一行字（现状 113pt）。</p>
+    </div>
+  </div>
+
+  <div class="why">
+    <div>
+      <h3>为什么放在工具栏</h3>
+      <ul>
+        <li>工具栏本来就有模型、力度、上下文环这些「这个会话」的状态，停车栏的状态放进来不突兀。</li>
+        <li>打字时它还在：不用收键盘就能看、能点。</li>
+        <li>输入框上面一行都不占：打字时对话从 4 行变 8 行；平时这个会话多 114pt，协调会话多 164pt。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>代价</h3>
+      <ul>
+        <li>平时只看得到最要紧的一件事，别的要点一下才看到。</li>
+        <li>Merge 从一按变成两按：先点「Merge」弹出 sheet，再按里面的 Merge to main。好处是打字时不会误触合并，合并前还能看一眼改了什么。</li>
+        <li>工具栏更挤了，放不下时模型名先截断。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>不变的</h3>
+      <ul>
+        <li>报错、转交、Run conflict 这类一次性的卡，还是出现在输入框上面，原样不动。</li>
+        <li>sheet 里是那几张卡现在的内容和动作，一样不少：失败面板、恢复入口、<code>View all in Tasks ›</code>、<code>Manage in Watches ›</code>。</li>
+        <li>开始卡上的「View tasks ›」改为打开这张 sheet，并停在任务那一段。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<script>
+  // Fill every slot from its template; a few passes so templates can nest.
+  for (let pass = 0; pass < 4; pass++) {
+    for (const slot of document.querySelectorAll('[data-use]')) {
+      const t = document.getElementById(slot.dataset.use);
+      if (!(t instanceof HTMLTemplateElement)) throw new Error('no template ' + slot.dataset.use);
+      slot.replaceWith(t.content.cloneNode(true));
+    }
+  }
+  const page = location.hash.slice(1);
+  if (page) for (const s of document.querySelectorAll('section.page')) s.style.display = s.id === page ? '' : 'none';
+</script>
+</body>
+</html>
