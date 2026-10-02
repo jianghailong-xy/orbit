@@ -126,6 +126,7 @@ import { MAX_UPLOAD_BYTES, toBytes } from '../attachments/attachments.media';
 import { SESSION_TAG_PALETTE } from '../session-tags/session-tags.service';
 import {
   CreateSessionDto,
+  MoveSessionDto,
   SessionConfigDto,
   AUTOMATIC_ACCOUNT,
   SessionInterruptDto,
@@ -930,6 +931,21 @@ export class SessionsService {
       if (!configured && borrowedRuntime) await this.assertUsablePool(ownerId, provider);
     }
     await this.assertOwnedRefs(ownerId, { workspaceId: dto.workspaceId, assignedRunnerId });
+    // §3.2: a session opened from a folder's page is filed in that folder, which has to be one of
+    // the caller's folders in the workspace this session is created in. A plain read: a folder
+    // never changes workspace, and one deleted before the INSERT fails its foreign key there.
+    const folderId = dto.folderId || null;
+    if (folderId) {
+      // CreateSessionDto is an interface, so nothing upstream checked the type: a number here would
+      // reach Prisma as one and come back a 500.
+      const folder = dto.workspaceId && typeof folderId === 'string'
+        ? await this.prisma.sessionFolder.findFirst({
+            where: { id: folderId, ownerId, workspaceId: dto.workspaceId },
+            select: { id: true },
+          })
+        : null;
+      if (!folder) throw new BadRequestException('folderId must be a folder of this workspace');
+    }
     // A mode the target machine cannot run at all: Bypass on a runner deployed as root, which
     // claude refuses by exiting inside its own startup — five seconds in, with the refusal on
     // stderr and a bare FAILED in every UI. Which of the two outcomes below applies turns on who
@@ -1118,6 +1134,7 @@ export class SessionsService {
         workspaceId: dto.workspaceId,
         assignedRunnerId,
         taskId: dto.taskId,
+        folderId,
         // §13.8: what this session is ABOUT, when it is not executing it. Mutually exclusive with
         // `taskId` at the database (0131), so the two cannot both be set by accident.
         contextTaskId: opts?.contextTaskId ?? null,
@@ -1139,7 +1156,20 @@ export class SessionsService {
         // columns, so there is no second statement that could write them.
         ...source.columns,
       },
-    }));
+    })).catch(async (e: unknown) => {
+      // The folder checked above was deleted before this INSERT reached it: the same 400 as naming
+      // a deleted one. Re-read rather than parsed out of the error, so a P2003 about any other key
+      // this INSERT names is left saying what it was really about.
+      if (
+        folderId &&
+        e instanceof Prisma.PrismaClientKnownRequestError &&
+        e.code === 'P2003' &&
+        (await this.prisma.sessionFolder.count({ where: { id: folderId } })) === 0
+      ) {
+        throw new BadRequestException('folderId must be a folder of this workspace');
+      }
+      throw e;
+    });
     // Scope the compose-page uploads to this session now that it exists. They stay
     // turn-less until the runner seeds the first turn (queue.service links them to it),
     // and cascade-delete with the session.
@@ -2749,6 +2779,7 @@ export class SessionsService {
       lastUserText: string | null;
       mergeStatus: string | null;
       pinnedAt: Date | null;
+      folderId: string | null;
       shared: boolean;
       tags: { id: string; name: string; color: string; isSystem: boolean; position: number }[];
       runningBgCount: number;
@@ -2826,6 +2857,8 @@ export class SessionsService {
         left(s.last_user_text, ${SessionsService.PREVIEW_LEN}::int) AS "lastUserText",
         s.merge_status    AS "mergeStatus",
         s.pinned_at       AS "pinnedAt",
+        -- The folder this session is filed in (0348), which the clients group the list by.
+        s.folder_id       AS "folderId",
         -- Whether anyone with a link can open this session right now: a share_link (0306) that
         -- was not turned off and has not run past its expiry, on a session that is not in the
         -- trash (which pauses it). The list's globe (docs/share-links-design.md §8). At most one
@@ -2980,6 +3013,7 @@ export class SessionsService {
         lastUserText: r.lastUserText,
         mergeStatus: r.mergeStatus,
         pinnedAt: r.pinnedAt,
+        folderId: r.folderId,
         shared: r.shared === true,
         tags: r.tags,
         runningBgCount: r.runningBgCount,
@@ -8052,6 +8086,58 @@ export class SessionsService {
     await this.get(ownerId, id); // ownership check (404s otherwise)
     await this.prisma.session.update({ where: { id }, data: { pinnedAt: null } });
     return { ok: true };
+  }
+
+  /**
+   * File a session in one of its workspace's folders, or in none — the folder half of
+   * `POST /sessions/:id/move` (docs/session-folders-move-design.md §5.4). Any session outside Trash
+   * may be moved, a running one included: a folder is filing only, and nothing that runs a session
+   * reads it. A `workspaceId` other than the session's own is refused with a 409 until moving
+   * between workspaces exists.
+   *
+   * The target folder is locked before the session row (common/lock-order.ts, rank 25 before 30).
+   * A folder delete takes the folder and then, through ON DELETE SET NULL, the sessions in it, so a
+   * move that held its session while waiting for the folder would be the other half of that cycle.
+   * FOR KEY SHARE is the lock the UPDATE's foreign-key check takes anyway — taken earlier, not
+   * added — and it keeps the folder from being deleted or renamed between the check and the write.
+   */
+  async move(ownerId: string, id: string, dto: MoveSessionDto) {
+    const folderId = dto.folderId ?? null;
+    const moved = await withTransactionRetry(this.prisma, async (tx) => {
+      const [folder] = folderId
+        ? await tx.$queryRaw<Array<{ ownerId: string; workspaceId: string }>>`
+            SELECT "owner_id" AS "ownerId", "workspace_id" AS "workspaceId"
+              FROM "session_folder"
+             WHERE "id" = ${folderId}::uuid
+               FOR KEY SHARE`
+        : [];
+      const [session] = await tx.$queryRaw<
+        Array<{ workspaceId: string | null; folderId: string | null; deletedAt: Date | null }>
+      >`
+        SELECT "workspace_id" AS "workspaceId", "folder_id" AS "folderId", "deleted_at" AS "deletedAt"
+          FROM "session"
+         WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+           FOR NO KEY UPDATE`;
+      if (!session) throw new NotFoundException('session not found');
+      if (session.deletedAt) {
+        throw new ConflictException('this session is in Trash; restore it before moving it');
+      }
+      if (dto.workspaceId && dto.workspaceId !== session.workspaceId) {
+        throw new ConflictException('moving to another workspace is not available yet');
+      }
+      if (
+        folderId &&
+        (!folder || folder.ownerId !== ownerId || folder.workspaceId !== session.workspaceId)
+      ) {
+        throw new BadRequestException("folderId must be a folder of this session's workspace");
+      }
+      if (session.folderId === folderId) return { workspaceId: session.workspaceId, changed: false };
+      await tx.session.update({ where: { id }, data: { folderId } });
+      return { workspaceId: session.workspaceId, changed: true };
+    }, loggedRetry(this.logger, 'sessions.move'));
+    // The list row moved; other clients learn where from the summary's folderId.
+    if (moved.changed) this.realtime.publishSessionUpdated(id);
+    return { id, workspaceId: moved.workspaceId, folderId };
   }
 
   /**
