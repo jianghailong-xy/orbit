@@ -326,7 +326,7 @@ import {
   type AccountEngine,
 } from '@orbit/shared';
 import { lastTypedUserMessage } from '../lib/deliveredMessage';
-import { planUsageRows } from '../lib/planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
 import { tagChipLabels } from '../lib/tagColor';
@@ -5863,7 +5863,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const readyImages = images.filter((im) => im.status === 'done' && im.id);
 
   function showLocalStatus(): void {
-    const planRow = shownPlanUsage ? planUsageRows(shownPlanUsage)[0] : undefined;
+    const planRow = shownPlanUsage ? bindingPlanUsageRow(currentPlanUsageRows(shownPlanUsage)) : undefined;
     const rows = localStatusRows({
       surface: 'Web',
       runnerName: runner.displayName || runner.name,

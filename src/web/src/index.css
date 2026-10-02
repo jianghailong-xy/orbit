@@ -2309,6 +2309,15 @@ body {
   min-width: 0;
   font-size: 12.5px;
 }
+/* Whose windows these are, when the engine has several accounts: the one a new session starts on. */
+.rd-quota-next {
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .rd-quota-head {
   display: flex;
   justify-content: space-between;
@@ -13019,6 +13028,59 @@ button.chat-jump-start:hover {
     display: none;
   }
 }
+/* A runner's engines and their accounts (RunnerEngines). Each row's quota is every window of its
+   login with when it resets, under a status that says whether the login can run now — the account
+   pools' login rows, which share these classes and keep the layout above. The status is sized for
+   the longest thing it says, "Spent · resets Mon 19:00"; the last column holds the widest pair of
+   actions, `+ Account` beside `Sign in` on a one-account row that is signed out, Re-sign in and
+   Remove being marks narrower than either. On a narrow card the quota's bar gives way before the
+   name does: the name keeps 137px, an engine's name on one line clear of the status beside it. */
+.re-runner-card .re-row {
+  grid-template-columns: minmax(137px, 1fr) 168px minmax(128px, 190px) 160px;
+  /* Against the top: the quota stacks a window per line, and the name, status and actions stay level
+     with the first of them. */
+  align-items: start;
+}
+/* A group's head has no status or quota of its own — its accounts do — so its line runs the width
+   of the row, and its one action sits level with the name it belongs to. */
+@media (min-width: 701px) {
+  .re-runner-card .re-row.re-grp {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  /* Too narrow for those floors (665px, 663 inside the border), as above: name and status, then
+     quota and actions. */
+  @container re-card (max-width: 662px) {
+    .re-runner-card .re-row {
+      grid-template-columns: minmax(0, 1fr) max-content;
+    }
+    .re-runner-card .re-row > :nth-child(2) {
+      justify-self: end;
+    }
+    .re-runner-card .re-quota {
+      margin-left: 38px;
+    }
+  }
+}
+@media (max-width: 700px) {
+  /* Name, status and the way back in on the first line, and the quota a line of its own under the
+     name, bars and resets kept — the account pools' rows on a phone. A long status gives way with an
+     ellipsis before the name does; what it would have said is in the resets under it. */
+  .re-runner-card .re-row {
+    grid-template-columns: minmax(96px, 1fr) minmax(0, max-content) max-content;
+    gap: 8px 10px;
+  }
+  .re-runner-card .re-row > .re-act {
+    grid-row: 1;
+    grid-column: 3;
+  }
+  .re-runner-card .re-quota {
+    display: block;
+    grid-row: 2;
+    grid-column: 1 / -1;
+    margin-left: 38px;
+  }
+}
 .re-id {
   display: flex;
   align-items: center;
@@ -13066,12 +13128,43 @@ button.chat-jump-start:hover {
   font-size: 11px;
   color: var(--text-4);
 }
+/* One window under another, each with when it resets — the account pools' login rows. */
+.re-window + .re-window {
+  margin-top: 8px;
+}
+.re-reset {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+/* A reading that stopped refreshing: the numbers above are as of then, not now. */
+.re-stale {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--warning);
+}
+.re-status {
+  min-width: 0;
+}
+.re-status .ant-tag {
+  max-width: 100%;
+  margin-inline-end: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
 .re-act {
   display: flex;
   justify-content: flex-end;
-  /* An account's row holds two actions — sign in, and off this machine — and a group head one;
+  /* An account's row holds two actions — off this machine, and sign in — and a group head one;
      one child is a no-op. */
   gap: 8px;
+}
+/* Re-sign in and Remove are marks, grey at rest. Remove turns red only under the pointer, like the
+   account pools' sign-out mark: red on a row that is fine reads as something wrong with it. */
+.re-act .re-icon.ant-btn:not(:disabled) {
+  color: var(--text-3);
 }
 /* Codex with more than one account: the engine's row heads a group, and each account is a row
    under it. The head keeps what the engine owns — binary, version, updates — and says how many. */
@@ -13120,7 +13213,7 @@ button.chat-jump-start:hover {
   bottom: auto;
   height: 28px;
 }
-/* DEFAULT: the machine's own ~/.codex, the one a terminal's `codex` shares. */
+/* A mark beside a name: NEXT, where the next session starts — on a pool, or among a runner's accounts. */
 .re-chip {
   display: inline-block;
   margin-left: 6px;
@@ -13854,7 +13947,7 @@ button.chat-jump-start:hover {
 }
 @media (max-width: 700px) {
   /* The quota is what an account's row is about: a line of its own under the name, bars and resets
-     kept — unlike a Claude account's, whose gauge waits for a wider window. */
+     kept — as a runner's accounts have it on Providers. */
   .pool-row .re-quota.pool-login-quota {
     display: block;
     grid-column: 1 / -1;

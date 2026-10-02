@@ -63,8 +63,8 @@ final class ProviderPoolsTests: XCTestCase {
         XCTAssertEqual(claude.members.map(\.next), [false, true, false])
         XCTAssertEqual(claude.members[2].resetsAt, "2026-09-25T10:30:00.000Z")
         // Each member's own quota, read with its own credential.
-        XCTAssertEqual(claude.members[0].planUsage?.primaryPercent, 70)
-        XCTAssertEqual(claude.members[1].planUsage?.primaryPercent, 20)
+        XCTAssertEqual(claude.members[0].planUsage?.rows.first?.percent, 70)
+        XCTAssertEqual(claude.members[1].planUsage?.rows.first?.percent, 20)
     }
 
     /// A state added on the server is one this build can't name — it must not cost the user every
@@ -154,7 +154,7 @@ final class ProviderPoolsTests: XCTestCase {
         XCTAssertEqual(account, PoolAccount(member: work, current: true))
         XCTAssertNotEqual(account?.member.label, claude.label)
         // Its own quota, not the pool's next pick's.
-        XCTAssertEqual(account?.member.planUsage?.primaryPercent, 70)
+        XCTAssertEqual(account?.member.planUsage?.rows.first?.percent, 70)
     }
 
     /// The detail spells ids base62 and a push or an older payload may spell them as UUIDs: the same
