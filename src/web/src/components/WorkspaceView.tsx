@@ -219,6 +219,7 @@ import {
   getSessionEventPageAfter,
   getSessionEventPageAround,
   getSessionRetryMessage,
+  resendSessionRetryMessage,
   type TranscriptAroundPage,
   renameSession,
   restoreSession,
@@ -317,6 +318,7 @@ import {
   type AccountEngine,
 } from '@orbit/shared';
 import { lastTypedUserMessage } from '../lib/deliveredMessage';
+import { compatibleUuid } from '../lib/uuid';
 import { planUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
@@ -6524,13 +6526,25 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Words only: `retry.attachmentIds` are read off the bubble this page holds, and a page holding
   // no bubble has no files to name — so the fallback re-sends the message's text and nothing else.
   const [retryMessageAskedFor, setRetryMessageAskedFor] = useState<string | null>(null);
-  const serverRetryText =
-    useQuery({
-      queryKey: ['session', selectedId, 'retry-message'],
-      queryFn: () => getSessionRetryMessage(selectedId!),
-      enabled: !!selectedId && retryMessageAskedFor === selectedId,
-    }).data?.text ?? '';
+  const serverRetry = useQuery({
+    queryKey: ['session', selectedId, 'retry-message'],
+    queryFn: () => getSessionRetryMessage(selectedId!),
+    enabled: !!selectedId && retryMessageAskedFor === selectedId,
+  }).data;
+  const serverRetryText = serverRetry?.text ?? '';
   const autoRetryText = retryText || serverRetryText;
+  // Whose words those are. Another Orbit session's are not the reader's to send again: through
+  // `send` they would go out in the owner's name, signed by nobody. So the Retry asks the server to
+  // re-send them as the automatic retry would — that session's, with the request they were, charged
+  // to nobody's hourly limit (docs/session-request-reply-contract.md §2.1). Read off the same bubble
+  // as the words, or off the server's answer when the window held none.
+  const retryFromSession = retryText ? retry.sessionMessage : serverRetry?.sessionMessage;
+  const resendFromSession = useMutation({
+    mutationFn: (sessionId: string) => resendSessionRetryMessage(sessionId, compatibleUuid()),
+    onSuccess: (_answer, sessionId) => qc.invalidateQueries({ queryKey: ['session', sessionId] }),
+    onError: (e: Error) => message.error(e.message || 'Could not re-send that message'),
+  });
+  const resendFromSessionMutate = resendFromSession.mutate;
   const sendMutate = send.mutate;
   const authErrorHelp: AuthErrorHelp = useMemo(
     () => ({
@@ -6539,7 +6553,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runnerId: runner.id,
       onRetry:
         retryText && !selectedTrashed && !selectedMissing
-          ? () => sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds })
+          ? retry.sessionMessage && selectedId
+            ? () => resendFromSessionMutate(selectedId)
+            : () => sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds })
           : undefined,
       retryText,
       // The provider gallery, not a preset vendor: the engine narrows it to a runtime, not to
@@ -6554,9 +6570,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runner.id,
       retry,
       retryText,
+      selectedId,
       selectedTrashed,
       selectedMissing,
       sendMutate,
+      resendFromSessionMutate,
       navigate,
     ],
   );
@@ -6605,13 +6623,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       attempts: detailForSelected?.retryAttempts ?? 0,
       onRetry:
         autoRetryText && !selectedTrashed && !selectedMissing
-          ? () =>
-              sendMutate({
-                content: autoRetryText,
-                images: [],
-                attachmentIds: retry.attachmentIds,
-                source: 'autoRetry',
-              })
+          ? retryFromSession && selectedId
+            ? () => resendFromSessionMutate(selectedId)
+            : () =>
+                sendMutate({
+                  content: autoRetryText,
+                  images: [],
+                  attachmentIds: retry.attachmentIds,
+                  source: 'autoRetry',
+                })
           : undefined,
       retryText: autoRetryText,
       // The card's own Retry goes through `send`, so its refusal arrives in the same handler as a
@@ -6645,10 +6665,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       detailForSelected?.retryAt,
       detailForSelected?.retryAttempts,
       autoRetryText,
+      retryFromSession,
       runConflict?.conflict,
       selectedTrashed,
       selectedMissing,
       sendMutate,
+      resendFromSessionMutate,
       selected?.id,
       selectedId,
       qc,
