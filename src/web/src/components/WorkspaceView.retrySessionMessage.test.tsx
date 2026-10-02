@@ -17,6 +17,10 @@ import type { Runner } from './TasksSidePanel';
  * failed. So when the words carry the sending session's card — on the bubble the page holds, or on
  * the server's answer when the page holds none — Retry asks the server to re-send them, and the
  * server sends them as that session's. The owner's own message still goes the way it always did.
+ *
+ * It names no key of its own any more, and it is not offered again while it is in flight (§2.1, §8
+ * criterion 19): the key is the server's, derived from the failed message, and the button is drawn
+ * disabled for as long as the request it made is unanswered — a double tap is one attempt.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -242,9 +246,7 @@ describe('the failure card’s Retry, for another session’s message', { timeou
     await press('.chat-quota-retry');
 
     await vi.waitFor(() => expect(vi.mocked(resendSessionRetryMessage)).toHaveBeenCalledTimes(1));
-    const [sessionId, clientTurnId] = vi.mocked(resendSessionRetryMessage).mock.calls[0];
-    expect(sessionId).toBe(SESSION_PUBLIC);
-    expect(clientTurnId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(vi.mocked(resendSessionRetryMessage).mock.calls[0] as unknown[]).toEqual([SESSION_PUBLIC]);
     expect(ownersSends(), 'the words went out again through the owner’s own send').toEqual([]);
   });
 
@@ -267,6 +269,29 @@ describe('the failure card’s Retry, for another session’s message', { timeou
     await press('.chat-quota-retry');
 
     await vi.waitFor(() => expect(vi.mocked(resendSessionRetryMessage)).toHaveBeenCalledTimes(1));
+    expect(ownersSends()).toEqual([]);
+  });
+
+  it('a re-send already in flight is not offered a second one', async () => {
+    // Never settles: this is the state the criterion is about — the button's request is out and no
+    // answer has come back, so a second press must not make a second one (§2.1, criterion 19).
+    vi.mocked(resendSessionRetryMessage).mockImplementation(() => new Promise(() => {}));
+    await mount(theirs(RATE_LIMITED), '.chat-quota');
+    await press('.chat-quota-retry');
+    await vi.waitFor(() => expect(vi.mocked(resendSessionRetryMessage)).toHaveBeenCalledTimes(1));
+
+    const retry = button('.chat-quota-retry');
+    expect(retry, 'the button left the card while its own re-send was in flight').not.toBeNull();
+    await act(async () => {
+      await vi.waitFor(() => expect(retry!.hasAttribute('disabled')).toBe(true), { timeout: 5_000, interval: 10 });
+    });
+    // …and it is not only the attribute: a press that reaches the handler anyway — a stale render,
+    // a keyboard, this test taking the attribute off — is refused there too.
+    retry!.removeAttribute('disabled');
+    await act(async () => {
+      retry!.click();
+    });
+    expect(vi.mocked(resendSessionRetryMessage)).toHaveBeenCalledTimes(1);
     expect(ownersSends()).toEqual([]);
   });
 
