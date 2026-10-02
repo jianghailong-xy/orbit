@@ -36,8 +36,9 @@ import (
 //
 // A RUN CUT SHORT FAILED. The CLI ends a turn that reached --max-turns with `error_max_turns`: the turn is
 // FAILED like any error, and the runner says so on the space's cursor as `truncated` — one more of the
-// space's consecutive failures, with the cursor where the last good run left it — because the run itself
-// can no longer say anything.
+// space's consecutive failures, with the cursor no further than past the ops the run had recorded (criterion
+// 3, revision 4), and where it was when it was cut short before that — because the run itself can no longer
+// say anything.
 
 // wikiMaintenanceRunV1 is contracts/wiki.contract.json `maintenance.run.capability`: declared on every call
 // (runnerCapabilitiesV1), it is what gets this runner handed maintenance sessions at all.
@@ -287,10 +288,11 @@ func onlyMCPTools(tools []map[string]interface{}, only map[string]bool) []map[st
 const claudeMaxTurnsSubtype = "error_max_turns"
 
 // reportWikiMaintenanceTruncated says on the space's cursor that the run was cut short: a failure, and one
-// that moves nothing. Best-effort — the turn itself is already FAILED, which is the record that stays.
+// that moves the cursor no further. Best-effort — the turn itself is already FAILED, which is the record that stays.
 func reportWikiMaintenanceTruncated(t *Transport, job *ClaimedSession) {
 	run := job.WikiMaintenance
-	why := fmt.Sprintf("the run reached its limit of %d model turns and was cut short, so it failed and moved nothing", run.MaxTurns)
+	why := fmt.Sprintf("the run reached its limit of %d model turns and was cut short, so it failed and moved the cursor no "+
+		"further than past the ops it had recorded", run.MaxTurns)
 	if _, err := t.advanceWikiCursor(job.SessionID, run.SpaceID, map[string]interface{}{"outcome": "truncated", "error": why}); err != nil {
 		logln("wiki maintenance: could not record the truncated run of", job.SessionID+":", err)
 	}

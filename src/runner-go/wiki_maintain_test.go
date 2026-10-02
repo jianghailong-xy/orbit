@@ -66,6 +66,11 @@ type fakeMaintainDoor struct {
 	// override answers a route, "METHOD path" under the space, in place of everything above: a server that
 	// answers 5xx (contract `maintenance.job.recovery.inSession`).
 	override map[string]func() (int, string)
+	// watermark is the space's cursor as the door keeps it ("" before anything moved it, read as tok-watermark):
+	// moved by POST …/maintenance/advance and by a succeeded finish, and where the first page of a run starts —
+	// pages[watermark], when there is one. advanceMissing is a server that predates the advance route.
+	watermark      string
+	advanceMissing bool
 }
 
 func newFakeMaintainDoor(t *testing.T) *fakeMaintainDoor {
@@ -90,7 +95,14 @@ func newFakeMaintainDoor(t *testing.T) *fakeMaintainDoor {
 			status, body = d.context()
 		case r.Method == http.MethodGet && path == "dossiers":
 			after := r.URL.Query().Get("after")
+			d.mu.Lock()
+			start := d.watermark
+			d.mu.Unlock()
 			page, ok := d.pages[after]
+			if from, moved := d.pages[start]; after == "" && start != "" && moved {
+				// A page starts at the later of `after` and the cursor: a run after one that moved it reads on from there.
+				page, ok, after = from, true, start
+			}
 			if !ok {
 				page = maintainPage(after, false)
 			}
@@ -165,8 +177,27 @@ func newFakeMaintainDoor(t *testing.T) *fakeMaintainDoor {
 			status, body = d.withdraw(request.body)
 		case r.Method == http.MethodPost && path == "plan/proposals" && d.proposals != nil:
 			status, body = d.proposals(request.body)
+		case r.Method == http.MethodPost && path == "maintenance/advance" && d.advanceMissing:
+			status, body = http.StatusNotFound, `{"message":"Cannot POST `+r.URL.Path+`","error":"Not Found","statusCode":404}`
+		case r.Method == http.MethodPost && path == "maintenance/advance":
+			to, _ := request.body["to"].(string)
+			d.mu.Lock()
+			moved := to != firstNonEmpty(d.watermark, "tok-watermark")
+			if moved {
+				d.watermark = to
+			}
+			position := firstNonEmpty(d.watermark, "tok-watermark")
+			d.mu.Unlock()
+			raw, _ := json.Marshal(map[string]interface{}{"advanced": moved,
+				"state": map[string]interface{}{"position": position, "backlog": 0, "consecutiveFailures": 0}})
+			status, body = http.StatusOK, string(raw)
 		case r.Method == http.MethodPost && path == "maintenance/finish":
 			outcome, _ := request.body["outcome"].(string)
+			if to, _ := request.body["to"].(string); outcome == "succeeded" && to != "" {
+				d.mu.Lock()
+				d.watermark = to
+				d.mu.Unlock()
+			}
 			advanced := outcome == "succeeded"
 			raw, _ := json.Marshal(map[string]interface{}{"advanced": advanced, "outcome": outcome,
 				"state": map[string]interface{}{"position": map[bool]string{true: "tok-expect", false: ""}[advanced], "backlog": 0, "consecutiveFailures": map[bool]int{true: 0, false: 1}[advanced]}})
@@ -507,7 +538,7 @@ func TestWikiMaintainRunsThePipelineAndAdvancesTheCursor(t *testing.T) {
 		}
 	}
 	// After its own ops, the run asks what ended sessions left waiting: nothing, here.
-	want := []string{"GET maintenance/run", "GET dossiers", "POST maintenance/changesets", "GET verifications",
+	want := []string{"GET maintenance/run", "GET dossiers", "POST maintenance/changesets", "POST maintenance/advance", "GET verifications",
 		"POST verifications", "GET maintenance/verifications", "GET anchors", "GET maintenance/docs", "POST maintenance/finish"}
 	if !reflect.DeepEqual(steps, want) {
 		t.Errorf("the run went %v\nwant %v", steps, want)
@@ -967,7 +998,8 @@ func TestWikiMaintainLeavesAnOpWithoutAVerdictToTheNextRun(t *testing.T) {
 }
 
 // What stops the verification still fails the run: the model's endpoint refusing the token stops it at the first
-// op — every op after would be refused the same way — and the run ends failed at verify, its cursor unmoved.
+// op — every op after would be refused the same way — and the run ends failed at verify, with the cursor where the
+// run moved it once its ops were recorded (TestWikiMaintainCursorAdvance… pins that moment).
 func TestWikiMaintainStillFailsWhenTheVerificationIsRefusedTheToken(t *testing.T) {
 	f := newMaintainFixture(t)
 	door := newFakeMaintainDoor(t)
@@ -986,10 +1018,10 @@ func TestWikiMaintainStillFailsWhenTheVerificationIsRefusedTheToken(t *testing.T
 	wikiMaintainSession(t, door.URL, vllm)
 
 	summary, err := runMaintainCLI(t)
-	if err == nil || !strings.Contains(err.Error(), "401") || !strings.Contains(err.Error(), "the cursor did not move") {
+	if err == nil || !strings.Contains(err.Error(), "401") || !strings.Contains(err.Error(), "the cursor had already moved past the sessions whose ops it recorded") {
 		t.Fatalf("a refused token in the verification = %v, want the run failed", err)
 	}
-	if summary.Outcome != "failed" || summary.Advanced {
+	if summary.Outcome != "failed" || !summary.Advanced || !summary.Report.CursorAdvanced {
 		t.Errorf("summary = %+v", summary)
 	}
 	end := finished(t, door)
@@ -1613,6 +1645,7 @@ func TestWikiMaintainIsTheContractsCommand(t *testing.T) {
 	maintenance := wikiContract(t)["agentSurface"].(map[string]interface{})["doors"].(map[string]interface{})["runner"].(map[string]interface{})["maintenanceRoutes"].([]interface{})
 	for name, path := range map[string]string{
 		"context": "GET /api/runner/wiki/spaces/:id/maintenance/run", "propose": "POST /api/runner/wiki/spaces/:id/maintenance/changesets",
+		"advance":   "POST /api/runner/wiki/spaces/:id/maintenance/advance",
 		"adoptions": "GET /api/runner/wiki/spaces/:id/" + wikiAdoptedVerifications.route,
 		"adopt":     "POST /api/runner/wiki/spaces/:id/" + wikiAdoptedVerifications.route,
 		"finish":    "POST /api/runner/wiki/spaces/:id/maintenance/finish", "check": "GET /api/runner/wiki/spaces/:id/maintenance/check",
