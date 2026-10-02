@@ -685,7 +685,22 @@ public struct ArmAutoRetryRequest: Codable, Sendable {
 /// `ConsoleModel.retryMessageText`.
 public struct RetryMessage: Codable, Sendable {
     public let text: String
-    public init(text: String) { self.text = text }
+    /// The card the words' echo carries when they are another Orbit session's (`sessionMessage`,
+    /// apiserver session-message.ts): the Retry then asks the server to re-send them
+    /// (`APIClient.resendRetryMessage`, `RetryRoute`). Nil for the owner's own words.
+    public let sessionMessage: SessionMessage?
+    public init(text: String, sessionMessage: SessionMessage? = nil) {
+        self.text = text
+        self.sessionMessage = sessionMessage
+    }
+}
+
+/// POST /sessions/:id/retry-message — the failure card's Retry, asking the server to re-send another
+/// session's message as that session's (docs/session-request-reply-contract.md §2.1). Keyed like any
+/// send, so a replay after a lost response is the same re-send.
+public struct RetryResendRequest: Codable, Sendable {
+    public let clientTurnId: String
+    public init(clientTurnId: String) { self.clientTurnId = clientTurnId }
 }
 
 /// POST /sessions/:id/turns — send a user message or raw shell command.

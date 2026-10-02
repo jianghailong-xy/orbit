@@ -233,6 +233,64 @@ final class RetrySendWiringTests: XCTestCase {
     }
 
     private static let workspacePath = "src/web/src/components/WorkspaceView.tsx"
+    private static let signInPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/RunnerSignInView.swift"
+    private static let iosProject = "src/ios/project.yml"
+
+    // MARK: another session's message (docs/session-request-reply-contract.md §2.1, §8 criterion 15)
+
+    /// The Retry asks `RetryRoute` whose words it re-sends — the bubble's sender, else the server's
+    /// answer — and another session's go to the server, never through `send`: that would say them again
+    /// in the owner's name, signed by nobody, and leave the request they were on the turn that failed.
+    func testAnotherSessionsMessageIsReSentByTheServerNotThroughSend() throws {
+        let console = try source(Self.consolePath)
+        let retry = try section(console, from: "func retryLastMessage() async {",
+                                to: "private func resendFromSession() async {")
+        XCTAssertTrue(retry.contains("RetryRoute.of(loadedText: last.text, loadedSender: last.sessionMessage,"),
+                      "the route is decided off the same bubble the words are read off")
+        XCTAssertTrue(retry.contains("serverText: serverRetryText, serverSender: serverRetrySender)"),
+                      "and off the server's answer when the window holds no bubble")
+        let serverCase = try section(retry, from: "case .serverResend:", to: "case .send(")
+        XCTAssertTrue(serverCase.contains("await resendFromSession()"))
+        XCTAssertFalse(serverCase.contains("send(overrideText:"),
+                       "another session's message went through the owner's own send")
+
+        let resend = try section(console, from: "private func resendFromSession() async {",
+                                 to: "// MARK: auto-retry")
+        XCTAssertTrue(resend.contains("try await api.resendRetryMessage(sessionID: sessionID, clientTurnId:"),
+                      "the server's re-send is what the route promises")
+        XCTAssertFalse(resend.contains("send(overrideText:"))
+        XCTAssertFalse(resend.contains("postTurn("), "the re-send reached the owner's turn door")
+        XCTAssertFalse(resend.contains("composerText ="), "the re-send went through the composer")
+
+        let fetch = try section(console, from: "func refreshRetryText() async {", to: "func retryLastMessage")
+        XCTAssertTrue(fetch.contains("serverRetrySender = answer?.sessionMessage"),
+                      "the server's answer about whose the words are was dropped")
+        let bubble = try section(console, from: "var lastUserMessage:", to: "var lastUserMessageText")
+        XCTAssertTrue(bubble.contains("return (b.text, b.attachments, b.sessionMessage)"),
+                      "whose the words are is not read off the bubble the words are")
+    }
+
+    /// Both cards that offer Retry — the provider-failure card and the sign-in card — reach it through
+    /// the one method that routes, so neither can send another session's words as the owner's.
+    func testBothCardsRetryThroughTheRoutingMethod() throws {
+        XCTAssertTrue(try source(Self.cardPath).contains("await console.retryLastMessage()"),
+                      "the provider-failure card's Retry no longer goes through retryLastMessage")
+        let signIn = try section(try source(Self.signInPath), from: "private func retry() async {", to: "}")
+        XCTAssertTrue(signIn.contains("await console.retryLastMessage()"),
+                      "the sign-in card's Retry no longer goes through retryLastMessage")
+    }
+
+    /// iOS has no copy of its own: its target compiles the macOS shell's sources in place, so the routing
+    /// above is the phone's too — unless one of these files lands on its exclude list.
+    func testTheIOSClientCompilesTheSameRetry() throws {
+        let project = try source(Self.iosProject)
+        let sources = try section(project, from: "    sources:", to: "    dependencies:")
+        XCTAssertTrue(sources.contains("path: ../macos/OrbitApp/Sources/OrbitApp"),
+                      "the iOS client no longer reuses the shared shell")
+        for file in ["ConsoleModel.swift", "AutoRetryCard.swift", "RunnerSignInView.swift"] {
+            XCTAssertFalse(sources.contains(file), "the iOS target no longer compiles \(file)")
+        }
+    }
 
     /// `send`'s body, from its signature to the accessor below it. Read through one helper because
     /// the signature is what this work changes, and three copies of it would each have to be

@@ -1580,6 +1580,24 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // renumbered before it landed: 0347 is main's token-sum drop above, 0348 is spelled by the
       // unlanded session-folders branch, and 0349 is the sender column just above.)
       '0350_session_request',
+      // What one session sent another, kept as it was sent (0351): one new table,
+      // `session_message_charge`, whose one foreign key is to the recipient `session` row (ON DELETE
+      // CASCADE), and one index on it. Its one INSERT fills that new table from the last hour of
+      // `conversation_turn` rows, which it only reads. Read against every claim above: no `task`,
+      // `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored task and
+      // criterion row are out of its reach; no function, trigger or type is created, replaced or
+      // dropped, so it is not another writer of the DONE fence and names none of the six preserved
+      // objects; and no existing row is updated or deleted.
+      '0351_session_message_charge',
+      // An outcome held for an asker that stopped for good (0352): one nullable column with no default
+      // on `session_request` (`reply_comment_due_at`), one CHECK every stored row satisfies because the
+      // column reads NULL in it, one partial index, and an AFTER UPDATE trigger on `session` whose
+      // function writes only `session_request`. Read against every claim above: no `task`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion
+      // row are out of its reach; the new function is not another writer of the DONE fence and names
+      // none of the six preserved objects. No INSERT, UPDATE or DELETE of an existing row: nothing is
+      // backfilled.
+      '0352_session_request_asker_stopped',
       // `project_open_item_promotion_open_idx` (0353): one partial btree index on
       // `project_open_item.promotion_id`, a column that already existed, over OPEN rows. Read
       // against every claim above: one `CREATE INDEX IF NOT EXISTS` and nothing else — no function,
@@ -1589,8 +1607,7 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `task`, `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair and
       // every stored task and criterion row are out of its reach. No INSERT, UPDATE or DELETE: the
       // build reads every item row once and writes none. (Written as 0350 on its own branch and
-      // renumbered before it landed: 0349 and 0350 are the two just above, and 0351 and 0352 are
-      // taken by work that has not landed.)
+      // renumbered before it landed: 0349 to 0352 are the four just above.)
       '0353_project_open_item_promotion_open_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.

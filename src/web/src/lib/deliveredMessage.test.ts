@@ -221,4 +221,23 @@ describe('lastTypedUserMessage', () => {
 
     expect(lastTypedUserMessageText(events, null, 1)).toBe(lastTypedUserMessage(events, null, 1).text);
   });
+
+  // docs/session-request-reply-contract.md §2.1: another session's words are not the reader's to send
+  // again, so the retry has to know whose they are — read off the same event as the words.
+  it('names the session the words came from, off the same event, and nobody for the owner’s own', () => {
+    const card = {
+      fromSessionId: '0199aa00-0000-7000-8000-00000000b001',
+      fromTitle: 'Worker: criterion 3',
+      fromAgentName: 'orbit-worker',
+      requestId: '7nZQb2kQGx3v9pWm1aLrT',
+    };
+    const theirs = [
+      { type: 'user', payload: { text: 'the owner, earlier' } },
+      { type: 'user', payload: { text: 'merge now or wait?', sessionMessage: card } },
+    ];
+    expect(lastTypedUserMessage(theirs, null, 2)).toEqual({ text: 'merge now or wait?', attachmentIds: [], sessionMessage: card });
+    // The owner's message after it is the one re-sent, and it is nobody else's.
+    const ownAfter = [...theirs, { type: 'user', payload: { text: 'ignore that, ship it' } }];
+    expect(lastTypedUserMessage(ownAfter, null, 3)).toEqual({ text: 'ignore that, ship it', attachmentIds: [] });
+  });
 });

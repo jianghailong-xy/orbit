@@ -17,9 +17,9 @@ export const SESSION_REPLY_TURN_KEY_PREFIX = 'session-reply:';
 /**
  * The namespace the auto-retry sweep re-sends a failed message under (sessions/auto-retry.service.ts).
  * A re-send of another session's message keeps its sender, and is the platform's re-send rather than
- * a message that session sent again: the hourly limit counts what one session sent another and leaves
- * these out (`chargeSessionMessage`, docs/session-request-reply-contract.md §2.1). Reserved for that
- * reason — a message a session queued under this key would not be counted either.
+ * a message that session sent again (docs/session-request-reply-contract.md §2.1). Reserved so that a
+ * turn under it is always the platform's own re-send, as a turn under the two prefixes above is always
+ * the platform's own delivery.
  */
 export const AUTO_RETRY_TURN_KEY_PREFIX = 'auto-retry:';
 
