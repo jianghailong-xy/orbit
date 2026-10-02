@@ -1569,9 +1569,29 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // criterion row are out of its reach. No function, trigger or type is created, replaced or
       // dropped — so it is not another writer of the DONE fence and names none of the six preserved
       // objects. No INSERT, UPDATE or DELETE: the new table starts empty and every session reads
-      // NULL. (0343 is left to the unlanded branches that spell it, and 0347 is taken, so this
-      // takes the next number nobody uses.)
-      '0348_session_folder'],
+      // NULL. (0343 is the delivery review's, as said above, and 0347 is the token-sum drop just
+      // above, so this took the next number nobody used.)
+      '0348_session_folder',
+      // Who sent a turn: one nullable UUID column with no default on `conversation_turn`
+      // (`sender_session_id`, deliberately no foreign key) and one partial index on it. Read against
+      // every claim above: `conversation_turn` is not among the preserved relations and nothing else
+      // is named — no `task`, `session`, `project` or `project_acceptance_*` object, no function,
+      // trigger or type created, replaced or dropped, and no INSERT, UPDATE or DELETE. (Written as
+      // 0343 on its own branch and renumbered before it landed: 0343 is the delivery review's, as
+      // said above, and 0348 is spelled by the unlanded session-folders branch.)
+      '0349_conversation_turn_sender_session',
+      // Session requests (0350): one new table, `session_request`, whose one foreign key is to the
+      // recipient `session` row (ON DELETE CASCADE), with CHECKs and partial indexes of its own; a
+      // BEFORE UPDATE guard on that table that keeps an outcome from being rewritten; and an AFTER
+      // UPDATE trigger on `session` that closes the OPEN requests naming an ended session as their
+      // recipient. Read against every claim above: no `task`, `project` or `project_acceptance_*`
+      // object is named, so the 0177 pair and every stored task and criterion row are out of its
+      // reach; the session trigger writes only `session_request`, which starts empty, and is not
+      // another writer of the DONE fence nor any of the six preserved objects. No INSERT, UPDATE or
+      // DELETE of an existing row: nothing is backfilled. (Written as 0347 on its own branch and
+      // renumbered before it landed: 0347 is main's token-sum drop above, 0348 is spelled by the
+      // unlanded session-folders branch, and 0349 is the sender column just above.)
+      '0350_session_request'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

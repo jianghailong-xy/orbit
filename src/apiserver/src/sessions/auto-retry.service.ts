@@ -26,6 +26,8 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { deriveSessionCapabilities } from './session-state';
 import { SessionsService } from './sessions.service';
 import { isBackgroundWakeTurn } from '../runner-api/background-job-wake';
+import { hasHeldSessionReplies, isSessionReplyTurn, SESSION_REPLY_TURN_PREFIX } from './session-request';
+import { AUTO_RETRY_TURN_KEY_PREFIX } from './watch-turn-key';
 import { runAccount } from '../providers/plan-usage-accounts';
 import {
   classifyTransactionError,
@@ -420,12 +422,17 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
 
-        const { content, attachmentsOf } = await this.messageToResend(
+        const { content, attachmentsOf, senderSessionId, sessionReplies } = await this.messageToResend(
           session.id,
           session.prompt,
           session.numTurns,
         );
-        if (!content) {
+        // A failed turn that handed back the outcomes of this session's own requests is re-sent as
+        // what it was: a reply turn, nobody's words, the outcomes its failure held for this session
+        // written in at delivery (sessions/session-request.ts). Only while some are held — with none,
+        // it would wake the session to say nothing.
+        const resendsReplies = sessionReplies && await hasHeldSessionReplies(this.prisma, session.id);
+        if (!content && !resendsReplies) {
           // Nothing to re-send (no user message, no opening prompt to fall back on). Sending
           // an invented "continue" would be us writing in the user's voice.
           await this.disarm(session.id, session.status, 'nothing to re-send');
@@ -487,11 +494,26 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           if (attachmentsOf) {
             attachmentIds.push(...(await this.copyAttachments(session.id, attachmentsOf)));
           }
-          await this.sessions.resume(session.ownerId, session.id, {
-            content,
-            attachmentIds,
-            clientTurnId: randomUUID(),
-          });
+          await this.sessions.resume(
+            session.ownerId,
+            session.id,
+            {
+              content,
+              attachmentIds,
+              // The platform's own key space (watch-turn-key.ts): what the hourly limit between two
+              // sessions leaves out, because the session whose message this is did not send it again.
+              // A reply turn's re-send is one again, so its outcomes are found, merged and drawn as
+              // what they are.
+              clientTurnId: resendsReplies
+                ? `${SESSION_REPLY_TURN_PREFIX}retry:${randomUUID()}`
+                : `${AUTO_RETRY_TURN_KEY_PREFIX}${randomUUID()}`,
+            },
+            // Another session's message is still that session's when it is re-sent: without its
+            // sender the recipient reads it as the account owner's (contract §2.1). Nothing else is
+            // passed — this is the platform's re-send, charged neither against that pair's hourly
+            // limit nor as a steer (no `participateSendTransaction`).
+            senderSessionId ? { senderSessionId } : undefined,
+          );
         } catch (error) {
           // Nothing was re-sent, so the copies made for it are not history — just bytes. Dropped
           // before anything else in this catch, which has paths that rethrow and paths that end
@@ -683,6 +705,13 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * it — a screenshot the user sent with them is a row hanging off that turn, and a retry that
    * re-sent the text alone asked the model about a picture it was never shown. Null when there
    * is nothing to carry.
+   *
+   * `senderSessionId` is who sent it, when that turn was another Orbit session's message
+   * (session-message.ts): the re-send is still that session's, and delivered without its sender it
+   * would read as the account owner's. Null for every message nobody's session sent.
+   *
+   * `sessionReplies` says the latest turn handed back the outcomes of this session's own requests: it
+   * has no words to re-send, and the sweep re-sends it as a reply turn when its outcomes are held.
    */
   private async messageToResend(
     sessionId: string,
@@ -691,6 +720,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   ): Promise<{
     content: string;
     attachmentsOf: string | null;
+    senderSessionId: string | null;
+    sessionReplies?: true;
   }> {
     // The user events themselves, not a tail of the whole stream: the latest one is near the
     // end only on a short turn. One workspace turn emits hundreds of tool/system events after the
@@ -711,7 +742,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     // question already answered. The runtime still holds the notification that woke that turn and
     // hands it over with the next message it is sent.
     if (await this.failureFollowsAnsweredMessage(sessionId, events[events.length - 1])) {
-      return { content: '', attachmentsOf: null };
+      return { content: '', attachmentsOf: null, senderSessionId: null };
     }
 
     // A provider's user event echoes exactly what the runner received, including delivery-time
@@ -731,6 +762,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
             targetTurnId: true,
             deliveryStatus: true,
             content: true,
+            senderSessionId: true,
             // A CURRENT_WORK USER can be the newest authored event when the executable it joined
             // fails. That adjustment is not a new executable. Follow its durable address back to
             // the exact message whose provider run failed, even if that message's USER fell
@@ -742,6 +774,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
                 sendIntent: true,
                 deliveryStatus: true,
                 content: true,
+                senderSessionId: true,
               },
             },
           },
@@ -753,15 +786,19 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       sendIntent: string | null;
       deliveryStatus: string | null;
       content: string | null;
+      senderSessionId: string | null;
     };
     const durableTurns = new Map<string, RetryTurn>();
     for (const turn of turns) {
       durableTurns.set(turn.id, turn);
       if (turn.targetTurn) durableTurns.set(turn.targetTurn.id, turn.targetTurn);
     }
+    // Each turn's own sender beside its words: the one re-sent is the one whose words are re-sent,
+    // which for an addressed steer is the message it joined rather than the steer.
     const durableContent = new Map([...durableTurns.values()].map((turn) => [turn.id, {
       id: turn.id,
       content: turn.content ?? '',
+      senderSessionId: turn.senderSessionId ?? null,
     }]));
 
     const executableFor = (turnId: string) => {
@@ -783,15 +820,22 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     };
 
     let chosen: (typeof events)[number] | undefined;
-    let chosenDurable: { id: string; content: string } | undefined;
+    let chosenDurable: { id: string; content: string; senderSessionId: string | null } | undefined;
     let content = '';
     for (let i = events.length - 1; i >= 0; i--) {
       const event = events[i];
       if (event.turnId && durableTurns.has(event.turnId)) {
         // A background job's wake (runner-api/background-job-wake.ts) carries nobody's words, and
         // stepping past it would re-send what the person said before it — a message already
-        // answered. There is nothing to re-send; the job's end stays in its durable event.
-        if (isBackgroundWakeTurn(turns.find((turn) => turn.id === event.turnId)?.clientTurnId)) break;
+        // answered. There is nothing to re-send; the job's end stays in its durable event. A turn
+        // handing back the outcomes of session requests carries nobody's words either, and stepping
+        // past it is wrong for the same reason; what it said is on the request rows, where its
+        // failure held it, and the sweep re-sends it as a reply turn (sessions/session-request.ts).
+        const keyOfTurn = turns.find((turn) => turn.id === event.turnId)?.clientTurnId;
+        if (isSessionReplyTurn(keyOfTurn)) {
+          return { content: '', attachmentsOf: null, senderSessionId: null, sessionReplies: true };
+        }
+        if (isBackgroundWakeTurn(keyOfTurn)) break;
         const original = executableFor(event.turnId);
         if (original?.content.trim()) {
           chosen = event;
@@ -819,7 +863,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       const opening = seeded?.content || prompt;
       if (opening.trim()) content = opening;
     }
-    if (!content) return { content: '', attachmentsOf: null };
+    if (!content) return { content: '', attachmentsOf: null, senderSessionId: null };
     // The turn THAT message came from, never merely the session's latest turn: pairing these words
     // with a later turn's images would re-send a message the user never wrote.
     return {
@@ -828,6 +872,9 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       // never got to announce. Its uploads are the compose page's, and the claim parked them
       // on the seeded first turn.
       attachmentsOf: chosenDurable?.id ?? (chosen ? chosen.turnId : seeded?.id ?? null),
+      // Read off the same durable turn as the words. An echo with no turn row behind it, and the
+      // opening prompt, are nobody's session's message.
+      senderSessionId: chosenDurable?.senderSessionId ?? null,
     };
   }
 

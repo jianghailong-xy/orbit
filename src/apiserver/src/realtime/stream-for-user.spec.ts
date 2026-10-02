@@ -10,6 +10,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { RealtimeService } from './realtime.service';
+import { noSessionRequests } from '../test-support/prisma-transaction-double';
 
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -79,6 +80,7 @@ function fakePrisma(
     taskOwnerConfirmationRequest: { findMany: async () => [] },
     // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
     // which these fixtures have none of either.
+    sessionRequest: noSessionRequests(),
     projectOpenItem: { findMany: async () => [] },
   } as unknown as PrismaService;
 }

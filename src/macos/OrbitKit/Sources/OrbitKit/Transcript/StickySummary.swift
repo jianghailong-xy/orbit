@@ -44,28 +44,38 @@ public enum StickySummary {
     public static func isAnchor(text: String, note: String? = nil,
                                 itemCard: OpenItemDelivery? = nil,
                                 taskStart: TaskStart? = nil,
-                                startedCard: ProjectStarted? = nil) -> Bool {
-        if itemCard != nil || taskStart != nil || startedCard != nil { return true }
+                                startedCard: ProjectStarted? = nil,
+                                sessionMessage: SessionMessage? = nil) -> Bool {
+        if sessionMessage != nil || itemCard != nil || taskStart != nil || startedCard != nil { return true }
         if WatchWakeText.parse(text) != nil { return true }
         guard BackgroundWakeText.carriesWake(note) else { return true }
         return BackgroundWakeCard.drawsBubble(text: text)
     }
 
     /// What the bar says about one user turn, read off the same fields the transcript reads a card
-    /// out of: a watch's wake is in the turn's own `text`, and an exception item's delivery, a task
-    /// run's opening and a project's start in the payload recorded beside it (`itemCard`,
-    /// `taskStart`, `startedCard`). A turn that is none of them is the person's, unchanged — which,
+    /// out of: a watch's wake is in the turn's own `text`, and who sent another session's message, an
+    /// exception item's delivery, a task run's opening and a project's start in the payload recorded
+    /// beside it (`sessionMessage`, `itemCard`, `taskStart`, `startedCard`). A turn that is none of
+    /// them is the person's, unchanged — which,
     /// for a turn the bar may name at all (`isAnchor`), includes the words somebody typed on a
     /// background wake's turn. `note` is taken so a caller hands both functions the same turn; only
     /// `isAnchor` reads it.
     ///
-    /// The order is the transcript's (`TranscriptItemView`, web's `NodeView`): the item card first,
-    /// then a task run's opening, then a project's start, then a watch's wake, then the person's
-    /// words — so the bar can never name a turn something other than what the card under it is.
+    /// The order is the transcript's (`TranscriptItemView`, web's `NodeView`): another session's
+    /// message first, then the item card, then a task run's opening, then a project's start, then a
+    /// watch's wake, then the person's words — so the bar can never name a turn something other than
+    /// what the card under it is.
     public static func of(text: String, note: String? = nil,
                           itemCard: OpenItemDelivery? = nil,
                           taskStart: TaskStart? = nil,
-                          startedCard: ProjectStarted? = nil) -> (label: String, text: String) {
+                          startedCard: ProjectStarted? = nil,
+                          sessionMessage: SessionMessage? = nil) -> (label: String, text: String) {
+        // Another Orbit session's message: somebody's question, but not the reader's, and the card
+        // under the bar names who asked it (`SessionMessageCard`).
+        if let card = sessionMessage {
+            let summary = SessionMessageCard.sticky(card, text: text)
+            return (arrow + summary.label, summary.text)
+        }
         if let card = itemCard {
             let summary = OpenItemDeliveryCard.sticky(card)
             return (arrow + summary.label, summary.text)

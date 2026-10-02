@@ -20,6 +20,13 @@ describe('returnsToComposer', () => {
     expect(returnsToComposer({ content: '请开始执行任务「Fix the race」。', authoredByOrbit: true })).toBe(false);
   });
 
+  it('keeps back another session’s message: somebody typed it, but not the reader', () => {
+    const card = { fromSessionId: '01a0cca7-8609-70ed-a0e2-d4b55b832b60', fromTitle: 'Worker', fromAgentName: 'orbit' };
+    expect(returnsToComposer({ content: 'please review the migration', sessionMessage: card })).toBe(false);
+    // The same words with no card beside them are a message the reader typed, and come back.
+    expect(returnsToComposer({ content: 'please review the migration' })).toBe(true);
+  });
+
   it('keeps back the wakes and deliveries by their shape, from a server that does not say so', () => {
     expect(returnsToComposer({ content: BG_WAKE })).toBe(false);
     expect(returnsToComposer({ content: 'Checks failed on the combined tree', openItemDelivery: { itemId: 'i' } })).toBe(false);

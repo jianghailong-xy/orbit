@@ -190,6 +190,9 @@ struct AgentContentColumn: View {
     /// the column root (see `body`). macOS carries it too but never shows a field: its window
     /// searches from the ⌘K palette instead.
     @State private var searchQuery = ""
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     var body: some View {
         @Bindable var app = app
         // Both branches in one `Group` so the search field below can be declared on the column root
@@ -247,8 +250,16 @@ struct AgentContentColumn: View {
         #if os(iOS)
         // Search, in the list rather than over it. Until it existed the list was only searchable from
         // inside the drawer (or ⌘K, which needs a keyboard), so it looked like it had none.
-        // `.navigationBarDrawer` is what keeps the field *below* the bar's own content instead of
-        // over it — the system owns that layout, which a hand-placed bar can't do. `.always`, and
+        //
+        // On the phone (iOS 26) the field sits in the bottom toolbar, where a thumb reaches it, and
+        // gets out of the way while the list is read downward: `revealsBottomSearchOnScroll` on
+        // `AgentPanes`' list hides it on the way down and brings it back on the way up, at the top
+        // and at the end (`BottomSearchReveal`). The owner picked that over the drawer below, which
+        // spent 60pt of the phone's header on a field that never left; New session stays in the bar.
+        //
+        // The iPad's column, and phones before iOS 26 (which draw no bottom search field), keep the
+        // drawer. `.navigationBarDrawer` is what keeps the field *below* the bar's own content instead
+        // of over it — the system owns that layout, which a hand-placed bar can't do. `.always`, and
         // this is the second time it has won: the list below carries `.refreshable`, and on iOS 26
         // the two disagree about where the drawer's 60pt goes.
         //
@@ -280,9 +291,9 @@ struct AgentContentColumn: View {
         // (The field is declared on the column root, so it also exists from that column's first
         // breath in either mode.) Typing searches the server (every workspace, scope and message
         // text); the hits replace the list's sections until the field is cleared (see `AgentPanes`).
-        .searchable(text: $searchQuery,
-                    placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: "Search sessions")
+        .sessionListSearch(text: $searchQuery,
+                           fromBottom: SessionListPresentation.resolve(
+                               isCompactWidth: horizontalSizeClass == .compact).searchesFromBottom)
         // The query used to be `AgentPanes`' own state, so switching workspace (`.id(a.id)`) dropped
         // it. It outlives that rebuild now, so clear it here to land on the new workspace's sessions
         // rather than on the old workspace's search results.
@@ -426,6 +437,9 @@ struct AgentPanes: View {
         // current list), not boxed inset-grouped cards.
         .listStyle(.plain)
         .rowSwipeList(rowSwipe)
+        // The phone's search field, in the bottom toolbar, gets out of the way while the list is read
+        // downward (see the column's `sessionListSearch`).
+        .revealsBottomSearchOnScroll(query: searchQuery, enabled: listPresentation.searchesFromBottom)
         #endif
         .focused($listFocused)
         .onChange(of: app.sessionListFocusRequest) { _, _ in listFocused = true }
@@ -1216,6 +1230,7 @@ struct AgentSessionRow: View {
                         Text(line.text).font(.orbitListSubtitle)
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
                     }
+                    SessionRequestsLine(session: session)
                 }
                 Spacer()
                 if let n = session.pendingApprovals, n > 0 {
@@ -1269,6 +1284,7 @@ struct AgentSessionRow: View {
                     .foregroundStyle(lineColor(line.tone))
                     .lineLimit(1)
             }
+            SessionRequestsLine(session: session)
         }
         .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
@@ -1302,6 +1318,7 @@ struct AgentSessionRow: View {
                 }
                 Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
             }
+            SessionRequestsLine(session: session)
         }
         .padding(.vertical, 2)
         // Combine the row's text into one VoiceOver element and speak the session's state as its

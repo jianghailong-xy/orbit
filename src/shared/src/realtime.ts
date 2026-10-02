@@ -8,6 +8,7 @@ import {
 } from './enums';
 import type { SessionCapabilities } from './dto';
 import type { SessionOwnerItem, SessionWaitingKind } from './project-progress';
+import type { SessionRequestPeer } from './session-request';
 
 /**
  * The user-scoped control-plane stream's wire protocol (`GET /api/events`).
@@ -172,6 +173,13 @@ export interface ControlSessionSummary {
    *  it holds, and an item that was answered clears the banner by arriving as an empty list. An
    *  absent key is an older control plane, and leaves whatever the row had. */
   ownerItems?: SessionOwnerItem[];
+  /** The sessions this one asked for a reply and is still waiting on (`session_send` /
+   *  `project_send` with `expectReply`, docs/session-request-reply-contract.md §6), oldest first.
+   *  Sent as `[]` when there are none, for the reason `ownerItems` is; absent from an older
+   *  control plane. */
+  awaitingReplyFrom?: SessionRequestPeer[];
+  /** The sessions waiting on a reply from this one, oldest first. Same `[]` convention. */
+  owesReplyTo?: SessionRequestPeer[];
   lastTurnAt: string | null;
   /** When the server will re-send the message this run's failure killed, or null if nothing is
    *  armed. Part of the summary because it is part of what `runState: FAILED` means here: a

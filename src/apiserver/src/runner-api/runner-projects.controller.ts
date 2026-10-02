@@ -34,6 +34,7 @@ import { ProjectHandoffService } from '../projects/project-handoff.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { SessionAttemptService } from '../projects/session-attempt.service';
 import { ProjectsService } from '../projects/projects.service';
+import { readRequestAsk } from '../sessions/session-request';
 import { assertClientTurnIdNotReserved } from '../sessions/watch-turn-key';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -258,18 +259,24 @@ export class RunnerProjectsController {
     // naming it is what makes `chargeSteer`'s own exemption ("a session steering the attempt it runs
     // is not steering somebody else's") apply where it should.
     const actor: SessionLifecycleActor = { kind: 'AGENT_SESSION', sessionId: actingSessionId };
+    // A request to the coordinator (contract §3.1), read the way `session_send`'s body is. Recorded
+    // against the conversation the message is DELIVERED to, which the service resolves.
+    const ask = readRequestAsk(dto);
     return this.projects.sendToCoordinator(
       runner.ownerId,
       id,
       actingSessionId,
       dto.message,
       provided || randomUUID(),
-      this.attempts
-        ? {
-            chargeSteer: (sessionId: string, tx: Prisma.TransactionClient) =>
-              this.attempts!.chargeSteer(runner.ownerId, sessionId, actor, tx),
-          }
-        : undefined,
+      {
+        ...(this.attempts
+          ? {
+              chargeSteer: (sessionId: string, tx: Prisma.TransactionClient) =>
+                this.attempts!.chargeSteer(runner.ownerId, sessionId, actor, tx),
+            }
+          : {}),
+        ...(ask ? { ask } : {}),
+      },
     );
   }
 

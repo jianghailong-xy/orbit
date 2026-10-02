@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { RunStatus } from '@prisma/client';
 import { RunEventType, RunStatus as SharedRunStatus } from '@orbit/shared';
-import { renderRawQuery } from '../test-support/prisma-transaction-double';
+import { renderRawQuery, noSessionRequests } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
@@ -85,6 +85,7 @@ function harness(options: HarnessOptions = {}) {
     // over can never be answered, so it stops being a question there
     // (`sessions/abandoned-approvals.ts`). These fixtures raise no approvals, so it collects none.
     approval: { updateMany: async () => ({ count: 0 }), findMany: async () => [] },
+    sessionRequest: noSessionRequests(),
     conversationTurn: {
       findMany: async () => [],
       updateMany: async () => {

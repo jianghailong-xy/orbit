@@ -40,6 +40,7 @@ import {
   referenceToken,
   type ReferenceMap,
 } from '../lib/composerRefs';
+import { requestPeersLine } from '../lib/sessionRequest';
 import { settleThinking } from '../lib/thinkingDraft';
 import {
   READER_INPUT_GRACE_MS,
@@ -175,6 +176,7 @@ import { BackgroundWakeCard } from './BackgroundWakeCard';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import { ProjectStartedCard } from './ProjectStartedCard';
+import { SessionMessageCard } from './SessionMessageCard';
 import { parseWatchWake, watchingCountWord, watchingWord } from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { returnsToComposer } from '../lib/queuedTurnRestore';
@@ -243,7 +245,7 @@ import {
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
 import { CoordinatorQuestions } from './CoordinatorQuestionCard';
-import { ItemAsCard, exceptionCardRows } from './ProjectProgressStatus';
+import { ItemAsCard, exceptionCardRows, isOwnerExceptionCard } from './ProjectProgressStatus';
 import {
   ProjectPromotion,
   ProjectPromotionCard,
@@ -298,6 +300,7 @@ import { PlanUsageIndicator } from './PlanUsageIndicator';
 import type {
   OpenItemDeliveryCard as OpenItemDelivery,
   ProjectStartedCard as ProjectStarted,
+  SessionMessageCard as SessionMessage,
   SessionTurnIntent,
   SessionTurnPlacement,
   WatchView,
@@ -438,6 +441,9 @@ export interface QueuedTurn {
   openItemDelivery?: OpenItemDelivery;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStarted;
+  /** Another Orbit session's message, and who sent it (`ActiveSessionTurn.sessionMessage`): drawn as
+   *  the "From [that session]" card its echo will be, and never handed back to the reader's composer. */
+  sessionMessage?: SessionMessage;
   /** The control plane wrote this turn itself, so nobody typed it (`ActiveSessionTurn.authoredByOrbit`). */
   authoredByOrbit?: true;
 }
@@ -1037,6 +1043,17 @@ export function SessionTitleRow({ session: s, hoverTipOpen = false }: { session:
       <CoordinatorBadge projectId={s.projectId} />
     </div>
   );
+}
+
+/**
+ * Who this row is waiting on for a reply, and who is waiting on it (session requests, contract §6):
+ * "Waiting on Worker 2 · Owes a reply to Coordinator". Read off the row's own `awaitingReplyFrom` /
+ * `owesReplyTo`, which every list read and every live summary carries; nothing when neither is open.
+ */
+export function SessionRequestsLine({ session: s }: { session: any }) {
+  const text = requestPeersLine(s.awaitingReplyFrom, s.owesReplyTo);
+  if (!text) return null;
+  return <div className="session-requests" title={text}>{text}</div>;
 }
 
 /** Compact tag summary for a session-list row. The first tag is the one users can scan; the
@@ -1857,6 +1874,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const [stuck, setStuck] = useState<
     { seq: string | null; label: string; text: string; loading?: boolean } | null
   >(null);
+  // The exception cards scrolled wholly above the viewport, by item id and space-joined so an
+  // unchanged answer is no re-render: which way the pinned line's press goes to reach one.
+  const [openItemsAbove, setOpenItemsAbove] = useState('');
   // Smart auto-scroll: only keep pinned to the bottom when the user is already there, so
   // reading history (or jumping to the sticky prompt) isn't yanked back by streaming updates.
   const atBottomRef = useRef(true);
@@ -2024,6 +2044,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // Near the top with older history still on the server → pull in the next page.
     if (top < LOAD_OLDER_AT) loadOlder();
     const topY = el.getBoundingClientRect().top;
+    setOpenItemsAbove(
+      Array.from(el.querySelectorAll<HTMLElement>('[data-open-item]'))
+        .filter((card) => card.getBoundingClientRect().bottom <= topY + 1)
+        .map((card) => card.getAttribute('data-open-item'))
+        .join(' '),
+    );
     // A turn a watch or the control plane queued is one of these too — it is where the answer under
     // it starts, so it is where the bar has to point — but it is no bubble and nobody typed it, so
     // its card hands over what to call it (`data-sticky-label` / `data-sticky-text`). Its queued
@@ -3284,6 +3310,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               // this row paints is the card the runner's echo will replace it with.
               ...(row.openItemDelivery ? { openItemDelivery: row.openItemDelivery } : {}),
               ...(row.projectStarted ? { projectStarted: row.projectStarted } : {}),
+              // …and another session's message, drawn "From [that session]" rather than as the
+              // reader's own bubble while its echo is on the way.
+              ...(row.sessionMessage ? { sessionMessage: row.sessionMessage } : {}),
             }))
             .filter(
               (turn) => !acceptedUserTurnLanded(turn, selectedId, accRef.current),
@@ -4347,6 +4376,28 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       }),
     [coordinatedProjectId, openItems.data, openItems.dataUpdatedAt, transcriptEvents],
   );
+
+  // Which of those cards the owner answers by pressing — an exception that became theirs, the pause
+  // only they can lift — for the pinned line to point at: drawn among the messages rather than at the
+  // foot, one of these that scrolled away had nothing pointing at it, while the phone's bar did (the
+  // account owner's report, 2026-10-02). The rows the inserts above draw and no others, so a press
+  // always has a card to arrive at.
+  const ownerExceptionRows = useMemo(
+    () =>
+      coordinatedProjectId
+        ? exceptionCardRows(openItems.data, transcriptEvents)
+          .filter(({ row, anchor }) => anchor !== null && isOwnerExceptionCard(row))
+          .map(({ row }) => row)
+        : [],
+    [coordinatedProjectId, openItems.data, transcriptEvents],
+  );
+  // Which side of the reader each sits on is measured on scroll, and a card can arrive or go on its
+  // read's own clock without the conversation moving — so a change in which cards there are is a
+  // reason to measure again.
+  const ownerExceptionIds = ownerExceptionRows.map((row) => row.itemId).join(' ');
+  useEffect(() => {
+    measure();
+  }, [ownerExceptionIds, measure]);
 
   // The candidate a check blocked, drawn at the moment it was blocked instead of at the bottom of
   // this pane — where it sat, under every later message, for as long as the block stood, and in a
@@ -7426,6 +7477,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                             {line.text}
                           </div>
                         </div>
+                        <SessionRequestsLine session={s} />
                       </div>
                     </div>
                     <div className="session-right">
@@ -7847,6 +7899,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   }
                 : null
             }
+            // The exception cards the owner presses, with how long each has been theirs and which
+            // side of the reader it sits on now: unlike a question, one can be above.
+            exceptions={ownerExceptionRows.map((row) => ({
+              row,
+              ageSeconds: Math.max(
+                0,
+                Math.floor((Date.now() - Date.parse(row.escalatedAt ?? row.waitingSince)) / 1000),
+              ),
+              above: openItemsAbove.split(' ').includes(row.itemId),
+            }))}
             // The strip states the fact and this takes the reader to the one place it can be
             // answered: the card the server delivered into this conversation. A second set of
             // buttons up here would be two faces racing for one answer.
@@ -8116,15 +8178,40 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 />
               ))}
               {!selectedTrashed && visibleQueuedTurns.map((q) => {
+                // Another Orbit session's message is asked about FIRST, off the card the snapshot
+                // carried, before anything is read out of its words — which are the sending agent's to
+                // choose, and could take the shape of a wake below (the transcript's own order,
+                // NodeView).
+                const fromSession = q.sessionMessage ?? null;
                 // A wake a watch queued is the card the transcript draws once a runner takes it
                 // (NodeView), so it keeps that shape when it lands and its JSON stays folded. How
                 // its delivery stands is the queue's line to say, as for every queued row.
-                const wake = parseWatchWake(q.content);
+                const wake = fromSession ? null : parseWatchWake(q.content);
                 // A wake the control plane queued for a background job's news, or for a wakeup coming
                 // due, is nobody's message either: it gets the line the transcript draws once a
                 // runner takes it. Withdrawing it is an ordinary cancel — nothing re-sends it.
-                const background = wake ? null : parseBackgroundWake(q.content);
-                return wake ? (
+                const background = fromSession || wake ? null : parseBackgroundWake(q.content);
+                return fromSession ? (
+                  // Drawn "From [that session]" while it waits, as the transcript draws it once a
+                  // runner takes it. Cancel withdraws it and hands nothing back to the composer — the
+                  // words are the sending session's (`returnsToComposer`) — and there is no Put back
+                  // for the same reason.
+                  <SessionMessageCard
+                    key={q.turnId}
+                    card={fromSession}
+                    text={q.content}
+                    ts={q.createdAt}
+                    queued={
+                      <QueuedTurnMeta
+                        placement={q.placement}
+                        delivery={q.delivery}
+                        deliveryCode={q.deliveryCode}
+                        deliveryReason={q.deliveryReason}
+                        onCancel={() => cancelQueued(q.turnId)}
+                      />
+                    }
+                  />
+                ) : wake ? (
                   <WatchWakeCard
                     key={q.turnId}
                     wake={wake}

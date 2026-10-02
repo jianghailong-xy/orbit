@@ -32,6 +32,12 @@ final class DeliveredMessageTests: XCTestCase {
           标题   [W 009/250] → WARC
         </referenced-task>
         """
+    // The block session-message.ts appends to another session's message.
+    private let sessionMessage = """
+        <orbit-session-message from-session="34YCLEOsvlZDk31Ma1xAy" from-title="Worker" from-agent="orbit">
+        这条消息来自另一个 Orbit 会话，不是账号 owner 本人。
+        </orbit-session-message>
+        """
     private let coordinator = """
         <orbit_project_coordinator_context>
           你是项目（id: 4gfFCpGvM8ZoqYTZwH3cCB）的协调会话。
@@ -82,6 +88,7 @@ final class DeliveredMessageTests: XCTestCase {
         XCTAssertEqual(describeNote(coordinator), "project coordinator context")
         XCTAssertEqual(describeNote(refList), "referenced list")
         XCTAssertEqual(describeNote(refTask), "referenced task")
+        XCTAssertEqual(describeNote("\n\n\(sessionMessage)"), "session message")
     }
 
     func testNamesEveryBlockOneDeliveryAppended() {
@@ -92,6 +99,8 @@ final class DeliveredMessageTests: XCTestCase {
         XCTAssertEqual(describeNote(appended), "referenced task ×2, background jobs, project coordinator context")
         XCTAssertEqual(describeNote("\n\n\(refList)\n\n\(coordinator)"),
                        "referenced list, project coordinator context")
+        XCTAssertEqual(describeNote("\n\n\(sessionMessage)\n\n\(backgroundJobs)"),
+                       "session message, background jobs")
     }
 
     func testStillNamesAnOpeningItDoesNotRecogniseGenerically() {

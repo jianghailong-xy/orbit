@@ -15,6 +15,7 @@ import {
   fetchAvatarDataUrl,
   getSession,
   getSessionDiff,
+  getSessionRequest,
   listShareLinks,
   type SessionListItem,
   type WorkspacePermissionRuleInfo,
@@ -362,6 +363,20 @@ export const sessionQuery = (id: string | null | undefined) =>
     queryKey: ['session', id ?? null] as const,
     queryFn: () => getSession(id!),
     enabled: id != null,
+  });
+
+/**
+ * One session request as it stands now (lib/sessionRequest), for the card that shows it. Under
+ * `['sessions']`, so the refresh `useControlPlane` runs on every `session.*` event reaches it with no
+ * entry of its own — and an outcome is always announced as one: handing it back publishes both the
+ * asking and the asked session. An OPEN request is polled besides, because the deadline passing is
+ * an event only once the worker has closed it, and a dropped announcement should cost latency only.
+ */
+export const sessionRequestQuery = (requestId: string) =>
+  queryOptions({
+    queryKey: ['sessions', 'request', requestId] as const,
+    queryFn: () => getSessionRequest(requestId),
+    refetchInterval: (q) => (q.state.data?.state === 'OPEN' ? 60_000 : false),
   });
 
 /**

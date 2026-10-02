@@ -4,14 +4,15 @@ import { PROJECT_STARTED_TURN_PREFIX } from '../projects/project-started';
 import { BACKGROUND_WAKE_TURN_PREFIX } from '../runner-api/background-job-wake';
 import { TASK_ACCEPTANCE_CLIENT_TURN_PREFIX } from '../tasks/executable-acceptance-round';
 import { TASK_RUN_TURN_PREFIX } from '../tasks/task-run-identity';
-import { WATCH_TURN_KEY_PREFIX } from './watch-turn-key';
+import { SESSION_REPLY_TURN_KEY_PREFIX, WATCH_TURN_KEY_PREFIX } from './watch-turn-key';
 
 /**
  * Whether the control plane wrote this turn itself, rather than filing a message somebody sent.
  *
  * Every turn Orbit queues on its own account is keyed in a namespace of its own: a watch's wake, a
  * background job's or a due wakeup's, an exception item's delivery, the owner's answer as it is told
- * to a coordinator, a project's start, a task run's brief and each acceptance round. A coordinator's
+ * to a coordinator, a project's start, a task run's brief, each acceptance round and the outcome of a
+ * session's request handed back to it. A coordinator's
  * wake delivery and a criteria decision's reply are keyed by `derivedUuid`, which no client mints.
  * Any other key is one the sender chose — the account owner's client, or an agent.
  *
@@ -31,6 +32,7 @@ export function isOrbitAuthoredTurn(clientTurnId: string | null | undefined): bo
     PROJECT_STARTED_TURN_PREFIX,
     TASK_RUN_TURN_PREFIX,
     TASK_ACCEPTANCE_CLIENT_TURN_PREFIX,
+    SESSION_REPLY_TURN_KEY_PREFIX,
   ];
   return prefixes.some((prefix) => clientTurnId.startsWith(prefix)) || isDerivedUuid(clientTurnId);
 }

@@ -41,6 +41,10 @@ public extension Session {
             // Travelling with the same count, and cleared by the same rule: a summary that says
             // nothing is waiting here has to be able to take the bar's card away with it.
             ownerItems: summary.ownerItems,
+            // Who is waiting on whose reply travels with every summary and is overwritten with it,
+            // by `ownerItems`' rule: an empty list is the server saying none is open any more.
+            awaitingReplyFrom: summary.awaitingReplyFrom,
+            owesReplyTo: summary.owesReplyTo,
             taskId: summary.taskId,
             lastTurnAt: summary.lastTurnAt,
             // The row's nested agent is richer than the summary's (it carries provider + effort, which
@@ -103,6 +107,9 @@ public extension Session {
                          // Doubly optional for the same reason: nil keeps the row's items, and
                          // `.some([])` is the server saying there are none.
                          ownerItems: [SessionOwnerItem]?? = nil,
+                         // Doubly optional for the same reason.
+                         awaitingReplyFrom: [SessionRequestPeer]?? = nil,
+                         owesReplyTo: [SessionRequestPeer]?? = nil,
                          taskId: String? = nil,
                          lastTurnAt: String? = nil,
                          agent: SessionAgentRef? = nil,
@@ -167,6 +174,8 @@ public extension Session {
                 codexAccount: codexAccount,
                 codexAccountPinned: codexAccountPinned,
                 claudeAccount: claudeAccount,
-                claudeAccountPinned: claudeAccountPinned)
+                claudeAccountPinned: claudeAccountPinned,
+                awaitingReplyFrom: awaitingReplyFrom ?? self.awaitingReplyFrom,
+                owesReplyTo: owesReplyTo ?? self.owesReplyTo)
     }
 }

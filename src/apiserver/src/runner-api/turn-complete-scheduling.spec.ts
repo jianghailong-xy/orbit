@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { RunStatus as SharedRunStatus } from '@orbit/shared';
 import { buildCoordinatorDeliveryContextKey } from '../projects/coordinator-opening';
-import { currentWorkTerminalizationDouble } from '../test-support/prisma-transaction-double';
+import { currentWorkTerminalizationDouble, noSessionRequests } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
 
 const PROJECT_ID = '33333333-3333-4333-8333-333333333333';
@@ -52,6 +52,7 @@ function makeController(
     // over can never be answered, so it stops being a question there
     // (`sessions/abandoned-approvals.ts`). These fixtures raise no approvals, so it collects none.
     approval: { updateMany: async () => ({ count: 0 }), findMany: async () => [] },
+    sessionRequest: noSessionRequests(),
     conversationTurn: {
       ...currentWork.conversationTurn,
       findUnique: async () => ({ kind: 'message' }),

@@ -88,6 +88,9 @@ import {
  * it (`project_request_start`): the "Start this project?" card in the coordinator conversation. Kept
  * apart from `PROJECT_DECISION` because the row says it in words of its own — "Ready to start" — and
  * apart from the four owner items because it is none of them: nothing escalated, and nothing pushes.
+ * Nor is the row one of the sessions that need you: nothing is blocked on the start, so the
+ * per-workspace tally (`workspaceSessionCounts`) and the clients' bar leave out a row whose only
+ * wait is this one, and the count here is what lets the row say its words.
  */
 export type OwnerDecisionKind =
   | 'PROJECT_DECISION'
