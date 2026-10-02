@@ -554,7 +554,7 @@ func TestWikiMaintainDocsIsTheContracts(t *testing.T) {
 	for _, reason := range docs["skipped"].([]interface{}) {
 		skipped = append(skipped, reason.(string))
 	}
-	if !reflect.DeepEqual(skipped, []string{"no_confirmed_plan", "no_server_support"}) {
+	if !reflect.DeepEqual(skipped, []string{"no_confirmed_plan", "no_server_support", "catching_up"}) {
 		t.Errorf("maintenance.job.docs.skipped = %v", skipped)
 	}
 	routes := job["routes"].(map[string]interface{})
@@ -578,7 +578,7 @@ func TestWikiMaintainDocsIsTheContracts(t *testing.T) {
 	for _, step := range job["run"].(map[string]interface{})["steps"].([]interface{}) {
 		steps = append(steps, strings.SplitN(step.(string), ":", 2)[0])
 	}
-	if !reflect.DeepEqual(steps, []string{"context", "checkout", "dossiers", "extract", "self-check", "breaker", "propose", "verify", "anchors", "docs", "finish"}) {
+	if !reflect.DeepEqual(steps, []string{"context", "checkout", "dossiers", "extract", "self-check", "breaker", "propose", "advance", "verify", "anchors", "docs", "finish"}) {
 		t.Errorf("the run's steps = %v", steps)
 	}
 	if !contains(wikiPlanFactKinds, "commit") {

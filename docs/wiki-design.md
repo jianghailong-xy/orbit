@@ -502,14 +502,22 @@ orbit wiki import --from <dir|file> --space <id>            # 阶段 2：CLAUDE.
      - 污染标记。
      - 原料有 FineWeb 类批量项目时，只收聚合统计。
      - 案卷只存 `(sourceIds, hash)`，不长期落库。
-  2. 按主题分批调 `wiki_propose`，origin=maintenance。先用 `dryRun` 自检。
-  3. `orbit wiki anchors verify`：在本地 checkout 的 `origin/main` 上跑 git 复验，结果回报服务端。
-  4. 为条目集合变了的主题重新生成 summary（§12.1）。
-  5. `orbit wiki cursor advance`。
+  2. 先用 `dryRun` 自检，再按主题分批调 `wiki_propose`，origin=maintenance。
+  3. **推进游标**（判据 3 第 4 版）：op 记下后立刻越过这些 op 所属的会话。之后的步骤失败，运行照样记失败、计入连续失败，但游标不回退，
+     下一次运行不再重读这些会话；截断或 propose 失败发生在记下之前，游标不动。
+  4. `orbit wiki anchors verify`：在本地 checkout 的 `origin/main` 上跑 git 复验，结果回报服务端。
+  5. 按已确认的 plan 只重写受影响的节；落不进任何一节的新知识产出 plan 修改建议（判据 3 第 3 版）。
 - **成本护栏**（照 Wikova 的实测）
   - Wikova ingest 的计费输入 p50 1.1M、最高 9.5M token，由轮数驱动。
-  - 所以：maxTurns 120；**被截断就算失败，不推进游标**；禁用 Task / Agent 子 agent 和 WebFetch / WebSearch；每次运行最多 30 个 op；单次改动的 active 条目不超过 10%，超过就熔断；没有新事实就不建任务（成本为 0）。
+  - 所以：maxTurns 120；**被截断就算失败，op 没记下的会话不推进游标**；禁用 Task / Agent 子 agent 和 WebFetch / WebSearch；每次运行最多 30 个 op；单次改动的 active 条目不超过 10%，超过就熔断；没有新事实就不建任务（成本为 0）。
+- **追赶**（判据 3 第 4 版，owner 10-02 选的「开追赶模式」）：最老的未处理事实早于 24 小时前，space 就算落后，回到 24 小时以内即退出，只按事实判定、不用时钟。
+  - 追赶中，上一次维护运行结束本身算触发事实，没有别的新事实也建下一次。
+  - 追赶中，本地端点（provider 端点在本机或私有网络、不产生 API 费用，如 local-vllm）的运行和失败的运行不计每日上限；公网 provider 的成功运行照计。
+  - 连续失败 3 次暂停追赶、回到每日上限，下一次成功后恢复。
+  - 落后时建出的运行跳过文档重写与 plan 修改建议；回到 24 小时以内后的第一次运行按 plan 统一重写追赶期间受影响的节，材料没变的节不重写。
+  - 起因：游标停在 09-19、落后约 13 天、积压近两千条不降——每天 8 次且失败也算、每次 20 个会话、每次运行都重写文档（10-01 那次 93 分钟里文档占 54 分钟）。
 - **判据**：EXECUTABLE `orbit wiki check --expect-cursor <token>`，验证游标确实推进、每个 op 都校验通过。「跑完了」不等于「做对了」。
+  游标已推进而后续步骤失败的运行同样判不过（运行结局 failed），游标停在原地、下一次运行不重读那些会话。
 - **健康**
   - `wiki_cursor` 记录 last_ok_at、滞后量、连续失败次数，显示在 Wiki 页头（效果图 01 的状态行）。
   - 连续失败 3 次：推送一次通知，并在 Following 的 Needs attention 里出现一条。
