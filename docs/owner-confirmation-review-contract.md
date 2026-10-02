@@ -85,7 +85,9 @@
 
 请求和审查行同时提交，所以这一轮结束后的第一次读就已经是「审查中」，needs-you 不会先亮一下再灭。
 
-**D2（提交后投递）**：事务提交后，`turnComplete` 调 `OwnerConfirmationReviewService.deliver(reviewId)`。投递走 ILC G6 的载体：
+**D2（提交后投递）**：这与「证据投给协调者」（`CompletionEvidenceProducer.deliver` → `CoordinatorDeliveryService.queue`）是同一类投递：在已提交的事实之后，一个事实投一条 `NEXT_TURN` 平台轮次，键由事实派生，不复活已结束的会话，被拒时由 owner 的卡片兜底。不同之处只有两点：不经过 `project_coordinator_wake`，因为项目外没有项目可挂；也不经过 convergence 授权器，因为它不计费（G5）。
+
+事务提交后，`turnComplete` 调 `OwnerConfirmationReviewService.deliver(reviewId)`。投递走 ILC G6 的载体：
 
 ```
 SessionsService.createTurn(ownerId, reviewerSessionId,
