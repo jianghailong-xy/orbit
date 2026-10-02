@@ -41,7 +41,9 @@ import {
   openItemActions,
   openItemFacts,
   openItemMessage,
+  openItemOwed,
   openItemTurnId,
+  openItemsNoLongerOwed,
   ownerAnswerMessage,
   ownerAnswerTurnId,
   questionDetailLine,
@@ -1386,7 +1388,8 @@ export class ProjectOpenItemService {
   /**
    * The project's open exceptions, in the two groups a reader acts on (§4.8): what waits for the
    * owner, and what the coordinator is handling. Both oldest first, which is the order somebody
-   * catching up wants them in.
+   * catching up wants them in. Only what is still owed (`openItemOwed`): an item about a candidate or
+   * a task that has moved on is in front of nobody, whether or not anything has closed it yet.
    */
   async list(ownerId: string, projectId: string): Promise<ProjectOpenItems> {
     const project = await this.prisma.project.findFirst({
@@ -1413,7 +1416,7 @@ export class ProjectOpenItemService {
     const askable = project.coordinatorSessionId != null
       && project.coordinatorSession != null
       && !sessionHasEnded(project.coordinatorSession);
-    const rows = await this.prisma.projectOpenItem.findMany({
+    const open = await this.prisma.projectOpenItem.findMany({
       where: { projectId, state: 'OPEN' },
       orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
       select: {
@@ -1439,6 +1442,8 @@ export class ProjectOpenItemService {
         },
       },
     });
+    const settled = await openItemsNoLongerOwed(this.prisma, open.map((row) => row.id));
+    const rows = open.filter((row) => !settled.has(row.id));
     const keys = rows.flatMap((row) => row.deliveries);
     // When each of the coordinator's items goes to the owner, as the clock decides it (§4.6): a
     // conversation still carrying one moves that moment on, so it is read here rather than taken
@@ -1630,25 +1635,27 @@ export class ProjectOpenItemService {
     return carried > 0;
   }
 
-  /** An item nobody's coordinator can read is the owner's (§4.4 X-D6). */
+  /**
+   * An item nobody's coordinator can read is the owner's (§4.4 X-D6) — while it is still owed
+   * (`openItemOwed`). One about a candidate or a task that has moved on is nobody's: it stays where it
+   * is, and the escalation tick's backstop closes it.
+   */
   private async handToOwner(
     itemId: string,
     assignedAt: Date,
     reason: Extract<OpenItemAssigneeReason, 'NO_COORDINATOR' | 'COORDINATOR_ENDED'>,
   ): Promise<void> {
-    const handed = await this.prisma.projectOpenItem.updateMany({
-      where: { id: itemId, state: 'OPEN', assignee: 'COORDINATOR', assignedAt },
-      data: {
-        assignee: 'OWNER',
-        assigneeReason: reason,
-        assignedAt: new Date(),
-        escalateAt: null,
-      },
-    });
+    const handed = await this.prisma.$executeRaw(Prisma.sql`
+      UPDATE "project_open_item" item
+         SET "assignee" = 'OWNER', "assignee_reason" = ${reason}, "assigned_at" = now(),
+             "escalate_at" = NULL, "updated_at" = now()
+       WHERE item."id" = ${itemId}::uuid AND item."state" = 'OPEN' AND item."assignee" = 'COORDINATOR'
+         AND item."assigned_at" = ${assignedAt.toISOString()}::timestamptz
+         AND ${openItemOwed('item')}`);
     // Only on the edge this call made: the compare-and-set above is what decides whether this
     // process is the one that handed the item over, and a second announcement of the same
     // handover is a second banner about one waiting thing.
-    if (handed.count > 0) void this.push?.notifyOwnerItem(itemId);
+    if (handed > 0) void this.push?.notifyOwnerItem(itemId);
   }
 
   /** Every entry point here runs after somebody else's commit, so none of them may cost it. */

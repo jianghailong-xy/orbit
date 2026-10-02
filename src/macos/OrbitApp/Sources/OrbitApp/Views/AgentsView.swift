@@ -190,6 +190,9 @@ struct AgentContentColumn: View {
     /// the column root (see `body`). macOS carries it too but never shows a field: its window
     /// searches from the ⌘K palette instead.
     @State private var searchQuery = ""
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     var body: some View {
         @Bindable var app = app
         // Both branches in one `Group` so the search field below can be declared on the column root
@@ -247,8 +250,16 @@ struct AgentContentColumn: View {
         #if os(iOS)
         // Search, in the list rather than over it. Until it existed the list was only searchable from
         // inside the drawer (or ⌘K, which needs a keyboard), so it looked like it had none.
-        // `.navigationBarDrawer` is what keeps the field *below* the bar's own content instead of
-        // over it — the system owns that layout, which a hand-placed bar can't do. `.always`, and
+        //
+        // On the phone (iOS 26) the field sits in the bottom toolbar, where a thumb reaches it, and
+        // gets out of the way while the list is read downward: `revealsBottomSearchOnScroll` on
+        // `AgentPanes`' list hides it on the way down and brings it back on the way up, at the top
+        // and at the end (`BottomSearchReveal`). The owner picked that over the drawer below, which
+        // spent 60pt of the phone's header on a field that never left; New session stays in the bar.
+        //
+        // The iPad's column, and phones before iOS 26 (which draw no bottom search field), keep the
+        // drawer. `.navigationBarDrawer` is what keeps the field *below* the bar's own content instead
+        // of over it — the system owns that layout, which a hand-placed bar can't do. `.always`, and
         // this is the second time it has won: the list below carries `.refreshable`, and on iOS 26
         // the two disagree about where the drawer's 60pt goes.
         //
@@ -280,9 +291,9 @@ struct AgentContentColumn: View {
         // (The field is declared on the column root, so it also exists from that column's first
         // breath in either mode.) Typing searches the server (every workspace, scope and message
         // text); the hits replace the list's sections until the field is cleared (see `AgentPanes`).
-        .searchable(text: $searchQuery,
-                    placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: "Search sessions")
+        .sessionListSearch(text: $searchQuery,
+                           fromBottom: SessionListPresentation.resolve(
+                               isCompactWidth: horizontalSizeClass == .compact).searchesFromBottom)
         // The query used to be `AgentPanes`' own state, so switching workspace (`.id(a.id)`) dropped
         // it. It outlives that rebuild now, so clear it here to land on the new workspace's sessions
         // rather than on the old workspace's search results.
@@ -327,6 +338,17 @@ struct AgentPanes: View {
     @State private var hitsQuery = ""
     @State private var contentSearched = true
     @State private var searching = false
+    /// Which row's circle swipe actions are out (iOS 26 — see `RowSwipeState`).
+    @State private var rowSwipe = RowSwipeState()
+    /// The row whose Share was tapped — drives the share panel, owned by the list for the same
+    /// reason as `taggingSession`.
+    @State private var sharingSession: Session?
+    /// The row whose Move was tapped — drives the Move panel, list-owned like the two above.
+    @State private var movingSession: Session?
+    /// Whether the Pinned section is folded to its header (iOS list only). Stored rather than view
+    /// state: this pane is rebuilt per workspace (`.id(a.id)`), so @State would unfold it on every
+    /// switch, and on every launch.
+    @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
     #endif
     // Set true when the composer hands ↑/↓ back on Escape, so the session list can be arrow-navigated
     // without a click; the binding also tracks click-to-focus.
@@ -382,6 +404,18 @@ struct AgentPanes: View {
                                 sessionRow(session)
                             }
                         }
+                    } else if section.title == "Pinned" {
+                        // Pinned folds to its header, as Notes' Pinned does: the rows leave the
+                        // list, the header stays to bring them back. The rows are dropped here
+                        // rather than through `Section(isExpanded:)`, whose disclosure only draws in
+                        // the sidebar list style.
+                        Section {
+                            if !pinnedCollapsed {
+                                ForEach(section.sessions) { sessionRow($0) }
+                            }
+                        } header: {
+                            pinnedSectionHeader(section.title)
+                        }
                     } else {
                         Section {
                             ForEach(section.sessions) { sessionRow($0) }
@@ -404,6 +438,10 @@ struct AgentPanes: View {
         // Plain style so the sections read as light headers over full-width rows (matching the
         // current list), not boxed inset-grouped cards.
         .listStyle(.plain)
+        .rowSwipeList(rowSwipe)
+        // The phone's search field, in the bottom toolbar, gets out of the way while the list is read
+        // downward (see the column's `sessionListSearch`).
+        .revealsBottomSearchOnScroll(query: searchQuery, enabled: listPresentation.searchesFromBottom)
         #endif
         .focused($listFocused)
         .onChange(of: app.sessionListFocusRequest) { _, _ in listFocused = true }
@@ -439,7 +477,17 @@ struct AgentPanes: View {
         // compact iPhone list keeps the existing icon-menu scope switcher and pays no extra height.
         // "Another session needs you" follows it in the same inset. This remains the only instance at
         // regular width (the console beside it stays quiet), so it excludes that visible console.
-        .safeAreaInset(edge: .top, spacing: 0) {
+        //
+        // Not a bare `.safeAreaInset`: on iOS 26 the pull's spinner hangs under the navigation
+        // bar, in the band these sit in, and a pull drew it over the needs-you bar; the modifier
+        // keeps these put and the spinner under them, pull and refresh alike, and puts the list
+        // back at its top when a refresh leaves it just past there (see `topInsetClearOfRefresh`).
+        // Also tried on the iOS 26.5 simulator and dropped: the bands stacked above the list
+        // instead (the pull pushed them down 60pt and no spinner showed), `.safeAreaBar` (the list
+        // would no longer pull, nor stay scrolled), and the needs-you bar as the list's first row
+        // (it scrolls away, and a finished refresh left the list settled with it half under the
+        // navigation bar).
+        .topInsetClearOfRefresh {
             VStack(spacing: 0) {
                 if listPresentation.showsPersistentScope {
                     VStack(spacing: 0) {
@@ -569,8 +617,28 @@ struct AgentPanes: View {
         .sheet(item: $taggingSession) { s in
             SessionTagSheet(session: s).environment(app)
         }
-        // Load the owner's tag library when the pane appears so the picker + chips are populated.
-        .task { await app.loadSessionTags() }
+        #if os(iOS)
+        // The share panel for the row whose Share was tapped: the session page's own (ConsoleView's),
+        // list-owned like the tag picker above. iOS only, as the rows' Share is.
+        .sheet(item: $sharingSession) { s in
+            if let baseURL = app.baseURL {
+                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)
+            }
+        }
+        // The Move panel for the row whose Move was tapped: the folders of this workspace, counted
+        // over the list the row is in (docs/session-folders-move-design.md §4).
+        .sheet(item: $movingSession) { s in
+            SessionMoveSheet(session: s, workspace: agent, listed: agents.agentSessions).environment(app)
+        }
+        #endif
+        // Load the owner's tag library when the pane appears so the picker + chips are populated,
+        // and on iOS the folder library the Move panel offers.
+        .task {
+            await app.loadSessionTags()
+            #if os(iOS)
+            await app.loadSessionFolders()
+            #endif
+        }
     }
 
     /// What the List's selection is bound to: the projection onto the section's stack in the
@@ -730,7 +798,6 @@ struct AgentPanes: View {
         contentSearched = res.contentSearched
         hitsQuery = res.q
     }
-    #endif
 
     /// One row, wrapped for the container it is in. The row view itself is the same either way; what
     /// changes is who moves the screen — the three-column shell's `List` selection, or the row's own
@@ -741,7 +808,9 @@ struct AgentPanes: View {
         let row = AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open)
         switch rowNavigation {
         case .selection:
-            row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }).tag(s.id)
+            row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },
+                                  onMove: { movingSession = s })
+                .tag(s.id)
         case .push:
             // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
             // usable hiding place on iOS 17/18 (see `AppModel.push`). `.foregroundStyle(.primary)`:
@@ -754,9 +823,11 @@ struct AgentPanes: View {
             // and `.contextMenu` are read off the view the `List` hosts as its row, and a `Button`
             // does not pass them up from its label — which is where this wrapper used to leave them,
             // and why a swipe or a long press on a compact session row did nothing.
-            .sessionRowActions(s, scope: view, onTag: { taggingSession = s })
+            .sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },
+                               onMove: { movingSession = s })
         }
     }
+    #endif
 
     @ViewBuilder private func tagSectionHeader(_ tag: SessionTag?) -> some View {
         if let tag {
@@ -768,6 +839,29 @@ struct AgentPanes: View {
             Text("Untagged").textCase(nil)
         }
     }
+
+    #if os(iOS)
+    /// The Pinned section's header: its title, and at the trailing edge a chevron that points down
+    /// while the rows show and right once they are folded away (one glyph turned, never two
+    /// swapped — as the cards' chevrons). The whole band is the button, not just the chevron.
+    private func pinnedSectionHeader(_ title: String) -> some View {
+        Button {
+            withAnimation { pinnedCollapsed.toggle() }
+        } label: {
+            HStack {
+                Text(title).textCase(nil)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .rotationEffect(.degrees(pinnedCollapsed ? 0 : 90))
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityHint(pinnedCollapsed ? "Shows the pinned sessions" : "Hides the pinned sessions")
+    }
+    #endif
 }
 
 /// The agent edit form, presented as a sheet from the content column's toolbar gear (it used to be
@@ -1161,6 +1255,7 @@ struct AgentSessionRow: View {
                         Text(line.text).font(.orbitListSubtitle)
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
                     }
+                    SessionRequestsLine(session: session)
                 }
                 Spacer()
                 if let n = session.pendingApprovals, n > 0 {
@@ -1214,6 +1309,7 @@ struct AgentSessionRow: View {
                     .foregroundStyle(lineColor(line.tone))
                     .lineLimit(1)
             }
+            SessionRequestsLine(session: session)
         }
         .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
@@ -1247,6 +1343,7 @@ struct AgentSessionRow: View {
                 }
                 Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
             }
+            SessionRequestsLine(session: session)
         }
         .padding(.vertical, 2)
         // Combine the row's text into one VoiceOver element and speak the session's state as its

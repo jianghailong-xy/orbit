@@ -22,6 +22,9 @@
  * older reading of the text to fall back on.
  */
 
+import type { SessionMessageCard } from '@orbit/shared';
+import { parseSessionMessage } from './sessionMessage';
+
 /**
  * A `user` event's text split where the apiserver recorded that the person's words end.
  *
@@ -63,12 +66,16 @@ function echoedAttachmentIds(payload: unknown): string[] {
  *
  * The first-turn prompt fallback carries no ids: it is the text the session was opened with, read
  * off the session row rather than off an echoed turn, so there is no event to read refs from.
+ *
+ * `sessionMessage` is the card the same event carries when the words are another Orbit session's
+ * (`parseSessionMessage`): then they are not the reader's to send again, and the Retry asks the
+ * server to re-send them as that session's (docs/session-request-reply-contract.md §2.1).
  */
 export function lastTypedUserMessage(
   events: readonly { type: string; payload?: unknown }[],
   openingPrompt?: string | null,
   numTurns?: number,
-): { text: string; attachmentIds: string[] } {
+): { text: string; attachmentIds: string[]; sessionMessage?: SessionMessageCard } {
   // Split each candidate before deciding whether it carries text. A promoted coordinator's
   // image-only turn has a non-empty echo made solely of delivery context; choosing first and
   // splitting second would stop there and hide the older message that can actually be retried.
@@ -77,7 +84,14 @@ export function lastTypedUserMessage(
     const echoed = (events[i].payload as { text?: unknown } | undefined)?.text;
     if (typeof echoed !== 'string') continue;
     const typed = splitRecordedNote(events[i].payload)?.text ?? echoed;
-    if (typed.trim()) return { text: typed, attachmentIds: echoedAttachmentIds(events[i].payload) };
+    if (typed.trim()) {
+      const sessionMessage = parseSessionMessage(events[i].payload);
+      return {
+        text: typed,
+        attachmentIds: echoedAttachmentIds(events[i].payload),
+        ...(sessionMessage ? { sessionMessage } : {}),
+      };
+    }
   }
   return {
     text: numTurns === 0 && openingPrompt?.trim() ? openingPrompt : '',
@@ -101,6 +115,8 @@ const TAG_LABEL: Record<string, string> = {
   orbit_project_coordinator_context: 'project coordinator context',
   'list-conditions': 'list conditions',
   'background-jobs': 'background jobs',
+  'orbit-session-message': 'session message',
+  'orbit-session-reply': 'session reply',
 };
 
 /** The wiki context block, whose line says how much it holds rather than only what it is. Exported

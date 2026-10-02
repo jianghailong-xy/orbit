@@ -23,6 +23,7 @@ import { ProvidersController } from '../providers/providers.controller';
 import { SharedPoolsController } from '../providers/shared-pools.controller';
 import { RunnersController } from '../runners/runners.controller';
 import { SessionTagsController } from '../session-tags/session-tags.controller';
+import { SessionFoldersController } from '../session-folders/session-folders.controller';
 import { SessionsController } from '../sessions/sessions.controller';
 import { SharedController } from '../shared/shared.controller';
 import { ShareLinksController } from '../share-links/share-links.controller';
@@ -103,6 +104,8 @@ const CONTROLLERS = [
   SharedPoolsController,
   RunnersController,
   SessionTagsController,
+  // Session folders (migration 0348): a folder is addressed by its public id on rename and delete.
+  SessionFoldersController,
   SessionsController,
   SharedController,
   ShareLinksController,

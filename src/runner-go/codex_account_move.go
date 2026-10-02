@@ -32,13 +32,27 @@ const codexAccountMoveCapabilityV1 = "codex-account-move/v1"
 // the account it is switched to may not be signed in yet, and that is no reason to refuse a session
 // that can go on where it was. A thread whose rollout cannot be found stays too: resuming it
 // elsewhere would fail. Reports whether it moved the session.
+//
+// A credential-isolated session (isolatedCodexStateForEnv) revived without those credentials — its
+// provider switched to the built-in one — moves the same way, from the home of its own, which holds no
+// login, onto the account its claim now names.
 func moveCodexThreadToClaimedAccount(job *ClaimedSession, scratchDir, execDir string) (bool, error) {
 	meta := readSessionMeta(filepath.Join(scratchDir, "meta.json"))
-	if meta == nil || meta.CodexStateLayout != codexStateLayoutShared || meta.CodexStateHome == "" {
+	if meta == nil || meta.CodexStateHome == "" {
 		return false, nil
 	}
 	from := filepath.Clean(meta.CodexStateHome)
-	if _, ok := codexAccountSlotOfHome(from); !ok {
+	switch meta.CodexStateLayout {
+	case codexStateLayoutShared:
+		if _, ok := codexAccountSlotOfHome(from); !ok {
+			return false, nil
+		}
+	case codexStateLayoutIsolated:
+		// Only once it runs without the credentials that isolated it, by the rule that placed it.
+		if !codexSharedStateAllowed(envWithAgent(job.Agent.Env)) {
+			return false, nil
+		}
+	default:
 		return false, nil
 	}
 	processEnv := envWithAgent(job.Agent.Env)

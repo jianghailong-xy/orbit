@@ -38,8 +38,12 @@ public struct ProjectBlocker: Codable, Equatable, Sendable, Identifiable {
     public let severity: String?
     public let requiredAction: String
     public let subjectTitle: String?
+    /// The task's own explanation, when it argued that a criterion did not apply.
+    public let agentArgument: String?
     public let criterionOrdinal: Int?
     public let criterionRevision: Int?
+    /// The current wording of the criterion, when the task still points at one.
+    public let criterionText: String?
     public let detail: Detail
     public let firstSeenAt: String?
     public let resolvedAt: String?
@@ -48,8 +52,9 @@ public struct ProjectBlocker: Codable, Equatable, Sendable, Identifiable {
     public let resolutionNote: String?
 
     public init(id: String, kind: String, owner: String = "USER", severity: String? = nil,
-                requiredAction: String = "", subjectTitle: String? = nil, criterionOrdinal: Int? = nil,
-                criterionRevision: Int? = nil, detail: Detail = Detail(), firstSeenAt: String? = nil,
+                requiredAction: String = "", subjectTitle: String? = nil, agentArgument: String? = nil,
+                criterionOrdinal: Int? = nil, criterionRevision: Int? = nil, criterionText: String? = nil,
+                detail: Detail = Detail(), firstSeenAt: String? = nil,
                 resolvedAt: String? = nil, resolvedBy: String? = nil, resolutionNote: String? = nil) {
         self.id = id
         self.kind = kind
@@ -57,8 +62,10 @@ public struct ProjectBlocker: Codable, Equatable, Sendable, Identifiable {
         self.severity = severity
         self.requiredAction = requiredAction
         self.subjectTitle = subjectTitle
+        self.agentArgument = agentArgument
         self.criterionOrdinal = criterionOrdinal
         self.criterionRevision = criterionRevision
+        self.criterionText = criterionText
         self.detail = detail
         self.firstSeenAt = firstSeenAt
         self.resolvedAt = resolvedAt
@@ -74,8 +81,10 @@ public struct ProjectBlocker: Codable, Equatable, Sendable, Identifiable {
         severity = try c.decodeIfPresent(String.self, forKey: .severity)
         requiredAction = try c.decodeIfPresent(String.self, forKey: .requiredAction) ?? ""
         subjectTitle = try c.decodeIfPresent(String.self, forKey: .subjectTitle)
+        agentArgument = try? c.decodeIfPresent(String.self, forKey: .agentArgument)
         criterionOrdinal = try? c.decodeIfPresent(Int.self, forKey: .criterionOrdinal)
         criterionRevision = try? c.decodeIfPresent(Int.self, forKey: .criterionRevision)
+        criterionText = try? c.decodeIfPresent(String.self, forKey: .criterionText)
         detail = (try? c.decodeIfPresent(Detail.self, forKey: .detail)) ?? Detail()
         firstSeenAt = try c.decodeIfPresent(String.self, forKey: .firstSeenAt)
         resolvedAt = try c.decodeIfPresent(String.self, forKey: .resolvedAt)

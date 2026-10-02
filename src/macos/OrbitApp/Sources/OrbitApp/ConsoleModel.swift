@@ -622,6 +622,11 @@ final class ConsoleModel {
     // session runner's reported set, narrowed to host-level + this session's agent (see applySlashItems).
     private(set) var slashItems: [SlashCommandInfo] = []
     var slashScope: String?   // nil = both kinds; "command"/"skill" when opened from the + menu
+    /// Whether the composer holds the keyboard (iOS): its editor's begin/end editing writes it, and
+    /// setting it focuses the field (`ComposerView`). A phone gives the transcript the room while you
+    /// type: the band's cards, the bars under the nav bar and the nav bar itself fold away until the
+    /// keyboard goes (`ConsoleView`).
+    var composerEditing = false
 
     /// The worktree status bar's own model (detail snapshot + diffs + commit/merge actions) —
     /// see `WorktreeModel`. Wired back to this console for the live status + the status line.
@@ -2174,14 +2179,15 @@ final class ConsoleModel {
     /// alone rather than a button that would send nothing.
     ///
     /// Both halves off ONE bubble: a second walk back through the transcript could stop at a
-    /// different message and re-send one message's words under another's files.
-    var lastUserMessage: (text: String, attachments: [TurnAttachment]) {
+    /// different message and re-send one message's words under another's files. So is whose they
+    /// are — the sending session's card, when they are another Orbit session's (`RetryRoute`).
+    var lastUserMessage: (text: String, attachments: [TurnAttachment], sessionMessage: SessionMessage?) {
         for item in state.items.reversed() {
             if case .user(let b) = item, !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return (b.text, b.attachments)
+                return (b.text, b.attachments, b.sessionMessage)
             }
         }
-        return ("", [])
+        return ("", [], nil)
     }
 
     var lastUserMessageText: String { lastUserMessage.text }
@@ -2200,6 +2206,9 @@ final class ConsoleModel {
     /// bubble to read has none to offer — so this stands in for `lastUserMessage.text` alone and
     /// never for its attachments.
     private(set) var serverRetryText = ""
+    /// Whose those words are, when the server's answer says they are another Orbit session's
+    /// (`RetryMessage.sessionMessage`): what routes the Retry to the server (`RetryRoute`).
+    private(set) var serverRetrySender: SessionMessage?
 
     /// What a retry sends: what is on screen when that answers it, and the server's answer when
     /// nothing on screen does.
@@ -2211,7 +2220,9 @@ final class ConsoleModel {
     /// Go and get it — only when the window came up empty, and only once per session.
     func refreshRetryText() async {
         guard lastUserMessageText.isEmpty, serverRetryText.isEmpty else { return }
-        serverRetryText = (try? await api.retryMessage(sessionID: sessionID))?.text ?? ""
+        let answer = try? await api.retryMessage(sessionID: sessionID)
+        serverRetryText = answer?.text ?? ""
+        serverRetrySender = answer?.sessionMessage
     }
 
     /// Re-send that message once the runner is signed back in (web's "Retry — re-send my last
@@ -2224,11 +2235,35 @@ final class ConsoleModel {
         // the same bubble. When it holds none — a run's message is thousands of events behind the
         // window — the server's words stand in, and there are no files to carry with them.
         let last = lastUserMessage
-        let text = last.text.isEmpty ? serverRetryText : last.text
-        guard !text.isEmpty, !sending else { return }
-        sendingAutoRetry = true
-        defer { sendingAutoRetry = false }
-        await send(overrideText: text, overrideAttachments: last.attachments)
+        guard !sending else { return }
+        switch RetryRoute.of(loadedText: last.text, loadedSender: last.sessionMessage,
+                             serverText: serverRetryText, serverSender: serverRetrySender) {
+        case .nothing:
+            return
+        case .serverResend:
+            await resendFromSession()
+        case .send(let text):
+            sendingAutoRetry = true
+            defer { sendingAutoRetry = false }
+            await send(overrideText: text, overrideAttachments: last.attachments)
+        }
+    }
+
+    /// The Retry of another Orbit session's message: the server re-sends it as the automatic retry
+    /// would — that session's, signed and with the request it was, charged to nobody's hourly limit
+    /// (docs/session-request-reply-contract.md §2.1). Never through `send`, which would say the words
+    /// again in the owner's name. Web parity: `resendSessionRetryMessage`.
+    private func resendFromSession() async {
+        sending = true
+        defer { sending = false }
+        do {
+            _ = try await api.resendRetryMessage(sessionID: sessionID, clientTurnId: UUID().uuidString)
+            statusMessage = ComposerLogic.statusAfterAcceptedSend(statusMessage)
+        } catch {
+            statusMessage = ComposerLogic.sendFailureMessage(error)
+        }
+        // The card reads the retry state off the session detail; the re-send has just changed it.
+        await refreshRetryState()
     }
 
     // MARK: auto-retry (the quota / provider-error card)
@@ -2893,7 +2928,7 @@ final class ConsoleModel {
         reducer.removeApproval(id: approvalID)
         publishStateNow()
         localSendTick &+= 1 // a reply is a send too — pin the transcript to the tail (web parity)
-        let req = ApprovalDecisionRequest(behavior: .deny, message: text, answers: nil, rememberRule: nil)
+        let req = ApprovalDecisionRequest(behavior: .deny, message: text, answers: nil, rememberRules: nil)
         // Replayed through a gateway blip like any other send — the decision only applies to a
         // still-PENDING approval server-side, so a lost response can't answer the question twice.
         do {
@@ -2909,15 +2944,15 @@ final class ConsoleModel {
 
     func decide(_ approval: PendingApproval, behavior: ApprovalBehavior,
                 answers: [String: [String]]? = nil, remember: Bool = false) async {
-        var rule: PermissionRule?
+        var rules: [PermissionRule]?
         if remember, behavior == .allow, let input = approval.input {
-            rule = Approvals.rememberRule(toolName: approval.toolName ?? "", input: input)
+            rules = Approvals.rememberRules(toolName: approval.toolName ?? "", input: input)
         }
         // Optimistic: drop the card now (the SSE `approval_resolved` echoes this). On failure,
         // re-seed from REST so it reappears rather than silently vanishing.
         reducer.removeApproval(id: approval.id)
         publishStateNow()
-        let req = ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRule: rule)
+        let req = ApprovalDecisionRequest(behavior: behavior, message: nil, answers: answers, rememberRules: rules)
         do { try await api.decideApproval(sessionID: sessionID, approvalID: approval.id, req) }
         catch {
             statusMessage = "Approval failed — \(APIClient.failureReason(error))."

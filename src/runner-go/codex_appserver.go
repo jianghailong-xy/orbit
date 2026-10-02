@@ -163,10 +163,11 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		emit(evError, map[string]interface{}{"message": "failed to prepare codex state: " + err.Error()})
 		return stFailed, true, false
 	}
-	if state.Shared {
+	if state.CodexHome != "" {
 		// Once selected, both the SQLite partition and the rollout/config source
 		// remain sticky. This prevents a later HOME change from backfilling a new
-		// account's history into the existing partition.
+		// account's history into the existing partition. A credential-isolated
+		// session's is the home of its own (isolatedCodexStateForEnv).
 		processEnv = envWithValue(processEnv, "CODEX_HOME", state.CodexHome)
 	}
 	// Plan usage is kept per account slot. A session's rolling rate limits refresh the windows of the
@@ -188,18 +189,22 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			return stFailed, true, false
 		}
 	}
-	// Shared state has already crossed the expensive backfill gate. Legacy and
-	// credential-isolated state may still need that work, so keep the same bounded
-	// long window instead of reintroducing the old two-minute interruption.
+	// Shared state has already crossed the expensive backfill gate, and an isolated
+	// home has no history to backfill. Legacy state may still need that work, so keep
+	// the same bounded long window instead of reintroducing the old two-minute
+	// interruption.
 	initTimeout := codexConnectionInitTimeout
-	if !state.Shared {
+	if state.Layout == codexStateLayoutLegacy {
 		initTimeout = codexStateInitTimeout
 	}
 	app, err := startReadyCodexAppServer(ctx, state, initTimeout, func() (*codexAppServer, error) {
 		return startCodexAppServer(ctx, job, execDir, state.Dir, processEnv, emit,
 			func(approvalCtx context.Context, request codexApprovalRequest, params map[string]interface{}) bool {
-				return bridgeCodexApprovalWithContext(approvalCtx, t, job, request, params,
-					codexAutoApprovalContextFor(execDir, upDir))
+				autoContext := codexAutoApprovalContextFor(execDir, upDir)
+				if job.WT != nil && job.WT.RepoDir != "" {
+					autoContext = codexAutoApprovalContextFor(execDir, upDir, job.WT.RepoDir)
+				}
+				return bridgeCodexApprovalWithContext(approvalCtx, t, job, request, params, autoContext)
 			})
 	})
 	if err != nil {

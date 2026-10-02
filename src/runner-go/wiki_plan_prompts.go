@@ -300,12 +300,13 @@ const wikiPlanDocFormat = `## 输出格式
 // from, and the sections moved into it, as one coherent outline.
 func (r *wikiPlanRun) rewritePrompt(unit *wikiPlanUnit, catalogue string) string {
 	var sources strings.Builder
+	names := r.projectNames()
 	for _, id := range unit.Sources {
 		slug, ok := r.baseIDs[id]
 		if !ok {
 			continue
 		}
-		doc := wikiPlanDocInput(r.baseDocs[slug])
+		doc := wikiPlanDocNamed(wikiPlanDocInput(r.baseDocs[slug]), names)
 		drop := map[int]bool{}
 		for _, move := range r.moves {
 			if move.From == id {
@@ -322,7 +323,7 @@ func (r *wikiPlanRun) rewritePrompt(unit *wikiPlanUnit, catalogue string) string
 		if !ok {
 			continue
 		}
-		doc := wikiPlanDocInput(r.baseDocs[slug])
+		doc := wikiPlanDocNamed(wikiPlanDocInput(r.baseDocs[slug]), names)
 		if move.Section >= 1 && move.Section <= len(doc.Sections) {
 			fmt.Fprintf(&sources, "【现在的 %s 第 %d 节（移入本篇）】%s\n", move.From, move.Section, wikiPlanSectionLines(1, doc.Sections[move.Section-1]))
 		}
@@ -353,7 +354,7 @@ func (r *wikiPlanRun) redoDocPrompt(unit *wikiPlanUnit, errs []wikiPlanGateError
 	current := ""
 	for i, u := range last.units {
 		if u == unit {
-			current = wikiPlanDocLinesWithRefs(last.plan.Docs[i], last.slugIDs)
+			current = wikiPlanDocLinesWithRefs(wikiPlanDocNamed(last.plan.Docs[i], r.projectNames()), last.slugIDs)
 		}
 	}
 	return fmt.Sprintf(`
@@ -367,6 +368,56 @@ func (r *wikiPlanRun) redoDocPrompt(unit *wikiPlanUnit, errs []wikiPlanGateError
 %s
 %s
 %s`, catalogue, unit.Title, unit.ID, r.errorLines(errs, last), current, wikiPlanOutlineRules, wikiPlanDocFormat)
+}
+
+// projectNames is how a revision's prompts name the projects of the version it revises: by title, the way
+// the drafting prompts name every project and the gate reads them back — never by id, which a local model
+// copies wrong. A project keeps its id where its title is not one only it has in the owner's list (a title
+// two projects share names neither), where the list may be cut short (materialsProjectsMax), or where the
+// title would not read back whole from a session line.
+func (r *wikiPlanRun) projectNames() map[string]string {
+	names := map[string]string{}
+	if len(r.online.Projects) >= wikiPlanMaterialsProjectsMax {
+		return names
+	}
+	titled := map[string]int{}
+	for _, p := range r.online.Projects {
+		titled[p.Title]++
+	}
+	for _, doc := range r.baseDocs {
+		for _, s := range doc.Sections {
+			if c := s.Sources.Sessions; c != nil {
+				for _, p := range c.Projects {
+					if p.Title == nil || titled[*p.Title] != 1 {
+						continue
+					}
+					if back := wikiPlanSessionsOf(wikiPlanSessionsLine(wikiPlanSessions{Projects: []string{*p.Title}})).Projects; len(back) == 1 && back[0] == *p.Title {
+						names[p.ID] = *p.Title
+					}
+				}
+			}
+		}
+	}
+	return names
+}
+
+// wikiPlanDocNamed is a document as a prompt shows it: its session conditions' projects by the names given
+// (projectNames), any other as it is.
+func wikiPlanDocNamed(doc wikiPlanDoc, names map[string]string) wikiPlanDoc {
+	shown := doc
+	shown.Sections = make([]wikiPlanSection, len(doc.Sections))
+	for i, s := range doc.Sections {
+		if c := s.Sources.Sessions; c != nil {
+			named := *c
+			named.Projects = make([]string, len(c.Projects))
+			for k, p := range c.Projects {
+				named.Projects[k] = firstNonEmpty(names[p], p)
+			}
+			s.Sources.Sessions = &named
+		}
+		shown.Sections[i] = s
+	}
+	return shown
 }
 
 // wikiPlanDocLinesWithRefs is a document in the line format with its scope-out targets as numbers of the

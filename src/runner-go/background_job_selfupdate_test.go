@@ -288,6 +288,7 @@ func TestSelfUpdateHandsJobsOnAndTheNextImageReportsHowTheyEnd(t *testing.T) {
 // the job and the watch are killed and each reported once as the runner's stop, and no record is left
 // for an image that is not coming.
 func TestARunnerStopThatIsNotASelfUpdateStillEndsItsJobs(t *testing.T) {
+	shortDrainWait(t)
 	job := runnerStopJob(t, "sess-signal-stop-jobs")
 	api := newRunnerStopControlPlane()
 	sup := superviseImage(t, job, newSessionPool(4), api, context.Canceled)
@@ -313,6 +314,7 @@ func TestARunnerStopThatIsNotASelfUpdateStillEndsItsJobs(t *testing.T) {
 // gone as one with no end report — the process is left alone, and the record is discarded. The paired
 // positive is a record this runner does read, in the same session.
 func TestARecordOfAVersionThisRunnerCannotReadIsNoEndReport(t *testing.T) {
+	shortDrainWait(t)
 	job := runnerStopJob(t, "sess-record-versions")
 	dir := t.TempDir()
 	known := startRecordedChild(t, job.SessionID, "bgj_0000000000a1", 1, dir)

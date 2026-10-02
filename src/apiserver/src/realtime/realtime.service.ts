@@ -32,6 +32,7 @@ import { deriveSessionCapabilities } from '../sessions/session-state';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
+import { readOpenRequestPeers } from '../sessions/session-request';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
 import {
@@ -877,6 +878,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
           select: { id: true, status: true, lastHeartbeatAt: true },
         },
         workspaceId: true,
+        folderId: true,
         lastTurnAt: true,
         workspace: { select: { id: true, name: true, model: true, effort: true } },
         coordinatorForProject: { select: { id: true, title: true } },
@@ -898,6 +900,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     // that had been sitting unanswered.
     const decisions = await this.ownerDecisionsOn(sessionId, s.ownerId);
     const pendingApprovals = approvals + (decisions?.count ?? 0);
+    // Who this session is waiting on for a reply, and who is waiting on it (session-request.ts), the
+    // pair the list rows carry — sent as empty lists too, which is how a row learns one cleared.
+    const peers = (await readOpenRequestPeers(this.prisma, s.ownerId, [sessionId])).get(sessionId);
     return {
       id: s.id,
       taskId: s.taskId ?? null,
@@ -918,6 +923,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             effort: s.workspace.effort ?? null,
           }
         : null,
+      // Null is a value here: a session moved out of its folder reaches the owner's other clients
+      // by this key going null.
+      folderId: s.folderId ?? null,
       projectId: s.coordinatorForProject?.id ?? null,
       projectTitle: s.coordinatorForProject?.title ?? null,
       pendingApprovals,
@@ -925,6 +933,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // The four owner items, sent with every summary — including as an empty list, which is how a
       // row learns that the one it was showing has been answered (§7.6 V13).
       ownerItems: ownerItemsForRow(decisions),
+      awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
+      owesReplyTo: peers?.owesReplyTo ?? [],
       lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,
       // Read fresh with the status it qualifies: the same summary has to be able to say both
       // "failed, retrying at 12:04" and, once the retries are spent, "failed, nothing coming".

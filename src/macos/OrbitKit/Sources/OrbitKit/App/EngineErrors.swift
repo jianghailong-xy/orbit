@@ -37,6 +37,7 @@ public enum EngineErrors {
         "connection error", "timed out", "timeout",
         "internal server error",          // a 500 in prose, when there was no response to read a status off
         "overloaded",                     // likewise a 529
+        "empty or malformed response",    // the runtime's non-streaming retry of a dead stream failed too
     ]
 
     /// A status arrives in two shapes, tried in this order: the raw dump the runtime prints when it

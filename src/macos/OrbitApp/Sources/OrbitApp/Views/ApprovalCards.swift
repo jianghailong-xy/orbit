@@ -172,8 +172,8 @@ struct ToolApprovalCard: View {
     @State private var descriptionOpen = false
     @State private var criteriaOpen = false
 
-    private var rememberRule: PermissionRule? {
-        approval.input.flatMap { Approvals.rememberRule(toolName: approval.toolName ?? "", input: $0) }
+    private var rememberRules: [PermissionRule] {
+        approval.input.map { Approvals.rememberRules(toolName: approval.toolName ?? "", input: $0) } ?? []
     }
     /// A shell line is shown as the command itself — never the model's prose `description`, since
     /// what runs is what you are agreeing to — in the transcript's own `$` block, so the tool row
@@ -359,7 +359,7 @@ struct ToolApprovalCard: View {
             }
             ApprovalActions {
                 allowButton
-                if let rule = rememberRule { rememberButton(rule) }
+                if !rememberRules.isEmpty { rememberButton(rememberRules) }
                 denyButton
             }
         }
@@ -378,11 +378,11 @@ struct ToolApprovalCard: View {
     }
     // Secondary "allow": same intent as Allow, so a bordered button (not plain text) that keeps
     // Allow the one filled/prominent action. The exact scope it will remember rides in monospace.
-    private func rememberButton(_ rule: PermissionRule) -> some View {
+    private func rememberButton(_ rules: [PermissionRule]) -> some View {
         Button {
             decide(console, approval, .allow, remember: true)
         } label: {
-            (Text("Allow & remember ") + Text(Approvals.rememberLabel(rule)).font(.orbitMono))
+            (Text("Allow & remember ") + Text(Approvals.rememberLabel(rules)).font(.orbitMono))
                 .approvalActionLabel()
         }
         .buttonStyle(.bordered)

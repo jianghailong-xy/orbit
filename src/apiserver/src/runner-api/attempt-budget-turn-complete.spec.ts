@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { AttemptBudgetMeterService } from '../projects/attempt-budget-meter.service';
 import { RunnerApiController } from './runner-api.controller';
+import { noSessionRequests } from '../test-support/prisma-transaction-double';
 
 /**
  * Unit T5's wiring: where the six-dimension budget is actually charged.
@@ -34,6 +35,7 @@ function harness(options: { kind?: 'steer' | 'message' } = {}) {
   const tx = {
     $queryRaw: async () => [{ id: SESSION_ID, leaseOwnerMatches: true }],
     $executeRaw: async () => 1,
+    sessionRequest: noSessionRequests(),
     conversationTurn: {
       findMany: async () => [],
       findFirst: async ({ where }: { where: { kind?: string } }) =>

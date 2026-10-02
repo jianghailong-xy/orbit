@@ -1,4 +1,9 @@
-import { AgentProvider, bashPrefix, bashSegments } from '@orbit/shared';
+import {
+  AgentProvider,
+  bashPrefix,
+  bashSegments,
+  isBashShellWrapperPrefix,
+} from '@orbit/shared';
 import type { PermissionRule } from '@orbit/shared';
 
 /** A stored rule, as it lives on the workspace (ruleContent '' = the whole tool). */
@@ -42,6 +47,16 @@ export function normalizePermissionRule(
   if (!toolName || toolName.length > MAX_RULE_LEN || !TOOL_NAME.test(toolName)) return null;
   const ruleContent = (rule?.ruleContent ?? '').trim();
   if (ruleContent.length > MAX_RULE_LEN || !narrowsOneGrant(ruleContent)) return null;
+  // `/bin/bash:*` is a wrapper-wide grant, not a command-specific grant. It can be left behind
+  // by an older client that derived a rule from Codex's raw `/bin/bash -lc …` command, so drop it
+  // at every server boundary rather than letting a stale row suppress future approvals.
+  if (
+    SHELL_TOOLS.has(toolName) &&
+    ruleContent.endsWith(':*') &&
+    isBashShellWrapperPrefix(ruleContent.slice(0, -2))
+  ) {
+    return null;
+  }
   return { toolName, ruleContent };
 }
 
@@ -162,7 +177,7 @@ function bashRulePrefixes(rules: readonly StoredPermissionRule[]): string[] {
   return rules
     .filter((rule) => SHELL_TOOLS.has(rule.toolName) && rule.ruleContent.endsWith(':*'))
     .map((rule) => rule.ruleContent.slice(0, -2).trim())
-    .filter((prefix) => prefix.length > 0);
+    .filter((prefix) => prefix.length > 0 && !isBashShellWrapperPrefix(prefix));
 }
 
 /**

@@ -1550,7 +1550,77 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the
       // six preserved objects — and it has no INSERT, UPDATE or DELETE. No `project_acceptance_*`
       // object is named.
-      '0346_codeless_and_source_on_upstream'],
+      '0346_codeless_and_source_on_upstream',
+      // The four lifetime token sums leave `session` (0347): `sum_input_tokens`,
+      // `sum_output_tokens`, `sum_cache_read` and `sum_cache_write` are dropped, catalog-only, after
+      // an anonymous DO gate that RAISEs while any function body still reads one. Read against every
+      // claim above: it ALTERs only `session`, so no `task` or `project_acceptance_*` object is
+      // named and the 0177 pair and every stored task and criterion row are out of its reach. No
+      // function, trigger or type is created, replaced or dropped — the gate is a DO block, not a
+      // `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none
+      // of the six preserved objects. No INSERT, UPDATE or DELETE.
+      '0347_drop_session_token_sums',
+      // Session folders (0348, docs/session-folders-move-design.md §3.1): one new table,
+      // `session_folder` (foreign keys to `user` and `workspace`, both ON DELETE CASCADE, a unique
+      // index on (workspace_id, name) and an index on owner_id), and one nullable UUID column with
+      // no default on `session`, `folder_id`, catalog-only, with its index and a foreign key into
+      // the new table ON DELETE SET NULL. Read against every claim above: no `task`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and
+      // criterion row are out of its reach. No function, trigger or type is created, replaced or
+      // dropped — so it is not another writer of the DONE fence and names none of the six preserved
+      // objects. No INSERT, UPDATE or DELETE: the new table starts empty and every session reads
+      // NULL. (0343 is the delivery review's, as said above, and 0347 is the token-sum drop just
+      // above, so this took the next number nobody used.)
+      '0348_session_folder',
+      // Who sent a turn: one nullable UUID column with no default on `conversation_turn`
+      // (`sender_session_id`, deliberately no foreign key) and one partial index on it. Read against
+      // every claim above: `conversation_turn` is not among the preserved relations and nothing else
+      // is named — no `task`, `session`, `project` or `project_acceptance_*` object, no function,
+      // trigger or type created, replaced or dropped, and no INSERT, UPDATE or DELETE. (Written as
+      // 0343 on its own branch and renumbered before it landed: 0343 is the delivery review's, as
+      // said above, and 0348 is spelled by the unlanded session-folders branch.)
+      '0349_conversation_turn_sender_session',
+      // Session requests (0350): one new table, `session_request`, whose one foreign key is to the
+      // recipient `session` row (ON DELETE CASCADE), with CHECKs and partial indexes of its own; a
+      // BEFORE UPDATE guard on that table that keeps an outcome from being rewritten; and an AFTER
+      // UPDATE trigger on `session` that closes the OPEN requests naming an ended session as their
+      // recipient. Read against every claim above: no `task`, `project` or `project_acceptance_*`
+      // object is named, so the 0177 pair and every stored task and criterion row are out of its
+      // reach; the session trigger writes only `session_request`, which starts empty, and is not
+      // another writer of the DONE fence nor any of the six preserved objects. No INSERT, UPDATE or
+      // DELETE of an existing row: nothing is backfilled. (Written as 0347 on its own branch and
+      // renumbered before it landed: 0347 is main's token-sum drop above, 0348 is spelled by the
+      // unlanded session-folders branch, and 0349 is the sender column just above.)
+      '0350_session_request',
+      // What one session sent another, kept as it was sent (0351): one new table,
+      // `session_message_charge`, whose one foreign key is to the recipient `session` row (ON DELETE
+      // CASCADE), and one index on it. Its one INSERT fills that new table from the last hour of
+      // `conversation_turn` rows, which it only reads. Read against every claim above: no `task`,
+      // `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored task and
+      // criterion row are out of its reach; no function, trigger or type is created, replaced or
+      // dropped, so it is not another writer of the DONE fence and names none of the six preserved
+      // objects; and no existing row is updated or deleted.
+      '0351_session_message_charge',
+      // An outcome held for an asker that stopped for good (0352): one nullable column with no default
+      // on `session_request` (`reply_comment_due_at`), one CHECK every stored row satisfies because the
+      // column reads NULL in it, one partial index, and an AFTER UPDATE trigger on `session` whose
+      // function writes only `session_request`. Read against every claim above: no `task`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion
+      // row are out of its reach; the new function is not another writer of the DONE fence and names
+      // none of the six preserved objects. No INSERT, UPDATE or DELETE of an existing row: nothing is
+      // backfilled.
+      '0352_session_request_asker_stopped',
+      // `project_open_item_promotion_open_idx` (0353): one partial btree index on
+      // `project_open_item.promotion_id`, a column that already existed, over OPEN rows. Read
+      // against every claim above: one `CREATE INDEX IF NOT EXISTS` and nothing else — no function,
+      // trigger, type, column or constraint is created, altered or dropped, so it is not another
+      // writer of the DONE fence and names none of the six preserved objects. `project_open_item`
+      // is named only as the table the index is built on, and it is not a preserved relation; no
+      // `task`, `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair and
+      // every stored task and criterion row are out of its reach. No INSERT, UPDATE or DELETE: the
+      // build reads every item row once and writes none. (Written as 0350 on its own branch and
+      // renumbered before it landed: 0349 to 0352 are the four just above.)
+      '0353_project_open_item_promotion_open_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

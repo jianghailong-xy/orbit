@@ -7,6 +7,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import { TASK_RUN_TRIGGER, taskRunResumeTurnId } from './task-run-identity';
 import { buildTaskExecutionPrompt } from './tasks.service';
+import { noSessionRequests } from '../test-support/prisma-transaction-double';
 
 /**
  * The record half of "a task's brief is not the owner's message".
@@ -83,6 +84,7 @@ async function ingest(opts: {
       createMany: async () => ({ count: 0 }),
       updateMany: async () => ({ count: 0 }),
     },
+    sessionRequest: noSessionRequests(),
     conversationTurn: {
       findMany: async () => [{ id: 'turn-1', content: opts.content, clientTurnId: opts.clientTurnId }],
     },

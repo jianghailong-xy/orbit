@@ -117,6 +117,33 @@ final class NeedsYouOwnerDecisionTests: XCTestCase {
             SessionLine(text: "Waiting for approval", tone: .approval))
     }
 
+    /// A project ready to start is not one of the sessions that need you (the account owner's
+    /// report, 2026-10-02: "2 sessions need you" over two coordinators whose rows both said Ready to
+    /// start). The row keeps its words; the bar, the badge and the drawer's count leave it out.
+    func testAProjectReadyToStartIsNotASessionThatNeedsYou() {
+        let ready = parkedCoordinator(pending: 1, waitingKind: .startRequest)
+        let groups = SessionGrouping.group([ready])
+        XCTAssertTrue(groups.needsYou.isEmpty, "the start is the owner's to make when they choose")
+        XCTAssertEqual(groups.running.map(\.id), ["coordinator"],
+                       "it is grouped as the parked conversation it is")
+        XCTAssertNil(NeedsYouLogic.banner(waiting: groups.needsYou), "no bar")
+        XCTAssertEqual(NeedsYouLogic.byAgent([ready]), [:], "no count on its workspace in the drawer")
+        XCTAssertNil(MenuBar.summary(from: [ready]).badge, "and no badge")
+        XCTAssertEqual(SessionLine.make(for: ready, live: true),
+                       SessionLine(text: "Ready to start", tone: .approval),
+                       "while the row itself still says what the card in it asks")
+
+        // Anything counted beside the start is still somebody waiting. The server names no kind for
+        // a row counting two things, so a blocked tool call next to the start lights the bar as before.
+        let alsoBlocked = parkedCoordinator(pending: 2)
+        XCTAssertEqual(SessionGrouping.group([alsoBlocked]).needsYou.map(\.id), ["coordinator"])
+        XCTAssertEqual(NeedsYouLogic.byAgent([alsoBlocked]), ["orbit": 1])
+        // And one of the four on the row is the evidence on its own, whatever the kind arrived as.
+        let alsoAnItem = parkedCoordinator(pending: 1, waitingKind: .startRequest,
+                                           ownerItems: [item("i1", .escalated, since: "2026-10-02T00:00:00Z")])
+        XCTAssertEqual(SessionGrouping.group([alsoAnItem]).needsYou.map(\.id), ["coordinator"])
+    }
+
     /// A blocked tool call is unchanged by the hoist: it holds the turn open, so it was already
     /// inside the gate and is now simply ahead of it.
     func testABlockedToolCallStillReadsTheSameWay() {

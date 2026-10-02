@@ -9,10 +9,11 @@ import (
 )
 
 func TestMergeRecoveryEscapedEnvelopeCannotAdvertiseReady(t *testing.T) {
-	r := &MergeRecovery{TargetBranch: "main", RepairWorktree: "/saved/repair", Patch: strings.Repeat("\x01", 200000)}
+	r := &MergeRecovery{TargetBranch: "main", RepairWorktree: "/saved/repair", Patch: strings.Repeat("\x01", 200000),
+		PushCommits: []MergeRecoveryCommit{{Sha: "pushed"}}}
 	out := recoveryError(r, "READY", "review")
 	payload, _ := json.Marshal(out.Recovery)
-	if r.Code != "PREVIEW_TOO_LARGE" || r.Patch != "" || r.RepairWorktree != "/saved/repair" || len(payload) > 1_200_000 {
+	if r.Code != "PREVIEW_TOO_LARGE" || r.Patch != "" || r.PushCommits != nil || r.RepairWorktree != "/saved/repair" || len(payload) > 1_200_000 {
 		t.Fatal("oversized escaped preview would be rejected forever by the result endpoint")
 	}
 }
@@ -76,6 +77,65 @@ func TestMergeRecoveryPreviewAndApply(t *testing.T) {
 	}
 	if again := mergeToMain(req); again.Status != "merged" || again.AlreadyMerged || again.Recovery == nil || again.Recovery.Code != "DONE" {
 		t.Fatalf("repeat apply: %+v", again)
+	}
+}
+
+// The review lists what the push adds to origin/main, no more and no less, newest first: this
+// session's replayed commit, the merge joining both target histories, the local-only commit.
+func TestMergeRecoveryPreviewListsExactlyWhatThePushAdds(t *testing.T) {
+	repo, bare, req := recoveryFixture(t)
+	local := mustGit(t, repo, "rev-parse", "main")
+	remote := mustGit(t, bare, "rev-parse", "main")
+	r := mergeToMain(req).Recovery
+	if r == nil || r.Code != "READY" {
+		t.Fatalf("preview: %+v", r)
+	}
+	var shas []string
+	for _, c := range r.PushCommits {
+		shas = append(shas, c.Sha)
+	}
+	if got, want := strings.Join(shas, "\n"), mustGit(t, repo, "rev-list", remote+".."+r.CandidateSha); got != want {
+		t.Fatalf("push commits %q, want exactly %q", got, want)
+	}
+	if len(r.PushCommits) != 3 {
+		t.Fatalf("push commits: %+v", r.PushCommits)
+	}
+	session, merge, extra := r.PushCommits[0], r.PushCommits[1], r.PushCommits[2]
+	if session.Sha != r.CandidateSha || session.Subject != "feature work" || session.Merge {
+		t.Fatalf("session commit: %+v", session)
+	}
+	// git's default subject would publish a raw SHA and the private repair branch's name.
+	if !merge.Merge || merge.Subject != "Merge origin/main into main" {
+		t.Fatalf("merge commit: %+v", merge)
+	}
+	if extra.Sha != local || extra.Merge || len(r.LocalCommits) != 1 || r.LocalCommits[0].Sha != local || r.LocalCommits[0].Merge {
+		t.Fatalf("local-only commit: %+v / %+v", extra, r.LocalCommits)
+	}
+}
+
+// The owner's case, 2026-10-01: local main matches origin/main, so the push is this session's
+// commits alone — no merge commit, no local-only commits, and none of them on the wire.
+func TestMergeRecoveryPreviewOfAMatchingTargetPushesOnlyTheSession(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
+	repo := initRepo(t)
+	addOriginBare(t, repo)
+	base := mustGit(t, repo, "rev-parse", "main")
+	mustGit(t, repo, "checkout", "-b", "orbit/feat")
+	commitFile(t, repo, "one.txt", "one\n", "first session commit")
+	commitFile(t, repo, "two.txt", "two\n", "second session commit")
+	mustGit(t, repo, "checkout", "main")
+	r := mergeToMain(MergeCommand{WorkDir: repo, Branch: "orbit/feat", SessionID: "recovery", BaseSha: base, RecoveryAction: "preview"}).Recovery
+	if r == nil || r.Code != "READY" || r.AddsMergeCommit || len(r.LocalCommits) != 0 || len(r.RemoteCommits) != 0 {
+		t.Fatalf("preview: %+v", r)
+	}
+	if len(r.PushCommits) != 2 || r.PushCommits[0].Subject != "second session commit" || r.PushCommits[1].Subject != "first session commit" {
+		t.Fatalf("push commits: %+v", r.PushCommits)
+	}
+	payload, _ := json.Marshal(r)
+	for _, absent := range []string{`"localCommits"`, `"remoteCommits"`, `"merge"`} {
+		if strings.Contains(string(payload), absent) {
+			t.Fatalf("%s should stay off the wire: %s", absent, payload)
+		}
 	}
 }
 

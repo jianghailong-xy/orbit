@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { AgentProvider, RunEventType, type RunInboxResponse } from '@orbit/shared';
-import { renderRawQuery } from '../test-support/prisma-transaction-double';
+import { renderRawQuery, noSessionRequests } from '../test-support/prisma-transaction-double';
 import { RunnerApiController } from './runner-api.controller';
 
 /**
@@ -157,6 +157,7 @@ function harness(options: {
         coordinatorForProject: null,
       }),
     },
+    sessionRequest: noSessionRequests(),
     conversationTurn: {
       count: async () => options.earlierDeliveriesThisGeneration ?? 0,
       findFirst: async () =>
@@ -479,6 +480,7 @@ test('the runner is told about background_task events and nothing else', async (
         coordinatorForProject: null,
       }),
     },
+    sessionRequest: noSessionRequests(),
     conversationTurn: {
       count: async () => 0,
       findFirst: async () => ({ deliveredAt: PREVIOUS_DELIVERY }),

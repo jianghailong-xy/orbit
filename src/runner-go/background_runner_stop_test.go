@@ -399,6 +399,29 @@ func runnerStopJob(t *testing.T, id string) *ClaimedSession {
 	return job
 }
 
+// shortDrainWait lets a drain give up on a job after a second rather than bgDrainWaitCap, for a
+// case whose jobs never finish on their own: the drain can only ever wait the cap out and kill
+// them, so its length decides how long the case takes and nothing it asserts. Called before the
+// session starts, and restored after its supervisor has returned (cleanups run last-in first-out).
+// Not for a case that times the drain against another deadline, such as the event flush grace.
+func shortDrainWait(t *testing.T) {
+	t.Helper()
+	restore := bgDrainWaitCap
+	bgDrainWaitCap = time.Second
+	t.Cleanup(func() { bgDrainWaitCap = restore })
+}
+
+// shortDrainAndFlushGrace is shortDrainWait for the case that does time the drain against the
+// final event flush's grace: both are scaled down a tenth, so the drain stays the longer of the two
+// by the margin production has, and a job drain that started only behind the turn drain still
+// lands its kill past the grace.
+func shortDrainAndFlushGrace(t *testing.T) {
+	t.Helper()
+	drain, grace := bgDrainWaitCap, eventFlushShutdownGrace
+	bgDrainWaitCap, eventFlushShutdownGrace = drain/10, grace/10
+	t.Cleanup(func() { bgDrainWaitCap, eventFlushShutdownGrace = drain, grace })
+}
+
 // committedButUnanswered is the control plane with one thing changed about the answer to the batch
 // carrying a job's end: that batch is recorded — committed, as the real one commits inside its
 // ingest transaction — and the answer is then held until the runner gives up on the request. This
@@ -460,6 +483,7 @@ func assertEndedByRunnerStop(t *testing.T, api *runnerStopControlPlane, job bgJo
 // hosting exists for, and the state in which the old drain's kills did arrive, filed as the
 // session's own `drain` and `drain_cap`.
 func TestRunnerStopReportsEachJobItEndsAsRunnerShutdown(t *testing.T) {
+	shortDrainWait(t)
 	job := runnerStopJob(t, "sess-runner-stop-idle")
 	api := newRunnerStopControlPlane()
 	sup := superviseUntilRunnerStop(t, job, false, api)
@@ -499,6 +523,7 @@ func TestRunnerStopReportsEachJobItEndsAsRunnerShutdown(t *testing.T) {
 // ended, so a runner that reports in time finishes in about bgDrainWaitCap, and one that does not
 // plays the production sequence out and is judged on what arrived.
 func TestRunnerStopMidTurnStillDeliversTheJobKill(t *testing.T) {
+	shortDrainAndFlushGrace(t)
 	fake := newFakeClaude(t,
 		fakeStep{Await: "user"},
 		fakeStep{Emit: "replay_user"},
@@ -542,6 +567,8 @@ func TestRunnerStopMidTurnStillDeliversTheJobKill(t *testing.T) {
 // the contract: drop the resend and a kill can go missing, keep the resend and the control plane
 // still has exactly one end for the job.
 func TestRunnerStopResendsABatchItWasNeverAnsweredFor(t *testing.T) {
+	// What is under test is the resend of a batch nobody answered, not when the drain reached it.
+	shortDrainWait(t)
 	fake := newFakeClaude(t,
 		fakeStep{Await: "user"},
 		fakeStep{Emit: "replay_user"},

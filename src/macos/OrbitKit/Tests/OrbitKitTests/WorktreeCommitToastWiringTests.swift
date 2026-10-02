@@ -40,9 +40,8 @@ final class WorktreeCommitToastWiringTests: XCTestCase {
 
     private static let modelPath = "src/macos/OrbitApp/Sources/OrbitApp/WorktreeModel.swift"
 
-    /// One branch of `surfaceCompletedAction`'s commit ladder, so a match in a neighbouring branch
-    /// cannot answer for it — a bare `contains` over the whole function is how a scan like this goes
-    /// falsely green.
+    /// One branch of `resultCard`'s commit ladder, so a match in a neighbouring branch cannot answer
+    /// for it — a bare `contains` over the whole function is how a scan like this goes falsely green.
     private func branch(from: String, to: String) throws -> String {
         let file = try source(Self.modelPath)
         guard let start = file.range(of: from) else { throw WiringError.missing(from) }
@@ -59,27 +58,22 @@ final class WorktreeCommitToastWiringTests: XCTestCase {
     }
 
     private func committedBranch() throws -> String {
-        try flat(branch(
-            from: #"} else if old.commitStatus == "pending", new.commitStatus == "committed" {"#,
-            to: #"} else if old.commitStatus == "pending", new.commitStatus == "nochange" {"#))
+        try flat(branch(from: #"case "committed":"#, to: #"case "nochange":"#))
     }
 
     private func nochangeBranch() throws -> String {
-        try flat(branch(
-            from: #"} else if old.commitStatus == "pending", new.commitStatus == "nochange" {"#,
-            to: "/// A failed action as a card"))
+        try flat(branch(from: #"case "nochange":"#, to: "/// A failed action as a card"))
     }
 
+    /// From the commit ladder's head, since `case "error":` opens a branch of the merge ladder first.
     private func errorBranch() throws -> String {
-        try flat(branch(
-            from: #"} else if old.commitStatus == "pending", new.commitStatus == "error" {"#,
-            to: #"} else if old.commitStatus == "pending", new.commitStatus == "committed" {"#))
+        try flat(branch(from: "switch detail.commitStatus {", to: #"case "committed":"#))
     }
 
     func testASuccessfulCommitShowsTheRunnerLineUnderItsHeadline() throws {
         let branch = try committedBranch()
         XCTAssertTrue(
-            branch.contains(#"message: "Changes committed", detail: Self.trimmed(new.commitResultMessage)"#),
+            branch.contains(#"message: "Changes committed", detail: Self.trimmed(detail.commitResultMessage)"#),
             "the runner's own sentence about a commit that landed mid-write has to reach the card it "
                 + "is about — attached to THIS headline, and trimmed so a blank line cannot draw an "
                 + "empty row. Branch as written: \(branch)")
@@ -90,7 +84,7 @@ final class WorktreeCommitToastWiringTests: XCTestCase {
     func testNoChangeShowsItTooAndStaysNeutral() throws {
         let branch = try nochangeBranch()
         XCTAssertTrue(
-            branch.contains(#"message: "No changes to commit", detail: Self.trimmed(new.commitResultMessage)"#),
+            branch.contains(#"message: "No changes to commit", detail: Self.trimmed(detail.commitResultMessage)"#),
             "a commit that found nothing to commit still has something to say (which background jobs "
                 + "were live while it looked), and the card is still neutral. Branch as written: \(branch)")
         XCTAssertTrue(branch.contains("tone: .neutral"),
@@ -103,8 +97,8 @@ final class WorktreeCommitToastWiringTests: XCTestCase {
     func testAFailedCommitLeadsWithTheRunnersPlainSentence() throws {
         let branch = try errorBranch()
         XCTAssertTrue(
-            branch.contains("WorktreeBarLogic.commitFailure(commitStatus: new.commitStatus, "
-                + "commitError: new.commitError, commitResultMessage: new.commitResultMessage)"),
+            branch.contains("WorktreeBarLogic.commitFailure(commitStatus: detail.commitStatus, "
+                + "commitError: detail.commitError, commitResultMessage: detail.commitResultMessage)"),
             "the failure card has to read the failure the way the bar does. Branch as written: \(branch)")
         XCTAssertTrue(
             branch.contains(#"message: "Commit failed", detail: failure?.why, tone: .error"#),

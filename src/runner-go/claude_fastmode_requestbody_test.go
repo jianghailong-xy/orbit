@@ -76,6 +76,7 @@ const fastModeSkipOrgCheck = "CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK"
 // Paired with the identical run that is not in fast mode. Without that control, "the
 // request says fast" would be satisfied by a CLI that says it for everybody.
 func TestRealClaudeFastModeSettingReachesTheAPIRequests(t *testing.T) {
+	t.Parallel()
 	on := driveFastModeProbe(t, true, false)
 	off := driveFastModeProbe(t, false, false)
 
@@ -110,6 +111,7 @@ func TestRealClaudeFastModeSettingReachesTheAPIRequests(t *testing.T) {
 // cheap to make and invisible once made: a `setconfig` carrying fastMode would look, from
 // the control plane, exactly like the feature working.
 func TestRealClaudeIgnoresAFastModeControlFrameMidSession(t *testing.T) {
+	t.Parallel()
 	speeds := driveFastModeProbe(t, false, true)
 
 	if len(speeds) < 2 {
@@ -144,10 +146,9 @@ func driveFastModeProbe(t *testing.T, fastMode, sendFrame bool) []string {
 	t.Cleanup(api.Close)
 
 	// Nothing here may touch this machine's own Claude Code state, and nothing here needs a
-	// credential: the API this process talks to is the recorder above.
+	// credential: the API this process talks to is the recorder above. The CLI's environment
+	// only, not the test process's: probes run in parallel.
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	if err := os.WriteFile(filepath.Join(home, ".claude.json"),
 		[]byte(`{"hasCompletedOnboarding":true}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -165,6 +166,8 @@ func driveFastModeProbe(t *testing.T, fastMode, sendFrame bool) []string {
 			// The same door a configured (BYOK) provider comes through, which is why this
 			// needs no test-only hook in the spawn path.
 			Env: map[string]string{
+				"HOME":                 home,
+				"CLAUDE_CONFIG_DIR":    t.TempDir(),
 				"ANTHROPIC_BASE_URL":   api.URL,
 				"ANTHROPIC_AUTH_TOKEN": "orbit-fastmode-probe",
 				fastModeSkipOrgCheck:   "1",
@@ -219,6 +222,7 @@ func driveFastModeProbe(t *testing.T, fastMode, sendFrame bool) []string {
 		rec.releaseFirstCall() // never leave the engine parked on a response
 		cancel()
 		<-done
+		_ = rt.wait() // reap the process and end its writer, rather than leak both
 	})
 
 	if err := rt.send(userFrame(job.SessionUUID, []map[string]interface{}{

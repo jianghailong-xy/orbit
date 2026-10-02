@@ -81,6 +81,7 @@ func init() {
 		claudeAccountLoginCapabilityV1,
 		claudeAccountRemoveCapabilityV1,
 		claudeAccountMoveCapabilityV1,
+		sessionMoveCapabilityV1,
 		wikiMaintenanceRunV1,
 	}, declaredSteerCapabilities()...), ",")
 }
@@ -1862,6 +1863,18 @@ func (t *Transport) sendSessionMessage(callerSessionID, orchestrationToken, id s
 	}
 	var out json.RawMessage
 	err := t.doOrchestration("POST", "/runner/sessions/"+url.PathEscape(id)+"/turns", body, &out, callerSessionID, orchestrationToken)
+	return out, err
+}
+
+// sendSessionReply answers a session request this session was sent (`session_reply`,
+// docs/session-request-reply-contract.md §3.2). Only the session the request was sent to may answer
+// it, which the server reads off the same orchestration credential every session verb carries.
+func (t *Transport) sendSessionReply(callerSessionID, orchestrationToken, requestID string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(requestID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration("POST", "/runner/session-requests/"+url.PathEscape(requestID)+"/reply", body, &out, callerSessionID, orchestrationToken)
 	return out, err
 }
 

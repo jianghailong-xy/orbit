@@ -85,6 +85,7 @@ const (
 // naming it. A success not followed by one would be a change that was acknowledged and not
 // made.
 func TestRealClaudeAcceptsASetPermissionMode(t *testing.T) {
+	t.Parallel()
 	agent := realClaudeContractAgent()
 	p := startRealClaudeProbe(t, agent)
 
@@ -111,6 +112,7 @@ func TestRealClaudeAcceptsASetPermissionMode(t *testing.T) {
 // to it is to throw the process away and re-spawn. Both halves are asserted, because a
 // refusal whose text goes missing degrades the same way while telling the user nothing.
 func TestRealClaudeRefusesAnUnknownPermissionMode(t *testing.T) {
+	t.Parallel()
 	agent := realClaudeContractAgent()
 	p := startRealClaudeProbe(t, agent)
 
@@ -152,6 +154,7 @@ func TestRealClaudeRefusesAnUnknownPermissionMode(t *testing.T) {
 // authoritative readback: it names the model the new turn will use, so an unchanged or
 // wrongly applied request still fails this assertion.
 func TestRealClaudeAcceptsASetModel(t *testing.T) {
+	t.Parallel()
 	agent := realClaudeContractAgent()
 	p := startRealClaudeProbe(t, agent)
 
@@ -181,6 +184,7 @@ func TestRealClaudeAcceptsASetModel(t *testing.T) {
 // would turn every model switch in production into a re-spawn. Both sides are checked
 // here, because the omission only means anything if the engine is the one enforcing it.
 func TestRealClaudeTakesASetModelWithNoSystemPrompt(t *testing.T) {
+	t.Parallel()
 	agent := realClaudeContractAgent()
 	p := startRealClaudeProbe(t, agent)
 
@@ -313,9 +317,12 @@ func startRealClaudeProbe(t *testing.T, agent AgentExecConfig) *realClaudeProbe 
 	// EMPTY rather than seeded from the real ones — no credential is borrowed; the only one
 	// the CLI gets is the loopback API's throwaway token below — so a probe can neither read
 	// the user's login nor leave a session in their history, and both dirs go away with the
-	// test.
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
+	// test. All of it is the CLI's environment, layered over the runner's the way a session's
+	// own env is (envWithAgent), and none of it the test process's: probes run in parallel.
+	agent.Env = map[string]string{
+		"HOME":              t.TempDir(),
+		"CLAUDE_CONFIG_DIR": t.TempDir(),
+	}
 	// The model test opens one turn to obtain system/init. Make the empty config decisive:
 	// inherited API, OAuth, gateway or cloud-provider credentials must not turn that local
 	// state readback into a paid external request.
@@ -333,15 +340,12 @@ func startRealClaudeProbe(t *testing.T, agent AgentExecConfig) *realClaudeProbe 
 		"CLAUDE_CODE_USE_MANTLE",
 		"CLAUDE_CODE_USE_VERTEX",
 	} {
-		t.Setenv(key, "")
+		agent.Env[key] = ""
 	}
-	// The one API the CLI is given instead, layered over the cleared ones the way a session's
-	// own env is layered over the runner's (envWithAgent).
+	// The one API the CLI is given instead, over the cleared ones.
 	api := realClaudeLoopbackAPI(t)
-	agent.Env = map[string]string{
-		"ANTHROPIC_BASE_URL":   api.URL,
-		"ANTHROPIC_AUTH_TOKEN": "orbit-setconfig-probe",
-	}
+	agent.Env["ANTHROPIC_BASE_URL"] = api.URL
+	agent.Env["ANTHROPIC_AUTH_TOKEN"] = "orbit-setconfig-probe"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	job := &ClaimedSession{
@@ -419,8 +423,9 @@ func requireRealClaude(t *testing.T) string {
 		t.Skipf("no %q binary in %v or anywhere on PATH, so the setconfig control frames are NOT verified against a real engine on this machine (searched %s)",
 			providerClaude, engineInstallerDirs(home), enginePath)
 	}
-	// spawnClaude resolves "claude" off the process PATH, so hand it the one that found this.
-	t.Setenv("PATH", enginePath)
+	// spawnClaude resolves "claude" off the process PATH, which TestMain has already given the
+	// same installer dirs — so it spawns the one that found this, with no t.Setenv a parallel
+	// probe could not make.
 	t.Logf("driving %s (%s)", exe, engineVersion(exe))
 	return exe
 }

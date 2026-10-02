@@ -1,3 +1,5 @@
+import { Prisma } from '@prisma/client';
+
 import type { PrismaService } from '../prisma/prisma.service';
 import { SETTLED_TASK_STATUSES, type CoordinatorWakeEvent } from './coordinator-wake';
 import { IN_FLIGHT_JOB_STATES, LANDING_JOB_KINDS } from './criterion-landing-reason';
@@ -6,7 +8,7 @@ import {
   type DerivedProjectDoneReading,
 } from './project-done-derived';
 import { DONE_REQUEST_KIND } from './project-done-request';
-import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
+import { SESSION_ENDING_SELECT, openItemOwed, sessionHasEnded } from './project-open-item';
 
 /**
  * A project that LOOKS finished and that Orbit still cannot record done — and who is told so, in
@@ -76,7 +78,7 @@ export async function landingInFlight(
 
 /** The delegates the guardrail reads: the projection's, and the four rows it asks before it. */
 type FinishClient = Parameters<typeof readDerivedProjectDoneReading>[0]
-  & Pick<PrismaService, 'projectTaskStatusCount' | 'projectOpenItem'>;
+  & Pick<PrismaService, 'projectTaskStatusCount' | '$queryRaw'>;
 
 /**
  * Whether this project looks finished while Orbit cannot record it done.
@@ -117,11 +119,15 @@ export async function readProjectFinish(
 
   // An open item is somebody already handling something — the coordinator's exception, or a
   // question, a merge or a request waiting on the owner. A project with one does not look finished.
-  const openItem = await prisma.projectOpenItem.findFirst({
-    where: { projectId, state: 'OPEN' },
-    select: { id: true },
-  });
-  if (openItem) return { state: 'NOT_FINISHED' };
+  // One that is owed (`openItemOwed`): an item about a candidate or a task that has moved on is
+  // nobody handling anything, whether or not anything has closed it yet.
+  const [open] = await prisma.$queryRaw<Array<{ owed: boolean }>>(Prisma.sql`
+    SELECT EXISTS (
+      SELECT 1 FROM "project_open_item" item
+       WHERE item."project_id" = ${projectId}::uuid
+         AND item."state" = 'OPEN'
+         AND ${openItemOwed('item')}) AS "owed"`);
+  if (open?.owed) return { state: 'NOT_FINISHED' };
 
   const reading = await readDerivedProjectDoneReading(prisma, project.ownerId, projectId);
   if (reading.inFlight.length > 0) return { state: 'LANDING_IN_FLIGHT' };
@@ -135,7 +141,7 @@ export async function readProjectFinish(
 }
 
 /** The delegates `projectsToRecordAsDone` reads. */
-type EscalationClient = FinishClient & Pick<PrismaService, 'projectCoordinatorWake'>;
+type EscalationClient = FinishClient & Pick<PrismaService, 'projectCoordinatorWake' | 'projectOpenItem'>;
 
 /**
  * This owner's projects, among `projectIds`, whose "Record as done…" is the owner's now — with the

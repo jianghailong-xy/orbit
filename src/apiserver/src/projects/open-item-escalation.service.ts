@@ -3,6 +3,8 @@ import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
+import { LANDED_RESULTS } from './project-criterion-landing';
+import { INTEGRATION_ITEM_KINDS, openItemOwed } from './project-open-item';
 
 /**
  * How often the clock looks. Not how long anything waits: each item carries its own
@@ -16,6 +18,19 @@ export interface EscalatedOpenItem {
   itemId: string;
   projectId: string;
   ownerId: string;
+}
+
+/** One item the backstop closed, or found landed and left open, as its log line reads it. */
+export interface ReconciledOpenItem {
+  itemId: string;
+  projectId: string;
+  ownerId: string;
+  kind: string;
+  assignee: string;
+  assigneeReason: string;
+  /** What the item is about as it stands now: `promotion <id>@<state>` or `task <id>@<status>`. */
+  about: string;
+  createdAt: Date;
 }
 
 /**
@@ -95,23 +110,36 @@ export function escalatesAt(alias: string): Prisma.Sql {
  * out of that selection. Two apiservers ticking at the same moment escalate each item once between
  * them, and a tick that runs every minute for an hour after an item came due escalates it on the
  * first one and reports nothing on the other fifty-nine.
+ *
+ * THE BACKSTOP RIDES THE SAME TICK. Before the sweep, `reconcile` closes the items nobody owes any
+ * more (`openItemOwed`) — the ones an edge that should have closed them missed — so what the clock
+ * hands to a person is only what somebody still owes. That is not a second clock (§8.3): it is this
+ * tick, and it writes an item's ending and nothing an agent would run either.
  */
 @Injectable()
 export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ProjectOpenItemEscalationService.name);
   private timer?: ReturnType<typeof setInterval>;
+  /** The landed items `reconcile` has already reported from this process, so a missing edge is one
+   *  warning rather than one a minute for as long as the item stays open. */
+  private readonly reportedLanded = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
     /** X-E1's one reader: an item that became the owner's is one of the four things their phone is
-     *  told about (§7.6 V12). `@Optional()`, so a build or a spec without PushModule escalates
-     *  exactly as before — the assignee is the fact, and the banner is a consequence of it. */
+     *  told about (§7.6 V12) — and an item the backstop closed may have been one their badge counted.
+     *  `@Optional()`, so a build or a spec without PushModule escalates exactly as before — the
+     *  assignee is the fact, and the banner is a consequence of it. */
     @Optional() private readonly push?: PushService,
   ) {}
 
   onModuleInit(): void {
     this.timer = setInterval(() => {
-      this.sweep()
+      // The backstop first, so what the sweep then hands over is only what somebody still owes. Its
+      // failure does not cost the sweep, which asks `openItemOwed` itself.
+      this.reconcile()
+        .catch((e) => this.logger.error(`reconcile failed: ${(e as Error).message}`))
+        .then(() => this.sweep())
         .then((escalated) => {
           // Told to the person it just became the problem of, and to nobody else: the sweep itself
           // stays a write of one column, which is what makes it safe to run on every replica.
@@ -141,6 +169,10 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
    * Due is `escalatesAt`, not the column. The column is the half of it that costs nothing and is
    * asked first, so a conversation's turns are read only for items that have outlived the window
    * they were opened with.
+   *
+   * And owed (`openItemOwed`): an item about a candidate or a task that has moved on is nobody's to
+   * act on, so it is not handed to the owner and nobody is told about it — whether or not
+   * `reconcile` has closed it yet.
    */
   async sweep(): Promise<EscalatedOpenItem[]> {
     return this.prisma.$queryRaw<EscalatedOpenItem[]>(Prisma.sql`
@@ -149,6 +181,112 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
              "escalated_at" = now(), "updated_at" = now()
        WHERE item."state" = 'OPEN' AND item."assignee" = 'COORDINATOR' AND item."escalate_at" <= now()
          AND ${escalatesAt('item')} <= now()
+         AND ${openItemOwed('item')}
       RETURNING item."id" AS "itemId", item."project_id" AS "projectId", item."owner_id" AS "ownerId"`);
   }
+
+  /**
+   * The backstop (§4.2): close every OPEN item nobody owes any more, and say which ones those were.
+   *
+   * An item is closed by the transaction that moves what it is about, one edge per fact, and this
+   * catches the edge somebody missed. It writes the ending that edge would have written —
+   * PROMOTION_MOVED_ON for an item about a candidate (SUPERSEDED when the candidate was, as
+   * `closePromotionItems` writes it), TASK_CLOSED for one about a cancelled or replaced task, both by
+   * the PLATFORM — with a `resolution_note` that starts `backstop:` and names the fact, so an item
+   * closed here can be told apart from one its edge closed and a missing edge is something a query
+   * can count. Each one is also a warning in the log, which is where somebody learns an edge is
+   * missing: the kind, what the item was about and where that stands now, how long it was open,
+   * and whose it was. The owners whose items closed have their badge recounted, since an item they
+   * held may have been one of the four it counts.
+   *
+   * A compare-and-set like the sweep: the statement takes only OPEN items that are not owed and moves
+   * them out of that set, so two replicas close each item once and the next tick finds nothing.
+   *
+   * An integration item whose task LANDED after it was opened is left open — that the work reached
+   * another branch is in no row (`openItemOwed`) — and reported instead, once per process.
+   */
+  async reconcile(): Promise<ReconciledOpenItem[]> {
+    const closed = await this.prisma.$queryRaw<ReconciledOpenItem[]>(Prisma.sql`
+      UPDATE "project_open_item" item
+         SET "state" = CASE WHEN stale."promotionState" = 'SUPERSEDED' THEN 'SUPERSEDED'
+                            ELSE 'RESOLVED' END,
+             "resolution" = CASE WHEN item."promotion_id" IS NOT NULL THEN 'PROMOTION_MOVED_ON'
+                                 ELSE 'TASK_CLOSED' END,
+             "resolved_by" = 'PLATFORM', "resolved_at" = now(), "updated_at" = now(),
+             "resolution_note" = 'backstop: ' || stale."about" || stale."why"
+                                 || '; no edge closed this item when that happened'
+        FROM (
+          SELECT stale_item."id",
+                 promotion."state" AS "promotionState",
+                 CASE WHEN stale_item."promotion_id" IS NOT NULL
+                      THEN 'promotion ' || promotion."id"::text || '@' || promotion."state"
+                      ELSE 'task ' || task."id"::text || '@' || task."status"::text END AS "about",
+                 CASE WHEN stale_item."kind" = 'PROMOTION_APPROVAL'
+                        THEN ' is not READY, so the card asks nothing'
+                      WHEN stale_item."promotion_id" IS NOT NULL THEN ' is no longer live'
+                      WHEN task."superseded_by_task_id" IS NOT NULL
+                        THEN ' was replaced by task ' || task."superseded_by_task_id"::text
+                      ELSE ' was cancelled' END AS "why"
+            FROM "project_open_item" stale_item
+            LEFT JOIN "project_promotion" promotion ON promotion."id" = stale_item."promotion_id"
+            LEFT JOIN "task" task ON task."id" = stale_item."task_id"
+           WHERE stale_item."state" = 'OPEN' AND NOT ${openItemOwed('stale_item')}
+        ) stale
+       WHERE item."id" = stale."id" AND item."state" = 'OPEN'
+      RETURNING item."id" AS "itemId", item."project_id" AS "projectId", item."owner_id" AS "ownerId",
+                item."kind", item."assignee", item."assignee_reason" AS "assigneeReason",
+                stale."about", item."created_at" AS "createdAt"`);
+    for (const item of closed) {
+      this.logger.warn(`backstop closed ${item.kind} ${item.itemId} of project ${item.projectId}: `
+        + `${item.about}, open ${openFor(item.createdAt)}, `
+        + `with ${item.assignee} (${item.assigneeReason})`);
+    }
+    for (const ownerId of new Set(closed.map((item) => item.ownerId))) {
+      this.push?.scheduleBadgeSync(ownerId);
+    }
+    await this.reportLanded();
+    return closed;
+  }
+
+  /**
+   * The integration items about a task that has since LANDED, which `openItemOwed` keeps owed: the
+   * item asks for the work on this project's line, and a receipt on some other branch does not say
+   * that happened. Read only, and each one reported once by this process.
+   */
+  private async reportLanded(): Promise<void> {
+    const landed = await this.prisma.$queryRaw<Array<ReconciledOpenItem & {
+      /** The branches its landed receipts name. */
+      branches: string;
+    }>>(Prisma.sql`
+      SELECT item."id" AS "itemId", item."project_id" AS "projectId", item."owner_id" AS "ownerId",
+             item."kind", item."assignee", item."assignee_reason" AS "assigneeReason",
+             'task ' || task."id"::text || '@' || task."status"::text AS "about",
+             item."created_at" AS "createdAt",
+             string_agg(DISTINCT receipt."target_branch", ', ') AS "branches"
+        FROM "project_open_item" item
+        JOIN "task" task ON task."id" = item."task_id"
+        JOIN "session_merge_receipt" receipt
+          ON receipt."task_id" = item."task_id"
+         AND receipt."result" IN (${Prisma.join(LANDED_RESULTS)})
+         AND receipt."created_at" AT TIME ZONE 'UTC' > item."created_at"
+       WHERE item."state" = 'OPEN' AND item."promotion_id" IS NULL
+         AND item."kind" IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
+         AND ${openItemOwed('item')}
+       GROUP BY item."id", task."id"`);
+    for (const item of landed) {
+      if (this.reportedLanded.has(item.itemId)) continue;
+      this.reportedLanded.add(item.itemId);
+      this.logger.warn(`backstop left ${item.kind} ${item.itemId} of project ${item.projectId} open: `
+        + `${item.about} landed on ${item.branches} after it was opened, `
+        + `open ${openFor(item.createdAt)}, with ${item.assignee} (${item.assigneeReason})`);
+    }
+  }
+}
+
+/** How long an item has been open, as a log line says it: `3d4h`, `5h12m`, `7m`. */
+function openFor(since: Date): string {
+  const minutes = Math.max(0, Math.floor((Date.now() - since.getTime()) / 60_000));
+  const hours = Math.floor(minutes / 60);
+  if (hours >= 24) return `${Math.floor(hours / 24)}d${hours % 24}h`;
+  return hours > 0 ? `${hours}h${minutes % 60}m` : `${minutes}m`;
 }
