@@ -475,7 +475,15 @@ struct AgentPanes: View {
         // compact iPhone list keeps the existing icon-menu scope switcher and pays no extra height.
         // "Another session needs you" follows it in the same inset. This remains the only instance at
         // regular width (the console beside it stays quiet), so it excludes that visible console.
-        .safeAreaInset(edge: .top, spacing: 0) {
+        //
+        // Not a bare `.safeAreaInset`: on iOS 26 the pull's spinner hangs under the navigation
+        // bar, in the band these sit in, and a pull drew it over the needs-you bar (see
+        // `topInsetClearOfRefresh`). Also tried on the iOS 26.5 simulator and dropped: the bands
+        // stacked above the list instead (the pull pushed them down 60pt and no spinner showed),
+        // `.safeAreaBar` (the list would no longer pull, nor stay scrolled), and the needs-you bar
+        // as the list's first row (it scrolls away, and a finished refresh left the list settled
+        // with it half under the navigation bar).
+        .topInsetClearOfRefresh {
             VStack(spacing: 0) {
                 if listPresentation.showsPersistentScope {
                     VStack(spacing: 0) {
