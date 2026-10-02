@@ -4782,8 +4782,9 @@ html[data-theme='dark'] .session-tag-chip {
   text-overflow: ellipsis;
 }
 /* Live status line (in place of a reply, while the agent works). Colour matches the
-   status glyph: blue = running, amber = waiting on you, grey = queued or a background
-   process the agent left up (which outlives the turn but isn't the agent working). */
+   status glyph: blue = running, amber = waiting on you, grey = queued, a background
+   process the agent left up (which outlives the turn but isn't the agent working), or a
+   watch that will resume the session (nothing is running, and nobody is being asked). */
 .session-preview.tone-running {
   color: var(--brand);
 }
@@ -4791,7 +4792,8 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--warning-solid);
 }
 .session-preview.tone-queued,
-.session-preview.tone-background {
+.session-preview.tone-background,
+.session-preview.tone-watching {
   color: var(--text-3);
 }
 /* Row actions overlay the right edge instead of taking layout space: while idle
@@ -13328,6 +13330,11 @@ button.chat-jump-start:hover {
   font-variant-numeric: tabular-nums;
   color: var(--text-2);
 }
+/* Its tightest window at 90% or more: orange with its bar, as the composer's quota turns. */
+.pool-gauge-pct.near-limit {
+  color: var(--warning);
+  font-weight: 600;
+}
 .pool-gauge.spent {
   color: var(--warning);
   font-weight: 500;
@@ -13767,6 +13774,12 @@ button.chat-jump-start:hover {
 }
 .pool-login-window + .pool-login-window {
   margin-top: 8px;
+}
+/* The sign-out mark rests grey and turns red only under the pointer: red on a row that is fine read
+   as something wrong with it. Weightier than antd's resting colour, lighter than its :hover and
+   :active, which keep the danger button's own red. */
+.pool-row .pool-signout.ant-btn {
+  color: var(--text-3);
 }
 .pool-login-reset {
   margin-top: 3px;

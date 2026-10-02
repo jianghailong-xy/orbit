@@ -257,6 +257,15 @@ final class AgentsModel {
         agentSessions[index] = agentSessions[index].settingTitle(title)
     }
 
+    #if os(iOS)
+    /// File this pane's row in a folder on the spot, for the same reason: a Completed row isn't in
+    /// the Open snapshot. See `AppModel.moveSession`.
+    func applyMovedSession(_ id: String, folderID: String?) {
+        guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
+        agentSessions[index] = agentSessions[index].settingFolder(folderID)
+    }
+    #endif
+
     /// Update relation metadata even in this pane's independently loaded Completed/Trash rows.
     /// Open rows are refreshed through `applyOpenSnapshot`, but those two scopes otherwise wait for
     /// their polling interval after a coordinator rotation or Project deletion.

@@ -25,7 +25,17 @@
     "session when it is neither running, queued nor failed — its turn is over.",
     "",
     "`sessionWords`: a session target's run state → the word its pill says, the one its own",
-    "header's glyph says for that run state."
+    "header's glyph says for that run state.",
+    "",
+    "`rows`: the live RESUME_SESSION watches one session is the observer of → what its session list",
+    "row says about the wait: `word`, the header's word, which the row's glyph says as its tooltip,",
+    "and `line`, the row's second line — the strip's folded line in one string. A lone watch on a lone",
+    "live target names it: `Watching <title>`. Otherwise what the wait needs (a lone watch's",
+    "threshold, or the distinct live targets across several) and then the `counts` sentence over",
+    "them. With every watch paused it leads with the paused word instead of `Watching`. Targets carry",
+    "an `id`, so two watches naming one target count it once, and `state` GONE when deleted. The web",
+    "reads this in `lib/watches.test.ts` (`watchingSessions`), the native client in",
+    "`WatchStripCopyParityTests` (`WatchSessionSummary.rowLine` and `.word`)."
   ],
   "now": "2026-09-14T10:00:00Z",
   "sentences": [
@@ -245,6 +255,205 @@
         { "kind": "TASK", "status": { "status": "DONE", "running": false, "queued": false } }
       ],
       "line": "1/2 done"
+    }
+  ],
+  "rows": [
+    {
+      "case": "session_await over one session, the screenshot's wait: the session by name",
+      "watches": [
+        {
+          "state": "ACTIVE",
+          "predicate": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+              { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "SESSION_NEEDS_ATTENTION" }
+            ]
+          },
+          "targets": [
+            { "id": "S1", "kind": "SESSION", "title": "执行任务：会话间请求与回复：修复 P1 审查发现的问题",
+              "status": { "status": "RUNNING", "running": true, "queued": false } }
+          ]
+        }
+      ],
+      "word": "Watching 1 target",
+      "line": "Watching 执行任务：会话间请求与回复：修复 P1 审查发现的问题"
+    },
+    {
+      "case": "task_await over one task: the task by name",
+      "watches": [
+        {
+          "state": "ACTIVE",
+          "predicate": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+              { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_FAILED" }
+            ]
+          },
+          "targets": [
+            { "id": "T1", "kind": "TASK", "title": "Fix the login redirect",
+              "status": { "status": "IN_PROGRESS", "running": true, "queued": false } }
+          ]
+        }
+      ],
+      "word": "Watching 1 target",
+      "line": "Watching Fix the login redirect"
+    },
+    {
+      "case": "one watch over four tasks: what its condition needs, then where they stand",
+      "watches": [
+        {
+          "state": "ACTIVE",
+          "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+          "targets": [
+            { "id": "T1", "kind": "TASK", "title": "Schema", "status": { "status": "DONE", "running": false, "queued": false } },
+            { "id": "T2", "kind": "TASK", "title": "Service", "status": { "status": "DONE", "running": false, "queued": false } },
+            { "id": "T3", "kind": "TASK", "title": "Clients", "status": { "status": "DONE", "running": false, "queued": false } },
+            { "id": "T4", "kind": "TASK", "title": "Docs", "status": { "status": "IN_PROGRESS", "running": true, "queued": false } }
+          ]
+        }
+      ],
+      "word": "Watching 4 targets",
+      "line": "Watching all 4 tasks · 1 running · 3/4 done"
+    },
+    {
+      "case": "any one of three tasks: one is all it takes",
+      "watches": [
+        {
+          "state": "ACTIVE",
+          "predicate": { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+          "targets": [
+            { "id": "T1", "kind": "TASK", "title": "Try A", "status": { "status": "IN_PROGRESS", "running": true, "queued": false } },
+            { "id": "T2", "kind": "TASK", "title": "Try B", "status": { "status": "OPEN", "running": false, "queued": true } },
+            { "id": "T3", "kind": "TASK", "title": "Try C", "status": { "status": "OPEN", "running": false, "queued": false } }
+          ]
+        }
+      ],
+      "word": "Watching 3 targets",
+      "line": "Watching any 1 of 3 tasks · 1 running · 0/3 done"
+    },
+    {
+      "case": "two watches: a target both name is counted once",
+      "watches": [
+        {
+          "state": "ACTIVE",
+          "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+          "targets": [
+            { "id": "T1", "kind": "TASK", "title": "Schema", "status": { "status": "DONE", "running": false, "queued": false } },
+            { "id": "T2", "kind": "TASK", "title": "Service", "status": { "status": "IN_PROGRESS", "running": true, "queued": false } }
+          ]
+        },
+        {
+          "state": "ACTIVE",
+          "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+          "targets": [
+            { "id": "T2", "kind": "TASK", "title": "Service", "status": { "status": "IN_PROGRESS", "running": true, "queued": false } },
+            { "id": "T3", "kind": "TASK", "title": "Clients", "status": { "status": "OPEN", "running": false, "queued": false } }
+          ]
+        }
+      ],
+      "word": "Watching 3 targets",
+      "line": "Watching 3 tasks · 1 running · 1/3 done"
+    },
+    {
+      "case": "a session and a task under one condition: counted as targets",
+      "watches": [
+        {
+          "state": "ACTIVE",
+          "predicate": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" }
+            ]
+          },
+          "targets": [
+            { "id": "S1", "kind": "SESSION", "title": "Review the contract", "status": { "status": "RUNNING", "running": true, "queued": false } },
+            { "id": "T1", "kind": "TASK", "title": "Fix the login redirect", "status": { "status": "OPEN", "running": false, "queued": false } }
+          ]
+        }
+      ],
+      "word": "Watching 2 targets",
+      "line": "Watching all 2 targets · 1 running · 0/2 done"
+    },
+    {
+      "case": "paused: it says so, then the target",
+      "watches": [
+        {
+          "state": "PAUSED",
+          "predicate": {
+            "kind": "ANY_OF",
+            "operands": [
+              { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "SESSION_TURN_SETTLED" },
+              { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "SESSION_NEEDS_ATTENTION" }
+            ]
+          },
+          "targets": [
+            { "id": "S1", "kind": "SESSION", "title": "执行任务：会话间请求与回复：修复 P1 审查发现的问题",
+              "status": { "status": "RUNNING", "running": true, "queued": false } }
+          ]
+        }
+      ],
+      "word": "Watch paused",
+      "line": "Watch paused · 执行任务：会话间请求与回复：修复 P1 审查发现的问题"
+    },
+    {
+      "case": "every watch paused, two of them",
+      "watches": [
+        {
+          "state": "PAUSED",
+          "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+          "targets": [
+            { "id": "T1", "kind": "TASK", "title": "Schema", "status": { "status": "OPEN", "running": false, "queued": false } }
+          ]
+        },
+        {
+          "state": "PAUSED",
+          "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+          "targets": [
+            { "id": "T2", "kind": "TASK", "title": "Service", "status": { "status": "OPEN", "running": false, "queued": false } }
+          ]
+        }
+      ],
+      "word": "2 watches paused",
+      "line": "2 watches paused · 2 tasks · 0/2 done"
+    },
+    {
+      "case": "one watching and one paused: it reads Watching, over every live watch as the strip does",
+      "watches": [
+        {
+          "state": "ACTIVE",
+          "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+          "targets": [
+            { "id": "T1", "kind": "TASK", "title": "Schema", "status": { "status": "IN_PROGRESS", "running": true, "queued": false } }
+          ]
+        },
+        {
+          "state": "PAUSED",
+          "predicate": { "kind": "ALL", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+          "targets": [
+            { "id": "T2", "kind": "TASK", "title": "Service", "status": { "status": "OPEN", "running": false, "queued": false } }
+          ]
+        }
+      ],
+      "word": "Watching 1 target",
+      "line": "Watching 2 tasks · 1 running · 0/2 done"
+    },
+    {
+      "case": "a deleted target is left out: the one still there is named",
+      "watches": [
+        {
+          "state": "ACTIVE",
+          "predicate": { "kind": "ANY", "over": "ALL_TARGETS", "leaf": "TASK_TERMINAL" },
+          "targets": [
+            { "id": "T1", "kind": "TASK", "title": "Old migration", "state": "GONE", "status": null },
+            { "id": "T2", "kind": "TASK", "title": "Ship the release", "status": { "status": "OPEN", "running": false, "queued": false } }
+          ]
+        }
+      ],
+      "word": "Watching 1 target",
+      "line": "Watching Ship the release"
     }
   ],
   "sessionWords": {

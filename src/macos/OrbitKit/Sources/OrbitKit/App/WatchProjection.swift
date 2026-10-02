@@ -718,6 +718,25 @@ public struct WatchSessionSummary: Equatable, Sendable {
                                                   done: counts.done, total: counts.total)
     }
 
+    /// A session list row's second line: the strip's one line in one string, so the list and the
+    /// strip above the session's composer say one thing — the lone target by name ("Watching Fix the
+    /// login redirect"), several by what the wait needs and where they stand ("Watching all 4 tasks ·
+    /// 1 running · 3/4 done"). With every watch paused nothing is being watched, so it leads with
+    /// `word` instead. The browser's `watchingSessions` says the same, and `WatchStripCopyParityTests`
+    /// holds both to `watch-strip.fixture.json`'s `rows`.
+    public var rowLine: String {
+        let what: String
+        if let target = lineTarget {
+            what = WatchProjection.targetTitle(kind: target.targetKind, id: target.targetResourceId,
+                                               name: target.targetTitle)
+        } else {
+            what = ([lineTargetWord] + lineParts.map(\.text)).joined(separator: SessionCreatedTasksCopy.separator)
+        }
+        return active.isEmpty
+            ? word + SessionCreatedTasksCopy.separator + what
+            : "\(WatchProjection.stripLabel) \(what)"
+    }
+
     /// The oldest last look among the ACTIVE watches — the least fresh reading is the one to show.
     /// Nil while they're all paused.
     public func lastEvaluated(now: Date = Date()) -> String? {

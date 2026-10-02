@@ -19,9 +19,15 @@ final class SessionWatchingTests: XCTestCase {
                 lastTurnAt: lastTurnAt)
     }
 
-    /// Seven tasks, three of them finished, looked at 20 seconds ago, resuming S1.
+    /// Seven tasks, three of them finished, looked at 20 seconds ago, resuming S1 — each standing where
+    /// a current server says it does, which is what the list row's line counts.
     private var sevenTasks: [Watch] {
-        [F.watch(observer: "S1", targets: F.tasks(7, met: 3), lastEvaluatedAt: F.ago(20))]
+        let targets = F.tasks(7, met: 3).enumerated().map { index, target -> [String: Any] in
+            var target = target
+            target["targetStatus"] = ["status": index < 3 ? "DONE" : "OPEN", "running": false, "queued": false]
+            return target
+        }
+        return [F.watch(observer: "S1", targets: targets, lastEvaluatedAt: F.ago(20))]
     }
 
     private func summary(_ watches: [Watch], for id: String = "S1") -> WatchSessionSummary? {
@@ -37,8 +43,10 @@ final class SessionWatchingTests: XCTestCase {
         XCTAssertEqual(SessionHeader.statusWord(for: s, watching: watching, now: now), "Watching 7 targets")
         XCTAssertEqual(SessionHeader.subtitle(for: s, watching: watching, now: now),
                        "Watching 7 targets · Open · 3 of 7 finished · Last evaluated just now")
+        // The row says what the strip above the composer says (`rowLine`, held to the browser's by
+        // `WatchStripCopyParityTests`): what the wait needs, then where the targets stand.
         XCTAssertEqual(SessionLine.make(for: s, live: true, watching: watching),
-                       SessionLine(text: "Watching 7 targets · 3 of 7 finished", tone: .watching))
+                       SessionLine(text: "Watching all 7 tasks · 3/7 done", tone: .watching))
         XCTAssertEqual(SessionStatusGlyph.make(for: s, watching: watching, now: now),
                        SessionStatusGlyph(shape: .symbol("eye"), tone: .neutral, label: "Watching 7 targets"))
     }
@@ -157,6 +165,20 @@ final class SessionWatchingTests: XCTestCase {
             F.watch(id: "W1", targets: [F.target("T1")]),
             F.watch(id: "W2", targets: [F.target("T1")]),
         ])?.lineTarget)
+    }
+
+    /// The list row's line, from the projection the strip already draws: a lone target by the name
+    /// the watch carries for it — by kind and short id when it carries none, as the strip names it —
+    /// and paused, the paused word ahead of it, since nothing is being watched while it is paused.
+    func testTheRowNamesALoneTargetTheWayTheStripDoes() throws {
+        var titled = F.target("T0")
+        titled["targetTitle"] = "Fix the login redirect"
+        XCTAssertEqual(try XCTUnwrap(summary([F.watch(targets: [titled])])).rowLine,
+                       "Watching Fix the login redirect")
+        XCTAssertEqual(try XCTUnwrap(summary([F.watch(targets: [F.target("T0")])])).rowLine,
+                       "Watching Task T0")
+        XCTAssertEqual(try XCTUnwrap(summary([F.watch(state: "PAUSED", targets: [titled])])).rowLine,
+                       "Watch paused · Fix the login redirect")
     }
 
     func testOnlyLiveWatchesThatResumeTheSessionCount() throws {
