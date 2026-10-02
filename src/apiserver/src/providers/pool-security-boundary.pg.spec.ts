@@ -13,6 +13,14 @@
  *      positive control that shows the check can see one.
  *  (D) The key never lands in an agent's env (Workspace.env), nor anywhere else at rest: it is
  *      decrypted at the claim, into the job env alone.
+ *  (E) A ChatGPT account in a Codex pool runs its owner's sessions and nobody else's (migration 0358): a
+ *      person the owner added to the pool runs on its API keys alone. At every door that builds their
+ *      session's engine — the claim, a restarted runner's reclaim, a provider-switch reload — they get a
+ *      person's token and never a login pool's (no `pool_login_token` row of theirs), their session names
+ *      no account, and through the real gateway their token reaches OpenAI's API on a key and nothing else;
+ *      a row naming the owner's account by hand is refused there, with nothing sent anywhere. The same
+ *      three doors for the owner are the positive control: an account, a login pool token, and the
+ *      ChatGPT backend on that account.
  *
  * (B) — the usage probe and pool admission — needs no database: pool-security-boundary.spec.ts.
  *
@@ -20,8 +28,11 @@
  * that refused everything could not pass. Everything between the rows and the answers is production
  * code: the providers controllers behind real HTTP, with the global pipe, interceptors and filter
  * main.ts installs; SessionsService, TasksService, ProvidersService, QueueService, RunnerApiController
- * and the quota cache (ProviderPlanUsageService). Only the network the server calls out on (`fetch`) and
- * the check of a person's signed token are stand-ins.
+ * and the quota cache (ProviderPlanUsageService); for (E), SharedPoolsService and the pool gateway's
+ * controller and both its services, behind main.ts's own body parsers. Only the network the server calls
+ * out on (`fetch`, and in (E) a recorder standing where OpenAI's API and ChatGPT's Codex backend stand —
+ * POOL_GATEWAY_UPSTREAM and POOL_LOGIN_UPSTREAM, which nothing in production can change) and the check
+ * of a person's signed token are stand-ins.
  *
  * It only adds rows, under ids and slugs of its own, and refuses to run anywhere but the disposable
  * server `coordinator-pg-test-safety` identifies.
@@ -31,6 +42,8 @@ import 'reflect-metadata';
 
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { createServer, type IncomingHttpHeaders, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import test from 'node:test';
 
 import { Module, RequestMethod, ValidationPipe } from '@nestjs/common';
@@ -39,6 +52,7 @@ import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaClient, RunStatus, RunnerStatus, type ModelProvider } from '@prisma/client';
 import { toUuid, uuidToBase62, type ClaimedSession } from '@orbit/shared';
+import { json, urlencoded } from 'express';
 import { Client } from 'pg';
 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -65,10 +79,16 @@ import { AdminProvidersController } from './admin-providers.controller';
 import { accountPoolRuntime } from './custom-provider';
 import { OAUTH_USAGE_URL } from './plan-usage';
 import { ProviderPlanUsageService } from './plan-usage.service';
+import { outsideThePoolGateway, PoolGatewayController } from './pool-gateway.controller';
+import { PoolGatewayService } from './pool-gateway.service';
+import { PoolLoginGatewayService } from './pool-login-gateway.service';
+import { PoolLoginLedger } from './pool-login-ledger';
+import { PoolUsageLedger } from './pool-usage-ledger';
 import { encryptSecret } from './provider-crypto';
 import { ProvidersController } from './providers.controller';
 import { CodexLoginService } from './codex-login.service';
 import { ProvidersService } from './providers.service';
+import { SharedPoolsService } from './shared-pools.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 // The spec encrypts keys and the code under test decrypts them; both only need the same secret.
@@ -319,6 +339,101 @@ async function openDoors() {
   app.useGlobalFilters(new TransientDbConflictFilter(new PublicIdExceptionFilter(httpAdapter), httpAdapter));
   await app.listen(0, '127.0.0.1');
   return { base: await app.getUrl(), close: () => app.close() };
+}
+
+/** One request the recorder standing where OpenAI's API and ChatGPT's Codex backend stand was sent. */
+interface Upstreamed {
+  path: string;
+  authorization: string | undefined;
+  /** `ChatGPT-Account-ID`: which ChatGPT account a request to the backend went out on. */
+  account: string | undefined;
+}
+
+/** A Responses stream that completes at once: all the gateway has to pass back. */
+const COMPLETED_STREAM = [
+  { type: 'response.created', response: { id: 'resp_spec', status: 'in_progress' } },
+  {
+    type: 'response.completed',
+    response: {
+      id: 'resp_spec', status: 'completed', model: 'gpt-5.5', output: [],
+      usage: { input_tokens: 10, input_tokens_details: { cached_tokens: 0 }, output_tokens: 2 },
+    },
+  },
+].map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join('');
+
+const headerOf = (headers: IncomingHttpHeaders, name: string) => {
+  const value = headers[name];
+  return Array.isArray(value) ? value[0] : value;
+};
+
+/**
+ * The Codex pools' gateway, up and reachable behind main.ts's own body parsers — the real controller and
+ * both its services — with a recorder where OpenAI's API (`/v1`) and ChatGPT's Codex backend
+ * (`/backend-api/codex`) stand. `send` is a request codex makes on a session token, and what of it
+ * reached either upstream.
+ */
+async function openGateway(
+  prisma: PrismaService,
+  realtime: RealtimeService,
+  pools: SharedPoolsService,
+  logins: CodexLoginService,
+) {
+  const seen: Upstreamed[] = [];
+  const recorder: Server = createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      seen.push({
+        path: req.url ?? '',
+        authorization: headerOf(req.headers, 'authorization'),
+        account: headerOf(req.headers, 'chatgpt-account-id'),
+      });
+      res.writeHead(200, { 'content-type': 'text/event-stream; charset=utf-8' });
+      res.end(COMPLETED_STREAM);
+    });
+  });
+  await new Promise<void>((resolve) => recorder.listen(0, '127.0.0.1', resolve));
+  const upstream = `http://127.0.0.1:${(recorder.address() as AddressInfo).port}`;
+  const keys = new PoolGatewayService(prisma, pools, new PoolUsageLedger(prisma), `${upstream}/v1`);
+  const accounts = new PoolLoginGatewayService(
+    prisma, logins, new PoolLoginLedger(prisma), realtime, `${upstream}/backend-api/codex`, `${upstream}/oauth/token`,
+  );
+  @Module({
+    controllers: [PoolGatewayController],
+    providers: [
+      { provide: PoolGatewayService, useValue: keys },
+      { provide: PoolLoginGatewayService, useValue: accounts },
+    ],
+  })
+  class GatewayDoors {}
+  const app = await NestFactory.create(GatewayDoors, { bodyParser: false, logger: false, abortOnError: false });
+  app.use(outsideThePoolGateway(json({ limit: '10mb' })));
+  app.use(outsideThePoolGateway(urlencoded({ extended: true, limit: '10mb' })));
+  app.setGlobalPrefix('api');
+  await app.listen(0, '127.0.0.1');
+  const base = (await app.getUrl()).replace('[::1]', '127.0.0.1');
+  return {
+    /** One `POST /responses` codex sends with `token`: the answer, and every request it made upstream. */
+    async send(token: string) {
+      const from = seen.length;
+      const response = await realFetch(`${base}/api/gw/codex/responses`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ model: 'gpt-5.5', input: 'hello', stream: true }),
+      });
+      const text = await response.text();
+      let code: string | undefined;
+      try {
+        code = (JSON.parse(text) as { error?: { code?: string } }).error?.code;
+      } catch {
+        /* a stream: no refusal in it */
+      }
+      return { status: response.status, code, upstream: seen.slice(from) };
+    },
+    async close() {
+      await app.close();
+      await new Promise((resolve) => recorder.close(resolve));
+    },
+  };
 }
 
 /** One HTTP exchange with the doors, as a browser (or, for `runner/…`, a runner) had it. */
@@ -666,6 +781,135 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     // Exactly the agent's own env: nothing was resolved for the slug at all.
     assert.deepEqual(reload.env, configuredEnv.get(at.workspaceId));
     assert.equal((await recorded(onHers)).poolMemberProviderId, null);
+  });
+
+  await t.test("(E) a person added to a pool of one's own ChatGPT accounts runs on its API keys alone — no login token, no account at the claim, the reclaim or the reload, and the gateway reaches OpenAI's API only; the owner's same three reach the ChatGPT backend on her account", async () => {
+    const owner = await person(db, 'codex-owner');
+    const member = await person(db, 'codex-member');
+    names.set(owner, 'the codex pool owner').set(member, 'a person in her codex pool');
+    const pools = new SharedPoolsService(prisma, realtime, providers);
+    // Her Codex pool, made through the browser's door — with her ADMIN row in it — and the ChatGPT account
+    // she signed in, as the sign-in stores one.
+    await call(owner, 'POST', 'providers/pools', {}, { label: 'Codex Pool', engine: 'codex' }, 201);
+    const pool = await db.providerPool.findFirstOrThrow({
+      where: { ownerId: owner, label: 'Codex Pool' },
+      select: { id: true, slug: true },
+    });
+    const accountId = `acct-${randomUUID()}`;
+    const login = { access: `codex-access-${randomUUID()}`, refresh: `codex-refresh-${randomUUID()}` };
+    const stored = await db.poolCodexLogin.create({
+      data: {
+        poolId: pool.id, userId: owner, accountId, email: 'codex-owner@codex-login.invalid', plan: 'pro',
+        accessTokenEnc: encryptSecret(login.access), refreshTokenEnc: encryptSecret(login.refresh),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+    // The person, by the email of their Orbit account, and one API key — the owner's.
+    const { email } = await db.user.findUniqueOrThrow({ where: { id: member }, select: { email: true } });
+    await pools.addPerson(owner, pool.id, { email });
+    const apiKey = `sk-proj-${randomUUID().replace(/-/g, '')}${randomUUID().replace(/-/g, '')}`;
+    await pools.addKey(owner, pool.id, { label: 'orbit-org-1', apiKey });
+    const key = await db.poolApiKey.findFirstOrThrow({ where: { poolId: pool.id }, select: { id: true, secretEncrypted: true } });
+    /** What none of the doors may hand a runner: the account's tokens, in the clear or as stored, and the key. */
+    const secrets = [login.access, login.refresh, stored.accessTokenEnc, stored.refreshTokenEnc, apiKey, key.secretEncrypted];
+    const secretsIn = (value: unknown) => secrets.filter((secret) => wire(value).includes(secret));
+
+    /** A session of `who`'s on `provider`, written into the table — as an engine that has run, unless queued;
+     *  `naming` an account as a row written by hand, or carried over from elsewhere, would. */
+    const codexSession = async (who: string, at: Machine, provider: string, status: RunStatus, naming: string | null) =>
+      (await db.session.create({
+        data: {
+          title: 'codex pool', prompt: 'hello', status, ownerId: who, creatorId: who,
+          workspaceId: at.workspaceId, assignedRunnerId: at.runnerId,
+          provider, providerBuiltin: provider === 'codex', model: 'gpt-5.5', permissionMode: 'default',
+          usesRuntimeDefaultModel: true, poolCodexAccountId: naming,
+          ...(status === RunStatus.PENDING ? {} : { numTurns: 1, runtimeSessionId: randomUUID(), startedAt: new Date() }),
+        },
+        select: { id: true },
+      })).id;
+
+    /** What each door that builds an engine handed `who`'s runner for a session on the pool: the claim, a
+     *  restarted runner's reclaim, and the reload a switch onto the pool re-spawns with. */
+    async function threeDoors(who: string, label: string, naming: string | null) {
+      const claimAt = await machine(db, who, `${label}-claims`);
+      const queuedOn = await codexSession(who, claimAt, pool.slug, RunStatus.PENDING, naming);
+      const claimed = await claim(claimAt.runnerId, queuedOn);
+
+      const reclaimAt = await machine(db, who, `${label}-reclaims`);
+      const liveOn = await codexSession(who, reclaimAt, pool.slug, RunStatus.AWAITING_INPUT, naming);
+      const reclaimed = (await runnerApi.reclaim({ id: reclaimAt.runnerId, ownerId: who })).sessions
+        .find((s) => s.sessionId === liveOn);
+      assert.ok(reclaimed, 'the session on the pool was left out of the reclaim');
+
+      const reloadAt = await machine(db, who, `${label}-reloads`);
+      const switched = await codexSession(who, reloadAt, 'codex', RunStatus.AWAITING_INPUT, naming);
+      await sessions.updateConfig(who, switched, { provider: pool.slug });
+      const reload = await dequeueReload(switched, reloadAt.runnerId);
+
+      return [
+        { door: 'claim', at: claimAt, sessionId: queuedOn, payload: claimed as unknown, env: claimed.agent.env },
+        { door: 'reclaim', at: reclaimAt, sessionId: liveOn, payload: reclaimed as unknown, env: reclaimed.agent.env },
+        { door: 'reload', at: reloadAt, sessionId: switched, payload: reload as unknown, env: reload.env },
+      ];
+    }
+    const onPool = (sessionId: string) =>
+      db.session.findUniqueOrThrow({ where: { id: sessionId }, select: { poolCodexAccountId: true, poolKeyId: true } });
+
+    const gateway = await openGateway(prisma, realtime, pools, doorsOver.login!);
+    try {
+      // The person: every door, on a session row that even names her account to begin with.
+      const theirs = await threeDoors(member, 'codex-member', accountId);
+      for (const { door, at, sessionId, payload, env } of theirs) {
+        const token = env?.OPENAI_API_KEY ?? '';
+        assert.match(token, /^orbit-gw-[A-Za-z0-9_-]{43}$/, `${door}: not a person's token`);
+        assert.ok(env?.OPENAI_BASE_URL?.endsWith('/api/gw/codex'), `${door}: not the gateway`);
+        assert.deepEqual(env, { ...configuredEnv.get(at.workspaceId), OPENAI_BASE_URL: env?.OPENAI_BASE_URL, OPENAI_API_KEY: token }, door);
+        assert.deepEqual(secretsIn(payload), [], `${door}: the runner was handed a credential of the pool`);
+        assert.equal(
+          await db.poolLoginToken.count({ where: { OR: [{ userId: member }, { sessionId }] } }),
+          0,
+          `${door}: a login pool token of the person's`,
+        );
+        assert.deepEqual(await onPool(sessionId), { poolCodexAccountId: null, poolKeyId: key.id }, `${door}: the session's credential`);
+        // Through the gateway: OpenAI's API on the key, and nothing else anywhere.
+        const sent = await gateway.send(token);
+        assert.equal(sent.status, 200, `${door}: ${sent.code}`);
+        assert.deepEqual(sent.upstream, [{ path: '/v1/responses', authorization: `Bearer ${apiKey}`, account: undefined }], door);
+      }
+      // A row naming her account by hand cannot take the person's token there: refused, and nothing goes out.
+      const [{ sessionId: forged, env: forgedEnv }] = theirs;
+      await db.session.update({ where: { id: forged }, data: { poolCodexAccountId: accountId } });
+      const refused = await gateway.send(forgedEnv!.OPENAI_API_KEY!);
+      assert.deepEqual({ status: refused.status, code: refused.code, upstream: refused.upstream }, {
+        status: 403, code: 'orbit_pool_login_owner_only', upstream: [],
+      });
+      await db.session.update({ where: { id: forged }, data: { poolCodexAccountId: null } });
+      // …and no login pool token can name the person at all: 0324's fence to the pool's owner stands.
+      await assert.rejects(
+        db.poolLoginToken.create({
+          data: { tokenHash: `pool-security-${randomUUID()}`, poolId: pool.id, userId: member, sessionId: forged, expiresAt: new Date(Date.now() + 60_000) },
+        }),
+        'a login pool token naming the person was stored',
+      );
+      assert.equal(await db.poolLoginToken.count({ where: { userId: member } }), 0);
+
+      // The positive control: the owner's same three doors land on her account, on a login pool token, and
+      // reach the ChatGPT backend on that account.
+      for (const { door, sessionId, payload, env } of await threeDoors(owner, 'codex-owner', null)) {
+        const token = env?.OPENAI_API_KEY ?? '';
+        assert.match(token, /^orbit-gwl-/, `${door}: not a login pool token`);
+        assert.deepEqual(secretsIn(payload), [], `${door}: the runner was handed a credential of the pool`);
+        assert.equal(await db.poolLoginToken.count({ where: { userId: owner, sessionId } }) > 0, true, `${door}: no login pool token`);
+        assert.deepEqual(await onPool(sessionId), { poolCodexAccountId: accountId, poolKeyId: null }, `${door}: the session's credential`);
+        const sent = await gateway.send(token);
+        assert.equal(sent.status, 200, `${door}: ${sent.code}`);
+        assert.deepEqual(sent.upstream, [
+          { path: '/backend-api/codex/responses', authorization: `Bearer ${login.access}`, account: accountId },
+        ], door);
+      }
+    } finally {
+      await gateway.close();
+    }
   });
 
   await t.test("(C) no providers or pool response carries a credential — every route, refusals included; only the owner's own reveal does", async () => {
