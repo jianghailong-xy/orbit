@@ -79,7 +79,7 @@ function assertReasoningLevels(runtime: string, models: unknown): void {
 type PoolEditRow = PoolAdmissionRow & { id: string; label: string };
 
 /** A pool as its owner reads it: the providers in it, keyless and endpointless, in the order the
- *  provider lists use — and, for a Codex pool of the caller's own, the ChatGPT account it runs on
+ *  provider lists use — and, for a Codex pool of the caller's own, the ChatGPT accounts it holds
  *  (migration 0323). Only the columns `codexLoginView` reads are selected, and no token is among them:
  *  the encrypted pair is never selected on any path that builds a response. */
 const POOL_SELECT = {
@@ -115,16 +115,17 @@ const POOL_SELECT = {
 } satisfies Prisma.ProviderPoolSelect;
 
 function poolView({ members, logins, ...pool }: Prisma.ProviderPoolGetPayload<{ select: typeof POOL_SELECT }>) {
-  return { ...pool, members: members.map((member) => member.provider), login: loginOf(logins) };
+  return { ...pool, members: members.map((member) => member.provider), ...loginsOf(logins) };
 }
 
-/** A pool's account as every read of it carries it: the email and `…AB12` of the one login it holds
- *  (a Codex pool of its owner's own), or null — which is every Claude pool, and a Codex one nobody has
- *  signed into yet. Built by `codexLoginView`, which cannot see a token: none is selected. */
-function loginOf(logins: { accountId: string; email: string | null; plan: string | null; state: string;
+/** A pool's accounts as every read of it carries them, each by its email and `…AB12`: `logins`, every
+ *  ChatGPT account a Codex pool of its owner's own holds, oldest first — none for every Claude pool, and
+ *  for a Codex one nobody has signed into yet — and `login`, the first of them or null, which is the one
+ *  its sessions run on. Built by `codexLoginView`, which cannot see a token: none is selected. */
+function loginsOf(rows: { accountId: string; email: string | null; plan: string | null; state: string;
   lastError: string | null; expiresAt: Date; createdAt: Date; usage: Prisma.JsonValue; spentUntil: Date | null }[]) {
-  const login = logins[0] ?? null;
-  return codexLoginView(login, (login?.usage as PlanUsageSnapshot | null | undefined) ?? null);
+  const logins = rows.map((row) => codexLoginView(row, row.usage as PlanUsageSnapshot | null)!);
+  return { login: logins[0] ?? null, logins };
 }
 
 /** The same pools, read with what asking each member's credential for its quota takes (poolViews). The key
@@ -461,8 +462,8 @@ export class ProvidersService {
   /** An account pool of the caller's own providers: one more slug to dispatch with, taken from the
    *  namespace the providers' slugs come from. Its members keep theirs.
    *
-   *  A pool may instead be created on Codex (migration 0323): a pool of the caller's own that holds one
-   *  ChatGPT login this server signs in and keeps, and starts with no members at all — its account is
+   *  A pool may instead be created on Codex (migration 0323): a pool of the caller's own that holds the
+   *  ChatGPT logins this server signs in and keeps, and starts with no members at all — each account is
    *  added by the sign-in (CodexLoginService), never as a provider, so one that names providers is
    *  refused rather than quietly emptied of them. */
   async createPool(ownerId: string, dto: CreateProviderPoolDto) {
@@ -658,15 +659,17 @@ export class ProvidersService {
       ownerId,
       pools.flatMap((pool) => pool.members.map((member) => member.provider)),
     );
-    return pools.map(({ members, logins, ...pool }) => {
-      const login = loginOf(logins);
+    return pools.map(({ members, logins: rows, ...pool }) => {
+      const { login, logins } = loginsOf(rows);
       // A Codex pool of the owner's own runs on its ChatGPT account, not on member providers: it holds
-      // none, and what decides whether it can take a session is the account's state alone. A quota that
-      // has not been read does not decide it — that is `login.usage` being null, and the account runs.
+      // none, and what decides whether it can take a session is the state of the account its sessions
+      // run on, the first. A quota that has not been read does not decide it — that is `login.usage`
+      // being null, and the account runs.
       if (pool.engine === AgentProvider.CODEX) {
         return {
           ...pool,
           login,
+          logins,
           resetsAt: null,
           unavailable: codexLoginUnavailableReason(pool.label, login),
           members: [],
@@ -689,6 +692,7 @@ export class ProvidersService {
       return {
         ...pool,
         login,
+        logins,
         resetsAt: selection.kind === 'EXHAUSTED' ? (selection.resetsAt?.toISOString() ?? null) : null,
         unavailable:
           selection.kind !== 'UNAVAILABLE' ? null : members.length > 0 ? 'No account can run' : 'No accounts',

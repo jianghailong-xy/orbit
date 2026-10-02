@@ -13328,6 +13328,11 @@ button.chat-jump-start:hover {
   font-variant-numeric: tabular-nums;
   color: var(--text-2);
 }
+/* Its tightest window at 90% or more: orange with its bar, as the composer's quota turns. */
+.pool-gauge-pct.near-limit {
+  color: var(--warning);
+  font-weight: 600;
+}
 .pool-gauge.spent {
   color: var(--warning);
   font-weight: 500;
@@ -13767,6 +13772,12 @@ button.chat-jump-start:hover {
 }
 .pool-login-window + .pool-login-window {
   margin-top: 8px;
+}
+/* The sign-out mark rests grey and turns red only under the pointer: red on a row that is fine read
+   as something wrong with it. Weightier than antd's resting colour, lighter than its :hover and
+   :active, which keep the danger button's own red. */
+.pool-row .pool-signout.ant-btn {
+  color: var(--text-3);
 }
 .pool-login-reset {
   margin-top: 3px;
