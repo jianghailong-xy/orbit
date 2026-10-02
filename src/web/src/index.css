@@ -4557,7 +4557,8 @@ html[data-theme='dark'] .session-tag-chip {
 :root[data-theme='dark'] .find-bar {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
 }
-/* ChatGPT-style snap-to-latest button; only mounted while scrolled up off the tail. */
+/* ChatGPT-style snap-to-latest button; only mounted while the tail is out of view — scrolled up
+   off it, or stranded below a transcript still pinned to it (WorkspaceView's `stranded`). */
 .scroll-to-bottom {
   position: absolute;
   bottom: 16px;
