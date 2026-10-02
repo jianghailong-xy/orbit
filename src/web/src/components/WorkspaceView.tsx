@@ -1115,15 +1115,27 @@ export function statusLabel(session: any, watching?: string | null): string {
   return queuedLabel(session); // PENDING
 }
 
+// What a failed session's glyph says — StatusIcon's FAILED tooltips, word for word: the error
+// itself where the header says only "Failed".
+function failedTitle(session: any): string {
+  if (sessionRetryPending(session)) return 'Retrying — the run resumes on its own';
+  const err: string = typeof session.error === 'string' ? session.error : '';
+  if (err.toLowerCase().includes('offline')) return 'Disconnected — runner went offline';
+  return err || 'Failed';
+}
+
 /**
  * The word an Orbit link card says for the session it links to: the header's own, with the watching
- * word a session list row would give it. A preview carries the counts rather than the watch rows, so
+ * word a session list row would give it — except a failure, which says what its glyph says (the
+ * error itself), as the native card does. A preview carries the counts rather than the watch rows, so
  * `watchingCountWord` says what the strip says from what the card was handed.
  *
  * Module-level and not a closure: it is handed to every card of the conversation through the cards
  * context, and a fresh function on every render would re-render every one of them.
  */
-function orbitLinkStateWord(row: any): string {
+export function orbitLinkStateWord(row: any): string {
+  // A decision waiting on the owner still outranks the failure, in the order `statusLabel` keeps.
+  if (sessionRunStateOf(row) === 'FAILED' && !((row?.pendingApprovals ?? 0) > 0)) return failedTitle(row);
   return statusLabel(row, watchingCountWord(row?.watching));
 }
 

@@ -15,7 +15,7 @@ import {
   orbitLinkTurns,
 } from './OrbitLinkCard';
 import { Transcript, type RunEvent } from './Transcript';
-import { statusLabel } from './WorkspaceView';
+import { orbitLinkStateWord, statusLabel } from './WorkspaceView';
 import { SharedSessionPage } from '../pages/SharedSessionPage';
 import type { OrbitLinkKind, OrbitLinkRef } from '../lib/orbitLink';
 import { decodeId } from '../lib/idCodec';
@@ -202,11 +202,11 @@ const text = (selector: string) =>
   [...container.querySelectorAll(selector)].map((node) => node.textContent ?? '');
 
 /** One card, on its own: the four contents and the two states are each a render of this. */
-async function renderCard(linkRef: OrbitLinkRef, preview?: LinkPreview) {
+async function renderCard(linkRef: OrbitLinkRef, preview?: LinkPreview, stateWord = statusLabel) {
   await act(async () => {
     root.render(
       <MemoryRouter>
-        <OrbitLinkCard link={linkRef} preview={preview} host={HOST} stateWord={statusLabel} />
+        <OrbitLinkCard link={linkRef} preview={preview} host={HOST} stateWord={stateWord} />
       </MemoryRouter>,
     );
   });
@@ -246,6 +246,33 @@ describe('the cards, one per kind', () => {
     );
     expect(text('.olc-state')).toEqual(['Running']);
     expect(text('.olc-badge')).toEqual(['Coordinator']);
+  });
+
+  it('says what a failed session’s glyph says — its error — as the native card does', async () => {
+    const error = 'failed to initialize codex app-server: context deadline exceeded';
+    const failed = { status: 'FAILED', runStatus: 'FAILED', runState: 'FAILED', sessionState: 'FAILED', error };
+    const sessionLink = link('session', SESSION, `${BASE}/sessions/${SESSION}`);
+    await renderCard(sessionLink, previews.session(failed), orbitLinkStateWord);
+    expect(text('.olc-state')).toEqual([error]);
+    expect(container.querySelector('.olc-state')?.className).toContain('is-failed');
+    // The pill truncates where the row runs out, so the whole error is kept for the hover.
+    expect(container.querySelector('.olc-state')?.getAttribute('title')).toBe(error);
+
+    // An armed retry says the glyph's sentence too, and a coordinator's failure reaches the project
+    // card's foot in the same words.
+    const retryAt = new Date(Date.now() + 30_000).toISOString();
+    await renderCard(sessionLink, previews.session({ ...failed, retryAt }), orbitLinkStateWord);
+    expect(text('.olc-state')).toEqual(['Retrying — the run resumes on its own']);
+    await renderCard(
+      link('project', PROJECT, `${BASE}/projects/${PROJECT}`),
+      previews.project({ coordinator: (previews.session(failed) as { session: unknown }).session }),
+      orbitLinkStateWord,
+    );
+    expect(text('.olc-foot-text')).toEqual([`Coordinator · ${error}`]);
+
+    // Every other state is still the header's own word.
+    await renderCard(sessionLink, previews.session(), orbitLinkStateWord);
+    expect(text('.olc-state')).toEqual(['Waiting for your reply']);
   });
 
   it('draws a project: the meter, the progress line, the stall, and who coordinates it', async () => {
