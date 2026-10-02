@@ -12,18 +12,12 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { codexPoolUnavailableReason } from '../providers/codex-login';
-import {
-  chooseLoginAccount,
-  keyToLoginSwitchNotice,
-  loginCanRun,
-  loginPoolResumesAt,
-  loginSwitchNotice,
-  loginToKeySwitchNotice,
-} from '../providers/pool-login-select';
+import { loginCanRun, loginPoolResumesAt } from '../providers/pool-login-select';
+import { choosePoolCredential } from '../providers/pool-credential-select';
 import { isBuiltinProvider, resolveProviderExec, type ModelProviderRow } from '../providers/custom-provider';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { isPoolCandidate, poolUnavailableReason } from '../providers/pool-admission';
-import { choosePoolKey, keyCanRun, poolKeysResumeAt, poolKeySwitchNotice } from '../providers/pool-key-select';
+import { keyCanRun, poolKeysResumeAt } from '../providers/pool-key-select';
 import {
   mintPoolGatewayToken,
   mintPoolLoginToken,
@@ -816,7 +810,7 @@ export class QueueService {
         people: { some: { userId: ownerId } },
         OR: [{ shared: true }, { ownerId: { not: ownerId } }],
       },
-      select: { id: true, label: true, ownKeyFirst: true },
+      select: { id: true, label: true, ownKeyFirst: true, ownerId: true, shared: true },
     });
   }
 
@@ -989,14 +983,14 @@ export class QueueService {
    *
    * The engine gets the pool gateway as its OpenAI endpoint and a session token minted here as its key
    * (shared-pool.ts sharedPoolExecRow) — never the login, which only the gateway ever reads, decrypts or
-   * refreshes. The account the session runs on is chosen here (pool-login-select.ts chooseLoginAccount:
-   * the one it is on while that can run, else the one that can whose quota resets soonest, else it stays)
-   * and recorded on the session (`pool_codex_account_id`), which is how a session says which account it
-   * ran on — and, since migration 0355, the only thing that says it: the token names no account, and the
-   * gateway sends every request of the token on whichever account its session is on then, so an engine
-   * warm on an older token follows the move with nothing re-spawned. A pool holding no account still
-   * dispatches here, and the gateway answers why — rather than on the runner's own login, which is exactly
-   * what a login pool is not.
+   * refreshes. The account the session runs on is chosen here (pool-credential-select.ts, by
+   * pool-login-select.ts chooseLoginAccount: the one it is on while that can run, else the one that can
+   * whose quota resets soonest, else it stays) and recorded on the session (`pool_codex_account_id`),
+   * which is how a session says which account it ran on — and, since migration 0355, the only thing that
+   * says it: the token names no account, and the gateway sends every request of the token on whichever
+   * account its session is on then, so an engine warm on an older token follows the move with nothing
+   * re-spawned. A pool holding no account still dispatches here, and the gateway answers why — rather than
+   * on the runner's own login, which is exactly what a login pool is not.
    *
    * A move off another account records the line the transcript owes for it (loginSwitchNotice), in place
    * of the one the gateway owed when that account was spent or signed out — "Switched to …" says why. At
@@ -1006,7 +1000,7 @@ export class QueueService {
    * The pool may hold API keys beside its accounts (migration 0358), and its owner's session runs on one
    * of them while none of its accounts can run — the key pool-key-select.ts chooses for the owner, as for
    * any person of a shared pool — recorded as `pool_key_id`, with `pool_codex_account_id` cleared, and back
-   * on an account at the first claim that finds one that can (the full order is the selection task's). The
+   * on an account at the first claim that finds one that can (pool-credential-select.ts). The
    * gateway sends on whichever of the two the session names: the token is the same login pool token
    * either way, and authenticates (pool, owner, session) alone. With neither able to run, the session
    * stays on what it is on. Each move says so, as a move between accounts does.
@@ -1030,41 +1024,18 @@ export class QueueService {
     const pool = await this.accountPool(session.ownerId, slug, db);
     if (pool?.engine !== AgentProvider.CODEX) return null;
     const now = new Date();
-    const chosen = chooseLoginAccount(pool.logins, session.poolCodexAccountId, now);
-    const previous = pool.logins.find((login) => login.accountId === session.poolCodexAccountId) ?? null;
-    // What the session was on: an account, else a key, else nothing yet — the first credential a session
-    // runs on is where it starts, not a move.
-    const onAccount = session.poolCodexAccountId !== null;
-    const onKey = !onAccount && session.poolKeyId !== null;
-    let next: { accountId: string | null; keyId: string | null };
-    let notice: string | null = null;
-    if (chosen && loginCanRun(chosen, now)) {
-      next = { accountId: chosen.accountId, keyId: null };
-      if (chosen.accountId !== session.poolCodexAccountId) {
-        notice = onAccount ? loginSwitchNotice(chosen, previous, now) : onKey ? keyToLoginSwitchNotice(chosen) : null;
-      }
-    } else {
-      const keys = await sharedPoolKeyCandidates(db, pool.id, now);
-      const key = choosePoolKey(keys, session.ownerId, pool.ownKeyFirst, session.poolKeyId, now);
-      if (key) {
-        next = { accountId: null, keyId: key.id };
-        if (onAccount) {
-          notice = loginToKeySwitchNotice(key, previous, now);
-        } else if (onKey && key.id !== session.poolKeyId) {
-          const left = keys.find((candidate) => candidate.id === session.poolKeyId) ?? null;
-          notice = poolKeySwitchNotice(key, left, session.ownerId, now);
-        }
-      } else if (onKey) {
-        // Nothing can run: the session stays on its key, which the gateway answers with why.
-        next = { accountId: null, keyId: session.poolKeyId };
-      } else {
-        // Nothing can run: on the account it is on, else the one chooseLoginAccount falls back to.
-        next = { accountId: chosen?.accountId ?? null, keyId: null };
-        if (chosen && onAccount && chosen.accountId !== session.poolCodexAccountId) {
-          notice = loginSwitchNotice(chosen, previous, now);
-        }
-      }
-    }
+    // accountPool found it as a pool of the session's owner's own, never a shared one: its accounts first.
+    const { next, notice } = choosePoolCredential(
+      {
+        ownerId: session.ownerId,
+        shared: false,
+        accounts: pool.logins,
+        keys: await sharedPoolKeyCandidates(db, pool.id, now),
+        ownKeyFirst: pool.ownKeyFirst,
+      },
+      { ownerId: session.ownerId, accountId: session.poolCodexAccountId, keyId: session.poolKeyId },
+      now,
+    );
     if (next.accountId !== session.poolCodexAccountId || next.keyId !== session.poolKeyId) {
       await db.session.update({
         where: { id: session.id },
@@ -1096,14 +1067,15 @@ export class QueueService {
    *
    * The engine gets the pool gateway as its OpenAI endpoint and a session token minted here as its key
    * (shared-pool.ts sharedPoolExecRow) — never a key of the pool, which only the gateway ever reads. The
-   * key this session's requests go out on is chosen here, the way pool-key-select.ts chooses (staying on
-   * the one it had, the owner's own first when the pool says so, none spent to its share cap), and
-   * recorded as `poolKeyId` for the gateway. When no key can run for this person the session stays on
-   * the key it had (null for one that never had any), which the gateway answers with the reason, and
-   * moves at the first claim that finds another one — so a move after a wait still says which key it
-   * left. Every door that builds such a session's engine environment resolves it here — this claim,
-   * a restarted runner's reclaim and a provider-switch reload (RunnerApiController) — and each mints its
-   * own token, since only a hash is kept and a new process needs the token in its environment.
+   * key this session's requests go out on is chosen here (pool-credential-select.ts), the way
+   * pool-key-select.ts chooses (staying on the one it had, the owner's own first when the pool says so,
+   * none spent to its share cap), and recorded as `poolKeyId` for the gateway. When no key can run for
+   * this person the session stays on the key it had (null for one that never had any), which the gateway
+   * answers with the reason, and moves at the first claim that finds another one — so a move after a wait
+   * still says which key it left. Every door that builds such a session's engine environment resolves it
+   * here — this claim, a restarted runner's reclaim and a provider-switch reload (RunnerApiController) —
+   * and each mints its own token, since only a hash is kept and a new process needs the token in its
+   * environment.
    * `db` is the caller's client: the reload runs inside the transaction that holds this session's row.
    *
    * A move off another key records the line the transcript owes for it (pool-key-select.ts
@@ -1129,20 +1101,24 @@ export class QueueService {
     const pool = await this.sharedPoolOf(db, session.ownerId, slug);
     if (!pool) return null;
     const now = new Date();
-    const keys = await sharedPoolKeyCandidates(db, pool.id, now);
-    const chosen = choosePoolKey(keys, session.ownerId, pool.ownKeyFirst, session.poolKeyId, now);
-    const moveTo = chosen && chosen.id !== session.poolKeyId ? chosen : null;
-    // The first key a session runs on is where it starts, not a move.
-    const notice =
-      moveTo && session.poolKeyId
-        ? poolKeySwitchNotice(moveTo, keys.find((key) => key.id === session.poolKeyId) ?? null, session.ownerId, now)
-        : null;
-    if (moveTo || session.poolCodexAccountId !== null) {
+    // Its keys alone (pool-credential-select.ts): no account of a pool's owner is read for this session.
+    const { next, notice } = choosePoolCredential(
+      {
+        ownerId: pool.ownerId,
+        shared: pool.shared,
+        accounts: [],
+        keys: await sharedPoolKeyCandidates(db, pool.id, now),
+        ownKeyFirst: pool.ownKeyFirst,
+      },
+      { ownerId: session.ownerId, accountId: session.poolCodexAccountId, keyId: session.poolKeyId },
+      now,
+    );
+    if (next.keyId !== session.poolKeyId || next.accountId !== session.poolCodexAccountId) {
       await db.session.update({
         where: { id: session.id },
         data: {
-          ...(moveTo ? { poolKeyId: moveTo.id } : {}),
-          poolCodexAccountId: null,
+          poolKeyId: next.keyId,
+          poolCodexAccountId: next.accountId,
           ...(notice ? { poolSwitchNotice: notice } : {}),
         },
       });
