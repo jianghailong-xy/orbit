@@ -1523,12 +1523,6 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // the blocker notification, but no wake row is backfilled or rewritten, and none of the
       // preserved task, session or acceptance relations is named.
       '0342_project_blocker_coordinator_wake',
-      // Who sent a turn: one nullable UUID column with no default on `conversation_turn`
-      // (`sender_session_id`, deliberately no foreign key) and one partial index on it. Read against
-      // every claim above: `conversation_turn` is not among the preserved relations and nothing else
-      // is named — no `task`, `session`, `project` or `project_acceptance_*` object, no function,
-      // trigger or type created, replaced or dropped, and no INSERT, UPDATE or DELETE.
-      '0343_conversation_turn_sender_session',
       // A landing run again on purpose (`integration_retry`): four nullable columns with no default
       // on `project_integration_job` (`retry_of_job_id`, `retry_failure_class`, `retry_reason`,
       // `retry_requested_by_session_id`, catalog-only) and four CHECKs every stored row satisfies
@@ -1556,7 +1550,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the
       // six preserved objects — and it has no INSERT, UPDATE or DELETE. No `project_acceptance_*`
       // object is named.
-      '0346_codeless_and_source_on_upstream'],
+      '0346_codeless_and_source_on_upstream',
+      // Who sent a turn: one nullable UUID column with no default on `conversation_turn`
+      // (`sender_session_id`, deliberately no foreign key) and one partial index on it. Read against
+      // every claim above: `conversation_turn` is not among the preserved relations and nothing else
+      // is named — no `task`, `session`, `project` or `project_acceptance_*` object, no function,
+      // trigger or type created, replaced or dropped, and no INSERT, UPDATE or DELETE. (Written as
+      // 0343 on its own branch and renumbered before it landed: 0343 is the delivery review's, as
+      // said above, and 0348 is spelled by the unlanded session-folders branch.)
+      '0349_conversation_turn_sender_session'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

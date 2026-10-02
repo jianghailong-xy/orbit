@@ -1780,7 +1780,7 @@ model ConversationTurn {
   /// by those two runner doors, from the caller's own identity and never from a request body; null
   /// is every other turn: the account owner, a headless credential, the platform's own deliveries.
   /// Deliberately not a relation: a foreign key would lock the sender's row under the recipient's,
-  /// and two sessions messaging each other would deadlock (migration 0343). The partial index the
+  /// and two sessions messaging each other would deadlock (migration 0349). The partial index the
   /// hourly limit counts with (`conversation_turn_sender_session_id_idx`) lives in that migration,
   /// because schema.prisma cannot express a partial index.
   senderSessionId String?   @map("sender_session_id") @db.Uuid
