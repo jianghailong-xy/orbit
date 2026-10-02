@@ -64,7 +64,7 @@ const sha = (nibble: string) => nibble.repeat(40);
 /**
  * What one project detail read costs, whatever is in the project.
  *
- * Twenty-two statements, and every one of them is per RELATION rather than per row:
+ * Twenty-four statements, and every one of them is per RELATION rather than per row:
  *
  *   4  the project document — the row, its coordinator members, its runtime, its criteria;
  *   1  the per-status task tally, read from `project_task_status_count` by project id. It replaced
@@ -93,6 +93,14 @@ const sha = (nibble: string) => nibble.repeat(40);
  *      cannot be read without either. Two more STATEMENTS and not one more query per task — Prisma
  *      issues one statement per relation level, and each of these is a whole level, so fifteen
  *      serving tasks of the large fixture cost them what the one task of the small one does;
+ *   1  the newest work session of each serving task, one more level of that same read, added
+ *      2026-10-01 with each criterion's landing reason (`criterion-landing-reason.ts`): whether the
+ *      work ever took a worktree branch is what tells CODELESS from NO_RECEIPT, and it is §1.1
+ *      `isCodeTask`'s half the landing fold deliberately does not read. A level, like the two
+ *      above it, so it is one statement at either size;
+ *   1  this project's landings and merges into the upstream that are queued or running, added with
+ *      the same reasons: the one input of a reason (IN_FLIGHT) that is not about any one
+ *      criterion's work. One `findMany` by project and state, bounded by the queue, not the work;
  *   4  the independence lane, which is the one that is not shaped like the other two;
  *   1  the project's blockers — every open one and the latest resolved, each with the title of the
  *      task it is about, joined in the same statement (`project-blocker-resolution.ts`);
@@ -137,7 +145,7 @@ const sha = (nibble: string) => nibble.repeat(40);
  * and fourth would BOTH be five statements at the large fixture and one at the small one if they
  * were written per criterion, and the equality assertion is what sees the difference.
  */
-const STATEMENTS_PER_READ = 22;
+const STATEMENTS_PER_READ = 24;
 
 test('the project detail read costs the same number of statements at either size', {
   skip, concurrency: 1, timeout: 300_000,

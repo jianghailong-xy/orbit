@@ -3226,6 +3226,24 @@ body {
 .session-section-head:first-child {
   padding-top: 2px;
 }
+/* The Pinned heading folds its rows away, as Notes' Pinned does: the whole heading is the button,
+   and the chevron at its end points down while the rows show, right once they are folded. */
+.session-section-fold {
+  width: 100%;
+  justify-content: space-between;
+  border: 0;
+  font-family: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.session-section-chev {
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+.session-section-chev.open {
+  transform: rotate(90deg);
+}
 /* Foot of the list while the next page loads. */
 .session-list-more {
   display: flex;
@@ -4742,6 +4760,16 @@ html[data-theme='dark'] .session-tag-chip {
 /* Last assistant reply, flattened to one line. Shares the second line with the row's tags
    (.session-sub owns the spacing above) — darker than the time so it reads as content,
    not metadata. */
+/* Who a session list row is waiting on for a reply, and who is waiting on it (session requests). */
+.session-requests {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--brand);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .session-preview {
   flex: 1;
   min-width: 0;
@@ -6692,7 +6720,11 @@ button.chat-jump-start:hover {
 .olc-head > :not(.olc-kind) {
   margin-left: auto;
 }
+/* The type's name keeps its width and the state beside it gives way: a failed session's state is its
+   error, which can run to a sentence, and a pill held at its full length pushed the card out of its
+   bubble. */
 .olc-kind {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -6712,6 +6744,9 @@ button.chat-jump-start:hover {
   font-size: 12px;
 }
 .olc-state {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 1px 7px;
   border: 1px solid;
   border-radius: 999px;
@@ -6817,6 +6852,16 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   color: var(--text-2);
 }
+/* One line, like the native card's: a failed coordinator's word is its error. */
+.olc-foot-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.olc-foot-time {
+  flex: none;
+}
 .olc-foot-arrow {
   margin-left: auto;
   color: var(--text-3);
@@ -6877,6 +6922,13 @@ button.chat-jump-start:hover {
 }
 .chat-file:hover {
   background: var(--bg-hover);
+}
+.chat-file.is-error {
+  border-color: var(--error-border);
+  color: var(--error);
+}
+.chat-file.is-error:hover {
+  background: var(--error-bg);
 }
 .chat-file-name {
   overflow: hidden;
@@ -7257,52 +7309,52 @@ button.chat-jump-start:hover {
   overflow-wrap: anywhere;
 }
 .chat-error-card {
-  margin: 8px 0;
-  padding: 9px 11px 8px 12px;
-  border: 1px solid var(--error-border);
+  margin: 6px 0;
+  border: 0;
   border-left: 3px solid var(--error);
-  border-radius: 9px;
-  background: var(--error-bg);
-  color: var(--text-1);
-  font-size: 13px;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
+  background: transparent;
 }
 .chat-error-card-head {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.chat-error-card-icon {
-  color: var(--error);
-  flex: none;
-}
-.chat-error-card-status {
-  margin-left: auto;
-  padding: 1px 6px;
-  border-radius: 999px;
-  color: var(--error);
-  background: color-mix(in srgb, var(--error) 12%, transparent);
-  font-size: 11px;
-  font-weight: 600;
-}
-.chat-error-card-path {
-  margin: 4px 0 1px 22px;
-  color: var(--text-2);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
   overflow-wrap: anywhere;
 }
+.chat-error-card .chat-error-card-icon {
+  color: var(--error);
+  flex: none;
+  background: var(--error-bg);
+}
+.chat-error-card .chat-error-card-status {
+  color: var(--error);
+  font-size: 12px;
+}
+.chat-error-card-detail {
+  margin: 0 10px 0 58px;
+  padding: 0 0 2px;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.chat-error-card-path {
+  margin: 0 0 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-3);
+}
 .chat-error-card-reason {
-  margin-left: 22px;
-  color: var(--text-1);
-  font-weight: 500;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .chat-error-card-disclosure {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin: 6px 0 0 20px;
+  margin: 3px 0 0 -2px;
   padding: 0;
   border: 0;
   color: var(--text-2);
@@ -7316,7 +7368,7 @@ button.chat-jump-start:hover {
 }
 .chat-error-card-log {
   max-height: 280px;
-  margin: 7px 0 0 20px;
+  margin: 4px 10px 7px 58px;
   padding: 7px 8px;
   border-radius: 6px;
   background: var(--bg-sunken);
@@ -9771,6 +9823,10 @@ button.chat-jump-start:hover {
 .coordinator-question .approval-body {
   background: var(--bg-raised);
   padding: 10px 14px 4px;
+  /* This card is read and answered top to bottom. Keep its body in the page flow so a
+     long question cannot turn the card itself into a nested scroll region. */
+  max-height: none;
+  overflow: visible;
 }
 .coordinator-question-text {
   margin: 2px 0 8px;
@@ -14666,18 +14722,69 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   color: var(--text-2);
 }
-.project-blockers-action {
+.project-blockers-subject a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 2px;
+}
+.project-blockers-question {
+  margin-top: 7px;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.project-blockers-next {
   margin-top: 2px;
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-3);
 }
+.project-blockers-next span {
+  margin-right: 5px;
+  color: var(--text-2);
+  font-weight: 600;
+}
 .project-blockers-paths {
-  margin-top: 3px;
+  margin-top: 6px;
   font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
   font-size: 11.5px;
   color: var(--text-3);
   overflow-wrap: anywhere;
+}
+.project-blockers-files {
+  margin-top: 3px;
+}
+.project-blockers-files > summary {
+  cursor: pointer;
+  list-style-position: inside;
+}
+.project-blockers-files ul {
+  margin: 5px 0 0;
+  padding-left: 18px;
+  color: var(--text-3);
+}
+.project-blockers-files code,
+.project-blockers-dialog-evidence code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.project-blockers-evidence {
+  margin-top: 7px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.project-blockers-evidence > summary {
+  cursor: pointer;
+  color: var(--text-2);
+}
+.project-blockers-evidence p {
+  margin: 5px 0 0;
+  padding-left: 18px;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 .project-blockers-side {
   display: flex;
@@ -14708,6 +14815,41 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   color: var(--text-2);
 }
+.project-blockers-dialog-question {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--brand);
+  background: var(--bg-sunken);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.project-blockers-dialog-kicker {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.project-blockers-dialog-evidence {
+  margin: 0 0 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.project-blockers-dialog-evidence p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+.project-blockers-dialog-evidence ul {
+  margin: 0;
+  padding-left: 17px;
+}
 .project-blockers-dialog-label {
   display: block;
   margin-bottom: 4px;
@@ -14724,6 +14866,16 @@ button.chat-jump-start:hover {
   margin-inline-end: auto;
   font-size: 11.5px;
   color: var(--text-3);
+}
+@media (max-width: 560px) {
+  .project-blockers-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .project-blockers-side {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
 }
 
 /* Work account and human control are one command centre: a flexible evidence card and a stable
@@ -16346,9 +16498,8 @@ button.chat-jump-start:hover {
 /* The Watching strip (WatchRelations.tsx `SessionWatchStrip`) is drawn in the Background processes
    tray's own shell (.bg-tray) with Tasks created here's rows and links (.ct-*); these are only what a
    wait adds to them. Folded, what the wait needs (a threshold, a count) sits where a lone target's name
-   would, and truncates before the sentence beside it does. Opened, each watch is one sentence in the
-   list's grey, over the targets it waits on; the line under it is the one said only while nobody is
-   checking the watch. */
+   would, and truncates before the sentence beside it does. Opened, each watch lists its targets in the
+   list's grey; the line under it is the one said only while nobody is checking the watch. */
 .watch-strip-target {
   flex: 0 1 auto;
   min-width: 0;
@@ -17033,6 +17184,211 @@ button.chat-jump-start:hover {
   font-size: 11px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* Another Orbit session's message (components/SessionMessageCard.tsx): on the side every turn this
+   conversation is handed sits, but a raised card rather than the owner's own tinted bubble — the
+   words are another agent's, and the head says whose. */
+.smc-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0;
+}
+.smc {
+  width: min(560px, 88%);
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+}
+.smc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.smc-mark {
+  flex: none;
+  color: var(--brand);
+}
+.smc-from {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.smc-agent {
+  flex: none;
+  padding: 0 8px;
+  border: 1px solid var(--brand-border);
+  border-radius: 9px;
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 18px;
+}
+.smc-body {
+  margin-top: 6px;
+}
+.smc-more {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.smc-meta {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bg-hover-strong);
+  color: var(--text-3);
+  font-size: 11px;
+}
+.smc-meta a {
+  color: var(--brand);
+  text-decoration: none;
+}
+.smc-undelivered {
+  margin-top: 4px;
+  color: var(--warning);
+  font-size: 12px;
+}
+/* Still waiting to be delivered (WorkspaceView's queued tail): dashed like a queued message, with the
+   queue's status line at its foot — the same shape the delivery and project-start cards take. */
+.smc.is-queued {
+  border-style: dashed;
+}
+.smc-queued {
+  margin-top: 6px;
+}
+.smc-queued .chat-queued-meta {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  row-gap: 2px;
+}
+.smc-queued .chat-queued-why {
+  order: 1;
+  flex-basis: 100%;
+  white-space: normal;
+}
+/* A message that asks for a reply (session requests): what it asks, by when, and where it stands —
+   read live, so the state word moves while the card does not. */
+.smc-request {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.smc-request-asks {
+  font-weight: 600;
+}
+.smc-request-state {
+  padding: 0 8px;
+  border: 1px solid var(--bg-hover-strong);
+  border-radius: 9px;
+  line-height: 18px;
+  font-size: 11px;
+}
+.smc-request-state-open {
+  border-color: var(--brand-border);
+  color: var(--brand);
+}
+.smc-request-state-replied {
+  border-color: var(--success);
+  color: var(--success);
+}
+.smc-request-state-no_reply,
+.smc-request-state-recipient_ended,
+.smc-request-state-expired,
+.smc-request-state-undelivered {
+  color: var(--warning);
+}
+
+/* The outcomes of this session's own requests, handed back (SessionReplyCard.tsx): the platform's
+   turn, so the agent's side of the transcript, in the brand tone. */
+.src-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+}
+.src {
+  width: min(560px, 88%);
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+}
+.src-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.src-mark {
+  flex: none;
+  color: var(--brand);
+}
+.src-from {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.src-outcome {
+  flex: none;
+  padding: 0 8px;
+  border: 1px solid var(--bg-hover-strong);
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--warning);
+}
+.src-outcome-replied {
+  border-color: var(--success);
+  color: var(--success);
+}
+.src-asked,
+.src-chose,
+.src-note {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.src-label {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.src-body,
+.src-excerpt {
+  margin-top: 6px;
+}
+.src-excerpt {
+  padding-left: 8px;
+  border-left: 2px solid var(--bg-hover-strong);
+  color: var(--text-2);
+}
+.src-meta {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bg-hover-strong);
+  color: var(--text-3);
+  font-size: 11px;
+}
+.src-meta a {
+  color: var(--brand);
+  text-decoration: none;
 }
 
 /* The message telling a coordinator its project was started (ProjectStartedCard.tsx): the exception
@@ -18824,10 +19180,22 @@ a.wkctx-title:hover { text-decoration: underline; }
 .wt-recovery p { margin: 10px 0; color: var(--text-2); }
 .wt-recovery summary { cursor: pointer; margin: 10px 0; }
 .wt-recovery-histories { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.wt-recovery-histories > :only-child { grid-column: 1 / -1; }
+.wt-recovery-route code { font-size: 11px; }
+.wt-recovery-origin.is-local { color: var(--warning); font-weight: 600; }
 .wt-recovery-histories small { display: block; opacity: .7; margin-bottom: 8px; }
 .wt-recovery pre { white-space: pre-wrap; max-height: 400px; overflow: auto; font-size: 11px; }
 .wt-recovery-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .wt-recovery-actions button { padding: 5px 10px; border-radius: 6px; cursor: pointer; }
 .wt-recovery-actions button:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg); color: var(--text-1); font: inherit; }
 .wt-recovery-actions button:disabled { opacity: .55; cursor: default; }
+.wt-recovery-repair-status { display: flex; align-items: center; gap: 10px; width: 100%; margin: 10px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-raised); color: var(--text-1); text-align: left; cursor: pointer; font: inherit; }
+.wt-recovery-repair-status.is-running { border-color: color-mix(in srgb, var(--brand) 38%, var(--border)); background: color-mix(in srgb, var(--brand) 8%, var(--bg-raised)); }
+.wt-recovery-repair-status.is-failed { border-color: color-mix(in srgb, var(--error) 38%, var(--border)); }
+.wt-recovery-repair-status-copy { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.wt-recovery-repair-status-copy strong, .wt-recovery-repair-status-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wt-recovery-repair-status-copy small { color: var(--text-2); }
+.wt-recovery-repair-chevron { color: var(--text-2); font-size: 22px; line-height: 1; }
+.wt-recovery-repair-hint { margin: 5px 0 0 !important; font-size: 11px; }
+.wt-recovery-repair-error { color: var(--error) !important; }
 @media (max-width: 680px) { .wt-recovery-histories { grid-template-columns: 1fr; } }

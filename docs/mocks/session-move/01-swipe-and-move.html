@@ -1,0 +1,137 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>board</title>
+<link rel="stylesheet" href="board.css"><script src="icons.js"></script></head>
+<body>
+<h1>会话列表 · 左滑 Share / Move / Delete，以及 Move 面板</h1>
+<p class="lede">左滑露出三个按钮（从左到右 Share、Move、Delete，Delete 在最外侧、不能一拉到底触发）。按钮的圆形样式以「滑动按钮圆形设计」会话的方案 B 为准，这里只定按钮清单、顺序、颜色和点下去之后的流程。Move 打开一个面板：上半是当前 Workspace 里的文件夹，下半是“搬到其他 Workspace”。</p>
+
+<div class="row3">
+  <!-- ① swipe -->
+  <div class="col">
+    <div class="cap"><span class="tag new">新增</span>① 左滑一行</div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="status"><span>10:04</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="nav">
+        <div class="glass gcirc"><i data-ic="ham" data-s="22" data-c="#fff"></i></div>
+        <div class="navtitle">orbit <i data-ic="chevd" data-s="14" data-c="#98989f"></i></div>
+        <div class="spacer"></div>
+        <div class="glass gcap"><i data-ic="filter" data-s="22" data-c="#fff"></i><i data-ic="compose" data-s="22" data-c="#fff"></i></div>
+      </div>
+      <div class="search"><i data-ic="search" data-s="18" data-c="#8e8e93"></i>Search sessions</div>
+      <div class="list">
+        <div class="frow"><span class="fi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="name">Release</span><span class="cnt">4</span><span class="chev"><i data-ic="chevr" data-s="13" data-c="#6b6b70"></i></span></div>
+        <div class="frow"><span class="fi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="name">iOS polish</span><span class="cnt">7</span><span class="chev"><i data-ic="chevr" data-s="13" data-c="#6b6b70"></i></span></div>
+        <div class="sh">Today</div>
+        <div class="srow"><div class="t"><span class="title">iOS 会话列表左滑按钮</span><span class="time">2m</span></div>
+          <div class="sub"><span class="chip bl">iOS</span><span class="pv">正在梳理代码：左滑按钮在 SessionRowActions…</span></div></div>
+        <div class="swipe">
+          <div class="card"><div class="t"><span class="title">审查导入逻辑避免侵入用户身份</span></div>
+            <div class="sub"><span class="chip or">代码审查</span><span>已记住：后续默认直接合入 main…</span></div></div>
+          <div class="sbtns">
+            <div class="sbtn"><i class="b-blue"><i data-ic="sharef" data-s="22" data-c="#fff"></i></i>Share</div>
+            <div class="sbtn"><i class="b-indigo"><i data-ic="folderf" data-s="22" data-c="#fff"></i></i>Move</div>
+            <div class="sbtn"><i class="b-red"><i data-ic="trashf" data-s="22" data-c="#fff"></i></i>Delete</div>
+          </div>
+        </div>
+        <div class="srow"><div class="t"><span class="title">滑动按钮圆形设计</span><span class="time">35m</span></div>
+          <div class="sub"><span class="chip bl">iOS</span><span class="pv">收到，做 B。先摸清现有代码和约束…</span></div></div>
+        <div class="sh">Yesterday</div>
+        <div class="srow"><div class="t"><span class="title">审查工具调用报错渲染</span><span class="time">1d</span></div>
+          <div class="sub"><span class="chip or">前端问题</span><span class="chip or">代码审查</span><span class="pv">对，原生 iOS 也会使用这套改…</span></div></div>
+        <div class="srow"><div class="t"><span class="title">Wiki 审核模式文案对齐</span><span class="time">1d</span></div>
+          <div class="sub"><span class="chip pu">Wiki</span><span class="pv">三处文案已统一为 Review mode…</span></div></div>
+        <div class="srow"><div class="t"><span class="title">发布 0.1.172</span><span class="time">1d</span></div>
+          <div class="sub"><span class="chip gr">发布</span><span class="pv">TestFlight 构建已上传…</span></div></div>
+      </div>
+      <div class="home"></div>
+    </div></div>
+    <ul class="notes">
+      <li><b>Share</b>（蓝）：打开会话页右上角那个分享面板，同一个 <code>ShareSheet</code>。</li>
+      <li><b>Move</b>（靛蓝，文件夹图标）：打开右边的 Move 面板。</li>
+      <li><b>Delete</b>（红）：不变，进回收站、可撤销。</li>
+      <li>Completed 里同样三个；<b>Trash 里只有 Delete Permanently</b>（回收站的会话不能开分享，也不移动）。</li>
+      <li>长按菜单里也加上 Share… 和 Move…，VoiceOver 和不习惯左滑的人都够得着。</li>
+    </ul>
+  </div>
+
+  <!-- ② move sheet -->
+  <div class="col">
+    <div class="cap"><span class="tag new">新增</span>② 点 Move：选文件夹，或搬到别的 Workspace</div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="status"><span>10:04</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="nav">
+        <div class="glass gcirc"><i data-ic="ham" data-s="22" data-c="#fff"></i></div>
+        <div class="navtitle">orbit <i data-ic="chevd" data-s="14" data-c="#98989f"></i></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="sheet" style="top:62px">
+        <div class="grab"></div>
+        <div class="shead"><div class="sbtnl"></div><div class="st">Move</div><div class="sbtnr"><div class="pillbtn">Done</div></div></div>
+        <div class="subject">审查导入逻辑避免侵入用户身份</div>
+        <div class="gh">Folder in orbit</div>
+        <div class="group">
+          <div class="grow"><span class="gi"><i data-ic="tray" data-s="22" data-c="#8e8e93"></i></span><span class="gn">No Folder</span><span class="check"><i data-ic="check" data-s="20" data-c="#0a84ff"></i></span></div>
+          <div class="grow"><span class="gi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="gn">Release</span><span class="gc">4</span></div>
+          <div class="grow"><span class="gi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="gn">iOS polish</span><span class="gc">7</span></div>
+          <div class="grow blue"><span class="gi"><i data-ic="folderplus" data-s="22" data-c="#0a84ff"></i></span><span class="gn">New Folder…</span></div>
+        </div>
+        <div class="gh">Move to Another Workspace</div>
+        <div class="group">
+          <div class="grow"><span class="gi"><span class="avatar" style="background:#2bb3a3">G</span></span><span class="gn">wikova-develop<div class="s">Codex · wikova</div></span><i data-ic="chevr" data-s="13" data-c="#6b6b70"></i></div>
+          <div class="grow"><span class="gi"><span class="avatar" style="background:#4a4f57">X</span></span><span class="gn">Wikids AI 游戏模拟器<div class="s">Codex · mac-mini</div></span><i data-ic="chevr" data-s="13" data-c="#6b6b70"></i></div>
+          <div class="grow off"><span class="gi"><span class="avatar" style="background:#6c5ce7;opacity:.45">Q</span></span><span class="gn">wikids<div class="s">Runner offline</div></span></div>
+        </div>
+        <div class="gf">换 Workspace 会换运行环境（目录、runner、模型设置），规则见第 3 张图。会话正在运行时这一组整体置灰。</div>
+      </div>
+      <div class="home"></div>
+    </div></div>
+    <ul class="notes">
+      <li>原生 sheet（medium / large 两档），和标题里的 Workspace 切换面板一个样式。</li>
+      <li><b>上半</b>：当前 Workspace 的文件夹。点一下就移过去、面板关闭；当前所在的打勾；<b>No Folder</b> = 移出文件夹。</li>
+      <li><b>New Folder…</b>：弹系统输入框起名，建好直接把这个会话放进去。</li>
+      <li><b>下半</b>：其他 Workspace。点进去再选放在那边的哪个文件夹（第 3 张图），最后有一次确认。</li>
+    </ul>
+  </div>
+
+  <!-- ③ after -->
+  <div class="col">
+    <div class="cap"><span class="tag n">结果</span>③ 移进文件夹之后</div>
+    <div class="device"><div class="screen">
+      <div class="island"></div>
+      <div class="status"><span>10:04</span><span class="r">5G <span class="batt"></span></span></div>
+      <div class="nav">
+        <div class="glass gcirc"><i data-ic="ham" data-s="22" data-c="#fff"></i></div>
+        <div class="navtitle">orbit <i data-ic="chevd" data-s="14" data-c="#98989f"></i></div>
+        <div class="spacer"></div>
+        <div class="glass gcap"><i data-ic="filter" data-s="22" data-c="#fff"></i><i data-ic="compose" data-s="22" data-c="#fff"></i></div>
+      </div>
+      <div class="search"><i data-ic="search" data-s="18" data-c="#8e8e93"></i>Search sessions</div>
+      <div class="glass" style="position:absolute;z-index:30;top:166px;left:50%;transform:translateX(-50%);height:40px;padding:0 18px;font-size:15px;font-weight:600;background:rgba(72,72,76,.92)">Moved to “iOS polish”</div>
+      <div class="list" style="top:214px">
+        <div class="frow"><span class="fi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="name">Release</span><span class="cnt">4</span><span class="chev"><i data-ic="chevr" data-s="13" data-c="#6b6b70"></i></span></div>
+        <div class="frow" style="background:rgba(109,124,255,.16)"><span class="fi"><i data-ic="folder" data-s="22" data-c="#8c95ff"></i></span><span class="name">iOS polish</span><span class="cnt" style="color:#fff;font-weight:650">8</span><span class="chev"><i data-ic="chevr" data-s="13" data-c="#6b6b70"></i></span></div>
+        <div class="sh">Today</div>
+        <div class="srow"><div class="t"><span class="title">iOS 会话列表左滑按钮</span><span class="time">2m</span></div>
+          <div class="sub"><span class="chip bl">iOS</span><span class="pv">正在梳理代码：左滑按钮在 SessionRowActions…</span></div></div>
+        <div class="srow"><div class="t"><span class="title">滑动按钮圆形设计</span><span class="time">35m</span></div>
+          <div class="sub"><span class="chip bl">iOS</span><span class="pv">收到，做 B。先摸清现有代码和约束…</span></div></div>
+        <div class="sh">Yesterday</div>
+        <div class="srow"><div class="t"><span class="title">审查工具调用报错渲染</span><span class="time">1d</span></div>
+          <div class="sub"><span class="chip or">前端问题</span><span class="chip or">代码审查</span><span class="pv">对，原生 iOS 也会使用这套改…</span></div></div>
+        <div class="srow"><div class="t"><span class="title">Wiki 审核模式文案对齐</span><span class="time">1d</span></div>
+          <div class="sub"><span class="chip pu">Wiki</span><span class="pv">三处文案已统一为 Review mode…</span></div></div>
+        <div class="srow"><div class="t"><span class="title">发布 0.1.172</span><span class="time">1d</span></div>
+          <div class="sub"><span class="chip gr">发布</span><span class="pv">TestFlight 构建已上传…</span></div></div>
+      </div>
+      <div class="home"></div>
+    </div></div>
+    <ul class="notes">
+      <li>这一行离开时间分组，进了文件夹；文件夹行的数字 +1，并短暂高亮。</li>
+      <li>顶部提示 <b>Moved to “iOS polish”</b>，用的是现有的 toast。想放回去就再 Move 一次选 No Folder。</li>
+      <li>点文件夹行进入文件夹页，见第 2 张图（方案 B）。</li>
+    </ul>
+  </div>
+</div>
+</body></html>

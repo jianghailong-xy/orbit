@@ -79,6 +79,9 @@ struct MarkdownView: View, Equatable {
                         .modifier(BubbleProseInset(active: inset))
                 case .card(let ref):
                     OrbitLinkCardView(ref: ref, inBubble: inBubble)
+                case .file(let ref):
+                    MarkdownFileLinkView(ref: ref)
+                        .modifier(BubbleProseInset(active: inset))
                 }
             }
         }
@@ -91,6 +94,9 @@ struct MarkdownView: View, Equatable {
                         .modifier(BubbleProseInset(active: inset))
                 case .card(let ref):
                     OrbitLinkCardView(ref: ref, inBubble: inBubble)
+                case .file(let ref):
+                    MarkdownFileLinkView(ref: ref)
+                        .modifier(BubbleProseInset(active: inset))
                 }
             }
         }
@@ -109,20 +115,45 @@ struct MarkdownView: View, Equatable {
     }
 }
 
-/// A message's blocks, with every Orbit link that stands for itself replaced by the card drawn in
-/// its place (`OrbitLinkPlacement`). Shared by the two things that have to agree about it: this
-/// renderer, and the person's bubble, which stretches to the row only when a card is in it.
-@MainActor func orbitRenderBlocks(_ source: String, cards: OrbitLinkCards?) -> [OrbitRenderBlock] {
-    let blocks = cachedMarkdownBlocks(source)
-    guard let cards else { return blocks.map { .markdown($0) } }
-    return OrbitLinkPlacement.place(blocks, host: cards.host)
+/// A Markdown file reference is kept in the app layer: OrbitKit knows how to parse the URL, while
+/// the SwiftUI transcript decides whether to draw a file card, an image, or ordinary prose around it.
+struct MarkdownFileRef: Equatable {
+    let href: String
+    let label: String
 }
 
-extension Array where Element == OrbitRenderBlock {
+enum MarkdownRenderBlock: Equatable {
+    case markdown(MarkdownBlock)
+    case card(OrbitLinkRef)
+    case file(MarkdownFileRef)
+}
+
+/// A message's blocks, with every Orbit link that stands for itself replaced by the card drawn in
+/// its place (`OrbitLinkPlacement`), and source-file links replaced by a file card. Shared by the two
+/// things that have to agree about it: this renderer, and the person's bubble, which stretches to
+/// the row when it contains an object card or a file card.
+@MainActor func orbitRenderBlocks(_ source: String, cards: OrbitLinkCards?) -> [MarkdownRenderBlock] {
+    let blocks = cachedMarkdownBlocks(source)
+    let placed: [OrbitRenderBlock]
+    if let cards {
+        placed = OrbitLinkPlacement.place(blocks, host: cards.host)
+    } else {
+        placed = blocks.map { .markdown($0) }
+    }
+    return placed.flatMap { rendered -> [MarkdownRenderBlock] in
+        switch rendered {
+        case .card(let ref): return [.card(ref)]
+        case .markdown(let block): return splitFileLinks(in: block)
+        }
+    }
+}
+
+extension Array where Element == MarkdownRenderBlock {
     /// Whether this message is showing any card at all — which is what stretches the bubble it is in.
     var hasOrbitCard: Bool {
         contains { block in
             if case .card = block { return true }
+            if case .file = block { return true }
             return false
         }
     }
@@ -136,6 +167,64 @@ extension Array where Element == OrbitRenderBlock {
 
     /// What a re-render keys on: which links the message shows, not the words around them.
     var orbitCardKeys: [String] { orbitCards.map(\.target.key) }
+}
+
+/// Split a paragraph around Markdown links that name files. Keeping the surrounding prose as
+/// paragraphs preserves its existing Markdown styling, while each file gets the same tappable card
+/// treatment as a user attachment. Image syntax is parsed as `.image` by `parseMarkdownBlocks` and
+/// never reaches this function, so image previews keep their existing full-size treatment.
+private func splitFileLinks(in block: MarkdownBlock) -> [MarkdownRenderBlock] {
+    guard case .paragraph(let text) = block else { return [.markdown(block)] }
+    let matches = markdownFileLinkMatches(in: text)
+    guard !matches.isEmpty else { return [.markdown(block)] }
+
+    var result: [MarkdownRenderBlock] = []
+    var cursor = text.startIndex
+    for match in matches {
+        let before = String(text[cursor..<match.range.lowerBound])
+        appendFileProse(&result, before)
+        result.append(.file(MarkdownFileRef(href: match.href, label: match.label)))
+        cursor = match.range.upperBound
+    }
+    appendFileProse(&result, String(text[cursor...]))
+    return result
+}
+
+private struct MarkdownFileLinkMatch {
+    let range: Range<String.Index>
+    let href: String
+    let label: String
+}
+
+private func markdownFileLinkMatches(in text: String) -> [MarkdownFileLinkMatch] {
+    // Agent source references use simple labels and paths. This deliberately avoids trying to be a
+    // second Markdown parser: fenced code and image blocks are already handled before this pass.
+    let pattern = #"\[([^\]\n]+)\]\(([^)\s]+)(?:\s+[\"'][^)]*)?\)"#
+    guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+    let nsRange = NSRange(text.startIndex..<text.endIndex, in: text)
+    return regex.matches(in: text, range: nsRange).compactMap { match in
+        guard match.numberOfRanges == 3,
+              let whole = Range(match.range(at: 0), in: text),
+              let labelRange = Range(match.range(at: 1), in: text),
+              let hrefRange = Range(match.range(at: 2), in: text),
+              let url = URL(string: String(text[hrefRange])),
+              AttachmentLink.isFileReference(url) else { return nil }
+        // `![...](...)` is an image block in the normal parser. Keep this guard for malformed or
+        // inline image syntax that the block parser leaves in a paragraph.
+        if whole.lowerBound > text.startIndex,
+           text[text.index(before: whole.lowerBound)] == "!" { return nil }
+        return MarkdownFileLinkMatch(range: whole,
+                                     href: String(text[hrefRange]),
+                                     label: String(text[labelRange]).trimmingCharacters(in: .whitespaces))
+    }
+}
+
+private func appendFileProse(_ result: inout [MarkdownRenderBlock], _ text: String) {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, !trimmed.allSatisfy({ $0.isWhitespace || "，。；：、,.;:!?!?".contains($0) }) else {
+        return
+    }
+    result.append(.markdown(.paragraph(text: trimmed)))
 }
 
 /// The inset the words keep inside the person's bubble. The bubble is padded 5pt for the card's sake
@@ -154,19 +243,20 @@ private struct BubbleProseInset: ViewModifier {
 #if os(iOS)
 /// A render unit for the iOS transcript: either a `.prose` run of flowable blocks merged into one
 /// selectable text view, or a standalone `.block` (code/table/quote/image/rule) that renders on its
-/// own — or a `.card`, an Orbit link that became the object it named.
+/// own — or a `.card`/`.file`, an Orbit object or file link that became the thing it named.
 private enum ProseGroup {
     case prose([ProseSegment])
     case block(MarkdownBlock)
     case card(OrbitLinkRef)
+    case file(MarkdownFileRef)
 }
 
 /// Fold a block list into render groups: maximal runs of flowable prose (headings, paragraphs,
 /// lists) collapse into one `.prose` — a single `SelectableText`, hence one selection domain — while
-/// code/table/quote/image/rule each stay a standalone `.block`, and a card an island of its own.
+/// code/table/quote/image/rule each stay a standalone `.block`, and a card or file an island of its own.
 /// Inter-block spacing (8pt, and 6pt between list items) is carried on each segment's `spacingBefore`
 /// so the merged view reproduces the gaps the old block `VStack` drew. See `MarkdownView.body`.
-private func proseGroups(_ blocks: [OrbitRenderBlock], base: ProseRole) -> [ProseGroup] {
+private func proseGroups(_ blocks: [MarkdownRenderBlock], base: ProseRole) -> [ProseGroup] {
     var groups: [ProseGroup] = []
     var pending: [ProseSegment] = []
     func flush() {
@@ -178,6 +268,11 @@ private func proseGroups(_ blocks: [OrbitRenderBlock], base: ProseRole) -> [Pros
         if case .card(let ref) = rendered {
             flush()
             groups.append(.card(ref))
+            continue
+        }
+        if case .file(let ref) = rendered {
+            flush()
+            groups.append(.file(ref))
             continue
         }
         guard case .markdown(let block) = rendered else { continue }
@@ -679,6 +774,138 @@ private struct MarkdownImageView: View {
     }
 }
 
+/// A source or document link written in a paragraph. The web transcript turns the same link into
+/// a `chat-file` chip; native keeps that affordance but adds a small in-app text preview so a reader
+/// can inspect a `.tsx`, `.ts`, `.sql`, or Markdown file without leaving the conversation. Image
+/// links delegate to `MarkdownImageView`, which already fetches and opens the session-wide viewer.
+private struct MarkdownFileLinkView: View {
+    let ref: MarkdownFileRef
+
+    @Environment(AttachmentImageStore.self) private var store
+    @Environment(AppModel.self) private var app: AppModel?
+    @Environment(\.sessionImagePreview) private var sessionPreview
+    @State private var fetching = false
+    @State private var previewText: String?
+    @State private var previewName = ""
+
+    private var attachmentID: String? { AttachmentLink.attachmentID(source: ref.href) }
+    private var artifactPath: String? {
+        guard let sessionID = sessionPreview?.sessionID,
+              let url = URL(string: ref.href) else { return nil }
+        return AttachmentLink.runnerArtifactPath(url, sessionID: sessionID)
+    }
+    private var fileName: String {
+        if attachmentID != nil { return ref.label.isEmpty ? "file" : ref.label }
+        return AttachmentLink.fileName(inPath: ref.href)
+    }
+    private var imageLike: Bool {
+        AttachmentLink.looksLikeImage(path: ref.href) || AttachmentLink.looksLikeImage(path: ref.label)
+    }
+    private var canFetch: Bool { attachmentID != nil || artifactPath != nil }
+
+    var body: some View {
+        Group {
+            if imageLike {
+                MarkdownImageView(source: ref.href, alt: ref.label.isEmpty ? fileName : ref.label)
+            } else if canFetch {
+                Button { fetch() } label: { card }
+                    .buttonStyle(.plain)
+                    .disabled(fetching)
+                    .accessibilityLabel(fileName)
+                    .accessibilityHint("Preview or open this file")
+            } else {
+                card
+                    .accessibilityLabel(fileName)
+                    .accessibilityHint("This file is unavailable from the current session")
+            }
+        }
+        .monospaceOutputViewer(
+            isPresented: Binding(
+                get: { previewText != nil },
+                set: { if !$0 { previewText = nil } }
+            ),
+            text: previewText ?? "",
+            lineCount: previewText?.split(whereSeparator: { $0.isNewline }).count ?? 0,
+            title: previewName.isEmpty ? fileName : previewName
+        )
+    }
+
+    private var card: some View {
+        HStack(spacing: 8) {
+            Group {
+                if fetching {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: icon)
+                }
+            }
+            .foregroundStyle(canFetch ? Color.accentColor : Color.secondary)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(ref.label.isEmpty ? fileName : ref.label)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if canFetch {
+                    Text("Preview file")
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Spacer(minLength: 8)
+            if canFetch && !fetching {
+                Image(systemName: "chevron.right")
+                    .font(.orbitMeta.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.orbitLabel)
+        .padding(.vertical, 7)
+        .padding(.horizontal, 10)
+        .frame(maxWidth: 320, alignment: .leading)
+        .background(Color.editorSurface, in: RoundedRectangle(cornerRadius: 9))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9)
+                .strokeBorder(canFetch ? Color.accentColor.opacity(0.22) : Color.primary.opacity(0.13), lineWidth: 1)
+        }
+    }
+
+    private var icon: String {
+        switch AttachmentLink.fileName(inPath: fileName).split(separator: ".").last?.lowercased() {
+        case "sql", "json", "md", "txt", "yaml", "yml": return "doc.text"
+        case "ts", "tsx", "js", "jsx", "swift", "go", "py", "rs", "java", "kt": return "chevron.left.forwardslash.chevron.right"
+        default: return "doc"
+        }
+    }
+
+    private func fetch() {
+        guard !fetching else { return }
+        fetching = true
+        let id = attachmentID
+        let path = artifactPath
+        let sessionID = sessionPreview?.sessionID
+        Task {
+            defer { fetching = false }
+            let data: Data?
+            if let id {
+                data = await store.data(for: id)
+            } else if let path, let sessionID {
+                data = await store.artifactData(sessionID: sessionID, path: path)
+            } else {
+                data = nil
+            }
+            guard let data, !data.isEmpty else {
+                app?.showToast("Couldn't open that file", detail: fileName, tone: .error)
+                return
+            }
+            if let text = String(data: data, encoding: .utf8) {
+                previewName = fileName
+                previewText = String(text.prefix(20_000))
+            } else if !FileHandoff.deliver(data, named: fileName) {
+                app?.showToast("Couldn't open that file", detail: fileName, tone: .error)
+            }
+        }
+    }
+}
+
 /// Inline-only Markdown (bold/italic/code/links/strikethrough), newlines preserved. Used for the
 /// text inside a single block; block structure is handled by `MarkdownBlockView`.
 func inlineMarkdown(_ s: String, codeBackground: Bool = true) -> Text {
@@ -703,13 +930,12 @@ func inlineMarkdown(_ s: String, codeBackground: Bool = true) -> Text {
             attributed[range].backgroundColor = Color.secondary.opacity(0.08)
         }
     }
-    // A link naming a file on the runner's disk can't be opened from a client, so don't draw one —
-    // the label reads as prose instead of a tinted link whose click does nothing. (The iOS transcript
-    // renders those through SelectableText, which draws web's paperclip chip; a `Text` — a macOS
-    // paragraph, or a table cell on either platform — can't hold one.) The same goes for a reference
-    // this app has no screen for (`ReferenceLink.isInert`). Ranges first, as above.
+    // A file reference in a block that cannot host a SwiftUI file card (a table cell or heading) is
+    // still drawn as muted prose instead of a tinted link whose click could only do nothing. The
+    // iOS selectable renderer adds the matching paperclip glyph. The same goes for a reference this
+    // app has no screen for (`ReferenceLink.isInert`). Ranges first, as above.
     let deadRanges = attributed.runs
-        .filter { $0.link.map { AttachmentLink.isRunnerLocalPath($0) || ReferenceLink.isInert($0) } == true }
+        .filter { $0.link.map { AttachmentLink.isFileReference($0) || ReferenceLink.isInert($0) } == true }
         .map(\.range)
     for range in deadRanges {
         attributed[range].link = nil

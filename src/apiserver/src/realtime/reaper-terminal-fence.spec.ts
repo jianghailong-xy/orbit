@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ReaperService } from './reaper.service';
+import { noSessionRequests } from '../test-support/prisma-transaction-double';
 
 const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 const RUNNER_ID = '22222222-2222-4222-8222-222222222222';
@@ -19,6 +20,7 @@ test('reaper terminalization retires the generation then records leased CURRENT_
       order.push('retire');
       return 1;
     },
+    sessionRequest: noSessionRequests(),
     conversationTurn: {
       findMany: async () => [{
         id: 'current-work-1', targetTurnId: 'target-1', status: 'IN_FLIGHT',

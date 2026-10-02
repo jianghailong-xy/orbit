@@ -74,16 +74,32 @@ public enum LoadFailureLogic {
     /// Where a cold launch lands. `orderedAgentIDs` is the sidebar order and `lastAgentID` the
     /// workspace remembered from the previous run. The selection is only claimed while it is still
     /// the launch default: Workspaces, with no workspace or session picked.
+    ///
+    /// `provisionalAgentID` is the workspace the launch snapshot landed on before this fetch
+    /// answered (`LaunchSnapshot.landingAgentID`). While it is still the one selected, nobody has
+    /// chosen anything yet, so this fetch decides afresh — a workspace deleted since the snapshot
+    /// was written isn't kept.
     public static func defaultLanding(agents: ListLoadState,
                                       orderedAgentIDs: [String],
                                       lastAgentID: String?,
                                       section: AppSection,
                                       selectedAgentID: String?,
-                                      selectedSessionID: String?) -> DefaultLanding {
+                                      selectedSessionID: String?,
+                                      provisionalAgentID: String? = nil) -> DefaultLanding {
         // A failed fetch leaves the empty starting list in hand; "no workspaces" read off that is
         // what sent returning users to Runners onboarding.
         guard agents.hasLoaded, !agents.lastLoadFailed else { return .undecided }
-        guard section == .agents, selectedAgentID == nil, selectedSessionID == nil else { return .keepCurrent }
+        let chosenAgentID = selectedAgentID == provisionalAgentID ? nil : selectedAgentID
+        guard section == .agents, chosenAgentID == nil, selectedSessionID == nil else { return .keepCurrent }
+        if let id = landingAgent(orderedAgentIDs: orderedAgentIDs, lastAgentID: lastAgentID) {
+            return .agent(id)
+        }
+        return .runners
+    }
+
+    /// The remembered workspace as `orderedAgentIDs` spells it, else the first of them; nil when
+    /// there are none.
+    static func landingAgent(orderedAgentIDs: [String], lastAgentID: String?) -> String? {
         // Compared through `PublicID.storageKey` because the two sides come from different eras:
         // `lastAgentID` was written by whichever build ran before this one, while the list spells ids
         // however the server does today (docs/public-id-migration-design.md). A raw `==` would
@@ -92,9 +108,8 @@ public enum LoadFailureLogic {
         // ids as the server spells them today.
         if let last = lastAgentID.map(PublicID.storageKey),
            let match = orderedAgentIDs.first(where: { PublicID.storageKey($0) == last }) {
-            return .agent(match)
+            return match
         }
-        if let first = orderedAgentIDs.first { return .agent(first) }
-        return .runners
+        return orderedAgentIDs.first
     }
 }

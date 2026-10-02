@@ -488,6 +488,7 @@ func (rec *chatgptRecorder) exchanges(method, path string) []chatgptRecordedExch
 }
 
 func TestRealCodexOnAChatGPTLogin(t *testing.T) {
+	t.Parallel()
 	exe, err := exec.LookPath("codex")
 	if err != nil {
 		t.Skip("no codex on PATH; this recording needs a real app-server")

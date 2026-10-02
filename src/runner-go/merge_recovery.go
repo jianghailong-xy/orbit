@@ -37,12 +37,16 @@ type MergeRecovery struct {
 	AddsMergeCommit  bool                  `json:"addsMergeCommit,omitempty"`
 	CheckedAt        string                `json:"checkedAt,omitempty"`
 	Check            *MergeRecoveryCheck   `json:"check,omitempty"`
+	// Exactly what the push adds to origin/<target>, newest first. Left out past the commit cap
+	// rather than failing the preview: clients then list the local-only commits alone.
+	PushCommits []MergeRecoveryCommit `json:"pushCommits,omitempty"`
 }
 type MergeRecoveryCommit struct {
 	Sha     string `json:"sha"`
 	Subject string `json:"subject"`
 	Author  string `json:"author"`
 	Date    string `json:"date"`
+	Merge   bool   `json:"merge,omitempty"`
 }
 type MergeRecoveryCheck struct {
 	Status         string `json:"status"`
@@ -61,7 +65,7 @@ func recoveryError(r *MergeRecovery, code, message string) mergeOutcome {
 	// Leave room for later outcome codes, and retain the candidate/location without a partial diff.
 	if payload, _ := json.Marshal(r); len(payload) > 1_180_000 {
 		r.Code, r.Patch = "PREVIEW_TOO_LARGE", ""
-		r.LocalCommits, r.RemoteCommits, r.Conflicts, r.Check = nil, nil, nil, nil
+		r.LocalCommits, r.RemoteCommits, r.PushCommits, r.Conflicts, r.Check = nil, nil, nil, nil, nil
 		message = "preview details are too large to review inline; inspect the saved histories or repair worktree"
 	}
 	return mergeOutcome{Status: "error", SourceSha: r.SourceSha, TargetBranch: r.TargetBranch,
@@ -162,7 +166,9 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 		if ff == "only" && r.AddsMergeCommit {
 			return recoveryError(r, "LINEAR_HISTORY_REQUIRED", "merge.ff=only disallows this target-history merge; prepare a separate PR candidate")
 		}
-		if _, err := git(r.RepairWorktree, "merge", "--ff", "--no-edit", r.RemoteSha); err != nil {
+		// Named for what it joins: this commit is pushed into the target's history, and git's
+		// default subject names a raw SHA and our private repair branch.
+		if _, err := git(r.RepairWorktree, "merge", "--ff", "--no-edit", "-m", "Merge origin/"+target+" into "+target, r.RemoteSha); err != nil {
 			return recoveryConflict(r, "TARGET_SYNC", err)
 		}
 	}
@@ -192,6 +198,7 @@ func recoverMerge(req MergeCommand) mergeOutcome {
 		return recoveryError(r, "PREVIEW_FAILED", gitStderr(err))
 	}
 	r.CandidateTreeSha, _ = git(root, "rev-parse", r.CandidateSha+"^{tree}")
+	r.PushCommits, _ = recoveryCommits(root, r.RemoteSha, r.CandidateSha)
 	r.Patch, err = git(root, "diff", "--no-ext-diff", "--binary", r.RemoteSha, r.CandidateSha, "--")
 	if err != nil {
 		return recoveryError(r, "PREVIEW_FAILED", gitStderr(err))
@@ -223,7 +230,7 @@ func recoveryRemoteTip(root, target string) (string, error) {
 }
 
 func recoveryCommits(root, base, tip string) ([]MergeRecoveryCommit, error) {
-	out, err := git(root, "log", "--format=%H%x1f%s%x1f%an%x1f%aI", base+".."+tip, "--")
+	out, err := git(root, "log", "--format=%H%x1f%P%x1f%s%x1f%an%x1f%aI", base+".."+tip, "--")
 	if err != nil {
 		return nil, err
 	}
@@ -234,10 +241,11 @@ func recoveryCommits(root, base, tip string) ([]MergeRecoveryCommit, error) {
 	commits := make([]MergeRecoveryCommit, 0, len(lines))
 	for _, line := range lines {
 		fields := strings.Split(line, "\x1f")
-		if len(fields) != 4 {
+		if len(fields) != 5 {
 			return nil, fmt.Errorf("could not read commit details")
 		}
-		commits = append(commits, MergeRecoveryCommit{fields[0], fields[1], fields[2], fields[3]})
+		commits = append(commits, MergeRecoveryCommit{Sha: fields[0], Subject: fields[2], Author: fields[3], Date: fields[4],
+			Merge: len(strings.Fields(fields[1])) > 1})
 	}
 	return commits, nil
 }

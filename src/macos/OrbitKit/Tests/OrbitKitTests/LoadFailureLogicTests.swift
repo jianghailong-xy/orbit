@@ -88,10 +88,10 @@ final class LoadFailureLogicTests: XCTestCase {
     /// Defaults to the launch default: Workspaces, nothing picked yet.
     private func landing(_ agents: ListLoadState, ids: [String], last: String? = nil,
                          section: AppSection = .agents, agentID: String? = nil,
-                         sessionID: String? = nil) -> DefaultLanding {
+                         sessionID: String? = nil, provisional: String? = nil) -> DefaultLanding {
         LoadFailureLogic.defaultLanding(agents: agents, orderedAgentIDs: ids, lastAgentID: last,
                                         section: section, selectedAgentID: agentID,
-                                        selectedSessionID: sessionID)
+                                        selectedSessionID: sessionID, provisionalAgentID: provisional)
     }
 
     func testFailedWorkspaceFetchDecidesNothingAndLeavesTheLandingOpen() {
@@ -160,5 +160,37 @@ final class LoadFailureLogicTests: XCTestCase {
         agents.succeed()
         XCTAssertEqual(landing(agents, ids: ["a", "b"], last: "b"), .agent("b"))
         XCTAssertEqual(presentation(agents, isEmpty: false), .content(showsError: false))
+    }
+
+    // MARK: A landing the launch snapshot made first
+
+    func testTheFetchDecidesAProvisionalLandingAgain() {
+        let loaded = history(.begin, .succeed)
+        // Still listed: the fetch lands where the snapshot did.
+        XCTAssertEqual(landing(loaded, ids: ["a", "b"], last: "b", agentID: "b", provisional: "b"),
+                       .agent("b"))
+        // Deleted since the snapshot was written: the first workspace, not a pane with nothing in it.
+        XCTAssertEqual(landing(loaded, ids: ["a", "c"], last: "b", agentID: "b", provisional: "b"),
+                       .agent("a"))
+        // No workspaces at all any more: Runners onboarding.
+        XCTAssertEqual(landing(loaded, ids: [], last: "b", agentID: "b", provisional: "b"), .runners)
+    }
+
+    func testAChoiceMadeOverAProvisionalLandingIsKept() {
+        let loaded = history(.begin, .succeed)
+        // Another workspace picked before the fetch answered (picking one is what `last` remembers).
+        XCTAssertEqual(landing(loaded, ids: ["a", "b"], last: "a", agentID: "a", provisional: "b"),
+                       .keepCurrent)
+        // A session opened in it, or another section.
+        XCTAssertEqual(landing(loaded, ids: ["a"], agentID: "b", sessionID: "s1", provisional: "b"),
+                       .keepCurrent)
+        XCTAssertEqual(landing(loaded, ids: ["a"], section: .tasks, agentID: "b", provisional: "b"),
+                       .keepCurrent)
+    }
+
+    func testAProvisionalLandingWaitsOutAFailedFetch() {
+        // Offline with a snapshot: it stays on screen, and the landing stays open for the reconnect.
+        XCTAssertEqual(landing(history(.begin, .fail), ids: [], last: "b", agentID: "b", provisional: "b"),
+                       .undecided)
     }
 }

@@ -1,6 +1,9 @@
-import { ProjectStatus } from '@prisma/client';
+import { Logger } from '@nestjs/common';
+import { Prisma, ProjectStatus } from '@prisma/client';
+import type { ProjectDoneBy } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
+import type { SessionsService } from '../sessions/sessions.service';
 import {
   criteriaFromDefinitions,
   standardSetConfirmationStanding,
@@ -18,14 +21,26 @@ import {
   type CriterionIndependenceRemedy,
 } from './project-criterion-independence';
 import {
-  readCriterionLanding,
+  criterionLanding,
+  readLandingBranches,
   type CriterionLanding,
   type CriterionLandingAnswer,
+  type LandingBranches,
 } from './project-criterion-landing';
+import {
+  CRITERION_LANDING_REASONS,
+  criterionLandingReason,
+  readCriterionLandingReasonFacts,
+  readInFlightLandingJobs,
+  type CriterionLandingReason,
+  type InFlightLandingJob,
+  type LandingReasonServingTask,
+} from './criterion-landing-reason';
 import {
   readCriterionSatisfaction,
   type CriterionSatisfaction,
 } from './project-criterion-satisfaction';
+import { tellCoordinatorProjectReopened, type ProjectReopenReason } from './project-started';
 
 /**
  * `project.status = 'DONE'` as a PROJECTION of two committed facts, rather than a column somebody
@@ -94,6 +109,11 @@ import {
  * in `coordinator-authority.ts`: what the owner writes is the CONFIRMATION, and DONE is the
  * projection of it onto work that has landed. "No principal writes it" becomes true of the server
  * rather than of an intention.
+ *
+ * One principal does, for the one case the facts cannot settle: the account owner, in person, on
+ * `POST /projects/:id/done` (`ProjectAcceptanceService.recordProjectDone`, migration 0345). That
+ * record is a decision rather than a reading, and `storeDerivedProjectStatus` says below what does
+ * and does not take it away.
  */
 
 /** Why the projection is withholding DONE. Empty exactly when it is not. */
@@ -129,6 +149,29 @@ export interface DerivedDoneCriterion {
    *  which is what makes a withheld criterion something a card can render rather than something
    *  quietly missing from a total. */
   remedy: CriterionIndependenceRemedy | null;
+  /** Why its work is not on the upstream by a receipt of its own (`criterion-landing-reason.ts`):
+   *  set on every criterion that is not LANDED, and on a LANDED one that had nothing to land. Null
+   *  exactly when it is on main by work of its own. A card groups by this and decides nothing. */
+  landingReason: CriterionLandingReason | null;
+}
+
+/**
+ * Every number a card prints about this project's criteria, counted once, here, from the same
+ * answers `criteria` carries — so "1 criterion has no merge receipt" and "0 with no merge receipt"
+ * can no longer sit on one card (2026-10-01). `onMain` and `byReason` partition the criteria:
+ * they add up to `criteria`.
+ */
+export interface DerivedDoneCounts {
+  /** The stated criteria. */
+  criteria: number;
+  /** Satisfied by the work filed under them. */
+  met: number;
+  /** LANDED, however: on main by work of their own, or with nothing to land. */
+  landed: number;
+  /** LANDED with work of their own on the upstream — `landingReason` null. */
+  onMain: number;
+  /** Every other criterion, by its `landingReason`. */
+  byReason: Record<CriterionLandingReason, number>;
 }
 
 /** The projection: the status these facts project, and — when it is not DONE — what is missing. */
@@ -138,6 +181,7 @@ export interface DerivedProjectDone {
   withheld: DerivedDoneWithheld[];
   criteria: DerivedDoneCriterionAnswer[];
   confirmation: StandardSetConfirmationState;
+  counts: DerivedDoneCounts;
 }
 
 /**
@@ -206,6 +250,26 @@ export function deriveProjectDone(
     withheld,
     criteria: answers,
     confirmation,
+    counts: derivedDoneCounts(answers),
+  };
+}
+
+/** The counts, over the answers they describe and nothing else. */
+export function derivedDoneCounts(criteria: readonly DerivedDoneCriterion[]): DerivedDoneCounts {
+  const byReason = Object.fromEntries(
+    CRITERION_LANDING_REASONS.map((reason) => [reason, 0]),
+  ) as Record<CriterionLandingReason, number>;
+  let onMain = 0;
+  for (const criterion of criteria) {
+    if (criterion.landingReason === null) onMain += 1;
+    else byReason[criterion.landingReason] += 1;
+  }
+  return {
+    criteria: criteria.length,
+    met: criteria.filter((criterion) => criterion.satisfied).length,
+    landed: criteria.filter((criterion) => criterion.landing === 'LANDED').length,
+    onMain,
+    byReason,
   };
 }
 
@@ -219,7 +283,19 @@ type DerivationClient = Pick<
   | 'projectCodebase'
   | 'projectCriteriaAuthorship'
   | 'projectStandardSetConfirmation'
+  // A task serving a criterion that was reopened after the owner recorded the project done.
+  | 'task'
+  // The landings and merges into the upstream in flight, which a criterion's landing reason reads.
+  | 'projectIntegrationJob'
 >;
+
+export interface StoreDerivedProjectStatusOptions {
+  /** Where the coordinator is told why the owner's DONE was reopened. An edge without one — the
+   *  merge-receipt writer, a hand-built fixture — still reopens the record, and tells nobody. */
+  sessions?: SessionsService;
+}
+
+const log = new Logger('ProjectDoneDerived');
 
 /**
  * Read both inputs and project the status, without writing anything.
@@ -250,6 +326,10 @@ export interface DerivedProjectDoneReading {
   derived: DerivedProjectDone;
   standing: StandardSetConfirmationStanding;
   satisfaction: CriterionSatisfaction[];
+  /** The landings and merges into the upstream queued or running when this was read — the input
+   *  an IN_FLIGHT reason was decided by, and what the closing guardrail asks before telling
+   *  anybody the project looks finished (`project-looks-finished.ts`). */
+  inFlight: InFlightLandingJob[];
 }
 
 export async function readDerivedProjectDoneReading(
@@ -257,7 +337,15 @@ export async function readDerivedProjectDoneReading(
   ownerId: string,
   projectId: string,
 ): Promise<DerivedProjectDoneReading> {
-  const [definitions, satisfaction, landing, independence, confirmation] = await Promise.all([
+  const [
+    definitions,
+    satisfaction,
+    landingFacts,
+    branches,
+    inFlight,
+    independence,
+    confirmation,
+  ] = await Promise.all([
     prisma.projectAcceptanceCriterionDefinition.findMany({
       where: { projectId, project: { ownerId } },
       orderBy: { ordinal: 'asc' },
@@ -272,7 +360,11 @@ export async function readDerivedProjectDoneReading(
       },
     }),
     readCriterionSatisfaction(prisma, ownerId, projectId),
-    readCriterionLanding(prisma, ownerId, projectId),
+    // The landing lane's facts with what its reasons need beside them, and the branches and the
+    // in-flight jobs both are read against.
+    readCriterionLandingReasonFacts(prisma, ownerId, projectId),
+    readLandingBranches(prisma, projectId),
+    readInFlightLandingJobs(prisma, projectId),
     readCriterionIndependence(prisma, ownerId, projectId),
     latestConfirmation(prisma, projectId),
   ]);
@@ -281,11 +373,40 @@ export async function readDerivedProjectDoneReading(
     standardSetVersion(criteriaFromDefinitions(definitions)),
     confirmation,
   );
+  const landing = criterionLandingWithReasons(landingFacts, branches, inFlight);
   return {
     derived: derivedDoneFromLanes(satisfaction, landing, independence, standing.state),
     standing,
     satisfaction,
+    inFlight,
   };
+}
+
+/** One criterion's landing answer with its reason beside it — the landing lane as the projection
+ *  reads it. */
+export interface CriterionLandingWithReason extends CriterionLandingAnswer {
+  landingReason: CriterionLandingReason | null;
+}
+
+/**
+ * The landing lane and each criterion's reason, folded from one read of the facts: the landing
+ * from `criterionLanding`, the reason from `criterionLandingReason` given that same landing, so the
+ * two cannot describe different work.
+ */
+export function criterionLandingWithReasons(
+  facts: ReadonlyArray<{ id: string; servingTasks: ReadonlyArray<LandingReasonServingTask> }>,
+  branches: LandingBranches,
+  inFlight: readonly InFlightLandingJob[],
+): CriterionLandingWithReason[] {
+  const serving = new Map(facts.map((definition) => [definition.id, definition.servingTasks]));
+  return criterionLanding(facts, branches).map((answer) => ({
+    ...answer,
+    landingReason: criterionLandingReason(
+      { landing: answer.landing, servingTasks: serving.get(answer.definitionId) ?? [] },
+      branches,
+      inFlight,
+    ),
+  }));
 }
 
 /**
@@ -293,8 +414,8 @@ export async function readDerivedProjectDoneReading(
  *
  * Split out of `readDerivedProjectDone` so a caller holding the lanes ALREADY can project without
  * reading them a second time: `ProjectsService.get` reads all three for the criteria it serves
- * (`readCriterionSatisfaction`, `readCriterionLanding`, `readCriterionIndependence`) and needs one
- * query more — the confirmation — to answer this. There is one fold, here, so a project's detail
+ * (`readCriterionSatisfaction`, the landing lane with its reasons, `readCriterionIndependence`) and
+ * needs one query more — the confirmation — to answer this. There is one fold, here, so a project's detail
  * document and the column written from it cannot disagree.
  *
  * `satisfaction` is the spine because it is the lane that is one row per criterion by
@@ -303,24 +424,29 @@ export async function readDerivedProjectDoneReading(
  */
 export function derivedDoneFromLanes(
   satisfaction: readonly CriterionSatisfaction[],
-  landing: readonly CriterionLandingAnswer[],
+  landing: readonly CriterionLandingWithReason[],
   independence: readonly CriterionIndependenceAnswer[],
   confirmation: StandardSetConfirmationState,
 ): DerivedProjectDone {
-  const landed = new Map(landing.map((row) => [row.definitionId, row.landing]));
+  const landed = new Map(landing.map((row) => [row.definitionId, row]));
   const independent = new Map(independence.map((row) => [row.definitionId, row]));
   const criteria = satisfaction.map((row) => ({
     definitionId: row.definitionId,
     satisfied: row.satisfied,
     // The same default `ProjectsService.get` serves: a criterion this lane has no receipt about
     // is UNKNOWN, which is exactly what it is for a criterion the lane never saw.
-    landing: landed.get(row.definitionId) ?? ('UNKNOWN' satisfies CriterionLanding),
+    landing: landed.get(row.definitionId)?.landing ?? ('UNKNOWN' satisfies CriterionLanding),
     // A criterion this lane never saw has no authorship row to collide with anything, which is
     // the same answer it gives for a criterion whose author is the owner or is unknown.
     independence: independent.get(row.definitionId)?.independence
       ?? ('INDEPENDENT' satisfies CriterionIndependence),
     conflicts: independent.get(row.definitionId)?.conflicts ?? [],
     remedy: independent.get(row.definitionId)?.remedy ?? null,
+    // And a criterion the lane never saw has no receipt to stand on, which is what its reader
+    // would have said about it too.
+    landingReason: landed.has(row.definitionId)
+      ? landed.get(row.definitionId)!.landingReason
+      : ('NO_RECEIPT' satisfies CriterionLandingReason),
   }));
 
   return deriveProjectDone(criteria, confirmation);
@@ -366,31 +492,128 @@ export async function readStandardSetConfirmationState(
  * --------------------------------------------
  * A projection that could only ever set DONE would be a latch, and a latch is a decision rather
  * than a reading: reopening a criterion, or filing a new task against one, must take DONE away
- * again or the column would go on asserting something its inputs no longer support.
+ * again or the column would go on asserting something its inputs no longer support. A DONE it
+ * writes is recorded `done_by = 'DERIVED'`, with the seal it was derived against.
  *
  * CANCELLED is left alone in both directions. It says a person dropped this project, which is not
  * a claim about the work and not something the work can overturn — a projection that reopened a
  * cancelled project would be overruling the owner with a merge receipt.
  *
+ * AN OWNER'S RECORD IS A DECISION, AND THE PROJECTION DOES NOT OVERRULE IT
+ * ------------------------------------------------------------------------
+ * A DONE the account owner recorded in person (`done_by = 'OWNER'`, `POST /projects/:id/done`) is
+ * the answer for exactly the case the facts cannot settle — a criterion Orbit cannot prove, whose
+ * gap the owner accepted. Projecting over it would take it away on the next task write, merge
+ * receipt or confirmation, which is what it was recorded to stop. So it stands until one of the two
+ * facts the owner's decision was about moves (`ownerRecordReopenedBy`): the criteria are no longer
+ * the ones it was recorded against, or a task serving one of them has been reopened since. Then the
+ * projection takes the row back — OPEN, or DONE recorded DERIVED when the facts now prove it by
+ * themselves — and when that reopens the project, the coordinator is told why.
+ *
  * The compare-and-set is in the WHERE clause rather than in a read taken first: two concurrent
  * post-commit edges deriving the same answer write the row once, and the loser learns it wrote
- * nothing instead of racing to write the same value again.
+ * nothing instead of racing to write the same value again. It names the record as well as the
+ * status, so an owner's DONE committed between this read and this write is never projected over.
  */
 export async function storeDerivedProjectStatus(
   prisma: DerivationClient,
   ownerId: string,
   projectId: string,
+  options: StoreDerivedProjectStatusOptions = {},
 ): Promise<DerivedProjectDone> {
-  const derived = await readDerivedProjectDone(prisma, ownerId, projectId);
-  await prisma.project.updateMany({
+  const reading = await readDerivedProjectDoneReading(prisma, ownerId, projectId);
+  const { derived } = reading;
+  const seal = reading.standing.currentVersion.digest;
+  const stored = await prisma.project.findFirst({
+    where: { id: projectId, ownerId },
+    select: { status: true, doneBy: true, doneAt: true, doneCriteriaDigest: true },
+  });
+  if (!stored || stored.status === ProjectStatus.CANCELLED) return derived;
+
+  let reopenedBy: ProjectReopenReason | null = null;
+  if (stored.status === ProjectStatus.DONE && stored.doneBy === ('OWNER' satisfies ProjectDoneBy)) {
+    reopenedBy = await ownerRecordReopenedBy(prisma, ownerId, projectId, stored, seal);
+    if (reopenedBy === null) return derived;
+  } else if (stored.status === derived.status) {
+    return derived;
+  }
+
+  const written = await prisma.project.updateMany({
     where: {
       id: projectId,
       ownerId,
-      status: derived.done ? ProjectStatus.OPEN : ProjectStatus.DONE,
+      status: stored.status,
+      doneBy: stored.doneBy,
+      doneAt: stored.doneAt,
     },
-    data: { status: derived.status },
+    data: derived.done
+      ? {
+        status: ProjectStatus.DONE,
+        doneBy: 'DERIVED' satisfies ProjectDoneBy,
+        doneAt: new Date(),
+        doneCriteriaDigest: seal,
+        acceptedGaps: [],
+      }
+      : { status: ProjectStatus.OPEN, ...NO_DONE_RECORD },
   });
+
+  if (written.count === 1 && reopenedBy !== null && !derived.done && options.sessions) {
+    await tellCoordinatorProjectReopened(prisma, options.sessions, {
+      ownerId,
+      projectId,
+      doneAt: stored.doneAt!,
+      reason: reopenedBy,
+    }).catch((e) =>
+      log.warn(`coordinator not told project ${projectId} was reopened: ${
+        (e as { message?: string })?.message ?? String(e)}`),
+    );
+  }
   return derived;
+}
+
+/** The DONE record of a project that is not recorded done (`project.done_*`, migration 0345). */
+export const NO_DONE_RECORD = {
+  doneBy: null,
+  doneAt: null,
+  doneCriteriaDigest: null,
+  acceptedGaps: [],
+} as const satisfies Prisma.ProjectUpdateManyMutationInput;
+
+/**
+ * Why an owner's DONE no longer stands, or null while it does — the two facts the owner's decision
+ * was about, and no others.
+ *
+ *   * The criteria: the seal it was recorded against is not the seal of the criteria that stand
+ *     now. An edit, a criterion added or removed, a weakening the owner approved — the decision was
+ *     about a different set.
+ *   * A task serving one of them was reopened after it was recorded. `task_progress_epoch_advance`
+ *     (0271) starts a task's next lifecycle epoch whenever it leaves DONE, CANCELLED or FAILED for
+ *     OPEN or IN_PROGRESS, whichever door moved it, so the epoch's start is the reopen itself.
+ *
+ * Both are read off committed rows rather than told by the edge that runs the projection, so every
+ * edge gives the same answer, and a later one still sees a reopen an earlier one missed.
+ */
+async function ownerRecordReopenedBy(
+  prisma: Pick<PrismaService, 'task'>,
+  ownerId: string,
+  projectId: string,
+  record: { doneAt: Date | null; doneCriteriaDigest: string | null },
+  seal: string,
+): Promise<ProjectReopenReason | null> {
+  if (record.doneCriteriaDigest !== seal) return { kind: 'CRITERIA_CHANGED', currentDigest: seal };
+  const reopened = await prisma.task.findFirst({
+    where: {
+      ownerId,
+      projectId,
+      criterionDefinitionId: { not: null },
+      progress: { epochStartedAt: { gt: record.doneAt! } },
+    },
+    orderBy: { id: 'asc' },
+    select: { id: true, title: true },
+  });
+  return reopened
+    ? { kind: 'SERVING_TASK_REOPENED', taskId: reopened.id, taskTitle: reopened.title }
+    : null;
 }
 
 /** The newest confirmation on record, current or not — r3's read, in r3's order: `confirmedAt`

@@ -4,7 +4,8 @@ import XCTest
 /// Two words, two meanings. The project menu's link is the signed-in app address — something you
 /// copy for yourself, so it reads `Copy Link` and goes to the pasteboard, not to the system share
 /// sheet. `Share` is the public, read-only link, and the session page offers it on both platforms:
-/// one sheet, opened from the nav bar on iOS and from the window toolbar on macOS.
+/// one sheet, opened from the nav bar on iOS and from the window toolbar on macOS. On iOS the
+/// session list's rows offer it as well.
 ///
 /// SwiftUI doesn't exist on Linux, so nothing here compiles the shells. Each check reads the part of
 /// the source it is about and asks which `#if` branch that part sits in: the branch is what decides
@@ -129,5 +130,54 @@ final class ShareEntriesWiringTests: XCTestCase {
         XCTAssertEqual(presented.components(separatedBy: ".sheet(").count, 2, "one sheet, the flag's own")
         XCTAssertFalse(presented.contains("#"), "the sheet's content isn't gated either")
         XCTAssertEqual(console.components(separatedBy: "ShareSheet(").count, 2, "one place builds the sheet")
+    }
+
+    /// The iOS session list offers Share on each row too: swiped left, just inside Delete, and as
+    /// Share… in the long-press menu (docs/session-folders-move-design.md §2). It opens the session
+    /// page's panel from a sheet the list holds, as it holds the tag picker's; the row only hands its
+    /// session over. iOS only — the Mac's rows have none — and never in Trash, whose sessions can't
+    /// be shared (docs/share-links-design.md §3).
+    func testTheIOSSessionListSharesARowFromItsSwipeAndItsMenu() throws {
+        let actions = code(try appSource("Views/SessionRowActions.swift"))
+
+        // One action, compiled for iOS alone, and none in Trash.
+        let share = try slice(actions, from: "private var shareAction: RowSwipeAction? {", to: "\n    }")
+        let made = "RowSwipeAction(title: \"Share\", systemImage: \"square.and.arrow.up\", tint: .blue, perform: onShare)"
+        XCTAssertTrue(share.contains(made), "blue, square.and.arrow.up, running what the list handed over")
+        XCTAssertEqual(try branches(of: made, in: actions), ["os(iOS)"], "the Mac's rows have no Share")
+        XCTAssertTrue(share.contains("guard !isTrash, let onShare else { return nil }"),
+                      "a trashed session can't be shared")
+        XCTAssertEqual(actions.components(separatedBy: "RowSwipeAction(title: \"Share\"").count - 1, 1,
+                       "the swipe and the menu draw the same one")
+
+        // Swiped left it sits inside Delete: a side lists its actions from the screen edge inward, so
+        // Delete stays outermost, and the trailing side has no full swipe. The circles and the
+        // system's buttons draw the same list.
+        let trailing = try slice(actions, from: "private var trailingActions: [RowSwipeAction] {", to: "\n    }")
+        XCTAssertTrue(trailing.contains("if let shareAction { return [deleteAction, shareAction] }"))
+        XCTAssertTrue(trailing.contains("return [deleteAction]"), "Delete alone where there's no Share")
+        XCTAssertTrue(actions.contains("trailing: trailingActions"))
+        let system = try slice(actions, from: ".swipeActions(edge: .trailing, allowsFullSwipe: false) {", to: "}")
+        XCTAssertTrue(system.contains("ForEach(trailingActions) { button($0) }"))
+
+        // The long-press menu has it too, as Share…, only where the swipe has it.
+        let menu = try slice(actions, from: "@ViewBuilder private var menu: some View {", to: "\n    }")
+        let item = try slice(menu, from: "if let shareAction {", to: "Divider()")
+        XCTAssertTrue(item.contains("Button(action: shareAction.perform)"))
+        XCTAssertTrue(item.contains("Label(SharePanelCopy.share, systemImage: shareAction.systemImage)"))
+
+        // The list holds the sheet, iOS only like the action, and builds the session page's panel for
+        // the row it was handed. Only the iOS list's rows hand one over.
+        let agents = code(try appSource("Views/AgentsView.swift"))
+        XCTAssertEqual(try branches(of: "@State private var sharingSession: Session?", in: agents), ["os(iOS)"])
+        XCTAssertEqual(try branches(of: ".sheet(item: $sharingSession)", in: agents), ["os(iOS)"])
+        let presented = try slice(agents, from: ".sheet(item: $sharingSession)",
+                                  to: "ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)")
+        XCTAssertEqual(presented.components(separatedBy: ".sheet(").count, 2, "one sheet, the list's own")
+        let row = try slice(agents, from: "@ViewBuilder private func sessionRow(", to: "private func tagSectionHeader(")
+        XCTAssertEqual(row.components(separatedBy: "onShare: { sharingSession = s }").count - 1, 2,
+                       "both of the iOS list's row shapes hand their session over")
+        XCTAssertEqual(agents.components(separatedBy: "onShare:").count - 1, 2, "and nothing else does")
+        XCTAssertEqual(try branches(of: "onShare: { sharingSession = s }", in: agents), ["os(iOS)"])
     }
 }

@@ -5,8 +5,9 @@
  * WHAT THIS IS FOR
  * ----------------
  * Since 57639ba119 a task that DECLARES it needs no code (`codeless`) no longer holds its criterion
- * off LANDED. The declaration is written when a task is created and no door writes it afterwards, so
- * a task created without it can never gain it — and the project that fix was written for went on
+ * off LANDED. The declaration was then written only when a task was created, so a task created
+ * without it could never gain it (0346 gave task_update the declaration too, with a reason — see
+ * `criterion-landing-codeless.pg.spec.ts`) — and the project that fix was written for went on
  * reading ON_INTEGRATION_LINE on the same criterion, because the task holding it declared nothing.
  * It was the UI acceptance task. It ran a branch (`orbit/ui-1-6-a48a23`) and committed nothing to
  * it; the line, handed that branch the next day, long after its session had finished, answered
@@ -18,6 +19,11 @@
  * The fact this file stands on is that answer — the line's own observation that the branch had no
  * commit of its own — and every case is about what it takes for the observation to be the whole
  * truth about a task (`lineSawNothingToLand` in `project-criterion-landing.ts`).
+ *
+ * Every answer here is the line's `ALREADY_LANDED`. Its `NOTHING_TO_LAND` (0300) used to be read by
+ * the same two conditions — the line at main, no main sync — and since 0346 is read by the runner's
+ * own measurement that the empty tip is on main instead; those cases, and the ones it must not
+ * release, are `criterion-landing-codeless.pg.spec.ts`'s.
  *
  * THE CASES
  * ---------
@@ -209,11 +215,12 @@ test('a criterion is LANDED over work whose finished branch the line found nothi
   }
 
   /** One finished task serving a criterion. Declares nothing: `codeless` is false unless a case sets it. */
-  async function settledTask(title: string, criterionKey: string) {
+  async function settledTask(title: string, criterionKey: string, declaration: { codeless?: boolean } = {}) {
     const task = await tasks.create(ownerId, {
       title,
       projectId,
       criterionKey,
+      ...declaration,
       completionCriterion: 'EXECUTABLE',
       acceptanceCommand: 'true',
       acceptanceExpectedExitCode: 0,
@@ -395,11 +402,11 @@ test('a criterion is LANDED over work whose finished branch the line found nothi
   }
 
   // ── (d) the declaration ────────────────────────────────────────────────────────────────────────
-  // Written on the row, which is how the product writes it: no DTO carries `codeless`.
+  // Made where the task is created, through task_create's own service — the door that carries
+  // `codeless` since 0346, and the way the product now writes it.
   await twoPiecesOnMain(declaredCodelessAt.key, 'd');
   const declaredTask = await settledTask('the acceptance task that declares it needs no code',
-    declaredCodelessAt.key);
-  await prisma.task.update({ where: { id: declaredTask }, data: { codeless: true } });
+    declaredCodelessAt.key, { codeless: true });
 
   // ── (a) with one fact changed: the answer is about a branch that went on growing ───────────────
   // The row this control is about is the one a build before 2026-09-23 wrote: the line answered

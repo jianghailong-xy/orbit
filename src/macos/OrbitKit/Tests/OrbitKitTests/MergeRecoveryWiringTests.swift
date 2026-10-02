@@ -70,4 +70,21 @@ final class MergeRecoveryWiringTests: XCTestCase {
                        "a minimum on the whole bar takes any shorter height it's offered, and what the bar holds spills out of it")
         XCTAssertTrue(pill.contains(".frame(minHeight: 24)"), "the row holds the 30pt collapsed bar instead")
     }
+
+    /// The owner's report, 2026-10-01: the review led with a file diff the branch bar already shows,
+    /// and its note pointed at "the local-only commits above" when there were none. It now leads with
+    /// the branches and the commits the push adds, the diff as that list's last row, and its note is
+    /// `MergeRecovery.reviewNote`, which only names local-only commits when some go out.
+    func testTheReviewLeadsWithTheBranchesAndTheCommitsThePushAdds() throws {
+        let sheet = code(try source("Views/MergeRecoverySheet.swift"))
+        let review = try slice(sheet, from: "private func review(", to: ".safeAreaInset(edge: .bottom")
+        let route = try XCTUnwrap(review.range(of: "RecoveryRouteRow("), "the branches have one row")
+        let push = try XCTUnwrap(review.range(of: "r.inlinePushCommits()"), "the push's commits are listed")
+        XCTAssertLessThan(route.lowerBound, push.lowerBound, "branches first, then what the push adds")
+        let pushSection = try slice(review, from: "r.inlinePushCommits()", to: "Text(r.landingNote)")
+        XCTAssertTrue(pushSection.contains("candidateDiffLink("), "the diff closes the push's list")
+        XCTAssertTrue(review.contains("r.reviewNote"))
+        XCTAssertFalse(sheet.contains("The local-only commits above"), "the note is the model's, which checks there are some")
+        XCTAssertFalse(review.contains("Saved repair branch"), "the repair branch lives behind the branches row")
+    }
 }

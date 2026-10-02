@@ -160,6 +160,11 @@ public final class APIClient: @unchecked Sendable {
 
     public func session(_ id: String) async throws -> Session { try await get("sessions/\(id)") }
 
+    /// One session request as it stands now — the state a request card shows (`SessionRequestView`).
+    public func sessionRequest(_ id: String) async throws -> SessionRequestView {
+        try await get("session-requests/\(id)")
+    }
+
     /// Per-workspace Open-session tallies used by the runner page's workspace rows.
     public func sessionCounts() async throws -> [WorkspaceSessionCounts] {
         try await get("sessions/counts")
@@ -242,6 +247,11 @@ public final class APIClient: @unchecked Sendable {
 
     public func createSession(_ req: CreateSessionRequest) async throws -> Session {
         try await post("sessions", body: req)
+    }
+
+    /// Start (or return) the server-owned repair conversation attached to a merge recovery.
+    public func createMergeRepair(sessionID: String, preparePR: Bool = false) async throws -> Session {
+        try await post("sessions/\(sessionID)/merge-repair", body: MergeRepairRequest(preparePR: preparePR))
     }
 
     public func sendTurn(sessionID: String, _ req: SessionTurnRequest) async throws -> TurnAccepted {

@@ -229,6 +229,7 @@ test('the app ValidationPipe keeps every batch field it is meant to forward', as
       },
       {
         title: 'S1',
+        codeless: true,
         dependsOnRefs: ['s0'],
         parentRef: 's0',
         dependsOnTaskIds: [TASK_A],
@@ -258,9 +259,31 @@ test('the app ValidationPipe keeps every batch field it is meant to forward', as
   });
   assert.deepEqual(kept(1), {
     title: 'S1',
+    codeless: true,
     dependsOnRefs: ['s0'],
     parentRef: 's0',
     dependsOnTaskIds: [TASK_A],
     assigneeId: null,
   });
+});
+
+test('the app ValidationPipe keeps the codeless declaration and its reason on the edit door', async () => {
+  // Same pipe: `codeless` and `codelessReason` reach TasksService.update rather than being stripped
+  // as undecorated keys, which is how a declaration sent by MCP or the CLI would vanish silently.
+  const pipe = new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false });
+  const value = (await pipe.transform(
+    { codeless: true, codelessReason: 'it deploys; it commits nothing', unknown: 'drop me' },
+    { type: 'body', metatype: UpdateTaskDto },
+  )) as UpdateTaskDto;
+  assert.deepEqual(
+    Object.fromEntries(Object.entries(value).filter(([, field]) => field !== undefined)),
+    { codeless: true, codelessReason: 'it deploys; it commits nothing' },
+  );
+  // A declaration is a boolean, and a reason is bounded like the criterion-change reason beside it.
+  assert.notEqual((await validate(plainToInstance(UpdateTaskDto, { codeless: 'yes' }))).length, 0);
+  assert.notEqual(
+    (await validate(plainToInstance(UpdateTaskDto, { codeless: true, codelessReason: 'x'.repeat(2_001) })))
+      .length,
+    0,
+  );
 });

@@ -34,9 +34,13 @@ export interface ProjectBlockerView {
   subjectId: string;
   /** The task's title, when the blocker is about one of this owner's tasks. */
   subjectTitle: string | null;
+  /** The task's own written argument, when it claimed the criterion did not apply. */
+  agentArgument: string | null;
   /** The criterion that task is filed against, as it stands today. */
   criterionOrdinal: number | null;
   criterionRevision: number | null;
+  /** The current wording of that criterion, when the task still points at one. */
+  criterionText: string | null;
   /** Display and diagnosis, never an input to a decision (0125, BL7). */
   detail: Prisma.JsonValue;
   firstSeenAt: Date;
@@ -66,7 +70,12 @@ const VIEW_COLUMNS = Prisma.sql`
   blocker."severity"::text AS "severity", blocker."required_action" AS "requiredAction",
   blocker."subject_type" AS "subjectType", blocker."subject_id" AS "subjectId",
   work."title" AS "subjectTitle",
+  CASE WHEN blocker."detail"->>'reason' = 'CRITERION_EXEMPTION_ARGUED'
+       THEN work."completion_criterion_override_reason"
+       ELSE NULL
+  END AS "agentArgument",
   criterion."ordinal" AS "criterionOrdinal", criterion."revision" AS "criterionRevision",
+  criterion."text" AS "criterionText",
   blocker."detail", blocker."first_seen_at" AS "firstSeenAt", blocker."last_seen_at" AS "lastSeenAt",
   blocker."escalated_at" AS "escalatedAt", blocker."resolved_at" AS "resolvedAt",
   blocker."resolved_by"::text AS "resolvedBy", blocker."resolution_note" AS "resolutionNote",
@@ -105,6 +114,7 @@ export async function readProjectBlockers(
     Prisma.sql`
       SELECT "id", "kind", "owner", "severity", "requiredAction", "subjectType", "subjectId",
              "subjectTitle", "criterionOrdinal", "criterionRevision", "detail", "firstSeenAt",
+             "agentArgument", "criterionText",
              "lastSeenAt", "escalatedAt", "resolvedAt", "resolvedBy", "resolutionNote",
              "resolvedByUserId", "resolvedCount"
         FROM (

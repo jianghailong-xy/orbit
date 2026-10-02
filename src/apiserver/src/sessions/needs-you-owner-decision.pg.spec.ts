@@ -57,9 +57,18 @@
  *       drawn only once the coordinator has ASKED (`project_request_start`) — so the paired
  *       negatives are the same project before a single task is filed under it, and then with a task
  *       and no request, which is the state the card used to be inferred from. The request lights the
- *       row as `START_REQUEST` ("Ready to start"). Starting it at the door puts the row back; an edit
- *       that moves the digest of the started project asks again, as a project decision; and a press
- *       the door refuses leaves the count standing, because a count is not a credential.
+ *       row as `START_REQUEST` ("Ready to start") and NOT the workspace tally: nothing is blocked on
+ *       a start, so it is not a session that needs you. Starting it at the door puts the row back; an
+ *       edit that moves the digest of the started project asks again, as a project decision, and that
+ *       one does light the tally; and a press the door refuses leaves the count standing, because a
+ *       count is not a credential.
+ *
+ *   (8) Its own fixture: a project that LOOKS finished — every criterion met, every task settled,
+ *       nothing open or landing — whose coordinator was handed it (project closing, D5) and did
+ *       not ask to have it recorded done. The row stays dark inside the project's
+ *       `exceptionEscalationSeconds`, lights as `RECORD_AS_DONE` ("Record as done…") once they have
+ *       run out, and goes dark again by itself the moment new work is filed. The delivery itself,
+ *       over the real producer, is `projects/project-looks-finished.pg.spec.ts`.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/needs-you-owner-decision.pg.spec.ts
  *
@@ -878,7 +887,10 @@ test('the badge counts the standard set waiting to be confirmed, and falls when 
       'the PARKED coordinator row says somebody is waiting on it — the state this card left dark');
     assert.equal(row.status, RunStatus.AWAITING_INPUT, 'and it is parked, not generating');
     assert.equal(row.waitingKind, 'START_REQUEST', 'and it names what is waiting: a start');
-    assert.equal(await needsYou(), 1, 'and the workspace tally lights with it');
+    // …and that is all it is. The owner starts it when they choose and nothing is blocked until
+    // they do, so it is not one of the sessions that need you (the account owner's report,
+    // 2026-10-02). (7c) lights this same tally off this same row once a real question is asked.
+    assert.equal(await needsYou(), 0, 'a project ready to start lit the workspace tally');
 
     assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), [{
       sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'START_REQUEST',
@@ -891,7 +903,7 @@ test('the badge counts the standard set waiting to be confirmed, and falls when 
     const recorded = await confirm();
     assert.equal(recorded.state, 'CONFIRMED', 'the door recorded the version that stood');
     assert.equal(await countOn(f.coordinatorSessionId), 0, 'and the question the row was lit for is answered');
-    assert.equal(await needsYou(), 0, 'and the workspace tally falls with it');
+    assert.equal(await needsYou(), 0, 'and the workspace tally is still dark');
     assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), []);
   });
 
@@ -904,6 +916,7 @@ test('the badge counts the standard set waiting to be confirmed, and falls when 
       'adding a criterion is not a loosening, so it is applied rather than held');
     assert.equal(await countOn(f.coordinatorSessionId), 1,
       'the set moved under the confirmation, so the owner is asked again');
+    assert.equal(await needsYou(), 1, 'and this one is a question, so the workspace tally lights');
     assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), [{
       sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'PROJECT_DECISION',
     }]);
@@ -929,5 +942,124 @@ test('the badge counts the standard set waiting to be confirmed, and falls when 
     await confirm();
     assert.equal(await countOn(f.coordinatorSessionId), 0,
       'the owner’s own press is what answers it, and the row falls with the answer');
+  });
+});
+
+test('the badge says Record as done… once a finished-looking project has waited out its window', {
+  skip, concurrency: 1, timeout: 300_000,
+}, async (t) => {
+  const url = URL!;
+  assertCoordinatorPgUrlIsIsolated(url);
+  const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+  await sql.connect();
+  await verifyCoordinatorPgIdentity(sql);
+  const stack = connect(url);
+  t.after(async () => {
+    await stack.db.$disconnect().catch(() => undefined);
+    await sql.end().catch(() => undefined);
+  });
+  const db = stack.db;
+  const f = await fixture(db, 'looks-finished');
+
+  // One criterion, confirmed, and the one task serving it DONE through the DONE fence — with no
+  // receipt anywhere, so the projection withholds DONE while every criterion is met.
+  await stack.projects.update(f.ownerId, f.projectId, {
+    acceptanceCriteriaItems: [{ text: RULER, verificationMethod: METHOD }],
+  } as never);
+  assert.equal((await confirmStandardSet(f, stack)).state, 'CONFIRMED');
+  const [criterion] = await db.projectAcceptanceCriterionDefinition.findMany({
+    where: { projectId: f.projectId }, select: { id: true, revision: true },
+  });
+  const served = await db.task.create({
+    data: {
+      ownerId: f.ownerId,
+      projectId: f.projectId,
+      title: 'the work the ruler asks for',
+      creatorType: CreatorType.USER,
+      creatorId: f.ownerId,
+      status: TaskStatus.OPEN,
+      criterionDefinitionId: criterion!.id,
+      criterionRevision: criterion!.revision,
+      completionCriterion: 'EXECUTABLE',
+      acceptanceCommand: 'true',
+      acceptanceExpectedExitCode: 0,
+    },
+  });
+  const settled = await sql.query(
+    `UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1::uuid AND "status" = 'OPEN'`, [served.id],
+  );
+  assert.equal(settled.rowCount, 1, 'the task reached DONE through the DONE fence');
+
+  // The settled fact, as the producer leaves it when it hands a finished-looking project to the
+  // conversation coordinating it: DELIVERED there, instead of a judgment.
+  const wakeId = randomUUID();
+  await db.projectCoordinatorWake.create({
+    data: {
+      id: wakeId,
+      projectId: f.projectId,
+      event: 'PROJECT_TASKS_SETTLED',
+      subjectType: 'PROJECT',
+      subjectId: f.projectId,
+      subjectVersion: 'settled',
+      idempotencyKey: `cw:v1:PROJECT_TASKS_SETTLED:PROJECT:${f.projectId}:settled`,
+      status: 'DELIVERED',
+      sessionId: f.coordinatorSessionId,
+      delivery: { clientTurnId: randomUUID() },
+    },
+  });
+
+  async function rowOf() {
+    const rows = await stack.sessions.list(f.ownerId, {}) as unknown as Array<{
+      id: string; pendingApprovals: number; waitingKind?: string | null;
+    }>;
+    const row = rows.find((s) => s.id === f.coordinatorSessionId);
+    assert.ok(row, 'the coordinator conversation is in this owner’s Open list');
+    return row;
+  }
+  async function needsYou(): Promise<number> {
+    const rows = await stack.sessions.workspaceSessionCounts(f.ownerId);
+    return rows.find((r) => r.workspaceId === f.workspaceId)?.needsYou ?? 0;
+  }
+
+  await t.test('(8a) inside the window the coordinator has it, and the row is dark', async () => {
+    assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), []);
+    assert.equal((await rowOf()).pendingApprovals, 0);
+    assert.equal(await needsYou(), 0);
+  });
+
+  await t.test('(8b) once the window has run out with no request, the row lights as Record as done…', async () => {
+    await sql.query(
+      `UPDATE "project_coordinator_wake" SET "updated_at" = "updated_at" - interval '7201 seconds'
+        WHERE "id" = $1::uuid`,
+      [wakeId],
+    );
+    assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), [{
+      sessionId: f.coordinatorSessionId, projectId: f.projectId, count: 1, kind: 'RECORD_AS_DONE',
+    }], 'it lands on the conversation the card is drawn in');
+    const row = await rowOf();
+    assert.equal(row.pendingApprovals, 1);
+    assert.equal(row.waitingKind, 'RECORD_AS_DONE', 'and the row names it in words of its own');
+    assert.equal(await needsYou(), 1);
+  });
+
+  await t.test('(8c) new work takes it back off the owner by itself', async () => {
+    await db.task.create({
+      data: {
+        ownerId: f.ownerId,
+        projectId: f.projectId,
+        title: 'more work the coordinator went and filed',
+        creatorType: CreatorType.USER,
+        creatorId: f.ownerId,
+        status: TaskStatus.OPEN,
+        criterionDefinitionId: criterion!.id,
+        criterionRevision: criterion!.revision,
+        completionCriterion: 'EXECUTABLE',
+        acceptanceCommand: 'true',
+        acceptanceExpectedExitCode: 0,
+      },
+    });
+    assert.deepEqual(await readOwnerDecisionSignals(db as never, f.ownerId), [],
+      'a project with work open again does not look finished, whatever its delivery says');
+    assert.equal(await needsYou(), 0);
   });
 });

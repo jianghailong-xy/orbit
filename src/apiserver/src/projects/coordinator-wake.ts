@@ -123,6 +123,8 @@ export const COORDINATOR_WAKE_EVENTS = [
    * queued off landings and a settled project has no more of them.
    */
   'PROJECT_SETTLED_UNMERGED',
+  /** A delivery raised a human-owned blocker that the coordinator must explain and hand off. */
+  'PROJECT_BLOCKER_RAISED',
 ] as const;
 
 export type CoordinatorWakeEvent = (typeof COORDINATOR_WAKE_EVENTS)[number];
@@ -608,6 +610,30 @@ export function criterionUnlandedFact(
     subjectId: criterionSubjectId(projectId, criterionKey),
     subjectVersion: settlementVersion(serving),
     detail: { criterionKey, taskCount: serving.length, landing },
+  };
+}
+
+/**
+ * A blocker is a separate wake from the landing fact that exposed it.
+ *
+ * The landing fact is consumed after it has been observed; using it again to notify the standing
+ * conversation would either duplicate its delivery or require the coordinator to infer a blocker
+ * from a consumed row. This fact names the blocker episode itself, so one episode gets one durable
+ * coordinator message and a later episode gets a new key.
+ */
+export function projectBlockerRaisedFact(input: {
+  projectId: string;
+  blockerId: string;
+  taskId: string;
+  detail: Record<string, unknown>;
+}): WakeFact {
+  return {
+    event: 'PROJECT_BLOCKER_RAISED',
+    projectId: input.projectId,
+    subjectType: 'TASK',
+    subjectId: input.taskId,
+    subjectVersion: input.blockerId,
+    detail: input.detail,
   };
 }
 

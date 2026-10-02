@@ -375,6 +375,8 @@ interface ServedBlocker {
   kind: string;
   requiredAction: string;
   subjectTitle: string | null;
+  agentArgument: string | null;
+  criterionText: string | null;
   detail: { reason?: string; paths?: string[] };
   resolvedAt: string | null;
   resolvedBy: string | null;
@@ -499,6 +501,10 @@ test('the owner reads a blocker and ends it with a written reason, and nobody ca
         assert.equal(served.detail.reason, 'OUTSIDE_DECLARED_SCOPE');
         assert.deepEqual(served.detail.paths, [STRAY], 'the read does not name the stray file');
         assert.equal(served.subjectTitle, title, 'the read does not say which work it is about');
+        assert.equal(served.agentArgument, null,
+          'a scope blocker exposed unrelated task prose as an agent argument');
+        assert.equal(served.criterionText, '这条标准的活改了没让它改的东西',
+          'the read does not show the current criterion wording');
         assert.equal(served.resolvedAt, null);
       });
 
@@ -679,6 +685,12 @@ test('an argued exemption, a moved standard and an undeclared file wait for thei
       ['HUMAN_DECISION_REQUIRED', 'POLICY_MANUAL_HOLD', 'AWAITING_USER_APPROVAL'],
       'the fixture did not raise the three blockers this case is about',
     );
+    const projectRead = await stack.projects.get(f.ownerId, f.projectId);
+    const exemptionView = projectRead.blockers.open.find((one) => one.subjectId === exemption);
+    assert.equal(exemptionView?.agentArgument, ARGUMENT,
+      'the project read dropped the agent explanation for an argued exemption');
+    assert.equal(exemptionView?.criterionText, texts[0],
+      'the project read dropped the current criterion wording');
 
     const keys = {
       exemption: `HUMAN_DECISION_REQUIRED:CRITERION_EXEMPTION_ARGUED:${exemption}`,

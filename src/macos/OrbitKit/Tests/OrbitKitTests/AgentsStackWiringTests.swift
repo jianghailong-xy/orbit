@@ -107,7 +107,7 @@ final class AgentsStackWiringTests: XCTestCase {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         let actions = try XCTUnwrap(push.firstIndex(
-            of: ".sessionRowActions(s, scope: view, onTag: { taggingSession = s })"),
+            of: ".sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s })"),
             "the compact row attaches its own actions")
         XCTAssertGreaterThan(actions, 0)
         XCTAssertTrue(push[actions - 1].hasSuffix("}"),

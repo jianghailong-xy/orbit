@@ -1057,19 +1057,13 @@ model Session {
   // PENDING = created, claimable by its assigned runner.
   status               RunStatus @default(PENDING)
   // billing, accrued per turn
-  sumInputTokens       Int       @default(0) @map("sum_input_tokens")
-  sumOutputTokens      Int       @default(0) @map("sum_output_tokens")
-  sumCacheRead         Int       @default(0) @map("sum_cache_read")
-  sumCacheWrite        Int       @default(0) @map("sum_cache_write")
   numTurns             Int       @default(0) @map("num_turns")
   costUsd              Float     @default(0) @map("cost_usd")
   // How full the context window is RIGHT NOW: the tokens the latest top-level assistant message
   // actually cost (fresh input + cache reads + cache writes + output), denormalized from the
-  // turn_end event that already carries it for the clients' context gauge. Deliberately not
-  // derivable from the four sums above — those accrue over the session's whole life, so the only
-  // thing they say about the current window is that it is smaller. A long-lived session has to
-  // rotate before it reaches the window (compaction is lossy), and this is the measurement that
-  // decision needs. null until a runtime reports one: never-run sessions, and runtimes that
+  // turn_end event that already carries it for the clients' context gauge. A long-lived session
+  // has to rotate before it reaches the window (compaction is lossy), and this is the measurement
+  // that decision needs. null until a runtime reports one: never-run sessions, and runtimes that
   // don't report it yet (kimi).
   contextTokens        Int?      @map("context_tokens")
   // What contextTokens is a fraction of: the window the engine that produced that number will
@@ -1353,6 +1347,8 @@ model Session {
   turns                 ConversationTurn[]
   backgroundJobWakes    BackgroundJobWake[]
   scheduledWakeups      SessionScheduledWakeup[]
+  /// The requests other sessions have asked of this one (session_request.to_session_id).
+  receivedRequests      SessionRequest[] @relation("SessionRequestRecipient")
   poolGatewayTokens     PoolGatewayToken[]
   poolLoginTokens       PoolLoginToken[]
   poolLoginUsage        PoolLoginUsage[]
@@ -1775,6 +1771,15 @@ model ConversationTurn {
   /// Runtime-authored USER acknowledgement, persisted by event ingest before turn-complete.
   deliveryAcknowledgedAt DateTime? @map("delivery_acknowledged_at")
   content         String? // user message text (null for interrupt/end)
+  /// The session that sent this turn, when it is one Orbit session's message to another
+  /// (`session_send`, `project_send` — docs/session-request-reply-contract.md §2.1). Written only
+  /// by those two runner doors, from the caller's own identity and never from a request body; null
+  /// is every other turn: the account owner, a headless credential, the platform's own deliveries.
+  /// Deliberately not a relation: a foreign key would lock the sender's row under the recipient's,
+  /// and two sessions messaging each other would deadlock (migration 0349). The partial index the
+  /// hourly limit counts with (`conversation_turn_sender_session_id_idx`) lives in that migration,
+  /// because schema.prisma cannot express a partial index.
+  senderSessionId String?   @map("sender_session_id") @db.Uuid
   status          String    @default("PENDING") // PENDING | IN_FLIGHT | ANSWERED
   deliveredAt     DateTime? @map("delivered_at")
   leaseDeadlineAt DateTime? @map("lease_deadline_at")
@@ -1854,6 +1859,49 @@ model SessionScheduledWakeup {
   /// The worker's read: waiting and due (partial on PENDING in the migration).
   @@index([dueAt], map: "session_scheduled_wakeup_due_idx")
   @@map("session_scheduled_wakeup")
+}
+
+/// One Orbit session asking another for a reply: a `session_send` / `project_send` that carried
+/// `expectReply` (docs/session-request-reply-contract.md §3–§5; sessions/session-request.ts). OPEN
+/// until it comes to exactly one outcome — REPLIED, NO_REPLY, RECIPIENT_ENDED, EXPIRED or
+/// UNDELIVERED — written by a compare-and-set on OPEN and never rewritten (migration 0350's guard).
+/// The outcome is then handed back to the asking session on a `session-reply:` turn
+/// (`replyClientTurnId`), or held on the row for its next turn (`replyHeldAt`).
+///
+/// The asking session is deliberately not a relation, for the reason `ConversationTurn.senderSessionId`
+/// is not one: the request is written under the RECIPIENT's row lock, and a key to the asker would
+/// take that row too. The partial indexes the workers and reads use live in migration 0350.
+model SessionRequest {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  ownerId           String    @map("owner_id") @db.Uuid
+  fromSessionId     String    @map("from_session_id") @db.Uuid
+  toSessionId       String    @map("to_session_id") @db.Uuid
+  toSession         Session   @relation("SessionRequestRecipient", fields: [toSessionId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "session_request_to_session_fkey")
+  /// The turn carrying the request in the recipient's conversation, and the key it was written under.
+  turnId            String    @map("turn_id") @db.Uuid
+  clientTurnId      String    @map("client_turn_id")
+  /// The first 200 characters of the request.
+  requestPreview    String    @map("request_preview")
+  /// `[{ label, description? }]`, two to four of them, or null.
+  options           Json?
+  replyBy           DateTime  @map("reply_by") @db.Timestamptz(3)
+  /// OPEN | REPLIED | NO_REPLY | RECIPIENT_ENDED | EXPIRED | UNDELIVERED
+  state             String    @default("OPEN")
+  replyText         String?   @map("reply_text")
+  replyOption       Int?      @map("reply_option")
+  /// The recipient's last words, for every outcome but REPLIED.
+  excerpt           String?
+  closeReason       String?   @map("close_reason")
+  closedAt          DateTime? @map("closed_at") @db.Timestamptz(3)
+  /// The asking session's turn that carries (or carried) the outcome back to it.
+  replyClientTurnId String?   @map("reply_client_turn_id")
+  /// The outcome is kept on the row for the asker's next turn: it had ended, its reply turn was taken
+  /// off its queue, or the turn carrying it failed or was drained before its engine finished it.
+  replyHeldAt       DateTime? @map("reply_held_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([toSessionId, clientTurnId], map: "session_request_turn_key")
+  @@map("session_request")
 }
 
 // Binary blob storage (currently web-composer image uploads) kept in-DB as bytea.
@@ -1966,6 +2014,18 @@ model Project {
   instructions       String?
 
   status ProjectStatus @default(OPEN)
+
+  /// Who recorded the project DONE (migration 0345): 'OWNER', the account owner in person on
+  /// `POST /projects/:id/done`, or 'DERIVED', the projection from committed facts
+  /// (`project-done-derived.ts`); null while neither has. An OWNER record survives ordinary task
+  /// writes, merge receipts and confirmations — only the criteria changing, or a task serving one
+  /// being reopened, reopens it. Present exactly with `doneAt`.
+  doneBy             String?   @map("done_by")
+  doneAt             DateTime? @map("done_at") @db.Timestamptz(3)
+  /// The seal of the criteria the DONE was recorded against.
+  doneCriteriaDigest String?   @map("done_criteria_digest") @db.Char(64)
+  /// The gaps the owner accepted when recording it done, as the card sent them (`AcceptedGap[]`).
+  acceptedGaps       Json      @default("[]") @map("accepted_gaps")
 
   /// The session this project is coordinated from — one durable conversation per project.
   ///
@@ -2330,6 +2390,10 @@ model ProjectIntegrationJob {
   landedSha       String? @map("landed_sha") @db.Char(40)
   landedTreeSha   String? @map("landed_tree_sha") @db.Char(40)
   aheadOfUpstream Int?    @map("ahead_of_upstream")
+  /// The runner's measurement, taken when it answers NOTHING_TO_LAND, of whether the source tip is
+  /// an ancestor of the upstream (migration 0346). The only fact on which §1.4 lets such an answer
+  /// out of a criterion's roll-up; NULL is "not measured" and withholds.
+  sourceOnUpstream Boolean? @map("source_on_upstream")
 
   /// `[{ name, command, expectedExitCode, exitCode, timedOut, durationMs, outputTail }]`.
   checks      Json     @default("[]")
@@ -2343,6 +2407,16 @@ model ProjectIntegrationJob {
   /// against; an upstream that moved is handed back to the owner untouched (M-T12). Kept on the job
   /// as well as on the promotion because the job is the record of what was sent out to be pushed.
   confirmedAutomatically Boolean @default(false) @map("confirmed_automatically")
+
+  /// A LAND_TASK generation a coordinator asked for through `integration_retry` (migration 0344,
+  /// contract §2.3 J-T1b): the failed generation it runs again, what that one failed of
+  /// (CHECK_FAILED, CHECK_TIMED_OUT or ERROR), the reason given, and the conversation that asked.
+  /// All four or none, held by a CHECK. `retryOfJobId` is a history reference with no relation: a
+  /// terminal job is never rewritten, so nothing may SET NULL it.
+  retryOfJobId              String? @map("retry_of_job_id") @db.Uuid
+  retryFailureClass         String? @map("retry_failure_class")
+  retryReason               String? @map("retry_reason")
+  retryRequestedBySessionId String? @map("retry_requested_by_session_id") @db.Uuid
 
   /// `ij:v1:<kind>:<taskId or promotionId>:<generation>` — enqueue is idempotent on the fact. The one
   /// exception is the landing J-T1e owes the work, keyed by the work's generation instead
@@ -4086,6 +4160,11 @@ model Task {
   /// dependent task's containment set (SR27): a "write the docs" prerequisite must not make the
   /// task after it demand a checkpoint that was never going to exist.
   codeless           Boolean  @default(false)
+  /// Why a task that already existed was declared `codeless` (migration 0346). The doors refuse that
+  /// edit without one, and refuse it outright for a task with commits of its own, because the
+  /// declaration takes the task out of its criterion's landing conjunction. NULL on a task that is
+  /// not codeless, and on one created codeless — creating it so is the first statement, not a change.
+  codelessReason     String?  @map("codeless_reason")
   /// The refusal this task's most recent start met before its run could begin (migration 0298):
   /// a `TaskDispatchRefusal` (@orbit/shared) — the §10.1 code and its fixAction, when, which run,
   /// the commit it stood on and the prerequisite commits that commit did not contain. NULL when

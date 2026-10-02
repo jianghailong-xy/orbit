@@ -75,31 +75,36 @@ final class SharePanelWiringTests: XCTestCase {
     }
 
     private static let appFiles = ["Views/Console/ConsoleView.swift", "Views/TasksView.swift",
-                                   "Views/ProjectsView.swift", "Views/ShareSheet.swift"]
+                                   "Views/ProjectsView.swift", "Views/AgentsView.swift", "Views/ShareSheet.swift"]
 
     // MARK: one panel
 
     func testTheSessionTheTaskAndTheProjectOpenTheSamePanel() throws {
-        let opened: [(String, String, String)] = [
-            ("Views/Console/ConsoleView.swift", "$showShare",
-             "ShareSheet(kind: .session, rootID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore)"),
-            ("Views/TasksView.swift", "$sharing",
-             "ShareSheet(kind: .task, rootID: taskID, baseURL: baseURL, tokenStore: model.tokenStore)"),
-            ("Views/ProjectsView.swift", "$sharing",
-             "ShareSheet(kind: .project, rootID: projectID, baseURL: baseURL, tokenStore: model.tokenStore)"),
+        // Where each is built, the sheet that presents it, and the platforms that compile that sheet.
+        // A session's opens from its page on both, and from the session list's rows on iOS alone
+        // (`ShareEntriesWiringTests` holds the rows to that).
+        let opened: [(String, String, String, [String])] = [
+            ("Views/Console/ConsoleView.swift", ".sheet(isPresented: $showShare)",
+             "ShareSheet(kind: .session, rootID: sessionID, baseURL: baseURL, tokenStore: appModel.tokenStore)", []),
+            ("Views/AgentsView.swift", ".sheet(item: $sharingSession)",
+             "ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)", ["os(iOS)"]),
+            ("Views/TasksView.swift", ".sheet(isPresented: $sharing)",
+             "ShareSheet(kind: .task, rootID: taskID, baseURL: baseURL, tokenStore: model.tokenStore)", []),
+            ("Views/ProjectsView.swift", ".sheet(isPresented: $sharing)",
+             "ShareSheet(kind: .project, rootID: projectID, baseURL: baseURL, tokenStore: model.tokenStore)", []),
         ]
         var built = 0
         for file in Self.appFiles {
             built += code(try appSource(file)).components(separatedBy: "ShareSheet(").count - 1
         }
-        XCTAssertEqual(built, opened.count, "one panel, built once per root and nowhere else")
-        for (file, flag, sheet) in opened {
+        XCTAssertEqual(built, opened.count, "one panel, built once per place that opens it and nowhere else")
+        for (file, presenter, sheet, platforms) in opened {
             let view = code(try appSource(file))
-            let presented = try slice(view, from: ".sheet(isPresented: \(flag))", to: sheet)
-            XCTAssertEqual(presented.components(separatedBy: ".sheet(").count, 2, "\(file): the flag's own sheet")
+            let presented = try slice(view, from: presenter, to: sheet)
+            XCTAssertEqual(presented.components(separatedBy: ".sheet(").count, 2, "\(file): its own sheet")
             XCTAssertFalse(presented.contains("#"), "\(file): the sheet's content isn't gated")
-            XCTAssertEqual(try branches(of: ".sheet(isPresented: \(flag))", in: view), [],
-                           "\(file): presented on iOS and macOS alike")
+            XCTAssertEqual(try branches(of: presenter, in: view), platforms,
+                           "\(file): presented on \(platforms.isEmpty ? "iOS and macOS alike" : platforms.joined())")
         }
         // The two menus keep saying what the panel did, from what it hands back.
         for file in ["Views/TasksView.swift", "Views/ProjectsView.swift"] {

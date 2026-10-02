@@ -129,6 +129,9 @@ function fakePrisma() {
     // probe drives — so the standing is UNCONFIRMED and the projection says so.
     projectStandardSetConfirmation: { findFirst: async () => null },
     projectCodebase: { findFirst: async () => null },
+    // And the landings and merges into the upstream in flight, which a criterion's landing reason
+    // reads beside its receipts: none, in a probe that runs no integration line.
+    projectIntegrationJob: { findMany: async () => [] },
     projectAcceptanceCriterionDefinition: {
       findMany: async ({ where }: { where: { projectId: string } }) => state.criteria
         .filter((row) => row.projectId === where.projectId)

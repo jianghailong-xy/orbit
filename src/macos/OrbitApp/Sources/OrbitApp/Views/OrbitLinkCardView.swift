@@ -90,11 +90,15 @@ struct OrbitLinkCardView: View {
             Text(content.typeName)
                 .font(.orbitLabel.weight(.semibold)).foregroundStyle(.secondary)
                 .lineLimit(1)
+                .layoutPriority(1)
             Spacer(minLength: 6)
             if let pill = content.pill {
                 TaskStatusPill(pill: pill)
             } else if let glyph = content.sessionGlyph {
-                SessionStatusPill(glyph: glyph)
+                // A failed session's state is its error, which can run to a sentence: the name keeps
+                // its width and the pill takes what is left, truncated — held at its full length it
+                // pushed the card, and the bubble holding it, off the screen.
+                SessionStatusPill(glyph: glyph).layoutPriority(1)
             } else if let trust = content.wikiTrust, trust != .unknown {
                 WikiBadge(text: WikiCopy.trustLabel(trust), tone: WikiLogic.trustTone(trust))
             }
@@ -236,7 +240,7 @@ struct SessionStatusPill: View {
             case .symbol(let name):
                 Image(systemName: name).font(.orbitMeta)
             }
-            Text(glyph.label).font(.orbitMeta).lineLimit(1).fixedSize()
+            Text(glyph.label).font(.orbitMeta).lineLimit(1).truncationMode(.tail)
         }
         .padding(.horizontal, 7)
         .padding(.vertical, 2)

@@ -106,7 +106,68 @@ final class ProjectPageSectionsTests: XCTestCase {
                        "4 resolved · latest: Auto-resolved — its condition no longer holds (08-21 16:12)")
         XCTAssertNil(ProjectPage.blockersResolvedSummary(ProjectBlockers()))
         XCTAssertEqual(ProjectPage.resolveBlockerMessage(whoNotInTeam),
-                       "Who not in team · 合并 TasksView 的两个独立轮询循环\n\nRecorded with your name and this reason.")
+                       "Who not in team · 合并 TasksView 的两个独立轮询循环\n\nAccepting records your name and note.")
+    }
+
+    /// A delivery a machine may not settle is a decision: the row says the question, the press
+    /// reviews it, and the dialog puts what the decision rests on before the note it asks for.
+    func testADeliveryBlockerAsksForADecisionAndShowsWhatItRestsOn() throws {
+        // The project read serves both beside the blocker (`project-blocker-resolution.ts`).
+        let read = try JSONDecoder().decode(ProjectBlocker.self, from: Data("""
+            {"id":"b6","kind":"HUMAN_DECISION_REQUIRED","agentArgument":"Only the root cause.",
+             "criterionText":"Re-run the import.","detail":{"reason":"CRITERION_EXEMPTION_ARGUED"}}
+            """.utf8))
+        XCTAssertEqual(read.agentArgument, "Only the root cause.")
+        XCTAssertEqual(read.criterionText, "Re-run the import.")
+        let argued = ProjectBlocker(
+            id: "b4", kind: "HUMAN_DECISION_REQUIRED", subjectTitle: "补数", agentArgument: "  这次交付只定位根因，没有执行补数。 ",
+            criterionOrdinal: 3, criterionText: "给出可验证的补数方案，并完成一次成功重跑。",
+            detail: .init(reason: "CRITERION_EXEMPTION_ARGUED"))
+        XCTAssertEqual(ProjectPage.blockerHeadline(argued).title, "Agent says this criterion doesn’t apply")
+        XCTAssertEqual(ProjectPage.blockerDecision(argued)?.question,
+                       "Does the agent’s explanation make this criterion inapplicable to this work?")
+        XCTAssertEqual(ProjectPage.resolveBlockerPress(argued), "Review…")
+        XCTAssertEqual(ProjectPage.resolveBlockerTitle(argued), "Review this blocker")
+        XCTAssertEqual(ProjectPage.resolveBlockerQuestion(argued), "What did you verify?")
+        XCTAssertEqual(ProjectPage.resolveBlockerConfirm(argued), "Accept the explanation")
+        XCTAssertEqual(ProjectPage.resolveBlockerKeep(argued), "Leave it open")
+        XCTAssertEqual(ProjectPage.resolveBlockerMessage(argued), """
+            Agent says this criterion doesn’t apply · 补数
+
+            Your decision
+            Does the agent’s explanation make this criterion inapplicable to this work?
+
+            Agent’s explanation
+            这次交付只定位根因，没有执行补数。
+
+            Current criterion
+            给出可验证的补数方案，并完成一次成功重跑。
+
+            Accepting records your name and note.
+            """)
+        // Files are listed whole; an explanation is only an argued exemption's.
+        let scope = ProjectBlocker(id: "b5", kind: "DELIVERY_REVIEW", agentArgument: "ignored",
+                                   detail: .init(reason: "OUTSIDE_DECLARED_SCOPE", paths: ["src/a.ts", "src/b.ts"]))
+        XCTAssertEqual(ProjectPage.resolveBlockerConfirm(scope), "Accept these files")
+        XCTAssertEqual(ProjectPage.resolveBlockerMessage(scope), """
+            Changed files it didn’t declare
+
+            Your decision
+            Are these extra files part of the delivery you want to accept?
+
+            Files this blocker names
+            src/a.ts
+            src/b.ts
+
+            Accepting records your name and note.
+            """)
+        // Any other kind is still simply resolved.
+        XCTAssertNil(ProjectPage.blockerDecision(whoNotInTeam))
+        XCTAssertEqual(ProjectPage.resolveBlockerPress(whoNotInTeam), "Resolve…")
+        XCTAssertEqual(ProjectPage.resolveBlockerTitle(whoNotInTeam), "Resolve this blocker")
+        XCTAssertEqual(ProjectPage.resolveBlockerQuestion(whoNotInTeam), "Why is it no longer blocking?")
+        XCTAssertEqual(ProjectPage.resolveBlockerConfirm(whoNotInTeam), "Resolve")
+        XCTAssertEqual(ProjectPage.resolveBlockerKeep(whoNotInTeam), "Cancel")
     }
 
     // MARK: run queue

@@ -2156,6 +2156,10 @@ export interface IntegrationJobResultRequest {
   landedSha?: string | null;
   landedTreeSha?: string | null;
   aheadOfUpstream?: number | null;
+  /** With NOTHING_TO_LAND: whether the source tip is an ancestor of the upstream, as the runner
+   *  measured it (0346). The only fact §1.4 lets that answer out of a criterion's roll-up on;
+   *  absent is "not measured", which an older runner sends, and withholds. */
+  sourceOnUpstream?: boolean | null;
   /** How many files the merge would change, for the card the owner reads (§3.2). */
   filesChanged?: number | null;
   checks?: IntegrationCheckResult[];

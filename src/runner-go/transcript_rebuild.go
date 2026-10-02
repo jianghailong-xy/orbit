@@ -74,7 +74,9 @@ const (
 // "Where the CLI will read it" is the whole of the first question, so it is asked of that path and
 // never of a glob over every project directory: a worktree that moved leaves the conversation
 // under the old cwd's slug, which `--resume` cannot read. Finding it there is the reason to
-// rebuild here, never a reason to skip the rebuild and resume into nothing.
+// rebuild here, never a reason to skip the rebuild and resume into nothing. The one other directory
+// read is the exact one runs/<id>/meta.json records this session last running in: a session moved
+// to another workspace on this machine has its conversation there, and copies it over whole.
 func ensureClaudeTranscript(ctx context.Context, t *Transport, job *ClaimedSession, execDir string, emit emitFn) bool {
 	// The account the session runs on decides where its conversation lives: `--resume` reads the
 	// transcript out of the CLI's own config directory, so a rebuild into the runner's default one
@@ -87,6 +89,13 @@ func ensureClaudeTranscript(ctx context.Context, t *Transport, job *ClaimedSessi
 	path, err := claudeTranscriptPathIn(base, execDir, job.SessionUUID)
 	if err != nil {
 		logln("transcript rebuild: cannot resolve transcript path:", err)
+		return true
+	}
+	// A session moved to another of this machine's workspaces left its conversation under the
+	// directory it last ran in: carry that across whole, where the rebuild below would shorten a long
+	// one. Asked before the conversation here is trusted, because a session moved back finds the copy
+	// it left here, without the turns it had since.
+	if carryMovedClaudeConversation(base, job, execDir, path) {
 		return true
 	}
 	if claudeTranscriptHasConversation(path) {

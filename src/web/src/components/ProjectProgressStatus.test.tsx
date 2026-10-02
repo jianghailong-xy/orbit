@@ -17,6 +17,7 @@ import {
   ItemAsCard,
   ProjectOpenItems,
   exceptionCardRows,
+  isOwnerExceptionCard,
 } from './ProjectProgressStatus';
 import { projectOpenItemsQuery } from '../lib/queries';
 import {
@@ -546,6 +547,29 @@ describe('exceptionCardRows — where each exception lands in a conversation', (
       EVENTS,
     );
     expect(rows.map(({ row }) => row.itemId)).toEqual([PAUSED.itemId, 'OLDER', CONFLICT.itemId]);
+  });
+});
+
+/**
+ * Which of those cards the conversation's pinned line points at, and the handle a press reaches one
+ * by. The line pointed at questions only, so an escalation drawn hours up the conversation had
+ * nothing pointing at it while the phone's bar did (the account owner's report, 2026-10-02).
+ */
+describe('isOwnerExceptionCard — the cards the pinned line points at', () => {
+  it('is the owner’s group, without the two kinds that have cards of their own', () => {
+    const rows = [PROMOTION, QUESTION, ESCALATED, PAUSED, CONFLICT, CHECK_FAILED];
+    expect(rows.filter(isOwnerExceptionCard).map((row) => row.itemId)).toEqual([
+      ESCALATED.itemId,
+      PAUSED.itemId,
+    ]);
+  });
+
+  it('carries its item on each card an item is drawn as, under whichever id that card has', () => {
+    const items = { needsYou: [ESCALATED, PAUSED], withCoordinator: [CONFLICT] };
+    for (const row of [ESCALATED, PAUSED, CONFLICT]) {
+      const html = paint(items, () => <ItemAsCard projectId={PROJECT_ID} row={row} now={NOW} />);
+      expect(html).toContain(`data-open-item="${row.itemId}"`);
+    }
   });
 });
 

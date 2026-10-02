@@ -36,6 +36,8 @@ test('a rule content that would forge a second grant is dropped, not stored', ()
   );
   assert.equal(normalizePermissionRule({ toolName: 'Bash', ruleContent: 'x'.repeat(201) }), null);
   assert.equal(normalizePermissionRule({ toolName: '', ruleContent: '' }), null);
+  assert.equal(normalizePermissionRule({ toolName: 'Bash', ruleContent: '/bin/bash:*' }), null);
+  assert.equal(normalizePermissionRule({ toolName: 'Bash', ruleContent: 'bash:*' }), null);
 });
 
 test('the ordinary shapes survive: spaces, globs, MCP names', () => {
@@ -190,6 +192,18 @@ test('a tool-wide Bash grant does not become blanket command execution elsewhere
   // widening this boundary exists to prevent — a command needs a command-prefix grant.
   assert.equal(
     ruleCoversApproval(AgentProvider.CODEX, 'Bash', bash('rm -rf /'), [{ toolName: 'Bash' }]),
+    false,
+  );
+});
+
+test('a stale shell-wrapper grant cannot answer a Codex command', () => {
+  assert.equal(
+    ruleCoversApproval(
+      AgentProvider.CODEX,
+      'Bash',
+      bash('/bin/bash -lc "rm -rf /"'),
+      [{ toolName: 'Bash', ruleContent: '/bin/bash:*' }],
+    ),
     false,
   );
 });

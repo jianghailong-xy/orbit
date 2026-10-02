@@ -24,6 +24,7 @@ import {
   RequestProjectStartDto,
   ResolveOpenItemDto,
   ResolveProjectBlockerDto,
+  RetryIntegrationDto,
   SendToCoordinatorDto,
   UpdateProjectDto,
 } from '../projects/dto';
@@ -33,6 +34,7 @@ import { ProjectHandoffService } from '../projects/project-handoff.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import { SessionAttemptService } from '../projects/session-attempt.service';
 import { ProjectsService } from '../projects/projects.service';
+import { readRequestAsk } from '../sessions/session-request';
 import { assertClientTurnIdNotReserved } from '../sessions/watch-turn-key';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
@@ -73,7 +75,7 @@ export class RunnerProjectsController {
     private readonly acceptance: ProjectAcceptanceService,
     private readonly handoffs: ProjectHandoffService,
     private readonly orchestration: RunnerOrchestrationAuthorizer,
-    // Only `askOwner`, `requestStart` and `resolveOpenItem` need it. Defaulted for the reason
+    // Only `askOwner`, `requestStart`, `resolveOpenItem` and `retryIntegration` need it. Defaulted for the reason
     // `ProjectsService`'s own late parameters are: Nest injects by type rather than by position,
     // while the specs that build this controller by hand to exercise one route would each have to
     // stub a service they never reach.
@@ -257,18 +259,24 @@ export class RunnerProjectsController {
     // naming it is what makes `chargeSteer`'s own exemption ("a session steering the attempt it runs
     // is not steering somebody else's") apply where it should.
     const actor: SessionLifecycleActor = { kind: 'AGENT_SESSION', sessionId: actingSessionId };
+    // A request to the coordinator (contract §3.1), read the way `session_send`'s body is. Recorded
+    // against the conversation the message is DELIVERED to, which the service resolves.
+    const ask = readRequestAsk(dto);
     return this.projects.sendToCoordinator(
       runner.ownerId,
       id,
       actingSessionId,
       dto.message,
       provided || randomUUID(),
-      this.attempts
-        ? {
-            chargeSteer: (sessionId: string, tx: Prisma.TransactionClient) =>
-              this.attempts!.chargeSteer(runner.ownerId, sessionId, actor, tx),
-          }
-        : undefined,
+      {
+        ...(this.attempts
+          ? {
+              chargeSteer: (sessionId: string, tx: Prisma.TransactionClient) =>
+                this.attempts!.chargeSteer(runner.ownerId, sessionId, actor, tx),
+            }
+          : {}),
+        ...(ask ? { ask } : {}),
+      },
     );
   }
 
@@ -468,6 +476,28 @@ export class RunnerProjectsController {
       kind: 'SESSION',
       sessionId: sessionId?.trim() ?? '',
     });
+  }
+
+  /**
+   * A coordinator running one of its project's failed landings again (`integration_retry`, contract
+   * §2.3 J-T1b): the next LAND_TASK generation of a DONE task whose newest landing ended
+   * CHECK_FAILED (a red check, or one that ran out of time) or ERROR.
+   *
+   * The platform reruns nothing by itself (J5), so this is the door a rerun takes, and it takes a
+   * reason. The acting session is the authority, checked by the service against the project's own
+   * coordinator pointer exactly as for the hand-close above — and, like it, a missing or blank header
+   * is NOT read as the account owner. No orchestration credential: it starts no session, and the
+   * landing it queues is the line's own work.
+   */
+  @Post('projects/:id/tasks/:taskId/integration/retry')
+  retryIntegration(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('taskId', PublicIdPipe) taskId: string,
+    @Body() dto: RetryIntegrationDto,
+  ) {
+    return this.openItems.retryIntegration(runner.ownerId, id, taskId, dto, sessionId?.trim());
   }
 
   /**

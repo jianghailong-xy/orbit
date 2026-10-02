@@ -130,6 +130,12 @@ export interface MergeToMainDto {
   waitSeconds?: number;
 }
 
+/** Start the dedicated repair conversation for a merge recovery. */
+export interface MergeRepairDto {
+  /** Prepare a reviewable PR candidate instead of resolving the recovery in place. */
+  preparePR?: boolean;
+}
+
 export interface SessionArmRetryDto {
   /** When the re-send should fire (ISO). Supplied by the caller because disarming cleared the
    *  only copy the server had; the client re-derives it from the failing reply with the same

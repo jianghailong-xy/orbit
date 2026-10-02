@@ -9,6 +9,10 @@ import {
 } from '@nestjs/common';
 import { Prisma, ProjectStatus } from '@prisma/client';
 import {
+  type DoneRequest,
+  type ProjectDoneBy,
+  type ProjectDoneRecord,
+  type ProjectDoneRequestBody,
   type ProjectStartRecord,
   type ProjectStartRequest,
   type ProjectStartSettings,
@@ -30,12 +34,16 @@ import {
   standardSetConfirmationStanding,
   standardSetVersion,
 } from './project-acceptance';
-import { refuseSessionAuthoredConfirmation } from './coordinator-authority';
+import {
+  refuseProjectStatusWrite,
+  refuseSessionAuthoredConfirmation,
+} from './coordinator-authority';
 import { VERIFICATION_METHOD_RUNGS } from './criteria-edit-classification';
 import { storeDerivedProjectStatus } from './project-done-derived';
 import { defaultStartLine, startProjectLine } from './project-integration-line';
 import { tellCoordinatorProjectStarted } from './project-started';
 import { START_REQUEST_KIND, answerStartRequests } from './project-start-request';
+import { DONE_REQUEST_KIND, answerDoneRequests } from './project-done-request';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 /** One stated criterion, as every read surface reports it. */
@@ -95,6 +103,26 @@ function criteriaVersionMoved(currentDigest: string): ConflictException {
       'The acceptance criteria changed after the version being confirmed was read. Read them '
       + 'again and confirm the set that stands now: a confirmation carried over an edit would '
       + 'say a person approved wording they never saw.',
+  });
+}
+
+/** The 409 an owner's DONE gets when the criteria moved after the card showed them. */
+function projectDoneCriteriaMoved(currentDigest: string): ConflictException {
+  return new ConflictException({
+    code: 'PROJECT_DONE_CRITERIA_VERSION_MOVED',
+    currentDigest,
+    message:
+      'The acceptance criteria changed after the version being recorded done was read. Read them '
+      + 'again: nothing was written.',
+  });
+}
+
+/** The 409 an owner's DONE gets when the request it answers is no longer the one standing: it was
+ *  answered, superseded or withdrawn, or it was made about criteria that have changed since. */
+function projectDoneRequestStale(why: string): ConflictException {
+  return new ConflictException({
+    code: 'PROJECT_DONE_REQUEST_STALE',
+    message: `The request to record this project done ${why}: nothing was written.`,
   });
 }
 
@@ -306,7 +334,9 @@ export class ProjectAcceptanceService {
     // any transaction: it reads committed rows, it decides nothing about whether this
     // confirmation was allowed, and a projection that could not be recomputed must not undo a
     // confirmation that was.
-    await storeDerivedProjectStatus(this.prisma, ownerId, projectId).catch((error) =>
+    await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
+      sessions: this.sessions,
+    }).catch((error) =>
       this.logger.warn(`derived project status not re-projected after confirmation: ${
         (error as { message?: string })?.message ?? String(error)}`),
     );
@@ -318,6 +348,111 @@ export class ProjectAcceptanceService {
       currentVersion,
       await this.latestConfirmation(projectId),
     ));
+  }
+
+  /**
+   * `POST /projects/:id/done`: the account owner records the project done, on the "Is this project
+   * done?" card or on the project page, in one write.
+   *
+   * Refused whole for a request carrying an acting session, before anything is read — by
+   * `refuseProjectStatusWrite`, the rule every session-authored write of `status` meets: a
+   * coordinator asks for this (`DONE_REQUEST`), it does not record it.
+   *
+   * One transaction, in the canonical lock order (docs/postgres-lock-order.md):
+   *
+   *   1. The project row, FOR NO KEY UPDATE (rank 40). A cancelled project is refused here, and so
+   *      is a seal that is not the one standing now, read under that lock so no criteria edit can
+   *      land between the comparison and the write.
+   *   2. The request the press answers, when it answers one (`requestId`), FOR UPDATE (rank 60): it
+   *      must still be OPEN and about that same seal, or the press is a 409.
+   *   3. The project: DONE, `done_by = 'OWNER'`, the instant, the seal and the accepted gaps, in one
+   *      statement.
+   *   4. The open request, if any, resolved APPROVED by the owner at that instant with the gaps they
+   *      accepted (`answerDoneRequests`).
+   *
+   * Every refusal comes before the first write, so a 409 writes nothing. What the record buys is
+   * `storeDerivedProjectStatus`'s rule: an ordinary task write, merge receipt or confirmation leaves
+   * it alone, and only the criteria changing or a task serving one being reopened reopens it.
+   */
+  async recordProjectDone(
+    ownerId: string,
+    projectId: string,
+    input: ProjectDoneRequestBody,
+    actingSessionId?: string,
+  ): Promise<ProjectDoneRecord> {
+    const refusal = refuseProjectStatusWrite(ProjectStatus.DONE, actingSessionId);
+    if (refusal) throw new ForbiddenException(refusal);
+    const unanchored = input.acceptedGaps.findIndex((gap) =>
+      typeof gap.criterionKey !== 'string' || gap.criterionKey.trim() === '');
+    if (unanchored >= 0) {
+      throw new BadRequestException(
+        `acceptedGaps[${unanchored}] names no criterionKey: a gap is accepted for one criterion`,
+      );
+    }
+    const requestId = input.requestId ?? null;
+    return withTransactionRetry(this.prisma, async (tx) => {
+      const [project] = await tx.$queryRaw<Array<{ status: ProjectStatus }>>(Prisma.sql`
+        SELECT "status"
+          FROM "project"
+         WHERE "id" = ${projectId}::uuid AND "owner_id" = ${ownerId}::uuid
+           FOR NO KEY UPDATE`);
+      if (!project) throw new NotFoundException('project not found');
+      if (project.status === ProjectStatus.CANCELLED) {
+        throw new ConflictException({
+          code: 'PROJECT_CANCELLED',
+          message: 'This project was cancelled, so it cannot be recorded done: nothing was written. '
+            + 'Reopen it first.',
+        });
+      }
+      const version = standardSetVersion(
+        await ProjectAcceptanceService.statedCriteria(tx, projectId),
+      );
+      if (input.criteriaDigest !== version.digest) throw projectDoneCriteriaMoved(version.digest);
+
+      if (requestId !== null) {
+        const [request] = await tx.$queryRaw<Array<{ state: string; payload: Prisma.JsonValue }>>(
+          Prisma.sql`
+            SELECT "state", "payload"
+              FROM "project_open_item"
+             WHERE "id" = ${requestId}::uuid AND "project_id" = ${projectId}::uuid
+               AND "owner_id" = ${ownerId}::uuid AND "kind" = ${DONE_REQUEST_KIND}
+               FOR UPDATE`);
+        if (!request) throw new NotFoundException('done request not found');
+        if (request.state !== 'OPEN') throw projectDoneRequestStale('is no longer open');
+        const asked = request.payload as unknown as Partial<DoneRequest> | null;
+        if (asked?.criteriaDigest !== version.digest) {
+          throw projectDoneRequestStale('was made about criteria that have changed since');
+        }
+      }
+
+      const at = new Date();
+      await tx.project.update({
+        where: { id: projectId },
+        data: {
+          status: ProjectStatus.DONE,
+          doneBy: 'OWNER' satisfies ProjectDoneBy,
+          doneAt: at,
+          doneCriteriaDigest: version.digest,
+          acceptedGaps: input.acceptedGaps as unknown as Prisma.InputJsonValue,
+        },
+      });
+      await answerDoneRequests(tx, {
+        ownerId,
+        projectId,
+        requestId,
+        at,
+        acceptedGaps: input.acceptedGaps,
+      });
+      return {
+        projectId,
+        status: ProjectStatus.DONE,
+        doneBy: 'OWNER',
+        doneAt: at.toISOString(),
+        criteriaDigest: version.digest,
+        acceptedGaps: input.acceptedGaps,
+        requestId,
+      };
+    }, loggedRetry(this.logger, 'projectAcceptance.recordProjectDone'));
   }
 
   /**
@@ -516,7 +651,9 @@ export class ProjectAcceptanceService {
           (error as { message?: string })?.message ?? String(error)}`),
       );
     }
-    await storeDerivedProjectStatus(this.prisma, ownerId, projectId).catch((error) =>
+    await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
+      sessions: this.sessions,
+    }).catch((error) =>
       this.logger.warn(`derived project status not re-projected after the start: ${
         (error as { message?: string })?.message ?? String(error)}`),
     );

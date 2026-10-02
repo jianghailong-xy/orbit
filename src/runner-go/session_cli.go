@@ -27,7 +27,8 @@ Usage:
   orbit session search --query TEXT [--limit N] [--json]
   orbit session get SESSION_ID [--json]
   orbit session await --session-id ID[,ID...] [--until PRESET] [--ttl-seconds N] [--idempotency-key KEY] [--json]
-  orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--resume-if-ended] [--json]
+  orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--resume-if-ended] [--expect-reply [--reply-options JSON] [--reply-within-seconds N]] [--json]
+  orbit session reply REQUEST_ID (--message TEXT | --message-file - | --option N) [--json]
   orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]
   orbit session merge SESSION_ID [--target-branch BRANCH] [--wait-seconds N] [--json]
   orbit session merge-receipt SESSION_ID --result RESULT --source-sha SHA --target-branch BRANCH [options]
@@ -135,7 +136,7 @@ long-lived session has finished the turn it was given.
 	"send": `orbit session send — add a message to a session
 
 Usage:
-  orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--resume-if-ended] [--json]
+  orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--resume-if-ended] [--expect-reply [--reply-options JSON] [--reply-within-seconds N]] [--json]
 
 --message-file accepts only '-' (stdin), so the CLI never opens an arbitrary path.
 
@@ -150,6 +151,25 @@ respawns with the conversation restored and the message becomes its first turn, 
 reports "revived": true. It costs a runner slot and a fresh run, so it is off by default; a
 session with no runner, an offline one, or one whose conversation cannot be restored still
 refuses, naming the reason.
+
+--expect-reply makes the message a request. The call still returns at once, with "requestId"
+and "replyBy"; the outcome comes back to the calling session later as a turn of its own —
+the answer (REPLIED), or why there is none: NO_REPLY (it went idle without answering),
+RECIPIENT_ENDED, EXPIRED or UNDELIVERED. Exactly one, exactly once; do not poll for it.
+--reply-options offers 2-4 answers to choose from, as a JSON array of {label, description}
+objects; --reply-within-seconds sets the deadline (60-2592000, default 86400). Requests need
+a calling session: a reply needs a conversation to come back to.
+`,
+	"reply": `orbit session reply — answer a request another session sent you
+
+Usage:
+  orbit session reply REQUEST_ID (--message TEXT | --message-file - | --option N) [--json]
+
+REQUEST_ID is the request-id of the <orbit-session-message> block the request arrived with.
+--option is the index of the answer you choose when the request offered options; --message
+(or --message-file -, read from stdin) is your answer in words, and may go with --option.
+Only the session the request was sent to can answer it, and only once: a request that already
+has an outcome is refused with REQUEST_CLOSED.
 `,
 	"interrupt": `orbit session interrupt — interrupt a session's current turn
 
@@ -222,7 +242,8 @@ var sessionCLICapabilities = []cliCapabilitySpec{
 	{Tool: "session_search", Argv: []string{"orbit", "session", "search"}, Usage: "orbit session search --query TEXT [--limit N] [--json]", Arguments: []string{"--query <text> (required)", "--limit <n>", "--json"}},
 	{Tool: "session_get", Argv: []string{"orbit", "session", "get"}, Usage: "orbit session get SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}},
 	{Tool: "session_await", Argv: []string{"orbit", "session", "await"}, Usage: "orbit session await --session-id ID[,ID...] [--until PRESET] [--ttl-seconds N] [--idempotency-key KEY] [--json]", Arguments: awaitCLIArguments("session-id", "sessionIds", sessionAwaitPresets), Mutates: true},
-	{Tool: "session_send", Argv: []string{"orbit", "session", "send"}, Usage: "orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--resume-if-ended] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file - (required)", "--client-turn-id <id>", "--resume-if-ended", "--json"}, Mutates: true},
+	{Tool: "session_send", Argv: []string{"orbit", "session", "send"}, Usage: "orbit session send SESSION_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--resume-if-ended] [--expect-reply [--reply-options JSON] [--reply-within-seconds N]] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file - (required)", "--client-turn-id <id>", "--resume-if-ended", "--expect-reply", "--reply-options <json array of {label, description}>", "--reply-within-seconds <n> (60-2592000)", "--json"}, Mutates: true},
+	{Tool: "session_reply", Argv: []string{"orbit", "session", "reply"}, Usage: "orbit session reply REQUEST_ID (--message TEXT | --message-file - | --option N) [--json]", Arguments: []string{"[request-id] (required)", "--message <text> | --message-file -", "--option <n>", "--json"}, Mutates: true},
 	{Tool: "session_interrupt", Argv: []string{"orbit", "session", "interrupt"}, Usage: "orbit session interrupt SESSION_ID [--message TEXT | --message-file -] [--client-turn-id ID] [--json]", Arguments: []string{"[session-id] (required)", "--message <text> | --message-file -", "--client-turn-id <id>", "--json"}, Mutates: true},
 	{Tool: "session_merge", Argv: []string{"orbit", "session", "merge"}, Usage: "orbit session merge SESSION_ID [--target-branch BRANCH] [--wait-seconds N] [--json]", Arguments: []string{"[session-id] (required)", "--target-branch <branch>", "--wait-seconds <n> (1-300; wait for the outcome and return the receipt instead of just queueing)", "--json"}, Mutates: true},
 	{Tool: "session_end", Argv: []string{"orbit", "session", "end"}, Usage: "orbit session end SESSION_ID [--json]", Arguments: []string{"[session-id] (required)", "--json"}, Mutates: true},
@@ -314,6 +335,8 @@ func cmdSessionCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliSessionAwait(args[1:], out, ctx)
 	case "send":
 		return cliSessionSend(args[1:], in, out, ctx)
+	case "reply":
+		return cliSessionReply(args[1:], in, out, ctx)
 	case "interrupt":
 		return cliSessionInterrupt(args[1:], in, out, ctx)
 	case "merge":
@@ -813,6 +836,7 @@ func cliSessionSend(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	messageFile := fs.String("message-file", "", "read message from stdin (-)")
 	clientTurnID := fs.String("client-turn-id", "", "idempotency key for this message")
 	resumeIfEnded := fs.Bool("resume-if-ended", false, "restart the session if it has ended")
+	request := addSessionRequestFlags(fs)
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
 		return err
@@ -840,6 +864,9 @@ func cliSessionSend(args []string, in io.Reader, out io.Writer, ctx cliOrchestra
 	// sends, so an old server cannot read a field it does not know about as anything.
 	if *resumeIfEnded {
 		body["resumeIfEnded"] = true
+	}
+	if err := request.apply(body); err != nil {
+		return err
 	}
 	raw, err := t.sendSessionMessage(ctx.sessionID, ctx.token, id, body)
 	if err != nil {

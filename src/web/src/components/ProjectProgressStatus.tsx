@@ -1088,6 +1088,9 @@ function ItemCard({
       className={`approval-card project-open-item-card is-${tone}`}
       id={id ?? `open-item-${row.itemId}`}
       data-kind={row.kind}
+      // One handle for all three cards, whichever id each is drawn under: what the conversation's
+      // pinned line scrolls to, and measures to say which way that is (`revealOpenItemCard`).
+      data-open-item={row.itemId}
     >
       <div className="approval-head project-open-item-head">
         <span className="project-open-item-heading">{heading}</span>
@@ -1126,12 +1129,27 @@ export function ItemAsCard({
   // would be two cards answering one question, and only one of them could win. A merge approval is
   // the same: `ProjectPromotionCard` draws it from the candidate itself, which is where what would
   // land and what the checks came to actually live.
-  if (row.kind === 'COORDINATOR_QUESTION' || row.kind === 'PROMOTION_APPROVAL') return null;
+  if (hasCardOfItsOwn(row)) return null;
   return escalationHeading(row, now) != null ? (
     <EscalatedItemCard projectId={projectId} row={row} now={now} />
   ) : (
     <OpenItemCard projectId={projectId} row={row} now={now} />
   );
+}
+
+/** The two kinds `ItemAsCard` draws nothing for, because each has a card of its own. */
+function hasCardOfItsOwn(row: Pick<ProjectOpenItemRow, 'kind'>): boolean {
+  return row.kind === 'COORDINATOR_QUESTION' || row.kind === 'PROMOTION_APPROVAL';
+}
+
+/**
+ * Whether a row is drawn as a card the OWNER answers by pressing a door rather than by replying — an
+ * exception that became theirs, or the pause only they can lift. The conversation's pinned line
+ * points at these as well as at its questions (`DecisionStrip`), so one that has scrolled away still
+ * has something pointing at it. The native clients count the same rows (`ExceptionCards.cards`).
+ */
+export function isOwnerExceptionCard(row: ProjectOpenItemRow): boolean {
+  return row.assignee === 'OWNER' && !hasCardOfItsOwn(row);
 }
 
 /**
