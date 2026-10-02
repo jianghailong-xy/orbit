@@ -28,6 +28,8 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertNil(Approvals.rememberRule(toolName: "ExitPlanMode", input: .null))
         XCTAssertNil(Approvals.rememberRule(toolName: "Bash",
                                             input: .object(["command": .string("|| true")])))
+        XCTAssertNil(Approvals.rememberRule(toolName: "Bash",
+                                            input: .object(["command": .string("/bin/bash -lc 'git status'")])))
 
         let edit = Approvals.rememberRule(toolName: "Edit", input: .null)
         XCTAssertEqual(edit, PermissionRule(toolName: "Edit"))

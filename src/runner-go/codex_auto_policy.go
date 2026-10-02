@@ -1,7 +1,10 @@
 package main
 
 import (
+	"net/url"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -146,12 +149,15 @@ func codexPathWithinRoots(path string, roots []string) bool {
 func codexAutoCommandNeedsApproval(command string, tempRoots []string) bool {
 	lower := strings.ToLower(command)
 	for _, word := range []string{
-		"curl", "wget", "ssh", "scp", "socat", "sudo", "doas", "printenv",
+		"wget", "ssh", "scp", "socat", "sudo", "doas", "printenv",
 		"chmod", "chown", "mkfs", "shutdown", "reboot", "poweroff", "launchctl", "systemctl",
 	} {
 		if codexShellWord(lower, word) {
 			return true
 		}
+	}
+	if codexShellWord(lower, "curl") && !codexAutoLocalHealthProbe(command) {
+		return true
 	}
 	for _, phrase := range []string{
 		"git push", "git remote add", "git reset --hard", "git clean", "git fetch", "git pull", "git clone",
@@ -169,6 +175,158 @@ func codexAutoCommandNeedsApproval(command string, tempRoots []string) bool {
 		}
 	}
 	return false
+}
+
+var (
+	codexLocalHealthLoop = regexp.MustCompile(`(?is)^for\s+([A-Za-z_][A-Za-z0-9_]*)\s+in\s+\$\(\s*seq\s+([0-9]+)\s+([0-9]+)\s*\)\s*;\s*do\s+(.+?)\s*;\s*done$`)
+	codexLocalHealthBody = regexp.MustCompile(`(?is)^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\$\(\s*curl\s+(.+?)\s*\)\s*;\s*printf\s+(.+)$`)
+)
+
+// codexAutoLocalHealthProbe is the one network-shaped exception in Auto's command guard. It is
+// intentionally narrower than "curl localhost": only a bounded GET/HEAD probe to loopback is
+// accepted, with output discarded or reduced to an HTTP status. That covers the health checks the
+// runner uses without turning an approval for curl into permission to upload data or reach a remote
+// host. Anything that does not fit this small grammar keeps the normal human/reviewer path.
+func codexAutoLocalHealthProbe(command string) bool {
+	body, wrapped := codexShellWrapperBody(command)
+	if wrapped {
+		command = body
+	} else {
+		command = strings.TrimSpace(command)
+	}
+	command = strings.ReplaceAll(command, "'\"'\"'", "'")
+	if match := codexLocalHealthLoop.FindStringSubmatch(command); match != nil {
+		start, errStart := strconv.Atoi(match[2])
+		end, errEnd := strconv.Atoi(match[3])
+		if errStart != nil || errEnd != nil || start < 0 || end < start || end-start >= 20 {
+			return false
+		}
+		body := codexLocalHealthBody.FindStringSubmatch(match[4])
+		if body == nil || !codexLocalHealthPrintf(body[3], match[1], body[1]) {
+			return false
+		}
+		return codexLocalCurlArgs(body[2])
+	}
+	if strings.HasPrefix(strings.ToLower(command), "curl ") {
+		return codexLocalCurlArgs(strings.TrimSpace(command[len("curl"):]))
+	}
+	return false
+}
+
+func codexShellWrapperBody(command string) (string, bool) {
+	trimmed := strings.TrimSpace(command)
+	words, rest := codexShellWordsUntilOperator(trimmed)
+	if len(words) == 3 && strings.TrimSpace(rest) == "" && (words[1] == "-c" || words[1] == "-lc") {
+		switch filepath.Base(words[0]) {
+		case "bash", "sh", "dash", "zsh", "ksh":
+			return words[2], true
+		}
+	}
+	fields := strings.Fields(trimmed)
+	if len(fields) < 3 || (fields[1] != "-c" && fields[1] != "-lc") {
+		return "", false
+	}
+	switch filepath.Base(fields[0]) {
+	case "bash", "sh", "dash", "zsh", "ksh":
+	default:
+		return "", false
+	}
+	bodyStart := strings.Index(trimmed, fields[2])
+	if bodyStart < 0 {
+		return "", false
+	}
+	body := strings.TrimSpace(trimmed[bodyStart:])
+	if len(body) < 2 || (body[0] != '\'' && body[0] != '"') || body[len(body)-1] != body[0] {
+		return "", false
+	}
+	return body[1 : len(body)-1], true
+}
+
+func codexLocalHealthPrintf(format, loopVariable, resultVariable string) bool {
+	format = strings.TrimSpace(format)
+	if !strings.HasPrefix(format, "'") && !strings.HasPrefix(format, `"`) {
+		return false
+	}
+	quote := format[0]
+	close := strings.IndexByte(format[1:], quote)
+	if close < 0 {
+		return false
+	}
+	close++
+	if format[1:close] != "%02d %s\\n" {
+		return false
+	}
+	rest := strings.TrimSpace(format[close+1:])
+	want := `"$` + loopVariable + `" "$` + resultVariable + `"`
+	return rest == want
+}
+
+func codexLocalCurlArgs(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	if at := strings.Index(raw, "||"); at >= 0 {
+		fallback := strings.TrimSpace(raw[at+2:])
+		if fallback != "printf '000'" && fallback != `printf "000"` && fallback != "printf 000" {
+			return false
+		}
+		raw = strings.TrimSpace(raw[:at])
+	}
+	if strings.ContainsAny(raw, ";&|<") {
+		return false
+	}
+	words, rest := codexShellWordsUntilOperator(raw)
+	if rest != "" || len(words) == 0 {
+		return false
+	}
+	maxTimeout := -1
+	urls := 0
+	for i := 0; i < len(words); i++ {
+		word := strings.Trim(words[i], "'\"")
+		switch word {
+		case "-s", "-S", "-sS", "--silent", "--show-error", "-f", "--fail", "-I", "--head", "2>/dev/null":
+			continue
+		case "-m", "--max-time", "--connect-timeout":
+			if i+1 >= len(words) {
+				return false
+			}
+			i++
+			value, err := strconv.Atoi(strings.Trim(words[i], "'\""))
+			if err != nil || value < 0 || value > 10 {
+				return false
+			}
+			maxTimeout = value
+		case "-o":
+			if i+1 >= len(words) || strings.Trim(words[i+1], "'\"") != "/dev/null" {
+				return false
+			}
+			i++
+		case "-w", "--write-out":
+			if i+1 >= len(words) || strings.Trim(words[i+1], "'\"") != "%{http_code}" {
+				return false
+			}
+			i++
+		default:
+			if !codexLocalHealthURL(word) {
+				return false
+			}
+			urls++
+		}
+	}
+	return urls == 1 && maxTimeout >= 0
+}
+
+func codexLocalHealthURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "http" || u.User != nil || u.Host == "" || u.Fragment != "" {
+		return false
+	}
+	if port := u.Port(); port != "" {
+		value, err := strconv.Atoi(port)
+		if err != nil || value < 1 || value > 65535 {
+			return false
+		}
+	}
+	host := strings.ToLower(u.Hostname())
+	return host == "127.0.0.1" || host == "localhost" || host == "::1"
 }
 
 // codexAutoCommandTargetsOutsideRoots recognizes Git's explicit path selectors. Checking only

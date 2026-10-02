@@ -368,6 +368,35 @@ func TestCodexAutoApprovalAllowsRoutineWorkspaceRequests(t *testing.T) {
 	}
 }
 
+func TestCodexAutoApprovalAllowsBoundedLocalHealthProbe(t *testing.T) {
+	auto := codexAutoApprovalContextFor("/repo", "/tmp/uploads/session-1")
+	command := `/bin/bash -lc 'for i in $(seq 1 10); do code=$(curl --max-time 5 -sS -o /dev/null -w '"'"'%{http_code}'"'"' http://127.0.0.1:2086/api/health 2>/dev/null || printf '"'"'000'"'"'); printf '"'"'%02d %s\n'"'"' "$i" "$code"; done'`
+	allowed, decided := codexAutoApproval(codexApprovalRequest{}, map[string]interface{}{
+		"command": command,
+		"cwd":     "/repo",
+	}, auto)
+	if !allowed || !decided {
+		t.Fatalf("local health probe = (%v, %v), want allowed without asking", allowed, decided)
+	}
+}
+
+func TestCodexAutoApprovalKeepsRemoteOrMutatingHealthProbesForReview(t *testing.T) {
+	auto := codexAutoApprovalContextFor("/repo", "/tmp/uploads/session-1")
+	for _, command := range []string{
+		"curl --max-time 5 http://example.com/health",
+		"curl --max-time 5 -X POST http://127.0.0.1:2086/api/health",
+		"for i in $(seq 1 100); do curl --max-time 5 http://127.0.0.1:2086/api/health; done",
+	} {
+		allowed, decided := codexAutoApproval(codexApprovalRequest{}, map[string]interface{}{
+			"command": command,
+			"cwd":     "/repo",
+		}, auto)
+		if allowed || decided {
+			t.Errorf("command %q = (%v, %v), want approval card", command, allowed, decided)
+		}
+	}
+}
+
 func TestCodexAutoApprovalLeavesBoundariesAndHighRiskRequestsForOwner(t *testing.T) {
 	auto := codexAutoApprovalContextFor("/repo", "/tmp/uploads/session-1")
 	for _, tc := range []struct {

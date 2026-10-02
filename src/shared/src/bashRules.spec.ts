@@ -68,6 +68,11 @@ describe('bashCommandRules', () => {
     expect(bashCommandRules('git add -A')).toEqual([{ toolName: 'Bash', ruleContent: 'git add:*' }]);
   });
 
+  it('does not turn a shell wrapper into a wrapper-wide standing grant', () => {
+    expect(bashCommandRules("/bin/bash -lc 'git status'")).toEqual([]);
+    expect(bashCommandRules('cd /repo && /bin/bash -lc "git status"')).toEqual([]);
+  });
+
   it('dedupes a sub-command that recurs across the line', () => {
     expect(prefixesOf('git add a; git status; git add b')).toEqual(['git add', 'git status']);
   });

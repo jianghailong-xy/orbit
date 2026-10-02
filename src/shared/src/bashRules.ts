@@ -6,6 +6,36 @@ import type { PermissionRule } from './dto';
 // implementations would drift, and a drift here means a rule quietly grants something other than
 // what it was created from.
 
+const SHELL_WRAPPER_PROGRAMS = new Set([
+  'bash',
+  '/bin/bash',
+  '/usr/bin/bash',
+  'sh',
+  '/bin/sh',
+  '/usr/bin/sh',
+  'zsh',
+  '/bin/zsh',
+  '/usr/bin/zsh',
+]);
+
+/** A wrapper prefix is never a useful standing grant: `/bin/bash:*` covers every command that
+ * the wrapper may execute. Keep this predicate shared with the server so old or hand-written
+ * rules cannot recreate the broad grant that the clients refuse to derive. */
+export function isBashShellWrapperPrefix(prefix: string): boolean {
+  return SHELL_WRAPPER_PROGRAMS.has(prefix.trim());
+}
+
+/** Whether one command segment invokes a shell with `-c`/`-lc`-style command execution. */
+export function isBashShellWrapperCommand(segment: string): boolean {
+  const toks = segment.trim().split(/\s+/);
+  let i = 0;
+  while (i < toks.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(toks[i])) i++;
+  const program = toks[i];
+  if (!program || !isBashShellWrapperPrefix(program)) return false;
+  const option = toks[i + 1];
+  return option === '--command' || /^-[A-Za-z]*c[A-Za-z]*$/.test(option ?? '');
+}
+
 // Split a shell command into its top-level sub-commands at unquoted ; && || | and
 // newlines, so every real command in a compound line can get its own allow rule — claude
 // gates each segment separately, so remembering only the leading one (e.g. `cd`) leaves
@@ -73,6 +103,10 @@ export function bashPrefix(segment: string): string | null {
 // command is blank or no segment yields a clean prefix.
 export function bashCommandRules(cmd: string): PermissionRule[] {
   if (!cmd.trim()) return [];
+  // Codex sends commands as `/bin/bash -lc '…'`. Remembering the wrapper would create a
+  // rule equivalent to `Bash(/bin/bash:*)`, which is a standing grant for arbitrary shell code.
+  // A compound command containing a wrapper is equally unsafe to summarize by prefixes.
+  if (bashSegments(cmd).some(isBashShellWrapperCommand)) return [];
   const seen = new Set<string>();
   const rules: PermissionRule[] = [];
   for (const seg of bashSegments(cmd)) {
