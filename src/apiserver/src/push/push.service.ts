@@ -6,6 +6,7 @@ import { RunStatus } from '@prisma/client';
 import type { LoginEngine } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { readOwnerItemSessionIds } from '../projects/owner-decision-signal';
+import { openItemsNoLongerOwed } from '../projects/project-open-item';
 import { agentAlert } from './agent-alert';
 import { badgeDiff, BadgeState } from './badge-diff';
 import { ownerItemAlert } from './owner-item-alert';
@@ -398,8 +399,10 @@ export class PushService {
         },
       });
       // A resolved item is not waiting on anybody: the owner answered it in another window, or the
-      // fact it was about moved on while this call was on its way here.
+      // fact it was about moved on while this call was on its way here. Nor is an open one whose
+      // candidate or task has moved on, which nothing closed yet (`openItemOwed`).
       if (!item || item.state !== 'OPEN') return;
+      if ((await openItemsNoLongerOwed(this.prisma, [itemId])).size > 0) return;
       const alert = ownerItemAlert({
         ...item,
         projectTitle: item.project?.title ?? null,

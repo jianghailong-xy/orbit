@@ -279,6 +279,12 @@ const CORE_TRIGGERS_AFTER: Readonly<Record<string, readonly string[]>> = {
     'session_opencode_runner_claim_guard',
     'session_project_capacity_serialize_insert_delete',
     'session_project_capacity_serialize_update',
+    // 0352's: an asking session that stops for good marks the outcomes held for its next turn, so
+    // its task is told them instead. Another SIBLING change.
+    'session_request_asker_stopped',
+    // 0350's session-request close: a session's run ending, or the session being completed or
+    // moved to Trash, closes the requests still waiting on it. Another SIBLING change.
+    'session_request_recipient_ended',
     // 0231's SOURCE snapshot freeze guard: the selector and the pin are frozen facts, and this is
     // the database's own refusal of every later write to those columns. Added by a SIBLING change,
     // not by 0207 or 0224 — which is exactly what this list exists to make visible.
@@ -299,7 +305,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
   // `task` carries 24; naming all of them here would restate the inventory rather than check it.
   // What matters for it is the same two properties, stated directly.
   const core = TRIGGER_WRITE_SOURCES.filter((entry) => CENSUS_TABLES.includes(entry.table));
-  assert.equal(core.length, 43,
+  assert.equal(core.length, 45,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -310,7 +316,9 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '0280 added the three `task_list_task_count_*` triggers to `task` — the maintained list '
     + 'count that replaced an unfiltered whole-table aggregate on every read of GET /task-lists — '
     + 'and 43 once 0282 added the three `project_task_status_count_*` triggers to `task`, the same '
-    + 'maintained-count shape for one project\'s per-status tally');
+    + 'maintained-count shape for one project\'s per-status tally, 44 once 0350 added '
+    + '`session_request_recipient_ended` to `session`, and 45 once 0352 added '
+    + '`session_request_asker_stopped` to it');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
   // Every one of them installed BEFORE 0207 is still here. Derived from the inventory's own
@@ -323,13 +331,14 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     core.filter((entry) => Number(entry.since.slice(0, 4)) >= 207).map((entry) => entry.trigger).sort(),
     ['project_task_status_count_delete', 'project_task_status_count_insert',
       'project_task_status_count_move', 'run_event_ingestion_provenance_guard',
-      'session_source_freeze_guard',
+      'session_request_asker_stopped', 'session_request_recipient_ended', 'session_source_freeze_guard',
       'task_list_task_count_delete', 'task_list_task_count_insert', 'task_list_task_count_relist',
       'task_progress_epoch_advance'],
     'the only triggers here newer than 0207 are the ones a later migration installed and kept — '
     + '0220\'s `run_event_ingestion_provenance_guard`, 0231\'s `session_source_freeze_guard`, '
     + '0271\'s `task_progress_epoch_advance`, 0280\'s three `task_list_task_count_*` and 0282\'s '
-    + 'three `project_task_status_count_*`. '
+    + 'three `project_task_status_count_*`, 0350\'s `session_request_recipient_ended` and 0352\'s '
+    + '`session_request_asker_stopped`. '
     + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(

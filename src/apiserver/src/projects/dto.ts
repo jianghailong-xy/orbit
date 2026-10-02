@@ -600,6 +600,14 @@ export class AskOwnerDto {
 export class SendToCoordinatorDto {
   @IsString() @MinLength(1) message!: string;
   @IsOptional() @IsString() @MinLength(1) @MaxLength(200) clientTurnId?: string;
+  /**
+   * Ask the coordinator for a reply (docs/session-request-reply-contract.md §3.1), and the two things
+   * only a request may carry. Declared here so the global whitelist keeps them; what they may hold is
+   * `readRequestAsk`'s to judge, the same reading `session_send`'s body gets.
+   */
+  @IsOptional() @IsBoolean() expectReply?: boolean;
+  @IsOptional() @IsArray() replyOptions?: unknown[];
+  @IsOptional() @IsInt() replyWithinSeconds?: number;
 }
 
 /**

@@ -5,6 +5,8 @@ import type {
   OpenItemDeliveryCard,
   ProjectStartedCard,
   SessionCapabilities,
+  SessionMessageCard,
+  SessionRequestView,
   SessionTurnIntent,
   SessionTurnPlacement,
 } from '@orbit/shared';
@@ -618,6 +620,10 @@ export interface ActiveSessionTurn {
   openItemDelivery?: OpenItemDeliveryCard;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStartedCard;
+  /** Another Orbit session's message (`SessionMessageCard`): who sent it, as the runner's echo will
+   *  carry it. Its words are that session's, not the reader's. Absent on every turn nobody's session
+   *  sent. */
+  sessionMessage?: SessionMessageCard;
   /** The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
    *  delivery — so nobody typed its words. Absent on every turn somebody sent. */
   authoredByOrbit?: true;
@@ -854,8 +860,20 @@ export const unpinSession = (sessionId: string) =>
 // re-sends with. Asked only when the loaded transcript window cannot answer: a run's message sits
 // at seq 1 behind thousands of tool events, far outside the tail this page paints, and deciding
 // from that window alone is how the button went missing on exactly the runs an outage kills.
+// `sessionMessage` is the card the words' echo carries when they are another Orbit session's: the
+// Retry then asks the server to re-send them (`resendSessionRetryMessage`).
 export const getSessionRetryMessage = (sessionId: string) =>
-  api<{ text: string }>(`/sessions/${sessionId}/retry-message`);
+  api<{ text: string; sessionMessage?: SessionMessageCard }>(`/sessions/${sessionId}/retry-message`);
+
+// Re-send another session's message from the failure card (docs/session-request-reply-contract.md
+// §2.1): the server re-sends it as the automatic retry would — signed by that session, with the
+// request it was — instead of this page sending the words again in the owner's own name. Keyed like
+// any send, so a replay of a lost response is the same re-send.
+export const resendSessionRetryMessage = (sessionId: string, clientTurnId: string) =>
+  api<{ turnId: string; placement?: string }>(`/sessions/${sessionId}/retry-message`, {
+    method: 'POST',
+    body: { clientTurnId },
+  });
 
 // Turn off / put back the retry armed on this session by a spent quota or a transient provider
 // error. Arming is automatic when one of those kills a turn; `armAutoRetry` exists so the card's
@@ -1368,6 +1386,10 @@ export interface SessionDetail {
  *  resolve the runner behind a `/sessions/:id` deep link and show its worktree output. */
 export const getSession = (idOrPublicId: string) =>
   api<SessionDetail>(`/sessions/${idOrPublicId}`);
+
+/** One session request as it stands now — the state a request card shows (lib/sessionRequest). */
+export const getSessionRequest = (requestId: string) =>
+  api<SessionRequestView>(`/session-requests/${encodeURIComponent(requestId)}`);
 
 /**
  * Open (or return) the conversation a task list is steered from.

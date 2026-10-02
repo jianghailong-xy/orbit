@@ -79,6 +79,20 @@ final class Phase3LogicTests: XCTestCase {
         XCTAssertTrue(SessionDelta.diff(previous: cur, current: cur).isEmpty)
     }
 
+    /// A project ready to start is not something blocked on you, so its start request arriving
+    /// raises no "Needs your approval" alert — and a blocked tool call landing beside it still does.
+    func testAStartRequestIsNotAnnouncedAsAnApproval() {
+        func row(_ approvals: Int, _ kind: SessionWaitingKind?) -> Session {
+            Session(id: "c", title: "Coordinator", status: .awaitingInput, agentId: nil,
+                    assignedRunnerId: nil, pendingApprovals: approvals, waitingKind: kind,
+                    branch: nil, updatedAt: nil)
+        }
+        let idle = row(0, nil), ready = row(1, .startRequest), blocked = row(2, nil)
+        XCTAssertTrue(SessionDelta.diff(previous: [idle], current: [ready]).isEmpty)
+        XCTAssertEqual(SessionDelta.diff(previous: [ready], current: [blocked]),
+                       [.needsApproval(sessionID: "c", title: "Coordinator", count: 2)])
+    }
+
     func testFocusedSessionIsSkipped() {
         let prev = [session("a", .running, approvals: 0)]
         let cur = [session("a", .running, approvals: 1)]

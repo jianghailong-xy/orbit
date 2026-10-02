@@ -31,12 +31,14 @@ import {
   CreateSessionDto,
   MergeRepairDto,
   MergeToMainDto,
+  MoveSessionDto,
   SessionArmRetryDto,
   SessionConfigDto,
   SessionAccountDto,
   SessionRenameDto,
   SessionResumeDto,
   SessionInterruptDto,
+  SessionRetryResendDto,
   SessionTurnDto,
   RecordMergeReceiptDto,
 } from './dto';
@@ -271,7 +273,7 @@ export class SessionsController {
   @Post()
   create(
     @CurrentUser() user: AuthUser,
-    @Body(PublicIdPipe.forFields('workspaceId', 'agentId', 'assignedRunnerId', 'taskId', 'attachmentIds'))
+    @Body(PublicIdPipe.forFields('workspaceId', 'agentId', 'assignedRunnerId', 'taskId', 'attachmentIds', 'folderId'))
     dto: CreateSessionDto,
   ) {
     // `agentId` is the pre-rename name every shipped client still sends.
@@ -588,6 +590,22 @@ export class SessionsController {
     return this.autoRetry.retryMessage(user.userId, id);
   }
 
+  /** Re-send that message now, the way the auto-retry does: the Retry button's door when the message
+   *  is another session's (`sessionMessage` on the answer above), so it goes out with that session as
+   *  its sender and the request it was, charged to nobody's hourly limit (contract §2.1) — not through
+   *  the owner's own door, which would say it again in the owner's name. */
+  @Post(':id/retry-message')
+  resendRetryMessage(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: SessionRetryResendDto,
+  ) {
+    const clientTurnId = typeof dto?.clientTurnId === 'string' ? dto.clientTurnId.trim() : '';
+    if (!clientTurnId) throw new BadRequestException('clientTurnId is required');
+    assertClientTurnIdNotReserved(clientTurnId);
+    return this.autoRetry.resendRetryMessage(user.userId, id, clientTurnId);
+  }
+
   /** Turn off the pending auto-retry on this session. Arming happens by itself when a quota or a
    *  transient provider error kills a turn; the POST below is only for putting back what this
    *  took away, so the card's switch is a switch and not a one-way trapdoor. */
@@ -631,6 +649,18 @@ export class SessionsController {
   @Delete(':id/pin')
   unpin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.unpin(user.userId, id);
+  }
+
+  /** File this session in one of its workspace's folders, or in none (`folderId` null or omitted).
+   *  A `workspaceId` other than the session's own is a 409 until moving between workspaces exists.
+   *  See SessionsService.move. */
+  @Post(':id/move')
+  move(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: MoveSessionDto,
+  ) {
+    return this.sessions.move(user.userId, id, dto);
   }
 
   /** Replace the set of personal colored tags applied to this session (picker sends the full

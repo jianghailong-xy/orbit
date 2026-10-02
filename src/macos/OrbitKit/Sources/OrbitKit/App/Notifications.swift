@@ -6,7 +6,8 @@ import Foundation
 
 /// A notification-worthy transition derived from polling the Open list.
 public enum NotificationEvent: Equatable, Sendable {
-    /// A session's pending-approval count went 0 → >0 — the agent is blocked on you.
+    /// A session's pending-approval count went 0 → >0 — the agent is blocked on you. A project ready
+    /// to start is not counted (see `SessionDelta.diff`).
     case needsApproval(sessionID: String, title: String, count: Int)
     /// A previously-live session reached a terminal state (status nil = it simply left the
     /// Open list, so the exact terminal status is unknown).
@@ -32,8 +33,11 @@ public enum SessionDelta {
         var events: [NotificationEvent] = []
 
         for s in current where !silent.contains(s.id) {
-            let before = prevByID[s.id]?.pendingApprovals ?? 0
-            let after = s.pendingApprovals ?? 0
+            // A row whose only wait is its project ready to start is read as nothing here, as the
+            // needs-you bar reads it: the start request arriving is no alert, and a blocked tool
+            // call landing beside it still is.
+            let before = prevByID[s.id].map(announcedCount) ?? 0
+            let after = announcedCount(s)
             if before == 0 && after > 0 {
                 events.append(.needsApproval(sessionID: s.id, title: s.title ?? "Session", count: after))
             }
@@ -52,6 +56,12 @@ public enum SessionDelta {
             events.append(.finished(sessionID: p.id, title: p.title ?? "Session", status: nil))
         }
         return events
+    }
+
+    /// The count an approval alert is raised on: `pendingApprovals`, or nothing for a row whose only
+    /// wait is a project ready to start (`SessionGrouping.countsOnlyAStart`).
+    private static func announcedCount(_ s: Session) -> Int {
+        SessionGrouping.countsOnlyAStart(s) ? 0 : (s.pendingApprovals ?? 0)
     }
 
     /// Whether a `session.ended` control event is worth announcing. That event fires whenever a row

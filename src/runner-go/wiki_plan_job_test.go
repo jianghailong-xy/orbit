@@ -887,11 +887,11 @@ func TestWikiPlanChecksRepositoryAndCrossReferencesAndRedoesWithTheErrors(t *tes
 		t.Fatalf("the redo prompts: %d", len(redos))
 	}
 	for _, want := range []string{
-		"Store.Load is no symbol of src/app/store.go", "it declares: Store; Store.Save",
-		"has no section «5. 不存在的章节»", "its sections are: 4. 写路径; 4.4 锚点",
-		"src/app/missing.go is no file or directory",
-		"points at 9.9, which is no document of this plan",
-		"«备注：这一行不在格式里» is not a line of a section",
+		`"Store.Load" is no symbol of src/app/store.go`, "it declares: Store; Store.Save",
+		`has no section "5. 不存在的章节"`, "its sections are: 4. 写路径; 4.4 锚点",
+		`"src/app/missing.go" is no file or directory`,
+		`points at "9.9", which is no document of this plan`,
+		`"备注：这一行不在格式里" is not a line of a section`,
 		"1.2《存储》 第 1 节「保存流程」",
 	} {
 		if !strings.Contains(redos[0], want) {
@@ -906,6 +906,137 @@ func TestWikiPlanChecksRepositoryAndCrossReferencesAndRedoesWithTheErrors(t *tes
 	}
 	if len(sent.RepoCheck.Missing) != 0 {
 		t.Errorf("the draft sent names what is not there: %+v", sent.RepoCheck.Missing)
+	}
+}
+
+// A closed-set value is what its wrapping holds (contract `plan.gate.values`): a section whose session condition
+// names its kinds in backticks or quotes, and its topic in quotes, passes this runner's gate the first time, and
+// the draft carries the values bare.
+func TestWikiPlanGateReadsAKindOrTopicWrappedInBackticksOrQuotesAsItsValue(t *testing.T) {
+	f := newPlanFixture(t)
+	door := newFakePlanDoor(t, f)
+	wrapped := strings.Replace(planOutlineOverview, "kind pitfall；主题 storage-topic", "kind `pitfall`/\"decision\"；主题 \"storage-topic\"", 1)
+	model := &planModel{outline: func(title string) string {
+		if title == "服务概览" {
+			return wrapped
+		}
+		return ""
+	}}
+	vllm := newFakeVLLM(t, model.answer)
+	planSession(t, door.URL, vllm)
+	fakeVerifyClaude(t)
+
+	summary, printed, err := runPlanCLI(t, t.TempDir(), "draft", "--target", "3-3")
+	if err != nil {
+		t.Fatalf("orbit wiki plan draft: %v\n%s", err, printed)
+	}
+	if len(summary.Report.Attempts) != 1 || summary.Report.Attempts[0].Local != 0 || len(model.asked("# 任务：改正 plan 里《")) != 0 {
+		t.Errorf("a wrapped kind or topic was refused: %+v", summary.Report.Attempts)
+	}
+	sessions := draftSent(t, door, 1).Plan.Docs[0].Sections[2].Sources.Sessions
+	if sessions == nil || !reflect.DeepEqual(sessions.EntryKinds, []string{"pitfall", "decision"}) || !reflect.DeepEqual(sessions.Topics, []string{"storage-topic"}) {
+		t.Errorf("the draft carries the session condition %+v, want its kinds and topic bare", sessions)
+	}
+}
+
+// What the gate refuses it names as a JSON string (contract `plan.gate.values`): the backticks around a project's
+// title, a zero-width space after a topic, a kind that is no kind — each shows in the redo prompt as it was written.
+func TestWikiPlanGateNamesWhatItRefusesAsAJSONString(t *testing.T) {
+	f := newPlanFixture(t)
+	door := newFakePlanDoor(t, f)
+	wrong := strings.Replace(strings.Replace(planOutlineOverview, "kind pitfall；主题 storage-topic", "kind dicision；主题 storage-topic\u200b", 1),
+		"项目「App 项目」", "项目「`App 项目`」", 1)
+	model := &planModel{
+		outline: func(title string) string {
+			if title == "服务概览" {
+				return wrong
+			}
+			return ""
+		},
+		redo: func(title, prompt string) string { return "标题：服务概览\n" + planOutlineOverview },
+	}
+	vllm := newFakeVLLM(t, model.answer)
+	planSession(t, door.URL, vllm)
+	fakeVerifyClaude(t)
+
+	summary, printed, err := runPlanCLI(t, t.TempDir(), "draft", "--target", "3-3")
+	if err != nil {
+		t.Fatalf("orbit wiki plan draft: %v\n%s", err, printed)
+	}
+	if first := summary.Report.Attempts[0]; first.Local != 3 || first.Checks["references"] != 3 {
+		t.Errorf("the first round: %+v", first)
+	}
+	redos := model.asked("# 任务：改正 plan 里《服务概览》")
+	if len(redos) != 1 {
+		t.Fatalf("the document was asked again %d times, want once", len(redos))
+	}
+	for _, want := range []string{
+		"sources.sessions.projects[0]：no project is titled \"`App 项目`\": name a project exactly",
+		`sources.sessions.entryKinds[0]："dicision" is no kind of entry: one of principle, convention`,
+		`sources.sessions.topics[0]："storage-topic\u200b" is not a topic of this space`,
+	} {
+		if !strings.Contains(redos[0], want) {
+			t.Errorf("the redo prompt does not say %q:\n%s", want, redos[0])
+		}
+	}
+}
+
+// A revision hands the model the documents it revises in the plan's line format, and asks it to keep their
+// sources as they are. Their projects are named as the drafting prompts name every project — by title — and
+// never by an id the local model would have to copy; a title two projects share still names neither, so that
+// project keeps its id.
+func TestWikiPlanRevisionNamesTheProjectsItHandsTheModelByTitle(t *testing.T) {
+	f := newPlanFixture(t)
+	door := newFakePlanDoor(t, f)
+	const appID = "0b5d1f6e-6c2a-4b8e-9f3a-2d7c4e1a9b30"
+	door.materials["projects"].([]interface{})[0].(map[string]interface{})["id"] = appID
+	base := planBase()
+	section := base["docs"].([]interface{})[1].(map[string]interface{})["sections"].([]map[string]interface{})[1]
+	section["sources"] = map[string]interface{}{"docs": []interface{}{}, "code": []interface{}{}, "contracts": []interface{}{},
+		"sessions": map[string]interface{}{"projects": []interface{}{
+			map[string]interface{}{"id": appID, "title": "App 项目"}, map[string]interface{}{"id": "p2", "title": "同名项目"}},
+			"since": nil, "until": nil, "keywords": []interface{}{"保存"}, "anchorPaths": []interface{}{}, "entryKinds": []interface{}{"convention"},
+			"topics": []interface{}{}, "evidence": "owner 说保存前要校验的原话"}}
+	door.state["confirmed"] = base
+	job := door.job["job"].(map[string]interface{})
+	job["kind"], job["trigger"], job["instructions"] = "revise", "owner", "把存储的约定移到开发约定里。"
+	model := &planModel{
+		revise: func(round int, prompt string) string {
+			return "## 1. 产品 `product` —— 这个服务是什么\n" +
+				"- 1.1 服务概览 `service-overview`｜是什么｜来源：1.1｜含：定位\n" +
+				"- 1.2 存储 `storage`｜怎么存｜来源：1.2｜含：保存\n" +
+				"## 2. 开发约定 `dev` —— 给 agent 的约定 [agents]\n" +
+				"- 2.1 测试约定 `testing`｜怎么跑测试与保存前的校验｜来源：2.1｜含：go test；保存前校验\n" +
+				"### 移到给 agent 的大类的节\n- 1.2 §2 → 2.1\n"
+		},
+		rewrite: func(title string) string {
+			return "标题：" + title + "\n问题：怎么跑测试？\n读者：写代码的 agent：读完知道怎么跑测试\n含：go test；保存前校验\n篇幅：400–600 字\n" +
+				"### 1. 怎么跑测试 | conventions | 300\n讲什么：用 go test 跑。\n- 代码：src/web/client.ts: render()\n" +
+				"### 2. 保存约定 | conventions | 200\n讲什么：保存前先校验，见 1.2。\n" +
+				"- 会话：项目「App 项目」「p2」；关键词 保存；kind convention；要找：owner 说保存前要校验的原话\n"
+		},
+	}
+	vllm := newFakeVLLM(t, model.answer)
+	planSession(t, door.URL, vllm)
+	fakeVerifyClaude(t)
+
+	summary, printed, err := runPlanCLI(t, t.TempDir(), "revise")
+	if err != nil {
+		t.Fatalf("orbit wiki plan revise: %v\n%s", err, printed)
+	}
+	rewrites := model.asked("# 任务：写新草稿里《测试约定》")
+	if len(rewrites) != 1 {
+		t.Fatalf("the document was rewritten %d times, want once", len(rewrites))
+	}
+	if !strings.Contains(rewrites[0], "- 会话：项目「App 项目」「p2」；关键词 保存；kind convention") || strings.Contains(rewrites[0], appID) {
+		t.Errorf("the rewrite does not name the moved section's projects by title, or still shows an id to copy:\n%s", rewrites[0])
+	}
+	if len(summary.Report.Attempts) != 1 || summary.Report.Attempts[0].Local != 0 {
+		t.Errorf("the rounds: %+v", summary.Report.Attempts)
+	}
+	moved := draftSent(t, door, 1).Plan.Docs[2].Sections[1].Sources.Sessions
+	if moved == nil || !reflect.DeepEqual(moved.Projects, []string{"App 项目", "p2"}) {
+		t.Errorf("the moved section's projects: %+v", moved)
 	}
 }
 

@@ -7,6 +7,7 @@ import { ListEventsService } from '../task-lists/list-events.service';
 import { appendBackgroundJobsContext } from './background-jobs-context';
 import { buildResumeContinuation } from './resume-continuation';
 import { RunnerApiController } from './runner-api.controller';
+import { noSessionRequests } from '../test-support/prisma-transaction-double';
 
 /**
  * The record half of "a control-plane block is not signed by the user".
@@ -30,6 +31,7 @@ const TYPED = '已经部署，请帮我测试';
 async function withBackgroundJobs(content: string | null): Promise<string> {
   const outputPath = '/root/.orbit/runs/session-1/bgj_3a1af2b50428.output';
   const tx = {
+    sessionRequest: noSessionRequests(),
     conversationTurn: {
       count: async () => 0,
       findFirst: async () => ({ deliveredAt: new Date('2026-09-10T12:00:00.000Z') }),
@@ -101,6 +103,7 @@ async function ingest(
       createMany: async () => ({ count: 0 }),
       updateMany: async () => ({ count: 0 }),
     },
+    sessionRequest: noSessionRequests(),
     conversationTurn: {
       // The columns ingest reads off the turn it is storing an echo for: the person's words, and the
       // key that says whether this turn was one the control plane wrote for an exception item.
