@@ -1349,6 +1349,8 @@ model Session {
   scheduledWakeups      SessionScheduledWakeup[]
   /// The requests other sessions have asked of this one (session_request.to_session_id).
   receivedRequests      SessionRequest[] @relation("SessionRequestRecipient")
+  /// What other sessions have sent this one, as §2.4's hourly limit counts it (session_message_charge).
+  messageCharges        SessionMessageCharge[] @relation("SessionMessageChargeRecipient")
   poolGatewayTokens     PoolGatewayToken[]
   poolLoginTokens       PoolLoginToken[]
   poolLoginUsage        PoolLoginUsage[]
@@ -1898,10 +1900,31 @@ model SessionRequest {
   /// The outcome is kept on the row for the asker's next turn: it had ended, its reply turn was taken
   /// off its queue, or the turn carrying it failed or was drained before its engine finished it.
   replyHeldAt       DateTime? @map("reply_held_at") @db.Timestamptz(3)
+  /// The asker stopped for good while the outcome was held for its next turn — its run ended, or the
+  /// auto-retry it was waiting on was given up — so the request worker owes §4.3's comment on the task
+  /// it ran (migration 0352's `session_request_asker_stopped`). Cleared once the comment is written.
+  replyCommentDueAt DateTime? @map("reply_comment_due_at") @db.Timestamptz(3)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@unique([toSessionId, clientTurnId], map: "session_request_turn_key")
   @@map("session_request")
+}
+
+/// One message §2.4's hourly limit admitted from one session to another (docs/session-request-reply-
+/// contract.md §2.4; sessions/session-message.ts `chargeSessionMessage`), written when it was sent and
+/// never touched by what happens to the message afterwards — so a queued message an interrupt drops, or
+/// the owner withdraws, still counts for the rest of its hour. Migration 0351.
+///
+/// The sending session is not a relation, for the reason `ConversationTurn.senderSessionId` is not one.
+model SessionMessageCharge {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  fromSessionId String   @map("from_session_id") @db.Uuid
+  toSessionId   String   @map("to_session_id") @db.Uuid
+  toSession     Session  @relation("SessionMessageChargeRecipient", fields: [toSessionId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "session_message_charge_to_session_fkey")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([toSessionId, fromSessionId, createdAt], map: "session_message_charge_pair_idx")
+  @@map("session_message_charge")
 }
 
 // Binary blob storage (currently web-composer image uploads) kept in-DB as bytea.

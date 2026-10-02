@@ -1579,7 +1579,25 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // DELETE of an existing row: nothing is backfilled. (Written as 0347 on its own branch and
       // renumbered before it landed: 0347 is main's token-sum drop above, 0348 is spelled by the
       // unlanded session-folders branch, and 0349 is the sender column just above.)
-      '0350_session_request'],
+      '0350_session_request',
+      // What one session sent another, kept as it was sent (0351): one new table,
+      // `session_message_charge`, whose one foreign key is to the recipient `session` row (ON DELETE
+      // CASCADE), and one index on it. Its one INSERT fills that new table from the last hour of
+      // `conversation_turn` rows, which it only reads. Read against every claim above: no `task`,
+      // `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored task and
+      // criterion row are out of its reach; no function, trigger or type is created, replaced or
+      // dropped, so it is not another writer of the DONE fence and names none of the six preserved
+      // objects; and no existing row is updated or deleted.
+      '0351_session_message_charge',
+      // An outcome held for an asker that stopped for good (0352): one nullable column with no default
+      // on `session_request` (`reply_comment_due_at`), one CHECK every stored row satisfies because the
+      // column reads NULL in it, one partial index, and an AFTER UPDATE trigger on `session` whose
+      // function writes only `session_request`. Read against every claim above: no `task`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion
+      // row are out of its reach; the new function is not another writer of the DONE fence and names
+      // none of the six preserved objects. No INSERT, UPDATE or DELETE of an existing row: nothing is
+      // backfilled.
+      '0352_session_request_asker_stopped'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
