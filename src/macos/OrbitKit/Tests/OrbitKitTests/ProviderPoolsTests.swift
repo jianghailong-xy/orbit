@@ -277,16 +277,69 @@ final class ProviderPoolsTests: XCTestCase {
         XCTAssertEqual(status(member(8, .unknown)), PoolStatus(label: "No quota reported", tone: .neutral))
     }
 
-    /// A row's gauge is the window that stopped a spent member, else the 5-hour one.
-    func testAMembersGaugeIsTheWindowThatMatters() {
+    /// A ChatGPT account's two windows as Codex reports them: the 5-hour one, then the weekly one.
+    private func codex(_ fiveHourUsed: Double, _ weeklyUsed: Double) -> PlanUsageSnapshot {
+        PlanUsageSnapshot(provider: "codex",
+                          primary: PlanUsageWindow(utilization: fiveHourUsed, resetsAt: "2026-09-25T11:00:00.000Z",
+                                                   windowDurationMins: 300),
+                          secondary: PlanUsageWindow(utilization: weeklyUsed, resetsAt: "2026-09-28T09:00:00.000Z",
+                                                     windowDurationMins: 7 * 24 * 60))
+    }
+
+    private func gauged(_ state: PoolMemberState, _ usage: PlanUsageSnapshot, next: Bool = false) -> PoolMember {
+        PoolMember(id: "m", slug: "m", label: "jianghailong.rd@gmail.com", planUsage: usage, state: state, next: next)
+    }
+
+    /// A row's gauge is the window closest to its limit: a weekly limit at 97% stops the account before a
+    /// 5-hour window at 6% does, which says nothing of it. The pool's head reads that same window for the
+    /// account the next session starts on, by its short name, in the warning tone at 90% or more.
+    func testAMembersGaugeIsItsTightestWindow() throws {
+        let lin = gauged(.available, codex(6, 97), next: true)
+        let quota = try XCTUnwrap(ProviderPools.memberQuota(lin))
+        XCTAssertEqual(quota.label, "Weekly limit")
+        XCTAssertEqual(quota.percent, 97)
+        XCTAssertTrue(quota.nearLimit)
+        XCTAssertEqual(ProviderPools.quotaReading(quota), "Weekly 97%")
+        XCTAssertEqual(ProviderPools.headGauge(pool([lin])), PoolStatus(label: "Weekly 97%", tone: .warning))
+        // A Claude account the same: its weekly window, all models.
+        let busy = PoolMember(id: "c", slug: "c", label: "C",
+                              planUsage: PlanUsageSnapshot(provider: "claude", fiveHour: PlanUsageWindow(utilization: 40),
+                                                           sevenDay: PlanUsageWindow(utilization: 95)),
+                              state: .available)
+        XCTAssertEqual(ProviderPools.memberQuota(busy).map { [$0.key, "\($0.percent)"] }, ["sevenDay", "95"])
+        XCTAssertEqual(ProviderPools.memberQuota(busy).map(ProviderPools.quotaReading), "Weekly 95%")
+    }
+
+    /// The 5-hour window when that one is the tighter, and when the two are level: a tie goes to the first.
+    func testAMembersGaugeIsTheFiveHourWindowWhenItIsTheTighterOrTheTwoAreLevel() {
+        let busy = gauged(.available, codex(64, 41), next: true)
+        XCTAssertEqual(ProviderPools.memberQuota(busy).map { [$0.label, "\($0.percent)"] }, ["5h limit", "64"])
+        XCTAssertEqual(ProviderPools.headGauge(pool([busy])), PoolStatus(label: "5h 64%", tone: .neutral))
+        XCTAssertEqual(ProviderPools.memberQuota(gauged(.running, codex(50, 50)))?.label, "5h limit")
         XCTAssertEqual(ProviderPools.memberQuota(member(1, .available, fiveHour: 40)).map { [$0.label, "\($0.percent)"] },
                        ["5-hour limit", "40"])
+    }
+
+    /// A spent account's gauge is still the window that stopped it — not a fuller one beside it — and a
+    /// pool with nothing else to run on says when it frees up rather than a window's reading.
+    func testASpentMembersGaugeIsTheWindowThatStoppedIt() {
         let weekly = PoolMember(id: "m", slug: "m", label: "M",
                                 planUsage: PlanUsageSnapshot(provider: "claude", fiveHour: PlanUsageWindow(utilization: 30),
                                                              sevenDay: PlanUsageWindow(utilization: 100)),
                                 state: .spent)
         XCTAssertEqual(ProviderPools.memberQuota(weekly)?.label, "Weekly · all models")
+        let spent = gauged(.spent, codex(100, 97))
+        XCTAssertEqual(ProviderPools.memberQuota(spent).map { [$0.label, "\($0.percent)"] }, ["5h limit", "100"])
+        let out = pool([spent], resetsAt: "2026-09-25T11:00:00.000Z")
+        XCTAssertNil(ProviderPools.headGauge(out))
+        XCTAssertEqual(ProviderPools.headline(out, now: now, timeZone: utc), "All spent · resets 11:00")
+    }
+
+    /// An account that reports no quota has no gauge, and the head says as much beside its name.
+    func testAMemberThatReportsNoQuotaHasNoGauge() {
         XCTAssertNil(ProviderPools.memberQuota(member(2, .noQuota)))
+        XCTAssertEqual(ProviderPools.headGauge(pool([member(3, .noQuota, next: true)])),
+                       PoolStatus(label: "No quota reported", tone: .neutral))
     }
 
     /// The page's head and its Accounts header: how many can run, and the one the next session starts on.

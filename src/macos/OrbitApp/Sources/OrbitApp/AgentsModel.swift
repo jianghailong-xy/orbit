@@ -132,10 +132,11 @@ final class AgentsModel {
         _ = try? await api.cancelCodexLogin(poolID: pool.id)
     }
 
-    /// Sign the pool's account out: the server deletes the sign-in it held. Why it didn't, or nil.
-    func signOutCodexLogin(_ pool: ProviderPool) async -> String? {
+    /// Sign one of the pool's accounts out: the server deletes the sign-in it held, and the pool's other
+    /// accounts stay. Why it didn't, or nil.
+    func signOutCodexLogin(_ pool: ProviderPool, _ login: CodexLogin) async -> String? {
         do {
-            try await api.signOutCodexLogin(poolID: pool.id)
+            try await api.signOutCodexLogin(poolID: pool.id, fingerprint: login.fingerprint)
             await reloadPools()
             return nil
         } catch {
