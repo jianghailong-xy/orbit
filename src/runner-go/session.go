@@ -225,6 +225,10 @@ type sessionMeta struct {
 	// delete while the session is running.
 	ClaudeConfigDir string `json:"claudeConfigDir,omitempty"`
 	WorkDir         string `json:"workDir"`
+	// PreviousWorkDir is the WorkDir before the last write that changed it: where a session moved
+	// to another of this machine's workspaces last ran, and so where its Claude conversation is
+	// (carryMovedClaudeConversation). Each run records its own WorkDir before its engine starts.
+	PreviousWorkDir string `json:"previousWorkDir,omitempty"`
 	Title           string `json:"title"`
 }
 
@@ -291,8 +295,9 @@ func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir
 	// the Codex state scope learned by an earlier successful start so a resume never
 	// falls back from runner-shared state to a stale legacy session directory.
 	claudeDir := claudeSessionConfigDirToRecord(job, execDir)
+	existing := readSessionMeta(filepath.Join(scratch, "meta.json"))
 	if layout == "" || claudeDir == "" {
-		if existing := readSessionMeta(filepath.Join(scratch, "meta.json")); existing != nil {
+		if existing != nil {
 			if layout == "" {
 				layout = existing.CodexStateLayout
 				partition = existing.CodexStatePartition
@@ -306,6 +311,14 @@ func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir
 			}
 		}
 	}
+	// The directory the session ran in before this one is kept until the session moves again.
+	var previousWorkDir string
+	if existing != nil {
+		previousWorkDir = existing.PreviousWorkDir
+		if existing.WorkDir != "" && existing.WorkDir != execDir {
+			previousWorkDir = existing.WorkDir
+		}
+	}
 	meta := sessionMeta{
 		Provider:            runtimeProvider(job),
 		SessionUUID:         job.SessionUUID,
@@ -315,6 +328,7 @@ func writeSessionMetaWithCodexState(scratch string, job *ClaimedSession, execDir
 		CodexStateHome:      codexHome,
 		ClaudeConfigDir:     claudeDir,
 		WorkDir:             execDir,
+		PreviousWorkDir:     previousWorkDir,
 		Title:               job.Title,
 	}
 	if b, err := json.Marshal(meta); err == nil {
