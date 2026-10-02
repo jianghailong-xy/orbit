@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Typography } from 'antd';
+import type { ProjectOpenItemRow } from '@orbit/shared';
 import { ACCEPTANCE_CONFIRMATION_TITLE } from './AcceptanceConfirmationCard';
 import {
   CRITERIA_CHANGE_TITLE,
@@ -87,6 +88,17 @@ import { PHONE_QUERY, useMediaQuery } from '../lib/useMediaQuery';
  *
  * What only a sentence can carry — the resubmission a WAITING ON YOU row asks its submitter for —
  * stays on the wider screens, where it has room, as the one fold left. A phone has no line for it.
+ *
+ * THE CARDS THE OWNER PRESSES ARE ON THE LINE TOO
+ * -----------------------------------------------
+ * An exception that became the owner's and the pause only they can lift are not questions — each is
+ * answered by pressing a door on its card — and they are not drawn at the foot with the questions
+ * either, but INTO the conversation at the moment each became the owner's (`exceptionCardRows`). So
+ * one that had scrolled away had nothing pointing at it: the header said "Escalated to you" over a
+ * conversation whose card was hours of messages up, while the phone's bar pointed at that same card
+ * (the account owner's report, 2026-10-02). They are on the line now, ahead of the questions because
+ * that is where they are in the conversation, each named as its session row names it. And because
+ * one of these can sit ABOVE the reader, the caret says which way the press goes.
  *
  * NOTHING IS SHOWN TO SOMEBODY WHO CANNOT ACT ON IT
  * ------------------------------------------------
@@ -260,6 +272,36 @@ export function ownerConfirmationPointer(title: string): string {
  */
 export function revealOwnerConfirmationCard(scope: ParentNode = document): boolean {
   const card = scope.querySelector<HTMLElement>('[data-owner-confirmation]');
+  if (!card) return false;
+  card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  markReached(card);
+  return true;
+}
+
+/** One card the owner answers by pressing rather than by replying, as the page draws it. */
+export interface ExceptionCardPointer {
+  row: Pick<ProjectOpenItemRow, 'itemId' | 'title' | 'assigneeReason'>;
+  /** How long it has been the owner's: since the moment its card is drawn at. */
+  ageSeconds: number | null;
+  /** Whether the card sits wholly above what the reader can see, which is the way a press goes. */
+  above: boolean;
+}
+
+/**
+ * What the line says for one of those cards: an exception that became the owner's leads with the
+ * word its session row and the header use for it (`OWNER_ITEM_ESCALATED`), then which item it is;
+ * one the owner had from the start — the pause — says its own title, which is its card's heading.
+ */
+export function exceptionPointer(row: Pick<ProjectOpenItemRow, 'title' | 'assigneeReason'>): string {
+  return row.assigneeReason === 'DEFAULT' ? row.title : `Escalated to you: ${row.title}`;
+}
+
+/**
+ * Take the reader to an exception card, which carries its item as `data-open-item` (`ItemCard` in
+ * `ProjectProgressStatus.tsx`). Returns whether it arrived, as `revealDecisionCard` does.
+ */
+export function revealOpenItemCard(itemId: string, scope: ParentNode = document): boolean {
+  const card = scope.querySelector<HTMLElement>(`[data-open-item="${itemId}"]`);
   if (!card) return false;
   card.scrollIntoView({ block: 'center', behavior: 'smooth' });
   markReached(card);
@@ -490,6 +532,7 @@ export function DecisionStrip({
   criteria = null,
   confirmation = false,
   ownerConfirmation = null,
+  exceptions = [],
   open,
   phone = false,
   hasCard = () => false,
@@ -498,6 +541,7 @@ export function DecisionStrip({
   onOpenCriteria,
   onRevealConfirmation = () => {},
   onRevealOwnerConfirmation = () => {},
+  onRevealException = () => {},
 }: {
   queue: PendingDecisionQueue;
   /** The held criteria proposals of the project this session coordinates, when it coordinates one.
@@ -512,6 +556,11 @@ export function DecisionStrip({
   ownerConfirmation?: { title: string; ageSeconds: number | null } | null;
   /** Where the reader goes to confirm it: its card. */
   onRevealOwnerConfirmation?: () => void;
+  /** The cards this conversation draws that the owner answers by pressing — an exception that
+   *  became theirs, the pause only they can lift — in the order they are drawn. */
+  exceptions?: ReadonlyArray<ExceptionCardPointer>;
+  /** Where the reader goes to press one: its card. */
+  onRevealException?: (row: ExceptionCardPointer['row']) => void;
   /** Whether the WAITING ON YOU rows are unfolded: the one fold left, and a deliberate act. */
   open: boolean;
   /** A phone, which has no line for the WAITING ON YOU sentence (ONE LINE, above). */
@@ -533,11 +582,26 @@ export function DecisionStrip({
   const decisions = queue.pending.filter((row) => pointsAtCard(row, hasCard));
   const yours = phone ? [] : (queue.waitingOnYou ?? []);
   // Every card a press can reach, oldest first within each kind, each named in the words its card
-  // uses and kept under a key that outlives a re-read of the queue. Weakenings lead: a held one is a
-  // question about the ruler everything else is measured with, and deciding evidence against a ruler
-  // about to move is the one order of reading that can go wrong. The settlement question has no age
-  // to give, and comes last, as its card does.
-  const ways: Array<{ key: string; label: string; ageSeconds: number | null; go: () => void }> = [
+  // uses and kept under a key that outlives a re-read of the queue. The cards the owner presses come
+  // first, in the order they are drawn: each sits where it became the owner's, above every question,
+  // which waits at the foot. Then weakenings: a held one is a question about the ruler everything else
+  // is measured with, and deciding evidence against a ruler about to move is the one order of reading
+  // that can go wrong. The settlement question has no age to give, and comes last, as its card does.
+  // Only a card drawn among the messages can be above the reader (`above`); a question never is.
+  const ways: Array<{
+    key: string;
+    label: string;
+    ageSeconds: number | null;
+    above?: boolean;
+    go: () => void;
+  }> = [
+    ...exceptions.map(({ row, ageSeconds, above }) => ({
+      key: `exception:${row.itemId}`,
+      label: exceptionPointer(row),
+      ageSeconds,
+      above,
+      go: () => onRevealException(row),
+    })),
     ...(onOpenCriteria
       ? oldestFirst(decidableCriteriaRows(criteria)).map((row) => ({
         key: `weakening:${row.intentId}`,
@@ -571,10 +635,12 @@ export function DecisionStrip({
   // anywhere the line names the first, which is where the first press goes.
   const here = ways.findIndex((way) => way.key === at);
   const shown = ways[Math.max(here, 0)];
+  // Where the next press goes — the first, until a press has gone anywhere — and so what the caret
+  // points at.
+  const next = ways[(here + 1) % ways.length];
   const step = () => {
-    const way = ways[(here + 1) % ways.length];
-    way.go();
-    setAt(way.key);
+    next.go();
+    setAt(next.key);
   };
 
   return (
@@ -603,7 +669,7 @@ export function DecisionStrip({
               </span>
             </>
           )}
-          <span className="decision-strip-caret" aria-hidden="true">↓</span>
+          <span className="decision-strip-caret" aria-hidden="true">{next.above ? '↑' : '↓'}</span>
         </button>
       )}
 
@@ -652,6 +718,7 @@ export function SessionDecisionStrip({
   cards,
   confirmation = false,
   ownerConfirmation = null,
+  exceptions = [],
   onOpenCriteria,
 }: {
   sessionId: string;
@@ -667,6 +734,9 @@ export function SessionDecisionStrip({
   /** The OWNER_CONFIRMED task whose run in this session is waiting on its owner, as the page that
    *  draws its confirmation card read it. Null wherever no such card is drawn. */
   ownerConfirmation?: { title: string; ageSeconds: number | null } | null;
+  /** The exception cards this conversation draws for the owner to press, as the page placed them
+   *  and measured them against the reader's viewport. */
+  exceptions?: ReadonlyArray<ExceptionCardPointer>;
   onOpenCriteria?: (row: PendingCriteriaDecisionRow) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -709,6 +779,8 @@ export function SessionDecisionStrip({
       onRevealConfirmation={() => revealSettlementCard()}
       ownerConfirmation={ownerConfirmation}
       onRevealOwnerConfirmation={() => revealOwnerConfirmationCard()}
+      exceptions={exceptions}
+      onRevealException={(row) => revealOpenItemCard(row.itemId)}
     />
   );
 }
