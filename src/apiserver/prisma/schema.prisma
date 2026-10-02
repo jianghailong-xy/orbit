@@ -2561,8 +2561,9 @@ model ProjectTaskStatusCount {
 /// for what needs authority or what nobody else can take — and `assigneeReason` says why. `kind`,
 /// `state`, `assignee`, `assigneeReason`, `resolution` and `resolvedBy` are closed sets held by CHECKs in
 /// the migration and spelled in `projects/project-open-item.ts`. A resolved or superseded row is final
-/// (`project_open_item_terminal_guard`). At most one OPEN item of a project holds a `dedupeKey`, and the
-/// task lookup index is `WHERE task_id IS NOT NULL`: both partial, which this schema cannot spell.
+/// (`project_open_item_terminal_guard`). At most one OPEN item of a project holds a `dedupeKey`, the
+/// task lookup index is `WHERE task_id IS NOT NULL`, and the candidate lookup (0353) is `promotion_id`
+/// over OPEN items: all three partial, which this schema cannot spell.
 model ProjectOpenItem {
   id        String  @id @default(uuid(7)) @db.Uuid
   projectId String  @map("project_id") @db.Uuid

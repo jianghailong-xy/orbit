@@ -1579,7 +1579,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // DELETE of an existing row: nothing is backfilled. (Written as 0347 on its own branch and
       // renumbered before it landed: 0347 is main's token-sum drop above, 0348 is spelled by the
       // unlanded session-folders branch, and 0349 is the sender column just above.)
-      '0350_session_request'],
+      '0350_session_request',
+      // `project_open_item_promotion_open_idx` (0353): one partial btree index on
+      // `project_open_item.promotion_id`, a column that already existed, over OPEN rows. Read
+      // against every claim above: one `CREATE INDEX IF NOT EXISTS` and nothing else — no function,
+      // trigger, type, column or constraint is created, altered or dropped, so it is not another
+      // writer of the DONE fence and names none of the six preserved objects. `project_open_item`
+      // is named only as the table the index is built on, and it is not a preserved relation; no
+      // `task`, `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair and
+      // every stored task and criterion row are out of its reach. No INSERT, UPDATE or DELETE: the
+      // build reads every item row once and writes none. (Written as 0350 on its own branch and
+      // renumbered before it landed: 0349 and 0350 are the two just above, and 0351 and 0352 are
+      // taken by work that has not landed.)
+      '0353_project_open_item_promotion_open_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
