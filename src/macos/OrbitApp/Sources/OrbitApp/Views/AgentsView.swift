@@ -343,6 +343,8 @@ struct AgentPanes: View {
     /// The row whose Share was tapped — drives the share panel, owned by the list for the same
     /// reason as `taggingSession`.
     @State private var sharingSession: Session?
+    /// The row whose Move was tapped — drives the Move panel, list-owned like the two above.
+    @State private var movingSession: Session?
     /// Whether the Pinned section is folded to its header (iOS list only). Stored rather than view
     /// state: this pane is rebuilt per workspace (`.id(a.id)`), so @State would unfold it on every
     /// switch, and on every launch.
@@ -475,7 +477,17 @@ struct AgentPanes: View {
         // compact iPhone list keeps the existing icon-menu scope switcher and pays no extra height.
         // "Another session needs you" follows it in the same inset. This remains the only instance at
         // regular width (the console beside it stays quiet), so it excludes that visible console.
-        .safeAreaInset(edge: .top, spacing: 0) {
+        //
+        // Not a bare `.safeAreaInset`: on iOS 26 the pull's spinner hangs under the navigation
+        // bar, in the band these sit in, and a pull drew it over the needs-you bar; the modifier
+        // keeps these put and the spinner under them, pull and refresh alike, and puts the list
+        // back at its top when a refresh leaves it just past there (see `topInsetClearOfRefresh`).
+        // Also tried on the iOS 26.5 simulator and dropped: the bands stacked above the list
+        // instead (the pull pushed them down 60pt and no spinner showed), `.safeAreaBar` (the list
+        // would no longer pull, nor stay scrolled), and the needs-you bar as the list's first row
+        // (it scrolls away, and a finished refresh left the list settled with it half under the
+        // navigation bar).
+        .topInsetClearOfRefresh {
             VStack(spacing: 0) {
                 if listPresentation.showsPersistentScope {
                     VStack(spacing: 0) {
@@ -613,9 +625,20 @@ struct AgentPanes: View {
                 ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)
             }
         }
+        // The Move panel for the row whose Move was tapped: the folders of this workspace, counted
+        // over the list the row is in (docs/session-folders-move-design.md §4).
+        .sheet(item: $movingSession) { s in
+            SessionMoveSheet(session: s, workspace: agent, listed: agents.agentSessions).environment(app)
+        }
         #endif
-        // Load the owner's tag library when the pane appears so the picker + chips are populated.
-        .task { await app.loadSessionTags() }
+        // Load the owner's tag library when the pane appears so the picker + chips are populated,
+        // and on iOS the folder library the Move panel offers.
+        .task {
+            await app.loadSessionTags()
+            #if os(iOS)
+            await app.loadSessionFolders()
+            #endif
+        }
     }
 
     /// What the List's selection is bound to: the projection onto the section's stack in the
@@ -785,7 +808,8 @@ struct AgentPanes: View {
         let row = AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open)
         switch rowNavigation {
         case .selection:
-            row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s })
+            row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },
+                                  onMove: { movingSession = s })
                 .tag(s.id)
         case .push:
             // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
@@ -799,7 +823,8 @@ struct AgentPanes: View {
             // and `.contextMenu` are read off the view the `List` hosts as its row, and a `Button`
             // does not pass them up from its label — which is where this wrapper used to leave them,
             // and why a swipe or a long press on a compact session row did nothing.
-            .sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s })
+            .sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },
+                               onMove: { movingSession = s })
         }
     }
     #endif
@@ -1330,9 +1355,10 @@ struct AgentSessionRow: View {
     }
 
     /// The slim trailing status cue for the compact row — the shared `SessionLiveIndicator` (spinner
-    /// while working / amber dot when it needs you / red dot on failure; calm states stay quiet).
+    /// while working / amber dot when it needs you / red dot on failure / eye while a watch will
+    /// resume it; calm states stay quiet).
     private var liveIndicator: some View {
-        SessionLiveIndicator(session: session)
+        SessionLiveIndicator(session: session, watching: watching)
     }
 
     /// Relative last-activity time ("just now", "3m ago", "2d ago", "7/8"). A working row omits
@@ -1391,14 +1417,18 @@ struct StatusGlyphView: View {
 /// The slim status cue used by the compact (iPhone) lists — the essence of the leading
 /// `StatusGlyphView`, distilled to what must never go silent: a spinner while working, an amber dot
 /// when it needs you (approval), a red dot on failure, and — since a job in flight became a state
-/// the product shows — a breathing terminal for background work. The calm states (dormant / done /
-/// queued, and processes merely left running) show nothing: the surrounding row states them in
-/// words + colour and in its VoiceOver value, so the jump-back lists (the grouped session list and
-/// the drawer's Recents) stay light. Shared so both show the exact same cue.
+/// the product shows — a breathing terminal for background work, and the strip's eye for a session
+/// a watch will resume. The calm states (dormant / done / queued, and processes merely left running)
+/// show nothing: the surrounding row states them in words + colour and in its VoiceOver value, so
+/// the jump-back lists (the grouped session list and the drawer's Recents) stay light. Shared so
+/// both show the exact same cue.
 struct SessionLiveIndicator: View {
     let session: Session
+    /// The live watches that will resume this session (`AgentSessionRow.watching`); nil where a list
+    /// holds none, which keeps the reading it always had.
+    var watching: WatchSessionSummary? = nil
     @ViewBuilder var body: some View {
-        let glyph = SessionStatusGlyph.make(for: session)
+        let glyph = SessionStatusGlyph.make(for: session, watching: watching)
         switch (glyph.shape, glyph.tone) {
         // Working is the one live state that does *not* want you — the row is making progress on
         // its own. Amber (needs you) and red (failed) are the two that do, so the working cue is
@@ -1406,6 +1436,12 @@ struct SessionLiveIndicator: View {
         // tappability: it used to sit inches from a blue tag chip on the same row, two unrelated
         // meanings in one hue.
         case (.spinner, _): SpinnerGlyph(color: .secondary)
+        // Parked on a watch that will resume it: a wake is coming and nobody is being asked anything,
+        // so it is the strip's eye, still — the mark the macOS row and the web glyph draw for the same
+        // wait — and it takes the place a job's breathing terminal would (contract §9.2: a watch is
+        // not a process). The glyph has already let a question for you or work of its own outrank it.
+        case (.symbol("eye"), _):
+            Image(systemName: "eye").font(.orbitGlyph).foregroundStyle(.secondary)
         // The one background state that is NOT quiet. A compact row's only live cue used to go
         // silent here, which is exactly the reading the session row stopped giving: a job in
         // flight is work happening with nobody generating, and this is the surface where the row

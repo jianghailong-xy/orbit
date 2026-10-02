@@ -557,6 +557,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** Drop the cached owner + workspace of a session that moved to another workspace
+   *  (SessionsService.move). The cached workspaceId is otherwise only evicted when the session
+   *  ends, and it is what every later control event names as the envelope's `agentId`. */
+  forgetSessionOwner(sessionId: string): void {
+    this.ownerCache.delete(sessionId);
+  }
+
   /** A still-PENDING user turn was added or withdrawn. Queued turns have no durable transcript
    * event until the runner leases them, so focused clients need this live-only nudge to re-fetch
    * GET /sessions/:id/turns and keep a queue created on another device visible. */
@@ -878,6 +885,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
           select: { id: true, status: true, lastHeartbeatAt: true },
         },
         workspaceId: true,
+        folderId: true,
         lastTurnAt: true,
         workspace: { select: { id: true, name: true, model: true, effort: true } },
         coordinatorForProject: { select: { id: true, title: true } },
@@ -922,6 +930,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             effort: s.workspace.effort ?? null,
           }
         : null,
+      // Null is a value here: a session moved out of its folder reaches the owner's other clients
+      // by this key going null.
+      folderId: s.folderId ?? null,
       projectId: s.coordinatorForProject?.id ?? null,
       projectTitle: s.coordinatorForProject?.title ?? null,
       pendingApprovals,

@@ -7,7 +7,7 @@ import { SessionRequestService } from './session-request.service';
 /**
  * The clock of session requests (contract §4, §5): EXPIRED, and the hand-offs nothing else made.
  *
- * Each pass does two things, in this order:
+ * Each pass does three things, in this order:
  *
  *   1. closes EXPIRED every request still OPEN past its `reply_by`, with the recipient as it stood
  *      (`expireSessionRequest`) — a compare-and-set, so an answer that lands first stands;
@@ -16,7 +16,13 @@ import { SessionRequestService } from './session-request.service';
  *      when a recipient's run ended (no application code is there to hand it off), what an interrupt,
  *      a withdrawal or a drain closed inside its own transaction, and anything a crash or a failed
  *      hand-off cut off between an outcome committing and its hand-off — a `session_reply` among
- *      them, which answers its caller as soon as REPLIED commits (`handOffQuietly`).
+ *      them, which answers its caller as soon as REPLIED commits (`handOffQuietly`);
+ *   3. says every outcome that was held for a next turn that will not come
+ *      (`SessionRequestService.tellStoppedAsker`): migration 0352's trigger marks them when the asker
+ *      stops — the auto-retry it waited on was given up, or it ended — in the statement that stopped
+ *      it, whichever code path wrote it, and this is where the mark is answered. Where it goes is
+ *      decided by where the asker stands now (§8 criterion 21): ended → §4.3's comment on its task;
+ *      merely idle → §4.2's reply turn.
  *
  * Shaped like the scheduled-wakeup worker (runner-api/scheduled-wakeup.worker.ts): one loop per replica,
  * never two passes at once, and nothing but compare-and-sets underneath, so replicas racing for the
@@ -88,8 +94,13 @@ export class SessionRequestWorker implements OnModuleInit, OnModuleDestroy {
       });
   }
 
-  /** One pass: expire what is due, then hand back what is owed. Answers what each step came to. */
-  async drain(now: Date = new Date()): Promise<{ expired: string[]; handedOff: string[] }> {
+  /** One pass: expire what is due, hand back what is owed, then say what will not be. */
+  async drain(now: Date = new Date()): Promise<{
+    expired: string[];
+    handedOff: string[];
+    commented: string[];
+    handedBack: string[];
+  }> {
     const expired: string[] = [];
     const due = await this.prisma.sessionRequest.findMany({
       where: { state: 'OPEN', replyBy: { lte: now } },
@@ -122,7 +133,27 @@ export class SessionRequestWorker implements OnModuleInit, OnModuleDestroy {
         this.log.error(`session request ${request.id} was not handed back: ${messageOf(error)}`);
       }
     }
-    return { expired, handedOff };
+    const commented: string[] = [];
+    const handedBack: string[] = [];
+    const unsaid = await this.prisma.sessionRequest.findMany({
+      where: { replyCommentDueAt: { not: null }, replyClientTurnId: null },
+      orderBy: [{ replyCommentDueAt: 'asc' }, { id: 'asc' }],
+      take: this.batch,
+      select: { id: true },
+    });
+    for (const request of unsaid) {
+      try {
+        // Where it goes depends on where the asker stands now (§8 criterion 21): ended → §4.3's
+        // comment on its task; merely idle → §4.2's reply turn, released from the hold the retry
+        // left it under. Which of the two the mark was set for is not what decides it.
+        const where = await this.requests.tellStoppedAsker(request.id);
+        if (where === 'COMMENTED') commented.push(request.id);
+        if (where === 'HANDED_BACK') handedBack.push(request.id);
+      } catch (error) {
+        this.log.error(`session request ${request.id} was not said on its asker's task: ${messageOf(error)}`);
+      }
+    }
+    return { expired, handedOff, commented, handedBack };
   }
 }
 

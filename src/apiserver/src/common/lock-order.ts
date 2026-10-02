@@ -71,7 +71,7 @@ export const LOCK_ORDER = [
   {
     rank: 15,
     relation: 'workspace, model_provider',
-    modes: 'FOR SHARE (unit L4 plan preflight) · FOR KEY SHARE (task.assignee_id FK)',
+    modes: 'FOR SHARE (unit L4 plan preflight; the workspace a SessionsService.move names) · FOR KEY SHARE (task.assignee_id FK)',
     why:
       'A plan is REFUSED when its assignee has been deleted or its provider disabled, and both of '
       + 'those are ordinary UPDATEs of a non-key column — which FOR KEY SHARE does not conflict '
@@ -79,13 +79,29 @@ export const LOCK_ORDER = [
       + 'at FOR SHARE before the first write and re-reads them there. Rank 15 rather than a place '
       + 'of their own further down because the INSERT reaches them at 10 through user and would '
       + 'otherwise be locking upward after having locked at 40; neither relation waits on anything '
-      + 'these paths hold (see LOCK_ORDER_COMPATIBLE), so this adds an ordering and no edge.',
+      + 'these paths hold (see LOCK_ORDER_COMPATIBLE), so this adds an ordering and no edge. A '
+      + 'session moved to another workspace holds that workspace the same way, for the same reason, '
+      + 'before its folder (25) and the session (30).',
   },
   {
     rank: 20,
     relation: 'task_list',
     modes: 'FOR UPDATE (list policy write) · FOR KEY SHARE (task.list_id FK)',
     why: 'A pause writes the list row and then every Task in it, so the list is taken before its Tasks.',
+  },
+  {
+    rank: 25,
+    relation: 'session_folder',
+    modes: 'FOR UPDATE (rename — `name` is in a unique index — and delete) · FOR KEY SHARE (SessionsService.move\'s pre-lock, and the session.folder_id FK)',
+    why:
+      'Below `session` because a folder delete reaches the sessions filed in it through '
+      + '`session_folder_id_fkey` ON DELETE SET NULL, after it already holds the folder row. The '
+      + 'one transaction that holds a session and wants a folder, `SessionsService.move`, therefore '
+      + 'takes the folder first, at FOR KEY SHARE — the mode its UPDATE\'s FK check takes anyway, '
+      + 'moved ahead of the session lock exactly as I2 moves the creator-session lock. Every other '
+      + 'Session writer reaches a folder only through that FK, which I3 keeps from firing: a row '
+      + 'written once re-checks no key whose column it did not change. A session INSERT naming a '
+      + 'folder takes it FOR KEY SHARE too, from a row nothing else can see yet.',
   },
   {
     rank: 30,
@@ -127,7 +143,7 @@ export const LOCK_ORDER = [
   },
   {
     rank: 60,
-    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, session_request, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_promotion, project_task_status_count, project_fuse_episode, project_fuse_held_action',
+    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_promotion, project_task_status_count, project_fuse_episode, project_fuse_held_action',
     modes: 'INSERT/UPDATE/DELETE only',
     why:
       'Child rows whose FK parents are already held by this point, so they add no wait edge of their '

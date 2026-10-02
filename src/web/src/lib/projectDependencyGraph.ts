@@ -1,4 +1,5 @@
 import dagre from '@dagrejs/dagre';
+import type { TaskRunReason } from '@orbit/shared';
 import {
   getTaskDependencyVisualState,
   type TaskDependencyGraphNode,
@@ -18,6 +19,10 @@ export interface ProjectTaskMark extends TaskDependencyGraphNode {
   parentTaskId: string | null;
   workState?: ProjectTaskWorkState;
   verificationState?: ProjectTaskVerificationState | null;
+  /** Why a running task is running. Absent from an older server, which never says. */
+  runReason?: TaskRunReason | null;
+  /** Its background jobs have stopped producing output (see `runningLabel`). */
+  runStalled?: boolean;
 }
 
 export type ProjectTaskWorkState =
@@ -179,6 +184,34 @@ export function markLiveState(
 ): { status: string; running?: boolean; queued?: boolean } {
   if (mark.kind === 'TASK') return { status: mark.status, running: mark.running, queued: mark.queued };
   return { status: markStatus(mark) };
+}
+
+/** The reason a running task is running, as one short phrase. */
+const RUN_REASON_LABEL: Record<TaskRunReason, string> = {
+  TURN: 'Turn in progress',
+  BACKGROUND_JOB: 'Background job',
+  WAITING: 'Waiting to be woken',
+};
+
+/**
+ * What a running task says it is doing: "Running · Background job".
+ *
+ * A run that ended its turn to wait — for a job it started, a watch, a scheduled wake-up — is still
+ * the task's run, and the server reports it as running with the reason beside it. The reason is the
+ * difference between "a turn is executing" and "the agent is waiting for its test matrix", and both
+ * are worth knowing about before opening the session. `runStalled` is the server saying the jobs it
+ * is waiting on have produced nothing for ten minutes: still running, but worth a look.
+ *
+ * Null when the server gave no reason — an older one never does — so the caller keeps the word it
+ * has always drawn.
+ */
+export function runningLabel(run: {
+  runReason?: TaskRunReason | null;
+  runStalled?: boolean;
+}): string | null {
+  if (!run.runReason) return null;
+  const label = `Running · ${RUN_REASON_LABEL[run.runReason] ?? run.runReason}`;
+  return run.runStalled ? `${label} · no output 10+ min` : label;
 }
 
 /**

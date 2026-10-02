@@ -70,7 +70,7 @@ const LOGIN_SELECT = {
   accountId: true, email: true, state: true, accessTokenEnc: true, expiresAt: true, spentUntil: true,
 } as const;
 
-/** Who is calling, established from their token, and the login their pool holds (or none). */
+/** Who is calling, established from their token, and the login their session's account holds (or none). */
 interface Caller {
   poolId: string;
   poolLabel: string;
@@ -97,10 +97,15 @@ type Refreshed =
  *
  * What it decides, and nothing more:
  * - WHO: the token's hash names one (pool, owner, session). A token revoked or expired, a session no longer
- *   open, moved to another provider or not its token's person's, the account it was bound to taken out of
- *   the pool, or the pool deleted — the last two delete the token row itself — is 401.
+ *   open, moved to another provider or not its token's person's, or the pool deleted — the last deletes the
+ *   token row itself — is 401. The token names no account (migration 0355), so no account's leaving the pool
+ *   refuses it here.
  * - WHAT: only the ALLOWED paths; anything else is 403.
- * - WHICH ACCOUNT: the one the pool holds. There is never another to choose or move to.
+ * - WHICH ACCOUNT: `session.pool_codex_account_id`, the account the last claim recorded on the session —
+ *   never one the token names, which is nothing. An engine warm on a token minted before the session moved
+ *   therefore sends on the account the session is on now; the gateway chooses no account and moves no
+ *   session. A session whose account the pool no longer holds, or which has none, is refused here with the
+ *   reason, and its next claim is what moves it.
  * - FRESHNESS: an access token about to expire is refreshed first, and one the backend answers 401 is
  *   refreshed and the request sent again once — the codex CLI's own recovery, on the same OAuth client and
  *   the same request (`refreshRequestBody`). This is the only place the pair is rotated, one refresh at a
@@ -143,7 +148,7 @@ export class PoolLoginGatewayService {
     const caller = await this.caller(token);
     if (!caller) {
       refuse(res, 401, 'orbit_gateway_token_invalid',
-        'This Orbit session token is not valid any more — the session ended or moved, its ChatGPT account left the pool, or the pool is gone');
+        'This Orbit session token is not valid any more — the session ended or moved, or the pool is gone');
       return;
     }
     if (!ALLOWED.some((allowed) => allowed.method === req.method && allowed.path === target.path)) {
@@ -247,7 +252,12 @@ export class PoolLoginGatewayService {
     this.log.log(`session ${caller.sessionId} account ${account}: ${req.method} ${target.path} → ${status} in ${Date.now() - started}ms`);
   }
 
-  /** The token's (pool, owner, session) and its pool's login, when it may still be used; null otherwise. */
+  /**
+   * The token's (pool, owner, session) and the login the session's account holds, when the token may
+   * still be used; null otherwise. The token names no account, so no account's leaving the pool refuses
+   * it here: a session whose account the pool no longer holds — or which has none — comes back with a
+   * null login, which the caller answers as the pool having no account.
+   */
   private async caller(token: string): Promise<Caller | null> {
     const row = await this.prisma.poolLoginToken.findUnique({
       where: { tokenHash: sha256(token) },
@@ -255,7 +265,6 @@ export class PoolLoginGatewayService {
         poolId: true,
         userId: true,
         sessionId: true,
-        accountId: true,
         expiresAt: true,
         revokedAt: true,
         pool: {
@@ -264,7 +273,9 @@ export class PoolLoginGatewayService {
             logins: { orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }], select: LOGIN_SELECT },
           },
         },
-        session: { select: { status: true, ownerId: true, provider: true, completedAt: true, deletedAt: true } },
+        session: {
+          select: { status: true, ownerId: true, provider: true, poolCodexAccountId: true, completedAt: true, deletedAt: true },
+        },
       },
     });
     if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) return null;
@@ -281,12 +292,12 @@ export class PoolLoginGatewayService {
       // A session moved onto another provider since: its old tokens name a pool it no longer runs on.
       session.provider === pool.slug;
     if (!current) return null;
-    // Bound to an account: that account, which is here — taking it out of the pool deleted the token.
-    // Bound to none (minted while the pool held none): whatever account the pool holds now, if any.
-    const login = row.accountId
-      ? pool.logins.find((candidate) => candidate.accountId === row.accountId) ?? null
-      : pool.logins[0] ?? null;
-    if (row.accountId && !login) return null;
+    // The account the session is on, if the pool still holds it: the token that got here may have been
+    // minted on another, before the session moved (migration 0355). None when the session names an
+    // account the pool has since lost, and when it names none — the same answer either way.
+    const login = session.poolCodexAccountId
+      ? pool.logins.find((candidate) => candidate.accountId === session.poolCodexAccountId) ?? null
+      : null;
     return { poolId: row.poolId, poolLabel: pool.label, userId: row.userId, sessionId: row.sessionId, login };
   }
 
@@ -299,7 +310,7 @@ export class PoolLoginGatewayService {
 
   /** The login is refused for good: signed out, the session told, and the request answered with that. */
   private async signedOut(res: Response, caller: Caller, login: GatewayLogin, reason: string): Promise<void> {
-    await this.logins.markSignedOut(caller.poolId, reason);
+    await this.logins.markSignedOut(caller.poolId, login.accountId, reason);
     await this.owe(caller.sessionId, loginSignedOutNotice(login, caller.poolLabel));
     refuse(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel));
     this.log.log(`session ${caller.sessionId} account ${maskedAccount(login.accountId)}: refused by OpenAI — signed out`);

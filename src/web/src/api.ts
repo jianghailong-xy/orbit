@@ -860,8 +860,18 @@ export const unpinSession = (sessionId: string) =>
 // re-sends with. Asked only when the loaded transcript window cannot answer: a run's message sits
 // at seq 1 behind thousands of tool events, far outside the tail this page paints, and deciding
 // from that window alone is how the button went missing on exactly the runs an outage kills.
+// `sessionMessage` is the card the words' echo carries when they are another Orbit session's: the
+// Retry then asks the server to re-send them (`resendSessionRetryMessage`).
 export const getSessionRetryMessage = (sessionId: string) =>
-  api<{ text: string }>(`/sessions/${sessionId}/retry-message`);
+  api<{ text: string; sessionMessage?: SessionMessageCard }>(`/sessions/${sessionId}/retry-message`);
+
+// Re-send another session's message from the failure card (docs/session-request-reply-contract.md
+// §2.1): the server re-sends it as the automatic retry would — signed by that session, with the
+// request it was — instead of this page sending the words again in the owner's own name. It names no
+// key: the server derives one from the failed message, so a double tap or a response lost and clicked
+// again is the turn already queued rather than a second re-send (§2.1, §8 criterion 19).
+export const resendSessionRetryMessage = (sessionId: string) =>
+  api<{ turnId: string; placement?: string }>(`/sessions/${sessionId}/retry-message`, { method: 'POST' });
 
 // Turn off / put back the retry armed on this session by a spent quota or a transient provider
 // error. Arming is automatic when one of those kills a turn; `armAutoRetry` exists so the card's

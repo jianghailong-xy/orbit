@@ -12,6 +12,7 @@ describe('control-plane protocol', () => {
       RunEventType.AGENT_CHANGED,
       RunEventType.TASK_LIST_CHANGED,
       RunEventType.TAG_CHANGED,
+      RunEventType.FOLDER_CHANGED,
       RunEventType.PROVIDER_CHANGED,
       RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED,
       RunEventType.PROJECT_CHANGED,

@@ -231,6 +231,65 @@ describe('ProjectReadyToRun', () => {
     expect(currentPath).toBe(`/sessions/${encodeId(RUNNING_SESSION_ID)}`);
   });
 
+  it('says why a running row is running, and offers its session rather than Run', async () => {
+    // A run that ended its turn to wait for its own test matrix is still the task's run: the
+    // server reports it RUNNING with the reason beside it, and pressing Run on it would hand the
+    // waiting agent the task brief as a new turn — so the row must offer the session, not Run.
+    const waiting = (
+      title: string,
+      i: number,
+      runReason: 'TURN' | 'BACKGROUND_JOB' | 'WAITING',
+      runStalled = false,
+    ) => ({
+      ...ITEM(title, 0, i, 'RUNNING', null, `00000000-0000-7000-8000-00000000006${i}`),
+      runReason,
+      runStalled,
+    });
+    apiMock.mockResolvedValue({
+      readyCount: 0,
+      queuedCount: 0,
+      runningCount: 5,
+      pausedCount: 0,
+      items: [
+        waiting('Serving a turn', 1, 'TURN'),
+        waiting('Waiting on the pg matrix', 2, 'BACKGROUND_JOB'),
+        waiting('Waiting on a hung job', 3, 'BACKGROUND_JOB', true),
+        waiting('Waiting on a watch', 4, 'WAITING'),
+        // An older server says nothing about why, and the row reads as it always has.
+        ITEM('Running on an older server', 0, 5, 'RUNNING', null, RUNNING_SESSION_ID),
+      ],
+      impactTruncated: null,
+    });
+    await mount(<ProjectReadyToRun projectId="p1" />);
+
+    const byTitle = (title: string) => rows().find((row) => row.textContent?.includes(title))!;
+    expect(byTitle('Serving a turn').textContent).toContain('Running · Turn in progress');
+    expect(byTitle('Waiting on the pg matrix').textContent).toContain('Running · Background job');
+    expect(byTitle('Waiting on the pg matrix').textContent).not.toContain('no output');
+    expect(byTitle('Waiting on a hung job').textContent).toContain(
+      'Running · Background job · no output 10+ min',
+    );
+    expect(byTitle('Waiting on a watch').textContent).toContain('Running · Waiting to be woken');
+    expect(byTitle('Running on an older server').textContent).toContain('Work in progress');
+    expect(container.textContent).toContain('5 running · 0 ready');
+
+    for (const title of [
+      'Serving a turn',
+      'Waiting on the pg matrix',
+      'Waiting on a hung job',
+      'Waiting on a watch',
+      'Running on an older server',
+    ]) {
+      expect(container.querySelector(`[aria-label="Open session for ${title}"]`)).not.toBeNull();
+      expect(container.querySelector(`[aria-label="Run ${title}"]`)).toBeNull();
+    }
+
+    await click(container.querySelector<HTMLElement>(
+      '[aria-label="Open session for Waiting on the pg matrix"]',
+    )!);
+    expect(currentPath).toBe(`/sessions/${encodeId('00000000-0000-7000-8000-000000000062')}`);
+  });
+
   it('clicking Run posts one named trigger and holds the row in Starting while it is pending', async () => {
     let finishRun!: (value: unknown) => void;
     const pendingRun = new Promise((resolve) => {

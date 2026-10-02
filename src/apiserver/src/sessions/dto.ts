@@ -1,4 +1,5 @@
 import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsPublicId } from '../common/public-id';
 import type { SessionTurnIntent } from '@orbit/shared';
 import { MERGE_RECEIPT_RESULTS, type MergeReceiptResult } from './merge-receipt';
 
@@ -55,6 +56,10 @@ export interface CreateSessionDto {
    *  session/turn — they're scoped to this session on create, then linked to the initial
    *  turn when the runner seeds it. Omitted/empty keeps the first turn text-only. */
   attachmentIds?: string[];
+  /** The folder the new session is filed in — one opened from a folder's page lands in that folder
+   *  (docs/session-folders-move-design.md §3.2). It has to be one of the caller's folders in this
+   *  session's own `workspaceId`, else 400. Omitted files it in none. */
+  folderId?: string;
 }
 
 export interface SessionTurnDto {
@@ -204,4 +209,17 @@ export class RecordMergeReceiptDto {
   @IsOptional() detail?: Record<string, unknown>;
   /** Supply one when the caller has a natural key; omitted derives MR4's from the merge itself. */
   @IsOptional() @IsString() @MaxLength(200) idempotencyKey?: string;
+}
+
+/**
+ * `POST /sessions/:id/move` (docs/session-folders-move-design.md §5.4). A class, so the global
+ * ValidationPipe decodes both ids from whichever spelling a client sends (`IsPublicId`).
+ *
+ * `workspaceId` omitted, or naming the session's own workspace, files it: `folderId` names a folder
+ * of that workspace — or, null or omitted, none, which is how a session leaves its folder. Naming
+ * another workspace moves the session there, into `folderId` (a folder of that workspace) or none.
+ */
+export class MoveSessionDto {
+  @IsOptional() @IsPublicId() workspaceId?: string;
+  @IsOptional() @IsPublicId() folderId?: string | null;
 }

@@ -102,6 +102,32 @@ final class TailPinningWiringTests: XCTestCase {
                       "macOS still infers the reader from the fall, so this is the iOS branch")
     }
 
+    /// The jump-to-latest button answers "is the tail out of view?", not only "did the reader scroll
+    /// up?". The pin un-pins on a scroll UP alone — on purpose, see `TailPinning` — so while the
+    /// button read the pin alone it stayed hidden whenever the tail left the view any other way: a
+    /// row that grew under a pinned reader, the keyboard, a follow that fell short. The owner's
+    /// report: the button only ever showed after a swipe up.
+    func testTheJumpToLatestButtonShowsWhenTheTailLeftTheViewWithoutAScrollUp() throws {
+        let source = try source("src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift")
+        let tracker = try section(source, from: "private struct ScrollTracker",
+                                  to: "/// Publishes the id of the item currently under")
+        let overlay = try section(source, from: ".overlay(alignment: .bottom) {",
+                                  to: "scrollToBottomButton(proxy: proxy)")
+        let strandKey = try section(source, from: "private var strandKey", to: "\n")
+
+        XCTAssertTrue(tracker.contains("tailOutOfView ="),
+                      "the tracker must report whether the tail is in view, whatever moved it")
+        XCTAssertTrue(tracker.contains("TailPinning.nearBottom"),
+                      "with the pin's own slack, so the button and the follow agree on 'the end'")
+        XCTAssertTrue(overlay.contains("stranded"),
+                      "the button must show for a pinned transcript stranded off its tail, not only "
+                        + "for a reader who scrolled up")
+        XCTAssertTrue(strandKey.contains("tailOutOfView"), "stranding is decided off the tail's visibility")
+        XCTAssertTrue(strandKey.contains("console.stateRevision"),
+                      "and waits out every publish: the follow it triggers lands after the rows grew, "
+                        + "and the gap in between must not flash the button on each streamed update")
+    }
+
     /// Web decides the same question in `tailPinning.ts`, and the two got here by drifting apart:
     /// both carried the gap-plus-direction rule, so both stopped following a reply when a reasoning
     /// row folded. Asserted piece by piece rather than as one expression, so reflowing that line

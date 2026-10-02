@@ -395,6 +395,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// by position). Empty/absent when untagged or from an older server. Drives the row's tag dots
     /// and the list's tag filter/grouping — see `SessionFilter` / `SessionTimeGrouping`.
     public let tags: [SessionTag]?
+    /// The folder this session is filed in (`SessionFolder`), or nil when it is in none — and
+    /// from an older server, which doesn't send the key. The list groups by it
+    /// (`SessionFolderGrouping`).
+    public let folderId: String?
 
     public var effectiveRunStatus: RunStatus { runStatus ?? status }
     public var effectiveRunState: SessionRunState {
@@ -497,6 +501,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         agent = try values.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         tags = try values.decodeIfPresent([SessionTag].self, forKey: .tags)
+        folderId = try values.decodeIfPresent(String.self, forKey: .folderId)
     }
 
     public init(id: String, title: String?, status: RunStatus, runStatus: RunStatus? = nil,
@@ -524,7 +529,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 poolMemberProviderId: String? = nil, poolKeyId: String? = nil,
                 codexAccount: String? = nil, codexAccountPinned: Bool? = nil,
                 claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil,
-                awaitingReplyFrom: [SessionRequestPeer]? = nil, owesReplyTo: [SessionRequestPeer]? = nil) {
+                awaitingReplyFrom: [SessionRequestPeer]? = nil, owesReplyTo: [SessionRequestPeer]? = nil,
+                folderId: String? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -575,6 +581,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.lastTurnAt = lastTurnAt
         self.currentTurnStartedAt = currentTurnStartedAt
         self.tags = tags
+        self.folderId = folderId
     }
 }
 
@@ -685,7 +692,22 @@ public struct ArmAutoRetryRequest: Codable, Sendable {
 /// `ConsoleModel.retryMessageText`.
 public struct RetryMessage: Codable, Sendable {
     public let text: String
-    public init(text: String) { self.text = text }
+    /// The card the words' echo carries when they are another Orbit session's (`sessionMessage`,
+    /// apiserver session-message.ts): the Retry then asks the server to re-send them
+    /// (`APIClient.resendRetryMessage`, `RetryRoute`). Nil for the owner's own words.
+    public let sessionMessage: SessionMessage?
+    public init(text: String, sessionMessage: SessionMessage? = nil) {
+        self.text = text
+        self.sessionMessage = sessionMessage
+    }
+}
+
+/// POST /sessions/:id/retry-message — the failure card's Retry, asking the server to re-send another
+/// session's message as that session's (docs/session-request-reply-contract.md §2.1). No idempotency
+/// key: the server derives one from the failed message (criterion 19), so there is nothing here for a
+/// second press to spell differently.
+public struct RetryResendRequest: Codable, Sendable {
+    public init() {}
 }
 
 /// POST /sessions/:id/turns — send a user message or raw shell command.
@@ -829,12 +851,16 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let codexAccount: String?
     /// The same for a session on the built-in Claude engine: one of the runner's Claude accounts.
     public let claudeAccount: String?
+    /// The folder the new session is filed in — one started from a folder's page lands in that
+    /// folder (docs/session-folders-move-design.md §3.2). It has to be one of this workspace's
+    /// folders, else the server answers 400. Nil omits it: the session is in no folder.
+    public let folderId: String?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
                 provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
                 shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
-                claudeAccount: String? = nil) {
+                claudeAccount: String? = nil, folderId: String? = nil) {
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
@@ -848,6 +874,7 @@ public struct CreateSessionRequest: Codable, Sendable {
         self.attachmentIds = attachmentIds
         self.codexAccount = codexAccount
         self.claudeAccount = claudeAccount
+        self.folderId = folderId
     }
 }
 

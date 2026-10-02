@@ -91,6 +91,12 @@ final class WatchWiringTests: XCTestCase {
                             from: "struct AgentSessionRow: View {", to: "private func lineColor(")
         XCTAssertTrue(row.contains("SessionLine.make(for: session, live: !deleted, watching: watching)"))
         XCTAssertTrue(row.contains("StatusGlyphView(glyph: .make(for: session, watching: watching))"))
+        // The phone and iPad rows have no leading glyph: their trailing cue is where the eye goes.
+        XCTAssertTrue(row.contains("SessionLiveIndicator(session: session, watching: watching)"))
+        let indicator = code(try slice(source("Views/AgentsView.swift"),
+                                       from: "struct SessionLiveIndicator: View {", to: "struct BreathingGlyph: View {"))
+        XCTAssertTrue(indicator.contains("SessionStatusGlyph.make(for: session, watching: watching)"))
+        XCTAssertTrue(indicator.contains("case (.symbol(\"eye\"), _):"))
         XCTAssertFalse(code(row).contains("SessionHeader.statusWord(for: session))"),
                        "every status word the row speaks is handed the watch")
     }

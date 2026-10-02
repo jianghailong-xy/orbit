@@ -283,6 +283,7 @@ model User {
   poolPlaces       ProviderPoolPerson[] // the shared pools this user is in (migration 0321)
   poolUsage        PoolUsage[] // what this user spent on shared-pool keys, by key and month
   sessionTags      SessionTag[] // personal colored session labels (tenant scope)
+  sessionFolders   SessionFolder[] // folders sessions are filed in, each inside one workspace (0348)
   refreshTokens    RefreshToken[] // long-lived rotating refresh tokens (hashed at rest)
   clientVersions   ClientVersion[] // which build of each client this user is running
   mergeReceipts    SessionMergeReceipt[] // merges recorded against this user's session branches
@@ -783,6 +784,8 @@ model Workspace {
   permissionRules WorkspacePermissionRule[]
   /// The wiki space this workspace's sessions read, at most one (see WikiSpaceWorkspace).
   wikiSpaceBindings WikiSpaceWorkspace[]
+  /// The folders this workspace's sessions can be filed in (see SessionFolder).
+  sessionFolders SessionFolder[]
 
   /// The key a wiki binding's composite foreign key names (migration 0307), so a space can only be
   /// bound to its own owner's workspaces. `id` alone is already unique.
@@ -1315,6 +1318,13 @@ model Session {
   // (a per-owner personal ordering). null = not pinned. Toggled via POST/DELETE /sessions/:id/pin.
   // Ordering only — never affects visibility or the runner.
   pinnedAt             DateTime? @map("pinned_at")
+  // The folder this session is filed in (migration 0348), at most one; null = the workspace's list.
+  // Filing only, like the pin — nothing that runs the session reads it. Always a folder of this
+  // session's own workspace: a single-column key (a composite one's SET NULL would clear
+  // workspace_id too), so the two writers, create and `POST /sessions/:id/move`, check it. Deleting
+  // the folder sets it back to null; Trash keeps it, so a restored session returns to its folder.
+  folderId             String?   @map("folder_id") @db.Uuid
+  folder               SessionFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
   // ── Public read-only share link (retired) ───────────────────────────────────
   // Where a session's public link used to live. Migration 0306 carried every token into
   // `ShareLink` unchanged, and from then on nothing writes or reads these two columns: the link,
@@ -1340,6 +1350,14 @@ model Session {
   // answers with something that is not one of those failures — not merely when a retry is
   // dispatched, which would let a provider that fails identically every time loop unbounded.
   retryAttempts        Int       @default(0) @map("retry_attempts")
+  // When the auto-retry sweep CLAIMED this retry — cleared `retry_at` and began writing the turn
+  // that fulfils it (migration 0354, docs/session-request-reply-contract.md §8 criterion 20).
+  // Between the claim and that turn the row is parked with `retry_at` NULL, which is also what a
+  // retry given up looks like; this is the fact that tells them apart (`awaitsAutoRetry`). NULL =
+  // no claim in flight. Cleared by the turn the resume writes, a re-arm, a disarm and the attempt
+  // a give-up hands back; a reader also treats a claim older than `RETRY_CLAIM_WINDOW_MS` as dead,
+  // so a sweep that died mid-claim cannot leave a session reading as on-its-way forever.
+  retryClaimedAt       DateTime? @map("retry_claimed_at")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 
@@ -1349,6 +1367,8 @@ model Session {
   scheduledWakeups      SessionScheduledWakeup[]
   /// The requests other sessions have asked of this one (session_request.to_session_id).
   receivedRequests      SessionRequest[] @relation("SessionRequestRecipient")
+  /// What other sessions have sent this one, as §2.4's hourly limit counts it (session_message_charge).
+  messageCharges        SessionMessageCharge[] @relation("SessionMessageChargeRecipient")
   poolGatewayTokens     PoolGatewayToken[]
   poolLoginTokens       PoolLoginToken[]
   poolLoginUsage        PoolLoginUsage[]
@@ -1406,6 +1426,8 @@ model Session {
   @@index([status])
   // The auto-retry sweeper's only query: armed retries that have come due.
   @@index([retryAt])
+  // What a folder delete's ON DELETE SET NULL looks its sessions up by.
+  @@index([folderId])
   @@map("session")
 }
 
@@ -1623,6 +1645,29 @@ model SessionTagLink {
   @@unique([sessionId, tagId])
   @@index([tagId])
   @@map("session_tag_link")
+}
+
+// A folder sessions are filed in (migration 0348, docs/session-folders-move-design.md §3). It
+// belongs to one workspace, and a session is in at most one folder — Session.folderId. Filing only:
+// nothing that runs a session reads it. Deleting a folder sets its sessions' folderId back to null
+// and deletes none of them.
+model SessionFolder {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  ownerId     String    @map("owner_id") @db.Uuid
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  workspaceId String    @map("workspace_id") @db.Uuid
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  // Trimmed, 1–60 characters (SessionFoldersService).
+  name        String
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  sessions Session[]
+
+  // No two folders of one workspace share a name; the service answers a clash with a 409.
+  @@unique([workspaceId, name])
+  @@index([ownerId])
+  @@map("session_folder")
 }
 
 // A tool-permission request from claude's --permission-prompt-tool (served by the
@@ -1898,10 +1943,31 @@ model SessionRequest {
   /// The outcome is kept on the row for the asker's next turn: it had ended, its reply turn was taken
   /// off its queue, or the turn carrying it failed or was drained before its engine finished it.
   replyHeldAt       DateTime? @map("reply_held_at") @db.Timestamptz(3)
+  /// The asker stopped for good while the outcome was held for its next turn — its run ended, or the
+  /// auto-retry it was waiting on was given up — so the request worker owes §4.3's comment on the task
+  /// it ran (migration 0352's `session_request_asker_stopped`). Cleared once the comment is written.
+  replyCommentDueAt DateTime? @map("reply_comment_due_at") @db.Timestamptz(3)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
   @@unique([toSessionId, clientTurnId], map: "session_request_turn_key")
   @@map("session_request")
+}
+
+/// One message §2.4's hourly limit admitted from one session to another (docs/session-request-reply-
+/// contract.md §2.4; sessions/session-message.ts `chargeSessionMessage`), written when it was sent and
+/// never touched by what happens to the message afterwards — so a queued message an interrupt drops, or
+/// the owner withdraws, still counts for the rest of its hour. Migration 0351.
+///
+/// The sending session is not a relation, for the reason `ConversationTurn.senderSessionId` is not one.
+model SessionMessageCharge {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  fromSessionId String   @map("from_session_id") @db.Uuid
+  toSessionId   String   @map("to_session_id") @db.Uuid
+  toSession     Session  @relation("SessionMessageChargeRecipient", fields: [toSessionId], references: [id], onDelete: Cascade, onUpdate: NoAction, map: "session_message_charge_to_session_fkey")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([toSessionId, fromSessionId, createdAt], map: "session_message_charge_pair_idx")
+  @@map("session_message_charge")
 }
 
 // Binary blob storage (currently web-composer image uploads) kept in-DB as bytea.
@@ -2561,8 +2627,9 @@ model ProjectTaskStatusCount {
 /// for what needs authority or what nobody else can take — and `assigneeReason` says why. `kind`,
 /// `state`, `assignee`, `assigneeReason`, `resolution` and `resolvedBy` are closed sets held by CHECKs in
 /// the migration and spelled in `projects/project-open-item.ts`. A resolved or superseded row is final
-/// (`project_open_item_terminal_guard`). At most one OPEN item of a project holds a `dedupeKey`, and the
-/// task lookup index is `WHERE task_id IS NOT NULL`: both partial, which this schema cannot spell.
+/// (`project_open_item_terminal_guard`). At most one OPEN item of a project holds a `dedupeKey`, the
+/// task lookup index is `WHERE task_id IS NOT NULL`, and the candidate lookup (0353) is `promotion_id`
+/// over OPEN items: all three partial, which this schema cannot spell.
 model ProjectOpenItem {
   id        String  @id @default(uuid(7)) @db.Uuid
   projectId String  @map("project_id") @db.Uuid
@@ -5480,7 +5547,6 @@ model PoolCodexLogin {
   usageReadAt     DateTime?    @map("usage_read_at")
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
-  tokens          PoolLoginToken[]
 
   @@id([poolId, accountId])
   @@map("pool_codex_login")
@@ -5489,25 +5555,23 @@ model PoolCodexLogin {
 /// A session token of a Codex pool of one person's own (migration 0324) — the login pools' twin of
 /// PoolGatewayToken, which cannot hold one: its person is a row of `provider_pool_person`, and a login
 /// pool has no people. Only the hash is stored. (pool_id, user_id) → provider_pool(id, owner_id) holds its
-/// person to the pool's owner; (pool_id, account_id) → pool_codex_login binds it to the account its claim
-/// found, so taking that account out of the pool deletes it (a token minted while the pool held no
-/// account has none, and is answered with that); and its session's deletion deletes it too.
+/// person to the pool's owner; its session's deletion deletes it too. It names no account (migration
+/// 0355): what a request of its goes out on is the account its session is on (`session.pool_codex_account_id`),
+/// read by the gateway at every request, so taking one account out of the pool leaves the token alone and
+/// a session that moved to another account sends on that one.
 model PoolLoginToken {
-  id        String          @id @default(uuid(7)) @db.Uuid
-  tokenHash String          @unique @map("token_hash")
-  poolId    String          @map("pool_id") @db.Uuid
-  userId    String          @map("user_id") @db.Uuid
-  pool      ProviderPool    @relation(fields: [poolId, userId], references: [id, ownerId], onDelete: Cascade, onUpdate: NoAction)
-  accountId String?         @map("account_id")
-  login     PoolCodexLogin? @relation(fields: [poolId, accountId], references: [poolId, accountId], onDelete: Cascade, onUpdate: NoAction)
-  sessionId String          @map("session_id") @db.Uuid
-  session   Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  createdAt DateTime        @default(now()) @map("created_at")
-  expiresAt DateTime        @map("expires_at")
-  revokedAt DateTime?       @map("revoked_at")
+  id        String       @id @default(uuid(7)) @db.Uuid
+  tokenHash String       @unique @map("token_hash")
+  poolId    String       @map("pool_id") @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  pool      ProviderPool @relation(fields: [poolId, userId], references: [id, ownerId], onDelete: Cascade, onUpdate: NoAction)
+  sessionId String       @map("session_id") @db.Uuid
+  session   Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdAt DateTime     @default(now()) @map("created_at")
+  expiresAt DateTime     @map("expires_at")
+  revokedAt DateTime?    @map("revoked_at")
 
   @@index([sessionId])
-  @@index([poolId, accountId])
   @@map("pool_login_token")
 }
 

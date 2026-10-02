@@ -187,7 +187,9 @@ private struct RunnersLoadOverlay: ViewModifier {
     func body(content: Content) -> some View {
         let presentation = LoadFailureLogic.presentation(runners.loadState, isEmpty: isEmpty)
         return content
-            .safeAreaInset(edge: .top, spacing: 0) {
+            // The notice sits where iOS 26 hangs the pull's spinner, and the phone's lists pull to
+            // refresh (see `topInsetClearOfRefresh`).
+            .topInsetClearOfRefresh {
                 if presentation == .content(showsError: true), let error = runners.errorText {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)

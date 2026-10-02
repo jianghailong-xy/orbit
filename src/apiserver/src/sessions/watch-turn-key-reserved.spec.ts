@@ -20,6 +20,9 @@ import type { SessionInterruptDto, SessionResumeDto, SessionTurnDto } from './dt
  * which `project_send` and `orbit project send --client-turn-id` travel through to its coordinator.
  * Each is pinned separately because the guard has to be per-door: it cannot move into
  * `SessionsService.createTurn`, which is precisely where the delivery worker writes these keys from.
+ * (The public API's failure-card retry used to be an eighth; it names no key at all now — the server
+ * derives that one from the failed message, session-request-reply-contract.md §2.1 criterion 19 — so
+ * a caller cannot reach into this namespace through it.)
  *
  * Every case sends an ordinary key through the same door afterwards, so no case can pass by refusing
  * everything.
@@ -71,7 +74,12 @@ function doors() {
       return { sessionId: 'coordinator-session', created: false, workspaceId: null, turn: { clientTurnId } };
     },
   };
-  const browser = new SessionsController(sessions as never, {} as never, {} as never, {} as never, {} as never, {} as never);
+  // The failure card's Retry, asking the server to re-send another session's message. It names no
+  // key: the door derives one from the failed message (criterion 19), so this holds nothing here.
+  const autoRetry = {
+    resendRetryMessage: async (_ownerId: string, _id: string) => ({ turnId: 'turn-4', seq: 4 }),
+  };
+  const browser = new SessionsController(sessions as never, {} as never, {} as never, {} as never, {} as never, autoRetry as never);
   const runner = new RunnerSessionsController(
     sessions as never,
     { assert: async () => undefined } as never,
@@ -161,6 +169,19 @@ test('POST /api/sessions/:id/resume refuses a clientTurnId in the wake namespace
   await d.browser.resume(USER, SESSION_ID, { clientTurnId: ORDINARY_KEY, content: 'wake up and carry on' });
   assert.equal(d.resumes.length, 1);
   assert.equal(d.resumes[0].clientTurnId, ORDINARY_KEY);
+});
+
+test('POST /api/sessions/:id/retry-message names no key of the caller\'s, so there is none to refuse', async () => {
+  const d = doors();
+
+  // The door used to take a clientTurnId and refuse the reserved namespaces through it. It takes
+  // none now: the re-send's key is derived from the failed message (criterion 19), so a body carrying
+  // one — the shape an older client sends — is ignored rather than refused, and the call goes through.
+  const call = d.browser.resendRetryMessage.bind(d.browser) as unknown as (
+    user: unknown, id: string, body: { clientTurnId: string },
+  ) => Promise<unknown>;
+  await call(USER, SESSION_ID, { clientTurnId: RESERVED_KEY });
+  await call(USER, SESSION_ID, { clientTurnId: ORDINARY_KEY });
 });
 
 test('POST /api/sessions/:id/interrupt refuses a follow-up keyed in the wake namespace', async () => {

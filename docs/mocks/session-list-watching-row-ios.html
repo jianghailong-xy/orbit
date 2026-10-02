@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>iOS 会话列表：挂在 watch 上的会话</title>
+<script>
+  // ?board=1 / ?board=2 renders one board at a time, so each PNG stays readable.
+  const board = new URLSearchParams(location.search).get('board');
+  if (board) document.documentElement.dataset.board = board;
+</script>
+<style>
+  /* iOS system colours (light / dark), as SwiftUI's .primary / .secondary / .blue / .orange draw them. */
+  .light {
+    --surface: #ffffff; --label: #000000; --label-2: rgba(60, 60, 67, .6); --label-3: rgba(60, 60, 67, .3);
+    --sep: rgba(60, 60, 67, .22); --fill: rgba(118, 118, 128, .12); --glass: rgba(255, 255, 255, .7);
+    --blue: #007aff; --orange: #ff9500;
+    --chip-orange-bg: rgba(250, 140, 22, .13); --chip-orange: #9a6220;
+    --chip-blue-bg: rgba(51, 112, 255, .13); --chip-blue: #2f5fc4;
+  }
+  .dark {
+    --surface: #000000; --label: #ffffff; --label-2: rgba(235, 235, 245, .6); --label-3: rgba(235, 235, 245, .3);
+    --sep: rgba(84, 84, 88, .6); --fill: rgba(118, 118, 128, .24); --glass: rgba(44, 44, 46, .8);
+    --blue: #0a84ff; --orange: #ff9f0a;
+    --chip-orange-bg: rgba(250, 140, 22, .22); --chip-orange: #f0b46b;
+    --chip-blue-bg: rgba(51, 112, 255, .22); --chip-blue: #9dbaff;
+  }
+
+  * { box-sizing: border-box; }
+  html[data-board="1"] #b2, html[data-board="2"] #b1 { display: none; }
+  body {
+    margin: 0; padding: 34px 34px 44px; background: #ececef; color: #16161a; width: 1320px;
+    font: 14px/1.55 -apple-system, "PingFang SC", "Noto Sans CJK SC", "Liberation Sans", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { margin: 0 0 6px; font-size: 20px; font-weight: 650; }
+  .lede { margin: 0 0 22px; max-width: 1220px; color: #4b4f57; }
+  .lede b { color: #16161a; }
+  code { font-family: ui-monospace, "Noto Sans Mono", monospace; font-size: 12px; background: rgba(0,0,0,.06); padding: 1px 4px; border-radius: 4px; }
+  h2 { margin: 0 0 10px; font-size: 14px; font-weight: 650; }
+  h2.before { color: #b3380a; }
+  h2.after { color: #1a7f37; }
+  h2.plain { color: #2b2f36; }
+  .row { display: flex; gap: 34px; align-items: flex-start; }
+  figure { margin: 0; }
+  .notes { margin: 12px 0 0; padding: 0; list-style: none; font-size: 13px; color: #3f444c; max-width: 393px; }
+  .notes li { position: relative; padding-left: 24px; margin: 0 0 6px; }
+  .notes li .n {
+    position: absolute; left: 0; top: 2px; width: 17px; height: 17px; border-radius: 50%;
+    font: 600 11px/17px -apple-system, "Noto Sans CJK SC", sans-serif; text-align: center; color: #fff; background: #d4380d;
+  }
+  .notes li .n.grey { background: #9aa0a8; }
+  .notes.before li .n { background: #b3380a; }
+  .notes.wide { max-width: 560px; }
+
+  /* ---- iPhone ---- */
+  .phone {
+    width: 393px; background: var(--surface); color: var(--label); overflow: hidden; position: relative;
+    border-radius: 34px; box-shadow: 0 18px 44px rgba(0,0,0,.16), 0 0 0 1px rgba(0,0,0,.08);
+    font-family: -apple-system, "Liberation Sans", "Noto Sans CJK SC", sans-serif;
+  }
+  .dark.phone { box-shadow: 0 18px 44px rgba(0,0,0,.3), 0 0 0 1px rgba(255,255,255,.1); }
+  .status { height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 0 30px 0 40px; font-size: 16px; font-weight: 600; }
+  .status .r { display: flex; align-items: center; gap: 6px; }
+  .bars { display: flex; align-items: flex-end; gap: 1.5px; height: 11px; }
+  .bars i { width: 3px; background: var(--label); border-radius: 1px; }
+  .batt { width: 25px; height: 12px; border: 1.5px solid var(--label-3); border-radius: 4px; position: relative; }
+  .batt::before { content: ""; position: absolute; left: 1px; top: 1px; bottom: 1px; width: 60%; background: var(--label); border-radius: 1.5px; }
+  .nav { height: 48px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; }
+  .platter { width: 42px; height: 42px; border-radius: 50%; background: var(--glass); display: flex; align-items: center; justify-content: center;
+             box-shadow: 0 1px 3px rgba(0,0,0,.08), inset 0 0 0 .5px rgba(0,0,0,.06); }
+  .platter svg { width: 19px; height: 19px; stroke: var(--label); fill: none; stroke-width: 1.9; stroke-linecap: round; }
+  .nav-title { font-size: 17px; font-weight: 600; }
+  .search { margin: 4px 16px 10px; height: 38px; border-radius: 19px; background: var(--fill); display: flex; align-items: center; gap: 7px; padding: 0 12px; color: var(--label-2); font-size: 17px; }
+  .search svg { width: 16px; height: 16px; stroke: var(--label-2); fill: none; stroke-width: 2.2; stroke-linecap: round; }
+  .grp { padding: 4px 16px 6px; font-size: 13px; font-weight: 600; color: var(--label-2); }
+
+  .srow { display: flex; flex-direction: column; gap: 3px; padding: 10px 16px; border-bottom: .5px solid var(--sep); position: relative; }
+  .srow:last-child { border-bottom: 0; }
+  .l1, .l2 { display: flex; align-items: center; min-width: 0; }
+  .l1 { gap: 8px; }
+  .l2 { gap: 7px; }
+  .ttl { flex: 0 1 auto; min-width: 0; font-size: 17px; line-height: 22px; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sp { flex: 1 1 auto; min-width: 8px; }
+  .rel { flex: none; font-size: 11.5px; color: var(--label-2); }
+  .line { flex: 1 1 auto; min-width: 0; font-size: 15px; line-height: 20px; color: var(--label-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .line.running { color: var(--blue); }
+  .line.approval { color: var(--orange); }
+  .chips { display: flex; gap: 5px; flex: none; }
+  .chip { display: inline-flex; align-items: center; height: 18px; padding: 0 7px; border-radius: 9px; font-size: 11px; white-space: nowrap; }
+  .chip.orange { color: var(--chip-orange); background: var(--chip-orange-bg); }
+  .chip.blue { color: var(--chip-blue); background: var(--chip-blue-bg); }
+
+  /* the trailing live cue */
+  .cue { flex: none; display: flex; align-items: center; justify-content: center; width: 17px; height: 17px; color: var(--label-2); }
+  .cue svg { display: block; }
+  .cue .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--orange); }
+  .cue.breathe svg { opacity: .55; }
+
+  /* ---- iPad list column ---- */
+  .ipad { width: 430px; background: var(--surface); color: var(--label); border-radius: 18px; overflow: hidden;
+          box-shadow: 0 10px 30px rgba(0,0,0,.12), 0 0 0 1px rgba(0,0,0,.08); font-family: -apple-system, "Liberation Sans", "Noto Sans CJK SC", sans-serif; }
+  .ipad-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 6px; }
+  .ipad-head b { font-size: 22px; letter-spacing: -.02em; }
+  .ipad .srow { padding: 9px 18px; gap: 4px; }
+
+  /* ---- macOS sidebar row ---- */
+  .mac { width: 330px; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 6px 18px rgba(0,0,0,.10), 0 0 0 1px rgba(0,0,0,.08);
+         font-family: -apple-system, "Liberation Sans", "Noto Sans CJK SC", sans-serif; color: #1d1d1f; }
+  .mrow { display: flex; align-items: center; gap: 8px; padding: 9px 16px 9px 16px; border-bottom: .5px solid rgba(0,0,0,.1); }
+  .mrow:last-child { border-bottom: 0; }
+  .mrow .g { width: 20px; flex: none; display: flex; justify-content: center; color: rgba(0,0,0,.5); }
+  .mrow .t { font-size: 13px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mrow .s { font-size: 10.5px; line-height: 14px; color: rgba(0,0,0,.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+  .mrow .c { flex: 1; min-width: 0; }
+  .tdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-left: 5px; vertical-align: 1px; }
+
+  /* ---- change markup ---- */
+  .mk { position: relative; outline: 1.5px dashed #d4380d; outline-offset: 2px; border-radius: 4px; }
+  .mk::after {
+    content: attr(data-n); position: absolute; top: -12px; right: -12px; z-index: 3;
+    width: 17px; height: 17px; border-radius: 50%; background: #d4380d; color: #fff;
+    font: 600 11px/17px -apple-system, "Noto Sans CJK SC", sans-serif; text-align: center;
+  }
+  .mk.left::after { left: -12px; right: auto; }
+
+  /* ---- board 2: matrix ---- */
+  .matrix { display: grid; grid-template-columns: 393px 1fr; column-gap: 28px; }
+  .rules { display: flex; flex-direction: column; }
+  .rule { display: flex; flex-direction: column; justify-content: center; font-size: 12.5px; color: #3f444c; }
+  .rule b { font-size: 13px; color: #16161a; font-weight: 650; }
+  .rule .k { display: inline-block; min-width: 20px; height: 18px; margin-right: 6px; padding: 0 5px; border-radius: 9px; text-align: center;
+             font: 600 11px/18px -apple-system, "Noto Sans CJK SC", sans-serif; color: #fff; background: #9aa0a8; vertical-align: 1px; }
+  .rule.new .k { background: #d4380d; }
+  .listcard { background: var(--surface); border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.10), 0 0 0 1px rgba(0,0,0,.08); }
+  svg.ico { width: 1.05em; height: 1.05em; vertical-align: -0.17em; fill: none; stroke: #6b7078; }
+  .cap { margin: 8px 0 0; font-size: 12.5px; color: #6b7078; max-width: 393px; }
+</style>
+
+<body>
+<!-- SF Symbols stand-ins, drawn at the sizes the rows use. -->
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="eye" viewBox="0 0 24 24"><path d="M1.8 12C4.3 7.6 7.8 5.4 12 5.4s7.7 2.2 10.2 6.6C19.7 16.4 16.2 18.6 12 18.6S4.3 16.4 1.8 12Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.6" fill="currentColor"/></symbol>
+  <symbol id="spin" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 1-9 9" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></symbol>
+  <symbol id="term" viewBox="0 0 24 24"><rect x="2.5" y="4" width="19" height="16" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M6.5 9.5l3 2.5-3 2.5M11.5 15h5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="msg" viewBox="0 0 24 24"><path d="M12 4c5 0 9 3.3 9 7.5S17 19 12 19c-1 0-2-.1-2.9-.4L4.5 20.5l1.3-3.6C4.1 15.6 3 13.6 3 11.5 3 7.3 7 4 12 4Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 12.3l2.7 2.7L16.2 9.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<!-- ================================================================== BOARD 1 -->
+<section id="b1">
+  <h1>iOS 会话列表：挂在 watch 上、等别的会话做完再自动接着干的会话</h1>
+  <p class="lede">
+    iPhone / iPad 的列表行没有左侧状态图标（ChatGPT 式列表），状态只靠两处说：<b>标题行尾部那格小标记</b>（转圈 = 在干活、琥珀点 = 等你、红点 = 失败、
+    呼吸的终端 = 后台作业在跑）和<b>第二行文字</b>。这个会话今天在 iOS 上：尾部那格什么都没有，第二行是 <b>Watching 1 target · 0 met</b>——没说错，但看不出在等谁，
+    也和 web / macOS 的眼睛对不上。另外它若同时留着一个后台作业，尾部会<b>呼吸终端图标</b>，而 macOS 同一行画的是眼睛（契约 §9.2：watch 不借后台进程的图标）。
+  </p>
+
+  <div class="row">
+    <figure>
+      <h2 class="before">现状 · iPhone</h2>
+      <div class="phone light">
+        <div class="status"><span>9:41</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span class="batt"></span></span></div>
+        <div class="nav">
+          <span class="platter"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+          <span class="nav-title">orbit ⌄</span>
+          <span class="platter"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+        </div>
+        <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div>
+        <div class="grp">Today</div>
+        <div class="srow">
+          <div class="l1"><span class="ttl">执行任务：会话间请求与回复：修复 P1 审查发现的问题</span><span class="sp"></span><span class="cue"><svg width="13" height="13"><use href="#spin"/></svg></span><span class="rel">4m</span></div>
+          <div class="l2"><span class="line running">Running Bash…</span></div>
+        </div>
+        <div class="srow">
+          <div class="l1"><span class="ttl">会话间消息参数与回复设计</span><span class="sp"></span><span class="rel">22m ago</span></div>
+          <div class="l2"><span class="chips"><span class="chip orange">项目架构</span><span class="chip blue">契约</span></span><span class="line">Watching 1 target · 0 met</span></div>
+        </div>
+        <div class="srow">
+          <div class="l1"><span class="ttl">排队区的 watch 唤醒卡片</span><span class="sp"></span><span class="rel">1h ago</span></div>
+          <div class="l2"><span class="line">改好了：排队区的唤醒卡和送达后是同一个组件，原文默认折叠。</span></div>
+        </div>
+        <div class="srow">
+          <div class="l1"><span class="ttl">P1 修复的合并确认</span><span class="sp"></span><span class="cue"><span class="dot"></span></span><span class="rel">2h ago</span></div>
+          <div class="l2"><span class="line approval">Waiting for approval</span></div>
+        </div>
+        <div class="srow">
+          <div class="l1"><span class="ttl">部署 0.1.204</span><span class="sp"></span><span class="rel">3h ago</span></div>
+          <div class="l2"><span class="line">已部署：apiserver 迁移已应用，runner 自更新完成。</span></div>
+        </div>
+      </div>
+      <ul class="notes before">
+        <li><span class="n">!</span>第 2 行尾部空着，和第 3 行（真的在等你回复）一样安静；只能靠读字分辨。</li>
+        <li><span class="n">!</span>「1 target · 0 met」在唤醒前永远是 0，看不出在等谁。</li>
+      </ul>
+    </figure>
+
+    <figure>
+      <h2 class="after">改后 · iPhone</h2>
+      <div class="phone light">
+        <div class="status"><span>9:41</span><span class="r"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:10px"></i></span><span class="batt"></span></span></div>
+        <div class="nav">
+          <span class="platter"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+          <span class="nav-title">orbit ⌄</span>
+          <span class="platter"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
+        </div>
+        <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.6-3.6"/></svg>Search sessions</div>
+        <div class="grp">Today</div>
+        <div class="srow">
+          <div class="l1"><span class="ttl">执行任务：会话间请求与回复：修复 P1 审查发现的问题</span><span class="sp"></span><span class="cue"><svg width="13" height="13"><use href="#spin"/></svg></span><span class="rel">4m</span></div>
+          <div class="l2"><span class="line running">Running Bash…</span></div>
+        </div>
+        <div class="srow">
+          <div class="l1"><span class="ttl">会话间消息参数与回复设计</span><span class="sp"></span><span class="cue mk left" data-n="1"><svg width="17" height="17"><use href="#eye"/></svg></span><span class="rel">22m ago</span></div>
+          <div class="l2"><span class="chips"><span class="chip orange">项目架构</span><span class="chip blue">契约</span></span><span class="line mk" data-n="2">Watching 执行任务：会话间请求与回复：修复 P1 审查发现的问题</span></div>
+        </div>
+        <div class="srow">
+          <div class="l1"><span class="ttl">排队区的 watch 唤醒卡片</span><span class="sp"></span><span class="rel">1h ago</span></div>
+          <div class="l2"><span class="line">改好了：排队区的唤醒卡和送达后是同一个组件，原文默认折叠。</span></div>
+        </div>
+        <div class="srow">
+          <div class="l1"><span class="ttl">P1 修复的合并确认</span><span class="sp"></span><span class="cue"><span class="dot"></span></span><span class="rel">2h ago</span></div>
+          <div class="l2"><span class="line approval">Waiting for approval</span></div>
+        </div>
+        <div class="srow">
+          <div class="l1"><span class="ttl">部署 0.1.204</span><span class="sp"></span><span class="rel">3h ago</span></div>
+          <div class="l2"><span class="line">已部署：apiserver 迁移已应用，runner 自更新完成。</span></div>
+        </div>
+      </div>
+      <ul class="notes">
+        <li><span class="n">1</span>尾部那格加一只灰色、静止的眼睛（和 web / macOS 同一个符号），时间照旧跟在后面。只有转圈和琥珀点、红点能压过它。</li>
+        <li><span class="n">2</span>第二行换成 A：Watching + 目标名，和 web、停车栏同一句；颜色还是次要灰。</li>
+      </ul>
+    </figure>
+
+    <figure>
+      <h2 class="after">改后 · iPad（常规宽度那一栏）</h2>
+      <div class="ipad light">
+        <div class="ipad-head"><b>orbit</b></div>
+        <div class="grp">Today</div>
+        <div class="srow">
+          <div class="l1"><span class="ttl">执行任务：会话间请求与回复：修复 P1 审查发现的问题</span><span class="sp"></span><span class="cue"><svg width="13" height="13"><use href="#spin"/></svg></span><span class="rel">4m</span></div>
+          <div class="l2"><span class="line running">Running Bash…</span></div>
+        </div>
+        <div class="srow">
+          <div class="l1"><span class="ttl">会话间消息参数与回复设计</span><span class="sp"></span><span class="cue mk left" data-n="1"><svg width="17" height="17"><use href="#eye"/></svg></span><span class="rel">22m ago</span></div>
+          <div class="l2"><span class="chips"><span class="chip orange">项目架构</span></span><span class="line mk" data-n="2">Watching 执行任务：会话间请求与回复：修复 P1 审查发现的问题</span></div>
+        </div>
+        <div class="srow">
+          <div class="l1"><span class="ttl">排队区的 watch 唤醒卡片</span><span class="sp"></span><span class="rel">1h ago</span></div>
+          <div class="l2"><span class="line">改好了：排队区的唤醒卡和送达后是同一个组件，原文默认折叠。</span></div>
+        </div>
+      </div>
+      <ul class="notes wide" style="max-width:430px">
+        <li><span class="n grey">=</span>iPad 行和 iPhone 同一套：尾部眼睛 + 第二行 A。iPad 行本来就只放第一个标签，所以目标名能多露出一截。</li>
+        <li><span class="n grey">=</span>VoiceOver 照旧读整行，状态读作 <b>Watching 1 target</b>（与头部同词，已经是这样）。</li>
+        <li><span class="n grey">=</span>不加左侧图标列，ChatGPT 式列表的版式不动。</li>
+      </ul>
+    </figure>
+  </div>
+</section>
+
+<!-- ================================================================== BOARD 2 -->
+<section id="b2">
+  <h1>iOS 改后 · 各种情况（从上到下 = 优先级从高到低）+ 深色 + macOS 行</h1>
+  <p class="lede">
+    尾部那格的优先级和 macOS 左侧图标、web 图标完全一样：<b>等你（琥珀点）&gt; 在干活（转圈）&gt; Watching（眼睛）&gt; 后台作业（呼吸终端）&gt; 安静</b>。
+    第二行的字和 web 逐字一致（共用 OrbitKit 的 <code>SessionLine</code>）。
+  </p>
+
+  <div class="matrix">
+    <div class="listcard light">
+      <div class="srow" style="height:72px">
+        <div class="l1"><span class="ttl">会话间消息参数与回复设计</span><span class="sp"></span><span class="cue"><span class="dot"></span></span><span class="rel">22m ago</span></div>
+        <div class="l2"><span class="chips"><span class="chip orange">项目架构</span><span class="chip blue">契约</span></span><span class="line approval">Waiting for approval</span></div>
+      </div>
+      <div class="srow" style="height:72px">
+        <div class="l1"><span class="ttl">会话间消息参数与回复设计</span><span class="sp"></span><span class="cue"><svg width="13" height="13"><use href="#spin"/></svg></span><span class="rel">12s</span></div>
+        <div class="l2"><span class="chips"><span class="chip orange">项目架构</span><span class="chip blue">契约</span></span><span class="line running">Running Bash…</span></div>
+      </div>
+      <div class="srow" style="height:72px">
+        <div class="l1"><span class="ttl">会话间消息参数与回复设计</span><span class="sp"></span><span class="cue"><svg width="17" height="17"><use href="#eye"/></svg></span><span class="rel">22m ago</span></div>
+        <div class="l2"><span class="chips"><span class="chip orange">项目架构</span><span class="chip blue">契约</span></span><span class="line">Watching 执行任务：会话间请求与回复：修复 P1 审查发现的问题</span></div>
+      </div>
+      <div class="srow" style="height:72px">
+        <div class="l1"><span class="ttl">项目协调：会话间请求与回复</span><span class="sp"></span><span class="cue"><svg width="17" height="17"><use href="#eye"/></svg></span><span class="rel">8m ago</span></div>
+        <div class="l2"><span class="line">Watching all 4 tasks · 1 running · 3/4 done</span></div>
+      </div>
+      <div class="srow" style="height:72px">
+        <div class="l1"><span class="ttl">发版前回归</span><span class="sp"></span><span class="cue"><svg width="17" height="17"><use href="#eye"/></svg></span><span class="rel">41m ago</span></div>
+        <div class="l2"><span class="line">Watching 6 targets · 2 running · 3/6 done</span></div>
+      </div>
+      <div class="srow" style="height:72px">
+        <div class="l1"><span class="ttl">会话间消息参数与回复设计</span><span class="sp"></span><span class="cue"><svg width="17" height="17"><use href="#eye"/></svg></span><span class="rel">22m ago</span></div>
+        <div class="l2"><span class="chips"><span class="chip orange">项目架构</span><span class="chip blue">契约</span></span><span class="line">Watch paused · 执行任务：会话间请求与回复：修复 P1 审查发现的问题</span></div>
+      </div>
+      <div class="srow" style="height:72px">
+        <div class="l1"><span class="ttl">dev server 联调</span><span class="sp"></span><span class="cue"><svg width="17" height="17"><use href="#eye"/></svg></span><span class="rel">2h ago</span></div>
+        <div class="l2"><span class="line">Watching 执行任务：修复登录跳转</span></div>
+      </div>
+      <div class="srow" style="height:72px">
+        <div class="l1"><span class="ttl">长跑基准测试</span><span class="sp"></span><span class="cue breathe"><svg width="17" height="17"><use href="#term"/></svg></span><span class="rel">5m ago</span></div>
+        <div class="l2"><span class="line">Background process running…</span></div>
+      </div>
+      <div class="srow" style="height:72px">
+        <div class="l1"><span class="ttl">排队区的 watch 唤醒卡片</span><span class="sp"></span><span class="rel">1h ago</span></div>
+        <div class="l2"><span class="line">改好了：排队区的唤醒卡和送达后是同一个组件，原文默认折叠。</span></div>
+      </div>
+    </div>
+
+    <div class="rules">
+      <div class="rule" style="height:72px"><b><span class="k">不变</span>有审批 / 确认在等你</b><span>琥珀点 + 橙色字。等你的永远排第一，watch 不能把它藏起来。</span></div>
+      <div class="rule" style="height:72px"><b><span class="k">不变</span>条件成立，会话被唤醒正在跑</b><span>watch 已 MATCHED，眼睛自然消失，换成转圈 + 本轮已跑的时长。</span></div>
+      <div class="rule new" style="height:72px"><b><span class="k">新</span>盯一个目标</b><span>眼睛 + 「Watching 目标名」。太长就截断，开头的 Watching 永远在。</span></div>
+      <div class="rule new" style="height:72px"><b><span class="k">新</span>一个 watch 盯多个目标</b><span>说条件要什么 + 进度：all 4 tasks / any 1 of 4 tasks，接「1 running · 3/4 done」。</span></div>
+      <div class="rule new" style="height:72px"><b><span class="k">新</span>多个 watch</b><span>数目标（每个只算一次）：6 targets，后面同样接进度。</span></div>
+      <div class="rule new" style="height:72px"><b><span class="k">新</span>watch 被暂停</b><span>眼睛不变，字改成 Watch paused：暂停期间不会被唤醒，但也不是在等你。</span></div>
+      <div class="rule new" style="height:72px"><b><span class="k">新</span>同时还留着后台作业</b><span>眼睛压过呼吸的终端图标（今天 iOS 这里呼吸的是终端，macOS 画的是眼睛——对齐它）。</span></div>
+      <div class="rule" style="height:72px"><b><span class="k">不变</span>没有 watch，只有后台作业</b><span>照旧：呼吸的终端 + Background process running…</span></div>
+      <div class="rule" style="height:72px"><b><span class="k">不变</span>没有 watch，真的在等你回复</b><span>尾部安静 + 回复摘要。</span></div>
+    </div>
+  </div>
+
+  <div class="row" style="margin-top:34px">
+    <figure>
+      <h2 class="plain">深色 · iPhone</h2>
+      <div class="phone dark">
+        <div class="grp" style="padding-top:14px">Today</div>
+        <div class="srow">
+          <div class="l1"><span class="ttl">执行任务：会话间请求与回复：修复 P1 审查发现的问题</span><span class="sp"></span><span class="cue"><svg width="13" height="13"><use href="#spin"/></svg></span><span class="rel">4m</span></div>
+          <div class="l2"><span class="line running">Running Bash…</span></div>
+        </div>
+        <div class="srow">
+          <div class="l1"><span class="ttl">会话间消息参数与回复设计</span><span class="sp"></span><span class="cue"><svg width="17" height="17"><use href="#eye"/></svg></span><span class="rel">22m ago</span></div>
+          <div class="l2"><span class="chips"><span class="chip orange">项目架构</span><span class="chip blue">契约</span></span><span class="line">Watching 执行任务：会话间请求与回复：修复 P1 审查发现的问题</span></div>
+        </div>
+        <div class="srow" style="padding-bottom:14px">
+          <div class="l1"><span class="ttl">排队区的 watch 唤醒卡片</span><span class="sp"></span><span class="rel">1h ago</span></div>
+          <div class="l2"><span class="line">改好了：排队区的唤醒卡和送达后是同一个组件，原文默认折叠。</span></div>
+        </div>
+      </div>
+    </figure>
+
+    <figure>
+      <h2 class="plain">macOS 侧栏行（同一份 <code>SessionLine</code>，只变第二行字）</h2>
+      <div class="row" style="gap:22px">
+        <div>
+          <div style="font-size:12px;color:#b3380a;font-weight:650;margin:0 0 6px">现状</div>
+          <div class="mac">
+            <div class="mrow"><span class="g"><svg width="16" height="16"><use href="#eye"/></svg></span><div class="c"><div class="t">会话间消息参数与回复设计<span class="tdot" style="background:#fa8c16"></span><span class="tdot" style="background:#3370ff"></span></div><div class="s">Watching 1 target · 0 met</div></div></div>
+            <div class="mrow"><span class="g"><svg width="16" height="16"><use href="#msg"/></svg></span><div class="c"><div class="t">排队区的 watch 唤醒卡片</div><div class="s">改好了：排队区的唤醒卡和送达后是同一个组件…</div></div></div>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:12px;color:#1a7f37;font-weight:650;margin:0 0 6px">改后</div>
+          <div class="mac">
+            <div class="mrow"><span class="g"><svg width="16" height="16"><use href="#eye"/></svg></span><div class="c"><div class="t">会话间消息参数与回复设计<span class="tdot" style="background:#fa8c16"></span><span class="tdot" style="background:#3370ff"></span></div><div class="s mk" data-n="2">Watching 执行任务：会话间请求与回复：修复 P1…</div></div></div>
+            <div class="mrow"><span class="g"><svg width="16" height="16"><use href="#msg"/></svg></span><div class="c"><div class="t">排队区的 watch 唤醒卡片</div><div class="s">改好了：排队区的唤醒卡和送达后是同一个组件…</div></div></div>
+          </div>
+        </div>
+      </div>
+      <p class="cap" style="max-width:690px">macOS 左侧的眼睛本来就有，不动；第二行跟着 A 改成同一句。iOS / macOS 共用这一行的代码，改一处三处一起变。</p>
+    </figure>
+  </div>
+</section>
+</body>
+</html>

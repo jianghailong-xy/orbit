@@ -3,6 +3,7 @@ import {
   WATCH_LEAF_SINCE_VERSION,
   WATCH_LEAVES,
   WATCH_LIMITS,
+  createdTasksCountLine,
   watchDeadLetterNeedsAttention,
   type CreateWatchRequest,
   type UpdateWatchRequest,
@@ -424,7 +425,11 @@ export const WATCHING_WORDS = {
  */
 export function watchingWord(watches: readonly WatchView[], sessionId: string): string | null {
   const observing = watchesFollowing(watches, sessionId).filter(isLiveWatch);
-  if (observing.length === 0) return null;
+  return observing.length === 0 ? null : wordOf(observing);
+}
+
+/** `watchingWord` over a set already known to be one session's live watches, and not empty. */
+function wordOf(observing: readonly WatchView[]): string {
   const active = observing.filter((w) => w.state === 'ACTIVE');
   if (active.length === 0) {
     return observing.length === 1
@@ -462,6 +467,104 @@ export function watchingCountWord(
   if (paused === 0) return null;
   return paused === 1 ? WATCHING_WORDS.paused : `${paused} ${WATCHING_WORDS.pausedMany}`;
 }
+
+/** A target by the name the watch carries for it, and by its short id when it carries none. */
+export const targetName = (t: WatchTargetView): string => t.targetTitle ?? linkId(t.targetResourceId).slice(0, 8);
+
+/** The noun a set of targets counts in: the one kind every target shares, and "targets" across kinds. */
+export const targetNoun = (watches: readonly WatchView[], count: number): string => {
+  const kinds = new Set(watches.flatMap((w) => w.targets.map((t) => t.targetKind)));
+  const noun = kinds.size !== 1 ? 'target' : kinds.has('TASK') ? 'task' : 'session';
+  return count === 1 ? noun : `${noun}s`;
+};
+
+/**
+ * What one watch's condition asks for, over the targets its leaf can read: every one of them, any
+ * one of them, or a count in between. The count is the predicate's own — an ANY watch over four
+ * targets is done after one — so the middle of the line says what the wait needs, not what it
+ * covers: "all 4 tasks" is four waits, "any 1 of 4 tasks" is one of four.
+ */
+function thresholdLine(t: WatchThreshold, watches: readonly WatchView[]): string {
+  const noun = targetNoun(watches, t.of);
+  if (t.of === 0) return `no ${noun}`;
+  if (t.needed === t.of) return `all ${t.of} ${noun}`;
+  if (t.needed === 1) return `any 1 of ${t.of} ${noun}`;
+  return `${t.needed} of ${t.of} ${noun}`;
+}
+
+/**
+ * The Watching strip's folded line, as data: the live targets of the watches a session waits on, each
+ * once however many watches name it; the target it names, when a lone watch waits on a lone target;
+ * and otherwise what the wait needs. `SessionWatchStrip` draws it, and a session list row says it in
+ * one string (`watchingSessions`), so the two cannot come apart.
+ */
+export function stripLine(waitingOn: readonly WatchView[]): {
+  live: WatchTargetView[];
+  single: WatchTargetView | null;
+  targetLine: string;
+} {
+  // Each live target once, however many watches name it, so two watches over the same task never
+  // read "2 targets".
+  const live = [
+    ...new Map(
+      waitingOn
+        .flatMap((w) => w.targets.filter((t) => t.state !== 'GONE'))
+        .map((t) => [`${t.targetKind}:${t.targetResourceId}`, t] as const),
+    ).values(),
+  ];
+  const single = waitingOn.length === 1 && live.length === 1 ? live[0] : null;
+  // What the wait is for when it names no one target: one watch states the threshold its own
+  // condition sets, several — no one condition between them — count the targets they cover.
+  const targetLine =
+    waitingOn.length === 1
+      ? thresholdLine(thresholdOf(waitingOn[0].predicate, live), waitingOn)
+      : `${live.length} ${targetNoun(waitingOn, live.length)}`;
+  return { live, single, targetLine };
+}
+
+/** What a session list row says about a session that live watches will resume. */
+export interface SessionWatching {
+  /** The header's word (`watchingWord`), which the row's glyph says as its tooltip. */
+  word: string;
+  /**
+   * The row's second line: the strip's folded line in one string — a lone target by name ("Watching
+   * Fix the login redirect"), several by what the wait needs and where they stand ("Watching all 4
+   * tasks · 1 running · 3/4 done"). With every watch paused nothing is being watched, so it leads
+   * with the header's paused word instead.
+   */
+  line: string;
+}
+
+/**
+ * Every session that live watches will resume, by id, with what its list row says about the wait.
+ * Built once per fetched list, so each row finds its own with one lookup (`sessionWatching`) rather
+ * than a scan. The set per session is the header's and the strip's: `watchesFollowing`, live. macOS
+ * builds the same map (`WatchIndex.summariesByObserver`); the lines are proved against
+ * `watch-strip.fixture.json`'s `rows`.
+ */
+export function watchingSessions(watches: readonly WatchView[]): ReadonlyMap<string, SessionWatching> {
+  const observing = new Map<string, WatchView[]>();
+  for (const w of watches) {
+    if (w.action !== 'RESUME_SESSION' || w.observerSessionId == null || !isLiveWatch(w)) continue;
+    const key = normId(w.observerSessionId);
+    observing.set(key, [...(observing.get(key) ?? []), w]);
+  }
+  const rows = new Map<string, SessionWatching>();
+  for (const [key, set] of observing) {
+    const { live, single, targetLine } = stripLine(set);
+    const what = single ? targetName(single) : `${targetLine} · ${createdTasksCountLine(stripCounts(live))}`;
+    const word = wordOf(set);
+    const watching = set.some((w) => w.state === 'ACTIVE');
+    rows.set(key, { word, line: watching ? `${STRIP_LABEL} ${what}` : `${word} · ${what}` });
+  }
+  return rows;
+}
+
+/** One session's entry in `watchingSessions`, whichever way its id is spelled: null when none will resume it. */
+export const sessionWatching = (
+  sessions: ReadonlyMap<string, SessionWatching>,
+  sessionId: string,
+): SessionWatching | null => sessions.get(normId(sessionId)) ?? null;
 
 export interface WatchProgress {
   met: number;

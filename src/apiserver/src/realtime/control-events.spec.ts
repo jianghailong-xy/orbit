@@ -26,6 +26,7 @@ test('controlTypeFor maps the synthesized lifecycle signals', () => {
   assert.equal(controlTypeFor(RunEventType.SESSION_UPDATED), ControlEventType.SESSION_UPDATED);
   assert.equal(controlTypeFor(RunEventType.TASK_LIST_CHANGED), ControlEventType.TASK_LIST_CHANGED);
   assert.equal(controlTypeFor(RunEventType.TAG_CHANGED), ControlEventType.TAG_CHANGED);
+  assert.equal(controlTypeFor(RunEventType.FOLDER_CHANGED), ControlEventType.FOLDER_CHANGED);
   assert.equal(controlTypeFor(RunEventType.PROVIDER_CHANGED), ControlEventType.PROVIDER_CHANGED);
   assert.equal(
     controlTypeFor(RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED),
@@ -40,6 +41,8 @@ test('only the owner-library events are user-scoped', () => {
   for (const t of [
     ControlEventType.TASK_LIST_CHANGED,
     ControlEventType.TAG_CHANGED,
+    // A folder belongs to the owner's workspace, not to any one session filed in it.
+    ControlEventType.FOLDER_CHANGED,
     ControlEventType.PROVIDER_CHANGED,
     ControlEventType.PROJECT_CRITERIA_DECISIONS_CHANGED,
     // Pausing or resuming a project is the owner's, from no session at all.

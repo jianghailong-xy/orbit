@@ -9,11 +9,13 @@ import type { SessionInterruptDto, SessionResumeDto, SessionTurnDto } from './dt
 
 /**
  * `auto-retry:` is the namespace the auto-retry sweep re-sends a failed message under. A re-send of
- * another session's message keeps that session as its sender, and the hourly limit between two
- * sessions leaves turns under the prefix out of what the session sent (docs/session-request-reply-
- * contract.md §2.1, §2.4) — so a message a session queued under it would go uncounted. Every door
- * that lets a caller name a turn key refuses it, as it refuses `watch:` and `session-reply:`: the same
- * seven doors `session-reply-turn-key-reserved.spec.ts` pins, through the same guard.
+ * another session's message keeps that session as its sender (docs/session-request-reply-contract.md
+ * §2.1), so a turn under the prefix is always the platform's re-send, never a message somebody sent
+ * again — and a message a caller queued under it would pass for one. Every door that lets a caller
+ * name a turn key refuses it, as it refuses `watch:` and `session-reply:`: the same seven doors
+ * `session-reply-turn-key-reserved.spec.ts` pins, through the same guard. (The failure card's Retry
+ * used to be an eighth, naming a key of its own; it names none now — the door derives the key from
+ * the failed message, so a caller cannot reach into this namespace through it — §2.1, criterion 19.)
  *
  * Every door also takes an ordinary key afterwards, and one that only starts with the same letters,
  * so no case can pass by refusing everything.
@@ -50,6 +52,10 @@ function doors() {
     },
     assertHostedByRunner: async () => undefined,
   };
+  // The failure card's Retry asks the server to re-send; it names no key at all (criterion 19).
+  const autoRetry = {
+    resendRetryMessage: async (_ownerId: string, _id: string) => ({ turnId: 'turn-4', seq: 4 }),
+  };
   const projects = {
     sendToCoordinator: async (_o: string, _p: string, _a: string, _m: string, clientTurnId: string) => {
       keys.push(clientTurnId);
@@ -58,7 +64,7 @@ function doors() {
   };
   return {
     keys,
-    browser: new SessionsController(sessions as never, {} as never, {} as never, {} as never, {} as never, {} as never),
+    browser: new SessionsController(sessions as never, {} as never, {} as never, {} as never, {} as never, autoRetry as never),
     runner: new RunnerSessionsController(sessions as never, { assert: async () => CALLER } as never, {} as never, ATTEMPTS as never),
     project: new RunnerProjectsController(projects as never, {} as never, {} as never, { assert: async () => CALLER } as never),
   };

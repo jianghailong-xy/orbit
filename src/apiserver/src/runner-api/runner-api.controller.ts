@@ -234,6 +234,7 @@ import {
   appendSessionRepliesContext,
   closeUnansweredRequests,
   closeUnreadSteerRequests,
+  holdTurnRepliesForRetry,
   readRequestForBlock,
   readSessionReplyCards,
   readTurnRequestIds,
@@ -4541,13 +4542,28 @@ export class RunnerApiController {
       // still wake it, in which case it may yet answer and the request waits (session-request.ts).
       // Judged here, under the lock and in the transaction that parked it, so an answer racing this
       // completion and this judgment meet on the request row and only one of them is the outcome.
+      // A retry armed is one of the wake sources: a turn a quota killed parks here, idle, with the
+      // re-send of its message already on its way.
       const requestsClosed = !failSession && nextStatus === RunStatus.AWAITING_INPUT
         ? await closeUnansweredRequests(tx, {
             id: sessionId,
             runningBgJobs: current.runningBgJobs,
+            retryAt: retryArmAt ?? current.retryAt,
             lastAssistantText: current.lastAssistantText,
           })
         : [];
+      // §8 criterion 17: a turn a transient failure killed without failing the run — a quota ran out
+      // and the session parked with a retry armed — was not read through. What it handed back to this
+      // session as an asker is held for the retry's turn, as a failed turn's is below. A turn put back
+      // in the queue (`unanswered`) keeps what it carries: its next delivery says it again.
+      if (
+        !failSession
+        && completedTurn?.kind === 'message'
+        && !unanswered
+        && (retryArmAt ?? current.retryAt) != null
+      ) {
+        await holdTurnRepliesForRetry(tx, sessionId, completedTurn.clientTurnId);
+      }
       // Per-file unified diffs to the side table (never on the session row, so the detail/
       // list payload stays small) — fetched on demand when the user opens a file's diff.
       if (dto.changedDiff !== undefined) {
@@ -5923,14 +5939,15 @@ export class RunnerApiController {
   }
 
   /** Startup worktree GC support: given the session ids of leftover checkouts on the runner,
-   *  return which are safe to remove. A checkout is kept while its session still exists and is
-   *  neither Completed nor deleted — it stays resumable, so idle-parked sessions
-   *  survive a runner restart. Everything else (Completed, deleted, or missing) is
-   *  removable leftover. */
+   *  return which are safe to remove. A checkout is kept while its session still exists, is
+   *  neither Completed nor deleted, and is still assigned to this runner — it stays resumable, so
+   *  idle-parked sessions survive a runner restart. Everything else (Completed, deleted, missing,
+   *  or moved to a workspace on another runner — docs/session-folders-move-design.md §5.4) is
+   *  removable leftover. The runner keeps a checkout's branch, and never removes a dirty one. */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/worktrees-removable')
   async worktreesRemovable(
-    @CurrentRunner() _runner: { id: string },
+    @CurrentRunner() runner: { id: string },
     @Body() dto: WorktreesRemovableRequest,
   ): Promise<WorktreesRemovableResponse> {
     const ids = (dto.ids ?? []).slice(0, 1000);
@@ -5943,6 +5960,7 @@ export class RunnerApiController {
             completedAt: null,
             archivedAt: null,
             deletedAt: null,
+            OR: [{ assignedRunnerId: null }, { assignedRunnerId: runner.id }],
           },
           select: { id: true },
         })

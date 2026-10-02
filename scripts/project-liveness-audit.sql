@@ -22,6 +22,9 @@
 -- missing `next_check_at` reads differently from no blocker at all).
 --
 -- Read-only: no writes, no locks beyond an ordinary MVCC snapshot. Safe on a live primary.
+--
+-- A second query follows the first, in the same shape: §4.2's open items that nobody owes any more,
+-- one row per project and kind, and nothing at all when every open item still waits on somebody.
 
 WITH in_loop AS (
   SELECT p."id",
@@ -84,3 +87,55 @@ SELECT "id"                      AS project_id,
    AND NOT clause_c_actionable_blocker
    AND NOT clause_d_future_wake
  ORDER BY "next_wake_at" NULLS FIRST, "id";
+
+-- §4.2 — open items that nobody owes any more, counted per project and kind.
+--
+-- An item is closed by the transaction that moves what it is about: a candidate leaving the live
+-- states, a task cancelled or replaced. A door that misses that edge leaves the item open about
+-- something that is gone — in front of the owner, on their badge, and (for an integration item)
+-- holding off the project's Automatic merges. The escalation tick's backstop
+-- (`ProjectOpenItemEscalationService.reconcile`) closes such an item within a minute, with a
+-- `resolution_note` that starts `backstop:`. So a deployment that runs the backstop returns nothing
+-- here but the minute between a missed edge and the next tick; one that predates it returns every
+-- zombie it has, which is what to read before and after deploying it.
+--
+-- `open_not_owed` is how many; `with_owner` how many of those are in front of the account owner;
+-- `oldest_opened_at` how long the oldest has been there.
+--
+-- The predicate is `openItemOwed('item')` in src/apiserver/src/projects/project-open-item.ts, written
+-- out because this file has no TypeScript to call; open-item-owed.pg.spec.ts holds the two to the
+-- same text and runs this query against the rows the backstop closes.
+--
+-- Read-only, like the query above.
+
+SELECT item."project_id"                                       AS project_id,
+       proj."title",
+       item."kind",
+       count(*)::int                                           AS open_not_owed,
+       (count(*) FILTER (WHERE item."assignee" = 'OWNER'))::int AS with_owner,
+       min(item."created_at")                                  AS oldest_opened_at
+  FROM "project_open_item" item
+  JOIN "project" proj ON proj."id" = item."project_id"
+ WHERE item."state" = 'OPEN'
+   AND NOT (CASE
+      WHEN "item"."promotion_id" IS NOT NULL AND "item"."kind" = 'PROMOTION_APPROVAL' THEN EXISTS (
+        SELECT 1 FROM "project_promotion" owed_promotion
+         WHERE owed_promotion."id" = "item"."promotion_id"
+           AND owed_promotion."state" = 'READY')
+      WHEN "item"."promotion_id" IS NOT NULL
+       AND "item"."kind" IN ('INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR')
+      THEN EXISTS (
+        SELECT 1 FROM "project_promotion" owed_promotion
+         WHERE owed_promotion."id" = "item"."promotion_id"
+           AND owed_promotion."state" IN ('CHECKING', 'READY', 'CONFIRMED', 'RECHECKING', 'BLOCKED'))
+      WHEN "item"."task_id" IS NOT NULL
+       AND "item"."kind" IN ('INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR')
+      THEN EXISTS (
+        SELECT 1 FROM "task" owed_task
+         WHERE owed_task."id" = "item"."task_id"
+           AND owed_task."status" <> 'CANCELLED'
+           AND owed_task."superseded_by_task_id" IS NULL)
+      ELSE true
+    END)
+ GROUP BY item."project_id", proj."title", item."kind"
+ ORDER BY item."project_id", item."kind";
