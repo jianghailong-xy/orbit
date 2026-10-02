@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { mergeRecoveryPrompt, mergeRecoveryReady, readMergeRecovery, type MergeRecovery } from './mergeRecovery';
+import { mergeRecoveryCommitOrigin, mergeRecoveryPrompt, mergeRecoveryReady, mergeRecoveryTargetRelation, readMergeRecovery,
+  type MergeRecovery } from './mergeRecovery';
 
 const ready: MergeRecovery = {
   code: 'READY', targetBranch: 'develop', previewId: 'reviewed', sourceSha: 'a'.repeat(40),
@@ -24,6 +25,27 @@ describe('merge recovery wire contract', () => {
       { ...ready, patch: 5 }, { ...ready, conflicts: [false] }, { ...ready, check: { status: 'unknown' } }]) {
       expect(readMergeRecovery(bad)).toBeNull();
     }
+  });
+  it('reads the commits a push adds and tells where each comes from', () => {
+    const local = { sha: 'b'.repeat(40), subject: 'Local unpublished work', author: 'Alice', date: '2026-09-30' };
+    const r = readMergeRecovery({ ...ready, localCommits: [local], pushCommits: [
+      { sha: 'd'.repeat(40), subject: 'Session work', author: 'Orbit', date: '2026-10-01' },
+      { sha: 'f'.repeat(40), subject: 'Merge origin/develop into develop', author: 'Orbit', date: '2026-10-01', merge: true },
+      local,
+    ] });
+    expect(r?.pushCommits?.map((c) => mergeRecoveryCommitOrigin(r!, c))).toEqual(['session', 'merge', 'local']);
+    expect(mergeRecoveryCommitOrigin(r!, { ...local, merge: true })).toBe('local');
+    for (const bad of [{ ...ready, pushCommits: [{ ...local, merge: 'yes' }] }, { ...ready, pushCommits: {} }]) {
+      expect(readMergeRecovery(bad)).toBeNull();
+    }
+  });
+  it('relates the local target to origin only when a check has read both sides', () => {
+    const c = { sha: 'f'.repeat(40), subject: 'x', author: 'Alice', date: '2026-09-30' };
+    expect(mergeRecoveryTargetRelation({ ...ready, remoteSha: ready.localSha })).toEqual({ ahead: 0, behind: 0 });
+    expect(mergeRecoveryTargetRelation({ ...ready, localCommits: [c] })).toEqual({ ahead: 1, behind: 0 });
+    expect(mergeRecoveryTargetRelation({ ...ready, localCommits: [c], remoteCommits: [c, c] })).toEqual({ ahead: 1, behind: 2 });
+    expect(mergeRecoveryTargetRelation(ready)).toBeNull();
+    expect(mergeRecoveryTargetRelation({ code: 'TARGET_DIVERGED', targetBranch: 'develop' })).toBeNull();
   });
   it('hands repairs the actual private checkout and forbids shared target writes', () => {
     const prompt = mergeRecoveryPrompt({ ...ready, repairBranch: 'orbit/recovery/abc', repairWorktree: '/private/abc',

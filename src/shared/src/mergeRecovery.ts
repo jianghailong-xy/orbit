@@ -6,6 +6,8 @@ export interface MergeRecoveryCommit {
   subject: string;
   author: string;
   date: string;
+  /** Two or more parents. Absent from runners that predate it. */
+  merge?: boolean;
 }
 export interface MergeRecovery {
   code: string;
@@ -24,6 +26,8 @@ export interface MergeRecovery {
   conflicts?: string[];
   localCommits?: MergeRecoveryCommit[];
   remoteCommits?: MergeRecoveryCommit[];
+  /** Exactly what the push adds to origin/<target>, newest first. Absent from older runners and past the commit cap. */
+  pushCommits?: MergeRecoveryCommit[];
   patch?: string;
   addsMergeCommit?: boolean;
   checkedAt?: string;
@@ -39,9 +43,10 @@ export function readMergeRecovery(value: unknown): MergeRecovery | null {
     if (r[key] !== undefined && typeof r[key] !== 'string') return null;
   }
   if (r.conflicts !== undefined && (!Array.isArray(r.conflicts) || !r.conflicts.every((p) => typeof p === 'string'))) return null;
-  for (const commits of [r.localCommits, r.remoteCommits]) {
+  for (const commits of [r.localCommits, r.remoteCommits, r.pushCommits]) {
     if (commits !== undefined && (!Array.isArray(commits) || !commits.every((c) => c &&
-      ['sha', 'subject', 'author', 'date'].every((k) => typeof c[k as keyof MergeRecoveryCommit] === 'string')))) return null;
+      ['sha', 'subject', 'author', 'date'].every((k) => typeof c[k as keyof MergeRecoveryCommit] === 'string') &&
+      (c.merge === undefined || typeof c.merge === 'boolean')))) return null;
   }
   if (r.addsMergeCommit !== undefined && typeof r.addsMergeCommit !== 'boolean') return null;
   if (r.check !== undefined && (!r.check || !['passed', 'failed', 'unconfigured'].includes(r.check.status) ||
@@ -57,6 +62,21 @@ export function mergeRecoveryReady(r: MergeRecovery | null | undefined): boolean
     [r.sourceSha, r.localSha, r.remoteSha, r.candidateSha, r.candidateTreeSha]
       .every((sha) => typeof sha === 'string' && /^[0-9a-f]{40}$/.test(sha)) &&
     typeof r.patch === 'string' && ['passed', 'unconfigured'].includes(r.check?.status ?? '');
+}
+
+/** Where a commit the push adds comes from. Local-only first: an unpublished local merge is still unpublished. */
+export function mergeRecoveryCommitOrigin(r: MergeRecovery, c: MergeRecoveryCommit): 'local' | 'merge' | 'session' {
+  if (r.localCommits?.some((l) => l.sha === c.sha)) return 'local';
+  return c.merge ? 'merge' : 'session';
+}
+
+/** Local target against origin/target, once a check has listed both sides. The runner leaves an empty
+ *  list out, so two absent lists only mean "same" when the tips agree; otherwise they went unread. */
+export function mergeRecoveryTargetRelation(r: MergeRecovery): { ahead: number; behind: number } | null {
+  if (!r.localSha || !r.remoteSha) return null;
+  if (r.localSha === r.remoteSha) return { ahead: 0, behind: 0 };
+  if (!r.localCommits && !r.remoteCommits) return null;
+  return { ahead: r.localCommits?.length ?? 0, behind: r.remoteCommits?.length ?? 0 };
 }
 
 /** Used by clients handing a conflict or a rejected target push to a coding session. */

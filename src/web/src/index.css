@@ -18947,6 +18947,9 @@ a.wkctx-title:hover { text-decoration: underline; }
 .wt-recovery p { margin: 10px 0; color: var(--text-2); }
 .wt-recovery summary { cursor: pointer; margin: 10px 0; }
 .wt-recovery-histories { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.wt-recovery-histories > :only-child { grid-column: 1 / -1; }
+.wt-recovery-route code { font-size: 11px; }
+.wt-recovery-origin.is-local { color: var(--warning); font-weight: 600; }
 .wt-recovery-histories small { display: block; opacity: .7; margin-bottom: 8px; }
 .wt-recovery pre { white-space: pre-wrap; max-height: 400px; overflow: auto; font-size: 11px; }
 .wt-recovery-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
