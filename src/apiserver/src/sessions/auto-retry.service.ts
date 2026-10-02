@@ -16,7 +16,7 @@ import {
   type PlanUsage,
   type SessionMessageCard,
 } from '@orbit/shared';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { QueueService } from '../queue/queue.service';
 import { postgresSqlState, taskRetirement } from '../tasks/task-supersession';
@@ -94,6 +94,32 @@ interface ResendMessage {
   senderSessionId: string | null;
   turnId: string | null;
   sessionReplies?: true;
+}
+
+/**
+ * The namespace the failure card's Retry writes in, and the FAILED message its key names (§2.1).
+ * Spelled apart from the sweep's own `auto-retry:` keys so a turn under it can be read back for the
+ * message it re-sent (`resendRetryMessage`'s `manualRetrySourceTurn`).
+ */
+const MANUAL_RETRY_TURN_KEY_PREFIX = `${AUTO_RETRY_TURN_KEY_PREFIX}retry-message:`;
+
+/**
+ * §2.1, §8 criterion 19: the key the failure card's Retry writes its turn under, DERIVED from the
+ * FAILED message rather than minted by the caller for every click. Two clicks on one failure — a
+ * double tap, or a response lost and pressed again — are one turn: the second call replays the key
+ * the first committed, and `resume` answers the turn it already queued (with the copies of the files
+ * that went out with it); a fresh key per click instead queued a second, signed, uncharged copy of
+ * the same message. A message that fails again IS a new failed message, so the next click derives a
+ * key of its own and really does go out again.
+ *
+ * A message whose words never became a turn row — a pre-attribution echo, the seeded opening prompt —
+ * is keyed by the words themselves: the same text typed twice and failing twice then collapses onto
+ * one turn, which is the safe direction for a door whose whole promise is "once".
+ */
+export function manualRetryTurnKey(message: { turnId: string | null; content: string }): string {
+  const source = message.turnId
+    ?? createHash('sha256').update(message.content).digest('hex').slice(0, 32);
+  return `${MANUAL_RETRY_TURN_KEY_PREFIX}${source}`;
 }
 
 /**
@@ -498,7 +524,13 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
             // after the pause lifts decides.
             AND: [NOT_DISPATCH_HELD, NOT_IN_CANCELLED_PROJECT],
           },
-          data: { retryAt: null, retryAttempts: attempts + 1 },
+          // `retry_claimed_at` is what tells the claim apart from a retry given up while the resume
+          // below is in flight: both leave the session parked with `retry_at` NULL, and a reader of
+          // the second as the first writes the asker a comment saying its request will never be
+          // answered, then says the outcome again on the retry's turn (migration 0354, §8 criterion
+          // 20). Cleared by the turn the resume writes, and by every path below that re-arms,
+          // disarms or hands the attempt back.
+          data: { retryAt: null, retryAttempts: attempts + 1, retryClaimedAt: now },
         });
         if (claimed.count === 0) continue;
         released.set(quotaKey, (released.get(quotaKey) ?? 0) + 1);
@@ -642,7 +674,9 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
                   retryAt: null,
                   retryAttempts: attempts + 1,
                 },
-                data: { retryAttempts: attempts },
+                // The attempt handed back and the claim dropped in one statement: this retry is over,
+                // and the session must stop reading as on its way to a turn (migration 0354).
+                data: { retryAttempts: attempts, retryClaimedAt: null },
               })).count;
           const refunded = { count: refundedCount };
           this.log.log(`session ${session.id} retry abandoned: ${retiredNow
@@ -738,6 +772,12 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
    * sender, the request they were moves onto the new turn, and nothing is charged: not that pair's
    * hour (§2.4), not a steer.
    *
+   * Idempotent on the FAILED message (§2.1, §8 criterion 19): the key is derived from the turn whose
+   * words are re-sent (`manualRetryTurnKey`), never minted per click, so a double tap or a response
+   * lost and pressed again queues one turn — and a press landing while this door's own re-send is
+   * still on its way is that turn (`manualRetrySourceTurn`), because the message that has not failed
+   * is the one IT re-sent.
+   *
    * The message is the one `retryMessage` answers with, chosen by the sweep's own chooser at the
    * moment of the click. The files it went out with go with it, by the ids they already have — the
    * re-send copies them as any resend of a file does (`SessionsService.assertLinkableAttachments`), so
@@ -747,7 +787,6 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   async resendRetryMessage(
     ownerId: string,
     id: string,
-    clientTurnId: string,
   ): Promise<SessionResumeAnswer> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
@@ -758,9 +797,18 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
     if (!message.content) {
       throw new ConflictException('this session has no message for a retry to re-send');
     }
-    const attachmentIds = message.attachmentsOf
+    // §2.1, §8 criterion 19: the key belongs to the FAILED message — and a message that is itself a
+    // re-send still on its way has not failed. What failed is what IT re-sent, which this door's own
+    // key names, so a press landing while that re-send is still out is that turn (the thing the
+    // clients refuse to offer again while a press is in flight) and not one more for one failure.
+    // The files come off the message the turn it replays went out from, for the same reason: the
+    // re-send's own attachments are copies of those, and naming them would read as another payload.
+    const resentFrom = await this.manualRetrySourceTurn(message);
+    const clientTurnId = manualRetryTurnKey({ turnId: resentFrom ?? message.turnId, content: message.content });
+    const attachmentTurn = resentFrom ?? message.attachmentsOf;
+    const attachmentIds = attachmentTurn
       ? (await this.prisma.attachment.findMany({
-          where: { sessionId: session.id, turnId: message.attachmentsOf },
+          where: { sessionId: session.id, turnId: attachmentTurn },
           orderBy: { createdAt: 'asc' },
           select: { id: true },
         })).map((attachment) => attachment.id)
@@ -800,6 +848,25 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
           }
         : {}),
     };
+  }
+
+  /**
+   * The message a manual re-send still on its way re-sent, when the turn this door would re-send is
+   * one of its own: what `resendRetryMessage` keys on, so that a second press over the same failure
+   * is the turn already out. Null for everything else — an ordinary message, the sweep's re-send
+   * (whose key names no source), and one of this door's own that has already settled, which is a
+   * failed message of its own and a fair thing to try again.
+   */
+  private async manualRetrySourceTurn(message: ResendMessage): Promise<string | null> {
+    if (!message.turnId) return null;
+    const turn = await this.prisma.conversationTurn.findFirst({
+      where: { id: message.turnId, status: { in: ['PENDING', 'IN_FLIGHT'] } },
+      select: { clientTurnId: true },
+    });
+    const named = turn?.clientTurnId?.startsWith(MANUAL_RETRY_TURN_KEY_PREFIX)
+      ? turn.clientTurnId.slice(MANUAL_RETRY_TURN_KEY_PREFIX.length)
+      : null;
+    return named && named !== message.turnId ? named : null;
   }
 
   /**
@@ -1136,7 +1203,9 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
             }
           : {}),
       },
-      data: { retryAt: at, retryAttempts: attempts },
+      // Re-armed: whatever the claim was, this is a retry waiting for a LATER instant, not one on its
+      // way to a turn (migration 0354).
+      data: { retryAt: at, retryAttempts: attempts, retryClaimedAt: null },
     });
     return claimed.count;
   }
@@ -1201,7 +1270,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       taskId, sessionId,
       { parkedAs, attempts: attempts + 1, observedRetryAt: null, requireArmed: false },
       (tx) => tx.$executeRaw(Prisma.sql`
-        UPDATE "session" SET "retry_attempts" = ${attempts}, "updated_at" = CURRENT_TIMESTAMP
+        UPDATE "session" SET "retry_attempts" = ${attempts}, "retry_claimed_at" = NULL,
+                             "updated_at" = CURRENT_TIMESTAMP
          WHERE "id" = ${sessionId}::uuid
       `),
     );
@@ -1218,7 +1288,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
       taskId, sessionId,
       { parkedAs, attempts, observedRetryAt, requireArmed: true },
       (tx) => tx.$executeRaw(Prisma.sql`
-        UPDATE "session" SET "retry_at" = NULL, "updated_at" = CURRENT_TIMESTAMP
+        UPDATE "session" SET "retry_at" = NULL, "retry_claimed_at" = NULL,
+                             "updated_at" = CURRENT_TIMESTAMP
          WHERE "id" = ${sessionId}::uuid
       `),
     );
@@ -1361,7 +1432,9 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   private async giveUpClaim(sessionId: string, parkedAs: RunStatus, attempts: number, why: string): Promise<void> {
     const { count } = await this.prisma.session.updateMany({
       where: { id: sessionId, status: parkedAs, retryAt: null, retryAttempts: attempts + 1 },
-      data: { retryAttempts: attempts },
+      // The attempt goes back in the same statement that drops the claim: from here the sweep is not
+      // going to write the turn, so the session must not read as on its way to one (migration 0354).
+      data: { retryAttempts: attempts, retryClaimedAt: null },
     });
     this.log.warn(`auto-retry of ${sessionId} given up after its claim: ${why}`);
     if (count > 0) this.announceSettled(sessionId, parkedAs);
@@ -1370,7 +1443,9 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   private async disarm(sessionId: string, parkedAs: RunStatus, why: string): Promise<void> {
     const cleared = await this.prisma.session.updateMany({
       where: { id: sessionId, status: parkedAs },
-      data: { retryAt: null },
+      // The retry is over, so nothing is on its way to a turn any more: a claim that had not been
+      // resolved yet ends here too (migration 0354).
+      data: { retryAt: null, retryClaimedAt: null },
     });
     this.log.warn(`auto-retry of ${sessionId} disarmed: ${why}`);
     if (cleared.count === 0) return;

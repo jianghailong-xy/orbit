@@ -12,8 +12,10 @@ import type { SessionInterruptDto, SessionResumeDto, SessionTurnDto } from './dt
  * another session's message keeps that session as its sender (docs/session-request-reply-contract.md
  * §2.1), so a turn under the prefix is always the platform's re-send, never a message somebody sent
  * again — and a message a caller queued under it would pass for one. Every door that lets a caller
- * name a turn key refuses it, as it refuses `watch:` and `session-reply:`: the same eight doors
- * `session-reply-turn-key-reserved.spec.ts` pins, through the same guard.
+ * name a turn key refuses it, as it refuses `watch:` and `session-reply:`: the same seven doors
+ * `session-reply-turn-key-reserved.spec.ts` pins, through the same guard. (The failure card's Retry
+ * used to be an eighth, naming a key of its own; it names none now — the door derives the key from
+ * the failed message, so a caller cannot reach into this namespace through it — §2.1, criterion 19.)
  *
  * Every door also takes an ordinary key afterwards, and one that only starts with the same letters,
  * so no case can pass by refusing everything.
@@ -50,12 +52,9 @@ function doors() {
     },
     assertHostedByRunner: async () => undefined,
   };
-  // The failure card's Retry asks the server to re-send under a key the caller chose.
+  // The failure card's Retry asks the server to re-send; it names no key at all (criterion 19).
   const autoRetry = {
-    resendRetryMessage: async (_ownerId: string, _id: string, clientTurnId: string) => {
-      keys.push(clientTurnId);
-      return { turnId: 'turn-4', seq: 4 };
-    },
+    resendRetryMessage: async (_ownerId: string, _id: string) => ({ turnId: 'turn-4', seq: 4 }),
   };
   const projects = {
     sendToCoordinator: async (_o: string, _p: string, _a: string, _m: string, clientTurnId: string) => {
@@ -73,7 +72,7 @@ function doors() {
 
 type Doors = ReturnType<typeof doors>;
 
-/** The eight doors, each called with the key under test. */
+/** The seven doors, each called with the key under test. */
 const DOORS: Array<{ door: string; call: (d: Doors, clientTurnId: string) => Promise<unknown> }> = [
   { door: 'POST /api/sessions/:id/turns', call: (d, key) => d.browser.turn(USER, SESSION_ID, { clientTurnId: key, content: 'hi' }) },
   {
@@ -82,10 +81,6 @@ const DOORS: Array<{ door: string; call: (d: Doors, clientTurnId: string) => Pro
   },
   { door: 'POST /api/sessions/:id/resume', call: (d, key) => d.browser.resume(USER, SESSION_ID, { clientTurnId: key, content: 'hi' }) },
   { door: 'POST /api/sessions/:id/interrupt', call: (d, key) => d.browser.interrupt(USER, SESSION_ID, { clientTurnId: key, content: 'hi' }) },
-  {
-    door: 'POST /api/sessions/:id/retry-message',
-    call: (d, key) => d.browser.resendRetryMessage(USER, SESSION_ID, { clientTurnId: key }),
-  },
   {
     door: 'POST /runner/sessions/:id/turns',
     call: (d, key) => d.runner.sendMessage(RUNNER, undefined, CALLER, 'tok', SESSION_ID, { message: 'hi', clientTurnId: key }),

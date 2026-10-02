@@ -3301,7 +3301,12 @@ export class SessionsService {
       select: { id: true },
     });
     if (!session) throw new NotFoundException('session not found');
-    await this.prisma.session.update({ where: { id }, data: { retryAt: null } });
+    await this.prisma.session.update({
+      where: { id },
+      // The claim too (migration 0354): the retry is over, so the session is not on its way to the
+      // turn a claim promised — a reader must see a retry given up, not one in flight.
+      data: { retryAt: null, retryClaimedAt: null },
+    });
     return { ok: true };
   }
 
@@ -3395,7 +3400,9 @@ export class SessionsService {
             { status: RunStatus.FAILED },
           ],
         },
-        data: { retryAt: at },
+        // Armed for a LATER instant, so any claim the sweep had in flight is over: the session waits
+        // on this retry, not on a turn (migration 0354).
+        data: { retryAt: at, retryClaimedAt: null },
       });
     }, loggedRetry(this.logger, 'sessions.armAutoRetry'));
     if (!armed.count) throw new BadRequestException('session is not waiting on a retry');
@@ -4903,7 +4910,10 @@ export class SessionsService {
           // came from the user (they took over; sending their own message again behind
           // their back would be a second, unasked-for turn) or from the sweeper itself
           // (the retry has now fired). Both routes into a new turn pass through here.
+          // A claim the sweep left behind ends with them (migration 0354): this IS the turn it
+          // promised, so the session stops reading as on its way to one.
           retryAt: null,
+          retryClaimedAt: null,
           ...(accountMove ?? {}),
           ...(session.mergeStatus === 'pending' && !mergeExecuting
             ? {
@@ -5184,8 +5194,10 @@ export class SessionsService {
           // exactly as in createTurn.
           ...(content ? { lastUserText: content } : {}),
           // The person took over: an auto-retry waiting on this session must not fire a
-          // second, unasked-for turn behind the one they just redirected to.
+          // second, unasked-for turn behind the one they just redirected to. A claim the sweep had
+          // in flight ends for the same reason (migration 0354) — this turn is not its.
           retryAt: null,
+          retryClaimedAt: null,
         },
       });
       return {
@@ -7268,8 +7280,10 @@ export class SessionsService {
           completedAt: null,
           archivedAt: null,
           // As in createTurn: a new message — the user's or the sweeper's own — disarms the
-          // auto-retry. This is the route the sweeper itself takes for a terminal session.
+          // auto-retry. This is the route the sweeper itself takes for a terminal session, and the
+          // turn it writes is the one a claim was waiting for (migration 0354): both go together.
           retryAt: null,
+          retryClaimedAt: null,
           ...(dto.model !== undefined
             ? { model: dto.model }
             : next.keepsModel
