@@ -192,7 +192,9 @@ public enum Approvals {
         if isQuestion(toolName: toolName) || isPlan(toolName: toolName)
             || isOrbitAsk(toolName: toolName) || isProviderWrite(toolName: toolName) { return nil }
         if toolName == "Bash" {
-            guard let cmd = input["command"]?.stringValue, let prefix = bashPrefix(cmd) else { return nil }
+            guard let cmd = input["command"]?.stringValue,
+                  !isBashShellWrapperCommand(cmd),
+                  let prefix = bashPrefix(cmd) else { return nil }
             return PermissionRule(toolName: "Bash", ruleContent: "\(prefix):*")
         }
         return PermissionRule(toolName: toolName)
@@ -219,6 +221,24 @@ public enum Approvals {
         let prog = toks[i]
         if i + 1 < toks.count, isSubcommand(toks[i + 1]) { return "\(prog) \(toks[i + 1])" }
         return prog
+    }
+
+    /// Codex wraps shell calls as `/bin/bash -lc '…'`. A remember rule for that outer command
+    /// would grant arbitrary shell code, so wrapper invocations never expose the remember action.
+    public static func isBashShellWrapperCommand(_ command: String) -> Bool {
+        let segments = command.split(whereSeparator: { $0 == ";" || $0 == "\n" })
+        return segments.contains { segment in
+            let toks = segment.split(whereSeparator: { $0 == " " || $0 == "\t" }).map(String.init)
+            var i = 0
+            while i < toks.count, isEnvAssignment(toks[i]) { i += 1 }
+            guard i < toks.count,
+                  ["bash", "/bin/bash", "/usr/bin/bash", "sh", "/bin/sh", "/usr/bin/sh",
+                   "zsh", "/bin/zsh", "/usr/bin/zsh"].contains(toks[i]) else { return false }
+            guard i + 1 < toks.count else { return false }
+            let option = toks[i + 1]
+            return option == "--command"
+                || option.first == "-" && option.contains("c")
+        }
     }
 
     // Regex equivalents from the web (ASCII-only, like [A-Za-z…]):
