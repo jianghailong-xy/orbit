@@ -239,18 +239,24 @@ final class WorkspaceMoveShotTests: XCTestCase {
         settle(1.5)
         shot(name)
         write(app.debugDescription, "tree-\(name).txt")
+        // One query per name: walking every element of the tree for its label took minutes a call.
         let names = ["wikova-develop", "site", "wikids", "docs", "archive"]
-        let seen = app.descendants(matching: .any).allElementsBoundByIndex
-            .filter { el in names.contains { el.label.hasPrefix($0) } }
-            .map { "\($0.elementType.rawValue):\($0.label)\($0.isEnabled ? "" : " [disabled]")" }
-        note("\(name) rows: \(seen.joined(separator: " | "))")
+        let opens = names.map { workspace in
+            "\(workspace): \(app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", workspace)).count > 0 ? "opens" : "greyed")"
+        }
+        note("\(name) rows: \(opens.joined(separator: " | "))")
     }
 
     /// Open a workspace's page from the panel's second group.
+    /// A tap that doesn't open the page (round 2 lost one) is tapped again once.
     private func open(_ app: XCUIApplication, _ workspace: String, _ name: String) {
-        option(app, workspace).tap()
         let bar = app.navigationBars[workspace]
-        if !bar.waitForExistence(timeout: 10) {
+        for attempt in 1...2 {
+            option(app, workspace).tap()
+            if bar.waitForExistence(timeout: 6) { break }
+            note("\(name): tap \(attempt) on \(workspace) opened no page")
+        }
+        if !bar.exists {
             note("\(name): no page for \(workspace)")
             write(app.debugDescription, "missing-page-\(name).txt")
         }
