@@ -1651,7 +1651,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or type is created, replaced or dropped, so it is not another writer of the DONE fence. (Written
       // as 0354 on its own branch and renumbered before it landed: 0354 is spelled by another branch not
       // yet landed, and 0355 is the one just above.)
-      '0356_wiki_maintenance_run_attempts'],
+      '0356_wiki_maintenance_run_attempts',
+      // How a maintenance run was made, for the day's count while its space catches up (0357): two `ADD
+      // COLUMN`s on `wiki_maintenance_run` — `catch_up` TEXT, nullable with no default, and `local_endpoint`
+      // BOOLEAN NOT NULL DEFAULT false, catalog-only — and one CHECK every stored row satisfies because its
+      // `catch_up` reads NULL. Read against every claim above: `wiki_maintenance_run` is the only table named, and
+      // it is none of the preserved relations, so no `task`, `session`, `project` or `project_acceptance_*`
+      // object is named and the 0177 pair and every stored task and criterion row are out of its reach. No
+      // function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence
+      // and names none of the six preserved objects. No INSERT, UPDATE or DELETE: nothing is backfilled.
+      '0357_wiki_maintenance_catch_up'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

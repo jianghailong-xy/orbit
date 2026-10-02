@@ -5,6 +5,7 @@ import {
   AgentProvider,
   WIKI_CURSOR_FACT_KINDS,
   WIKI_MAINTENANCE_LIST_TITLE,
+  wikiMaintenanceEndpointIsLocal,
   wikiMaintenanceSettings,
   type WikiMaintenanceSettings,
 } from '@orbit/shared';
@@ -112,6 +113,25 @@ export async function wikiMaintenanceProviderProblem(
     };
   }
   return { why: `no provider of this account is called '${slug}', and a Wiki maintenance run falls back to no other`, unavailable: true };
+}
+
+/**
+ * Whether the provider `slug` names for `ownerId` is a local endpoint (contract `maintenance.job.catchUp.localEndpoint`):
+ * a configured provider made from no vendor preset — a preset is its vendor's API, which bills — whose base URL's
+ * host is this machine or a private network (`wikiMaintenanceEndpointIsLocal`). A built-in engine, an account pool
+ * or a name no provider has is not.
+ */
+export async function wikiMaintenanceProviderIsLocal(
+  db: Pick<Prisma.TransactionClient, 'modelProvider'>,
+  ownerId: string,
+  slug: string,
+): Promise<boolean> {
+  if (isBuiltinProvider(slug)) return false;
+  const row = await db.modelProvider.findFirst({
+    where: { slug, OR: [{ ownerId: null }, { ownerId }] },
+    select: { baseUrl: true, presetSlug: true },
+  });
+  return row !== null && row.presetSlug === null && wikiMaintenanceEndpointIsLocal(row.baseUrl);
 }
 
 // ── The owner's maintenance settings ────────────────────────────────────────────────────────────

@@ -869,8 +869,8 @@ private struct ProvidersSettingsPage: View {
 }
 
 /// An account pool's page: the pool as Providers last read it — read-only for a pool of Claude keys, and
-/// run from here for a Codex pool of one's own ChatGPT account (signing it in, again, or out, and
-/// deleting the pool). Deleting the pool closes the page.
+/// run from here for a Codex pool of one's own ChatGPT accounts (adding one, signing one in again or
+/// out, and deleting the pool). Deleting the pool closes the page.
 private struct AccountPoolSettingsPage: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -885,7 +885,7 @@ private struct AccountPoolSettingsPage: View {
                     start: { try await agents.startCodexLogin(pool) },
                     poll: { try await agents.pollCodexLogin(pool) },
                     cancel: { await agents.cancelCodexLogin(pool) },
-                    signOut: { await agents.signOutCodexLogin(pool) },
+                    signOut: { login in await agents.signOutCodexLogin(pool, login) },
                     deletePool: { await close(agents, pool) },
                     refresh: { await agents.reloadPools() }))
             } else {

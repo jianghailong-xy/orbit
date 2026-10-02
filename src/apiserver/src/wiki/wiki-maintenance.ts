@@ -39,10 +39,12 @@ export { isWikiMaintenanceSession, setWikiMaintenance, wikiMaintenanceSpaceOf } 
  * into the Sessions or Projects services: a fact that commits is in the next count, whether or not an
  * event about it was published, delivered or lost.
  *
- * THE CURSOR ONLY MOVES FORWARD, AND ONLY FOR A RUN THAT SUCCEEDED. A page hands out the position of
+ * THE CURSOR ONLY MOVES FORWARD, AND ONLY PAST WHAT A RUN RECORDED. A page hands out the position of
  * the last fact it covered as a token; `advanceCursor` moves the watermark to it only when the run says
  * it succeeded, only forward, and only as far as a page has handed out — one compare-and-set on the
- * row. A failed or truncated run moves nothing and is counted as a failure.
+ * row. A failed or truncated run moves nothing and is counted as a failure. `orbit wiki maintain` moves it
+ * earlier, the same way, once its ops are recorded (`advanceRecorded`, criterion 3 revision 4): what fails
+ * after that still ends the run failed, and the cursor stays past the sessions those ops came from.
  */
 
 // ── Facts, positions and tokens ─────────────────────────────────────────────────────────────────
@@ -878,6 +880,35 @@ export class WikiMaintenance {
       return { advanced: false, outcome, state: await this.stateOf(scope, await this.cursorRow(ownerId, spaceId), now) };
     }
     return { advanced: true, outcome, state: await this.stateOf(scope, after, now) };
+  }
+
+  /**
+   * A maintenance run recorded its ops (contract `maintenance.job.run.steps`, advance; criterion 3 revision 4): the
+   * cursor moves past the sessions they came from at once, forward only and only as far as a page has handed out —
+   * one compare-and-set, as `advanceCursor` moves it — and nothing of the run's health is written. How the run ends
+   * is still its finish's to say: a step that fails after this counts as a failure, and the next run does not read
+   * these sessions again. A token at or behind the watermark moves nothing: the cursor is already past them.
+   */
+  async advanceRecorded(ownerId: string, spaceId: string, to: string, now: Date = new Date()): Promise<{ advanced: boolean; state: WikiCursorState }> {
+    const scope = await spaceScope(this.prisma, ownerId, spaceId);
+    const row = await this.cursorRow(ownerId, spaceId);
+    const target = decodeCursorToken(to, spaceId);
+    if (comparePositions(target, positionOf(row.issuedAt, row.issuedKind, row.issuedRef)) > 0) {
+      refuse('WIKI_CURSOR_INVALID', 'the token names a position past every page this space has handed out');
+    }
+    if (comparePositions(target, positionOf(row.positionAt, row.positionKind, row.positionRef)) <= 0) {
+      return { advanced: false, state: await this.stateOf(scope, row, now) };
+    }
+    const moved = await this.prisma.$executeRaw`
+      UPDATE "wiki_cursor"
+         SET "position_at" = ${target!.at.toISOString()}::timestamptz, "position_kind" = ${target!.kind}, "position_ref" = ${target!.ref},
+             "updated_at" = now()
+       WHERE "id" = ${row.id}::uuid
+         AND ("position_at" IS NULL
+           OR ("position_at", "position_kind", "position_ref") < (${target!.at.toISOString()}::timestamptz, ${target!.kind}::text, ${target!.ref}::text))
+         AND "issued_at" IS NOT NULL
+         AND ("issued_at", "issued_kind", "issued_ref") >= (${target!.at.toISOString()}::timestamptz, ${target!.kind}::text, ${target!.ref}::text)`;
+    return { advanced: moved > 0, state: await this.stateOf(scope, await this.cursorRow(ownerId, spaceId), now) };
   }
 
   /**

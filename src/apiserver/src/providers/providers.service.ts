@@ -661,17 +661,20 @@ export class ProvidersService {
     );
     return pools.map(({ members, logins: rows, ...pool }) => {
       const { login, logins } = loginsOf(rows);
-      // A Codex pool of the owner's own runs on its ChatGPT account, not on member providers: it holds
-      // none, and what decides whether it can take a session is the state of the account its sessions
-      // run on, the first. A quota that has not been read does not decide it — that is `login.usage`
-      // being null, and the account runs.
+      // A Codex pool of the owner's own runs on its ChatGPT accounts, not on member providers: it holds
+      // none, and what decides whether it can take a session is whether one of its accounts is ACTIVE,
+      // which the claim can put the session on (QueueService.accountPoolRefusal). A quota that has not been
+      // read does not decide it — that is `login.usage` being null, and the account runs.
       if (pool.engine === AgentProvider.CODEX) {
         return {
           ...pool,
           login,
           logins,
           resetsAt: null,
-          unavailable: codexLoginUnavailableReason(pool.label, login),
+          unavailable: codexLoginUnavailableReason(
+            pool.label,
+            logins.find((view) => view.state === 'ACTIVE') ?? login,
+          ),
           members: [],
         };
       }

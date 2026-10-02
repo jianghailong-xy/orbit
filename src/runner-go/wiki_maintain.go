@@ -39,13 +39,21 @@ import (
 // repository material they cite that changed on origin/main — and proposes a change to the plan for what
 // fits no section (wiki_maintain_docs.go). The topic articles are no longer written.
 //
-// A RUN THAT DID NOT FINISH MOVES NOTHING. Any step that fails, a model endpoint that refuses the token,
-// or an op the server refuses ends the run `failed`: the space's cursor stays where it was, its
-// consecutive failures go up by one, and the report says where it stopped. Only a run that got through
-// every step advances the cursor, to the last page it read — the position its task expects, which is what
-// `orbit wiki check` holds it to — or, when the breaker held ops back, to where their pages start. An op
-// the verification got no verdict for, asked twice, is not a step that failed: it is not live, it keeps
-// waiting, and the next run adopts it, as it adopts what any ended session left waiting.
+// THE CURSOR MOVES ONCE THE OPS ARE RECORDED (criterion 3, revision 4). As soon as every batch is recorded,
+// the run moves the space's cursor past the sessions its ops came from — to the last page it read, the position
+// its task expects and `orbit wiki check` holds it to, or, when the breaker held ops back, to where their pages
+// start — before the verification, the anchors and the documents. One of those that fails still ends the run
+// `failed` — its consecutive failures go up by one, and the report says where it stopped and that the cursor
+// had moved — but the next run does not read those sessions again, nor spend the local model on them twice: a
+// space thirteen days behind (2026-10-02) cannot afford a run's work done over. What fails before the ops are
+// recorded — any step up to the proposals, a model endpoint that refuses the token, an op the server refuses, a
+// run cut short — moves nothing. An op the verification got no verdict for, asked twice, is not a step that
+// failed: it is not live, it keeps waiting, and the next run adopts it, as it adopts what any ended session left
+// waiting.
+//
+// A SPACE THAT IS BEHIND WRITES NO DOCUMENT (`maintenance.job.catchUp.docs`). A run its trigger made while the
+// space's oldest pending fact was more than a day old skips the documents and the plan proposal: the first run
+// after the space has caught up writes again every section the entries and origin/main changed meanwhile.
 //
 // WHAT THE MODEL SAYS IS CHECKED BEFORE IT IS PROPOSED, and proposed only as the space's maintenance run.
 // Each entry is held to its dossier the way the demo's extract.py held it: a known kind with its fields,
@@ -65,8 +73,9 @@ import (
 // `maintenance.job.cli.maintainPrecondition` and `checkPrecondition`, word for word; wiki_maintain_test.go
 // holds them equal.
 const wikiMaintainPrecondition = "Run this only as a Wiki maintenance run of the space, once, and let it finish: it " +
-	"proposes as the space's maintenance run, and it moves the cursor only when every step succeeded — a run that " +
-	"failed or was cut short moves nothing, and one whose breaker held ops back stops it where their dossiers start."
+	"proposes as the space's maintenance run, and it moves the cursor only past the sessions whose ops it recorded — " +
+	"a run that failed or was cut short before that moves nothing, one that fails after it still ends failed, and one " +
+	"whose breaker held ops back stops it where their dossiers start."
 
 const wikiCheckPrecondition = "Judge a maintenance run only by what this reads: it passes when the space's cursor " +
 	"reached the position the task expects and the server refused none of the run's ops, and a run cannot pass it by " +
@@ -78,14 +87,15 @@ var wikiMaintainDescription = wikiMaintainPrecondition + " This is a Wiki mainte
 	"provider's, through a clean Claude Code with thinking off — extract at most " + strconv.Itoa(wikiMaintainEntriesPerSession) +
 	" entries from each, checks every entry against its dossier and the checkout, proposes them by topic with dryRun " +
 	"first and then as the space's maintenance run — holding back, for the next run, the dossiers whose entries the " +
-	"run's circuit breaker has no room for — has them verified in an automatic space (an op it gets no verdict for, " +
-	"asked twice, is not live and waits for the next run, which adopts it; that fails nothing), re-verifies the anchors, " +
-	"writes again only the sections of the confirmed plan's documents that the entries and origin/main's changes " +
-	"touched (proposing a change to the plan for what fits no section, and writing no document when no plan is " +
-	"confirmed), and advances the cursor. It prints what it did, the token spend included, and exits non-zero when " +
-	"the run failed. When the Orbit server answers 5xx or nothing at all it waits for it, 15 minutes at most, before " +
-	"the run starts and before it reports a run that stopped on it, and it says whose a failure was and whether the " +
-	"run may be run again. Any session but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION."
+	"run's circuit breaker has no room for — advances the cursor past the sessions whose ops it recorded, has them " +
+	"verified in an automatic space (an op it gets no verdict for, asked twice, is not live and waits for the next run, " +
+	"which adopts it; that fails nothing), re-verifies the anchors, and writes again only the sections of the confirmed " +
+	"plan's documents that the entries and origin/main's changes touched (proposing a change to the plan for what fits " +
+	"no section, writing no document when no plan is confirmed, and none while the space is catching up). It prints " +
+	"what it did, the token spend included, and exits non-zero when the run failed. When the Orbit server answers 5xx " +
+	"or nothing at all it waits for it, 15 minutes at most, before the run starts and before it reports a run that " +
+	"stopped on it, and it says whose a failure was and whether the run may be run again. Any session but a " +
+	"maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION."
 
 var wikiCheckDescription = wikiCheckPrecondition + " This is a Wiki maintenance task's acceptance command: it asks the " +
 	"server whether --space's cursor is at or past the position --expect-cursor names, and whether the run of the task " +
@@ -162,6 +172,9 @@ type wikiMaintainContext struct {
 	TaskID      string `json:"taskId"`
 	Expect      string `json:"expect"`
 	RunSessions int    `json:"runSessions"`
+	// CatchUp is how the run was made (`maintenance.job.catchUp`): "active" or "paused" while the space was behind,
+	// when the run writes no document and proposes no change to the plan; empty otherwise.
+	CatchUp string `json:"catchUp"`
 }
 
 func (t *Transport) wikiMaintainRunContext(sessionID, spaceID string) (json.RawMessage, error) {
@@ -202,6 +215,19 @@ func (t *Transport) proposeWikiMaintenance(sessionID, spaceID string, body inter
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/maintenance/changesets"
 	_, err := t.doWiki(http.MethodPost, path, body, &out, wikiDossierPageTimeout, sessionHeader(sessionID), wikiRecordsOnce(body))
+	return out, err
+}
+
+// advanceWikiMaintenance moves the space's cursor past the sessions whose ops the run recorded (`POST
+// …/maintenance/advance`): the position alone, never the run's health. It may land any number of times — a
+// cursor at or past the token moves nothing — so it is sent again through a transient failure.
+func (t *Transport) advanceWikiMaintenance(sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(spaceID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/maintenance/advance"
+	_, err := t.doWiki(http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
@@ -264,6 +290,10 @@ type wikiMaintainReport struct {
 		Calls  int `json:"calls"`
 	} `json:"tokens"`
 	Seconds int `json:"seconds"`
+
+	// CursorAdvanced is the cursor moved past the sessions whose ops the run recorded, before the steps after the
+	// proposals: a step that failed after it failed the run, and the next run does not read those sessions again.
+	CursorAdvanced bool `json:"cursorAdvanced,omitempty"`
 }
 
 type wikiMaintainVerification struct {
@@ -360,6 +390,9 @@ type wikiMaintainRun struct {
 	pageOf map[string]int
 	// What the dry runs said of the run's circuit breaker, the least room of them; nil until one says it.
 	breakerRead *wikiMaintainBreakerReading
+	// What moving the cursor once the ops were recorded did (advance): whether it moved, and where it stands.
+	advanced bool
+	position string
 
 	mu      sync.Mutex
 	report  wikiMaintainReport
@@ -422,8 +455,8 @@ func runWikiMaintain(t *Transport, sessionID, spaceID string, opts wikiMaintainO
 	if stop != nil && stop.serverDown() && !r.awaitServer(stop.err) {
 		summary.ServerGone = true
 		return summary, fmt.Errorf("orbit wiki maintain: the run failed at %s, and the Orbit server did not come back within %s, "+
-			"so it could not be told: an infrastructure failure, not the run's. Do not run it again in this session: the "+
-			"next run takes the same dossiers", stop, wikiServerWait.budget)
+			"so it could not be told: an infrastructure failure, not the run's. Do not run it again in this session: %s",
+			stop, wikiServerWait.budget, r.nextRunReads())
 	}
 	answerRaw, finishErr := t.finishWikiMaintenance(sessionID, spaceID, body)
 	if finishErr != nil && stop == nil && wikiServerDown(finishErr) && r.awaitServer(finishErr) {
@@ -440,17 +473,35 @@ func runWikiMaintain(t *Transport, sessionID, spaceID string, opts wikiMaintainO
 	}
 	var answer wikiCursorAdvanceAnswer
 	_ = json.Unmarshal(answerRaw, &answer)
-	summary.Advanced = answer.Advanced
-	summary.Cursor = answer.State.Position
+	// The cursor may have moved when the ops were recorded (advance), and the end then moves it no further.
+	summary.Advanced = answer.Advanced || r.advanced
+	summary.Cursor = firstNonEmpty(answer.State.Position, r.position)
 	if stop != nil && summary.FailureKind == "infra" {
-		return summary, fmt.Errorf("orbit wiki maintain: the run failed at %s; the cursor did not move. The failure was the "+
-			"infrastructure's, not the run's, and the server answers again: the run may be run once more", stop)
+		return summary, fmt.Errorf("orbit wiki maintain: the run failed at %s; %s. The failure was the "+
+			"infrastructure's, not the run's, and the server answers again: the run may be run once more", stop, r.cursorAfterFailure())
 	}
 	if stop != nil {
-		return summary, fmt.Errorf("orbit wiki maintain: the run failed at %s; the cursor did not move", stop)
+		return summary, fmt.Errorf("orbit wiki maintain: the run failed at %s; %s", stop, r.cursorAfterFailure())
 	}
 	summary.Outcome = "succeeded"
 	return summary, nil
+}
+
+// cursorAfterFailure says where a run that failed left the cursor: past the sessions whose ops it recorded, or
+// where it was.
+func (r *wikiMaintainRun) cursorAfterFailure() string {
+	if r.report.CursorAdvanced {
+		return "the cursor had already moved past the sessions whose ops it recorded, and the next run does not read them again"
+	}
+	return "the cursor did not move"
+}
+
+// nextRunReads says what the next run reads after a run that failed.
+func (r *wikiMaintainRun) nextRunReads() string {
+	if r.report.CursorAdvanced {
+		return "the cursor had already moved past the sessions whose ops it recorded, and the next run takes the dossiers after them"
+	}
+	return "the next run takes the same dossiers"
 }
 
 // ── When the server does not answer ─────────────────────────────────────────────────────────────
@@ -582,6 +633,9 @@ func (r *wikiMaintainRun) steps() *wikiMaintainStop {
 	batches = r.breaker(batches)
 	if err := r.propose(batches); err != nil {
 		return fail("propose", err)
+	}
+	if err := r.advance(); err != nil {
+		return fail("advance", err)
 	}
 	if err := r.verify(); err != nil {
 		return fail("verify", err)
@@ -1549,6 +1603,37 @@ func (r *wikiMaintainRun) propose(batches []wikiMaintainBatch) error {
 	return nil
 }
 
+// advance moves the space's cursor past the sessions whose ops the run recorded, as soon as every batch is
+// recorded (contract `maintenance.job.run.steps`, advance; criterion 3 revision 4): to the last page the run read
+// or, when the breaker held ops back, to where their pages start. Nothing of how the run ends is said here: a step
+// after it that fails still fails the run, and the cursor stays where this put it, so the next run does not read
+// those sessions again. A server that predates the route moves the cursor at the run's end, as it always did.
+func (r *wikiMaintainRun) advance() error {
+	if r.cursor == "" {
+		return nil
+	}
+	raw, err := r.t.advanceWikiMaintenance(r.sessionID, r.spaceID, map[string]interface{}{"to": r.cursor})
+	if err != nil {
+		if wikiMaintenanceDoorMissing(err) {
+			r.say("This Orbit server predates moving the cursor once the ops are recorded: it moves at the run's end.")
+			return nil
+		}
+		return wikiMaintenanceCallError("orbit wiki maintain", r.spaceID, "--to", err)
+	}
+	var answer wikiCursorAdvanceAnswer
+	if err := json.Unmarshal(raw, &answer); err != nil {
+		return fmt.Errorf("the server's answer to the cursor's move is not the shape this build reads: %w", err)
+	}
+	r.advanced, r.position = answer.Advanced, answer.State.Position
+	r.report.CursorAdvanced = true
+	if answer.Advanced {
+		r.say("The ops are recorded: the cursor moved past their sessions, to %s.", firstNonEmpty(answer.State.Position, r.cursor))
+	} else {
+		r.say("The ops are recorded: the cursor already stood past their sessions.")
+	}
+	return nil
+}
+
 // wikiMaintainAnswer is a proposal's answer, as far as a run reads it.
 type wikiMaintainAnswer struct {
 	ChangesetID string                   `json:"changesetId"`
@@ -1917,6 +2002,9 @@ func describeWikiMaintainSummary(s wikiMaintainSummary) string {
 		fmt.Fprintf(&b, "\nThe cursor advanced to %s.", s.Cursor)
 	case s.Outcome == "succeeded":
 		b.WriteString("\nThe cursor already stood there: nothing new was covered.")
+	case r.CursorAdvanced:
+		b.WriteString("\nThe cursor had moved past the sessions whose ops the run recorded before it failed: the next run does " +
+			"not read them again.")
 	default:
 		b.WriteString("\nThe cursor did not move: the next run reads the same dossiers again.")
 	}
@@ -1925,8 +2013,12 @@ func describeWikiMaintainSummary(s wikiMaintainSummary) string {
 	}
 	switch {
 	case s.ServerGone:
+		next := "the next run takes the same dossiers"
+		if r.CursorAdvanced {
+			next = "the next run takes the dossiers after the sessions whose ops this one recorded"
+		}
 		fmt.Fprintf(&b, "\nThe Orbit server answered 5xx or nothing at all for %s: an infrastructure failure, not the run's. "+
-			"Do not run it again in this session — the next run takes the same dossiers.", wikiServerWait.budget)
+			"Do not run it again in this session — %s.", wikiServerWait.budget, next)
 	case s.Outcome != "succeeded" && s.FailureKind == "infra":
 		b.WriteString("\nThe failure was the infrastructure's — the Orbit server or the model's endpoint — not the run's, and the " +
 			"Orbit server answers again: the run may be run once more.")

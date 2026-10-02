@@ -65,8 +65,8 @@ public struct PoolMember: Codable, Equatable, Sendable, Identifiable {
     /// a month, not a window. Added by the adapter (`SharedPools.asProviderPool`), never decoded:
     /// the server's own pools carry no such field.
     public let key: SharedPoolKey?
-    /// In a Codex pool of one's own the one member is its ChatGPT account (web's `member.login`):
-    /// added by the adapter (`CodexLoginPool.drawn`) off the pool's `login`, never decoded.
+    /// In a Codex pool of one's own each member is one of its ChatGPT accounts (web's `member.login`):
+    /// added by the adapter (`CodexLoginPool.drawn`) off the pool's `logins`, never decoded.
     public let login: CodexLogin?
 
     public init(id: String, slug: String, label: String, presetSlug: String? = nil,
@@ -127,14 +127,19 @@ public struct ProviderPool: Codable, Equatable, Sendable, Identifiable {
     /// its members are those keys, and its caps are a month. Attached by the adapter, never decoded.
     public let shared: SharedPool?
     /// What it runs on: `claude` (the 0265 pools of one's own Claude keys) or `codex` — a pool of
-    /// one's own ChatGPT account (migration 0323). Absent from an older server: `claude`.
+    /// one's own ChatGPT accounts (migration 0323). Absent from an older server: `claude`.
     public let engine: String
-    /// A Codex pool of one's own: the ChatGPT account it runs on, or nil before anyone signed in.
+    /// A Codex pool of one's own: every ChatGPT account it holds, oldest first — the one its sessions
+    /// run on being the first of them. Absent from an older server, which names that one only
+    /// (`CodexLoginPool.logins` reads either).
+    public let logins: [CodexLogin]?
+    /// The first of `logins` — the account the pool's sessions run on, or nil before anyone signed in.
     public let login: CodexLogin?
 
     public init(id: String, slug: String, label: String, resetsAt: String? = nil,
                 unavailable: String? = nil, members: [PoolMember] = [],
-                shared: SharedPool? = nil, engine: String = "claude", login: CodexLogin? = nil) {
+                shared: SharedPool? = nil, engine: String = "claude", login: CodexLogin? = nil,
+                logins: [CodexLogin]? = nil) {
         self.id = id
         self.slug = slug
         self.label = label
@@ -143,6 +148,7 @@ public struct ProviderPool: Codable, Equatable, Sendable, Identifiable {
         self.members = members
         self.shared = shared
         self.engine = engine
+        self.logins = logins
         self.login = login
     }
 
@@ -154,13 +160,15 @@ public struct ProviderPool: Codable, Equatable, Sendable, Identifiable {
         engine = ((try? c.decodeIfPresent(String.self, forKey: .engine)) ?? nil) ?? "claude"
         // An account in a shape this build cannot read is left out rather than losing the pool.
         login = (try? c.decodeIfPresent(CodexLogin.self, forKey: .login)) ?? nil
+        logins = (try? c.decodeIfPresent([LossyDecodable<CodexLogin>].self, forKey: .logins))?
+            .compactMap(\.value)
         // Not on the wire: this says which *kind* of pool a row is, and only the client's own
         // catalogue knows it (a shared pool is read from its own endpoint, Models/SharedPools.swift).
         shared = nil
         if engine == "codex" {
-            // A Codex pool of one's own has no member providers: its ChatGPT account is its one
-            // member, and what the pool says of itself is read off that account (web's `withLogin`).
-            let drawn = CodexLoginPool.drawn(slug: slug, login: login)
+            // A Codex pool of one's own has no member providers: each ChatGPT account it holds is one
+            // of its members, and what the pool says of itself is read off them (web's `withLogin`).
+            let drawn = CodexLoginPool.drawn(slug: slug, logins: CodexLoginPool.logins(logins, login: login))
             members = drawn.members
             unavailable = drawn.unavailable
             resetsAt = drawn.resetsAt
