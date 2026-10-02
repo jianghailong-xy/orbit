@@ -3,6 +3,8 @@ import { CoordinatorJudgmentModule } from '../projects/coordinator-judgment.modu
 import { SessionTagsModule } from '../session-tags/session-tags.module';
 import { AutoRetryService } from './auto-retry.service';
 import { MergeReceiptService } from './merge-receipt.service';
+import { SessionRequestService } from './session-request.service';
+import { SessionRequestsController } from './session-requests.controller';
 import { SessionsController } from './sessions.controller';
 import { SessionsService } from './sessions.service';
 
@@ -26,13 +28,17 @@ import { SessionsService } from './sessions.service';
   // wiring fails on a ConfigService that only AppModule's global ConfigModule provides. The
   // dispatcher is resolved lazily instead; see `MergeReceiptService`'s constructor.
   imports: [SessionTagsModule, forwardRef(() => CoordinatorJudgmentModule)],
-  controllers: [SessionsController],
+  controllers: [SessionsController, SessionRequestsController],
   // AutoRetryService lives here rather than beside the reaper so it can depend on
   // SessionsService directly — re-sending a message is exactly resume(), and reimplementing
   // that (capability checks, the row lock, inbox fencing) is how the two would drift.
-  providers: [SessionsService, AutoRetryService, MergeReceiptService],
+  // SessionRequestService hands a session request's outcome back to the session that asked, which is
+  // a turn of that session: SessionsService again, so it lives beside it.
+  providers: [SessionsService, AutoRetryService, MergeReceiptService, SessionRequestService],
   // Exported so the runner door and the user door write receipts through ONE instance — a second
-  // provider entry would be a second object, which is how the auto-run sweep once ran twice.
-  exports: [SessionsService, MergeReceiptService],
+  // provider entry would be a second object, which is how the auto-run sweep once ran twice. The
+  // request service for the same reason: the runner's reply door and turn completion hand off through
+  // the one the worker uses.
+  exports: [SessionsService, MergeReceiptService, SessionRequestService],
 })
 export class SessionsModule {}

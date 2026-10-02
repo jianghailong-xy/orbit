@@ -30,6 +30,7 @@ import {
 import { CLEARED_RUNNING_WORK } from '../sessions/running-work';
 import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { TaskFailureHow, returnQueuedTurns } from '../projects/project-open-item';
+import { settleUnrunSessionRequests } from '../sessions/session-request';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 
 const REAP_INTERVAL_MS = 30_000;
@@ -471,6 +472,14 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       });
       // And an exception item queued for this conversation (projects/project-open-item.ts).
       await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
+      // And what rides on session requests: the status write above has already closed what the end
+      // closes, so what is left is a run with a retry armed (sessions/session-request.ts) — the turn
+      // still in flight included, since the drain below answers it without its engine finishing it.
+      await settleUnrunSessionRequests(tx, sessionId, {
+        code: 'SESSION_ENDED',
+        closesRequests: true,
+        retryArmed: retryAt != null,
+      });
       await tx.conversationTurn.updateMany({
         where: { sessionId, status: { not: 'ANSWERED' } },
         data: { status: 'ANSWERED', answeredAt: new Date() },

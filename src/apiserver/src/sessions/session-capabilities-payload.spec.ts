@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
 import { SESSION_MERGE_RECOVERY_V1 } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
+import { noSessionRequests } from '../test-support/prisma-transaction-double';
 
 const NOW = new Date();
 
@@ -94,6 +95,7 @@ test('UI list and detail payloads include the same derived capabilities', async 
     taskOwnerConfirmationRequest: { findMany: async () => [] },
     // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
     // which these fixtures have none of either.
+    sessionRequest: noSessionRequests(),
     projectOpenItem: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);

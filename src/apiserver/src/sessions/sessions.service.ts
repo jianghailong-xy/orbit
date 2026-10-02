@@ -25,6 +25,15 @@ import { freshRunningBgJobs } from './background-job-activity';
 import { CLEARED_RUNNING_WORK } from './running-work';
 import { resolveLegacyArtifactPath } from './legacy-artifact-path';
 import { isOrbitAuthoredTurn } from './orbit-authored-turn';
+import { readSessionMessageCard } from './session-message';
+import {
+  isSessionReplyTurn,
+  queuedRepliesContent,
+  readOpenRequestPeers,
+  readTurnRequestIds,
+  settleUnrunSessionRequests,
+} from './session-request';
+
 import { createHash, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
@@ -45,6 +54,7 @@ import {
   MAX_PROMPT_CHARS,
   type OpenItemDeliveryCard,
   type ProjectStartedCard,
+  type SessionMessageCard,
   PermissionMode,
   type PermissionRule,
   ROOT_FALLBACK_PERMISSION_MODE,
@@ -204,6 +214,15 @@ import {
   withSessionState,
 } from './session-state';
 
+/**
+ * A turn the control plane queued with no words of anybody's, whose content is written in at delivery:
+ * a background job's or a wakeup's wake, or the outcomes of the session's own requests handed back.
+ */
+function isPlatformContentTurn(clientTurnId: string | null | undefined): boolean {
+  return isBackgroundWakeTurn(clientTurnId) || isSessionReplyTurn(clientTurnId);
+}
+
+
 // The furthest ahead a hand-armed retry may be scheduled (armAutoRetry). Just past the longest
 // window a provider actually reports — a weekly quota — so a bad clock parks a session for days
 // at worst, never indefinitely.
@@ -246,6 +265,11 @@ interface ListedQueuedTurn {
   openItemDelivery?: OpenItemDeliveryCard;
   /** The same for the message telling a coordinator its project was started (project-started.ts). */
   projectStarted?: ProjectStartedCard;
+  /** Another Orbit session's message (session-message.ts, contract §2.3): the card the runner's echo
+   *  will carry, so the queue draws "From [that session]" rather than the owner's own bubble — and a
+   *  client taking it off the queue unrun hands none of it back to the owner's composer: the words
+   *  are the sending session's. Absent on every turn nobody's session sent. */
+  sessionMessage?: SessionMessageCard;
   /** The control plane wrote this turn itself (`isOrbitAuthoredTurn`): nobody typed its words, so a
    *  client taking it off the queue unrun hands none of them back to the composer. Absent on every
    *  turn somebody sent. */
@@ -3035,9 +3059,13 @@ export class SessionsService {
     const decisions = await readOwnerDecisionsBySession(this.prisma, ownerId, {
       sessionIds: sessions.map((s) => s.id),
     });
+    // Who is waiting on whose reply (session-request.ts, contract §6): on each row, the sessions it
+    // asked and still waits on, and the sessions waiting on it.
+    const requests = await readOpenRequestPeers(this.prisma, ownerId, sessions.map((s) => s.id));
     return sessions.map((s) => {
       const approvals = byId.get(s.id) ?? 0;
       const waiting = decisions.get(s.id);
+      const peers = requests.get(s.id);
       return {
         ...s,
         pendingApprovals: approvals + (waiting?.count ?? 0),
@@ -3045,6 +3073,8 @@ export class SessionsService {
         // Which of the four owner items are waiting here, for the banner that has to name one and
         // open its card rather than only say that a number is not zero (§7.6 V13).
         ownerItems: ownerItemsForRow(waiting),
+        awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
+        owesReplyTo: peers?.owesReplyTo ?? [],
       };
     });
   }
@@ -4332,6 +4362,7 @@ export class SessionsService {
       requestFingerprint?: string;
       sendIntent?: SessionTurnIntent;
       targetTurnId?: string;
+      senderSessionId?: string;
     },
   ) {
     const existing = await tx.conversationTurn.findUnique({
@@ -4534,6 +4565,14 @@ export class SessionsService {
       /** Orchestration's attempt charge. Invoked exactly once for a NEW, placeable turn, inside
        * this transaction after idempotency/target checks and before the turn is written. */
       participateSendTransaction?: (tx: Prisma.TransactionClient) => Promise<void>;
+      /**
+       * The session this turn is a message FROM (`conversation_turn.sender_session_id`,
+       * session-message.ts). Set by the two session-to-session doors — `session_send` and
+       * `project_send` — from the session their orchestration credential proved, and by nothing
+       * else: it is an option of this call and never a field of `dto`, so no request body can name a
+       * sender. Written on a NEW turn only; a replay returns the turn as it was written.
+       */
+      senderSessionId?: string;
       /** Full logical resume payload hash. Present only when resume delegates to this live path. */
       requestFingerprint?: string;
       /**
@@ -4543,6 +4582,13 @@ export class SessionsService {
        * usual. Whatever it wrote rolls back with a refusal it throws.
        */
       coalesce?: (tx: Prisma.TransactionClient, session: Session) => Promise<ConversationTurn | null>;
+      /**
+       * What rides on the turn just written, written beside it: called once for a NEW turn, in this
+       * transaction and under the Session lock, after the row exists — the session-to-session doors'
+       * request (`session_request`, session-request.ts), which names the turn that carries it. A
+       * replay of a committed key never reaches it, and a refusal it throws takes the turn with it.
+       */
+      onTurnWritten?: (tx: Prisma.TransactionClient, turn: ConversationTurn) => Promise<void>;
     },
   ) {
     assertPromptSize(dto.content, 'message');
@@ -4786,8 +4832,10 @@ export class SessionsService {
         ...(opts?.requestFingerprint ? { requestFingerprint: opts.requestFingerprint } : {}),
         ...(intent ? { sendIntent: intent } : {}),
         ...(targetTurnId ? { targetTurnId } : {}),
+        ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
+      await opts?.onTurnWritten?.(tx, turn);
       const nextStatus = statusAfterTurnEnqueued(session.status);
       await tx.session.update({
         where: { id },
@@ -4913,6 +4961,12 @@ export class SessionsService {
       /** Atomic orchestration budget participant. It runs only after a new follow-up's durable
        * idempotency receipt and payload have been checked, inside the Session transaction. */
       participateFollowUpTransaction?: (tx: Prisma.TransactionClient) => Promise<void>;
+      /**
+       * The session the follow-up is a message FROM — see `createTurn`'s own. Set by
+       * `session_interrupt`'s door from the session its orchestration credential proved, and by
+       * nothing else; written on the follow-up turn and never on the interrupt, which says nothing.
+       */
+      senderSessionId?: string;
     },
   ) {
     const content = dto?.content ?? '';
@@ -5012,6 +5066,10 @@ export class SessionsService {
       // An exception item queued behind the interrupted turn is taken back unrun. The conversation
       // lives on, so the item stays the coordinator's and is delivered again when its next turn ends.
       await returnQueuedTurns(tx, id, { code: 'TURN_INTERRUPTED' });
+      // A request another session queued here was never read: it is UNDELIVERED, and its asker is
+      // told. Outcomes queued back to THIS session as an asker are held for its next turn — stopping
+      // means stopping, not running on to read a reply (sessions/session-request.ts).
+      await settleUnrunSessionRequests(tx, id, { code: 'TURN_INTERRUPTED' });
       if (protectedTargetIds.length > 0) {
         // Target FKs intentionally prevent individual deletion. Retire an undelivered seed in
         // place so its attachments and clientTurnId receipt remain auditable.
@@ -5064,6 +5122,7 @@ export class SessionsService {
         kind: 'message',
         content,
         clientTurnId: dto!.clientTurnId!,
+        ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
       const nextStatus = statusAfterTurnEnqueued(session.status);
@@ -5172,6 +5231,7 @@ export class SessionsService {
         status: true,
         content: true,
         createdAt: true,
+        senderSessionId: true,
         attachments: { select: { id: true, mimeType: true } },
       },
     });
@@ -5184,8 +5244,11 @@ export class SessionsService {
       // cannot see it cannot say the session is about to be woken. So it is listed with the block it
       // will be delivered with (queuedWakeContent), and left out exactly where it has nothing to
       // show: no wakes filed on it, or already leased, where the transcript is what shows it.
+      //
+      // A turn handing back the outcomes of this session's requests is the same kind of row
+      // (sessions/session-request.ts): listed with the blocks it will be delivered with.
       .filter((turn) => turn.clientTurnId !== initialClientTurnId
-        && (!isBackgroundWakeTurn(turn.clientTurnId) || wakeContent.has(turn.id)))
+        && (!isPlatformContentTurn(turn.clientTurnId) || wakeContent.has(turn.id)))
       .map((turn) => ({
         turn,
         content: wakeContent.get(turn.id) ?? turn.content ?? '',
@@ -5196,7 +5259,7 @@ export class SessionsService {
         // successor is not promoted into the place it vacates.
         placement: (turn.kind === 'steer'
           ? 'steer'
-          : isBackgroundWakeTurn(turn.clientTurnId)
+          : isPlatformContentTurn(turn.clientTurnId)
             ? 'queued'
             : turn.id === headExecutableId
               ? 'accepted'
@@ -5213,9 +5276,11 @@ export class SessionsService {
       // accepted head the native client will not see costs a query.
       const deliveryCards = await this.openItemDeliveryCards(queued.map(({ turn }) => turn));
       const startedCards = await this.projectStartedCards(ownerId, queued.map(({ turn }) => turn));
+      const messageCards = await this.sessionMessageCards(ownerId, id, queued.map(({ turn }) => turn));
       return queued.map(({ turn, content }) => {
         const card = deliveryCards.get(turn.id);
         const started = startedCards.get(turn.id);
+        const message = messageCards.get(turn.id);
         return {
           turnId: turn.id,
           kind: turn.kind,
@@ -5226,6 +5291,7 @@ export class SessionsService {
           })),
           ...(card ? { openItemDelivery: card } : {}),
           ...(started ? { projectStarted: started } : {}),
+          ...(message ? { sessionMessage: message } : {}),
           ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
         };
       });
@@ -5278,10 +5344,12 @@ export class SessionsService {
     // The card an exception item's delivery is, for the rows this snapshot actually returns.
     const deliveryCards = await this.openItemDeliveryCards(activeRows.map(({ turn }) => turn));
     const startedCards = await this.projectStartedCards(ownerId, activeRows.map(({ turn }) => turn));
+    const messageCards = await this.sessionMessageCards(ownerId, id, activeRows.map(({ turn }) => turn));
     const activeTurns: ListedActiveTurn[] = activeRows
       .map(({ turn, placement, content }) => {
         const card = deliveryCards.get(turn.id);
         const started = startedCards.get(turn.id);
+        const message = messageCards.get(turn.id);
         return {
           turnId: turn.id,
           kind: turn.kind,
@@ -5299,6 +5367,7 @@ export class SessionsService {
             : {}),
           ...(card ? { openItemDelivery: card } : {}),
           ...(started ? { projectStarted: started } : {}),
+          ...(message ? { sessionMessage: message } : {}),
           ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
           content,
           createdAt: turn.createdAt.toISOString(),
@@ -5357,6 +5426,31 @@ export class SessionsService {
     return cards;
   }
 
+  /** The "From [that session]" card each of these turns carries, by turn id — for the ones another
+   *  Orbit session sent, and nothing at all for a batch of the owner's own messages.
+   *
+   *  Read by the same two calls the ingest path records the runner's echo with
+   *  (`readTurnRequestIds` and `readSessionMessageCard`, runner-api.controller.ts), off the turn's
+   *  sender column, so the card a client draws while the message waits is the one the echo will be
+   *  drawn as — the request it carries included (contract §2.3). */
+  private async sessionMessageCards(
+    ownerId: string,
+    sessionId: string,
+    turns: ReadonlyArray<{ id: string; senderSessionId: string | null }>,
+  ): Promise<Map<string, SessionMessageCard>> {
+    const cards = new Map<string, SessionMessageCard>();
+    const signed = turns.filter((turn) => turn.senderSessionId);
+    if (signed.length === 0) return cards;
+    const requestOfTurn = await readTurnRequestIds(this.prisma, sessionId, signed.map((turn) => turn.id));
+    for (const turn of signed) {
+      const card = await readSessionMessageCard(
+        this.prisma, ownerId, turn.senderSessionId!, requestOfTurn.get(turn.id),
+      );
+      if (card) cards.set(turn.id, card);
+    }
+    return cards;
+  }
+
   /** What each of the session's still-queued wake turns has to say, by turn id.
    *
    *  A wake turn's own `content` is empty and stays empty: what it says lives beside it, in the
@@ -5380,6 +5474,11 @@ export class SessionsService {
     const wakeContent = new Map<string, string>();
     for (const turn of turns) {
       if (!turn.clientTurnId || turn.status !== 'PENDING') continue;
+      if (isSessionReplyTurn(turn.clientTurnId)) {
+        const replies = await queuedRepliesContent(this.prisma, sessionId, turn.clientTurnId);
+        if (replies) wakeContent.set(turn.id, replies);
+        continue;
+      }
       if (!isBackgroundWakeTurn(turn.clientTurnId)) continue;
       const { clientTurnId } = turn;
       const jobs = await appendBackgroundWakeContext(this.prisma, sessionId, clientTurnId, '');
@@ -5420,6 +5519,9 @@ export class SessionsService {
       await settleUnrunWakeTurns(tx, id, { turnId });
       // Same for an exception item's turn withdrawn from the queue: taken back unrun, still owed.
       await returnQueuedTurns(tx, id, { code: 'TURN_WITHDRAWN', turnId });
+      // And a request another session asked of this one, withdrawn unread: UNDELIVERED. A reply turn
+      // withdrawn here leaves its outcomes held for this session's next turn (session-request.ts).
+      await settleUnrunSessionRequests(tx, id, { code: 'TURN_WITHDRAWN', turnId });
       const res = await tx.conversationTurn.deleteMany({
         // The seeded prompt turn isn't a withdrawable follow-up — never let it be cancelled.
         where: {
@@ -6155,6 +6257,10 @@ export class SessionsService {
       // An exception item queued for this project's coordinator goes back to being owed, and to the
       // account owner: a conversation that is ending cannot read it (projects/project-open-item.ts).
       await returnQueuedTurns(tx, sessionId, { code: 'SESSION_ENDED', ending: true });
+      // Outcomes queued back to this session as an asker are let go, to be held for it and written on
+      // its task. The requests queued here are left to the end itself: the status write below (or the
+      // finalize after it) closes them RECIPIENT_ENDED, which wins over UNDELIVERED (session-request.ts).
+      await settleUnrunSessionRequests(tx, sessionId, { code: 'SESSION_ENDED', closesRequests: false, retryArmed: false });
       if (session.status === RunStatus.PENDING) {
         await tx.session.update({
           where: { id: sessionId },
@@ -6690,6 +6796,18 @@ export class SessionsService {
        */
       participateSendTransaction?: (tx: Prisma.TransactionClient) => Promise<void>;
       /**
+       * Who the turn is a message from — see `createTurn`'s own. Carried onto both branches: the
+       * live delegation below and the revive, because the session-to-session doors reach both
+       * through this one verb and a message is no less another session's for having woken its
+       * recipient up.
+       */
+      senderSessionId?: string;
+      /**
+       * What rides on the turn — see `createTurn`'s own. Carried onto both branches for the reason
+       * `senderSessionId` is: a request is no less a request for having woken its recipient up.
+       */
+      onTurnWritten?: (tx: Prisma.TransactionClient, turn: ConversationTurn) => Promise<void>;
+      /**
        * This request is a PERSON saying something now — the HTTP resume door, and only that one.
        *
        * It is what decides whether a message whose session has been replaced is ROUTED to the run
@@ -6794,6 +6912,8 @@ export class SessionsService {
         // below would be a fence on the branch nobody uses.
         fence: opts?.fence,
         participateSendTransaction: opts?.participateSendTransaction,
+        senderSessionId: opts?.senderSessionId,
+        onTurnWritten: opts?.onTurnWritten,
         requestFingerprint,
       });
       // Nothing was revived: this turn joined a process that was already running. Said out loud
@@ -7041,8 +7161,10 @@ export class SessionsService {
         content: dto.content,
         clientTurnId: dto.clientTurnId,
         requestFingerprint,
+        ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
       });
       await this.linkAttachments(turn.id, attachmentIds, tx);
+      await opts?.onTurnWritten?.(tx, turn);
       // A revive may also move the session to another provider on the same runtime. Unlike a live
       // switch there is no process to reload: the row goes PENDING and the claim below resolves
       // the environment from it, which is also why a model the new provider doesn't serve is

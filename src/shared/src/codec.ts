@@ -192,6 +192,20 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // no session at all.
   'authoredBySessionId',
   'actingSessionId',
+  // Who sent a turn, when it was another Orbit session (migration 0349), and the card the clients
+  // draw it from (`SessionMessageCard`): the session that sent it and the task that session runs.
+  // Addresses a reader follows — "open the session this came from" is what the card is for. Being
+  // a public id says nothing about who may write one: the column is the server's, from the caller's
+  // own identity, and no request body carries it.
+  'senderSessionId',
+  'fromSessionId',
+  'fromTaskId',
+  // The session a request was asked of (`session_request.to_session_id`, migration 0350) — where the
+  // request sits and who answers it, the far end of `fromSessionId` on the same row. An address.
+  'toSessionId',
+  // The turn a request arrived as in the recipient's transcript, carried on the asker's reply card so
+  // the card can open the original request there (`SessionReplyCard.requestTurnId`). A turn's address.
+  'requestTurnId',
   // The conversation a coordinator rotation left behind, served beside the one it opened. Not a
   // column: it is a computed response field, and it is an address all the same — the `ensure` door
   // answers with it so a client can go and read what the replaced conversation decided. Left

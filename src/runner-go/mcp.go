@@ -608,6 +608,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// header it already is, which is also what makes the delivery the caller's own.
 		body := map[string]interface{}{"message": message}
 		copyIfPresent(body, args, "clientTurnId")
+		copySessionRequestArgs(body, args)
 		raw, err := s.t.sendProjectCoordinator(s.sessionID, s.orchestrationToken, id, body)
 		if err != nil {
 			return toolResult("send to project coordinator failed: "+err.Error(), true)
@@ -1209,9 +1210,33 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if getBool(args, "resumeIfEnded") {
 			body["resumeIfEnded"] = true
 		}
+		copySessionRequestArgs(body, args)
 		raw, err := s.t.sendSessionMessage(s.sessionID, s.orchestrationToken, id, body)
 		if err != nil {
 			return toolResult("send message failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
+	case "session_reply":
+		if !s.orchestrationEnabled() {
+			return toolResult(orchestrationOffMsg, true)
+		}
+		requestID := getString(args, "requestId")
+		if requestID == "" {
+			return toolResult("requestId is required", true)
+		}
+		message, messageSet := args["message"].(string)
+		var option *int
+		if _, given := args["option"]; given && args["option"] != nil {
+			chosen := getNumber(args, "option")
+			option = &chosen
+		}
+		if strings.TrimSpace(message) == "" && option == nil {
+			return toolResult("give option (the index of the answer you choose), message, or both", true)
+		}
+		raw, err := s.t.sendSessionReply(s.sessionID, s.orchestrationToken, requestID, sessionReplyBody(message, messageSet, option))
+		if err != nil {
+			return toolResult("reply failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
 
@@ -3425,14 +3450,17 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "session_send",
-				"description": "Send a message to a session you started (e.g. correct a sub-agent that's going off track, or answer one that is waiting for you). The server decides where it lands and reports it in `placement`: `steer` writes it into the turn already running, which gets no independent reply and cannot be withdrawn, while `accepted`/`queued` files it as that session's next turn. A session that has ended refuses the message unless you pass resumeIfEnded. Reuse clientTurnId after an uncertain response.",
-				"inputSchema": obj(map[string]interface{}{
+				"description": "Send a message to a session you started (e.g. correct a sub-agent that's going off track, or answer one that is waiting for you). The server decides where it lands and reports it in `placement`: `steer` writes it into the turn already running, which gets no independent reply and cannot be withdrawn, while `accepted`/`queued` files it as that session's next turn. A session that has ended refuses the message unless you pass resumeIfEnded. Reuse clientTurnId after an uncertain response. Pass expectReply to make it a request: the call still returns at once (with `requestId` and `replyBy`), and the answer — or why there is none — comes back to you later as a turn of its own.",
+				"inputSchema": obj(withSessionRequestProps(map[string]interface{}{
 					"sessionId":     sessionIDProp,
 					"message":       str,
 					"clientTurnId":  map[string]interface{}{"type": "string", "description": "Optional idempotency key. Re-sending the same CURRENT_WORK payload with this key returns its existing receipt instead of delivering twice — use it when retrying a call whose answer you never saw. Omitted, every call is a new logical send."},
 					"resumeIfEnded": map[string]interface{}{"type": "boolean", "description": "Restart the session if it has ended, instead of refusing the message. The engine respawns with the conversation restored and this message becomes its first turn; the reply reports `revived: true`. This starts a run and holds a runner slot, so ask for it only when you mean to continue THAT conversation — otherwise start a new session. A live session is unaffected. Still refuses, naming the reason, when the session has no runner, its runner is offline, or its conversation cannot be restored."},
-				}, "sessionId", "message"),
+				}), "sessionId", "message"),
 			},
+			// The other end of a request: the session asked answers it. Gated with session_send, whose
+			// requests it answers (contract §3.2).
+			sessionReplyDescriptor(obj),
 			map[string]interface{}{
 				"name":        "session_interrupt",
 				"description": "Interrupt a session's current turn (the process stays alive; you can session_send afterward). Interrupting DROPS whatever was queued behind that turn — stopping means stop. To stop the turn and redirect it, pass `message`: that files the follow-up in the same operation, after the drop, so it survives and runs as the next turn. Accepting this is not a promise the engine stopped; the session's transcript carries an `interrupt` event when it actually did.",
@@ -3560,8 +3588,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"— a retry answers the same thing; a write refused after a coordinator WAS found " +
 					"comes back as COORDINATOR_MESSAGE_UNDELIVERED with the sentence that refused it " +
 					"inside. The acting session is the authority and there is no headless form. Reuse " +
-					"clientTurnId after an uncertain response.",
-				"inputSchema": obj(map[string]interface{}{
+					"clientTurnId after an uncertain response. With expectReply the message is a " +
+					"request to the coordinator it was DELIVERED to: the answer comes back to you as a " +
+					"turn, and if that conversation is rotated out first the outcome is RECIPIENT_ENDED " +
+					"— ask again and it reaches the new one.",
+				"inputSchema": obj(withSessionRequestProps(map[string]interface{}{
 					"projectId": map[string]interface{}{
 						"type":        "string",
 						"description": "The project whose coordinator the message is for, as shown in its web UI URL (/projects/<id>).",
@@ -3574,7 +3605,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"type":        "string",
 						"description": "Optional idempotency key the message is written under. Re-sending the same message with this key returns the turn it already filed instead of delivering a second copy — use it when retrying a call whose answer you never saw. Omitted, the server mints one and every call is a new message.",
 					},
-				}, "projectId", "message"),
+				}), "projectId", "message"),
 			},
 		)
 	}
