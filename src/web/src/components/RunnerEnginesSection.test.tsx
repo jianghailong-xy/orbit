@@ -168,13 +168,17 @@ describe("a machine's engine CLIs", () => {
 });
 
 describe("each engine's sign-in, quota and way to its sign-in", () => {
-  // wikova's engines on 2026-09-29, as runnerAttention.cases.json has them.
+  /** A reset this many hours after whenever the test runs: a window past its reset reads as the fresh
+   *  window it now is (currentPlanUsageRows), so a fixed date would turn every reading to 0% once it
+   *  went by. */
+  const later = (hours: number) => new Date(Date.now() + hours * 3600_000).toISOString();
+  // wikova's engines on 2026-09-29, as runnerAttention.cases.json has them, resetting ahead of now.
   const wikova = (over: Partial<Runner> = {}) =>
     runner({
       planUsage: {
         provider: 'claude',
-        fiveHour: { utilization: 14, resetsAt: '2026-09-29T02:59:59Z' },
-        sevenDay: { utilization: 98, resetsAt: '2026-10-02T03:59:59Z' },
+        fiveHour: { utilization: 14, resetsAt: later(2) },
+        sevenDay: { utilization: 98, resetsAt: later(60) },
       } as PlanUsage,
       engines: [
         health({ engine: 'claude', version: '2.1.284 (Claude Code)' }),
@@ -245,6 +249,57 @@ describe("each engine's sign-in, quota and way to its sign-in", () => {
     // Signed out, the last reading is about sessions that can no longer start.
     const out = rowsOf(render(wikova({ engines: [health({ engine: 'claude', auth: 'no' })] })));
     expect(out.map((row) => [row.quota, row.quotaNote])).toEqual([[[], '—']]);
+  });
+
+  it('reads a window past its reset as the fresh one it now is', () => {
+    const html = render(
+      wikova({
+        planUsage: {
+          provider: 'claude',
+          fiveHour: { utilization: 100, resetsAt: later(-1) },
+          sevenDay: { utilization: 59, resetsAt: later(60) },
+        } as PlanUsage,
+      }),
+    );
+    expect(rowsOf(html)[0].quota).toEqual(['5-hour limit 0%', 'Weekly · all models 59%']);
+  });
+
+  it('shows an engine with several accounts by the one a new session starts on, named', () => {
+    // Two Claude logins. Default's 5-hour window is spent, so a session nobody picked an account for
+    // starts on jianghailong.rd — and its windows are the ones that say what that session has. Default's
+    // under "2 accounts signed in" would read as the whole machine's.
+    const html = render(
+      runner({
+        planUsage: {
+          claude: {
+            provider: 'claude',
+            fiveHour: { utilization: 100, resetsAt: later(1) },
+            sevenDay: { utilization: 59, resetsAt: later(100) },
+            accounts: {
+              fad98727: {
+                provider: 'claude',
+                fiveHour: { utilization: 1, resetsAt: later(4) },
+                sevenDay: { utilization: 0, resetsAt: later(150) },
+              },
+            },
+          },
+        } as PlanUsage,
+        engines: [
+          health({
+            engine: 'claude',
+            version: '2.1.287 (Claude Code)',
+            accounts: [
+              { id: 'default', home: '/root/.claude', auth: 'yes' },
+              { id: 'fad98727', name: 'jianghailong.rd', home: '/root/.orbit/claude-accounts/fad98727', auth: 'yes' },
+            ],
+          }),
+        ],
+      }),
+    );
+    const [claude] = rowsOf(html);
+    expect(claude.signIn).toEqual(['ok', '2 accounts signed in']);
+    expect(claude.quota).toEqual(['5-hour limit 1%', 'Weekly · all models 0%']);
+    expect(/class="rd-quota-next">([^<]*)</.exec(html)?.[1]).toBe('Next: jianghailong.rd');
   });
 
   it('leads every row to that engine’s sign-in on Providers, its card opened', () => {

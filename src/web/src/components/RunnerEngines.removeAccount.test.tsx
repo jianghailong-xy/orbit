@@ -76,9 +76,12 @@ let host: HTMLDivElement | null = null;
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // Remove asks in an antd popup, which measures itself with a ResizeObserver jsdom does not have.
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
 afterAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  vi.unstubAllGlobals();
 });
 
 afterEach(() => {
@@ -117,9 +120,11 @@ function mount(runners: Runner[]) {
 }
 
 const rows = (el: ParentNode, selector: string) => [...el.querySelectorAll<HTMLElement>(selector)];
-const labels = (el: ParentNode) => rows(el, 'button').map((b) => b.textContent?.trim());
+/** A button's words, or the name of a mark that has none (Re-sign in, Remove). */
+const labelOf = (b: Element) => b.textContent?.trim() || b.getAttribute('aria-label');
+const labels = (el: ParentNode) => rows(el, 'button').map(labelOf);
 const button = (el: ParentNode, label: string) => {
-  const found = rows(el, 'button').find((b) => b.textContent?.trim() === label);
+  const found = rows(el, 'button').find((b) => labelOf(b) === label);
   if (!found) throw new Error(`no "${label}" button in ${el.textContent}`);
   return found as HTMLButtonElement;
 };
@@ -127,6 +132,22 @@ const click = async (el: HTMLElement) => {
   await act(async () => {
     el.click();
   });
+};
+/** The confirmation's own Remove, once its popup is drawn (a portal, a few frames late on a slow host). */
+const confirmation = async () => {
+  let ok: HTMLButtonElement | undefined;
+  await act(async () => {
+    await vi.waitFor(
+      () => {
+        ok = [...document.querySelectorAll<HTMLButtonElement>('.ant-popconfirm button')].find(
+          (b) => b.textContent?.trim() === 'Remove',
+        );
+        expect(ok).toBeDefined();
+      },
+      { timeout: 20_000, interval: 20 },
+    );
+  });
+  return ok!;
 };
 
 /** The account rows, in the order the page drew them. */
@@ -158,7 +179,11 @@ describe('removing one Codex account from a runner', () => {
     const page = mount([runner([DEFAULT, WORK, PERSONAL])]);
     const [, , personalRow] = accountsOf(page);
 
+    // It asks first — the slot's sign-in goes from the machine — and sends nothing until answered.
     await click(button(personalRow, 'Remove'));
+    const ok = await confirmation();
+    expect(removals()).toEqual([]);
+    await click(ok);
 
     expect(removals().map(([path]) => path)).toEqual([
       `/runners/${RUNNER_ID}/accounts/codex/7c21de40`,
@@ -187,6 +212,9 @@ describe('the note raised by one account signed in twice', () => {
     );
 
     await click(personalRow.querySelector('.re-dup .re-link') as HTMLButtonElement);
+    const ok = await confirmation();
+    expect(removals()).toEqual([]);
+    await click(ok);
 
     expect(removals().map(([path]) => path)).toEqual([
       `/runners/${RUNNER_ID}/accounts/codex/7c21de40`,
@@ -207,6 +235,7 @@ describe('the note raised by one account signed in twice', () => {
     // person reading "this is the same account" is looking.
     const noteRemove = workRow.querySelector('.re-dup .re-link') as HTMLButtonElement;
     await click(noteRemove);
+    await click(await confirmation());
 
     expect(removals().map(([path]) => path)).toEqual([
       `/runners/${RUNNER_ID}/accounts/codex/3fa91c2e`,
