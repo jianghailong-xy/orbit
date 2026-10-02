@@ -1,0 +1,6 @@
+.dd/
+*.xcodeproj/
+build.log
+shots/
+results/
+__pycache__/

@@ -132,3 +132,32 @@ jobs:
             -configuration Debug \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
             build
+
+  # TEMPORARY — an evidence run, not a gate; this branch is never merged. `.move-probe/` hosts the
+  # real iOS session list against a fixture API and photographs its Move — the left swipe and the
+  # long-press menu on Open, Completed and Trash, and the Move panel before and after a move into a
+  # folder, out to No Folder and into a New Folder… (see .move-probe/README.md).
+  move-shots-ios:
+    name: Move probe (iOS session list)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Build, test and capture
+        run: bash .move-probe/ios/run.sh
+      - name: Upload the captures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: move-shots-ios
+          path: .move-probe/ios/shots
+          if-no-files-found: error
