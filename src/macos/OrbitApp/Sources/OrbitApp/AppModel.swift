@@ -247,10 +247,12 @@ final class AppModel {
     var selectedAgentSessionID: String? {
         get { nav.focusedConsoleSessionID }
         set {
-            // Selecting in a three-column shell replaces the page the detail pane shows; clearing
-            // pops the console that is there — never a draft or a deeper frame.
+            // Selecting in a three-column shell replaces the page the detail pane shows — or, with a
+            // folder's page showing, is pushed over it, so the folder stays the list's page beside
+            // the console (`NavState.selectConsole`); clearing pops the console that is there —
+            // never a draft or a deeper frame.
             if let id = newValue {
-                nav.replaceTop(with: .console(sessionID: id, origin: .list))
+                nav.selectConsole(.console(sessionID: id, origin: .list))
             } else if case .console = nav.path.last {
                 nav.pop()
             }
@@ -263,6 +265,13 @@ final class AppModel {
     var composingAgentSession: Bool {
         if case .compose = nav.path.last { return true }
         return false
+    }
+    /// The folder the draft on screen was opened from — a folder page's ✎ — whose sessions it
+    /// files the one it creates in (`POST /sessions` with a `folderId`, design §3.3). Nil for a
+    /// draft opened from a list. Read off the same frame as ``composingAgentSession``.
+    var composingFolderID: String? {
+        if case .compose(_, let folderID) = nav.path.last { return folderID }
+        return nil
     }
     /// The account whose record fills the Admin pane. Compact had nowhere to put this: the section
     /// was a bare `NavigationStack` with no detail column and no push, so a selected user went
@@ -1453,7 +1462,7 @@ final class AppModel {
     /// Mirrors the "New session" button in `AgentPanes`.
     func newSessionInCurrentAgent() {
         guard let id = currentAgentID else { return }
-        show(.compose(agentID: id), agent: id)
+        show(.compose(agentID: id, folderID: nil), agent: id)
     }
 
     /// Open the draft composer for the agent pane already on screen (the "New session" toolbar
@@ -1461,17 +1470,27 @@ final class AppModel {
     /// Deliberately not an entry point — it leaves the pane's agent where it is (a draft for the
     /// agent you are looking at, falling back to the first one), so unlike ``show`` it does not move
     /// the section or the agent, only the page.
+    ///
     func startComposingSession() {
         guard let id = currentAgentID else { return }
-        nav.replaceTop(with: .compose(agentID: id))
+        nav.openDraft(agentID: id, folderID: nil)
+    }
+
+    /// ✎ on a folder's page (§3.3): the draft goes *over* the folder — the back swipe returns to it
+    /// — and the session it creates is filed in that folder. The workspace comes from the page's
+    /// own frame, so the draft is for the workspace the folder belongs to, whatever the pane's
+    /// selection has moved on to.
+    func startComposingSession(inFolder folderID: String, of agentID: String) {
+        nav.openDraft(agentID: agentID, folderID: folderID)
     }
 
     /// Switch the agent the new-session draft is composing for while staying on the compose page —
     /// the hero's agent switcher. Unlike `openAgent` (which pops back to the agent's session list),
     /// this swaps the draft's own frame for one naming `id`, so the pushed/inline `NewSessionView`
-    /// just rebuilds for it (a fresh draft via its `.id(agent.id)`).
+    /// just rebuilds for it (a fresh draft via its `.id(agent.id)`). A folder the draft was opened
+    /// from belongs to the old workspace, so the reborn draft files in none.
     func composeWithAgent(_ id: String) {
-        show(.compose(agentID: id), agent: id)
+        show(.compose(agentID: id, folderID: nil), agent: id)
     }
 
     /// Enter the Agents section focused on agent `id` — the one navigation transition behind the
@@ -1933,7 +1952,36 @@ final class AppModel {
     /// the Move panel then offers No Folder and New Folder… alone.
     func loadSessionFolders() async {
         guard let api else { return }
-        if let folders = try? await api.listSessionFolders() { sessionFolders = folders }
+        guard let folders = try? await api.listSessionFolders() else { return }
+        sessionFolders = folders
+        // A folder deleted on another device while its page is up: the page goes back to the
+        // workspace's list (§3.3 — the folder is gone, so there is no page to be on). Only an
+        // answer that landed can say that; a failed read leaves the library as it stands.
+        if let open = nav.folderPage ?? nav.folderColumn,
+           !folders.contains(where: { $0.id == open.folderID }) {
+            nav.leaveFolder(open.folderID)
+        }
+    }
+
+    /// The folder page showing on a phone, if one is (design §3.3) — the compact stack's top frame.
+    var folderPage: SessionFolderAddress? { nav.folderPage }
+
+    /// The folder the wide shells' session column is showing, if one is — the frame the column's
+    /// list draws, with the console the detail pane follows above it. Nil on macOS, which shows no
+    /// folders (§1): nothing there ever puts one on the stack.
+    var folderColumn: SessionFolderAddress? { nav.folderColumn }
+
+    /// Open a folder's page from a folder row at the top of a workspace's session list (§3.3). One
+    /// entry point for both shells: the frame lands at the bottom of the section's stack, which is
+    /// the page on top on a phone and the list's page in a wide shell's column.
+    func openFolder(_ address: SessionFolderAddress) {
+        nav.enterFolder(address)
+    }
+
+    /// Back out of a folder's page — the wide shell's column back button. A phone's system back
+    /// pops the frame itself, and lands here all the same through `nav.path`.
+    func leaveFolder(_ folderID: String? = nil) {
+        nav.leaveFolder(folderID)
     }
 
     /// File a session in one of its workspace's folders, or in none (`folderID` nil) — the Move
@@ -1973,6 +2021,59 @@ final class AppModel {
         } catch {
             return SessionMoveCopy.createFailure(error, name: name, workspace: workspace.name)
         }
+    }
+
+    /// New Folder… in the list's ≡ menu (§3.4): make the folder in this workspace and nothing else —
+    /// the row appears at the top of the Open list, empty. Nil once it exists; otherwise why it
+    /// wasn't created, in the same words the Move panel uses (`SessionMoveCopy.createFailure`).
+    func createSessionFolder(named name: String, in workspace: Agent) async -> String? {
+        guard let api else { return nil }
+        do {
+            let folder = try await api.createSessionFolder(workspaceID: workspace.id, name: name)
+            if !sessionFolders.contains(where: { $0.id == folder.id }) { sessionFolders.append(folder) }
+            return nil
+        } catch {
+            return SessionMoveCopy.createFailure(error, name: name, workspace: workspace.name)
+        }
+    }
+
+    /// Rename… (§3.4): the folder's new name, everywhere it is read. Nil once the server has it;
+    /// otherwise why it wasn't renamed, in one sentence (`SessionFolderCopy.renameFailure` — a name
+    /// its workspace already has is said as such).
+    func renameSessionFolder(_ id: String, to name: String) async -> String? {
+        guard let api else { return nil }
+        do {
+            let renamed = try await api.renameSessionFolder(id, name: name)
+            if let index = sessionFolders.firstIndex(where: { $0.id == id }) {
+                sessionFolders[index] = renamed
+            } else {
+                sessionFolders.append(renamed)
+            }
+            return nil
+        } catch {
+            let workspace = sessionFolders.first { $0.id == id }
+                .flatMap { folder in agents?.agent(folder.workspaceId)?.name } ?? "this workspace"
+            return SessionFolderCopy.renameFailure(error, name: name, workspace: workspace)
+        }
+    }
+
+    /// Delete Folder… (§3.4): the folder goes, the sessions in it stay — the server clears their
+    /// `folder_id` (the column's `ON DELETE SET NULL`), and the list draws them loose again the
+    /// moment the folder leaves the library (`SessionFolderGrouping.listing`). Nil once it is gone;
+    /// otherwise why it wasn't deleted. The page comes down with it (§3.3).
+    func deleteSessionFolder(_ id: String) async -> String? {
+        guard let api else { return nil }
+        do {
+            try await api.deleteSessionFolder(id)
+        } catch {
+            return SessionFolderCopy.deleteFailure(error)
+        }
+        sessionFolders.removeAll { $0.id == id }
+        nav.leaveFolder(id)
+        // The rows it held were drawn behind its row a moment ago; read the lists again so they are
+        // back in the time sections even if an event from another device hasn't landed yet.
+        Task { await reloadSessionLists() }
+        return nil
     }
 
     private func sessionFolder(_ id: String?) -> SessionFolder? {
