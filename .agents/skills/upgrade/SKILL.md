@@ -11,13 +11,14 @@ Database migrations are not a separate step: the apiserver container runs `prism
 
 ## Workflow
 
-1. Check the current branch, worktree status, and Compose availability. If `--pull` is requested, do not overwrite or discard local changes; stop if a fast-forward pull is unsafe.
+1. Check the current branch, worktree status, and Compose availability. On `main` the helper runs `git pull --ff-only` before building, so the deploy is origin's main and not a stale checkout; it never overwrites or discards local changes and stops if a fast-forward is impossible.
 
    The helper refuses to build when tracked files are modified: images are built from the working tree, not from `HEAD`, so uncommitted edits reach production while existing in no commit and are silently reverted by the next clean rebuild. Commit or stash first; pass `--allow-dirty` only when deliberately deploying an uncommitted change.
 
 2. Choose flags from the request:
 
-   - `--pull`: run `git pull --ff-only` before building.
+   - `--no-pull`: skip the pull on `main` and deploy the checkout as it is.
+   - `--pull`: run `git pull --ff-only` even when the checkout is not on `main`.
    - `--pull-base`: pull the pinned `postgres` and `gateway` images and recreate the full stack. This is the only mode that may restart postgres; use it only when explicitly requested.
    - `--no-cache`: rebuild local images without Docker layer cache.
    - `--prune`: prune dangling images after a successful upgrade.
@@ -27,12 +28,14 @@ Database migrations are not a separate step: the apiserver container runs `prism
 
    ```bash
    .agents/skills/upgrade/scripts/upgrade.sh
-   .agents/skills/upgrade/scripts/upgrade.sh --pull --prune
+   .agents/skills/upgrade/scripts/upgrade.sh --prune
    ```
 
 4. Report the final `docker compose ps` state. If health checks fail, inspect `docker compose logs <service>` and diagnose the failure; do not claim the upgrade succeeded.
 
 ## Behavior
+
+On `main` the helper first fast-forwards to origin (`git pull --ff-only`) unless `--no-pull` is given.
 
 Without `--pull-base`, the helper:
 
