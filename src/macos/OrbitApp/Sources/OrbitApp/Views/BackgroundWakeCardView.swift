@@ -18,6 +18,10 @@ import OrbitKit
 /// drawn from `Transcript.tsx`'s `NodeView` once delivered and from `WorkspaceView.tsx`'s queued
 /// tail until then. The words are OrbitKit's `BackgroundWakeCard`, which
 /// `BackgroundWakeCopyParityTests` holds to the web's.
+///
+/// A job that ends while a turn runs is written into that turn (a steer): the same line, inside the
+/// running turn, saying how far it got (`steerState`) — and, while it waits for the runner, with no
+/// Cancel, because nothing takes a steer back.
 struct BackgroundWakeCardView: View {
     let wake: BackgroundWake
     var ts: String?
@@ -28,15 +32,20 @@ struct BackgroundWakeCardView: View {
     /// is empty, so handing the leftover block back to a user bubble drew an empty bubble under the
     /// wake — a message with no words in it, signed with the reader's own name.
     var attached: (kind: String, text: String)?
-    /// Cancels a wake that is still queued. Nil once a runner has taken it, and on every settled
-    /// line. Unlike a watch's wake this is an ordinary cancel — nothing ever re-sends it — so it
-    /// asks nothing first and uses the words a queued message already uses.
+    /// Cancels a wake that is still queued. Nil once a runner has taken it, on every settled line,
+    /// and on a steer, which the server refuses to withdraw. Unlike a watch's wake this is an ordinary
+    /// cancel — nothing ever re-sends it — so it asks nothing first and uses the words a queued
+    /// message already uses.
     var onCancelQueued: (() -> Void)?
+    /// How far a wake written into the running turn has got (`BackgroundWakeCard.steerState`), said
+    /// under the line — in place of a queued wake's Cancel while it still waits for the runner.
+    var steerState: String?
+    /// Still waiting for a runner rather than an event yet: drawn dashed, the browser's
+    /// `.bgwake.is-queued`.
+    var queued: Bool = false
 
     @State private var open = false
     @State private var showingRaw = false
-
-    private var queued: Bool { onCancelQueued != nil }
     private var failed: Bool { wake.jobs.contains(where: BackgroundWakeCard.isFailed) }
     private var several: Bool { wake.jobs.count > 1 }
     /// The tails a failure leaves out of the fold: why it failed is what woke anybody.
@@ -62,6 +71,12 @@ struct BackgroundWakeCardView: View {
                 // Amber, not red: the turn was queued and the session simply hasn't confirmed it.
                 Text(BackgroundWakeCard.undelivered)
                     .font(.orbitMeta).foregroundStyle(.orange)
+                    .padding(.leading, 20)
+            }
+            if let steerState {
+                // A steer's progress, in the words and tone its bubble uses (`UserBubbleView`).
+                Text(steerState)
+                    .font(.orbitMeta).foregroundStyle(.secondary)
                     .padding(.leading, 20)
             }
             if let onCancelQueued { queuedFoot(onCancelQueued).padding(.leading, 20) }

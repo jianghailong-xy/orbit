@@ -356,6 +356,18 @@ public enum BackgroundWakeCard {
     /// The runner never confirmed the engine received the turn.
     public static let undelivered = "The session has not confirmed it received this."
 
+    /// How far a wake written into the running turn has got, in a steer's own words
+    /// (`SteerDelivery.state`) — "Sending…" while it waits for the runner, then "Delivering…" and
+    /// "Sent into this turn". A job that ends while a turn runs is filed as a steer aimed at that turn
+    /// (apiserver `background-job-wake.ts`), so its line sits inside the running turn and this is the
+    /// only account of it there is. Nil for every other wake, and for one that never arrived, which
+    /// `undelivered` already says. Web parity: `Transcript.tsx` hands the line
+    /// `node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined`.
+    public static func steerState(steer: Bool, delivery: String?, undelivered: Bool) -> String? {
+        guard steer, !undelivered, delivery != "failed", delivery != "unconfirmed" else { return nil }
+        return SteerDelivery.state(delivery).label
+    }
+
     /// The fold the original text stays behind.
     public static let rawSummary = "What the agent received"
 

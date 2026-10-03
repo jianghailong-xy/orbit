@@ -44,6 +44,30 @@ func offeredPermissionModesFor(root bool) []string {
 	return out
 }
 
+// antigravityPermissionArgs is how an Orbit permission mode reaches agy, whose headless mode cannot
+// ask anyone: what needs approval is either granted up front — by these flags, or by an allow rule
+// in its settings (antigravitySettings) — or refused on the spot (docs/antigravity-runtime-contract.md
+// §5.1). Default and Don't Ask therefore take no flag: refusing is already what agy does with
+// nobody to ask. Bypass needs nothing special under root, unlike claude.
+func antigravityPermissionArgs(mode string) []string {
+	switch strings.TrimSpace(mode) {
+	case "plan":
+		return []string{"--mode", "plan"}
+	case "acceptEdits":
+		return []string{"--mode", "accept-edits"}
+	case "auto", "bypassPermissions":
+		return []string{"--dangerously-skip-permissions"}
+	}
+	return nil
+}
+
+// antigravityGuardedMode is every mode in which agy refuses what nobody approved: all but the two
+// that skip its permission checks altogether.
+func antigravityGuardedMode(mode string) bool {
+	mode = strings.TrimSpace(mode)
+	return mode != "auto" && mode != "bypassPermissions"
+}
+
 // offeredPermissionModes answers for THIS process, which is the right scope for both callers: the
 // MCP server and the `orbit` CLI both run as children of the session, so their euid is the euid
 // claude was spawned with.

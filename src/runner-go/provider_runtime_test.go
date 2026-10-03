@@ -10,6 +10,8 @@ func TestProviderRuntimesDeclareOneTransportPerEngine(t *testing.T) {
 		providerCodex:    transportJSONRPC,
 		providerKimi:     transportJSONRPC,
 		providerOpenCode: transportOneShot,
+		// One resident agy, a `user` line per turn on a stdin that stays open.
+		providerAntigravity: transportStreamJSON,
 	}
 	if len(providerRuntimes) != len(want) {
 		t.Fatalf("providerRuntimes has %d entries, want %d — a new engine needs a transport here", len(providerRuntimes), len(want))
