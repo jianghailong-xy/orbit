@@ -1727,6 +1727,21 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // UPDATE or DELETE. (Written as 0360 on its own branch and renumbered before it landed: 0359 is
       // spelled by a branch not yet landed, and 0361, 0362, 0364 and 0365 landed first.)
       '0366_session_retry_claim_lease',
+      // An exception item the coordinator is handling (0368): five nullable columns with no default
+      // on `project_open_item` (`handling_job_id`, `handling_session_id`, `handling_reason`,
+      // `handling_started_at`, `resolved_by_job_id`, catalog-only), four CHECKs every stored item
+      // satisfies because all five read NULL in it, one partial index over OPEN rows, and
+      // `project_integration_job_retry_kind_chk` dropped and added back admitting CHECK_PROMOTION — a
+      // superset every stored job satisfies. Read against every claim above: `project_open_item` and
+      // `project_integration_job` are the only relations named and neither is a preserved one; no
+      // `task`, `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair and
+      // every stored task and criterion row are out of its reach. No function, trigger or type is
+      // created, replaced or dropped — the only DROP is a CHECK restated in the same statement — so it
+      // is not another writer of the DONE fence and names none of the six preserved objects. No
+      // INSERT, UPDATE or DELETE: nothing is backfilled. (Written as 0364 on its own branch and
+      // renumbered before it landed: 0364, 0365 and 0366 landed first, 0369 just below left 0367 and
+      // 0368 to two branches not yet landed, and 0367 is the other one's.)
+      '0368_open_item_coordinator_handling',
       // Every live workspace's place in the sidebar, written down (0369): one UPDATE … FROM of
       // `workspace.position`, computed from `workspace` and `runner` rows and nothing else. Read
       // against every claim above: neither table is a preserved relation, and no `task`, `session`,

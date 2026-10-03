@@ -691,8 +691,11 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	case "integration_retry":
 		id := getString(args, "projectId")
 		taskID := getString(args, "taskId")
-		if id == "" || taskID == "" {
-			return toolResult("projectId and taskId are required", true)
+		promotionID := getString(args, "promotionId")
+		if id == "" || (taskID == "") == (promotionID == "") {
+			return toolResult("projectId and exactly one of taskId or promotionId are required: taskId for "+
+				"a DONE task's failed landing, promotionId for a blocked merge of the project branch into main "+
+				"(an item that names no task)", true)
 		}
 		reason := strings.TrimSpace(getString(args, "reason"))
 		if reason == "" {
@@ -703,14 +706,26 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// The acting session IS the authority, as it is for open_item_resolve: the server checks it
 		// against the project's own coordinator pointer, and refuses — with the reason — a landing
 		// that is in flight, a failure that is the account owner's, or a task of another project.
+		if promotionID != "" {
+			raw, err := s.t.retryPromotionCheck(s.sessionID, id, promotionID, reason)
+			if err != nil {
+				return toolResult("integration retry failed: "+err.Error(), true)
+			}
+			return toolResult("The candidate's check is queued again, with your reason on it, and your open "+
+				"items about it are now being handled: they stay open until the check reports. If it passes "+
+				"they are marked handled in your name and the merge goes on as before — the owner's card, or "+
+				"the Automatic setting; if it fails, a new item reaches you on its own and these are marked "+
+				"superseded.\n"+prettyJSON(raw), false)
+		}
 		raw, err := s.t.retryIntegration(s.sessionID, id, taskID, reason)
 		if err != nil {
 			return toolResult("integration retry failed: "+err.Error(), true)
 		}
 		return toolResult("The next generation of this task's landing is queued, with your reason on it, "+
-			"and the open items about the failed one are superseded. It lands on the project branch "+
-			"and goes on to the merge check like any landing; if it fails, a new item reaches you on "+
-			"its own.\n"+prettyJSON(raw), false)
+			"and your open items about the failed one are now being handled: they stay open until it "+
+			"reports. If it lands they are marked handled in your name and it goes on to the merge check "+
+			"like any landing; if it fails, a new item reaches you on its own and these are marked "+
+			"superseded.\n"+prettyJSON(raw), false)
 
 	case "task_dependency_graph":
 		id, ok := s.resolveTaskID(args)
@@ -2976,23 +2991,28 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name": "integration_retry",
-			"description": "Run one of your project's failed landings again: a task that is DONE " +
-				"whose newest landing onto the project's integration line ended CHECK_FAILED (a check " +
-				"on the combined tree disagreed, or ran out of time — CHECK_TIMED_OUT) or ERROR (the " +
-				"integration machinery stopped). This is the only way such a landing is attempted again: " +
-				"the platform never reruns one by itself, and task_start runs the task again on a new " +
-				"branch without ever queueing another landing of the work it finished. It is a decision, " +
-				"not a reflex — read the item first, and rerun only when you can say why this run will " +
-				"come out differently (the merge check's baseline was repaired, the check timed out, the " +
-				"machinery failed). A red that belongs to the delivery is sent back (task_reopen) or " +
-				"replaced instead, and a CONFLICT is refused here: only a branch that changed answers " +
-				"one. Queues exactly one new generation of the task's landing, which carries your " +
-				"reason and the failure class it reruns, and supersedes your open items about the failed " +
-				"one with your reason on them. Refused with the reason when a landing of the task is " +
-				"already queued or running, when the failure's item is the account owner's (escalated, " +
-				"or a project that is not Automatic), when the owner has an open blocker on the task, or " +
-				"when the task is not this project's. Only the conversation the project is coordinated " +
-				"from may call it.",
+			"description": "Run one of your project's failed integrations again. With taskId: a task " +
+				"that is DONE whose newest landing onto the project's integration line ended CHECK_FAILED " +
+				"(a check on the combined tree disagreed, or ran out of time — CHECK_TIMED_OUT) or ERROR " +
+				"(the integration machinery stopped). With promotionId instead: a blocked merge of the " +
+				"project branch into main — the item that names no task — whose check or landing ended " +
+				"the same way; what is rerun is the candidate's check, and a check that passes leaves the " +
+				"merge exactly as it was authorized: the account owner's card, or the Automatic setting. " +
+				"This is the only way either is attempted again: the platform never reruns one by itself, " +
+				"and task_start runs the task again on a new branch without ever queueing another landing " +
+				"of the work it finished. It is a decision, not a reflex — read the item first, and rerun " +
+				"only when you can say why this run will come out differently (the merge check's baseline " +
+				"was repaired, the check timed out, the machinery failed). A red that belongs to the " +
+				"delivery is sent back (task_reopen) or replaced instead, and a CONFLICT is refused here: " +
+				"only a branch that changed answers one. Queues exactly one new job, which carries your " +
+				"reason and the failure class it reruns; your open items about the failure stay open and " +
+				"read as being handled until that job reports — if it lands or passes they are marked " +
+				"handled in your name with your reason, and if it fails again they are marked superseded " +
+				"by the new item its failure opens. Refused with the reason when the task's landing or the " +
+				"candidate is already queued or running, when the failure's item is the account owner's " +
+				"(escalated, or a project that is not Automatic), when the owner has an open blocker on " +
+				"the task, or when the task or candidate is not this project's. Only the conversation the " +
+				"project is coordinated from may call it.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
@@ -3000,14 +3020,19 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"taskId": map[string]interface{}{
 					"type":        "string",
-					"description": "The DONE task whose failed landing to run again.",
+					"description": "The DONE task whose failed landing to run again. Give this or promotionId, not both.",
+				},
+				"promotionId": map[string]interface{}{
+					"type": "string",
+					"description": "The blocked candidate — the merge of the project branch into main — whose " +
+						"check to run again, as its item names it. Give this or taskId, not both.",
 				},
 				"reason": map[string]interface{}{
 					"type": "string",
 					"description": "Why this run will come out differently — what changed since the failed " +
-						"one. Up to 2000 characters; it stays on the new landing and on every item it supersedes.",
+						"one. Up to 2000 characters; it stays on the new job and on every item it handles.",
 				},
-			}, "projectId", "taskId", "reason"),
+			}, "projectId", "reason"),
 		},
 		{
 			"name": "project_delete",

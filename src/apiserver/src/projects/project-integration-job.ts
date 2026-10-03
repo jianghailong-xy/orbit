@@ -594,7 +594,8 @@ export async function queueLandingBehindTheWork(
   });
 }
 
-/** Why a rerun was asked for, as migration 0344 records it on the generation it queued. */
+/** Why a rerun was asked for, as migration 0344 records it on the generation it queued — a task's
+ *  landing, or (0368) a blocked candidate's check. */
 export interface LandingRetryRequest {
   /** The failed generation this one runs again. */
   ofJobId: string;
@@ -1125,6 +1126,8 @@ export async function queuePromotionJob(
     promotion: PromotionJobSubject;
     canonicalRepoUrl: string;
     confirmedAutomatically?: boolean;
+    /** Set only for the check a coordinator asked to run again (§4.7 H1, migration 0368). */
+    retry?: LandingRetryRequest;
   },
 ): Promise<string> {
   const previous = await tx.projectIntegrationJob.aggregate({
@@ -1167,6 +1170,14 @@ export async function queuePromotionJob(
         subjectId: input.promotion.id,
         generation,
       }),
+      ...(input.retry
+        ? {
+            retryOfJobId: input.retry.ofJobId,
+            retryFailureClass: input.retry.failureClass,
+            retryReason: input.retry.reason,
+            retryRequestedBySessionId: input.retry.requestedBySessionId,
+          }
+        : {}),
     }],
     skipDuplicates: true,
     select: { id: true },
