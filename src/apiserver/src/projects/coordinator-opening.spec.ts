@@ -83,6 +83,14 @@ test('with Automatic on, the coordinator is told it judges task completion, and 
     assert.match(form, /task_start 不会重新排落地/);
     assert.match(form, /用 integration_retry 带理由重排一次，交付本身的问题用 task_reopen 退回返工/);
     assert.match(form, /这类落地去留由你判，不拿去问账号所有者/);
+    // A delivery outside its declaration, or one git refused, is the coordinator's review too
+    // (`DECIDE_TASK_LANDING`, `blocker-disposition.ts` §4), with the doors each answer takes — and the
+    // owner hears of it only when the conversation sits on it past the project's window.
+    assert.match(form, /交付改了它声明里没提的文件、或者 git 拒绝合并，也会作为一条交付复核待办送到这里/);
+    for (const door of ['open_item_resolve', 'task_reopen', 'supersedesTaskId', 'integration_retry']) {
+      assert.ok(form.includes(door), `the Automatic form does not name ${door}`);
+    }
+    assert.match(form, /平台不会自己重跑，这条会话停着不处理超过项目的 exceptionEscalationSeconds，它才交给账号所有者/);
     // And not the conversational stance, whose second sentence is false with the switch on: wakes,
     // auto-run dispatch and the automatic merge into main all act on this project.
     assert.doesNotMatch(form, /推进靠的是跟人对话/);
@@ -103,8 +111,10 @@ test('with Automatic off, the coordinator keeps the conversational text and no A
     assert.doesNotMatch(form, /要找账号所有者的只有三类/);
     assert.doesNotMatch(form, /ask_owner/);
     // Without the switch a failed landing is the owner's from the start, so the coordinator is not
-    // told it decides one.
+    // told it decides one — and nothing about a delivery's landing is put to it either.
     assert.doesNotMatch(form, /integration_retry/);
+    assert.doesNotMatch(form, /交付复核待办/);
+    assert.doesNotMatch(form, /open_item_resolve/);
   }
 });
 

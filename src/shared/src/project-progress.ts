@@ -158,7 +158,9 @@ export interface ProjectIntegrationBuckets {
 /**
  * What opened an exception item, as §4.2's closed set spells it — and `START_REQUEST`, a
  * coordinator asking its owner to start the project (`project_request_start`, `project-start.ts`),
- * and `DONE_REQUEST`, one asking its owner to record the project done (`project-done.ts`).
+ * and `DONE_REQUEST`, one asking its owner to record the project done (`project-done.ts`), and
+ * `DELIVERY_REVIEW`, a finished delivery whose landing somebody has to decide — files outside its
+ * declaration, or a branch git refused — which an Automatic project puts to its coordinator first.
  * The set is closed in the database too (`project_open_item_kind_chk`): a new kind is a migration.
  */
 export type OpenItemKind =
@@ -170,16 +172,18 @@ export type OpenItemKind =
   | 'COORDINATOR_QUESTION'
   | 'FUSE_PAUSED'
   | 'START_REQUEST'
-  | 'DONE_REQUEST';
+  | 'DONE_REQUEST'
+  | 'DELIVERY_REVIEW';
 
 /**
- * The kinds a project's coordinator can be handling (§7.1 V1/V2): `OpenItemKind` minus the four
+ * The kinds a project's coordinator can be handling (§7.1 V1/V2): `OpenItemKind` minus the ones
  * that are the owner's from birth.
  *
- * A merge approval, a question to the owner, a pause and a request to start are asked OF the owner
- * and never worked BY the coordinator, so an item whose assignee is the coordinator is one of these
- * four — which is what lets the list row's blue chip be a `Record` over this type rather than a
- * switch with a branch for a state that cannot happen. A kind that later becomes returnable to the coordinator
+ * A merge approval, a question to the owner, a pause and a request to start or to close are asked OF
+ * the owner and never worked BY the coordinator, so an item whose assignee is the coordinator is one
+ * of these — which is what lets the list row's blue chip be a `Record` over this type rather than a
+ * switch with a branch for a state that cannot happen. A delivery review (`DELIVERY_REVIEW`) is the
+ * fifth: the landing of a delivery an Automatic project's coordinator decides. A kind that later becomes returnable to the coordinator
  * (the one §4.7 lists and has no door for yet) adds itself here, and every reader fails to compile
  * until it has a phrase.
  *
@@ -191,6 +195,7 @@ export const COORDINATOR_LEAD_KINDS = [
   'INTEGRATION_CHECK_FAILED',
   'INTEGRATION_ERROR',
   'TASK_FAILED',
+  'DELIVERY_REVIEW',
 ] as const;
 export type CoordinatorLeadKind = (typeof COORDINATOR_LEAD_KINDS)[number];
 
@@ -268,7 +273,8 @@ export interface OpenItemFacts {
   /** The branch an integration was moving work into, and the tip it was moving (INTEGRATION_*). */
   targetRef: string | null;
   targetSha: string | null;
-  /** The paths a conflicting merge could not reconcile (INTEGRATION_CONFLICT). */
+  /** The paths a conflicting merge could not reconcile (INTEGRATION_CONFLICT), or the paths a
+   *  delivery review is about (DELIVERY_REVIEW). */
   files: string[];
   /** Whether the target branch is where it was — the first thing a reader asks a conflict. */
   nothingLanded: boolean;
@@ -288,6 +294,12 @@ export interface OpenItemFacts {
      *  (§4.5): the last one is the owner's rather than the coordinator's. */
     attempt: number;
     limit: number;
+  } | null;
+  /** Which reading a delivery review is about and what the task's declaration named
+   *  (DELIVERY_REVIEW); null for every other kind. Absent from a server that predates it. */
+  review?: {
+    reason: 'OUTSIDE_DECLARED_SCOPE' | 'MERGE_REFUSED_BY_GIT';
+    declaredPaths: string[];
   } | null;
 }
 

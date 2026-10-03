@@ -1530,8 +1530,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored task
       // and criterion row are out of its reach. No function, trigger or type is created, replaced or
       // dropped — so it is not another writer of the DONE fence and names none of the six preserved
-      // objects. No INSERT, UPDATE or DELETE: nothing is backfilled. (0343 is left to the unlanded
-      // delivery-review migration of the same project's branch that already spells it.)
+      // objects. No INSERT, UPDATE or DELETE: nothing is backfilled. (0343 was left to the unlanded
+      // delivery-review migration of the same project's branch, which landed as 0359 instead — it
+      // rewrites the CHECK 0345 rewrites, so it has to sort after it — and 0343 stays a hole.)
       '0344_integration_job_retry',
       // The owner DONE record (0345): four columns on `project` plus CHECKs for its provenance,
       // digest and accepted-gap array. Existing DONE rows are backfilled only in those new columns
@@ -1569,16 +1570,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // criterion row are out of its reach. No function, trigger or type is created, replaced or
       // dropped — so it is not another writer of the DONE fence and names none of the six preserved
       // objects. No INSERT, UPDATE or DELETE: the new table starts empty and every session reads
-      // NULL. (0343 is the delivery review's, as said above, and 0347 is the token-sum drop just
-      // above, so this took the next number nobody used.)
+      // NULL. (0343 was held for the delivery review, as said above, and 0347 is the token-sum drop
+      // just above, so this took the next number nobody used.)
       '0348_session_folder',
       // Who sent a turn: one nullable UUID column with no default on `conversation_turn`
       // (`sender_session_id`, deliberately no foreign key) and one partial index on it. Read against
       // every claim above: `conversation_turn` is not among the preserved relations and nothing else
       // is named — no `task`, `session`, `project` or `project_acceptance_*` object, no function,
       // trigger or type created, replaced or dropped, and no INSERT, UPDATE or DELETE. (Written as
-      // 0343 on its own branch and renumbered before it landed: 0343 is the delivery review's, as
-      // said above, and 0348 is spelled by the unlanded session-folders branch.)
+      // 0343 on its own branch and renumbered before it landed: 0343 was held for the delivery
+      // review, as said above, and 0348 is spelled by the unlanded session-folders branch.)
       '0349_conversation_turn_sender_session',
       // Session requests (0350): one new table, `session_request`, whose one foreign key is to the
       // recipient `session` row (ON DELETE CASCADE), with CHECKs and partial indexes of its own; a
@@ -1620,7 +1621,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // every stored task and criterion row are out of its reach. No INSERT, UPDATE or DELETE: the
       // build reads every item row once and writes none. (Written as 0350 on its own branch and
       // renumbered before it landed: 0349 to 0352 are the four just above.)
-      '0353_project_open_item_promotion_open_idx'],
+      '0353_project_open_item_promotion_open_idx',
+      // A delivery's landing question as an exception item (0359): `project_open_item_kind_chk` is
+      // dropped and added back admitting DELIVERY_REVIEW beside the nine kinds 0345 left, which every
+      // stored item satisfies; the owner-only CHECK is untouched. Read against every claim above: no
+      // `task`, `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair and
+      // every stored task and criterion row are out of its reach. No function, trigger or type is
+      // created, replaced or dropped, so it is not another writer of the DONE fence and names none of
+      // the six preserved objects. No INSERT, UPDATE or DELETE: nothing is backfilled. (Numbered
+      // after main's 0354–0358, which this branch does not carry yet, and after 0345, whose rewrite
+      // of the same CHECK it must follow on a fresh database.)
+      '0359_delivery_review_item'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

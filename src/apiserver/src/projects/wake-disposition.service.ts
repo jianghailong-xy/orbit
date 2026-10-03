@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -14,8 +14,10 @@ import { readTaskCriterionChange } from '../tasks/task-completion-criterion-chan
 import {
   BLOCKER_KIND_FOR,
   type BlockerDisposition,
+  type BlockerRoute,
   type DeliveryObservations,
   blockerDisposition,
+  blockerRoute,
   declaredPaths,
 } from './blocker-disposition';
 import { CoordinatorDeliveryService } from './coordinator-delivery.service';
@@ -35,6 +37,13 @@ import {
 import { criterionKeyOf } from './project-acceptance';
 import { openFuseEpisodeId, refusingWhileFusePaused } from './project-fuse';
 import {
+  DELIVERY_REVIEW_KIND,
+  type DeliveryReviewReason,
+  deliveryReviewKey,
+  recordDeliveryReview,
+} from './project-open-item';
+import { ProjectOpenItemService } from './project-open-item.service';
+import {
   LANDING_SERVING_WORK_SELECT,
   type CriterionWithLandingFacts,
   type LandingBranches,
@@ -45,12 +54,23 @@ import {
 } from './project-criterion-landing';
 import { CriterionState, criterionCoverage, wakeDisposition } from './wake-disposition';
 
-/** The blocker one delivery raised, for a caller that has to report that it stopped. */
+/**
+ * Where one delivery that has to stop was put, for a caller that has to report that it stopped.
+ *
+ * `route` says which of the two surfaces it went to (`blocker-disposition.ts` §4): a blocker the
+ * account owner answers, or an exception item the project's coordinator is handed first. At most one
+ * of the two ids is set.
+ */
 export interface RaisedBlocker extends BlockerDisposition {
-  /** The work the blocker is about. */
+  /** The work the question is about. */
   taskId: string;
-  /** The episode row, including the existing row when this delivery added nothing. */
+  route: BlockerRoute;
+  /** The episode row, including the existing row when this delivery added nothing; null when the
+   *  question went to an exception item. */
   blockerId: string | null;
+  /** The delivery review, or null when the question went to a blocker or the review was already
+   *  open. */
+  itemId: string | null;
 }
 
 /** How long a HUMAN-recovery blocker waits before it reads as overdue (BL5's escalation alarm). */
@@ -123,6 +143,13 @@ export class WakeDispositionService {
     private readonly prisma: PrismaService,
     private readonly judgments: CoordinatorJudgmentService,
     private readonly deliveries: CoordinatorDeliveryService,
+    /**
+     * Hands a delivery review to the coordinator the moment it is filed (`fileDeliveryReview`).
+     * `@Optional()` and last, for the reason the router's later producers give: the fixtures that
+     * build this unit by hand pass the three before it, and for them the item is still filed — it is
+     * delivered by the next drain point (the coordinator's own turn ending) instead of at once.
+     */
+    @Optional() private readonly openItems?: ProjectOpenItemService,
   ) {}
 
   /**
@@ -149,7 +176,9 @@ export class WakeDispositionService {
       // asked for, or whose branch git already refused would be routing the merge around the
       // blocker rather than stopping it. RECORD_ONLY is the existing answer for "this fact is not
       // worth waking anybody for", and it is the right one here: the fact stays in the ledger, and
-      // `raiseBlockerIfNeeded` puts the question to the person on the way back through `spend`.
+      // `raiseBlockerIfNeeded` puts the question to whoever decides it on the way back through
+      // `spend` — the owner for a question about the ruler, the coordinator first for one about the
+      // delivery's landing, in an exception item of its own rather than as an order to merge.
       //
       // A read, not a decision about permission: it takes the same branch either way, both
       // branches end in a status inside 0174's partial unique index, and nothing is WRITTEN here.
@@ -410,20 +439,73 @@ export class WakeDispositionService {
    * question addressed to somebody: two of them raised in one pass would be two notifications
    * about one delivery, and the second question is not askable until the first is answered
    * anyway. The order is fixed so that two readings of the same world ask the same question.
+   *
+   * WHERE THE QUESTION GOES
+   * =======================
+   * `blocker-disposition.ts` §4: the tier of the act the reading asks for. A question about the
+   * ruler is the owner's blocker, as it always was. A question about the delivery's landing is an
+   * exception item, filed and handed to whoever the item's own rule names — the coordinator
+   * conversation of an Automatic project, the owner when there is none — so a path warning never
+   * reaches the owner without the coordinator having had it first.
    */
   async raiseBlockerIfNeeded(fact: WakeFact): Promise<RaisedBlocker | null> {
     const stopped = await this.blockerFor(fact);
     if (!stopped) return null;
+    const reason = stopped.disposition.reason;
+    if (blockerRoute(reason) === 'EXCEPTION_ITEM' && isDeliveryReviewReason(reason)) {
+      return {
+        ...stopped.disposition,
+        taskId: stopped.taskId,
+        route: 'EXCEPTION_ITEM',
+        blockerId: null,
+        itemId: await this.fileDeliveryReview(fact.projectId, stopped, reason),
+      };
+    }
     return {
       ...stopped.disposition,
       taskId: stopped.taskId,
+      route: 'OWNER_BLOCKER',
       blockerId: await this.raiseBlocker(fact.projectId, stopped.taskId, stopped.disposition),
+      itemId: null,
     };
   }
 
-  /** Deliver the human-owned episode to Automatic's standing coordinator after it is committed. */
+  /**
+   * File the exception item a delivery's landing question goes to, and hand it over at once.
+   *
+   * The item is the durable fact and its own transaction is the whole write; the hand-over after the
+   * commit is the same one every exception item takes (`ProjectOpenItemService.deliverForTasks`):
+   * a queued turn on the coordinator conversation, or the owner's devices told when the item is
+   * theirs from birth. It cannot fail this caller — that method never throws — and a hand-over that
+   * did not happen is made at the coordinator's next drain point from the same committed row.
+   */
+  private async fileDeliveryReview(
+    projectId: string,
+    stopped: StoppedDelivery,
+    reason: DeliveryReviewReason,
+  ): Promise<string | null> {
+    const filed = await withTransactionRetry(this.prisma, (tx) => recordDeliveryReview(tx, {
+      projectId,
+      taskId: stopped.taskId,
+      sessionId: stopped.sessionId,
+      reason,
+      paths: stopped.disposition.paths,
+      declaredPaths: stopped.observed.declaredPaths,
+      criterionKey: stopped.criterionKey,
+    }), loggedRetry(this.logger, 'wakeDisposition.fileDeliveryReview'));
+    await this.openItems?.deliverForTasks([stopped.taskId]);
+    return filed?.itemId ?? null;
+  }
+
+  /**
+   * Deliver the human-owned episode to Automatic's standing coordinator after it is committed.
+   *
+   * Only for a question that went to the owner's blocker: a delivery review is handed to the
+   * coordinator as the item itself (`fileDeliveryReview`), and a second message about the same
+   * question would be two hand-overs of one decision.
+   */
   async notifyCoordinatorOfBlocker(fact: WakeFact, blocker: RaisedBlocker): Promise<void> {
-    if (!blocker.blockerId) return;
+    if (blocker.route !== 'OWNER_BLOCKER' || !blocker.blockerId) return;
     const task = await this.prisma.task.findUnique({
       where: { id: blocker.taskId },
       select: {
@@ -463,14 +545,12 @@ export class WakeDispositionService {
    * is the only moment a blocker may be written. Asking twice costs one repeated read and buys the
    * property that matters — nothing is written on the strength of a fact nobody authorized.
    */
-  private async blockerFor(
-    fact: WakeFact,
-  ): Promise<{ taskId: string; disposition: BlockerDisposition } | null> {
+  private async blockerFor(fact: WakeFact): Promise<StoppedDelivery | null> {
     if (fact.event !== 'CRITERION_UNLANDED') return null;
 
     for (const delivery of await this.deliveriesUnder(fact)) {
       const disposition = blockerDisposition(delivery.observed);
-      if (disposition) return { taskId: delivery.taskId, disposition };
+      if (disposition) return { ...delivery, disposition };
     }
     return null;
   }
@@ -483,9 +563,7 @@ export class WakeDispositionService {
    * by several. Nothing here decides anything: `blocker-disposition.ts` §2 says which row each
    * observation is, and this is that reading, spelled once.
    */
-  private async deliveriesUnder(
-    fact: WakeFact,
-  ): Promise<Array<{ taskId: string; observed: DeliveryObservations }>> {
+  private async deliveriesUnder(fact: WakeFact): Promise<ObservedDelivery[]> {
     const stated = await this.prisma.projectAcceptanceCriterionDefinition.findMany({
       where: { projectId: fact.projectId },
       select: {
@@ -511,7 +589,7 @@ export class WakeDispositionService {
               where: { startsTaskWork: true, deletedAt: null },
               orderBy: { createdAt: 'desc' },
               take: 1,
-              select: { changedFiles: true },
+              select: { id: true, changedFiles: true },
             },
           },
         },
@@ -524,6 +602,8 @@ export class WakeDispositionService {
       .filter((row) => criterionSubjectId(fact.projectId, criterionKeyOf(row.id)) === fact.subjectId)
       .flatMap((row) => row.servingTasks.map((task) => ({
         taskId: task.id,
+        sessionId: task.sessions[0]?.id ?? null,
+        criterionKey: criterionKeyOf(row.id),
         observed: {
           // Written prose only: the record the criterion-change door keeps in the same column says
           // the criterion moved, not that one does not apply (`blocker-disposition.ts` §2).
@@ -622,22 +702,46 @@ export class WakeDispositionService {
    * never by `kind`, which the missing-judgment-path signal shares, and never by `detail`, which is
    * display only. Each is a compare-and-set on the row still being open, so a redelivery, a second
    * receipt or an owner resolving it first writes nothing twice.
+   *
+   * The delivery reviews filed for a branch git refused are ended here too, for the reason that
+   * blocker never was: a refused merge is answered by the merge going through, and a landing receipt
+   * is that. A review of files outside a declaration is NOT ended by a landing — whether they belong
+   * to the work is not something a merge decides — and is chosen out by its key.
    */
   async resolveLandedBlockers(projectIds: ReadonlyArray<string | null | undefined>): Promise<number> {
     const ids = [...new Set(projectIds.filter((id): id is string => !!id))];
     if (ids.length === 0) return 0;
-    const open = await this.prisma.projectBlocker.findMany({
-      where: {
-        projectId: { in: ids },
-        resolvedAt: null,
-        subjectType: 'TASK',
-        OR: LANDED_WORK_REASONS.map((reason) => ({ dedupeKey: { startsWith: dispositionKey(reason) } })),
-      },
-      select: { id: true, projectId: true, subjectId: true },
-    });
-    if (open.length === 0) return 0;
+    const [open, reviews] = await Promise.all([
+      this.prisma.projectBlocker.findMany({
+        where: {
+          projectId: { in: ids },
+          resolvedAt: null,
+          subjectType: 'TASK',
+          OR: LANDED_WORK_REASONS.map((reason) => ({ dedupeKey: { startsWith: dispositionKey(reason) } })),
+        },
+        select: { id: true, projectId: true, subjectId: true },
+      }),
+      this.prisma.projectOpenItem.findMany({
+        where: {
+          projectId: { in: ids },
+          kind: DELIVERY_REVIEW_KIND,
+          state: 'OPEN',
+          dedupeKey: { startsWith: deliveryReviewKey('MERGE_REFUSED_BY_GIT', '') },
+          taskId: { not: null },
+        },
+        select: { id: true, projectId: true, taskId: true },
+      }),
+    ]);
+    if (open.length === 0 && reviews.length === 0) return 0;
     const receipts = await this.prisma.sessionMergeReceipt.findMany({
-      where: { taskId: { in: [...new Set(open.map((blocker) => blocker.subjectId))] } },
+      where: {
+        taskId: {
+          in: [...new Set([
+            ...open.map((blocker) => blocker.subjectId),
+            ...reviews.map((review) => review.taskId!),
+          ])],
+        },
+      },
       orderBy: { createdAt: 'asc' },
       select: { taskId: true, result: true, targetBranch: true },
     });
@@ -645,14 +749,17 @@ export class WakeDispositionService {
       where: { projectId: { in: ids }, slot: 'primary' },
       select: { projectId: true, upstreamRef: true, integrationRef: true },
     });
+    const landingOf = (projectId: string, taskId: string) => {
+      const branches = landingBranchesFor(
+        codebases.find((codebase) => codebase.projectId === projectId) ?? null,
+      );
+      return receipts.find((receipt) => receipt.taskId === taskId
+        && receiptIsLandingEvidence(receipt, branches));
+    };
 
     let resolved = 0;
     for (const blocker of open) {
-      const branches = landingBranchesFor(
-        codebases.find((codebase) => codebase.projectId === blocker.projectId) ?? null,
-      );
-      const landed = receipts.find((receipt) => receipt.taskId === blocker.subjectId
-        && receiptIsLandingEvidence(receipt, branches));
+      const landed = landingOf(blocker.projectId, blocker.subjectId);
       if (!landed) continue;
       const now = new Date();
       const { count } = await this.prisma.projectBlocker.updateMany({
@@ -666,8 +773,43 @@ export class WakeDispositionService {
       });
       resolved += count;
     }
+    for (const review of reviews) {
+      const landed = landingOf(review.projectId, review.taskId!);
+      if (!landed) continue;
+      const { count } = await this.prisma.projectOpenItem.updateMany({
+        where: { id: review.id, state: 'OPEN' },
+        data: {
+          state: 'RESOLVED',
+          resolution: 'LANDED',
+          resolvedAt: new Date(),
+          resolvedBy: 'PLATFORM',
+          resolutionNote: `the work landed on ${landed.targetBranch}`,
+        },
+      });
+      resolved += count;
+    }
     return resolved;
   }
+}
+
+/** One serving task's delivery, with the five observations the fold reads and where they came from. */
+interface ObservedDelivery {
+  taskId: string;
+  /** The work session whose reported snapshot `changedPaths` is, when the task has one. */
+  sessionId: string | null;
+  /** The criterion the fact is about, by its key. */
+  criterionKey: string;
+  observed: DeliveryObservations;
+}
+
+/** A delivery the fold stopped on, and what it said about it. */
+interface StoppedDelivery extends ObservedDelivery {
+  disposition: BlockerDisposition;
+}
+
+/** The readings an exception item can carry (`recordDeliveryReview`). */
+function isDeliveryReviewReason(reason: BlockerDisposition['reason']): reason is DeliveryReviewReason {
+  return reason === 'OUTSIDE_DECLARED_SCOPE' || reason === 'MERGE_REFUSED_BY_GIT';
 }
 
 /** The reasons whose blocker a landing ends — see `resolveLandedBlockers`. */

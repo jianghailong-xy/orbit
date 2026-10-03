@@ -1,6 +1,8 @@
+import { COORDINATOR_AUTHORITY, type CoordinatorAction } from './coordinator-authority';
+
 /**
- * The four readings of a finished delivery that a machine must not settle, and the one blocker
- * each of them raises.
+ * The four readings of a finished delivery that a machine must not settle, and who each of them is
+ * put to.
  *
  * §0 — THE OTHER HALF OF THE SAME NIGHT
  * =====================================
@@ -28,7 +30,8 @@
  * ==============================================
  * Each row below answers one question, and it is always the same question: has this happened? Not
  * "is the argument good", not "are the extra files harmless", not "should the standard have said
- * that". The blocker carries the observation to a person and stops; nothing here weighs it.
+ * that". The observation is carried to whoever §4 says decides it, and stops; nothing here weighs
+ * it.
  *
  * That is also why every kind below is one the vocabulary already had. `project_blocker.kind` is a
  * ROUTING word — it answers "who fixes this and what does the UI offer them" — and these four
@@ -72,6 +75,27 @@
  * `null` means this fold recognised nothing, exactly as its sibling's `null` does. It is not a
  * clearance. An ordinary delivery — one whose five observations all came back ordinary — answers
  * `null` here, and what happens to it next is the other table's answer.
+ *
+ * §4 — WHO IS ASKED IS THE TIER OF WHAT IS ASKED
+ * ==============================================
+ * The four were one table because they were one kind of stop: a machine may not settle any of
+ * them. They are not one kind of DECISION, and treating them as one is what put a mechanical path
+ * warning in front of the account owner on 2026-10-01 (project 34Y7My8sqhKLWtmCQYv1l, task ③: twenty
+ * files of an owner-done gate its declaration happened not to name, raised CRITICAL and USER, and
+ * the coordinator — the conversation the owner had switched on to make exactly that call — could
+ * only relay it back to them).
+ *
+ * Two of the four are about the RULER: an argument that a criterion does not apply asks for the
+ * exam to be edited, and a criterion that moved under the work asks which version of the exam
+ * counts. `coordinator-authority.ts` grades both acts HUMAN_ONLY, so they stay the owner's blocker
+ * whoever is coordinating. The other two are about the DELIVERY: whether files outside its
+ * declaration belong to it, and what to do with a branch git refused. That is
+ * `DECIDE_TASK_LANDING`, graded COORDINATOR_BOUNDED, so it becomes an exception item
+ * (`project-open-item.ts`, `DELIVERY_REVIEW`) and is assigned the way every exception item is — to
+ * the project's coordinator conversation when the project is Automatic and has a live one, to the
+ * owner when it has none — and it escalates to the owner when the conversation does nothing with it
+ * for the project's window. Nothing here reads the switch: the tier decides which surface a question
+ * goes to, and the exception item's own assignment rule decides who on that surface is asked first.
  */
 
 /** Which of the four this is. The reason a person is being asked, in one word. */
@@ -108,6 +132,35 @@ export const BLOCKER_KIND_FOR: Readonly<Record<BlockerReason, string>> = {
   // The kind that has always meant this.
   MERGE_REFUSED_BY_GIT: 'MERGE_CONFLICT',
 };
+
+/**
+ * The act each reason asks somebody to perform, as `coordinator-authority.ts` names it (§4).
+ *
+ * Total over the reasons, so a fifth reason cannot arrive without somebody deciding who answers it.
+ */
+export const BLOCKER_DECISION: Readonly<Record<BlockerReason, CoordinatorAction>> = {
+  // "This criterion does not apply to me" is a request to edit the exam.
+  CRITERION_EXEMPTION_ARGUED: 'EDIT_ACCEPTANCE_CRITERIA',
+  // "Does it pass under today's wording" is a question about which version of the exam counts.
+  ACCEPTANCE_STANDARD_MOVED: 'CONFIRM_ACCEPTANCE_CRITERIA',
+  // Whether files outside the declaration belong to the delivery, and what to do with a branch git
+  // would not merge: both are what happens to this task's landing.
+  OUTSIDE_DECLARED_SCOPE: 'DECIDE_TASK_LANDING',
+  MERGE_REFUSED_BY_GIT: 'DECIDE_TASK_LANDING',
+};
+
+/**
+ * Where a reason's question is put (§4): a blocker the account owner answers, or an exception item
+ * assigned coordinator-first.
+ */
+export type BlockerRoute = 'OWNER_BLOCKER' | 'EXCEPTION_ITEM';
+
+/** §4, as a rule: the tier of the act the reason asks for, and nothing else. */
+export function blockerRoute(reason: BlockerReason): BlockerRoute {
+  return COORDINATOR_AUTHORITY[BLOCKER_DECISION[reason]] === 'HUMAN_ONLY'
+    ? 'OWNER_BLOCKER'
+    : 'EXCEPTION_ITEM';
+}
 
 /** Everything the fold may look at. Every field is an observation; none is a setting. */
 export interface DeliveryObservations {

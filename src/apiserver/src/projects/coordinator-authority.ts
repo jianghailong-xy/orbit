@@ -95,6 +95,7 @@ export const COORDINATOR_ACTIONS = [
   'CONCLUDE_VERDICT_PASS',
   'SETTLE_PROJECT_DONE',
   'RESOLVE_PROJECT_BLOCKER',
+  'DECIDE_TASK_LANDING',
 ] as const;
 export type CoordinatorAction = (typeof COORDINATOR_ACTIONS)[number];
 
@@ -152,6 +153,20 @@ export const COORDINATOR_AUTHORITY: Readonly<Record<CoordinatorAction, Authority
   // name the write it would authorize. Calling this HUMAN_ONLY would claim exactly the property
   // that review found the approval row does not have.
   RESOLVE_PROJECT_BLOCKER: 'COORDINATOR_BOUNDED',
+  // What happens to a finished task's delivery that the platform could not land cleanly by itself:
+  // files it changed outside its own declaration, a branch git refused, a combined-tree check that
+  // came back red, an integration that errored. Four answers, every one reversible: accept the
+  // delivery as it is, send the task back, replace it with a successor, or run its landing again.
+  //
+  // BOUNDED, and the bound is what each answer leaves behind rather than who may give it. Accepting
+  // writes the reason on the exception item the question arrived as (`open_item_resolve`); a rerun
+  // is one generation per call and carries its reason onto the generation it queues and the items it
+  // supersedes (`integration_retry`) — the platform never reruns a failed landing by itself, so a red
+  // check is never hidden behind a retry nobody decided on; sending back and replacing are the task
+  // doors the coordinator already has. None of the four touches the ruler: a delivery that argues a
+  // criterion does not apply, or whose criterion moved under it, is the two HUMAN_ONLY rows above and
+  // is the account owner's whoever is asked first (`blocker-disposition.ts` §4).
+  DECIDE_TASK_LANDING: 'COORDINATOR_BOUNDED',
 };
 
 /**

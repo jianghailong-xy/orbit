@@ -61,6 +61,13 @@ export interface CriterionUnlandedDelivery {
    * merge has not settled anything a machine may act on.
    */
   blockerKind?: string;
+  /**
+   * The delivery review this delivery was put to its coordinator as, instead of a blocker for the
+   * owner: files outside its declaration, or a branch git refused, in an Automatic project
+   * (`blocker-disposition.ts` §4). Present exactly when `action` and `blockerKind` are absent and the
+   * delivery still stopped.
+   */
+  review?: { reason: string; itemId: string | null };
 }
 
 /**

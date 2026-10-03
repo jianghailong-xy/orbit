@@ -56,7 +56,17 @@ export const COMPLETION_INPUT_DELIVERY_FAILED = 'COMPLETION_INPUT_DELIVERY_FAILE
 export type SpentFact = (CompletionInputRouteOutcome | WakeSpend) & {
   action?: MechanicalAction;
   blockerKind?: string;
+  /** The delivery review this fact filed for the coordinator instead of a blocker for the owner
+   *  (`blocker-disposition.ts` §4). A stop like a blocker is: no action rides beside it. */
+  review?: DeliveryReviewStop;
 };
+
+/** A delivery that stopped on a question about its landing, put to the coordinator first. */
+export interface DeliveryReviewStop {
+  reason: string;
+  /** The exception item it went to, or null when that question was already open. */
+  itemId: string | null;
+}
 
 export type CompletionInputRouteOutcome =
   | { outcome: 'CONSUMED'; wakeId: string; idempotencyKey: string; consumer: CompletionInputConsumer }
@@ -159,6 +169,11 @@ export class CompletionInputRouter {
     );
     if (outcome.outcome === 'REFUSED' || outcome.outcome === 'ALREADY_AWAKE') return outcome;
     const blocker = await this.disposition.raiseBlockerIfNeeded(fact);
+    if (blocker?.route === 'EXCEPTION_ITEM') {
+      // A question about the delivery's landing: the exception item is the durable handoff, and it
+      // is already on its way to the coordinator (or the owner, when there is no coordinator).
+      return { ...outcome, review: { reason: blocker.reason, itemId: blocker.itemId } };
+    }
     if (blocker) {
       // The blocker row is the durable human handoff. Automatic also gets a separate wake keyed
       // to that episode, so the coordinator can explain it and use its existing owner-approval
@@ -362,6 +377,7 @@ export class CompletionInputRouter {
         ...(routed.outcome === 'REFUSED' ? { refusalCode: routed.refusalCode } : {}),
         ...(routed.action ? { action: routed.action } : {}),
         ...(routed.blockerKind ? { blockerKind: routed.blockerKind } : {}),
+        ...(routed.review ? { review: routed.review } : {}),
       });
     }
     // Last, and for every project named rather than only those with a fact left: a criterion whose

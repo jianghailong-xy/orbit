@@ -28,6 +28,7 @@ import { SessionNotSendable, SessionsService } from '../sessions/sessions.servic
 import {
   AskedQuestion,
   CoordinatorQuestion,
+  DELIVERY_REVIEW_KIND,
   INTEGRATION_ITEM_KINDS,
   MAX_OPEN_ITEM_RESOLUTION_NOTE,
   OpenItemAssignee,
@@ -38,6 +39,7 @@ import {
   SESSION_ENDING_SELECT,
   TASK_FAILURE_CHAIN_LIMIT,
   coordinatorQuestion,
+  deliveryReviewDetailLine,
   openItemActions,
   openItemFacts,
   openItemMessage,
@@ -114,6 +116,10 @@ export const OPEN_ITEM_HAS_ITS_OWN_DOOR = 'OPEN_ITEM_HAS_ITS_OWN_DOOR';
 const HAND_CLOSABLE_RESOLUTIONS: Readonly<Record<string, 'HANDLED' | 'WITHDRAWN'>> = {
   ...Object.fromEntries(INTEGRATION_ITEM_KINDS.map((kind) => [kind, 'HANDLED' as const])),
   TASK_FAILED: 'HANDLED',
+  // A delivery whose landing its assignee decided to accept as delivered — files outside its
+  // declaration included. The note is the decision: what the reviewer compared the paths against
+  // and why they belong to the work (`blocker-disposition.ts` §4).
+  [DELIVERY_REVIEW_KIND]: 'HANDLED',
   // §5.2 R12: a question is withdrawn, not handled, and who withdraws it is who asked it.
   COORDINATOR_QUESTION: 'WITHDRAWN',
 };
@@ -1340,6 +1346,10 @@ export class ProjectOpenItemService {
    * new generation §4.2 names, and an item that closed on every retry would close on the way to the
    * landing that is supposed to answer it. Cancelled and replaced are the two that do — nobody is
    * going to land a task that is gone.
+   *
+   * A delivery review (`DELIVERY_REVIEW`) is the third statement and the third axis: it is about the
+   * delivery the task finished with, so anything that takes the task off that delivery answers it —
+   * sent back (`RETRIED`), cancelled (`TASK_CLOSED`) or replaced (`SUCCESSOR_FILED`).
    */
   async resolveByFact(taskIds: ReadonlyArray<string | null | undefined>): Promise<void> {
     const ids = unique(taskIds);
@@ -1382,6 +1392,28 @@ export class ProjectOpenItemService {
            AND i."state" = 'OPEN'
            AND t."id" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
            AND (t."status" = 'CANCELLED' OR t."superseded_by_task_id" IS NOT NULL)`);
+      // A delivery review is about the delivery the task finished with, so it is answered by the
+      // task no longer standing on that delivery: sent back (reopened), cancelled, or replaced.
+      // Landing is deliberately not among them: whether files outside a declaration belong to the
+      // work is not something a merge decides, which is why its assignee closes it with a reason
+      // when it accepts it. (A branch git refused is answered by a landing, and
+      // `WakeDispositionService.resolveLandedBlockers` is where that is read.)
+      await this.prisma.$executeRaw(Prisma.sql`
+        UPDATE "project_open_item" i
+           SET "state" = 'RESOLVED',
+               "resolution" = CASE
+                 WHEN t."superseded_by_task_id" IS NOT NULL THEN 'SUCCESSOR_FILED'
+                 WHEN t."status" = 'CANCELLED' THEN 'TASK_CLOSED'
+                 ELSE 'RETRIED' END,
+               "resolved_at" = now(),
+               "resolved_by" = 'PLATFORM',
+               "updated_at" = now()
+          FROM "task" t
+         WHERE i."task_id" = t."id"
+           AND i."kind" = ${DELIVERY_REVIEW_KIND}
+           AND i."state" = 'OPEN'
+           AND t."id" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
+           AND (t."status" <> 'DONE' OR t."superseded_by_task_id" IS NOT NULL)`);
     });
   }
 
@@ -1682,6 +1714,7 @@ function detailLine(kind: string, payload: unknown): string {
   // A pause writes its own, because what it has to say is not "something failed" but what the
   // coordinator spent, what is still running without it, and what resuming does and does not do.
   if (kind === 'FUSE_PAUSED') return fusePausedDetailLine(payload as FusePausedPayload);
+  if (kind === DELIVERY_REVIEW_KIND) return deliveryReviewDetailLine(payload);
   if (kind !== 'TASK_FAILED') return '';
   const failure = (payload ?? {}) as {
     how?: string;

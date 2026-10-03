@@ -27,6 +27,31 @@ session. `docs/project-done-gate.md` is the live page for what decides the value
 
 It is deliberately limited to those actions. It does not redesign authentication.
 
+## A delivery's landing is not a HUMAN_ONLY question (2026-10-03)
+
+What happens to a finished task's delivery that the platform could not land cleanly by itself —
+files it changed outside its own declaration, a branch git refused, a red check on the combined
+tree, an integration error — is `DECIDE_TASK_LANDING`, graded `COORDINATOR_BOUNDED` in
+`coordinator-authority.ts`. The bound is what each answer leaves behind: accepting the delivery
+closes its exception item with the coordinator's reason on it (`open_item_resolve`), a rerun is
+one landing generation per call and carries its reason onto the generation it queues and the items
+it supersedes (`integration_retry`; the platform never reruns one by itself, and a conflict is not
+rerun at all), and sending back or replacing the task are the task doors the coordinator already
+holds. None of them touches the ruler.
+
+So in an Automatic project a delivery outside its declaration, or one git refused, becomes a
+`DELIVERY_REVIEW` exception item assigned to the coordinator conversation, and reaches the account
+owner only through the item's escalation — the coordinator sitting on it for the project's
+`exceptionEscalationSeconds` — or when the project has no live coordinator. The two delivery
+readings that ARE about the ruler stay the owner's blocker whoever coordinates: an argument that a
+criterion does not apply (`EDIT_ACCEPTANCE_CRITERIA`) and a criterion that moved under the work
+(`CONFIRM_ACCEPTANCE_CRITERIA`). With Automatic off nothing is handed to the coordinator at all:
+the unlanded-criterion fact is refused by the switch, every exception item is the owner's from
+birth, and the coordinator's hand-close of one is refused `OPEN_ITEM_NOT_COORDINATOR_ITEM` and its
+rerun `INTEGRATION_RETRY_OWNER_ITEM`, which is the observable form of that boundary.
+`blocker-disposition.ts` §4 is the rule, and
+`src/apiserver/src/projects/automatic-coordinator-routing.pg.spec.ts` holds it against real rows.
+
 ## Decision
 
 `authorityPrincipal(undefined)` must **not** become a blanket refusal. A missing acting Session is

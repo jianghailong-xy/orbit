@@ -33,7 +33,9 @@ import type { PrismaService } from '../prisma/prisma.service';
 
 /** What an item is about (§4.2), and a coordinator's request to start its project
  *  (`START_REQUEST`, `project-start-request.ts`; migration 0333) or to have it recorded done
- *  (`DONE_REQUEST`, `project-done-request.ts`; migration 0345). */
+ *  (`DONE_REQUEST`, `project-done-request.ts`; migration 0345). `DELIVERY_REVIEW` (0359) is a
+ *  finished delivery whose landing somebody has to decide — files outside its declaration, or a
+ *  branch git refused — put to the coordinator first (`blocker-disposition.ts` §4). */
 export const OPEN_ITEM_KINDS = [
   'INTEGRATION_CONFLICT',
   'INTEGRATION_CHECK_FAILED',
@@ -44,6 +46,7 @@ export const OPEN_ITEM_KINDS = [
   'FUSE_PAUSED',
   'START_REQUEST',
   'DONE_REQUEST',
+  'DELIVERY_REVIEW',
 ] as const;
 export type OpenItemKind = (typeof OPEN_ITEM_KINDS)[number];
 
@@ -714,6 +717,119 @@ export async function resolveIntegrationItemsOnLanding(
   });
 }
 
+/** What a finished delivery whose landing somebody has to decide is filed under (0359). */
+export const DELIVERY_REVIEW_KIND = 'DELIVERY_REVIEW' satisfies OpenItemKind;
+
+/** The two readings of a delivery that `DECIDE_TASK_LANDING` answers (`blocker-disposition.ts` §4). */
+export type DeliveryReviewReason = 'OUTSIDE_DECLARED_SCOPE' | 'MERGE_REFUSED_BY_GIT';
+
+/** A finished delivery the platform could not settle, as the reading that stopped it knows it. */
+export interface DeliveryReview {
+  projectId: string;
+  taskId: string;
+  /** The work session whose reported snapshot the paths were read from, when there is one. */
+  sessionId: string | null;
+  reason: DeliveryReviewReason;
+  /** What the question is about: files changed outside the declaration, or the paths git refused. */
+  paths: readonly string[];
+  /** What the task's own declaration named — the other half of the comparison, kept beside it so
+   *  the reader can make the comparison without a second read. */
+  declaredPaths: readonly string[];
+  /** The criterion the work serves, by its key. */
+  criterionKey: string | null;
+}
+
+/** The words an item about a delivery is titled with. */
+const DELIVERY_REVIEW_TITLE: Readonly<Record<DeliveryReviewReason, string>> = {
+  OUTSIDE_DECLARED_SCOPE: 'Changed files it didn’t declare',
+  MERGE_REFUSED_BY_GIT: 'Git refused to merge it',
+};
+
+/** `DR:` + the reading + the task: one open question per reading per task. */
+export function deliveryReviewKey(reason: DeliveryReviewReason, taskId: string): string {
+  return `DR:${reason}:${taskId}`;
+}
+
+/**
+ * Put a finished delivery's landing to whoever decides it (`blocker-disposition.ts` §4).
+ *
+ * Assigned the way an integration failure is (`recordIntegrationFailure`), because it is the same
+ * question asked earlier — what happens to this task's landing — and an item that differed from its
+ * siblings in who it reaches would be a second rule about the same switch: the conversation the
+ * project is coordinated from when the project is Automatic and that conversation is live, the
+ * account owner otherwise; and the project's escalation window on the coordinator's.
+ *
+ * One OPEN item per task and reading (`deliveryReviewKey`), so the same delivery derived again —
+ * every task write and receipt in the project re-derives the fact it is read from — finds the
+ * question already asked. Sending the task back, cancelling it or replacing it ends the item
+ * (`ProjectOpenItemService.resolveByFact`), so a review never outlives the delivery it is about.
+ * What it does NOT do is ask again about the delivery a sent-back task makes next: the fact this is
+ * read from is keyed by the criterion and its tasks' statuses, so the redone task's DONE is the same
+ * fact and is spent once (0174). The message says so — the conversation that sent it back is the one
+ * that reviews what comes back.
+ *
+ * Returns null when there is nothing to file — the task left the project — or the question is
+ * already open.
+ */
+export async function recordDeliveryReview(
+  tx: Prisma.TransactionClient,
+  review: DeliveryReview,
+): Promise<RecordedOpenItem | null> {
+  const task = await tx.task.findUnique({
+    where: { id: review.taskId },
+    select: { ownerId: true, projectId: true, title: true },
+  });
+  if (!task || task.projectId !== review.projectId) return null;
+  const project = await tx.project.findUnique({
+    where: { id: review.projectId },
+    select: {
+      coordinatorEnabled: true,
+      coordinatorSessionId: true,
+      exceptionEscalationSeconds: true,
+      coordinatorSession: { select: SESSION_ENDING_SELECT },
+    },
+  });
+  if (!project) return null;
+
+  const coordinator = project.coordinatorEnabled && project.coordinatorSessionId
+    ? project.coordinatorSession
+    : null;
+  const [assignee, assigneeReason]: [OpenItemAssignee, OpenItemAssigneeReason] =
+    !coordinator ? ['OWNER', 'NO_COORDINATOR']
+      : sessionHasEnded(coordinator) ? ['OWNER', 'COORDINATOR_ENDED']
+        : ['COORDINATOR', 'DEFAULT'];
+  const now = new Date();
+  const [created] = await tx.projectOpenItem.createManyAndReturn({
+    data: [{
+      projectId: review.projectId,
+      ownerId: task.ownerId,
+      kind: DELIVERY_REVIEW_KIND,
+      state: 'OPEN' satisfies OpenItemState,
+      assignee,
+      assigneeReason,
+      taskId: review.taskId,
+      sessionId: review.sessionId,
+      dedupeKey: deliveryReviewKey(review.reason, review.taskId),
+      title: `${DELIVERY_REVIEW_TITLE[review.reason]}: ${task.title}`,
+      payload: {
+        reason: review.reason,
+        paths: [...review.paths],
+        declaredPaths: [...review.declaredPaths],
+        criterionKey: review.criterionKey,
+      },
+      waitingSince: now,
+      assignedAt: now,
+      escalateAt: assignee === 'COORDINATOR'
+        ? new Date(now.getTime() + project.exceptionEscalationSeconds * 1_000)
+        : null,
+    }],
+    skipDuplicates: true,
+    select: { id: true },
+  });
+  if (!created) return null;
+  return { itemId: created.id, projectId: review.projectId, taskId: review.taskId, assignee };
+}
+
 /**
  * The chain this task is one attempt in (§4.5 X-C1), and what has already failed on it.
  *
@@ -981,6 +1097,9 @@ function landingNextStep(projectId: string, taskId: string, payload: Integration
  * `task` is a column of the item rather than of its payload — a conflict is about the task whose
  * branch would not land, and the card's first row names it.
  *
+ * A delivery review reads the same way: its `files` are the paths the question is about, and
+ * `review` says which reading it was and what the declaration named.
+ *
  * Null for the kinds whose card has no such rows (a question is its own card and a pause writes its
  * own sentence) and for a payload that is not an object at all.
  */
@@ -989,23 +1108,23 @@ export function openItemFacts(
   payload: unknown,
   task: { id: string; title: string } | null,
 ): OpenItemFacts | null {
-  if (!(INTEGRATION_ITEM_KINDS as readonly string[]).includes(kind) && kind !== 'TASK_FAILED') {
+  if (!(INTEGRATION_ITEM_KINDS as readonly string[]).includes(kind) && kind !== 'TASK_FAILED'
+      && kind !== DELIVERY_REVIEW_KIND) {
     return null;
   }
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
-  const row = payload as IntegrationItemPayload & {
+  const row = payload as IntegrationItemPayload & DeliveryReviewPayload & {
     how?: string;
     exitCode?: number;
     expectedExitCode?: number;
     chain?: { failuresInChain?: number; limit?: number };
   };
+  const review = kind === DELIVERY_REVIEW_KIND ? deliveryReviewOf(row) : null;
   return {
     task,
     targetRef: filled(row.targetRef),
     targetSha: filled(row.targetSha),
-    files: Array.isArray(row.files)
-      ? row.files.filter((file): file is string => typeof file === 'string' && file !== '')
-      : [],
+    files: review ? review.paths : paths(row.files),
     nothingLanded: row.nothingLanded === true,
     check: checkResult(row.check),
     branchUnchanged: row.branchUnchanged === true,
@@ -1019,11 +1138,37 @@ export function openItemFacts(
           limit: typeof row.chain?.limit === 'number' ? row.chain.limit : TASK_FAILURE_CHAIN_LIMIT,
         }
       : null,
+    review: review ? { reason: review.reason, declaredPaths: review.declaredPaths } : null,
   };
 }
 
 function filled(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
+}
+
+function paths(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((file): file is string => typeof file === 'string' && file !== '')
+    : [];
+}
+
+/** A delivery review's payload (`recordDeliveryReview`), every key optional for the reason the
+ *  integration payload's are. */
+interface DeliveryReviewPayload {
+  reason?: string;
+  paths?: unknown;
+  declaredPaths?: unknown;
+  criterionKey?: string | null;
+}
+
+/** The review a payload records, or null when it records none this build can read. */
+function deliveryReviewOf(row: DeliveryReviewPayload): {
+  reason: DeliveryReviewReason;
+  paths: string[];
+  declaredPaths: string[];
+} | null {
+  if (row.reason !== 'OUTSIDE_DECLARED_SCOPE' && row.reason !== 'MERGE_REFUSED_BY_GIT') return null;
+  return { reason: row.reason, paths: paths(row.paths), declaredPaths: paths(row.declaredPaths) };
 }
 
 /** The check that disagreed, complete enough to draw: a payload that names no command is not one. */
@@ -1090,6 +1235,9 @@ export function openItemMessage(item: OpenItemMessageSource): string {
           + '任务做事，今天也没有一条属于协调会话的重试门——需要重跑时找账号所有者说明，不要自己造一条作业。\n')
       + `\n${notice}`;
   }
+  if (item.kind === DELIVERY_REVIEW_KIND && item.taskId) {
+    return deliveryReviewMessage(item, projectId, payload, notice);
+  }
   if (item.kind !== 'TASK_FAILED' || !item.taskId) {
     return `【例外待办】${item.title}\n\n`
       + `项目 ${projectId} 有一条需要你处理的例外。待办编号 ${uuidToBase62(item.id)}。\n\n`
@@ -1114,6 +1262,104 @@ export function openItemMessage(item: OpenItemMessageSource): string {
     + `失败原因先用 task_get（taskId 传 ${taskId}）读任务评论与它的会话，不要照着这条消息猜。\n`
     + `任务重新跑起来、被取代、被取消或完成之后，这条待办由平台自己关闭，你不用回报。`
     + `${handClose}\n\n`
+    + notice;
+}
+
+/** Most paths one review's message lists; the card and the open-items read carry all of them. */
+const MAX_REVIEW_PATHS_IN_MESSAGE = 40;
+
+/**
+ * A delivery review's one line under its title, in the list's words: how many paths, and the first
+ * of them. The rest are on the card (`facts.files`), which is where a reader who wants them looks.
+ */
+export function deliveryReviewDetailLine(payload: unknown): string {
+  const review = deliveryReviewOf((payload ?? {}) as DeliveryReviewPayload);
+  if (!review) return '';
+  const count = review.paths.length;
+  const files = `${count} file${count === 1 ? '' : 's'}`;
+  const first = review.paths[0];
+  const rest = count > 1 ? ` · +${count - 1}` : '';
+  const named = first ? ` · ${first}${rest}` : '';
+  return review.reason === 'MERGE_REFUSED_BY_GIT'
+    ? `Git refused ${files}${named}`
+    : `${files} outside its declaration${named}`;
+}
+
+/**
+ * What the coordinator is told about a delivery whose landing it decides (`blocker-disposition.ts`
+ * §4). Built, like every item message, only from columns that never change.
+ *
+ * It says the one thing the coordinator cannot see from where it sits — the reading is MECHANICAL, a
+ * comparison of paths and nothing more — then the answers, each with the door that gives it, so the
+ * decision is made against the task's declaration, its criterion and its actual diff rather than
+ * against this message. And it says what the question is not: a question about the ruler, and so
+ * not one to put to the owner.
+ *
+ * A rerun is offered the way `integration_retry` takes one (`decideIntegrationRetry`): for a landing
+ * that failed a check, ran out of time or errored. A branch git refused is not rerun — the same
+ * commits conflict the same way — so that reading's answers are the reworking ones and a record of a
+ * merge made by hand.
+ */
+function deliveryReviewMessage(
+  item: OpenItemMessageSource,
+  projectId: string,
+  payload: unknown,
+  notice: string,
+): string {
+  const review = deliveryReviewOf((payload ?? {}) as DeliveryReviewPayload);
+  const taskId = uuidToBase62(item.taskId!);
+  const itemId = uuidToBase62(item.id);
+  const listed = (label: string, all: readonly string[]): string => {
+    if (all.length === 0) return `${label}：无\n`;
+    const shown = all.slice(0, MAX_REVIEW_PATHS_IN_MESSAGE).map((file) => `- ${file}`).join('\n');
+    const more = all.length > MAX_REVIEW_PATHS_IN_MESSAGE
+      ? `\n- ……另有 ${all.length - MAX_REVIEW_PATHS_IN_MESSAGE} 个`
+      : '';
+    return `${label}（${all.length} 个）：\n${shown}${more}\n`;
+  };
+  const resolve = `open_item_resolve（projectId 传 ${projectId}，itemId 传 ${itemId}）`;
+  const retry = `integration_retry（projectId 传 ${projectId}，taskId 传 ${taskId}，`
+    + 'reason 写明这次为什么会不同）';
+  const conflict = review?.reason === 'MERGE_REFUSED_BY_GIT';
+  const observed = conflict
+    ? `项目 ${projectId} 的任务 ${taskId} 有一条合并回执说 git 拒绝了合并。\n`
+      + listed('git 报告冲突的文件', review?.paths ?? [])
+    : `项目 ${projectId} 的任务 ${taskId} 的交付改了它自己的声明里没有提到的文件。`
+      + '这是一条机械的范围告警：平台只拿任务标题、描述和验收标准里写到的路径，去比这次交付实际改动的'
+      + '文件，不判断这些改动对不对。\n'
+      + listed('声明里写到的路径', review?.declaredPaths ?? [])
+      + listed('声明之外改动的文件', review?.paths ?? []);
+  const answers = conflict
+    ? [
+        `退回：task_comment 写清冲突在哪，再 task_reopen（taskId 传 ${taskId}），让它在任务分支上解决；`,
+        '取代：task_update 置 CANCELLED，再 task_create 带 supersedesTaskId，另起一个能合进去的任务；',
+        '已经手工解决并合入：用 merge_receipt 记下那次合并（成果落地后这条待办自己关闭），'
+          + `或用 ${resolve} 写明你是怎么处理的；`,
+        '不要原样重跑：同样的提交再合一次还会冲突，integration_retry 也不接受冲突。',
+      ]
+    : [
+        `接受范围：这些文件属于这份交付该做的事——用 ${resolve} 写明你的判断，理由会留在待办上。`
+          + '接受只记下判断、本身不合并：项目有自己的集成分支时，任务 DONE 时平台已经排了它的落地作业；'
+          + '其余情况照你收到「干完但还没落 main」时的做法落地；',
+        '退回：交付里有不该改的部分——task_comment 写清要撤回或拆出的改动，'
+          + `再 task_reopen（taskId 传 ${taskId}）让它按原任务重做；`,
+        '取代：任务的范围本身就写错了——task_update 置 CANCELLED，再 task_create 带 supersedesTaskId，'
+          + '新任务把要改的路径写进声明；',
+        '重跑落地：交付没问题，是它的落地作业因与交付无关的原因没过（检查失败、超时或集成出错）——'
+          + `用 ${retry} 重排一次落地，再用 open_item_resolve 关掉这条待办；冲突不能重跑。`,
+      ];
+  return `【例外待办】${item.title}\n\n`
+    + `${observed}\n`
+    + '这个项目开着 Automatic：这份交付的落地去留由你判，不先交给账号所有者。'
+    + `先读任务的声明（task_get，taskId 传 ${taskId}）、它服务的那条判据（project_get 的 `
+    + 'acceptanceCriteriaItems）和它实际的改动（它的会话的 diff），再选一条：\n'
+    + `${answers.map((line) => `- ${line}`).join('\n')}\n`
+    + '任务被退回、取消或被取代之后，这条待办由平台自己关闭；退回的任务重做之后的交付不会再自动生成'
+    + '一条这样的待办，复核它的是退回它的你。这条会话停着不处理超过项目的 exceptionEscalationSeconds，'
+    + '它会交给账号所有者。\n'
+    + '这不是验收标准的问题，不要为它 ask_owner：改验收标准、确认标准集仍然只有账号所有者能做；'
+    + '交付声称某条判据不适用、或判据在它开工之后被改过，那两种情况是账号所有者的 blocker，'
+    + '不会作为这种待办交给你。\n\n'
     + notice;
 }
 
@@ -1176,7 +1422,11 @@ export async function readOpenItemDeliveryCard(
     kind: item.kind as OpenItemKind,
     title: item.title,
     task: task ? { id: task.id, title: task.title, sessionId: item.sessionId } : null,
-    files: item.kind === 'INTEGRATION_CONFLICT' ? payload.files ?? [] : [],
+    files: item.kind === 'INTEGRATION_CONFLICT'
+      ? payload.files ?? []
+      : item.kind === DELIVERY_REVIEW_KIND
+        ? deliveryReviewOf(payload as DeliveryReviewPayload)?.paths ?? []
+        : [],
     targetRef: payload.targetRef ?? null,
     check: payload.check?.name
       ? {

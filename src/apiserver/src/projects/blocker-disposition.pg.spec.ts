@@ -49,13 +49,16 @@ import {
 import { mechanicalAction } from './mechanical-disposition';
 import { criteriaFromDefinitions } from './project-acceptance';
 import { ProjectAcceptanceService } from './project-acceptance.service';
+import { ProjectOpenItemService } from './project-open-item.service';
 import { ProjectTasksSettledProducer } from './project-tasks-settled.producer';
 import { ProjectsService } from './projects.service';
 import { TaskExceptionInputProducer } from './task-exception-input.producer';
 import { WakeDispositionService } from './wake-disposition.service';
 
 /**
- * The four deliveries a coordinator may not settle, and the one blocker each of them raises.
+ * The four deliveries a machine may not settle, and where each of them is put: the two about the
+ * ruler raise one owner blocker each, and the two about the delivery's landing become one delivery
+ * review each, which the project's coordinator decides first (`blocker-disposition.ts` §4).
  *
  *   COORDINATOR_PG_URL=postgresql://... \
  *   COORDINATOR_PG_EXPECTED_DATABASE=pcc... \
@@ -181,6 +184,8 @@ async function connect(): Promise<Stack> {
       prisma,
       new CoordinatorJudgmentService(prisma, new CoordinatorWakeService(prisma), sessions),
       new CoordinatorDeliveryService(prisma, new CoordinatorWakeService(prisma), sessions),
+      // What hands a delivery review to the coordinator the moment it is filed, as in production.
+      new ProjectOpenItemService(prisma, sessions),
     ),
     new CriterionUnlandedProducer(prisma, new CoordinatorConvergenceService(prisma)),
   );
@@ -601,24 +606,40 @@ const blockerNoticesTo = (db: PrismaClient, sessionId: string) =>
     where: { sessionId, content: { contains: '需要账号所有者裁决' } },
   });
 
-/** Let the standing coordinator finish reading the blocker handoff before a control delivery. */
-const coordinatorReadsBlocker = async (db: PrismaClient, sessionId: string) => {
-  const notice = await db.conversationTurn.findFirst({
-    where: { sessionId, content: { contains: '需要账号所有者裁决' }, status: 'PENDING' },
-    orderBy: { seq: 'asc' },
-  });
-  assert.ok(notice, 'the blocker handoff was not queued for the coordinator');
-  const now = new Date();
-  await db.conversationTurn.update({
-    where: { id: notice.id },
-    data: { status: 'ANSWERED', deliveredAt: now, answeredAt: now },
-  });
-  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
-};
-
 /** Whether this task was started — the observable half of "the next one was released". */
 const sessionsOf = (db: PrismaClient, taskId: string) =>
   db.session.count({ where: { taskId, deletedAt: null } });
+
+/** The delivery reviews filed on one project — the coordinator's half of `blocker-disposition.ts` §4. */
+const reviewsOf = (db: PrismaClient, projectId: string) =>
+  db.projectOpenItem.findMany({
+    where: { projectId, kind: 'DELIVERY_REVIEW' },
+    select: { id: true, taskId: true, assignee: true, assigneeReason: true, state: true, payload: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+/** The words the standing conversation was handed, beyond the prompt it opened with. */
+const toldTo = async (db: PrismaClient, sessionId: string) =>
+  (await db.conversationTurn.findMany({
+    where: { sessionId, clientTurnId: { not: SessionsService.initialTurnClientId(sessionId) } },
+    select: { content: true },
+    orderBy: { seq: 'asc' },
+  })).map((turn) => turn.content ?? '');
+
+/**
+ * The coordinator conversation reads what it was handed and goes idle again, which is what a runner
+ * does with a queued turn. Without it the next message on the `resume` carrier would be refused as
+ * "not read the last one yet" (`coordinator-delivery.service.ts` §2.1) — true, and not this file's
+ * subject.
+ */
+async function coordinatorReads(db: PrismaClient, sessionId: string): Promise<void> {
+  const now = new Date();
+  await db.conversationTurn.updateMany({
+    where: { sessionId, status: 'PENDING' },
+    data: { status: 'ANSWERED', deliveredAt: now, answeredAt: now },
+  });
+  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+}
 
 const judgmentSessions = (db: PrismaClient, ownerId: string) =>
   db.session.findMany({
@@ -645,12 +666,20 @@ const STATED: Readonly<Record<Case, string>> = {
   CONTROL: '这条标准的活规规矩矩',
 };
 
-const EXPECTED_KIND: Readonly<Record<Exclude<Case, 'CONTROL'>, string>> = {
+/** The two about the RULER, and the owner blocker each raises. */
+const EXPECTED_KIND: Readonly<Record<'EXEMPTION' | 'STANDARD', string>> = {
   EXEMPTION: 'HUMAN_DECISION_REQUIRED',
   STANDARD: 'POLICY_MANUAL_HOLD',
-  SCOPE: 'AWAITING_USER_APPROVAL',
-  CONFLICT: 'MERGE_CONFLICT',
 };
+
+/** The two about the delivery's LANDING, and the reading the coordinator's review records. */
+const EXPECTED_REVIEW: Readonly<Record<'SCOPE' | 'CONFLICT', string>> = {
+  SCOPE: 'OUTSIDE_DECLARED_SCOPE',
+  CONFLICT: 'MERGE_REFUSED_BY_GIT',
+};
+
+const isRulerCase = (which: Exclude<Case, 'CONTROL'>): which is 'EXEMPTION' | 'STANDARD' =>
+  which === 'EXEMPTION' || which === 'STANDARD';
 
 interface Delivered {
   f: Fixture;
@@ -711,8 +740,9 @@ async function deliverCase(
 }
 
 // (a) -----------------------------------------------------------------------------------------
-test('four deliveries a machine may not settle — an argued exemption, a moved standard, an '
-  + 'unasked-for file and a branch git refused — each raise exactly one blocker of their own kind',
+test('four deliveries a machine may not settle — an argued exemption and a moved standard each raise '
+  + 'one owner blocker of their own kind, and an unasked-for file and a branch git refused each '
+  + 'become one delivery review the coordinator decides first',
   { skip, timeout: 420_000 }, async () => {
     const stack = await connect();
     const four: Array<Exclude<Case, 'CONTROL'>> = ['EXEMPTION', 'STANDARD', 'SCOPE', 'CONFLICT'];
@@ -723,29 +753,57 @@ test('four deliveries a machine may not settle — an argued exemption, a moved 
         const one = await deliverCase(stack, `stop-${which.toLowerCase()}`, which);
         delivered.push(one);
         const spent = criterionFor(stack, one.f, one.criterionKey);
-        // Recorded, not DELIVERED. The standing conversation is the thing that performs merges,
-        // and it receives a separate handoff explaining the human-owned blocker rather than an
-        // instruction to merge this delivery.
+        // Recorded, not DELIVERED: the merge order the standing conversation is otherwise sent is
+        // exactly what none of the four may be given.
         assert.equal(spent[0]?.outcome, 'CONSUMED', `${which}: the fact took the wrong terminal`);
-        assert.equal(await messagesTo(stack.db, one.f.coordinatorSessionId), 1,
-          `${which}: the coordinator did not receive the blocker handoff`);
-        assert.equal(await blockerNoticesTo(stack.db, one.f.coordinatorSessionId), 1,
-          `${which}: the coordinator received no human-decision explanation`);
+        const told = await toldTo(stack.db, one.f.coordinatorSessionId);
+        assert.equal(told.length, 1, `${which}: the coordinator was not handed exactly one message`);
+        assert.ok(told.every((text) => !text.includes('合并到 main')),
+          `${which}: a delivery that had to stop still told the coordinator to merge it`);
 
-        // 1 — its own kind, and exactly one row for it.
-        assert.equal(spent[0]?.blockerKind, EXPECTED_KIND[which],
-          `${which}: the delivery raised the wrong kind, or none`);
-        assert.equal(await blockerCount(stack.db, one.f.projectId), 1,
-          `${which}: the delivery raised something other than exactly one blocker`);
-        assert.equal(await stack.db.projectBlocker.count() - before, 1,
-          `${which}: the blocker table did not gain exactly one row`);
-        const [row] = await openBlockers(stack.db, one.f.projectId);
-        assert.equal(row?.kind, EXPECTED_KIND[which], `${which}: the row is not the reported kind`);
-        assert.equal(row?.subjectId, one.taskId, `${which}: the row is about a different task`);
-        assert.equal(row?.owner, 'USER', `${which}: the row was not addressed to a person`);
+        if (isRulerCase(which)) {
+          // 1 — the ruler: its own kind of blocker, exactly one, on the owner; the coordinator is
+          // handed the explanation of a decision that is not its own, and no review is filed.
+          assert.equal(spent[0]?.blockerKind, EXPECTED_KIND[which],
+            `${which}: the delivery raised the wrong kind, or none`);
+          assert.equal(spent[0]?.review, undefined, `${which}: a question about the ruler became a review`);
+          assert.equal(await blockerCount(stack.db, one.f.projectId), 1,
+            `${which}: the delivery raised something other than exactly one blocker`);
+          assert.equal(await stack.db.projectBlocker.count() - before, 1,
+            `${which}: the blocker table did not gain exactly one row`);
+          const [row] = await openBlockers(stack.db, one.f.projectId);
+          assert.equal(row?.kind, EXPECTED_KIND[which], `${which}: the row is not the reported kind`);
+          assert.equal(row?.subjectId, one.taskId, `${which}: the row is about a different task`);
+          assert.equal(row?.owner, 'USER', `${which}: the row was not addressed to a person`);
+          assert.deepEqual(await reviewsOf(stack.db, one.f.projectId), [],
+            `${which}: a question about the ruler was handed to the coordinator to decide`);
+          assert.equal(await blockerNoticesTo(stack.db, one.f.coordinatorSessionId), 1,
+            `${which}: the coordinator received no human-decision explanation`);
+        } else {
+          // 1 — the landing: no blocker, one review, the coordinator's, about this task, and the
+          // coordinator handed it — never the owner first, and not as a human-decision handoff.
+          assert.equal(spent[0]?.blockerKind, undefined, `${which}: the delivery still raised a blocker`);
+          assert.equal(spent[0]?.review?.reason, EXPECTED_REVIEW[which],
+            `${which}: the delivery was not put to the coordinator as a review`);
+          assert.equal(await blockerCount(stack.db, one.f.projectId), 0,
+            `${which}: the owner was handed a blocker for a question about the landing`);
+          assert.equal(await stack.db.projectBlocker.count() - before, 0,
+            `${which}: the blocker table gained a row`);
+          const reviews = await reviewsOf(stack.db, one.f.projectId);
+          assert.equal(reviews.length, 1, `${which}: not exactly one review was filed`);
+          assert.equal(reviews[0]!.id, spent[0]?.review?.itemId);
+          assert.equal(reviews[0]!.taskId, one.taskId, `${which}: the review is about a different task`);
+          assert.equal(reviews[0]!.assignee, 'COORDINATOR', `${which}: the review went to the owner first`);
+          assert.equal(reviews[0]!.assigneeReason, 'DEFAULT');
+          assert.equal(await blockerNoticesTo(stack.db, one.f.coordinatorSessionId), 0,
+            `${which}: a question about the landing was relayed as the owner's decision`);
+          assert.ok(told[0]!.includes('open_item_resolve') || told[0]!.includes('merge_receipt'),
+            `${which}: the coordinator was handed the review without a door to answer it`);
+        }
 
-        // 2 — nothing merged, and the next task was not released. The sibling is OPEN, opted in
-        // and assigned to a live runner: case (b) shows the same task start when nothing stops.
+        // 2 — nothing merged, and the next task was not released: who answers changed, not whether
+        // this edge goes on without an answer. The sibling is OPEN, opted in and assigned to a live
+        // runner: case (b) shows the same task start when nothing stops.
         assert.equal(await landedReceipts(stack.db, one.f.projectId), 0,
           `${which}: a delivery that had to stop produced a merge`);
         assert.equal(await sessionsOf(stack.db, one.choreId), 0,
@@ -764,10 +822,11 @@ test('four deliveries a machine may not settle — an argued exemption, a moved 
 
       const stops = delivered.map((one) => criterionFor(stack, one.f, one.criterionKey)[0]);
       assert.deepEqual(stops.map((d) => d?.blockerKind),
-        four.map((which) => EXPECTED_KIND[which]),
-        'the four deliveries did not raise the four kinds');
-      assert.equal(new Set(stops.map((d) => d?.blockerKind)).size, 4,
-        'two of the four deliveries raised the same kind');
+        [EXPECTED_KIND.EXEMPTION, EXPECTED_KIND.STANDARD, undefined, undefined],
+        'the two questions about the ruler did not raise their two kinds');
+      assert.deepEqual(stops.map((d) => d?.review?.reason),
+        [undefined, undefined, EXPECTED_REVIEW.SCOPE, EXPECTED_REVIEW.CONFLICT],
+        'the two questions about the landing did not become their two reviews');
 
       // 5 — and none of them chose an action. This is the whole of "the two tables never both
       // answer", and it is not a vacuous statement about deliveries nothing was going to be done
@@ -780,35 +839,39 @@ test('four deliveries a machine may not settle — an argued exemption, a moved 
         'the other table no longer merges a round that passed, so this non-overlap says nothing',
       );
       assert.deepEqual(stops.map((d) => d?.action), [undefined, undefined, undefined, undefined],
-        'a delivery that raised a blocker also chose an action a coordinator would act on');
+        'a delivery that stopped also chose an action a coordinator would act on');
 
-      // And the four words are words the vocabulary already had: no migration, no new member of
-      // the closed set, nothing for the censuses that keep that set and the code agreeing.
+      // The two blocker words are words the vocabulary already had: no new member of the closed set.
       const [constraint] = await stack.db.$queryRaw<Array<{ def: string }>>`
         SELECT pg_get_constraintdef(oid) AS def
           FROM pg_constraint WHERE conname = 'project_blocker_kind_chk'`;
       assert.ok(constraint?.def, 'the closed set of kinds is not enforced by that constraint');
-      for (const which of four) {
+      for (const which of ['EXEMPTION', 'STANDARD'] as const) {
         assert.ok(constraint!.def.includes(`'${EXPECTED_KIND[which]}'`),
           `${which}: its kind is not a member of the live closed set`);
       }
 
-      // The two rows that are about paths name them: a question that cannot say WHICH files is
+      // The two reviews that are about paths name them: a question that cannot say WHICH files is
       // not a question anybody can answer.
       const scope = delivered[four.indexOf('SCOPE')]!;
-      const [scopeRow] = await openBlockers(stack.db, scope.f.projectId);
-      assert.deepEqual((scopeRow?.detail as { paths?: string[] })?.paths, [STRAY],
-        'the blocker did not name the file nobody asked for');
+      const [scopeReview] = await reviewsOf(stack.db, scope.f.projectId);
+      assert.deepEqual((scopeReview?.payload as { paths?: string[] })?.paths, [STRAY],
+        'the review did not name the file nobody asked for');
+      assert.deepEqual((scopeReview?.payload as { declaredPaths?: string[] })?.declaredPaths,
+        [DECLARED_DIR, `${DECLARED_DIR}/blocker-disposition.ts`],
+        'the review did not say what the declaration named');
       const conflict = delivered[four.indexOf('CONFLICT')]!;
-      const [conflictRow] = await openBlockers(stack.db, conflict.f.projectId);
-      assert.deepEqual((conflictRow?.detail as { paths?: string[] })?.paths,
+      const [conflictReview] = await reviewsOf(stack.db, conflict.f.projectId);
+      assert.deepEqual((conflictReview?.payload as { paths?: string[] })?.paths,
         [`${DECLARED_DIR}/blocker-disposition.ts`],
-        'the blocker did not name what git refused to merge');
+        'the review did not name what git refused to merge');
 
-      // The reason a moved standard is a HOLD rather than an opinion: the table that decides who
-      // may edit the exam says it is not this coordinator.
+      // Why the two go where they go: editing and confirming the exam are the owner's alone, and
+      // what happens to a delivery's landing is the coordinator's, inside its bound.
       assert.equal(COORDINATOR_AUTHORITY.EDIT_ACCEPTANCE_CRITERIA, 'HUMAN_ONLY',
         'the standard is no longer human-only, so this row would not be a policy hold');
+      assert.equal(COORDINATOR_AUTHORITY.DECIDE_TASK_LANDING, 'COORDINATOR_BOUNDED',
+        'deciding a landing is no longer the coordinator’s, so these would not be its reviews');
     } finally {
       for (const one of delivered) teardown(one.f);
       await stack.db.$disconnect();
@@ -852,20 +915,25 @@ test('the file set is the input: two deliveries in one project, with one declara
       await finishRound(stack, f, await queueRound(stack, f, strayed, 'outside-scope'), strayedFiles);
       const [strayedSpent] = criterionFor(stack, f, outside!.key);
 
-      // 3 — the same declaration, one more file in the diff, and the answer moves.
-      assert.equal(strayedSpent?.blockerKind, BLOCKER_KIND_FOR.OUTSIDE_DECLARED_SCOPE,
+      // 3 — the same declaration, one more file in the diff, and the answer moves: the delivery
+      // stops, on a review its coordinator decides rather than on a blocker the owner answers.
+      assert.equal(strayedSpent?.review?.reason, 'OUTSIDE_DECLARED_SCOPE',
         'a delivery outside its declaration did not stop');
+      assert.equal(strayedSpent?.blockerKind, undefined,
+        'a delivery outside its declaration was put to the owner as a blocker');
       assert.equal(strayedSpent?.action, undefined,
         'the out-of-scope delivery both stopped and chose an action');
       assert.equal(await sessionsOf(stack.db, chore), 0,
         'the stopped delivery released the next task anyway');
       assert.equal(await sessionsOf(stack.db, kept), 0,
         'the stopped delivery started the other half of this pair');
-      assert.equal(await messagesTo(stack.db, f.coordinatorSessionId), 1,
-        'the stopped delivery did not hand its blocker to the coordinator');
-      assert.equal(await blockerNoticesTo(stack.db, f.coordinatorSessionId), 1,
-        'the stopped delivery did not explain the human decision to the coordinator');
-      await coordinatorReadsBlocker(stack.db, f.coordinatorSessionId);
+      const strayedTold = await toldTo(stack.db, f.coordinatorSessionId);
+      assert.equal(strayedTold.length, 1, 'the coordinator was not handed the review');
+      assert.ok(!strayedTold[0]!.includes('合并到 main'),
+        'the stopped delivery told the coordinator to merge it anyway');
+      assert.equal(await blockerNoticesTo(stack.db, f.coordinatorSessionId), 0,
+        'the review was relayed to the coordinator as the owner’s decision');
+      await coordinatorReads(stack.db, f.coordinatorSessionId);
 
       const keptFiles = stage(f.treeDir, IN_SCOPE);
       await finishRound(stack, f, await queueRound(stack, f, kept, 'inside-scope'), keptFiles);
@@ -900,16 +968,17 @@ test('the file set is the input: two deliveries in one project, with one declara
       assert.equal(keptSpent?.action, 'MERGE_AND_RELEASE_NEXT',
         'the in-scope control settled nothing either — this pair would be green over a dead unit');
       assert.equal(await messagesTo(stack.db, f.coordinatorSessionId), 2,
-        'the coordinator did not receive both the blocker handoff and the ordinary delivery');
-      assert.equal(await blockerNoticesTo(stack.db, f.coordinatorSessionId), 1,
-        'the existing blocker handoff was duplicated or disappeared');
-      assert.notEqual(keptSpent?.blockerKind, strayedSpent?.blockerKind,
+        'the coordinator did not receive both the review and the ordinary delivery');
+      assert.equal(keptSpent?.review, undefined, 'a delivery inside its declaration was reviewed');
+      assert.ok(strayedSpent?.review && !keptSpent?.review,
         'the answer did not move when the file set did');
       assert.equal(await sessionsOf(stack.db, chore), 1,
         'nothing was released even by the delivery that stopped at nothing');
 
-      assert.equal(await blockerCount(stack.db, f.projectId), 1,
-        'the pair raised something other than the one blocker the strayed half owns');
+      assert.equal(await blockerCount(stack.db, f.projectId), 0,
+        'the pair put a question to the owner that is the coordinator’s');
+      assert.equal((await reviewsOf(stack.db, f.projectId)).length, 1,
+        'the pair filed something other than the one review the strayed half owns');
       assert.equal(await landedReceipts(stack.db, f.projectId), 0,
         'this pair performed a merge; the action is computed and merging is somebody else’s');
     } finally {
@@ -954,6 +1023,10 @@ test('a switched-off coordinator stops nothing and raises nothing: each of the f
           `${which}: a switched-off coordinator was handed an action to take`);
         assert.equal(await blockerCount(stack.db, one.f.projectId), 0,
           `${which}: a switched-off project ended up with a blocker on it`);
+        assert.equal(spent[0]?.review, undefined,
+          `${which}: a switched-off coordinator was handed a review`);
+        assert.deepEqual(await reviewsOf(stack.db, one.f.projectId), [],
+          `${which}: a switched-off project ended up with a review on it`);
         assert.deepEqual(
           await judgmentSessions(stack.db, one.f.ownerId),
           [],
@@ -966,17 +1039,17 @@ test('a switched-off coordinator stops nothing and raises nothing: each of the f
       control = await deliverCase(stack, 'on-scope', 'SCOPE');
       const [stopped] = criterionFor(stack, control.f, control.criterionKey);
       assert.equal(stopped?.outcome, 'CONSUMED', 'the control fact was not delivered');
-      assert.equal(await messagesTo(stack.db, control.f.coordinatorSessionId), 1,
-        'the control did not hand its blocker to the coordinator');
-      assert.equal(await blockerNoticesTo(stack.db, control.f.coordinatorSessionId), 1,
-        'the control did not explain the human decision to the coordinator');
+      const told = await toldTo(stack.db, control.f.coordinatorSessionId);
+      assert.ok(told.every((text) => !text.includes('合并到 main')),
+        'the control told its coordinator to merge a delivery that had to stop');
       assert.equal(
-        stopped?.blockerKind, EXPECTED_KIND.SCOPE,
+        stopped?.review?.reason, EXPECTED_REVIEW.SCOPE,
         'the control delivery stopped at nothing either — this negative would be green over a '
         + 'dead unit',
       );
-      assert.equal(await blockerCount(stack.db, control.f.projectId), 1,
-        'the control raised something other than the one blocker it owns');
+      assert.equal((await reviewsOf(stack.db, control.f.projectId)).length, 1,
+        'the control filed something other than the one review it owns');
+      assert.equal(told.length, 1, 'the control’s coordinator was not handed its review');
     } finally {
       for (const one of delivered) teardown(one.f);
       if (control) teardown(control.f);

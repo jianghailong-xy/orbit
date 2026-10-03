@@ -587,6 +587,8 @@ describe('attention by reason', () => {
     ['INTEGRATION_CHECK_FAILED', 'Coordinator · checks failed · 3h'],
     ['INTEGRATION_ERROR', 'Coordinator · handling an integration error · 3h'],
     ['TASK_FAILED', 'Coordinator · handling a failed task · 3h'],
+    // A delivery whose landing an Automatic project's coordinator decides: the owner is not asked.
+    ['DELIVERY_REVIEW', 'Coordinator · reviewing a delivery · 3h'],
   ] as const)('names what the coordinator is doing with a %s', (leadKind, text) => {
     const row = project({
       buckets: { running: 1 },
