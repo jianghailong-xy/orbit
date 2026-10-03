@@ -21,6 +21,15 @@ export function accountNameOf(account: Pick<RunnerEngineAccount, 'id' | 'name'>)
   return account.name || (account.id === 'default' ? 'Default' : `Account ${account.id}`);
 }
 
+/** What "+ Account" calls a new account until the user names it: its number on the machine, Default
+ *  being the first — or the next number free, so it never takes a name an account already goes by. */
+export function defaultAccountName(accounts: Pick<RunnerEngineAccount, 'id' | 'name'>[]): string {
+  const taken = new Set(accounts.map(accountNameOf));
+  let n = Math.max(accounts.length, 1) + 1;
+  while (taken.has(`Account ${n}`)) n++;
+  return `Account ${n}`;
+}
+
 /** The directory one account's login lives in — a CODEX_HOME, a CLAUDE_CONFIG_DIR. */
 export function accountDir(account: RunnerEngineAccount): string {
   return account.home ?? account.codexHome ?? '';

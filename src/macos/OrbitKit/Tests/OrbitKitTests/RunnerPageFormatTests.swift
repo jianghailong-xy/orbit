@@ -307,6 +307,21 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.accountLines(unnamed).map(\.name), ["Default", "Account 9f00"])
     }
 
+    /// Add Account names the account it adds by its number on the machine, Default being the first,
+    /// and skips a number an account already goes by (web `defaultAccountName`).
+    func testAddAccountNamesTheNewAccountByItsNumber() {
+        XCTAssertEqual(RunnerPageFormat.defaultAccountName([]), "Account 2", "a runner listing none has Default alone")
+        XCTAssertEqual(RunnerPageFormat.defaultAccountName([RunnerEngineAccount(id: "default")]), "Account 2")
+        XCTAssertEqual(RunnerPageFormat.defaultAccountName([RunnerEngineAccount(id: "default"),
+                                                            RunnerEngineAccount(id: "3fa91c2e", name: "Work")]),
+                       "Account 3")
+        XCTAssertEqual(RunnerPageFormat.defaultAccountName([RunnerEngineAccount(id: "default"),
+                                                            RunnerEngineAccount(id: "3fa91c2e", name: "Account 3")]),
+                       "Account 4")
+        XCTAssertEqual(RunnerPageFormat.defaultAccountName([RunnerEngineAccount(id: "default", name: "Account 2")]),
+                       "Account 3", "a renamed Default's name is taken too")
+    }
+
     func testARenamedDefaultSaysUnderItsNameThatItIsStillTheMachinesOwnLogin() throws {
         let health = RunnerEngineHealth(engine: "claude", installed: true, auth: "yes", accounts: [
             RunnerEngineAccount(id: "default", name: "jianghailong.main", auth: "yes", home: "/root/.claude"),

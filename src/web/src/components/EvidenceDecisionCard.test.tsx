@@ -780,14 +780,16 @@ describe('a press, end to end inside the browser', () => {
     ]);
   });
 
-  it('stands down while two versions of one task are asking at once', async () => {
+  it('gives the keys to the higher of two versions asking at once, and decides only that one', async () => {
     // This is the one card of the four that can be on screen more than once — one per version of
-    // the evidence — and the keys are held by the ONLY card asking or by none: with two questions
-    // up, one press would have to choose between them (`CardHotkey.ts`).
+    // the evidence — and one press answers one question: the keys are held by the highest card
+    // asking, and its hint is the only one on screen (`CardHotkey.ts`).
     const first = row();
     const second = row({ evidenceRevision: '3', claim: 'A newer version of the same evidence.' });
     const qc = newClient();
     qc.setQueryData(pendingDecisionsQuery(SESSION_ID).queryKey, queue([first, second]));
+    apiMock.mockImplementation((async (_path: string, options?: { method?: string }) =>
+      options?.method === 'POST' ? receipt() : queue([second])) as never);
 
     const rendered = await mount(
       <QueryClientProvider client={qc}>
@@ -798,13 +800,19 @@ describe('a press, end to end inside the browser', () => {
         />
       </QueryClientProvider>,
     );
-    expect(rendered.querySelectorAll('[data-decision-row]'), 'both versions were asking').toHaveLength(2);
-    for (const button of rendered.querySelectorAll<HTMLElement>('button.card-action')) {
-      expect(hintOn(button), 'a card showed a key it cannot honour').toBeNull();
-    }
+    const cards = [...rendered.querySelectorAll<HTMLElement>('[data-decision-row]')];
+    expect(cards, 'both versions were asking').toHaveLength(2);
+    expect(
+      cards.map((card) =>
+        [...card.querySelectorAll<HTMLElement>('button.card-action')].map(hintOn).filter(Boolean)),
+      'only the higher card shows a key',
+    ).toEqual([[ENTER_HINT], []]);
 
     await key();
-    expect(apiMock, 'one press decided two versions').not.toHaveBeenCalled();
+    const decided = apiMock.mock.calls
+      .filter(([, options]) => (options as { method?: string } | undefined)?.method === 'POST')
+      .map(([, options]) => (options as { body: { evidenceRevision: string } }).body.evidenceRevision);
+    expect(decided, 'one press decided one version, the one drawn higher').toEqual([first.evidenceRevision]);
   });
 });
 

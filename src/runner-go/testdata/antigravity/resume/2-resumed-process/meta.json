@@ -1,0 +1,25 @@
+{
+  "agy": "1.2.15",
+  "recorded": "2026-10-03",
+  "argv": [
+    "--gemini_dir=/work/orbit-gemini",
+    "--print=",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--conversation",
+    "9ac3c41d-cfdb-4d6a-b6cd-b2fc0009b06a"
+  ],
+  "settings": {
+    "enableTelemetry": false
+  },
+  "exit": 0,
+  "note": "Second process with --conversation: same conversation_id, step_index continues, a system_message step is injected, num_turns/usage include the earlier process.",
+  "driver": [
+    "write stdin line 1",
+    "wait for result #1",
+    "close stdin",
+    "wait for exit"
+  ]
+}

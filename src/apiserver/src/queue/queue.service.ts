@@ -98,32 +98,43 @@ export class QueueService {
     this.signal.emit('queued');
   }
 
-  private waitForSignal(timeoutMs: number): Promise<void> {
+  private waitForSignal(timeoutMs: number, hungUp?: AbortSignal): Promise<void> {
     return new Promise((resolve) => {
       const done = (): void => {
         clearTimeout(timer);
         this.signal.off('queued', done);
+        hungUp?.removeEventListener('abort', done);
         resolve();
       };
       const timer = setTimeout(done, timeoutMs);
       this.signal.once('queued', done);
+      hungUp?.addEventListener('abort', done, { once: true });
     });
   }
 
+  /**
+   * `hungUp` is the runner's connection closing. A claim committed after it moves the row
+   * PENDING -> RUNNING for a process that is no longer listening: nobody takes it over, and nothing
+   * on this side ever puts it back. On 2026-10-03 the long poll a self-updating runner had left
+   * open claimed a task's session 4s after the runner re-executed, and it read "Starting" for 15
+   * minutes — until an unrelated failed claim made the new process reconcile.
+   */
   async claimSessionForRunner(
     runner: { id: string; supportedProviders?: readonly AgentProvider[] },
     waitMs = 0,
     supportsTerminalHandoff = false,
     supportsSourcePin = false,
     supportsWikiMaintenance = false,
+    hungUp?: AbortSignal,
   ): Promise<ClaimedSession | null> {
     const deadline = Date.now() + waitMs;
     for (;;) {
-      const job = await this.trySessionClaim(runner, supportsTerminalHandoff, supportsSourcePin, supportsWikiMaintenance);
+      if (hungUp?.aborted) return null;
+      const job = await this.trySessionClaim(runner, supportsTerminalHandoff, supportsSourcePin, supportsWikiMaintenance, hungUp);
       if (job) return job;
       const remaining = deadline - Date.now();
       if (remaining <= 0) return null;
-      await this.waitForSignal(Math.min(remaining, 5000));
+      await this.waitForSignal(Math.min(remaining, 5000), hungUp);
     }
   }
 
@@ -132,6 +143,7 @@ export class QueueService {
     supportsTerminalHandoff: boolean,
     supportsSourcePin: boolean,
     supportsWikiMaintenance: boolean,
+    hungUp?: AbortSignal,
   ): Promise<ClaimedSession | null> {
     const supportsOpenCode = runner.supportedProviders?.includes(AgentProvider.OPENCODE) ?? false;
     // Atomically claim one PENDING session assigned to this runner. The runner id
@@ -160,6 +172,9 @@ export class QueueService {
         // claim OpenCode as Claude during a rolling control-plane deploy. This transaction-
         // local capability is the positive signal that lets only the new, capable path pass.
         await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', ${supportsOpenCode ? '1' : '0'}, true)`;
+        // Asked again here, after the waits for a connection and for the lock above (up to 20s
+        // under a busy pool): the runner may have hung up during them.
+        if (hungUp?.aborted) return [];
         // Prisma.sql rather than a bare tagged template so the cap fragments below are the
         // SAME SQL the session list uses to explain a queued row. Written twice they drift,
         // and a UI that names the wrong gate is worse than one that names none.

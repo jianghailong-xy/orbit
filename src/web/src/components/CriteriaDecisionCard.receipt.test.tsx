@@ -4,6 +4,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api';
+import { SHORTCUT_HINT } from './CardHotkey';
 import {
   APPROVE_LABEL,
   SessionCriteriaDecisionCard,
@@ -131,10 +132,18 @@ afterEach(async () => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 });
 
+/** The words ON a button. The key hint the card draws inside it (`CardHotkey.ts`) is a span of its
+ *  own and is not part of the action's label — a label is what the button does, not what presses it. */
+function labelOf(button: HTMLButtonElement): string {
+  const hint = button.querySelector<HTMLElement>('.approval-kbd');
+  const text = button.textContent ?? '';
+  return (hint?.textContent ? text.replace(hint.textContent, '') : text).trim();
+}
+
 /** The live Approve button, or null once there is none to press. */
 function approveButton(node: HTMLElement): HTMLButtonElement | null {
   return [...node.querySelectorAll('button')]
-    .find((button) => button.textContent === APPROVE_LABEL && !button.disabled) ?? null;
+    .find((button) => labelOf(button) === APPROVE_LABEL && !button.disabled) ?? null;
 }
 
 /**
@@ -206,6 +215,55 @@ describe('a criteria card answered in this window', () => {
       'the card to give way to the receipt');
     expect(approveButton(node), 'an answered proposal still offers an answer').toBeNull();
     expect(node.querySelector('.is-stale')).toBeNull();
+  });
+});
+
+describe('a criteria card answered from the keyboard', () => {
+  it('approves on ⌘/Ctrl + Enter, says so on the button, and leaves the bare key alone', async () => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    let decided = false;
+    const bodies: unknown[] = [];
+    vi.mocked(api).mockImplementation((async (path: string, init?: { method?: string; body?: unknown }) => {
+      if (init?.method === 'POST' && path === DECISION_PATH) {
+        bodies.push(init.body);
+        decided = true;
+        return DECIDED;
+      }
+      if (path === PENDING_PATH) return decided ? queue([], [answered()]) : queue([held()]);
+      throw new Error(`nothing is stubbed at ${init?.method ?? 'GET'} ${path}`);
+    }) as unknown as typeof api);
+
+    client = new QueryClient({
+      defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
+    });
+    const node = document.createElement('div');
+    document.body.appendChild(node);
+    container = node;
+    const tree = createRoot(node);
+    root = tree;
+    const qc = client;
+    await act(async () => tree.render(
+      <QueryClientProvider client={qc}>
+        <SessionCriteriaDecisionCard projectId={PROJECT} />
+      </QueryClientProvider>,
+    ));
+    await until(() => approveButton(node) !== null, 'the card to offer its answer');
+    expect(approveButton(node)!.querySelector('.approval-kbd')?.textContent).toBe(SHORTCUT_HINT);
+
+    const key = async (init: KeyboardEventInit = {}): Promise<void> => {
+      await act(async () => {
+        window.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init }),
+        );
+      });
+    };
+    await key();
+    expect(bodies, 'the bare key moved the ruler').toEqual([]);
+
+    await key({ ctrlKey: true });
+    await until(() => bodies.length > 0, 'the approval to reach the door');
+    // The same request the button sends: the proposal's own token, against the seal it was drawn on.
+    expect(bodies).toEqual([{ commitToken: `token-${INTENT}`, decision: 'APPROVE', baseSeal: SEAL }]);
   });
 });
 

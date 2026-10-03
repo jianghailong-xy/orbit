@@ -141,6 +141,9 @@ interface Workspace {
   runnerId?: string | null;
   enabled?: boolean;
   enableWorktree?: boolean;
+  /** Smart model selection (docs/model-routing-design.md §7.2): on, a fresh task run here is created
+   *  on the routed model and effort; off (the default), routing is only recorded in shadow. */
+  modelRouting?: boolean;
   /** Default a new session under this workspace inherits. null = inherit the account default.
    *  The permission mode is deliberately NOT here — it belongs to the run (Session), with an
    *  account-level default. */
@@ -321,6 +324,7 @@ export function RunnerDetailPage() {
   const [fWorkDir, setFWorkDir] = useState('');
   const [fRepoUrl, setFRepoUrl] = useState('');
   const [fEnableWorktree, setFEnableWorktree] = useState(false);
+  const [fModelRouting, setFModelRouting] = useState(false);
   const [fEnv, setFEnv] = useState<{ key: string; value: string }[]>([]);
   // null = Default, the runner's own Codex account.
   const [fCodexAccount, setFCodexAccount] = useState<string | null>(null);
@@ -347,6 +351,7 @@ export function RunnerDetailPage() {
         workDir: fWorkDir.trim() || undefined,
         repoUrl: fRepoUrl.trim() || undefined,
         enableWorktree: fEnableWorktree,
+        modelRouting: fModelRouting,
         env: Object.fromEntries(
           fEnv.map((r) => [r.key.trim(), r.value]).filter(([k]) => k),
         ),
@@ -528,6 +533,7 @@ export function RunnerDetailPage() {
     setFWorkDir(a?.workDir ?? '');
     setFRepoUrl(a?.repoUrl ?? '');
     setFEnableWorktree(a?.enableWorktree ?? false);
+    setFModelRouting(a?.modelRouting ?? false);
     setFEnv(Object.entries(a?.env ?? {}).map(([key, value]) => ({ key, value })));
     setFCodexAccount(a?.codexAccount ?? null);
     setFClaudeAccount(a?.claudeAccount ?? null);
@@ -711,14 +717,35 @@ export function RunnerDetailPage() {
           setDirty(true);
         }}
       />
+      {/* Off by default, and only the owner's to turn on: it decides what task runs cost, so the
+          agent tools cannot set it (docs/model-routing-design.md §7.2). */}
+      <SettingRow
+        label="Smart model selection for tasks"
+        desc="Each task run gets a model and effort picked from the task's difficulty, how it is checked, and how earlier runs went. A model pinned on a task always wins. Sessions you open yourself are not affected."
+        checked={fModelRouting}
+        onChange={(v) => {
+          setFModelRouting(v);
+          setDirty(true);
+        }}
+      />
 
       {/* Model is not a workspace field: it resolves from the runtime/provider this project last
           ran on. Stated read-only because the row displays it — otherwise it reads as a setting
           someone forgot to make editable. Mode and effort are deliberately not here: they are
-          per-session choices, made in the session where the context for them is. */}
+          per-session choices, made in the session where the context for them is. With smart
+          selection on, that model is only what the sessions opened by hand start on. */}
       <div className="rd-form-derived">
-        Model <b>{formModel || '—'}</b> · resolved by {providerLabelFor(formProvider)} on this
-        runner. Pick a different one from the session composer.
+        {fModelRouting ? (
+          <>
+            Task runs: model picked per task by smart selection. Sessions you open yourself:{' '}
+            <b>{formModel || '—'}</b> · resolved by {providerLabelFor(formProvider)} on this runner.
+          </>
+        ) : (
+          <>
+            Model <b>{formModel || '—'}</b> · resolved by {providerLabelFor(formProvider)} on this
+            runner. Pick a different one from the session composer.
+          </>
+        )}
       </div>
 
       {/* Import needs the workspace to exist — it creates a session OF it. The create form only

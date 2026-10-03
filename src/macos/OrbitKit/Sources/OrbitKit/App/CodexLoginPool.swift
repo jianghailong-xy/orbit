@@ -1,16 +1,18 @@
 import Foundation
 
 /// A Codex pool of the user's own ChatGPT accounts (migration 0323) on iOS — the web's `withLogin`
-/// (lib/codexLogin.ts) and its pool page (`CodexPoolPage` in ProviderPoolPage.tsx) in their words: every
-/// account it holds, where each one stands, its windows with when each resets, and what its owner — the
-/// only person who ever sees the pool — can do about them. `CodexSignInCopyParityTests` holds every word
-/// here to the web source.
+/// (lib/codexLogin.ts) and its account rows (`LoginRow` in components/AccountPools.tsx) in their words:
+/// every account it holds, where each one stands, its windows with when each resets, and what its owner —
+/// the only person who ever sees them — can do about them. The page they are drawn on is `CodexPoolPage`.
+/// `CodexSignInCopyParityTests` holds every word here to the web source.
 public enum CodexLoginPool {
     // MARK: drawing it as a pool
 
-    /// A Codex pool of one's own: ChatGPT accounts, not a set of member keys.
+    /// A Codex pool of one's own, the one its owner's ChatGPT accounts are in — its people and keys read
+    /// beside them or not (`SharedPools.ownPoolWithAccess`), but never a pool made on the shared pools page
+    /// (web's `isLoginPool`).
     public static func isLoginPool(_ pool: ProviderPool) -> Bool {
-        pool.engine == "codex" && pool.shared == nil
+        pool.engine == "codex" && pool.shared?.shared != true
     }
 
     /// What the pool head says while nothing can run, in the words it has room for.
@@ -110,35 +112,13 @@ public enum CodexLoginPool {
         member.next && pool.members.count > 1
     }
 
-    // MARK: its page
+    // MARK: on its page
 
-    public static let pageTitle = "Codex pool"
-    public static let justMe = "Just me"
-    /// The Accounts card's head, beside how many accounts the pool holds.
-    public static let accountsHeader = "Accounts"
-    /// The web page's sentence under the pool's name, after whose it is and how many of its accounts can
-    /// run (`summary`); on a phone, the Accounts section's footer.
-    public static let accountsFooter = "Each session starts on the account whose quota resets soonest, and stays on it until that one runs out."
     public static let noAccount = "No account yet — no session can start on this pool until you sign in with ChatGPT."
-    /// Always on the page: a pool of one's own takes one account after another, and a signed-out one
-    /// comes back from its row (`signInAgain`).
-    public static let addAccount = "Add account"
+    /// A signed-out account comes back from its row.
     public static let signInAgain = "Sign in again"
 
-    /// Whose the pool is and how many of its accounts a session could start on now — "Just me · 2 of 2
-    /// accounts available", the web card's head and the page's line under the pool's name alike.
-    public static func summary(_ pool: ProviderPool) -> String {
-        "\(justMe) · \(ProviderPools.pageSubtitle(pool))"
-    }
-
-    /// The Providers row's value: the head's gauge (web's `PoolGauge`) less the account's name, which a
-    /// phone's row has no room for — the tightest window of the account the next session starts on — or,
-    /// with none to start on, when the first frees up or why.
-    public static func overviewValue(_ pool: ProviderPool, now: Date = Date(), timeZone: TimeZone = .current) -> String {
-        ProviderPools.headGauge(pool)?.label ?? ProviderPools.headline(pool, now: now, timeZone: timeZone)
-    }
-
-    // MARK: signing out, deleting
+    // MARK: signing out
 
     public static let signOut = "Sign out"
     /// The row's sign-out mark, named for a screen reader.
@@ -155,11 +135,4 @@ public enum CodexLoginPool {
             + "\(pool.label) keeps running on its other account\(others == 1 ? "" : "s")."
     }
     public static func signedOut(_ login: CodexLogin) -> String { "\(name(login)) is signed out" }
-
-    public static let deletePool = "Delete pool"
-    public static func deleteTitle(_ pool: ProviderPool) -> String { "Delete \(pool.label)?" }
-    public static let delete = "Delete"
-    public static func deleteNote(_ pool: ProviderPool) -> String {
-        "Its ChatGPT sign-in\(logins(pool).count == 1 ? " is" : "s are") deleted from the Orbit server with it."
-    }
 }

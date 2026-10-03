@@ -1,0 +1,1 @@
+{"event": "user", "message": {"content": "long answer\nmock:text partial answer before the interrupt\nmock:hang"}}

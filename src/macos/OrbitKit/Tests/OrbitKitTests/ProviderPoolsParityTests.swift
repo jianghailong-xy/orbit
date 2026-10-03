@@ -238,8 +238,8 @@ final class ProviderPoolsParityTests: XCTestCase {
                       "\(lib)'s pool no longer spells out its month — drop this check")
         let window = SharedPoolWindow(start: "2026-09-01T00:00:00.000Z", end: "2026-10-01T00:00:00.000Z")
         XCTAssertEqual(try encodedKeys(window), ["start", "end"])
-        let pool = SharedPool(id: "p", slug: "team-codex", label: "Team Codex", engine: "codex",
-                              membersCanAdd: true, ownKeyFirst: true, viewerRole: .member,
+        let pool = SharedPool(id: "p", slug: "team-codex", label: "Team Codex", engine: "codex", shared: false,
+                              ownerHasChatGPT: true, membersCanAdd: true, ownKeyFirst: true, viewerRole: .member,
                               window: window, people: [person], keys: [key])
         XCTAssertEqual(try encodedKeys(pool), declaredFields(try interfaceBody("SharedPool", in: web, file: lib)))
     }
@@ -315,13 +315,16 @@ final class ProviderPoolsParityTests: XCTestCase {
                                  members: [PoolMember(id: "m", slug: "k", label: "K", state: .spent)])
         let withReset = try XCTUnwrap(ProviderPools.spentNote(spent, now: now))
         let head = try XCTUnwrap(withReset.components(separatedBy: " · resets ").first)
-        // The head's first run is chosen by the pool's kind — a shared pool's keys are capped, not spent,
-        // unless what stopped them is OpenAI's own out-of-budget mark (`allOutOfBudget`) — and an account
-        // pool's reset is `formatResetTime`, the same clock this client reads.
+        // The head's first run is chosen by what the pool holds — a pool of nothing but keys is capped, not
+        // spent, unless what stopped them is OpenAI's own out-of-budget mark (`allOutOfBudget`); one with a
+        // ChatGPT account in it is spent — and an account's reset is `formatResetTime`, the same clock this
+        // client reads.
         let prose = web.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-        XCTAssertTrue(prose.contains("const spent = !pool.shared ? '\(head)' : allOutOfBudget(pool.shared) ? '\(SharedPoolPage.allOutOfBudgetWords)' : '\(SharedPoolPage.allAtCapWords)';"),
+        XCTAssertTrue(prose.contains("const keysOnly = !!pool.shared && !pool.members.some((member) => member.login);"),
+                      "AccountPools.tsx no longer reads a pool of nothing but keys as capped")
+        XCTAssertTrue(prose.contains("const spent = !keysOnly ? '\(head)' : allOutOfBudget(pool.shared!) ? '\(SharedPoolPage.allOutOfBudgetWords)' : '\(SharedPoolPage.allAtCapWords)';"),
                       "AccountPools.tsx no longer heads a spent account pool with `\(head)`")
-        XCTAssertTrue(prose.contains("{spent} · </span>resets{' '} {pool.shared ? formatCapReset(head.resetsAt) : formatResetTime(head.resetsAt)}"),
+        XCTAssertTrue(prose.contains("{spent} · </span>resets{' '} {keysOnly ? formatCapReset(head.resetsAt) : formatResetTime(head.resetsAt)}"),
                       "AccountPools.tsx no longer says `\(head) · resets <time>`")
 
         let noReset = ProviderPool(id: "p", slug: "s", label: "L", members: spent.members)
