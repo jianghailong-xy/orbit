@@ -582,7 +582,10 @@ struct ComposerView: View {
                     if let reason = route.reasons.first {
                         Text(reason)
                     }
-                    Text(TaskDetailCopy.modelChangeAppliesToThisRun)
+                    // An iOS menu item ends at its third line: the note's two sentences are two items.
+                    ForEach(ComposerLogic.sentences(TaskDetailCopy.modelChangeAppliesToThisRun), id: \.self) {
+                        Text($0)
+                    }
                     #endif
                 }
                 Divider()

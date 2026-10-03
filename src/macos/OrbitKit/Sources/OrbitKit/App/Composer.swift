@@ -29,6 +29,13 @@ public enum ComposerLogic {
         return route
     }
 
+    /// A short paragraph's sentences, each with its full stop — what an iOS menu shows as items of
+    /// their own, since it cuts one item off at its third line.
+    public static func sentences(_ text: String) -> [String] {
+        let parts = text.components(separatedBy: ". ")
+        return parts.enumerated().map { index, part in index < parts.count - 1 ? part + "." : part }
+    }
+
     /// A sentence as a Mac menu can show it — the lines of a paragraph, each its own item, since an
     /// NSMenu draws an item on one line however long. Breaks at spaces; a run with none (a long id,
     /// a CJK sentence, whose characters count double) breaks where it fills the line. Past

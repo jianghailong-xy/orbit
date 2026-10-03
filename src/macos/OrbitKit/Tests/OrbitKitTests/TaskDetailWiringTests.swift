@@ -157,7 +157,8 @@ final class TaskDetailWiringTests: XCTestCase {
                       "each tier as the server resolved it — no tier table on this side")
         // A Toggle per tier: the only menu item shape whose second Text is drawn as its subtitle.
         XCTAssertTrue(picker.contains("Toggle(isOn: Binding("))
-        XCTAssertTrue(picker.contains("Text(pick.label)\n                        Text(pick.detail)"))
+        XCTAssertTrue(picker.contains("Text(pick.label.replacingOccurrences(of: \" · \", with: \"\\u{00A0}· \"))"))
+        XCTAssertTrue(picker.contains("Text(pick.detail)"))
         XCTAssertTrue(picker.contains("await tasks.setModelHint(task.id, pick.value)"))
         XCTAssertTrue(picker.contains("guard on, pick.value != task.modelHint else { return }"),
                       "re-picking the tier writes nothing")
@@ -213,6 +214,8 @@ final class TaskDetailWiringTests: XCTestCase {
                                   in: menu)
         XCTAssertEqual(order, order.sorted(), "why first, the models, then Open task last — the web menu's order")
         XCTAssertTrue(menu.contains("ComposerLogic.menuLines("), "a Mac menu item does not wrap")
+        XCTAssertTrue(menu.contains("ComposerLogic.sentences(TaskDetailCopy.modelChangeAppliesToThisRun)"),
+                      "an iOS menu item stops at three lines")
         // On the phone the task opens over the conversation, so back returns to the run.
         XCTAssertTrue(menu.contains("app.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole)"))
         XCTAssertTrue(menu.contains(".accessibilityLabel(chipAccessibilityLabel)"))

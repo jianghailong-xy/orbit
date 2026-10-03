@@ -1760,7 +1760,8 @@ private struct TaskDetailContent: View {
                             Task { await tasks.setModelHint(task.id, pick.value) }
                         }
                     )) {
-                        Text(pick.label)
+                        // Where a tier's name wraps, the dot stays at the end of the line it closes.
+                        Text(pick.label.replacingOccurrences(of: " · ", with: "\u{00A0}· "))
                         Text(pick.detail)
                     }
                 }
@@ -1773,10 +1774,14 @@ private struct TaskDetailContent: View {
                     #if os(iOS)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.orbitLabel.weight(.semibold))
-                        .foregroundStyle(Color.secondary.opacity(0.7))
                     #endif
                 }
+                // The tint the menu pickers around it draw their value in, on iOS.
+                #if os(iOS)
+                .foregroundStyle(Color.accentColor)
+                #else
                 .foregroundStyle(Color.secondary)
+                #endif
             }
             .borderlessMenuStyle()
             #if os(macOS)
@@ -2186,6 +2191,8 @@ private struct TaskDetailContent: View {
                         } label: {
                             Image(systemName: "info.circle")
                                 .font(.orbitControl)
+                                .frame(minWidth: 32, minHeight: 44)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.borderless)
                         .accessibilityLabel(TaskDetailCopy.why(pick))
@@ -2195,6 +2202,7 @@ private struct TaskDetailContent: View {
                         Image(systemName: "chevron.right")
                             .font(.orbitLabel.weight(.semibold))
                             .foregroundStyle(Color.secondary.opacity(0.7))
+                            .frame(minHeight: 44)
                             .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -2233,13 +2241,15 @@ private struct TaskDetailContent: View {
                     }
                 }
                 HStack(spacing: 6) {
-                    Text(sessionLabel(session))
+                    // One run of text, so the dot sits evenly between where it stands and what it ran on.
+                    let status = Text(sessionLabel(session))
                         .foregroundStyle(session.resolvedRunState == .running ? Color.accentColor : sessionColor(session))
                     if let ranOn = TaskDetailLogic.runModelLine(session, modelLabel: name) {
-                        Text("· \(ranOn)")
-                            .foregroundStyle(Color.secondary)
+                        (status + Text(" · \(ranOn)").foregroundStyle(Color.secondary))
                             .lineLimit(1)
                             .truncationMode(.tail)
+                    } else {
+                        status
                     }
                     if let route, route.applied {
                         routeTierTag(route)
