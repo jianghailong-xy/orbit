@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -211,18 +212,28 @@ func writeClaudeLogin(t *testing.T, dir, token string, expiresAt time.Time) {
 // hours; "refuse" changes nothing and exits 1, as the real one does offline; "zombie" — a refresh
 // token the server already spent — empties both tokens, as the real one does on invalid_grant. Any
 // other `-p` run changes nothing and exits 1. `auth status` answers loggedIn while an access token is
-// stored. Every run is recorded: refreshes() returns the CLAUDE_CONFIG_DIR of each `-p` run, and
+// stored, and `--version` the engine probe's question. Every run is recorded: refreshes() returns the CLAUDE_CONFIG_DIR of each `-p` run, and
 // statuses() that of each `auth status`, "" for a run that named none.
 func fakeClaudeTokenCLI(t *testing.T, mode, fresh string) (refreshes, statuses func() []string) {
 	t.Helper()
 	bin := t.TempDir()
 	log := filepath.Join(bin, "runs")
+	// PATH ends up the fake's directory alone, so the tools the script uses are named in full.
+	grep, err := exec.LookPath("grep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sleep, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
 	expires := strconv.FormatInt(time.Now().Add(8*time.Hour).UnixMilli(), 10)
 	creds := `"${CLAUDE_CONFIG_DIR:-$HOME/.claude}/.credentials.json"`
 	script := `#!/bin/sh
+if [ "$1" = "--version" ]; then echo '2.1.288 (Claude Code)'; exit 0; fi
 if [ "$1 $2" = "auth status" ]; then
   printf 'status\t%s\n' "$CLAUDE_CONFIG_DIR" >> '` + log + `'
-  if [ -f ` + creds + ` ] && ! grep -q '"accessToken":""' ` + creds + `; then echo '{"loggedIn":true}'; else echo '{"loggedIn":false}'; fi
+  if [ -f ` + creds + ` ] && ! '` + grep + `' -q '"accessToken":""' ` + creds + `; then echo '{"loggedIn":true}'; else echo '{"loggedIn":false}'; fi
   exit 0
 fi
 printf 'refresh\t%s\n' "$CLAUDE_CONFIG_DIR" >> '` + log + `'
@@ -233,7 +244,7 @@ for arg in "$@"; do
   [ "$arg" = "--no-session-persistence" ] && persist=0
 done
 [ "$print" = 1 ] && [ "$help" = 1 ] && [ "$persist" = 0 ] || exit 1
-[ -n "$FAKE_CLAUDE_HOLD" ] && while [ -e "$FAKE_CLAUDE_HOLD" ]; do sleep 0.05; done
+[ -n "$FAKE_CLAUDE_HOLD" ] && while [ -e "$FAKE_CLAUDE_HOLD" ]; do '` + sleep + `' 0.05; done
 `
 	switch mode {
 	case "refresh":

@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -216,19 +217,23 @@ func TestClaudeEngineHealthDoesNotAskTheCLIAboutATokenNearExpiry(t *testing.T) {
 // accounts after it none: killed mid-answer, and reported unknown.
 func TestClaudeEngineHealthGivesEachAccountItsOwnBudget(t *testing.T) {
 	claudeAccountSlotTestHomes(t)
+	sleep, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Fatal(err)
+	}
 	bin := t.TempDir()
 	t.Setenv("PATH", bin)
-	for _, name := range []string{"Work", "Personal", "Spare"} {
+	for _, name := range []string{"Work", "Personal", "Spare", "Fourth"} {
 		if _, err := claudeAccountKind.create(name); err != nil {
 			t.Fatal(err)
 		}
 	}
 	previous := accountLoginStatusTimeout
-	accountLoginStatusTimeout = 2 * time.Second
+	accountLoginStatusTimeout = 3 * time.Second
 	t.Cleanup(func() { accountLoginStatusTimeout = previous })
 
-	// A second each: three would not fit one shared budget of two.
-	claude := writeFakeBin(t, bin, "claude", `case "$1 $2" in "auth status") sleep 1; echo '{"loggedIn":false}' ;; *) exit 2 ;; esac`)
+	// A second each: four would not fit one shared budget of three.
+	claude := writeFakeBin(t, bin, "claude", `case "$1 $2" in "auth status") '`+sleep+`' 1; echo '{"loggedIn":false}' ;; *) exit 2 ;; esac`)
 	for _, account := range accountHealth(claudeAccountKind, claude, authNo) {
 		if account.Auth != "no" {
 			t.Fatalf("account %s (%s) = %q, want each answered in its own budget", account.ID, account.Name, account.Auth)
