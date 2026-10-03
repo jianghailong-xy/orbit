@@ -167,6 +167,16 @@ test('a session that brings its own credentials ignores the local sign-in', () =
     }),
     null,
   );
+  // Antigravity runs on a Gemini API key from its own environment: there is no sign-in on the
+  // machine to be out of, whatever the runner's probe says, so a missing key fails at spawn instead.
+  assert.equal(
+    signedOutEngineRefusal({
+      runtime: 'antigravity',
+      bringsOwnCredentials: false,
+      runner: { ...runner, engines: [{ engine: 'antigravity', installed: true, auth: 'no' }] },
+    }),
+    null,
+  );
 });
 
 test('kimi needs both halves of its environment provider to skip the check', () => {

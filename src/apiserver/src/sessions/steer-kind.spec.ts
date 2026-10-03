@@ -156,15 +156,20 @@ test('CURRENT_WORK reports an expired lease instead of silently queueing', async
 });
 
 test('unsupported runtime rejects CURRENT_WORK and does not charge or queue', async () => {
-  const h = harness({ provider: 'opencode' });
-  let charged = 0;
-  await assert.rejects(
-    send(h, 'CURRENT_WORK', CLIENT_ID, async () => { charged += 1; }),
-    (error: unknown) =>
-      (error as { response?: { reason?: string } }).response?.reason === 'STEER_UNSUPPORTED',
-  );
-  assert.equal(charged, 0);
-  assert.equal(h.created.length, 0);
+  // Antigravity among them although its transport is claude's stream-json: agy runs a frame
+  // written mid-turn as a turn of its own after the current one (contract §8.1).
+  for (const provider of ['opencode', 'antigravity']) {
+    const h = harness({ provider });
+    let charged = 0;
+    await assert.rejects(
+      send(h, 'CURRENT_WORK', CLIENT_ID, async () => { charged += 1; }),
+      (error: unknown) =>
+        (error as { response?: { reason?: string } }).response?.reason === 'STEER_UNSUPPORTED',
+      provider,
+    );
+    assert.equal(charged, 0, provider);
+    assert.equal(h.created.length, 0, provider);
+  }
 });
 
 test('lease is atomically rechecked after capability resolution', async () => {

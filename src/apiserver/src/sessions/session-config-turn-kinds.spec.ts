@@ -287,10 +287,11 @@ test('a provider switch that keeps the model still speaks to the running engine'
 /**
  * Which turn a config PATCH queues also depends on the RUNTIME, not just on what moved.
  *
- * `setconfig` is a stream-json control_request. Codex and Kimi are driven over ACP/JSON-RPC and
- * OpenCode runs one process per turn; none of their session loops has an arm for the kind, so a
- * setconfig filed for one is acked on delivery and the change never reaches the engine at all —
- * strictly worse than the wait the split removed. They keep the reload they always had.
+ * `setconfig` is a stream-json control_request. Codex and Kimi are driven over ACP/JSON-RPC,
+ * OpenCode runs one process per turn, and Antigravity's stream-json takes only user messages; none
+ * of their session loops has an arm for the kind, so a setconfig filed for one is acked on delivery
+ * and the change never reaches the engine at all — strictly worse than the wait the split removed.
+ * They keep the reload they always had.
  *
  * Each case below is paired with its opposite on purpose: "codex re-spawns" says nothing without
  * "claude does not", and a rule that always re-spawned would satisfy the first half alone.
@@ -330,7 +331,22 @@ test('an opencode session is re-spawned too — its process does not outlive the
   assert.equal(JSON.parse(turns[0].content ?? '{}').model, 'anthropic/claude-haiku-4-5');
 });
 
-test('a built-in claude session is told, and is the control for all three above', async () => {
+test('an antigravity session is re-spawned although it speaks stream-json like claude', async () => {
+  // Same transport, different input: agy takes nothing but user messages on stdin and exits on a
+  // control_request (docs/antigravity-runtime-contract.md §1.1), so a setconfig would end the
+  // session rather than move its model. The new model goes in with the next process.
+  const { service, turns } = serviceOn({
+    provider: 'antigravity',
+    model: 'gemini-3.1-pro',
+  });
+
+  await service.updateConfig(OWNER, ID, { model: 'gemini-3.8-flash' });
+
+  assert.deepEqual(turns.map((t) => t.kind), ['reload']);
+  assert.equal(JSON.parse(turns[0].content ?? '{}').model, 'gemini-3.8-flash');
+});
+
+test('a built-in claude session is told, and is the control for all four above', async () => {
   const { service, turns } = serviceOn({});
 
   await service.updateConfig(OWNER, ID, { model: 'claude-haiku-4-5' });
@@ -342,13 +358,14 @@ test('a built-in claude session is told, and is the control for all three above'
  * Effort specifically, on the runtimes that cannot be told. It moved onto the control channel
  * for claude alone; a runtime with no arm for the kind would have the change acked on delivery
  * and applied by nobody, which is strictly worse than the wait the split removed. So each of
- * the three keeps the reload it always had — with the new level on it, because the process
+ * the four keeps the reload it always had — with the new level on it, because the process
  * that reload builds is what applies it.
  */
 for (const runtime of [
   { provider: 'codex', model: 'gpt-5.6-sol' },
   { provider: 'kimi', model: 'kimi-code/kimi-for-coding' },
   { provider: 'opencode', model: 'anthropic/claude-opus-5' },
+  { provider: 'antigravity', model: 'gemini-3.1-pro' },
 ]) {
   test(`a ${runtime.provider} session is re-spawned for an effort change`, async () => {
     const { service, turns } = serviceOn(runtime);

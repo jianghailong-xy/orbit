@@ -24,6 +24,18 @@ const CODEX_EFFORTS = new Set([
   'max',
   'ultra',
 ]);
+// agy's `--effort` is a closed set of three (docs/antigravity-runtime-contract.md §9.2). A level
+// carried in from another runtime — an account default last picked on Claude or Codex — lands on
+// the nearer end of that range rather than reaching agy as a name it does not have; anything this
+// table does not know is Default.
+const ANTIGRAVITY_EFFORTS = new Set(['', 'low', 'medium', 'high']);
+const ANTIGRAVITY_EFFORT_ALIASES: Readonly<Record<string, string>> = {
+  none: 'low',
+  minimal: 'low',
+  xhigh: 'high',
+  max: 'high',
+  ultra: 'high',
+};
 
 /**
  * Turn a persisted provider identity into a built-in runner runtime.
@@ -37,16 +49,21 @@ export function normalizeRuntimeProvider(
 ): AgentProvider {
   if (value === AgentProvider.CODEX) return AgentProvider.CODEX;
   if (value === AgentProvider.OPENCODE) return AgentProvider.OPENCODE;
+  // Like `opencode`, needs no providerBuiltin discriminator: migration 0367 moved any configured
+  // provider or pool that held the slug aside before the keyword became a runtime.
+  if (value === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
   if (value === AgentProvider.KIMI && providerBuiltin) return AgentProvider.KIMI;
   return AgentProvider.CLAUDE;
 }
 
-/** Runtimes that learn their durable conversation id only after process initialization. */
+/** Runtimes that learn their durable conversation id only after process initialization. agy mints
+ *  its conversation id itself and reports it in the `init` event of each process it starts. */
 export function initializesRuntimeDynamically(provider?: string | null): boolean {
   return (
     provider === AgentProvider.CODEX ||
     provider === AgentProvider.KIMI ||
-    provider === AgentProvider.OPENCODE
+    provider === AgentProvider.OPENCODE ||
+    provider === AgentProvider.ANTIGRAVITY
   );
 }
 
@@ -91,10 +108,12 @@ export function normalizeBuiltinPermissionMode(
 
 /**
  * Keep persisted effort values valid when a session changes runtime or is resumed from an older
- * client. Kimi's vocabulary tops out at `max` and has no `minimal`/`medium`. Which levels a Codex
- * or Kimi model actually accepts is per-model (K2.7 Coding accepts none at all), so this maps the
- * vocabulary and `normalizeEffortForRuntimeModel` applies the model's own list. OpenCode variants are
- * model/provider-defined and stay open-ended, so only the closed CLI enums are clamped.
+ * client. Kimi's vocabulary tops out at `max` and has no `minimal`/`medium`; Antigravity's is
+ * low/medium/high, so the levels either side of it land on its ends. Which levels a Codex, Kimi or
+ * Antigravity model actually accepts is per-model (K2.7 Coding accepts none at all, Gemini 3.1 Pro
+ * has no medium), so this maps the vocabulary and `normalizeEffortForRuntimeModel` applies the
+ * model's own list. OpenCode variants are model/provider-defined and stay open-ended, so only the
+ * closed CLI enums are clamped.
  */
 export function normalizeEffortForProvider(
   provider: AgentProvider,
@@ -111,16 +130,23 @@ export function normalizeEffortForProvider(
   if (provider === AgentProvider.CODEX) {
     return CODEX_EFFORTS.has(effort) ? effort : '';
   }
+  if (provider === AgentProvider.ANTIGRAVITY) {
+    const normalized = ANTIGRAVITY_EFFORT_ALIASES[effort] ?? effort;
+    return ANTIGRAVITY_EFFORTS.has(normalized) ? normalized : '';
+  }
   return CLAUDE_EFFORTS.has(effort) ? effort : '';
 }
 
 /** Runtimes whose reasoning levels are per-model, so only the assigned runner's catalog can say
  *  whether one is valid. OpenCode's variants are model/provider-defined; Kimi's are declared by
- *  each model's `supportEfforts` and rejected with invalid_params when they are not. */
+ *  each model's `supportEfforts` and rejected with invalid_params when they are not; Antigravity's
+ *  are the levels `agy models` lists for each base model, which the runner folds into that row's
+ *  `reasoningLevels` (contract §9.1–9.2). */
 const MODEL_DEFINED_EFFORT_RUNTIMES: AgentProvider[] = [
   AgentProvider.CODEX,
   AgentProvider.OPENCODE,
   AgentProvider.KIMI,
+  AgentProvider.ANTIGRAVITY,
 ];
 
 /** Claude Code's effort levels, lowest first: the scale a declared list is read against, and the
@@ -157,7 +183,8 @@ export function effortWithinDeclaredLevels(effort: string | undefined, levels: s
  * These runtimes' levels are model-defined, so `normalizeEffortForProvider` alone cannot police
  * them: an account-level default picked in a Claude session (`max`) would otherwise reach OpenCode
  * as `--variant=max` and fail the turn, or reach Kimi's K2.7 Coding, which declares no levels at
- * all. Mirrors the web picker's rule — an exact catalog row is authoritative even when it lists no
+ * all, or hand agy a `--effort medium` for Gemini 3.1 Pro, whose levels are only low and high.
+ * Mirrors the web picker's rule — an exact catalog row is authoritative even when it lists no
  * variants, while a model the runner-wide catalog does not report may be project-scoped (or come
  * from a runner too old to probe its CLI) and keeps its value.
  *
