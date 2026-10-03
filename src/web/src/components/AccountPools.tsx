@@ -763,7 +763,7 @@ export function PoolAccountsModal({
     onError: (e: Error) => {
       // A partial add still changed the pool.
       void qc.invalidateQueries({ queryKey: ['providers'] });
-      message.error(e.message || 'Failed');
+      message.error(pool ? "Couldn't add the account" : "Couldn't create the pool", e.message);
     },
   });
 
@@ -897,7 +897,7 @@ export function NewPoolModal({ rows, onClose }: { rows: ProviderRow[]; onClose: 
     },
     onError: (e: Error) => {
       void qc.invalidateQueries({ queryKey: ['providers'] });
-      message.error(e.message || 'Failed');
+      message.error("Couldn't create the pool", e.message);
     },
   });
 

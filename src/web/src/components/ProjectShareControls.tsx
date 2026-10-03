@@ -128,14 +128,14 @@ export function ProjectShareControls({
   });
   const live = shareQ.data?.link != null && shareQ.data.link.state !== 'ENDED';
 
-  const copy = (text: string, done: string) =>
-    void copyText(text).then((ok) => (ok ? toast.success(done) : toast.error('Could not copy')));
+  const copy = (text: string, done: string, failed: string) =>
+    void copyText(text).then((ok) => (ok ? toast.success(done) : toast.error(failed)));
   const copyMarkdown = () => {
     // What the page's Work overview and Tasks blocks already read, under their own keys: nothing is
     // fetched for the copy.
     const buckets = qc.getQueryData<{ buckets: ProjectPanoramaBuckets }>(projectPanoramaQuery(projectId).queryKey)?.buckets;
     const tasks = qc.getQueryData<{ items: ProjectMarkdownTask[] }>(['project', projectId, 'tasks', 'root'])?.items;
-    copy(projectMarkdown(project, projectAppUrl(projectId), { buckets, tasks }), 'Markdown copied');
+    copy(projectMarkdown(project, projectAppUrl(projectId), { buckets, tasks }), 'Markdown copied', "Couldn't copy the Markdown");
   };
 
   return (
@@ -154,7 +154,11 @@ export function ProjectShareControls({
           Share
         </Button>
       )}
-      <Button size="small" icon={<LinkOutlined />} onClick={() => copy(projectAppUrl(projectId), 'Link copied')}>
+      <Button
+        size="small"
+        icon={<LinkOutlined />}
+        onClick={() => copy(projectAppUrl(projectId), 'Link copied', "Couldn't copy the link")}
+      >
         Copy link
       </Button>
       {/* Two words for two links (§8): Copy link is the signed-in address, for yourself; Share… is
@@ -172,7 +176,7 @@ export function ProjectShareControls({
               label: 'Copy link',
               onClick: () => {
                 setMenuOpen(false);
-                copy(projectAppUrl(projectId), 'Link copied');
+                copy(projectAppUrl(projectId), 'Link copied', "Couldn't copy the link");
               },
             },
             {

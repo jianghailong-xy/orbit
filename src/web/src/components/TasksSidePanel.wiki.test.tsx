@@ -80,7 +80,7 @@ describe('the sidebar’s Wiki entry', () => {
     expect(projects).toBeGreaterThan(-1);
     expect(wiki).toBeGreaterThan(projects);
     expect(runners).toBeGreaterThan(wiki);
-    expect(html).toContain('anticon-book');
+    expect(html).toContain('sidebar-nav-icon-wiki');
     // Reachable and activatable by keyboard, which is what the row's `role="link"` promises.
     expect(html).toContain('role="link" tabindex="0" title="Wiki"');
   });
@@ -115,7 +115,7 @@ describe('the sidebar, for an account the server has not switched the wiki on fo
     const html = paint(null);
     expect(html).not.toContain('>Wiki<');
     expect(html).not.toContain('title="Wiki"');
-    expect(html).not.toContain('anticon-book');
+    expect(html).not.toContain('sidebar-nav-icon-wiki');
     expect(html).toContain('>Projects<');
     expect(html).toContain('>Runners<');
   });

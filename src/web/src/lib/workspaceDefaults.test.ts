@@ -21,6 +21,7 @@ import {
   ANTIGRAVITY_MODEL_OPTIONS,
   providerIdentityResolved,
   PROVIDER_OPTIONS,
+  runtimeForProvider,
   supportsAuto,
   type ConfiguredProvider,
 } from './workspaceDefaults';
@@ -581,6 +582,59 @@ describe('Antigravity defaults', () => {
   it('takes its context window from the runner catalogue', () => {
     expect(contextWindowFor('gemini-3.8-flash', catalog)).toBe(1_048_576);
     expect(contextWindowFor('gemini-3.1-pro', catalog)).toBeUndefined();
+  });
+});
+
+describe('A Gemini key, which runs on Antigravity', () => {
+  // What GET /providers serves for a row connected from the Gemini preset: withPreset() puts agy's
+  // fallback list and the modelsFromRuntime flag on it.
+  const gemini: ConfiguredProvider = {
+    slug: 'gemini',
+    label: 'Gemini',
+    runtime: 'antigravity',
+    models: [
+      { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', contextWindow: 1_048_576 },
+      { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro', contextWindow: 1_048_576 },
+    ],
+    defaultModel: 'gemini-3.8-flash',
+    presetSlug: 'gemini',
+    modelsFromRuntime: true,
+  };
+  const catalog: RunnerModelCatalog = {
+    claude: [{ value: 'claude-opus-6', label: 'Opus 6' }],
+    antigravity: [
+      { value: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash', reasoningLevels: ['low', 'medium', 'high'] },
+      { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro', reasoningLevels: ['low', 'high'] },
+    ],
+  };
+
+  it('runs on the runtime it borrows', () => {
+    expect(runtimeForProvider('gemini', [gemini])).toBe('antigravity');
+  });
+
+  it('offers the models agy reports, and the preset’s own only until it reports them', () => {
+    expect(modelOptionsForProvider('gemini', catalog, [gemini])).toEqual([
+      { value: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash' },
+      { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro' },
+    ]);
+    expect(modelOptionsForProvider('gemini', null, [gemini]).map((option) => option.value)).toEqual([
+      'gemini-3.8-flash',
+      'gemini-3.1-pro',
+    ]);
+  });
+
+  it('defaults to what agy reports, never to what Claude does', () => {
+    expect(defaultModelForProvider('gemini', catalog, [gemini])).toBe('gemini-3.7-flash');
+    expect(
+      defaultModelForProvider('gemini', catalog, [gemini], { claude: 'claude-opus-6', antigravity: 'gemini-3.1-pro' }),
+    ).toBe('gemini-3.1-pro');
+    expect(defaultModelForProvider('gemini', null, [gemini])).toBe('gemini-3.8-flash');
+  });
+
+  it('judges a pin against agy’s catalogue', () => {
+    expect(livePinnedModel('gemini-3.1-pro', 'gemini', catalog, [gemini])).toBe('gemini-3.1-pro');
+    // A pin from when the row ran on Codex: agy has no such model and would refuse to start.
+    expect(livePinnedModel('gemini-2.5-pro', 'gemini', catalog, [gemini])).toBeUndefined();
   });
 });
 

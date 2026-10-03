@@ -334,7 +334,7 @@ import {
   hasResolvedSource,
   sessionSourceSnapshot,
 } from '../projects/session-source';
-import { sessionExecRuntime } from '../providers/custom-provider';
+import { providerSlugsOn, sessionExecRuntime } from '../providers/custom-provider';
 
 // Must stay >= the runner's own loginRelayTimeout (login.go): the runner kills its CLI at that
 // point, so anything still marked in-flight past this window has no process behind it.
@@ -1181,8 +1181,8 @@ export class RunnerApiController {
     if (dto?.agentDirProbes?.length) {
       try {
         await Promise.all(
-          dto.agentDirProbes.slice(0, 200).map((p) =>
-            this.prisma.workspace.updateMany({
+          dto.agentDirProbes.slice(0, 200).map(async (p) => {
+            await this.prisma.workspace.updateMany({
               where: { id: p.agentId, runnerId: runner.id, deletedAt: null },
               data: {
                 workDirExists: p.exists,
@@ -1196,8 +1196,24 @@ export class RunnerApiController {
                 workDirTotalBytes: toDiskBytes(p.totalBytes),
                 workDirProbedAt: new Date(),
               },
-            }),
-          ),
+            });
+            // Existing workspaces learn their repository without a manual URL entry. The
+            // directory must still be the one probed, and a concurrent explicit edit wins:
+            // never replace a recorded remote or accept an old runner's unscoped report.
+            const repoUrl = typeof p.repoUrl === 'string' ? p.repoUrl.trim() : '';
+            if (p.exists && p.isGitRepo && typeof p.workDir === 'string' && p.workDir && repoUrl) {
+              await this.prisma.workspace.updateMany({
+                where: {
+                  id: p.agentId,
+                  runnerId: runner.id,
+                  workDir: p.workDir,
+                  deletedAt: null,
+                  OR: [{ repoUrl: null }, { repoUrl: '' }],
+                },
+                data: { repoUrl },
+              });
+            }
+          }),
         );
       } catch {
         // Advisory telemetry — never fail the heartbeat (that would read as offline).
@@ -1933,13 +1949,14 @@ export class RunnerApiController {
 
   /**
    * Mark pending work on a runtime this runner has not advertised (ADVERTISED_RUNTIMES: OpenCode,
-   * Antigravity) visibly, before carrying on without it. The conditional update repeats the
-   * scheduling predicates, so a capable claim/cancel racing this check can never have its
-   * now-live/ended row stamped with a stale upgrade error.
+   * Antigravity) visibly, before carrying on without it. `slugs` are the providers that run on it
+   * (providerSlugsOn): the built-in slug, and the configured rows that borrow the runtime. The
+   * conditional update repeats the scheduling predicates, so a capable claim/cancel racing this
+   * check can never have its now-live/ended row stamped with a stale upgrade error.
    */
   private async markProviderUpgradeRequired(
     runnerId: string,
-    provider: AgentProvider,
+    slugs: string[],
     upgradeError: string,
     candidates?: Array<{ id: string; error: string | null }>,
   ): Promise<boolean> {
@@ -1949,7 +1966,7 @@ export class RunnerApiController {
         where: {
           assignedRunnerId: runnerId,
           status: RunStatus.PENDING,
-          provider,
+          provider: { in: slugs },
           cancelRequestedAt: null,
         },
         select: { id: true, error: true },
@@ -1964,7 +1981,7 @@ export class RunnerApiController {
           id: { in: unmarked },
           assignedRunnerId: runnerId,
           status: RunStatus.PENDING,
-          provider,
+          provider: { in: slugs },
           cancelRequestedAt: null,
         },
         data: { error: upgradeError },
@@ -2028,7 +2045,7 @@ export class RunnerApiController {
   @UseGuards(RunnerAuthGuard)
   @Get('sessions/claim')
   async claim(
-    @CurrentRunner() runner: { id: string },
+    @CurrentRunner() runner: { id: string; ownerId: string },
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
     @Res({ passthrough: true }) res?: Response,
@@ -2048,10 +2065,12 @@ export class RunnerApiController {
     const supportedProviders = advertisedRunnerProviders(providerHeader);
     for (const { provider, upgradeError } of ADVERTISED_RUNTIMES) {
       if (supportedProviders.includes(provider)) continue;
-      // Explain the stall on the OpenCode/Antigravity rows themselves and then carry on: the
-      // claim SQL (plus migration 0080's and 0367's triggers) already keeps them away from a
-      // legacy runner, so failing the request would only strand this runner's other work as well.
-      await this.markProviderUpgradeRequired(runner.id, provider, upgradeError);
+      // Explain the stall on the OpenCode/Antigravity rows themselves — a Gemini key's included,
+      // which runs on Antigravity under a slug of its own — and then carry on: the claim SQL (plus
+      // migration 0080's and 0367's triggers, 0372's for the borrowed slugs) already keeps them away
+      // from a legacy runner, so failing the request would only strand this runner's other work.
+      const slugs = await providerSlugsOn(this.prisma, runner.ownerId, provider);
+      await this.markProviderUpgradeRequired(runner.id, slugs, upgradeError);
     }
     if (!supportsSourcePin) {
       // Same shape, same reason (SR35): the claim SQL already withholds these rows, and failing the
@@ -2121,13 +2140,16 @@ export class RunnerApiController {
     const undrivable = new Set<string>();
     for (const { provider, upgradeError } of ADVERTISED_RUNTIMES) {
       if (runnerAdvertisesProvider(providerHeader, provider)) continue;
-      const onProvider = sessions.filter(
-        (session) => (session.provider ?? AgentProvider.CLAUDE) === provider,
+      // The configured rows that borrow the runtime too: this runner would rebuild a Gemini key's
+      // session as Claude just the same.
+      const slugs = await providerSlugsOn(this.prisma, runner.ownerId, provider);
+      const onProvider = sessions.filter((session) =>
+        slugs.includes(session.provider ?? AgentProvider.CLAUDE),
       );
       if (onProvider.length === 0) continue;
       await this.markProviderUpgradeRequired(
         runner.id,
-        provider,
+        slugs,
         upgradeError,
         onProvider
           .filter(

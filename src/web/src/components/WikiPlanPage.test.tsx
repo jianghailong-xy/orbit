@@ -9,6 +9,8 @@ import { App as AntApp } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiDocsDirectory, WikiPlanJob, WikiPlanProposal, WikiPlanState, WikiPlanVersion } from '@orbit/shared';
 import { WikiPage } from '../pages/WikiPage';
+import { ToastViewport } from './ToastViewport';
+import { clearToasts } from '../lib/toastStore';
 
 /**
  * The plan (criterion 11's owner half, criterion 10 revised: mocks 21, 22, 25, 26), driven through the real
@@ -160,7 +162,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  act(() => root.unmount());
+  act(() => {
+    clearToasts();
+    root.unmount();
+  });
   container.remove();
   document.body.innerHTML = '';
   vi.unstubAllGlobals();
@@ -205,6 +210,7 @@ async function open(path: string): Promise<void> {
             </Routes>
             <Where />
           </AntApp>
+          <ToastViewport />
         </MemoryRouter>
       </QueryClientProvider>,
     );

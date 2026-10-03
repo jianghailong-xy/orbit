@@ -2,13 +2,15 @@ package main
 
 import (
 	"context"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
 
 // Answering "is this agent's working directory actually there, and can it be worktree-isolated?"
-// costs a stat plus a `git rev-parse` per agent. That is cheap but not free, and a hung network
+// costs a stat plus local git queries per agent. That is cheap but not free, and a hung network
 // mount would make it unbounded — so it runs on the same single-flight, latest-wins background
 // cache the session telemetry uses, and the heartbeat only ever reads the last completed scan.
 const (
@@ -118,10 +120,16 @@ func scanAgentDirs(ctx context.Context, targets []AgentDirTarget) []AgentDirProb
 		dir := expandTilde(t.WorkDir)
 		info, err := os.Stat(dir)
 		if err != nil || !info.IsDir() {
-			out = append(out, AgentDirProbe{AgentID: t.AgentID, Exists: false})
+			out = append(out, AgentDirProbe{AgentID: t.AgentID, WorkDir: t.WorkDir, Exists: false})
 			continue
 		}
-		probe := AgentDirProbe{AgentID: t.AgentID, Exists: true, IsGitRepo: isGitRepo(dir)}
+		inside, gitErr := gitCtx(ctx, dir, "rev-parse", "--is-inside-work-tree")
+		probe := AgentDirProbe{AgentID: t.AgentID, WorkDir: t.WorkDir, Exists: true, IsGitRepo: gitErr == nil && inside == "true"}
+		if probe.IsGitRepo {
+			if origin, err := gitCtx(ctx, dir, "remote", "get-url", "origin"); err == nil {
+				probe.RepoURL = agentDirRepoURL(origin)
+			}
+		}
 		// Same stat pass, one extra syscall: the filesystem this directory lives on. Reported
 		// here rather than as a machine-wide figure because agents on one runner can sit on
 		// different mounts, and a run can only be gated on the disk it will write to. A
@@ -134,4 +142,34 @@ func scanAgentDirs(ctx context.Context, targets []AgentDirTarget) []AgentDirProb
 		out = append(out, probe)
 	}
 	return out
+}
+
+// Origin URLs can contain local credentials. Report only the clone address; SSH usernames
+// identify the remote account, while HTTP userinfo, passwords and query tokens stay local.
+func agentDirRepoURL(origin string) string {
+	if strings.ContainsAny(origin, "\r\n") {
+		return ""
+	}
+	origin = strings.TrimSpace(origin)
+	// Git falls back to the remote name when remote.origin.url is configured as empty.
+	if origin == "origin" {
+		return ""
+	}
+	if !strings.Contains(origin, "://") {
+		return origin // SCP-style SSH addresses and local paths have no URL userinfo.
+	}
+	u, err := url.Parse(origin)
+	if err != nil {
+		return ""
+	}
+	if u.User != nil {
+		if strings.EqualFold(u.Scheme, "ssh") {
+			u.User = url.User(u.User.Username())
+		} else {
+			u.User = nil
+		}
+	}
+	u.RawQuery, u.Fragment, u.RawFragment = "", "", ""
+	u.ForceQuery = false
+	return u.String()
 }

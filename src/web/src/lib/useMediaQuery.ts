@@ -12,12 +12,14 @@ export const PHONE_QUERY = '(max-width: 600px)';
 
 export function useMediaQuery(query: string): boolean {
   // Guarded rather than read straight: this also runs under `renderToStaticMarkup`, where there
-  // is no window at all. "No window" answers false — the desktop reading — and the effect below
-  // corrects it on the first commit in a browser.
+  // is no window at all, and in a test document that has no `matchMedia` (the toast viewport is
+  // mounted in trees that never stubbed it). Either answers false — the desktop reading — and the
+  // effect below corrects it on the first commit in a browser.
   const [matches, setMatches] = useState(
-    () => typeof window !== 'undefined' && window.matchMedia(query).matches,
+    () => typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia(query).matches,
   );
   useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return undefined;
     const mql = window.matchMedia(query);
     const onChange = (): void => setMatches(mql.matches);
     onChange();

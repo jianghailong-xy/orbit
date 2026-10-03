@@ -7,6 +7,8 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionMoveTargets } from '@orbit/shared';
 import type { Runner } from './TasksSidePanel';
+import { ToastViewport } from './ToastViewport';
+import { clearToasts } from '../lib/toastStore';
 
 /**
  * Session folders and Move on the web (docs/session-folders-move-design.md §3–§5, §7), through the
@@ -146,6 +148,7 @@ async function mount(path: string, ready: () => void): Promise<void> {
             <WorkspaceView runner={RUNNER} />
             <LocationProbe />
           </AntApp>
+          <ToastViewport />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -345,6 +348,7 @@ afterEach(async () => {
   client = null;
   container = null;
   try {
+    await act(async () => clearToasts());
     if (mountedRoot) await act(async () => mountedRoot.unmount());
   } finally {
     if (mountedClient) {
@@ -504,9 +508,11 @@ describe('managing folders', { timeout: 60_000 }, () => {
 });
 
 describe('Move', { timeout: 60_000 }, () => {
-  it('files a row in a folder at once from its Move… button', async () => {
+  it('files a row in a folder at once from its More actions menu', async () => {
     await mountOnLoose();
-    await click(listRow('Loose one').querySelector('.session-move'), 'the row’s Move…');
+    await click(listRow('Loose one').querySelector('button[aria-label="More actions"]'), 'the row’s More actions');
+    await until(() => expect(menuItem('Move…')).toBeTruthy());
+    await click(menuItem('Move…'), 'the row’s Move…');
     await until(() => expect(option('Wiki')).toBeTruthy());
 
     expect(dialog()!.querySelector('.move-dialog-sub')?.textContent).toBe('Loose one');

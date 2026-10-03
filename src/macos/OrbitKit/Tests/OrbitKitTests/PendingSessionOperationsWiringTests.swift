@@ -79,8 +79,8 @@ final class PendingSessionOperationsWiringTests: XCTestCase {
     func testTheConsolesPollRaisesNoResultCard() throws {
         let retry = try slice(code(try source("WorktreeModel.swift")),
                               from: "private func surfaceRetry(", to: "static func resultCard(")
-        for card in ["Merged into", "Merge conflict in", "Merge into", "recovery.title",
-                     "Commit failed", "Changes committed", "No changes to commit"] {
+        for card in ["Merged into", "Merge conflict in", "Couldn't merge into", "recovery.title",
+                     "Couldn't commit", "Changes committed", "No changes to commit"] {
             XCTAssertFalse(retry.contains(card), "`\(card)` is the followed request's card, not the poll's")
         }
     }

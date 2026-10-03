@@ -391,7 +391,7 @@ struct AgentPanes: View {
         // there the List has nothing to select (and in a plain stack wouldn't respond to a tap).
         List(selection: listSelection) {
             #if os(iOS)
-            // ChatGPT-style recency sections (Pinned / Today / Yesterday / Previous 7 Days / …) — a
+            // ChatGPT-style recency sections (Pinned / Today / Yesterday / 2–7 days ago / …) — a
             // deliberate divergence from web's flat list, grouping the tall iOS session column by
             // last activity. Bucketing is the pure, tested `SessionTimeGrouping`. macOS keeps the flat
             // list (its 3-pane window reads fine without sections).

@@ -101,12 +101,12 @@ export type TaskRunConflictToast = Pick<ReturnType<typeof useToast>, 'error' | '
  * Those presses have nowhere to put a persistent block, so the run goes into a session card —
  * which already opens the session it names, making "open the run" the card's own click rather
  * than a control invented for it. A conflict this build cannot read falls through to the server's
- * own words, exactly as it did before.
+ * own words, on the line under a headline that says the start failed.
  */
 export function reportTaskRunConflict(toast: TaskRunConflictToast, error: Error): void {
   const conflict = readTaskRunConflict(error);
   if (!conflict || !conflict.sessionId) {
-    toast.error(error.message);
+    toast.error("Couldn't start the task", error.message);
     return;
   }
   toast.sessionNotice({

@@ -231,224 +231,150 @@ body {
   white-space: nowrap;
 }
 
-/* Toasts (AntD message): a top-right notification stack. The transcript is a growing content
-   stream, so a centred overlay lands right on whatever you just scrolled to; parking the cards
-   in the corner keeps the conversation column and the session title clear. AntD has no
-   placement option for message, so we re-anchor each notice inside its own list. Fixed width
-   keeps a stack's edges flush; text-align:start because the list's alignment would otherwise
-   ragged-right the wrapped lines. Sitting over the header band is fine here: the cards take no
-   clicks (see below), so the controls underneath stay live.
-   The card is `-notice`; `-notice-wrapper` is the icon+text row inside it. That pairing is
-   inverted from v5, where the wrapper was the outer box — decorating the wrapper paints a
-   second card inside AntD's own, which reads as a white slab around the toast.
-   Vertically: v6 pads the list by 24px and positions the card inside that padding, so the
-   holder's top edge sits 24px above the card's. 16px plus the notch inset therefore lands the
-   card level with the lifecycle notifications below — one origin for both toast surfaces.
-   !important only where a flat selector has to outrank AntD: its cssinjs rules read
-   `:where(.css-hash).ant-message .ant-message-notice …`, i.e. specificity (0,2,0)/(0,3,0). The
-   card rule qualifies through the list instead and needs none. */
-/* Normally level with the notification stack's origin; when that stack has cards up, it parks
-   below them instead of underneath them — lib/toast.tsx measures it into --toast-stack-top
-   (0px when the stack is empty, so max() falls back to the normal top). */
-.ant-message {
-  top: max(calc(env(safe-area-inset-top, 0px) + 16px), var(--toast-stack-top, 0px)) !important;
-  transition: top 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-/* AntD 6 centres each notice by hand — inset-inline-start:50% plus a -50% translate on a
-   shrink-to-fit box — so right-aligning the stack means replacing that pair, not justifying the
-   list around it. 16px inside the list's own 24px padding puts the card's right edge where the
-   lifecycle card's sits; max-width keeps a 16px gutter on the other side once the viewport is
-   too narrow for the full 360px. Four classes to outrank AntD's own (0,2,0) rules without
-   !important on `transform`: an important transform would also outrank the entrance keyframes
-   below and turn the slide into a bare fade.
-   Same card as the lifecycle notification below — radius, padding, border, shadow and icon
-   metrics are shared, so two cards stacked in one corner read as one family rather than as two
-   systems that happen to overlap. AntD's own defaults for this surface are 8px radius,
-   9px/12px padding, a three-layer shadow and 16px icons. */
-.ant-message.ant-message-list .ant-message-list-content > .ant-message-notice {
-  inset-inline-start: auto;
-  inset-inline-end: max(16px, env(safe-area-inset-right, 0px));
-  transform: none;
+/* ---- Toasts (components/ToastViewport.tsx, docs/mocks/toast-system) ----
+   One column in the top-right corner. The transcript is a growing content stream, so a centred
+   overlay lands right on whatever you just scrolled to; the corner keeps the conversation column
+   and the session title clear. What waits for you — a failure — is pinned at the top of the column
+   and stays until its ×; what passes stacks under it, newest last. A phone centres the column under
+   its top bar instead. The column takes no clicks, and neither does a pill that names nothing:
+   they float over the header band, whose controls stay live. Toasts that do something opt back in
+   (`.toast--live`). */
+.toast-viewport {
+  position: fixed;
+  z-index: 2050;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
   width: 360px;
-  max-width: calc(100vw - 56px);
-  padding: 12px 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-raised);
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1);
-  text-align: start;
+  max-width: calc(100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px));
+  pointer-events: none;
 }
-:root[data-theme='dark'] .ant-message-notice {
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35) !important;
-}
-/* Toasts don't take clicks — the card floats over the header's right edge and used to swallow
-   them (it blocked the double-click-to-rename target). Interactive cards opt back in below. */
-.ant-message-notice {
-  pointer-events: none !important;
-}
-/* 20px glyph inset 16px, text at 52px — the lifecycle card's icon column, so the two surfaces
-   share a text edge. The gap is the row's, so it goes on the row. One palette too: AntD's
-   message icons default to its own token colours, which are a different red (#f54a45) and
-   orange (#ff8800) from the semantic vars every other status surface in the app resolves
-   through. */
-.ant-message-notice-wrapper {
-  gap: 16px !important;
-}
-.ant-message-notice-icon {
-  font-size: 20px !important;
-}
-.ant-message-notice-icon > .anticon {
-  font-size: inherit !important;
-}
-.ant-message-success > .ant-message-notice-icon {
-  color: var(--success-solid) !important;
-}
-.ant-message-info > .ant-message-notice-icon {
-  color: var(--brand) !important;
-}
-.ant-message-warning > .ant-message-notice-icon {
-  color: var(--warning-solid) !important;
-}
-.ant-message-error > .ant-message-notice-icon {
-  color: var(--error-solid) !important;
-}
-.ant-message-notice:has(.toast-err) {
-  pointer-events: auto !important;
-}
-.ant-message-notice:has(.toast-err) {
-  user-select: text;
-}
-/* Error toast: the text plus a × that closes it (see lib/toast.tsx — errors never time out).
-   AntD wraps our content in a <span> of its own that shrink-wraps inside the card's flex row,
-   so the trailing close action needs that span to fill the card. */
-.ant-message-notice-title:has(> .toast-err) {
-  flex: 1;
-  min-width: 0;
-}
-
-/* Session-level results use Notification rather than Message: this is a compact card with the
-   outcome + session title, optional diagnostic detail, and a real action button when reversible.
-   These hug the viewport's top-right corner instead of hanging off the pane header's bottom edge:
-   anchored under the header the card dropped ~100px down and landed inside the reading column,
-   covering the top of the transcript and reading as page content rather than as a transient
-   system message. A toast is chrome, so it sits over chrome — the band it now overlaps carries
-   only the conversation header's ⋮ menu (desktop) or empty space right of "Orbit" (the mobile top
-   bar). Subsequent cards stack downward with an 8px gap. */
-.ant-notification.ant-notification-topRight:has(.session-lifecycle-toast) {
-  top: calc(env(safe-area-inset-top, 0px) + 16px) !important;
-  margin-right: max(16px, env(safe-area-inset-right, 0px)) !important;
-}
-/* Unlike the Message stack above, every card here takes clicks: the copy block opens the session
-   the card names (see lib/toast.tsx), so there is no such thing as an inert one. */
-.ant-notification-notice.session-lifecycle-toast {
-  box-sizing: border-box;
-  width: 360px;
-  max-width: calc(
-    100vw - 32px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)
-  );
-  min-height: 64px;
-  margin-bottom: 8px;
-  padding: 12px 16px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 10px;
-  background: var(--bg-raised);
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1);
-}
-.session-lifecycle-toast .ant-notification-notice-wrapper,
-.session-lifecycle-toast .ant-notification-notice-title {
-  min-width: 0;
-}
-/* AntD 6 lays the card out as a flex row rather than absolutely positioning the glyph against an
-   indented message, so the icon column is the row's own gap: 16px of padding, a 20px glyph and a
-   16px gap put the text on the same edge the Message card uses. */
-.session-lifecycle-toast .ant-notification-notice-wrapper {
-  gap: 16px;
+.toast-viewport--narrow {
+  top: calc(env(safe-area-inset-top, 0px) + 56px);
+  left: max(16px, env(safe-area-inset-left, 0px));
+  width: auto;
+  max-width: none;
   align-items: center;
 }
-/* One icon size for every tone, and the same 20px the Message toast uses — success used to
-   render at 24px against everyone else's 20px, so the same filled status circle came in two
-   weights depending on the outcome. (AntD sizes this one itself, hence !important.) */
-.session-lifecycle-toast .ant-notification-notice-icon {
-  width: 20px;
-  font-size: 20px !important;
-  line-height: 1;
-  text-align: center;
-}
-.session-lifecycle-toast--success .session-lifecycle-toast-icon {
-  color: var(--success-solid);
-}
-.session-lifecycle-toast--neutral .session-lifecycle-toast-icon {
-  color: var(--text-3);
-}
-.session-lifecycle-toast--info .session-lifecycle-toast-icon {
-  color: var(--brand);
-}
-.session-lifecycle-toast--warning .session-lifecycle-toast-icon {
-  color: var(--warning-solid);
-}
-.session-lifecycle-toast--error .session-lifecycle-toast-icon,
-.session-lifecycle-toast--danger .session-lifecycle-toast-icon {
-  color: var(--error-solid);
-}
-/* A tinted border means the card waits for you: warning and error are the two tones that never
-   time out. `danger` keeps the red icon — it reports a destructive result — but not the border,
-   because it dismisses itself like any other confirmation, and a card that looks identical to
-   the one that stays put is the reason you stop trusting the border at all. */
-.ant-notification-notice.session-lifecycle-toast--warning {
-  border-color: var(--warning-border);
-}
-.ant-notification-notice.session-lifecycle-toast--error {
-  border-color: var(--error-border);
-}
-.session-lifecycle-toast .ant-notification-notice-title {
-  margin: 0;
-  font-size: inherit;
-  line-height: inherit;
-}
-/* AntD parks the × 24px in from the edge; pull it onto the card's own 16px content grid so it
-   lines up with the Message toast's ×. */
-.session-lifecycle-toast .ant-notification-notice-close {
-  inset-inline-end: 16px !important;
-}
-.session-lifecycle-toast-body {
+.toast {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 12px;
-  min-height: 38px;
+  margin: 0;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-raised);
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.12);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: start;
+  animation: orbit-toast-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-/* The copy block is a button that opens the session the card names (see lib/toast.tsx). Strip
-   the button chrome so the card looks exactly as it did, and let the hover state carry the
-   affordance — a pointer plus an underlined headline, the same signal a link gives. */
-.session-lifecycle-toast-copy {
-  display: block;
+:root[data-theme='dark'] .toast {
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.4);
+}
+.toast--live {
+  pointer-events: auto;
+}
+/* ① a confirmation and a progress line: a pill that hugs its words. */
+.toast--pill {
+  gap: 8px;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 7px 16px 7px 10px;
+  border-radius: 999px;
+}
+button.toast--pill {
+  cursor: pointer;
+}
+button.toast--pill:hover {
+  background: var(--bg-hover);
+}
+/* ② and ③: a card as wide as the column. */
+.toast--card {
+  width: 100%;
+  min-height: 56px;
+  padding: 12px 12px 12px 14px;
+  border-radius: 12px;
+}
+/* ③: tinted over the raised surface (the dark theme's tints are translucent), the server's words
+   in a block of their own, and selectable — the thing you read twice and paste somewhere. */
+.toast--attention {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  user-select: text;
+}
+.toast--error {
+  border-color: var(--error-border);
+  background: linear-gradient(var(--error-bg), var(--error-bg)), var(--bg-raised);
+}
+.toast--warning {
+  border-color: var(--warning-border);
+  background: linear-gradient(var(--warning-bg), var(--warning-bg)), var(--bg-raised);
+}
+.toast-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.toast-glyph {
+  flex: none;
+  font-size: 20px;
+  line-height: 0;
+}
+.toast--pill .toast-glyph {
+  font-size: 18px;
+}
+.toast-glyph--success {
+  color: var(--success-solid);
+}
+.toast-glyph--info {
+  color: var(--brand);
+}
+.toast-glyph--neutral {
+  color: var(--text-3);
+}
+.toast-glyph--warning {
+  color: var(--warning-solid);
+}
+.toast-glyph--error {
+  color: var(--error-solid);
+}
+.toast-copy {
+  display: flex;
   flex: 1;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
+}
+.toast--pill .toast-copy {
+  flex: 0 1 auto;
+  gap: 0;
+}
+.toast-copy--link {
   padding: 0;
   border: 0;
-  background: transparent;
+  border-radius: 6px;
+  background: none;
   color: inherit;
   font: inherit;
   text-align: start;
   cursor: pointer;
 }
-.session-lifecycle-toast-copy:hover .session-lifecycle-toast-status {
-  text-decoration: underline;
+.toast-copy--link:hover .toast-head {
+  color: var(--brand);
 }
-.session-lifecycle-toast-copy:hover .session-lifecycle-toast-title {
-  color: var(--text-2);
-}
-.session-lifecycle-toast-copy:focus-visible {
-  border-radius: 6px;
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-.session-lifecycle-toast-status {
-  color: var(--text-1);
-  font-size: 14px;
+.toast-head {
   font-weight: 600;
-  line-height: 20px;
+  overflow-wrap: anywhere;
 }
-.session-lifecycle-toast-title {
+.toast-sub {
   overflow: hidden;
   color: var(--text-3);
   font-size: 13px;
@@ -456,54 +382,123 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.session-lifecycle-toast-detail {
-  margin-top: 4px;
+.toast-detail {
   color: var(--text-2);
   font-size: 13px;
   line-height: 18px;
   overflow-wrap: anywhere;
 }
-.session-lifecycle-toast:has(.session-lifecycle-toast-detail) .ant-notification-notice-wrapper {
-  align-items: flex-start;
-}
-.session-lifecycle-toast--warning,
-.session-lifecycle-toast--error {
-  user-select: text;
-}
-.session-lifecycle-toast-undo {
-  flex: none;
-  min-width: 52px;
-  min-height: 36px;
-  margin-left: auto;
-  padding: 0 8px;
-  border: 0;
+.toast-reason {
+  max-height: 108px;
+  margin-left: 32px;
+  overflow: auto;
+  padding: 7px 10px;
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  background: transparent;
-  color: var(--brand);
-  font-family: inherit;
-  font-size: 14px;
+  background: var(--bg-raised);
+  color: var(--text-2);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 12px;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.toast-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-left: 32px;
+}
+.toast-action {
+  flex: none;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 20px;
   cursor: pointer;
 }
-.session-lifecycle-toast-undo:hover {
-  background: var(--brand-tint);
+.toast-action:hover {
+  background: var(--bg-hover);
 }
-.session-lifecycle-toast-undo:active {
+.toast-action--primary {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+.toast-action--primary:hover {
+  border-color: var(--brand-strong);
+  background: var(--brand-strong);
+}
+/* A result card's one action — Undo — in the tint the lifecycle card's Undo always had. */
+.toast--card:not(.toast--attention) > .toast-action {
+  border-color: var(--brand-tint);
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.toast--card:not(.toast--attention) > .toast-action:hover {
   background: var(--brand-tint-hover);
 }
-.session-lifecycle-toast-undo:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 1px;
+.toast-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-3);
+  font-size: 13px;
+  cursor: pointer;
 }
-:root[data-theme='dark'] .ant-notification-notice.session-lifecycle-toast {
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+.toast-close:hover {
+  color: var(--text-1);
+}
+.toast-count {
+  flex: none;
+  padding: 0 7px;
+  border-radius: 9px;
+  background: var(--error-solid);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 18px;
+}
+.toast-chev {
+  flex: none;
+  color: var(--text-3);
+  font-size: 11px;
+}
+.toast-more {
+  pointer-events: auto;
+  margin-top: -2px;
+  padding: 3px 12px;
+  border: 1px solid var(--error-border);
+  border-radius: 999px;
+  background: linear-gradient(var(--error-bg), var(--error-bg)), var(--bg-raised);
+  color: var(--error);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.toast-copy--link:focus-visible,
+.toast-action:focus-visible,
+.toast-close:focus-visible,
+.toast-more:focus-visible,
+button.toast--pill:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
-/* One entrance for both toast surfaces. AntD's top-right Notification already enters
-   horizontally — tightened here to a subtle 16px so it feels anchored to the header rather than
-   flying in from off-screen — while its Message drops in vertically. Cards that share a corner
-   shouldn't arrive from two different directions, so Message borrows this one. */
+/* Cards in the corner arrive from the side the corner is on, subtly — anchored to the header rather
+   than flying in from off-screen; a phone's centred column drops in from under its top bar. */
 @keyframes orbit-toast-enter {
   from {
     opacity: 0;
@@ -511,84 +506,33 @@ body {
   }
   to {
     opacity: 1;
-    transform: translate3d(0, 0, 0);
+    transform: none;
   }
 }
-.session-lifecycle-toast.ant-notification-fade-enter.ant-notification-fade-enter-active,
-.session-lifecycle-toast.ant-notification-fade-appear.ant-notification-fade-appear-active,
-.ant-message .ant-message-notice.ant-message-fade-enter.ant-message-fade-enter-active,
-.ant-message .ant-message-notice.ant-message-fade-appear.ant-message-fade-appear-active {
-  animation-name: orbit-toast-enter !important;
-  animation-duration: 180ms !important;
-  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+@keyframes orbit-toast-drop {
+  from {
+    opacity: 0;
+    transform: translate3d(0, -12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
-
-@media (max-width: 600px) {
-  .ant-notification.ant-notification-topRight:has(.session-lifecycle-toast) {
-    right: max(16px, env(safe-area-inset-right, 0px)) !important;
-    left: max(16px, env(safe-area-inset-left, 0px)) !important;
-    width: auto;
-    margin-right: 0 !important;
-  }
-  .ant-notification-notice.session-lifecycle-toast {
-    width: 100%;
-    max-width: none;
-  }
+.toast-viewport--narrow .toast {
+  animation-name: orbit-toast-drop;
 }
 
 @media (pointer: coarse) {
-  .session-lifecycle-toast-undo {
+  .toast-action {
     min-height: 44px;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .ant-notification-notice.session-lifecycle-toast {
-    transition: none !important;
+  .toast {
+    animation: none;
   }
-  .session-lifecycle-toast.ant-notification-fade-enter,
-  .session-lifecycle-toast.ant-notification-fade-appear,
-  .session-lifecycle-toast.ant-notification-fade-leave,
-  .ant-message .ant-message-notice.ant-message-fade-enter,
-  .ant-message .ant-message-notice.ant-message-fade-appear,
-  .ant-message .ant-message-notice.ant-message-fade-leave {
-    opacity: 1 !important;
-    animation: none !important;
-  }
-  .ant-message {
-    transition: none;
-  }
-}
-
-/* A wrapped error is three lines tall; keep AntD's severity icon up on the first one with the
-   × instead of centred against the whole block. The icon and the text are the two children of
-   the notice's own row, so this lands on the row rather than on the card around it. */
-.ant-message-notice-wrapper:has(.toast-err) {
-  align-items: flex-start;
-}
-.toast-err {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-.toast-err-text {
-  min-width: 0;
-}
-.toast-err-close {
-  flex: none;
-  margin-left: auto;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--text-3);
-  /* Same glyph and same 16px inset as the lifecycle card's × (see below) — dismissing a toast
-     shouldn't be a different-sized target depending on which surface it came from. */
-  font-size: 14px;
-  line-height: 20px;
-  cursor: pointer;
-}
-.toast-err-close:hover {
-  color: var(--text-1);
 }
 
 /* ---- App shell: side nav | main region (master/detail) ---- */
@@ -3356,7 +3300,7 @@ body {
      list never scrolls sideways (titles/previews already ellipsize). */
   overflow-x: hidden;
 }
-/* Recency ("Today", "Previous 7 Days", …) / tag section headings over the rows below them.
+/* Recency ("Today", "2–7 days ago", …) / tag section headings over the rows below them.
    Sticky so the heading of the group being scrolled through stays legible, and light enough
    that the rows — not the headings — carry the list's weight. */
 .session-section-head {
@@ -3551,11 +3495,9 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .session-row.active {
   background: var(--brand-tint);
-  --row-bg: var(--brand-tint);
 }
 .session-row.active:hover {
   background: var(--brand-tint-hover);
-  --row-bg: var(--brand-tint-hover);
 }
 .workspace-draft {
   display: flex;
@@ -4745,7 +4687,6 @@ html[data-theme='dark'] .session-tag-chip {
   cursor: pointer;
   /* Keep the swipe-away content from spilling past the row's edges. */
   overflow: hidden;
-  --row-bg: var(--bg-raised);
 }
 /* Wraps the row's icon + text so a touch swipe can slide it either way, exposing the swipe
    actions behind it. On desktop it never translates (transform stays 0). */
@@ -4846,7 +4787,14 @@ html[data-theme='dark'] .session-tag-chip {
 @media (hover: hover) {
   .session-row:hover {
     background: var(--bg-hover);
-    --row-bg: var(--bg-hover);
+  }
+}
+.session-row.menu-open:not(.active) {
+  background: var(--bg-hover);
+}
+@media (min-width: 961px) {
+  .session-row {
+    border-radius: 6px;
   }
 }
 /* Trash rows are managed, not opened — no pointer affordance. */
@@ -4883,6 +4831,12 @@ html[data-theme='dark'] .session-tag-chip {
   flex: none;
   font-size: 12.5px;
   color: var(--text-4);
+}
+.session-pin-indicator {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-3);
+  font-size: 12px;
 }
 /* A public link opens this session (the list row's `shared`): a globe beside the time. */
 .session-shared {
@@ -4952,35 +4906,18 @@ html[data-theme='dark'] .session-tag-chip {
 .session-preview.tone-review {
   color: var(--text-3);
 }
-/* Row actions overlay the right edge instead of taking layout space: while idle
-   the title fills the full row width, and on hover the icon fades in over the
-   text. A gradient blends the title into the row background so it never collides
-   with the icon. */
+/* A permanent action slot keeps text and hit targets stable as the pointer moves. */
 .session-right {
-  position: absolute;
-  top: 0;
-  right: 8px;
-  bottom: 0;
   display: flex;
+  flex: none;
   align-items: center;
-  padding-left: 40px;
-  background: linear-gradient(to right, transparent, var(--row-bg) 40px);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
+  width: 32px;
 }
-/* Reveal-on-hover only for real pointers. On touch, actions come from a swipe
-   (.session-swipe-actions); keeping :hover off touch also stops iOS Safari's "first tap shows
-   hover, second tap clicks" — which was swallowing the tap that should open the session. */
-@media (hover: hover) {
-  .session-row:hover .session-right {
-    opacity: 1;
-    pointer-events: auto;
+/* Touch phones use swipes; narrow desktop windows still need the menu for mouse/keyboard. */
+@media (max-width: 960px) and (hover: none) and (pointer: coarse) {
+  .session-right {
+    display: none;
   }
-}
-.session-row.menu-open .session-right {
-  opacity: 1;
-  pointer-events: auto;
 }
 .session-actions {
   display: flex;
@@ -4997,9 +4934,9 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 16px;
   flex: none;
 }
-/* Enlarge the click/hover target to the full row height without growing the
-   visible chip, so the icon stays light but is easy to hit. */
-.session-kebab::before {
+/* Folder controls keep their existing expanded target; session actions use a real button. */
+.session-folder-more::before,
+.session-folder-head-more::before {
   content: '';
   position: absolute;
   top: -18px;
@@ -5011,40 +4948,51 @@ html[data-theme='dark'] .session-tag-chip {
   background: var(--bg-hover-strong);
   color: var(--text-1);
 }
-/* Complete button: a bare glyph with no chip — the row's own hover/selected
-   highlight already frames it, so the action stays light and never clashes with
-   the selected-row tint. Darkens slightly on direct hover for feedback. */
-.session-kebab.session-complete {
+.session-actions > .session-kebab {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
   background: transparent;
-  color: var(--text-3);
+  font: inherit;
   font-size: 16px;
+  cursor: pointer;
 }
-.session-kebab.session-complete:hover {
-  background: transparent;
-  color: var(--text-2);
-}
-.session-kebab.session-complete.disabled,
-.session-kebab.session-complete.disabled:hover {
-  color: var(--text-3);
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-/* Pin toggle: a bare pushpin like the ✓, chip-highlighted on direct hover. It only ever shows
-   together with the row's other actions (on hover) — a pinned row is marked at rest by the
-   accent bar below instead, so there is never a lone floating pin. */
-.session-kebab.session-pin-toggle {
-  background: transparent;
-  color: var(--text-3);
-}
-.session-kebab.session-pin-toggle:hover {
+.session-actions > .session-kebab:hover,
+.session-row.menu-open .session-actions > .session-kebab {
   background: var(--bg-hover-strong);
   color: var(--text-1);
 }
-/* Pinned rows: a thin accent bar on the leading edge marks the pinned state at rest (they also
-   sort to the top). The pin/✓ actions still appear only on hover, exactly like every other row.
-   box-shadow (not background) so it survives the hover/selected background tints. */
-.session-row.pinned {
-  box-shadow: inset 3px 0 0 var(--brand);
+.session-actions > .session-kebab:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.session-row-menu {
+  min-width: 240px;
+}
+.session-row-menu .session-menu-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.session-row-menu .session-menu-label kbd {
+  flex: none;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+}
+.session-row-menu .session-menu-description {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.4;
 }
 .session-status {
   font-size: 12.5px;
@@ -18013,6 +17961,14 @@ button.chat-jump-start:hover {
   flex: none;
   font-size: 12px;
 }
+.bgwake-details-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  margin-left: auto;
+  font-size: 12px;
+}
 .bgwake-caret {
   flex: none;
   align-self: center;
@@ -18120,20 +18076,68 @@ button.chat-jump-start:hover {
   margin-top: 8px;
 }
 .bgwake-tail {
-  margin: 2px 0 6px 22px;
+  margin: 6px 0 6px 22px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--bg-sunken);
 }
 .bgwake-tail-name {
   margin-bottom: 2px;
   color: var(--text-2);
   font-size: 12px;
 }
+.bgwake-output > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.bgwake-output > summary::-webkit-details-marker {
+  display: none;
+}
+.bgwake-output-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+/* Clamp visual lines: one long JSON line must be as compact as multiline output. */
+.bgwake-output-preview {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-height: 1.6;
+  max-height: 4.8em;
+  overflow: hidden;
+}
+.bgwake-output-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--brand);
+  font-size: 12px;
+}
+.bgwake-output-collapse,
+.bgwake-output[open] .bgwake-output-preview,
+.bgwake-output[open] .bgwake-output-expand {
+  display: none;
+}
+.bgwake-output[open] .bgwake-output-collapse {
+  display: inline;
+}
+.bgwake-output[open] .bgwake-output-action .anticon {
+  transform: rotate(180deg);
+}
+.bgwake-output-full {
+  margin-top: 6px;
+  line-height: 1.6;
+}
 .bgwake-undelivered {
   margin: 2px 0 0 22px;
   color: var(--warning);
   font-size: 12px;
 }
-/* A wake written into the running turn: how far it got, in a steer bubble's own words and tone
-   (.chat-steer-state). */
+/* A wake written into the running turn: delivery progress in the same quiet tone as a steer. */
 .bgwake-steer {
   margin: 2px 0 0 22px;
   font-size: 12px;

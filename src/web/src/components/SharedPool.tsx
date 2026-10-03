@@ -73,8 +73,8 @@ export function PeopleStack({ pool }: { pool: SharedPool }) {
 }
 
 /** A write to a shared pool, after which every provider read — the pool's page, its card, the
- *  pickers — reads again. */
-function usePoolWrite<T>(write: (input: T) => Promise<unknown>, onDone?: () => void) {
+ *  pickers — reads again. `failed` names the write in the toast when it doesn't go through. */
+function usePoolWrite<T>(failed: string, write: (input: T) => Promise<unknown>, onDone?: () => void) {
   const qc = useQueryClient();
   const message = useToast();
   return useMutation({
@@ -83,7 +83,7 @@ function usePoolWrite<T>(write: (input: T) => Promise<unknown>, onDone?: () => v
       void qc.invalidateQueries({ queryKey: ['providers'] });
       onDone?.();
     },
-    onError: (e: Error) => message.error(e.message || 'Failed'),
+    onError: (e: Error) => message.error(failed, e.message),
   });
 }
 
@@ -119,11 +119,13 @@ export function WhoCanUseItCard({
   // Everybody in it but its owner: the people they added.
   const added = pool.people.filter((person) => !person.creator);
   const [sharing, setSharing] = useState(false);
-  const save = usePoolWrite((rules: { membersCanAdd?: boolean; membersCanAddAccounts?: boolean }) =>
-    api(poolPath(pool), { method: 'PATCH', body: rules }),
+  const save = usePoolWrite(
+    "Couldn't change the setting",
+    (rules: { membersCanAdd?: boolean; membersCanAddAccounts?: boolean }) =>
+      api(poolPath(pool), { method: 'PATCH', body: rules }),
   );
   // Back to Just me: everybody but its owner out, and their keys and session tokens with them.
-  const keepToSelf = usePoolWrite(async () => {
+  const keepToSelf = usePoolWrite("Couldn't make the pool just yours", async () => {
     for (const person of pool.people) {
       if (!person.creator) await api(`${poolPath(pool)}/people/${encodeId(person.userId)}`, { method: 'DELETE' });
     }
@@ -307,8 +309,10 @@ function PersonRow({
 function PersonMenu({ pool, person }: { pool: SharedPool; person: SharedPoolPerson }) {
   const { modal } = App.useApp();
   const at = `${poolPath(pool)}/people/${encodeId(person.userId)}`;
-  const setRole = usePoolWrite((role: 'ADMIN' | 'MEMBER') => api(at, { method: 'PATCH', body: { role } }));
-  const remove = usePoolWrite(() => api(at, { method: 'DELETE' }));
+  const setRole = usePoolWrite("Couldn't change the role", (role: 'ADMIN' | 'MEMBER') =>
+    api(at, { method: 'PATCH', body: { role } }),
+  );
+  const remove = usePoolWrite("Couldn't remove the person from the pool", () => api(at, { method: 'DELETE' }));
   const items: MenuProps['items'] = [
     ...(pool.shared ? [{ key: 'role', label: person.role === 'ADMIN' ? 'Make member' : 'Make admin' }] : []),
     { key: 'remove', label: 'Remove from pool', danger: true },
@@ -422,7 +426,7 @@ function SharePoolModal({
     },
     onError: (e: Error) => {
       void qc.invalidateQueries({ queryKey: ['providers'] });
-      message.error(e.message || 'Failed');
+      message.error("Couldn't share the pool", e.message);
     },
   });
   const footer = empty ? (

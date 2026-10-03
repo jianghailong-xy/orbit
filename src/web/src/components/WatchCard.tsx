@@ -192,10 +192,10 @@ function deliveryMark(d: WatchDeliveryView): string {
 
 type ControlVerb = 'pause' | 'resume' | 'cancel';
 
-const CONTROL: Record<ControlVerb, { call: (id: string) => Promise<WatchView>; done: string }> = {
-  pause: { call: pauseWatch, done: 'Watch paused. Its deadline keeps running.' },
-  resume: { call: resumeWatch, done: 'Watch resumed' },
-  cancel: { call: cancelWatch, done: 'Stopped watching' },
+const CONTROL: Record<ControlVerb, { call: (id: string) => Promise<WatchView>; done: string; failed: string }> = {
+  pause: { call: pauseWatch, done: 'Watch paused. Its deadline keeps running.', failed: "Couldn't pause the watch" },
+  resume: { call: resumeWatch, done: 'Watch resumed', failed: "Couldn't resume the watch" },
+  cancel: { call: cancelWatch, done: 'Stopped watching', failed: "Couldn't stop the watch" },
 };
 
 /**
@@ -223,7 +223,7 @@ export function WatchControls({ watch }: { watch: WatchView }) {
       void qc.invalidateQueries({ queryKey: watchesQuery().queryKey });
       toast.success(CONTROL[verb].done);
     },
-    onError: (err) => toast.error(watchErrorMessage(err)),
+    onError: (err, verb) => toast.error(CONTROL[verb].failed, watchErrorMessage(err)),
   });
   const pending = control.isPending ? control.variables : undefined;
   return (

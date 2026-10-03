@@ -106,9 +106,13 @@ type HeartbeatRequest struct {
 // a directory on this machine, and whether it sits inside a git work tree (the precondition for
 // per-session worktree isolation). Mirrors @orbit/shared AgentDirProbe.
 type AgentDirProbe struct {
-	AgentID   string `json:"agentId"`
+	AgentID string `json:"agentId"`
+	// Original target spelling, before expanding ~ or cleaning paths, for stale-probe checks.
+	WorkDir   string `json:"workDir,omitempty"`
 	Exists    bool   `json:"exists"`
 	IsGitRepo bool   `json:"isGitRepo"`
+	// Local origin URL without credentials. Missing origin or failed probe leaves this empty.
+	RepoURL string `json:"repoUrl,omitempty"`
 	// Free/total bytes of the filesystem holding WorkDir. Per directory, not per machine: one
 	// runner's agents can sit on different mounts, and the only figure that can gate a run is
 	// the one for the filesystem it will actually write to. Omitted when the path is missing or
