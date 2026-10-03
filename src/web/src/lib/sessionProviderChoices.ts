@@ -1,6 +1,6 @@
 import { AgentProvider, PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shared';
 import type { PlanUsage, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
-import { accountPlanUsage } from './engineAccounts';
+import { accountNameOf, accountPlanUsage } from './engineAccounts';
 import { encodeId } from './idCodec';
 import { bindingPlanUsageRow, currentPlanUsageRows } from './planUsage';
 import { ownsPool, type SharedPool } from './sharedPools';
@@ -222,7 +222,7 @@ export function providerChoices(
               account.auth === 'yes' && snapshot ? bindingPlanUsageRow(currentPlanUsageRows(snapshot)) : undefined;
             return {
               id: account.id,
-              label: account.id === 'default' ? 'Default' : account.name || `Account ${account.id}`,
+              label: accountNameOf(account),
               ...(quota
                 ? {
                     quota: `${compactWindowLabel(quota.label)} ${quota.percent}%`,

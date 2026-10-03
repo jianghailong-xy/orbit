@@ -9,12 +9,13 @@ import {
 import type {
   LoginEngine,
   RunnerAccountRemoveState,
+  RunnerEngineAccount,
   RunnerInstallState,
   RunnerLoginState,
   SlashCommandInfo,
 } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
-import { sanitizeRunnerEngines } from '../common/runner-engines';
+import { namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
 import { sanitizeRuntimeDefaultModels } from '../common/runtime-model';
 import { ACTIVE_TURN_STATUSES } from '../common/session-scheduling';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
@@ -121,8 +122,10 @@ export class RunnersService {
         heartbeatLeaseOwner: true,
         heartbeatDraining: true,
         // Per-engine health, and any install the user started for one of them — both drive the
-        // Providers page's "On your runners" section.
+        // Providers page's "On your runners" section. The accounts carry the names given them here
+        // (namedRunnerEngines), not only the ones the runner reports.
         engines: true,
+        accountNames: true,
         installStatus: true,
         installEngine: true,
         installCommand: true,
@@ -157,6 +160,7 @@ export class RunnersService {
       availableSkills,
       runtimeDefaultModels,
       engines,
+      accountNames,
       installStatus,
       installEngine,
       installCommand,
@@ -173,7 +177,7 @@ export class RunnersService {
       runtimeDefaultModels: sanitizeRuntimeDefaultModels(runtimeDefaultModels),
       // null (not []) for a runner that has never reported: "we don't know yet" and "nothing is
       // installed" are different answers, and only one of them is ours to make up.
-      engines: sanitizeRunnerEngines(engines),
+      engines: namedRunnerEngines({ engines, accountNames }),
       install: installStateOf({
         installStatus,
         installEngine,
@@ -535,6 +539,56 @@ export class RunnersService {
       },
     });
     return accountRemoveStateOf(r);
+  }
+
+  /**
+   * Rename one account a runner reports — Default included, which the machine itself never names.
+   *
+   * Only a label, and Orbit's own: kept in `runner.account_names` and laid over the report wherever
+   * an account is named (namedRunnerEngines), so nothing on the machine changes, the runner need not
+   * be online, and no runner has to be new enough to understand it. The name goes into its one key in
+   * the statement itself, so two accounts renamed at once cannot lose either name. A name equal to the
+   * one the account carries anyway — what the runner reports for it, or "Default" — removes the key
+   * instead: that is how Default goes back to being Default. Returns the account as the runner list
+   * now shows it.
+   */
+  async renameAccount(
+    ownerId: string,
+    id: string,
+    engine: LoginEngine,
+    account: string,
+    name: string,
+  ): Promise<RunnerEngineAccount> {
+    if (!engineKeepsAccounts(engine)) {
+      throw new BadRequestException(`Only an engine that keeps accounts can rename one`);
+    }
+    if (!ACCOUNT_ID_PATTERN.test(account ?? '')) {
+      throw new BadRequestException('Unknown account');
+    }
+    const trimmed = (name ?? '').trim();
+    if (!trimmed) throw new BadRequestException('An account needs a name');
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { engines: true } });
+    if (!runner) throw new NotFoundException('runner not found');
+    const reported = sanitizeRunnerEngines(runner.engines)
+      ?.find((entry) => entry.engine === engine)
+      ?.accounts?.find((entry) => entry.id === account);
+    if (!reported) throw new NotFoundException('That account is not one this runner reports');
+    const own = reported.name || (account === 'default' ? 'Default' : '');
+    const alias = trimmed === own ? null : trimmed;
+    const written = await this.prisma.$executeRaw`
+      UPDATE "runner"
+         SET "account_names" = CASE
+               WHEN ${alias}::text IS NULL
+                 THEN COALESCE("account_names", '{}'::jsonb) #- ARRAY[${engine}::text, ${account}::text]
+               ELSE jsonb_set(
+                      COALESCE("account_names", '{}'::jsonb),
+                      ARRAY[${engine}::text],
+                      COALESCE("account_names" -> ${engine}::text, '{}'::jsonb)
+                        || jsonb_build_object(${account}::text, ${alias}::text))
+             END
+       WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
+    if (written === 0) throw new NotFoundException('runner not found');
+    return alias ? { ...reported, name: alias } : reported;
   }
 
   /** @deprecated Codex's route; read removeAccount. */

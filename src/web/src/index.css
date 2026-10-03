@@ -12896,11 +12896,16 @@ button.chat-jump-start:hover {
 .re-card + .re-card {
   margin-top: 10px;
 }
-/* An offline runner's rows describe its last check-in, not its present state. */
+/* An offline runner's rows describe its last check-in, not its present state: everything in them but
+   an account's rename mark, which asks nothing of the machine — a name is kept in Orbit — and so stays
+   as live as it is. Faded part by part, since nothing inside a faded element can be less faded. */
 .re-card.offline {
   background: var(--bg-subtle);
 }
-.re-card.offline .re-row {
+.re-card.offline .re-row > :not(.re-id),
+.re-card.offline .re-id > :not(.re-id-main),
+.re-card.offline .re-id-main > :not(.re-name):not(.re-name-input),
+.re-card.offline .re-name > :not(.re-rename) {
   opacity: 0.62;
 }
 .re-head {
@@ -13227,6 +13232,54 @@ button.chat-jump-start:hover {
   font-weight: 600;
   line-height: 16px;
   vertical-align: 1px;
+}
+/* An account's rename mark, after its name and its marks: grey at rest like the row's other marks. */
+.re-rename {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text-3);
+  font-size: 12px;
+  vertical-align: -4px;
+  cursor: pointer;
+}
+.re-rename:hover {
+  color: var(--text-1);
+  background: var(--fill-muted);
+}
+/* The name being renamed: the session title's underlined input (.workspace-name-input), at the
+   name's own size, its width set from the unseen twin below so the underline hugs the text. */
+.re-name-input {
+  display: block;
+  box-sizing: content-box;
+  max-width: 100%;
+  min-width: 3ch;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-bottom: 1px solid var(--brand);
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.re-name-mirror {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  visibility: hidden;
+  white-space: pre;
+  font-size: 13px;
+  font-weight: 600;
 }
 /* Two slots, one account: said under the second slot's row, in the second slot's own words, with
    the way out beside it. Indented past the rail so it reads as that row's and not the card's. */

@@ -7,7 +7,8 @@ import OrbitKit
 // state and quota (`CodexAccounts`, the same split the New Session picker reads). Signing in, again
 // or for the first time, is `RunnerSignInView` for that account; Add Account signs a new one in under
 // a name; an added account swipes off the machine, after asking. None of it can reach a machine that
-// is offline, so there the presses are greyed and the page says why.
+// is offline, so there the presses are greyed and the page says why — all but Rename…, in every
+// account's long-press menu, Default's too: a name is a label Orbit keeps, and the machine has no say.
 
 /// The engine page for `engine` on the runner `runnerID` — the frame `NavNode.runnerEngine` names.
 struct RunnerEnginePage: View {
@@ -35,6 +36,10 @@ private struct RunnerEngineContent: View {
     @State private var signingIn: String?
     @State private var newAccountName = ""
     @State private var pendingRemoval: RunnerPageFormat.AccountLine?
+    /// The account whose rename alert is up, and the name being typed into it — seeded in the same
+    /// press that raises the alert, as the session rename's is (SessionRenameAlert.swift).
+    @State private var renaming: RunnerPageFormat.AccountLine?
+    @State private var renameDraft = ""
     @State private var notice: String?
 
     private static let adding = "+"
@@ -62,6 +67,15 @@ private struct RunnerEngineContent: View {
             Button("Cancel", role: .cancel) {}
         } message: { line in
             Text(removalNote(line))
+        }
+        .alert("Rename Account", isPresented: renameAsked, presenting: renaming) { line in
+            TextField(line.isDefault ? "Default" : "Name", text: $renameDraft)
+            // Default action, so Return in the field commits.
+            Button("Save") { rename(line) }
+                .keyboardShortcut(.defaultAction)
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("Only a label in Orbit — nothing on \(RunnerPageFormat.displayName(runner)) changes.")
         }
         .runnerNotice(notice)
         // A sign-in lands on the machine's next check-in: read it again while the page is up.
@@ -108,6 +122,16 @@ private struct RunnerEngineContent: View {
         Section {
             ForEach(RunnerPageFormat.accountLines(health)) { line in
                 accountRow(line, login: login, offline: offline, now: now)
+                    // Rename stays out of the swipe actions: it opens an editor rather than performing
+                    // the action, which is not what a swipe promises (SessionRowActions.swift).
+                    .contextMenu {
+                        Button {
+                            renameDraft = line.name
+                            renaming = line
+                        } label: {
+                            Label("Rename…", systemImage: "pencil")
+                        }
+                    }
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         if !line.isDefault {
                             Button(role: .destructive) { pendingRemoval = line } label: {
@@ -159,8 +183,8 @@ private struct RunnerEngineContent: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(line.name)
                         .font(.headline)
-                    if let home = line.home {
-                        Text(home)
+                    if let subtitle = line.subtitle {
+                        Text(subtitle)
                             .font(.orbitLabel)
                             .foregroundStyle(Color.secondary)
                             .lineLimit(1)
@@ -259,6 +283,10 @@ private struct RunnerEngineContent: View {
         Binding(get: { pendingRemoval != nil }, set: { if !$0 { pendingRemoval = nil } })
     }
 
+    private var renameAsked: Binding<Bool> {
+        Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })
+    }
+
     private var removalTitle: String {
         guard let line = pendingRemoval else { return "Remove" }
         return "Remove “\(line.name)” from \(RunnerPageFormat.displayName(runner))?"
@@ -274,6 +302,17 @@ private struct RunnerEngineContent: View {
     private func closeSignIn() {
         signingIn = nil
         Task { await runners.load() }
+    }
+
+    /// The session rename's rules: trimmed, and an empty or unchanged name changes nothing.
+    private func rename(_ line: RunnerPageFormat.AccountLine) {
+        guard let login = RunnerPageFormat.loginEngine(engine) else { return }
+        let name = renameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != line.name else { return }
+        let id = runner.id
+        Task {
+            if let failure = await runners.renameAccount(id, engine: login, account: line.id, name: name) { show(failure) }
+        }
     }
 
     private func remove(_ line: RunnerPageFormat.AccountLine) {

@@ -307,6 +307,22 @@ final class RunnerPageFormatTests: XCTestCase {
         XCTAssertEqual(RunnerPageFormat.accountLines(unnamed).map(\.name), ["Default", "Account 9f00"])
     }
 
+    func testARenamedDefaultSaysUnderItsNameThatItIsStillTheMachinesOwnLogin() throws {
+        let health = RunnerEngineHealth(engine: "claude", installed: true, auth: "yes", accounts: [
+            RunnerEngineAccount(id: "default", name: "jianghailong.main", auth: "yes", home: "/root/.claude"),
+            RunnerEngineAccount(id: "29e631a9", name: "jianghailong.orbit", auth: "yes",
+                                home: "/root/.orbit/claude-accounts/29e631a9"),
+        ])
+        let lines = RunnerPageFormat.accountLines(health)
+        XCTAssertEqual(lines.map(\.name), ["jianghailong.main", "jianghailong.orbit"])
+        XCTAssertEqual(lines.map(\.subtitle), ["~/.claude · Default", "~/.orbit/claude-accounts/29e631a9"])
+        XCTAssertEqual(lines.map(\.isDefault), [true, false])
+
+        // Default as it was says nothing more than where it lives.
+        let plain = RunnerPageFormat.accountLines(try engine(try wikova(), "codex"))
+        XCTAssertEqual(plain.map(\.subtitle), ["~/.codex", "~/.orbit/codex-accounts/1fda3f43"])
+    }
+
     func testARemovalIsTheAccountsItWasAskedFor() {
         let pending = RunnerAccountRemoveState(engine: "codex", account: "1fda3f43", status: "pending", message: nil)
         XCTAssertEqual(RunnerPageFormat.removal(pending, engine: "codex", account: "1fda3f43"),

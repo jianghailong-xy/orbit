@@ -1241,6 +1241,15 @@ public final class APIClient: @unchecked Sendable {
         try await delete("runners/\(id)/accounts/\(engine.rawValue)/\(account)")
     }
 
+    /// Rename one of the runner's accounts, Default included; answers with the account as the runner
+    /// list now shows it.
+    @discardableResult
+    public func renameRunnerAccount(_ id: String, engine: LoginEngine, account: String,
+                                    name: String) async throws -> RunnerEngineAccount {
+        try await patch("runners/\(id)/accounts/\(engine.rawValue)/\(account)",
+                        body: RenameRunnerAccountRequest(name: name))
+    }
+
     // MARK: runner enrollment (Phase 4 — one-app device flow)
 
     /// Start a device enrollment (acts as the would-be runner; this endpoint needs no auth).
