@@ -37,7 +37,7 @@ export function useEngineUpdate(runnerId: string) {
   return useMutation({
     mutationFn: () => api(`/runners/${runnerId}/engine-update`, { method: 'POST' }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
-    onError: (e: Error) => message.error(e.message || 'Could not start the update'),
+    onError: (e: Error) => message.error("Couldn't start the engine update", e.message),
   });
 }
 
@@ -79,7 +79,7 @@ export function RunnerEnginesSection({ runner }: { runner: Runner }) {
       message.success('Re-reading this machine’s model lists — the picker updates within a minute.');
       void qc.invalidateQueries({ queryKey: runnersQuery().queryKey });
     },
-    onError: (e: Error) => message.error(e.message || 'Could not refresh the model lists'),
+    onError: (e: Error) => message.error("Couldn't refresh the model lists", e.message),
   });
 
   return (

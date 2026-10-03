@@ -661,7 +661,7 @@ describe('what a successful Run now refreshes', () => {
     expect(invalidated(['task', TASK_ID])).toBe(false);
     expect(invalidated(['project', PROJECT_ID, 'tasks', 'root'])).toBe(false);
     // ...and the reason reaches the reader whole, through the existing toast path.
-    expect(message.error).toHaveBeenCalledWith('no runner available');
+    expect(message.error).toHaveBeenCalledWith("Couldn't start the task", 'no runner available');
     expect(message.success).not.toHaveBeenCalled();
   });
 

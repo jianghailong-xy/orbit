@@ -81,6 +81,8 @@ public enum WikiCopy {
     public static let supersedeConfirm = "Supersede"
     public static let retireConfirm = "Retire"
     public static let saved = "Saved"
+    /// The space's settings, once written (`WIKI_SETTINGS_SAVED`).
+    public static let settingsSaved = "Wiki settings saved"
     public static let superseded = "Superseded"
     public static let retired = "Retired"
     public static let refused = "The server refused it"
@@ -117,8 +119,17 @@ public enum WikiCopy {
     public static let reasonLabel = "Reason"
     public static let evidenceLabel = "Evidence"
     public static let afterLabel = "After"
-    public static let rejected = "Rejected"
-    public static let decided = "Decided"
+    /// What the toast says once a Review answer lands (`WIKI_DECIDED_*`, see `WikiLogic.decidedToast`):
+    /// the outcome in the words of the answer and the card it was given on, with the entry's title on
+    /// the line under it. A bare "Decided" said neither what was decided nor about what.
+    public static let decidedAccepted = "Accepted"                          // WIKI_DECIDED_ACCEPTED
+    public static let decidedEdited = "Accepted with your edits"            // WIKI_DECIDED_EDITED
+    public static let rejected = "Rejected"                                 // WIKI_DECIDED_REJECTED
+    public static let decidedKept = "Kept"                                  // WIKI_DECIDED_KEPT
+    public static let decidedReconfirmed = "Re-confirmed"                   // WIKI_DECIDED_RECONFIRMED
+    public static let decidedAmended = "Amended"                            // WIKI_DECIDED_AMENDED
+    /// A Review answer the server refused: what failed, with its reason under it.
+    public static let decideFailed = "Couldn't record your answer"          // WIKI_DECIDE_FAILED
     public static let accept = "Accept"                                     // WIKI_REVIEW_ACCEPT
     public static let reviewEdit = "Edit"                                   // WIKI_REVIEW_EDIT
     public static let reject = "Reject"                                     // WIKI_REVIEW_REJECT
@@ -641,13 +652,32 @@ public enum WikiLogic {
             .min { $0.1 < $1.1 }?.0
     }
 
+    /// The toast for a Review answer once it lands (web `wikiDecidedToast`). Keep on a retire card is a
+    /// rejection on the wire, but the owner kept the entry, so it says Kept; Retire there is an accept.
+    public static func decidedToast(op: WikiOpKind?, action: WikiDecideAction) -> String {
+        switch action {
+        case .edit:      return WikiCopy.decidedEdited
+        case .reconfirm: return WikiCopy.decidedReconfirmed
+        case .amend:     return WikiCopy.decidedAmended
+        case .retire:    return WikiCopy.retired
+        case .reject:    return op == .retire ? WikiCopy.decidedKept : WikiCopy.rejected
+        case .accept:    return op == .retire ? WikiCopy.retired : WikiCopy.decidedAccepted
+        }
+    }
+
     /// What a card is about, as Review's card says it: the title an add's or a supersede's draft
     /// carries, else the title of the entry the op names (an amend's new title is its diff's to say),
     /// else the word `entry`.
     public static func cardTitle(_ card: ReviewCard, entry: WikiEntry?) -> String {
+        knownTitle(card, entry: entry) ?? WikiCopy.entryWord
+    }
+
+    /// The card's title when one is known — the draft's, else the named entry's; nil rather than the
+    /// placeholder word, for a line that is better left out than filled with "entry".
+    public static func knownTitle(_ card: ReviewCard, entry: WikiEntry?) -> String? {
         if let title = card.op.payload?["entry"]?["title"]?.stringValue { return title }
         if let title = entry?.title, !title.isEmpty { return title }
-        return WikiCopy.entryWord
+        return nil
     }
 
     /// The anchor lines a card lists (`anchorsOf`): the draft's own, or the ones the named entry

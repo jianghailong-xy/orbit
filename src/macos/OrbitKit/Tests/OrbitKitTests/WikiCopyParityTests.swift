@@ -122,6 +122,15 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_REVIEW_REJECT", WikiCopy.reject),
             ("WIKI_REVIEW_KEEP", WikiCopy.keep),
             ("WIKI_REVIEW_RETIRE", WikiCopy.reviewRetire),
+            ("WIKI_DECIDED_ACCEPTED", WikiCopy.decidedAccepted),
+            ("WIKI_DECIDED_EDITED", WikiCopy.decidedEdited),
+            ("WIKI_DECIDED_REJECTED", WikiCopy.rejected),
+            ("WIKI_DECIDED_RETIRED", WikiCopy.retired),
+            ("WIKI_DECIDED_KEPT", WikiCopy.decidedKept),
+            ("WIKI_DECIDED_RECONFIRMED", WikiCopy.decidedReconfirmed),
+            ("WIKI_DECIDED_AMENDED", WikiCopy.decidedAmended),
+            ("WIKI_DECIDE_FAILED", WikiCopy.decideFailed),
+            ("WIKI_SETTINGS_SAVED", WikiCopy.settingsSaved),
             ("WIKI_ACCEPT_NOTE", WikiCopy.acceptNote),
             ("WIKI_WEB_DERIVED_NOTE", WikiCopy.webDerivedNote),
             ("WIKI_REJECT_REASON_FOOT", WikiCopy.rejectReasonFoot),
@@ -152,6 +161,28 @@ final class WikiCopyParityTests: XCTestCase {
             ("WIKI_NO_ENTRY_SELECTED", WikiCopy.noEntrySelected),
         ]
         for (name, word) in pairs { assertDeclares(web, name, word) }
+    }
+
+    /// What a landed Review answer's toast says: the web's `wikiDecidedToast`, case by case.
+    func testTheReviewToastSaysWhatTheAnswerDid() throws {
+        let web = try source(Self.lib)
+        for line in ["case 'edit': return WIKI_DECIDED_EDITED;",
+                     "case 'reconfirm': return WIKI_DECIDED_RECONFIRMED;",
+                     "case 'amend': return WIKI_DECIDED_AMENDED;",
+                     "case 'retire': return WIKI_DECIDED_RETIRED;",
+                     "case 'reject': return op === 'retire' ? WIKI_DECIDED_KEPT : WIKI_DECIDED_REJECTED;",
+                     "case 'accept': return op === 'retire' ? WIKI_DECIDED_RETIRED : WIKI_DECIDED_ACCEPTED;"] {
+            assertSays(web, line, in: Self.lib)
+        }
+        XCTAssertEqual(WikiLogic.decidedToast(op: .add, action: .accept), "Accepted")
+        XCTAssertEqual(WikiLogic.decidedToast(op: .amend, action: .edit), "Accepted with your edits")
+        XCTAssertEqual(WikiLogic.decidedToast(op: .add, action: .reject), "Rejected")
+        XCTAssertEqual(WikiLogic.decidedToast(op: .retire, action: .accept), "Retired")
+        XCTAssertEqual(WikiLogic.decidedToast(op: .retire, action: .reject), "Kept",
+                       "Keep is a rejection on the wire, but the owner kept the entry")
+        XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .reconfirm), "Re-confirmed")
+        XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .amend), "Amended")
+        XCTAssertEqual(WikiLogic.decidedToast(op: .challenge, action: .retire), "Retired")
     }
 
     /// The sentences built around a value, each the same expression at both ends.
@@ -363,7 +394,8 @@ final class WikiCopyParityTests: XCTestCase {
                    + "'\(WikiCopy.supersedeConfirm)' : '\(WikiCopy.save)'}", in: Self.drawer)
         assertSays(drawer, "message.success(mode === 'retire' ? '\(WikiCopy.retired)' : mode === 'supersede' ? "
                    + "'\(WikiCopy.superseded)' : '\(WikiCopy.saved)');", in: Self.drawer)
-        assertSays(drawer, "'\(WikiCopy.refused)'", in: Self.drawer)
+        assertSays(drawer, "message.error(ENTRY_WRITE_FAILED[mode], error instanceof Error ? error.message : undefined);",
+                   in: Self.drawer)
         XCTAssertEqual(WikiCopy.retiredRationale("T"), "the owner retired “T”")
         XCTAssertEqual(WikiCopy.editedRationale("T"), "the owner edited “T”")
         XCTAssertEqual(WikiCopy.replacedRationale("T"), "the owner replaced “T”")
@@ -431,7 +463,11 @@ final class WikiCopyParityTests: XCTestCase {
         assertSays(review, "const WIKI_ENTRY_WORD = '\(WikiCopy.entryWord)';", in: Self.review)
         assertSays(review, "return trimmed.length > 48 ? `${trimmed.slice(0, 47)}…` : trimmed;", in: Self.review)
         assertSays(review, "op === 'supersede' ? 'AMEND' : op.toUpperCase()", in: Self.review)
-        assertSays(review, "message.success(decision.action === 'reject' ? '\(WikiCopy.rejected)' : '\(WikiCopy.decided)');",
+        // The toast a landed answer floats: its outcome in the answer's words, the entry under it.
+        assertSays(review, "toast.success(wikiDecidedToast(op.op, action), about ?? undefined);", in: Self.review)
+        assertSays(review, "decided(decision.action);", in: Self.review)
+        assertSays(review, "decided('edit', edited.title ?? title);", in: Self.review)
+        assertSays(review, "toast.error(WIKI_DECIDE_FAILED, error instanceof Error ? error.message : undefined);",
                    in: Self.review)
         // What a card is about, and the anchors it lists: the draft's, else the named entry's.
         assertSays(review, "const draft = (payload.entry ?? {}) as Record<string, unknown>;", in: Self.review)

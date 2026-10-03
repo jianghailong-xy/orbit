@@ -387,7 +387,7 @@ describe('a watch card', () => {
     await mount(<WatchList />);
     await click(button('Pause'), 'Pause');
 
-    expect(toast.error).toHaveBeenCalledWith('a MATCHED watch cannot be paused');
+    expect(toast.error).toHaveBeenCalledWith("Couldn't pause the watch", 'a MATCHED watch cannot be paused');
     expect(container!.querySelector('.watch-state')?.textContent).toBe('Watching');
   });
 

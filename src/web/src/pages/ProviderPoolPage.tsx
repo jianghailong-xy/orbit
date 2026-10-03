@@ -69,7 +69,7 @@ export function ProviderPoolPage() {
       refresh();
       message.success(`${member.label} left the pool`);
     },
-    onError: (e: Error) => message.error(e.message || 'Failed'),
+    onError: (e: Error) => message.error("Couldn't remove the account from the pool", e.message),
   });
   const removePool = useMutation({
     mutationFn: () => api(`/providers/pools/${encodeId(poolId!)}`, { method: 'DELETE' }),
@@ -78,7 +78,7 @@ export function ProviderPoolPage() {
       message.success('Pool deleted');
       navigate('/providers');
     },
-    onError: (e: Error) => message.error(e.message || 'Failed'),
+    onError: (e: Error) => message.error("Couldn't delete the pool", e.message),
   });
 
   if (pools.isPending || shared.isPending || access.isLoading) {
@@ -207,7 +207,6 @@ function CodexPoolPage({
   );
   const at = `${SHARED_POOLS_BASE}/${encodeId(pool.id)}`;
   const refresh = () => void qc.invalidateQueries({ queryKey: ['providers'] });
-  const failed = (e: Error) => message.error(e.message || 'Failed');
   const signOut = useMutation({
     mutationFn: (login: CodexLogin) =>
       api(`${codexLoginPath(pool.id)}/account?fingerprint=${encodeURIComponent(login.fingerprint)}`, {
@@ -217,13 +216,14 @@ function CodexPoolPage({
       refresh();
       message.success(`${loginName(login)} is signed out`);
     },
-    onError: failed,
+    onError: (e: Error) => message.error("Couldn't sign out the account", e.message),
   });
   const switchKey = useMutation({
     mutationFn: ({ key, enabled }: { key: SharedPoolKey; enabled: boolean }) =>
       api(`${at}/keys/${encodeId(key.id)}`, { method: 'PATCH', body: { enabled } }),
     onSuccess: refresh,
-    onError: failed,
+    onError: (e: Error, { enabled }) =>
+      message.error(enabled ? "Couldn't enable the key" : "Couldn't disable the key", e.message),
   });
   const removeKey = useMutation({
     mutationFn: (key: SharedPoolKey) => api(`${at}/keys/${encodeId(key.id)}`, { method: 'DELETE' }),
@@ -231,7 +231,7 @@ function CodexPoolPage({
       refresh();
       message.success(`${key.label} is out of the pool`);
     },
-    onError: failed,
+    onError: (e: Error) => message.error("Couldn't remove the key", e.message),
   });
   // The way out: its owner deletes it — a pool of their own where its accounts are, one made on the
   // shared pools page where its keys are — and anybody else leaves it.
@@ -245,7 +245,7 @@ function CodexPoolPage({
       message.success(mine ? 'Pool deleted' : `You left ${pool.label}`);
       navigate('/providers');
     },
-    onError: failed,
+    onError: (e: Error) => message.error(mine ? "Couldn't delete the pool" : "Couldn't leave the pool", e.message),
   });
 
   // What deleting it takes off the Orbit server: its ChatGPT sign-ins, its API keys, or both.

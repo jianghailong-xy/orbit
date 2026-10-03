@@ -424,6 +424,7 @@ describe('naming an account while + Account adds it', () => {
     await type(input, 'Work');
     await press(input, 'Enter');
     await vi.waitFor(() => expect(document.body.textContent).toContain('Could not reach the server'));
+    expect(document.body.textContent).toContain("Couldn't rename the account");
     await settle();
     // The account is signed in and reported, but not under the name in the field: still open.
     expect(panelOf(page)).not.toBeNull();

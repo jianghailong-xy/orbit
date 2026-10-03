@@ -143,7 +143,7 @@ export function SessionMoveModal({
       onClose();
     } catch (error) {
       previous.forEach(([key, value]) => qc.setQueryData(key, value));
-      message.error(moveFailureText(error));
+      message.error("Couldn't move the session", moveFailureText(error));
     } finally {
       setPhase(null);
       refreshAfterMove();
@@ -164,7 +164,7 @@ export function SessionMoveModal({
     refreshAfterMove();
     void qc.invalidateQueries({ queryKey: ['workspaces'] });
     if (failure) {
-      message.error(failure);
+      message.error("Couldn't move the session", failure);
       void targetsQ.refetch();
       return;
     }

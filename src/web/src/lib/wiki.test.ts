@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { WikiAnchorCheck, WikiEntry } from '@orbit/shared';
 import {
   WIKI_REJECT_MENU,
+  wikiDecidedToast,
   WIKI_TRUST_LABELS,
   WIKI_TRUST_TONE,
   wikiAnchorMark,
@@ -237,6 +238,20 @@ describe('the words Review decides by', () => {
       { reason: 'duplicate', label: 'Duplicate' },
       { reason: 'too_specific', label: 'Too specific' },
     ]);
+  });
+
+  it('says what an answer did, in the words of the card it was given on', () => {
+    expect(wikiDecidedToast('add', 'accept')).toBe('Accepted');
+    expect(wikiDecidedToast('amend', 'accept')).toBe('Accepted');
+    expect(wikiDecidedToast('add', 'edit')).toBe('Accepted with your edits');
+    expect(wikiDecidedToast('add', 'reject')).toBe('Rejected');
+    // A retirement's Retire is an accept, and its Keep a rejection — but the owner kept the entry.
+    expect(wikiDecidedToast('retire', 'accept')).toBe('Retired');
+    expect(wikiDecidedToast('retire', 'reject')).toBe('Kept');
+    // A challenge's three answers.
+    expect(wikiDecidedToast('challenge', 'reconfirm')).toBe('Re-confirmed');
+    expect(wikiDecidedToast('challenge', 'amend')).toBe('Amended');
+    expect(wikiDecidedToast('challenge', 'retire')).toBe('Retired');
   });
 });
 

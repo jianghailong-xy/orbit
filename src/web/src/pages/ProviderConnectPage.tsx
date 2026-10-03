@@ -271,7 +271,8 @@ function ProviderForm({
       message.success(editing ? 'Provider updated' : 'Provider created');
       navigate('/providers');
     },
-    onError: (e: Error) => message.error(e.message || 'Failed'),
+    onError: (e: Error) =>
+      message.error(editing ? "Couldn't save the provider" : "Couldn't connect the provider", e.message),
   });
 
   // Create needs a key; edit keeps the stored one when left blank. label/baseUrl always required.
@@ -299,7 +300,7 @@ function ProviderForm({
       setApiKey(r.apiKey);
       setKeyVisible(true);
     } catch (e) {
-      message.error((e as Error).message || 'Could not load the key');
+      message.error("Couldn't load the key", (e as Error).message);
     } finally {
       setRevealing(false);
     }

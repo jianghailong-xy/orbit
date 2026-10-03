@@ -598,7 +598,7 @@ describe('TasksSidePanel arranging the Workspace rows', () => {
   it('lets a row move only while arranging, and saves each drop through the reorder endpoint', () => {
     expect(source).toContain('return editingWorkspaces && runnerId ? (');
     expect(source).toContain("api<Workspace[]>('/workspaces/reorder', { method: 'POST', body: { ids } })");
-    expect(source).toContain("message.error(e.message || 'Reorder failed')");
+    expect(source).toContain(`message.error("Couldn't reorder the workspaces", e.message)`);
   });
 });
 

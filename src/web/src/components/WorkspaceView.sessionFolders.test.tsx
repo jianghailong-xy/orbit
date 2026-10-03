@@ -7,6 +7,8 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SessionMoveTargets } from '@orbit/shared';
 import type { Runner } from './TasksSidePanel';
+import { ToastViewport } from './ToastViewport';
+import { clearToasts } from '../lib/toastStore';
 
 /**
  * Session folders and Move on the web (docs/session-folders-move-design.md §3–§5, §7), through the
@@ -146,6 +148,7 @@ async function mount(path: string, ready: () => void): Promise<void> {
             <WorkspaceView runner={RUNNER} />
             <LocationProbe />
           </AntApp>
+          <ToastViewport />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -345,6 +348,7 @@ afterEach(async () => {
   client = null;
   container = null;
   try {
+    await act(async () => clearToasts());
     if (mountedRoot) await act(async () => mountedRoot.unmount());
   } finally {
     if (mountedClient) {

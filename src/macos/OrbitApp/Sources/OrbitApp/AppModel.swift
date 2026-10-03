@@ -9,22 +9,16 @@ import AppKit
 import UIKit
 #endif
 
-/// How loud a toast is — drives its icon, its tint, and whether it self-dismisses. Ported from
-/// web's `SessionNoticeTone` so the same outcome reads the same on every client.
-enum ToastTone: Equatable {
-    case success, neutral, info, warning, error
-
-    /// Web parity: an outcome you need to read twice — and usually paste somewhere — isn't taken
-    /// away on a timer. It stays until the ✕.
-    var isPersistent: Bool { self == .warning || self == .error }
-}
-
 /// What a console reports to the app's toast host. The session id isn't here: the registry knows
-/// which console it handed this sink to and adds it (see `ConsoleRegistry.onToast`).
+/// which console it handed this sink to and adds it (see `ConsoleRegistry.onToast`). `key` names the
+/// operation ("merge", "commit") so its result takes its progress pill's place; the app scopes it to
+/// the session. `ToastTone` lives in OrbitKit with the rest of the toast rules (`ToastFeed`).
 struct ToastRequest: Equatable {
     let message: String
     var detail: String?
     var tone: ToastTone = .success
+    var key: String?
+    var inProgress = false
 }
 
 /// Top-level app state: instance + auth + the Open session list. All UI-driving state lives
@@ -497,7 +491,8 @@ final class AppModel {
         // one toast host, not the status line above the composer — see `showToast`.
         consoleRegistry?.onToast = { [weak self] request, sessionID in
             self?.showToast(request.message, sessionID: sessionID,
-                            detail: request.detail, tone: request.tone)
+                            detail: request.detail, tone: request.tone,
+                            key: request.key.map { "\($0):\(sessionID ?? "")" }, inProgress: request.inProgress)
         }
         // The permission posture a session inherits when it stores none, and where a Mode picked in
         // the composer is remembered — both live on the account (Settings → Default permission).
@@ -1357,9 +1352,7 @@ final class AppModel {
             // The foreground card standing in for one of those banners has to come down with them.
             // It's persistent by design, so an approval answered on web or macOS would otherwise
             // leave a card asking for something that's already been decided.
-            if let toast, toast.awaitsApproval, let sid = toast.sessionID, !needsYou.contains(sid) {
-                dismissToast()
-            }
+            toasts.clearApprovals(stillWaiting: needsYou)
         }
         #endif
     }
@@ -1672,30 +1665,15 @@ final class AppModel {
 
     // MARK: session row actions (shared by the menu-bar quick items + the agent session lists)
 
-    /// A session result floated by the app's single toast host (see `toastHost()`) — the native
-    /// port of web's `sessionNotice` card: outcome first, the session it happened in second, an
-    /// optional diagnostic third. `sessionID` is that session, so the card doubles as the way into
-    /// it; `canUndo` marks the action reversible and adds the inline Undo button, where moving to
-    /// Open is the universal undo — the server's `restore` clears both completion and trash state.
-    struct Toast: Identifiable, Equatable {
-        let id = UUID()
-        let message: String
-        var sessionTitle: String?
-        var detail: String?
-        var tone: ToastTone = .success
-        /// SF Symbol overriding the tone's default — web passes an `icon` the same way, so a
-        /// neutral outcome can still say what it was ("Moved to Trash" gets a trash can).
-        var icon: String?
-        var sessionID: String?
-        var canUndo = false
-        /// Set on the card that stands in for a foreground approval banner (see
-        /// `NotificationManager.willPresent`). It's a `.warning`, so nothing takes it down on a
-        /// timer — and the approval it names can be answered anywhere, including on another
-        /// device, so the snapshot that notices has to clear it.
-        var awaitsApproval = false
-    }
-    var toast: Toast?
-    private var toastDismiss: Task<Void, Never>?
+    /// What the app's toast host draws (see `toastHost()`): the toasts that wait for you, pinned, and
+    /// the one transient toast under them, ruled by `ToastFeed` (docs/mocks/toast-system). A toast
+    /// names what happened, then what it happened to — the session, or an entry's title — then any
+    /// diagnostic; one that names a session doubles as the way into it, and `canUndo` adds Undo,
+    /// where moving to Open is the universal undo (the server's `restore` clears both completion and
+    /// trash state).
+    private(set) var toasts = ToastFeed()
+    @ObservationIgnored private var toastExpiry: Task<Void, Never>?
+    @ObservationIgnored private var toastFold: Task<Void, Never>?
 
     /// Refresh whichever session lists are on screen (Open always; the agent list if
     /// one has been opened) so a row action reflects immediately instead of waiting for the poll.
@@ -1705,31 +1683,60 @@ final class AppModel {
         sessionDetails.reconcile(with: agents?.agentSessions ?? [])
     }
 
-    /// Float a session result as a toast. One dwell time for every card — web settled on 6s for the
-    /// whole surface (see `lib/toast.tsx`'s `sessionNotice`), and the ramp keys on what the toast
-    /// asks of you rather than on which client renders it: 4s for a one-line confirmation, 6s once
-    /// there's a session name, a diagnostic or an Undo to take in, and a warning/error doesn't leave
-    /// on a timer at all (see `ToastTone.isPersistent`). Console-side outcomes arrive here too (see
-    /// `ConsoleRegistry.onToast`).
+    /// Float a result as a toast. What it asks of you decides how long it stays (`ToastItem.dwell`),
+    /// the same ramp on every client: 3s for a confirmation (web's Message layer, see `main.tsx`) —
+    /// even one that names its entry, which is still something you just did and expected — 6s for a
+    /// card with an Undo or a diagnostic (web's `sessionNotice`), and a failure or an approval
+    /// doesn't leave on a timer at all: it pins, and nothing that comes after it can replace it.
+    /// Console-side outcomes arrive here too (see `ConsoleRegistry.onToast`).
     ///
-    /// `sessionTitle` is for a result whose session has already left every loaded scope by the time
-    /// the card is built — completing one drops it from Open, so the name has to be taken before the
-    /// mutation or the line just disappears. Everything else lets it resolve here.
-    func showToast(_ message: String, sessionID: String? = nil, sessionTitle: String? = nil,
-                   detail: String? = nil, tone: ToastTone = .success, icon: String? = nil,
-                   canUndo: Bool = false, awaitsApproval: Bool = false) {
-        let title = sessionTitle ?? sessionID.flatMap(toastSessionTitle)
-        toast = Toast(message: message, sessionTitle: title,
-                      detail: detail, tone: tone, icon: icon,
-                      sessionID: sessionID, canUndo: canUndo, awaitsApproval: awaitsApproval)
-        toastDismiss?.cancel()
-        guard !tone.isPersistent else { return }
-        let isCard = title != nil || detail != nil || canUndo
-        let seconds: UInt64 = isCard ? 6 : 4
-        toastDismiss = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: seconds * 1_000_000_000)
+    /// `subtitle` names what a confirmation happened to — a Wiki entry's title. `sessionTitle` is
+    /// for a result whose session has already left every loaded scope by the time the card is
+    /// built — completing one drops it from Open, so the name has to be taken before the mutation
+    /// or the line just disappears. Everything else lets it resolve here. `key` makes one operation
+    /// one toast: a result posted with its progress pill's key takes the pill's place.
+    func showToast(_ message: String, subtitle: String? = nil, sessionID: String? = nil,
+                   sessionTitle: String? = nil, detail: String? = nil, tone: ToastTone = .success,
+                   icon: String? = nil, canUndo: Bool = false, awaitsApproval: Bool = false,
+                   key: String? = nil, inProgress: Bool = false) {
+        let line = subtitle ?? sessionTitle ?? sessionID.flatMap(toastSessionTitle)
+        let item = ToastItem(message: message, subtitle: line, detail: detail, tone: tone, icon: icon,
+                             sessionID: sessionID, canUndo: canUndo, awaitsApproval: awaitsApproval,
+                             key: key, inProgress: inProgress)
+        guard let id = toasts.post(item, at: Date()), let shown = toasts.item(id) else { return }
+        announce(shown)
+        if shown.level == .attention {
+            foldToastLater(id)
+        } else if let dwell = shown.dwell {
+            expireToastLater(id, after: dwell)
+        }
+    }
+
+    /// A card that only paints is invisible to VoiceOver — read it out as it arrives, with what it
+    /// happened to and the diagnostic, which on a failure is the part worth hearing.
+    private func announce(_ toast: ToastItem) {
+        let spoken = [toast.message, toast.subtitle, toast.detail].compactMap { $0 }.joined(separator: ". ")
+        AccessibilityNotification.Announcement(spoken).post()
+    }
+
+    /// Takes the transient toast down when its dwell runs out — unless something replaced it first.
+    private func expireToastLater(_ id: ToastItem.ID, after seconds: TimeInterval) {
+        toastExpiry?.cancel()
+        toastExpiry = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             guard !Task.isCancelled else { return }
-            self?.toast = nil
+            self?.toasts.expire(id)
+        }
+    }
+
+    /// On a phone an open ③ card folds into its pill after six seconds: it stops covering the top of
+    /// the page and stays one tap away. Wide layouts draw every pinned card open regardless.
+    private func foldToastLater(_ id: ToastItem.ID) {
+        toastFold?.cancel()
+        toastFold = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 6_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.toasts.fold(id)
         }
     }
 
@@ -1743,7 +1750,24 @@ final class AppModel {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    func dismissToast() { toastDismiss?.cancel(); toast = nil }
+    /// ✕ or a swipe.
+    func dismissToast(_ id: ToastItem.ID) { toasts.dismiss(id) }
+
+    /// A folded ③ pill tapped open; it folds again after six seconds.
+    func unfoldToast(_ id: ToastItem.ID) {
+        toasts.unfold(id)
+        foldToastLater(id)
+    }
+
+    /// The pointer resting on a toast keeps it; its dwell starts over when the pointer leaves.
+    func holdToast(_ id: ToastItem.ID) {
+        if toasts.transient?.id == id { toastExpiry?.cancel() }
+    }
+
+    func releaseToast(_ id: ToastItem.ID) {
+        guard let toast = toasts.transient, toast.id == id, let dwell = toast.dwell else { return }
+        expireToastLater(id, after: dwell)
+    }
 
     /// The server's own words for the card's diagnostic line, when it sent any — web shows
     /// `e.message` the same way. Falls back to nothing rather than to a restatement of the headline.
@@ -1757,9 +1781,9 @@ final class AppModel {
     /// Tapping the toast opens the session it reports on — a result you just acted on is usually the
     /// one you want to look at next, and without this the only way back was to find the row by hand.
     /// The card has done its job once it's been followed, so it goes with the navigation.
-    func openToastSession() {
-        guard let sessionID = toast?.sessionID else { return }
-        dismissToast()
+    func openToastSession(_ id: ToastItem.ID) {
+        guard let sessionID = toasts.item(id)?.sessionID else { return }
+        toasts.dismiss(id)
         route(to: .session(sessionID))
     }
 
@@ -1776,7 +1800,7 @@ final class AppModel {
             defer { filedSessions.remove(id) }
             do { try await api.completeSession(id) }
             catch {
-                showToast("Could not complete session", sessionID: id, sessionTitle: name,
+                showToast("Couldn't complete the session", sessionID: id, sessionTitle: name,
                           detail: Self.toastDetail(error), tone: .error)
                 return
             }
@@ -1798,7 +1822,7 @@ final class AppModel {
         Task { @MainActor in
             do { try await api.restoreSession(id) }
             catch {
-                showToast("Could not move to Open", sessionID: id, sessionTitle: name,
+                showToast("Couldn't move to Open", sessionID: id, sessionTitle: name,
                           detail: Self.toastDetail(error), tone: .error)
                 return
             }
@@ -1817,7 +1841,7 @@ final class AppModel {
             defer { filedSessions.remove(id) }
             do { try await api.deleteSession(id) }
             catch {
-                showToast("Could not move to Trash", sessionID: id, sessionTitle: name,
+                showToast("Couldn't move to Trash", sessionID: id, sessionTitle: name,
                           detail: Self.toastDetail(error), tone: .error)
                 return
             }
@@ -1858,7 +1882,7 @@ final class AppModel {
         Task { @MainActor in
             do { try await api.renameSession(id, title: title) }
             catch {
-                showToast("Could not rename session", sessionID: id,
+                showToast("Couldn't rename the session", sessionID: id,
                           detail: Self.toastDetail(error), tone: .error)
             }
             await reloadSessionLists()
@@ -1944,10 +1968,10 @@ final class AppModel {
         }
     }
 
-    func undoSessionAction() {
-        guard let toast, toast.canUndo, let sessionID = toast.sessionID else { return }
+    func undoSessionAction(_ id: ToastItem.ID) {
+        guard let toast = toasts.item(id), toast.canUndo, let sessionID = toast.sessionID else { return }
         moveSessionToOpen(sessionID)
-        dismissToast()
+        toasts.dismiss(id)
     }
 
     // MARK: session folders (iOS — docs/session-folders-move-design.md §3–4)
