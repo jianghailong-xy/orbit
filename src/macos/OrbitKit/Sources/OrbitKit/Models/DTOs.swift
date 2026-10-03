@@ -88,6 +88,10 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let claudeAccount: String?
 
     public let enableWorktree: Bool?
+    /// Smart model selection (docs/model-routing-design.md §7.2): on, a fresh task run here gets the
+    /// model and effort of its tier; off (the default), routing is only recorded in shadow. Only the
+    /// owner's user API writes it.
+    public let modelRouting: Bool?
     public let workDirExists: Bool?
     public let workDirIsGit: Bool?
     /// BIGINT columns are serialized as strings by the control plane; numeric fixtures and older
@@ -101,7 +105,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case id, name, lastProvider, provider, model, permissionMode, effort, workDir
         case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
-        case autoInitGit, codexAccount, claudeAccount, enableWorktree, workDirExists, workDirIsGit
+        case autoInitGit, codexAccount, claudeAccount, enableWorktree, modelRouting, workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup
     }
 
@@ -131,6 +135,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         codexAccount = try c.decodeIfPresent(String.self, forKey: .codexAccount)
         claudeAccount = try c.decodeIfPresent(String.self, forKey: .claudeAccount)
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
+        modelRouting = try c.decodeIfPresent(Bool.self, forKey: .modelRouting)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
         workDirIsGit = try c.decodeIfPresent(Bool.self, forKey: .workDirIsGit)
         workDirFreeBytes = c.flexibleInt64(forKey: .workDirFreeBytes)
@@ -1115,6 +1120,9 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public let retryAt: String?
     /// Attempts already spent on the current outage — what separates "never armed" from "gave up".
     public let retryAttempts: Int?
+    /// The routing decision this task run was planned with (docs/model-routing-design.md §7.5) —
+    /// what marks the composer's model chip ✦. Nil on any other session.
+    public let route: TaskRunRoute?
 
     public var effectiveRunStatus: RunStatus? { runStatus ?? status }
     public var effectiveRunState: SessionRunState? {
@@ -1159,6 +1167,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         shareToken = try values.decodeIfPresent(String.self, forKey: .shareToken)
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         retryAttempts = try values.decodeIfPresent(Int.self, forKey: .retryAttempts)
+        route = try values.decodeIfPresent(TaskRunRoute.self, forKey: .route)
     }
 
     public init(id: String, status: RunStatus? = nil, runStatus: RunStatus? = nil,
@@ -1175,7 +1184,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 commitStatus: String? = nil, commitError: String? = nil,
                 commitResultMessage: String? = nil,
                 agent: SessionDetailAgent? = nil, shareToken: String? = nil,
-                retryAt: String? = nil, retryAttempts: Int? = nil) {
+                retryAt: String? = nil, retryAttempts: Int? = nil, route: TaskRunRoute? = nil) {
         self.id = id
         self.status = status
         self.runStatus = runStatus
@@ -1204,6 +1213,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.shareToken = shareToken
         self.retryAt = retryAt
         self.retryAttempts = retryAttempts
+        self.route = route
     }
 }
 

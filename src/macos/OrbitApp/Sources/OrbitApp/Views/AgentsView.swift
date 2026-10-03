@@ -1701,7 +1701,8 @@ struct SpinnerGlyph: View {
 }
 
 /// The edit form. Fields mirror the web RunnerDetailPage agent form: name, effort, Instructions
-/// (appendSystemPrompt), working directory, enabled. There is no runtime field — an agent holds no
+/// (appendSystemPrompt), working directory, enabled, and smart model selection for its task runs.
+/// There is no runtime field — an agent holds no
 /// provider; that is picked per session in the composer. Nor a permission mode: migration 0094
 /// dropped that column (the posture is per-run, seeded from the account — Settings → Default
 /// permission). Empty Instructions / workDir omit the key (no change) — matching the web, which
@@ -1716,6 +1717,7 @@ struct AgentFormContent: View {
     @State private var instructions = ""
     @State private var workDir = ""
     @State private var enabled = true
+    @State private var modelRouting = false
     @State private var confirmingDelete = false
 
     /// Not an editable field: an agent holds no provider. This is what the project last ran on,
@@ -1768,6 +1770,20 @@ struct AgentFormContent: View {
                           prompt: Text("/path/to/project on the runner (optional)"))
             }
 
+            // Off by default, and only the owner's to turn on: it decides what task runs cost, so the
+            // agent tools cannot set it (docs/model-routing-design.md §7.2).
+            Section("Task runs") {
+                Toggle(isOn: $modelRouting) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(TaskDetailCopy.smartSelectionSwitch)
+                        Text(TaskDetailCopy.smartSelectionSwitchDetail)
+                            .font(.orbitLabel)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
             if let env = agent.env, !env.isEmpty {
                 Section("Environment") {
                     ForEach(env.sorted(by: { $0.key < $1.key }), id: \.key) { k, v in
@@ -1818,6 +1834,7 @@ struct AgentFormContent: View {
         instructions = agent.appendSystemPrompt ?? ""
         workDir = agent.workDir ?? ""
         enabled = agent.enabled ?? true
+        modelRouting = agent.modelRouting ?? false
     }
 
     /// True when the working copy diverges from the agent as prefilled — mirrors `prefill()` field
@@ -1833,6 +1850,7 @@ struct AgentFormContent: View {
         || instructions != (agent.appendSystemPrompt ?? "")
         || workDir != (agent.workDir ?? "")
         || enabled != (agent.enabled ?? true)
+        || modelRouting != (agent.modelRouting ?? false)
     }
 
     /// Save (only if changed and still valid) then close. An emptied name is invalid — the form was
@@ -1852,7 +1870,9 @@ struct AgentFormContent: View {
             // previously-set effort — omitting (nil) would leave the old value unchanged.
             effort: effort.rawValue,
             workDir: workDir.isEmpty ? nil : workDir,
-            enabled: enabled
+            enabled: enabled,
+            // Only when moved: the switch is written by the user API alone, and only by a press.
+            modelRouting: modelRouting != (agent.modelRouting ?? false) ? modelRouting : nil
         )
         Task { await agents.save(agent.id, req) }
     }
