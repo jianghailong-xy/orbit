@@ -161,6 +161,11 @@ func loginFlowFor(engine string) loginFlow {
 		// to (and accidentally launches) Claude's login flow.
 		return loginFlow{engine: providerOpenCode}
 	}
+	if engine == providerAntigravity {
+		// Orbit runs agy on a Gemini API key only; there is nothing to sign in to. Explicit for the
+		// same reason as OpenCode: falling through would launch Claude's login.
+		return loginFlow{engine: providerAntigravity}
+	}
 	// Anything else (including the empty engine an older control plane sends) is claude.
 	return loginFlow{
 		engine: providerClaude,
@@ -276,6 +281,10 @@ func (r *loginRelay) start(lr LoginCommand, report func(LoginResultRequest)) {
 	flow := loginFlowFor(lr.Engine)
 	if flow.engine == providerOpenCode {
 		report(LoginResultRequest{Status: loginFailed, Message: "OpenCode sign-in is provider-specific — run `opencode auth login` on this runner and choose the provider there", Attempt: attempt})
+		return
+	}
+	if flow.engine == providerAntigravity {
+		report(LoginResultRequest{Status: loginFailed, Message: "Antigravity runs on a Gemini API key in Orbit, not a Google-account sign-in — set GEMINI_API_KEY for this runner, or give the session a Gemini API key", Attempt: attempt})
 		return
 	}
 	// An engine whose CLI keeps a login per directory can sign in another account; every other

@@ -2698,6 +2698,56 @@ body {
   margin-top: 2px;
   flex: none;
 }
+/* The engines smart selection may move a task run to (model routing §6), under the switch's own
+   explanation: one chip per engine, the agent's own ticked and fixed. Qualified with .rd-engines-list
+   so antd's single-class checkbox rules, injected after this stylesheet, do not win on order. */
+.rd-route-engines {
+  margin-top: 10px;
+}
+.rd-engines-label {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.rd-engines-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.rd-engines-list .ant-checkbox-wrapper {
+  margin-inline-start: 0;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.rd-engines-list .ant-checkbox-wrapper.is-on {
+  border-color: var(--brand-border);
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font-weight: 600;
+}
+/* The agent's own engine cannot be unticked, but it is ticked: drawn as on, not as greyed out. */
+.rd-engines-list .ant-checkbox-wrapper-disabled.is-on {
+  cursor: default;
+}
+.rd-engines-list .ant-checkbox-wrapper-disabled.is-on .ant-checkbox-inner {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+.rd-engines-list .ant-checkbox-wrapper-disabled.is-on .ant-checkbox-inner::after {
+  border-color: #fff;
+}
+.rd-engines-list .ant-checkbox-wrapper-disabled.is-on .ant-checkbox + span {
+  color: var(--brand-strong);
+}
+.rd-engines-note {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 6px;
+  line-height: 1.5;
+}
 /* Advanced disclosure — folded by default, but it has to admit when it hides something. */
 .rd-adv-toggle {
   display: flex;
@@ -17415,6 +17465,14 @@ button.chat-jump-start:hover {
   margin: 2px 0 0 22px;
   color: var(--warning);
   font-size: 12px;
+}
+/* A wake written into the running turn: how far it got, in a steer bubble's own words and tone
+   (.chat-steer-state). */
+.bgwake-steer {
+  margin: 2px 0 0 22px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-3);
 }
 /* Still waiting behind the running turn (WorkspaceView's queued tail): dashed like a queued
    message, with the queue's own status line under it. */

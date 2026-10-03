@@ -26,3 +26,11 @@ func terminateSessionProcessTree(cmd *exec.Cmd) error {
 	}
 	return err
 }
+
+// interruptSessionProcessGroup signals the engine alone: these platforms get no process group.
+func interruptSessionProcessGroup(cmd *exec.Cmd) error {
+	if cmd == nil || cmd.Process == nil {
+		return os.ErrProcessDone
+	}
+	return cmd.Process.Signal(os.Interrupt)
+}

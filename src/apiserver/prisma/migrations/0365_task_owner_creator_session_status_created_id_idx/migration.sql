@@ -1,0 +1,53 @@
+-- `GET /sessions/:id/created-tasks`, the "Tasks created here" row above a session's composer, is
+-- polled every 15 seconds while one of its rows is running or queued. It answers three counts over
+-- every row of the session and the first `limit` rows in status order, and one pipeline session on
+-- this deployment created 109,879 of the table's 112,211 tasks (2026-10-03). For that session the
+-- statement read the whole table and held every row in a CTE that three readers shared:
+--
+--   CTE line
+--     ->  Seq Scan on task t_1  (actual rows=109879 loops=1)
+--           Buffers: shared hit=11524 read=20979     → 32,503 heap pages for one session's rows
+--   ->  Aggregate
+--         ->  CTE Scan on line l    (rows=109879)  temp written=563          ← the tuplestore
+--   ->  Hash Semi Join -> CTE Scan on line l_1     temp read=564 written=1   ← read back for the live rows
+--   ->  Sort (top-N)   -> CTE Scan on line l_2     temp read=564             ← and again for the first 20
+--   Execution Time: 1007.224 ms
+--
+-- (production, read-only, at a 64 MB work_mem so that the measuring itself did not spill; the temp
+-- figures are the same rows at production's 4 MB on a reproduction — one 4,614,918-byte file, 42
+-- bytes a row — and are exactly what pg_stat_statements recorded per call: 564 blocks written,
+-- 1,128 read.)
+--
+-- The statement now counts the session's rows off this index and reads its first rows per status
+-- straight off it, newest first, so nothing is held and the table is not read:
+--
+--   ->  Index Only Scan using task_owner_creator_session_status_created_id_idx on task t
+--         Index Cond: ((owner_id = '5ccdf9b9-…') AND (creator_session_id = '01a005f5-…'))
+--         Heap Fetches: 0                       → 109,879 index entries, no temp file
+--   ->  Index Only Scan using task_owner_creator_session_status_created_id_idx on task t_2
+--         Index Cond: (… AND (status = s.status))   (loops=5, Limit 20 each)
+--
+-- On a reproduction of production's rows at production's heap density, alternating the two
+-- statements: 1,314 buffers a call instead of 31,911, 59.8 ms mean instead of 441.7 ms, 0 temp
+-- blocks instead of 564 written and 1,128 read; on sessions of 16 to 145 tasks, about 157 buffers
+-- either way. The index comes out at 9.3 MB / 1,184 pages built.
+--
+-- `owner_id` leads, as in the other list indexes on `task`, and the read asks for it by equality
+-- beside `creator_session_id`. Led by `creator_session_id` instead, the index would also answer a
+-- lookup by session alone, and the planner moves those — the task list's `?creatorSessionId=`, the
+-- SET NULL on session purge — off 0305's index, a sixth of this one's size, onto this one.
+-- `status, created_at DESC, id DESC` is the order the page asks for within a status. Every column
+-- the read needs of the session's own rows is a key, which is why it asks "which tasks no
+-- supersession walk starts from" rather than testing `terminal_reason` and `superseded_by_task_id`
+-- per row: those are not here, and testing them would fetch every heap row.
+--
+-- What this costs: one more index entry for each task INSERT and each non-HOT UPDATE. It removes no
+-- HOT update — `owner_id`, `creator_session_id`, `status`, `created_at` and `id` are all keys of
+-- existing indexes already, so an UPDATE that moves any of them is non-HOT today.
+--
+-- Plain rather than PARTIAL for the reason 0305 gives: almost every task names its session.
+-- Deliberately not CONCURRENTLY because Prisma runs the migration in a transaction, as with 0283,
+-- 0305 and 0361: one pass over a table this size. A deployment with a much larger `task` table may
+-- pre-create the identical index CONCURRENTLY, after which IF NOT EXISTS makes this a no-op.
+CREATE INDEX IF NOT EXISTS "task_owner_creator_session_status_created_id_idx"
+  ON "task" ("owner_id", "creator_session_id", "status", "created_at" DESC, "id" DESC);

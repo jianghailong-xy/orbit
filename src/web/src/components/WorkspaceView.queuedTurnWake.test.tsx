@@ -336,6 +336,13 @@ const BG_WAKE = [
 ].join('\n');
 const ACCEPTANCE = 'npm test -w @orbit/web';
 const BRIEF = '请开始执行任务「Fix the race」。\n\n任务描述：the dispatcher double-counts a slot.';
+// A job that ended while the turn ran is written into that turn (a steer), not queued behind it: it
+// waits for the runner in the same tail, but it is on its way into the running turn and nothing takes
+// it back (BackgroundWakeSteer.test.tsx).
+const BG_STEERED = BG_WAKE.replace('bgj_10bca948d369', 'bgj_3c9d2e1f0a4b').replace(
+  'has news you were waiting for; the control plane opened this turn for it:',
+  'has news you were waiting for. It ended while you were working, so this message was added to the turn you are in:',
+);
 
 describe('turns nobody typed, taken off the queue unrun', { timeout: 60_000 }, () => {
   beforeEach(() => {
@@ -346,6 +353,10 @@ describe('turns nobody typed, taken off the queue unrun', { timeout: 60_000 }, (
       { turnId: 'turn-acceptance', kind: 'shell', placement: 'queued', content: ACCEPTANCE, createdAt: at, authoredByOrbit: true },
       { turnId: 'turn-brief', kind: 'message', placement: 'queued', content: BRIEF, createdAt: at, authoredByOrbit: true },
       { turnId: 'turn-typed', kind: 'message', placement: 'queued', content: TYPED, createdAt: at },
+      {
+        turnId: 'turn-steered-wake', kind: 'steer', placement: 'steer', targetTurnId: 'turn-running',
+        content: BG_STEERED, createdAt: at, authoredByOrbit: true,
+      },
     ];
   });
 
@@ -382,6 +393,13 @@ describe('turns nobody typed, taken off the queue unrun', { timeout: 60_000 }, (
     await click(cancelIn(bubbleSaying('请开始执行任务')));
     await waitForUi(() => expect(cancelMock).toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-brief'));
     expect(composer()?.value).toBe('');
+
+    // The wake written into the running turn is the one row here with nothing to withdraw: it says
+    // how far it has got instead, and stays.
+    const steered = [...mounted().querySelectorAll('.bgwake')].find((line) => line.textContent?.includes('Sending…'));
+    expect(steered, 'the steered wake is drawn with its steer state').toBeDefined();
+    expect(steered!.querySelectorAll('a')).toHaveLength(0);
+    expect(cancelMock).not.toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-steered-wake');
 
     // The same Cancel on a message somebody typed still hands it back, so the empty composer above
     // is the rule and not a Cancel that restores nothing.

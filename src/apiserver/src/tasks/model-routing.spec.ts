@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  ENGINE_QUOTA_LIMIT,
   MODEL_ROUTING_POLICY_VERSION,
   routeTaskRun,
   type ModelRoutingDecision,
+  type ModelRoutingEngineState,
   type ModelRoutingInput,
   type ModelRoutingLevel,
   type ModelRoutingRun,
@@ -419,4 +421,150 @@ test('routing is deterministic and does not mutate the task, history, catalogs o
   first.reasons.push('caller changed its copy');
   assert.ok(!routeTaskRun(value).reasons.includes('caller changed its copy'));
   assert.deepEqual(value, before);
+});
+
+/** What the runner says of one engine, in place of what it said before. */
+function setState(value: ModelRoutingInput, engine: string, state: ModelRoutingEngineState): void {
+  value.engines = { ...value.engines, states: { ...value.engines?.states, [engine]: state } };
+}
+
+/** An Agent on claude whose runner also reports Codex, with `allowed` the other engines its owner ticked. */
+function crossInput(allowed: string[] = ['codex']): ModelRoutingInput {
+  const value = input();
+  value.task = { modelHint: 'M' };
+  value.environment.modelCatalog!.codex = codexInput().environment.modelCatalog!.codex;
+  value.environment.runtimeDefaultModels = { codex: 'gpt-default' };
+  value.engines = { allowed, states: { claude: {}, codex: {} } };
+  return value;
+}
+
+test('an engine the owner did not allow is never chosen, however unavailable the agent\'s own engine is', () => {
+  const value = crossInput([]);
+  value.engines!.states = { claude: { signedOut: true, quota: { utilization: 100, window: 'weekly' } }, codex: {} };
+  const result = routeTaskRun(value);
+  assertDecision(result, { level: 'M', provider: 'claude', model: SONNET, effort: 'medium' });
+  assert.ok(result.reasons.includes("Engine claude: this agent's own engine"));
+  assert.ok(!result.reasons.some((reason) => reason.includes('codex')));
+  // Nor when the list was left out of the input altogether, as every decision before cross-engine routing.
+  delete value.engines;
+  assertDecision(routeTaskRun(value), { level: 'M', provider: 'claude', model: SONNET, effort: 'medium' });
+});
+
+for (const utilization of [89.9, 90, 100]) {
+  test(`the agent's own engine at ${utilization}% of a window obeys the inclusive ${ENGINE_QUOTA_LIMIT}% limit`, () => {
+    const value = crossInput();
+    value.engines!.states!.claude!.quota = { utilization, window: 'weekly' };
+    const result = routeTaskRun(value);
+    if (utilization < ENGINE_QUOTA_LIMIT) {
+      assertDecision(result, { level: 'M', provider: 'claude', model: SONNET, effort: 'medium' });
+      assert.ok(result.reasons.includes("Engine claude: this agent's own engine"));
+    } else {
+      // Same tier, on the other engine's tier table.
+      assertDecision(result, { level: 'M', provider: 'codex', model: 'gpt-default', effort: 'medium' });
+      assert.ok(result.reasons.includes(`Engine codex: claude is at ${utilization}% of its weekly quota`));
+    }
+  });
+}
+
+test('an agent\'s own engine signed out on the runner moves the run to an allowed engine', () => {
+  const value = crossInput();
+  value.task = { modelHint: 'XL' };
+  setState(value, 'claude', { signedOut: true });
+  const result = routeTaskRun(value);
+  assertDecision(result, { level: 'XL', provider: 'codex', model: 'gpt-default', effort: 'xhigh' });
+  assert.deepEqual(result.reasons, [
+    'Tier XL: suggested by the coordinator', 'Engine codex: claude is signed out on this runner',
+  ]);
+});
+
+test('a run moves from Codex to Claude on the same tier, mapped onto Claude\'s table', () => {
+  const value = codexInput();
+  value.task = { modelHint: 'L' };
+  value.environment.modelCatalog!.claude = input().environment.modelCatalog!.claude;
+  value.engines = { allowed: ['claude'], states: { codex: { quota: { utilization: 97, window: '5-hour' } }, claude: {} } };
+  const result = routeTaskRun(value);
+  assertDecision(result, { level: 'L', provider: 'claude', model: OPUS, effort: 'high' });
+  assert.ok(result.reasons.includes('Engine claude: codex is at 97% of its 5-hour quota'));
+});
+
+test('no engine left to move to: the run stays on its own engine and every ruled-out engine is named', () => {
+  const value = crossInput();
+  value.engines!.states = {
+    claude: { quota: { utilization: 95, window: 'weekly' } },
+    codex: { signedOut: true, quota: { utilization: 99, window: 'weekly' } },
+  };
+  const result = routeTaskRun(value);
+  assertDecision(result, { level: 'M', provider: 'claude', model: SONNET, effort: 'medium' });
+  assert.deepEqual(result.reasons.slice(1), [
+    "Engine claude: this agent's own engine — no other engine it may use is available",
+    'claude is at 95% of its weekly quota',
+    'codex is signed out on this runner',
+  ]);
+  // An allowed engine whose models the runner has not reported cannot take the run either.
+  setState(value, 'codex', {});
+  delete value.environment.modelCatalog!.codex;
+  assert.ok(routeTaskRun(value).reasons.includes('codex has not reported its models on this runner'));
+  assert.equal(routeTaskRun(value).provider, 'claude');
+});
+
+test('a verification run prefers an engine the task it verifies did not last run on', () => {
+  const value = crossInput();
+  value.engines!.verifiedRunEngine = 'claude';
+  let result = routeTaskRun(value);
+  assertDecision(result, { level: 'M', provider: 'codex', model: 'gpt-default', effort: 'medium' });
+  assert.deepEqual(result.reasons.slice(1), ['Engine codex: the task it verifies last ran on claude']);
+
+  // Its own engine already differs: it stays there.
+  value.engines!.verifiedRunEngine = 'codex';
+  result = routeTaskRun(value);
+  assertDecision(result, { level: 'M', provider: 'claude', model: SONNET, effort: 'medium' });
+  assert.deepEqual(result.reasons.slice(1), ["Engine claude: this agent's own engine — the task it verifies last ran on codex"]);
+
+  // The other engine is ruled out: a preference, never a reason to pick an engine that cannot take the run.
+  value.engines!.verifiedRunEngine = 'claude';
+  setState(value, 'codex', { quota: { utilization: 92, window: 'weekly' } });
+  result = routeTaskRun(value);
+  assertDecision(result, { level: 'M', provider: 'claude', model: SONNET, effort: 'medium' });
+  assert.deepEqual(result.reasons.slice(1), [
+    "Engine claude: this agent's own engine — no other engine it may use is available",
+    'codex is at 92% of its weekly quota',
+  ]);
+
+  // Not allowed to move at all: as before cross-engine routing.
+  const unallowed = crossInput([]);
+  unallowed.engines!.verifiedRunEngine = 'claude';
+  assert.deepEqual(routeTaskRun(unallowed).reasons.slice(1), ["Engine claude: this agent's own engine"]);
+});
+
+test('a provider pin and an undecided tier both keep the run on its engine', () => {
+  const pinned = crossInput();
+  pinned.task = { provider: 'claude', modelHint: 'M' };
+  setState(pinned, 'claude', { signedOut: true });
+  pinned.engines!.verifiedRunEngine = 'claude';
+  let result = routeTaskRun(pinned);
+  assertDecision(result, { level: 'M', provider: 'claude', model: SONNET, effort: 'medium' });
+  assert.deepEqual(result.reasons.slice(1), ['Engine claude: pinned on the task']);
+
+  const unsuggested = crossInput();
+  unsuggested.task = {};
+  setState(unsuggested, 'claude', { quota: { utilization: 100, window: 'weekly' } });
+  result = routeTaskRun(unsuggested);
+  assertDecision(result, { ...unsuggested.baseline, level: null });
+  assert.deepEqual(result.reasons, ["No suggestion — keeps the agent's model, as today", "Engine claude: this agent's own engine"]);
+});
+
+test('an engine with no tier table is never a candidate, nor the same runtime under another name', () => {
+  const value = crossInput(['kimi', 'claude', 'opencode']);
+  setState(value, 'claude', { quota: { utilization: 100, window: 'weekly' } });
+  const result = routeTaskRun(value);
+  assert.equal(result.provider, 'claude');
+  assert.ok(result.reasons.includes("Engine claude: this agent's own engine"));
+
+  // A Claude account pool's run is already on Claude: ticking claude gives it nowhere else to go.
+  const pool = crossInput(['claude']);
+  pool.baseline.provider = 'claude-pool';
+  pool.engines!.states = { 'claude-pool': { signedOut: true }, claude: {} };
+  const pooled = routeTaskRun(pool);
+  assert.equal(pooled.provider, 'claude-pool');
+  assert.ok(pooled.reasons.includes("Engine claude-pool: this agent's own engine"));
 });

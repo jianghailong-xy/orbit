@@ -205,10 +205,11 @@ func newLeaseGeneration() (string, error) {
 const mcpToolTimeoutMs = 2147483647
 
 const (
-	providerClaude   = "claude"
-	providerCodex    = "codex"
-	providerKimi     = "kimi"
-	providerOpenCode = "opencode"
+	providerClaude      = "claude"
+	providerCodex       = "codex"
+	providerKimi        = "kimi"
+	providerOpenCode    = "opencode"
+	providerAntigravity = "antigravity"
 )
 
 // runInteractiveSession drives a long-lived `claude` process for an interactive
@@ -244,7 +245,7 @@ func runtimeProvider(job *ClaimedSession) string {
 		p = strings.ToLower(strings.TrimSpace(job.Agent.Provider))
 	}
 	switch p {
-	case providerCodex, providerKimi, providerOpenCode:
+	case providerCodex, providerKimi, providerOpenCode, providerAntigravity:
 		return p
 	}
 	return providerClaude

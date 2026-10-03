@@ -1360,15 +1360,21 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
       // a folded entry in the line's own fold, because it is the control plane's too. It used to be
       // an entry in a user bubble under the card, which drew an empty bubble: a message with no
       // words in it, in the reader's own name.
+      //
+      // A job that ended while a turn ran is written into that turn as a steer: the same line, in
+      // the running turn's stream where its echo landed, saying how far it got as a steer's bubble
+      // would — never the bubble itself.
       const background = parseBackgroundWake(node.note);
       if (background) {
+        const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
         return (
           <>
             <BackgroundWakeCard
               wake={background}
               seq={node.seq}
               ts={node.ts}
-              undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+              undelivered={undelivered}
+              steer={node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined}
               attached={
                 background.rest !== '' && (
                   <ControlPlaneNote kind={describeNote(background.rest)} text={background.rest} />

@@ -3,7 +3,10 @@ import {
   AgentProvider,
   USAGE_LIMIT_ERROR_MARKERS,
   runnerCatalogRow,
+  spentPlanUsage,
+  type AccountEngine,
   type PlanUsage,
+  type PlanUsageWindow,
   type RunnerModelCatalog,
 } from '@orbit/shared';
 import { resolvePermissionMode } from '../common/permission-mode';
@@ -11,13 +14,18 @@ import { firstRuntimeCatalogModel, sanitizeRuntimeDefaultModels } from '../commo
 import { normalizeEffortForProvider, normalizeRuntimeProvider } from '../common/runtime-provider';
 import type { PrismaService } from '../prisma/prisma.service';
 import { accountPoolRuntime, isBuiltinProvider } from '../providers/custom-provider';
+import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { followsRuntimeCatalog } from '../providers/preset-overlay';
+import { signedOutEngineRefusal } from '../sessions/engine-signin-preflight';
 import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { readExecutableAcceptanceOutcome } from './executable-acceptance-round';
 import {
+  MODEL_ROUTING_ENGINES,
   MODEL_ROUTING_LEVELS,
   priorLevel,
   routeTaskRun,
+  type ModelRoutingEngineState,
+  type ModelRoutingInput,
   type ModelRoutingLevel,
   type ModelRoutingRun,
 } from './model-routing';
@@ -28,9 +36,9 @@ import type { TaskRunRoute } from './task-run-receipt';
  * and outside any transaction, and none of it over the network: the router itself is pure.
  *
  * Per Agent, per runner and per account, each read once — a bulk Run routes many tasks against the
- * same few of them (§8.2).
+ * same few of them (§8.2). `now` is the instant a runner's report is judged at (§6).
  */
-export function taskRouteReads(prisma: PrismaService, ownerId: string) {
+export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date = new Date()) {
   const cached = new Map<string, Promise<unknown>>();
   const once = <T>(key: string, read: () => Promise<T>): Promise<T> => {
     if (!cached.has(key)) cached.set(key, read());
@@ -39,18 +47,25 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string) {
   return {
     prisma,
     ownerId,
+    now,
     owner: () => once('owner', () => prisma.user.findUnique({
       where: { id: ownerId },
       select: { preferences: true },
     })),
     workspace: (id: string) => once(`workspace:${id}`, () => prisma.workspace.findFirst({
       where: { id, ownerId },
-      select: { runnerId: true, effort: true, modelRouting: true },
+      select: {
+        runnerId: true, effort: true, modelRouting: true, modelRoutingProviders: true,
+        env: true, codexAccount: true, claudeAccount: true,
+      },
     })),
     seed: (workspaceId: string) => once(`seed:${workspaceId}`, () => agentProviderSeed(prisma, workspaceId)),
     runner: (id: string) => once(`runner:${id}`, () => prisma.runner.findFirst({
       where: { id, ownerId },
-      select: { modelCatalog: true, runtimeDefaultModels: true, planUsage: true },
+      select: {
+        modelCatalog: true, runtimeDefaultModels: true, planUsage: true,
+        name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true,
+      },
     })),
     engine: (provider: string, providerBuiltin: boolean) => once(
       `engine:${provider}:${providerBuiltin}`,
@@ -118,6 +133,7 @@ async function routeEnvironment(
     providerSource: pinned ? 'task-pin' : 'agent-seed',
     runtime: engine.runtime,
     hasOwnModelSpace: engine.hasOwnModelSpace,
+    runner,
     modelCatalog: (runner?.modelCatalog ?? null) as RunnerModelCatalog | null,
     runtimeDefaultModels: sanitizeRuntimeDefaultModels(runner?.runtimeDefaultModels),
     planUsage: (runner?.planUsage ?? null) as PlanUsage | null,
@@ -125,6 +141,97 @@ async function routeEnvironment(
     // What a task run gets: it names no mode, so the account's default, else the floor.
     permissionMode: resolvePermissionMode(null, owner),
   };
+}
+
+type RouteAgent = NonNullable<Awaited<ReturnType<TaskRouteReads['workspace']>>>;
+type RouteRunner = NonNullable<Awaited<ReturnType<TaskRouteReads['runner']>>>;
+
+/** What reasons call a reported window: by its length, else by the slot it was reported in. */
+function windowName(window: PlanUsageWindow | undefined, slot: string): string {
+  const mins = window?.windowDurationMins;
+  if (!mins) return slot;
+  if (mins === 7 * 24 * 60) return 'weekly';
+  if (mins % (24 * 60) === 0) return `${mins / (24 * 60)}-day`;
+  return mins % 60 === 0 ? `${mins / 60}-hour` : slot;
+}
+
+/**
+ * Where an engine stands on the target runner for the account a run there would use (§6) — the
+ * account `sessions.create` would start it on (automaticAccount, runAccount), signed in as its
+ * preflight judges it (signedOutEngineRefusal). The quota is the fullest window that caps the whole
+ * engine; a model family's own window (Opus weekly) only moves the tier's model (§5).
+ */
+function engineState(
+  engine: AccountEngine,
+  agent: RouteAgent,
+  runner: RouteRunner,
+  now: Date,
+): ModelRoutingEngineState {
+  const automatic = automaticAccount(engine, agent, runner.engines, runner.planUsage, now);
+  const accounts = {
+    codexAccount: agent.codexAccount,
+    claudeAccount: agent.claudeAccount,
+    ...(automatic ? { [engine === AgentProvider.CLAUDE ? 'claudeAccount' : 'codexAccount']: automatic } : {}),
+  };
+  const signedOut = signedOutEngineRefusal({
+    runtime: engine,
+    bringsOwnCredentials: false,
+    workspaceEnv: agent.env,
+    accounts,
+    runner,
+    nowMs: now.getTime(),
+  }) !== null;
+  const account = runAccount(engine, agent.env, accounts, runner.engines);
+  const snapshot = account === null ? undefined : spentPlanUsage(runner.planUsage as PlanUsage | null, engine, account);
+  const windows: Array<[PlanUsageWindow | undefined, string]> = snapshot
+    ? [
+      [snapshot.fiveHour, '5-hour'],
+      [snapshot.sevenDay, 'weekly'],
+      [snapshot.primary, windowName(snapshot.primary, 'primary')],
+      [snapshot.secondary, windowName(snapshot.secondary, 'secondary')],
+    ]
+    : [];
+  let quota: ModelRoutingEngineState['quota'] = null;
+  for (const [window, name] of windows) {
+    // One past its reset has given its quota back.
+    if (!window || Date.parse(window.resetsAt ?? '') <= now.getTime()) continue;
+    if (!quota || window.utilization > quota.utilization) quota = { utilization: window.utilization, window: name };
+  }
+  return { signedOut, quota };
+}
+
+/** The engine a task's newest work run was created on, by runtime: what a verification looks past (§6). */
+async function lastRunEngine(reads: TaskRouteReads, taskId: string): Promise<string | null> {
+  const run = await reads.prisma.session.findFirst({
+    where: { ownerId: reads.ownerId, taskId, startsTaskWork: true },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: { provider: true, providerBuiltin: true },
+  });
+  return run ? (await reads.engine(run.provider, run.providerBuiltin)).runtime : null;
+}
+
+/**
+ * The router's cross-engine input (§6): the engines the owner allowed this Agent's task runs, what
+ * the target runner says of each one a run could start on, and for a verification the engine the
+ * task it verifies last ran on. Nothing past the allowed list when the task pins its engine or the
+ * owner allowed none: the run cannot leave its own engine then.
+ */
+async function routeEngines(
+  reads: TaskRouteReads,
+  task: TaskRouteSubject,
+  agent: RouteAgent | null,
+  env: Awaited<ReturnType<typeof routeEnvironment>>,
+): Promise<NonNullable<ModelRoutingInput['engines']>> {
+  const allowed = (agent?.modelRoutingProviders ?? []).filter((engine) => MODEL_ROUTING_ENGINES.includes(engine));
+  if (task.provider || allowed.length === 0 || !agent) return { allowed };
+  const states: Record<string, ModelRoutingEngineState> = {};
+  for (const engine of new Set([env.provider, ...allowed])) {
+    if (env.runner && (engine === AgentProvider.CLAUDE || engine === AgentProvider.CODEX)) {
+      states[engine] = engineState(engine, agent, env.runner, reads.now);
+    }
+  }
+  const verifiedRunEngine = task.verifiesTaskId ? await lastRunEngine(reads, task.verifiesTaskId) : null;
+  return { allowed, states, verifiedRunEngine };
 }
 
 /** `autoRunHoldOff`'s reading: an error naming a spent quota says nothing about the task (§3.3). */
@@ -232,6 +339,7 @@ export async function planTaskRunRoute(
     : ((env.owner?.preferences ?? {}) as { defaultEffort?: string }).defaultEffort || undefined;
   const effort = normalizeEffortForProvider(normalizeRuntimeProvider(env.runtime), named) || null;
   const modelHint = MODEL_ROUTING_LEVELS.find((level) => level === task.modelHint) ?? null;
+  const engines = await routeEngines(reads, task, agent, env);
   const decision = routeTaskRun({
     task: {
       provider: task.provider ?? null,
@@ -249,6 +357,7 @@ export async function planTaskRunRoute(
       defaultPermissionMode: env.permissionMode,
       planUsage: env.planUsage,
     },
+    engines,
   });
   // The run the router compared against: the newest one that did not stop at a usage limit.
   const skipped = history.findIndex((run) => !run.quotaFailure);
@@ -298,6 +407,10 @@ export async function planTaskRunRoute(
       escalatedFrom,
       opusWeeklyUtilization: env.planUsage?.claude?.sevenDayOpus?.utilization ?? null,
       modelRouting: agent?.modelRouting === true,
+      // Cross-engine (§6): what the owner allowed, and what the runner said of each candidate.
+      modelRoutingProviders: engines.allowed ?? [],
+      engineStates: engines.states ?? null,
+      verifiedRunEngine: engines.verifiedRunEngine ?? null,
     },
     reasons: decision.reasons,
   };

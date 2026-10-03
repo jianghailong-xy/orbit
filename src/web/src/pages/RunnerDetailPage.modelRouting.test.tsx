@@ -45,8 +45,9 @@ const workspace = (over: Record<string, unknown> = {}) => ({
 
 const SWITCH_LABEL = 'Smart model selection for tasks';
 const SWITCH_DESC =
-  "Each task run gets a model and effort picked from the task's difficulty, how it is checked, and how " +
-  'earlier runs went. A model pinned on a task always wins. Sessions you open yourself are not affected.';
+  'Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. ' +
+  "Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. " +
+  'Sessions you open yourself are not affected.';
 const MODEL_LINE_OFF =
   'Model claude-opus-5-5 · resolved by Claude on this runner. Pick a different one from the session composer.';
 const MODEL_LINE_ON =
@@ -171,12 +172,12 @@ const smartSwitch = () => smartRow().querySelector<HTMLElement>('[role="switch"]
 const modelLine = () => squash(form().querySelector('.rd-form-derived')?.textContent);
 
 describe('smart model selection on the Agent', () => {
-  it('sits under Worktree isolation, off until it is turned on, in the mock’s words', async () => {
+  it('sits under Worktree isolation, off until it is turned on, with the task routing explanation', async () => {
     mount(workspace());
     await openEditor();
 
     expect(settingLabels()).toEqual(['Worktree isolation', SWITCH_LABEL]);
-    expect(squash(smartRow().querySelector('.rd-set-desc')?.textContent)).toBe(SWITCH_DESC);
+    expect(smartRow().querySelector('.rd-set-desc')?.textContent).toBe(SWITCH_DESC);
     expect(smartSwitch().getAttribute('aria-checked')).toBe('false');
     // Off, the Model line is today's.
     expect(modelLine()).toBe(MODEL_LINE_OFF);
@@ -223,5 +224,71 @@ describe('smart model selection on the Agent', () => {
     await click(byText('button', 'Save'));
     expect(writes).toHaveLength(1);
     expect(writes[0].body).toMatchObject({ enableWorktree: false, modelRouting: true });
+  });
+});
+
+const ENGINES_NOTE =
+  "Only this agent's own engine is ticked by default, so a task never moves to another engine unless you tick it here.";
+
+/** The engines smart selection may use, inside its row, as each one's tick reads. */
+const engines = () =>
+  [...smartRow().querySelectorAll<HTMLElement>('.rd-engines-list .ant-checkbox-wrapper')].map((chip) => {
+    const input = chip.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+    return { engine: chip.textContent, ticked: input.checked, fixed: input.disabled };
+  });
+const engineInput = (engine: string) =>
+  [...smartRow().querySelectorAll<HTMLElement>('.rd-engines-list .ant-checkbox-wrapper')]
+    .find((chip) => chip.textContent === engine)!
+    .querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+
+describe('the engines smart selection may use', () => {
+  it('sit under the switch, with only the agent\'s own engine ticked, and that one fixed', async () => {
+    mount(workspace());
+    await openEditor();
+
+    expect(smartRow().querySelector('.rd-engines-label')?.textContent).toBe('Engines it may use');
+    expect(engines()).toEqual([
+      { engine: 'claude', ticked: true, fixed: true },
+      { engine: 'codex', ticked: false, fixed: false },
+    ]);
+    expect(squash(smartRow().querySelector('.rd-engines-note')?.textContent)).toBe(ENGINES_NOTE);
+    // Still one setting row: the group belongs to the switch, not beside it.
+    expect(settingLabels()).toEqual(['Worktree isolation', SWITCH_LABEL]);
+  });
+
+  it('ticking another engine saves it as modelRoutingProviders', async () => {
+    const { writes } = mount(workspace());
+    await openEditor();
+
+    await click(engineInput('codex'));
+    expect(engines()[1]).toEqual({ engine: 'codex', ticked: true, fixed: false });
+
+    await click(byText('button', 'Save'));
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).toMatchObject({ method: 'PATCH', path: `/workspaces/${WORKSPACE_ID}` });
+    expect(writes[0].body.modelRoutingProviders).toEqual(['codex']);
+  });
+
+  it('fixes the engine the agent runs on, and unticking the other one takes it off the list', async () => {
+    const { writes } = mount(workspace({ lastProvider: 'codex', modelRoutingProviders: ['claude'] }));
+    await openEditor();
+
+    expect(engines()).toEqual([
+      { engine: 'claude', ticked: true, fixed: false },
+      { engine: 'codex', ticked: true, fixed: true },
+    ]);
+    await click(engineInput('claude'));
+    await click(byText('button', 'Save'));
+    expect(writes).toHaveLength(1);
+    expect(writes[0].body.modelRoutingProviders).toEqual([]);
+  });
+
+  it('leaves the list as it was when the Agent is saved for something else', async () => {
+    const { writes } = mount(workspace({ modelRoutingProviders: ['codex'] }));
+    await openEditor();
+    await click(form().querySelector<HTMLElement>('.rd-set-row [role="switch"]')!); // Worktree isolation
+    await click(byText('button', 'Save'));
+    expect(writes).toHaveLength(1);
+    expect(writes[0].body).toMatchObject({ enableWorktree: false, modelRoutingProviders: ['codex'] });
   });
 });
