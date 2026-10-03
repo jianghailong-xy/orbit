@@ -1,4 +1,4 @@
-import { Prisma, RunStatus } from '@prisma/client';
+import { Prisma, RunStatus, TaskEvidenceDecisionValue, TaskVerdict } from '@prisma/client';
 import {
   AgentProvider,
   USAGE_LIMIT_ERROR_MARKERS,
@@ -13,6 +13,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { accountPoolRuntime, isBuiltinProvider } from '../providers/custom-provider';
 import { followsRuntimeCatalog } from '../providers/preset-overlay';
 import { agentProviderSeed } from '../workspaces/workspace-provider';
+import { readExecutableAcceptanceOutcome } from './executable-acceptance-round';
 import {
   MODEL_ROUTING_LEVELS,
   priorLevel,
@@ -132,6 +133,66 @@ function quotaFailure(error: string | null): boolean {
   return USAGE_LIMIT_ERROR_MARKERS.some((marker) => text.includes(marker));
 }
 
+/**
+ * The task's work runs as the router reads them (§3.3): newest first, numbered in the order they
+ * were started ("run 1" is the first), each with the tier its own Route Decision named — a shadow
+ * one included — and how it ended.
+ *
+ * A verifier's FAIL and the owner's SEND_BACK come after the run they judge, so each belongs to the
+ * newest run started before it: the reading the routing report counts failures by (§10.1), so the
+ * run routing escalated after is the run the report counts as failed. A verifier keeps only the
+ * verdict it holds now, dated by its row's last write.
+ */
+async function readRunHistory(
+  prisma: PrismaService,
+  ownerId: string,
+  taskId: string,
+): Promise<ModelRoutingRun[]> {
+  const runs = await prisma.session.findMany({
+    where: { ownerId, taskId, startsTaskWork: true },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: {
+      id: true, createdAt: true, status: true, error: true,
+      provider: true, providerBuiltin: true, model: true, effort: true,
+    },
+  });
+  if (runs.length === 0) return [];
+  const decisions = await prisma.taskRouteDecision.findMany({
+    where: { ownerId, taskId, sessionId: { in: runs.map((run) => run.id) } },
+    select: { sessionId: true, level: true },
+  });
+  const failedVerdicts = await prisma.task.findMany({
+    where: { ownerId, verifiesTaskId: taskId, verdict: TaskVerdict.FAIL },
+    select: { updatedAt: true },
+  });
+  const sendBacks = await prisma.taskEvidenceDecision.findMany({
+    where: { ownerId, taskId, decision: TaskEvidenceDecisionValue.SEND_BACK },
+    select: { decidedAt: true },
+  });
+  const levels = new Map(decisions.map((row) => [row.sessionId, row.level]));
+  return runs.map((run, index): ModelRoutingRun => {
+    const next = runs[index + 1]?.createdAt;
+    const judged = (at: Date) => at >= run.createdAt && (!next || at < next);
+    return {
+      ordinal: index + 1,
+      status: run.status,
+      quotaFailure: run.status === RunStatus.FAILED && quotaFailure(run.error),
+      level: MODEL_ROUTING_LEVELS.find((level) => level === levels.get(run.id)) ?? null,
+      model: run.model,
+      effort: run.effort,
+      runtime: isBuiltinProvider(run.provider, run.providerBuiltin)
+        ? normalizeRuntimeProvider(run.provider, run.providerBuiltin)
+        : run.provider,
+      // The run's own end first, then what was said about its work afterwards.
+      outcome: run.status === RunStatus.FAILED
+        ? (readExecutableAcceptanceOutcome(run.error) ? 'ACCEPTANCE_FAILED' : 'FAILED')
+        : failedVerdicts.some((row) => judged(row.updatedAt)) ? 'VERIFICATION_FAILED'
+          : sendBacks.some((row) => judged(row.decidedAt)) ? 'SENT_BACK'
+            : 'OK',
+    };
+  }).reverse();
+}
+
 /** What a dispatch already holds of the task it routes. */
 export interface TaskRouteSubject {
   id: string;
@@ -163,29 +224,13 @@ export async function planTaskRunRoute(
   const { prisma, ownerId } = reads;
   const env = await routeEnvironment(reads, task, workspace.id, workspace.runnerId);
   const agent = await reads.workspace(workspace.id);
-  const runs = await prisma.session.findMany({
-    where: { ownerId, taskId: task.id, startsTaskWork: true },
-    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    select: { status: true, error: true, provider: true, providerBuiltin: true, model: true, effort: true },
-  });
+  const history = await readRunHistory(prisma, ownerId, task.id);
   const dependents = await prisma.taskDependency.count({ where: { dependsOnTaskId: task.id } });
   // The effort `sessions.create` gives a run that names none: the Agent's, else the account's.
   const named = agent && agent.effort !== null
     ? agent.effort
     : ((env.owner?.preferences ?? {}) as { defaultEffort?: string }).defaultEffort || undefined;
   const effort = normalizeEffortForProvider(normalizeRuntimeProvider(env.runtime), named) || null;
-  // Work runs only, newest first, numbered in the order they were started — "run 1" is the first.
-  const history: ModelRoutingRun[] = runs.map((run, index): ModelRoutingRun => ({
-    ordinal: index + 1,
-    status: run.status,
-    quotaFailure: run.status === RunStatus.FAILED && quotaFailure(run.error),
-    model: run.model,
-    effort: run.effort,
-    runtime: isBuiltinProvider(run.provider, run.providerBuiltin)
-      ? normalizeRuntimeProvider(run.provider, run.providerBuiltin)
-      : run.provider,
-    outcome: run.status === RunStatus.FAILED ? 'FAILED' : 'OK',
-  })).reverse();
   const modelHint = MODEL_ROUTING_LEVELS.find((level) => level === task.modelHint) ?? null;
   const decision = routeTaskRun({
     task: {
