@@ -105,9 +105,11 @@ final class TaskDetailWiringTests: XCTestCase {
         XCTAssertFalse(presses.contains("Mark done"), "a second `done` beside Confirm done read as the same press")
         XCTAssertTrue(presses.contains("if row.stacked {"), "the long pointer stacks rather than wraps")
         XCTAssertTrue(presses.contains("HStack(spacing: 10) {"))
-        XCTAssertEqual(presses.components(separatedBy: ".frame(maxWidth: .infinity)").count - 1, 6,
-                       "every label fills its half: three leading presses and three trailing ones")
-        XCTAssertEqual(presses.components(separatedBy: ".lineLimit(1)").count - 1, 6, "and none of them wraps")
+        // Four leading presses since a run's report can be with its reviewer: the pointer to the card
+        // says Under review then (docs/owner-confirmation-review-contract.md §5 N3).
+        XCTAssertEqual(presses.components(separatedBy: ".frame(maxWidth: .infinity)").count - 1, 7,
+                       "every label fills its half: four leading presses and three trailing ones")
+        XCTAssertEqual(presses.components(separatedBy: ".lineLimit(1)").count - 1, 7, "and none of them wraps")
         XCTAssertTrue(presses.contains("TaskDetailCopy.runNow"), "the detail's first run says what the browser's does")
 
         let menu = try section(view, from: "ToolbarItem(placement: .primaryAction) {\n                    Menu {",

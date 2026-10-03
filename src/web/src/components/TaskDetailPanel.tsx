@@ -71,6 +71,7 @@ import {
   refreshOwnerConfirmationViews,
   sendOwnerDecision,
 } from './OwnerConfirmationCard';
+import { UNDER_REVIEW } from './OwnerConfirmationReview';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
 // bundle; it is fetched only when someone opens a task with dependencies and selects Graph.
@@ -1248,13 +1249,15 @@ export function TaskDetailPanel({
         <div className="tdp-head-actions">
           {ownerWaiting ? (
             // A run is waiting on the owner: its card in that session is where this is answered,
-            // so the panel only takes the reader there.
+            // so the panel only takes the reader there. While its report is still with its reviewer
+            // the pointer says so, in the quieter tone, as the session's row does (contract §5 N3).
             <Link
-              className="tdp-owner-confirmation-pointer"
+              className={`tdp-owner-confirmation-pointer${
+                ownerWaiting.review?.state === 'UNDER_REVIEW' ? ' is-under-review' : ''}`}
               to={`/sessions/${encodeId(ownerWaiting.sessionId)}`}
               state={{ revealOwnerConfirmation: true }}
             >
-              {WAITING_FOR_CONFIRMATION}
+              {ownerWaiting.review?.state === 'UNDER_REVIEW' ? UNDER_REVIEW : WAITING_FOR_CONFIRMATION}
             </Link>
           ) : confirmHere ? (
             <Button loading={confirmDone.isPending} onClick={() => confirmDone.mutate()}>

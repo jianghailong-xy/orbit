@@ -1544,7 +1544,7 @@ struct AgentSessionRow: View {
 
     private func lineColor(_ tone: SessionLine.Tone) -> Color {
         switch tone {
-        case .preview, .queued, .background, .watching: return .secondary
+        case .preview, .queued, .background, .watching, .review: return .secondary
         case .running:                       return .blue
         case .approval:                      return .orange
         }
@@ -1615,6 +1615,10 @@ struct SessionLiveIndicator: View {
         // not a process). The glyph has already let a question for you or work of its own outrank it.
         case (.symbol("eye"), _):
             Image(systemName: "eye").font(.orbitGlyph).foregroundStyle(.secondary)
+        // Under review (contract §5 N3): the clock the macOS row and the web glyph draw, in the
+        // quiet tone — the report is somebody else's to look at first, and nothing here is amber.
+        case (.symbol("clock"), .neutral) where session.confirmationUnderReview != nil:
+            Image(systemName: "clock").font(.orbitGlyph).foregroundStyle(.secondary)
         // The one background state that is NOT quiet. A compact row's only live cue used to go
         // silent here, which is exactly the reading the session row stopped giving: a job in
         // flight is work happening with nobody generating, and this is the surface where the row
