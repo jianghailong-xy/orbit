@@ -79,8 +79,9 @@ function codexPool(...logins: CodexLogin[]): ProviderPool {
   };
 }
 
-/** Who can use the pool, and its API keys, as GET /providers/shared-pools/:id serves them to its owner
- *  (migration 0358): its owner alone, and no key. */
+/** Who can use the pool, its ChatGPT accounts and its API keys, as GET /providers/shared-pools/:id serves
+ *  them to its owner (migration 0358): its owner alone, no key, and the accounts the providers read
+ *  carries (`pools` below) — the server sends the same accounts here since 2026-10-03. */
 function alone(): SharedPool {
   return {
     id: POOL_ID,
@@ -88,7 +89,8 @@ function alone(): SharedPool {
     label: 'My Codex',
     engine: 'codex',
     shared: false,
-    ownerHasChatGPT: true,
+    // The pool's accounts, as the shared-pools read serves them — the same ones the providers read carries.
+    logins: [{ ...account(), next: true }],
     membersCanAdd: true,
     ownKeyFirst: true,
     viewerRole: 'ADMIN',
@@ -472,12 +474,12 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
       'Sign in with your own ChatGPT account to run My Codex on it.',
     );
     expect(Array.from(dialog()!.querySelectorAll('.pa-facts li')).map((li) => li.textContent)).toEqual([
-      'Only you can use it. Sessions on My Codex are yours alone — nobody else in Orbit sees this pool or its account.',
+      'Yours, and whoever you add. A pool that is just yours runs your sessions alone; add people and their sessions start on this account too.',
       'The sign-in stays on the Orbit server. It never goes to a runner — runners get a session token, not your login — and nobody sees its tokens.',
       'Sign out any time. Its usage, and when it resets, show on this pool’s page.',
     ]);
     expect(dialog()?.querySelector('.pa-risk')?.textContent).toBe(
-      'Don’t share your account. OpenAI’s terms don’t allow a ChatGPT account to be shared — an account used that way can be suspended.',
+      'Adding people shares your account. Their sessions run on it — OpenAI’s terms treat account sharing as a violation, and an account used that way can be suspended.',
     );
     // What the notice's press is about: the one-time code the next step shows (03-2's own button).
     expect(button('Cancel', dialog()!)).not.toBeNull();
@@ -702,12 +704,12 @@ describe('a Codex pool of one’s own ChatGPT account', { timeout: 30_000 }, () 
       'Sign in with another ChatGPT account of yours to add it to My Codex. It runs on 1 account now.',
     );
     expect(Array.from(dialog()!.querySelectorAll('.pa-facts li')).map((li) => li.textContent)).toEqual([
-      'Only you can use it. Sessions on a ChatGPT account are yours alone, even when My Codex is shared: the people in it can’t run on it or see which account it is.',
+      'Everyone in the pool runs on it. Once My Codex is shared, the people you add run their sessions on this account too — and see it, with its usage, on the pool’s page.',
       'The sign-in stays on the Orbit server. It never goes to a runner. Runners get a session token, not your login.',
       'Sign out any time. My Codex keeps running on its other accounts.',
     ]);
     expect(dialog()?.querySelector('.pa-risk')?.textContent).toBe(
-      'Only your own accounts. Signing in with someone else’s ChatGPT account is sharing it. OpenAI’s terms don’t allow that, and an account used that way can be suspended.',
+      'Only your own accounts. Signing in with someone else’s ChatGPT account is sharing it, and so is putting yours in a pool others run on: OpenAI’s terms treat both as a violation, and an account used that way can be suspended.',
     );
 
     await click(button('Get a code', dialog()!));

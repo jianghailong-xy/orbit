@@ -169,7 +169,13 @@ suite('the codex sign-in and its credential, on real PostgreSQL', { timeout: 300
   const newPool = async (ownerId: string, engine = 'codex', label = 'Mine') => {
     const id = randomUUID();
     await prisma.providerPool.create({
-      data: { id, slug: `codex-login-${randomUUID()}`, label, ownerId, engine, shared: false },
+      data: {
+        id, slug: `codex-login-${randomUUID()}`, label, ownerId, engine, shared: false,
+        // A Codex pool has its owner among its people from the start (migration 0358; the row
+        // ProvidersService.createPool writes) — the row the pool page's doors find them by, and the one a
+        // publish about its accounts reaches.
+        ...(engine === 'codex' ? { people: { create: { userId: ownerId, role: 'ADMIN' } } } : {}),
+      },
     });
     return id;
   };

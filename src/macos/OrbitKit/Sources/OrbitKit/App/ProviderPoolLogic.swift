@@ -116,8 +116,8 @@ public enum ProviderPools {
         pool.shared != nil && !pool.members.contains { $0.login != nil }
     }
 
-    /// Whether `pool` is drawn for one of the people its owner added — who run on its API keys alone —
-    /// rather than for its owner (web's `readByMember`).
+    /// Whether `pool` is drawn for one of the people its owner added rather than for its owner (web's
+    /// `readByMember`).
     public static func readByMember(_ pool: ProviderPool) -> Bool {
         pool.shared.map { !SharedPoolPage.ownsPool($0) } ?? false
     }
@@ -131,9 +131,14 @@ public enum ProviderPools {
 
     /// What `n` of a pool's members are to whoever reads it (web's `memberNoun`): to its owner, accounts —
     /// each ChatGPT account and API key of a Codex pool, each subscription of a Claude one — and to the
-    /// people they added, its keys.
+    /// people they added, what they can run on: the pool's ChatGPT accounts and its keys, whichever of the
+    /// two it holds (the accounts run their sessions too, 2026-10-03).
     public static func memberNoun(_ pool: ProviderPool, _ n: Int) -> String {
-        readByMember(pool) ? "key\(n == 1 ? "" : "s") you can run on" : "account\(n == 1 ? "" : "s")"
+        guard readByMember(pool) else { return "account\(n == 1 ? "" : "s")" }
+        let accounts = pool.members.contains { $0.login != nil }
+        let keys = pool.members.contains { $0.key != nil }
+        if accounts && keys { return "account\(n == 1 ? "" : "s") and key\(n == 1 ? "" : "s") you can run on" }
+        return (keys ? "key\(n == 1 ? "" : "s")" : "account\(n == 1 ? "" : "s")") + " you can run on"
     }
 
     // MARK: the pool's page (Settings → Providers → an account pool)
@@ -166,7 +171,9 @@ public enum ProviderPools {
         if pool.members.contains(where: { $0.state == .spent }) {
             return spentNote(pool, now: now, timeZone: timeZone) ?? "All spent"
         }
-        return pool.shared != nil ? "No key can run" : "No account can run"
+        // A pool holding ChatGPT accounts is spent rather than capped (web's `poolHeadline`): the accounts
+        // come back by the hour, where keys spent to their caps come back with the month.
+        return keysOnly(pool) ? "No key can run" : "No account can run"
     }
 
     /// A member's status tag (web's `memberStatus`).

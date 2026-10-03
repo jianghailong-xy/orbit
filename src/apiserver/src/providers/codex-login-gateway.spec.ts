@@ -186,6 +186,16 @@ test('the session is told which window of which account is spent and when it goe
     'The ChatGPT account owner@example.invalid on "My Codex" was signed out by OpenAI — only you can sign in again, on the pool\'s page',
   );
   assert.equal(loginMissingReason('My Codex'), '"My Codex" has no ChatGPT account signed in — only you can sign one in, on the pool\'s page');
+  // One of the people the pool's owner added runs on it too (2026-10-03): the press is named as the
+  // owner's, not as theirs.
+  assert.equal(
+    loginSignedOutNotice(login, 'My Codex', false),
+    'The ChatGPT account owner@example.invalid on "My Codex" was signed out by OpenAI — only its owner can sign in again, on the pool\'s page',
+  );
+  assert.equal(
+    loginMissingReason('My Codex', false),
+    '"My Codex" has no ChatGPT account signed in — only its owner can sign one in, on the pool\'s page',
+  );
   // No word of these names the account's id.
   for (const words of [loginSpentNotice(login, reading, reset), loginSignedOutNotice(login, 'My Codex')]) {
     assert.ok(!words.includes(login.accountId));

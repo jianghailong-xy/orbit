@@ -133,11 +133,13 @@ export function loginToKeySwitchNotice(to: { label: string }, from: LoginAccount
 }
 
 /**
- * The line for a session of the pool's owner moving back off an API key onto ChatGPT account `to`, which
- * can run again: nothing is wrong with the key — an owner's sessions run on their own accounts first.
+ * The line for a session moving back off an API key onto ChatGPT account `to`, which can run again:
+ * nothing is wrong with the key — a session runs on the pool's ChatGPT accounts first. `byOwner` says
+ * whose session it is: the owner's own, whose accounts they are, or one of the people they added, for
+ * whom they are the pool's.
  */
-export function keyToLoginSwitchNotice(to: LoginAccount): string {
-  return `Switched to ${accountName(to)} — your ChatGPT accounts come first`;
+export function keyToLoginSwitchNotice(to: LoginAccount, byOwner = true): string {
+  return `Switched to ${accountName(to)} — ${byOwner ? 'your ChatGPT accounts come first' : "the pool's ChatGPT accounts come first"}`;
 }
 
 /** Signed out first, since only its owner can undo that; then the used-up window, as the gateway names it. */
