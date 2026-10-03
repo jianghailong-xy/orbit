@@ -369,7 +369,7 @@ struct AgentPanes: View {
     /// The folder whose Rename… was tapped — on a folder row's long-press menu (the folder page's
     /// ⋯ raises the same question through the same modifier). List-owned like the sheets above.
     @State private var renamingFolder: SessionFolder?
-    /// The folder whose Delete Folder… was tapped, with the count the confirmation names.
+    /// The folder whose Delete Folder… was tapped, held the same way.
     @State private var deletingFolder: SessionFolderDeletion?
     /// New Folder… in the ≡ menu (§3.4) and the prompt it opens: its draft, whether it is waiting on
     /// the server, and why the last one failed (a name the workspace already has, in words).
@@ -855,7 +855,7 @@ struct AgentPanes: View {
                 Label(SessionFolderCopy.rename, systemImage: "pencil")
             }
             Button(role: .destructive) {
-                deletingFolder = SessionFolderDeletion(folder: row.folder, sessionCount: row.sessionCount)
+                deletingFolder = SessionFolderDeletion(folder: row.folder)
             } label: {
                 Label(SessionFolderCopy.delete, systemImage: "trash")
             }

@@ -77,11 +77,9 @@ struct SessionFolderRowView: View {
     }
 }
 
-/// A folder about to be deleted, and how many of the list's sessions are in it — the number the
-/// confirmation names (design §3.4). Held by whichever surface raised the question.
+/// A folder about to be deleted (design §3.4). Held by whichever surface raised the question.
 struct SessionFolderDeletion: Equatable {
     let folder: SessionFolder
-    let sessionCount: Int
 }
 
 /// One folder's page (§3.3, mock 02's middle phone): the sessions filed in it, under its name and
@@ -286,7 +284,7 @@ struct SessionFolderPage: View {
                 Label(SessionFolderCopy.rename, systemImage: "pencil")
             }
             Button(role: .destructive) {
-                deletingFolder = folder.map { SessionFolderDeletion(folder: $0, sessionCount: sessions.count) }
+                deletingFolder = folder.map { SessionFolderDeletion(folder: $0) }
             } label: {
                 Label(SessionFolderCopy.delete, systemImage: "trash")
             }
@@ -409,7 +407,7 @@ private struct SessionFolderManagement: ViewModifier {
                 Button(SessionFolderCopy.deleteConfirm, role: .destructive) { delete() }
                 Button(SessionFolderCopy.cancel, role: .cancel) {}
             } message: {
-                Text(SessionFolderCopy.deleteMessage(sessionCount: deleting?.sessionCount ?? 0))
+                Text(SessionFolderCopy.deleteMessage)
             }
             .alert(failure?.title ?? "", isPresented: failurePresented) {
                 Button(SessionFolderCopy.ok, role: .cancel) {}
