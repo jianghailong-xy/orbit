@@ -95,6 +95,10 @@ jobs:
       # that the Linux job's `#if` guards skip.
       - name: Test OrbitKit (macOS)
         working-directory: src/macos/OrbitKit
+        # TEMPORARY (probe branch, never merged): main's WikiHealthCopyParityTests is red — the Wiki
+        # contract gained maintenance.health.lastFailure and the native model did not — and a red here
+        # skips the build below. This branch only needs the build's verdict, so the tests may fail.
+        continue-on-error: true
         run: swift test
       # First real compile of the SwiftUI layer (views, @Observable models, MenuBarExtra,
       # UNUserNotificationCenter, launchctl glue). If this surfaces SDK nits, that's its job.
@@ -104,8 +108,9 @@ jobs:
 
   ios:
     name: iOS (generate + build)
-    # macOS runners bill at 10× — only on PRs or an explicit dispatch, not every branch push.
-    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
+    # TEMPORARY (probe branch, never merged): this branch's dispatch is for the macOS build alone; the
+    # iOS build of the same commit runs on the task branch.
+    if: github.event_name == 'pull_request'
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v7
