@@ -1700,7 +1700,21 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // with its own indexes and foreign keys. Read against the claims above: no existing column
       // is dropped or retyped, no DML or function/trigger replacement appears, and neither the
       // 0177 pair, criterion enum nor any project_acceptance_* object is named.
-      '0364_task_model_routing'],
+      '0364_task_model_routing',
+      // `task_owner_creator_session_status_created_id_idx` (0365): one btree on `task
+      // (owner_id, creator_session_id, status, created_at DESC, id DESC)`, five columns that already
+      // existed, so that a session's "Tasks created here" row is counted and its first rows read off
+      // the index instead of a read — and a 4.6 MB tuplestore — of every task the session created.
+      // Read against every claim above: one `CREATE INDEX IF NOT EXISTS` and nothing else — no
+      // function, trigger, type, column or constraint is created, altered or dropped, so it is not
+      // another writer of the DONE fence and names none of the six preserved objects. `task` IS one
+      // of the preserved relations, and it is named only as the table the index is built on, as in
+      // 0283, 0305 and 0361: no column of `task` is added, dropped or retyped and no stored row moves.
+      // `task.acceptance_command`, `task.acceptance_expected_exit_code`,
+      // `task_executable_acceptance_pair` and `task_completion_criterion` are not named, and no
+      // `project_acceptance_*` object is. No INSERT, UPDATE or DELETE: the build reads every task
+      // row once and writes none.
+      '0365_task_owner_creator_session_status_created_id_idx'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
