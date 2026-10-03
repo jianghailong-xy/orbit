@@ -246,7 +246,7 @@ export async function recordOwnerConfirmationRequest(
     sessionId: string;
     turnId: string;
     claimId: string;
-    /** The run's branch tip as this completion reported it (0368); null when it reported none. */
+    /** The run's branch tip as this completion reported it (0370); null when it reported none. */
     branchSha: string | null;
   },
 ): Promise<{ id: string; requestedAt: Date }> {

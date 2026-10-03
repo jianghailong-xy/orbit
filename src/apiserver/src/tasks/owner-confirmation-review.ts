@@ -26,7 +26,7 @@ import { STALE_ACTION } from './task-owner-confirmation';
  * review row: the project's coordinator conversation for a task in an Automatic project, the
  * conversation the task was filed from outside a project, and nobody when the task was filed from
  * no conversation at all (the owner's own, in the app) or its project is not Automatic. A request
- * with no review row has no review bar, exactly as every request recorded before 0368.
+ * with no review row has no review bar, exactly as every request recorded before 0370.
  *
  * WHAT STATE IT IS IN (§4). Read, never stored and never swept: `confirmationReviewStates` is the
  * one definition, asked by the card, the counts, the session rows and the doors alike — the way

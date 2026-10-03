@@ -1132,7 +1132,7 @@ export class RunnerApiController {
                 // The worktree's actual HEAD branch → the bar flags divergence from the tracked
                 // `branch` and offers Adopt (older runners omit it → left untouched).
                 ...(s.worktreeBranch !== undefined ? { worktreeBranch: s.worktreeBranch } : {}),
-                // The branch tip a confirmation review is held to (0368): written when reported.
+                // The branch tip a confirmation review is held to (0370): written when reported.
                 ...(storableBranchSha(s.branchSha) ? { branchSha: s.branchSha } : {}),
               },
             });
@@ -4596,7 +4596,7 @@ export class RunnerApiController {
           ...(branchMerged !== undefined ? { branchMerged } : {}),
           // The worktree's actual HEAD branch → flags divergence / offers Adopt (older runners omit).
           ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
-          // The branch tip a confirmation review is held to (0368): written when reported.
+          // The branch tip a confirmation review is held to (0370): written when reported.
           ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
           runtimeSessionId: dto.runtimeSessionId ?? undefined,
           lastTurnAt: new Date(),
@@ -6563,7 +6563,7 @@ export class RunnerApiController {
         ...(branchMerged !== undefined ? { branchMerged } : {}),
         // The worktree's actual HEAD branch → flags divergence / offers Adopt (older runners omit).
         ...(dto.worktreeBranch !== undefined ? { worktreeBranch: dto.worktreeBranch } : {}),
-        // The branch tip a confirmation review is held to (0368) — moved by a Commit, which is what
+        // The branch tip a confirmation review is held to (0370) — moved by a Commit, which is what
         // pushes this diff: written when reported.
         ...(storableBranchSha(dto.branchSha) ? { branchSha: dto.branchSha } : {}),
       },

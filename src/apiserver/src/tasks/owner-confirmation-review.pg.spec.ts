@@ -2,7 +2,7 @@
  * An OWNER_CONFIRMED request reviewed before its owner is asked, against real PostgreSQL
  * (docs/owner-confirmation-review-contract.md §11.1's list; each case names its clauses):
  *
- *   (1) migration 0368's tables, columns and trigger;
+ *   (1) migration 0370's tables, columns and trigger;
  *   (2) who reviews: the project's coordinator, the session that filed the task, or nobody — and the
  *       refusals a delivery is written down with (S2, S4, D2);
  *   (3) the request and its review commit together, and a request under review is not counted: the
@@ -362,7 +362,7 @@ suite('OWNER_CONFIRMED: the reviewer reviews first, the owner still decides', { 
   }
 
   // (1) ------------------------------------------------------------------------------------------
-  await t.test('(1) migration 0368: two tables, the request and session columns, the decision columns, the trigger', async () => {
+  await t.test('(1) migration 0370: two tables, the request and session columns, the decision columns, the trigger', async () => {
     const tables = (await sql.query<{ review: string | null; record: string | null }>(
       `SELECT to_regclass('task_owner_confirmation_review')::text AS review,
               to_regclass('task_owner_confirmation_review_record')::text AS record`,

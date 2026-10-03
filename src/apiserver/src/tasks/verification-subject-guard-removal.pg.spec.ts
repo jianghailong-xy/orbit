@@ -226,7 +226,7 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
     + '0352 added `session_request_asker_stopped`, which marks the outcomes held for an asking '
     + 'session that stopped for good, 46 once 0367 added `session_antigravity_runner_claim_guard`, '
     + 'which keeps an older control plane from claiming an Antigravity session as Claude, and 47 '
-    + 'once 0368 added `task_owner_confirmation_review_reviewer_ended`, which records on the '
+    + 'once 0370 added `task_owner_confirmation_review_reviewer_ended`, which records on the '
     + 'confirmation reviews still waiting on a session that their reviewer ended');
   for (const [, trigger] of DROPPED_TRIGGERS) {
     assert.equal(installed.rows.some((row) => row.trigger === trigger), false);

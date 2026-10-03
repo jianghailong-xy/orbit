@@ -1750,7 +1750,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // (0366 is the retry-claim lease just above, which landed first, so this took 0367; 0369,
       // below, landed before this did and left 0367 to it.)
       '0367_antigravity_runtime',
-      // A confirmation request's review (0368, docs/owner-confirmation-review-contract.md §3): three new
+      // Every live workspace's place in the sidebar, written down (0369): one UPDATE … FROM of
+      // `workspace.position`, computed from `workspace` and `runner` rows and nothing else. Read
+      // against every claim above: neither table is a preserved relation, and no `task`, `session`,
+      // `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored task
+      // and criterion row are out of its reach. No table, column, constraint, index, function,
+      // trigger or type is created, altered or dropped, so it is not another writer of the DONE
+      // fence and names none of the six preserved objects; no row is inserted or deleted. (Written
+      // as 0366 on its own branch and renumbered before it landed: 0366 is the retry claim lease
+      // above, and 0367 and 0368 were spelled by branches not yet landed.)
+      '0369_workspace_position_backfill',
+      // A confirmation request's review (0370, docs/owner-confirmation-review-contract.md §3): three new
       // enums, two new tables (`task_owner_confirmation_review` and its records), one nullable CHAR(40)
       // column on `task_owner_confirmation_request` and one on `session`, three nullable columns on
       // `task_owner_decision` with a foreign key and a CHECK on the new values only, and one new
@@ -1761,19 +1771,9 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `CREATE OR REPLACE FUNCTION` is the new trigger's own, so it is not another writer of the DONE
       // fence and names none of the six preserved objects; 0267's CHECKs are left as they were. No
       // INSERT, UPDATE or DELETE: no request or decision is backfilled. (Written as 0365 on its own
-      // branch and renumbered before it landed: 0365, 0366 and 0367 landed first, just above. 0369,
-      // just below, landed before this one and left 0368 to it.)
-      '0368_owner_confirmation_review',
-      // Every live workspace's place in the sidebar, written down (0369): one UPDATE … FROM of
-      // `workspace.position`, computed from `workspace` and `runner` rows and nothing else. Read
-      // against every claim above: neither table is a preserved relation, and no `task`, `session`,
-      // `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored task
-      // and criterion row are out of its reach. No table, column, constraint, index, function,
-      // trigger or type is created, altered or dropped, so it is not another writer of the DONE
-      // fence and names none of the six preserved objects; no row is inserted or deleted. (Written
-      // as 0366 on its own branch and renumbered before it landed: 0366 is the retry claim lease
-      // above, and 0367 and 0368 were spelled by branches not yet landed.)
-      '0369_workspace_position_backfill'],
+      // branch and renumbered before it landed: 0365, 0366, 0367 and 0369 landed first, just above,
+      // and 0368 is spelled by another project's branch not yet landed.)
+      '0370_owner_confirmation_review'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

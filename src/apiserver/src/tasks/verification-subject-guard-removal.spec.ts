@@ -294,7 +294,7 @@ const CORE_TRIGGERS_AFTER: Readonly<Record<string, readonly string[]>> = {
     'session_source_freeze_guard',
     'session_superseded_task_guard',
     'session_superseded_task_revive_guard',
-    // 0368's: a session that ends records, on the confirmation reviews still waiting on it, that their
+    // 0370's: a session that ends records, on the confirmation reviews still waiting on it, that their
     // reviewer ended (docs/owner-confirmation-review-contract.md §3.1). Another SIBLING change.
     'task_owner_confirmation_review_reviewer_ended',
   ],
@@ -325,7 +325,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + 'maintained-count shape for one project\'s per-status tally, 44 once 0350 added '
     + '`session_request_recipient_ended` to `session`, 45 once 0352 added '
     + '`session_request_asker_stopped` to it, 46 once 0367 added '
-    + '`session_antigravity_runner_claim_guard` with the Antigravity runtime, and 47 once 0368 '
+    + '`session_antigravity_runner_claim_guard` with the Antigravity runtime, and 47 once 0370 '
     + 'added `task_owner_confirmation_review_reviewer_ended` to `session`');
   assert.deepEqual(core.filter((entry) => entry.since.startsWith('0207_')), [],
     'no trigger attributed to 0207 may still be registered');
@@ -348,7 +348,7 @@ test('(g) exactly the three 0207 triggers left, and nothing installed before the
     + '0271\'s `task_progress_epoch_advance`, 0280\'s three `task_list_task_count_*` and 0282\'s '
     + 'three `project_task_status_count_*`, 0350\'s `session_request_recipient_ended`, 0352\'s '
     + '`session_request_asker_stopped`, 0367\'s `session_antigravity_runner_claim_guard` and '
-    + '0368\'s `task_owner_confirmation_review_reviewer_ended`. '
+    + '0370\'s `task_owner_confirmation_review_reviewer_ended`. '
     + '0212\'s `failure_successor_task_binding_immutable` was another, and 0226 removed it',
   );
   assert.ok(

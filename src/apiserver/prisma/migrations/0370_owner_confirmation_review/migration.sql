@@ -1,4 +1,4 @@
--- 0368 —— OWNER_CONFIRMED 确认卡的「先审后呈」（docs/owner-confirmation-review-contract.md §3）。
+-- 0370 —— OWNER_CONFIRMED 确认卡的「先审后呈」（docs/owner-confirmation-review-contract.md §3）。
 --
 -- 执行会话声明完成并停下时，`runnerApi.turnComplete` 记下确认请求；从这一版起，同一个事务里还把请求
 -- 交给审查方：项目里是项目的协调会话，项目外是派活的会话（契约 §1）。审查方先审，审查期间卡片照常
