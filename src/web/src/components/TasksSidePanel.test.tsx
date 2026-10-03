@@ -27,7 +27,7 @@ describe('TasksSidePanel nav', () => {
     const topBlock =
       source.match(/const TOP(?:\s*:\s*TopNavItem\[\])?\s*=\s*\[([\s\S]*?)\n\];/)?.[1] ?? '';
     expect(topBlock).toMatch(
-      /\{\s*key:\s*'projects',\s*icon:\s*<ProjectOutlined\s*\/>,\s*label:\s*'Projects',\s*shortcut:\s*projectsShortcutLabel\(\)\s*,?\s*\}/,
+      /\{\s*key:\s*'projects',\s*icon:\s*<SidebarNavIcon name="projects"\s*\/>,\s*label:\s*'Projects',\s*shortcut:\s*projectsShortcutLabel\(\)\s*,?\s*\}/,
     );
   });
 
@@ -35,7 +35,7 @@ describe('TasksSidePanel nav', () => {
     const topBlock =
       source.match(/const TOP(?:\s*:\s*TopNavItem\[\])?\s*=\s*\[([\s\S]*?)\n\];/)?.[1] ?? '';
     expect(topBlock).toMatch(
-      /\{\s*key:\s*'tasks',\s*icon:\s*<CheckSquareOutlined\s*\/>,\s*label:\s*'Tasks'\s*,?\s*\}/,
+      /\{\s*key:\s*'tasks',\s*icon:\s*<SidebarNavIcon name="tasks"\s*\/>,\s*label:\s*'Tasks'\s*,?\s*\}/,
     );
   });
 

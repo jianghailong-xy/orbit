@@ -1,12 +1,8 @@
 import {
-  ApiOutlined,
   BgColorsOutlined,
-  BookOutlined,
   CaretDownOutlined,
   CheckOutlined,
-  CheckSquareOutlined,
   CodeOutlined,
-  DesktopOutlined,
   DisconnectOutlined,
   FolderOutlined,
   HolderOutlined,
@@ -14,7 +10,6 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  ProjectOutlined,
   SettingOutlined,
   TeamOutlined,
   UserOutlined,
@@ -69,6 +64,7 @@ import {
   type SidebarProject,
 } from '../lib/projectAttention';
 import { wikiProposalsToReview, wikiShown } from '../lib/wiki';
+import { SidebarNavIcon } from './SidebarNavIcon';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -129,24 +125,24 @@ interface TopNavItem {
 const TOP: TopNavItem[] = [
   {
     key: 'projects',
-    icon: <ProjectOutlined />,
+    icon: <SidebarNavIcon name="projects" />,
     label: 'Projects',
     shortcut: projectsShortcutLabel(),
   },
   // Tasks under Projects, in the iPhone drawer's order (Projects · Tasks · Wiki). It is the way into
   // the task lists too: they are picked from the Tasks page's title, as they are on the phone.
-  { key: 'tasks', icon: <CheckSquareOutlined />, label: 'Tasks' },
+  { key: 'tasks', icon: <SidebarNavIcon name="tasks" />, label: 'Tasks' },
   // The Wiki sits under Projects because it is the other thing a codebase has: Projects is the work
   // in it, and the Wiki is what the work learned. Its amber count is the proposals waiting for the
   // owner, which is the same `needs-you` pill a workspace row shows — and the same rule applies with
   // it: a row carrying an amber number shows no shortcut.
-  { key: 'wiki', icon: <BookOutlined />, label: 'Wiki' },
+  { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
-  { key: 'runners', icon: <DesktopOutlined />, label: 'Runners' },
+  { key: 'runners', icon: <SidebarNavIcon name="runners" />, label: 'Runners' },
   // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
   // manage the shared ones on the same page.
-  { key: 'providers', icon: <ApiOutlined />, label: 'Providers' },
+  { key: 'providers', icon: <SidebarNavIcon name="providers" />, label: 'Providers' },
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
