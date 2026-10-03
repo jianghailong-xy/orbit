@@ -804,10 +804,17 @@ struct TranscriptView: View {
                 // once a runner takes it. Nothing has been recorded yet, so the block is still the
                 // turn's own content rather than a note beside it (web parity: the queued tail
                 // reads `q.content`). Withdrawing it is an ordinary cancel — nothing re-sends it.
+                // Except for a job that ended while the turn ran: that wake is a steer on its way
+                // into the running turn, which the server refuses to withdraw, so it says how far it
+                // has got instead (web parity: `QueuedTurnMeta` for a `steer` placement).
                 BackgroundWakeCardView(wake: background, ts: bubble.ts,
                                        undelivered: bubble.undelivered,
-                                       onCancelQueued: bubble.turnId == nil
-                                           ? nil : { Task { await console.cancelQueued(bubble) } })
+                                       onCancelQueued: bubble.turnId == nil || bubble.steer
+                                           ? nil : { Task { await console.cancelQueued(bubble) } },
+                                       steerState: BackgroundWakeCard.steerState(
+                                           steer: bubble.steer, delivery: bubble.delivery,
+                                           undelivered: bubble.undelivered),
+                                       queued: true)
             } else {
                 UserBubbleView(bubble: bubble,
                                onCancelQueued: { Task { await console.cancelQueued(bubble) } })
@@ -1414,11 +1421,16 @@ struct TranscriptItemView: View {
                 // returning engine is handed, a coordinator's standing role) is a folded entry in
                 // the same card, because it is the control plane's too. It used to be an entry in a
                 // user bubble under the card, which drew an empty bubble: a message with no words
-                // in it, in the reader's own name.
+                // in it, in the reader's own name. A job that ended while a turn ran was written
+                // into that turn as a steer: the same line, where its echo landed inside the running
+                // turn, saying how far it got (web parity: `Transcript.tsx`'s `steer=`).
                 VStack(alignment: .leading, spacing: 6) {
                     BackgroundWakeCardView(wake: background, ts: b.ts,
                                            undelivered: b.undelivered || b.delivery == "failed",
-                                           attached: attachedRest(background))
+                                           attached: attachedRest(background),
+                                           steerState: BackgroundWakeCard.steerState(
+                                               steer: b.steer, delivery: b.delivery,
+                                               undelivered: b.undelivered))
                     if BackgroundWakeCard.drawsBubble(text: b.text) {
                         UserBubbleView(bubble: withoutNote(b))
                     }

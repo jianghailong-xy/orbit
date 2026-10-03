@@ -14,7 +14,13 @@ import {
 } from '@orbit/shared';
 import { api } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
-import { accountDir, accountNameOf, accountPlanUsage, engineKeepsAccounts } from '../lib/engineAccounts';
+import {
+  accountDir,
+  accountNameOf,
+  accountPlanUsage,
+  defaultAccountName,
+  engineKeepsAccounts,
+} from '../lib/engineAccounts';
 import {
   bindingPlanUsageRow,
   currentPlanUsageRows,
@@ -513,7 +519,12 @@ function EngineRow({
       )}
       {addsAccounts && signIn === addAccountPanel(engine) && (
         <div className="re-panel">
-          <AddEngineAccount engine={engine} runnerId={runner.id} onCancel={() => onSignIn(null)} />
+          <AddEngineAccount
+            engine={engine}
+            runnerId={runner.id}
+            accounts={health?.accounts ?? []}
+            onCancel={() => onSignIn(null)}
+          />
         </div>
       )}
     </div>
@@ -800,26 +811,75 @@ function AccountRow({
   );
 }
 
-/** "+ Account": name the new account, then the same sign-in flow as every other here. The runner
- *  gives it a config directory of its own, so Default — and the CLI in a terminal — is untouched. */
+/**
+ * "+ Account": the same sign-in flow as every other here, started the moment the panel opens, under
+ * a name the page picks (defaultAccountName). The runner gives the account a config directory of its
+ * own, so Default — and the CLI in a terminal — is untouched.
+ *
+ * The name stays editable throughout, and Enter or a click elsewhere saves it the way a row's rename
+ * does (AccountName). That rename can only name an account the runner reports, which a new one is
+ * once it is signed in, so a name saved before then waits here for it — and a panel closed first
+ * leaves the account the name it was added under, for its row's rename to change.
+ */
 function AddEngineAccount({
   engine,
   runnerId,
+  accounts,
   onCancel,
 }: {
   engine: LoginEngine;
   runnerId: string;
+  /** Every account the runner reports for this engine, Default included. */
+  accounts: RunnerEngineAccount[];
   onCancel: () => void;
 }) {
-  const [name, setName] = useState('');
+  const message = useToast();
+  const qc = useQueryClient();
+  const [picked] = useState(() => defaultAccountName(accounts));
+  const [name, setName] = useState(picked);
+  // The accounts the runner had when the panel opened. The one this sign-in adds is the newest it
+  // reports that is not among them: the runner lists added accounts in the order they were made.
+  const [had] = useState(() => new Set(accounts.map((account) => account.id)));
+  const added = accounts.filter((account) => !had.has(account.id)).at(-1);
+  // A name saved before the runner reported the account it is for.
+  const [waiting, setWaiting] = useState<string | null>(null);
+  const rename = useMutation({
+    mutationFn: ({ id, to }: { id: string; to: string }) =>
+      api<RunnerEngineAccount>(`/runners/${runnerId}/accounts/${engine}/${id}`, {
+        method: 'PATCH',
+        body: { name: to },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+    onError: (e: Error) => message.error(e.message || 'Could not rename the account'),
+  });
+  const save = () => {
+    const to = name.trim();
+    // An empty name changes nothing, as on a row: the field goes back to the name the account has.
+    if (!to) setName(added ? accountNameOf(added) : (waiting ?? picked));
+    else if (!added) setWaiting(to);
+    else if (to !== accountNameOf(added)) rename.mutate({ id: added.id, to });
+  };
+  const addedId = added?.id;
+  const addedName = added && accountNameOf(added);
+  useEffect(() => {
+    if (!addedId || waiting === null) return;
+    setWaiting(null);
+    if (waiting !== addedName) rename.mutate({ id: addedId, to: waiting });
+  }, [addedId, addedName, waiting, rename.mutate]);
+
   return (
-    <RunnerSignIn runnerId={runnerId} engine={engine} accountName={name} onCancel={onCancel}>
+    <>
       <label className="re-add">
         <span className="re-add-label">Account name</span>
         <input
           className="rsi-input"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          onBlur={save}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return; // let the IME (e.g. pinyin) keep Enter
+            if (e.key === 'Enter') e.currentTarget.blur();
+          }}
           placeholder="Work"
           maxLength={60}
           autoComplete="off"
@@ -831,7 +891,8 @@ function AddEngineAccount({
         <code className="re-cmd">{engine === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME'}</code> on
         this machine; your terminal keeps using Default.
       </div>
-    </RunnerSignIn>
+      <RunnerSignIn runnerId={runnerId} engine={engine} accountName={name} autoStart onCancel={onCancel} />
+    </>
   );
 }
 

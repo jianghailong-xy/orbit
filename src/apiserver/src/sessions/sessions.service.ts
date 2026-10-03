@@ -4394,6 +4394,27 @@ export class SessionsService {
     );
   }
 
+  /**
+   * The engine turn a server-routed send is written into (createTurn's `steerIfLive`), or null for
+   * one that waits behind it. Explicit CURRENT_WORK's questions in its order — a live engine turn, a
+   * runtime and runner that take an exact-target steer, and that turn's lease asked again on the
+   * database clock once the capability reads are done — answered with a route instead of a refusal.
+   */
+  private async steerTargetIfLive(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    session: {
+      provider: string;
+      providerBuiltin: boolean;
+      ownerId: string;
+      assignedRunnerId: string | null;
+    },
+  ): Promise<{ id: string } | null> {
+    const live = await this.liveEngineTurn(tx, sessionId);
+    if (!live || !(await this.runtimeTakesSteer(tx, session))) return null;
+    return this.liveEngineTurn(tx, sessionId, live.id);
+  }
+
   /** The pre-routing-protocol decision used only when an installed client omits `intent`.
    * It deliberately retains Claude's legacy always-steer behaviour and Codex's existing
    * capability gate; routing-v1 is required only for explicit, exact-target CURRENT_WORK. */
@@ -4639,12 +4660,28 @@ export class SessionsService {
       /** Full logical resume payload hash. Present only when resume delegates to this live path. */
       requestFingerprint?: string;
       /**
+       * A NEXT_TURN message the server may write into the turn already running instead: filed as a
+       * CURRENT_WORK steer aimed at the live engine turn when there is one and this runtime and its
+       * runner can take an exact-target steer — the same two questions explicit CURRENT_WORK asks,
+       * answered under the same Session lock in the same transaction — and as the NEXT_TURN message
+       * it was otherwise. A route, never a refusal: nothing here answers 409 for a turn that cannot
+       * steer. An option of this call and never a field of `dto`, so no request body can ask for it;
+       * a background job's exit is its one caller (runner-api `backgroundWake`).
+       */
+      steerIfLive?: boolean;
+      /**
        * A turn that joins one already queued rather than adding another. Called for a NEW operation
        * only, under the Session lock and after the lifecycle refusals: a turn it returns is this
        * request's receipt, and nothing more is written or woken; null lets the turn be written as
-       * usual. Whatever it wrote rolls back with a refusal it throws.
+       * usual. Whatever it wrote rolls back with a refusal it throws. `route` is where the turn would
+       * be written — a `steer` names the running turn it joins — decided before this is called, so a
+       * turn joined is one on the same route.
        */
-      coalesce?: (tx: Prisma.TransactionClient, session: Session) => Promise<ConversationTurn | null>;
+      coalesce?: (
+        tx: Prisma.TransactionClient,
+        session: Session,
+        route: { kind: 'message' | 'shell' | 'steer'; targetTurnId?: string },
+      ) => Promise<ConversationTurn | null>;
       /**
        * What rides on the turn just written, written beside it: called once for a NEW turn, in this
        * transaction and under the Session lock, after the row exists — the session-to-session doors'
@@ -4699,16 +4736,23 @@ export class SessionsService {
         include: { attachments: { select: { id: true } } },
       });
       if (existing) {
+        // A server-routed send may have been filed either way, and a missed steer is a NEXT_TURN
+        // message by now: its retry replays whichever the row is.
+        const routedSteer = opts?.steerIfLive === true
+          && intent === 'NEXT_TURN'
+          && dto.kind !== 'shell'
+          && existing.sendIntent === 'CURRENT_WORK';
         if (
           (intent === 'CURRENT_WORK' && existing.sendIntent !== 'CURRENT_WORK')
           || (intent === 'NEXT_TURN'
             && existing.sendIntent != null
-            && existing.sendIntent !== 'NEXT_TURN')
+            && existing.sendIntent !== 'NEXT_TURN'
+            && !routedSteer)
           || (intent === undefined && existing.sendIntent === 'CURRENT_WORK')
         ) {
           throw new ConflictException(`clientTurnId was already used with ${existing.sendIntent ?? 'legacy intent'}`);
         }
-        const expectedKinds = intent === 'CURRENT_WORK'
+        const expectedKinds = intent === 'CURRENT_WORK' || routedSteer
           ? ['steer']
           : dto.kind === 'shell'
             ? ['shell']
@@ -4753,7 +4797,19 @@ export class SessionsService {
       if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
         throw new SessionNotSendable('the session has ended');
       }
-      const joined = await opts?.coalesce?.(tx, session);
+      // A server-routed send is placed before anything may join it: whether it goes into the running
+      // turn or waits behind it decides which queued turn it can join, and a placement changed after
+      // joining could only be undone in a second transaction — the fallback this lock exists to avoid.
+      const steerTarget = opts?.steerIfLive && intent === 'NEXT_TURN' && dto.kind !== 'shell'
+        ? await this.steerTargetIfLive(tx, id, session)
+        : null;
+      const joined = await opts?.coalesce?.(
+        tx,
+        session,
+        steerTarget
+          ? { kind: 'steer', targetTurnId: steerTarget.id }
+          : { kind: dto.kind === 'shell' ? 'shell' : 'message' },
+      );
       if (joined) {
         return {
           turn: joined,
@@ -4860,6 +4916,11 @@ export class SessionsService {
         }
         kind = 'steer';
         targetTurnId = liveTarget.id;
+      } else if (steerTarget) {
+        // Placed above, under this lock and before the turn could join anything.
+        kind = 'steer';
+        targetTurnId = steerTarget.id;
+        await opts?.participateSendTransaction?.(tx);
       } else {
         if (intent === 'NEXT_TURN') {
           kind = dto.kind === 'shell' ? 'shell' : 'message';
@@ -4893,7 +4954,8 @@ export class SessionsService {
         content: dto.content,
         clientTurnId: dto.clientTurnId,
         ...(opts?.requestFingerprint ? { requestFingerprint: opts.requestFingerprint } : {}),
-        ...(intent ? { sendIntent: intent } : {}),
+        // A server-routed steer is the CURRENT_WORK shape the row constraints accept for one.
+        ...(steerTarget ? { sendIntent: 'CURRENT_WORK' } : intent ? { sendIntent: intent } : {}),
         ...(targetTurnId ? { targetTurnId } : {}),
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
       });
@@ -5537,7 +5599,7 @@ export class SessionsService {
    *  out of the list — that empty row is what listing every wake turn would otherwise produce. */
   private async queuedWakeContent(
     sessionId: string,
-    turns: ReadonlyArray<{ id: string; clientTurnId: string | null; status: string }>,
+    turns: ReadonlyArray<{ id: string; clientTurnId: string | null; status: string; kind: string }>,
   ): Promise<Map<string, string>> {
     const wakeContent = new Map<string, string>();
     for (const turn of turns) {
@@ -5549,7 +5611,8 @@ export class SessionsService {
       }
       if (!isBackgroundWakeTurn(turn.clientTurnId)) continue;
       const { clientTurnId } = turn;
-      const jobs = await appendBackgroundWakeContext(this.prisma, sessionId, clientTurnId, '');
+      // In the turn's own kind, as the claim writes it: a steer's block says which turn it joins.
+      const jobs = await appendBackgroundWakeContext(this.prisma, sessionId, clientTurnId, '', turn.kind);
       const block = await appendScheduledWakeupContext(this.prisma, sessionId, clientTurnId, jobs);
       if (block) wakeContent.set(turn.id, block);
     }

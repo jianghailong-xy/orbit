@@ -83,8 +83,8 @@ Usage:
 Run 'orbit <command> --help' for command-specific options.
 
 The runner uses each coding engine's local configuration and credentials
-(Claude Code, Codex, Kimi Code, OpenCode). Run 'orbit doctor' for installation
-and sign-in guidance.
+(Claude Code, Codex, Kimi Code, OpenCode, Antigravity). Run 'orbit doctor' for
+installation and sign-in guidance.
 
 Env:
   ORBIT_HOME               Override the runner's config/runs dir (default: ~/.orbit)
@@ -151,7 +151,7 @@ Usage:
 Usage:
   orbit doctor
 
-Reports, for Claude Code, Codex, Kimi Code, and OpenCode, whether the CLI is installed, its version, a
+Reports, for Claude Code, Codex, Kimi Code, OpenCode, and Antigravity, whether the CLI is installed, its version, a
 best-effort sign-in check, and whether the background service's PATH can see it —
 with the exact install/sign-in command for anything that's missing. Exits non-zero
 when no engine is installed. Runs automatically at the end of 'orbit register'.
@@ -776,6 +776,19 @@ func cmdResume(args []string) {
 			os.Exit(1)
 		}
 		cmd = exec.Command(providerOpenCode, "--session", meta.RuntimeSessionID)
+	case providerAntigravity:
+		if meta.RuntimeSessionID == "" {
+			fmt.Fprintln(os.Stderr, "this Antigravity session has no conversation yet")
+			os.Exit(1)
+		}
+		// The conversation lives in the session's own Gemini directory, not in ~/.gemini; agy
+		// reads GEMINI_API_KEY from this terminal's environment.
+		geminiDir, err := antigravityGeminiDir(sessionDir)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "cannot resolve this session's Gemini directory:", err)
+			os.Exit(1)
+		}
+		cmd = exec.Command(agyExecutable, "--gemini_dir="+geminiDir, "--conversation", meta.RuntimeSessionID)
 	default:
 		cmd = exec.Command("claude", "--resume", meta.SessionUUID)
 	}

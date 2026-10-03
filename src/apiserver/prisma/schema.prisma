@@ -4399,6 +4399,9 @@ model Task {
   /// list's `?creatorSessionId=` scope, plus the lookup side of the column's SET NULL on session
   /// purge (migration 0305). Plain, not partial — nearly every task has a creator session.
   @@index([creatorSessionId], map: "task_creator_session_idx")
+  /// The "Tasks created here" row read off the index alone (migration 0365): its counts, and each
+  /// status's newest rows, without reading — or holding — every task of a 110k-task session.
+  @@index([ownerId, creatorSessionId, status, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_creator_session_status_created_id_idx")
   /// The criterion declaration's lookup index, and the referencing side of its foreign key. Both
   /// directions need it: "which work serves this criterion" is the read, and without it every
   /// criterion delete scans `task` to find the rows its SET NULL applies to.

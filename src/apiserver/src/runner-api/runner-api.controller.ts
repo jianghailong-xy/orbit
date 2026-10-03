@@ -217,6 +217,8 @@ import {
   BackgroundWakeDto,
   type BackgroundWakeReceipt,
   fileBackgroundJobWake,
+  foldQueuedWakeTurnsInto,
+  foldRequeuedWakeTurns,
   isBackgroundWakeTurn,
   sessionHasEnded,
   undeliveredWakeTurn,
@@ -3212,8 +3214,9 @@ export class RunnerApiController {
         // above for the reason the block below gives — a wake handed out again after its runner died
         // still has to say why. Not best-effort: this block is the turn, and one delivered without it
         // wakes the agent for nothing, so a failure rolls the claim back and leaves the turn queued.
-        if (t.kind === 'message' && isBackgroundWakeTurn(t.clientTurnId)) {
-          content = (await appendBackgroundWakeContext(tx, sessionId, t.clientTurnId, content)) ?? content;
+        // A job's exit written into the running turn is a steer, and carries its block the same way.
+        if ((t.kind === 'message' || t.kind === 'steer') && isBackgroundWakeTurn(t.clientTurnId)) {
+          content = (await appendBackgroundWakeContext(tx, sessionId, t.clientTurnId, content, t.kind)) ?? content;
           content = (await appendScheduledWakeupContext(tx, sessionId, t.clientTurnId, content)) ?? content;
         }
         // The outcomes of this session's own requests, handed back to it (session-request.ts, contract
@@ -3669,6 +3672,12 @@ export class RunnerApiController {
    * Wakes nobody has been handed yet are one turn: a wake arriving while one is queued files itself
    * onto it (MERGED). A session that has ended is neither woken nor revived (DROPPED), answered with a
    * 200 because there is nothing for the runner to try again.
+   *
+   * A job's exit is written into the turn the session is running, when it is running one this runtime
+   * and runner can steer (`steerIfLive`): the agent reads it at its next tool call instead of after
+   * the turn, and no turn is opened for it. It then joins only a steer still waiting for that same
+   * turn. A job's new output always waits for the next turn, joining the wake queued there — written
+   * into the running turn, a job that prints every minute would interrupt it every minute.
    */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/background-wake')
@@ -3688,9 +3697,10 @@ export class RunnerApiController {
         sessionId,
         { clientTurnId, content: '', intent: 'NEXT_TURN' },
         {
-          coalesce: async (tx, session) => {
+          steerIfLive: dto.trigger === 'exit',
+          coalesce: async (tx, session, route) => {
             if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
-            const queued = await undeliveredWakeTurn(tx, sessionId);
+            const queued = await undeliveredWakeTurn(tx, sessionId, route);
             merged = queued !== null;
             await fileBackgroundJobWake(tx, sessionId, queued?.clientTurnId ?? clientTurnId, dto);
             return queued;
@@ -3931,7 +3941,7 @@ export class RunnerApiController {
       // on. The completed-turn read above serves the L0 shell path; neither query mutates the row.
       const steering = await tx.conversationTurn.findFirst({
         where: { id: dto.turnId, sessionId, kind: 'steer' },
-        select: { id: true, sendIntent: true, targetTurnId: true, deliveryStatus: true },
+        select: { id: true, sendIntent: true, targetTurnId: true, deliveryStatus: true, clientTurnId: true },
       });
       // `turnComplete` is retried when the response is lost. After the first successful
       // steer_requeue the SAME row is already a `message` (and may even have been leased for its
@@ -3994,6 +4004,9 @@ export class RunnerApiController {
             where: { id: sessionId, status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
             data: { status: RunStatus.PENDING, lastTurnAt: new Date() },
           });
+          // A background job's exit the engine never read is a wake turn of its own again, and a
+          // wake already queued for the next turn joins it rather than opening a second one.
+          await foldQueuedWakeTurnsInto(tx, sessionId, steering);
         }
         return {
           applied: requeued.count > 0,
@@ -4394,9 +4407,11 @@ export class RunnerApiController {
       let currentWorkTerminalized = 0;
       let currentWorkRequeued = 0;
       if (completedTurn && !failSession) {
-        currentWorkRequeued = (
-          await requeueUnreadCurrentWorkSteers(tx, sessionId, [completedTurn.id])
-        ).length;
+        const requeuedSteers = await requeueUnreadCurrentWorkSteers(tx, sessionId, [completedTurn.id]);
+        currentWorkRequeued = requeuedSteers.length;
+        // A background job's exit that missed this turn is a wake turn of its own again; a wake
+        // already queued for the next turn joins it rather than opening a second one behind it.
+        if (requeuedSteers.length > 0) await foldRequeuedWakeTurns(tx, sessionId, requeuedSteers);
       } else if (completedTurn) {
         // A failing turn takes the session with it, and the drain below answers every queued row.
         // Requeueing into a queue about to be emptied would lose the message with nothing said;

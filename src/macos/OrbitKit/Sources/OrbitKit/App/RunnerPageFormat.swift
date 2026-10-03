@@ -332,6 +332,16 @@ public enum RunnerPageFormat {
         }
     }
 
+    /// What Add Account calls a new account until the user names it: its number on the machine,
+    /// Default being the first — or the next number free, so it never takes a name an account already
+    /// goes by (web `defaultAccountName`).
+    public static func defaultAccountName(_ accounts: [RunnerEngineAccount]) -> String {
+        let taken = Set(accounts.map { CodexAccounts.label($0.id, accounts: accounts) })
+        var number = max(accounts.count, 1) + 1
+        while taken.contains("Account \(number)") { number += 1 }
+        return "Account \(number)"
+    }
+
     /// What became of the last removal asked of this account: under way, or refused in the machine's
     /// own words. Nil when the last removal was another account's.
     public struct AccountRemoval: Equatable, Sendable {

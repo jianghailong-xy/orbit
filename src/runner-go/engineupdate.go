@@ -219,7 +219,7 @@ func nativeClaudeInstall(spec engineSpec, servicePath string) (string, bool) {
 	if spec.bin != providerClaude {
 		return "", false
 	}
-	binPath, ok := lookPathIn(spec.bin, servicePath)
+	binPath, ok := lookPathIn(spec.executable(), servicePath)
 	if !ok {
 		return "", false
 	}
@@ -473,7 +473,7 @@ func updateEngine(ctx context.Context, spec engineSpec, servicePath string, prox
 	// Resolve the exact binary the runner would exec (service PATH order) and measure the
 	// version against THAT path before and after: an update that exits 0 without moving
 	// this binary's version wrote to a copy the runner never runs.
-	binPath, ok := lookPathIn(spec.bin, servicePath)
+	binPath, ok := lookPathIn(spec.executable(), servicePath)
 	if !ok {
 		return EngineUpdateReport{}, ""
 	}
@@ -777,7 +777,7 @@ func recordEngineUpdate(bin, status, message string, facts engineUpdateFacts) En
 // with drift measured only when a command runs, a permanently busy machine can fall arbitrarily
 // far behind while its row says nothing at all.
 func noteEngineDrift(ctx context.Context, spec engineSpec, servicePath string) {
-	binPath, ok := lookPathIn(spec.bin, servicePath)
+	binPath, ok := lookPathIn(spec.executable(), servicePath)
 	if !ok {
 		return
 	}
