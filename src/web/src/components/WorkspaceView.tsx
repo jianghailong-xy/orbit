@@ -15,6 +15,7 @@ import {
   DownloadOutlined,
   DownOutlined,
   EditOutlined,
+  EllipsisOutlined,
   EyeOutlined,
   FolderOutlined,
   GlobalOutlined,
@@ -582,6 +583,7 @@ const MODE_OPTIONS = Object.keys(MODE_TO_PERMISSION);
 const IS_MAC =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
 const NEW_SESSION_HINT = IS_MAC ? '⌘N' : 'Ctrl N';
+const COMPLETE_SESSION_HINT = IS_MAC ? '⌘D' : 'Ctrl D';
 /** A runner that carries a session's conversation onto another of its accounts (runner
  *  codex_account_move.go, claude_account_move.go) — the one kind the composer offers the move on. */
 const ACCOUNT_MOVE_CAPABILITY: Record<AccountEngine, string> = {
@@ -1059,10 +1061,19 @@ export const SESSION_SHARED_TIP = 'Shared · anyone with the link';
 
 /** The title is the only flexible item: time, merge state, and coordinator relation stay visible
  * while a long title ellipsizes into whatever width remains. */
-export function SessionTitleRow({ session: s, hoverTipOpen = false }: { session: any; hoverTipOpen?: boolean }) {
+export function SessionTitleRow({
+  session: s,
+  hoverTipOpen = false,
+  showPinned = false,
+}: { session: any; hoverTipOpen?: boolean; showPinned?: boolean }) {
   return (
     <div className="session-title-row">
       <div className="session-title">{s.title}</div>
+      {showPinned && s.pinnedAt && (
+        <span className="session-pin-indicator" title="Pinned" aria-label="Pinned">
+          <PushpinFilled />
+        </span>
+      )}
       {(s.mergeStatus === 'error' || s.mergeStatus === 'conflict') && (
         <Tooltip
           title={s.mergeStatus === 'conflict' ? 'Merge conflict — needs resolving' : 'Merge failed'}
@@ -1699,8 +1710,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     localStorage.setItem(PINNED_COLLAPSED_KEY, next ? '1' : '0');
   };
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null); // session row whose action menu is open
-  // Touch swipe actions for session rows: hover has no touch equivalent, so on mobile the row's
-  // actions sit behind a swipe instead, laid out like the iOS list (lib/sessionSwipe) — swipe right
+  // Touch swipe actions for session rows: on mobile the row's actions sit behind a swipe,
+  // laid out like the iOS list (lib/sessionSwipe) — swipe right
   // for Complete / Move to Open + Pin, swipe left for Delete.
   const [swipeOpen, setSwipeOpen] = useState<{ id: string; side: SwipeSide } | null>(null); // row held open by a swipe
   // The row under a finger drag: its live offset (px; negative = leftward), and whether releasing
@@ -1719,7 +1730,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   } | null>(null);
   const swipeClickGuard = useRef(false); // eat the click that trails a horizontal swipe
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
-  // A row's Share swipe opens the share dialog for that row rather than for the open session.
+  // A row's Share action opens the share dialog for that row rather than for the open session.
   const [shareRowId, setShareRowId] = useState<string | null>(null);
   // The session the Move dialog is open for: a row's, or the open conversation's.
   const [moveTarget, setMoveTarget] = useState<MoveDialogSession | null>(null);
@@ -2776,6 +2787,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      if (menuOpenId || e.defaultPrevented) return;
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       const el = document.activeElement;
       if (
@@ -2787,7 +2799,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [stepSession]);
+  }, [menuOpenId, stepSession]);
 
   // Keep the highlighted row in view when arrowing through a long list.
   useEffect(() => {
@@ -5393,13 +5405,38 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     },
     [completeMut, message, selectedSession],
   );
-  // ⌘/Ctrl+D completes the open session — the keyboard twin of the action on its row. Fires
-  // even while the composer is focused; preventDefault swallows the browser's bookmark
-  // shortcut. The endpoint handles ending a live run and moving it to Completed.
+  // An open row menu owns the shortcut, including when its Complete action cannot run.
+  // Otherwise ⌘/Ctrl+D completes the selected session, even while the composer is focused.
+  // Never let a disabled/missing menu action fall through and complete a different session.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key.toLowerCase() !== 'd' || e.shiftKey || e.altKey) return;
+      if (menuOpenId && e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        // Restore focus before the controlled dropdown begins its exit animation.
+        listRef.current?.querySelector<HTMLButtonElement>('.session-row.menu-open .session-kebab')?.focus();
+        setMenuOpenId(null);
+        return;
+      }
+      if (e.key.toLowerCase() !== 'd' || e.shiftKey || e.altKey || e.isComposing) return;
       if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.repeat) {
+        e.preventDefault();
+        return;
+      }
+      if (menuOpenId) {
+        e.preventDefault();
+        e.stopPropagation();
+        const row = orderedSessions.find((s) => s.id === menuOpenId);
+        const source = selectedSession?.id === menuOpenId ? selectedSession : row;
+        if (
+          !row || view !== 'open' || !source ||
+          !isCompleteShortcutEligible(source, sessionLifecycleStateOf(source, { listView: view }))
+        ) return;
+        setMenuOpenId(null);
+        requestComplete(row);
+        return;
+      }
       if (
         !selected ||
         !isCompleteShortcutEligible(selectedSession, selectedLifecycleState)
@@ -5409,9 +5446,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       setHeaderMenuOpen(false);
       requestComplete(selected);
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [selected, selectedSession, selectedLifecycleState, requestComplete]);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [menuOpenId, orderedSessions, view, selected, selectedSession, selectedLifecycleState, requestComplete]);
+  useEffect(() => {
+    if (menuOpenId && !orderedSessions.some((s) => s.id === menuOpenId)) setMenuOpenId(null);
+  }, [menuOpenId, orderedSessions]);
   const deleteMut = useMutation({
     mutationFn: (session: SessionToastTarget) => deleteSession(session.id),
     onSuccess: (_d, session) => {
@@ -5545,7 +5585,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     onError: (e: Error) => message.error(e.message),
     onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   });
-  // A tapped swipe button (or a full swipe) runs the same request as the row's hover or menu
+  // A tapped swipe button (or a full swipe) runs the same request as the row's menu
   // action; the row settles closed either way.
   const runSwipeAction = (action: SwipeAction, s: any): void => {
     setSwipeOpen(null);
@@ -7214,6 +7254,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Switching view while a session transcript is open closes it: the open session belongs
   // to the view it was opened from, so browsing another one means leaving the conversation.
   const switchView = (next: SessionView): void => {
+    setMenuOpenId(null);
     setView(next);
     if (!selectedId) return;
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
@@ -7917,51 +7958,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
                 const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
                 const canRestoreRow = sessionCapabilityOf(actionSession, 'canRestore', true);
-                const restoreItem = {
-                  key: 'restore',
-                  icon: <UndoOutlined />,
-                  label: view === 'completed' ? 'Move to Open' : 'Restore to Open',
-                  disabled: !canRestoreRow,
-                  onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
-                    domEvent.stopPropagation();
-                    requestRestore(s);
-                  },
-                };
-                const deleteItem = {
-                  key: 'delete',
-                  icon: <DeleteOutlined />,
-                  label: 'Delete',
-                  danger: true,
-                  onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
-                    domEvent.stopPropagation();
-                    requestTrash(s);
-                  },
-                };
-                const purgeItem = {
-                  key: 'purge',
-                  icon: <DeleteOutlined />,
-                  label: 'Delete permanently',
-                  danger: true,
-                  onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
-                    domEvent.stopPropagation();
-                    confirmPurge({ id: s.id, title: s.title });
-                  },
-                };
-                const moveItem = {
-                  key: 'move',
-                  icon: <FolderOutlined />,
-                  label: MOVE_COPY.action,
-                  onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
-                    domEvent.stopPropagation();
-                    openMove(s);
-                  },
-                };
-                const menuItems: MenuProps['items'] =
-                  view === 'completed'
-                    ? [restoreItem, moveItem, { type: 'divider' }, deleteItem]
-                    : view === 'trash'
-                      ? [restoreItem, { type: 'divider' }, purgeItem]
-                      : [restoreItem];
                 // Open and Completed rows open their transcript; only
                 // Trash rows stay closed.
                 const openable = view !== 'trash';
@@ -7987,9 +7983,42 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   delete: { label: 'Delete', icon: <DeleteOutlined />, disabled: false },
                   purge: { label: 'Delete permanently', icon: <DeleteOutlined />, disabled: false },
                 };
+                const menuItem = (action: SwipeAction) => ({
+                  key: action,
+                  icon: swipeButtons[action].icon,
+                  disabled: swipeButtons[action].disabled,
+                  danger: action === 'delete' || action === 'purge',
+                  label: action === 'complete' ? (
+                    <div>
+                      <div className="session-menu-label">
+                        <span>Complete</span>
+                        <kbd>{COMPLETE_SESSION_HINT}</kbd>
+                      </div>
+                      {(!canCompleteRow || isSessionLive(actionSession)) && (
+                        <span className="session-menu-description">
+                          {canCompleteRow ? 'Ends the run and moves to Completed' : 'Complete unavailable right now'}
+                        </span>
+                      )}
+                    </div>
+                  ) : action === 'move' ? MOVE_COPY.action
+                    : action === 'share' ? 'Share…'
+                      : action === 'purge' ? 'Delete Permanently…'
+                        : swipeButtons[action].label,
+                  title: action === 'restore' && !canRestoreRow ? 'Move to Open unavailable right now' : undefined,
+                });
+                const menuItems: MenuProps['items'] = view === 'trash'
+                  ? [menuItem('restore'), { type: 'divider' }, menuItem('purge')]
+                  : [
+                      ...swipeActions.leading.map(menuItem),
+                      { type: 'divider' },
+                      menuItem('share'),
+                      menuItem('move'),
+                      { type: 'divider' },
+                      menuItem('delete'),
+                    ];
                 return (
                   <div
-                    className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${view === 'open' && s.pinnedAt ? ' pinned' : ''}`}
+                    className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}`}
                     key={s.id}
                     onClick={() => {
                       if (swipeClickGuard.current) {
@@ -8000,6 +8029,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         setSwipeOpen(null); // a tap anywhere on an open row just closes it
                         return;
                       }
+                      setMenuOpenId(null);
                       if (openable)
                         navigateWithPaneSlide('push', () =>
                           navigate(sessionPath(s.id), { state: stampFromList() }),
@@ -8043,7 +8073,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         <StatusIcon session={actionSession} watching={watching?.word} />
                       </span>
                       <div className="session-main">
-                        <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
+                        <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} showPinned={view !== 'trash'} />
                         {/* Tags lead the second line and the reply preview follows them. They sat
                             beside the title as bare colour dots until the naming pass started
                             writing semantic ones ("登录", "性能"): a dot cannot show a word, so the
@@ -8065,85 +8095,42 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     </div>
                     <div className="session-right">
                       <div className="session-actions" onClick={(e) => e.stopPropagation()}>
-                        {view === 'open' ? (
-                          <>
-                            <Tooltip title={MOVE_COPY.action} placement="top" open={hoverTipOpen}>
-                              <span
-                                className="session-kebab session-move"
-                                role="button"
-                                aria-label={MOVE_COPY.action}
-                                tabIndex={0}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openMove(s);
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key !== 'Enter' && e.key !== ' ') return;
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  openMove(s);
-                                }}
-                              >
-                                <FolderOutlined />
-                              </span>
-                            </Tooltip>
-                            <Tooltip title={s.pinnedAt ? 'Unpin' : 'Pin to top'} placement="top" open={hoverTipOpen}>
-                              <span
-                                className="session-kebab session-pin-toggle"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  pinMut.mutate({ id: s.id, pin: !s.pinnedAt });
-                                  setSwipeOpen(null);
-                                }}
-                              >
-                                {s.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />}
-                              </span>
-                            </Tooltip>
-                            <Tooltip
-                              title={canCompleteRow ? 'Complete' : 'Complete unavailable right now'}
-                              placement="top"
-                              open={hoverTipOpen}
-                            >
-                              <span
-                                className={`session-kebab session-complete${canCompleteRow ? '' : ' disabled'}`}
-                                role="button"
-                                aria-label="Complete"
-                                aria-disabled={!canCompleteRow}
-                                tabIndex={canCompleteRow ? 0 : -1}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  requestComplete(s);
-                                  setSwipeOpen(null);
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key !== 'Enter' && e.key !== ' ') return;
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  requestComplete(s);
-                                  setSwipeOpen(null);
-                                }}
-                              >
-                                <CheckOutlined />
-                              </span>
-                            </Tooltip>
-                          </>
-                        ) : (
-                          <Dropdown
-                            trigger={['click']}
-                            placement="bottomRight"
-                            open={menuOpenId === s.id}
-                            onOpenChange={(o) => setMenuOpenId(o ? s.id : null)}
-                            menu={{ items: menuItems }}
+                        <Dropdown
+                          trigger={['click']}
+                          placement="bottomRight"
+                          autoFocus
+                          classNames={{ root: 'session-row-menu' }}
+                          open={menuOpenId === s.id}
+                          onOpenChange={(open) => {
+                            setMenuOpenId((current) => open ? s.id : current === s.id ? null : current);
+                            if (open) setSwipeOpen(null);
+                          }}
+                          menu={{
+                            items: menuItems,
+                            onClick: ({ key, domEvent }) => {
+                              domEvent.stopPropagation();
+                              setMenuOpenId(null);
+                              runSwipeAction(key as SwipeAction, s);
+                            },
+                          }}
+                        >
+                          <button
+                            type="button"
+                            className="session-kebab"
+                            aria-label="More actions"
+                            aria-haspopup="menu"
+                            aria-expanded={menuOpenId === s.id}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              if (e.key !== 'ArrowDown') return;
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setMenuOpenId(s.id);
+                            }}
                           >
-                            <span
-                              className="session-kebab"
-                              title="More actions"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <MoreOutlined />
-                            </span>
-                          </Dropdown>
-                        )}
+                            <EllipsisOutlined />
+                          </button>
+                        </Dropdown>
                       </div>
                     </div>
                   </div>

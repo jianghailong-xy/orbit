@@ -504,9 +504,11 @@ describe('managing folders', { timeout: 60_000 }, () => {
 });
 
 describe('Move', { timeout: 60_000 }, () => {
-  it('files a row in a folder at once from its Move… button', async () => {
+  it('files a row in a folder at once from its More actions menu', async () => {
     await mountOnLoose();
-    await click(listRow('Loose one').querySelector('.session-move'), 'the row’s Move…');
+    await click(listRow('Loose one').querySelector('button[aria-label="More actions"]'), 'the row’s More actions');
+    await until(() => expect(menuItem('Move…')).toBeTruthy());
+    await click(menuItem('Move…'), 'the row’s Move…');
     await until(() => expect(option('Wiki')).toBeTruthy());
 
     expect(dialog()!.querySelector('.move-dialog-sub')?.textContent).toBe('Loose one');

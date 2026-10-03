@@ -3551,11 +3551,9 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .session-row.active {
   background: var(--brand-tint);
-  --row-bg: var(--brand-tint);
 }
 .session-row.active:hover {
   background: var(--brand-tint-hover);
-  --row-bg: var(--brand-tint-hover);
 }
 .workspace-draft {
   display: flex;
@@ -4745,7 +4743,6 @@ html[data-theme='dark'] .session-tag-chip {
   cursor: pointer;
   /* Keep the swipe-away content from spilling past the row's edges. */
   overflow: hidden;
-  --row-bg: var(--bg-raised);
 }
 /* Wraps the row's icon + text so a touch swipe can slide it either way, exposing the swipe
    actions behind it. On desktop it never translates (transform stays 0). */
@@ -4846,7 +4843,14 @@ html[data-theme='dark'] .session-tag-chip {
 @media (hover: hover) {
   .session-row:hover {
     background: var(--bg-hover);
-    --row-bg: var(--bg-hover);
+  }
+}
+.session-row.menu-open:not(.active) {
+  background: var(--bg-hover);
+}
+@media (min-width: 961px) {
+  .session-row {
+    border-radius: 6px;
   }
 }
 /* Trash rows are managed, not opened — no pointer affordance. */
@@ -4883,6 +4887,12 @@ html[data-theme='dark'] .session-tag-chip {
   flex: none;
   font-size: 12.5px;
   color: var(--text-4);
+}
+.session-pin-indicator {
+  display: inline-flex;
+  flex: none;
+  color: var(--text-3);
+  font-size: 12px;
 }
 /* A public link opens this session (the list row's `shared`): a globe beside the time. */
 .session-shared {
@@ -4951,35 +4961,18 @@ html[data-theme='dark'] .session-tag-chip {
 .session-preview.tone-watching {
   color: var(--text-3);
 }
-/* Row actions overlay the right edge instead of taking layout space: while idle
-   the title fills the full row width, and on hover the icon fades in over the
-   text. A gradient blends the title into the row background so it never collides
-   with the icon. */
+/* A permanent action slot keeps text and hit targets stable as the pointer moves. */
 .session-right {
-  position: absolute;
-  top: 0;
-  right: 8px;
-  bottom: 0;
   display: flex;
+  flex: none;
   align-items: center;
-  padding-left: 40px;
-  background: linear-gradient(to right, transparent, var(--row-bg) 40px);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s ease;
+  width: 32px;
 }
-/* Reveal-on-hover only for real pointers. On touch, actions come from a swipe
-   (.session-swipe-actions); keeping :hover off touch also stops iOS Safari's "first tap shows
-   hover, second tap clicks" — which was swallowing the tap that should open the session. */
-@media (hover: hover) {
-  .session-row:hover .session-right {
-    opacity: 1;
-    pointer-events: auto;
+/* Touch phones use swipes; narrow desktop windows still need the menu for mouse/keyboard. */
+@media (max-width: 960px) and (hover: none) and (pointer: coarse) {
+  .session-right {
+    display: none;
   }
-}
-.session-row.menu-open .session-right {
-  opacity: 1;
-  pointer-events: auto;
 }
 .session-actions {
   display: flex;
@@ -4996,9 +4989,9 @@ html[data-theme='dark'] .session-tag-chip {
   font-size: 16px;
   flex: none;
 }
-/* Enlarge the click/hover target to the full row height without growing the
-   visible chip, so the icon stays light but is easy to hit. */
-.session-kebab::before {
+/* Folder controls keep their existing expanded target; session actions use a real button. */
+.session-folder-more::before,
+.session-folder-head-more::before {
   content: '';
   position: absolute;
   top: -18px;
@@ -5010,40 +5003,51 @@ html[data-theme='dark'] .session-tag-chip {
   background: var(--bg-hover-strong);
   color: var(--text-1);
 }
-/* Complete button: a bare glyph with no chip — the row's own hover/selected
-   highlight already frames it, so the action stays light and never clashes with
-   the selected-row tint. Darkens slightly on direct hover for feedback. */
-.session-kebab.session-complete {
+.session-actions > .session-kebab {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
   background: transparent;
-  color: var(--text-3);
+  font: inherit;
   font-size: 16px;
+  cursor: pointer;
 }
-.session-kebab.session-complete:hover {
-  background: transparent;
-  color: var(--text-2);
-}
-.session-kebab.session-complete.disabled,
-.session-kebab.session-complete.disabled:hover {
-  color: var(--text-3);
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-/* Pin toggle: a bare pushpin like the ✓, chip-highlighted on direct hover. It only ever shows
-   together with the row's other actions (on hover) — a pinned row is marked at rest by the
-   accent bar below instead, so there is never a lone floating pin. */
-.session-kebab.session-pin-toggle {
-  background: transparent;
-  color: var(--text-3);
-}
-.session-kebab.session-pin-toggle:hover {
+.session-actions > .session-kebab:hover,
+.session-row.menu-open .session-actions > .session-kebab {
   background: var(--bg-hover-strong);
   color: var(--text-1);
 }
-/* Pinned rows: a thin accent bar on the leading edge marks the pinned state at rest (they also
-   sort to the top). The pin/✓ actions still appear only on hover, exactly like every other row.
-   box-shadow (not background) so it survives the hover/selected background tints. */
-.session-row.pinned {
-  box-shadow: inset 3px 0 0 var(--brand);
+.session-actions > .session-kebab:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+.session-row-menu {
+  min-width: 240px;
+}
+.session-row-menu .session-menu-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.session-row-menu .session-menu-label kbd {
+  flex: none;
+  padding: 1px 5px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+}
+.session-row-menu .session-menu-description {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.4;
 }
 .session-status {
   font-size: 12.5px;
