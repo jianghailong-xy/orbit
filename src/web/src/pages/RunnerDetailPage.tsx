@@ -721,7 +721,7 @@ export function RunnerDetailPage() {
           agent tools cannot set it (docs/model-routing-design.md §7.2). */}
       <SettingRow
         label="Smart model selection for tasks"
-        desc="Each task run gets a model and effort picked from the task's difficulty, how it is checked, and how earlier runs went. A model pinned on a task always wins. Sessions you open yourself are not affected."
+        desc="Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected."
         checked={fModelRouting}
         onChange={(v) => {
           setFModelRouting(v);

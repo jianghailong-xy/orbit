@@ -45,8 +45,9 @@ const workspace = (over: Record<string, unknown> = {}) => ({
 
 const SWITCH_LABEL = 'Smart model selection for tasks';
 const SWITCH_DESC =
-  "Each task run gets a model and effort picked from the task's difficulty, how it is checked, and how " +
-  'earlier runs went. A model pinned on a task always wins. Sessions you open yourself are not affected.';
+  'Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. ' +
+  "Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. " +
+  'Sessions you open yourself are not affected.';
 const MODEL_LINE_OFF =
   'Model claude-opus-5-5 · resolved by Claude on this runner. Pick a different one from the session composer.';
 const MODEL_LINE_ON =
@@ -171,12 +172,12 @@ const smartSwitch = () => smartRow().querySelector<HTMLElement>('[role="switch"]
 const modelLine = () => squash(form().querySelector('.rd-form-derived')?.textContent);
 
 describe('smart model selection on the Agent', () => {
-  it('sits under Worktree isolation, off until it is turned on, in the mock’s words', async () => {
+  it('sits under Worktree isolation, off until it is turned on, with the task routing explanation', async () => {
     mount(workspace());
     await openEditor();
 
     expect(settingLabels()).toEqual(['Worktree isolation', SWITCH_LABEL]);
-    expect(squash(smartRow().querySelector('.rd-set-desc')?.textContent)).toBe(SWITCH_DESC);
+    expect(smartRow().querySelector('.rd-set-desc')?.textContent).toBe(SWITCH_DESC);
     expect(smartSwitch().getAttribute('aria-checked')).toBe('false');
     // Off, the Model line is today's.
     expect(modelLine()).toBe(MODEL_LINE_OFF);
