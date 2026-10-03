@@ -119,7 +119,7 @@ test('claim forwards every capability negotiation to the queue', async () => {
     'claude,codex,opencode',
   );
   assert.deepEqual(capable.claimCalls, [
-    [{ id: RUNNER.id, supportedProviders: ['claude', 'codex', 'opencode'] }, 25_000, true, true, true],
+    [{ id: RUNNER.id, supportedProviders: ['claude', 'codex', 'opencode'] }, 25_000, true, true, true, undefined],
   ]);
 
   // One capability without the others negotiates only that one off: a runner that can hand a
@@ -127,13 +127,13 @@ test('claim forwards every capability negotiation to the queue', async () => {
   const handoffOnly = makeController({ claimed: null });
   await handoffOnly.controller.claim(RUNNER, SESSION_TERMINAL_HANDOFF_V1, 'claude,codex,opencode');
   assert.deepEqual(handoffOnly.claimCalls, [
-    [{ id: RUNNER.id, supportedProviders: ['claude', 'codex', 'opencode'] }, 25_000, true, false, false],
+    [{ id: RUNNER.id, supportedProviders: ['claude', 'codex', 'opencode'] }, 25_000, true, false, false, undefined],
   ]);
 
   const legacy = makeController({ claimed: null });
   await legacy.controller.claim(RUNNER);
   assert.deepEqual(legacy.claimCalls, [
-    [{ id: RUNNER.id, supportedProviders: [] }, 25_000, false, false, false],
+    [{ id: RUNNER.id, supportedProviders: [] }, 25_000, false, false, false, undefined],
   ]);
 });
 
