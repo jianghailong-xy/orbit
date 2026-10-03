@@ -372,6 +372,8 @@ export class CreateTaskDto {
   title!: string;
 
   @IsOptional() @IsString() description?: string;
+  // Existing owner-owned attachments to copy as task inputs, preserving their original scope.
+  @IsOptional() @IsArray() @IsPublicId({ each: true }) attachmentIds?: string[];
   // The workspace assigned to execute the task. Must be owned by the caller.
   @IsOptional() @IsPublicId() assigneeId?: string;
   // The list this task belongs to. Must be owned by the caller.

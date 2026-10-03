@@ -157,6 +157,7 @@ test('the identity binds every field an approval authorises, not just the prose'
     ['dependsOn', identity({ dependsOnTaskIds: [TASK] })],
     ['dependsOnRef', identity({ dependsOnRefDigests: ['abc'] })],
     ['labels', identity({ labels: ['c'] })],
+    ['attachments', identity({ attachmentIds: [TASK] })],
     ['source project', identity({}, { projectId: PROJECT_B })],
     ['source task', identity({}, { taskId: OTHER_TASK })],
     ['source session', identity({}, { sessionId: OTHER_TASK })],
@@ -187,6 +188,11 @@ test('the identity binds every field an approval authorises, not just the prose'
 });
 
 test('two spellings of one request are one question; two sources are two', () => {
+  assert.equal(handoffPayloadDigest(identity({ attachmentIds: [] })), handoffPayloadDigest(identity()));
+  assert.equal(
+    handoffPayloadDigest(identity({ attachmentIds: [TASK, OTHER_TASK, TASK] })),
+    handoffPayloadDigest(identity({ attachmentIds: [OTHER_TASK, TASK] })),
+  );
   // Absent and explicitly null are the same request.
   assert.equal(
     handoffPayloadDigest(identity({ description: null })),

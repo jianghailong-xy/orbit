@@ -3639,6 +3639,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       this.auditReplayedProject(winner, dto.projectId);
       return winner;
     }
+    await this.assertOwnedAttachments(ownerId, dto.attachmentIds);
     // Unit L3 §4: which project this create actually lands in. Decided by the server from the
     // session's coordination scope, not from whatever the caller named — and decided before the
     // transaction, so a refusal is deterministic and leaves nothing behind (AC1).
@@ -3868,6 +3869,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
             tx, ownerId, dependencyCrossings.edges, now,
           );
           const created = await tx.task.create({ data });
+          await this.copyAttachmentsToTask(tx, ownerId, created.id, dto.attachmentIds);
           // Unit L4's `APPLY`: the yes is spent on this task, in the transaction that wrote it. A
           // second application updates no row, throws, and takes this task with it — which is what
           // makes "one approval, one task" a property of the row rather than of the call order.
@@ -4319,6 +4321,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    */
   async previewCreateMany(ownerId: string, dto: CreateTasksBatchDto) {
     const items = await this.assertBatchValid(ownerId, dto);
+    await this.assertOwnedAttachments(ownerId, items.flatMap((item) => item.attachmentIds ?? []));
     // By the project each item NAMES: this preview cannot see the project a coordinator's unnamed
     // item would be filed under. That can only make it quieter than the write, never louder — a
     // card is not refused over VERIFICATION advice the write would withhold.
@@ -4575,6 +4578,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const write = batchWriteOf(item);
       return write ? await this.idempotencyWinner(this.prisma, ownerId, write) : null;
     }));
+    await this.assertOwnedAttachments(
+      ownerId,
+      validated.flatMap((item, index) => replayed[index] ? [] : (item.attachmentIds ?? [])),
+    );
     // Unit L3 §4, once for the whole batch and BEFORE the transaction: every item that is not a
     // replay is admitted and bound, or none is written. An item refused mid-transaction would be a
     // batch that took the owner lock and rolled back; admitted here, a refusal costs no row and no
@@ -4851,6 +4858,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
               criterionDeclarations.get(index) ?? null,
             ),
           }));
+        if (!existing) await this.copyAttachmentsToTask(tx, ownerId, task.id, item.attachmentIds);
         // Unit L4's `APPLY`, for an item this call actually created: a replay found the row the
         // first run wrote, and that run already spent the approval on it.
         const spend = spends.get(index);
@@ -5594,6 +5602,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       plan: {
         title: item.title,
         description: item.description ?? null,
+        attachmentIds: item.attachmentIds,
         acceptanceCriteria: item.acceptanceCriteria ?? null,
         acceptanceCommand: item.acceptanceCommand ?? null,
         acceptanceExpectedExitCode: item.acceptanceExpectedExitCode ?? null,
@@ -11736,6 +11745,44 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // its own copies from the request that made it — so leaving them would add a set of the
       // task's design mocks per losing delivery, attached to nothing and deleted by nothing.
       if (!landed) await this.discardTaskAttachmentCopies(copies);
+    }
+  }
+
+  private async assertOwnedAttachments(ownerId: string, attachmentIds?: string[]): Promise<void> {
+    const ids = [...new Set(attachmentIds ?? [])];
+    if (!ids.length) return;
+    const count = await this.prisma.attachment.count({ where: { ownerId, id: { in: ids } } });
+    if (count !== ids.length) throw new NotFoundException('attachment not found');
+  }
+
+  /** Copy, never move, so a task can reuse conversation or task inputs without changing history. */
+  private async copyAttachmentsToTask(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    taskId: string,
+    attachmentIds?: string[],
+  ): Promise<void> {
+    const ids = [...new Set(attachmentIds ?? [])];
+    if (!ids.length) return;
+    const sources = await tx.attachment.findMany({
+      where: { ownerId, id: { in: ids } },
+      select: { id: true, mimeType: true, sizeBytes: true, fileName: true, data: true },
+    });
+    // Rechecked in the task's transaction: deletion after preflight must roll back the task too.
+    if (sources.length !== ids.length) throw new NotFoundException('attachment not found');
+    const byId = new Map(sources.map((source) => [source.id, source]));
+    for (const id of ids) {
+      const source = byId.get(id)!;
+      await tx.attachment.create({
+        data: {
+          ownerId, taskId,
+          mimeType: source.mimeType,
+          sizeBytes: source.sizeBytes,
+          fileName: source.fileName,
+          data: source.data,
+        },
+        select: { id: true },
+      });
     }
   }
 
