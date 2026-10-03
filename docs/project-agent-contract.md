@@ -1,4 +1,4 @@
-# Project · Agent · Workspace 领域契约 v1.3
+# Project · Agent · Workspace 领域契约 v1.4
 
 > **状态**：已冻结（frozen）。本文件是 `Project 多 Agent 协作与 Agent 级 Provider 调度` 的**单一权威契约**。
 > 02–06 阶段的每个实现任务都必须与本文件一致；实现与本文件冲突时，先改本文件并说明理由，再改代码。
@@ -24,6 +24,9 @@
 >
 > 其余条款（Agent / Workspace / Provider 分流、§5 执行契约、§11 兼容矩阵）**不依赖控制环，照常有效**。
 > 本文其余部分逐字保留：它记录的是当时为什么这样定，删掉会让这段历史读不懂。
+
+> **v1.4（2026-10-03）**：只新增 LEGACY 解析链上的可选**路由步骤**（项目「任务智能选择模型」），结论与理由见 §0.3；
+> 代码基线 `main` `c07c8046`。V1 路径、§6 的冻结语义与 §12 的错误码表都不变。
 
 ## 0. v1.1 修订说明（相对 v1）
 
@@ -65,6 +68,29 @@ v1.2 被独立复核（01V，被审 `47cfc22a`）判为 FAIL，三项阻断。�
 
 v1.3 **不改变**任何生产行为，也不提前实现 PCC §12.1 步骤 6j —— 那条仍然由 04C 承担，`00.14` 的 landed/pending
 双向断言与"唯一一条落地步骤"逐字不变。
+
+### 0.3 v1.4 修订说明（相对 v1.3）
+
+这一轮不是由审查触发的，而是一个新项目：「任务智能选择模型」（`34Z2CCqHygFxrbqBlPljx`）要在派发时为任务的每一次
+**新建运行**选 model 与 effort。按文件开头的规则，实现与本文件冲突时先改本文件：v1.3 有三处与它冲突，v1.4 逐项给出
+**唯一**结论：
+
+| # | v1.3 与智能选模型冲突的地方 | v1.4 的唯一结论 | 落在 |
+|---|---|---|---|
+| 1 | §11.1 L1 要求 LEGACY 路径与 v1 之前**逐字节相同**，而按任务选 model / effort 必然改变 LEGACY 运行 | LEGACY WITH 链在 task pin 之后新增一个**可选**的路由步骤：只作用于任务的新建运行（`plan = CREATE`），RESUME / ADOPT 不路由；Agent（`workspace` 行）的 `modelRouting` 打开才生效，否则只记录（影子模式）。L1 的"逐字节相同"收窄为"`modelRouting` 关闭时派发结果逐字段相同" | §2 · §7.2 P7 · §8.2 · §11.1 L1 / L7 · §11.4 |
+| 2 | §7.2 P6 与 §7.5 的 `with.source` 是封闭集合，表达不了"这一段是路由选的" | 增加 `router`，与 `task-pin` 一样**只属于 LEGACY 路径**；路由的依据（基线、档位、理由、策略版本、是否生效）不进 `resolution`，另存于表 `task_route_decision`，按 `session_id` 关联 | §7.2 P6 · §7.5 |
+| 3 | §2 说 Explicit Fallback 是**唯一**被允许的降级路径、§7.4 说"不静默换引擎"，而跨引擎选模型读起来像第二条降级路径 | 跨引擎路由**不是** fallback：只能在 owner 于 Agent 上**显式列出**的引擎之间进行（`workspace.modelRoutingProviders`），默认空 = 只在本 Agent 的引擎内选档；每一次决策都写理由 | §7.4 R1–R4 · §8.2 |
+
+**为什么放在 LEGACY 而不是 V1**：02C 的 `task.execution_contract` 至今没有落库（迁移 `0129_project_agent_identity`
+只落了 02A 的 `agent` 表），生产上每一次任务派发都走 §11.1 的 legacy 路径 —— 放进 V1 的路由一次也不会执行。
+另外，路由要读派发目标 runner 的模型列表与额度，这是 WITH 链读 WHERE 链的结果：LEGACY 路径里 WHERE 先于 WITH
+确定（`task.assigneeId → workspace.runnerId`），R3 本来就不约束它；V1 要路由，得先回答这条跨链依赖怎样与 R3 相容，
+那是另一次修订。
+
+v1.4 **不改** V1 路径（V1 的 `with.source` 取值集合与 P1–P5 逐字不变）、**不改** §6 的冻结语义（路由只给 create
+提供值，model / effort 仍在首次 claim 封存）、**不新增** §12 错误码（路由从不拒绝：选不出就保持基线，见 §7.2 P7）。
+档位表、定档与升档规则、评估方法与开启节奏写在 `docs/model-routing-design.md`，本文件只定边界；证明这些条款的用例
+落在该项目各期任务的 spec 里（设计文档的分期表），不进 §13 的编号体系。
 
 ---
 
@@ -113,6 +139,8 @@ v1.3 **不改变**任何生产行为，也不提前实现 PCC §12.1 步骤 6j �
 | **Session** | 一次真实运行的对话。执行层实体，**持有解析结果的不可变快照**（§6）。 | 表 `session` |
 | **Execution Snapshot** | Session 上一组"写一次、此后只读"的列，记录三条解析链的结果与依据。Resume / reclaim / 心跳 **永不**从 Agent/Project/Workspace 重新推导这些值。冻结分**两段**：create-frozen 与 claim-frozen（§6）。 | §6 表格 |
 | **Explicit Fallback** | Agent 上显式配置的、有序的备选 Provider/Model 列表。**唯一被允许的降级路径**；为空即表示"不可用就失败"。 | `agent.provider_fallbacks` |
+| **Model Routing**（路由步骤；界面文案 Smart model selection） | LEGACY WITH 链上、紧接 task pin 之后的**可选**一步（v1.4）：为任务的一次**新建运行**按档位选 model 与 effort，owner 显式授权时还可以换引擎（§7.4 R2）。Agent（`workspace` 行）的 `modelRouting` 打开时**生效**；关闭时照样计算并记录，但不改变派发结果，称**影子模式**。它**不是** Explicit Fallback（§7.4 R1）。规则的唯一出处是 §7.2 P7，档位表等细节在 `docs/model-routing-design.md` | `workspace.model_routing` · `workspace.model_routing_providers` |
+| **Route Decision** | 路由步骤对一次新建运行的结论与依据（v1.4）：基线、选出的 provider / model / effort、档位、理由、策略版本、是否生效。每个 run request 恰好一条，影子模式也写。**不进 `session.resolution`**（§7.5） | 表 `task_route_decision` |
 | **Public ID** | 面向外部（URL、API、CLI、MCP、原生端）的 base62 短 id，由 `src/shared/src/codec.ts` 编解码。内部一律 UUID。 | 见 §10 |
 
 ---
@@ -348,7 +376,9 @@ v1 **不新建这张表**，而是把 `agent_id` **保序重指向**到新的 `a
 ## 7. 三条解析链
 
 三条链**顺序执行、互不传参**。任何实现里出现"因为 Agent 是 X 所以机器选 Y"都是对 R3 的违反。
-本节全部规则**只适用于 `executionContract = 'V1'` 的 Task**；LEGACY 走 §11.1。
+本节全部规则**只适用于 `executionContract = 'V1'` 的 Task**；LEGACY 走 §11.1。**唯一的例外是 §7.2 P7 与 §7.4 R1–R4
+（v1.4）**：它们规定 LEGACY WITH 链上的路由步骤，写在这里是为了和 V1 的 P1 / P6 与 Explicit Fallback 对照着读 ——
+两者的边界正是这几条要说清的东西。
 
 ### 7.1 WHO —— 谁做
 
@@ -385,7 +415,32 @@ v1 **不新建这张表**，而是把 `agent_id` **保序重指向**到新的 `a
 - **P3**：Provider 是自定义 slug 时，仍走既有校验（`ModelProvider` 存在、enabled、属于本 owner 或全局）。校验失败 = 不可用，进 §7.4。
 - **P4**：`effort` 与 provider/model 同链解析：`agent.defaultEffort` → null（用模型默认）。V1 Task 上同样没有 effort pin。
 - **P5**：v1 路径**不再使用** `agentProviderSeed()`（"这个 workspace 上一次交互会话跑的是什么"）。那正是"位置决定引擎"的耦合本身：同一个目录上次有人用 Codex 试了一把，下一个 Task 就默默改跑 Codex。它只保留给 §11.1 legacy 路径。优先级 2 的 owner 级默认是一个**固定值**，不是一次推导。
-- **P6（`with.source` 的封闭取值）**：V1 路径只允许 `agent-default` / `owner-default` / `agent-fallback`（§7.4 降级成功时）。`task-pin` 是 **LEGACY 路径专用**的取值，V1 的 `resolution` 里出现它即为缺陷。
+- **P6（`with.source` 的封闭取值）**：V1 路径只允许 `agent-default` / `owner-default` / `agent-fallback`（§7.4 降级成功时）。`task-pin` 与 `router`（v1.4，P7）是 **LEGACY 路径专用**的取值，V1 的 `resolution` 里出现其中任何一个即为缺陷。
+- **P7（LEGACY 路径上的路由步骤，v1.4）**：LEGACY WITH 链（§11.1 L1）在 task pin 之后、`agentProviderSeed()` 与
+  `workspace.model` 旧桥之前多一个**可选**步骤。不路由时这条链本来给出的 provider / model / effort 称为**基线**。
+  七条边界，每条只有一个答案：
+  1. **只填 pin 留下的空位**：`task.model` 非空 → 不路由，用 pin；只有 `task.provider` 非空 → 引擎就是它，只在这个
+     引擎内选 model / effort；两者都空 → 引擎是**本 Agent 的引擎**（基线的 provider，即 `agentProviderSeed()` 的结果），
+     换引擎只按 §7.4 R2。provider pin 只定引擎、不关掉路由：建任务时用 `provider` 指定引擎是常态，把它也算作
+     "手动指定模型"，这些任务就永远不会被路由。
+  2. **只作用于任务的新建运行**：只在 `planWorkspaceRun` 给出 `CREATE` 时计算。`RESUME`（把提示词作为新一轮投给
+     暂停的运行）与 `ADOPT`（这个请求自己的运行已经存在）**一律不路由**，它们的 provider / model / effort 照今天的规则
+     处理（Session 的 provider 终生固定，§6）；同一 Session 上的自动重试（`AutoRetryService`）也不是新建运行。
+     人自己开的会话（输入框、`session_create`、@-mention 打开的对话）不经过任务派发，与路由无关。
+  3. **生效与影子**：Agent（`workspace` 行，§2 Legacy agent alias）的 `modelRouting = true` 时**生效**，冻结的 run target
+     里的 provider / model / effort 取路由结果；`false`（默认）时是**影子模式**：照样计算并写一条 Route Decision
+     （`applied = false`），派发出的 Session 的 provider / model / effort 与基线**逐字段相同**。`modelRouting` 只有
+     owner 能改（§8.2）。
+  4. **不写回**：路由结果**不得**写回 `task.provider` / `task.model`。那两列是人明确指定的值，写回会把一次路由变成
+     永久 pin，下一次运行就再也不会重新选。
+  5. **决定一次，冻结在 run target 里**：路由结果写进冻结的 run target（`TaskRunExecuteTarget` / `TaskRunBatchPlan` v2
+     的 `effort` 与 `route`），接管者照它执行、不重算；Route Decision 按 `(task_id, request_token)` 幂等写入，同一个
+     run request 只有一条。Session 的 `model` / `effort` 仍在首次 claim 封存（§6 S4）—— 路由只是给 create 提供了值。
+  6. **从不拒绝**：定不出档位（例如没有建议、上次也没有失败）、引擎没有档位表、目标 runner 没报模型列表，都保持基线，
+     并在 Route Decision 里写明理由。路由步骤**不新增任何 §12 错误码**，也不落 `project_blocker` —— 它是一次选择，
+     不是一道闸门。
+  7. **纯函数**：路由器在派发路径上不发网络请求；它的输入（任务与它的失败历史、目标 runner 的模型列表与额度、账号
+     默认的权限模式与 effort）在租约内、事务外读好再传入。
 
 ### 7.3 WHERE —— 在哪里做
 
@@ -470,6 +525,21 @@ v1 **不新建这张表**，而是把 `agent_id` **保序重指向**到新的 `a
   或者给它配一条显式 fallback"：两者都留在"这个身份用什么"这一层上（§7.2 P1）。
   这不是文案问题 —— 一条把人引向 400 的恢复指引，与"静默跳过"在结果上是同一件事。
 
+**R（跨引擎路由不是 fallback，v1.4）**：§7.2 P7 的路由步骤可以选到另一个引擎。它与本节的 Explicit Fallback 是两件事：
+
+- **R1（不是降级）**：Explicit Fallback 回答"原定的引擎**不可用**怎么办"，只属于 V1 路径（本节第 1–6 条）；路由回答
+  "这一次新建运行**该用**哪个引擎的哪一档"，只属于 LEGACY 路径（§7.2 P7）。两者互不借用：路由不读任何 `providerFallbacks`
+  （`agent` 上的或 `workspace` 上的），fallback 不读 `modelRoutingProviders`；路由选不出时不降级到任何地方，保持基线（P7 第 6 条）。§2 对 Explicit Fallback
+  的定义 ——"唯一被允许的降级路径"—— 因此在 v1.4 仍然成立。
+- **R2（owner 显式授权）**：路由只能在 owner 于 Agent（`workspace` 行）上**显式列出**的引擎之间选：
+  候选引擎 = 本 Agent 的引擎 ∪ `workspace.modelRoutingProviders`。这一列**默认空 = 只在本 Agent 的引擎内选档**，永不跨引擎；
+  它与 `modelRouting` 一样只有 owner 能改（§8.2），agent 工具改不了。`task.provider` 有 pin 时候选只有它（pin 赢）。
+- **R3（每次决策都有理由）**：每一次路由 —— 跨不跨引擎、生不生效 —— 都写一条 Route Decision，`reasons` 逐条写明为什么是
+  这个引擎、这一档；离开本 Agent 的引擎时必须有一条理由说明为什么离开（例如本引擎的额度用到 90% 以上、验证任务换一个
+  引擎）。本节开头的"不静默换引擎"因此对路由同样成立：换了，就有记录、有理由，并显示在任务的运行列表里。
+- **R4（换引擎 = 新会话）**：Session 的 provider 终生固定（§6）。路由只发生在新建运行上（P7 第 2 条），所以跨引擎永远是
+  开一个新 Session，从不把一个在跑或暂停的运行换到另一个引擎。
+
 ### 7.5 `session.resolution` 结构（冻结）
 
 ```jsonc
@@ -490,7 +560,13 @@ v1 **不新建这张表**，而是把 `agent_id` **保序重指向**到新的 `a
 - `v` 必须写，且读方必须容忍未知版本（跳过展示，不报错）。
 - 三个 key **恒存在**，即使某条链走的是默认值 —— 一个缺失的 key 和一个 "用了默认" 是两件不同的事。
 - **本结构里恰好有三个 id**：`who.agentId`、`where.workspaceId`、`where.runnerId`。内部落库为 UUID，出站按 §10 B3 **三个全部**编成 base62。
-- LEGACY 路径若产出 `resolution`，`with.source` 可以是 `task-pin`（§7.2 P6）；V1 路径出现它即为缺陷。
+- LEGACY 路径若产出 `resolution`，`with.source` 可以是 `task-pin`，或 `router`（v1.4：路由**生效**的新建运行，§7.2 P7）；
+  V1 路径出现其中任何一个即为缺陷（§7.2 P6）。影子模式下路由不生效，`with.source` 保持不路由时的取值。
+- **路由决策另存，不进 `resolution`（v1.4）**：路由的完整依据 —— 基线、档位、选出的 provider / model / effort、理由、
+  策略版本、是否生效 —— 存在表 `task_route_decision`，每个 run request 一行（`UNIQUE (task_id, request_token)`），
+  按 `session_id` 关联到这次运行。`resolution` 只用 `with.source = "router"` 指出这一段是路由选的，**不复制任何一列**：
+  同一事实两处落库必然漂移（与 §3.3 W3 同一条纪律）；而且影子模式下决策照样要写，那时根本没有一个来源是 `router` 的
+  `resolution`。本结构里的 id 因此仍然恰好三个（§10 B3 不变）。
 
 ---
 
@@ -533,6 +609,7 @@ v1 **不新建这张表**，而是把 `agent_id` **保序重指向**到新的 `a
 | 设 / 换 Coordinator Agent | ✔ | ✘ | ✘ | ✘ |
 | 注册 / 移除 Project Workspace、设 Default Workspace | ✔ | ✘ | ✘ | ✘ |
 | 创建 Agent、改 Agent 配置（含 provider / fallback / 权限位） | ✔ | ✘ | ✘ | ✘ |
+| 改 Agent（`workspace` 行）的智能选模型开关与可用引擎（`modelRouting` / `modelRoutingProviders`，v1.4） | ✔ | ✘ | ✘ | ✘ |
 | 在 Project 内建任务 / 建任务树 | ✔ | ⚠a | ⚠b | ✘ |
 | 指派 Task 给某 Agent | ✔ | ⚠c | ⚠d | ✘ |
 | 改 Task 的 requiredCapabilities | ✔ | ⚠c | ✘ | ✘ |
@@ -551,6 +628,8 @@ v1 **不新建这张表**，而是把 `agent_id` **保序重指向**到新的 `a
 - **⚠c** 仅限本 Project；被指派的 Agent 必须是本 Project 的 Team 成员。
 - **⚠d** Member 默认只能指派给**自己**（即当前 Session 的 `agentId`）；`canDelegate` 为真时可指派给同 Team 的其他 Agent。
 - **⚠e** Runner 只能读它自己被分派的 Session，既有约束不变。
+- `modelRouting` / `modelRoutingProviders`（v1.4）决定花费与引擎，只有 owner 能通过用户 API 改；agent 工具（MCP `agent_*`、
+  CLI `orbit agent`，§9.2 冻结）**不提供**这两个参数 —— agent 不能给自己打开这个开关，也不能给自己加一个可用引擎。
 
 ### 8.3 权限位的有效值（收窄语义）
 
@@ -646,13 +725,15 @@ workspaceIds
 | **Legacy Project Task** | `execution_contract = 'LEGACY'` 且 `project_id IS NOT NULL` | legacy |
 | 迁移后新建、且**创建请求显式带 `assigneeAgentId`** 的 Project Task（L5） | `execution_contract = 'V1'` | §7 三条链 |
 
-**规则 L1**：`execution_contract = 'LEGACY'` 的 Task 走 **legacy 路径**，行为与 v1 之前**逐字节相同**：
+**规则 L1**：`execution_contract = 'LEGACY'` 的 Task 走 **legacy 路径**，行为与 v1 之前**逐字节相同**（v1.4：在 Agent 的
+`modelRouting` 关闭时成立 —— 派发结果逐字段相同，新增的只有一行影子 Route Decision 和 run target 里的决策快照；
+打开时见 L7）：
 
 | | legacy 路径 | v1 路径 |
 |---|---|---|
 | 触发条件 | `task.executionContract = 'LEGACY'` | `task.executionContract = 'V1'` |
 | WHO | 无（不存在 Agent 概念） | §7.1 |
-| WITH | `task.provider/model` → `agentProviderSeed(workspace)` → `workspace.model` 旧桥 | §7.2（**不读** `workspace.model`，也**没有** task pin） |
+| WITH | `task.provider/model` → **路由步骤**（v1.4，§7.2 P7：只作用于新建运行，`modelRouting` 关闭时只记录）→ `agentProviderSeed(workspace)` → `workspace.model` 旧桥 | §7.2（**不读** `workspace.model`，也**没有** task pin；v1.4 不路由） |
 | WHERE | `task.assigneeId` → `workspace.runnerId` | §7.3 |
 | Runtime Requirement | 不检查 | §7.3 |
 
@@ -691,6 +772,11 @@ workspaceIds
   都是缺陷** —— v1.2 恰好留了四句，于是同一个旧端请求按不同段落得到 `V1` 与 `LEGACY` 两个答案（`00.17` 扫描它，
   并对两种录制的旧端载荷各断言一个唯一结果）。
 - **L6**：`task.assigneeId`（workspace）**不删列、不改语义**。在 V1 路径下它不参与解析，但仍被写入与展示，供旧客户端与历史查询使用。
+- **L7（LEGACY 路径上的路由步骤，v1.4）**：L1 表里 WITH 那一格多出的一步，规则唯一在 §7.2 P7。对本节而言它只改变一件事：
+  Agent（`workspace` 行）的 `modelRouting` 打开时，LEGACY Task 的**新建运行**的 model / effort 可以与 v1.4 之前不同，
+  provider 也可以变，但只在 owner 显式授权的引擎之间（§7.4 R2）。RESUME / ADOPT、`modelRouting` 关闭的 Agent、带
+  `task.model` pin 的任务，派发结果都与 v1.4 之前逐字段相同。开关默认关闭，因此**部署 v1.4 不改变任何一条既有任务的
+  运行方式**，与 L2 / L3 是同一条纪律：默认值是老行为，新行为由一次显式写入（owner 打开开关）触发。
 
 ### 11.2 迁移 `0128_project_agent_identity`（02A–02E 合并为一次迁移）
 
@@ -764,6 +850,7 @@ workspaceIds
 | **MCP / CLI 旧拼法** | 按 §9.2 保持旧含义 |
 | **旧客户端创建 Project Task** | 载荷里没有 `assigneeAgentId`（`POST /tasks`、`POST /tasks/batch-create`）：接口**照常 201**，行落 `execution_contract = 'LEGACY'`（§11.1 L5），派发走 legacy 路径、结果与 v1 之前逐字段相同。**绝不 400**，也绝不建出一条第一次派发必然 `WHO_UNRESOLVED` 的 V1 行。新 UI 上它是一条 Legacy Project Task（上一行），带 L4 晋升入口。`06B.8` 用录制的旧端载荷跑这条 |
 | **MCP / CLI 的 `provider` / `model` 参数** | 对 LEGACY Task 行为不变；对 V1 Task 返回 `TASK_PROVIDER_PIN_REFUSED` 并在错误文案里指出"Provider 现在配置在 Agent 上"。**不静默忽略** —— 静默忽略会让脚本以为自己换了引擎 |
+| **智能选模型的新字段（v1.4）** | 全部是可选字段：任务的 `modelHint` / `modelHintReason`，Agent（`workspace`）的 `modelRouting` / `modelRoutingProviders`，任务详情与会话详情里每次运行的 `route` 摘要。旧端看不到它们，照常读写；旧端建的任务没有 `modelHint`，按"没有建议"处理（§7.2 P7）。MCP `agent_*` / CLI `orbit agent` 按 §9.2 冻结，不加 `modelRouting` / `modelRoutingProviders`（§8.2）。原生端解码这些字段的要求同下一行 |
 | **原生端（iOS/macOS）** | v1 **不要求** iOS/macOS 跟进 Agent/Team UI。它们必须做到的只有两件事：**不因为新字段而崩溃或误显示**，以及 `coordinatorAgentId` 取不到对应 workspace 时不白屏。Swift 端对新增可选字段的解码必须验证过（既有教训：wire 变更而 Swift 未跟进会静默漏改） |
 
 ### 11.5 版本投递
@@ -1099,3 +1186,4 @@ runner 侧的任何改动（02E 的 capability 上报、05A 的 CLI）**必须�
 | v1.1 | 2026-08-21 | 01V 独立审查 FAIL（评论 `34AqK7dEuWvR1Fwj7JawE`，被审 `a4adabf9`） | 见 §0 的七项结论；§13 全部用例编号化；§14 8 条映射重写；新增契约自检 spec |
 | v1.2 | 2026-08-21 | 01V 对 v1.1 的独立复验 FAIL（评论 `34ArzVefRCxRrqdDh1cEi`，被审 `b810be89`） | 见 §0.1 的四项结论：§11.2 步骤 4 的语句顺序（M7）、两组拒绝谓词的唯一优先级（H4 / C8 / E3）、PAC↔PCC 与数据库 CHECK 的双向闭合（E4，含 PCC 同步）、AC1/3/6/8 的四条指名用例（`04A.20` / `03C.15` / AC6 的 API 引用 / `06B.8`）。同批新增自检 `00.12`–`00.16` |
 | v1.3 | 2026-08-21 | 01V 对 v1.2 的第三轮独立复核 FAIL（评论 `34AtY6AGHMBfp1FH7v9eQ` + 补充 `34AtZerHln1UBUWZDnw4h`，被审 `47cfc22a`） | 见 §0.2 的三项结论：`execution_contract` 写入规则统一到 §11.1 L5 的三行请求形状表（§2 / §3.4 / K3 / L3 / `02C.2` 改为引用）、WHO 交集在可执行模型上按 H4 定序并直接跑两个反例、`executionContract` 进入反例模型的 `Db33` / fixture / resolver / `world` 投影 / `S10_FIELDS`。同批新增自检 `00.17`–`00.19`；不改生产代码，不提前实现 PCC §12.1 步骤 6j |
+| v1.4 | 2026-10-03 | 项目「任务智能选择模型」（`34Z2CCqHygFxrbqBlPljx`）的 P0 任务（`34ZI8yUtHWCE4C5m5AfYj`） | 见 §0.3 的三项结论：LEGACY WITH 链在 task pin 之后新增可选的路由步骤，只作用于新建运行，`modelRouting` 打开才生效、否则影子模式只记录（§7.2 P7、§11.1 L1 / L7）；`with.source` 增加 LEGACY 专用的 `router`，路由决策另存于 `task_route_decision`（§7.2 P6、§7.5）；跨引擎路由不是 fallback，只在 owner 显式列出的引擎之间进行（§7.4 R1–R4）。同批：§2 两条术语、§8.2 一行权限、§11.4 一行兼容。不改 V1 路径、不改 §6 冻结语义、不新增 §12 错误码 |
