@@ -4343,6 +4343,16 @@ model Task {
   /// The predicate is half the point here rather than a size optimisation: those two conditions are
   /// the statement's own filters, so the predicate is what lets the planner match this index to it.
   @@index([projectId, assigneeId], map: "task_project_assignee_idx")
+  /// `GET /projects/sidebar`'s `lastActivityAt`: `max(updated_at)` over each OPEN project's tasks,
+  /// polled every 15 seconds. The covering index above carries `updated_at` last, after `status`
+  /// and `id`, so it answered that maximum by reading every task of every open project — 9,054 of
+  /// the read's 10,421 buffers on 2026-10-03. Ordered directly after the project, the same `max()`
+  /// is PostgreSQL's min/max path: one backward probe per project. It stands in for a maintained
+  /// "newest task write" column, which every task write would have had to rewrite and lock.
+  ///
+  /// Created PARTIAL (`WHERE project_id IS NOT NULL`, migration 0361), which this schema cannot
+  /// spell — the predicate the covering index above carries, for the same reason.
+  @@index([ownerId, projectId, updatedAt], map: "task_project_activity_idx")
   @@index([status])
   /// The scheduled sweep's way in: the due tasks, in the order they came due. Created PARTIAL
   /// (`WHERE run_at IS NOT NULL`, see migration 0110) — a predicate this schema cannot spell, the
