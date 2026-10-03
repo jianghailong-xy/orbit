@@ -203,6 +203,12 @@ public struct SharedPool: Codable, Equatable, Sendable, Identifiable {
     public let label: String
     /// `codex`: a shared pool runs Codex, on OpenAI's own endpoint through the pool gateway.
     public let engine: String
+    /// Made on the shared pools page (migration 0321): API keys alone, never a ChatGPT account. False on a
+    /// Codex pool of somebody's own (0323), which takes people and keys beside its owner's accounts (0358).
+    /// An older server, which listed only the first kind, leaves it out: true.
+    public let shared: Bool
+    /// Whether its owner has ChatGPT accounts in it — all anybody else is told of them.
+    public let ownerHasChatGPT: Bool
     /// Rule: anyone in the pool may put a key in. Off, only admins can.
     public let membersCanAdd: Bool
     /// Rule: a member's sessions start on a key they put in while it has room.
@@ -213,13 +219,16 @@ public struct SharedPool: Codable, Equatable, Sendable, Identifiable {
     public let people: [SharedPoolPerson]
     public let keys: [SharedPoolKey]
 
-    public init(id: String, slug: String, label: String, engine: String = "codex",
+    public init(id: String, slug: String, label: String, engine: String = "codex", shared: Bool = true,
+                ownerHasChatGPT: Bool = false,
                 membersCanAdd: Bool = true, ownKeyFirst: Bool = true, viewerRole: SharedPoolRole = .member,
                 window: SharedPoolWindow? = nil, people: [SharedPoolPerson] = [], keys: [SharedPoolKey] = []) {
         self.id = id
         self.slug = slug
         self.label = label
         self.engine = engine
+        self.shared = shared
+        self.ownerHasChatGPT = ownerHasChatGPT
         self.membersCanAdd = membersCanAdd
         self.ownKeyFirst = ownKeyFirst
         self.viewerRole = viewerRole
@@ -234,6 +243,8 @@ public struct SharedPool: Codable, Equatable, Sendable, Identifiable {
         slug = try c.decode(String.self, forKey: .slug)
         label = try c.decodeIfPresent(String.self, forKey: .label) ?? slug
         engine = try c.decodeIfPresent(String.self, forKey: .engine) ?? "codex"
+        shared = (try? c.decodeIfPresent(Bool.self, forKey: .shared)) ?? true
+        ownerHasChatGPT = (try? c.decodeIfPresent(Bool.self, forKey: .ownerHasChatGPT)) ?? false
         membersCanAdd = try c.decodeIfPresent(Bool.self, forKey: .membersCanAdd) ?? true
         ownKeyFirst = try c.decodeIfPresent(Bool.self, forKey: .ownKeyFirst) ?? true
         viewerRole = try c.decodeIfPresent(SharedPoolRole.self, forKey: .viewerRole) ?? .unknown
