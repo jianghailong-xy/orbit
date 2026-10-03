@@ -91,9 +91,12 @@ let host: HTMLDivElement | null = null;
 // Tells React this is a test that drives updates through act(), so it flushes them there.
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // Remove asks in an antd popup, which measures itself with a ResizeObserver jsdom does not have.
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
 });
 afterAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  vi.unstubAllGlobals();
 });
 
 afterEach(() => {
@@ -132,9 +135,11 @@ function mount(runners: Runner[]) {
 }
 
 const rows = (el: ParentNode, selector: string) => [...el.querySelectorAll<HTMLElement>(selector)];
-const labels = (el: ParentNode) => rows(el, 'button').map((b) => b.textContent?.trim());
+/** A button's words, or the name of a mark that has none (Re-sign in, Remove). */
+const labelOf = (b: Element) => b.textContent?.trim() || b.getAttribute('aria-label');
+const labels = (el: ParentNode) => rows(el, 'button').map(labelOf);
 const button = (el: ParentNode, label: string) => {
-  const found = rows(el, 'button').find((b) => b.textContent?.trim() === label);
+  const found = rows(el, 'button').find((b) => labelOf(b) === label);
   if (!found) throw new Error(`no "${label}" button in ${el.textContent}`);
   return found as HTMLButtonElement;
 };
@@ -142,6 +147,22 @@ const click = async (el: HTMLElement) => {
   await act(async () => {
     el.click();
   });
+};
+/** The confirmation's own Remove, once its popup is drawn (a portal, a few frames late on a slow host). */
+const confirmation = async () => {
+  let ok: HTMLButtonElement | undefined;
+  await act(async () => {
+    await vi.waitFor(
+      () => {
+        ok = [...document.querySelectorAll<HTMLButtonElement>('.ant-popconfirm button')].find(
+          (b) => b.textContent?.trim() === 'Remove',
+        );
+        expect(ok).toBeDefined();
+      },
+      { timeout: 20_000, interval: 20 },
+    );
+  });
+  return ok!;
 };
 
 /** The account rows, in the order the page drew them. */
@@ -207,6 +228,7 @@ describe('one Codex account signed into two slots', () => {
     const [, workRow] = accountsOf(page);
 
     await click(button(workRow, 'Remove'));
+    await click(await confirmation());
 
     // One request, for this slot and no other: the note is about THIS account being the second copy
     // of one already signed in, so it is this slot that goes (RunnerEngines.removeAccount.test.tsx).

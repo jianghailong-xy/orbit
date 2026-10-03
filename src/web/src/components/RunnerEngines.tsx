@@ -1,20 +1,29 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Tag } from 'antd';
-import type {
-  LoginEngine,
-  RunnerAccountRemoveState,
-  RunnerEngineAccount,
-  RunnerEngineHealth,
-  RunnerInstallState,
+import { Button, Popconfirm, Tag } from 'antd';
+import { DeleteOutlined, LoginOutlined } from '@ant-design/icons';
+import {
+  accountToStartOn,
+  type LoginEngine,
+  type PlanUsageSnapshot,
+  type RunnerAccountRemoveState,
+  type RunnerEngineAccount,
+  type RunnerEngineHealth,
+  type RunnerInstallState,
 } from '@orbit/shared';
 import { api } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
 import { accountDir, accountPlanUsage, engineKeepsAccounts } from '../lib/engineAccounts';
-import { planUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
+import {
+  bindingPlanUsageRow,
+  currentPlanUsageRows,
+  planUsageSnapshotForProvider,
+  type PlanUsageDisplayRow,
+} from '../lib/planUsage';
+import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
-import { updateNoteOf } from '../lib/runnerEngines';
+import { ago, engineVersionNumber, updateNoteOf } from '../lib/runnerEngines';
 import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
@@ -88,6 +97,12 @@ const STATUS_TAG: Record<RowKind, { color: string; label: string }> = {
   'install-failed': { color: 'red', label: 'Install failed' },
 };
 
+/** An engine's version as a number — the name beside it already says which CLI it is, so
+ *  `2.1.287 (Claude Code)` would say it twice — or the CLI's own name when it reported none. */
+function versionOf(engine: LoginEngine, health?: RunnerEngineHealth): string {
+  return health?.version ? engineVersionNumber(health.version) : engine;
+}
+
 /** The sub-line under an engine's name: what is on this machine, or what would be. */
 function metaFor(kind: RowKind, engine: LoginEngine, health?: RunnerEngineHealth): string {
   if (kind === 'installing') return health?.installed ? 'Reinstalling' : 'Not installed yet';
@@ -97,8 +112,8 @@ function metaFor(kind: RowKind, engine: LoginEngine, health?: RunnerEngineHealth
     // went), so this just states the fact.
     return kind === 'missing' ? 'Not installed — Orbit can install it here' : 'Not installed';
   }
-  if (kind === 'unknown') return `${engine} ${health.version ?? ''} · the CLI wouldn't say`.trim();
-  return health.version ? `${engine} ${health.version}` : engine;
+  if (kind === 'unknown') return `${versionOf(engine, health)} · the CLI wouldn't say`;
+  return versionOf(engine, health);
 }
 
 /** The sign-in panel a card holds open: an engine's own (keyed by the engine), one of its
@@ -116,7 +131,7 @@ function accountKindOf(account: RunnerEngineAccount): RowKind {
 
 /** What a row calls an account: Default, what the user named the slot, or the slot's own id when
  *  the name it was added under is gone. */
-function accountNameOf(account: RunnerEngineAccount): string {
+export function accountNameOf(account: Pick<RunnerEngineAccount, 'id' | 'name'>): string {
   if (account.id === 'default') return 'Default';
   return account.name || `Account ${account.id}`;
 }
@@ -183,21 +198,82 @@ function signedIn(health: RunnerEngineHealth): boolean {
   );
 }
 
-type Quota = ReturnType<typeof planUsageRows>[number];
+/** A login's quota as a row draws it: every window it reported, as it stands now — or none, for a
+ *  login that is not signed in, whose last reading is about sessions that can no longer start. */
+interface Quota {
+  windows: PlanUsageDisplayRow[];
+  /** "Usage as of 17:44 · 7h ago", once the reading is older than the runner's reads. */
+  stale: string | null;
+}
 
-/** The quota column: the plan's nearest limit, or why there isn't one to show. */
-function QuotaCell({ kind, quota }: { kind: RowKind; quota: Quota | null }) {
+/** Older than this, a reading has missed three of the runner's reads (every 5 min with a session
+ *  running, every 10 without, when any workspace there defaults to the engine) and is said to be as
+ *  of then. Not that anything is wrong: an engine no workspace defaults to is read only while one of
+ *  its sessions runs, so its idle reading is often this old. */
+const STALE_QUOTA_MS = 30 * 60_000;
+
+function quotaOf(kind: RowKind, snapshot: PlanUsageSnapshot | null, online: boolean, now: number): Quota {
+  if (kind !== 'in' || !snapshot) return { windows: [], stale: null };
+  const windows = currentPlanUsageRows(snapshot, now);
+  const read = snapshot.fetchedAt;
+  // An offline machine reads nothing, and the card already says it is offline: one note per row
+  // would only repeat that.
+  const stale =
+    windows.length > 0 && online && read && now - Date.parse(read) > STALE_QUOTA_MS
+      ? `Usage as of ${formatResetTime(read, now)} · ${ago(read, now)}`
+      : null;
+  return { windows, stale };
+}
+
+/** What a row's tag says: whether that login can run a session now — and if its quota is spent, when
+ *  it can — in the words the account pools use for theirs. */
+function statusOf(kind: RowKind, quota: Quota, now: number): { color: string; label: string } {
+  const binding = bindingPlanUsageRow(quota.windows);
+  // Signed in with nothing read: the sign-in is all there is to say.
+  if (kind !== 'in' || !binding) return STATUS_TAG[kind];
+  if (binding.window.utilization < 100) return { color: 'green', label: 'Available' };
+  const resetsAt = binding.window.resetsAt;
+  return { color: 'orange', label: resetsAt ? `Spent · resets ${formatResetTime(resetsAt, now)}` : 'Spent' };
+}
+
+/** Whether a login can take a session now: signed in, and no window of its spent. */
+function available(kind: RowKind, quota: Quota): boolean {
+  return kind === 'in' && (bindingPlanUsageRow(quota.windows)?.window.utilization ?? 0) < 100;
+}
+
+function StatusTag({ status }: { status: { color: string; label: string } }) {
+  return (
+    <div className="re-status">
+      <Tag color={status.color} title={status.label}>
+        {status.label}
+      </Tag>
+    </div>
+  );
+}
+
+/** The quota column: each window with how much of it is used and when it resets, or why there is
+ *  nothing to show. */
+function QuotaCell({ kind, quota }: { kind: RowKind; quota: Quota }) {
   return (
     <div className="re-quota">
-      {quota ? (
+      {quota.windows.length > 0 ? (
         <>
-          <div className="re-quota-head">
-            <b>{quota.label}</b>
-            <span>{quota.percent}%</span>
-          </div>
-          <div className={`runner-util ${quota.nearLimit ? 'full' : ''}`}>
-            <span className="runner-util-fill" style={{ width: `${quota.percent}%` }} />
-          </div>
+          {quota.windows.map((row) => (
+            <div key={row.key} className="re-window">
+              {row.groupLabel && <div className="re-quota-head">{row.groupLabel}</div>}
+              <div className="re-quota-head">
+                <b>{row.label}</b>
+                <span>{row.percent}%</span>
+              </div>
+              <div className={`runner-util ${row.nearLimit ? 'full' : ''}`}>
+                <span className="runner-util-fill" style={{ width: `${row.percent}%` }} />
+              </div>
+              {row.window.resetsAt && (
+                <div className="re-reset">resets {formatResetTime(row.window.resetsAt)}</div>
+              )}
+            </div>
+          ))}
+          {quota.stale && <div className="re-stale">{quota.stale}</div>}
         </>
       ) : (
         <span className="re-quota-none">
@@ -205,6 +281,24 @@ function QuotaCell({ kind, quota }: { kind: RowKind; quota: Quota | null }) {
         </span>
       )}
     </div>
+  );
+}
+
+/** Re-sign in, as a mark: a login that is in rarely needs it, and a word on every row read as
+ *  something each of them needed doing. It is the last thing on its row, as Sign in is on a row that
+ *  needs one, so the way back into every login on a card is one column down its right edge. */
+function ResignIn({ disabled, onClick }: { disabled?: boolean; onClick: () => void }) {
+  return (
+    <Button
+      size="small"
+      type="text"
+      className="re-icon"
+      icon={<LoginOutlined />}
+      aria-label="Re-sign in"
+      title="Re-sign in"
+      disabled={disabled}
+      onClick={onClick}
+    />
   );
 }
 
@@ -250,11 +344,17 @@ function EngineRow({
   });
 
   // Only one runtime's quota is this engine's; the others belong to the other rows.
+  const now = Date.now();
   const snapshot = planUsageSnapshotForProvider(runner.planUsage, engine);
-  const quota = kind === 'in' && snapshot ? planUsageRows(snapshot)[0] : null;
+  const quota = quotaOf(kind, snapshot, !!runner.online, now);
   // More than one Codex account: this row heads their group, and each account is a row of its own
   // below it (AccountRow), with its own state.
   const grouped = accounts.length > 0;
+  // What the head says for its group: how many of its accounts could take a session now.
+  const ready = accounts.filter((account) => {
+    const own = accountKindOf(account);
+    return available(own, quotaOf(own, accountPlanUsage(runner.planUsage, engine, account.id), !!runner.online, now));
+  }).length;
   // "+ Account" is how a machine gets from one account to two, so it is not the group's to hold:
   // the Codex row offers it whenever the probe speaks for the engine, whether it heads a group yet
   // or not.
@@ -267,7 +367,9 @@ function EngineRow({
   const warn = note?.tone === 'warn' && !offline;
 
   const action = () => {
-    if (offline) return <Button size="small" disabled>Sign in</Button>;
+    if (offline) {
+      return kind === 'in' ? <ResignIn disabled onClick={() => {}} /> : <Button size="small" disabled>Sign in</Button>;
+    }
     switch (kind) {
       case 'missing':
         return (
@@ -287,15 +389,12 @@ function EngineRow({
             Retry
           </Button>
         );
-      // Nothing to press until the probe lands and says whether it needs signing in.
-      case 'installed':
-        return null;
       case 'in':
-        return (
-          <Button size="small" type="text" onClick={() => onSignIn(signIn === engine ? null : engine)}>
-            Re-sign in
-          </Button>
-        );
+        return <ResignIn onClick={() => onSignIn(signIn === engine ? null : engine)} />;
+      // Signed out, wouldn't say, or just installed. An install the probe hasn't caught up with yet
+      // gets Sign in too: a CLI that was just installed has no sign-in, so that is what comes next,
+      // and the runner only reports an install done once the binary is on its PATH — waiting for the
+      // check-in first left the row with nothing to press for up to a heartbeat.
       default:
         return (
           <Button
@@ -318,8 +417,10 @@ function EngineRow({
           <div className="re-meta">
             {grouped ? (
               <>
-                {health?.version ? `${engine} ${health.version}` : engine} ·{' '}
-                <b>{accounts.length} accounts</b>
+                {versionOf(engine, health)} ·{' '}
+                <b>
+                  {ready} of {accounts.length} accounts available
+                </b>
               </>
             ) : (
               metaFor(kind, engine, health)
@@ -339,18 +440,11 @@ function EngineRow({
           </div>
         </div>
       </div>
-      {grouped ? (
-        // Signed in and quota are each account's, not the engine's: the group's own columns stay
-        // empty rather than speak for one of its accounts.
+      {/* Signed in and quota are each account's, not the engine's: a group's head has no columns
+          for them, and its line runs the width of the row instead. */}
+      {!grouped && (
         <>
-          <div />
-          <div className="re-quota" />
-        </>
-      ) : (
-        <>
-          <div>
-            <Tag color={STATUS_TAG[kind].color}>{STATUS_TAG[kind].label}</Tag>
-          </div>
+          <StatusTag status={statusOf(kind, quota, now)} />
           <QuotaCell kind={kind} quota={quota} />
         </>
       )}
@@ -440,6 +534,7 @@ function AccountRow({
   runner,
   engine,
   account,
+  next,
   duplicateOf,
   lastOfGroup,
   signIn,
@@ -449,6 +544,8 @@ function AccountRow({
   /** The engine this account belongs to: its own sign-in panel, its own removal, its own quota. */
   engine: LoginEngine;
   account: RunnerEngineAccount;
+  /** The account a session nobody picked one for starts on next (accountToStartOn). */
+  next?: boolean;
   /** The account already signed in above that this slot turned out to hold too
    *  (duplicateAccounts). Absent for the slot that made the sign-in. */
   duplicateOf?: RunnerEngineAccount;
@@ -485,9 +582,26 @@ function AccountRow({
   });
   // Each account's quota is its own: the runner reads every account in that account's CODEX_HOME,
   // and an account it has not read shows none rather than borrowing another's limit.
+  const now = Date.now();
   const snapshot = accountPlanUsage(runner.planUsage, engine, account.id);
-  const quota = kind === 'in' && snapshot ? planUsageRows(snapshot)[0] : null;
+  const quota = quotaOf(kind, snapshot, !!runner.online, now);
   const toggle = () => onSignIn(signIn === panel ? null : panel);
+  // Removing deletes the slot's sign-in from the machine, and only signing in again brings it back:
+  // asked first, wherever it is offered.
+  const confirmRemove = (trigger: ReactNode) => (
+    <Popconfirm
+      title={`Remove ${accountNameOf(account)}?`}
+      description={
+        `Its sign-in is deleted from ${runner.displayName || runner.name}. ` +
+        'Workspaces set to this account run on Default.'
+      }
+      okText="Remove"
+      okButtonProps={{ danger: true }}
+      onConfirm={() => remove.mutate()}
+    >
+      {trigger}
+    </Popconfirm>
+  );
 
   return (
     <div className={`re-row re-acct${lastOfGroup ? ' re-acct-end' : ''}`}>
@@ -496,7 +610,13 @@ function AccountRow({
         <div style={{ minWidth: 0 }}>
           <div className="re-name">
             {accountNameOf(account)}
-            {isDefault && <span className="re-chip">DEFAULT</span>}
+            {/* Where Automatic starts the next session — the account pools' mark for the same
+                thing. Default needs no mark of its own: its name says it. */}
+            {next && (
+              <span className="re-chip" title="Automatic starts new sessions here">
+                NEXT
+              </span>
+            )}
           </div>
           {/* Where the account lives and which one it is — never who: the account's email and id
               stay on the machine, and the fingerprint is a prefix of a non-reversible one. */}
@@ -506,39 +626,34 @@ function AccountRow({
           </div>
         </div>
       </div>
-      <div>
-        <Tag color={STATUS_TAG[kind].color}>{STATUS_TAG[kind].label}</Tag>
-      </div>
+      <StatusTag status={statusOf(kind, quota, now)} />
       <QuotaCell kind={kind} quota={quota} />
       <div className="re-act">
-        {!runner.online ? (
-          <Button size="small" disabled>
-            Sign in
-          </Button>
-        ) : kind === 'in' ? (
-          <Button size="small" type="text" onClick={toggle}>
-            Re-sign in
-          </Button>
-        ) : (
-          <Button size="small" type="primary" onClick={toggle}>
-            Sign in
-          </Button>
-        )}
         {/* Default has nothing to remove: it is the CODEX_HOME the machine's own environment
             selects, the one `codex` typed in a terminal shares. Every other account is a slot this
             runner added, and this is the way back off the machine — the one thing the page could
             not do before, which left whoever signed one in twice with a directory to delete by
-            hand. */}
-        {!isDefault && (
-          <Button
-            size="small"
-            type="text"
-            danger
-            disabled={!runner.online || removing}
-            loading={removing}
-            onClick={() => remove.mutate()}
-          >
-            Remove
+            hand. A grey mark until pointed at, like the account pools' sign-out: red on a row that
+            is fine reads as something wrong with it. */}
+        {!isDefault &&
+          confirmRemove(
+            <Button
+              size="small"
+              type="text"
+              danger
+              className="re-icon re-remove"
+              icon={<DeleteOutlined />}
+              aria-label="Remove"
+              title="Remove"
+              disabled={!runner.online || removing}
+              loading={removing}
+            />,
+          )}
+        {kind === 'in' ? (
+          <ResignIn disabled={!runner.online} onClick={toggle} />
+        ) : (
+          <Button size="small" type={runner.online ? 'primary' : 'default'} disabled={!runner.online} onClick={toggle}>
+            Sign in
           </Button>
         )}
       </div>
@@ -551,14 +666,11 @@ function AccountRow({
             This is the same account as <b>{accountNameOf(duplicateOf)}</b> — signing in twice does
             not double the quota.
           </span>
-          <button
-            className="re-link"
-            type="button"
-            disabled={!runner.online || removing}
-            onClick={() => remove.mutate()}
-          >
-            Remove
-          </button>
+          {confirmRemove(
+            <button className="re-link" type="button" disabled={!runner.online || removing}>
+              Remove
+            </button>,
+          )}
         </div>
       )}
       {/* The machine would not do it, and its reason is the only thing that can explain why: a
@@ -654,7 +766,7 @@ function RunnerEngineCard({
   const engines = runner.engines ?? null;
 
   return (
-    <div className={`re-card${runner.online ? '' : ' offline'}${collapsed ? ' collapsed' : ''}`}>
+    <div className={`re-card re-runner-card${runner.online ? '' : ' offline'}${collapsed ? ' collapsed' : ''}`}>
       <div className="re-head">
         {/* The toggle is its own button rather than the whole header: the header also holds a
             link, and a link inside a button is neither valid nor operable by keyboard. */}
@@ -692,6 +804,11 @@ function RunnerEngineCard({
           const accounts = accountRowsOf(engine, health, runner.install);
           // Read across the whole group, since a repeat is a fact about two of its rows.
           const repeats = duplicateAccounts(accounts);
+          // The same question the server asks when a session starts with no account picked.
+          const next =
+            (engine === 'claude' || engine === 'codex') && accounts.length > 0
+              ? accountToStartOn(engine, accounts, runner.planUsage, new Date())
+              : null;
           return (
             <Fragment key={engine}>
               <EngineRow
@@ -709,6 +826,7 @@ function RunnerEngineCard({
                   runner={runner}
                   engine={engine}
                   account={account}
+                  next={account.id === next}
                   duplicateOf={repeats.get(account.id)}
                   lastOfGroup={index === accounts.length - 1}
                   signIn={signIn}

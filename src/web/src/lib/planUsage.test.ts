@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bindingPlanUsageRow,
+  currentPlanUsageRows,
   planUsageRows,
   planUsageSnapshotForProvider,
   planUsageSnapshots,
@@ -98,5 +100,64 @@ describe('sessionPlanUsage', () => {
     ];
     // isBuiltinProvider wins at dispatch, so the runner's login is the credential being spent.
     expect(sessionPlanUsage('claude', runner, shadow)?.fiveHour?.utilization).toBe(100);
+  });
+});
+
+describe('a login read at a moment', () => {
+  const NOW = Date.parse('2026-10-02T16:56:18Z');
+  const at = (hours: number) => new Date(NOW + hours * 3600_000).toISOString();
+  // jianghailong.rd on wikova at NOW: its 5-hour reading is from before that window rolled over, and
+  // its weekly one is spent until Monday.
+  const rd = {
+    provider: 'claude',
+    fiveHour: { utilization: 6, resetsAt: at(-5.5) },
+    sevenDay: { utilization: 100, resetsAt: at(66) },
+  } as const;
+
+  it('reads a window past its reset as the fresh window it now is', () => {
+    expect(
+      currentPlanUsageRows(rd, NOW).map(({ label, percent, nearLimit, window }) => ({
+        label,
+        percent,
+        nearLimit,
+        resetsAt: window.resetsAt,
+      })),
+    ).toEqual([
+      { label: '5-hour limit', percent: 0, nearLimit: false, resetsAt: undefined },
+      { label: 'Weekly · all models', percent: 100, nearLimit: true, resetsAt: at(66) },
+    ]);
+    // Until that reset, the reading stands as it was.
+    expect(currentPlanUsageRows(rd, Date.parse(at(-6))).map((row) => row.percent)).toEqual([6, 100]);
+  });
+
+  it('names the window that stops a login, not the first one it has', () => {
+    const binding = (usage: Parameters<typeof currentPlanUsageRows>[0]) =>
+      bindingPlanUsageRow(currentPlanUsageRows(usage, NOW))?.label;
+    // A spent week outranks a 5-hour window with room, whichever comes first.
+    expect(binding(rd)).toBe('Weekly · all models');
+    // Two spent: the login is back when the later one resets, so that is the one that stops it.
+    expect(
+      binding({
+        provider: 'claude',
+        fiveHour: { utilization: 100, resetsAt: at(0.5) },
+        sevenDay: { utilization: 100, resetsAt: at(66) },
+      }),
+    ).toBe('Weekly · all models');
+    // A spent window with no reset named holds the login for as long as anyone can tell.
+    expect(
+      binding({ provider: 'claude', fiveHour: { utilization: 100, resetsAt: at(0.5) }, sevenDay: { utilization: 100 } }),
+    ).toBe('Weekly · all models');
+    // None spent: the one closest to its limit, a tie going to the first.
+    expect(binding({ provider: 'claude', fiveHour: { utilization: 1 }, sevenDay: { utilization: 59 } })).toBe(
+      'Weekly · all models',
+    );
+    expect(binding({ provider: 'claude', fiveHour: { utilization: 40 }, sevenDay: { utilization: 40 } })).toBe(
+      '5-hour limit',
+    );
+    // A spent window past its reset stops nothing.
+    expect(
+      binding({ provider: 'claude', fiveHour: { utilization: 100, resetsAt: at(-1) }, sevenDay: { utilization: 59 } }),
+    ).toBe('Weekly · all models');
+    expect(bindingPlanUsageRow([])).toBeUndefined();
   });
 });

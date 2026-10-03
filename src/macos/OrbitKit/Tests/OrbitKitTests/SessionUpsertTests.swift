@@ -169,6 +169,74 @@ final class SessionUpsertTests: XCTestCase {
         XCTAssertNil(merged.agent?.provider)
     }
 
+    /// A session moved to another workspace (docs/session-folders-move-design.md §5.6): the summary
+    /// names the new workspace, and the row takes the summary's agent for it — the lists group rows
+    /// by `agent.id`, so the row's own agent would hold it in the old workspace's list until the next
+    /// snapshot. The row leaves the list it was in and joins the other workspace's at once.
+    func testAMoveToAnotherWorkspaceTakesTheSummarysAgent() throws {
+        let row = try loadedRow()
+        XCTAssertEqual(SessionFilter.forAgent([row], agentID: "a1").map(\.id), ["s1"])
+        let event = try summary("""
+        {"id":"s1","status":"SUCCEEDED","runStatus":"SUCCEEDED","runState":"SUCCEEDED","pendingApprovals":0,
+         "agentId":"a2","agent":{"id":"a2","name":"site","model":"sonnet","effort":"medium"},"folderId":"f9"}
+        """)
+        let moved = row.applying(event)
+
+        XCTAssertEqual(moved.agentId, "a2")
+        XCTAssertEqual(moved.agent?.id, "a2")
+        XCTAssertEqual(moved.agent?.name, "site")
+        XCTAssertEqual(moved.agent?.model, "sonnet")
+        XCTAssertEqual(moved.agent?.effort, "medium")
+        XCTAssertEqual(moved.folderId, "f9")
+        XCTAssertEqual(SessionFilter.forAgent([moved], agentID: "a1"), [], "gone from the old workspace's list")
+        XCTAssertEqual(SessionFilter.forAgent([moved], agentID: "a2").map(\.id), ["s1"], "and in the new one's")
+        // Nothing else the summary leaves out is lost on the way.
+        XCTAssertEqual(moved.lastAssistantText, "here you go")
+        XCTAssertEqual(moved.tags?.map(\.id), ["t1"])
+        XCTAssertEqual(moved.provider, "claude")
+    }
+
+    /// A summary that names the new workspace but carries no agent still moves the row: a bare agent
+    /// for that workspace, which the next snapshot fills in.
+    func testAMoveWithoutTheSummarysAgentStillMovesTheRow() throws {
+        let row = try loadedRow()
+        let event = try summary(#"{"id":"s1","status":"RUNNING","pendingApprovals":0,"agentId":"a2"}"#)
+        let moved = row.applying(event)
+        XCTAssertEqual(moved.agent?.id, "a2")
+        XCTAssertNil(moved.agent?.name)
+        XCTAssertEqual(SessionFilter.forAgent([moved], agentID: "a2").map(\.id), ["s1"])
+
+        // A row that only knows its workspace by the flat id moves the same way.
+        let flat = try session(#"{"id":"s1","status":"RUNNING","agentId":"a1"}"#)
+        let event2 = try summary("""
+        {"id":"s1","status":"RUNNING","pendingApprovals":0,"agentId":"a2","agent":{"id":"a2","name":"site"}}
+        """)
+        XCTAssertEqual(flat.applying(event2).agent?.id, "a2")
+        XCTAssertEqual(SessionFilter.forAgent([flat.applying(event2)], agentID: "a1"), [])
+    }
+
+    /// The same workspace is no move: the row's richer agent stays (the test above it), and so does
+    /// a row whose summary names no workspace at all.
+    func testNoWorkspaceInTheSummaryLeavesTheRowWhereItIs() throws {
+        let row = try loadedRow()
+        let event = try summary(#"{"id":"s1","status":"RUNNING","pendingApprovals":0}"#)
+        XCTAssertEqual(row.applying(event).agent, row.agent)
+        XCTAssertNil(row.applying(event).agentId)
+    }
+
+    /// The app's own move writes the new workspace into the row once the server has it there.
+    func testSettingWorkspaceMovesTheRowAndItsFolder() throws {
+        let row = try loadedRow()
+        let moved = row.settingWorkspace(id: "a2", name: "site", model: "sonnet", effort: nil, folder: "f9")
+        XCTAssertEqual(moved.agentId, "a2")
+        XCTAssertEqual(moved.agent, SessionAgentRef(id: "a2", name: "site", provider: nil, model: "sonnet", effort: nil))
+        XCTAssertEqual(moved.folderId, "f9")
+        XCTAssertEqual(SessionFilter.forAgent([moved], agentID: "a1"), [])
+        XCTAssertNil(moved.settingWorkspace(id: "a2", name: "site", model: nil, effort: nil, folder: nil).folderId)
+        XCTAssertEqual(moved.title, row.title)
+        XCTAssertEqual(moved.pinnedAt, row.pinnedAt)
+    }
+
     /// A null title means "not named yet", not "cleared" — the naming pass fills it in later.
     func testNullTitleDoesNotClearAName() throws {
         let row = try loadedRow()

@@ -236,7 +236,7 @@ final class WikiHealthCopyParityTests: XCTestCase {
         let fields = try XCTUnwrap(health["maintenance"] as? [String: Any])
         XCTAssertEqual(Set(fields.keys), [
             "enabled", "look", "lastOkAt", "lastRunAt", "consecutiveFailures", "backlog", "oldestPendingAt",
-            "lagSeconds", "dailyLimitReached", "held", "running", "lastRun",
+            "lagSeconds", "dailyLimitReached", "held", "running", "lastRun", "lastFailure",
         ])
         // Every field the contract names round-trips through the model.
         let full = WikiMaintenanceHealth(
@@ -244,7 +244,8 @@ final class WikiHealthCopyParityTests: XCTestCase {
             oldestPendingAt: "c", lagSeconds: 9, dailyLimitReached: true,
             held: WikiMaintenanceHeld(reason: .reviewQueueFull, at: "d"),
             running: WikiMaintenanceHealth.Running(sessionId: "e", startedAt: "f"),
-            lastRun: WikiMaintenanceHealth.LastRun(sessionId: "g", outcome: "failed", endedAt: "h"))
+            lastRun: WikiMaintenanceHealth.LastRun(sessionId: "g", outcome: "failed", endedAt: "h"),
+            lastFailure: WikiMaintenanceHealth.LastFailure(kind: "infra", reason: "i", at: "j", sessionId: "k"))
         let encoded = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(full)) as? [String: Any])
         XCTAssertEqual(Set(encoded.keys), Set(fields.keys))
         XCTAssertEqual(try JSONDecoder().decode(WikiMaintenanceHealth.self, from: JSONEncoder().encode(full)), full)

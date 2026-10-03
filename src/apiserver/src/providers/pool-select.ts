@@ -51,8 +51,8 @@ export type PoolSelection<Row extends PoolMemberRow> =
  *
  * - `stickyId`, the member the session already runs on, is kept for as long as it is usable, even
  *   when another would be taken first: moving accounts mid-conversation gains nothing.
- * - A member with a window nearly spent (90%) comes after the rest: a run started there would soon
- *   meet its limit and have to move.
+ * - A member with a window nearly spent (80% of a 5-hour one, 90% of a longer one — quotaNearLimit)
+ *   comes after the rest: a run started there would soon meet its limit and have to move.
  * - Then the member whose quota resets soonest — its weekly window's reset (quotaExpiresAt) — and on
  *   equal expiry the one with the most room in its 5-hour window. A member with nothing reported has
  *   nothing known to expire, and ranks after every member that has room: not reported is not the same

@@ -207,3 +207,19 @@ export function codexLoginUnavailableReason(
   }
   return null;
 }
+
+/**
+ * codexLoginUnavailableReason, for a codex pool that may hold API keys beside its accounts (migration
+ * 0358): its owner's session runs on a key when no account can, so the pool is refused only while no key
+ * of it is switched on and unrefused either — the same test a shared pool's refusal makes of its keys
+ * (shared-pool.ts sharedPoolUnavailableReason). The reason given is still the accounts': they are what
+ * the owner's sessions run on first.
+ */
+export function codexPoolUnavailableReason(
+  label: string,
+  account: { email: string | null; state: string } | null,
+  keys: ReadonlyArray<{ enabled: boolean; state: string }>,
+): string | null {
+  if (keys.some((key) => key.enabled && key.state === 'ACTIVE')) return null;
+  return codexLoginUnavailableReason(label, account);
+}

@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { AgentProvider, type PlanUsageSnapshot } from '@orbit/shared';
 import { api } from '../api';
+import { encodeId } from './idCodec';
 import type { PoolMember, PoolMemberState, ProviderPool } from './providerPools';
 
 /**
@@ -65,6 +66,11 @@ export interface SharedPool {
   slug: string;
   label: string;
   engine: string;
+  /** Made on the shared pools page (migration 0321): API keys alone, never a ChatGPT account. False on a
+   *  Codex pool of somebody's own (0323), which takes people and keys beside its owner's accounts (0358). */
+  shared: boolean;
+  /** Whether its owner has ChatGPT accounts in it — all anybody else is told of them. */
+  ownerHasChatGPT: boolean;
   membersCanAdd: boolean;
   ownKeyFirst: boolean;
   viewerRole: SharedPoolRole;
@@ -85,6 +91,25 @@ export const sharedPoolsQuery = () =>
     queryKey: SHARED_POOLS_KEY,
     queryFn: () => api<SharedPool[]>(SHARED_POOLS_BASE),
   });
+
+/** A Codex pool of the user's own as its people and keys are read (migration 0358): its owner is one of
+ *  its people, but the list above names only the pools of somebody else's. */
+export const poolAccessQuery = (poolId: string) =>
+  queryOptions({
+    queryKey: [...SHARED_POOLS_KEY, poolId] as const,
+    queryFn: () => api<SharedPool>(`${SHARED_POOLS_BASE}/${encodeId(poolId)}`),
+  });
+
+/** Whose the pool is: the person who made it, whose ChatGPT accounts are in it and who says who else can
+ *  use it. */
+export const poolOwner = (pool: SharedPool): SharedPoolPerson | undefined =>
+  pool.people.find((person) => person.creator);
+
+/** Whether the viewer is the pool's owner — the page drawn for them — rather than one of the people they added. */
+export const ownsPool = (pool: SharedPool): boolean => pool.people.some((person) => person.you && person.creator);
+
+/** "Me and people I add" rather than "Just me": anybody is in it besides its owner. */
+export const hasPeople = (pool: SharedPool): boolean => pool.people.length > 1;
 
 /** Whether the others have spent `key`'s cap this month — which stops everyone's sessions on it but its
  *  contributor's (pool-key-select.ts keyRoom). */
@@ -130,7 +155,54 @@ function keyWindow(key: SharedPoolKey, pool: SharedPool): PlanUsageSnapshot | nu
  * and the pool itself the whole view (`shared`) for what only a shared pool has.
  */
 export function sharedPoolAsProviderPool(pool: SharedPool): ProviderPool {
-  const members: PoolMember[] = pool.keys.map((key) => {
+  return keysPool(pool, keyMembers(pool));
+}
+
+/**
+ * A Codex pool of the user's own, read twice — its ChatGPT accounts with the providers (`own`, as withLogin
+ * draws them), its people and keys from `access` — drawn as one: its accounts first, then its keys, in the
+ * order its owner's sessions take them (pool-credential-select.ts). A key is the next session's only while
+ * none of the accounts can take one.
+ */
+export function ownPoolWithAccess(own: ProviderPool, access: SharedPool): ProviderPool {
+  const accounts = own.members;
+  const nextAccount =
+    accounts.find((member) => member.next) ?? accounts.find((member) => member.state === 'AVAILABLE');
+  const members = [
+    ...accounts.map((member) => ({ ...member, next: member === nextAccount })),
+    ...keyMembers(access).map((member) => (nextAccount ? { ...member, next: false } : member)),
+  ];
+  const working = members.some((member) => member.state === 'AVAILABLE' || member.state === 'RUNNING');
+  const stops = members.flatMap((member) => (member.state === 'SPENT' && member.resetsAt ? [member.resetsAt] : []));
+  // Whether waiting brings anything back: not when every account is signed out and every key refused or
+  // switched off.
+  const revives =
+    accounts.some((member) => member.state !== 'SIGNED_OUT') ||
+    access.keys.some((key) => key.enabled && key.state === 'ACTIVE');
+  return {
+    ...own,
+    members,
+    resetsAt: !working && stops.length > 0 ? earliest(stops) : null,
+    unavailable: revives
+      ? null
+      : accounts.length > 0
+        ? 'Signed out'
+        : access.keys.length > 0
+          ? 'No key can run'
+          : 'Not signed in',
+    shared: access,
+  };
+}
+
+const earliest = (stops: string[]): string => stops.reduce((a, b) => (Date.parse(a) <= Date.parse(b) ? a : b));
+
+function keyMembers(pool: SharedPool): PoolMember[] {
+  // The viewer's own keys first while the pool starts a person's sessions on theirs (`ownKeyFirst`): the
+  // order a session of theirs takes them in.
+  const keys = pool.ownKeyFirst
+    ? [...pool.keys].sort((a, b) => Number(b.contributor.you) - Number(a.contributor.you))
+    : pool.keys;
+  return keys.map((key) => {
     const state = keyState(key);
     return {
       id: key.id,
@@ -146,6 +218,9 @@ export function sharedPoolAsProviderPool(pool: SharedPool): ProviderPool {
       key,
     };
   });
+}
+
+function keysPool(pool: SharedPool, members: PoolMember[]): ProviderPool {
   const free = members.some((member) => member.state === 'AVAILABLE' || member.state === 'RUNNING');
   const runnable = pool.keys.some((key) => key.enabled && key.state === 'ACTIVE');
   const stops = members.flatMap((member) => (member.state === 'SPENT' && member.resetsAt ? [member.resetsAt] : []));
@@ -155,7 +230,7 @@ export function sharedPoolAsProviderPool(pool: SharedPool): ProviderPool {
     label: pool.label,
     // The EARLIEST of the stops, as an account pool's own `resetsAt` is: one key free of its reason is
     // enough for work to continue, whether that is the month turning or OpenAI's mark running out.
-    resetsAt: !free && stops.length > 0 ? stops.reduce((a, b) => (Date.parse(a) <= Date.parse(b) ? a : b)) : null,
+    resetsAt: !free && stops.length > 0 ? earliest(stops) : null,
     unavailable: runnable ? null : pool.keys.length === 0 ? 'No keys' : 'No key can run',
     members,
     shared: pool,
