@@ -634,8 +634,9 @@ agy 不报上下文窗口大小，按模型维护一张表（阶段 1 定值；�
 
 ## 11. 真实 key 待补项
 
-runner 上没有真实 Gemini key。拿到 key 后用同一套脚本（去掉 `GOOGLE_GEMINI_BASE_URL`，key 从文件读、不进日志）补这些，
-并把样本加进 `src/runner-go/testdata/antigravity/`：
+runner 上没有真实 Gemini key。owner 把 key 写进 runner 上的 `/root/.config/orbit/gemini-api-key` 后，用同一套脚本
+（去掉 `GOOGLE_GEMINI_BASE_URL`，`GEMINI_API_KEY` 只从这个文件读，不进日志、评论和提交）补这些，并把样本加进
+`src/runner-go/testdata/antigravity/`：
 
 1. 真实模型的思考：stream-json 里到底有没有思考文本（mock 下没有）。
 2. `cache_read_tokens` 在多轮里的实际值，确认 §9.3 的读数取法。
