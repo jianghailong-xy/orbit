@@ -45,7 +45,7 @@ node src/web/scripts/audit-antd.mjs
 node src/web/scripts/audit-antd.mjs --json > /tmp/orbit-antd-current.json
 
 # 验证扫描器识别 imports/aliases/types/mocks/选择器/ref，且图标独立存在时不阻塞退役。
-node src/web/scripts/audit-antd.test.mjs
+node src/web/scripts/audit-antd-selfcheck.mjs
 
 # 验证完整归属、37种导入契约、测试全集、CSS逐命中覆盖，并与钉住基线逐字段比较。
 # 仅允许 HEAD 因交付提交而改变；scopeHash/files/counts 等必须相同。
@@ -94,8 +94,33 @@ npm run test:ui-migration -w @orbit/web
 
 新旧组件共存时，各页面批次按本清单重验主题、层叠、嵌套弹层、焦点恢复与手机触摸；CSS 区段只清当前迁移产生的遗留。不要删除独立图标、全局业务样式，或通过降低断言与覆盖截图掩盖差异。
 
-## 本次验证记录
+## 原始交付验证记录
 
 审计自测、两次 JSON 字节一致性、机器/独立集合计数、149个源文件归属、37种导入契约、287个测试及26个 CSS 区段完整性均通过。退役命令按预期返回1；仅图标 source/manifest/lockfile 的自测通过。`git diff --check` 通过，生产界面文件差异为零。
 
 本次未运行 Web 完整构建/测试或浏览器，也未声称取得视觉或性能证据；这些属于 P0.2 及后续阶段。本清单的静态扫描局限已同时保存于报告 `limitations`，人工热点及复查方法见上述索引。
+
+## 集成检查修复与复现
+
+原交付 `843886cc3c498e2fa70570243cb76c13bcf69644` 的 Node 自检使用了 Vitest 会收集的文件名，导致完整检查报 `No test suite found`。本轮仅将其改名为 `audit-antd-selfcheck.mjs` 并同步命令引用，所有断言逐字节保留；不修改 Vitest 发现规则、生产源码、依赖声明或合并条件。
+
+本轮起点为 `ef53a2e0095c5349ae958bc3ce97c084944bb575`，通过 `2cf0a3bed7777f4cd02948389f3cc798d63df555` 原样恢复原交付九项成果。项目配置的集成目标为 `project/34ZZeq0e3IR65GVm2kAs7`；检查时本地和 origin 均未提供该 ref，首次集成将从上游 `main` 开始。读取远端得到 `fd61b7a91806494c720f7eb5ad0459503ec6e4bc`，其 `src/web`、`src/shared`、根 package.json/lockfile 与本轮起点完全相同。原会话没有成功合并回执，本记录不声称成果已进入项目分支。
+
+起点相对历史基线已有 `WorkspaceView.tsx`、`WorkspaceView.sessionMenu.test.tsx`、`index.css` 三处文件变化，源于既有会话菜单修复。逐文件复查确认文件集合、导入及忽略行号后的审计命中相同：仍为93个 antd 生产文件、64个 antd 测试、54个含 `.ant-*` 的测试、80个图标生产文件；历史归属与契约仍覆盖全部现存依赖。当前源码 hash 与历史不同是预期事实，历史 JSON 和行号均未覆盖。
+
+在后续源码已变化的工作树中，使用独立历史工作树复现，不把当前报告冒充历史报告：
+
+```sh
+antd_repro_dir=$(mktemp -d /tmp/orbit-antd-repro.XXXXXX)
+git worktree add --detach "$antd_repro_dir" 1068a14b899911838526111b6814394e99762aaf
+mkdir -p "$antd_repro_dir/src/web/scripts" "$antd_repro_dir/docs/evidence"
+cp src/web/scripts/audit-antd.mjs src/web/scripts/audit-antd-selfcheck.mjs src/web/scripts/verify-antd-inventory.mjs "$antd_repro_dir/src/web/scripts/"
+cp -R docs/evidence/base-ui-migration "$antd_repro_dir/docs/evidence/"
+node "$antd_repro_dir/src/web/scripts/audit-antd-selfcheck.mjs"
+node "$antd_repro_dir/src/web/scripts/audit-antd.mjs" --json > /tmp/orbit-antd-reproduced.json
+node "$antd_repro_dir/src/web/scripts/verify-antd-inventory.mjs" /tmp/orbit-antd-reproduced.json
+```
+
+本轮审计自检、两次当前 JSON 字节一致性及历史源码复现均通过；覆盖校验为149个源文件归属、37种导入契约、287个测试、182行上的187个 CSS 命中。当前退役命令退出1，正确报告203个阻塞文件。运行环境为 Linux、Node v26.10.0、npm 11.19.1、Vitest 5.0.2；使用现有安装的根目录和 Web 工作区依赖副本，并在本树构建 `@orbit/shared`。首次构建因未复制 Web 工作区内的 `@types/react-dom` 而退出1，补齐现有依赖后重跑完整合并命令；未改源码或锁文件绕过该环境问题。
+
+修复后 `npm run build -w @orbit/web && npm run test -w @orbit/web` 退出 **0**：构建通过，287个测试文件及3527个用例全部通过（Vitest 170.62s），没有 `No test suite found`。README 上述独立历史工作树步骤也已实跑，产物与历史 JSON 完全相等（包含基线提交和 scopeHash）。本轮未执行浏览器视觉、行为或性能基线；这些仍由 P0.2 负责。
