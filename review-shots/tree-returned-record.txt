@@ -1,0 +1,152 @@
+Attributes: Application, 0x114c2abc0, pid: 39804, label: 'MoveProbe'
+Element subtree:
+ →Application, 0x114c2abc0, pid: 39804, label: 'MoveProbe'
+    Window (Main), 0x114c29cc0, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x114c29e00, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x114c29f40, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x114c2a080, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x114c2a1c0, {{0.0, 0.0}, {402.0, 874.0}}
+              Other, 0x114c2a300, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x114c2a440, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                  Button, 0x114c2a580, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Back'
+                  Other, 0x114c2a6c0, {{80.0, 66.7}, {242.0, 34.7}}
+                    Other, 0x114c2a800, {{80.0, 66.7}, {242.0, 34.7}}
+                      Button, 0x114c2a940, {{80.0, 66.7}, {242.0, 34.7}}, label: '执行任务：审查方退回的 P1-3 修复, Waiting for your reply · Open · 8m ago'
+                        StaticText, 0x114c2aa80, {{80.2, 66.7}, {241.7, 20.3}}, label: '执行任务：审查方退回的 P1-3 修复'
+                        StaticText, 0x114c29b80, {{101.3, 88.0}, {199.3, 13.3}}, label: 'Waiting for your reply · Open · 8m ago'
+                  Other, 0x114beabc0, {{346.0, 66.0}, {36.0, 36.0}}, identifier: 'square.and.arrow.up', label: 'Share session'
+                    Other, 0x114bebac0, {{346.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x114beaa80, {{349.7, 66.0}, {28.7, 36.0}}, identifier: 'square.and.arrow.up', label: 'Share session'
+                Other, 0x114bea440, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x114bebd40, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x114beb480, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x114beb700, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x114beb5c0, {{0.0, 148.0}, {402.0, 571.0}}
+                        CollectionView, 0x114beb200, {{0.0, 0.0}, {402.0, 719.0}}
+                          Other, 0x114beb340, {{0.0, -1635.3}, {402.0, 3792.3}}
+                          Cell, 0x114beaf80, {{0.0, -128.3}, {402.0, 280.0}}
+                            Other, 0x114beb0c0, {{0.0, -128.3}, {402.0, 280.0}}
+                              Other, 0x114beae40, {{0.0, -128.3}, {402.0, 280.0}}
+                                Other, 0x114bead00, {{0.0, -128.3}, {402.0, 280.0}}
+                            Other, 0x114bea800, {{0.0, -128.3}, {402.0, 280.0}}
+                              Other, 0x114bea940, {{0.0, -128.3}, {402.0, 280.0}}
+                                Other, 0x114bea6c0, {{0.0, -128.3}, {402.0, 280.0}}
+                                  TextView, 0x114bebe80, {{16.0, 0.0}, {370.0, 145.7}}, value: All six P1 review ...
+                                    TextView, 0x114bebc00, {{16.0, -122.3}, {370.0, 267.6}}, label: 'All six P1 review findings are fixed and pushed to orbit/p1-1c207b at commit 59d98153ef85c565646fede291f66f61940573c7. This branch also carries P0, P1 and the attribution follow-up merged onto current main. One rename: P1’s expectReply flag is now replyBy, because the deadline is what it carries. PG 2298/2298, web 1,204 files green; JS tests did not run on CI.'
+                                    Other, 0x114beb840, {{353.0, -122.3}, {30.0, 268.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x114beb980, {{380.0, -119.3}, {3.0, 262.0}}
+                                    Other, 0x114be0140, {{16.0, 112.7}, {370.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x114bfa300, {{19.0, 139.7}, {364.0, 3.0}}
+                          Other, 0x114bf9040, {{0.0, 0.0}, {402.0, 719.0}}
+                            Other, 0x114bf9180, {{0.0, 0.0}, {402.0, 170.8}}
+                          Other, 0x114bf92c0, {{0.0, 0.0}, {402.0, 719.0}}
+                            Other, 0x114bf9400, {{0.0, 0.0}, {402.0, 170.8}}
+                              Image, 0x114bfa940, {{-120.0, -166.0}, {642.0, 332.0}}, identifier: 'AdditionalDimmingOverlay'
+                              Other, 0x114bfbe80, {{0.0, 0.0}, {402.0, 106.0}}
+                              Other, 0x114bfa800, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x114bf8000, {{0.0, 0.0}, {402.0, 170.8}}
+                              Other, 0x114bf8780, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x114bf8640, {{0.0, 0.0}, {402.0, 170.8}}
+                              Other, 0x114bf83c0, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x114bf8140, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x114bf8c80, {{0.0, 0.0}, {402.0, 170.8}}
+                          Cell, 0x114bf8dc0, {{0.0, 151.7}, {402.0, 188.0}}
+                            Other, 0x114bf8f00, {{0.0, 151.7}, {402.0, 188.0}}
+                              Other, 0x114bfa440, {{0.0, 151.7}, {402.0, 188.0}}
+                                Other, 0x114bfa6c0, {{0.0, 151.7}, {402.0, 188.0}}
+                            Other, 0x114bfa580, {{0.0, 151.7}, {402.0, 188.0}}
+                              Other, 0x114bf88c0, {{0.0, 151.7}, {402.0, 188.0}}
+                                Other, 0x114bf8a00, {{0.0, 151.7}, {402.0, 188.0}}
+                                  Image, 0x114bf8b40, {{27.3, 168.3}, {10.3, 10.3}}, identifier: 'arrow.uturn.backward', label: 'Undo'
+                                  StaticText, 0x114bf8280, {{45.0, 165.7}, {163.3, 15.7}}, label: 'Sent back by the reviewer'
+                                  StaticText, 0x114bf8500, {{346.7, 166.8}, {29.3, 13.3}}, label: '13:33'
+                                  Button, 0x114bf9540, {{26.0, 187.3}, {202.3, 20.3}}, label: '会话间消息参数与回复设计'
+                                  StaticText, 0x114bf9f40, {{26.0, 213.7}, {304.0, 42.3}}, label: '“Two of the six findings are not fixed on the branch.”'
+                                  StaticText, 0x114bfa080, {{26.0, 264.0}, {50.3, 15.7}}, label: 'Problem'
+                                  StaticText, 0x114bfa1c0, {{98.0, 262.0}, {209.3, 18.0}}, label: 'P1-3 still sends the reply twice'
+                                  StaticText, 0x114bf9900, {{26.0, 288.0}, {50.3, 15.7}}, label: 'Problem'
+                                  StaticText, 0x114bf9a40, {{98.0, 286.0}, {111.7, 18.0}}, label: 'P1-5 has no test'
+                                  Button, 0x114bf9b80, {{26.0, 310.0}, {156.0, 15.7}}, label: '⊕ Orbit attached: context'
+                          Cell, 0x114bf9e00, {{0.0, 339.7}, {402.0, 344.3}}
+                            Other, 0x114bf9cc0, {{0.0, 339.7}, {402.0, 344.3}}
+                              Other, 0x114bf9680, {{0.0, 339.7}, {402.0, 344.3}}
+                                Other, 0x114c1bac0, {{0.0, 339.7}, {402.0, 344.3}}
+                            Other, 0x114c1b700, {{0.0, 339.7}, {402.0, 344.3}}
+                              Other, 0x114c1b840, {{0.0, 339.7}, {402.0, 344.3}}
+                                Other, 0x114c1b5c0, {{0.0, 339.7}, {402.0, 344.3}}
+                                  Image, 0x114c1b480, {{34.7, 364.3}, {12.7, 12.7}}, identifier: 'checkmark.seal.fill', label: 'Verified', Selected
+                                  StaticText, 0x114c1af80, {{60.0, 360.5}, {206.0, 20.3}}, label: 'Confirm this task is done?'
+                                  StaticText, 0x114c1b0c0, {{30.0, 393.7}, {65.0, 15.7}}, label: 'From Orbit'
+                                  StaticText, 0x114c1b340, {{30.0, 421.3}, {180.3, 20.3}}, label: '审查方退回的 P1-3 修复'
+                                  StaticText, 0x114c1b200, {{30.0, 444.7}, {176.0, 15.7}}, label: 'You decide when this is done'
+                                  StaticText, 0x114c1abc0, {{212.0, 446.7}, {13.7, 13.3}}, label: 't9'
+                                  StaticText, 0x114c1ad00, {{40.0, 480.3}, {61.3, 13.3}}, label: 'REVIEW · '
+                                  StaticText, 0x114c1ae40, {{101.3, 480.3}, {131.3, 13.3}}, label: '会话间消息参数与回复设计'
+                                  StaticText, 0x114c1a800, {{232.7, 480.3}, {54.7, 13.3}}, label: ' · 13:33'
+                                  StaticText, 0x114c1a940, {{314.3, 480.3}, {47.7, 13.3}}, label: '59d9815'
+                                  StaticText, 0x114c1aa80, {{40.0, 499.7}, {173.3, 20.3}}, label: 'Returned to the agent'
+                                  StaticText, 0x114c1a080, {{40.0, 526.0}, {304.0, 42.3}}, label: '“Two of the six findings are not fixed on the branch.”'
+                                  Button, 0x114c1a580, {{40.0, 574.3}, {322.0, 18.0}}, label: 'Problem, P1-3 still sends the reply twice'
+                                    StaticText, 0x114c1a6c0, {{40.0, 576.3}, {50.3, 15.7}}, label: 'Problem'
+                                    StaticText, 0x114c1a300, {{132.0, 574.3}, {209.3, 18.0}}, label: 'P1-3 still sends the reply twice'
+                                  Button, 0x114c1a440, {{40.0, 598.3}, {322.0, 18.0}}, label: 'Problem, P1-5 has no test'
+                                    StaticText, 0x114c1a1c0, {{40.0, 600.3}, {50.3, 15.7}}, label: 'Problem'
+                                    StaticText, 0x114c19f40, {{132.0, 598.3}, {111.7, 18.0}}, label: 'P1-5 has no test'
+                                  StaticText, 0x114c19a40, {{40.0, 622.3}, {299.3, 33.7}}, label: 'The agent got this as its next message. You were not asked.'
+                          Cell, 0x114c19e00, {{0.0, 684.0}, {402.0, 34.0}}
+                            Other, 0x114c19cc0, {{0.0, 684.0}, {402.0, 34.0}}
+                              Other, 0x114c19b80, {{0.0, 684.0}, {402.0, 34.0}}
+                                Other, 0x114c197c0, {{0.0, 684.0}, {402.0, 34.0}}
+                            Other, 0x114c19900, {{0.0, 684.0}, {402.0, 34.0}}
+                              Other, 0x114c19540, {{0.0, 684.0}, {402.0, 34.0}}
+                                Other, 0x114c19680, {{0.0, 684.0}, {402.0, 34.0}}
+                                  TextView, 0x114c18b40, {{16.0, 690.0}, {316.0, 22.0}}, value: Fixing P1-3 and ad...
+                                    TextView, 0x114c19040, {{16.0, 690.0}, {315.4, 22.0}}, label: 'Fixing P1-3 and adding the P1-5 test now.'
+                                    Other, 0x114c19180, {{299.0, 690.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x114c192c0, {{326.0, 673.0}, {3.0, 36.0}}
+                                    Other, 0x114c19400, {{16.0, 698.0}, {316.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x114c18c80, {{19.0, 706.0}, {310.0, 3.0}}
+                          Cell, 0x114c18dc0, {{0.0, 718.0}, {402.0, 1.0}}
+                            Other, 0x114c18f00, {{0.0, 718.0}, {402.0, 1.0}}
+                              Other, 0x114c18780, {{0.0, 718.0}, {402.0, 1.0}}
+                                Other, 0x114c18a00, {{0.0, 718.0}, {402.0, 1.0}}
+                            Other, 0x114c188c0, {{0.0, 718.0}, {402.0, 1.0}}
+                              Other, 0x114c18640, {{0.0, 718.0}, {402.0, 1.0}}
+                                Other, 0x114c18280, {{0.0, 718.0}, {402.0, 1.0}}
+                                  Other, 0x114c18500, {{0.0, 718.0}, {402.0, 1.0}}
+                          Other, 0x114c183c0, {{369.0, 148.0}, {30.0, 571.0}}, label: 'Vertical scroll bar, 2 pages', value: 100%
+                            Other, 0x114c18140, {{396.0, 334.3}, {3.0, 381.7}}
+                          Other, 0x114c18000, {{369.0, 148.0}, {30.0, 571.0}}, label: 'Vertical scroll bar, 2 pages', value: 100%
+                            Other, 0x114be4000, {{396.0, 334.3}, {3.0, 381.7}}
+                        Button, 0x114be4140, {{0.0, 116.0}, {402.0, 32.0}}, label: 'Jump to your last question'
+                          StaticText, 0x114be4280, {{16.0, 124.2}, {97.0, 15.7}}, label: '↑ Your question'
+                          StaticText, 0x114be43c0, {{121.0, 123.0}, {233.7, 18.0}}, label: '执行任务：审查方退回的 P1-3 修复'
+                          Other, 0x114be4500, {{0.0, 116.0}, {402.0, 32.0}}
+                        Other, 0x114be4640, {{201.0, 739.0}, {0.0, 0.0}}
+                        TextView, 0x114be4780, {{32.0, 754.0}, {338.0, 22.0}}
+                          StaticText, 0x114be48c0, {{32.0, 754.0}, {338.0, 20.3}}, label: 'Message…'
+                          Other, 0x114be4a00, {{337.0, 754.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x114be4b40, {{364.0, 737.0}, {3.0, 36.0}}
+                          Other, 0x114be4c80, {{32.0, 762.0}, {338.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                            Other, 0x114be4dc0, {{35.0, 770.0}, {332.0, 3.0}}
+                        Button, 0x114be4f00, {{24.0, 790.0}, {32.0, 32.0}}, label: 'Add'
+                          Button, 0x114be5040, {{24.0, 790.0}, {32.0, 32.0}}
+                            Image, 0x114be5180, {{24.0, 790.0}, {32.0, 32.0}}, identifier: 'plus', label: 'Add'
+                        Button, 0x114be52c0, {{64.0, 797.0}, {33.0, 18.0}}, label: 'Auto'
+                          Button, 0x114be5400, {{64.0, 797.0}, {33.0, 18.0}}
+                            StaticText, 0x114be5540, {{64.0, 797.0}, {33.0, 18.0}}, label: 'Auto'
+                        Button, 0x114be5680, {{153.3, 797.0}, {160.7, 18.0}}, label: 'claude-opus-5, Default'
+                          Button, 0x114be57c0, {{153.3, 797.0}, {160.7, 18.0}}
+                            StaticText, 0x114be5900, {{153.3, 797.0}, {106.3, 18.0}}, label: 'claude-opus-5'
+                            StaticText, 0x114be5a40, {{264.7, 797.0}, {49.3, 18.0}}, label: 'Default'
+                        Button, 0x114be5b80, {{322.1, 798.1}, {15.8, 15.8}}, label: 'Context window not reported yet · 1M window'
+                        Button, 0x114be5cc0, {{346.0, 790.0}, {32.0, 32.0}}, identifier: 'arrow.up.circle.fill', label: 'Arrow Up Circle', Disabled
+                Other, 0x114be5e00, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x114be5f40, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x114c2abc0, pid: 39804, label: 'MoveProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.moveprobe'
+  Output: {
+    Application, 0x114be6080, pid: 39804, label: 'MoveProbe'
+  }

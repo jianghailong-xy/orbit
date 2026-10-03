@@ -1,0 +1,133 @@
+Attributes: Application, 0x114252940, pid: 30245, label: 'MoveProbe'
+Element subtree:
+ →Application, 0x114252940, pid: 30245, label: 'MoveProbe'
+    Window (Main), 0x114250f00, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x114250000, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x114250140, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x114250280, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x1142503c0, {{0.0, 0.0}, {402.0, 874.0}}
+              Other, 0x114250500, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x114250640, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                  Button, 0x114250780, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Back'
+                  Other, 0x1142508c0, {{80.0, 66.7}, {242.0, 34.7}}
+                    Other, 0x114250a00, {{80.0, 66.7}, {242.0, 34.7}}
+                      Button, 0x114250b40, {{80.0, 66.7}, {242.0, 34.7}}, label: '执行任务：会话间请求与回复：P1 审查发现的问题已修复, Waiting for your confirmation · Open · just now'
+                        StaticText, 0x114250c80, {{84.0, 66.7}, {234.0, 20.3}}, label: '执行任务：会话间请求与回复：P1 审查发现的问题已修复'
+                        StaticText, 0x114250dc0, {{82.2, 88.0}, {237.7, 13.3}}, label: 'Waiting for your confirmation · Open · just now'
+                  Other, 0x114252580, {{346.0, 66.0}, {36.0, 36.0}}, identifier: 'square.and.arrow.up', label: 'Share session'
+                    Other, 0x1142526c0, {{346.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x114252800, {{349.7, 66.0}, {28.7, 36.0}}, identifier: 'square.and.arrow.up', label: 'Share session'
+                Other, 0x114252a80, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x114252bc0, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x114252d00, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x114252e40, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x114252f80, {{0.0, 186.3}, {402.0, 532.7}}
+                        CollectionView, 0x1142530c0, {{0.0, 0.0}, {402.0, 719.0}}
+                          Other, 0x114253200, {{0.0, -2016.3}, {402.0, 4173.3}}
+                          Cell, 0x114253340, {{0.0, -201.3}, {402.0, 919.3}}
+                            Other, 0x114253480, {{0.0, -201.3}, {402.0, 919.3}}
+                              Other, 0x1142535c0, {{0.0, -201.3}, {402.0, 919.3}}
+                                Other, 0x114253700, {{0.0, -201.3}, {402.0, 919.3}}
+                            Other, 0x114253840, {{0.0, -201.3}, {402.0, 919.3}}
+                              Other, 0x114253980, {{0.0, -201.3}, {402.0, 919.3}}
+                                Other, 0x114253ac0, {{0.0, -201.3}, {402.0, 919.3}}
+                                  Image, 0x114253c00, {{34.7, -176.7}, {12.7, 12.7}}, identifier: 'checkmark.seal.fill', label: 'Verified', Selected
+                                  StaticText, 0x114253d40, {{60.0, -180.5}, {206.0, 20.3}}, label: 'Confirm this task is done?'
+                                  StaticText, 0x114253e80, {{30.0, -147.3}, {65.0, 15.7}}, label: 'From Orbit'
+                                  StaticText, 0x11424bac0, {{30.0, -119.7}, {309.3, 42.3}}, label: '会话间请求与回复：P1 审查发现的问题已修复'
+                                  StaticText, 0x11424bc00, {{30.0, -74.3}, {176.0, 15.7}}, label: 'You decide when this is done'
+                                  StaticText, 0x11424bd40, {{212.0, -72.3}, {13.7, 13.3}}, label: 't4'
+                                  Button, 0x11424be80, {{40.0, -46.7}, {322.0, 44.0}}, label: 'WHAT COUNTS AS DONE, 6 items'
+                                    StaticText, 0x11424a580, {{40.0, -31.3}, {129.3, 13.3}}, label: 'WHAT COUNTS AS DONE'
+                                    StaticText, 0x11424a6c0, {{303.0, -32.5}, {45.0, 15.7}}, label: '6 items'
+                                    Image, 0x11424a800, {{356.0, -29.3}, {5.3, 9.3}}, identifier: 'chevron.right', label: 'Forward'
+                                  StaticText, 0x11424a940, {{40.0, 17.3}, {183.7, 13.3}}, label: 'WHAT THE AGENT SAID · 13:31'
+                                  StaticText, 0x11424aa80, {{40.0, 34.7}, {321.3, 152.3}}, label: 'All six P1 review findings are fixed and pushed to orbit/p1-1c207b at commit 59d98153ef85c565646fede291f66f61940573c7. This branch also carries P0, P1 and the attribution follow-up merged onto current main. One rename: P1’s expectReply flag…'
+                                  Button, 0x11424abc0, {{40.0, 191.0}, {322.0, 44.0}}, label: 'Show all'
+                                    StaticText, 0x11424ad00, {{40.0, 205.2}, {50.3, 15.7}}, label: 'Show all'
+                                    Image, 0x11424ae40, {{97.7, 210.3}, {9.3, 5.3}}, identifier: 'chevron.down', label: 'Go Down'
+                                  StaticText, 0x11424af80, {{40.0, 263.0}, {61.3, 13.3}}, label: 'REVIEW · '
+                                  StaticText, 0x11424b0c0, {{101.3, 263.0}, {131.3, 13.3}}, label: '会话间消息参数与回复设计'
+                                  StaticText, 0x11424b200, {{232.7, 263.0}, {54.7, 13.3}}, label: ' · 13:33'
+                                  StaticText, 0x11424b340, {{314.3, 263.0}, {47.7, 13.3}}, label: '59d9815'
+                                  StaticText, 0x11424b480, {{40.0, 282.3}, {269.3, 20.3}}, label: '1 not checked · nothing needs you'
+                                  Button, 0x11424b5c0, {{40.0, 308.7}, {322.0, 18.0}}, label: 'Checked, Criteria 1–6 · PG 2298/2298'
+                                    StaticText, 0x11424b700, {{40.0, 310.7}, {53.3, 15.7}}, label: 'Checked'
+                                    StaticText, 0x11424b840, {{132.0, 308.7}, {192.0, 18.0}}, label: 'Criteria 1–6 · PG 2298/2298'
+                                  Button, 0x11424b980, {{40.0, 332.7}, {322.0, 18.0}}, label: 'Not checked, JS tests never ran on CI'
+                                    StaticText, 0x114260000, {{40.0, 334.7}, {76.7, 15.7}}, label: 'Not checked'
+                                    StaticText, 0x114260140, {{132.0, 332.7}, {162.7, 18.0}}, label: 'JS tests never ran on CI'
+                                  Button, 0x114260280, {{40.0, 356.7}, {322.0, 18.0}}, label: 'Left open, 4 optional review items'
+                                    StaticText, 0x1142603c0, {{40.0, 358.7}, {57.7, 15.7}}, label: 'Left open'
+                                    StaticText, 0x114260500, {{132.0, 356.7}, {158.3, 18.0}}, label: '4 optional review items'
+                                  StaticText, 0x114260640, {{40.0, 380.7}, {275.7, 42.3}}, label: '“OK to confirm. Merge after JS runs on CI.”'
+                                  StaticText, 0x114260780, {{42.0, 453.0}, {95.3, 13.3}}, label: 'IF YOU CONFIRM'
+                                  Image, 0x1142608c0, {{46.7, 478.7}, {9.7, 10.7}}, identifier: 'play.fill', label: 'Play'
+                                  StaticText, 0x114260a00, {{70.0, 474.3}, {226.7, 18.0}}, label: 'Starts 1 task waiting on this one'
+                                  StaticText, 0x114260b40, {{70.0, 493.3}, {287.0, 15.7}}, label: '会话间消息署名：自动重试遇到请求、手动 Retry、计数口径三处待定'
+                                  Image, 0x114260c80, {{45.0, 521.0}, {12.0, 12.0}}, identifier: 'arrow.triangle.branch', label: 'Divide'
+                                  StaticText, 0x114260dc0, {{70.0, 517.0}, {176.0, 18.0}}, label: 'Not on main yet · +9,432'
+                                  StaticText, 0x114260f00, {{70.0, 536.0}, {281.7, 15.7}}, label: 'orbit/p1-1c207b — confirming doesn’t merge it'
+                                  Button, 0x114261040, {{30.0, 573.7}, {342.0, 34.3}}, label: 'Confirm done'
+                                  Button, 0x114261180, {{30.0, 618.0}, {342.0, 34.3}}, label: 'Chat about this'
+                                  StaticText, 0x1142612c0, {{30.0, 664.3}, {290.3, 33.7}}, label: 'Your next message goes to this agent. The task stays open.'
+                          Other, 0x114261400, {{0.0, 0.0}, {402.0, 719.0}}
+                            Other, 0x114261540, {{0.0, 0.0}, {402.0, 170.8}}
+                          Other, 0x114261680, {{0.0, 0.0}, {402.0, 719.0}}
+                            Other, 0x1142617c0, {{0.0, 0.0}, {402.0, 170.8}}
+                              Image, 0x114261900, {{-120.0, -166.0}, {642.0, 332.0}}, identifier: 'AdditionalDimmingOverlay'
+                              Other, 0x114261a40, {{0.0, 0.0}, {402.0, 106.0}}
+                              Other, 0x114261b80, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x114261cc0, {{0.0, 0.0}, {402.0, 170.8}}
+                              Other, 0x114261e00, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x114261f40, {{0.0, 0.0}, {402.0, 170.8}}
+                              Other, 0x114262080, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x1142621c0, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x114262300, {{0.0, 0.0}, {402.0, 170.8}}
+                          Cell, 0x114262440, {{0.0, 718.0}, {402.0, 1.0}}
+                            Other, 0x114262580, {{0.0, 718.0}, {402.0, 1.0}}
+                              Other, 0x1142626c0, {{0.0, 718.0}, {402.0, 1.0}}
+                                Other, 0x114262800, {{0.0, 718.0}, {402.0, 1.0}}
+                            Other, 0x114262940, {{0.0, 718.0}, {402.0, 1.0}}
+                              Other, 0x114262a80, {{0.0, 718.0}, {402.0, 1.0}}
+                                Other, 0x114262bc0, {{0.0, 718.0}, {402.0, 1.0}}
+                                  Other, 0x114262d00, {{0.0, 718.0}, {402.0, 1.0}}
+                          Other, 0x114262e40, {{369.0, 186.3}, {30.0, 532.7}}, label: 'Vertical scroll bar, 3 pages', value: 100%
+                            Other, 0x114262f80, {{396.0, 460.7}, {3.0, 255.3}}
+                          Other, 0x1142630c0, {{369.0, 186.3}, {30.0, 532.7}}, label: 'Vertical scroll bar, 3 pages', value: 100%
+                            Other, 0x114263200, {{396.0, 460.7}, {3.0, 255.3}}
+                        Button, 0x114263340, {{0.0, 154.3}, {402.0, 32.0}}, label: 'Jump to your last question'
+                          StaticText, 0x114263480, {{16.0, 162.5}, {97.0, 15.7}}, label: '↑ Your question'
+                          StaticText, 0x1142635c0, {{121.0, 161.3}, {239.3, 18.0}}, label: '执行任务：会话间请求与回复：P1 审查发现的问题已修复'
+                          Other, 0x114263700, {{0.0, 154.3}, {402.0, 32.0}}
+                        Other, 0x114263840, {{201.0, 739.0}, {0.0, 0.0}}
+                        TextView, 0x114263980, {{32.0, 754.0}, {338.0, 22.0}}
+                          StaticText, 0x114263ac0, {{32.0, 754.0}, {338.0, 20.3}}, label: 'Message…'
+                          Other, 0x114263c00, {{337.0, 754.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x114263d40, {{364.0, 737.0}, {3.0, 36.0}}
+                          Other, 0x114263e80, {{32.0, 762.0}, {338.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                            Other, 0x114264000, {{35.0, 770.0}, {332.0, 3.0}}
+                        Button, 0x114264140, {{24.0, 790.0}, {32.0, 32.0}}, label: 'Add'
+                          Button, 0x114264280, {{24.0, 790.0}, {32.0, 32.0}}
+                            Image, 0x1142643c0, {{24.0, 790.0}, {32.0, 32.0}}, identifier: 'plus', label: 'Add'
+                        Button, 0x114264500, {{64.0, 797.0}, {33.0, 18.0}}, label: 'Auto'
+                          Button, 0x114264640, {{64.0, 797.0}, {33.0, 18.0}}
+                            StaticText, 0x114264780, {{64.0, 797.0}, {33.0, 18.0}}, label: 'Auto'
+                        Button, 0x1142648c0, {{153.3, 797.0}, {160.7, 18.0}}, label: 'claude-opus-5, Default'
+                          Button, 0x114264a00, {{153.3, 797.0}, {160.7, 18.0}}
+                            StaticText, 0x114264b40, {{153.3, 797.0}, {106.3, 18.0}}, label: 'claude-opus-5'
+                            StaticText, 0x114264c80, {{264.7, 797.0}, {49.3, 18.0}}, label: 'Default'
+                        Button, 0x114264dc0, {{322.1, 798.1}, {15.8, 15.8}}, label: 'Context window not reported yet · 1M window'
+                        Button, 0x114264f00, {{346.0, 790.0}, {32.0, 32.0}}, identifier: 'arrow.up.circle.fill', label: 'Arrow Up Circle', Disabled
+                        Button, 0x114265040, {{0.0, 116.0}, {402.0, 38.3}}, label: '1 open question'
+                          StaticText, 0x114265180, {{32.0, 125.0}, {120.3, 20.3}}, label: '1 open question'
+                          Image, 0x1142652c0, {{375.3, 132.7}, {9.3, 5.3}}, identifier: 'chevron.down', label: 'Go Down'
+                Other, 0x114265400, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x114265540, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x114252940, pid: 30245, label: 'MoveProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.moveprobe'
+  Output: {
+    Application, 0x114265680, pid: 30245, label: 'MoveProbe'
+  }

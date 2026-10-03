@@ -1,0 +1,123 @@
+Attributes: Application, 0x114c3fd40, pid: 40582, label: 'MoveProbe'
+Element subtree:
+ →Application, 0x114c3fd40, pid: 40582, label: 'MoveProbe'
+    Window (Main), 0x114c3d680, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x114c3d7c0, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x114c3d900, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x114c3da40, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x114c3db80, {{0.0, 0.0}, {402.0, 874.0}}
+              Other, 0x114c3dcc0, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x114c3de00, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                  Button, 0x114c3df40, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Back'
+                  Other, 0x114c3e080, {{80.0, 66.7}, {242.0, 34.7}}
+                    Other, 0x114c3e1c0, {{80.0, 66.7}, {242.0, 34.7}}
+                      Button, 0x114c3e300, {{80.0, 66.7}, {242.0, 34.7}}, label: '会话间消息参数与回复设计, Waiting for your reply · Open · 9m ago'
+                        StaticText, 0x114c3e440, {{99.8, 66.7}, {202.3, 20.3}}, label: '会话间消息参数与回复设计'
+                        StaticText, 0x114c3e580, {{101.3, 88.0}, {199.3, 13.3}}, label: 'Waiting for your reply · Open · 9m ago'
+                  Other, 0x114c3e6c0, {{346.0, 66.0}, {36.0, 36.0}}, identifier: 'square.and.arrow.up', label: 'Share session'
+                    Other, 0x114c3fc00, {{346.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x114c2ad00, {{349.7, 66.0}, {28.7, 36.0}}, identifier: 'square.and.arrow.up', label: 'Share session'
+                Other, 0x114c29680, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x114c2ae40, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x114c2af80, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x114c2b0c0, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x114c2b200, {{0.0, 116.0}, {402.0, 603.0}}
+                        CollectionView, 0x114c2b340, {{0.0, 0.0}, {402.0, 719.0}}
+                          Other, 0x114c2b480, {{0.0, -1322.0}, {402.0, 3220.0}}
+                          Other, 0x114c2b5c0, {{0.0, 0.0}, {402.0, 719.0}}
+                            Other, 0x114c2b700, {{0.0, 0.0}, {402.0, 170.8}}
+                          Other, 0x114c2b840, {{0.0, 0.0}, {402.0, 719.0}}
+                          Cell, 0x114c2b980, {{0.0, 116.0}, {402.0, 97.0}}
+                            Other, 0x114c2bac0, {{0.0, 116.0}, {402.0, 97.0}}
+                              Other, 0x114c2bc00, {{0.0, 116.0}, {402.0, 97.0}}
+                                Other, 0x114c2bd40, {{0.0, 116.0}, {402.0, 97.0}}
+                            Other, 0x114c2be80, {{0.0, 116.0}, {402.0, 97.0}}
+                              Other, 0x114c29900, {{0.0, 116.0}, {402.0, 97.0}}
+                                Other, 0x114c29a40, {{0.0, 116.0}, {402.0, 97.0}}
+                                  TextView, 0x114c40000, {{104.0, 130.0}, {270.0, 50.0}}, value: 把会话间消息的参数和回复的设计定下来...
+                                    TextView, 0x114c40140, {{104.0, 130.0}, {270.0, 49.3}}, label: '把会话间消息的参数和回复的设计定下来，并把 P1 的修复派出去。'
+                                    Other, 0x114c40280, {{341.0, 130.0}, {30.0, 50.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x114c403c0, {{368.0, 133.0}, {3.0, 44.0}}
+                                    Other, 0x114c40500, {{104.0, 152.0}, {270.0, 25.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x114c40640, {{107.0, 174.0}, {264.0, 3.0}}
+                                  Button, 0x114c40780, {{317.7, 191.7}, {28.0, 15.0}}, identifier: 'doc.on.doc', label: 'Copy'
+                                  StaticText, 0x114c408c0, {{351.7, 192.3}, {34.3, 13.3}}, label: '1h ago'
+                          Cell, 0x114c40a00, {{0.0, 213.0}, {402.0, 62.0}}
+                            Other, 0x114c40b40, {{0.0, 213.0}, {402.0, 62.0}}
+                              Other, 0x114c40c80, {{0.0, 213.0}, {402.0, 62.0}}
+                                Other, 0x114c40dc0, {{0.0, 213.0}, {402.0, 62.0}}
+                            Other, 0x114c40f00, {{0.0, 213.0}, {402.0, 62.0}}
+                              Other, 0x114c41040, {{0.0, 213.0}, {402.0, 62.0}}
+                                Other, 0x114c41180, {{0.0, 213.0}, {402.0, 62.0}}
+                                  TextView, 0x114c412c0, {{16.0, 219.0}, {354.0, 50.0}}, value: Filed the P1 fix a...
+                                    TextView, 0x114c41400, {{16.0, 219.0}, {354.0, 49.3}}, label: 'Filed the P1 fix as a task; I will review its report when it declares done.'
+                                    Other, 0x114c41540, {{337.0, 219.0}, {30.0, 50.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x114c41680, {{364.0, 222.0}, {3.0, 44.0}}
+                                    Other, 0x114c417c0, {{16.0, 241.0}, {354.0, 25.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x114c41900, {{19.0, 263.0}, {348.0, 3.0}}
+                          Cell, 0x114c41a40, {{0.0, 275.0}, {402.0, 150.0}}
+                            Other, 0x114c41b80, {{0.0, 275.0}, {402.0, 150.0}}
+                              Other, 0x114c41cc0, {{0.0, 275.0}, {402.0, 150.0}}
+                                Other, 0x114c41e00, {{0.0, 275.0}, {402.0, 150.0}}
+                            Other, 0x114c41f40, {{0.0, 275.0}, {402.0, 150.0}}
+                              Other, 0x114c42080, {{0.0, 275.0}, {402.0, 150.0}}
+                                Other, 0x114c421c0, {{0.0, 275.0}, {402.0, 150.0}}
+                                  Image, 0x114c42300, {{27.3, 291.3}, {12.3, 11.0}}, identifier: 'checklist', label: 'checklist'
+                                  StaticText, 0x114c42440, {{47.0, 289.2}, {112.7, 15.7}}, label: 'Review requested'
+                                  Button, 0x114c42580, {{26.0, 310.8}, {330.3, 20.3}}, label: '会话间请求与回复：修复 P1 审查发现的问题'
+                                  StaticText, 0x114c426c0, {{26.0, 337.2}, {70.3, 18.0}}, label: 'Due 14:05'
+                                  Button, 0x114c42800, {{26.0, 361.3}, {145.7, 28.0}}, label: 'Open task session'
+                                  Button, 0x114c42940, {{26.0, 395.2}, {156.0, 15.7}}, label: '⊕ Orbit attached: context'
+                          Cell, 0x114c42a80, {{0.0, 425.0}, {402.0, 34.0}}
+                            Other, 0x114c42bc0, {{0.0, 425.0}, {402.0, 34.0}}
+                              Other, 0x114c42d00, {{0.0, 425.0}, {402.0, 34.0}}
+                                Other, 0x114c42e40, {{0.0, 425.0}, {402.0, 34.0}}
+                            Other, 0x114c42f80, {{0.0, 425.0}, {402.0, 34.0}}
+                              Other, 0x114c430c0, {{0.0, 425.0}, {402.0, 34.0}}
+                                Other, 0x114c43200, {{0.0, 425.0}, {402.0, 34.0}}
+                                  TextView, 0x114c43340, {{16.0, 431.0}, {203.0, 22.0}}, value: Reviewing the bran...
+                                    TextView, 0x114c43480, {{16.0, 431.0}, {202.9, 22.0}}, label: 'Reviewing the branch now.'
+                                    Other, 0x114c435c0, {{186.0, 431.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x114c43700, {{213.0, 414.0}, {3.0, 36.0}}
+                                    Other, 0x114c43840, {{16.0, 439.0}, {203.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x114c43980, {{19.0, 447.0}, {197.0, 3.0}}
+                          Cell, 0x114c43ac0, {{0.0, 459.0}, {402.0, 1.0}}
+                            Other, 0x114c43c00, {{0.0, 459.0}, {402.0, 1.0}}
+                              Other, 0x114c43d40, {{0.0, 459.0}, {402.0, 1.0}}
+                                Other, 0x114c43e80, {{0.0, 459.0}, {402.0, 1.0}}
+                            Other, 0x114c44000, {{0.0, 459.0}, {402.0, 1.0}}
+                              Other, 0x114c44140, {{0.0, 459.0}, {402.0, 1.0}}
+                                Other, 0x114c44280, {{0.0, 459.0}, {402.0, 1.0}}
+                                  Other, 0x114c443c0, {{0.0, 459.0}, {402.0, 1.0}}
+                          Other, 0x114c44500, {{369.0, 116.0}, {30.0, 603.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x114c44640, {{396.0, 709.0}, {3.0, 7.0}}
+                          Other, 0x114c44780, {{369.0, 116.0}, {30.0, 603.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x114c448c0, {{396.0, 709.0}, {3.0, 7.0}}
+                        Other, 0x114c44a00, {{201.0, 739.0}, {0.0, 0.0}}
+                        TextView, 0x114c44b40, {{32.0, 754.0}, {338.0, 22.0}}
+                          StaticText, 0x114c44c80, {{32.0, 754.0}, {338.0, 20.3}}, label: 'Message…'
+                          Other, 0x114c44dc0, {{337.0, 754.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x114c44f00, {{364.0, 737.0}, {3.0, 36.0}}
+                          Other, 0x114c45040, {{32.0, 762.0}, {338.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                            Other, 0x114c45180, {{35.0, 770.0}, {332.0, 3.0}}
+                        Button, 0x114c452c0, {{24.0, 790.0}, {32.0, 32.0}}, label: 'Add'
+                          Button, 0x114c45400, {{24.0, 790.0}, {32.0, 32.0}}
+                            Image, 0x114c45540, {{24.0, 790.0}, {32.0, 32.0}}, identifier: 'plus', label: 'Add'
+                        Button, 0x114c45680, {{64.0, 797.0}, {33.0, 18.0}}, label: 'Auto'
+                          Button, 0x114c457c0, {{64.0, 797.0}, {33.0, 18.0}}
+                            StaticText, 0x114c45900, {{64.0, 797.0}, {33.0, 18.0}}, label: 'Auto'
+                        Button, 0x114c45a40, {{153.3, 797.0}, {160.7, 18.0}}, label: 'claude-opus-5, Default'
+                          Button, 0x114c45b80, {{153.3, 797.0}, {160.7, 18.0}}
+                            StaticText, 0x114c45cc0, {{153.3, 797.0}, {106.3, 18.0}}, label: 'claude-opus-5'
+                            StaticText, 0x114c45e00, {{264.7, 797.0}, {49.3, 18.0}}, label: 'Default'
+                        Button, 0x114c45f40, {{322.1, 798.1}, {15.8, 15.8}}, label: 'Context window not reported yet · 1M window'
+                        Button, 0x114c46080, {{346.0, 790.0}, {32.0, 32.0}}, identifier: 'arrow.up.circle.fill', label: 'Arrow Up Circle', Disabled
+                Other, 0x114c461c0, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x114c46300, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x114c3fd40, pid: 40582, label: 'MoveProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.moveprobe'
+  Output: {
+    Application, 0x114c46440, pid: 40582, label: 'MoveProbe'
+  }

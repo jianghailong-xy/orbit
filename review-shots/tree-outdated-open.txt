@@ -1,0 +1,133 @@
+Attributes: Application, 0x114bfbd40, pid: 36371, label: 'MoveProbe'
+Element subtree:
+ →Application, 0x114bfbd40, pid: 36371, label: 'MoveProbe'
+    Window (Main), 0x114bf97c0, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x114bfaa80, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x114bfabc0, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x114bfad00, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x114bfae40, {{0.0, 0.0}, {402.0, 874.0}}
+              Other, 0x114bfaf80, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x114bfb0c0, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                  Button, 0x114bfb200, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Back'
+                  Other, 0x114bfb340, {{80.0, 66.7}, {242.0, 34.7}}
+                    Other, 0x114bfb480, {{80.0, 66.7}, {242.0, 34.7}}
+                      Button, 0x114bfb5c0, {{80.0, 66.7}, {242.0, 34.7}}, label: '执行任务：登录跳转保留 next 参数, Waiting for your confirmation · Open · 6m ago'
+                        StaticText, 0x114bfb700, {{81.5, 66.7}, {239.0, 20.3}}, label: '执行任务：登录跳转保留 next 参数'
+                        StaticText, 0x114bfb840, {{81.3, 88.0}, {239.3, 13.3}}, label: 'Waiting for your confirmation · Open · 6m ago'
+                  Other, 0x114bfb980, {{346.0, 66.0}, {36.0, 36.0}}, identifier: 'square.and.arrow.up', label: 'Share session'
+                    Other, 0x114bfbac0, {{346.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x114bfbc00, {{349.7, 66.0}, {28.7, 36.0}}, identifier: 'square.and.arrow.up', label: 'Share session'
+                Other, 0x114bf6e40, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x114bf6f80, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x114bf6a80, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x114bf6d00, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x114bf6bc0, {{0.0, 186.3}, {402.0, 532.7}}
+                        CollectionView, 0x114bf70c0, {{0.0, 0.0}, {402.0, 719.0}}
+                          Other, 0x114bf7200, {{0.0, -1946.0}, {402.0, 4239.3}}
+                          Cell, 0x114bf7340, {{0.0, -159.0}, {402.0, 1013.3}}
+                            Other, 0x114bf7480, {{0.0, -159.0}, {402.0, 1013.3}}
+                              Other, 0x114bf75c0, {{0.0, -159.0}, {402.0, 1013.3}}
+                                Other, 0x114bf7700, {{0.0, -159.0}, {402.0, 1013.3}}
+                            Other, 0x114bf7840, {{0.0, -159.0}, {402.0, 1013.3}}
+                              Other, 0x114bf7980, {{0.0, -159.0}, {402.0, 1013.3}}
+                                Other, 0x114bf7ac0, {{0.0, -159.0}, {402.0, 1013.3}}
+                                  Image, 0x114bf7c00, {{34.7, -134.3}, {12.7, 12.7}}, identifier: 'checkmark.seal.fill', label: 'Verified', Selected
+                                  StaticText, 0x114bf7d40, {{60.0, -138.2}, {206.0, 20.3}}, label: 'Confirm this task is done?'
+                                  StaticText, 0x114bf7e80, {{30.0, -105.0}, {65.0, 15.7}}, label: 'From Orbit'
+                                  StaticText, 0x114bfc000, {{30.0, -77.3}, {177.7, 20.3}}, label: '登录跳转保留 next 参数'
+                                  StaticText, 0x114bfc140, {{30.0, -54.0}, {176.0, 15.7}}, label: 'You decide when this is done'
+                                  StaticText, 0x114bfc280, {{212.0, -52.0}, {13.7, 13.3}}, label: 't7'
+                                  Button, 0x114bfc3c0, {{40.0, -26.3}, {322.0, 44.0}}, label: 'WHAT COUNTS AS DONE, 6 items'
+                                    StaticText, 0x114bfc500, {{40.0, -11.0}, {129.3, 13.3}}, label: 'WHAT COUNTS AS DONE'
+                                    StaticText, 0x114bfc640, {{303.0, -12.2}, {45.0, 15.7}}, label: '6 items'
+                                    Image, 0x114bfc780, {{356.0, -9.0}, {5.3, 9.3}}, identifier: 'chevron.right', label: 'Forward'
+                                  StaticText, 0x114bfc8c0, {{40.0, 37.7}, {183.7, 13.3}}, label: 'WHAT THE AGENT SAID · 13:33'
+                                  StaticText, 0x114bfca00, {{40.0, 55.0}, {321.3, 152.3}}, label: 'All six P1 review findings are fixed and pushed to orbit/p1-1c207b at commit 59d98153ef85c565646fede291f66f61940573c7. This branch also carries P0, P1 and the attribution follow-up merged onto current main. One rename: P1’s expectReply flag…'
+                                  Button, 0x114bfcb40, {{40.0, 211.3}, {322.0, 44.0}}, label: 'Show all'
+                                    StaticText, 0x114bfcc80, {{40.0, 225.5}, {50.3, 15.7}}, label: 'Show all'
+                                    Image, 0x114bfcdc0, {{97.7, 230.7}, {9.3, 5.3}}, identifier: 'chevron.down', label: 'Go Down'
+                                  StaticText, 0x114bfcf00, {{40.0, 283.3}, {61.3, 13.3}}, label: 'REVIEW · '
+                                  StaticText, 0x114bfd040, {{101.3, 283.3}, {131.3, 13.3}}, label: '会话间消息参数与回复设计'
+                                  StaticText, 0x114bfd180, {{232.7, 283.3}, {54.7, 13.3}}, label: ' · 13:35'
+                                  StaticText, 0x114bfd2c0, {{314.3, 283.3}, {47.7, 13.3}}, label: '59d9815'
+                                  StaticText, 0x114bfd400, {{40.0, 302.7}, {75.0, 20.3}}, label: 'Outdated'
+                                  StaticText, 0x114bfd540, {{40.0, 329.0}, {316.0, 33.7}}, label: 'Written for 59d9815. The branch is at 7c1e2a0 now, so this says nothing about the last commit.'
+                                  Button, 0x114bfd680, {{40.0, 368.7}, {322.0, 44.0}}, label: 'Show the old review'
+                                    StaticText, 0x114bfd7c0, {{40.0, 382.8}, {121.7, 15.7}}, label: 'Show the old review'
+                                    Image, 0x114bfd900, {{169.0, 388.0}, {9.3, 5.3}}, identifier: 'chevron.up', label: 'Go Up'
+                                  StaticText, 0x114bfda40, {{40.0, 418.7}, {269.3, 20.3}}, label: '1 not checked · nothing needs you'
+                                  Button, 0x114bfdb80, {{40.0, 445.0}, {322.0, 18.0}}, label: 'Checked, Criteria 1–6 · PG 2298/2298'
+                                    StaticText, 0x114bfdcc0, {{40.0, 447.0}, {53.3, 15.7}}, label: 'Checked'
+                                    StaticText, 0x114bfde00, {{132.0, 445.0}, {192.0, 18.0}}, label: 'Criteria 1–6 · PG 2298/2298'
+                                  Button, 0x114bfdf40, {{40.0, 469.0}, {322.0, 18.0}}, label: 'Not checked, JS tests never ran on CI'
+                                    StaticText, 0x114bfe080, {{40.0, 471.0}, {76.7, 15.7}}, label: 'Not checked'
+                                    StaticText, 0x114bfe1c0, {{132.0, 469.0}, {162.7, 18.0}}, label: 'JS tests never ran on CI'
+                                  Button, 0x114bfe300, {{40.0, 493.0}, {322.0, 18.0}}, label: 'Left open, 4 optional review items'
+                                    StaticText, 0x114bfe440, {{40.0, 495.0}, {57.7, 15.7}}, label: 'Left open'
+                                    StaticText, 0x114bfe580, {{132.0, 493.0}, {158.3, 18.0}}, label: '4 optional review items'
+                                  StaticText, 0x114bfe6c0, {{40.0, 517.0}, {275.7, 42.3}}, label: '“OK to confirm. Merge after JS runs on CI.”'
+                                  StaticText, 0x114bfe800, {{42.0, 589.3}, {95.3, 13.3}}, label: 'IF YOU CONFIRM'
+                                  Image, 0x114bfe940, {{46.7, 615.0}, {9.7, 10.7}}, identifier: 'play.fill', label: 'Play'
+                                  StaticText, 0x114bfea80, {{70.0, 610.7}, {226.7, 18.0}}, label: 'Starts 1 task waiting on this one'
+                                  StaticText, 0x114bfebc0, {{70.0, 629.7}, {287.0, 15.7}}, label: '会话间消息署名：自动重试遇到请求、手动 Retry、计数口径三处待定'
+                                  Image, 0x114bfed00, {{45.0, 657.3}, {12.0, 12.0}}, identifier: 'arrow.triangle.branch', label: 'Divide'
+                                  StaticText, 0x114bfee40, {{70.0, 653.3}, {176.0, 18.0}}, label: 'Not on main yet · +9,432'
+                                  StaticText, 0x114bfef80, {{70.0, 672.3}, {281.7, 15.7}}, label: 'orbit/p1-1c207b — confirming doesn’t merge it'
+                                  Button, 0x114bff0c0, {{30.0, 710.0}, {342.0, 34.3}}, label: 'Confirm done'
+                                  Button, 0x114bff200, {{30.0, 754.3}, {342.0, 34.3}}, label: 'Chat about this'
+                                  StaticText, 0x114bff340, {{30.0, 800.7}, {290.3, 33.7}}, label: 'Your next message goes to this agent. The task stays open.'
+                          Other, 0x114bff480, {{0.0, 0.0}, {402.0, 719.0}}
+                            Other, 0x114bff5c0, {{0.0, 0.0}, {402.0, 170.8}}
+                          Other, 0x114bff700, {{0.0, 0.0}, {402.0, 719.0}}
+                            Other, 0x114bff840, {{0.0, 0.0}, {402.0, 170.8}}
+                              Image, 0x114bff980, {{-120.0, -166.0}, {642.0, 332.0}}, identifier: 'AdditionalDimmingOverlay'
+                              Other, 0x114bffac0, {{0.0, 0.0}, {402.0, 106.0}}
+                              Other, 0x114bffc00, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x114bffd40, {{0.0, 0.0}, {402.0, 170.8}}
+                              Other, 0x114bffe80, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x114c10000, {{0.0, 0.0}, {402.0, 170.8}}
+                              Other, 0x114c10140, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x114c10280, {{0.0, 0.0}, {402.0, 170.8}}
+                                Other, 0x114c103c0, {{0.0, 0.0}, {402.0, 170.8}}
+                          Other, 0x114c10500, {{369.0, 186.3}, {30.0, 532.7}}, label: 'Vertical scroll bar, 3 pages', value: 84%
+                            Other, 0x114c10640, {{396.0, 425.3}, {3.0, 244.3}}
+                          Other, 0x114c10780, {{369.0, 186.3}, {30.0, 532.7}}, label: 'Vertical scroll bar, 3 pages', value: 84%
+                            Other, 0x114c108c0, {{396.0, 425.3}, {3.0, 244.3}}
+                        Button, 0x114c10a00, {{179.0, 669.0}, {44.0, 44.0}}, label: 'Scroll to latest'
+                          Image, 0x114c10b40, {{179.0, 669.0}, {44.0, 44.0}}, identifier: 'arrow.down', label: 'Down'
+                          Other, 0x114c10c80, {{179.0, 669.0}, {44.0, 44.0}}
+                        Button, 0x114c10dc0, {{0.0, 154.3}, {402.0, 32.0}}, label: 'Jump to your last question'
+                          StaticText, 0x114c10f00, {{16.0, 162.5}, {97.0, 15.7}}, label: '↑ Your question'
+                          StaticText, 0x114c11040, {{121.0, 161.3}, {231.0, 18.0}}, label: '执行任务：登录跳转保留 next 参数'
+                          Other, 0x114c11180, {{0.0, 154.3}, {402.0, 32.0}}
+                        Other, 0x114c112c0, {{201.0, 739.0}, {0.0, 0.0}}
+                        TextView, 0x114c11400, {{32.0, 754.0}, {338.0, 22.0}}
+                          StaticText, 0x114c11540, {{32.0, 754.0}, {338.0, 20.3}}, label: 'Message…'
+                          Other, 0x114c11680, {{337.0, 754.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x114c117c0, {{364.0, 737.0}, {3.0, 36.0}}
+                          Other, 0x114c11900, {{32.0, 762.0}, {338.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                            Other, 0x114c11a40, {{35.0, 770.0}, {332.0, 3.0}}
+                        Button, 0x114c11b80, {{24.0, 790.0}, {32.0, 32.0}}, label: 'Add'
+                          Button, 0x114c11cc0, {{24.0, 790.0}, {32.0, 32.0}}
+                            Image, 0x114c11e00, {{24.0, 790.0}, {32.0, 32.0}}, identifier: 'plus', label: 'Add'
+                        Button, 0x114c11f40, {{64.0, 797.0}, {33.0, 18.0}}, label: 'Auto'
+                          Button, 0x114c12080, {{64.0, 797.0}, {33.0, 18.0}}
+                            StaticText, 0x114c121c0, {{64.0, 797.0}, {33.0, 18.0}}, label: 'Auto'
+                        Button, 0x114c12300, {{153.3, 797.0}, {160.7, 18.0}}, label: 'claude-opus-5, Default'
+                          Button, 0x114c12440, {{153.3, 797.0}, {160.7, 18.0}}
+                            StaticText, 0x114c12580, {{153.3, 797.0}, {106.3, 18.0}}, label: 'claude-opus-5'
+                            StaticText, 0x114c126c0, {{264.7, 797.0}, {49.3, 18.0}}, label: 'Default'
+                        Button, 0x114c12800, {{322.1, 798.1}, {15.8, 15.8}}, label: 'Context window not reported yet · 1M window'
+                        Button, 0x114c12940, {{346.0, 790.0}, {32.0, 32.0}}, identifier: 'arrow.up.circle.fill', label: 'Arrow Up Circle', Disabled
+                        Button, 0x114c12a80, {{0.0, 116.0}, {402.0, 38.3}}, label: '1 open question'
+                          StaticText, 0x114c12bc0, {{32.0, 125.0}, {120.3, 20.3}}, label: '1 open question'
+                          Image, 0x114c12d00, {{375.3, 132.7}, {9.3, 5.3}}, identifier: 'chevron.down', label: 'Go Down'
+                Other, 0x114c12e40, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x114c12f80, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x114bfbd40, pid: 36371, label: 'MoveProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.moveprobe'
+  Output: {
+    Application, 0x114c130c0, pid: 36371, label: 'MoveProbe'
+  }

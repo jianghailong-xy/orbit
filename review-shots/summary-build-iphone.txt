@@ -1,0 +1,24 @@
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test10SessionList]' started.
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test10SessionList]' passed (27.450 seconds).
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test1UnderReview]' started.
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test1UnderReview]' passed (21.679 seconds).
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test2Reviewed]' started.
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test2Reviewed]' passed (22.838 seconds).
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test3ReviewedInDark]' started.
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test3ReviewedInDark]' passed (18.215 seconds).
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test4NeedsYou]' started.
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test4NeedsYou]' passed (66.726 seconds).
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test5NotReviewed]' started.
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test5NotReviewed]' passed (21.106 seconds).
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test6Outdated]' started.
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test6Outdated]' passed (29.619 seconds).
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test7ConfirmedFirst]' started.
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test7ConfirmedFirst]' passed (31.707 seconds).
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test8Returned]' started.
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test8Returned]' passed (24.995 seconds).
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test9ReviewRequested]' started.
+Test Case '-[MoveProbeUITests.OwnerConfirmationReviewShotTests test9ReviewRequested]' passed (23.184 seconds).
+	 Executed 10 tests, with 0 failures (0 unexpected) in 287.519 (287.542) seconds
+	 Executed 10 tests, with 0 failures (0 unexpected) in 287.519 (287.546) seconds
+	 Executed 10 tests, with 0 failures (0 unexpected) in 287.519 (287.548) seconds
+** TEST SUCCEEDED **

@@ -1,0 +1,4 @@
+B-needs-you: in view after 3 drag(s) at (39.99999999999997, 285.16666666666663, 315.0, 20.333333333333314)
+B-needs-you-press: in view after 3 drag(s) at (30.0, 573.6666666666667, 342.0, 34.33333333333326)
+B-needs-you-other-row: in view after 2 drag(s) at (40.0, 325.0000000000001, 322.0, 44.00000000000006)
+B-needs-you-other: in view after 2 drag(s) at (30.0, 630.3333333333334, 342.0, 34.33333333333326)

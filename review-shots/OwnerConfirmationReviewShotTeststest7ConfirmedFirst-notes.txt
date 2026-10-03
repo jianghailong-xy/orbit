@@ -1,0 +1,1 @@
+confirmed-first: in view after 0 drag(s) at (40.0, 599.6666666666666, 322.0, 34.0)
