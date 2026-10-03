@@ -1448,7 +1448,6 @@ struct AgentSessionRow: View {
                         Text(line.text).font(.orbitListSubtitle)
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
                     }
-                    SessionRequestsLine(session: session)
                 }
                 Spacer()
                 if let n = session.pendingApprovals, n > 0 {
@@ -1502,7 +1501,6 @@ struct AgentSessionRow: View {
                     .foregroundStyle(lineColor(line.tone))
                     .lineLimit(1)
             }
-            SessionRequestsLine(session: session)
         }
         .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
@@ -1536,7 +1534,6 @@ struct AgentSessionRow: View {
                 }
                 Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
             }
-            SessionRequestsLine(session: session)
         }
         .padding(.vertical, 2)
         // Combine the row's text into one VoiceOver element and speak the session's state as its

@@ -10,17 +10,15 @@ import {
   SESSION_REQUEST_ASKS,
   SESSION_REQUEST_STATE_LABEL,
   parseSessionReplies,
-  requestPeersLine,
   withoutReplyBlocks,
 } from '../lib/sessionRequest';
 import { Transcript, type RunEvent } from './Transcript';
-import { SessionRequestsLine } from './WorkspaceView';
 
 /**
  * Session requests on the web (docs/session-request-reply-contract.md §6): the recipient's "From"
  * card says the message asks for a reply and shows where the request stands, read live and refreshed
  * when it moves; the asker's turn that handed outcomes back is drawn as reply cards that open the
- * original request; the list says who is waiting on whom. None of it offers the owner a way to answer.
+ * original request. None of it offers the owner a way to answer.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -233,27 +231,5 @@ describe('the pieces the cards are drawn from', () => {
     expect(withoutReplyBlocks(block)).toBe('');
     expect(withoutReplyBlocks(`${block}\n\n<background-jobs>\n…\n</background-jobs>`)).toBe('<background-jobs>\n…\n</background-jobs>');
     expect(withoutReplyBlocks(undefined)).toBe('');
-  });
-
-  it('says who a list row waits on and who waits on it, and nothing when neither', () => {
-    const peer = (title: string) => ({ requestId: 'r', sessionId: 's', title });
-    expect(requestPeersLine([peer('Worker 2')], [peer('Coordinator')])).toBe('Waiting on Worker 2 · Owes a reply to Coordinator');
-    expect(requestPeersLine([peer('a'), peer('b'), peer('c')], [])).toBe('Waiting on a, b +1');
-    expect(requestPeersLine([], undefined)).toBeNull();
-  });
-});
-
-describe('the session list row', () => {
-  it('shows the line from the row’s own fields, and nothing without them', async () => {
-    await act(async () => {
-      root.render(
-        <SessionRequestsLine
-          session={{ awaitingReplyFrom: [{ requestId: 'r', sessionId: RECIPIENT, title: 'Coordinator' }], owesReplyTo: [] }}
-        />,
-      );
-    });
-    expect(container.querySelector('.session-requests')!.textContent).toBe('Waiting on Coordinator');
-    await act(async () => { root.render(<SessionRequestsLine session={{ awaitingReplyFrom: [], owesReplyTo: [] }} />); });
-    expect(container.querySelector('.session-requests')).toBeNull();
   });
 });

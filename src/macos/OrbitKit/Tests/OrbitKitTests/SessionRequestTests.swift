@@ -4,8 +4,8 @@ import XCTest
 
 /// Session requests on the native clients (docs/session-request-reply-contract.md §6): the recipient's
 /// card knows the message is a request and reads its state live; the asker's turn that handed
-/// outcomes back carries reply cards, not the owner's words; the list rows say who is waiting on
-/// whom, and a live summary clears that when the request closes. The native half of the pair the web
+/// outcomes back carries reply cards, not the owner's words; a live summary clears the session's
+/// open request peers when the request closes. The native half of the pair the web
 /// is held to (`SessionReplyCard.test.tsx`). `SessionRequestCopyParityTests` holds the words to the
 /// browser's, and `SessionRequestWiringTests` holds both shells to drawing the cards.
 final class SessionRequestTests: XCTestCase {
@@ -135,16 +135,7 @@ final class SessionRequestTests: XCTestCase {
 
     // MARK: - the list
 
-    func testTheRowSaysWhoIsWaitingOnWhom() {
-        let peer = { (title: String) in SessionRequestPeer(requestId: "r", sessionId: "s", title: title) }
-        XCTAssertEqual(SessionRequestCopy.peersLine(awaiting: [peer("Worker 2")], owes: [peer("Coordinator")]),
-                       "Waiting on Worker 2 · Owes a reply to Coordinator")
-        XCTAssertEqual(SessionRequestCopy.peersLine(awaiting: [peer("a"), peer("b"), peer("c")], owes: []),
-                       "Waiting on a, b +1")
-        XCTAssertNil(SessionRequestCopy.peersLine(awaiting: [], owes: nil))
-    }
-
-    func testALiveSummaryClearsTheLineWhenTheRequestCloses() throws {
+    func testALiveSummaryClearsThePeersWhenTheRequestCloses() throws {
         let row = try JSONDecoder().decode(Session.self, from: Data("""
             {"id":"s1","status":"AWAITING_INPUT","pendingApprovals":0,
              "awaitingReplyFrom":[{"requestId":"r1","sessionId":"\(Self.recipient)","title":"Coordinator"}],
@@ -161,7 +152,6 @@ final class SessionRequestTests: XCTestCase {
             {"id":"s1","status":"AWAITING_INPUT","pendingApprovals":0,"awaitingReplyFrom":[],"owesReplyTo":[]}
             """.utf8))
         XCTAssertEqual(row.applying(closed).awaitingReplyFrom, [])
-        XCTAssertNil(SessionRequestCopy.peersLine(awaiting: row.applying(closed).awaitingReplyFrom,
-                                                  owes: row.applying(closed).owesReplyTo))
+        XCTAssertEqual(row.applying(closed).owesReplyTo, [])
     }
 }
