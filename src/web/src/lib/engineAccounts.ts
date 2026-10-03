@@ -14,6 +14,13 @@ export function engineKeepsAccounts(engine: string | null | undefined): engine i
   return !!engine && (ACCOUNT_ENGINES as readonly string[]).includes(engine);
 }
 
+/** What an account is called wherever one is named: what the user called it — Default too, once
+ *  renamed in Orbit — else "Default", or the slot's own id when the name it was added under is gone.
+ *  The apiserver's accountLabel names it the same way in a session's transcript. */
+export function accountNameOf(account: Pick<RunnerEngineAccount, 'id' | 'name'>): string {
+  return account.name || (account.id === 'default' ? 'Default' : `Account ${account.id}`);
+}
+
 /** The directory one account's login lives in — a CODEX_HOME, a CLAUDE_CONFIG_DIR. */
 export function accountDir(account: RunnerEngineAccount): string {
   return account.home ?? account.codexHome ?? '';

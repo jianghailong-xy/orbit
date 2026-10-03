@@ -114,6 +114,13 @@ final class RunnersModel {
         await press { _ = try await self.api.repoCleanup(workspaceId: workspaceId) }
     }
 
+    /// One account's name, Default's included. Only a label, kept by the control plane: it asks
+    /// nothing of the machine, so it works with the runner offline.
+    @discardableResult
+    func renameAccount(_ id: String, engine: LoginEngine, account: String, name: String) async -> String? {
+        await press { _ = try await self.api.renameRunnerAccount(id, engine: engine, account: account, name: name) }
+    }
+
     /// One account off the machine. A refusal the machine makes itself (a session is running on it)
     /// comes back as its own words.
     @discardableResult

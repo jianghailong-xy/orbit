@@ -137,6 +137,18 @@ final class CodexAccountsTests: XCTestCase {
         XCTAssertEqual(CodexAccounts.label("c0ffee42", accounts: accounts), "Account c0ffee42")
     }
 
+    func testAnAccountRenamedInOrbitIsNamedByItDefaultIncluded() {
+        let accounts = [account("default", name: "jianghailong.main"), account(pro, name: "Research"), account("c0ffee42", name: "")]
+        XCTAssertEqual(CodexAccounts.label("default", accounts: accounts), "jianghailong.main")
+        XCTAssertEqual(CodexAccounts.label(pro, accounts: accounts), "Research")
+        XCTAssertEqual(CodexAccounts.label("c0ffee42", accounts: accounts), "Account c0ffee42", "an empty name is none")
+        // The picker reads the same rule.
+        let engines = [RunnerEngineHealth(engine: "claude", installed: true, auth: "yes", accounts: accounts)]
+        XCTAssertEqual(SessionProviderChoices.choices(configured: [], engines: engines)
+                        .first { $0.slug == "claude" }?.accounts?.map(\.label),
+                       ["jianghailong.main", "Research", "Account c0ffee42"])
+    }
+
     func testAnIdTheRunnerDoesNotReportRunsOnDefault() {
         XCTAssertEqual(CodexAccounts.onRunner(pro, accounts: both), pro)
         XCTAssertEqual(CodexAccounts.onRunner("c0ffee42", accounts: both), "default")

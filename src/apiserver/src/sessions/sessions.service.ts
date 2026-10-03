@@ -1068,7 +1068,7 @@ export class SessionsService {
     // everything this deliberately lets through.
     const targetRunner = await this.prisma.runner.findFirst({
       where: { id: assignedRunnerId, ownerId },
-      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, planUsage: true },
+      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true, planUsage: true },
     });
     // The Codex or Claude account this session runs on: the one picked for it — which pins it there —
     // else, when its workspace leaves the account to Orbit, the runner's account whose quota resets
@@ -4571,7 +4571,7 @@ export class SessionsService {
     if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin)) return null;
     const runner = await tx.runner.findUnique({
       where: { id: session.assignedRunnerId },
-      select: { engines: true, planUsage: true, capabilities: true },
+      select: { engines: true, accountNames: true, planUsage: true, capabilities: true },
     });
     if (!runner || !runnerCarriesAccounts(runner, engine)) return null;
     const workspace = session.workspaceId
@@ -4598,7 +4598,7 @@ export class SessionsService {
     return {
       ...(codex ? { codexAccount: move.to } : { claudeAccount: move.to }),
       // Said on the `resumed` that reload earns, unless another line is already owed.
-      ...(session.poolSwitchNotice ? {} : { poolSwitchNotice: accountSwitchNotice(engine, move, runner.engines) }),
+      ...(session.poolSwitchNotice ? {} : { poolSwitchNotice: accountSwitchNotice(engine, move, runner) }),
     };
   }
 
@@ -7912,7 +7912,7 @@ export class SessionsService {
           claudeAccount: true,
           claudeAccountPinned: true,
           workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
-          assignedRunner: { select: { engines: true, planUsage: true, capabilities: true } },
+          assignedRunner: { select: { engines: true, accountNames: true, planUsage: true, capabilities: true } },
         },
       });
       const engine: AccountEngine | null =
@@ -7943,14 +7943,14 @@ export class SessionsService {
         const roomier = spent ? accountToMoveTo(engine, accounts, usage, now, current) : null;
         if (roomier) {
           to = roomier;
-          notice = accountSwitchNotice(engine, { from: current, to }, runner.engines);
+          notice = accountSwitchNotice(engine, { from: current, to }, runner);
         }
       } else {
         const row = accounts?.find((entry) => entry.id === account);
         if (!row) throw new BadRequestException("that account is not one this session's runner reports");
         if (row.auth === 'no') throw new ConflictException("that account is signed out on this session's runner");
         to = account;
-        if (to !== current) notice = `Switched to ${accountLabel(engine, to, runner.engines)}`;
+        if (to !== current) notice = `Switched to ${accountLabel(engine, to, runner)}`;
       }
       const moves = to !== current;
       if (moves && !runner.capabilities.includes(engine === AgentProvider.CODEX ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1)) {

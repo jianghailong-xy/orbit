@@ -154,7 +154,7 @@ import {
   type LocalStatusRow,
 } from '../lib/slashCommands';
 import { sessionPlanUsage } from '../lib/planUsage';
-import { accountPlanUsage } from '../lib/engineAccounts';
+import { accountNameOf, accountPlanUsage } from '../lib/engineAccounts';
 import { poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
 import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import {
@@ -6543,13 +6543,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const shownAccountsHere = shownAccountEngine ? accountsOf(runner, shownAccountEngine) : [];
   const shownAccountRow =
     shownAccountsHere.length >= 2
-      ? (shownAccountsHere.find((account) => account.id === shownAccount) ?? { id: 'default', name: undefined })
+      ? (shownAccountsHere.find((account) => account.id === shownAccount) ??
+        // An account the runner does not report runs on Default — under whatever Default is called.
+        shownAccountsHere.find((account) => account.id === 'default') ?? { id: 'default', name: undefined })
       : null;
-  const shownAccountLabel = shownAccountRow
-    ? shownAccountRow.id === 'default'
-      ? 'Default'
-      : shownAccountRow.name || `Account ${shownAccountRow.id}`
-    : null;
+  const shownAccountLabel = shownAccountRow ? accountNameOf(shownAccountRow) : null;
   const shownPlanUsage = shownPool
     ? (shownPoolAccount?.member.planUsage ?? null)
     : (shownProvider === 'codex' || shownProvider === 'claude') && shownAccount !== 'default'

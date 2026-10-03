@@ -27,6 +27,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { TASK_COMPLETION_FENCE_REVISION } from '../tasks/task-completion-criterion';
 import { spaceScope } from './wiki-maintenance';
+import { WIKI_RUN_BASH_TIMEOUT, wikiRunCutOff } from './wiki-maintenance-session';
 import { ensureWikiMaintenanceList, wikiMaintenanceProviderProblem } from './wiki-maintenance-settings';
 
 /**
@@ -404,7 +405,7 @@ function planJobPrompt(input: {
   const lines = [
     `A Wiki plan ${input.kind === 'revise' ? 'redraft' : 'draft'} of the space «${input.title}» (${input.spaceRef}): ${because}.`,
     '',
-    'Run this once, with the Bash tool, and let it finish — it takes an hour or two, and it prints what it did:',
+    `Run this once, with the Bash tool, and let it finish — it takes an hour or two, and it prints what it did. ${WIKI_RUN_BASH_TIMEOUT}:`,
     '',
     `    orbit wiki plan ${command} --space ${input.spaceRef}`,
     '',
@@ -418,6 +419,7 @@ function planJobPrompt(input: {
     'Then report it: task_progress_report with where the run ended, and one task_comment with the summary it printed — '
       + 'the documents, the gate rounds and their errors, the token spend and the time; if it failed, its last lines. '
       + 'Run nothing else, and do not run it again if it fails.',
+    wikiRunCutOff('the job ends failed, and its owner can ask for another.'),
   ];
   if (input.kind === 'revise' && input.instructions) {
     lines.push('', "The owner's instructions, as they were given:", '', ...input.instructions.split('\n').map((line) => `> ${line}`));
@@ -431,7 +433,7 @@ function buildJobPrompt(input: { spaceRef: string; title: string; version: numbe
     `A Wiki documents build of the space «${input.title}» (${input.spaceRef}): its owner confirmed version ${input.version} of the `
       + "space's plan, and its documents are written from it.",
     '',
-    'Run this once, with the Bash tool, and let it finish — it takes a while, and it prints what it did:',
+    `Run this once, with the Bash tool, and let it finish — it can take hours, and it prints what it did. ${WIKI_RUN_BASH_TIMEOUT}:`,
     '',
     `    orbit wiki docs build --space ${input.spaceRef}`,
     '',
@@ -442,6 +444,7 @@ function buildJobPrompt(input: { spaceRef: string; title: string; version: numbe
     'Then report it: task_progress_report with where the run ended, and one task_comment with the summary it printed — the '
       + 'documents and sections written, unchanged and failed, the token spend and the time; if it failed, its last lines. '
       + 'Run nothing else, and do not run it again if it fails.',
+    wikiRunCutOff('the sections it wrote are kept, and a later build leaves them as they are.'),
   ].join('\n');
 }
 

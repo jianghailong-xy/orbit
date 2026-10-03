@@ -207,7 +207,8 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
 public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     /// `default`, or the slot's id — what a session is created with (`codexAccount`).
     public let id: String
-    /// What the user called it. Absent for Default.
+    /// What the user called it: the name it was renamed to in Orbit, else the one it was added under.
+    /// Absent for a Default never renamed.
     public let name: String?
     /// The CLI's own answer for this account: `yes` / `no` / `unknown`.
     public let auth: String?
@@ -335,6 +336,13 @@ public struct StartLoginRequest: Encodable, Sendable {
         self.account = account
         self.accountName = accountName
     }
+}
+
+/// PATCH /runners/:id/accounts/:engine/:account — a new name for one of the runner's accounts,
+/// Default included. Only a label, kept by the control plane: nothing on the machine changes.
+public struct RenameRunnerAccountRequest: Encodable, Sendable {
+    public let name: String
+    public init(name: String) { self.name = name }
 }
 
 /// POST /runners/:id/login/code — hand back the code the sign-in page gave the user.

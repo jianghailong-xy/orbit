@@ -335,7 +335,7 @@ export class QueueService {
     claudeAccount: string | null;
     claudeAccountPinned: boolean;
     workspace: { env: unknown; codexAccount: string | null; claudeAccount: string | null } | null;
-    assignedRunner: { engines: unknown; planUsage: unknown; capabilities: string[] } | null;
+    assignedRunner: { engines: unknown; accountNames: unknown; planUsage: unknown; capabilities: string[] } | null;
   }): Promise<{ codexAccount: string | null | undefined; claudeAccount: string | null | undefined }> {
     const workspace = session.workspace;
     const accounts = {
@@ -370,7 +370,7 @@ export class QueueService {
     // Owed only when no other line is: one already owed (a pool's) is said first, as PoolNotices.owe keeps it.
     await this.prisma.session.updateMany({
       where: { id: session.id, poolSwitchNotice: null },
-      data: { poolSwitchNotice: accountSwitchNotice(engine, move, runner.engines) },
+      data: { poolSwitchNotice: accountSwitchNotice(engine, move, runner) },
     });
     return codex ? { ...accounts, codexAccount: move.to } : { ...accounts, claudeAccount: move.to };
   }
@@ -390,6 +390,8 @@ export class QueueService {
             modelCatalog: true,
             runsAsRoot: true,
             engines: true,
+            // What naming the account it moves to reads (accountSwitchNotice).
+            accountNames: true,
             // What moving it off a spent account before this start reads (accountsForClaim).
             planUsage: true,
             capabilities: true,

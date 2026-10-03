@@ -207,6 +207,18 @@ describe('the runner’s Codex accounts, under the Codex choice', () => {
     expect(accountsOf(choices, 'claude')).toBeUndefined();
   });
 
+  it('lists an account by what it was renamed to in Orbit, Default included', () => {
+    const choices = providerChoices(
+      [],
+      catalog,
+      undefined,
+      codex([{ id: 'default', name: 'jianghailong.main', auth: 'yes' }, { id: '3fa91c2e', name: 'Research', auth: 'yes' }]),
+      [],
+      usage,
+    );
+    expect(accountsOf(choices)?.map((account) => account.label)).toEqual(['jianghailong.main', 'Research']);
+  });
+
   it('lists none for a single account, or for an engine that cannot run', () => {
     expect(accountsOf(providerChoices([], catalog, undefined, codex([{ id: 'default', auth: 'yes' }]), [], usage)))
       .toBeUndefined();
