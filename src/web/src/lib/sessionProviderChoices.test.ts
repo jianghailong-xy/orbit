@@ -45,9 +45,9 @@ const catalog = {
 } as never;
 
 describe('providerChoices', () => {
-  it('always offers the three engines, even with nothing configured', () => {
+  it('always offers the engines, even with nothing configured', () => {
     const choices = providerChoices([], catalog);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'antigravity']);
     expect(choices.every((c) => c.kind === 'engine')).toBe(true);
   });
 
@@ -57,14 +57,48 @@ describe('providerChoices', () => {
       'claude',
       'codex',
       'kimi',
+      'antigravity',
       'deepseek',
       'my-endpoint',
     ]);
-    expect(choices.slice(3).every((c) => c.kind === 'byok')).toBe(true);
+    expect(choices.slice(4).every((c) => c.kind === 'byok')).toBe(true);
   });
 
   it('never offers opencode as a choice — it is not a login engine', () => {
     expect(providerChoices([], catalog).some((c) => c.slug === 'opencode')).toBe(false);
+  });
+
+  it('offers Antigravity as an engine, with the model the runner reports first', () => {
+    const withAgy = {
+      ...(catalog as object),
+      antigravity: [
+        { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', reasoningLevels: ['low', 'medium', 'high'] },
+        { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro', reasoningLevels: ['low', 'high'] },
+      ],
+    } as never;
+    const row = providerChoices([], withAgy).find((c) => c.slug === 'antigravity');
+    expect(row).toMatchObject({ kind: 'engine', label: 'Antigravity', glyphKey: 'antigravity' });
+    expect(row?.modelLabel).toBe('Gemini 3.8 Flash');
+    // Before the runner reports its models, agy picks its own.
+    expect(providerChoices([], catalog).find((c) => c.slug === 'antigravity')?.modelLabel).toBe(
+      'Managed by the provider',
+    );
+  });
+
+  it('holds Antigravity to its CLI being there, and never to a sign-in it does not have', () => {
+    // agy runs on a Gemini API key from the session's environment — possibly the workspace's own,
+    // which the runner's probe of the machine never sees — so a "no" there is not a blocker.
+    const signedOut = providerChoices([], catalog, undefined, [
+      { engine: 'antigravity', installed: true, auth: 'no' },
+    ]);
+    expect(signedOut.find((c) => c.slug === 'antigravity')?.unavailable).toBeUndefined();
+    const missing = providerChoices([], catalog, undefined, [
+      { engine: 'antigravity', installed: false, auth: 'unknown' },
+    ]);
+    expect(missing.find((c) => c.slug === 'antigravity')).toMatchObject({
+      unavailable: 'Not installed',
+      fixEngine: 'antigravity',
+    });
   });
 
   it('drops a configured row that shadows a built-in engine slug', () => {
@@ -86,7 +120,7 @@ describe('providerChoices', () => {
       { engine: 'codex', installed: false, auth: 'unknown' },
       { engine: 'kimi', installed: false, auth: 'unknown' },
     ]);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'deepseek']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'antigravity', 'deepseek']);
     // Hiding it would leave "why is Kimi missing?" with no answer anywhere in the product.
     expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBe('Not installed');
     expect(choices.find((c) => c.slug === 'codex')?.unavailable).toBe('Not installed');
@@ -109,7 +143,7 @@ describe('providerChoices', () => {
       { engine: 'codex', installed: true, auth: 'no' },
       { engine: 'kimi', installed: true, auth: 'unknown' },
     ]);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'antigravity']);
     expect(choices.find((c) => c.slug === 'codex')?.unavailable).toBe('Not signed in');
     // `unknown` is a CLI that wouldn't answer, not a "no" — it stays pickable.
     expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBeUndefined();
@@ -156,11 +190,12 @@ describe('providerChoices', () => {
       'claude',
       'codex',
       'kimi',
+      'antigravity',
     ]);
     const partial = providerChoices([], catalog, undefined, [
       { engine: 'claude', installed: false, auth: 'no' },
     ]);
-    expect(partial.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi']);
+    expect(partial.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'antigravity']);
     // Only the engine the runner actually spoke about carries a reason.
     expect(partial.find((c) => c.slug === 'claude')?.unavailable).toBe('Not installed');
     expect(partial.filter((c) => c.unavailable)).toHaveLength(1);
@@ -264,6 +299,14 @@ describe('brandForProvider', () => {
     expect(brandForProvider('claude', 'Claude').glyphKey).toBe('anthropic');
     expect(brandForProvider('codex', 'Codex').glyphKey).toBe('openai');
     expect(brandForProvider('kimi', 'Kimi').glyphKey).toBe('moonshot');
+  });
+
+  it('gives Antigravity its own mark rather than the Gemini preset’s', () => {
+    // Google ships both, but the Gemini preset is the API reached through another CLI.
+    const { brand, glyphKey } = brandForProvider('antigravity', 'Antigravity');
+    expect(glyphKey).toBe('antigravity');
+    expect(brand).toEqual({ mono: 'A', from: '#3186ff', to: '#00b95c' });
+    expect(PROVIDER_GLYPHS.antigravity).toBeTruthy();
   });
 
   it('resolves every glyph key it hands out to actual artwork', () => {
@@ -427,6 +470,7 @@ describe('account pools among the choices', () => {
       'claude',
       'codex',
       'kimi',
+      'antigravity',
       'claude-accounts',
       'anthropic',
       'anthropic-2',
@@ -474,7 +518,7 @@ describe('shared pools among the choices', () => {
 
   it('offers one after the engines, wearing the Codex mark and counting its keys', () => {
     const choices = providerChoices(configured, catalog, undefined, undefined, [team]);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'team-codex', 'deepseek']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'antigravity', 'team-codex', 'deepseek']);
     const tile = choices.find((c) => c.slug === 'team-codex')!;
     expect(tile).toMatchObject({ kind: 'pool', label: 'Team Codex', poolSize: 3, poolUnit: 'key', glyphKey: 'openai' });
     // Its model is the Codex CLI's own.

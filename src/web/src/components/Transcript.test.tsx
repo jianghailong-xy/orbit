@@ -1376,6 +1376,28 @@ describe('Bash folded row', () => {
   });
 });
 
+describe('Edit card', () => {
+  const editRow = (input: Record<string, unknown>) =>
+    renderToStaticMarkup(
+      <Transcript events={[{ seq: 1, type: 'tool_use', payload: { id: 't1', name: 'Edit', input } }]} />,
+    );
+
+  it('opens onto the diff it was given', () => {
+    const html = editRow({ file_path: '/w/a.ts', old_string: 'const a = 1;', new_string: 'const a = 2;' });
+
+    expect(html).toContain('<div class="chat-tool-row">');
+  });
+
+  it('is just the file when the runtime reports no diff, as Antigravity does', () => {
+    // agy's stream names the edited file and nothing else (the runner maps replace_file_content to
+    // Edit), so there is nothing to open — not an empty diff behind a caret.
+    const html = editRow({ file_path: '/w/a.ts' });
+
+    expect(html).toContain('<b class="chat-path-file">a.ts</b>');
+    expect(html).toContain('chat-tool-row no-detail');
+  });
+});
+
 describe('foreground Shell card', () => {
   const toolUse: RunEvent = {
     seq: 1,
@@ -1701,6 +1723,17 @@ describe('runtime authentication help', () => {
     const html = card('deepseek');
 
     expect(html).toContain('Provider authentication failed');
+    expect(html).not.toContain('opencode auth login');
+  });
+
+  it('names the Gemini key Antigravity runs on, with nothing to sign into', () => {
+    const html = card('antigravity');
+
+    expect(html).toContain('Gemini API key rejected');
+    expect(html).toContain('GEMINI_API_KEY');
+    // agy has no sign-in for the relay to drive, and no configured row in Providers to fix.
+    expect(html).not.toContain('rsi-');
+    expect(html).not.toContain('Update the API key');
     expect(html).not.toContain('opencode auth login');
   });
 });

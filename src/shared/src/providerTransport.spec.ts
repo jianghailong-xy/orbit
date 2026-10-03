@@ -50,6 +50,15 @@ describe('supportsMidTurnSteer', () => {
     expect(supportsMidTurnSteer(AgentProvider.OPENCODE, DECLARED)).toBe(false);
   });
 
+  it('keeps antigravity queueing although it shares claude\'s stream-json transport', () => {
+    // agy keeps one process and an open stdin like claude, but runs a frame written mid-turn as a
+    // turn of its own after the current result (docs/antigravity-runtime-contract.md §8). Filed as
+    // a steer, it would be leased by a loop that refuses it and never re-leased.
+    expect(PROVIDER_TRANSPORTS[AgentProvider.ANTIGRAVITY]).toBe(PROVIDER_TRANSPORTS[AgentProvider.CLAUDE]);
+    expect(supportsMidTurnSteer(AgentProvider.ANTIGRAVITY)).toBe(false);
+    expect(supportsMidTurnSteer(AgentProvider.ANTIGRAVITY, DECLARED)).toBe(false);
+  });
+
   it('says no to a runtime it has never heard of', () => {
     // A configured (BYOK) slug reaches here only through execRuntime; anything else is a
     // runtime this build does not know, and an unknown engine cannot be written to mid-turn.
@@ -84,5 +93,6 @@ describe('supportsTargetBoundCurrentWorkSteer', () => {
     const all = [...ROUTING, SESSION_CODEX_STEER_V1];
     expect(supportsTargetBoundCurrentWorkSteer(AgentProvider.KIMI, all)).toBe(false);
     expect(supportsTargetBoundCurrentWorkSteer(AgentProvider.OPENCODE, all)).toBe(false);
+    expect(supportsTargetBoundCurrentWorkSteer(AgentProvider.ANTIGRAVITY, all)).toBe(false);
   });
 });

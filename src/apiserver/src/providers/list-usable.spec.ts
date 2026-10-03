@@ -44,12 +44,17 @@ test('every built-in engine is listed alongside the configured providers', async
 
   assert.deepEqual(
     listed.map((p) => p.slug),
-    ['claude', 'codex', 'kimi', 'opencode', 'deepseek'],
+    ['claude', 'codex', 'kimi', 'opencode', 'antigravity', 'deepseek'],
   );
   // Which of the two a slug is, since only one of them takes a label or a model list.
   assert.deepEqual(
     listed.filter((p) => p.builtin).map((p) => p.slug),
-    ['claude', 'codex', 'kimi', 'opencode'],
+    ['claude', 'codex', 'kimi', 'opencode', 'antigravity'],
+  );
+  // A built-in runs on itself: Antigravity is agy, not a provider borrowing some other CLI.
+  assert.deepEqual(
+    listed.find((p) => p.slug === 'antigravity'),
+    { slug: 'antigravity', runtime: 'antigravity', builtin: true },
   );
 });
 
@@ -74,7 +79,8 @@ test('the query matches the check task and session writes run', async () => {
   await serviceFor([], captured).listUsable('user-1');
 
   assert.deepEqual(captured.where, {
-    slug: { not: 'opencode' },
+    // Not the compatibility rows migrations 0080 and 0367 parked on the two built-in names.
+    slug: { notIn: ['opencode', 'antigravity'] },
     enabled: true,
     OR: [{ ownerId: null }, { ownerId: 'user-1' }],
   });

@@ -21,11 +21,12 @@ import {
 // a control-plane-configured ModelProvider that borrows one of these runtimes.
 /** True for a built-in provider (or an unset one) — i.e. NOT a configured ModelProvider slug.
  * `providerBuiltin` is persisted only to fence the former custom `kimi` slug during rolling
- * deployment; Claude/Codex predate the discriminator, and migration 0080 moves any pre-existing
- * custom `opencode` row aside, so both remain unambiguous. */
+ * deployment; Claude/Codex predate the discriminator, and migrations 0080 and 0367 move any
+ * pre-existing custom `opencode` / `antigravity` row (0367: or account pool) aside, so all four
+ * remain unambiguous. */
 export function isBuiltinProvider(slug?: string | null, providerBuiltin = true): boolean {
   if (!slug || slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX) return true;
-  if (slug === AgentProvider.OPENCODE) return true;
+  if (slug === AgentProvider.OPENCODE || slug === AgentProvider.ANTIGRAVITY) return true;
   if (slug === AgentProvider.KIMI) return providerBuiltin;
   return false;
 }
@@ -108,6 +109,7 @@ export function execRuntime(args: {
   if (args.customRow && args.customRow.enabled) return runtimeOf(args.customRow);
   if (args.declaredProvider === AgentProvider.CODEX) return AgentProvider.CODEX;
   if (args.declaredProvider === AgentProvider.OPENCODE) return AgentProvider.OPENCODE;
+  if (args.declaredProvider === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
   if (args.declaredProvider === AgentProvider.KIMI && args.declaredProviderBuiltin !== false) {
     return AgentProvider.KIMI;
   }
@@ -248,7 +250,7 @@ function injectedEnv(row: ModelProviderRow, model: string): Record<string, strin
  * built-in runtime, the model to pass, and the process env. For a configured provider
  * the runner never learns its slug — it just receives a Claude/Codex/Kimi job whose env points at
  * the provider's endpoint, so the runner needs no changes. A built-in may also resolve
- * directly to Kimi or OpenCode.
+ * directly to Kimi, OpenCode or Antigravity; a configured row can borrow neither of the last two.
  *
  * `customRow` is null for a built-in provider, or for a slug whose ModelProvider was
  * deleted/disabled (a safe fallback to the claude default rather than a dispatch failure).
@@ -403,7 +405,9 @@ function runtimeCatalogDefault(
  * endpoint IS that CLI's. A configured third-party keeps its pin: its list is a document we mirror
  * (models.dev) or one the user maintains, and neither retires an id reliably enough to overrule a
  * deliberate choice. OpenCode is out too: it owns model selection, and the ids it reports are a
- * slice of a multi-provider space rather than the whole of it.
+ * slice of a multi-provider space rather than the whole of it. Antigravity is judged like the rest,
+ * against the base models its runner folds `agy models` into — so a full level-suffixed slug a
+ * caller typed (`gemini-3.8-flash-high`, which no row is) reads as retired there.
  */
 function retiredPin(
   row: ModelProviderRow | null,

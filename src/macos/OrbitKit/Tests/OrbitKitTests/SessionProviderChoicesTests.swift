@@ -13,20 +13,42 @@ final class SessionProviderChoicesTests: XCTestCase {
         models: [ConfiguredProviderModel(value: "x-1", label: "X 1")],
         defaultModel: "x-1", presetSlug: nil)
 
-    func testAlwaysOffersTheThreeEnginesWithNothingConfigured() {
+    func testAlwaysOffersTheEnginesWithNothingConfigured() {
         let choices = SessionProviderChoices.choices(configured: [])
-        XCTAssertEqual(choices.map(\.slug), ["claude", "codex", "kimi"])
+        XCTAssertEqual(choices.map(\.slug), ["claude", "codex", "kimi", "antigravity"])
         XCTAssertTrue(choices.allSatisfy { $0.kind == .engine })
     }
 
     func testAppendsConfiguredProvidersAfterTheEngines() {
         let choices = SessionProviderChoices.choices(configured: [deepseek, custom])
-        XCTAssertEqual(choices.map(\.slug), ["claude", "codex", "kimi", "deepseek", "my-endpoint"])
+        XCTAssertEqual(choices.map(\.slug), ["claude", "codex", "kimi", "antigravity", "deepseek", "my-endpoint"])
         XCTAssertTrue(choices.suffix(2).allSatisfy { $0.kind == .byok })
     }
 
     func testNeverOffersOpenCodeBecauseItIsNotALoginEngine() {
         XCTAssertFalse(SessionProviderChoices.choices(configured: []).contains { $0.slug == "opencode" })
+    }
+
+    /// Not a login engine either, but a built-in engine the user picks directly: agy has no
+    /// sign-in at all, so it is offered like the engines that do.
+    func testOffersAntigravityAsAnEngineWithTheModelTheRunnerReportsFirst() {
+        let agy = RunnerModelCatalog(antigravity: [
+            RunnerModelInfo(value: "gemini-3.8-flash", label: "Gemini 3.8 Flash",
+                            reasoningLevels: ["low", "medium", "high"]),
+            RunnerModelInfo(value: "gemini-3.1-pro", label: "Gemini 3.1 Pro", reasoningLevels: ["low", "high"]),
+        ])
+        let row = SessionProviderChoices.choices(configured: [], catalog: agy).first { $0.slug == "antigravity" }
+        XCTAssertEqual(row?.kind, .engine)
+        XCTAssertEqual(row?.label, "Antigravity")
+        // Its own mark rather than the Gemini preset's, which is the Gemini API through another CLI.
+        XCTAssertEqual(row?.brandKey, "antigravity")
+        XCTAssertEqual(row?.modelLabel, "Gemini 3.8 Flash")
+        XCTAssertNil(row?.accounts)
+        // Before the runner reports its models, agy picks its own.
+        XCTAssertEqual(SessionProviderChoices.choices(configured: []).first { $0.slug == "antigravity" }?.modelLabel,
+                       "Managed by the provider")
+        XCTAssertEqual(SessionProviderChoices.current("antigravity", in: SessionProviderChoices.choices(configured: []),
+                                                      configured: []).kind, .engine)
     }
 
     func testDropsAConfiguredRowShadowingABuiltInSlug() {
@@ -140,6 +162,18 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertEqual(choices.map(\.slug), ["opencode"])
     }
 
+    /// Antigravity is its own runtime too, and no configured provider borrows it, so a session on
+    /// it has nowhere to move — and none of the Claude or Kimi rows may be offered as if it did.
+    func testSameRuntimeLeavesAntigravityAlone() {
+        let configured = [anthropic, anthropic2, moonshot]
+        let choices = SessionProviderChoices.sameRuntime(
+            "antigravity", in: SessionProviderChoices.choices(configured: configured),
+            configured: configured)
+        XCTAssertEqual(choices.map(\.slug), ["antigravity"])
+        XCTAssertEqual(SessionProviderChoices.executingRuntime("antigravity", configured: configured),
+                       "antigravity")
+    }
+
     func testSameRuntimeLeavesALoneProviderAloneSoTheMenuCanBeHidden() {
         XCTAssertEqual(
             SessionProviderChoices.sameRuntime("claude", in: SessionProviderChoices.choices(configured: []),
@@ -168,7 +202,7 @@ final class SessionProviderChoicesTests: XCTestCase {
                 health("codex", installed: false, auth: "unknown"),
                 health("kimi", installed: false, auth: "unknown"),
             ])
-        XCTAssertEqual(choices.map(\.slug), ["claude", "codex", "kimi", "deepseek"])
+        XCTAssertEqual(choices.map(\.slug), ["claude", "codex", "kimi", "antigravity", "deepseek"])
         XCTAssertEqual(choices.first { $0.slug == "kimi" }?.unavailable, "Not installed")
         XCTAssertEqual(choices.first { $0.slug == "kimi" }?.fixEngine, "kimi")
         XCTAssertNil(choices.first { $0.slug == "claude" }?.unavailable)
@@ -212,12 +246,26 @@ final class SessionProviderChoicesTests: XCTestCase {
         XCTAssertNil(choices.first { $0.slug == "moonshot" }?.unavailable)
     }
 
+    /// agy runs on a Gemini API key from the session's environment — possibly the workspace's own,
+    /// which the runner's probe of the machine never sees — so a "no" there is not a blocker. Only a
+    /// missing CLI is, and that one is fixed on its own engine row.
+    func testHoldsAntigravityToItsCLIBeingThereAndNeverToASignInItDoesNotHave() {
+        let signedOut = SessionProviderChoices.choices(
+            configured: [], engines: [health("antigravity", installed: true, auth: "no")])
+        XCTAssertNil(signedOut.first { $0.slug == "antigravity" }?.unavailable)
+        XCTAssertNil(signedOut.first { $0.slug == "antigravity" }?.fixEngine)
+        let missing = SessionProviderChoices.choices(
+            configured: [], engines: [health("antigravity", installed: false, auth: "unknown")])
+        XCTAssertEqual(missing.first { $0.slug == "antigravity" }?.unavailable, "Not installed")
+        XCTAssertEqual(missing.first { $0.slug == "antigravity" }?.fixEngine, "antigravity")
+    }
+
     func testAnEngineTheRunnerHasClaimedNothingAboutStaysRunnable() {
         XCTAssertTrue(SessionProviderChoices.choices(configured: [], engines: nil)
             .allSatisfy { $0.unavailable == nil })
         let partial = SessionProviderChoices.choices(
             configured: [], engines: [health("claude", installed: false, auth: "no")])
-        XCTAssertEqual(partial.map(\.slug), ["claude", "codex", "kimi"])
+        XCTAssertEqual(partial.map(\.slug), ["claude", "codex", "kimi", "antigravity"])
         XCTAssertEqual(partial.filter { $0.unavailable != nil }.count, 1)
     }
 
@@ -264,7 +312,8 @@ final class SessionProviderChoicesTests: XCTestCase {
         let choices = SessionProviderChoices.choices(
             configured: withPools([anthropic, anthropic2, deepseek], [pool]), catalog: opus5, pools: [pool])
         XCTAssertEqual(choices.map(\.slug),
-                       ["claude", "codex", "kimi", "claude-accounts", "anthropic", "anthropic-2", "deepseek"])
+                       ["claude", "codex", "kimi", "antigravity", "claude-accounts", "anthropic", "anthropic-2",
+                        "deepseek"])
         let tile = choices.first { $0.slug == "claude-accounts" }
         XCTAssertEqual(tile?.kind, .pool)
         XCTAssertEqual(tile?.poolSize, 2)

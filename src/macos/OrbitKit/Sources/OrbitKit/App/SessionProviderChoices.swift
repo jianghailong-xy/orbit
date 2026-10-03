@@ -125,26 +125,32 @@ public enum SessionProviderChoices {
         return short.replacingOccurrences(of: " · ", with: " ")
     }
 
-    /// Exactly the slugs a runner can sign into (`LoginEngine` in @orbit/shared). `opencode` is a
-    /// fourth built-in provider but not a login engine, so it is never offered — it only appears
+    /// The slugs a runner can sign into (`LoginEngine` in @orbit/shared), plus `antigravity`: a
+    /// built-in engine the user picks directly, with no sign-in at all — agy runs on a Gemini API
+    /// key from its environment — so it is offered whenever the machine has it installed.
+    /// `opencode` is a built-in provider that is neither, so it is never offered — it only appears
     /// as the current pick when an agent is already set to it.
-    public static let engineSlugs = ["claude", "codex", "kimi"]
+    public static let engineSlugs = ["claude", "codex", "kimi", "antigravity"]
 
     /// A built-in engine has no configured row, so it has no preset to inherit a look from. Borrow
     /// the vendor preset carrying the same mark: the engine and the BYOK provider are the same
-    /// company, and a user who sees both should see one logo.
+    /// company, and a user who sees both should see one logo. Antigravity's vendor ships no preset
+    /// carrying its mark — Google's is the Gemini API reached through another CLI, and the two
+    /// should not be one logo — so its key names its own mark (web's `ENGINE_BRAND`).
     static let enginePreset: [String: String] = [
-        "claude": "anthropic", "codex": "openai", "kimi": "moonshot",
+        "claude": "anthropic", "codex": "openai", "kimi": "moonshot", "antigravity": "antigravity",
     ]
 
     /// Why an engine can't run a session on that machine, or nil when it can. Missing outranks
     /// signed out — a CLI that isn't installed has nothing to sign into. Only the CLI's own "no"
     /// counts for auth: `unknown` is an engine that wouldn't answer, which is not evidence enough
-    /// to take the choice away. Mirrors web's `engineBlocker`.
+    /// to take the choice away. Antigravity has no sign-in to be out of: its key comes from the
+    /// session's environment, which can be the workspace's own — something the runner's probe of
+    /// the machine never sees — so only a missing CLI blocks it. Mirrors web's `engineBlocker`.
     static func engineBlocker(_ health: RunnerEngineHealth?) -> String? {
         guard let health else { return nil }
         if health.installed == false { return "Not installed" }
-        if health.auth == "no" { return "Not signed in" }
+        if health.auth == "no", health.engine != "antigravity" { return "Not signed in" }
         return nil
     }
 
@@ -164,12 +170,12 @@ public enum SessionProviderChoices {
         ProviderPools.unavailableReason(pool)
     }
 
-    /// The picker's contents. Engines always come first and are always all three: they are what a
+    /// The picker's contents. Engines always come first and are always all of them: they are what a
     /// user with nothing configured can still run, so the list is never empty.
     ///
     /// `engines` is the health the runner last reported, because every choice here is a claim about
-    /// someone else's machine. A runner that has reported nothing claims nothing, so all three stay
-    /// runnable — as does any engine missing from a partial report.
+    /// someone else's machine. A runner that has reported nothing claims nothing, so every engine
+    /// stays runnable — as does any engine missing from a partial report.
     ///
     /// The user's pools come after the engines, each one choice that runs on its members' own
     /// credentials. The providers in a pool stay pickable, marked `inPool` for the picker to fold
@@ -277,13 +283,14 @@ public enum SessionProviderChoices {
     /// The built-in runtime that actually executes an identity, mirroring the server's
     /// `execRuntime`. Deliberately not `AgentDefaults.runtime(for:)`, which answers "claude" for
     /// the OpenCode slug — harmless where it is used for model defaults, but here it would offer
-    /// an OpenCode session every Claude provider on the account.
+    /// an OpenCode session every Claude provider on the account. No configured provider borrows
+    /// Antigravity yet, so it only ever executes its own slug.
     static func executingRuntime(_ provider: String, configured: [ConfiguredProvider]) -> String {
         if let custom = configured.first(where: { $0.slug == provider }) {
             let borrowed = custom.runtime ?? ""
             return borrowed == "codex" || borrowed == "kimi" ? borrowed : "claude"
         }
-        return ["codex", "kimi", "opencode"].contains(provider) ? provider : "claude"
+        return ["codex", "kimi", "opencode", "antigravity"].contains(provider) ? provider : "claude"
     }
 
     /// The entry to show as current. An agent set to `opencode`, or pointing at a provider that has

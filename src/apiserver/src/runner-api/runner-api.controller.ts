@@ -306,7 +306,7 @@ import {
   retireSessionInboxGeneration,
 } from '../common/session-inbox-fence';
 import {
-  OPENCODE_RUNNER_UPGRADE_ERROR,
+  ADVERTISED_RUNTIMES,
   SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
   advertisedRunnerProviders,
   runnerAdvertisesProvider,
@@ -1906,12 +1906,15 @@ export class RunnerApiController {
   }
 
   /**
-   * Mark pending OpenCode work visibly before refusing a legacy runner. The conditional update
-   * repeats the scheduling predicates, so a capable claim/cancel racing this check can never have
-   * its now-live/ended row stamped with a stale upgrade error.
+   * Mark pending work on a runtime this runner has not advertised (ADVERTISED_RUNTIMES: OpenCode,
+   * Antigravity) visibly, before carrying on without it. The conditional update repeats the
+   * scheduling predicates, so a capable claim/cancel racing this check can never have its
+   * now-live/ended row stamped with a stale upgrade error.
    */
-  private async markOpenCodeUpgradeRequired(
+  private async markProviderUpgradeRequired(
     runnerId: string,
+    provider: AgentProvider,
+    upgradeError: string,
     candidates?: Array<{ id: string; error: string | null }>,
   ): Promise<boolean> {
     const pending =
@@ -1920,14 +1923,14 @@ export class RunnerApiController {
         where: {
           assignedRunnerId: runnerId,
           status: RunStatus.PENDING,
-          provider: AgentProvider.OPENCODE,
+          provider,
           cancelRequestedAt: null,
         },
         select: { id: true, error: true },
       }));
     if (pending.length === 0) return false;
     const unmarked = pending
-      .filter((session) => session.error !== OPENCODE_RUNNER_UPGRADE_ERROR)
+      .filter((session) => session.error !== upgradeError)
       .map((session) => session.id);
     if (unmarked.length > 0) {
       const marked = await this.prisma.session.updateMany({
@@ -1935,10 +1938,10 @@ export class RunnerApiController {
           id: { in: unmarked },
           assignedRunnerId: runnerId,
           status: RunStatus.PENDING,
-          provider: AgentProvider.OPENCODE,
+          provider,
           cancelRequestedAt: null,
         },
-        data: { error: OPENCODE_RUNNER_UPGRADE_ERROR },
+        data: { error: upgradeError },
       });
       if (marked.count > 0) {
         for (const id of unmarked) this.realtime.publishSessionCreated(id);
@@ -1950,7 +1953,7 @@ export class RunnerApiController {
   /**
    * SR35, said out loud on the rows it applies to.
    *
-   * Mirrors `markOpenCodeUpgradeRequired` exactly, because the situation is the same one: a session
+   * Mirrors `markProviderUpgradeRequired` exactly, because the situation is the same one: a session
    * this machine's binary cannot drive, withheld by the claim SQL, which would otherwise sit PENDING
    * with nothing on it to say why. What differs is only that "cannot drive" here means "would drive
    * it from the wrong commit" — a runner without `source-pin/v1` does not fail on the payload, it
@@ -2017,11 +2020,12 @@ export class RunnerApiController {
     const supportsTerminalHandoff = runnerSupportsCapability(capabilities, SESSION_TERMINAL_HANDOFF_V1);
     const supportsSourcePin = runnerSupportsCapability(capabilities, SESSION_SOURCE_PIN_V1);
     const supportedProviders = advertisedRunnerProviders(providerHeader);
-    if (!supportedProviders.includes(AgentProvider.OPENCODE)) {
-      // Explain the stall on the OpenCode rows themselves and then carry on: the claim SQL
-      // (plus migration 0080's trigger) already keeps them away from a legacy runner, so
-      // failing the request would only strand this runner's Claude/Codex work as well.
-      await this.markOpenCodeUpgradeRequired(runner.id);
+    for (const { provider, upgradeError } of ADVERTISED_RUNTIMES) {
+      if (supportedProviders.includes(provider)) continue;
+      // Explain the stall on the OpenCode/Antigravity rows themselves and then carry on: the
+      // claim SQL (plus migration 0080's and 0367's triggers) already keeps them away from a
+      // legacy runner, so failing the request would only strand this runner's other work as well.
+      await this.markProviderUpgradeRequired(runner.id, provider, upgradeError);
     }
     if (!supportsSourcePin) {
       // Same shape, same reason (SR35): the claim SQL already withholds these rows, and failing the
@@ -2088,17 +2092,18 @@ export class RunnerApiController {
         owner: { select: { preferences: true } },
       },
     });
-    const openCodeSessions = sessions.filter(
-      (session) =>
-        (session.provider ?? AgentProvider.CLAUDE) === AgentProvider.OPENCODE,
-    );
-    const legacyOpenCode =
-      openCodeSessions.length > 0 &&
-      !runnerAdvertisesProvider(providerHeader, AgentProvider.OPENCODE);
-    if (legacyOpenCode) {
-      await this.markOpenCodeUpgradeRequired(
+    const undrivable = new Set<string>();
+    for (const { provider, upgradeError } of ADVERTISED_RUNTIMES) {
+      if (runnerAdvertisesProvider(providerHeader, provider)) continue;
+      const onProvider = sessions.filter(
+        (session) => (session.provider ?? AgentProvider.CLAUDE) === provider,
+      );
+      if (onProvider.length === 0) continue;
+      await this.markProviderUpgradeRequired(
         runner.id,
-        openCodeSessions
+        provider,
+        upgradeError,
+        onProvider
           .filter(
             (session) =>
               session.status === RunStatus.PENDING && session.cancelRequestedAt == null,
@@ -2108,10 +2113,12 @@ export class RunnerApiController {
       // Omit the rows rather than failing the request. A 426 is not retryable on the runner, so
       // refusing here shuts the whole process down over one session it merely cannot drive. The
       // checkouts stay safe: worktree GC asks `sessions/worktrees-removable`, which keeps every
-      // non-terminal session, and the claim SQL never hands an OpenCode row to a legacy runner.
+      // non-terminal session, and the claim SQL never hands an OpenCode or Antigravity row to a
+      // runner that has not advertised it.
+      for (const session of onProvider) undrivable.add(session.id);
     }
-    const reclaimable = legacyOpenCode
-      ? sessions.filter((session) => !openCodeSessions.includes(session))
+    const reclaimable = undrivable.size > 0
+      ? sessions.filter((session) => !undrivable.has(session.id))
       : sessions;
     // How to ASK each authority, read once for the whole response rather than per session: the
     // frozen identity travels on each session row, and only the remote's local name and the
@@ -2145,7 +2152,7 @@ export class RunnerApiController {
       // SR35 again, on the other door. A downgraded runner must not re-attach a session whose
       // baseline it cannot honour: reclaim is where a process rebuilds supervisors from checkouts,
       // and one rebuilt without the pin is one that resumes from whatever the shared checkout says
-      // now. Omitted rather than refused, for the same reason the OpenCode rows are.
+      // now. Omitted rather than refused, for the same reason the OpenCode and Antigravity rows are.
       if (!supportsSourcePin && hasResolvedSource(s.sourceState)) {
         continue;
       }
