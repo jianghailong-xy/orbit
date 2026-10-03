@@ -1181,8 +1181,8 @@ export class RunnerApiController {
     if (dto?.agentDirProbes?.length) {
       try {
         await Promise.all(
-          dto.agentDirProbes.slice(0, 200).map((p) =>
-            this.prisma.workspace.updateMany({
+          dto.agentDirProbes.slice(0, 200).map(async (p) => {
+            await this.prisma.workspace.updateMany({
               where: { id: p.agentId, runnerId: runner.id, deletedAt: null },
               data: {
                 workDirExists: p.exists,
@@ -1196,8 +1196,24 @@ export class RunnerApiController {
                 workDirTotalBytes: toDiskBytes(p.totalBytes),
                 workDirProbedAt: new Date(),
               },
-            }),
-          ),
+            });
+            // Existing workspaces learn their repository without a manual URL entry. The
+            // directory must still be the one probed, and a concurrent explicit edit wins:
+            // never replace a recorded remote or accept an old runner's unscoped report.
+            const repoUrl = typeof p.repoUrl === 'string' ? p.repoUrl.trim() : '';
+            if (p.exists && p.isGitRepo && typeof p.workDir === 'string' && p.workDir && repoUrl) {
+              await this.prisma.workspace.updateMany({
+                where: {
+                  id: p.agentId,
+                  runnerId: runner.id,
+                  workDir: p.workDir,
+                  deletedAt: null,
+                  OR: [{ repoUrl: null }, { repoUrl: '' }],
+                },
+                data: { repoUrl },
+              });
+            }
+          }),
         );
       } catch {
         // Advisory telemetry — never fail the heartbeat (that would read as offline).

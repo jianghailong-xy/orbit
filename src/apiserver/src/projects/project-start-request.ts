@@ -266,11 +266,11 @@ export function startReadiness(
     finding('REFUSE', 'START_REPOSITORY_UNKNOWN',
       settings.line === 'PROJECT_BRANCH'
         ? 'tasks are to land on a project branch, and this project names no repository to hold one: '
-          + 'its coordination workspace has no remote'
+          + 'its coordination workspace has no recorded remote'
         : 'a merge check needs a repository to run on, and this project names none: its '
-          + 'coordination workspace has no remote',
-      'Suggest line MAIN with no merge check, or have the project coordinated from a workspace '
-        + 'cloned from its repository.');
+          + 'coordination workspace has no recorded remote',
+      'Wait for the runner to detect origin, or set Repository URL in the coordination workspace '
+        + 'settings. For a project without a repository, suggest line MAIN with no merge check.');
   }
 
   const byHand = running.filter((task) => !task.autoRunWhenReady);
