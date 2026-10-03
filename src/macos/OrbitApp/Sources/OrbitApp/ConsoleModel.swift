@@ -1963,7 +1963,7 @@ final class ConsoleModel {
                 if fromComposer { composerText = "" }
                 return
             }
-            if replyContext == nil, provider != "codex", provider != "opencode" {
+            if replyContext == nil, provider != "codex", provider != "opencode", provider != "antigravity" {
                 if command.isEmpty {
                     statusMessage = "Pick a slash command before sending"
                     return

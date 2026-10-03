@@ -21,6 +21,11 @@ export const PROVIDER_TRANSPORTS: Record<AgentProvider, ProviderTransport> = {
   [AgentProvider.KIMI]: 'json-rpc',
   // One process per turn, carrying that turn's prompt and exiting with it.
   [AgentProvider.OPENCODE]: 'one-shot',
+  // One resident `agy --print=` process per session, stream-json in both directions, a `result`
+  // per turn. Unlike Claude's, a frame written mid-turn does not reach the running turn: agy
+  // queues it and runs it as the next turn after that `result` (contract §8), so the transport
+  // alone says nothing about steering (see MID_TURN_STEER).
+  [AgentProvider.ANTIGRAVITY]: 'stream-json',
 };
 
 /**
@@ -62,13 +67,17 @@ const NEVER = false;
  *
  * Keyed on the RUNTIME rather than its transport, because the transport does not answer the
  * question: codex and kimi are both driven over JSON-RPC and only one of them can take a
- * mid-turn message (codex app-server has `turn/steer`; ACP has nothing that corresponds).
+ * mid-turn message (codex app-server has `turn/steer`; ACP has nothing that corresponds), and
+ * claude and antigravity are both stream-json while only claude folds a frame into the turn.
  */
 const MID_TURN_STEER: Record<AgentProvider, string | typeof ALWAYS | typeof NEVER> = {
   [AgentProvider.CLAUDE]: ALWAYS,
   [AgentProvider.CODEX]: SESSION_CODEX_STEER_V1,
   [AgentProvider.KIMI]: NEVER,
   [AgentProvider.OPENCODE]: NEVER,
+  // agy runs a mid-turn frame as a turn of its own after the current `result` (contract §8.1),
+  // and the runner refuses a steer for it (provider_runtime.go). A message sent mid-turn queues.
+  [AgentProvider.ANTIGRAVITY]: NEVER,
 };
 
 /**

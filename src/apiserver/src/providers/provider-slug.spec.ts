@@ -37,6 +37,9 @@ test('provider-slug', async (t) => {
     assert.equal(pickFreeSlug(slugBase('Codex'), []), 'codex-2');
     assert.equal(pickFreeSlug(slugBase('Kimi'), []), 'kimi-2');
     assert.equal(pickFreeSlug(slugBase('OpenCode'), []), 'opencode-2');
+    // Every AgentProvider value is reserved, so the fifth runtime needed no edit here: a provider
+    // somebody labels "Antigravity" lands beside the runtime, never on it.
+    assert.equal(pickFreeSlug(slugBase('Antigravity'), []), 'antigravity-2');
     assert.equal(
       pickFreeSlug(KIMI_ORPHAN_PROVIDER_TOMBSTONE, []),
       `${KIMI_ORPHAN_PROVIDER_TOMBSTONE}-2`,

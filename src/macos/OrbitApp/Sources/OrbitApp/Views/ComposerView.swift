@@ -130,7 +130,8 @@ struct ComposerView: View {
         if !models.contains(where: { $0.id == console.modelID }) {
             models.insert(ModelOption(
                 id: console.modelID,
-                name: AgentDefaults.friendlyName(console.modelID, catalog: console.modelCatalog,
+                name: AgentDefaults.friendlyName(console.modelID, for: console.provider,
+                                                  catalog: console.modelCatalog,
                                                   configured: console.configuredProviders)), at: 0)
         }
         return models

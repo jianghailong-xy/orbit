@@ -22,6 +22,18 @@ import { withPreset } from './preset-overlay';
 import { pickFreeSlug, slugBase } from './provider-slug';
 
 /**
+ * The slugs whose `model_provider` row is a compatibility guard, not a provider: migrations 0080 and
+ * 0367 parked one on `opencode` and one on `antigravity` when each became a built-in runtime, to
+ * fence an older control plane through a rolling deploy (and to keep it from creating a provider
+ * under the name). The built-in runtime is what answers to the slug, so no list, lookup or write
+ * here ever treats either row as a provider.
+ */
+export const COMPATIBILITY_GUARD_SLUGS: string[] = [
+  AgentProvider.OPENCODE,
+  AgentProvider.ANTIGRAVITY,
+];
+
+/**
  * One entry of ProvidersService.listUsable. The last three are absent on a built-in engine
  * rather than empty: what a built-in offers is whatever the CLI installed on the runner reports
  * (see the runner's claude_models.go / codex_models.go), which this side does not know — and
@@ -189,7 +201,7 @@ export class ProvidersService {
   async listPublic(userId: string) {
     const rows = await this.prisma.modelProvider.findMany({
       where: {
-        slug: { not: AgentProvider.OPENCODE },
+        slug: { notIn: COMPATIBILITY_GUARD_SLUGS },
         enabled: true,
         OR: [{ ownerId: null }, { ownerId: userId }],
       },
@@ -242,9 +254,9 @@ export class ProvidersService {
   async listUsable(ownerId: string): Promise<UsableProvider[]> {
     const rows = await this.prisma.modelProvider.findMany({
       where: {
-        // The built-in entry below already names `opencode`; the compatibility guard row that
-        // holds that slug is not a second provider to choose between.
-        slug: { not: AgentProvider.OPENCODE },
+        // The built-in entries below already name `opencode` and `antigravity`; the compatibility
+        // guard rows that hold those slugs are not second providers to choose between.
+        slug: { notIn: COMPATIBILITY_GUARD_SLUGS },
         enabled: true,
         OR: [{ ownerId: null }, { ownerId }],
       },
@@ -293,7 +305,7 @@ export class ProvidersService {
    *  user's personal rows. Every field except the encrypted key (→ hasApiKey). */
   async listShared() {
     const rows = await this.prisma.modelProvider.findMany({
-      where: { ownerId: null, slug: { not: AgentProvider.OPENCODE } },
+      where: { ownerId: null, slug: { notIn: COMPATIBILITY_GUARD_SLUGS } },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
     });
     return rows.map((r) => this.desensitize(r));
@@ -312,7 +324,7 @@ export class ProvidersService {
    *  the only way the pool form can say which rows it will turn away, and why, before anyone asks. */
   async listMine(ownerId: string) {
     const rows = await this.prisma.modelProvider.findMany({
-      where: { ownerId, slug: { not: AgentProvider.OPENCODE } },
+      where: { ownerId, slug: { notIn: COMPATIBILITY_GUARD_SLUGS } },
       orderBy: [{ position: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
     });
     return rows.map((r) => {
@@ -437,7 +449,7 @@ export class ProvidersService {
    *  shared row, or another user's, reads as not-found. */
   async idOfMine(ownerId: string, slug: string): Promise<string> {
     const row = await this.prisma.modelProvider.findFirst({
-      where: { ownerId, slug: { equals: slug, not: AgentProvider.OPENCODE } },
+      where: { ownerId, slug: { equals: slug, notIn: COMPATIBILITY_GUARD_SLUGS } },
       select: { id: true },
     });
     if (!row) throw new NotFoundException('provider not found');
@@ -630,7 +642,7 @@ export class ProvidersService {
 
   private async getScoped(ownerId: string | null, id: string) {
     const row = await this.prisma.modelProvider.findFirst({
-      where: { id, ownerId, slug: { not: AgentProvider.OPENCODE } },
+      where: { id, ownerId, slug: { notIn: COMPATIBILITY_GUARD_SLUGS } },
     });
     if (!row) throw new NotFoundException('provider not found');
     return row;
@@ -800,7 +812,7 @@ export class ProvidersService {
     const rows = await this.prisma.modelProvider.findMany({
       where: {
         id: { in: providerIds },
-        slug: { not: AgentProvider.OPENCODE },
+        slug: { notIn: COMPATIBILITY_GUARD_SLUGS },
         OR: [{ ownerId: null }, { ownerId }],
       },
       select: { id: true, label: true, ownerId: true, runtime: true, baseUrl: true, apiKeyEnc: true },

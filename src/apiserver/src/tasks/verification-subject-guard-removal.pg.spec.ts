@@ -209,7 +209,7 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
   // can drift alone, which is what makes "one fewer" a detectable event rather than a hand edit.
   assert.deepEqual(installed.rows, registered,
     'the core tables\' installed triggers and the inventory must be the same set');
-  assert.equal(installed.rowCount, 46,
+  assert.equal(installed.rowCount, 47,
     'these four tables carried 43 triggers before 0224, 40 after it, 39 once 0226 removed '
     + '`failure_successor_task_binding_immutable` from `task`, 38 once 0227 removed '
     + '`task_executable_plan_bind` with the EXECUTABLE acceptance runtime, 35 once 0228 '
@@ -224,9 +224,10 @@ suite('(g) the core tables carry exactly the triggers the inventory registers, m
     + 'project\'s status count. 44 once 0350 added `session_request_recipient_ended` to `session`, '
     + 'which closes the session requests still waiting on a session whose run ends, 45 once '
     + '0352 added `session_request_asker_stopped`, which marks the outcomes held for an asking '
-    + 'session that stopped for good, and 46 once 0368 added '
-    + '`task_owner_confirmation_review_reviewer_ended`, which records on the confirmation reviews '
-    + 'still waiting on a session that their reviewer ended');
+    + 'session that stopped for good, 46 once 0367 added `session_antigravity_runner_claim_guard`, '
+    + 'which keeps an older control plane from claiming an Antigravity session as Claude, and 47 '
+    + 'once 0368 added `task_owner_confirmation_review_reviewer_ended`, which records on the '
+    + 'confirmation reviews still waiting on a session that their reviewer ended');
   for (const [, trigger] of DROPPED_TRIGGERS) {
     assert.equal(installed.rows.some((row) => row.trigger === trigger), false);
   }

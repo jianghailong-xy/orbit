@@ -16,6 +16,7 @@ export const ENGINE_CLI_NAME: Record<ReportedEngine, string> = {
   codex: 'Codex',
   kimi: 'Kimi Code',
   opencode: 'OpenCode',
+  antigravity: 'Antigravity CLI',
 };
 
 const MINUTE = 60_000;
