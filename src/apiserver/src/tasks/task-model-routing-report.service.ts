@@ -41,7 +41,7 @@ export class TaskModelRoutingReportService {
            ${sinceDate ? Prisma.sql`AND d.created_at >= ${sinceDate}` : Prisma.empty}
            ${agentId ? Prisma.sql`AND s.workspace_id = ${agentId}::uuid` : Prisma.empty}
       ),
-      -- Filters choose samples, never truncate the history that determines the first run or cost.
+      -- Filters choose samples, never cut short the history that determines the first run or cost.
       work_runs AS (
         SELECT s.id, s.task_id, s.status, s.error, s.cost_usd, s.created_at,
                row_number() OVER history AS ordinal,
