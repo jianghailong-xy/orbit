@@ -25,7 +25,7 @@ import { after, test } from 'node:test';
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { toUuid } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -376,6 +376,168 @@ test('wiki reads · a topic page, the timeline and the usage window', { skip, co
     expectStatus(plain, 200, 'the same space without asking');
     assert.equal(plain.body.usage, undefined, 'the four aggregates are paid for only by the read that asks');
     assert.equal(plain.body.id, made, 'and it is still the space itself that answers');
+  });
+});
+
+/**
+ * What the timeline costs the database, beside what it answers: however many ops the space holds, the
+ * read writes no temp file.
+ *
+ * It used to. The page was ordered over the whole join, and once `wiki_entry` was too big to hash the
+ * planner sorted every listed op of the space — each with its whole `payload` — beneath the lookups
+ * into `wiki_entry`, where the LIMIT cannot bound a sort: 4–7 MB of temp file a read for a space of
+ * nine thousand ops. A database this size never picks that plan: it joins `wiki_entry` first and keeps
+ * a top-N of whole rows, which spills nothing here. So what the case pins is the shape of the fix,
+ * which holds whatever the plan: the one sort that sees more ops than the page orders the page key and
+ * nothing else. Production runs a 4 MB work_mem; here it is PostgreSQL's floor, 64 kB, so three hundred
+ * ops stand in for nine thousand. The paired positive sorts the same rows with their payload and no
+ * bound, on the same fixture and setting, and must spill: otherwise zero would mean nothing.
+ */
+test('wiki reads · the timeline writes no temp file, however many ops the space holds', { skip, concurrency: 1, timeout: 300_000 }, async (t) => {
+  const h = await boot();
+  const owner = await account(h, 'busy timeline owner');
+  const made = await space(h, owner, 'github.com/orbit/busy-timeline.git');
+  const spaceId = toUuid(made);
+
+  // Thirty settled runs ten minutes apart, ten ops each, dated all three ways the timeline dates an
+  // op: by its decision, by its verdict, and by its changeset (three such ops per run tie, and are
+  // ordered by id). Then the newest run, still pending: two spot checks it lists and two ops it does
+  // not — every row the read must leave out is newer than every row it lists.
+  const base = Date.now() - 31 * 600_000;
+  const second = (ms: number) => new Date(Math.floor(ms / 1000) * 1000);
+  const changesets: Array<{ id: string; createdAt: Date; settled: boolean }> = [];
+  const ops: Array<Record<string, unknown>> = [];
+  const listed: Array<{ id: string; at: Date }> = [];
+  for (let run = 0; run <= 30; run += 1) {
+    const changeset = { id: randomUUID(), createdAt: second(base + run * 600_000), settled: run < 30 };
+    changesets.push(changeset);
+    const createdMs = changeset.createdAt.getTime();
+    const payload = (n: number) => ({ reason: `reason ${run}.${n}`, note: Array.from({ length: 33 }, () => randomUUID()).join('') });
+    const op = (seq: number, row: Record<string, unknown>, at: Date | null) => {
+      const id = randomUUID();
+      ops.push({ id, changeset_id: changeset.id, seq, payload: payload(seq), spot_check: false, ...row });
+      if (at) listed.push({ id, at });
+    };
+    if (!changeset.settled) {
+      const spotCheck = { decision: 'pending', applied_by_mode: 'automatic', spot_check: true };
+      op(0, spotCheck, changeset.createdAt);
+      op(1, spotCheck, changeset.createdAt);
+      op(2, { decision: 'pending' }, null);
+      op(3, { decision: 'rejected', decision_reason: 'not_true', decided_at: second(createdMs + 300_000) }, null);
+      continue;
+    }
+    for (let seq = 0; seq < 10; seq += 1) {
+      const decided = second(createdMs + (seq * 47 + 13) * 1000);
+      const verified = second(createdMs + (seq * 53 + 7) * 1000);
+      if ((run * 10 + seq) % 3 === 0) op(seq, { decision: seq % 2 ? 'edited' : 'accepted', decided_at: decided }, decided);
+      else if ((run * 10 + seq) % 3 === 1) {
+        op(seq, {
+          decision: 'auto_applied', decided_at: changeset.createdAt, applied_by_mode: 'automatic', verified_at: verified,
+          verification_verdict: 'supported', verification_reason: 'the spec read it', verification_model: 'spec-model',
+        }, verified);
+      } else op(seq, { decision: 'auto_applied', decided_at: changeset.createdAt, applied_by_mode: 'tiered' }, changeset.createdAt);
+    }
+  }
+  await h.sql.query(
+    `INSERT INTO "wiki_changeset"("id","owner_id","space_id","origin","rationale","status","created_at","decided_at","expires_at")
+     SELECT r.id, $2::uuid, $3::uuid, 'maintenance', 'a run of the spec', CASE WHEN r.settled THEN 'settled' ELSE 'pending' END,
+            r.created_at, CASE WHEN r.settled THEN r.created_at + interval '1 minute' END,
+            CASE WHEN r.settled THEN NULL ELSE now() + interval '14 days' END
+       FROM jsonb_to_recordset($1::jsonb) AS r(id uuid, created_at timestamptz, settled boolean)`,
+    [JSON.stringify(changesets.map((c) => ({ id: c.id, created_at: c.createdAt, settled: c.settled }))), owner.id, spaceId],
+  );
+  await h.sql.query(
+    `INSERT INTO "wiki_changeset_op"("id","owner_id","changeset_id","seq","op","payload","decision","decision_reason",
+                                     "decided_at","applied_by_mode","spot_check","verification_verdict","verification_reason",
+                                     "verification_model","verified_at")
+     SELECT r.id, $2::uuid, r.changeset_id, r.seq, 'add', r.payload, r.decision, r.decision_reason, r.decided_at,
+            r.applied_by_mode, r.spot_check, r.verification_verdict, r.verification_reason, r.verification_model, r.verified_at
+       FROM jsonb_to_recordset($1::jsonb) AS r(id uuid, changeset_id uuid, seq int, payload jsonb, decision text,
+            decision_reason text, decided_at timestamptz, applied_by_mode text, spot_check boolean,
+            verification_verdict text, verification_reason text, verification_model text, verified_at timestamptz)`,
+    [JSON.stringify(ops), owner.id],
+  );
+  await h.sql.query('ANALYZE "wiki_changeset"');
+  await h.sql.query('ANALYZE "wiki_changeset_op"');
+  assert.equal(listed.length, 302, 'three hundred settled ops and two spot checks are listed');
+
+  interface PlanNode {
+    'Node Type': string;
+    'Temp Written Blocks'?: number;
+    'Actual Rows': number;
+    'Actual Loops': number;
+    Output?: string[];
+    Plans?: PlanNode[];
+  }
+  /** Every node of `text`'s executed plan, at a 64 kB work_mem. */
+  const nodesOf = async (text: string, values: unknown[]): Promise<PlanNode[]> => {
+    await h.sql.query('BEGIN');
+    try {
+      await h.sql.query(`SET LOCAL work_mem = '64kB'`);
+      const explained = await h.sql.query(`EXPLAIN (ANALYZE, VERBOSE, BUFFERS, FORMAT JSON) ${text}`, values);
+      const nodes: PlanNode[] = [];
+      const visit = (node: PlanNode): void => {
+        nodes.push(node);
+        for (const child of node.Plans ?? []) visit(child);
+      };
+      visit(explained.rows[0]['QUERY PLAN'][0].Plan);
+      return nodes;
+    } finally {
+      await h.sql.query('ROLLBACK');
+    }
+  };
+  const spills = (nodes: PlanNode[]): string[] =>
+    nodes
+      .filter((node) => (node['Temp Written Blocks'] ?? 0) > 0)
+      .map((node) => `${node['Node Type']}: ${node['Temp Written Blocks']} temp blocks written`);
+
+  await t.test('sorting the listed ops with their payload and no bound spills on this fixture', async () => {
+    const unbounded = await nodesOf(
+      `SELECT o."payload"
+         FROM "wiki_changeset_op" o
+         JOIN "wiki_changeset" c ON c."id" = o."changeset_id" AND c."owner_id" = o."owner_id"
+        WHERE o."owner_id" = $1::uuid AND c."space_id" = $2::uuid
+        ORDER BY CASE WHEN o."applied_by_mode" IS NULL THEN o."decided_at" ELSE COALESCE(o."verified_at", c."created_at") END DESC,
+                 o."id" DESC`,
+      [owner.id, spaceId],
+    );
+    assert.notDeepEqual(spills(unbounded), [], 'the payloads of these ops outgrow 64 kB');
+  });
+
+  await t.test('the statement the timeline sends orders the space’s ops on the page key alone, and writes none', async () => {
+    let sent: Prisma.Sql | undefined;
+    const capturing = {
+      wikiSpace: { findFirst: async () => ({ id: spaceId, settings: {}, createdAt: new Date(), updatedAt: new Date() }) },
+      $queryRaw: async (query: Prisma.Sql) => {
+        sent = query;
+        return [];
+      },
+    } as unknown as PrismaService;
+    const page = 100;
+    await new WikiService(capturing).getTimeline(owner.id, spaceId, page);
+    assert.ok(sent, 'the statement was captured');
+    const nodes = await nodesOf(sent.text, sent.values);
+    const wideSorts = nodes
+      .filter((node) => node['Node Type'] === 'Sort')
+      .map((node) => ({ sorted: node.Plans![0]['Actual Rows'] * node.Plans![0]['Actual Loops'], output: node.Output ?? [] }))
+      .filter(({ sorted, output }) => sorted > page && output.length > 2)
+      .map(({ sorted, output }) => `a sort of ${sorted} ops carries ${output.join(', ')}`);
+    assert.deepEqual(wideSorts, [], 'the ops the page is picked from are sorted as (at, id) only');
+    assert.deepEqual(spills(nodes), []);
+  });
+
+  await t.test('and still lists the newest ops first, however each was dated', async () => {
+    const newest = [...listed].sort((a, b) => b.at.getTime() - a.at.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+    for (const limit of [1, 20, 100, undefined]) {
+      const answer = await call(h, owner.bearer, 'GET', `/wiki/spaces/${made}/timeline${limit ? `?limit=${limit}` : ''}`);
+      expectStatus(answer, 200, `the timeline at limit=${limit}`);
+      const items = answer.body.items as Array<{ opId: string; at: string }>;
+      assert.deepEqual(
+        items.map((item) => [toUuid(item.opId), item.at]),
+        newest.slice(0, limit ?? 20).map((row) => [row.id, row.at.toISOString()]),
+        `limit=${limit}: newest first, ties by id`,
+      );
+    }
   });
 });
 
