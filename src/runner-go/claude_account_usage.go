@@ -35,16 +35,17 @@ func newClaudeAccountUsage() *claudeAccountUsage {
 // so a slot that moved under the runner's feet is read where it is now, and one that is gone stops
 // being readable at all rather than answering from Default.
 func newClaudeSlotUsage(id string) *claudeSlotUsage {
+	read := &claudeUsageRead{name: "claude plan-usage (account " + id + ")"}
 	fetch := func(ctx context.Context, client *http.Client) (*PlanUsage, error) {
 		dir, err := claudeAccountKind.home(id)
 		if err != nil {
 			return nil, err
 		}
-		return fetchClaudePlanUsageIn(ctx, client, dir)
+		return read.fetch(ctx, client, dir)
 	}
 	return &claudeSlotUsage{probe: &planUsageProbe{
 		client: &http.Client{},
-		name:   "claude plan-usage (account " + id + ")",
+		name:   read.name,
 		fetch:  fetch,
 	}}
 }

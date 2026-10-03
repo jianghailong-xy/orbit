@@ -54,6 +54,10 @@ func writeFakeBin(t *testing.T, dir, name, body string) string {
 }
 
 func TestProbeAuthClaude(t *testing.T) {
+	// No credentials file in the way: a stored refresh token would answer before the CLI is asked
+	// (claudeStoredSignedIn), and the machine's own ~/.claude may hold one.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	yes := writeFakeBin(t, t.TempDir(), "claude", `echo '{"loggedIn":true,"email":"x"}'`)
 	if got := probeAuth(providerClaude, yes); got != authYes {
 		t.Fatalf("loggedIn:true should be authYes, got %v", got)

@@ -52,9 +52,8 @@ func effectiveClaudeConfigDir(env []string, cwd string) (string, error) {
 }
 
 // claudeSlotLoginStatus asks one Claude account's own login: `claude auth status`, run with that
-// account's CLAUDE_CONFIG_DIR. The CLI is asked rather than its credentials file read — the file
-// says where a token is, not whether the CLI accepts it, and on macOS the token may not be a file
-// at all.
+// account's CLAUDE_CONFIG_DIR — unless the login's stored credentials answer by themselves, which
+// they do wherever asking could start a refresh the CLI would not finish (claudeStoredSignedIn).
 func claudeSlotLoginStatus(ctx context.Context, binPath, dir string) authState {
 	return probeAuthIn(ctx, providerClaude, binPath, envWithValue(os.Environ(), "CLAUDE_CONFIG_DIR", dir))
 }
