@@ -455,8 +455,11 @@ describe('the record a merge leaves, in the conversation it happened in', { time
 
     await waitForUi(() => {
       expect(cardsOfState('READY'), 'the next candidate is not being asked about').toBe(1);
+      // The record too, and in the same window: it is drawn from its own read of the merges on
+      // record, and reading it synchronously right after the window is how a loaded host took a
+      // null where a receipt was asserted.
+      expect(count('.project-promotion-receipt'), 'the merge stopped being drawn at all').toBe(1);
     });
-    expect(count('.project-promotion-receipt'), 'the merge stopped being drawn at all').toBe(1);
     const receipt = record()!;
     expect(receipt.getAttribute('data-state'), 'the record followed the new candidate').toBe('MERGED');
     expect(receipt.textContent, 'the record now names a commit that never landed').toContain(MERGED_SHA.slice(0, 7));
@@ -470,6 +473,11 @@ describe('the record a merge leaves, in the conversation it happened in', { time
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
       expect(mounted().textContent).toContain(`${NOTE[COORDINATOR_PUBLIC]}, opening`);
+      // The record itself, not only the note: the merges on record are their own read, and they can
+      // land after the conversation's opening. Read synchronously, `record()` came back null on a
+      // merge check and the very next line's `compareDocumentPosition` threw on it
+      // (workstation-gpu, the sibling task's third generation).
+      expect(record(), 'the merge was not drawn as a record').not.toBeNull();
     });
     // Older than every loaded event: drawn ABOVE the conversation's first row, not dropped and not
     // at the tail (see `decisionReceiptAnchor`) — a record that disappears on a long conversation
