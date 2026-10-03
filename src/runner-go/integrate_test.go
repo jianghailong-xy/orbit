@@ -154,6 +154,78 @@ func TestIntegrationRebaseLandsAndVerifies(t *testing.T) {
 	}
 }
 
+// J-S4 and TASK_BRANCH promotion must not replay commits the target already contains just because
+// the session recorded an older upstream base. A base beyond the fork still excludes session setup.
+func TestIntegrationRebaseSessionBaseAnchor(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"LAND_TASK", "LAND_PROMOTION"} {
+		for _, basePosition := range []string{"before_fork", "at_fork", "after_fork"} {
+			t.Run(kind+"/"+basePosition, func(t *testing.T) {
+				t.Parallel()
+				r := newIntegrationRepo(t)
+				upstream := r.rev("main")
+				target := "main"
+				if kind == "LAND_TASK" {
+					target = "project/line"
+					r.checkoutNew(target, upstream)
+				}
+				// Replaying the first target commit onto its tip conflicts with the second edit.
+				r.write("shared.txt", "first target edit\n")
+				r.commit("target first edit")
+				r.write("shared.txt", "second target edit\n")
+				targetTip := r.commit("target second edit")
+				r.push(target)
+
+				sessionBase := upstream
+				sourceBase := targetTip
+				if basePosition == "after_fork" {
+					sourceBase = upstream
+				}
+				r.checkoutNew("task/anchor", sourceBase)
+				switch basePosition {
+				case "at_fork":
+					sessionBase = targetTip
+				case "after_fork":
+					r.write("session-baseline.txt", "session setup, excluded from the task\n")
+					sessionBase = r.commit("session setup")
+				}
+				r.write("task.txt", "task's own change\n")
+				r.commit("task change")
+				r.push("task/anchor")
+
+				// Build the expected tree independently: target tip plus only the task's change.
+				r.checkoutNew("expected", targetTip)
+				r.write("task.txt", "task's own change\n")
+				r.commit("expected tree")
+				expectedTree := r.rev("HEAD^{tree}")
+				r.checkout("main")
+
+				command := r.command("task/anchor", target)
+				if kind == "LAND_PROMOTION" {
+					command = r.promotionCommand(kind, "task/anchor", "TASK_BRANCH")
+				}
+				command.SessionBaseSha = sessionBase
+				result := runIntegrationJob(command, silent)
+				if result.State != "LANDED" {
+					t.Fatalf("state = %s (%s %s), conflicts = %v, want LANDED", result.State, result.ErrorCode, result.Phase, result.Conflicts)
+				}
+				if result.LandedTreeSha != expectedTree || result.TestedTreeSha != expectedTree {
+					t.Fatalf("landed/tested trees = %s/%s, want target plus task tree %s", result.LandedTreeSha, result.TestedTreeSha, expectedTree)
+				}
+				if got := r.originRev("refs/heads/" + target); got != result.LandedSha {
+					t.Fatalf("target tip = %s, want landed commit %s", got, result.LandedSha)
+				}
+				if parent := r.rev(result.LandedSha + "^"); parent != targetTip {
+					t.Fatalf("landed parent = %s, want target tip %s", parent, targetTip)
+				}
+				if commits, err := git(r.work, "rev-list", "--count", targetTip+".."+result.LandedSha); err != nil || commits != "1" {
+					t.Fatalf("commits added to target = %q (%v), want only the task's one commit", commits, err)
+				}
+			})
+		}
+	}
+}
+
 // TestIntegrationAbsorbsUpstreamBeforeLanding is J-S2: a project branch takes main's new commits by
 // MERGE, never by rewriting itself, and the branch's own old tip stays an ancestor of what lands.
 func TestIntegrationAbsorbsUpstreamBeforeLanding(t *testing.T) {
