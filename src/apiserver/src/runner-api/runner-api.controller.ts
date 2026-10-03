@@ -4124,13 +4124,13 @@ export class RunnerApiController {
       // never armed it, and the session sat FAILED for good. On Automatic — nobody picked its account
       // by hand, and its workspace leaves the account to Orbit — it moves to another of the runner's
       // accounts with room and is re-sent there at once (its thread moves with it: runner
-      // codex_account_move.go); else it waits for this account's reset. A task's run is not: its
-      // failure settles the task, as it always has.
+      // codex_account_move.go); else it waits for this account's reset. A task's run too, as a Claude
+      // one does (retryPlanFor): the retry this arms holds its task's failure back (retryPending
+      // below), and the run goes on in its own checkout and thread rather than ending the attempt.
       const codexUsageLimit =
         failSession
         && completedTurn?.kind === 'message'
         && current.retryAt == null
-        && !current.taskId
         && current.provider === AgentProvider.CODEX
         && isUsageLimitErrorText(failureText)
           ? await this.codexUsageLimitRetry(tx, runner.id, current, failureText!)
@@ -6546,7 +6546,6 @@ export class RunnerApiController {
       select: {
         ownerId: true,
         provider: true,
-        taskId: true,
         retryAttempts: true,
         codexAccount: true,
         claudeAccount: true,
@@ -6559,8 +6558,10 @@ export class RunnerApiController {
     // A built-in Claude session on Automatic — nobody picked its account by hand, and its workspace
     // leaves the account to Orbit — moves to another of the runner's accounts with room and is re-sent
     // at once: the events path queues the reload that re-spawns its engine there, and the runner
-    // carries the conversation across (CLAUDE_ACCOUNT_MOVE_V1). Not a task's run, as for Codex.
-    if (session.provider === AgentProvider.CLAUDE && !session.taskId) {
+    // carries the conversation across (CLAUDE_ACCOUNT_MOVE_V1). A task's run too: it is armed like any
+    // other session (above), and left on the spent account it waited for the reset while another had
+    // room — on 2026-10-02, 36 minutes for a 5-hour window, with Default at 1%.
+    if (session.provider === AgentProvider.CLAUDE) {
       const runner = await tx.runner.findUnique({
         where: { id: runnerId },
         select: { planUsage: true, engines: true, capabilities: true },
