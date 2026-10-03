@@ -65,6 +65,10 @@ function fakePrisma(
         // spell it answers with the empty set — as the row would if it had been inserted without it.
         return { ...row, runningBgShells: row.runningBgShells ?? [] };
       },
+      // Which of these conversations are runs of a task, for the evidence cards of dispatched tasks
+      // a run can hold (`tasks/pending-evidence-judgments.ts#countDispatchedEvidenceJudgments`):
+      // asked of the table, and answered with none, as the task reads beside it are.
+      findMany: async () => [],
     },
     // A number stands in for "the table answers this much"; a function is the table itself, for the
     // one case where the count is a predicate over WHICH rows answer (`backgroundJobId ∈ …`).
@@ -78,6 +82,9 @@ function fakePrisma(
     // still statements about the first.
     project: { findMany: async () => [] },
     taskOwnerConfirmationRequest: { findMany: async () => [] },
+    // …the evidence of tasks these conversations dispatched outside any project
+    // (`tasks/evidence-review.ts`), which none of them has…
+    task: { findMany: async () => [] },
     // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
     // which these fixtures have none of either.
     sessionRequest: noSessionRequests(),

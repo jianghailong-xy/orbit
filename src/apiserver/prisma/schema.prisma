@@ -259,6 +259,18 @@ enum OwnerConfirmationReviewRecordKind {
   @@map("owner_confirmation_review_record_kind")
 }
 
+/// Why only the account owner can settle a task an agent declared OWNER_CONFIRMED (migration 0373,
+/// `tasks/owner-confirmation-reason.ts`): a release, an irreversible step, the owner's own device
+/// or account, or a trade-off only they can make.
+enum OwnerConfirmationReason {
+  DEPLOY
+  IRREVERSIBLE
+  OWNER_DEVICE_OR_ACCOUNT
+  OWNER_TRADE_OFF
+
+  @@map("owner_confirmation_reason")
+}
+
 /// Whether the reliable in-app delivery also becomes due APNs work. IN_APP_ONLY still receives a
 /// terminal device-ledger receipt so suppression is an auditable fact rather than a missing row.
 enum TaskJudgmentDevicePolicy {
@@ -4057,6 +4069,13 @@ model Task {
   /// the acceptance prose. NULL means no override was needed or recorded; the text is audit
   /// evidence only and is never interpreted as completion evidence.
   completionCriterionOverrideReason String? @map("completion_criterion_override_reason")
+  /// Why only the account owner can settle this OWNER_CONFIRMED task, as the agent that declared it
+  /// said (migration 0373). A session declaring OWNER_CONFIRMED outside an Automatic project names
+  /// one (`tasks/owner-confirmation-reason.ts`); the owner may, and nobody else is asked. Cleared by
+  /// the write that takes the task off OWNER_CONFIRMED. Audit material: no gate reads it afterwards.
+  ownerConfirmationReason     OwnerConfirmationReason? @map("owner_confirmation_reason")
+  /// The one sentence that may accompany the reason. Never present without it (CHECK).
+  ownerConfirmationReasonNote String?                  @map("owner_confirmation_reason_note")
   /// WHICH of the project's stated acceptance criteria this work says it serves, as a relation
   /// rather than the name of one (migration 0232). `CreateTaskDto.criterionKey` is still how a
   /// caller spells it — a content-addressed key read back from `project_get` — and this is where

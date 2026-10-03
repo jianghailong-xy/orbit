@@ -178,13 +178,25 @@ export const EVIDENCE_JUDGMENT_REQUIRES_PROJECT_ACTION =
  * part of the declaration: where work is FILED is decided by the scope contract after the
  * declaration has already been validated, and the three write doors have to ask this question
  * about the project each of them actually lands in.
+ *
+ * EXCEPT WORK A SESSION DISPATCHED (2026-10-03)
+ * ---------------------------------------------
+ * A task with a dispatching session — `creator_session_id`, the conversation that filed it — has a
+ * decider outside a project as well: its run's evidence is delivered to that session to decide, and
+ * the owner's card covers it when the session does not (`evidence-review.ts`). So it may declare
+ * EVIDENCE_JUDGMENT in no project, held to its own acceptanceCriteria as every such row is. A task
+ * with none — the owner's own, or one filed with no session — is refused as before: nobody would
+ * be handed its evidence. `dispatchingSessionId` is that column as the write leaves it: the session
+ * a create is made from, or the one an existing row was filed from.
  */
 export function criterionNeedsProjectRefusal(declaration: {
   completionCriterion?: TaskCompletionCriterionValue | null;
   projectId?: string | null;
+  dispatchingSessionId?: string | null;
 }): { code: string; kind: 'REFUSAL'; requiredAction: string; message: string } | null {
   if (declaration.completionCriterion !== 'EVIDENCE_JUDGMENT') return null;
   if (declaration.projectId) return null;
+  if (declaration.dispatchingSessionId) return null;
   return {
     code: EVIDENCE_JUDGMENT_REQUIRES_PROJECT_CODE,
     kind: 'REFUSAL',
@@ -193,10 +205,12 @@ export function criterionNeedsProjectRefusal(declaration: {
       'EVIDENCE_JUDGMENT is settled by one CONFIRM measured against a stated acceptance criterion, '
       + 'and this task is in no project, so the only standard it could be held to is whatever it '
       + 'happens to have written in its own acceptanceCriteria — which nothing here requires it to '
-      + 'have, and which its evidence would then have to quote word for word. Give this work a '
-      + 'projectId, so the criterion it serves is one the project states and a decider can read; '
-      + 'or declare EXECUTABLE with acceptanceCommand and acceptanceExpectedExitCode, which it can '
-      + 'settle without one.',
+      + 'have, and which its evidence would then have to quote word for word. Nor was it filed from '
+      + 'a session, so nobody would be handed its evidence to decide. Give this work a projectId, '
+      + 'so the criterion it serves is one the project states and a decider can read; or declare '
+      + 'EXECUTABLE with acceptanceCommand and acceptanceExpectedExitCode, which it can settle '
+      + 'without one. (A task a session files outside a project may declare EVIDENCE_JUDGMENT: '
+      + 'that session is handed its evidence to decide.)',
   };
 }
 
