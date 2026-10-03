@@ -182,6 +182,14 @@ describe('renaming an account on a runner', () => {
 
     expect(renames()).toEqual([[`/runners/${RUNNER_ID}/accounts/claude/default`, { name: 'jianghailong.main' }]]);
     await vi.waitFor(() => expect(apiMock.mock.calls.filter(([path]) => path === '/runners').length).toBeGreaterThan(0));
+    // The row the press redraws, not the request it fires. The press closes the editor, and the
+    // redraw after it is the settled mutation standing on the list's OLD name — `shown` falls back
+    // to the account once `isPending` goes false, which it does when the refetch `onSuccess` awaits
+    // has resolved, one render before the list's own answer reaches this row. A loaded host reads
+    // the row in that render: "expected 'Default' to be 'jianghailong.main'", with the editor
+    // already gone (the request was issued long before — the mount read alone satisfies the wait
+    // above). What the press must have done is the row carrying the name the response carries.
+    await vi.waitFor(() => expect(nameOf(accountsOf(page)[0])).toBe('jianghailong.main'));
     const [named] = accountsOf(page);
     expect(editorOf(named)).toBeNull();
     expect(nameOf(named)).toBe('jianghailong.main');

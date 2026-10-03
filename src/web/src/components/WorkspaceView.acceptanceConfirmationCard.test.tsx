@@ -229,9 +229,19 @@ const mounted = (): HTMLDivElement => {
 const count = (selector: string): number => mounted().querySelectorAll(selector).length;
 
 const waitForUi = async (assertion: () => void): Promise<void> => {
-  await act(async () => {
+  // RTL's own async wait: the act environment is off while a wall-clock window is being waited
+  // out, so an update arriving inside it is allowed to commit — the window is the page's, not
+  // act's. Left on, React queues every update the wait exists to see and flushes none of them
+  // until the window has already given up (`e85b63ee9`'s second full run: the change card's data
+  // arrived, the DOM never moved, `.decision-strip-title` missing at 8s while the card was drawn).
+  const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+  const previous = env.IS_REACT_ACT_ENVIRONMENT;
+  env.IS_REACT_ACT_ENVIRONMENT = false;
+  try {
     await vi.waitFor(assertion, { timeout: 8_000, interval: 20 });
-  });
+  } finally {
+    env.IS_REACT_ACT_ENVIRONMENT = previous;
+  }
 };
 
 beforeEach(() => {
