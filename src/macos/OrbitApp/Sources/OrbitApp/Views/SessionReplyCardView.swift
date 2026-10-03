@@ -186,20 +186,3 @@ struct SessionReplyCardView: View {
         return line
     }
 }
-
-/// Who a session list row is waiting on for a reply, and who is waiting on it (session requests,
-/// contract §6): "Waiting on Worker 2 · Owes a reply to Coordinator". Read off the row's own
-/// `awaitingReplyFrom` / `owesReplyTo`, which every list read and every live summary carries; nothing
-/// when neither is open. Web parity: `SessionRequestsLine` in `WorkspaceView.tsx`.
-struct SessionRequestsLine: View {
-    let session: Session
-
-    var body: some View {
-        if let text = SessionRequestCopy.peersLine(awaiting: session.awaitingReplyFrom, owes: session.owesReplyTo) {
-            Text(text)
-                .font(.orbitMeta)
-                .foregroundStyle(.tint)
-                .lineLimit(1)
-        }
-    }
-}

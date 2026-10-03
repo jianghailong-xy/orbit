@@ -628,17 +628,7 @@ function AccountName({
   return (
     <div className="re-name" onDoubleClick={start}>
       <span className="re-name-text">{shown}</span>
-      {renamedDefault && (
-        <span
-          className="re-chip"
-          title={
-            `This machine's own login — ${tildePath(accountDir(account))}, the one \`${engine}\` in a terminal ` +
-            'uses. Signing in from a terminal changes which account this is.'
-          }
-        >
-          DEFAULT
-        </span>
-      )}
+      {renamedDefault && <span className="re-chip">DEFAULT</span>}
       {/* Where Automatic starts the next session — the account pools' mark for the same thing. */}
       {next && (
         <span className="re-chip" title="Automatic starts new sessions here">
