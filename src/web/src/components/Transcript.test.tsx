@@ -1688,6 +1688,37 @@ describe('failed tool call body', () => {
 
     expect(html.indexOf('go build')).toBeLessThan(html.indexOf('compiled cleanly'));
   });
+
+  // Stop while agy runs a command: agy never finishes that call, so the runner answers it with an
+  // error. A live session then shows it failed, not still running.
+  it('marks a call cut off by an interrupt as failed while the session stays open', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        live
+        events={[
+          {
+            seq: 1,
+            type: 'tool_use',
+            payload: { id: 'conv:2', name: 'Bash', input: { command: 'sleep 120 && echo finished-sleeping' } },
+          },
+          { seq: 2, type: 'interrupt', payload: {} },
+          {
+            seq: 3,
+            type: 'tool_result',
+            payload: {
+              toolUseId: 'conv:2',
+              content: 'Interrupted: the turn was stopped while this tool was running.',
+              isError: true,
+            },
+          },
+          { seq: 4, type: 'turn_end', payload: { subtype: 'interrupted' } },
+        ]}
+      />,
+    );
+
+    expect(html).toContain('chat-tool-status err');
+    expect(html).not.toContain('chat-tool-status running');
+  });
 });
 
 describe('runtime authentication help', () => {
