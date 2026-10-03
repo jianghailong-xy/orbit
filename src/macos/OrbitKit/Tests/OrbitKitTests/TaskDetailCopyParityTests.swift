@@ -313,6 +313,9 @@ final class TaskDetailCopyParityTests: XCTestCase {
         assertSays(web, "<div className=\"composer-route-reason\"> \(TaskDetailCopy.modelChangeAppliesToThisRun) </div>",
                    in: Self.workspace)
         assertSays(web, "<span className=\"composer-route-open\">\(TaskDetailCopy.openTask)</span>", in: Self.workspace)
+        // The chip's name aloud, and what it ends on while it carries the ✦.
+        assertSays(web, "aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${ smartRoute ? '"
+                    + TaskDetailCopy.chipPickedBySmartSelection + "' : '' }`}", in: Self.workspace)
         // Only while the chip still shows the pick (`ComposerLogic.smartRoute`).
         assertSays(web, "selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null",
                    in: Self.workspace)

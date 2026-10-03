@@ -205,11 +205,43 @@ final class ModelRoutingLogicTests: XCTestCase {
                        "Policy v1 · decided Oct 3, 1:12 AM · a failure from a usage limit would not have moved the tier")
     }
 
-    func testARunsModelIsNamedByThePickersTiersFirst() {
-        XCTAssertEqual(TaskDetailLogic.modelLabel("claude-opus-5-5", options: options, catalog: nil, configured: nil),
+    func testARunsModelIsNamedByThePickersTiersThenAnyRunnersCatalogue() throws {
+        XCTAssertEqual(TaskDetailLogic.modelLabel("claude-opus-5-5", options: options, catalogs: [], configured: nil),
                        "Opus 5.5")
-        XCTAssertEqual(TaskDetailLogic.modelLabel("some-new-model", options: options, catalog: nil, configured: nil),
+        XCTAssertEqual(TaskDetailLogic.modelLabel("some-new-model", options: options, catalogs: [], configured: nil),
                        "some-new-model")
+        // A run outlives its assignee: with no tiers resolved, any runner's catalogue still names it,
+        // the first that does winning — and before a configured provider's own list.
+        let elsewhere = RunnerModelCatalog(codex: [RunnerModelInfo(value: "gpt-5.6-sol", label: "GPT-5.6 Sol")])
+        let own = RunnerModelCatalog(claude: [RunnerModelInfo(value: "claude-opus-5-5", label: "Opus 5.5")])
+        XCTAssertEqual(TaskDetailLogic.modelLabel("gpt-5.6-sol", options: nil, catalogs: [own, elsewhere],
+                                                  configured: nil), "GPT-5.6 Sol")
+        let configured = try JSONDecoder().decode([ConfiguredProvider].self, from: Data("""
+        [{"slug":"anthropic-key","label":"Anthropic","runtime":"claude",
+          "models":[{"value":"claude-opus-5-5","label":"Claude Opus 5.5"}]}]
+        """.utf8))
+        XCTAssertEqual(TaskDetailLogic.modelLabel("claude-opus-5-5", options: nil, catalogs: [own],
+                                                  configured: configured), "Opus 5.5")
+        XCTAssertEqual(TaskDetailLogic.modelLabel("claude-opus-5-5", options: nil, catalogs: [],
+                                                  configured: configured), "Claude Opus 5.5")
+    }
+
+    func testAMacMenuShowsALongSentenceAsTheLinesOfAParagraph() {
+        let note = TaskDetailCopy.modelChangeAppliesToThisRun
+        let lines = ComposerLogic.menuLines(note)
+        XCTAssertEqual(lines, ["Changing the model here applies to this run only. To fix the",
+                               "model for every run, set it on the task."])
+        XCTAssertEqual(lines.joined(separator: " "), note, "every word, in order")
+        XCTAssertTrue(lines.allSatisfy { $0.count <= 64 })
+        XCTAssertEqual(ComposerLogic.menuLines("Tier M"), ["Tier M"])
+        // A run with no space breaks where it fills the line; CJK characters count double.
+        let cjk = String(repeating: "规", count: 40)
+        XCTAssertEqual(ComposerLogic.menuLines(cjk).map(\.count), [32, 8])
+        // Past four lines the fourth ends on an ellipsis: the whole of it is in the task's Why.
+        let long = Array(repeating: "word", count: 80).joined(separator: " ")
+        let capped = ComposerLogic.menuLines(long)
+        XCTAssertEqual(capped.count, 4)
+        XCTAssertTrue(capped[3].hasSuffix("…"))
     }
 
     // MARK: the Agent's switch

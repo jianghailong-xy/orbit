@@ -428,6 +428,11 @@ struct TaskRouteWhySheet: View {
                                 .textSelection(.enabled)
                         }
                     }
+                } header: {
+                    // A Mac sheet draws no navigation title: the pick is said here instead.
+                    #if os(macOS)
+                    Text(why.title).font(.headline).textCase(nil)
+                    #endif
                 } footer: {
                     Text(why.footer)
                 }
