@@ -726,8 +726,8 @@ describe('ProjectsPage — starting a project', () => {
     serve(
       { '/projects?status=OPEN': [REVAMP] },
       {
-        // The first row cannot open, and R2 appears before R1 in workspace order. Runner order
-        // still puts W1 first — exactly the choice firstOpenableWorkspace makes for DefaultLanding.
+        // The first row cannot open, and W2 comes before W1 in workspace order. Runner order no
+        // longer reorders them — exactly the choice firstOpenableWorkspace makes for DefaultLanding.
         workspaces: [
           { id: W_SHARED, runnerId: null, position: 0, createdAt: '2026-01-01T00:00:00Z' },
           { id: W2, runnerId: R2, position: 1, createdAt: '2026-01-02T00:00:00Z' },
@@ -739,10 +739,10 @@ describe('ProjectsPage — starting a project', () => {
     await mount();
 
     await click(button('New project', mountedContainer()), () => {
-      expect(currentLocation()).toBe(`/workspaces/${encodeId(W1)}/new?intent=project`);
+      expect(currentLocation()).toBe(`/workspaces/${encodeId(W2)}/new?intent=project`);
     });
 
-    expect(currentLocation()).toBe(`/workspaces/${encodeId(W1)}/new?intent=project`);
+    expect(currentLocation()).toBe(`/workspaces/${encodeId(W2)}/new?intent=project`);
   });
 
   it('routes to runner guidance when every workspace runner is offline', async () => {

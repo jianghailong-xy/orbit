@@ -1747,8 +1747,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // REPLACE FUNCTION`s are its own new guards, so it is not another writer of the DONE fence
       // and names none of the six preserved objects; no table, column, type or enum is created,
       // altered or dropped besides that CHECK, and no `project_acceptance_*` object is named.
-      // (0366 is the retry-claim lease just above, which landed first, so this took 0367.)
-      '0367_antigravity_runtime'],
+      // (0366 is the retry-claim lease just above, which landed first, so this took 0367; 0369,
+      // below, landed before this did and left 0367 to it.)
+      '0367_antigravity_runtime',
+      // Every live workspace's place in the sidebar, written down (0369): one UPDATE … FROM of
+      // `workspace.position`, computed from `workspace` and `runner` rows and nothing else. Read
+      // against every claim above: neither table is a preserved relation, and no `task`, `session`,
+      // `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored task
+      // and criterion row are out of its reach. No table, column, constraint, index, function,
+      // trigger or type is created, altered or dropped, so it is not another writer of the DONE
+      // fence and names none of the six preserved objects; no row is inserted or deleted. (Written
+      // as 0366 on its own branch and renumbered before it landed: 0366 is the retry claim lease
+      // above, and 0367 and 0368 were spelled by branches not yet landed.)
+      '0369_workspace_position_backfill'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

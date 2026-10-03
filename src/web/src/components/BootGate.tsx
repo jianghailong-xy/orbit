@@ -108,7 +108,7 @@ export function BootGate({ children }: { children: React.ReactNode }) {
   const workspaces = useQuery({ ...workspacesQuery(), enabled: warm && deep?.kind !== 'session' });
   const homeFirst = deep || !runners.isFetched
     ? undefined
-    : firstOpenableWorkspace(workspaces.data ?? [], runners.data ?? []);
+    : firstOpenableWorkspace(workspaces.data ?? []);
   const runnerId =
     deep?.kind === 'session'
       ? (sessionDetail.data?.assignedRunnerId ?? null)
