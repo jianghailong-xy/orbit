@@ -1,0 +1,23 @@
+{
+  "agy": "1.2.15",
+  "recorded": "2026-10-03",
+  "argv": [
+    "--gemini_dir=/work/orbit-gemini",
+    "--print=",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json"
+  ],
+  "settings": {
+    "enableTelemetry": false
+  },
+  "exit": 0,
+  "note": "First process.",
+  "driver": [
+    "write stdin line 1",
+    "wait for result #1",
+    "close stdin",
+    "wait for exit"
+  ]
+}

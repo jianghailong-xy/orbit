@@ -1,0 +1,3 @@
+{"event": "user", "message": {"content": "run it\nmock:tool run_command {\"CommandLine\": \"echo hi\", \"Cwd\": \"/work/repo\", \"WaitMsBeforeAsync\": 10000, \"toolSummary\": \"Command\", \"toolAction\": \"Running command\"}\nmock:text unreachable"}}
+{"event": "user", "message": {"content": "write it\nmock:tool write_to_file {\"TargetFile\": \"/work/repo/x.txt\", \"CodeContent\": \"x\\n\", \"Overwrite\": false, \"Description\": \"d\", \"toolSummary\": \"write_to_file\", \"toolAction\": \"Using write_to_file\"}\nmock:text unreachable"}}
+{"event": "user", "message": {"content": "just talk\nmock:text plain answer still works"}}

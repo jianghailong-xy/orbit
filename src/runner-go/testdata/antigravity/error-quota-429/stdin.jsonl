@@ -1,0 +1,1 @@
+{"event": "user", "message": {"content": "hello\nmock:error 429 RESOURCE_EXHAUSTED retryDelay=40s You exceeded your current quota"}}

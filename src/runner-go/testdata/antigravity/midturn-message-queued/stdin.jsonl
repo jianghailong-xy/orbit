@@ -1,0 +1,2 @@
+{"event": "user", "message": {"content": "first\nmock:sleep 4s\nmock:text reply to first"}}
+{"event": "user", "message": {"content": "second, sent mid-turn\nmock:text reply to second"}}
