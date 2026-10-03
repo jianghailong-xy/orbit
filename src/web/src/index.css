@@ -46,6 +46,8 @@
   --warning-solid: #fa8c16;
   --warning-bg: #fff4e6;
   --warning-border: #ffd591;
+  /* what smart model selection would have picked, on a run that kept the agent's own model */
+  --route-shadow: #5b2fb8;
   /* high-contrast inverted button (dark CTA on light, light CTA on dark) */
   --invert-surface: #1f2329;
   --invert-surface-hover: #000000;
@@ -89,6 +91,7 @@
   --warning-solid: #e0902b;
   --warning-bg: rgba(250, 140, 22, 0.15);
   --warning-border: rgba(250, 140, 22, 0.38);
+  --route-shadow: #b69cf5;
   --invert-surface: #e6e8eb;
   --invert-surface-hover: #ffffff;
   --invert-text: #16171a;
@@ -2694,6 +2697,56 @@ body {
 .rd-set-row .ant-switch {
   margin-top: 2px;
   flex: none;
+}
+/* The engines smart selection may move a task run to (model routing §6), under the switch's own
+   explanation: one chip per engine, the agent's own ticked and fixed. Qualified with .rd-engines-list
+   so antd's single-class checkbox rules, injected after this stylesheet, do not win on order. */
+.rd-engines {
+  margin-top: 10px;
+}
+.rd-engines-label {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.rd-engines-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.rd-engines-list .ant-checkbox-wrapper {
+  margin-inline-start: 0;
+  padding: 2px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.rd-engines-list .ant-checkbox-wrapper.is-on {
+  border-color: var(--brand-border);
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font-weight: 600;
+}
+/* The agent's own engine cannot be unticked, but it is ticked: drawn as on, not as greyed out. */
+.rd-engines-list .ant-checkbox-wrapper-disabled.is-on {
+  cursor: default;
+}
+.rd-engines-list .ant-checkbox-wrapper-disabled.is-on .ant-checkbox-inner {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+.rd-engines-list .ant-checkbox-wrapper-disabled.is-on .ant-checkbox-inner::after {
+  border-color: #fff;
+}
+.rd-engines-list .ant-checkbox-wrapper-disabled.is-on .ant-checkbox + span {
+  color: var(--brand-strong);
+}
+.rd-engines-note {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 6px;
+  line-height: 1.5;
 }
 /* Advanced disclosure — folded by default, but it has to admit when it hides something. */
 .rd-adv-toggle {
@@ -5569,6 +5622,44 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .composer-model-menu.ant-dropdown-menu {
   min-width: 200px;
+}
+/* A task run on smart selection's pick (model routing §9): a ✦ and a light blue ground, no wider
+   than before — why it is this model opens at the top of the menu. */
+.composer-model-chip.is-smart {
+  background: var(--brand-tint);
+}
+.composer-model-chip.is-smart.ant-dropdown-open {
+  background: var(--brand-tint-hover);
+}
+.composer-model-chip.is-smart .composer-model-name {
+  color: var(--brand-strong);
+}
+.composer-model-spark {
+  align-self: center;
+  color: var(--brand);
+  font-size: 12px;
+}
+.composer-route-note {
+  max-width: 320px;
+  white-space: normal;
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.composer-route-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 650;
+}
+.composer-route-reason {
+  margin-top: 6px;
+}
+.composer-route-open {
+  color: var(--brand-strong);
+  font-weight: 600;
 }
 /* Lightweight, borderless controls (Claude-style): text-only label, with a faint
    rounded background surfacing only on hover. The pill category is named via Tooltip. */
@@ -10345,6 +10436,67 @@ button.chat-jump-start:hover {
   background: var(--bg-hover);
   border-radius: 4px;
 }
+/* The Suggested tier (model routing §9): its picker with the coordinator's reason under it, and in
+   the picker each tier's dot, its model and effort, and the work it is for. */
+.tdp-field-stack {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.tdp-field-note {
+  margin-top: 1px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-3);
+}
+.tdp-hint-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.tdp-hint-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.tdp-hint-dot.is-s {
+  background: var(--success-solid);
+}
+.tdp-hint-dot.is-m {
+  background: var(--brand);
+}
+.tdp-hint-dot.is-l {
+  background: var(--warning-solid);
+}
+.tdp-hint-dot.is-xl {
+  background: var(--error);
+}
+.tdp-hint-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  max-width: 340px;
+  white-space: normal;
+}
+.tdp-hint-option .tdp-hint-dot {
+  margin-top: 6px;
+}
+.tdp-hint-option-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.tdp-hint-option.is-none .tdp-hint-option-name {
+  font-weight: 400;
+  color: var(--text-3);
+}
+.tdp-hint-option-detail {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
 /* 「Start at」editor: the label keeps the shared 76px gutter, everything the control needs —
    input, its two actions, and the line under them — stacks in the remaining column. */
 .tdp-schedule {
@@ -11372,6 +11524,69 @@ button.chat-jump-start:hover {
   font-size: 11px;
   color: var(--text-3);
   margin-top: 1px;
+}
+/* A run's routing (model routing §9): the tier smart selection put it on — amber when a failed run
+   moved it up — or, where the Agent has not turned it on, the purple line saying what it would
+   have picked. Either opens the Why under the row. */
+.tdp-route-tag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 650;
+  line-height: 16px;
+  vertical-align: 1px;
+  cursor: pointer;
+}
+.tdp-route-tag.is-up {
+  background: var(--warning-bg);
+  color: var(--warning);
+}
+.tdp-route-would {
+  align-self: flex-start;
+  margin-top: 2px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--route-shadow);
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+.tdp-route-would:hover {
+  text-decoration: underline;
+}
+.tdp-route-why {
+  margin: 6px 0 2px 26px;
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 9px;
+  background: var(--brand-tint);
+}
+.tdp-route-why-title {
+  margin-bottom: 5px;
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text-1);
+}
+.tdp-route-why ul {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--text-2);
+}
+.tdp-route-why-foot {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text-3);
 }
 .tdp-dot {
   width: 8px;

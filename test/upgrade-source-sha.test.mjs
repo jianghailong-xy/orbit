@@ -183,7 +183,8 @@ printf '%s\\t%s\\n' "\${ORBIT_SOURCE_SHA-}" "$*" >>"$ORBIT_FAKE_DOCKER_LOG"
       ORBIT_FAKE_DOCKER_LOG: dockerLog,
     };
     delete env.ORBIT_SOURCE_SHA;
-    const run = spawnSync(upgrade, ['--allow-dirty'], {
+    // --no-pull: this runs in the repository itself, which a pull would move.
+    const run = spawnSync(upgrade, ['--allow-dirty', '--no-pull'], {
       cwd: repo,
       env,
       encoding: 'utf8',
@@ -202,5 +203,109 @@ printf '%s\\t%s\\n' "\${ORBIT_SOURCE_SHA-}" "$*" >>"$ORBIT_FAKE_DOCKER_LOG"
     assert.deepEqual(build, [head, 'compose build apiserver web']);
   } finally {
     rmSync(fixture, { recursive: true, force: true });
+  }
+});
+
+test('upgrade on main pulls origin first, so the build names the commit that landed', () => {
+  // Merges reach origin without passing through the deploy checkout — another machine's runner, a
+  // GitHub merge. Built from what that checkout last heard, the deploy is stale and still reports
+  // success, so both copies of the skill fast-forward a checkout on main before building.
+  for (const relative of [
+    '.claude/skills/upgrade/upgrade.sh',
+    '.agents/skills/upgrade/scripts/upgrade.sh',
+  ]) {
+    const fixture = mkdtempSync(path.join(tmpdir(), 'orbit-upgrade-pull-'));
+    const origin = path.join(fixture, 'origin.git');
+    const deployed = path.join(fixture, 'deployed');
+    const elsewhere = path.join(fixture, 'elsewhere');
+    const dockerLog = path.join(fixture, 'docker.log');
+    const fakeDocker = path.join(fixture, 'docker');
+    writeFileSync(fakeDocker, `#!/bin/sh
+printf '%s\\t%s\\n' "\${ORBIT_SOURCE_SHA-}" "$*" >>"$ORBIT_FAKE_DOCKER_LOG"
+`);
+    chmodSync(fakeDocker, 0o755);
+    const env = {
+      ...process.env,
+      PATH: `${fixture}:${process.env.PATH}`,
+      ORBIT_FAKE_DOCKER_LOG: dockerLog,
+      GIT_AUTHOR_NAME: 'fixture',
+      GIT_AUTHOR_EMAIL: 'fixture@example.invalid',
+      GIT_COMMITTER_NAME: 'fixture',
+      GIT_COMMITTER_EMAIL: 'fixture@example.invalid',
+    };
+    delete env.ORBIT_SOURCE_SHA;
+    const git = (cwd, ...args) =>
+      execFileSync('git', args, { cwd, env, encoding: 'utf8', stdio: 'pipe' }).trim();
+    const commit = (cwd, message) => {
+      git(cwd, 'commit', '-q', '--allow-empty', '-m', message);
+      return git(cwd, 'rev-parse', 'HEAD');
+    };
+    const land = (message) => {
+      const sha = commit(elsewhere, message);
+      git(elsewhere, 'push', '-q', 'origin', 'main');
+      return sha;
+    };
+    // The commit the run handed to `compose build`; undefined when it stopped before building.
+    const upgradeWith = (...args) => {
+      writeFileSync(dockerLog, '');
+      const run = spawnSync(path.join(deployed, relative), args, {
+        cwd: fixture,
+        env,
+        encoding: 'utf8',
+      });
+      const build = readFileSync(dockerLog, 'utf8')
+        .split('\n')
+        .map((line) => line.split('\t'))
+        .find(([, call]) => call === 'compose build apiserver web');
+      return { run, built: build?.[0], why: `${relative} ${args.join(' ')}\n${run.stdout}\n${run.stderr}` };
+    };
+
+    try {
+      git(fixture, 'init', '-q', '--bare', '--initial-branch=main', origin);
+      git(fixture, 'init', '-q', '--initial-branch=main', deployed);
+      // As the installed checkout has it: --ff-only must still win over a configured rebase.
+      git(deployed, 'config', 'pull.rebase', 'true');
+      mkdirSync(path.dirname(path.join(deployed, relative)), { recursive: true });
+      copyFileSync(path.join(repo, relative), path.join(deployed, relative));
+      chmodSync(path.join(deployed, relative), 0o755);
+      git(deployed, 'add', '.');
+      commit(deployed, 'install');
+      git(deployed, 'remote', 'add', 'origin', origin);
+      git(deployed, 'push', '-q', '-u', 'origin', 'main');
+      git(fixture, 'clone', '-q', origin, elsewhere);
+
+      const landed = land('merged on another machine');
+      let r = upgradeWith();
+      assert.equal(r.run.status, 0, r.why);
+      assert.equal(r.built, landed, `the build must name the commit the pull brought in: ${r.why}`);
+
+      // Only ahead of origin — a local fast-forward not pushed yet — leaves nothing to pull: it ships.
+      const local = commit(deployed, 'fast-forwarded here, not pushed');
+      r = upgradeWith();
+      assert.equal(r.run.status, 0, r.why);
+      assert.equal(r.built, local, r.why);
+
+      // Diverged from origin: stop before building anything, and name the way out.
+      land('merged on another machine again');
+      r = upgradeWith();
+      assert.notEqual(r.run.status, 0, `a diverged checkout must not deploy: ${r.why}`);
+      assert.equal(r.built, undefined, `it must stop before building: ${r.why}`);
+      assert.match(r.run.stderr, /--no-pull/, r.why);
+      assert.equal(git(deployed, 'rev-parse', 'HEAD'), local, 'the failed pull must leave the checkout alone');
+
+      // --no-pull deploys the checkout exactly as it is.
+      r = upgradeWith('--no-pull');
+      assert.equal(r.run.status, 0, r.why);
+      assert.equal(r.built, local, r.why);
+
+      // Off main nothing is pulled: this branch has no upstream, so a pull would fail the run.
+      git(deployed, 'switch', '-q', '-c', 'topic');
+      const topic = commit(deployed, 'on a topic branch');
+      r = upgradeWith();
+      assert.equal(r.run.status, 0, r.why);
+      assert.equal(r.built, topic, r.why);
+    } finally {
+      rmSync(fixture, { recursive: true, force: true });
+    }
   }
 });

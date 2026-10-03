@@ -28,6 +28,19 @@ export const DEFAULT_MODEL_TIER_TABLE = {
   },
 } as const;
 
+/** The built-in engines with a tier table: the only ones a run can be routed onto from another (§4.3, §6). */
+export const MODEL_ROUTING_ENGINES: readonly string[] = [AgentProvider.CLAUDE, AgentProvider.CODEX];
+
+/** At or above this share of a window used, an engine is not picked for a fresh run (§6). */
+export const ENGINE_QUOTA_LIMIT = 90;
+
+/** What the target runner says of one engine, for the account a run there would use (§6). */
+export interface ModelRoutingEngineState {
+  signedOut?: boolean;
+  /** The fullest of that account's windows that cap the whole engine, not one model family. */
+  quota?: { utilization: number; window: string } | null;
+}
+
 export interface ModelRoutingSelection {
   provider: string;
   model: string | null;
@@ -70,6 +83,15 @@ export interface ModelRoutingInput {
     defaultPermissionMode?: string | null;
     planUsage?: PlanUsage | null;
   };
+  /** Cross-engine routing (§6). Absent, or no other engine allowed: the run stays on its own engine. */
+  engines?: {
+    /** `workspace.modelRoutingProviders`: the other engines the owner lets this Agent's task runs use. */
+    allowed?: readonly string[];
+    /** The target runner's report on each engine, by slug; an engine absent here is not ruled out. */
+    states?: Readonly<Record<string, ModelRoutingEngineState>>;
+    /** For a verification task: the engine the task it verifies last ran on. */
+    verifiedRunEngine?: string | null;
+  };
 }
 
 export interface ModelRoutingDecision extends ModelRoutingSelection {
@@ -86,7 +108,7 @@ const FAILURE_WORDING = {
 } as const;
 const EFFORT_ORDER = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
-function priorLevel(run: ModelRoutingRun, runtime: string): ModelRoutingLevel | null {
+export function priorLevel(run: ModelRoutingRun, runtime: string): ModelRoutingLevel | null {
   if (run.level) return run.level;
   const model = run.model ?? '';
   if (model === 'opus' || model.startsWith('claude-opus-')) return 'L';
@@ -97,6 +119,58 @@ function priorLevel(run: ModelRoutingRun, runtime: string): ModelRoutingLevel | 
     ) ?? null;
   }
   return null;
+}
+
+/**
+ * The engine a routed run starts on (§6), with a reason for each step. The candidates are this
+ * Agent's own engine and the ones the owner allowed, and a provider pin is the only candidate there
+ * is. An engine signed out on the target runner or at ENGINE_QUOTA_LIMIT of a window is not picked,
+ * nor one whose models that runner has not reported. A verification task looks first for an engine
+ * other than the one the task it verifies last ran on; any other run stays on this Agent's engine
+ * and moves only when that engine is ruled out.
+ */
+function chooseEngine(input: ModelRoutingInput, provider: string): { provider: string; runtime: string; reasons: string[] } {
+  const { task, engines, environment } = input;
+  const { runtime } = environment;
+  if (task.provider) return { provider, runtime, reasons: [`Engine ${provider}: pinned on the task`] };
+  const own = `Engine ${provider}: this agent's own engine`;
+  const others = MODEL_ROUTING_ENGINES.filter((engine) =>
+    engine !== runtime && (engines?.allowed ?? []).includes(engine));
+  if (others.length === 0) return { provider, runtime, reasons: [own] };
+
+  const ruledOut = (engine: string): string | null => {
+    const state = engines?.states?.[engine];
+    if (state?.signedOut) return `${engine} is signed out on this runner`;
+    if (state?.quota && state.quota.utilization >= ENGINE_QUOTA_LIMIT) {
+      return `${engine} is at ${state.quota.utilization}% of its ${state.quota.window} quota`;
+    }
+    return null;
+  };
+  const ownOut = ruledOut(provider);
+  const notes = ownOut ? [ownOut] : [];
+  const usable: string[] = [];
+  for (const engine of others) {
+    const out = ruledOut(engine)
+      ?? (environment.modelCatalog?.[engine as AgentProvider]?.length ? null : `${engine} has not reported its models on this runner`);
+    if (out) notes.push(out);
+    else usable.push(engine);
+  }
+  const move = (engine: string, why: string) => ({
+    provider: engine,
+    runtime: engine,
+    reasons: [`Engine ${engine}: ${why}`, ...notes.filter((note) => note !== why)],
+  });
+  const stay = (line: string, explained: boolean) => ({ provider, runtime, reasons: explained ? [line, ...notes] : [line] });
+  const verified = engines?.verifiedRunEngine ?? null;
+  if (verified) {
+    if (runtime !== verified && !ownOut) return stay(`${own} — the task it verifies last ran on ${verified}`, false);
+    const fresh = usable.find((engine) => engine !== verified);
+    if (fresh) return move(fresh, `the task it verifies last ran on ${verified}`);
+  }
+  if (!ownOut) return verified ? stay(`${own} — no other engine it may use is available`, true) : stay(own, false);
+  return usable.length > 0
+    ? move(usable[0], ownOut)
+    : stay(`${own} — no other engine it may use is available`, true);
 }
 
 /** No I/O or writes to the task: every decision depends only on these value snapshots. */
@@ -160,16 +234,22 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
     reasons.push("No suggestion — keeps the agent's model, as today");
   }
   reasons.push(...skipped);
-  reasons.push(`Engine ${provider}: ${task.provider ? 'pinned on the task' : "this agent's own engine"}`);
-  if (!level) return unchanged(reasons);
+  if (!level) {
+    reasons.push(`Engine ${provider}: ${task.provider ? 'pinned on the task' : "this agent's own engine"}`);
+    return unchanged(reasons);
+  }
+  // The tier stays what it is wherever the run goes: it maps onto the chosen engine's tier table.
+  const engine = chooseEngine(input, provider);
+  reasons.push(...engine.reasons);
+  const { runtime: chosen } = engine;
 
-  const catalog = environment.modelCatalog?.[runtime] ?? [];
+  const catalog = environment.modelCatalog?.[chosen as AgentProvider] ?? [];
   if (catalog.length === 0) {
     return unchanged([...reasons, "This runner has not reported its models — keeps the agent's model"]);
   }
   let model: RunnerModelInfo | undefined;
   let effort: string | null;
-  if (runtime === AgentProvider.CODEX) {
+  if (chosen === AgentProvider.CODEX) {
     const defaultModel = environment.runtimeDefaultModels?.codex;
     model = catalog.find((row) => row.value === defaultModel) ?? catalog[0];
     effort = DEFAULT_MODEL_TIER_TABLE.codex[level].effort;
@@ -179,7 +259,7 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
   } else {
     const eligible = catalog.filter((row) =>
       environment.defaultPermissionMode !== PermissionMode.AUTO ||
-      autoAvailable(runtime, row.value, false, environment.modelCatalog),
+      autoAvailable(chosen, row.value, false, environment.modelCatalog),
     );
     if (eligible.length < catalog.length) {
       reasons.push('Models without Auto permission support were excluded');
@@ -223,7 +303,7 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
   return {
     policyVersion: MODEL_ROUTING_POLICY_VERSION,
     level,
-    provider,
+    provider: engine.provider,
     model: model.value,
     effort,
     reasons,
