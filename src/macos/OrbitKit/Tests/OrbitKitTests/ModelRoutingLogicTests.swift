@@ -118,6 +118,17 @@ final class ModelRoutingLogicTests: XCTestCase {
         XCTAssertEqual(Set(picks.map(\.id)).count, picks.count, "every row has its own identity")
     }
 
+    func testATiersNameInTheMenuBreaksOnlyAfterADot() {
+        let nbsp = "\u{00A0}"
+        XCTAssertEqual(TaskDetailLogic.menuTitle("M · Sonnet 5.5 · medium"),
+                       "M\(nbsp)· Sonnet\(nbsp)5.5\(nbsp)· medium")
+        XCTAssertEqual(TaskDetailLogic.menuTitle("No suggestion"), "No\(nbsp)suggestion")
+        XCTAssertEqual(TaskDetailLogic.menuTitle("L"), "L")
+        // The same words, only the spaces differ.
+        XCTAssertEqual(TaskDetailLogic.menuTitle("XL · Opus 5.5 · max").replacingOccurrences(of: nbsp, with: " "),
+                       "XL · Opus 5.5 · max")
+    }
+
     func testTheCoordinatorsReasonReadsUnderTheTierItArguesFor() throws {
         XCTAssertEqual(TaskDetailLogic.modelHintNote(detail),
                        "Coordinator: 照 Web 同一套改动做 macOS/iOS 界面，文案有 parity 测试约束，规格清楚。")
