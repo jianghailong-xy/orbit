@@ -30,6 +30,15 @@ func stopCodexProbeProcess(cmd *exec.Cmd, stdin io.Closer) error {
 	}
 	waited := make(chan error, 1)
 	go func() { waited <- cmd.Wait() }()
+	return errors.Join(closeErr, stopCodexProbeProcessWithWait(cmd, nil, waited))
+}
+
+// A probe that already owns cmd.Wait passes its result here instead of waiting twice.
+func stopCodexProbeProcessWithWait(cmd *exec.Cmd, stdin io.Closer, waited <-chan error) error {
+	var closeErr error
+	if stdin != nil {
+		closeErr = stdin.Close()
+	}
 	var waitErr error
 	exited := false
 	select {
@@ -94,63 +103,77 @@ func codexProbeGroupAlive(ctx context.Context, pgid int) (bool, error) {
 func TestCodexProbeCleanupStopsHomeWriters(t *testing.T) {
 	for _, mode := range []string{"graceful", "orphan", "forced", "unexpected"} {
 		t.Run(mode, func(t *testing.T) {
-			home := t.TempDir()
-			cmd := exec.Command(os.Args[0], "-test.run=^TestCodexProbeProcessHelper$")
-			cmd.Env = append(os.Environ(), "ORBIT_CODEX_PROBE_HELPER="+mode, "CODEX_HOME="+home)
-			configureCodexProbeProcess(cmd)
-			stdin, err := cmd.StdinPipe()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := cmd.Start(); err != nil {
-				t.Fatal(err)
-			}
-			stopped := false
-			t.Cleanup(func() {
-				if !stopped {
-					if err := stopCodexProbeProcess(cmd, stdin); err != nil {
-						t.Errorf("probe cleanup: %v", err)
+			for _, backgroundWaiter := range []bool{false, true} {
+				t.Run(fmt.Sprintf("background_waiter=%t", backgroundWaiter), func(t *testing.T) {
+					home := t.TempDir()
+					cmd := exec.Command(os.Args[0], "-test.run=^TestCodexProbeProcessHelper$")
+					cmd.Env = append(os.Environ(), "ORBIT_CODEX_PROBE_HELPER="+mode, "CODEX_HOME="+home)
+					configureCodexProbeProcess(cmd)
+					stdinR, stdin, err := os.Pipe()
+					if err != nil {
+						t.Fatal(err)
 					}
-				}
-			})
-			writes := filepath.Join(home, "writes")
-			deadline := time.Now().Add(5 * time.Second)
-			for {
-				if data, err := os.ReadFile(writes); err == nil && len(data) > 0 {
-					break
-				}
-				if time.Now().After(deadline) {
-					t.Fatal("descendant did not write into CODEX_HOME")
-				}
-				time.Sleep(5 * time.Millisecond)
-			}
-			err = stopCodexProbeProcess(cmd, stdin)
-			stopped = true
-			if (err != nil) != (mode == "unexpected") {
-				t.Fatalf("cleanup returned %v for %s", err, mode)
-			}
-			if mode == "unexpected" {
-				var exitErr *exec.ExitError
-				if !errors.As(err, &exitErr) || exitErr.ExitCode() != 7 {
-					t.Fatalf("cleanup lost the unexpected exit status: %v", err)
-				}
-			}
-			if mode != "forced" {
-				if _, err := os.Stat(filepath.Join(home, "eof")); err != nil {
-					t.Fatalf("wrapper did not exit on stdin EOF: %v", err)
-				}
-			}
-			before, err := os.ReadFile(writes)
-			if err != nil {
-				t.Fatal(err)
-			}
-			time.Sleep(30 * time.Millisecond)
-			after, err := os.ReadFile(writes)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(after) != len(before) {
-				t.Fatal("descendant still writes after cleanup returned")
+					cmd.Stdin = stdinR
+					if err := cmd.Start(); err != nil {
+						t.Fatal(errors.Join(err, stdinR.Close(), stdin.Close()))
+					}
+					stop := func() error { return stopCodexProbeProcess(cmd, stdin) }
+					if backgroundWaiter {
+						waited := make(chan error, 1)
+						go func() { waited <- cmd.Wait() }()
+						stop = func() error { return stopCodexProbeProcessWithWait(cmd, stdin, waited) }
+					}
+					stopped := false
+					t.Cleanup(func() {
+						if !stopped {
+							if err := stop(); err != nil {
+								t.Errorf("probe cleanup: %v", err)
+							}
+						}
+					})
+					if err := stdinR.Close(); err != nil {
+						t.Fatal(err)
+					}
+					writes := filepath.Join(home, "writes")
+					deadline := time.Now().Add(5 * time.Second)
+					for {
+						if data, err := os.ReadFile(writes); err == nil && len(data) > 0 {
+							break
+						}
+						if time.Now().After(deadline) {
+							t.Fatal("descendant did not write into CODEX_HOME")
+						}
+						time.Sleep(5 * time.Millisecond)
+					}
+					err = stop()
+					stopped = true
+					if (err != nil) != (mode == "unexpected") {
+						t.Fatalf("cleanup returned %v for %s", err, mode)
+					}
+					if mode == "unexpected" {
+						var exitErr *exec.ExitError
+						if !errors.As(err, &exitErr) || exitErr.ExitCode() != 7 {
+							t.Fatalf("cleanup lost the unexpected exit status: %v", err)
+						}
+					}
+					if mode != "forced" {
+						if _, err := os.Stat(filepath.Join(home, "eof")); err != nil {
+							t.Fatalf("wrapper did not exit on stdin EOF: %v", err)
+						}
+					}
+					before, err := os.ReadFile(writes)
+					if err != nil {
+						t.Fatal(err)
+					}
+					time.Sleep(30 * time.Millisecond)
+					after, err := os.ReadFile(writes)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if len(after) != len(before) {
+						t.Fatal("descendant still writes after cleanup returned")
+					}
+				})
 			}
 		})
 	}
