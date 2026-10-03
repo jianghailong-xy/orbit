@@ -448,16 +448,19 @@ describe('If you confirm, in the words both clients say', () => {
 
 describe('what a press sends', () => {
   it('names the report it answers, and carries a reason only with a send-back', () => {
+    // A confirmation always names the review record its card drew — null when it drew none — which
+    // is how the door knows this client knows about reviews (contract §7 Q3); a send-back does not.
     expect(ownerDecisionRequest(TASK_ID, REQUEST_ID, 'CONFIRM')).toEqual({
       path: `/tasks/${TASK_ID}/owner-confirmation`,
-      body: { decision: 'CONFIRM', requestId: REQUEST_ID },
+      body: { decision: 'CONFIRM', requestId: REQUEST_ID, reviewRecordId: null },
     });
     expect(ownerDecisionRequest(TASK_ID, REQUEST_ID, 'SEND_BACK', '  take the amount from the bank line  ')).toEqual({
       path: `/tasks/${TASK_ID}/owner-confirmation`,
       body: { decision: 'SEND_BACK', requestId: REQUEST_ID, note: 'take the amount from the bank line' },
     });
     // The task panel answers "no run is waiting".
-    expect(ownerDecisionRequest(TASK_ID, null, 'CONFIRM').body).toEqual({ decision: 'CONFIRM', requestId: null });
+    expect(ownerDecisionRequest(TASK_ID, null, 'CONFIRM').body)
+      .toEqual({ decision: 'CONFIRM', requestId: null, reviewRecordId: null });
   });
 
   it('reads a refusal for staleness as an out-of-date card', () => {
@@ -525,7 +528,7 @@ describe('what a press sends', () => {
     );
     expect(posts).toEqual([[`/tasks/${TASK_ID}/owner-confirmation`, {
       method: 'POST',
-      body: { decision: 'CONFIRM', requestId: REQUEST_ID },
+      body: { decision: 'CONFIRM', requestId: REQUEST_ID, reviewRecordId: null },
     }]]);
     expect(apiMock.mock.calls[0][1]).toMatchObject({ method: 'POST' });
     // ...and the read the card is drawn from is asked again once the door has answered.
@@ -568,7 +571,7 @@ describe('what a press sends', () => {
     );
     expect(posts).toEqual([[`/tasks/${TASK_ID}/owner-confirmation`, {
       method: 'POST',
-      body: { decision: 'CONFIRM', requestId: REQUEST_ID },
+      body: { decision: 'CONFIRM', requestId: REQUEST_ID, reviewRecordId: null },
     }]]);
   });
 });

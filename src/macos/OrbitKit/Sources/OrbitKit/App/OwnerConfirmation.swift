@@ -63,13 +63,28 @@ public struct OwnerConfirmationWaiting: Codable, Equatable, Sendable {
     public let sessionId: String
     public let requestedAt: String
     public let report: OwnerConfirmationReport?
+    /// Its review (`OwnerConfirmationReview.swift`); nil when it has no reviewer, from an older
+    /// server, and when this build cannot read it — a review costs its own bar, never the card.
+    public let review: OwnerConfirmationReviewView?
 
     public init(requestId: String, sessionId: String, requestedAt: String,
-                report: OwnerConfirmationReport? = nil) {
+                report: OwnerConfirmationReport? = nil, review: OwnerConfirmationReviewView? = nil) {
         self.requestId = requestId
         self.sessionId = sessionId
         self.requestedAt = requestedAt
         self.report = report
+        self.review = review
+    }
+
+    private enum CodingKeys: String, CodingKey { case requestId, sessionId, requestedAt, report, review }
+
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        requestId = try box.decode(String.self, forKey: .requestId)
+        sessionId = try box.decode(String.self, forKey: .sessionId)
+        requestedAt = try box.decode(String.self, forKey: .requestedAt)
+        report = try box.decodeIfPresent(OwnerConfirmationReport.self, forKey: .report)
+        review = try? box.decodeIfPresent(OwnerConfirmationReviewView.self, forKey: .review)
     }
 }
 
@@ -86,10 +101,21 @@ public struct RecordedOwnerDecision: Codable, Equatable, Sendable, Identifiable 
     public let sessionId: String?
     /// What that run had reported, so a receipt can say what was confirmed.
     public let report: OwnerConfirmationReport?
+    /// The answered request's review as it stands now, drawn under the receipt (§9 L3) — including
+    /// one that came in after the decision.
+    public let review: OwnerConfirmationReviewView?
+    /// The review's state when the owner decided; nil for a panel confirmation.
+    public let reviewStateAtDecision: String?
+    /// The REVIEW record the decision was made against.
+    public let reviewRecordId: String?
+    /// The owner's answers to that review's questions; empty when it asked none.
+    public let answers: [OwnerConfirmationAnswer]
 
     public init(id: String, decision: OwnerDecision, note: String? = nil, decidedAt: String,
                 decidedByType: String? = nil, requestId: String? = nil, sessionId: String? = nil,
-                report: OwnerConfirmationReport? = nil) {
+                report: OwnerConfirmationReport? = nil, review: OwnerConfirmationReviewView? = nil,
+                reviewStateAtDecision: String? = nil, reviewRecordId: String? = nil,
+                answers: [OwnerConfirmationAnswer] = []) {
         self.id = id
         self.decision = decision
         self.note = note
@@ -98,6 +124,33 @@ public struct RecordedOwnerDecision: Codable, Equatable, Sendable, Identifiable 
         self.requestId = requestId
         self.sessionId = sessionId
         self.report = report
+        self.review = review
+        self.reviewStateAtDecision = reviewStateAtDecision
+        self.reviewRecordId = reviewRecordId
+        self.answers = answers
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, decision, note, decidedAt, decidedByType, requestId, sessionId, report
+        case review, reviewStateAtDecision, reviewRecordId, answers
+    }
+
+    /// The review's fields are best-effort, as the card's are: a receipt is drawn from the decision,
+    /// and a review this build cannot read costs the review alone.
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        id = try box.decode(String.self, forKey: .id)
+        decision = try box.decode(OwnerDecision.self, forKey: .decision)
+        note = try box.decodeIfPresent(String.self, forKey: .note)
+        decidedAt = try box.decode(String.self, forKey: .decidedAt)
+        decidedByType = try box.decodeIfPresent(String.self, forKey: .decidedByType)
+        requestId = try box.decodeIfPresent(String.self, forKey: .requestId)
+        sessionId = try box.decodeIfPresent(String.self, forKey: .sessionId)
+        report = try box.decodeIfPresent(OwnerConfirmationReport.self, forKey: .report)
+        review = try? box.decodeIfPresent(OwnerConfirmationReviewView.self, forKey: .review)
+        reviewStateAtDecision = try? box.decodeIfPresent(String.self, forKey: .reviewStateAtDecision)
+        reviewRecordId = try? box.decodeIfPresent(String.self, forKey: .reviewRecordId)
+        answers = (try? box.decodeIfPresent([OwnerConfirmationAnswer].self, forKey: .answers)) ?? []
     }
 }
 
@@ -116,12 +169,16 @@ public struct OwnerConfirmationView: Codable, Equatable, Sendable {
     public let decisions: [RecordedOwnerDecision]
     /// What confirming sets off, while a run is waiting; nil otherwise, and from an older server.
     public let ifConfirmed: OwnerConfirmationIfConfirmed?
+    /// The reports a reviewer sent back to the run, oldest first (§8 B6): no decision answers them,
+    /// so the card each was is drawn as the record it became. Empty from an older server.
+    public let reviewerReturns: [ReviewerReturnedRequest]
 
     public init(taskId: String, title: String, status: String, projectId: String? = nil,
                 completionCriterion: String, acceptanceCriteria: String? = nil,
                 waiting: OwnerConfirmationWaiting? = nil,
                 decisions: [RecordedOwnerDecision] = [],
-                ifConfirmed: OwnerConfirmationIfConfirmed? = nil) {
+                ifConfirmed: OwnerConfirmationIfConfirmed? = nil,
+                reviewerReturns: [ReviewerReturnedRequest] = []) {
         self.taskId = taskId
         self.title = title
         self.status = status
@@ -131,6 +188,27 @@ public struct OwnerConfirmationView: Codable, Equatable, Sendable {
         self.waiting = waiting
         self.decisions = decisions
         self.ifConfirmed = ifConfirmed
+        self.reviewerReturns = reviewerReturns
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case taskId, title, status, projectId, completionCriterion, acceptanceCriteria, waiting
+        case decisions, ifConfirmed, reviewerReturns
+    }
+
+    public init(from decoder: Decoder) throws {
+        let box = try decoder.container(keyedBy: CodingKeys.self)
+        taskId = try box.decode(String.self, forKey: .taskId)
+        title = try box.decode(String.self, forKey: .title)
+        status = try box.decode(String.self, forKey: .status)
+        projectId = try box.decodeIfPresent(String.self, forKey: .projectId)
+        completionCriterion = try box.decode(String.self, forKey: .completionCriterion)
+        acceptanceCriteria = try box.decodeIfPresent(String.self, forKey: .acceptanceCriteria)
+        waiting = try box.decodeIfPresent(OwnerConfirmationWaiting.self, forKey: .waiting)
+        decisions = try box.decode([RecordedOwnerDecision].self, forKey: .decisions)
+        ifConfirmed = try box.decodeIfPresent(OwnerConfirmationIfConfirmed.self, forKey: .ifConfirmed)
+        reviewerReturns = (try? box.decodeIfPresent([ReviewerReturnedRequest].self,
+                                                    forKey: .reviewerReturns)) ?? []
     }
 }
 
@@ -257,24 +335,41 @@ public enum OwnerDecision: String, Codable, Equatable, Sendable {
 /// to — and nil for the task panel, which answers "no run is waiting". It is always written, null
 /// included, so what reaches the door says which question was answered rather than leaving it
 /// implied; `note` rides with a send-back and with nothing else.
-public struct OwnerDecisionRequest: Codable, Equatable, Sendable {
+///
+/// A confirmation always writes `reviewRecordId` too — the review record its card drew, null when
+/// it drew none (docs/owner-confirmation-review-contract.md §7 Q3). The key being there is how the
+/// door knows this client knows about reviews, so it is written with `encodeNil` rather than left
+/// out; `answers` ride beside it when the review asked anything. A send-back carries neither.
+public struct OwnerDecisionRequest: Encodable, Equatable, Sendable {
     public let decision: OwnerDecision
     public let requestId: String?
     public let note: String?
+    public let reviewRecordId: String?
+    public let answers: [OwnerAnswerBody]
 
-    public init(decision: OwnerDecision, requestId: String? = nil, note: String? = nil) {
+    public init(decision: OwnerDecision, requestId: String? = nil, note: String? = nil,
+                reviewRecordId: String? = nil, answers: [OwnerAnswerBody] = []) {
         self.decision = decision
         self.requestId = requestId
         self.note = note
+        self.reviewRecordId = reviewRecordId
+        self.answers = answers
     }
 
-    private enum CodingKeys: String, CodingKey { case decision, requestId, note }
+    private enum CodingKeys: String, CodingKey { case decision, requestId, note, reviewRecordId, answers }
 
     public func encode(to encoder: Encoder) throws {
         var box = encoder.container(keyedBy: CodingKeys.self)
         try box.encode(decision, forKey: .decision)
         try box.encode(requestId, forKey: .requestId)
         try box.encodeIfPresent(note, forKey: .note)
+        guard decision == .confirm else { return }
+        if let reviewRecordId {
+            try box.encode(reviewRecordId, forKey: .reviewRecordId)
+        } else {
+            try box.encodeNil(forKey: .reviewRecordId)
+        }
+        if !answers.isEmpty { try box.encode(answers, forKey: .answers) }
     }
 }
 
@@ -319,6 +414,9 @@ public struct OwnerConfirmationStanding: Equatable, Sendable {
         /// Something else is waiting — a later report, or a report in another session. Every answer
         /// this card could send would be refused as stale; the newer question has its own card.
         case superseded(OwnerConfirmationWaiting)
+        /// Its reviewer sent the report back to the run (§8 B6): the card is a record now, with
+        /// nothing to press — the owner was not asked.
+        case returned(ReviewerReturnedRequest)
         /// Nothing is waiting and nothing answers this request: the task settled, or was reopened.
         case notWaiting
         /// The read has not come back.
@@ -351,6 +449,12 @@ public struct OwnerConfirmationStanding: Equatable, Sendable {
 
     /// Whether the door would take an answer from this card: true for exactly one state.
     public var answerable: Bool { waiting != nil }
+
+    /// The return this card became, when its reviewer sent the report back.
+    public var returned: ReviewerReturnedRequest? {
+        if case .returned(let returned) = state { return returned }
+        return nil
+    }
 }
 
 // MARK: - the logic
@@ -438,6 +542,10 @@ public enum OwnerConfirmations {
         if let decided = view.decisions.first(where: { $0.requestId == requestID }) {
             return .answered(decided)
         }
+        // Returned by its reviewer: answered too, by nobody the owner was asked to be (§8 B3).
+        if let returned = view.reviewerReturns.first(where: { $0.requestId == requestID }) {
+            return .returned(returned)
+        }
         guard let waiting = view.waiting else { return .notWaiting }
         guard waiting.requestId == requestID, waiting.sessionId == sessionID else {
             return .superseded(waiting)
@@ -458,7 +566,7 @@ public enum OwnerConfirmations {
     public static func isOpen(_ standing: OwnerConfirmationStanding) -> Bool {
         switch standing.state {
         case .waiting, .unread:            return true
-        case .answered, .superseded, .notWaiting: return false
+        case .answered, .returned, .superseded, .notWaiting: return false
         }
     }
 
@@ -519,12 +627,69 @@ public enum OwnerConfirmations {
     public static let autoMain = "Lands on main by itself if the checks pass"
     public static let endsSession = "Ends this session"
 
+    /// What the card's mark says about itself, now that an agent's words can stand on it twice — the
+    /// report and the review — each in a box naming who wrote it (contract §10 G3;
+    /// `OWNER_CONFIRMATION_AUTHORSHIP_TITLE`).
+    public static let authorshipTitle = "Orbit composed this card and authorised its buttons. "
+        + "Anything an agent wrote is shown in a box that names who wrote it."
+
+    // MARK: the review bar's words (`OwnerConfirmationReview.tsx`)
+
+    /// What a run's session row, its header and its task's pointer say while its report is still
+    /// with its reviewer (§5 N3): the card is there and can be pressed, but nobody is asking yet.
+    public static let underReview = "Under review"
+    /// The review bar's label, ahead of who wrote it: a box key like WHAT THE AGENT SAID.
+    public static let reviewHeading = "REVIEW"
+    /// The reviewer's name when its conversation's title cannot be read (§1 S5).
+    public static let reviewerFallback = "Reviewer"
+    public static let reviewingSincePrefix = "Reviewing since"
+    public static let reviewWillAsk = "Orbit will ask you once the review is in. You can still confirm now."
+    /// Under a receipt the decision is made, so "Orbit will ask you" no longer holds (§9 L3).
+    public static let reviewWillShowHere = "It will show here when it comes in."
+    public static let reviewNeedsYou = "Needs you: "
+    public static let reviewNothingNeedsYou = "nothing needs you"
+    public static let reviewChecked = "Checked"
+    public static let reviewNotChecked = "Not checked"
+    public static let reviewLeftOpen = "Left open"
+    public static let reviewProblem = "Problem"
+    public static let notReviewed = "Not reviewed"
+    public static let notReviewedTail = " Only the agent that did the work has checked this."
+    public static let notReviewedReviewerEnded = "The reviewer’s session ended before it answered."
+    public static let notReviewedReviewerStopped = "The reviewer stopped without answering."
+    public static let notReviewedCoordinatorPaused = "This project’s coordinator is paused."
+    public static let notReviewedAutomaticOff = "Automatic was switched off for this project."
+    public static let notReviewedNoCoordinator = "This project has no coordinator conversation."
+    public static let notReviewedUnreachable = "The reviewer could not be reached."
+    public static let reviewOutdated = "Outdated"
+    public static let reviewEarlierReport = "Written for an earlier report."
+    public static let showOldReview = "Show the old review"
+    /// A reviewer sent the report back to the run: the card is a record now (§8 B6).
+    public static let returnedToAgent = "Returned to the agent"
+    public static let returnedFooter = "The agent got this as its next message. You were not asked."
+    /// The card the return draws in the run's own conversation (§8 B6).
+    public static let sentBackByReviewer = "Sent back by the reviewer"
+    /// The fold over a question's evidence (§7 Q2).
+    public static let reviewEvidence = "Evidence"
+    public static let answersSentWithConfirm = "Your answers are sent with Confirm done."
+    /// What a receipt lists the owner's answers under (§7 Q5).
+    public static let yourAnswers = "Your answers"
+    public static let answerNotShown = "Not shown to you — the recommended answer was recorded."
+    public static let beforeReview = "Before the review came in"
+    /// The card the reviewer's own conversation draws for the turn that asks it to review (§2 D7).
+    public static let reviewRequested = "Review requested"
+    /// The press onto the run's session — the exception card's words for the same door.
+    public static let openTaskSession = "Open task session"
+
     /// The door's refusals that mean "this card is out of date", in the door's own spelling
     /// (`OWNER_CONFIRMATION_STALE_CODES`).
     public static let staleCodes: [String] = [
         "OWNER_CONFIRMATION_STALE",
         "OWNER_CONFIRMATION_NOTHING_TO_SEND_BACK",
         "OWNER_CONFIRMATION_TASK_SETTLED",
+        // The two a review adds (§7 Q3): the review the card drew is not the one waiting now, or its
+        // questions were not all answered. Read again, the card draws them as they are now.
+        "OWNER_CONFIRMATION_REVIEW_STALE",
+        "OWNER_CONFIRMATION_ANSWERS_REQUIRED",
     ]
 
     /// The statuses an OWNER_CONFIRMED task can still be confirmed from: the door's own two.
@@ -554,7 +719,8 @@ public enum OwnerConfirmations {
     public static func staleExplanation(_ standing: OwnerConfirmationStanding)
         -> StaleExplanation? {
         switch standing.state {
-        case .waiting, .answered:
+        // A returned card is the record of what happened to it, and says so itself.
+        case .waiting, .answered, .returned:
             return nil
         case .superseded:
             return StaleExplanation(
@@ -585,10 +751,13 @@ public enum OwnerConfirmations {
     /// nothing at all, so there is no request worth making. The reason is trimmed, because
     /// whitespace is not one, and it rides with a send-back and with nothing else.
     public static func request(waiting: OwnerConfirmationWaiting, decision: OwnerDecision,
-                               note: String? = nil) -> OwnerDecisionRequest? {
+                               note: String? = nil,
+                               review: OwnerDecisionReview? = nil) -> OwnerDecisionRequest? {
         switch decision {
         case .confirm:
-            return OwnerDecisionRequest(decision: .confirm, requestId: waiting.requestId)
+            return OwnerDecisionRequest(decision: .confirm, requestId: waiting.requestId,
+                                        reviewRecordId: review?.reviewRecordId,
+                                        answers: review?.answers ?? [])
         case .sendBack:
             let reason = note?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !reason.isEmpty else { return nil }
@@ -611,6 +780,9 @@ public enum OwnerConfirmations {
     public enum PanelAction: Equatable, Sendable {
         /// A run is waiting: the panel takes the reader to the card in that run's session.
         case pointer(sessionId: String)
+        /// A run is waiting and its report is still with its reviewer (§5 N3): the same way to the
+        /// card, saying `Under review` rather than asking for the owner's confirmation.
+        case underReview(sessionId: String)
         case confirm
     }
 
@@ -624,7 +796,11 @@ public enum OwnerConfirmations {
     /// end knows it.
     public static func panelAction(_ view: OwnerConfirmationView?, taskIsOwnerConfirmed: Bool,
                                    taskUnsettled: Bool, taskHasRuns: Bool) -> PanelAction? {
-        if let waiting = view?.waiting { return .pointer(sessionId: waiting.sessionId) }
+        if let waiting = view?.waiting {
+            return waiting.review?.state == .underReview
+                ? .underReview(sessionId: waiting.sessionId)
+                : .pointer(sessionId: waiting.sessionId)
+        }
         if let view {
             guard view.completionCriterion == ownerConfirmedCriterion,
                   confirmableStatuses.contains(view.status) else { return nil }

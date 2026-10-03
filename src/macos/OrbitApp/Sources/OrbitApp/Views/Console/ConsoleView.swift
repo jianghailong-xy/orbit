@@ -793,6 +793,17 @@ struct TranscriptView: View {
                                        undelivered: bubble.undelivered,
                                        onCancelQueued: bubble.turnId == nil
                                            ? nil : { Task { await console.cancelQueued(bubble) } })
+            } else if let card = bubble.reviewRequest {
+                // A confirmation review's turns are Orbit's on the queue too: the cards the
+                // transcript draws once a runner takes them (web parity: the queued tail's
+                // `q.confirmationReviewRequest` / `q.confirmationReturn`).
+                ReviewRequestedCardView(card: card, ts: bubble.ts, undelivered: bubble.undelivered,
+                                        onCancelQueued: bubble.turnId == nil
+                                            ? nil : { Task { await console.cancelQueued(bubble) } })
+            } else if let card = bubble.reviewReturn {
+                SentBackByReviewerCardView(card: card, ts: bubble.ts, undelivered: bubble.undelivered,
+                                           onCancelQueued: bubble.turnId == nil
+                                               ? nil : { Task { await console.cancelQueued(bubble) } })
             } else if let wake = WatchWakeText.parse(bubble.text) {
                 WatchWakeCardView(wake: wake, text: bubble.text, ts: bubble.ts,
                                   undelivered: bubble.undelivered,
@@ -1396,6 +1407,17 @@ struct TranscriptItemView: View {
                 ProjectStartedCardView(card: started, text: b.text, ts: b.ts,
                                        undelivered: b.undelivered || b.delivery == "failed",
                                        attached: b.attached)
+            } else if let card = b.reviewRequest {
+                // A confirmation request handed to this conversation to review, and a reviewer's
+                // return handed to the run (`ConfirmationReviewTurns.swift`): Orbit's turns, drawn as
+                // their cards with the block the agent read riding at the foot (web parity: NodeView).
+                ReviewRequestedCardView(card: card, ts: b.ts,
+                                        undelivered: b.undelivered || b.delivery == "failed",
+                                        attached: b.attached)
+            } else if let card = b.reviewReturn {
+                SentBackByReviewerCardView(card: card, ts: b.ts,
+                                           undelivered: b.undelivered || b.delivery == "failed",
+                                           attached: b.attached)
             } else if let replies = b.sessionReplies, !replies.isEmpty {
                 // The outcomes of this session's own requests, handed back (`sessionReplies`,
                 // `SessionReply.parse`): a reply turn carries nobody's words, and a message of the
