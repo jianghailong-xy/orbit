@@ -389,11 +389,12 @@ function EngineRow({
             Retry
           </Button>
         );
-      // Nothing to press until the probe lands and says whether it needs signing in.
-      case 'installed':
-        return null;
       case 'in':
         return <ResignIn onClick={() => onSignIn(signIn === engine ? null : engine)} />;
+      // Signed out, wouldn't say, or just installed. An install the probe hasn't caught up with yet
+      // gets Sign in too: a CLI that was just installed has no sign-in, so that is what comes next,
+      // and the runner only reports an install done once the binary is on its PATH — waiting for the
+      // check-in first left the row with nothing to press for up to a heartbeat.
       default:
         return (
           <Button
