@@ -204,15 +204,23 @@ export function loginSpentNotice(login: { email: string | null; accountId: strin
 }
 
 /**
- * Why a login pool's session can send nothing: its account was signed out by OpenAI, and signing it in
- * again is its owner's alone — the session's owner, since a login pool is nobody else's (migration 0323).
- * The gateway's refusal, and the line the transcript is owed when it happens.
+ * Why a session of a Codex pool can send nothing: its account was signed out by OpenAI, and signing it
+ * in again is the pool owner's alone (migration 0323; the accounts run the people its owner added too,
+ * 2026-10-03, but nobody but its owner may sign one in). `byOwner` says whose session is owed the line —
+ * the owner's own, or one of those people's, who can only ask. The gateway's refusal, and the line the
+ * transcript is owed when it happens.
  */
-export function loginSignedOutNotice(login: { email: string | null; accountId: string }, poolLabel: string): string {
-  return `The ChatGPT account ${accountName(login)} on "${poolLabel}" was signed out by OpenAI — only you can sign in again, on the pool's page`;
+export function loginSignedOutNotice(
+  login: { email: string | null; accountId: string },
+  poolLabel: string,
+  byOwner = true,
+): string {
+  const way = byOwner ? 'only you can sign in again' : 'only its owner can sign in again';
+  return `The ChatGPT account ${accountName(login)} on "${poolLabel}" was signed out by OpenAI — ${way}, on the pool's page`;
 }
 
-/** Why a login pool's session can send nothing because the pool holds no account. */
-export function loginMissingReason(poolLabel: string): string {
-  return `"${poolLabel}" has no ChatGPT account signed in — only you can sign one in, on the pool's page`;
+/** Why a session of a Codex pool can send nothing because the pool holds no account. `byOwner` as above. */
+export function loginMissingReason(poolLabel: string, byOwner = true): string {
+  const way = byOwner ? 'only you can sign one in' : 'only its owner can sign one in';
+  return `"${poolLabel}" has no ChatGPT account signed in — ${way}, on the pool's page`;
 }

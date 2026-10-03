@@ -10,22 +10,22 @@
  *  (C) No browser-visible providers or pool payload carries a credential. Every route the providers
  *      controllers declare is called, refusals included, and no body holds `sk-ant`, a stored
  *      ciphertext or a key field. The owner's own reveal route, which exists to return a key, is the
- *      positive control that shows the check can see one. Nor does any of them hand a person the owner
- *      added to a pool of her ChatGPT accounts (migration 0358) anything of those accounts: asked by
- *      them — at her pool wherever a route takes one — no answer names an account's email, plan,
- *      `…AB12`, quota or the words OpenAI refused it with, only that she has some (`ownerHasChatGPT`),
- *      and neither does their session on the pool. Her own same requests, which read every one of
- *      those, are the positive control.
+ *      positive control that shows the check can see one. A person the owner added to a pool of her
+ *      ChatGPT accounts (migration 0358) reads those accounts — since 2026-10-03 they run their sessions
+ *      too (pool-credential-select.ts), so the pool's page names each one's email, plan, `…AB12`, quota
+ *      and why OpenAI refused it — and OpenAI's own id of an account is named to nobody, her included.
+ *      Their session on the pool says nothing of an account either, and no push carries one.
  *  (D) The key never lands in an agent's env (Workspace.env), nor anywhere else at rest: it is
  *      decrypted at the claim, into the job env alone.
- *  (E) A ChatGPT account in a Codex pool runs its owner's sessions and nobody else's (migration 0358): a
- *      person the owner added to the pool runs on its API keys alone. At every door that builds their
- *      session's engine — the claim, a restarted runner's reclaim, a provider-switch reload — they get a
- *      person's token and never a login pool's (no `pool_login_token` row of theirs), their session names
- *      no account, and through the real gateway their token reaches OpenAI's API on a key and nothing else;
- *      a row naming the owner's account by hand is refused there, with nothing sent anywhere. The same
- *      three doors for the owner are the positive control: an account, a login pool token, and the
- *      ChatGPT backend on that account.
+ *  (E) A ChatGPT account in a Codex pool runs the sessions of everyone in it — its owner's, and those of
+ *      the people the owner added (2026-10-03). At every door that builds their session's engine — the
+ *      claim, a restarted runner's reclaim, a provider-switch reload — they get a person's token and never
+ *      a login pool's (no `pool_login_token` row of theirs; 0324's fence holds the login table to the
+ *      owner), their session names the account, and through the real gateway their token reaches ChatGPT's
+ *      Codex backend on it, with the account's live access token in place. A session row naming an account
+ *      the pool no longer holds is refused there, with nothing sent anywhere — the gateway reads the
+ *      pool's own rows, not the session's. The same three doors for the owner are the positive control:
+ *      a login pool token, and the same backend on the same account.
  *
  * (B) — the usage probe and pool admission — needs no database: pool-security-boundary.spec.ts.
  *
@@ -58,7 +58,7 @@ import { Module, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { HttpAdapterHost, NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaClient, RunStatus, RunnerStatus, type ModelProvider } from '@prisma/client';
+import { PrismaClient, RunStatus, RunnerStatus, type ModelProvider, type Prisma } from '@prisma/client';
 import { toUuid, uuidToBase62, type ClaimedSession } from '@orbit/shared';
 import { json, urlencoded } from 'express';
 import { Client } from 'pg';
@@ -803,7 +803,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     assert.equal((await recorded(onHers)).poolMemberProviderId, null);
   });
 
-  await t.test("(E) a person added to a pool of one's own ChatGPT accounts runs on its API keys alone — no login token, no account at the claim, the reclaim or the reload, and the gateway reaches OpenAI's API only; the owner's same three reach the ChatGPT backend on her account", async () => {
+  await t.test("(E) a person added to a pool of one's own ChatGPT accounts runs on its account too — a person's token, no login token of theirs, the gateway reaching the ChatGPT backend on that account; the owner's same three as the positive control", async () => {
     const owner = await person(db, 'codex-owner');
     const member = await person(db, 'codex-member');
     names.set(owner, 'the codex pool owner').set(member, 'a person in her codex pool');
@@ -877,7 +877,8 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
 
     const gateway = await openGateway(prisma, realtime, pools, doorsOver.login!);
     try {
-      // The person: every door, on a session row that even names her account to begin with.
+      // The person: every door lands on her account — it runs their sessions too — on a person's token,
+      // with no login pool token of theirs anywhere.
       const theirs = await threeDoors(member, 'codex-member', accountId);
       for (const { door, at, sessionId, payload, env } of theirs) {
         const token = env?.OPENAI_API_KEY ?? '';
@@ -890,24 +891,37 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
           0,
           `${door}: a login pool token of the person's`,
         );
-        assert.deepEqual(await onPool(sessionId), { poolCodexAccountId: null, poolKeyId: key.id }, `${door}: the session's credential`);
-        // Through the gateway: OpenAI's API on the key, and nothing else anywhere.
+        assert.deepEqual(await onPool(sessionId), { poolCodexAccountId: accountId, poolKeyId: null }, `${door}: the session's credential`);
+        // Through the gateway: ChatGPT's Codex backend on her account — the account's own access token and
+        // id put in place, never anything of the key's — and nothing sent anywhere else.
         const sent = await gateway.send(token);
         assert.equal(sent.status, 200, `${door}: ${sent.code}`);
-        assert.deepEqual(sent.upstream, [{ path: '/v1/responses', authorization: `Bearer ${apiKey}`, account: undefined }], door);
+        assert.deepEqual(sent.upstream, [
+          { path: '/backend-api/codex/responses', authorization: `Bearer ${login.access}`, account: accountId },
+        ], door);
       }
-      // A row naming her account by hand cannot take the person's token there: refused, and nothing goes out.
-      const [{ sessionId: forged, env: forgedEnv }] = theirs;
-      await db.session.update({ where: { id: forged }, data: { poolCodexAccountId: accountId } });
-      const refused = await gateway.send(forgedEnv!.OPENAI_API_KEY!);
+      // A session row naming an account the pool no longer holds is refused, with nothing sent: the row is
+      // no way in — the gateway reads the pool's own rows for the account it sends on.
+      const [{ sessionId: gone, env: goneEnv }] = theirs;
+      const held = await db.poolCodexLogin.findUniqueOrThrow({ where: { poolId_accountId: { poolId: pool.id, accountId } } });
+      await db.poolCodexLogin.delete({ where: { poolId_accountId: { poolId: pool.id, accountId } } });
+      const refused = await gateway.send(goneEnv!.OPENAI_API_KEY!);
       assert.deepEqual({ status: refused.status, code: refused.code, upstream: refused.upstream }, {
-        status: 403, code: 'orbit_pool_login_owner_only', upstream: [],
+        status: 403, code: 'orbit_pool_login_missing', upstream: [],
       });
-      await db.session.update({ where: { id: forged }, data: { poolCodexAccountId: null } });
+      // Back, field by field — the row as the sign-in stored it, its ciphertexts included.
+      await db.poolCodexLogin.create({
+        data: {
+          poolId: pool.id, userId: owner, accountId: held.accountId, email: held.email, plan: held.plan,
+          accessTokenEnc: held.accessTokenEnc, refreshTokenEnc: held.refreshTokenEnc,
+          expiresAt: held.expiresAt, state: held.state, lastError: held.lastError, spentUntil: held.spentUntil,
+          ...(held.usage === null ? {} : { usage: held.usage as Prisma.InputJsonValue, usageReadAt: held.usageReadAt }),
+        },
+      });
       // …and no login pool token can name the person at all: 0324's fence to the pool's owner stands.
       await assert.rejects(
         db.poolLoginToken.create({
-          data: { tokenHash: `pool-security-${randomUUID()}`, poolId: pool.id, userId: member, sessionId: forged, expiresAt: new Date(Date.now() + 60_000) },
+          data: { tokenHash: `pool-security-${randomUUID()}`, poolId: pool.id, userId: member, sessionId: gone, expiresAt: new Date(Date.now() + 60_000) },
         }),
         'a login pool token naming the person was stored',
       );
@@ -1048,7 +1062,7 @@ suite("account pools' security boundary, on real PostgreSQL", { timeout: 600_000
     assert.equal(reveal.json.apiKey, personal.key);
   });
 
-  await t.test("(C) a person she added to a pool of her ChatGPT accounts reads nothing of them at any route, refusals included, but that she has some — and her own same requests read all of it", async () => {
+  await t.test("(C) a person she added to a pool of her ChatGPT accounts reads them at any route as she does — they run their sessions too (2026-10-03) — bar OpenAI's own id of an account, which no response names to anyone", async () => {
     const owner = await person(db, 'chatgpt-owner');
     const member = await person(db, 'chatgpt-member');
     const ownerAt = await machine(db, owner, 'chatgpt-owner');
@@ -1258,40 +1272,48 @@ exec sleep 300
       await rm(work, { recursive: true, force: true });
     }
 
-    // The person read nothing of her accounts: not in an answer, not in their session, not in a push.
-    assert.deepEqual(
-      asked.person.flatMap((answer) => {
-        const found = readIn(answer.text);
-        return found.length ? [`${answer.method} /api/${answer.route} as ${answer.who} → ${answer.status}: ${found.join(', ')}`] : [];
-      }),
-      [],
-      'what the person read of her ChatGPT accounts',
-    );
+    // Their session read says nothing of her accounts — which account it runs on is not a session field to
+    // anyone — and nothing pushed to them names one either.
     assert.deepEqual(readIn(wire(theirSession)), [], 'what their session on her pool says of her ChatGPT accounts');
     assert.deepEqual(
       broadcasts.filter((broadcast) => broadcast.includes(member)).flatMap((broadcast) => readIn(wire(broadcast))),
       [],
       'what was pushed to the person of her ChatGPT accounts',
     );
-    // …but that she has some, which the page's locked line is drawn from — and a pool with none says so.
+    // The person's pages read the accounts as hers do: each email, plan, `…AB12`, quota and last error is in
+    // an answer they got — that is what the pool's page shows them now.
     const answered = (who: Who, method: string, route: string) =>
       asked[who].find((answer) => answer.method === method && answer.route === route)?.json;
-    assert.equal(answered('person', 'GET', 'providers/shared-pools/:id')?.ownerHasChatGPT, true);
-    assert.equal(
-      (answered('person', 'GET', 'providers/shared-pools') as Array<{ id: string; ownerHasChatGPT: boolean }>).find((p) => p.id === at.id)
-        ?.ownerHasChatGPT,
-      true,
+    const seenByPerson = new Set(
+      asked.person.flatMap((answer) => onlyHers.filter(({ value }) => answer.text.includes(value)).map(({ what }) => what)),
     );
-    assert.equal(answered('person', 'POST', 'providers/shared-pools')?.ownerHasChatGPT, false);
-
-    // The positive control: her own same requests read every one of those — bar OpenAI's id of an account,
-    // which is nobody's to read.
-    const shown = new Set(asked.owner.flatMap((answer) => onlyHers.filter(({ value }) => answer.text.includes(value))));
     assert.deepEqual(
-      onlyHers.filter((item) => !shown.has(item)).map(({ what, value }) => `${what}: ${value}`),
-      accounts.map((account) => `an account id: ${account.accountId}`),
-      'what her own requests did not read of her ChatGPT accounts',
+      onlyHers.filter((item) => !seenByPerson.has(item.what)).map(({ what }) => what),
+      accounts.map(() => 'an account id'),
+      'what the person did not read of her ChatGPT accounts',
     );
+    // Both of them, and a pool the person made with no account in it: `logins` is the accounts themselves,
+    // and empties of them where there are none.
+    const pageOne = answered('person', 'GET', 'providers/shared-pools/:id') as { logins?: Array<{ email: string | null }> };
+    assert.deepEqual(
+      pageOne.logins?.map((account) => account.email).sort(),
+      accounts.map((account) => account.email).sort(),
+    );
+    const listed = (answered('person', 'GET', 'providers/shared-pools') as Array<{ id: string; logins: unknown[] }>)
+      .find((p) => p.id === at.id);
+    assert.equal(listed?.logins?.length, accounts.length);
+    assert.deepEqual(answered('person', 'POST', 'providers/shared-pools')?.logins, []);
+
+    // The positive control: her own same requests read every one of those too — and no request of either of
+    // them names OpenAI's id of an account, which is nobody's to read.
+    for (const who of ['owner', 'person'] as const) {
+      const shown = new Set(asked[who].flatMap((answer) => onlyHers.filter(({ value }) => answer.text.includes(value))));
+      assert.deepEqual(
+        onlyHers.filter((item) => !shown.has(item)).map(({ what, value }) => `${what}: ${value}`),
+        accounts.map((account) => `an account id: ${account.accountId}`),
+        `what the ${who}'s requests did not read of her ChatGPT accounts`,
+      );
+    }
 
     // No answer to either of them carries a credential: a token of her accounts or an OpenAI key, in the
     // clear or as stored.

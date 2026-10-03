@@ -17,11 +17,12 @@
  *  (6) Removing a person, and deleting the pool, ends their tokens in the same statement.
  *  (7) A pool of one's own ChatGPT accounts takes people and API keys too (migration 0358), through the same
  *      doors: its owner is in it as its only admin, adds a person by the email of their Orbit account and
- *      adds a key. The owner's session runs on the account while it can and on a key when it cannot — a
- *      login pool's token either way — and back on the account at the claim after it can again, each move
- *      saying so; the person's runs on the keys alone, its own first, on a person's token, with no account
- *      named and no login pool token of theirs anywhere. Everyone taken out, it is "Just me" again: their
- *      keys and tokens are gone, and their session is handed nothing of the pool.
+ *      adds a key. Every session of it runs on the account while it can and on a key when it cannot — the
+ *      owner's on a login pool's token, the person added on a person's, no login pool token of theirs
+ *      anywhere — and back on the account at the claim after it can again, each move saying so; the
+ *      person's move names the account, since it is theirs to run on too (2026-10-03). Everyone taken out,
+ *      it is "Just me" again: their keys and tokens are gone, and their session is handed nothing of the
+ *      pool.
  *
  * Production code throughout: QueueService's claim, RunnerApiController's reclaim and inbox,
  * SessionsService, SharedPoolsService and ProvidersService. It only adds rows, and refuses to run anywhere
@@ -376,7 +377,7 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
     assert.deepEqual((await claim(mia, miaSession)).agent.env, mia.env);
   });
 
-  await t.test("(7) a pool of one's own ChatGPT accounts takes people and keys: the owner runs on an account while one can and on a key when none can; a person added runs on the keys alone; everyone out is Just me again", async () => {
+  await t.test("(7) a pool of one's own ChatGPT accounts takes people and keys: everyone in it runs on an account while one can and on a key when none can; everyone out is Just me again", async () => {
     const olga = await person(db, 'Olga');
     const pia = await person(db, 'Pia');
     const made = await providers.createPool(olga.id, { label: 'Olga Codex', engine: 'codex' });
@@ -415,9 +416,33 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
     const page = await pools.get(olga.id, own.id);
     assert.deepEqual(page.people.map((p) => [p.userId, p.role, p.creator]), [[olga.id, 'ADMIN', true], [pia.id, 'MEMBER', false]]);
     assert.deepEqual(page.keys.map((k) => k.label).sort(), ['olga-org', 'pia-proj']);
-    assert.ok(!wire(page).includes(accountId) && !wire(page).includes('olga@codex-login.invalid'), 'the people-and-keys page names her account');
+    // The page names her account to everyone in the pool (2026-10-03: it runs their sessions too), by its
+    // email and `…AB12` — never by OpenAI's own id of it.
+    assert.ok(wire(page).includes('olga@codex-login.invalid'), 'the page does not name her account');
+    assert.ok(!wire(page).includes(accountId), "the page names OpenAI's account id");
     const usable = await providers.listUsable(pia.id);
     assert.deepEqual(usable.filter((p) => p.slug === own.slug).map((p) => p.runtime), ['codex']);
+
+    // The doors that take a provider: neither of them refuses her the pool. With both keys switched off the
+    // account can still run her sessions (2026-10-03), so it is still taken; with the account signed out
+    // too it is refused in the words of somebody who can only ask its owner to sign in again.
+    await db.poolApiKey.updateMany({ where: { poolId: own.id }, data: { enabled: false } });
+    assert.equal(await queue.accountPoolRefusal(pia.id, own.slug), null, 'its account runs her sessions');
+    assert.equal(await queue.accountPoolRefusal(olga.id, own.slug), null, "its owner's too");
+    await db.poolCodexLogin.update({
+      where: { poolId_accountId: { poolId: own.id, accountId } },
+      data: { state: 'SIGNED_OUT' },
+    });
+    assert.equal(
+      await queue.accountPoolRefusal(pia.id, own.slug),
+      'the ChatGPT account olga@codex-login.invalid on the pool "Olga Codex" was rejected by OpenAI — '
+        + "ask its owner to sign in again, on the pool's page, or pick another provider",
+    );
+    await db.poolCodexLogin.update({
+      where: { poolId_accountId: { poolId: own.id, accountId } },
+      data: { state: 'ACTIVE' },
+    });
+    await db.poolApiKey.updateMany({ where: { poolId: own.id }, data: { enabled: true } });
 
     const accountOn = async (sessionId: string) =>
       db.session.findUniqueOrThrow({
@@ -425,8 +450,9 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
         select: { poolCodexAccountId: true, poolKeyId: true, poolSwitchNotice: true },
       });
 
-    // Pia's session: on the keys alone — her own first — on a person's token; no account named, no login pool
-    // token of hers, and nothing of the account in what her runner was handed.
+    // Pia's session: on Olga's ChatGPT account — since 2026-10-03 the pool's accounts run the people its
+    // owner added too — on a person's token; no login pool token of hers, and nothing of the account in
+    // what her runner was handed (the credential itself never leaves the gateway).
     const piaSession = (await sessions.create(pia.id, {
       prompt: 'hello', title: "on Olga's pool", workspaceId: pia.workspaceId, provider: own.slug,
     })).id;
@@ -434,7 +460,7 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
     const piaToken = piaClaim.agent.env?.OPENAI_API_KEY;
     assert.match(piaToken ?? '', /^orbit-gw-[A-Za-z0-9_-]{43}$/);
     assert.deepEqual(piaClaim.agent.env, { ...pia.env, OPENAI_BASE_URL: GATEWAY, OPENAI_API_KEY: piaToken });
-    assert.deepEqual(await accountOn(piaSession), { poolCodexAccountId: null, poolKeyId: piaKey, poolSwitchNotice: null });
+    assert.deepEqual(await accountOn(piaSession), { poolCodexAccountId: accountId, poolKeyId: null, poolSwitchNotice: null });
     assert.equal(await db.poolLoginToken.count({ where: { OR: [{ userId: pia.id }, { sessionId: piaSession }] } }), 0);
     assert.deepEqual((await tokensOf(piaSession)).map((row) => [row.poolId, row.userId]), [[own.id, pia.id]]);
     for (const secret of [accountId, login.access, login.refresh, 'olga@codex-login.invalid']) {
@@ -466,8 +492,19 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
     // While a key can run for her, a retry of a turn that failed there waits for nothing; the pool resumes now.
     assert.equal(await queue.loginPoolRetryAt(db, { ownerId: olga.id, provider: own.slug, poolCodexAccountId: null, poolKeyId: olgaKey }, new Date()), null);
     assert.ok((await queue.accountPoolResumesAt(olga.id, own.slug, new Date()))!.getTime() <= Date.now());
-    await db.session.update({ where: { id: olgaSession }, data: { poolSwitchNotice: null } });
-    // The account can run again: back on it at the next claim.
+    // Pia's session was on the same account — it runs hers too — so the same limit moves her off it, onto a
+    // key of her own and on her own token; the line names the account, as hers did.
+    assert.match((await claim(pia, piaSession)).agent.env?.OPENAI_API_KEY ?? '', /^orbit-gw-/);
+    assert.deepEqual(await accountOn(piaSession), {
+      poolCodexAccountId: null,
+      poolKeyId: piaKey,
+      poolSwitchNotice: 'Switched to pia-proj — the usage limit on olga@codex-login.invalid is reached',
+    });
+    // For her too, a retry of a turn that failed on that account waits for nothing: her key can run.
+    assert.equal(await queue.sharedPoolRetryAt(db, { ownerId: pia.id, provider: own.slug, poolCodexAccountId: null, poolKeyId: piaKey }, new Date()), null);
+    assert.ok((await queue.accountPoolResumesAt(pia.id, own.slug, new Date()))!.getTime() <= Date.now());
+    await db.session.updateMany({ where: { id: { in: [olgaSession, piaSession] } }, data: { poolSwitchNotice: null } });
+    // The account can run again: back on it at the next claim — both of them, each on their own token.
     await db.poolCodexLogin.update({ where: { poolId_accountId: { poolId: own.id, accountId } }, data: { spentUntil: null } });
     await claim(olga, olgaSession);
     assert.deepEqual(await accountOn(olgaSession), {
@@ -475,13 +512,12 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
       poolKeyId: null,
       poolSwitchNotice: 'Switched to olga@codex-login.invalid — your ChatGPT accounts come first',
     });
-    // Pia's session never moves onto it, whatever the account does.
     await claim(pia, piaSession);
-    assert.deepEqual(await accountOn(piaSession), { poolCodexAccountId: null, poolKeyId: piaKey, poolSwitchNotice: null });
-    // A row that names the account anyway — carried over, or written by hand — is cleared by her next claim.
-    await db.session.update({ where: { id: piaSession }, data: { poolCodexAccountId: accountId } });
-    await claim(pia, piaSession);
-    assert.equal((await accountOn(piaSession)).poolCodexAccountId, null);
+    assert.deepEqual(await accountOn(piaSession), {
+      poolCodexAccountId: accountId,
+      poolKeyId: null,
+      poolSwitchNotice: "Switched to olga@codex-login.invalid — the pool's ChatGPT accounts come first",
+    });
     assert.equal(await db.poolLoginToken.count({ where: { userId: pia.id } }), 0);
 
     // Everyone taken out: Just me again. Her key and her tokens go with her; the owner's key stays.

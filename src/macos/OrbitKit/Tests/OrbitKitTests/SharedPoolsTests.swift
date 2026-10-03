@@ -17,11 +17,13 @@ final class SharedPoolsTests: XCTestCase {
     private static let wikova = id(1), zhang = id(2), chen = id(3), lin = id(4)
 
     /// What the server answers Wikova, the pool's creator: base62 ids, as the public-id interceptor
-    /// leaves them, and the fields this client doesn't read (timestamps). A server from before scheme A
-    /// says nothing of whose ChatGPT accounts are in it.
+    /// leaves them, and the fields this client doesn't read (timestamps). A pool made on the shared pools
+    /// page holds no ChatGPT account, so `logins` is empty — which is also what a server from before
+    /// scheme A leaves out entirely.
     private static let payload = """
     [{
       "id": "\(id(900))", "slug": "team-codex", "label": "Team Codex", "engine": "codex", "shared": true,
+      "logins": [],
       "membersCanAdd": true, "ownKeyFirst": true, "viewerRole": "ADMIN",
       "window": {"start": "2026-09-01T00:00:00.000Z", "end": "2026-10-01T00:00:00.000Z"},
       "people": [
@@ -84,7 +86,7 @@ final class SharedPoolsTests: XCTestCase {
                                  usage: key.usage, running: key.running)
         }
         return SharedPool(id: pool.id, slug: pool.slug, label: pool.label, engine: pool.engine, shared: pool.shared,
-                          ownerHasChatGPT: pool.ownerHasChatGPT,
+                          logins: pool.logins,
                           membersCanAdd: pool.membersCanAdd, ownKeyFirst: pool.ownKeyFirst, viewerRole: role,
                           window: pool.window, people: pool.people.map(mark), keys: pool.keys.map(mark))
     }
@@ -105,7 +107,7 @@ final class SharedPoolsTests: XCTestCase {
         XCTAssertEqual(pool.label, "Team Codex")
         XCTAssertEqual(pool.engine, "codex")
         XCTAssertTrue(pool.shared, "made on the shared pools page")
-        XCTAssertFalse(pool.ownerHasChatGPT)
+        XCTAssertTrue(pool.logins.isEmpty, "a shared pool holds no ChatGPT account")
         XCTAssertEqual(pool.viewerRole, .admin)
         XCTAssertTrue(pool.membersCanAdd)
         XCTAssertTrue(pool.ownKeyFirst)
@@ -157,22 +159,29 @@ final class SharedPoolsTests: XCTestCase {
     }
 
     /// A Codex pool of somebody's own, as one of the people they added reads it (migration 0358): not made
-    /// on the shared pools page, and its owner's ChatGPT accounts in it — which is all it says of them.
+    /// on the shared pools page, and its owner's ChatGPT accounts in it — which they read since 2026-10-03
+    /// like the owner does, the accounts running their sessions too.
     func testDecodesAPoolOfSomebodysOwnTheyWereAddedTo() throws {
-        let json = Self.payload
-            .replacingOccurrences(of: "\"shared\": true,", with: "\"shared\": false, \"ownerHasChatGPT\": true,")
+        let json = Self.payload.replacingOccurrences(
+            of: "\"shared\": true,",
+            with: "\"shared\": false, \"logins\": [{\"state\": \"ACTIVE\", \"email\": \"owner@codex-login.invalid\","
+                + " \"plan\": \"pro\", \"fingerprint\": \"…AB12\", \"next\": true}],")
         let pool = asMember(try team(json), userId: Self.zhang)
         XCTAssertFalse(pool.shared)
-        XCTAssertTrue(pool.ownerHasChatGPT)
-        XCTAssertEqual(CodexPoolPage(own: nil, access: pool)?.lockedOwner, "Wikova")
-        XCTAssertNil(CodexPoolPage(own: nil, access: try team(json))?.lockedOwner, "its owner reads their accounts themselves")
+        XCTAssertEqual(pool.logins.map(\.email), ["owner@codex-login.invalid"])
+        XCTAssertEqual(pool.logins.first?.plan, "pro")
+        XCTAssertEqual(pool.logins.first?.next, true)
+        XCTAssertEqual(CodexPoolPage(own: nil, access: pool)?.accounts, 1)
+        XCTAssertEqual(CodexPoolPage(own: nil, access: pool)?.logins.map(\.email), ["owner@codex-login.invalid"])
+        XCTAssertEqual(CodexPoolPage(own: nil, access: try team(json))?.accounts, 1,
+                       "its owner reads the same accounts from their own page")
     }
 
     func testOptionalFieldsFallBackWhenAServerOmitsThem() throws {
         let pool = try team(#"[{"id": "p1", "slug": "pool-a", "keys": [{"id": "k1", "contributor": {"userId": "u1"}}]}]"#)
         XCTAssertEqual(pool.label, "pool-a")
         XCTAssertTrue(pool.shared, "an older server lists only pools made on the shared pools page")
-        XCTAssertFalse(pool.ownerHasChatGPT)
+        XCTAssertTrue(pool.logins.isEmpty, "a server that says nothing of accounts is read as holding none")
         XCTAssertEqual(pool.viewerRole, .unknown)
         XCTAssertTrue(pool.people.isEmpty)
         XCTAssertNil(pool.window)
@@ -233,7 +242,7 @@ final class SharedPoolsTests: XCTestCase {
         XCTAssertEqual(chen.who, "Wikova’s")
         XCTAssertEqual(chen.subtitleRest, " · 4 people · 3 of 5 keys you can run on available")
         XCTAssertEqual(chen.howSentence, "Your sessions run on the API keys, your own first.")
-        XCTAssertNil(chen.lockedOwner, "a pool made on the shared pools page holds no ChatGPT account")
+        XCTAssertNil(chen.accounts, "a pool made on the shared pools page holds no ChatGPT account")
     }
 
     // MARK: - keys

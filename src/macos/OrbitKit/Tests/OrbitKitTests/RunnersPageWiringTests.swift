@@ -327,12 +327,19 @@ final class RunnersPageWiringTests: XCTestCase {
                       "RunnerSignInView(runnerID: runner.id, engine: login, account: line.signInAccount)",
                       "Button(\"Add Account\")",
                       // The press starts the sign-in under a name the page picks; the name typed over it
-                      // is saved as Rename… saves one, once the runner reports the account.
+                      // is saved as Rename… saves one, once the runner reports the account — and once
+                      // that account is signed in and named, the card folds back into Add Account.
                       "newAccountPicked = RunnerPageFormat.defaultAccountName(accounts)",
                       "RunnerSignInView(runnerID: runner.id, engine: login, accountName: newAccountName, autoStart: true)",
-                      ".onSubmit { saveNewAccountName(health) }",
+                      ".focused($newAccountFocused)",
+                      ".onSubmit { newAccountFocused = false }",
+                      "if !focused { saveNewAccountName(health) }",
                       ".onDisappear { saveNewAccountName(health) }",
                       "await runners.renameAccount(id, engine: login, account: account.id, name: name)",
+                      ".onChange(of: newAccountDone(health)) { _, done in",
+                      "if done { closeSignIn() }",
+                      "guard let added = newAccount(health), added.auth == \"yes\" else { return false }",
+                      "return !newAccountFocused && newAccountWaiting == nil && !newAccountRenaming",
                       ".swipeActions(edge: .trailing, allowsFullSwipe: false) {",
                       "if !line.isDefault {",
                       "Button(role: .destructive) { pendingRemoval = line } label: {",

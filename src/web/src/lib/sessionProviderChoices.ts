@@ -1,9 +1,10 @@
 import { AgentProvider, PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shared';
 import type { PlanUsage, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
+import type { CodexLogin } from './codexLogin';
 import { accountNameOf, accountPlanUsage } from './engineAccounts';
 import { encodeId } from './idCodec';
 import { bindingPlanUsageRow, currentPlanUsageRows } from './planUsage';
-import { ownsPool, type SharedPool } from './sharedPools';
+import type { SharedPool } from './sharedPools';
 import {
   defaultModelForProvider,
   modelOptionsForProvider,
@@ -37,7 +38,8 @@ export interface PoolChoiceSource {
   id: string;
   slug: string;
   label: string;
-  members: { slug: string }[];
+  /** What the pool holds; `login` says a member is one of its ChatGPT accounts rather than a key. */
+  members: { slug: string; login?: CodexLogin }[];
   unavailable?: string | null;
   /** `codex` for a pool of one's own ChatGPT account (migration 0323); absent or `claude` otherwise. */
   engine?: string;
@@ -249,9 +251,9 @@ export function providerChoices(
   // whose runs carry a session token for the pool's gateway — and so is a pool of one's own ChatGPT
   // account's, whose account the server holds.
   //
-  // Somebody a pool's owner added runs on its API keys alone, so for them that reason is always the one
-  // thing, whatever else the pool holds: no key they can run on — while its owner's ChatGPT accounts may
-  // be running the owner's own sessions all along (docs/mocks/account-pool-access/02, note 4).
+  // Somebody a pool's owner added runs on the pool's ChatGPT accounts first and on its keys when none
+  // can (pool-credential-select.ts, 2026-10-03), so what the pool holds is what they can run on, and the
+  // pool's own answer (`unavailable`, built the same way for them as for its owner) is the whole reason.
   const accountPools: ProviderChoice[] = pools.map((pool) => {
     const runtime = pool.shared || pool.engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
     const blocker = byokBlocker(engineHealth?.find((e) => e.engine === runtime));
@@ -262,14 +264,13 @@ export function providerChoices(
       ...brandForProvider(pool.slug, pool.label, ENGINE_PRESET[runtime]),
       modelLabel: defaultModelLabel(pool.slug, modelCatalog, configured, runtimeDefaultModels),
       poolSize: pool.members.length,
-      ...(pool.shared ? { poolUnit: 'key' as const } : {}),
+      // 'N keys' only where the pool really is nothing but keys; a pool holding ChatGPT accounts counts
+      // accounts (the viewer's own words — AccountPools' memberNoun).
+      ...(pool.shared && !pool.members.some((member) => member.login) ? { poolUnit: 'key' as const } : {}),
       ...(blocker
         ? { unavailable: blocker, fixEngine: runtime }
         : pool.unavailable
-          ? {
-              unavailable: pool.shared && !ownsPool(pool.shared) ? 'No key you can run on' : pool.unavailable,
-              fixHref: `/providers/pools/${encodeId(pool.id)}`,
-            }
+          ? { unavailable: pool.unavailable, fixHref: `/providers/pools/${encodeId(pool.id)}` }
           : {}),
     };
   });
