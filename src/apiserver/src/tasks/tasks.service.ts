@@ -1189,6 +1189,10 @@ interface EndedAutoRunMoment {
   deletedAt: Date | null;
   /** The run's own automatic retry (AutoRetryService), when one is armed. */
   retryAt: Date | null;
+  /** The task's provider pin and its Agent's smart selection switch: which engine a re-run would
+   *  start on, and so which quota holds it (dispatchEngines). */
+  taskProvider: string | null;
+  modelRouting: boolean;
 }
 
 /**
@@ -9823,7 +9827,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // turn, and loading all of them (plus every one of their dependency edges) once a minute
     // only to discard them dwarfs the dispatch it exists to do.
     // freeBytes/minFreeDiskMb ride along on the joins this scan already needs, so the disk gate
-    // below costs no extra round trip. They arrive as bigint (BIGINT column) and number.
+    // below costs no extra round trip. They arrive as bigint (BIGINT column) and number. So do the
+    // task's provider pin and its Agent's smart selection switch, which say which engine the quota
+    // gate judges (dispatchEngines).
     const rows = await this.prisma.$queryRaw<
       {
         id: string;
@@ -9836,12 +9842,14 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dispatchEpoch: bigint | null;
         priority: number;
         projectId: string | null;
+        taskProvider: string | null;
+        modelRouting: boolean | null;
       }[]
     >`
       SELECT t.id, t.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
              t.list_id AS "listId", e.epoch AS "dispatchEpoch", t.priority AS "priority",
-             t.project_id AS "projectId"
+             t.project_id AS "projectId", t.provider AS "taskProvider", a.model_routing AS "modelRouting"
       FROM task t
       LEFT JOIN workspace a ON a.id = t.assignee_id
       LEFT JOIN runner r ON r.id = a.runner_id
@@ -9899,9 +9907,10 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       SELECT c.id, c.owner_id AS "ownerId", a.id AS "workspaceId", a.runner_id AS "runnerId",
              a.work_dir_free_bytes AS "freeBytes", r.min_free_disk_mb AS "minFreeDiskMb",
              c.list_id AS "listId", e.epoch AS "dispatchEpoch", c.priority AS "priority",
-             c.project_id AS "projectId"
+             c.project_id AS "projectId", c.provider AS "taskProvider", a.model_routing AS "modelRouting"
       FROM (
         SELECT t.id, t.owner_id, t.assignee_id, t.list_id, t.created_at, t.priority, t.project_id,
+               t.provider,
                -- The project's own budget, so this scan offers no project more than it has room
                -- for; the loop below spends that same budget across both candidate sets
                -- (projectBudgetSpent), and takeBudget the RUNNER's cap and a paused list's. Ranked
@@ -10510,27 +10519,28 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * on and routing applies; otherwise the task's provider pin, else the Agent's seed (the project's
    * last interactive session, migration 0088), which `sessions.create` falls back to.
    *
-   * Routing is planned only for the Agents with the switch on: anywhere else a route is never
-   * applied, so it could not move the engine. A route that cannot be worked out leaves the run on
-   * the pins, exactly as dispatch does (routeFreshRun).
+   * The pin and the switch ride on the scan that found the candidates. Routing is planned only for
+   * the Agents with the switch on: anywhere else a route is never applied, so it could not move the
+   * engine, and nothing more is read. A route that cannot be worked out leaves the run on the pins,
+   * exactly as dispatch does (routeFreshRun).
    */
   private async dispatchEngines(
-    candidates: Array<{ id: string; ownerId: string; workspaceId: string; runnerId: string | null }>,
+    candidates: Array<{
+      id: string;
+      ownerId: string;
+      workspaceId: string;
+      runnerId: string | null;
+      taskProvider?: string | null;
+      modelRouting?: boolean | null;
+    }>,
   ): Promise<Map<string, string>> {
     const engines = new Map<string, string>();
     if (candidates.length === 0) return engines;
-    const workspaceIds = [...new Set(candidates.map((c) => c.workspaceId))];
     // One batched lookup for the whole sweep rather than one per row.
-    const seeds = await lastProviderByWorkspace(this.prisma, workspaceIds);
-    const routing = new Set(
-      (
-        await this.prisma.workspace.findMany({
-          where: { id: { in: workspaceIds }, modelRouting: true },
-          select: { id: true },
-        })
-      ).map((w) => w.id),
-    );
-    const taskIds = [...new Set(candidates.map((c) => c.id))];
+    const seeds = await lastProviderByWorkspace(this.prisma, candidates.map((c) => c.workspaceId));
+    const taskIds = [...new Set(
+      candidates.filter((c) => c.modelRouting === true && c.runnerId).map((c) => c.id),
+    )];
     const tasks = new Map<string, TaskRouteSubject>();
     for (let offset = 0; offset < taskIds.length; offset += TASK_ID_QUERY_CHUNK) {
       const chunk = await this.prisma.task.findMany({
@@ -10546,8 +10556,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const reads = new Map<string, TaskRouteReads>();
     for (const c of candidates) {
       const task = tasks.get(c.id);
-      let engine = task?.provider ?? (seeds.get(c.workspaceId) ?? DEFAULT_AGENT_PROVIDER).provider;
-      if (task && c.runnerId && routing.has(c.workspaceId)) {
+      let engine = c.taskProvider ?? (seeds.get(c.workspaceId) ?? DEFAULT_AGENT_PROVIDER).provider;
+      if (task && c.runnerId) {
         if (!reads.has(c.ownerId)) reads.set(c.ownerId, taskRouteReads(this.prisma, c.ownerId, this.now()));
         const route = await this.routeFreshRun(
           reads.get(c.ownerId)!, task, { id: c.workspaceId, runnerId: c.runnerId }, '',
@@ -10810,7 +10820,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
              receipt.result->>'sessionId' AS "sessionId", run.status AS "sessionStatus",
              run.end_reason AS "endReason", run.completed_at AS "completedAt",
              run.archived_at AS "archivedAt", run.deleted_at AS "deletedAt",
-             run.retry_at AS "retryAt"
+             run.retry_at AS "retryAt", t.provider AS "taskProvider", a.model_routing AS "modelRouting"
         FROM task t
         JOIN workspace a ON a.id = t.assignee_id
         JOIN task_dispatch_epoch current_moment ON current_moment.task_id = t.id
