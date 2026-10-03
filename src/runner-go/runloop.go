@@ -387,6 +387,12 @@ const takeoverConflictLimit = 5
 // the conflict clears — e.g. the server fails the abandoned operation over.
 const reclaimRetryInterval = 45 * time.Second
 
+// How long after its request was given up on a claim can still commit. The control plane's claim long
+// poll runs for 25s, and the claim it tries last waits up to 20s for a database connection and runs
+// under a 5s transaction timeout. It stops early when it sees the runner hang up — but not behind a
+// proxy that keeps the connection open, and a claim committed then is RUNNING with nobody told.
+const lateClaimWindow = time.Minute
+
 // How long to wait before retry number N of a claim that failed at the transport, in the shape
 // `reclaimMissingSessions` uses: the first retry is quick so a blip costs nothing, and doubling to a
 // cap keeps a long outage to a handful of attempts a minute instead of a storm.
@@ -1674,6 +1680,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// When a reclaim sets conflicted sessions aside, retry at this time so they do
 	// not stay unsupervised; zero means nothing is waiting.
 	var reclaimRetryAt time.Time
+	// A claim that commits after the request asking for it was given up on is RUNNING with no
+	// supervisor: the process this one replaced may have stopped with a claim open, and a failed claim
+	// of this process's own may still be committing. The reclaim each of those is followed by runs too
+	// early to see it, so look once more when it has had time to land; zero means nothing is owed. On
+	// 2026-10-03 a session claimed while this reclaim was still running read "Starting" for 15 minutes.
+	lateClaimCheckAt := time.Now().Add(lateClaimWindow)
 	pendingStarts, reclaimSkipped, reclaimErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
 	if reclaimErr != nil && loopCtx.Err() == nil {
 		logln("reclaim permanently failed; stopping runner:", reclaimErr)
@@ -1755,6 +1767,25 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				pool.endUnclaimedHostlessJobs()
 			}
 		}
+		if !lateClaimCheckAt.IsZero() && time.Now().After(lateClaimCheckAt) {
+			lateClaimCheckAt = time.Time{}
+			recovered, skipped, recoverErr := reclaimMissingSessions(loopCtx, t, pool.reclaimStates, prepareTakeover)
+			if recoverErr != nil {
+				if loopCtx.Err() == nil {
+					logln("late claim reconciliation failed; stopping runner:", recoverErr)
+					loopCancel()
+				}
+				break
+			}
+			if skipped {
+				reclaimRetryAt = time.Now().Add(reclaimRetryInterval)
+			}
+			for _, pending := range recovered {
+				logln(fmt.Sprintf("reclaiming session %s — %s (late claim check)", pending.job.SessionID, pending.job.Title))
+				startSession(pending.job, pending.initiallyActive)
+				pending.endTakeover()
+			}
+		}
 		// Re-sweep leftover checkouts on the way round the loop. Finalization no longer removes
 		// any checkout, so this is where every reclamation happens — including of a checkout
 		// finalization could not remove at all, which is how a lease loss stops leaking one until
@@ -1806,6 +1837,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				startSession(pending.job, pending.initiallyActive)
 				pending.endTakeover()
 			}
+			// The failed request's claim may still be committing (lateClaimWindow).
+			lateClaimCheckAt = time.Now().Add(lateClaimWindow)
 			// Back off before trying again. Retrying a broken claim immediately turns one bad request
 			// into a storm, and it is worse here than anywhere else: every attempt above also runs
 			// the reclaim reconciliation, so each failed claim costs two requests against a link

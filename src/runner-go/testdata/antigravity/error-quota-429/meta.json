@@ -1,0 +1,22 @@
+{
+  "agy": "1.2.15",
+  "recorded": "2026-10-03",
+  "argv": [
+    "--gemini_dir=/work/orbit-gemini",
+    "--print=",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json"
+  ],
+  "settings": {
+    "enableTelemetry": false
+  },
+  "exit": 3,
+  "note": "429 RESOURCE_EXHAUSTED with RetryInfo 40s: no retry (delay > 30s), AGY_ERROR retryable:true, exit 3.",
+  "driver": [
+    "write stdin line 1",
+    "wait for result #1",
+    "wait for exit"
+  ]
+}

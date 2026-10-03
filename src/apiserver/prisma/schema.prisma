@@ -274,6 +274,7 @@ model User {
   ownedSessions    Session[]         @relation("SessionOwner")
   createdSessions  Session[]         @relation("SessionCreator")
   ownedTasks       Task[] // tasks this user owns (tenant scope)
+  taskRouteDecisions TaskRouteDecision[]
   taskLists        TaskList[] // task lists this user owns (tenant scope)
   projects         Project[] // projects this user owns (tenant scope)
   attachments      Attachment[] // blobs this user uploaded (tenant scope)
@@ -701,6 +702,9 @@ model Workspace {
   // Default reasoning effort a new session inherits when its create request omits one
   // ('' / null = the model's default). Claude: low|medium|high|xhigh|max; codex adds minimal.
   effort              String?   @map("effort")
+  // Owner-controlled routing; false records shadow decisions without changing dispatch.
+  modelRouting        Boolean   @default(false) @map("model_routing")
+  modelRoutingProviders String[] @default([]) @map("model_routing_providers")
   // routing: bind to a specific runner and/or match runner labels
   targetRunnerId      String?   @map("target_runner_id") @db.Uuid
   targetLabels        String[]  @default([]) @map("target_labels")
@@ -4085,6 +4089,9 @@ model Task {
   // fixed for its lifetime (see TasksService.runAgentOnTask).
   provider         String?
   model            String?
+  // Suggested tier, separate from the model pin. The migration checks S/M/L/XL or NULL.
+  modelHint        String?     @map("model_hint")
+  modelHintReason  String?     @map("model_hint_reason")
   // When all prerequisites are DONE, auto-run this task (the dependency "pipeline"
   // default). Turn off to keep the gate but trigger the run manually.
   autoRunWhenReady Boolean     @default(true) @map("auto_run_when_ready")
@@ -4254,6 +4261,7 @@ model Task {
   /// Public links with this task as their root, ended ones included (migration 0306).
   shareLinks   ShareLink[]
   completionEvidence TaskCompletionEvidence[]
+  routeDecisions TaskRouteDecision[]
   legacyEvidenceImports TaskLegacyEvidenceImport[]
   evidenceDecisions TaskEvidenceDecision[]
   /// OWNER_CONFIRMED (0267): the times a run of this task asked its owner, and what the owner
@@ -4399,6 +4407,34 @@ model Task {
   /// 0120 used for (decision, project).
   @@unique([id, ownerId], map: "task_id_owner_id_key")
   @@map("task")
+}
+
+/// One routing decision per run request, including shadow and unrouted decisions.
+model TaskRouteDecision {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  ownerId       String   @map("owner_id") @db.Uuid
+  owner         User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  taskId        String   @map("task_id") @db.Uuid
+  task          Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  requestToken  String   @map("request_token")
+  // The planned session may not exist yet, so this id deliberately has no foreign key.
+  sessionId     String?  @map("session_id") @db.Uuid
+  applied       Boolean
+  policyVersion Int      @map("policy_version")
+  // NULL means no routing; the migration checks S/M/L/XL for non-null values.
+  level         String?
+  provider      String
+  model         String?
+  effort        String?
+  baseline      Json     @db.JsonB
+  features      Json     @db.JsonB
+  reasons       String[]
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([taskId, requestToken])
+  @@index([ownerId, createdAt])
+  @@index([sessionId])
+  @@map("task_route_decision")
 }
 
 /// An explicit, immutable claim that structured completion evidence was submitted for a Task.

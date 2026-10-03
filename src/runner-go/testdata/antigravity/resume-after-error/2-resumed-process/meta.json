@@ -1,0 +1,27 @@
+{
+  "agy": "1.2.15",
+  "recorded": "2026-10-03",
+  "argv": [
+    "--gemini_dir=/work/orbit-gemini",
+    "--print=",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--conversation",
+    "678b5e2b-72a3-47af-aec0-6c2b3ba521c0"
+  ],
+  "settings": {
+    "enableTelemetry": false
+  },
+  "exit": 0,
+  "note": "Resumed: both turns succeed (no error_message step, process stays up) but every result still says status ERROR with the old error.",
+  "driver": [
+    "write stdin line 1",
+    "wait for result #1",
+    "write stdin line 2",
+    "wait for result #2",
+    "close stdin",
+    "wait for exit"
+  ]
+}

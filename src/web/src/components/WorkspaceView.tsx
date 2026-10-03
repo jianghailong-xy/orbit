@@ -7086,7 +7086,38 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       : [];
     return rows.length > 1 ? rows : [];
   };
+  // A task run whose model smart selection picked (docs/model-routing-design.md §9): the chip carries
+  // a ✦ on a light blue ground, and its menu opens on why — the decision's own first sentence — and
+  // on where to fix the model for every run. Only while the chip still shows the pick: a model
+  // changed here is this run's own. A session opened by hand has no route, and a run on an Agent
+  // without smart selection has one that was not applied, so both look as they always have.
+  const smartRoute = (() => {
+    const route = detailForSelected?.route;
+    return selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null;
+  })();
   const modelMenuItems: MenuProps['items'] = [
+    ...(smartRoute
+      ? [
+          {
+            key: 'smart-route',
+            type: 'group' as const,
+            label: (
+              <div className="composer-route-note">
+                <div className="composer-route-head">
+                  <span className="composer-model-spark">✦</span>
+                  Picked by smart selection · tier {smartRoute.level}
+                </div>
+                {smartRoute.reasons[0] && <div className="composer-route-reason">{smartRoute.reasons[0]}</div>}
+                <div className="composer-route-reason">
+                  Changing the model here applies to this run only. To fix the model for every run, set it on the
+                  task.
+                </div>
+              </div>
+            ),
+          },
+          { key: 'smart-route-divider', type: 'divider' as const },
+        ]
+      : []),
     // Only when there is somewhere to go: a second account with the same vendor, another endpoint on
     // the same CLI, or another of the runner's Codex accounts. One entry means no switch is possible,
     // and the row is left out rather than shown inert — the common case, one Claude sign-in and no
@@ -7240,6 +7271,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               ),
               onClick: () => pickFastMode(option.value),
             })),
+          },
+        ]
+      : []),
+    ...(smartRoute
+      ? [
+          { key: 'smart-route-open-divider', type: 'divider' as const },
+          {
+            key: 'open-task',
+            label: <span className="composer-route-open">Open task ›</span>,
+            onClick: () => navigate(`/tasks/${encodeId(selected.taskId)}`),
           },
         ]
       : []),
@@ -9217,10 +9258,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               >
                 <button
                   type="button"
-                  className="composer-model-chip"
+                  className={`composer-model-chip${smartRoute ? ' is-smart' : ''}`}
                   disabled={!configEditable}
-                  aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}`}
+                  aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${
+                    smartRoute ? ', picked by smart selection' : ''
+                  }`}
                 >
+                  {smartRoute && (
+                    <span className="composer-model-spark" aria-hidden="true">
+                      ✦
+                    </span>
+                  )}
                   <span className="composer-model-name">{shownModelLabel}</span>
                   <span className="composer-model-effort">
                     {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}

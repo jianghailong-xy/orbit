@@ -1,0 +1,1 @@
+error: /model is answered by the CLI itself and is unavailable with --input-format stream-json; run it as its own --print /model invocation

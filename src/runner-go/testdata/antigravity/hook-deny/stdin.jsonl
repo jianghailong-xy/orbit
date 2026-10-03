@@ -1,0 +1,1 @@
+{"event": "user", "message": {"content": "try it\nmock:tool run_command {\"CommandLine\": \"echo gated\", \"Cwd\": \"/work/repo\", \"WaitMsBeforeAsync\": 10000, \"toolSummary\": \"Command\", \"toolAction\": \"Running command\"}\nmock:text the hook said no"}}
