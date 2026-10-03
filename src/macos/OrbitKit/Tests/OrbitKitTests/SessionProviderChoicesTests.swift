@@ -338,11 +338,14 @@ final class SessionProviderChoicesTests: XCTestCase {
     private let codexCatalog = RunnerModelCatalog(
         codex: [RunnerModelInfo(value: "gpt-5.6-sol", label: "GPT-5.6 Sol")])
 
-    private func sharedPool(_ keys: [SharedPoolKey],
+    /// A shared pool as its maker reads it — or, `added`, as somebody its maker added does.
+    private func sharedPool(_ keys: [SharedPoolKey], added: Bool = false,
                             monthEnds: String = "2026-10-01T00:00:00.000Z") -> ProviderPool {
         SharedPools.asProviderPool(SharedPool(
             id: "pool-2", slug: "team-codex", label: "Team Codex",
             window: SharedPoolWindow(start: "2026-09-01T00:00:00.000Z", end: monthEnds),
+            people: [SharedPoolPerson(userId: "wikova", name: "Wikova", role: .admin, creator: true, you: !added)]
+                + (added ? [SharedPoolPerson(userId: "me", name: "Me", you: true)] : []),
             keys: keys))
     }
 
@@ -410,6 +413,52 @@ final class SessionProviderChoicesTests: XCTestCase {
             .first { $0.slug == "team-codex" }
         XCTAssertEqual(tile?.unavailable, "No key can run")
         XCTAssertNil(tile?.fixEngine, "nothing on a runner gives it a key that can run")
+    }
+
+    /// Somebody a pool's maker added runs on its API keys alone, so for them a pool none of whose keys can
+    /// run is greyed as the one thing it is to them, whatever the pool's own words — while its maker reads
+    /// those (docs/mocks/account-pool-access/02, note 4).
+    func testAPoolGreyedForSomebodyItsMakerAddedSaysNoKeyTheyCanRunOn() {
+        let refused = SharedPoolKey(id: "k", label: "orbit-org-1", fingerprint: "sk-…0000", state: .invalid,
+                                    contributor: PoolKeyContributor(userId: "wikova", name: "Wikova"))
+        func tile(_ pool: ProviderPool) -> ProviderChoice? {
+            SessionProviderChoices.choices(configured: withPools([], [pool]), pools: [pool])
+                .first { $0.slug == "team-codex" }
+        }
+        XCTAssertEqual(tile(sharedPool([], added: true))?.unavailable, "No key you can run on")
+        XCTAssertEqual(tile(sharedPool([refused], added: true))?.unavailable, "No key you can run on")
+        XCTAssertNil(tile(sharedPool([refused], added: true))?.fixEngine)
+        XCTAssertEqual(tile(sharedPool([]))?.unavailable, "No keys", "its maker reads the pool's own words")
+        XCTAssertNil(tile(sharedPool([sharedKey("orbit-org-1")], added: true))?.unavailable,
+                     "a key of it can run: the pool takes the pick")
+    }
+
+    /// A Codex pool of one's own runs on its owner's ChatGPT accounts through the Codex CLI: the picker
+    /// offers it as Codex — its mark, and the CLI whose absence blocks it — though nobody else uses it and
+    /// it carries no shared view.
+    func testAChatGPTPoolOfOnesOwnIsOfferedAsCodex() {
+        let login = CodexLogin(email: "wikova@orbitd.io", fingerprint: "…7QX4")
+        let drawn = CodexLoginPool.drawn(slug: "my-codex", logins: [login])
+        let pool = ProviderPool(id: "pool-3", slug: "my-codex", label: "My Codex", members: drawn.members,
+                                engine: "codex", login: login, logins: [login])
+        XCTAssertNil(pool.shared)
+        let choices = SessionProviderChoices.choices(
+            configured: withPools([], [pool]), catalog: codexCatalog,
+            engines: [health("claude", installed: false, auth: "no"),
+                      health("codex", installed: true, auth: "unknown")],
+            pools: [pool])
+        let tile = choices.first { $0.slug == "my-codex" }
+        XCTAssertEqual(tile?.brandKey, "openai")
+        XCTAssertEqual(tile?.modelLabel, "GPT-5.6 Sol")
+        XCTAssertNil(tile?.unavailable, "the Claude CLI's absence is nothing to a pool that runs Codex")
+        XCTAssertNil(tile?.poolUnit, "its members are accounts")
+        let noCodex = SessionProviderChoices.choices(
+            configured: withPools([], [pool]),
+            engines: [health("claude", installed: true, auth: "yes"),
+                      health("codex", installed: false, auth: "unknown")],
+            pools: [pool]).first { $0.slug == "my-codex" }
+        XCTAssertEqual(noCodex?.unavailable, "Not installed")
+        XCTAssertEqual(noCodex?.fixEngine, "codex")
     }
 
     /// A Codex session may move onto a shared pool — the same CLI — and a Claude one may not, however
