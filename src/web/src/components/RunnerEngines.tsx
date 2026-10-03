@@ -1,8 +1,8 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Popconfirm, Tag } from 'antd';
-import { DeleteOutlined, LoginOutlined } from '@ant-design/icons';
+import { DeleteOutlined, EditOutlined, LoginOutlined } from '@ant-design/icons';
 import {
   accountToStartOn,
   type LoginEngine,
@@ -14,7 +14,13 @@ import {
 } from '@orbit/shared';
 import { api } from '../api';
 import { routeId, encodeId } from '../lib/idCodec';
-import { accountDir, accountPlanUsage, engineKeepsAccounts } from '../lib/engineAccounts';
+import {
+  accountDir,
+  accountNameOf,
+  accountPlanUsage,
+  defaultAccountName,
+  engineKeepsAccounts,
+} from '../lib/engineAccounts';
 import {
   bindingPlanUsageRow,
   currentPlanUsageRows,
@@ -127,13 +133,6 @@ function accountKindOf(account: RunnerEngineAccount): RowKind {
   if (account.auth === 'yes') return 'in';
   if (account.auth === 'no') return 'out';
   return 'unknown';
-}
-
-/** What a row calls an account: Default, what the user named the slot, or the slot's own id when
- *  the name it was added under is gone. */
-export function accountNameOf(account: Pick<RunnerEngineAccount, 'id' | 'name'>): string {
-  if (account.id === 'default') return 'Default';
-  return account.name || `Account ${account.id}`;
 }
 
 /**
@@ -389,11 +388,12 @@ function EngineRow({
             Retry
           </Button>
         );
-      // Nothing to press until the probe lands and says whether it needs signing in.
-      case 'installed':
-        return null;
       case 'in':
         return <ResignIn onClick={() => onSignIn(signIn === engine ? null : engine)} />;
+      // Signed out, wouldn't say, or just installed. An install the probe hasn't caught up with yet
+      // gets Sign in too: a CLI that was just installed has no sign-in, so that is what comes next,
+      // and the runner only reports an install done once the binary is on its PATH — waiting for the
+      // check-in first left the row with nothing to press for up to a heartbeat.
       default:
         return (
           <Button
@@ -519,20 +519,147 @@ function EngineRow({
       )}
       {addsAccounts && signIn === addAccountPanel(engine) && (
         <div className="re-panel">
-          <AddEngineAccount engine={engine} runnerId={runner.id} onCancel={() => onSignIn(null)} />
+          <AddEngineAccount
+            engine={engine}
+            runnerId={runner.id}
+            accounts={health?.accounts ?? []}
+            onClose={() => onSignIn(null)}
+          />
         </div>
       )}
     </div>
   );
 }
 
-/** One Codex account, under its engine's row: its name, where it lives on the machine, its own
- *  sign-in state, its own way back in, and — for every account but Default — the way off this
- *  machine. */
+/**
+ * An account's name on its row, and the way to change it — Default's too, which the machine never
+ * names. The pencil after it, or a double-click on it, swaps it for the session title's own editor
+ * (WorkspaceView): everything selected, Enter or a click elsewhere saves, Escape drops the draft, and
+ * an empty or unchanged one changes nothing. Only a label, kept in Orbit (RunnersService.renameAccount):
+ * nothing on the machine changes, so it works with the runner offline.
+ */
+function AccountName({
+  runner,
+  engine,
+  account,
+  next,
+}: {
+  runner: Runner;
+  engine: LoginEngine;
+  account: RunnerEngineAccount;
+  next?: boolean;
+}) {
+  const message = useToast();
+  const qc = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  // Escape blurs the input too; this tells that blur not to save.
+  const cancelled = useRef(false);
+  // The input hugs its text, measured off an unseen twin, as the session title's does.
+  const mirror = useRef<HTMLSpanElement>(null);
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    if (editing) setWidth((mirror.current?.offsetWidth ?? 0) + 2);
+  }, [editing, draft]);
+  const rename = useMutation({
+    mutationFn: (name: string) =>
+      api<RunnerEngineAccount>(`/runners/${runner.id}/accounts/${engine}/${account.id}`, {
+        method: 'PATCH',
+        body: { name },
+      }),
+    // Returned, so the new name stays on the row until the list carries it rather than flicking back.
+    onSuccess: () => qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+    onError: (e: Error) => message.error(e.message || 'Could not rename the account'),
+  });
+  const shown = rename.isPending ? (rename.variables ?? accountNameOf(account)) : accountNameOf(account);
+  // Default named something else says what it still is: the login this machine's own environment
+  // selects, which a terminal shares — and which signing in there changes.
+  const renamedDefault = account.id === 'default' && shown !== 'Default';
+  const start = () => {
+    setDraft(shown);
+    setEditing(true);
+  };
+
+  if (editing) {
+    return (
+      <>
+        <span ref={mirror} className="re-name-mirror" aria-hidden="true">
+          {draft || ' '}
+        </span>
+        <input
+          className="re-name-input"
+          style={{ width }}
+          autoFocus
+          value={draft}
+          maxLength={60}
+          aria-label={`Rename ${shown}`}
+          autoComplete="off"
+          spellCheck={false}
+          onChange={(e) => setDraft(e.target.value)}
+          onFocus={(e) => {
+            // Select all (typing replaces it), with the caret at the start so a long name shows its head.
+            const el = e.currentTarget;
+            el.setSelectionRange(0, el.value.length, 'backward');
+          }}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return; // let the IME (e.g. pinyin) keep Enter
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              e.currentTarget.blur();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              cancelled.current = true;
+              e.currentTarget.blur();
+            }
+          }}
+          onBlur={() => {
+            setEditing(false);
+            if (cancelled.current) {
+              cancelled.current = false;
+              return;
+            }
+            const name = draft.trim();
+            if (name && name !== shown) rename.mutate(name);
+          }}
+        />
+      </>
+    );
+  }
+  return (
+    <div className="re-name" onDoubleClick={start}>
+      <span className="re-name-text">{shown}</span>
+      {renamedDefault && (
+        <span
+          className="re-chip"
+          title={
+            `This machine's own login — ${tildePath(accountDir(account))}, the one \`${engine}\` in a terminal ` +
+            'uses. Signing in from a terminal changes which account this is.'
+          }
+        >
+          DEFAULT
+        </span>
+      )}
+      {/* Where Automatic starts the next session — the account pools' mark for the same thing. */}
+      {next && (
+        <span className="re-chip" title="Automatic starts new sessions here">
+          NEXT
+        </span>
+      )}
+      <button type="button" className="re-rename" aria-label="Rename" title="Rename" onClick={start}>
+        <EditOutlined />
+      </button>
+    </div>
+  );
+}
+
+/** One Codex account, under its engine's row: its name (AccountName), where it lives on the machine,
+ *  its own sign-in state, its own way back in, and — for every account but Default — the way off
+ *  this machine. */
 function AccountRow({
   runner,
   engine,
   account,
+  defaultName,
   next,
   duplicateOf,
   lastOfGroup,
@@ -543,6 +670,8 @@ function AccountRow({
   /** The engine this account belongs to: its own sign-in panel, its own removal, its own quota. */
   engine: LoginEngine;
   account: RunnerEngineAccount;
+  /** What this engine's Default is called here — where a removed account's workspaces go. */
+  defaultName: string;
   /** The account a session nobody picked one for starts on next (accountToStartOn). */
   next?: boolean;
   /** The account already signed in above that this slot turned out to hold too
@@ -592,7 +721,7 @@ function AccountRow({
       title={`Remove ${accountNameOf(account)}?`}
       description={
         `Its sign-in is deleted from ${runner.displayName || runner.name}. ` +
-        'Workspaces set to this account run on Default.'
+        `Workspaces set to this account run on ${defaultName}.`
       }
       okText="Remove"
       okButtonProps={{ danger: true }}
@@ -606,17 +735,8 @@ function AccountRow({
     <div className={`re-row re-acct${lastOfGroup ? ' re-acct-end' : ''}`}>
       <div className="re-id">
         <span className="re-rail" aria-hidden="true" />
-        <div style={{ minWidth: 0 }}>
-          <div className="re-name">
-            {accountNameOf(account)}
-            {/* Where Automatic starts the next session — the account pools' mark for the same
-                thing. Default needs no mark of its own: its name says it. */}
-            {next && (
-              <span className="re-chip" title="Automatic starts new sessions here">
-                NEXT
-              </span>
-            )}
-          </div>
+        <div className="re-id-main" style={{ minWidth: 0 }}>
+          <AccountName runner={runner} engine={engine} account={account} next={next} />
           {/* Where the account lives and which one it is — never who: the account's email and id
               stay on the machine, and the fingerprint is a prefix of a non-reversible one. */}
           <div className="re-meta" title={accountDir(account)}>
@@ -691,38 +811,108 @@ function AccountRow({
   );
 }
 
-/** "+ Account": name the new account, then the same sign-in flow as every other here. The runner
- *  gives it a config directory of its own, so Default — and the CLI in a terminal — is untouched. */
+/**
+ * "+ Account": the same sign-in flow as every other here, started the moment the panel opens, under
+ * a name the page picks (defaultAccountName). The runner gives the account a config directory of its
+ * own, so Default — and the CLI in a terminal — is untouched.
+ *
+ * The name stays editable throughout, and Enter or a click elsewhere saves it the way a row's rename
+ * does (AccountName). That rename can only name an account the runner reports, which a new one is
+ * once it is signed in, so a name saved before then waits here for it — and a panel closed first
+ * leaves the account the name it was added under, for its row's rename to change.
+ *
+ * Once that account is signed in, reported and named, the panel folds itself away: what it added is
+ * that account's own row, and the row's pencil is where its name changes from then on.
+ */
 function AddEngineAccount({
   engine,
   runnerId,
-  onCancel,
+  accounts,
+  onClose,
 }: {
   engine: LoginEngine;
   runnerId: string;
-  onCancel: () => void;
+  /** Every account the runner reports for this engine, Default included. */
+  accounts: RunnerEngineAccount[];
+  /** Fold the panel away: its own Cancel, and the moment the account it added is done. */
+  onClose: () => void;
 }) {
-  const [name, setName] = useState('');
+  const message = useToast();
+  const qc = useQueryClient();
+  const [picked] = useState(() => defaultAccountName(accounts));
+  const [name, setName] = useState(picked);
+  // The accounts the runner had when the panel opened. The one this sign-in adds is the newest it
+  // reports that is not among them: the runner lists added accounts in the order they were made.
+  const [had] = useState(() => new Set(accounts.map((account) => account.id)));
+  const added = accounts.filter((account) => !had.has(account.id)).at(-1);
+  // A name saved before the runner reported the account it is for.
+  const [waiting, setWaiting] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
+  const rename = useMutation({
+    mutationFn: ({ id, to }: { id: string; to: string }) =>
+      api<RunnerEngineAccount>(`/runners/${runnerId}/accounts/${engine}/${id}`, {
+        method: 'PATCH',
+        body: { name: to },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+    // Not returned: an error toast stays until dismissed, and a mutation awaits what onError returns,
+    // so returning it would hold the rename pending — and the panel waiting on it — until then.
+    onError: (e: Error) => {
+      message.error(e.message || 'Could not rename the account');
+    },
+  });
+  const save = () => {
+    const to = name.trim();
+    // An empty name changes nothing, as on a row: the field goes back to the name the account has.
+    if (!to) setName(added ? accountNameOf(added) : (waiting ?? picked));
+    else if (!added) setWaiting(to);
+    else if (to !== accountNameOf(added)) rename.mutate({ id: added.id, to });
+  };
+  const addedId = added?.id;
+  const addedName = added && accountNameOf(added);
+  useEffect(() => {
+    if (!addedId || waiting === null) return;
+    setWaiting(null);
+    if (waiting !== addedName) rename.mutate({ id: addedId, to: waiting });
+  }, [addedId, addedName, waiting, rename.mutate]);
+  // Done: the account is signed in by the runner's own word, and carries the name in the field. Not
+  // while that name is still being typed or saved — a rename that failed leaves it differing, and the
+  // panel open — and never after a sign-in that failed or was cancelled, which reports no such account.
+  const finished =
+    added?.auth === 'yes' &&
+    !focused &&
+    waiting === null &&
+    !rename.isPending &&
+    name.trim() === addedName;
+  useEffect(() => {
+    if (finished) onClose();
+  }, [finished, onClose]);
+
   return (
-    <RunnerSignIn runnerId={runnerId} engine={engine} accountName={name} onCancel={onCancel}>
+    <>
       <label className="re-add">
         <span className="re-add-label">Account name</span>
         <input
           className="rsi-input"
           value={name}
           onChange={(e) => setName(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            setFocused(false);
+            save();
+          }}
+          onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return; // let the IME (e.g. pinyin) keep Enter
+            if (e.key === 'Enter') e.currentTarget.blur();
+          }}
           placeholder="Work"
           maxLength={60}
           autoComplete="off"
           spellCheck={false}
         />
       </label>
-      <div className="re-panel-hint re-add-hint">
-        Only a label for this page. Orbit gives the account its own{' '}
-        <code className="re-cmd">{engine === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME'}</code> on
-        this machine; your terminal keeps using Default.
-      </div>
-    </RunnerSignIn>
+      <RunnerSignIn runnerId={runnerId} engine={engine} accountName={name} autoStart onCancel={onClose} />
+    </>
   );
 }
 
@@ -825,6 +1015,7 @@ function RunnerEngineCard({
                   runner={runner}
                   engine={engine}
                   account={account}
+                  defaultName={accountNameOf(accounts.find((entry) => entry.id === 'default') ?? { id: 'default' })}
                   next={account.id === next}
                   duplicateOf={repeats.get(account.id)}
                   lastOfGroup={index === accounts.length - 1}

@@ -37,6 +37,8 @@ Usage:
   orbit task start [task-id] [--json]
   orbit task comment [task-id] (--body TEXT | --body-file -) [--json]
   orbit task request-confirmation [task-id] [--json]
+  orbit task confirmation-review [task-id] (--input JSON | --input-file -) [--json]
+  orbit task confirmation-return [task-id] (--input JSON | --input-file -) [--json]
   orbit task progress [task-id] [--phase TEXT] [--current N] [--total N] [--message TEXT] [--expected-revision N] [--json]
   orbit task dependency-graph [task-id] [--max-depth N] [--max-nodes N] [--json]
   orbit task dependency-add [task-id] --depends-on ID [--json]
@@ -58,9 +60,11 @@ Usage:
 `
 
 var taskActionHelp = map[string]string{
-	"await":    taskAwaitHelp,
-	"progress": taskProgressHelp,
-	"reopen":   taskReopenHelp,
+	"await":               taskAwaitHelp,
+	"progress":            taskProgressHelp,
+	"reopen":              taskReopenHelp,
+	"confirmation-review": taskConfirmationReviewHelp,
+	"confirmation-return": taskConfirmationReturnHelp,
 	"list": `orbit task list — list tasks
 
 Usage:
@@ -198,6 +202,9 @@ Options:
                               task by itself once this instant has come (see below)
   --provider SLUG             Pin the run to a provider; defaults to the assignee's project
   --model MODEL               Pin the run to a model within that provider
+  --model-hint S|M|L|XL       Suggest the task's difficulty; distinct from --model's hard pin
+  --model-hint-reason TEXT    One sentence explaining the tier (max 500 characters)
+  --clear-model-hint         Explicitly leave both the tier and reason empty
   --depends-on ID[,ID...]     Repeatable prerequisite task ids; name the SUBJECT of the work,
                               not its verification task — a dependency on a verified task is
                               already held until that task's check PASSES
@@ -206,6 +213,8 @@ Options:
   --completion-policy MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED
                               How this task's own completion is decided once it has subtasks
   --json
+
+--model-hint: ` + taskModelHintDescription + `
 
 --supersedes-task-id names the attempt this new task replaces, and records it in the SAME transaction
 that creates the task: the predecessor keeps the CANCELLED or FAILED it ended with, and gains a
@@ -321,8 +330,12 @@ JSON is an array of task objects (or {"tasks": [...]}), each taking the same fie
 as 'orbit task create': title (required), description, assigneeId, listId, projectId, handoff,
 parentTaskId, verifiesTaskId, acceptanceCriteria, codeless, completionCriterion,
 completionCriterionOverrideReason, acceptanceCommand,
-acceptanceExpectedExitCode, dueDate, runAt, provider, model, dependsOnTaskIds, autoRunWhenReady,
+acceptanceExpectedExitCode, dueDate, runAt, provider, model, modelHint, modelHintReason, dependsOnTaskIds, autoRunWhenReady,
 completionPolicy. Nothing is written unless every item is valid.
+
+Each item's "modelHint" is S/M/L/XL and "modelHintReason" is one sentence (max 500 characters).
+Use null for either empty field. The tier is a suggestion; "model" is a hard pin and "provider"
+still chooses the engine. The tier meanings are as on 'orbit task create --model-hint'.
 
 Every item must set "completionCriterion" explicitly. EVIDENCE_JUDGMENT remains available when it is
 intended, but omission never selects it on a runner write. Related verifier, executable, and
@@ -500,6 +513,9 @@ Options:
                               Set or move this task's one-time scheduled start, or cancel it
   --provider SLUG | --clear-provider
   --model MODEL | --clear-model
+  --model-hint S|M|L|XL       Replace the difficulty suggestion; omission keeps it
+  --model-hint-reason TEXT    Replace its reason verbatim (max 500 characters)
+  --clear-model-hint         Clear both the suggestion and reason; cannot combine with either setter
   --acceptance-criteria TEXT  Replace what would settle that this task is done (max 4,000
                               characters)
   --acceptance-criteria-file -
@@ -558,6 +574,8 @@ Options:
   --json
 
 task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
+
+--model-hint: ` + taskModelHintDescription + `
 
 --codeless turns an existing task into one that produces no code: it stops taking part in its
 acceptance criterion's landing, so the criterion no longer waits for its work to reach main. That
@@ -780,6 +798,8 @@ func cmdTaskCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliTaskComment(args[1:], in, out)
 	case "request-confirmation":
 		return cliTaskRequestConfirmation(args[1:], out)
+	case "confirmation-review", "confirmation-return":
+		return cliTaskConfirmationAnswer(action, args[1:], in, out)
 	case "progress":
 		return cliTaskProgress(args[1:], out)
 	case "dependency-graph":
@@ -1013,6 +1033,15 @@ func validateTaskCLICompletionPolicy(policy string) error {
 		return nil
 	default:
 		return fmt.Errorf("completion-policy must be one of MANUAL, ALL_CHILDREN_DONE, VERIFICATION_PASSED")
+	}
+}
+
+func validateTaskCLIModelHint(hint string) error {
+	switch hint {
+	case "S", "M", "L", "XL":
+		return nil
+	default:
+		return fmt.Errorf("--model-hint must be one of S, M, L, XL")
 	}
 }
 
@@ -1453,6 +1482,9 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	runAt := fs.String("run-at", "", "one-time scheduled start: when the server starts this task by itself (ISO 8601 date-time)")
 	provider := fs.String("provider", "", "run on this provider instead of the assignee's")
 	model := fs.String("model", "", "run on this model instead of the assignee's")
+	modelHint := fs.String("model-hint", "", taskModelHintDescription)
+	modelHintReason := fs.String("model-hint-reason", "", "one sentence explaining the suggested tier (max 500 characters)")
+	clearModelHint := fs.Bool("clear-model-hint", false, "leave both the suggested tier and reason empty")
 	var dependsOn csvFlag
 	fs.Var(&dependsOn, "depends-on", "comma-separated prerequisite task ids (repeatable)")
 	var labels csvFlag
@@ -1471,6 +1503,14 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if *unassigned && flagWasSet(fs, "assignee-id") {
 		return fmt.Errorf("--unassigned and --assignee-id cannot be used together")
+	}
+	if *clearModelHint && (flagWasSet(fs, "model-hint") || flagWasSet(fs, "model-hint-reason")) {
+		return fmt.Errorf("--clear-model-hint cannot be used with --model-hint or --model-hint-reason")
+	}
+	if flagWasSet(fs, "model-hint") {
+		if err := validateTaskCLIModelHint(*modelHint); err != nil {
+			return err
+		}
 	}
 	// The pair, refused locally so nothing reaches the server: a verifier is a task, and a task
 	// with no title is not one; and one task is either the check or the subject, never both.
@@ -1662,6 +1702,17 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--model cannot be empty")
 		}
 		body["model"] = *model
+	}
+	if *clearModelHint {
+		body["modelHint"] = nil
+		body["modelHintReason"] = nil
+	} else {
+		if flagWasSet(fs, "model-hint") {
+			body["modelHint"] = *modelHint
+		}
+		if flagWasSet(fs, "model-hint-reason") {
+			body["modelHintReason"] = *modelHintReason
+		}
 	}
 	if deps := uniqueStrings(dependsOn); len(deps) > 0 {
 		body["dependsOnTaskIds"] = deps
@@ -1954,6 +2005,9 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	clearProvider := fs.Bool("clear-provider", false, "inherit the assignee's provider again")
 	model := fs.String("model", "", "run on this model instead of the assignee's")
 	clearModel := fs.Bool("clear-model", false, "inherit the assignee's model again")
+	modelHint := fs.String("model-hint", "", taskModelHintDescription)
+	modelHintReason := fs.String("model-hint-reason", "", "replace the suggested tier's reason (max 500 characters)")
+	clearModelHint := fs.Bool("clear-model-hint", false, "clear both the suggested tier and reason")
 	acceptanceCriteria := fs.String("acceptance-criteria", "", "replace what would settle that this task is done")
 	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the replacement acceptance criteria from stdin (-)")
 	clearAcceptanceCriteria := fs.Bool("clear-acceptance-criteria", false, "leave the task with no acceptance criteria")
@@ -2033,6 +2087,14 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if *clearModel && flagWasSet(fs, "model") {
 		return fmt.Errorf("--clear-model and --model cannot be used together")
+	}
+	if *clearModelHint && (flagWasSet(fs, "model-hint") || flagWasSet(fs, "model-hint-reason")) {
+		return fmt.Errorf("--clear-model-hint cannot be used with --model-hint or --model-hint-reason")
+	}
+	if flagWasSet(fs, "model-hint") {
+		if err := validateTaskCLIModelHint(*modelHint); err != nil {
+			return err
+		}
 	}
 	if *clearDependencies && flagWasSet(fs, "depends-on") {
 		return fmt.Errorf("--clear-dependencies and --depends-on cannot be used together")
@@ -2206,6 +2268,17 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--model cannot be empty; use --clear-model")
 		}
 		body["model"] = *model
+	}
+	if *clearModelHint {
+		body["modelHint"] = nil
+		body["modelHintReason"] = nil
+	} else {
+		if flagWasSet(fs, "model-hint") {
+			body["modelHint"] = *modelHint
+		}
+		if flagWasSet(fs, "model-hint-reason") {
+			body["modelHintReason"] = *modelHintReason
+		}
 	}
 	// Whole-field replacement with an explicit way to remove it: null clears, a string replaces, and
 	// an absent flag sends nothing so the task keeps what it already states. Free text rather than an
@@ -2782,6 +2855,8 @@ var baseCLICapabilities = withTaskCompletionCapabilityArgs([]cliCapabilitySpec{
 	{Tool: "task_start", Argv: []string{"orbit", "task", "start"}, Usage: "orbit task start [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_comment", Argv: []string{"orbit", "task", "comment"}, Usage: "orbit task comment [task-id] (--body TEXT | --body-file -) [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--body <text> | --body-file - (required)", "--json"}, Description: "Add a comment to a task, authored by this agent inside a session (like the MCP path) or by the runner owner when run headless.", Mutates: true},
 	{Tool: "task_request_confirmation", Argv: []string{"orbit", "task", "request-confirmation"}, Usage: "orbit task request-confirmation [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "Declare, as this run, that the task's work is finished — the one thing that asks an OWNER_CONFIRMED task's owner. With no declaration there is no card: the task stays OPEN and is confirmed only from its detail panel. Requires ORBIT_SESSION_ID and a turn in flight, and is accepted only from the task's own execution session. The question waits for the turn that ends the run (nothing queued, no background job or sub-workspace of its own in flight, no wake-up it asked for), so declaring while more work is coming asks nothing yet; declaring again in one turn is one declaration. Confirming or sending back is the account owner's own act in the app.", Mutates: true},
+	{Tool: "task_confirmation_review", Argv: []string{"orbit", "task", "confirmation-review"}, Usage: "orbit task confirmation-review [task-id] (--input JSON | --input-file -) [--json]", Arguments: []string{"[task-id] (or the input's taskId: the review block's task=\"…\"; no ORBIT_TASK_ID default)", "--input <JSON object> | --input-file - (required): {taskId, requestId, reviewedSha, judgment, checked, notChecked, needsYou, leftOpen}", "--json"}, Description: "Record your review of an OWNER_CONFIRMED task's confirmation request — the one an <orbit-confirmation-review> block handed this session. The owner is not asked until it is recorded or its window runs out; then their card shows it under REVIEW, and Orbit writes the card's first line from your lists (the first needsYou question, else how many lines you could not check). needsYou lines carry 2–4 options and the one you recommend. Only the session the request was handed to may record it, from inside a turn (ORBIT_SESSION_ID); a retry in the same turn returns what was recorded. It cannot confirm the task: only the owner can.", Mutates: true},
+	{Tool: "task_confirmation_return", Argv: []string{"orbit", "task", "confirmation-return"}, Usage: "orbit task confirmation-return [task-id] (--input JSON | --input-file -) [--json]", Arguments: []string{"[task-id] (or the input's taskId: the review block's task=\"…\"; no ORBIT_TASK_ID default)", "--input <JSON object> | --input-file - (required): {taskId, requestId, reviewedSha, reason, problems}", "--json"}, Description: "Send an OWNER_CONFIRMED task's confirmation request back to its run, when something must change before the owner looks: the reason is the run's next message and the owner is not asked. Once per request and at most 3 times between two decisions of the owner's; refused while the project's Automatic is off or its coordinator is paused, once the run has ended, or after the owner sent it back. After the owner has confirmed, the problems are recorded under their receipt and they are told instead. Only the session the request was handed to for review may call it, from inside a turn.", Mutates: true},
 	{Tool: "task_progress_report", Argv: []string{"orbit", "task", "progress"}, Usage: "orbit task progress [task-id] [--phase TEXT | --clear-phase] [--current N | --clear-current] [--total N | --clear-total] [--message TEXT | --clear-message] [--expected-revision N] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--phase <text> | --clear-phase", "--current <n> | --clear-current", "--total <n> | --clear-total (needs a current it bounds)", "--message <text> | --clear-message (never progress on its own)", "--expected-revision <n> (expectedRevision: report only if the progress is still at this revision)", "--json"}, Mutates: true},
 	{Tool: "task_dependency_graph", Argv: []string{"orbit", "task", "dependency-graph"}, Usage: "orbit task dependency-graph [task-id] [--max-depth N] [--max-nodes N] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--max-depth <n> (server default when unset)", "--max-nodes <n> (server default when unset)", "--json"}},
 	{Tool: "task_dependency_add", Argv: []string{"orbit", "task", "dependency-add"}, Usage: "orbit task dependency-add [task-id] --depends-on ID [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--depends-on <id> (required)", "--json"}, Description: "Add one dependency edge: taskId waits for --depends-on. Point it at the SUBJECT rather than at that subject's verification task: once anything checks that task, the server holds the edge until its latest check has PASSED. An edge naming the check resolves to the same gate, so older plans keep working.", Mutates: true},
@@ -2803,6 +2878,9 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 		case "task_create":
 			capabilities[i].Arguments = append(
 				capabilities[i].Arguments,
+				"--model-hint <S|M|L|XL> (modelHint: suggested difficulty, distinct from the model hard pin)",
+				"--model-hint-reason <text> (modelHintReason: one sentence, max 500 characters)",
+				"--clear-model-hint (explicitly send null for both suggestion fields)",
 				"--completion-criterion <EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT> (required for every runner task creation; EVIDENCE_JUDGMENT is never inferred)",
 				"--completion-criterion-override-reason <text> (non-blank audit reason for keeping a criterion after TASK_CRITERION_SHAPE_ADVICE)",
 				"--acceptance-command <shell> (the one EXECUTABLE command; use with --acceptance-expected-exit-code)",
@@ -2815,6 +2893,9 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 		case "task_update":
 			capabilities[i].Arguments = append(
 				capabilities[i].Arguments,
+				"--model-hint <S|M|L|XL> (modelHint: replace the difficulty suggestion; omit to preserve)",
+				"--model-hint-reason <text> (modelHintReason: replace its reason verbatim, max 500 characters)",
+				"--clear-model-hint (send null to clear both suggestion fields)",
 				"--completion-criterion <EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT> (replace the task's one normal completion criterion)",
 				"--completion-criterion-override-reason <text> (completionCriterionOverrideReason: non-blank reason for CHANGING the criterion, required whenever the write lands on a different one than the task carries — including a change derived from --acceptance-command rather than named; stored beside the criterion left behind)",
 				"--acceptance-command <shell> (replace the one EXECUTABLE command)",

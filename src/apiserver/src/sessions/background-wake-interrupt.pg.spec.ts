@@ -155,7 +155,9 @@ test('an interrupt takes the payload of the wake turns it deletes with it', {
   /**
    * A session with a turn the engine is running: what an interrupt is for. The wake turns below queue
    * behind it, which is the shape the bug lives in — a job's wake or a due wakeup arriving while the
-   * agent is working, and the owner pressing stop.
+   * agent is working, and the owner pressing stop. They queue because this runner declared no
+   * routing-v1: behind one that did, a job's exit is written into the running turn instead
+   * (background-wake-steer.pg.spec.ts), and only its output and a due wakeup still queue here.
    */
   async function sessionRunningATurn(): Promise<{ sessionId: string; running: string }> {
     const sessionId = await session({ status: RunStatus.RUNNING });

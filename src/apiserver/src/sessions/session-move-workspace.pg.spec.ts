@@ -594,6 +594,7 @@ test('moving a session to another workspace: the panel, the move, its refusals a
       }],
       ['Kimi', "Moving Kimi sessions isn't supported yet.", { provider: 'kimi', providerBuiltin: true }],
       ['OpenCode', "Moving OpenCode sessions isn't supported yet.", { provider: 'opencode' }],
+      ['Antigravity', "Moving Antigravity sessions isn't supported yet.", { provider: 'antigravity', providerBuiltin: true }],
     ];
     for (const [title, reason, extra, after] of cases) {
       const id = await conversation(title, extra);

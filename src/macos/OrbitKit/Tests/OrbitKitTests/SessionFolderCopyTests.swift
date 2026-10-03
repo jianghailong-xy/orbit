@@ -15,15 +15,11 @@ final class SessionFolderCopyTests: XCTestCase {
     }
 
     /// §3.4's confirmation, word for word — `Delete “<name>”?`, and the body that says the sessions
-    /// move back to the list and nothing is deleted.
+    /// move back to the list and nothing is deleted, with no count in it.
     func testTheDeleteConfirmationSaysNothingIsDeleted() {
         XCTAssertEqual(SessionFolderCopy.deleteTitle("Release"), "Delete “Release”?")
-        XCTAssertEqual(SessionFolderCopy.deleteMessage(sessionCount: 4),
-                       "The 4 sessions in it move back to the list. No session is deleted.")
-        XCTAssertEqual(SessionFolderCopy.deleteMessage(sessionCount: 1),
-                       "The 1 session in it moves back to the list. No session is deleted.")
-        XCTAssertEqual(SessionFolderCopy.deleteMessage(sessionCount: 0),
-                       "The 0 sessions in it move back to the list. No session is deleted.")
+        XCTAssertEqual(SessionFolderCopy.deleteMessage,
+                       "Its sessions move back to the list. No session is deleted.")
     }
 
     /// A name its workspace already has is a 409 — the sentence names the name and the workspace and

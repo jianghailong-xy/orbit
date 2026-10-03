@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsObject,
   IsOptional,
@@ -14,6 +15,7 @@ import {
 } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
+import { MODEL_ROUTING_ENGINES } from '../tasks/model-routing';
 
 export class ProviderFallbackDto {
   @IsString() @MinLength(1) provider!: string;
@@ -69,6 +71,17 @@ export class CreateWorkspaceDto {
   // Branch this workspace's sessions merge into by default (null = the runner auto-detects
   // main, else master). Also written implicitly when a session merges to an explicit target.
   @IsOptional() @IsString() defaultMergeTarget?: string;
+  // Smart model selection (docs/model-routing-design.md §7.2): a fresh task run on this Agent is
+  // created on the routed model and effort; off (the default), routing is recorded in shadow only.
+  // The owner's alone: it decides what runs cost, so the agent tools' whitelist
+  // (runner-agents.controller.ts ORCHESTRATOR_WORKSPACE_CREATE_FIELDS) deliberately leaves it out.
+  @IsOptional() @IsBoolean() modelRouting?: boolean;
+  // The other engines smart selection may move this Agent's task runs to (§6): only engines with a
+  // tier table, and only the owner's to name, for the same reason as the switch. Empty (the
+  // default) keeps every run on this Agent's own engine.
+  @IsOptional() @IsArray() @ArrayMaxSize(MODEL_ROUTING_ENGINES.length)
+  @IsIn(MODEL_ROUTING_ENGINES, { each: true })
+  modelRoutingProviders?: string[];
 }
 
 export class UpdateWorkspaceDto {
@@ -103,9 +116,15 @@ export class UpdateWorkspaceDto {
   @IsOptional() @IsBoolean() autoInitGit?: boolean;
   @IsOptional() @IsBoolean() enableWorktree?: boolean;
   @IsOptional() @IsString() defaultMergeTarget?: string;
+  /** See CreateWorkspaceDto.modelRouting. Absent leaves the switch as it is. */
+  @IsOptional() @IsBoolean() modelRouting?: boolean;
+  /** See CreateWorkspaceDto.modelRoutingProviders. Absent leaves the list as it is; [] empties it. */
+  @IsOptional() @IsArray() @ArrayMaxSize(MODEL_ROUTING_ENGINES.length)
+  @IsIn(MODEL_ROUTING_ENGINES, { each: true })
+  modelRoutingProviders?: string[];
 }
 
 // The full workspace list in the desired sidebar order; each id's index becomes its position.
 export class ReorderWorkspacesDto {
-  @IsArray() @IsString({ each: true }) ids!: string[];
+  @IsArray() @IsPublicId({ each: true }) ids!: string[];
 }

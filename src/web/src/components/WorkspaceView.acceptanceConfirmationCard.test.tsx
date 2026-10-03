@@ -2,6 +2,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { act } from 'react';
+import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { App as AntApp } from 'antd';
@@ -15,6 +16,7 @@ import {
 } from '../lib/acceptanceConfirmation';
 import { pendingCriteriaDecisionsQuery } from '../lib/queries';
 import { ACCEPTANCE_PLAN_CHANGE_PREFIX } from './AcceptanceConfirmationCard';
+import { ENTER_HINT } from './CardHotkey';
 import { OWNER_SEND_BACK_ACTION } from './OwnerConfirmationCard';
 import { SETTLEMENT_DELEGATE_ACTION } from './ProjectSettlementCard';
 import type { ProjectOpenItemRow } from '@orbit/shared';
@@ -227,9 +229,25 @@ const mounted = (): HTMLDivElement => {
 const count = (selector: string): number => mounted().querySelectorAll(selector).length;
 
 const waitForUi = async (assertion: () => void): Promise<void> => {
-  await act(async () => {
+  // The act environment is off while the window is waited out, as RTL's own asyncWrapper does it:
+  // React queues every render scheduled inside an in-flight act callback and flushes none of them
+  // until that callback settles, so a page that answers inside the window can never draw what the
+  // window exists to see — instrumented, the answer arrived 203ms into an 8s window and the DOM
+  // never moved (e85b63ee9's second full run: `.decision-strip-title` missing while the card was
+  // drawn; retryAttachments and accounts:267 red the same way on the merge check).
+  const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+  const previous = env.IS_REACT_ACT_ENVIRONMENT;
+  env.IS_REACT_ACT_ENVIRONMENT = false;
+  try {
     await vi.waitFor(assertion, { timeout: 8_000, interval: 20 });
-  });
+  } finally {
+    env.IS_REACT_ACT_ENVIRONMENT = previous;
+  }
+  // And one act to close the window: the last commit the wait saw leaves its passive effects
+  // scheduled, and what they carry — React Query's mutation options among it — is what the test's
+  // next press runs on. The old act-wrapped wait flushed them on its way out; this keeps that,
+  // without the freeze that made the wait itself blind.
+  await act(async () => {});
 };
 
 beforeEach(() => {
@@ -867,6 +885,72 @@ describe('Chat about this on the start card', { timeout: 60_000 }, () => {
     expect(card().querySelectorAll('textarea')).toHaveLength(0);
     expect(requested.slice(requestedBefore), 'arming the composer asked the server for something')
       .toEqual([]);
+  });
+
+  /**
+   * 2026-10-03: the owner pressed Chat about this, typed a question and pressed Enter, and the
+   * project started 68 ms after the message was sent. The send empties the composer before the key
+   * reaches the window, where the card answers Enter on a focused field with no text in it
+   * (`CardHotkey.ts`), so one press did both. A browser commits the emptied composer in the
+   * microtask it runs between the page's listener and the window's; jsdom runs none there, so the
+   * document listener below commits it at that same point.
+   */
+  it('sends what was typed on Enter without starting the project, and Enter on the emptied box starts it', async () => {
+    // The start card alone is asking, so it holds Enter — as it did on the owner's screen.
+    proposalsHeld = false;
+    await mount(`/sessions/${COORDINATOR_PUBLIC}`);
+    await waitForUi(() => {
+      expect(count('.settlement-card')).toBe(1);
+    });
+    const card = (): HTMLElement => mounted().querySelector<HTMLElement>('.settlement-card')!;
+    const actions = (): HTMLButtonElement[] => [
+      ...card().querySelectorAll<HTMLButtonElement>('.settlement-card-actions button'),
+    ];
+    await waitForUi(() => {
+      expect(actions()[0]!.querySelector('.approval-kbd')?.textContent, 'Start the project holds no key')
+        .toBe(ENTER_HINT);
+    });
+
+    await act(async () => {
+      actions()[1]!.click();
+    });
+    await waitForUi(() => {
+      expect(count('.composer-replyto')).toBe(1);
+    });
+    const box = mounted().querySelector<HTMLTextAreaElement>('.composer-box textarea')!;
+    expect(box.placeholder).toBe(START_CHAT_PLACEHOLDER);
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(box, 'move it to orbit-develop first?');
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    box.focus();
+
+    const commitBeforeTheWindow = (): void => flushSync(() => {});
+    document.addEventListener('keydown', commitBeforeTheWindow);
+    try {
+      await act(async () => {
+        box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+      });
+    } finally {
+      document.removeEventListener('keydown', commitBeforeTheWindow);
+    }
+
+    await waitForUi(() => {
+      expect(sendTurnMock).toHaveBeenCalledTimes(1);
+    });
+    expect(sendTurnMock.mock.calls[0]![1]).toContain('move it to orbit-develop first?');
+    expect(starts, 'the Enter that sent the message also pressed Start the project').toEqual([]);
+    expect(count('.settlement-card'), 'the card went away').toBe(1);
+
+    // With nothing left to send, Enter is the card's again.
+    expect(box.value).toBe('');
+    await act(async () => {
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    await waitForUi(() => {
+      expect(starts, 'Enter on the empty composer no longer reaches the card').toHaveLength(1);
+    });
+    expect(sendTurnMock).toHaveBeenCalledTimes(1);
   });
 });
 

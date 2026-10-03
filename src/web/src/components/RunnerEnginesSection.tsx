@@ -4,7 +4,7 @@ import { Button } from 'antd';
 import { Link } from 'react-router-dom';
 import { accountToStartOn, type ReportedEngine, type RunnerEngineHealth } from '@orbit/shared';
 import { api } from '../api';
-import { accountPlanUsage, engineKeepsAccounts } from '../lib/engineAccounts';
+import { accountNameOf, accountPlanUsage, engineKeepsAccounts } from '../lib/engineAccounts';
 import { encodeId } from '../lib/idCodec';
 import { currentPlanUsageRows, planUsageSnapshotForProvider } from '../lib/planUsage';
 import { runnersQuery } from '../lib/queries';
@@ -22,7 +22,7 @@ import { ENGINE_CLI_NAME, engineVersionNumber, updateNoteOf } from '../lib/runne
 import { ENGINE_PRESET } from '../lib/sessionProviderChoices';
 import { useToast } from '../lib/toast';
 import { ProviderTile } from './ProviderGallery';
-import { accountNameOf, rowKindOf } from './RunnerEngines';
+import { rowKindOf } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
 
 /** Where an engine's sign-in and accounts live: its card on Providers, opened at this engine. */
@@ -165,8 +165,9 @@ type Tone = 'ok' | 'warn' | 'muted';
  */
 function signInOf(runner: Runner, health: RunnerEngineHealth): { text: string; tone: Tone } {
   const none = { text: '—', tone: 'muted' as const };
-  // OpenCode signs in per provider with nothing to relay: there is no sign-in to report.
-  if (health.engine === 'opencode') {
+  // OpenCode signs in per provider with nothing to relay, and Antigravity runs on an API key from
+  // its environment: neither has a sign-in to report.
+  if (health.engine === 'opencode' || health.engine === 'antigravity') {
     return health.installed ? none : { text: RUNNER_ENGINE_NOT_INSTALLED, tone: 'muted' };
   }
   const kind = rowKindOf(health, runner.install, health.engine);
@@ -195,7 +196,10 @@ function EngineLine({ runner, health }: { runner: Runner; health: RunnerEngineHe
   const signIn = signInOf(runner, health);
   // A quota belongs to a login that is in: signed out, its last reading is about a session that
   // can no longer start. Same reading Providers shows at the head of its row.
-  const kind = health.engine === 'opencode' ? null : rowKindOf(health, runner.install, health.engine);
+  const kind =
+    health.engine === 'opencode' || health.engine === 'antigravity'
+      ? null
+      : rowKindOf(health, runner.install, health.engine);
   // With several accounts the engine's own snapshot is Default's alone, and one account's windows
   // under "2 accounts signed in" would read as the machine's. The windows shown are those of the
   // account a new session starts on, named — what an account pool's head shows for its next one.

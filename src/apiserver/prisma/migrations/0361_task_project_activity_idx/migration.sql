@@ -1,0 +1,56 @@
+-- `GET /projects/sidebar` reports, for every OPEN project, `lastActivityAt` = `max(updated_at)`
+-- over the project's tasks, and the web sidebar polls it every 15 seconds for as long as a tab is
+-- visible (5,531 calls a day on 2026-10-03). Nothing indexed that question in the order it asks
+-- it, so PostgreSQL answered it by reading every task of every open project:
+--
+--   ->  Aggregate  (actual time=3.311..3.311 rows=1 loops=30)
+--         ->  Index Only Scan using task_project_rollup_covering_idx on task t
+--               (actual rows=3678 loops=30)    → 110,340 entries for 30 rows of output
+--               Heap Fetches: 5719
+--               Buffers: shared hit=9054
+--
+-- Measured on production 2026-10-03 with `EXPLAIN (ANALYZE, BUFFERS)`, read-only: that LATERAL was
+-- 9,054 of the statement's 10,421 buffers (86.9%) and 97% of its execution time, and run alone it
+-- read 3,494 of its 9,082 buffers from outside shared_buffers — the rest of the statement read none.
+-- The covering index has `updated_at` as its last key column, after `status` and `id`, so within a
+-- project it is in no useful order for a maximum.
+--
+-- With `updated_at` ordered directly after the project, the statement's own `max()` becomes
+-- PostgreSQL's min/max path — one backward probe per project:
+--
+--   ->  Result  (actual rows=1 loops=30)
+--         InitPlan 1 (returns $1)
+--           ->  Limit  (actual rows=1 loops=30)
+--                 ->  Index Only Scan Backward using task_project_activity_idx on task t
+--                       Index Cond: ((owner_id = '…') AND (project_id = proj.id) AND (updated_at IS NOT NULL))
+--                       Buffers: shared hit=91
+--
+-- (a reproduction of production's 112,194 rows in their physical order; 2.3 MB / 286 pages built.)
+-- The answer is the same `max()` over the same rows, so it cannot differ from what the scan
+-- returned — the 30 rows were identical — and no writer has to remember anything: every path that
+-- writes `updated_at` (Prisma's `@updatedAt`, raw SQL, the parent-touch triggers, referential
+-- actions, a psql session) maintains this index, because PostgreSQL maintains every index.
+--
+-- WHY NOT A MAINTAINED COLUMN
+-- ===========================
+-- 0280 and 0282 kept a count per write instead of per read, and those counts are nearly free on the
+-- write side because a status-only write nets to zero and touches nothing. A maximum of
+-- `updated_at` does not net to zero: 16 of the 17 UPDATE shapes on `task` advance `updated_at`, so
+-- every task-writing statement would rewrite and lock that project's row until commit. On
+-- `project` itself that is the rank inversion `docs/postgres-lock-order.md` forbids (0282 says why);
+-- in a table of its own it still serialises every pair of concurrent writes to one project's tasks.
+-- And a maximum is not exact under the writes that LOWER it — a delete, a move to another project,
+-- an `updated_at` written as an earlier `CURRENT_TIMESTAMP` — each of which needs the project's
+-- maximum recomputed, which is this index's job anyway.
+--
+-- What this costs: one more index entry for each task INSERT and each non-HOT UPDATE. It removes no
+-- HOT update — `owner_id`, `project_id` and `updated_at` are all already keys of
+-- `task_project_rollup_covering_idx`, so an UPDATE that moves any of them is non-HOT today.
+--
+-- PARTIAL for the reason the covering index is: a task in no project can never be in this answer.
+-- Deliberately not CONCURRENTLY because Prisma runs the migration in a transaction, as with 0283
+-- and 0305: one pass over a table this size. A deployment with a much larger `task` table may
+-- pre-create the identical index CONCURRENTLY, after which IF NOT EXISTS makes this a no-op.
+CREATE INDEX IF NOT EXISTS "task_project_activity_idx"
+  ON "task" ("owner_id", "project_id", "updated_at")
+  WHERE "project_id" IS NOT NULL;

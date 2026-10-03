@@ -8,6 +8,9 @@ import {
 } from './sessionProviderChoices';
 import type { ConfiguredProvider } from './workspaceDefaults';
 import { PROVIDER_GLYPHS } from './providerGlyphs';
+import { encodeId } from './idCodec';
+import type { CodexLogin } from './codexLogin';
+import { sharedPoolAsProviderPool, type SharedPool, type SharedPoolKey, type SharedPoolPerson } from './sharedPools';
 
 const deepseek: ConfiguredProvider = {
   slug: 'deepseek',
@@ -42,9 +45,9 @@ const catalog = {
 } as never;
 
 describe('providerChoices', () => {
-  it('always offers the three engines, even with nothing configured', () => {
+  it('always offers the engines, even with nothing configured', () => {
     const choices = providerChoices([], catalog);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'antigravity']);
     expect(choices.every((c) => c.kind === 'engine')).toBe(true);
   });
 
@@ -54,14 +57,48 @@ describe('providerChoices', () => {
       'claude',
       'codex',
       'kimi',
+      'antigravity',
       'deepseek',
       'my-endpoint',
     ]);
-    expect(choices.slice(3).every((c) => c.kind === 'byok')).toBe(true);
+    expect(choices.slice(4).every((c) => c.kind === 'byok')).toBe(true);
   });
 
   it('never offers opencode as a choice — it is not a login engine', () => {
     expect(providerChoices([], catalog).some((c) => c.slug === 'opencode')).toBe(false);
+  });
+
+  it('offers Antigravity as an engine, with the model the runner reports first', () => {
+    const withAgy = {
+      ...(catalog as object),
+      antigravity: [
+        { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', reasoningLevels: ['low', 'medium', 'high'] },
+        { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro', reasoningLevels: ['low', 'high'] },
+      ],
+    } as never;
+    const row = providerChoices([], withAgy).find((c) => c.slug === 'antigravity');
+    expect(row).toMatchObject({ kind: 'engine', label: 'Antigravity', glyphKey: 'antigravity' });
+    expect(row?.modelLabel).toBe('Gemini 3.8 Flash');
+    // Before the runner reports its models, agy picks its own.
+    expect(providerChoices([], catalog).find((c) => c.slug === 'antigravity')?.modelLabel).toBe(
+      'Managed by the provider',
+    );
+  });
+
+  it('holds Antigravity to its CLI being there, and never to a sign-in it does not have', () => {
+    // agy runs on a Gemini API key from the session's environment — possibly the workspace's own,
+    // which the runner's probe of the machine never sees — so a "no" there is not a blocker.
+    const signedOut = providerChoices([], catalog, undefined, [
+      { engine: 'antigravity', installed: true, auth: 'no' },
+    ]);
+    expect(signedOut.find((c) => c.slug === 'antigravity')?.unavailable).toBeUndefined();
+    const missing = providerChoices([], catalog, undefined, [
+      { engine: 'antigravity', installed: false, auth: 'unknown' },
+    ]);
+    expect(missing.find((c) => c.slug === 'antigravity')).toMatchObject({
+      unavailable: 'Not installed',
+      fixEngine: 'antigravity',
+    });
   });
 
   it('drops a configured row that shadows a built-in engine slug', () => {
@@ -83,7 +120,7 @@ describe('providerChoices', () => {
       { engine: 'codex', installed: false, auth: 'unknown' },
       { engine: 'kimi', installed: false, auth: 'unknown' },
     ]);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'deepseek']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'antigravity', 'deepseek']);
     // Hiding it would leave "why is Kimi missing?" with no answer anywhere in the product.
     expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBe('Not installed');
     expect(choices.find((c) => c.slug === 'codex')?.unavailable).toBe('Not installed');
@@ -106,7 +143,7 @@ describe('providerChoices', () => {
       { engine: 'codex', installed: true, auth: 'no' },
       { engine: 'kimi', installed: true, auth: 'unknown' },
     ]);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'antigravity']);
     expect(choices.find((c) => c.slug === 'codex')?.unavailable).toBe('Not signed in');
     // `unknown` is a CLI that wouldn't answer, not a "no" — it stays pickable.
     expect(choices.find((c) => c.slug === 'kimi')?.unavailable).toBeUndefined();
@@ -153,11 +190,12 @@ describe('providerChoices', () => {
       'claude',
       'codex',
       'kimi',
+      'antigravity',
     ]);
     const partial = providerChoices([], catalog, undefined, [
       { engine: 'claude', installed: false, auth: 'no' },
     ]);
-    expect(partial.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi']);
+    expect(partial.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'antigravity']);
     // Only the engine the runner actually spoke about carries a reason.
     expect(partial.find((c) => c.slug === 'claude')?.unavailable).toBe('Not installed');
     expect(partial.filter((c) => c.unavailable)).toHaveLength(1);
@@ -205,6 +243,18 @@ describe('the runner’s Codex accounts, under the Codex choice', () => {
     expect(accountsOf(choices, 'claude')).toBeUndefined();
   });
 
+  it('lists an account by what it was renamed to in Orbit, Default included', () => {
+    const choices = providerChoices(
+      [],
+      catalog,
+      undefined,
+      codex([{ id: 'default', name: 'jianghailong.main', auth: 'yes' }, { id: '3fa91c2e', name: 'Research', auth: 'yes' }]),
+      [],
+      usage,
+    );
+    expect(accountsOf(choices)?.map((account) => account.label)).toEqual(['jianghailong.main', 'Research']);
+  });
+
   it('lists none for a single account, or for an engine that cannot run', () => {
     expect(accountsOf(providerChoices([], catalog, undefined, codex([{ id: 'default', auth: 'yes' }]), [], usage)))
       .toBeUndefined();
@@ -249,6 +299,14 @@ describe('brandForProvider', () => {
     expect(brandForProvider('claude', 'Claude').glyphKey).toBe('anthropic');
     expect(brandForProvider('codex', 'Codex').glyphKey).toBe('openai');
     expect(brandForProvider('kimi', 'Kimi').glyphKey).toBe('moonshot');
+  });
+
+  it('gives Antigravity its own mark rather than the Gemini preset’s', () => {
+    // Google ships both, but the Gemini preset is the API reached through another CLI.
+    const { brand, glyphKey } = brandForProvider('antigravity', 'Antigravity');
+    expect(glyphKey).toBe('antigravity');
+    expect(brand).toEqual({ mono: 'A', from: '#3186ff', to: '#00b95c' });
+    expect(PROVIDER_GLYPHS.antigravity).toBeTruthy();
   });
 
   it('resolves every glyph key it hands out to actual artwork', () => {
@@ -412,6 +470,7 @@ describe('account pools among the choices', () => {
       'claude',
       'codex',
       'kimi',
+      'antigravity',
       'claude-accounts',
       'anthropic',
       'anthropic-2',
@@ -459,7 +518,7 @@ describe('shared pools among the choices', () => {
 
   it('offers one after the engines, wearing the Codex mark and counting its keys', () => {
     const choices = providerChoices(configured, catalog, undefined, undefined, [team]);
-    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'team-codex', 'deepseek']);
+    expect(choices.map((c) => c.slug)).toEqual(['claude', 'codex', 'kimi', 'antigravity', 'team-codex', 'deepseek']);
     const tile = choices.find((c) => c.slug === 'team-codex')!;
     expect(tile).toMatchObject({ kind: 'pool', label: 'Team Codex', poolSize: 3, poolUnit: 'key', glyphKey: 'openai' });
     // Its model is the Codex CLI's own.
@@ -477,5 +536,136 @@ describe('shared pools among the choices', () => {
     const choices = providerChoices(configured, catalog, undefined, undefined, [team]);
     expect(sameRuntimeChoices('codex', choices, configured, catalog).map((c) => c.slug)).toEqual(['codex', 'team-codex']);
     expect(sameRuntimeChoices('claude', choices, configured, catalog).map((c) => c.slug)).not.toContain('team-codex');
+  });
+});
+
+describe('a Codex pool somebody was added to, in their picker', () => {
+  // jianghailong's Codex Pool (docs/mocks/account-pool-access/02), as Zhang Min, whom he added, reads it —
+  // and as WorkspaceView hands it in: its ChatGPT accounts and its keys as members
+  // (sharedPoolAsProviderPool), and a Codex entry in the catalogue (poolsAsProviders). His accounts run
+  // her sessions too (2026-10-03), so the pool is pickable while one of them can run, keys or no keys.
+  const POOL_ID = '0195c0de-0000-7000-8000-000000000800';
+  const NAMES: Record<string, string> = { jiang: 'jianghailong', zhang: 'Zhang Min', lin: 'Lin Wei' };
+  const spend = { inputTokens: 0, outputTokens: 0, costUsd: 0 };
+  /** One of his ChatGPT accounts as the pool carries it — the first one the next session's. */
+  const account = (email: string, over: Partial<CodexLogin> = {}): CodexLogin => ({
+    state: 'ACTIVE',
+    email,
+    plan: 'plus',
+    fingerprint: `…${email.slice(0, 4)}`,
+    lastError: null,
+    expiresAt: '2026-10-06T00:00:00.000Z',
+    linkedAt: '2026-09-28T00:00:00.000Z',
+    usage: null,
+    usageUnavailable: null,
+    ...over,
+  });
+  const ACCOUNTS: CodexLogin[] = [account('jianghailong.rd@gmail.com'), account('hl.work@gmail.com')];
+  const key = (label: string, contributor: string, viewer: string, over: Partial<SharedPoolKey> = {}): SharedPoolKey => ({
+    id: `${label}-id`,
+    label,
+    fingerprint: 'sk-…AB12',
+    state: 'ACTIVE',
+    enabled: true,
+    shareCap: null,
+    spentUntil: null,
+    contributor: { userId: contributor, name: NAMES[contributor], you: contributor === viewer },
+    usage: { ...spend, othersCostUsd: 0 },
+    running: false,
+    next: false,
+    ...over,
+  });
+  const codexPool = (
+    viewer: string,
+    keys: SharedPoolKey[] = [],
+    over: Partial<SharedPool> = {},
+    logins: CodexLogin[] = ACCOUNTS,
+  ): SharedPool => ({
+    id: POOL_ID,
+    slug: 'codex-pool',
+    label: 'Codex Pool',
+    engine: 'codex',
+    shared: false,
+    logins: logins.map((login, index) => ({ ...login, next: index === 0 })),
+    membersCanAdd: true,
+    ownKeyFirst: true,
+    viewerRole: viewer === 'jiang' ? 'ADMIN' : 'MEMBER',
+    window: { start: '2026-10-01T00:00:00.000Z', end: '2026-11-01T00:00:00.000Z' },
+    people: ['jiang', 'zhang', 'lin'].map(
+      (userId): SharedPoolPerson => ({
+        userId,
+        name: NAMES[userId],
+        role: userId === 'jiang' ? 'ADMIN' : 'MEMBER',
+        creator: userId === 'jiang',
+        you: userId === viewer,
+        keys: keys.filter((row) => row.contributor.userId === userId).length,
+        sessions: 0,
+        usage: spend,
+      }),
+    ),
+    keys,
+    ...over,
+  });
+  const configured: ConfiguredProvider[] = [
+    { slug: 'codex-pool', label: 'Codex Pool', runtime: 'codex', models: [], presetSlug: 'openai', modelsFromRuntime: true },
+  ];
+  const tileOf = (pool: SharedPool, engineHealth?: Parameters<typeof providerChoices>[3]) =>
+    providerChoices(configured, catalog, undefined, engineHealth, [sharedPoolAsProviderPool(pool)]).find(
+      (c) => c.slug === 'codex-pool',
+    )!;
+
+  it('offers it for a pick on his ChatGPT accounts while the pool has no API key at all', () => {
+    const tile = tileOf(codexPool('zhang'));
+    // Still listed, as the pool it is — and pickable: his accounts run her sessions, and one of them is
+    // marked next. The tile counts credentials, and they are not keys alone any more.
+    expect(tile).toMatchObject({
+      kind: 'pool',
+      label: 'Codex Pool',
+      poolSize: 2,
+    });
+    expect(tile.poolUnit).toBeUndefined();
+    expect(tile.unavailable).toBeUndefined();
+    expect(tile.fixHref).toBeUndefined();
+  });
+
+  it('says the same while every key it has is switched off or refused by OpenAI — the accounts still run', () => {
+    const keys = [
+      key('orbit-org-1', 'jiang', 'zhang', { state: 'INVALID' }),
+      key('zm-proj', 'zhang', 'zhang', { enabled: false }),
+    ];
+    expect(tileOf(codexPool('zhang', keys)).unavailable).toBeUndefined();
+    expect(tileOf(codexPool('lin')).unavailable).toBeUndefined();
+  });
+
+  it('greys it out with "Signed out" when its accounts are signed out and its keys refused or off too', () => {
+    const keys = [key('orbit-org-1', 'jiang', 'zhang', { state: 'INVALID' })];
+    const logins = ACCOUNTS.map((login) => account(login.email!, { state: 'SIGNED_OUT' }));
+    const tile = tileOf(codexPool('zhang', keys, {}, logins));
+    expect(tile.unavailable).toBe('Signed out');
+    expect(tile.fixHref).toBe(`/providers/pools/${encodeId(POOL_ID)}`);
+    expect(tile.fixEngine).toBeUndefined();
+  });
+
+  it('counts accounts with the keys once a key of it can run', () => {
+    const tile = tileOf(codexPool('zhang', [key('orbit-org-1', 'jiang', 'zhang')]));
+    expect(tile.unavailable).toBeUndefined();
+    expect(tile.fixHref).toBeUndefined();
+    expect(tile.poolSize).toBe(3);
+    expect(tile.poolUnit).toBeUndefined();
+  });
+
+  it('keeps the words of a shared pool’s own maker, whom nobody added', () => {
+    // A pool made on the shared pools page, read by the person who made it: no accounts, so "No keys", as
+    // before — and its unit is the key.
+    const tile = tileOf(codexPool('jiang', [], { shared: true }, []));
+    expect(tile.unavailable).toBe('No keys');
+    expect(tile.poolUnit).toBe('key');
+  });
+
+  it('still says first that this runner has no Codex CLI to run it on', () => {
+    expect(tileOf(codexPool('zhang'), [{ engine: 'codex', installed: false, auth: 'unknown' }])).toMatchObject({
+      unavailable: 'Not installed',
+      fixEngine: 'codex',
+    });
   });
 });

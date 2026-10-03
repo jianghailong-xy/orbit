@@ -222,6 +222,16 @@ const maxTaskLabels = 16
 // the cap the write would be rejected against, rather than letting a model discover it by 400.
 const maxTaskAcceptanceCriteriaChars = 4000
 
+const maxTaskModelHintReasonChars = 500
+
+const taskModelHintDescription = "Suggested difficulty tier: S = mechanical edits, copy changes, version upgrades (Sonnet · low); " +
+	"M = a well-specified feature or fix (Sonnet · medium); " +
+	"L = unknown root cause, concurrency, cross-module work, migrations, or dispatch/core paths (Opus · high); " +
+	"XL = architecture design, long unattended work, or repeated failures at L (Opus · max). " +
+	"Codex uses the same default model with low/medium/high/xhigh for S/M/L/XL. " +
+	"modelHint is a suggestion that failures can escalate; model is a hard pin that takes precedence. " +
+	"The engine is still specified with provider. Omit to preserve the suggestion on update; null clears it."
+
 // The range of a task's priority: the server's TASK_PRIORITY_MIN/MAX, which are the INTEGER
 // column's own, stated in the schema for the same reason as the bounds above.
 const (
@@ -757,7 +767,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
+		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
 		if err := requireHandoffNamesItsDestination(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
@@ -802,7 +812,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
+			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
 			// Per item, because a crossing is per item: one plan can file most of its work at home
 			// and one piece of it over the line, and the item that crosses is the one that has to
 			// name where it is going.
@@ -849,7 +859,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "runAt", "provider", "model", "acceptanceCriteria", "criterionKey", "codeless", "codelessReason", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "priority", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason", "handoff")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "acceptanceCriteria", "criterionKey", "codeless", "codelessReason", "completionCriterion", "completionCriterionOverrideReason", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "priority", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason", "handoff")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -937,6 +947,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("declare the task finished failed: "+err.Error(), true)
 		}
 		return toolResult(prettyJSON(raw), false)
+
+	case "task_confirmation_review", "task_confirmation_return":
+		return s.answerConfirmationReview(name, args)
 
 	case "task_progress_report":
 		id, ok := s.resolveTaskID(args)
@@ -1876,6 +1889,16 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"type":        []string{"string", "null"},
 		"description": "Run this task on a specific model id within its provider's model space (e.g. \"claude-opus-5\"). Omit (or pass null) to use the provider's own default. An id the provider doesn't have will fail at run time, not here.",
 	}
+	modelHintProp := map[string]interface{}{
+		"type":        []string{"string", "null"},
+		"enum":        []interface{}{"S", "M", "L", "XL", nil},
+		"description": taskModelHintDescription,
+	}
+	modelHintReasonProp := map[string]interface{}{
+		"type":        []string{"string", "null"},
+		"maxLength":   maxTaskModelHintReasonChars,
+		"description": "One sentence explaining the modelHint tier, at most 500 characters, preserved verbatim. Omit to preserve it on update; null clears the reason.",
+	}
 	// Files a new task under a project, on task_create and every task_create_batch item alike.
 	// Not nullable, unlike listId: on a create there is nothing to clear, and null would be an id
 	// the server rejects rather than a shorthand for "no project".
@@ -2322,6 +2345,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"runAt":                    runAtProp,
 			"provider":                 providerProp,
 			"model":                    modelProp,
+			"modelHint":                modelHintProp,
+			"modelHintReason":          modelHintReasonProp,
 			"dependsOnTaskIds": map[string]interface{}{
 				"type":        "array",
 				"items":       str,
@@ -3089,7 +3114,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_update",
-			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, or OWNER_CONFIRMED path, and an OWNER_CONFIRMED task is confirmed only by the account owner in the Orbit app. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected, and the account owner's to make: a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project, and a declared crossing waits on the owner as CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING (read the row with project_crossings). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/runAt/provider/model to clear them. `codeless: true` declares that the task produces no code, which takes it out of its acceptance criterion's landing: it needs `codelessReason` in the same call, and is refused for a task that already has commits of its own.",
+			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, or OWNER_CONFIRMED path, and an OWNER_CONFIRMED task is confirmed only by the account owner in the Orbit app. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected, and the account owner's to make: a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project, and a declared crossing waits on the owner as CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING (read the row with project_crossings). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/runAt/provider/model/modelHint/modelHintReason to clear them. `codeless: true` declares that the task produces no code, which takes it out of its acceptance criterion's landing: it needs `codelessReason` in the same call, and is refused for a task that already has commits of its own.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId":             taskIDProp,
 				"title":              str,
@@ -3104,6 +3129,8 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"runAt":              updateRunAtProp,
 				"provider":           providerProp,
 				"model":              modelProp,
+				"modelHint":          modelHintProp,
+				"modelHintReason":    modelHintReasonProp,
 				"acceptanceCriteria": updateAcceptanceCriteriaProp,
 				"criterionKey":       updateCriterionKeyProp,
 				"codeless":           updateCodelessProp,
@@ -3205,9 +3232,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"flight, no wake-up it asked for), over the report that turn ends on — declaring while more " +
 				"work is coming asks nothing yet. Calling it twice in one turn is one declaration. " +
 				"Confirming done, or sending back with a reason, is the account owner's own act in the app; " +
-				"no agent session can do it.",
+				"no agent session can do it. If the task has a reviewer, Orbit asks it first and the owner's " +
+				"card waits until the review is in.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
+		// The reviewer's two answers to a confirmation request it was handed
+		// (docs/owner-confirmation-review-contract.md §3.5, §8).
+		confirmationReviewDescriptor(obj),
+		confirmationReturnDescriptor(obj),
 		// A task's structured progress, which the progress watches read (task_progress.go).
 		taskProgressDescriptor(obj, taskIDProp),
 		{

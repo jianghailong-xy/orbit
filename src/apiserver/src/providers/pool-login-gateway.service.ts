@@ -86,10 +86,10 @@ type Refreshed =
  *   session the claim put on one of the pool's API keys (migration 0358) goes to OpenAI's API on that key,
  *   through PoolGatewayService, on this same token.
  * - WHAT: only the allowed paths (pool-gateway.service.ts gatewayAllows); anything else is 403.
- * - WHOSE (`forward`): a ChatGPT account of the pool is its owner's, and runs its owner's sessions only. A
- *   session somebody else owns is refused before any account is read — whatever token it came with and
- *   whatever its row names — so a person added to the pool, whose token is a person's (`orbit-gw-`), can
- *   never reach the ChatGPT backend through here.
+ * - WHOSE (`forward`): a ChatGPT account of the pool runs the sessions of everyone in the pool — its
+ *   owner's, and those of the people they added (2026-10-03; the pool's owner asked for it), whatever kind
+ *   of token the request arrived on. Signing an account in or out is still the owner's alone, and a
+ *   refusal that asks for one is worded for whoever reads it (byOwner).
  * - WHICH ACCOUNT: `session.pool_codex_account_id`, the account the last claim recorded on the session —
  *   never one the token names, which is nothing. An engine warm on a token minted before the session moved
  *   therefore sends on the account the session is on now; the gateway chooses no account and moves no
@@ -135,18 +135,15 @@ export class PoolLoginGatewayService {
   /**
    * A request of a session on one of its pool's ChatGPT accounts (or of a login pool's session on nothing),
    * sent on to ChatGPT's Codex backend on that account — `caller` authenticated by either kind of token, and
-   * the path already allowed (PoolGatewayController). Only for a session the pool's owner owns: the
-   * accounts are theirs, and nobody else's session is sent on one.
+   * the path already allowed (PoolGatewayController). Every session of the pool is served here, its owner's
+   * and the people they added to it alike: the accounts are the owner's, and run their sessions too.
    */
   async forward(req: Request, res: Response, caller: GatewayCaller): Promise<void> {
     const started = Date.now();
     const target = gatewayTarget(req.originalUrl ?? req.url);
-    if (caller.sessionOwnerId !== caller.poolOwnerId) {
-      refuse(res, 403, 'orbit_pool_login_owner_only',
-        `The ChatGPT accounts in "${caller.poolLabel}" run its owner's sessions only — yours run on its API keys`);
-      this.log.log(`session ${caller.sessionId} pool ${caller.poolId}: not its owner's session, on an account — refused`);
-      return;
-    }
+    // Whose session this is: the pool owner's own, or one of the people they added, whose lines say to
+    // ask its owner where the owner's say "you". Any of them may be sent on one of the pool's accounts.
+    const byOwner = caller.sessionOwnerId === caller.poolOwnerId;
     // The account the session is on, if the pool still holds it: the token that got here may have been
     // minted on another, before the session moved (migration 0355). None when the session names an
     // account the pool has since lost, and when it names none — the same answer either way.
@@ -157,15 +154,15 @@ export class PoolLoginGatewayService {
         })
       : null;
     if (!login) {
-      refuse(res, 403, 'orbit_pool_login_missing', loginMissingReason(caller.poolLabel));
+      refuse(res, 403, 'orbit_pool_login_missing', loginMissingReason(caller.poolLabel, byOwner));
       this.log.log(`session ${caller.sessionId} pool ${caller.poolId}: no account — refused`);
       return;
     }
     const account = maskedAccount(login.accountId);
     if (login.state !== 'ACTIVE') {
       // Every session it refuses is told, once, whichever of them saw it signed out first.
-      await this.owe(caller.sessionId, loginSignedOutNotice(login, caller.poolLabel));
-      refuse(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel));
+      await this.owe(caller.sessionId, loginSignedOutNotice(login, caller.poolLabel, byOwner));
+      refuse(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel, byOwner));
       this.log.log(`session ${caller.sessionId} account ${account}: signed out — refused`);
       return;
     }
@@ -310,9 +307,10 @@ export class PoolLoginGatewayService {
 
   /** The login is refused for good: signed out, the session told, and the request answered with that. */
   private async signedOut(res: Response, caller: GatewayCaller, login: GatewayLogin, reason: string): Promise<void> {
+    const byOwner = caller.sessionOwnerId === caller.poolOwnerId;
     await this.logins.markSignedOut(caller.poolId, login.accountId, reason);
-    await this.owe(caller.sessionId, loginSignedOutNotice(login, caller.poolLabel));
-    refuse(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel));
+    await this.owe(caller.sessionId, loginSignedOutNotice(login, caller.poolLabel, byOwner));
+    refuse(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel, byOwner));
     this.log.log(`session ${caller.sessionId} account ${maskedAccount(login.accountId)}: refused by OpenAI — signed out`);
   }
 
@@ -324,7 +322,8 @@ export class PoolLoginGatewayService {
       this.log.warn(`account ${maskedAccount(login.accountId)}: refresh failed: ${refreshed.message}`);
     } else {
       // Signed out or taken out of the pool while this request waited.
-      refuse(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel));
+      const byOwner = caller.sessionOwnerId === caller.poolOwnerId;
+      refuse(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel, byOwner));
     }
   }
 

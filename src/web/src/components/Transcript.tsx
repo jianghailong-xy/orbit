@@ -1360,15 +1360,21 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
       // a folded entry in the line's own fold, because it is the control plane's too. It used to be
       // an entry in a user bubble under the card, which drew an empty bubble: a message with no
       // words in it, in the reader's own name.
+      //
+      // A job that ended while a turn ran is written into that turn as a steer: the same line, in
+      // the running turn's stream where its echo landed, saying how far it got as a steer's bubble
+      // would — never the bubble itself.
       const background = parseBackgroundWake(node.note);
       if (background) {
+        const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
         return (
           <>
             <BackgroundWakeCard
               wake={background}
               seq={node.seq}
               ts={node.ts}
-              undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+              undelivered={undelivered}
+              steer={node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined}
               attached={
                 background.rest !== '' && (
                   <ControlPlaneNote kind={describeNote(background.rest)} text={background.rest} />
@@ -1497,13 +1503,14 @@ function ToolFailureCard({
  * The providers whose credentials live on the runner itself (the engines in doctor.go), so the
  * remedy is a sign-in on that machine rather than a key to fix in Providers.
  */
-const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi', 'opencode']);
+const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi', 'opencode', 'antigravity']);
 
 /**
  * Of those, the ones Orbit can sign in from here. OpenCode is deliberately absent: its login
  * picks an underlying provider interactively, which the browser relay's DTO cannot express, so
  * the runner refuses such a request outright (loginFlowFor in login.go). Its card names the
- * command to run instead of offering a button that cannot work.
+ * command to run instead of offering a button that cannot work. Antigravity has no sign-in at
+ * all: agy runs on the Gemini API key in its environment, so its card names that variable.
  */
 const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi']);
 
@@ -1534,9 +1541,11 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
         <div className="chat-authfix-title">
           {!help
             ? 'Authentication failed'
-            : local
-              ? `Sign-in expired${help.runnerName ? ` on “${help.runnerName}”` : ''}`
-              : 'Provider authentication failed'}
+            : help.provider === 'antigravity'
+              ? 'Gemini API key rejected'
+              : local
+                ? `Sign-in expired${help.runnerName ? ` on “${help.runnerName}”` : ''}`
+                : 'Provider authentication failed'}
         </div>
       </div>
       <div className="chat-authfix-msg">{message}</div>
@@ -1550,6 +1559,12 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
               onUseApiKey={help.onUseApiKey}
             />
           )
+        ) : provider === 'antigravity' ? (
+          <div className="chat-authfix-desc">
+            Antigravity runs on the Gemini API key in its environment. Set{' '}
+            <code>GEMINI_API_KEY</code> in this workspace's environment variables, or on the runner,
+            then send your message again.
+          </div>
         ) : (
           <div className="chat-authfix-desc">
             Run <code>opencode auth login</code> on that machine and choose the provider there —
@@ -3201,7 +3216,18 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
         body: i.content ? <Pre text={String(i.content)} /> : undefined,
       };
     case 'Edit':
-      return { label: 'Edit', icon: <EditOutlined />, tone: 'write', path: i.file_path, body: <Diff oldStr={i.old_string} newStr={i.new_string} /> };
+      return {
+        label: 'Edit',
+        icon: <EditOutlined />,
+        tone: 'write',
+        path: i.file_path,
+        // Antigravity names the file it edited and nothing else — agy's stream carries no diff
+        // (contract §2.2) — so an Edit without either side is just the file, not an empty diff.
+        body:
+          i.old_string === undefined && i.new_string === undefined ? undefined : (
+            <Diff oldStr={i.old_string} newStr={i.new_string} />
+          ),
+      };
     case 'apply_patch': {
       const files = Array.isArray(i.files)
         ? i.files.filter((p: unknown): p is string => typeof p === 'string' && p.length > 0)

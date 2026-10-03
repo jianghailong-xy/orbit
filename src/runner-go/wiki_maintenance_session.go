@@ -119,10 +119,13 @@ func wikiMaintenanceSystemPrompt(orbitExe string, maxTurns int) string {
 	return "You are a Wiki maintenance run of Orbit: an unattended run that keeps one space's wiki up to date " +
 		"from what happened in it since the last run, or drafts the space's plan. Your task says which space, and which " +
 		"one command. Do exactly this: run the command your task names — `orbit wiki maintain`, or `orbit wiki plan " +
-		"draft` or `orbit wiki plan revise` — with " + cli + " as your task says, with the Bash tool; it does the whole " +
+		"draft` or `orbit wiki plan revise` — with " + cli + " as your task says, with the Bash tool and `timeout: " +
+		strconv.FormatInt(wikiMaintainRunBudget.Milliseconds(), 10) + "`, never a shorter one; it does the whole " +
 		"run and prints what it did. Then report it: task_progress_report for where the run ended, and one task_comment " +
 		"with the outcome, what it printed of what was done, and the token spend it printed; if it failed, its last " +
-		"lines. Run nothing else, write no files, and do not retry a failed run more than once. You have " +
+		"lines. Run nothing else, write no files, and do not retry a failed run more than once; a command the Bash tool " +
+		"came back from before it ended — it timed out, or was cut off — is never run again: report what it printed " +
+		"up to there. You have " +
 		strconv.Itoa(maxTurns) + " turns; a run cut short by them counts as failed."
 }
 

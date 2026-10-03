@@ -57,13 +57,16 @@
 | `open-item:v1:<itemId>:<assignedAtMs>` | 当前协调会话 | §4.4 |
 | `owner-answer:v1:<itemId>:<sessionId>` | 当前协调会话 | §5.2 |
 | `criteria-decision:v1:<intentId>` | 提案会话 | §5.1 |
+| `owner-confirmation-review:v1:<reviewId>` | 确认请求的审查方会话 | `docs/owner-confirmation-review-contract.md` D2 |
+| `confirmation-return:v1:<recordId>` | 执行会话（由 Orbit 转交审查方的话） | 同上 B3 |
+| `owner-confirmation-answers:v1:<decisionId>` | 确认请求的审查方会话 | 同上 Q5 |
 
 **G7（轮次来源）**：`conversation_turn` 没有来源列。保险丝（§6.1，以保险丝计数任务的定义为准）用「这一轮有没有 `conversation_turn`」来区分：Orbit 投递的轮次都有一行，runner 把该轮的事件记在它名下；engine 自己起的轮次没有，它的 `run_event.type = 'turn_end'` 不挂 `turn_id`。
 
 | 来源 | 判据 | 类别 |
 |---|---|---|
 | owner 消息、另一会话的 `session_send`、auto-retry 重发 | 有 `conversation_turn`，`clientTurnId` 随机或由客户端给出 | 外部 |
-| 平台投递 | 有 `conversation_turn`，`clientTurnId` 为上表前缀、`coordinator-wake-delivery:v1:` 派生 uuid、`task-comment-mention:`、`system:task-acceptance:v1:` 或 `initial-<sessionId>` | 外部 |
+| 平台投递 | 有 `conversation_turn`，`clientTurnId` 为上表前缀（含确认审查的三个）、`coordinator-wake-delivery:v1:` 派生 uuid、`task-comment-mention:`、`system:task-acceptance:v1:` 或 `initial-<sessionId>` | 外部 |
 | Watch 投递（匹配与到期）、会话定时唤醒 | 有 `conversation_turn`，`watch:<id>:…` 或定时唤醒的前缀 | 外部（已知边界：agent 自己约定的定时唤醒不计入自发，见附录 A-Q11） |
 | engine 自己起的轮次（后台任务通知、ScheduleWakeup、Monitor） | 没有 `conversation_turn`；`run_event.type = 'turn_end'` 且 `turn_id IS NULL` | 自发 |
 
@@ -753,9 +756,9 @@ CHECK：`(state = 'OPEN') = (resolved_at IS NULL)`；`kind ∈ {PROMOTION_APPROV
 3. 协调会话每一次 `turnComplete` 提交后：补投本项目 OPEN、且没有投给本会话未退回投递行的协调会话待办。这是进程死在 1 与提交后边沿之间时的补偿点；
 4. 被退回的投递（X-D5）在 3 上自然补投。
 
-**X-D5（排空点退回）**：在 G6 列出的四个排空点，以及打断与撤回的删除点，排空之前调用 `ProjectOpenItemService.returnQueuedTurns(tx, sessionId, { code, ending })`：本会话尚未 `delivered_at` 的平台轮次对应的投递行写 `returned_at` / `return_code`。`ending = true`（会话正在结束）时，同一事务把这些待办改为 OWNER / `COORDINATOR_ENDED`，提交后推送 `escalated-to-you`；`ending = false`（打断、撤回）时待办保持 OPEN，等 X-D4 第 3 条补投。
+**X-D5（排空点退回）**：在 G6 列出的四个排空点，以及打断与撤回的删除点，排空之前调用 `ProjectOpenItemService.returnQueuedTurns(tx, sessionId, { code, ending })`：本会话尚未 `delivered_at` 的平台轮次对应的投递行写 `returned_at` / `return_code`。`ending = true`（会话正在结束）时，同一事务把这些待办改为 OWNER / `COORDINATOR_ENDED`，提交后推送 `escalated-to-you`；`ending = false`（打断、撤回）时待办保持 OPEN，等 X-D4 第 3 条补投。例外是运行失败带来的排空（失败的轮次、runner 以 FAILED finalize、reaper）：会话 FAILED、没有 `end_reason`、仍在 Open（`conversationIsDown`），是挂了而不是结束了，待办仍归 COORDINATOR，同一事务只把 `assigned_at` 改为此刻——被排空的轮次原地保留、占着旧键，不换键下一次投递就成了一次重放——`waiting_since` 与 `escalate_at` 不动，等会话被重试后由 X-D4 第 3 条补投，窗口内没回来就由 X-E1 升级。
 
-**X-D6（没人可投）**：创建时项目没有协调会话，或会话已结束 → 负责人直接为 OWNER（`NO_COORDINATOR` / `COORDINATOR_ENDED`），推送 `escalated-to-you`。
+**X-D6（没人可投）**：创建时项目没有协调会话，或会话已结束 → 负责人直接为 OWNER（`NO_COORDINATOR` / `COORDINATOR_ENDED`），推送 `escalated-to-you`。会话只是挂了（`conversationIsDown`：运行失败——API 错误、登录过期、runner 掉线——且没人结束它）不算已结束：负责人仍为 COORDINATOR。`createTurn` 不往 FAILED 会话上写轮次，所以待办先不投，等会话被重试、下一轮结束时由 X-D4 第 3 条补投；窗口内没回来由 X-E1 升级。投递时（X-D4 第 1 条）同理：`createTurn` 以会话不可发拒绝时重读会话，只有真正结束（`conversationIsOver`）才交给 owner。
 
 **X-D7**：OWNER 待办不投给会话，owner 在卡片与推送里看到。其中 `COORDINATOR_QUESTION` 的答复投给协调会话（§5.2）。
 
@@ -833,9 +836,10 @@ interface OpenItemRow {
 4. `a FAILED written by the reaper opens one item`（改动前跑红）
 5. `an EXECUTABLE exit mismatch and a task_update FAILED each open one item`
 6. `an item survives unread messages and is delivered after the running turn ends`
-7. `an item whose coordinator has ended is reassigned to the owner`
-8. `a queued item turn drained by a failed turn is returned, not lost`
-9. `the third failure in one successor chain goes straight to the owner`
+7. `an item whose coordinator has ended is reassigned to the owner`（含挂了之后被 owner 归档的协调会话：它被人关掉了）
+8. `items opened while the coordinator is down stay the coordinator's, and reach it once a retry brings it back`（合并冲突与任务失败各一条；改动前跑红：两条都直接给了 owner）
+9. `a queued item turn drained by the coordinator's failed turn is returned, stays the coordinator's, and is queued afresh once it is back`（改动前跑红：退回后给了 owner）
+10. `the third failure in one successor chain goes straight to the owner`
 
 `src/apiserver/src/projects/exception-escalation.pg.spec.ts`（判据 9）：
 
@@ -1409,3 +1413,4 @@ SELECT count(*) FROM project_coordinator_wake
 - **v1 修订 4**（2026-09-23）：M7 放开一处——项目分支 + Automatic + 检查干净 → 平台自行合入 main（新增 M-T11、M-T12，迁移 0301 的 `confirmed_automatically` 两列，runner 能力 `promotion-automatic-land/v1`，§3.6 `merged.automatic` / `merged.revert`，V8 文案）。缘由：owner 2026-09-23 的决定「有自己的项目集成分支 + automatic 就可以合并；如果是 main 或非 automatic，就需要人来点」；线上实测两个项目（一个 30 小时 15 张、一个 6 小时 6 张）的 21 张晋升卡里 20 张在几分钟内被按下，按已经不是决策而是形式。边界：项目分支是已过线检查的暂存区（干净），Automatic 是 owner 已给过的授权（可以自己动），两者都在才不越权；「干净」一字不放宽——检查红、有冲突、main 在检查后前进、有 OPEN 集成类待办，任一即出卡，main 前进由 runner 在推送前判（只落到 `upstream_sha_checked`，动了就原样交回），声明不了这一点的旧 runner 不参与自动落地；授权在领取时重读一次，检查之后被收回（Automatic 关、线改、新开集成类待办）的落地不下发、交回 owner。代价：`coordinator_enabled` 从此同时是「自动交付例外」与「自动合入 main」的授权，为前者打开的项目会顺带得到后者；不另加开关（owner 明确选择复用 Automatic），改为在该列注释与 Automatic 文案里写明。部署顺序：apiserver 先上即安全——没声明 `promotion-automatic-land/v1` 的 runner 一律出卡，与今天一致；runner 升版（root `package.json` 版本号 bump、自更新）之后，自动合入才对该 runner 上的项目生效。
 - **v1 修订 5**（2026-09-23）：G5 对 `COORDINATOR_WAKE_EVENTS` 再开一处例外，增 `PROJECT_SETTLED_UNMERGED`（迁移 0303）。结算后的项目，若它的集成线上仍有成果没有任何回执说到 upstream，平台把「这些提交停在集成线上、没进 main」送到协调会话并点名提交（`detail.commits`）；合并由谁做是会话/owner 的判断（M7），平台不合、不排候选、也不改任何守卫。缘由：2026-09-23 项目 `34ODoUKJGEsfbgcJDGS4q` 已 DONE，而 `d6b55d2d853f8b2410977674e3ec54c39f52a34e` 停在 `project/34ODoUKJGEsfbgcJDGS4q` 上、比 main 多一个提交：承载它的落地作业在会话写下这个提交之前九分钟就已终态 `ALREADY_LANDED`（§2.2 J-T5 的那条答案是「分支上已经没有 line 没见过的提交」，而会话后来又提交了一次），于是没有任何一次「队列变短了」来为这个 tip 排候选（M-F1/M-F4），而结算之后连会重新读这条线的写入也停了——它最终由人手工重放进 main。不放新表，因为它不是例外待办：没有失败要处理、没有终态要记，要的只是送到一次。载体是 G6（`CoordinatorDeliveryService.deliver` → `sessions.resume`，`createTurn`），不走 `WakeDispositionService`（那条规则读的是一条验收标准的覆盖度，而结算要求每条标准都已 LANDED，没有标准可读）；幂等键是（事件，项目，`(taskId, tipSha)` 对的摘要），同一批残留只投一次、残留移动一次就再投一次。读的是 `project-criterion-landing.ts` 自己的两个折叠（`taskLanding` 与 `taskHasNothingToLand`）而不是第二份「线上的、不在 main 上的」判断；只在**已结算**的项目上读，所以线上有活而项目还开着的常态不会产生任何东西。此前 0298 为 `TASK_DISPATCH_REFUSED`、0299 为 `DEPENDENT_READY` 已各加过一次。
 - **v1 修订 6**（2026-10-01）：J-T1b 落地为协调会话的 `integration_retry`（理由必填），§4.7 的 owner 门暂不实现。缘由：2026-10-01 项目 `34Y7My8sqhKLWtmCQYv1l` 的三条 DONE 任务（③ `34Y7Utvsd47A14DjMzIzD`、Automatic 路由修复、合并检查基线修复）各只有第 1 代 `LAND_TASK`，都以 `CHECK_FAILED` 结束（合并检查在 main 上本来就红；基线那条是 TASK_ACCEPTANCE 里 `go test` 撞上 10 分钟默认超时），项目分支从未建立；其中两条的待办已被协调会话手工 `HANDLED`，没有在途作业，也没有 owner blocker。`task_start` 只会再跑一遍任务、开新分支，从不重新排落地；契约里写的 J-T1b 一直没有实现，于是没有任何一扇门能让这些成果重新上线，下游全被依赖链挡住。取舍：（1）理由必填、记在新一代作业上（迁移 0344 的四列），因为「平台从不自己重跑」只有在每次重跑都有人说明为什么这次会不同时才成立；（2）权限按待办归属判，没有 OPEN 待办时才看 Automatic——这样协调会话手工关掉的待办（③ 的状态）在 Automatic 下仍可重跑，而 owner 的待办（升级、非 Automatic）只有 owner 交回后才归协调会话，与修订 2 对那次按压的读法一致；（3）冲突不在可重跑之列：同样的提交原样重放只会再冲突；（4）分支取「此刻一次 DONE 会交给线」的那条而不是失败那一代的 `source_ref`：基线任务第 1 代落地的分支 `orbit/transcript-runner-go-5-e1acaf` 已与新的 main 冲突，它的成果在后来那次运行的分支上；（5）再失败的那一代照常开分类待办给协调会话，不加链上限——普通的落地去留不是 owner 的问题（§0 的 COORDINATOR_BOUNDED）。
+- **v1 修订 7**（2026-10-03）：§4.4 X-D5、X-D6 区分协调会话「挂了」与「结束了」。运行失败（会话 FAILED、没有 `end_reason`、仍在 Open——API 错误、登录过期、runner 掉线，`conversationIsDown`）不算结束：新开的例外待办照常归 COORDINATOR；投递时 `createTurn` 拒绝 FAILED 会话，就先不投；失败轮次的排空退回的待办也不再转给 owner，只换 `assigned_at`，好让下一次投递是一条新轮次。会话被重试后，下一轮结束时由 X-D4 第 3 条补投；窗口内没回来，由 X-E1 升级。被人结束、归档、删除的会话照旧交给 owner。缘由：2026-10-02 项目 `34VR0RwUSIcaoO7ZZqv52` 的协调会话从 07:53 起每一轮都被账号限流（429）当场拒掉，runner 把这种轮次判为失败，会话停在 FAILED；09:46 一次 `LAND_TASK` 冲突开出的待办因此一出生就是 OWNER / `COORDINATOR_ENDED`，没有投给任何会话，owner 在 15:50 先重试协调会话、再按「Ask the coordinator again」才把它交回去。代价：协调会话真起不来时，owner 要等窗口走完（默认 2 小时）才收到卡，而不是立刻。`sessionHasEnded` 的其他读者（唤醒投递、§0.3 G6 的钩子、looks-finished）不变。

@@ -25,6 +25,11 @@
  *       reaches it — at the claim that starts its engine, and ahead of the message an idle resident
  *       engine is sent — not after that turn fails on the limit. A pinned session, and a runner that
  *       cannot carry the conversation, stay where they are.
+ *   (9) A task's run is moved by its usage limit as (6) is — it used to wait out the reset beside an
+ *       account with room — and its task is told nothing while the re-send is on its way.
+ *  (10) A usage limit met in a turn nobody sent — a background agent reporting in — moves the session
+ *       as well, re-sending nothing; and the engine being replaced saying so again does not move it a
+ *       second time.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-account-choice.pg.spec.ts
  *
@@ -35,7 +40,13 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { Prisma, PrismaClient, RunStatus, RunnerStatus, SessionDispatchOrigin } from '@prisma/client';
-import { AgentProvider, RunEventType, type PlanUsage, type RunnerEngineHealth } from '@orbit/shared';
+import {
+  AgentProvider,
+  RunEventType,
+  RunStatus as SharedRunStatus,
+  type PlanUsage,
+  type RunnerEngineHealth,
+} from '@orbit/shared';
 import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
@@ -451,5 +462,98 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     await sessions.createTurn(idle.ownerId, roomy, { content: 'go on', clientTurnId: randomUUID() });
     assert.deepEqual(await reloads(roomy), []);
     assert.equal((await row(roomy)).claude_account, WORK);
+  });
+
+  await t.test('(9) a task’s run its account’s limit stopped moves too, and its task is told nothing meanwhile', async () => {
+    const m = await machine('task-limit');
+    const taskId = randomUUID();
+    await db.task.create({
+      data: {
+        id: taskId,
+        ownerId: m.ownerId,
+        assigneeId: m.workspaceId,
+        title: 'P0 verification',
+        creatorType: 'AGENT',
+        creatorId: m.workspaceId,
+        status: 'OPEN',
+        completionCriterion: 'EVIDENCE_JUDGMENT',
+      } as never,
+    });
+    const id = await sessionOn(m, 'claude', RunStatus.RUNNING, { engineTurnActive: true, taskId, startsTaskWork: true });
+    const turn = await db.conversationTurn.create({
+      data: {
+        sessionId: id,
+        seq: 1,
+        clientTurnId: `turn-${randomUUID()}`,
+        kind: 'message',
+        content: '充值好了',
+        status: 'IN_FLIGHT',
+        deliveredAt: new Date(),
+        leaseDeadlineAt: new Date(Date.now() + 300_000),
+        leaseGeneration: randomUUID(),
+      },
+      select: { id: true },
+    });
+    // What the runner reported on 2026-10-02: the limit as the reply, then the turn FAILED on it.
+    const limit = "You've hit your session limit · resets 7:30pm (Europe/Berlin)";
+    const before = Date.now();
+    await api.events({ id: m.runnerId }, id, {
+      events: [{ seq: 1, type: RunEventType.ASSISTANT, ts: new Date().toISOString(), turnId: turn.id, payload: { text: limit } }],
+    });
+    await api.turnComplete({ id: m.runnerId }, id, {
+      turnId: turn.id, status: SharedRunStatus.FAILED, subtype: 'success', result: limit, numTurns: 1, costUsd: 0,
+    });
+
+    const after = await row(id);
+    assert.equal(after.claude_account, WORK, 'a task’s run waited out the reset beside an account with room');
+    assert.equal(after.pool_switch_notice, 'Switched to Work — the usage limit on Default is reached');
+    assert.ok(after.retry_ms !== null && after.retry_ms >= before - 1_000 && after.retry_ms <= Date.now() + 1_000,
+      `not re-sent now: ${after.retry_ms}`);
+    assert.equal(await db.taskComment.count({ where: { taskId } }), 0, 'a failure note beside a run that is going on');
+    const task = await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { status: true } });
+    assert.equal(task.status, 'OPEN', 'the task was reclaimed under a run that is going on');
+  });
+
+  await t.test('(10) a limit met in a turn nobody sent moves the session too, and re-sends nothing', async () => {
+    const m = await machine('undelivered-limit');
+    // The runner's snapshot has not caught up with the limit: Default still reads as having room.
+    const lagging = {
+      claude: {
+        provider: AgentProvider.CLAUDE,
+        fiveHour: { utilization: 30, resetsAt: LATER },
+        sevenDay: { utilization: 10, resetsAt: LATER },
+        accounts: { [WORK]: (USAGE.claude as { accounts: Record<string, unknown> }).accounts[WORK] },
+      },
+    };
+    await db.runner.update({ where: { id: m.runnerId }, data: { planUsage: lagging as unknown as Prisma.InputJsonValue } });
+    // What a background agent reporting in sounds like: the runtime's own turn, so no turn id.
+    const limitSaid = (id: string, seq: number) =>
+      api.events({ id: m.runnerId }, id, {
+        events: [{
+          seq,
+          type: RunEventType.ASSISTANT,
+          ts: new Date().toISOString(),
+          payload: { text: "You've hit your session limit · resets 7:30pm (Europe/Berlin)" },
+        }],
+      });
+
+    const id = await sessionOn(m, 'claude', RunStatus.AWAITING_INPUT, { engineTurnActive: true });
+    await limitSaid(id, 1);
+    const after = await row(id);
+    assert.equal(after.claude_account, WORK, 'the engine was left on the spent account');
+    assert.equal(after.pool_switch_notice, 'Switched to Work — the usage limit on Default is reached');
+    assert.equal(after.retry_ms, null, 'a message already answered was armed to be sent again');
+    assert.deepEqual(await reloads(id), [{ content: JSON.stringify({ provider: 'claude' }), status: 'PENDING' }]);
+
+    // The engine on Default says it again before the reload replaces it. That limit is Default's.
+    await limitSaid(id, 2);
+    assert.equal((await row(id)).claude_account, WORK, 'moved off Work on the word of the engine it is leaving');
+    assert.equal((await reloads(id)).length, 1);
+
+    // An account picked by hand is where it stays.
+    const pinned = await sessionOn(m, 'claude', RunStatus.AWAITING_INPUT, { claudeAccountPinned: true });
+    await limitSaid(pinned, 1);
+    assert.equal((await row(pinned)).claude_account, 'default');
+    assert.deepEqual(await reloads(pinned), []);
   });
 });

@@ -261,6 +261,22 @@ final class BackgroundWakeTests: XCTestCase {
         XCTAssertEqual(wake.rest, "")
     }
 
+    /// A job that ends while a turn runs is written into that turn (a steer), and its block says it
+    /// joined that turn instead of saying one was opened for it (apiserver `background-job-wake.ts`
+    /// `WAKE_HEADS`). Nothing the line reads is in that sentence, so the same job comes out of it.
+    func testReadsAWakeWrittenIntoTheRunningTurnTheSame() throws {
+        let steered = Fixture.enDone.replacingOccurrences(
+            of: "has news you were waiting for; the control plane opened this turn for it:",
+            with: "has news you were waiting for. It ended while you were working, so this message was added to the turn you are in:")
+        XCTAssertNotEqual(steered, Fixture.enDone)
+
+        let wake = try XCTUnwrap(BackgroundWakeText.parse(steered))
+        XCTAssertEqual(wake.jobs, try XCTUnwrap(BackgroundWakeText.parse(Fixture.enDone)).jobs)
+        XCTAssertEqual(wake.text, steered)
+        XCTAssertEqual(wake.rest, "")
+        XCTAssertTrue(BackgroundWakeText.carriesWake(steered))
+    }
+
     func testReadsTheSameFieldsOutOfTheWordingThatShippedUntilSeptember15() throws {
         let wake = try XCTUnwrap(BackgroundWakeText.parse(Fixture.zhDone))
 
@@ -534,6 +550,68 @@ final class BackgroundWakeTests: XCTestCase {
         XCTAssertEqual(BackgroundWakeCard.rawSummary, "What the agent received")
         XCTAssertEqual(BackgroundWakeCard.undelivered, "The session has not confirmed it received this.")
         XCTAssertEqual(BackgroundWakeCard.tailLines, 8)
+    }
+
+    /// A wake written into the running turn says how far it got, in a steer's words — from waiting for
+    /// the runner to the engine reading it — and nothing at all once it is known not to have arrived,
+    /// which the undelivered line says instead. Any other wake says neither.
+    func testASteeredWakeSaysHowFarItGotInASteersWords() {
+        let said = { (delivery: String?) in
+            BackgroundWakeCard.steerState(steer: true, delivery: delivery, undelivered: false)
+        }
+        XCTAssertEqual(said(nil), "Sending…", "waiting for the runner: no event exists yet")
+        XCTAssertEqual(said("enqueued"), "Sending…")
+        XCTAssertEqual(said("written"), "Delivering…")
+        XCTAssertEqual(said("acknowledged"), "Sent into this turn")
+        XCTAssertEqual(said("requeued"), "Queued for next turn instead")
+        XCTAssertNil(said("failed"))
+        XCTAssertNil(said("unconfirmed"))
+        XCTAssertNil(BackgroundWakeCard.steerState(steer: true, delivery: "written", undelivered: true))
+        XCTAssertNil(BackgroundWakeCard.steerState(steer: false, delivery: "written", undelivered: false))
+        XCTAssertNil(BackgroundWakeCard.steerState(steer: false, delivery: nil, undelivered: false))
+    }
+
+    /// The steer's echo carries the block as the control plane's note and no words of anybody's, so it
+    /// is read off the note — the line, inside the running turn — and the bubble rule finds nothing
+    /// typed to draw. A steer that missed its turn and ran as a turn of its own is still that one row.
+    func testASteeredWakesEchoIsTheLineItsTurnRanIn() throws {
+        let steered = Fixture.enDone.replacingOccurrences(
+            of: "has news you were waiting for; the control plane opened this turn for it:",
+            with: "has news you were waiting for. It ended while you were working, so this message was added to the turn you are in:")
+        let echo = { (seq: Int, steer: Bool) in
+            RunEvent(seq: seq, type: .user, turnId: "turn-steered-wake", payload: .object([
+                "text": .string(steered),
+                "controlPlaneNote": .string(steered),
+                "delivery": .string("enqueued"),
+                "steer": .bool(steer),
+            ]))
+        }
+        let rows = { (r: TranscriptReducer) in
+            r.state.items.compactMap { item -> UserBubble? in
+                if case .user(let b) = item { return b } else { return nil }
+            }
+        }
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .user, turnId: "turn-running",
+                         payload: .object(["text": .string("refactor the parser")])))
+        r.apply(echo(2, true))
+
+        let line = try XCTUnwrap(rows(r).last)
+        XCTAssertTrue(line.steer)
+        XCTAssertEqual(line.note, steered)
+        XCTAssertNotNil(BackgroundWakeText.parse(line.note), "the line is read off the note")
+        XCTAssertFalse(BackgroundWakeCard.drawsBubble(text: line.text), "no words of anybody's to draw a bubble for")
+        XCTAssertEqual(BackgroundWakeCard.steerState(steer: line.steer, delivery: line.delivery,
+                                                     undelivered: line.undelivered), "Sending…")
+
+        // Missed, handed back, and delivered again as the wake turn it became: the same one row.
+        r.apply(RunEvent(seq: 3, type: .userDelivery, payload: .object([
+            "turnId": .string("turn-steered-wake"), "delivery": .string("requeued"),
+        ])))
+        r.apply(echo(4, false))
+        XCTAssertEqual(rows(r).filter { $0.turnId == "turn-steered-wake" }.count, 1)
+        XCTAssertFalse(try XCTUnwrap(rows(r).last).steer)
+        XCTAssertNil(BackgroundWakeCard.steerState(steer: false, delivery: "enqueued", undelivered: false))
     }
 
     /// The wakeup's own row: how far out it was asked for, and when it came due. The span is the

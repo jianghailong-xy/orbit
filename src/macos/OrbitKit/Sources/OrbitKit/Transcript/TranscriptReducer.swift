@@ -1113,6 +1113,29 @@ public struct TranscriptReducer: Sendable, Codable {
         if let qi = state.queued.firstIndex(where: echoes) {
             state.queued.remove(at: qi)
         }
+        // One message, one row. A steer the engine provably never read is handed back and delivered
+        // again as the ordinary turn it would have been — the same row, the same turn id — so its
+        // second `user` event is that message arriving, not another one: it amends the row already
+        // drawn, where it was drawn, instead of showing it twice, and the steer's progress line goes
+        // with the kind it no longer is. Only steer → message: nothing else re-announces a turn this
+        // way, and a re-leased message turn keeps its own line. A job's wake written into a turn that
+        // ended before the engine read it is the commonest such steer. Web parity: `Transcript.tsx`'s
+        // `priorSteer`.
+        if !steer, let tid = ev.turnId, let i = state.items.lastIndex(where: {
+            if case .user(let b) = $0 { return b.turnId == tid && b.steer && !b.pending }
+            return false
+        }), case .user(var b) = state.items[i] {
+            b.steer = false
+            b.delivery = delivery
+            b.undelivered = delivery == "failed"
+            if str(ev, "text") != nil {
+                b.text = body
+                b.note = recorded?.note
+            }
+            if !atts.isEmpty { b.attachments = atts }
+            state.items[i] = .user(b)
+            return
+        }
         // Reconcile a pending optimistic (idle) bubble in place rather than appending a duplicate.
         if let i = state.items.firstIndex(where: {
             guard case .user(let b) = $0, b.pending else { return false }

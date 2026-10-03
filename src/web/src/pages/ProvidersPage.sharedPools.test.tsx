@@ -71,6 +71,9 @@ function team(viewer: string, over: Partial<SharedPool> = {}): SharedPool {
     slug: 'team-codex',
     label: 'Team Codex',
     engine: 'codex',
+    shared: true,
+    // A pool made on the shared pools page: API keys alone, no ChatGPT account of anybody's.
+    logins: [],
     membersCanAdd: true,
     ownKeyFirst: true,
     viewerRole: viewer === WIKOVA ? 'ADMIN' : 'MEMBER',
@@ -269,8 +272,9 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     expect(head.querySelector('.re-runner')?.textContent).toBe('Team Codex');
     expect(head.querySelector('.pool-shared-chip')?.textContent).toBe('SHARED');
     expect(head.querySelectorAll('.pool-people .pool-av')).toHaveLength(4);
-    expect(head.querySelector('.re-summary')?.textContent).toBe('2 of 5 keys available');
-    expect(head.querySelector('.pool-gauge-name')?.textContent).toBe('Next: orbit-org-1');
+    // Its maker reads every key as one of the pool's accounts, and the gauge as their own next session's.
+    expect(head.querySelector('.re-summary')?.textContent).toBe('2 of 5 accounts available');
+    expect(head.querySelector('.pool-gauge-name')?.textContent).toBe('Next for you: orbit-org-1');
     expect(head.querySelector('.pool-gauge-pct')?.textContent).toBe('Monthly 25%');
     // The account pool beside it wears Claude's mark and is nobody else's.
     expect(claude.querySelector('.re-runner')?.textContent).toBe('Claude accounts');
@@ -288,7 +292,8 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     const status = (label: string) => rowOf(label).querySelector('.pool-status')?.textContent;
     const money = (label: string) => rowOf(label).querySelector('.pool-key-money .re-quota-head')?.textContent;
     expect(rowOf('orbit-org-1').querySelector('.re-name')?.textContent).toBe('orbit-org-1youNEXT');
-    expect(rowOf('orbit-org-1').querySelector('.pool-key-mask')?.textContent).toBe('Wikova · sk-…AB12');
+    // Shared with people: each key says it runs everybody's sessions.
+    expect(rowOf('orbit-org-1').querySelector('.pool-key-mask')?.textContent).toBe('Wikova · sk-…AB12 · Everyone here');
     expect([
       'orbit-org-1',
       'orbit-org-2',
@@ -317,10 +322,10 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     await mount('/providers');
     expect(rowOf('chen-org-2').querySelector('.pool-status')?.textContent).toBe('Out of budget · resets Sep 30');
     // The one OpenAI put out of budget and the one at its cap are both out; the other two can run.
-    expect(container.querySelector('.pool-sec .pool-card .re-summary')?.textContent).toBe('2 of 6 keys available');
+    expect(container.querySelector('.pool-sec .pool-card .re-summary')?.textContent).toBe('2 of 6 accounts available');
     // It is not the key a session starting now runs on, and the card's head still names the one that is.
     expect(rowOf('chen-org-2').querySelector('.re-chip')).toBeNull();
-    expect(container.querySelector('.pool-sec .pool-card .pool-gauge-name')?.textContent).toBe('Next: orbit-org-1');
+    expect(container.querySelector('.pool-sec .pool-card .pool-gauge-name')?.textContent).toBe('Next for you: orbit-org-1');
   });
 
   it('heads a pool no key can run on with the mark that stopped them, and the first of them back', async () => {
@@ -339,19 +344,26 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     expect(container.querySelector('.pool-sec .pool-card .pool-gauge')?.textContent).toBe(
       'All out of budget · resets Sep 30',
     );
-    expect(container.querySelector('.pool-sec .pool-card .re-summary')?.textContent).toBe('0 of 1 key available');
+    expect(container.querySelector('.pool-sec .pool-card .re-summary')?.textContent).toBe('0 of 1 account available');
   });
 
   it('says the same of that key on the pool page, where the whole pool reads as its own head', async () => {
     shared = [teamWithOutOfBudget()];
     await mount(`/providers/pools/${POOL_ID}`);
     expect(rowOf('chen-org-2').querySelector('.pool-status')?.textContent).toBe('Out of budget · resets Sep 30');
-    expect(text()).toContain('2 of 6 keys available');
+    expect(text()).toContain('2 of 6 accounts available');
   });
 
   it('shows somebody who may not replace a refused key who can, and no button', async () => {
     shared = [team(LIN)];
     await mount('/providers');
+    // Somebody its maker added reads whose the pool is and the keys they run on — its people and its
+    // gauge are on its page.
+    const head = container.querySelector<HTMLElement>('.pool-sec .pool-card .re-head')!;
+    expect(head.querySelector('.pool-shared-chip')?.textContent).toBe('SHARED');
+    expect(head.querySelector('.re-summary')?.textContent).toBe('Wikova’s · 5 keys you can run on');
+    expect(head.querySelector('.pool-people')).toBeNull();
+    expect(head.querySelector('.pool-gauge')).toBeNull();
     expect(button('Replace key', rowOf('wikova-backup'))).toBeNull();
     expect(rowOf('wikova-backup').querySelector('.pool-why')?.textContent).toBe(
       'Rejected by OpenAI — only Wikova or the pool’s admins can replace it.',
@@ -393,31 +405,38 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     expect(path).toBe(`/providers/pools/${POOL_ID}`);
   });
 
-  it("gives an admin the whole page: every key's removal, their own keys' switch, people, rules, and deleting it", async () => {
+  it("gives its maker the whole page: every key's removal, their own keys' switch, who can use it, and deleting it", async () => {
     await mount(`/providers/pools/${POOL_ID}`);
     expect(container.querySelector('.pool-page-title h1')?.textContent).toBe('Team Codex');
     expect(container.querySelector('.pool-page-title .pool-shared-chip')?.textContent).toBe('SHARED');
-    expect(text()).toContain(
-      'Shared Codex pool · 4 members · 2 of 5 keys available · each session starts on the key with the most room, and stays on it until that one runs out.',
+    // A pool made on the shared pools page holds no ChatGPT account: everybody, its maker too, runs on keys.
+    expect(container.querySelector('.pool-sub')?.textContent).toBe(
+      'Codex pool · Me and 3 people · 2 of 5 accounts available · each session starts on the key with the most room, and stays on it until that one runs out.',
     );
     expect(button('Add a key')).not.toBeNull();
+    expect(container.querySelector('.pool-detail .re-runner')?.textContent).toBe('Accounts5');
     expect(container.querySelectorAll('[aria-label^="Remove "]')).toHaveLength(5);
     expect(container.querySelectorAll('[aria-label^="Disable "]')).toHaveLength(2);
     expect(labelled('Disable orbit-org-1')).toHaveLength(1);
     expect(labelled('Disable wikova-backup')).toHaveLength(1);
 
-    // Members: what each put in and ran, everyone's share, and a menu on everyone but oneself.
-    expect(personOf('Wikova').textContent).toBe('WWikovayouADMIN2 keys · 23 sessions34%');
-    expect(personOf('Lin Wei').querySelector('.pool-person-meta')?.textContent).toBe('No key · 6 sessions');
+    // Who can use it: what each put in and ran, everyone's share, and a menu on everyone but its maker.
+    const who = container.querySelector<HTMLElement>('.who-card')!;
+    expect(who.querySelector('.re-runner')?.textContent).toBe('Who can use it4');
+    expect(who.querySelector('.pool-head-note')?.textContent).toBe('Share of this month’s API key use');
+    expect(personOf('Wikova').textContent).toBe('WWikovayouOWNERRuns on the API keys · 2 keys · 23 sessions34%');
+    expect(personOf('Lin Wei').querySelector('.pool-person-meta')?.textContent).toBe(
+      'Runs on the API keys · no key · 6 sessions',
+    );
     expect(personOf('Lin Wei').querySelector('.pool-share-pct')?.textContent).toBe('12%');
     expect(container.querySelectorAll('[aria-label^="Manage "]')).toHaveLength(3);
     expect(labelled('Manage Wikova')).toHaveLength(0);
-    expect(button('Add members')).not.toBeNull();
+    expect(button('Add people', who)).not.toBeNull();
+    // No ChatGPT account of anybody's here, so nothing to say about one.
+    expect(who.querySelector('.who-foot')).toBeNull();
 
-    // Rules are an admin's to change.
-    const rules = container.querySelector<HTMLElement>('.pool-rules-card')!;
-    expect(rules.querySelector('.pool-head-note')).toBeNull();
-    const [membersCanAdd] = rules.querySelectorAll<HTMLButtonElement>('button.ant-switch');
+    // The one rule is its maker's to change.
+    const [membersCanAdd] = who.querySelectorAll<HTMLButtonElement>('button.ant-switch');
     expect(membersCanAdd.disabled).toBe(false);
     await click(membersCanAdd);
     await click(labelled('Disable orbit-org-1')[0]);
@@ -435,23 +454,30 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     expect(button('Delete pool')).not.toBeNull();
     expect(button('Leave pool')).toBeNull();
     expect(container.querySelector('.pool-danger-note')?.textContent).toBe(
-      'Its keys are removed from the Orbit server and no session can run on it.',
+      'Its API keys are deleted from the Orbit server, and nobody can run on it.',
     );
   });
 
-  it("gives a member with no key a page that reads the rules and lets them leave, and nothing of anybody else's", async () => {
+  it("gives a member with no key a page that reads who can use it and lets them leave, and nothing of anybody else's", async () => {
     shared = [team(LIN)];
     await mount(`/providers/pools/${POOL_ID}`);
+    expect(container.querySelector('.pool-sub')?.textContent).toBe(
+      'Codex pool · Wikova’s · 4 people · 2 of 5 keys you can run on available · your sessions run on the API keys, your own first.',
+    );
+    expect(container.querySelector('.pool-detail .re-runner')?.textContent).toBe('Accounts');
     expect(container.querySelectorAll('[aria-label^="Remove "]')).toHaveLength(0);
     expect(container.querySelectorAll('[aria-label^="Disable "]')).toHaveLength(0);
     expect(container.querySelectorAll('[aria-label^="Manage "]')).toHaveLength(0);
     expect(button('Replace key')).toBeNull();
-    expect(button('Add members')).toBeNull();
+    expect(button('Add people')).toBeNull();
     expect(personOf('Lin Wei').querySelector('.pool-you')?.textContent).toBe('you');
+    expect(personOf('Lin Wei').querySelector('.pool-person-meta')?.textContent).toBe('No key · 6 sessions');
 
-    const rules = container.querySelector<HTMLElement>('.pool-rules-card')!;
-    expect(rules.querySelector('.pool-head-note')?.textContent).toBe('Set by the pool’s admins');
-    for (const toggle of rules.querySelectorAll<HTMLButtonElement>('button.ant-switch')) expect(toggle.disabled).toBe(true);
+    // Who can use it is its maker's to say, and reads that way.
+    const who = container.querySelector<HTMLElement>('.who-card')!;
+    expect(who.querySelector('.pool-head-note')?.textContent).toBe('Set by Wikova · share of this month’s API key use');
+    expect(who.querySelector('.ant-segmented')).toBeNull();
+    expect(who.querySelectorAll('button.ant-switch')).toHaveLength(0);
 
     // Members may add while the pool lets them.
     expect(button('Add a key')).not.toBeNull();

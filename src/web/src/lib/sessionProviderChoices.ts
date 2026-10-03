@@ -1,8 +1,10 @@
 import { AgentProvider, PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shared';
 import type { PlanUsage, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
-import { accountPlanUsage } from './engineAccounts';
+import type { CodexLogin } from './codexLogin';
+import { accountNameOf, accountPlanUsage } from './engineAccounts';
 import { encodeId } from './idCodec';
 import { bindingPlanUsageRow, currentPlanUsageRows } from './planUsage';
+import type { SharedPool } from './sharedPools';
 import {
   defaultModelForProvider,
   modelOptionsForProvider,
@@ -16,30 +18,35 @@ import {
  * summary under the card — an engine spends the subscription you signed into on that machine, a
  * configured provider spends the API key you pasted.
  *
- * Engines are exactly the slugs a runner can sign into (LoginEngine in @orbit/shared). `opencode`
- * is a fourth AgentProvider but not a login engine, so it never appears as a choice — it only
- * shows up as the current pick when a workspace is already set to it.
+ * Engines are the slugs a runner can sign into (LoginEngine in @orbit/shared), plus Antigravity,
+ * which has no sign-in at all — agy runs on a Gemini API key from its environment — and so is
+ * offered whenever the machine has it installed. `opencode` is an AgentProvider that is neither,
+ * so it never appears as a choice — it only shows up as the current pick when a workspace is
+ * already set to it.
  */
 export const ENGINE_SLUGS = [
   AgentProvider.CLAUDE,
   AgentProvider.CODEX,
   AgentProvider.KIMI,
+  AgentProvider.ANTIGRAVITY,
 ] as const;
 
 export type ProviderChoiceKind = 'engine' | 'byok' | 'pool';
 
 /** An account pool as the picker needs it: its slug, its name, and which providers it holds — and,
  *  when none of them can run, why (ProviderPool.unavailable) and the pool's id, whose page fixes it.
- *  `shared` marks a shared pool of OpenAI keys, which runs on Codex rather than Claude. */
+ *  `shared` marks a pool read as one of its people (sharedPoolAsProviderPool) — a shared pool of OpenAI
+ *  keys, or somebody else's own Codex pool they were added to — which runs on Codex rather than Claude. */
 export interface PoolChoiceSource {
   id: string;
   slug: string;
   label: string;
-  members: { slug: string }[];
+  /** What the pool holds; `login` says a member is one of its ChatGPT accounts rather than a key. */
+  members: { slug: string; login?: CodexLogin }[];
   unavailable?: string | null;
   /** `codex` for a pool of one's own ChatGPT account (migration 0323); absent or `claude` otherwise. */
   engine?: string;
-  shared?: object;
+  shared?: SharedPool;
 }
 
 export interface ProviderChoice {
@@ -102,6 +109,7 @@ const ENGINE_LABELS: Record<string, string> = {
   [AgentProvider.CODEX]: 'Codex',
   [AgentProvider.KIMI]: 'Kimi',
   [AgentProvider.OPENCODE]: 'OpenCode',
+  [AgentProvider.ANTIGRAVITY]: 'Antigravity',
 };
 
 /** One line about a provider's endpoint, for the gallery card and the connect form's identity bar.
@@ -123,6 +131,15 @@ export const ENGINE_PRESET: Record<string, string> = {
   [AgentProvider.KIMI]: 'moonshot',
 };
 
+// An engine whose vendor ships no preset carrying its mark. Antigravity is Google's, but Google's
+// preset is the Gemini API reached through another CLI, and the two should not be one logo.
+const ENGINE_BRAND: Record<string, { brand: ProviderBrand; glyphKey: string }> = {
+  [AgentProvider.ANTIGRAVITY]: {
+    brand: { mono: 'A', from: '#3186ff', to: '#00b95c' },
+    glyphKey: 'antigravity',
+  },
+};
+
 const NEUTRAL_BRAND = (label: string): ProviderBrand => ({
   mono: (label.trim()[0] ?? '?').toUpperCase(),
   from: '#9aa0a8',
@@ -139,7 +156,7 @@ export function brandForProvider(
   const presetKey = presetSlug ?? ENGINE_PRESET[slug];
   const preset = presetKey ? PROVIDER_PRESETS.find((p) => p.slug === presetKey) : undefined;
   if (preset) return { brand: preset.brand, glyphKey: preset.slug };
-  return { brand: NEUTRAL_BRAND(label) };
+  return ENGINE_BRAND[slug] ?? { brand: NEUTRAL_BRAND(label) };
 }
 
 /** The label to show for a provider's resolved default model. Falls back to the raw id when the
@@ -165,7 +182,9 @@ export function defaultModelLabel(
 function engineBlocker(health?: RunnerEngineHealth): string | undefined {
   if (!health) return undefined;
   if (!health.installed) return 'Not installed';
-  if (health.auth === 'no') return 'Not signed in';
+  // Antigravity has no sign-in to be out of. Its key comes from the session's environment, which
+  // can be the workspace's own — something the runner's probe of the machine never sees.
+  if (health.auth === 'no' && health.engine !== 'antigravity') return 'Not signed in';
   return undefined;
 }
 
@@ -178,15 +197,15 @@ function byokBlocker(health?: RunnerEngineHealth): string | undefined {
 }
 
 /**
- * The picker's contents: the three engines, then the configured providers in the order the API
+ * The picker's contents: the engines, then the configured providers in the order the API
  * returned them.
  *
  * Engines carry the health the runner last reported, because an engine choice is a claim about
  * someone else's machine. Not installed there, or installed but signed out → listed with the
  * reason, pointing at the Providers page where that machine gets its install or its sign-in (see
  * `unavailable`). Hiding the row instead would leave a user who pays for Kimi with no way to find
- * out why it isn't offered. A runner that has reported nothing claims nothing, so all three stay
- * pickable — as does any engine missing from a partial report.
+ * out why it isn't offered. A runner that has reported nothing claims nothing, so every engine
+ * stays pickable — as does any engine missing from a partial report.
  *
  * A configured provider is judged the same way through the engine it borrows, since that CLI is
  * what actually runs it — a Moonshot row on a machine without the Kimi CLI reads "Not installed"
@@ -220,7 +239,7 @@ export function providerChoices(
               account.auth === 'yes' && snapshot ? bindingPlanUsageRow(currentPlanUsageRows(snapshot)) : undefined;
             return {
               id: account.id,
-              label: account.id === 'default' ? 'Default' : account.name || `Account ${account.id}`,
+              label: accountNameOf(account),
               ...(quota
                 ? {
                     quota: `${compactWindowLabel(quota.label)} ${quota.percent}%`,
@@ -246,6 +265,10 @@ export function providerChoices(
   // which the server says (`unavailable`) and refuses the pool without. A shared pool's CLI is Codex,
   // whose runs carry a session token for the pool's gateway — and so is a pool of one's own ChatGPT
   // account's, whose account the server holds.
+  //
+  // Somebody a pool's owner added runs on the pool's ChatGPT accounts first and on its keys when none
+  // can (pool-credential-select.ts, 2026-10-03), so what the pool holds is what they can run on, and the
+  // pool's own answer (`unavailable`, built the same way for them as for its owner) is the whole reason.
   const accountPools: ProviderChoice[] = pools.map((pool) => {
     const runtime = pool.shared || pool.engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
     const blocker = byokBlocker(engineHealth?.find((e) => e.engine === runtime));
@@ -256,7 +279,9 @@ export function providerChoices(
       ...brandForProvider(pool.slug, pool.label, ENGINE_PRESET[runtime]),
       modelLabel: defaultModelLabel(pool.slug, modelCatalog, configured, runtimeDefaultModels),
       poolSize: pool.members.length,
-      ...(pool.shared ? { poolUnit: 'key' as const } : {}),
+      // 'N keys' only where the pool really is nothing but keys; a pool holding ChatGPT accounts counts
+      // accounts (the viewer's own words — AccountPools' memberNoun).
+      ...(pool.shared && !pool.members.some((member) => member.login) ? { poolUnit: 'key' as const } : {}),
       ...(blocker
         ? { unavailable: blocker, fixEngine: runtime }
         : pool.unavailable

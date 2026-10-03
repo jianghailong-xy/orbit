@@ -36,6 +36,7 @@ import {
   RunEventType,
   toUuid,
   uuidToBase62,
+  WIKI_MAINTENANCE_RUN,
   WIKI_PLAN_JOB_HELD_REASONS,
   WIKI_PLAN_JOB_KINDS,
   WIKI_PLAN_JOB_OUTCOMES,
@@ -318,6 +319,21 @@ async function taskRow(h: Harness, taskId: string): Promise<TaskRow> {
   return rows.rows[0];
 }
 
+/**
+ * A plan job's task gives its one Bash call the clean start's five hours, never less, and says that a call the
+ * tool cut off is not run again — the maintenance run of 2026-10-03 gave 600000, was cut off, and ran it again
+ * (contract `maintenance.run.bashCall`).
+ */
+function assertBashCall(description: string | null, what: string): void {
+  const text = description ?? '';
+  assert.equal(WIKI_MAINTENANCE_RUN.bashTimeoutMs, 18_000_000, 'the run\'s Bash timeout is five hours');
+  assert.ok(text.includes('Give that Bash call `timeout: 18000000` (five hours), never a shorter one'),
+    `${what} does not give its Bash call five hours: ${text}`);
+  assert.ok(text.includes('If the Bash tool comes back before the command has ended — it timed out, or was cut off — do not run it '
+    + 'again, with this timeout or any other, and spend no retry on it: report what it printed up to there, say it was cut off, '
+    + 'and end; the job ends failed, and its owner can ask for another.'), `${what} does not say a call the tool cut off is not run again: ${text}`);
+}
+
 async function listTasks(h: Harness, listId: string): Promise<string[]> {
   return (await h.sql.query<{ id: string }>(`SELECT "id" FROM "task" WHERE "list_id" = $1 ORDER BY "created_at", "id"`, [listId])).rows.map((r) => r.id);
 }
@@ -426,6 +442,7 @@ test('a new space makes its first draft at once: a task of its maintenance list,
   assert.equal(task.acceptance_expected_exit_code, 0);
   assert.match(task.description ?? '', new RegExp(`orbit wiki plan draft --space ${uuidToBase62(spaceId)}`, 'u'));
   assert.match(task.description ?? '', /token spend/u, 'the description does not ask for the token spend');
+  assertBashCall(task.description, 'the draft task');
   const list = await h.sql.query<{ hidden: boolean; title: string; max_concurrent: number }>(
     `SELECT "hidden","title","max_concurrent" FROM "task_list" WHERE "id" = $1`,
     [settings.listId],
@@ -514,6 +531,7 @@ test('the owner asks for a redraft through the owner channel and a job is made; 
   assert.equal(thirdTask.title, 'Wiki plan redraft: A planned space');
   assert.match(thirdTask.description ?? '', /orbit wiki plan revise --space/u);
   assert.ok((thirdTask.description ?? '').includes(`> ${words}`), 'the owner\'s instructions are not quoted in the task');
+  assertBashCall(thirdTask.description, 'the revision task');
   // The job the cancelled task left made was ended when the next request found it: failed, with why.
   const ended = (await jobs(h, spaceId))[1];
   assert.deepEqual([ended.state, ended.outcome], ['ended', 'failed']);

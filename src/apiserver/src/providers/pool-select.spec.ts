@@ -98,7 +98,7 @@ test('equal expiry: the lowest 5-hour utilization is chosen, a tie going to the 
 
 test('some members unreported: they rank after every member that reported room, never as 0% used', () => {
   const unreported = member('anthropic', null);
-  const busy = member('anthropic-2', fiveHour(80));
+  const busy = member('anthropic-2', fiveHour(79));
   assert.equal(chosen(selectPoolMember([unreported, busy], null, NOW)), 'anthropic-2');
 
   // A week with a reset to go by is a reading like any other, 5-hour window or not.

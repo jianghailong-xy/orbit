@@ -169,11 +169,8 @@ export interface AutomaticConfirmationFacts {
  * Every refusal is today's behaviour, unchanged: the card, exactly as it would have opened.
  */
 export function automaticConfirmationRefusal(facts: AutomaticConfirmationFacts): string | null {
-  if (facts.sourceKind !== 'PROJECT_BRANCH' || facts.line !== 'PROJECT_BRANCH') {
-    return 'the project integrates on main itself, and a merge into main from a MAIN line always asks';
-  }
-  if (!facts.coordinatorEnabled) return 'Automatic is off for this project';
-  if (facts.projectPaused) return 'the project is paused, and a paused project merges nothing into main by itself';
+  const unauthorized = automaticAuthorizationRefusal(facts);
+  if (unauthorized) return unauthorized;
   if (facts.conflicts.length > 0) return 'the check reported conflicts';
   if (!facts.checks.every(checkPassed)) return 'a check on the combined tree did not pass';
   if (!facts.upstreamShaChecked || !facts.mergeTreeSha) {
@@ -183,6 +180,23 @@ export function automaticConfirmationRefusal(facts: AutomaticConfirmationFacts):
   if (!facts.runnerHandsBackMovedUpstream) {
     return 'the runner that would land it has not said it lands nothing when main has moved since the check';
   }
+  return null;
+}
+
+/**
+ * The half of `automaticConfirmationRefusal` that is about the project rather than about a check:
+ * the owner's two halves — the line is the project's own branch, and Automatic is on — in a project
+ * that is not paused. Null when a clean check would be merged into main by the platform itself; the
+ * owner's confirmation card reads it before any check has run (`landing: AUTO_MAIN`).
+ */
+export function automaticAuthorizationRefusal(
+  facts: Pick<AutomaticConfirmationFacts, 'sourceKind' | 'line' | 'coordinatorEnabled' | 'projectPaused'>,
+): string | null {
+  if (facts.sourceKind !== 'PROJECT_BRANCH' || facts.line !== 'PROJECT_BRANCH') {
+    return 'the project integrates on main itself, and a merge into main from a MAIN line always asks';
+  }
+  if (!facts.coordinatorEnabled) return 'Automatic is off for this project';
+  if (facts.projectPaused) return 'the project is paused, and a paused project merges nothing into main by itself';
   return null;
 }
 

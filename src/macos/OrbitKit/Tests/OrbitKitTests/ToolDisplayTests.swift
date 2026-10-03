@@ -68,6 +68,27 @@ final class ToolDisplayTests: XCTestCase {
         XCTAssertTrue(rows.contains { $0.kind == .ctx && $0.text == "let a = 1" })
     }
 
+    /// Antigravity names the file it edited and nothing else — agy's stream carries no diff — so
+    /// its Edit and Write are just the file, not an empty diff or code block (web parity).
+    func testAnEditOrWriteThatCarriesNoContentIsJustTheFile() {
+        let edit = ToolDisplay.describe(name: "Edit", input: obj(["file_path": .string("/a/b/x.ts")]),
+                                        status: .ok, id: "conv:7")
+        XCTAssertEqual(edit.label, "Edit")
+        XCTAssertEqual(edit.path, PathParts(base: "x.ts", dir: "…/b/"))
+        XCTAssertEqual(edit.body, ToolBody.none)
+        XCTAssertFalse(edit.hasBody)
+        let write = ToolDisplay.describe(name: "Write", input: obj(["file_path": .string("/a/b/y.ts")]),
+                                         status: .ok, id: "conv:8")
+        XCTAssertEqual(write.path?.base, "y.ts")
+        XCTAssertFalse(write.hasBody)
+        // Either side alone is still an edit with something to show.
+        let added = ToolDisplay.describe(name: "Edit",
+                                         input: obj(["file_path": .string("/a/x.ts"),
+                                                     "new_string": .string("let b = 3")]),
+                                         status: .ok, id: "t1")
+        XCTAssertTrue(added.hasBody)
+    }
+
     func testGrepJoinsMonoSummary() {
         let d = ToolDisplay.describe(name: "Grep",
                                      input: obj(["pattern": .string("agent-view"), "path": .string("src/web")]),

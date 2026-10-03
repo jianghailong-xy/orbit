@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import { api } from '../api';
@@ -513,6 +513,7 @@ export function evidenceDecisionRecordedLine(result: EvidenceDecisionResult): st
  * saying why sits above the dead row, so it reads as the reason the row is dead.
  */
 export function EvidenceDecisionCard({
+  ref,
   standing,
   busy = false,
   error = null,
@@ -521,6 +522,8 @@ export function EvidenceDecisionCard({
   onConfirm,
   onChatAbout,
 }: {
+  /** The card's own element, which is where its keyboard claim says it is drawn (`CardHotkey.ts`). */
+  ref?: Ref<HTMLDivElement>;
   standing: EvidenceDecisionStanding;
   /** A press from this card is on its way to the door. */
   busy?: boolean;
@@ -542,6 +545,7 @@ export function EvidenceDecisionCard({
     // Where the rail's pointer lands: `revealDecisionCard` looks for this key, computed from its own
     // copy of the same row, so there is no map between the two to fall out of step.
     <div
+      ref={ref}
       className="approval-card decision-ask evidence-decision"
       data-decision-row={decisionRowKey(standing.address)}
     >
@@ -680,12 +684,15 @@ function EvidenceDecisionSlot({
   };
   // Enter follows the confirmation button's liveness. Chat about this leaves by the composer.
   const live = standing.state === 'DECIDABLE' && !answer.isPending && !answer.isSuccess;
+  const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
     confirmEnabled: live,
     onConfirm: confirm,
+    anchor,
   });
   return (
     <EvidenceDecisionCard
+      ref={anchor}
       standing={standing}
       busy={answer.isPending}
       error={answer.isError ? answer.error : null}

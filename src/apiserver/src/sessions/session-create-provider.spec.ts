@@ -111,7 +111,7 @@ test('a project that has never run anything starts on claude', async () => {
 });
 
 test('a built-in engine slug overrides the seed without a provider lookup', async () => {
-  for (const slug of ['claude', 'codex', 'kimi', 'opencode']) {
+  for (const slug of ['claude', 'codex', 'kimi', 'opencode', 'antigravity']) {
     const fixture = makeService('claude');
     await fixture.service.create('owner-1', {
       prompt: 'Fix the login timeout',

@@ -1,0 +1,1 @@
+{"event": "user", "message": {"content": "slow\nmock:tool run_command {\"CommandLine\": \"sleep 30; echo finished\", \"Cwd\": \"/work/repo\", \"WaitMsBeforeAsync\": 60000, \"toolSummary\": \"Command\", \"toolAction\": \"Running command\"}\nmock:text unreachable"}}

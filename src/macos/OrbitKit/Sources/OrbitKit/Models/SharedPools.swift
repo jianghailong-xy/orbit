@@ -203,6 +203,15 @@ public struct SharedPool: Codable, Equatable, Sendable, Identifiable {
     public let label: String
     /// `codex`: a shared pool runs Codex, on OpenAI's own endpoint through the pool gateway.
     public let engine: String
+    /// Made on the shared pools page (migration 0321): API keys alone, never a ChatGPT account. False on a
+    /// Codex pool of somebody's own (0323), which takes people and keys beside its owner's accounts (0358).
+    /// An older server, which listed only the first kind, leaves it out: true.
+    public let shared: Bool
+    /// The ChatGPT accounts a pool of somebody's own holds (migrations 0323/0324), as its owner's page
+    /// reads them and — since 2026-10-03 — as everyone in the pool reads them: the accounts run their
+    /// sessions too (pool-credential-select.ts). Which of them the reader's next session runs on is its
+    /// `next`. Empty for a shared pool, which holds none, and for an older server.
+    public let logins: [CodexLogin]
     /// Rule: anyone in the pool may put a key in. Off, only admins can.
     public let membersCanAdd: Bool
     /// Rule: a member's sessions start on a key they put in while it has room.
@@ -213,13 +222,16 @@ public struct SharedPool: Codable, Equatable, Sendable, Identifiable {
     public let people: [SharedPoolPerson]
     public let keys: [SharedPoolKey]
 
-    public init(id: String, slug: String, label: String, engine: String = "codex",
+    public init(id: String, slug: String, label: String, engine: String = "codex", shared: Bool = true,
+                logins: [CodexLogin] = [],
                 membersCanAdd: Bool = true, ownKeyFirst: Bool = true, viewerRole: SharedPoolRole = .member,
                 window: SharedPoolWindow? = nil, people: [SharedPoolPerson] = [], keys: [SharedPoolKey] = []) {
         self.id = id
         self.slug = slug
         self.label = label
         self.engine = engine
+        self.shared = shared
+        self.logins = logins
         self.membersCanAdd = membersCanAdd
         self.ownKeyFirst = ownKeyFirst
         self.viewerRole = viewerRole
@@ -234,6 +246,10 @@ public struct SharedPool: Codable, Equatable, Sendable, Identifiable {
         slug = try c.decode(String.self, forKey: .slug)
         label = try c.decodeIfPresent(String.self, forKey: .label) ?? slug
         engine = try c.decodeIfPresent(String.self, forKey: .engine) ?? "codex"
+        shared = (try? c.decodeIfPresent(Bool.self, forKey: .shared)) ?? true
+        // An account in a shape this build cannot read is no reason to lose the rest of the pool.
+        logins = (try? c.decodeIfPresent([LossyDecodable<CodexLogin>].self, forKey: .logins))?
+            .compactMap(\.value) ?? []
         membersCanAdd = try c.decodeIfPresent(Bool.self, forKey: .membersCanAdd) ?? true
         ownKeyFirst = try c.decodeIfPresent(Bool.self, forKey: .ownKeyFirst) ?? true
         viewerRole = try c.decodeIfPresent(SharedPoolRole.self, forKey: .viewerRole) ?? .unknown

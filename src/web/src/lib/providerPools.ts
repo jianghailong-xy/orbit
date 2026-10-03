@@ -279,5 +279,8 @@ export function poolHeadline(pool: ProviderPool): PoolHeadline {
   // member it no longer admits still reports a spent window for.
   if (pool.unavailable) return { kind: 'none', reason: pool.unavailable };
   if (pool.members.some((m) => m.state === 'SPENT')) return { kind: 'spent', resetsAt: pool.resetsAt };
-  return { kind: 'none', reason: pool.shared ? 'No key can run' : 'No account can run' };
+  // A pool holding ChatGPT accounts is spent rather than capped: the accounts come back by the hour,
+  // where keys spent to their caps come back with the month (AccountPools' PoolGauge reads the same).
+  const keysOnly = !!pool.shared && !pool.members.some((member) => member.login);
+  return { kind: 'none', reason: keysOnly ? 'No key can run' : 'No account can run' };
 }

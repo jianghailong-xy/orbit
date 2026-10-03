@@ -1,6 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 import { type LoginEngine, type RunnerEngineHealth } from '@orbit/shared';
-import { isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
+import { isLoginEngine, namedRunnerEngines } from '../common/runner-engines';
 import { accountDir } from '@orbit/shared';
 import { DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner } from '../providers/account';
 import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
@@ -43,6 +43,8 @@ export interface EnginePreflightRunner {
   lastHeartbeatAt: Date | null;
   /** Heartbeat-reported per-engine health, stored as sent (RunnerEngineHealth[]). */
   engines: unknown;
+  /** The names its accounts were given in Orbit (Runner.accountNames), which a refusal names them by. */
+  accountNames?: unknown;
 }
 
 function bringsOwnEnvCredential(engine: LoginEngine, workspaceEnv: unknown): boolean {
@@ -86,7 +88,7 @@ function sessionAccountLogin(
   health: RunnerEngineHealth,
   account: string | null | undefined,
   workspaceEnv: unknown,
-  runnerEngines: unknown,
+  runnerEngines: RunnerEngineHealth[],
 ): SessionLogin | null {
   const pick = account?.trim();
   if (pick && pick !== DEFAULT_ACCOUNT) {
@@ -99,7 +101,8 @@ function sessionAccountLogin(
   const env = (workspaceEnv && typeof workspaceEnv === 'object' ? workspaceEnv : {}) as Record<string, unknown>;
   const varName = accountEnvVar(engine);
   if (varName && typeof env[varName] === 'string' && (env[varName] as string).trim() !== '') return null;
-  return { auth: health.auth, ...((health.accounts?.length ?? 0) > 1 ? { name: '"Default"' } : {}) };
+  const own = health.accounts?.find((entry) => entry.id === DEFAULT_ACCOUNT)?.name || 'Default';
+  return { auth: health.auth, ...((health.accounts?.length ?? 0) > 1 ? { name: `"${own}"` } : {}) };
 }
 
 /**
@@ -119,7 +122,8 @@ function sessionAccountLogin(
  *   - the session brings its own credential (a configured provider's API key, an account pool member's,
  *     a shared pool's gateway session token, or one set on the workspace's environment) → the CLI's
  *     local login is not what will run it;
- *   - the runtime has no local sign-in at all (OpenCode resolves credentials itself);
+ *   - the runtime has no local sign-in at all (OpenCode resolves credentials itself, and
+ *     Antigravity runs on a Gemini API key from its own environment);
  *   - the runner has never reported this engine, or reports `unknown` (its probe couldn't answer —
  *     which is deliberately NOT a claim of a sign-out), or reports it as not installed (the runner
  *     installs engines on demand, so that is a normal first-session state);
@@ -177,14 +181,15 @@ export function signedOutEngineRefusal(args: {
     heartbeatMs >= (args.nowMs ?? Date.now()) - SESSION_RUNNER_OFFLINE_AFTER_MS;
   if (!online) return null;
 
-  const engines = sanitizeRunnerEngines(args.runner.engines);
+  // Named as the Providers page names them: with what each account was called in Orbit.
+  const engines = namedRunnerEngines({ engines: args.runner.engines, accountNames: args.runner.accountNames });
   const health = engines?.find((e) => e.engine === args.runtime);
-  if (!health?.installed) return null;
+  if (!engines || !health?.installed) return null;
   // An engine that keeps one sign-in per account is judged on the account this session runs on;
   // one that keeps a single login is judged on that.
   const account = args.runtime === 'claude' ? args.accounts?.claudeAccount : args.accounts?.codexAccount;
   const login: SessionLogin | null = accountEnvVar(args.runtime)
-    ? sessionAccountLogin(args.runtime, health, account, args.workspaceEnv, args.runner.engines)
+    ? sessionAccountLogin(args.runtime, health, account, args.workspaceEnv, engines)
     : { auth: health.auth };
   if (login?.auth !== 'no') return null;
 

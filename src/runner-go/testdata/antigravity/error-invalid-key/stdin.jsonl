@@ -1,0 +1,2 @@
+{"event": "user", "message": {"content": "hello\nmock:text unreachable"}}
+{"event": "user", "message": {"content": "again\nmock:text unreachable"}}

@@ -37,6 +37,7 @@ import {
   QuestionNotAskable,
   SESSION_ENDING_SELECT,
   TASK_FAILURE_CHAIN_LIMIT,
+  conversationIsOver,
   coordinatorQuestion,
   openItemActions,
   openItemFacts,
@@ -378,7 +379,8 @@ export class ProjectOpenItemService {
    * The conversation is read at THIS moment rather than when the item was opened: a project that
    * rotated its coordinator owes the item to the one it has now. A conversation that has ended, or a
    * project that no longer has one, means the item is the owner's — which is the same answer §4.3
-   * gives when the item is opened, reached later.
+   * gives when the item is opened, reached later. One that is only down (`conversationIsDown`)
+   * keeps it, undelivered, until a turn of its own ends.
    */
   async deliver(itemId: string, askedBy: DeliverAskedBy = 'AUTOMATIC'): Promise<void> {
     const item = await this.prisma.projectOpenItem.findUnique({
@@ -456,6 +458,17 @@ export class ProjectOpenItemService {
       if (error instanceof OpenItemNoLongerOwed) return;
       // SessionNotSendable is a ConflictException, so it is asked about first.
       if (error instanceof SessionNotSendable || error instanceof NotFoundException) {
+        // Down is not over: a conversation whose run failed is still the one to read this once it is
+        // retried, and its next turn's end is where it is told (§4.4 X-D4 3) — or, if it does not
+        // come back, the clock hands the item over (§4.6 X-E1). Read again rather than taken from the
+        // refusal, which says only that this turn could not be written.
+        if (error instanceof SessionNotSendable) {
+          const session = await this.prisma.session.findUnique({
+            where: { id: sessionId },
+            select: SESSION_ENDING_SELECT,
+          });
+          if (session && !conversationIsOver(session)) return;
+        }
         await this.handToOwner(item.id, item.assignedAt, 'COORDINATOR_ENDED');
         return;
       }

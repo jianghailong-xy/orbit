@@ -59,6 +59,12 @@ export class StartLoginDto {
   @IsOptional() @IsString() @MaxLength(60) accountName?: string;
 }
 
+/** A new name for an account a runner reports, Default included. The limit is the one an account
+ *  is added under (StartLoginDto.accountName). */
+export class RenameAccountDto {
+  @IsString() @MaxLength(60) name!: string;
+}
+
 /** Which CLI to install on the runner. Required — there is no historical default here. */
 export class StartInstallDto {
   @IsIn(['claude', 'codex', 'kimi']) engine!: LoginEngine;

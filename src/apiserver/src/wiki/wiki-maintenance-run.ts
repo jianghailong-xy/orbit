@@ -47,7 +47,7 @@ import {
   type FactPosition,
   type WikiMaintenance,
 } from './wiki-maintenance';
-import { wikiMaintenanceCatchUpOf, wikiMaintenanceRunsToday } from './wiki-maintenance-session';
+import { WIKI_RUN_BASH_TIMEOUT, wikiMaintenanceCatchUpOf, wikiMaintenanceRunsToday, wikiRunCutOff } from './wiki-maintenance-session';
 import { wikiMaintenanceProviderIsLocal } from './wiki-maintenance-settings';
 import { hasQueuedWikiPlanJob, resumeWikiPlanJobs } from './wiki-plan-job';
 import { currentWikiRollout, wikiOnFor } from './wiki-rollout';
@@ -721,7 +721,7 @@ function maintenanceTaskPrompt(input: {
     `A Wiki maintenance run of the space «${input.title}» (${input.spaceRef}): ${because}. This run covers the next `
       + `${input.runSessions} of those sessions.`,
     '',
-    'Run this once, with the Bash tool, and let it finish — it can take a while, and it prints what it did:',
+    `Run this once, with the Bash tool, and let it finish — it can take hours, and it prints what it did. ${WIKI_RUN_BASH_TIMEOUT}:`,
     '',
     `    orbit wiki maintain --space ${input.spaceRef}`,
     '',
@@ -734,6 +734,7 @@ function maintenanceTaskPrompt(input: {
       + 'retry a failed run more than once. When the Orbit server answers 5xx or not at all, it waits for the server '
       + 'itself before it ends, so a run it says you may run again is safe to run again at once; when it says the '
       + 'server did not come back, do not run it again — the next run takes the dossiers this one did not record.',
+    wikiRunCutOff('the next run takes up where this one stopped.'),
     ...behind,
   ].join('\n');
 }

@@ -169,7 +169,13 @@ suite('the codex sign-in and its credential, on real PostgreSQL', { timeout: 300
   const newPool = async (ownerId: string, engine = 'codex', label = 'Mine') => {
     const id = randomUUID();
     await prisma.providerPool.create({
-      data: { id, slug: `codex-login-${randomUUID()}`, label, ownerId, engine, shared: false },
+      data: {
+        id, slug: `codex-login-${randomUUID()}`, label, ownerId, engine, shared: false,
+        // A Codex pool has its owner among its people from the start (migration 0358; the row
+        // ProvidersService.createPool writes) — the row the pool page's doors find them by, and the one a
+        // publish about its accounts reaches.
+        ...(engine === 'codex' ? { people: { create: { userId: ownerId, role: 'ADMIN' } } } : {}),
+      },
     });
     return id;
   };
@@ -440,7 +446,11 @@ suite('the codex sign-in and its credential, on real PostgreSQL', { timeout: 300
 
   await t.test('the deadline takes the attempt with it: EXPIRED, no row, no child, no directory', async () => {
     const ttl = process.env.CODEX_LOGIN_TTL_MS;
-    process.env.CODEX_LOGIN_TTL_MS = '300';
+    // Seconds, not milliseconds: the deadline starts counting before the stand-in is even spawned, and
+    // `start` answers only once it has printed its code. A deadline shorter than a loaded machine takes to
+    // get bash that far is refused at the start ("no device code") instead of being reached here — 300ms
+    // was, a few starts in a hundred under load.
+    process.env.CODEX_LOGIN_TTL_MS = '3000';
     try {
       const cli = await fakeCli(work, 'IJ90-KL12', account());
       process.env.CODEX_LOGIN_BIN = cli.bin;

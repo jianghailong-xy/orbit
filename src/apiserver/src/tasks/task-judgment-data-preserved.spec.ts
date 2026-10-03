@@ -1696,7 +1696,111 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // column, constraint, index, function, trigger or type is created, altered or dropped, so it is not
       // another writer of the DONE fence and names none of the six preserved objects; no row is updated
       // or deleted. (0357 is the wiki maintenance catch-up's, so this took the next number.)
-      '0358_codex_pool_owner_person'],
+      '0358_codex_pool_owner_person',
+      // `task_project_activity_idx`: one partial btree on `task (owner_id, project_id, updated_at)`
+      // `WHERE project_id IS NOT NULL`, three columns that already existed, so that the sidebar's
+      // `max(updated_at)` per open project is one backward probe instead of a read of every task.
+      // Read against every claim above: one `CREATE INDEX IF NOT EXISTS` and nothing else — no
+      // function, trigger, type, column or constraint is created, altered or dropped, so it is not
+      // another writer of the DONE fence and names none of the six preserved objects. `task` IS one
+      // of the preserved relations, and it is named only as the table the index is built on, as in
+      // 0283 and 0305: an index is a new relation beside the table, not a rewrite of it, so no
+      // column of `task` is added, dropped or retyped and no stored row moves by one byte.
+      // `task.acceptance_command`, `task.acceptance_expected_exit_code`,
+      // `task_executable_acceptance_pair` and `task_completion_criterion` are not named, and no
+      // `project_acceptance_*` object is. No INSERT, UPDATE or DELETE: the build reads every task
+      // row once and writes none. (It is in place of a maintained column on `project`, another
+      // preserved relation, whose backfill would have been an UPDATE of every project row.)
+      '0361_task_project_activity_idx',
+      // What the user calls each account a runner reports (0362): one `ADD COLUMN` on `runner` —
+      // `account_names` JSONB, nullable with no default, catalog-only. Read against every claim above:
+      // `runner` is none of the preserved relations, so no `task`, `session`, `project` or
+      // `project_acceptance_*` object is named and the 0177 pair and every stored task and criterion row
+      // are out of its reach. No function, trigger, type or constraint is created, replaced or dropped,
+      // so it is not another writer of the DONE fence and names none of the six preserved objects. No
+      // INSERT, UPDATE or DELETE: nothing is backfilled. (Written as 0359 on its own branch and
+      // renumbered before it landed: 0359 and 0360 are spelled by other branches not yet landed, and
+      // 0361 is the one just above.)
+      '0362_runner_account_names',
+      // Model-routing storage (0364): two nullable task suggestion columns and their CHECK,
+      // two workspace settings with constant defaults, and a new task_route_decision table
+      // with its own indexes and foreign keys. Read against the claims above: no existing column
+      // is dropped or retyped, no DML or function/trigger replacement appears, and neither the
+      // 0177 pair, criterion enum nor any project_acceptance_* object is named.
+      '0364_task_model_routing',
+      // `task_owner_creator_session_status_created_id_idx` (0365): one btree on `task
+      // (owner_id, creator_session_id, status, created_at DESC, id DESC)`, five columns that already
+      // existed, so that a session's "Tasks created here" row is counted and its first rows read off
+      // the index instead of a read — and a 4.6 MB tuplestore — of every task the session created.
+      // Read against every claim above: one `CREATE INDEX IF NOT EXISTS` and nothing else — no
+      // function, trigger, type, column or constraint is created, altered or dropped, so it is not
+      // another writer of the DONE fence and names none of the six preserved objects. `task` IS one
+      // of the preserved relations, and it is named only as the table the index is built on, as in
+      // 0283, 0305 and 0361: no column of `task` is added, dropped or retyped and no stored row moves.
+      // `task.acceptance_command`, `task.acceptance_expected_exit_code`,
+      // `task_executable_acceptance_pair` and `task_completion_criterion` are not named, and no
+      // `project_acceptance_*` object is. No INSERT, UPDATE or DELETE: the build reads every task
+      // row once and writes none.
+      '0365_task_owner_creator_session_status_created_id_idx',
+      // A retry claim taken back without its turn is a retry given up (0366): 0352's AFTER UPDATE
+      // trigger on `session`, `session_request_asker_stopped`, dropped and created again over the same
+      // function — one more column in its list (`retry_claimed_at`) and one more branch in its WHEN —
+      // and one partial index on `session.retry_claimed_at`. Read against every claim above: no
+      // function is created or replaced, and the trigger's function still writes only
+      // `session_request`, so it is not another writer of the DONE fence and names none of the six
+      // preserved objects; `session` is named only as the table the trigger and the index are on, and
+      // it is not a preserved relation; no `task`, `project` or `project_acceptance_*` object is named,
+      // so the 0177 pair and every stored task and criterion row are out of its reach. No INSERT,
+      // UPDATE or DELETE. (Written as 0360 on its own branch and renumbered before it landed: 0359 is
+      // spelled by a branch not yet landed, and 0361, 0362, 0364 and 0365 landed first.)
+      '0366_session_retry_claim_lease',
+      // `antigravity` becomes a built-in runtime keyword (0367), the way 0080 made `opencode` one:
+      // whatever configured provider or account pool held the slug is renamed to a free
+      // `antigravity-N`, every stored reference to the slug is rewritten to it, a compatibility row
+      // is inserted into `model_provider` with one CHECK, and two new functions back three new
+      // triggers (two on `model_provider`, one BEFORE UPDATE OF "status" on `session`). Read
+      // against every claim above: it is DML on two preserved relations, and only on one column
+      // of each — `session.provider` and `task.provider`, rewritten from `antigravity` to the new
+      // slug on the rows that name it, and nothing else assigned. No row is inserted into or
+      // deleted from either, so no count moves; no status, criterion, verdict or acceptance column
+      // is written, and `task.acceptance_command`, `task.acceptance_expected_exit_code`,
+      // `task_executable_acceptance_pair` and `task_completion_criterion` are not named. The
+      // triggers that UPDATE fires are the statement-level AFTER UPDATE ones on `task`, which act
+      // on run_at/status/project/list differences this write cannot produce; no row-level trigger
+      // on either table lists `provider`, so the DONE writer fence (status and
+      // completion_fence_revision only) does not fire. Its other writes land on relations this
+      // file does not preserve — `model_provider`, `provider_pool`, `task_route_decision`,
+      // `task_run_request`, `workspace`, `agent`, `user` and `wiki_space`. Its two `CREATE OR
+      // REPLACE FUNCTION`s are its own new guards, so it is not another writer of the DONE fence
+      // and names none of the six preserved objects; no table, column, type or enum is created,
+      // altered or dropped besides that CHECK, and no `project_acceptance_*` object is named.
+      // (0366 is the retry-claim lease just above, which landed first, so this took 0367; 0369,
+      // below, landed before this did and left 0367 to it.)
+      '0367_antigravity_runtime',
+      // Every live workspace's place in the sidebar, written down (0369): one UPDATE … FROM of
+      // `workspace.position`, computed from `workspace` and `runner` rows and nothing else. Read
+      // against every claim above: neither table is a preserved relation, and no `task`, `session`,
+      // `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored task
+      // and criterion row are out of its reach. No table, column, constraint, index, function,
+      // trigger or type is created, altered or dropped, so it is not another writer of the DONE
+      // fence and names none of the six preserved objects; no row is inserted or deleted. (Written
+      // as 0366 on its own branch and renumbered before it landed: 0366 is the retry claim lease
+      // above, and 0367 and 0368 were spelled by branches not yet landed.)
+      '0369_workspace_position_backfill',
+      // A confirmation request's review (0370, docs/owner-confirmation-review-contract.md §3): three new
+      // enums, two new tables (`task_owner_confirmation_review` and its records), one nullable CHAR(40)
+      // column on `task_owner_confirmation_request` and one on `session`, three nullable columns on
+      // `task_owner_decision` with a foreign key and a CHECK on the new values only, and one new
+      // trigger with its own new function on `session`. Read against every claim above: `task` is
+      // named only as the target of the new tables' foreign keys — no column of it is added, dropped or
+      // retyped, and no stored row moves; `task.acceptance_command`, `task.acceptance_expected_exit_code`,
+      // `task_executable_acceptance_pair` and `task_completion_criterion` are not named. Its one
+      // `CREATE OR REPLACE FUNCTION` is the new trigger's own, so it is not another writer of the DONE
+      // fence and names none of the six preserved objects; 0267's CHECKs are left as they were. No
+      // INSERT, UPDATE or DELETE: no request or decision is backfilled. (Written as 0365 on its own
+      // branch and renumbered before it landed: 0365, 0366, 0367 and 0369 landed first, just above,
+      // and 0368 is spelled by another project's branch not yet landed.)
+      '0370_owner_confirmation_review'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

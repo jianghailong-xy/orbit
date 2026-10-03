@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>任务智能选择模型 · iOS 效果图</title>
+<style>
+  :root {
+    --tint:#2E6AFF; --tint-bg:rgba(46,106,255,.14);
+    --amber:#FF9500; --amber-ink:#B35A00; --amber-bg:rgba(255,149,0,.15);
+    --green:#34C759; --green-ink:#248A3D; --red:#FF3B30; --red-ink:#C9261B;
+    --purple-ink:#5b2fb8; --purple-bg:rgba(124,77,255,.12);
+    --label:#000; --label-2:rgba(60,60,67,.6); --label-3:rgba(60,60,67,.3);
+    --sep:#E1E1E3; --surface:#fff; --grouped:#F2F2F7; --fill:#E9E9EA;
+    --glass:rgba(255,255,255,.72); --mark:#2E6AFF;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:36px 40px 44px; background:#e4e4e9; color:#16161a; width:1880px;
+         font:15px/1.5 -apple-system,"Nimbus Sans","Noto Sans CJK SC",sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:24px; letter-spacing:-.02em; margin:0 0 6px; }
+  .lede { color:#4a4a52; margin:0 0 24px; font-size:14.5px; max-width:1400px; }
+  .lede b { color:#16161a; }
+  .row { display:flex; gap:36px; align-items:flex-start; }
+  figure { margin:0; flex:none; width:393px; }
+  .tag { display:inline-block; font-size:13px; font-weight:700; border-radius:999px; padding:2px 11px; margin-bottom:10px; }
+  .tag.after { background:#d6e4ff; color:#14428f; }
+  figcaption { margin-top:12px; font-size:13px; line-height:1.6; color:#4a4a52; }
+  figcaption b { color:#16161a; }
+  .mk { outline:2px dashed var(--mark); outline-offset:3px; border-radius:10px; }
+
+  /* phone shell */
+  .phone { width:393px; height:852px; background:var(--grouped); overflow:hidden; position:relative;
+           border-radius:44px; box-shadow:0 18px 44px rgba(0,0,0,.18), 0 0 0 1px rgba(0,0,0,.08); color:var(--label);
+           font:17px/1.3 -apple-system,"Nimbus Sans","Noto Sans CJK SC",sans-serif; }
+  .phone.white { background:#fff; }
+  .status { position:absolute; left:0; right:0; top:0; height:54px; display:flex; align-items:center; justify-content:space-between;
+            padding:4px 30px 0 46px; font-size:16px; font-weight:600; z-index:6; }
+  .status .rr { display:flex; align-items:center; gap:6px; }
+  .bars { display:flex; align-items:flex-end; gap:1.6px; height:11px; }
+  .bars i { width:3px; background:#000; border-radius:1px; }
+  .batt { width:25px; height:12px; background:#000; border-radius:4px; }
+  .nav { position:absolute; left:0; right:0; top:54px; height:46px; display:flex; align-items:center; padding:0 16px; z-index:6; }
+  .platter { width:40px; height:40px; border-radius:999px; background:var(--glass); display:flex; align-items:center; justify-content:center;
+             box-shadow:0 2px 10px rgba(0,0,0,.08), inset 0 0 0 .5px rgba(0,0,0,.06); font-size:20px; color:#000; flex:none; }
+  .navtitle { position:absolute; left:70px; right:70px; text-align:center; font-size:16px; font-weight:600; }
+  .navright { margin-left:auto; color:var(--tint); font-size:17px; font-weight:600; }
+  .home { position:absolute; bottom:8px; left:50%; width:139px; margin-left:-69.5px; height:5px; border-radius:3px; background:#000; z-index:9; }
+  .page { position:absolute; left:0; right:0; top:100px; bottom:0; }
+
+  /* task detail */
+  .hdr { padding:6px 20px 0; }
+  .hdr h2 { font-size:21px; line-height:27px; font-weight:700; margin:0 0 8px; letter-spacing:-.01em; }
+  .pill { display:inline-flex; align-items:center; gap:5px; font-size:13px; font-weight:500; border-radius:999px; padding:2px 8px 2px 7px; }
+  .pill.run { background:var(--tint-bg); color:var(--tint); }
+  .pill.fail { background:rgba(255,59,48,.13); color:var(--red-ink); }
+  .pill.done { background:rgba(52,199,89,.16); color:var(--green-ink); }
+  .pill .dot { width:6px; height:6px; border-radius:50%; background:currentColor; }
+  .sh { padding:20px 32px 7px; font-size:13px; color:var(--label-2); text-transform:uppercase; letter-spacing:.02em; }
+  .card { background:var(--surface); margin:0 16px; border-radius:22px; }
+  .r { position:relative; display:flex; align-items:center; gap:10px; min-height:44px; padding:10px 16px; font-size:16.5px; }
+  .r + .r::before { content:""; position:absolute; top:0; left:16px; right:0; height:.5px; background:var(--sep); }
+  .r .v { margin-left:auto; color:var(--label-2); display:inline-flex; align-items:center; gap:6px; font-size:16px; }
+  .r .ud { color:var(--label-3); font-size:12px; }
+  .lvl { width:9px; height:9px; border-radius:50%; display:inline-block; }
+  .lvl.m { background:#2E6AFF; } .lvl.l { background:#FF9500; }
+  .foot { padding:6px 32px 0; font-size:12.5px; line-height:1.45; color:var(--label-2); }
+  .run { align-items:flex-start; }
+  .run .dt { width:9px; height:9px; border-radius:50%; margin-top:7px; flex:none; }
+  .run .main { flex:1; min-width:0; }
+  .run .t { font-size:16.5px; }
+  .run .s { font-size:13px; color:var(--label-2); margin-top:2px; display:flex; align-items:center; gap:5px; flex-wrap:wrap; }
+  .run .side { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+  .rt { font-size:11.5px; font-weight:700; border-radius:5px; padding:0 5px; line-height:17px; background:var(--tint-bg); color:var(--tint); }
+  .rt.up { background:var(--amber-bg); color:var(--amber-ink); }
+  .info { width:22px; height:22px; border-radius:50%; border:1.6px solid var(--tint); color:var(--tint); font-size:13px; font-weight:700;
+          display:inline-flex; align-items:center; justify-content:center; font-style:italic; font-family:Georgia,serif; }
+
+  /* sheet */
+  .dim { position:absolute; inset:0; background:rgba(0,0,0,.28); z-index:7; }
+  .sheet { position:absolute; left:8px; right:8px; bottom:8px; background:#fff; border-radius:34px; z-index:8; padding:10px 0 26px; }
+  .grab { width:36px; height:5px; border-radius:3px; background:#c7c7cc; margin:0 auto 10px; }
+  .sheet .st { display:flex; align-items:center; padding:2px 20px 12px; }
+  .sheet .st .tt { font-size:19px; font-weight:700; flex:1; }
+  .sheet .st .x { width:30px; height:30px; border-radius:50%; background:var(--fill); color:var(--label-2); display:flex; align-items:center;
+                  justify-content:center; font-size:15px; }
+  .sheet .lead { margin:0 20px 12px; font-size:15px; color:var(--label-2); line-height:1.45; }
+  .rs { margin:0 16px; background:var(--grouped); border-radius:18px; }
+  .rs .ri { position:relative; display:flex; gap:10px; padding:11px 14px; font-size:15px; line-height:1.4; }
+  .rs .ri + .ri::before { content:""; position:absolute; top:0; left:14px; right:0; height:.5px; background:var(--sep); }
+  .rs .ri .n { flex:none; width:20px; height:20px; border-radius:50%; background:#fff; font-size:12px; font-weight:700; color:var(--tint);
+               display:flex; align-items:center; justify-content:center; margin-top:1px; }
+  .rs b { font-weight:600; }
+  .sheet .meta { margin:10px 22px 0; font-size:12.5px; color:var(--label-2); }
+
+  /* form */
+  .fr { position:relative; display:flex; align-items:flex-start; gap:12px; padding:11px 16px; font-size:16.5px; min-height:44px; }
+  .fr + .fr::before { content:""; position:absolute; top:0; left:16px; right:0; height:.5px; background:var(--sep); }
+  .fr .main { flex:1; }
+  .fr .ds { font-size:13px; color:var(--label-2); margin-top:3px; line-height:1.4; }
+  .tg { width:51px; height:31px; border-radius:16px; background:#e9e9ea; position:relative; flex:none; }
+  .tg::after { content:""; position:absolute; top:2px; left:2px; width:27px; height:27px; border-radius:50%; background:#fff;
+               box-shadow:0 2px 5px rgba(0,0,0,.2); }
+  .tg.on { background:var(--green); }
+  .tg.on::after { left:22px; }
+  .chk { margin-left:auto; color:var(--tint); font-size:18px; font-weight:600; }
+  .p5 { font-size:10.5px; font-weight:700; color:var(--purple-ink); background:var(--purple-bg); border-radius:4px; padding:0 5px;
+        margin-left:6px; text-transform:none; letter-spacing:0; }
+  .tf { color:var(--label); }
+
+  /* console + composer */
+  .bub { margin:10px 16px 0 70px; background:var(--tint); color:#fff; border-radius:20px; padding:10px 14px; font-size:15.5px; line-height:1.4; }
+  .asst { margin:14px 20px 0; font-size:15.5px; line-height:1.5; color:var(--label); }
+  .asst .tool { display:inline-flex; gap:6px; align-items:center; margin-top:8px; font-size:13px; color:var(--label-2);
+                background:var(--fill); border-radius:8px; padding:3px 9px; }
+  .cmp { position:absolute; left:12px; right:12px; bottom:28px; background:#fff; border-radius:26px; padding:12px 12px 10px 18px; z-index:6;
+         box-shadow:0 4px 18px rgba(0,0,0,.10), inset 0 0 0 .5px rgba(0,0,0,.07); }
+  .cmp .ph { color:var(--label-3); font-size:16px; margin-bottom:12px; }
+  .cbar { display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--label-2); }
+  .cbar .plus { font-size:22px; color:var(--label); line-height:1; }
+  .cbar .sp { flex:1; }
+  .mchip { display:inline-flex; align-items:center; gap:4px; border-radius:9px; padding:3px 8px; background:var(--tint-bg); }
+  .mchip b { color:var(--tint); font-weight:650; }
+  .mchip .spark { color:var(--tint); font-size:12px; }
+  .ring { width:12px; height:12px; border-radius:50%; border:2px solid #dfe3ea; border-top-color:var(--tint); border-right-color:var(--tint); }
+  .sendb { width:34px; height:34px; border-radius:50%; background:var(--fill); color:#aeaeb2; display:flex; align-items:center;
+           justify-content:center; font-size:17px; font-weight:700; }
+  .menu { position:absolute; right:14px; bottom:118px; width:300px; background:rgba(255,255,255,.96); border-radius:22px; z-index:8;
+          box-shadow:0 12px 40px rgba(0,0,0,.22), inset 0 0 0 .5px rgba(0,0,0,.06); overflow:hidden; }
+  .menu .mh { padding:13px 16px 11px; font-size:13px; color:var(--label-2); line-height:1.45; border-bottom:.5px solid var(--sep); }
+  .menu .mh .tt { font-size:14px; font-weight:650; color:var(--label); display:flex; align-items:center; gap:5px; margin-bottom:3px; }
+  .menu .mh .tt .spark { color:var(--tint); }
+  .menu .mi { display:flex; align-items:center; gap:10px; padding:11px 16px; font-size:16.5px; }
+  .menu .mi + .mi { border-top:.5px solid var(--sep); }
+  .menu .mi .ck { width:16px; color:var(--label); font-weight:600; }
+  .menu .mi .rv { margin-left:auto; color:var(--label-2); font-size:15px; }
+  .menu .grp { height:8px; background:rgba(120,120,128,.12); }
+  .menu .mi.lnk { color:var(--tint); }
+</style>
+
+<h1>任务智能选择模型 · iOS / macOS 效果图</h1>
+<p class="lede">
+  和 web 同一套改动、同一套文案（TaskDetailCopy 的 parity 测试会比对两边标签）。macOS 复用同一批 SwiftUI 视图，这里只画 iPhone。
+  <b>蓝色虚线框</b>是改动的地方。
+</p>
+
+<div class="row">
+  <!-- 1 task detail -->
+  <figure>
+    <span class="tag after">① 任务详情</span>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="rr"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span><span class="batt"></span></span></div>
+      <div class="nav"><span class="platter">‹</span><span class="navtitle">Task</span></div>
+      <div class="page">
+        <div class="hdr"><h2>把 run target 升到 v2 并冻结 effort</h2>
+          <span class="pill run"><span class="dot"></span>Running</span></div>
+        <div class="sh">Details</div>
+        <div class="card">
+          <div class="r"><span>Assignee</span><span class="v">orbit <span class="ud">⌃⌄</span></span></div>
+          <div class="r"><span>Suggested</span><span class="v mk"><span class="lvl m"></span>M · Sonnet 5.5 <span class="ud">⌃⌄</span></span></div>
+          <div class="r"><span>Provider</span><span class="v">Assignee's (claude) <span class="ud">⌃⌄</span></span></div>
+          <div class="r"><span>Model</span><span class="v mk">✦ Smart selection <span class="ud">⌃⌄</span></span></div>
+          <div class="r"><span>List</span><span class="v">None <span class="ud">⌃⌄</span></span></div>
+        </div>
+        <div class="foot mk" style="margin:8px 22px 0;padding:4px 10px">Suggested by coordinator: one service plus its spec; an acceptance command decides it.</div>
+        <div class="sh">Runs (2)</div>
+        <div class="card">
+          <div class="r run"><span class="dt" style="background:var(--red)"></span>
+            <div class="main"><div class="t">orbit</div>
+              <div class="s">09:12 · Sonnet 5.5 · medium <span class="rt">✦ M</span></div></div>
+            <div class="side"><span class="pill fail">Failed</span></div></div>
+          <div class="r run"><span class="dt" style="background:var(--tint)"></span>
+            <div class="main"><div class="t">orbit</div>
+              <div class="s">10:24 · Opus 5.5 · high <span class="rt up">✦ L ↑</span></div></div>
+            <div class="side"><span class="pill run">Running</span><span class="info mk">i</span></div></div>
+        </div>
+      </div>
+      <div class="home"></div>
+    </div>
+    <figcaption>Details 多一行 <b>Suggested</b>（coordinator 建议的档位，直接显示对应模型），理由放在卡片下的脚注里。开了智能选择时 Model 显示「✦ Smart selection」。
+      Runs 每行写明模型、effort 和档位；点 <b>ⓘ</b> 看为什么（见 ②）。点行本身仍然进会话。</figcaption>
+  </figure>
+
+  <!-- 2 why sheet -->
+  <figure>
+    <span class="tag after">② 点 ⓘ：为什么是这个模型</span>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="rr"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span><span class="batt"></span></span></div>
+      <div class="nav"><span class="platter">‹</span><span class="navtitle">Task</span></div>
+      <div class="page">
+        <div class="hdr"><h2>把 run target 升到 v2 并冻结 effort</h2>
+          <span class="pill run"><span class="dot"></span>Running</span></div>
+        <div class="sh">Details</div>
+        <div class="card"><div class="r"><span>Assignee</span><span class="v">orbit</span></div>
+          <div class="r"><span>Suggested</span><span class="v">M · Sonnet 5.5</span></div></div>
+      </div>
+      <div class="dim"></div>
+      <div class="sheet mk" style="outline-offset:-3px">
+        <div class="grab"></div>
+        <div class="st"><span class="tt">Why Opus 5.5 · High</span><span class="x">✕</span></div>
+        <div class="lead">Picked by smart selection for run 2 of this task.</div>
+        <div class="rs">
+          <div class="ri"><span class="n">1</span><span><b>Tier L</b> — one above run 1 (M), because run 1 failed its acceptance command.</span></div>
+          <div class="ri"><span class="n">2</span><span>Run 1 started at <b>M</b>: suggested by the coordinator — one service plus its spec.</span></div>
+          <div class="ri"><span class="n">3</span><span>Engine <b>claude</b>: this agent's own engine.</span></div>
+          <div class="ri"><span class="n">4</span><span>Opus weekly quota at 41% — no step-down needed.</span></div>
+        </div>
+        <div class="meta">Policy v1 · decided Oct 3, 10:24. A failure from a usage limit would not have moved the tier.</div>
+      </div>
+      <div class="home"></div>
+    </div>
+    <figcaption>内容和 web 的「Why」完全一样，都直接读路由决策记录里存下的理由，客户端不自己推算。
+      影子模式下这里的标题是「Smart selection would have picked …」。</figcaption>
+  </figure>
+
+  <!-- 3 agent form -->
+  <figure>
+    <span class="tag after">③ Agent 设置</span>
+    <div class="phone">
+      <div class="status"><span>9:41</span><span class="rr"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span><span class="batt"></span></span></div>
+      <div class="nav"><span class="platter">✕</span><span class="navtitle">Edit Agent</span><span class="navright">Save</span></div>
+      <div class="page">
+        <div class="sh">Name</div>
+        <div class="card"><div class="fr"><span class="tf">orbit</span></div></div>
+        <div class="sh">Sessions</div>
+        <div class="card">
+          <div class="fr"><div class="main">Worktree isolation
+            <div class="ds">Each session runs in its own git worktree.</div></div><span class="tg on"></span></div>
+        </div>
+        <div class="sh">Task runs</div>
+        <div class="card mk">
+          <div class="fr"><div class="main">Smart model selection
+            <div class="ds">Each task run gets a model and effort picked from the task's difficulty, how it is checked, and how earlier runs went. A model pinned on a task always wins.</div></div>
+            <span class="tg on"></span></div>
+        </div>
+        <div class="sh">Engines it may use<span class="p5">P5</span></div>
+        <div class="card">
+          <div class="fr"><span>claude</span><span class="chk">✓</span></div>
+          <div class="fr"><span>codex</span></div>
+          <div class="fr"><span>kimi</span></div>
+        </div>
+        <div class="foot">Only this agent's own engine is ticked by default, so a task never moves to another engine unless you tick it here.</div>
+      </div>
+      <div class="home"></div>
+    </div>
+    <figcaption>新的一组「Task runs」，默认关闭。只能人来开（agent 的工具改不了它）。
+      「Engines it may use」到 P5 才出现，默认只勾本 Agent 自己的引擎。</figcaption>
+  </figure>
+
+  <!-- 4 composer -->
+  <figure>
+    <span class="tag after">④ 任务会话：点开模型标签</span>
+    <div class="phone white">
+      <div class="status"><span>9:41</span><span class="rr"><span class="bars"><i style="height:4px"></i><i style="height:6px"></i><i style="height:8px"></i><i style="height:11px"></i></span><span class="batt"></span></span></div>
+      <div class="nav"><span class="platter">‹</span><span class="navtitle">执行任务：把 run target 升到 v2…</span></div>
+      <div class="page">
+        <div class="asst">Run 1 failed its acceptance command on the shadow spec. Picking it up from the failing case: the batch path still builds a v1 target.
+          <div><span class="tool">✎ Edit tasks.service.ts</span></div></div>
+      </div>
+      <div class="menu mk" style="outline-offset:-3px">
+        <div class="mh"><div class="tt"><span class="spark">✦</span>Picked by smart selection · tier L</div>
+          Run 1 on Sonnet 5.5 failed its acceptance command, so this run moved up one tier. Changing it here applies to this run only.</div>
+        <div class="mi"><span class="ck">✓</span>Opus 5.5<span class="rv">High</span></div>
+        <div class="mi"><span class="ck"></span>Sonnet 5.5</div>
+        <div class="mi"><span class="ck"></span>Fable 5.1</div>
+        <div class="grp"></div>
+        <div class="mi lnk"><span class="ck"></span>Open task</div>
+      </div>
+      <div class="cmp">
+        <div class="ph">Reply…</div>
+        <div class="cbar"><span class="plus">+</span><span>Auto</span><span class="sp"></span>
+          <span class="mchip mk"><span class="spark">✦</span><b>Opus 5.5</b> High</span>
+          <span class="ring"></span><span>41%</span><span class="sendb">↑</span></div>
+      </div>
+      <div class="home"></div>
+    </div>
+    <figcaption>标签多一个 ✦ 和浅蓝底；菜单顶上一段说明来由。你自己开的会话、没开智能选择的任务会话，标签和今天<b>完全一样</b>。</figcaption>
+  </figure>
+</div>
+</html>

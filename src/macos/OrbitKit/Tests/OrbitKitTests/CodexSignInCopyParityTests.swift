@@ -12,8 +12,8 @@ import XCTest
 ///
 /// Deliberately not compared: "New pool" — a pool is made on the web (it opens straight to signing in),
 /// as a shared pool's is; the words only a phone has to say (the swipe's own label is `Sign out`, the
-/// web mark's name); and the sheet's layout, where the web's one line under the pool's name is the
-/// phone's head plus the Accounts section's footer (both compared as that one line).
+/// web mark's name); and the page the accounts are drawn on, whose words — its head, its way out, who can
+/// use it — are `PoolAccessCopyParityTests`'.
 final class CodexSignInCopyParityTests: XCTestCase {
 
     private static let dialog = "src/web/src/components/CodexSignIn.tsx"
@@ -190,25 +190,10 @@ final class CodexSignInCopyParityTests: XCTestCase {
                        "\(Self.dialog) reads POOL_CODEX_ACCOUNT_TAKEN again — so should CodexSignIn")
     }
 
-    /// The pool's page: what it is and how many of its accounts can run, "Add account" always, the
-    /// Accounts card with its count, signing one out, and the way out.
+    /// The pool's page, signing one of its accounts out: the account it signs out is named — by its
+    /// fingerprint to the server, by its email here.
     func testThePoolPageSaysWhatTheWebPageSays() throws {
         let page = try web(Self.poolPage)
-        let footer = CodexLoginPool.accountsFooter.prefix(1).lowercased() + CodexLoginPool.accountsFooter.dropFirst()
-        assertSays(page, "\(CodexLoginPool.pageTitle) · \(CodexLoginPool.justMe) · {availabilityOf(pool, NO_REFUSALS)} · \(footer)",
-                   in: Self.poolPage)
-        assertSays(page, "> \(CodexLoginPool.addAccount) </Button>", in: Self.poolPage)
-        assertSays(page, "\(CodexLoginPool.accountsHeader)<span className=\"pool-head-count\">{logins.length}</span>",
-                   in: Self.poolPage)
-        XCTAssertEqual(CodexLoginPool.deleteNote(pool("P", accounts: 1)),
-                       "Its ChatGPT sign-in is deleted from the Orbit server with it.")
-        assertSays(page, "const deleteNote = `" + asWeb(CodexLoginPool.deleteNote(pool("P", accounts: 2)), "sign-ins are",
-                                                        "sign-in${logins.length === 1 ? ' is' : 's are'}") + "`;",
-                   in: Self.poolPage)
-        assertSays(page, "title={`\(CodexLoginPool.deleteTitle(pool("${pool.label}")))`}", in: Self.poolPage)
-        assertSays(page, "okText=\"\(CodexLoginPool.delete)\"", in: Self.poolPage)
-        assertSays(page, "> \(CodexLoginPool.deletePool) </Button>", in: Self.poolPage)
-        // Signing out names the account it signs out — by its fingerprint to the server, by its email here.
         assertSays(page, "message.success(`\(CodexLoginPool.signedOut(account(email: "${loginName(login)}")))`)",
                    in: Self.poolPage)
         assertSays(page, "/account?fingerprint=${encodeURIComponent(login.fingerprint)}", in: Self.poolPage)
@@ -219,12 +204,15 @@ final class CodexSignInCopyParityTests: XCTestCase {
     func testTheAccountsRowSaysWhatTheWebRowSays() throws {
         let row = try web(Self.accountPools)
         assertSays(row, "<div className=\"pool-note\"> \(CodexLoginPool.noAccount) </div>", in: Self.accountPools)
-        assertSays(row, "<span className=\"re-summary\">\(CodexLoginPool.justMe) · {availabilityOf(pool, refusals)}</span>",
+        assertSays(row, "<span className=\"re-summary\">\(CodexPoolPage.justMe) · {availabilityOf(pool, refusals)}</span>",
                    in: Self.accountPools)
-        XCTAssertEqual(CodexLoginPool.summary(pool("P", accounts: 2)), "Just me · 2 of 2 accounts available")
+        XCTAssertEqual(ProvidersOverview.codexPoolLine(pool("P", accounts: 2)), "Just me · 2 of 2 accounts available")
         assertSays(row, "<span className=\"re-quota-none\">\(CodexLoginPool.noQuota)</span>", in: Self.accountPools)
         assertSays(row, "resets {formatResetTime(row.window.resetsAt)}", in: Self.accountPools)
-        assertSays(row, "<div className=\"pool-why\">\(CodexLoginPool.signedOutReason)</div>", in: Self.accountPools)
+        // Why it is out, and the way back — to the pool's owner, whose the sign-in is; one of the people
+        // they added reads that only its owner can.
+        assertSays(row, "<div className=\"pool-why\"> {onSignIn ? '\(CodexLoginPool.signedOutReason)' : '\(CodexLoginPool.signedOutReasonMember)'} </div>",
+                   in: Self.accountPools)
         assertSays(row, "> \(CodexLoginPool.signInAgain) </Button>", in: Self.accountPools)
         let signingOut = account(email: "${member.label}")
         assertSays(row, "title={`\(CodexLoginPool.signOutTitle(signingOut))`}", in: Self.accountPools)
@@ -255,10 +243,11 @@ final class CodexSignInCopyParityTests: XCTestCase {
     }
 
     /// The head names the account the next session starts on — just named while it is the pool's only
-    /// account, "Next:" among several — and reads its tightest window by its short name.
+    /// account, "Next:" among several, "Next for you:" once other people use the pool — and reads its
+    /// tightest window by its short name.
     func testTheHeadSaysWhatTheWebPoolGaugeSays() throws {
         let card = try web(Self.accountPools)
-        assertSays(card, "{member.login && pool.members.length === 1 ? member.label : `Next: ${member.label}`}",
+        assertSays(card, "{pool.shared && hasPeople(pool.shared) ? `Next for you: ${member.label}` : member.login && pool.members.length === 1 ? member.label : `Next: ${member.label}`}",
                    in: Self.accountPools)
         let usage = PlanUsageSnapshot(provider: "codex",
                                       primary: PlanUsageWindow(utilization: 6, windowDurationMins: 300),
@@ -272,6 +261,8 @@ final class CodexSignInCopyParityTests: XCTestCase {
         assertSays(card, "{`${compactWindowLabel(quota.label)} ${quota.percent}%`}", in: Self.accountPools)
         let unread = codexPool("P", [CodexLogin(email: "e", fingerprint: "…016a")])
         XCTAssertEqual(ProviderPools.headGauge(unread)?.label, CodexLoginPool.noQuota)
-        assertSays(card, "<span className=\"pool-gauge-none\">\(CodexLoginPool.noQuota)</span>", in: Self.accountPools)
+        // A key with no cap has nothing to fill: it says so in the same place.
+        assertSays(card, "<span className=\"pool-gauge-none\">{member.key ? '\(ProviderPools.noLimit)' : '\(CodexLoginPool.noQuota)'}</span>",
+                   in: Self.accountPools)
     }
 }

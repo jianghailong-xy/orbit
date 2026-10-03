@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>任务智能选择模型 · web 效果图</title>
+<style>
+  :root {
+    --bg-base:#fff; --bg-raised:#fff; --bg-subtle:#fafbfc; --bg-sunken:#f7f8fa; --bg-hover:#f5f6f7;
+    --fill-muted:#f1f1f4; --border:#dee0e3; --border-subtle:#eceef1;
+    --text-1:#1f2329; --text-2:#646a73; --text-3:#8f959e;
+    --brand:#3370ff; --brand-strong:#245ae0; --brand-tint:#eaf1ff; --brand-border:#bcd3ff;
+    --success:#1a7f37; --success-bg:#e8f6ec; --success-border:#b6e7c4;
+    --error:#cf3b35; --error-bg:#fdeceb; --error-border:#ffccc7;
+    --warning:#c2710c; --warning-bg:#fff4e6; --warning-border:#ffd591;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 40px 64px; background:#eceef1; color:var(--text-1); width:1880px;
+         font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",
+              "Noto Sans CJK SC",Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; letter-spacing:-.01em; margin:0 0 6px; }
+  .lede { color:var(--text-2); max-width:1300px; margin:0 0 6px; }
+  .lede b { color:var(--text-1); }
+  .legend { margin:14px 0 0; font-size:12.5px; color:var(--text-2); display:flex; gap:20px;
+            align-items:center; flex-wrap:wrap; }
+  .legend .swatch { display:inline-block; width:34px; height:14px; border-radius:4px;
+                    border:1.6px dashed var(--brand); vertical-align:-2px; margin-right:7px; }
+  section { margin-top:40px; }
+  .sechead { font-size:17px; font-weight:650; margin:0 0 3px; }
+  .secsub { font-size:13px; color:var(--text-2); margin:0 0 15px; max-width:1300px; }
+  .secsub code, figcaption code { font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
+                 background:#e3e6eb; padding:1px 5px; border-radius:4px; }
+  .pair { display:flex; gap:26px; align-items:flex-start; }
+  figure { margin:0; width:560px; flex:none; }
+  .trio figure { width:590px; }
+  figcaption { margin-top:11px; font-size:12.5px; line-height:1.6; color:var(--text-2); }
+  figcaption b { color:var(--text-1); }
+  .tag { display:inline-block; font-size:11px; font-weight:700; letter-spacing:.05em;
+         padding:2px 8px; border-radius:5px; margin-bottom:9px; }
+  .tag.now { background:#e3e6eb; color:#646a73; }
+  .tag.new { background:var(--brand-tint); color:var(--brand-strong); }
+  .tag.shadow { background:#efe7ff; color:#5b2fb8; }
+  .frame { background:var(--bg-base); border:1px solid var(--border); border-radius:12px;
+           padding:18px 20px; box-shadow:0 1px 2px rgba(0,0,0,.05), 0 8px 22px rgba(0,0,0,.07);
+           position:relative; }
+  .changed { outline:1.6px dashed var(--brand); outline-offset:5px; border-radius:8px; }
+  .chg { outline:1.4px dashed var(--brand); outline-offset:2px; border-radius:4px; }
+  .dim { color:var(--text-3); font-size:12px; }
+
+  /* ── agent form (RunnerDetailPage) ─────────────────────────────── */
+  .rd-title { font-size:15px; font-weight:650; margin-bottom:2px; }
+  .rd-sub { font-size:12px; color:var(--text-3); margin-bottom:14px; }
+  .rd-section { font-size:12px; font-weight:600; color:var(--text-3); margin:16px 0 8px; }
+  .rd-field { display:flex; flex-direction:column; gap:5px; margin-bottom:12px; }
+  .rd-label { font-size:12.5px; color:var(--text-2); }
+  .rd-input { border:1px solid var(--border); border-radius:7px; padding:5px 10px; font-size:13px; }
+  .rd-set-row { display:flex; gap:16px; align-items:flex-start; padding:11px 0;
+                border-top:1px solid var(--border-subtle); }
+  .rd-set-main { flex:1; }
+  .rd-set-label { font-size:13.5px; font-weight:600; }
+  .rd-set-desc { font-size:12px; color:var(--text-2); margin-top:2px; line-height:1.55; }
+  .sw { width:34px; height:20px; border-radius:10px; background:#c9cdd4; position:relative; flex:none;
+        margin-top:2px; }
+  .sw::after { content:""; position:absolute; top:2px; left:2px; width:16px; height:16px;
+               border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.25); }
+  .sw.on { background:var(--brand); }
+  .sw.on::after { left:16px; }
+  .rd-derived { font-size:12px; color:var(--text-2); background:var(--bg-sunken); border-radius:7px;
+                padding:8px 10px; margin-top:6px; line-height:1.55; }
+  .eng { display:flex; gap:8px; margin-top:8px; }
+  .echip { display:inline-flex; align-items:center; gap:6px; font-size:12px; border:1px solid var(--border);
+           border-radius:6px; padding:2px 9px; color:var(--text-2); background:var(--bg-base); }
+  .echip.on { border-color:var(--brand-border); background:var(--brand-tint); color:var(--brand-strong);
+              font-weight:600; }
+  .echip .bx { width:12px; height:12px; border-radius:3px; border:1.3px solid currentColor;
+               display:inline-flex; align-items:center; justify-content:center; font-size:9px; line-height:1; }
+  .p5 { font-size:10.5px; font-weight:700; color:#5b2fb8; background:#efe7ff; border-radius:4px;
+        padding:0 5px; margin-left:6px; vertical-align:1px; }
+
+  /* ── task detail (TaskDetailPanel) ─────────────────────────────── */
+  .tdp-head { display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+  .tdp-head .t { font-size:15px; font-weight:650; flex:1; min-width:0; }
+  .tdp-badge { font-size:12px; line-height:18px; padding:0 8px; border-radius:9px;
+               border:1px solid transparent; white-space:nowrap; }
+  .tone-running { background:var(--brand-tint); color:var(--brand-strong); border-color:var(--brand-border); }
+  .tone-failed { background:var(--error-bg); color:var(--error); border-color:var(--error-border); }
+  .tone-done { background:var(--success-bg); color:var(--success); border-color:var(--success-border); }
+  .tone-open { background:var(--fill-muted); color:var(--text-2); }
+  .tdp-section-title { font-size:12px; font-weight:600; color:var(--text-3); margin:4px 0 10px; }
+  .tdp-field { display:flex; gap:10px; margin-bottom:8px; font-size:13px; align-items:flex-start;
+               position:relative; }
+  .tdp-field-label { width:76px; flex:none; color:var(--text-3); padding-top:2px; }
+  .sel { display:inline-flex; align-items:center; gap:6px; color:var(--text-1); padding:2px 8px;
+         margin-left:-8px; border-radius:6px; }
+  .sel.ph { color:var(--text-3); }
+  .sel .cv { color:var(--text-3); font-size:10px; }
+  .sel.focus { background:var(--bg-hover); }
+  .lvl { display:inline-block; width:8px; height:8px; border-radius:50%; }
+  .lvl.s { background:#34c759; } .lvl.m { background:#3370ff; } .lvl.l { background:#ff9500; }
+  .lvl.xl { background:#cf3b35; }
+  .fsub { font-size:11.5px; color:var(--text-3); margin-top:1px; line-height:1.45; }
+  .fcol { display:flex; flex-direction:column; }
+  .dd { width:100%; background:#fff;
+        border:1px solid var(--border); border-radius:10px; padding:5px;
+        box-shadow:0 6px 24px rgba(0,0,0,.14); }
+  .dd .o { display:flex; gap:9px; align-items:flex-start; padding:6px 9px; border-radius:7px; }
+  .dd .o.cur { background:var(--brand-tint); }
+  .dd .o .lvl { margin-top:6px; flex:none; }
+  .dd .o .on { font-size:13px; font-weight:600; }
+  .dd .o .od { font-size:11.5px; color:var(--text-2); line-height:1.45; }
+  .dd .o.none .on { font-weight:400; color:var(--text-3); }
+
+  .tdp-session { display:flex; align-items:center; gap:9px; padding:8px 10px; border-radius:8px;
+                 border:1px solid transparent; }
+  .tdp-session + .tdp-session { margin-top:4px; }
+  .tdp-session.hover { background:var(--bg-hover); }
+  .tdp-dot { width:8px; height:8px; border-radius:50%; background:#c9cdd4; flex:none; }
+  .tdp-dot.FAILED { background:var(--error); } .tdp-dot.RUNNING { background:var(--brand); }
+  .tdp-dot.DONE { background:var(--success); }
+  .tdp-session-main { flex:1; min-width:0; }
+  .tdp-session-title { font-size:13px; }
+  .tdp-session-sub { font-size:11px; color:var(--text-3); margin-top:1px; display:flex; gap:5px;
+                     align-items:center; flex-wrap:wrap; }
+  .rt { display:inline-flex; align-items:center; gap:3px; font-size:10.5px; font-weight:650;
+        border-radius:4px; padding:0 5px; line-height:16px; background:var(--brand-tint);
+        color:var(--brand-strong); }
+  .rt.up { background:var(--warning-bg); color:var(--warning); }
+  .would { font-size:11px; color:#5b2fb8; margin-top:2px; display:flex; gap:5px; align-items:center; }
+  .why { margin:6px 0 2px 27px; border:1px solid var(--brand-border); background:#f5f9ff;
+         border-radius:9px; padding:10px 12px; }
+  .why .wt { font-size:12.5px; font-weight:650; margin-bottom:5px; }
+  .why ul { margin:0; padding-left:16px; font-size:12px; color:var(--text-2); line-height:1.65; }
+  .why ul b { color:var(--text-1); font-weight:600; }
+  .why .wf { font-size:11px; color:var(--text-3); margin-top:5px; }
+
+  /* ── composer ──────────────────────────────────────────────────── */
+  .msg { font-size:13.5px; color:var(--text-1); padding:4px 4px 14px;
+         border-bottom:1px solid var(--border-subtle); margin-bottom:14px; }
+  .cmp { border:1px solid var(--border); border-radius:22px; padding:12px 14px 10px 18px;
+         box-shadow:0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05); position:relative; }
+  .cmp .ph { color:var(--text-3); font-size:14.5px; margin-bottom:12px; }
+  .cbar { display:flex; align-items:center; gap:10px; font-size:12.5px; color:var(--text-2); }
+  .cbar .plus { font-size:18px; color:var(--text-1); line-height:1; }
+  .cbar .sp { flex:1; }
+  .mchip { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:7px; }
+  .mchip b { color:var(--text-1); font-weight:650; }
+  .mchip.smart { background:var(--brand-tint); }
+  .mchip.smart b { color:var(--brand-strong); }
+  .spark { color:var(--brand); font-size:12px; }
+  .meter { display:inline-flex; align-items:center; gap:5px; }
+  .meter i { display:inline-block; width:22px; height:3px; border-radius:2px; background:#dfe3ea;
+             position:relative; }
+  .meter i::before { content:""; position:absolute; left:0; top:0; bottom:0; width:6px;
+                     background:var(--brand); border-radius:2px; }
+  .ring { width:11px; height:11px; border-radius:50%; border:2px solid #dfe3ea;
+          border-top-color:var(--brand); border-right-color:var(--brand); display:inline-block; }
+  .sendb { width:30px; height:30px; border-radius:50%; background:#dfe3ea; color:#fff;
+           display:inline-flex; align-items:center; justify-content:center; font-size:15px; }
+  .pop { position:absolute; right:70px; bottom:58px; width:380px; background:#fff; z-index:5;
+         border:1px solid var(--border); border-radius:12px; padding:12px 14px;
+         box-shadow:0 8px 28px rgba(0,0,0,.16); }
+  .pop .ph1 { display:flex; align-items:center; gap:6px; font-size:13px; font-weight:650; }
+  .pop .pb { font-size:12.5px; color:var(--text-2); margin-top:6px; line-height:1.6; }
+  .pop .pb b { color:var(--text-1); font-weight:600; }
+  .pop .sepl { border-top:1px solid var(--border-subtle); margin:9px 0; }
+  .pop .ml { display:flex; justify-content:space-between; font-size:13px; padding:3px 2px; }
+  .pop .ml.cur { color:var(--brand-strong); font-weight:600; }
+  .pop .lnk { font-size:12.5px; color:var(--brand-strong); font-weight:600; margin-top:8px; }
+  .gap { height:250px; }
+</style>
+
+<h1>任务智能选择模型 · web 效果图</h1>
+<p class="lede">
+  改动集中在三个地方：<b>Agent 设置页</b>多一个开关；<b>任务详情</b>多一个「建议档位」字段（coordinator 给的建议）、运行列表写明每次用了什么模型以及为什么；
+  <b>任务会话的输入框</b>上，模型标签标出「这是智能选的」。没开启智能选择的 Agent，界面和今天一样（只多一行影子提示）。
+  界面文案沿用现在的英文，说明用中文。
+</p>
+<p class="legend"><span><span class="swatch"></span>虚线框 = 改动的地方</span>
+  <span><span class="p5" style="margin:0 6px 0 0">P5</span>= 最后一期（跨引擎）才出现</span></p>
+
+<!-- 1 ───────────────────────────────────────────────────────────── -->
+<section>
+  <div class="sechead">1 · Agent 设置页：开关只能人来开</div>
+  <p class="secsub">
+    放在「Worktree isolation」下面，同一种 SettingRow。默认关闭。只有用户 API 能改，<code>agent_update</code> 改不了 ——
+    这是一个会影响花费的开关，不让 agent 自己打开。
+  </p>
+  <div class="pair">
+    <figure>
+      <span class="tag now">现状</span>
+      <div class="frame">
+        <div class="rd-title">orbit</div>
+        <div class="rd-sub">wikova · /root/orbit</div>
+        <div class="rd-field"><div class="rd-label">Name</div><div class="rd-input">orbit</div></div>
+        <div class="rd-set-row">
+          <div class="rd-set-main"><div class="rd-set-label">Worktree isolation</div>
+            <div class="rd-set-desc">Each session runs in its own git worktree. Off → sessions run directly in the
+              working directory, sharing it.</div></div>
+          <span class="sw on"></span>
+        </div>
+        <div class="rd-derived">Model <b>claude-opus-5-5</b> · resolved by Claude on this runner. Pick a different
+          one from the session composer.</div>
+      </div>
+      <figcaption>今天 Agent 页上没有任何跟模型有关的开关，模型那一行是只读说明。</figcaption>
+    </figure>
+    <figure>
+      <span class="tag new">改后</span>
+      <div class="frame">
+        <div class="rd-title">orbit</div>
+        <div class="rd-sub">wikova · /root/orbit</div>
+        <div class="rd-field"><div class="rd-label">Name</div><div class="rd-input">orbit</div></div>
+        <div class="rd-set-row">
+          <div class="rd-set-main"><div class="rd-set-label">Worktree isolation</div>
+            <div class="rd-set-desc">Each session runs in its own git worktree. Off → sessions run directly in the
+              working directory, sharing it.</div></div>
+          <span class="sw on"></span>
+        </div>
+        <div class="changed">
+          <div class="rd-set-row">
+            <div class="rd-set-main"><div class="rd-set-label">Smart model selection for tasks</div>
+              <div class="rd-set-desc">Each task run gets a model and effort picked from the task's difficulty, how
+                it is checked, and how earlier runs went. A model pinned on a task always wins.
+                Sessions you open yourself are not affected.</div>
+              <div style="margin-top:10px;font-size:12px;color:var(--text-2)">Engines it may use<span class="p5">P5</span></div>
+              <div class="eng">
+                <span class="echip on"><span class="bx">✓</span>claude</span>
+                <span class="echip"><span class="bx"></span>codex</span>
+                <span class="echip"><span class="bx"></span>kimi</span>
+              </div>
+              <div class="rd-set-desc" style="margin-top:6px">Only this agent's own engine is ticked by default, so a
+                task never moves to another engine unless you tick it here.</div>
+            </div>
+            <span class="sw on"></span>
+          </div>
+        </div>
+        <div class="rd-derived changed" style="margin-top:14px">Task runs: model picked per task by smart selection.
+          Sessions you open yourself: <b>claude-opus-5-5</b> · resolved by Claude on this runner.</div>
+      </div>
+      <figcaption>开关打开后，这个 Agent 的<b>任务运行</b>按路由结果选模型；你自己开的会话不受影响。
+        「Engines it may use」要到 P5 才出现，默认只勾本 Agent 的引擎 —— 不勾就永远不会跨引擎。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 2 ───────────────────────────────────────────────────────────── -->
+<section>
+  <div class="sechead">2 · 任务详情 · Details：多一个「Suggested」（coordinator 建议的档位）</div>
+  <p class="secsub">
+    档位由 coordinator 建任务时给出（<code>task_create</code> 的 <code>modelHint</code> + 理由），人也可以在这里改。
+    Assignee 开了智能选择时，Model 的占位文字从「Provider default」变成「Smart selection」；在这里选定一个模型就是 pin，优先于建议。
+  </p>
+  <div class="pair trio">
+    <figure>
+      <span class="tag now">现状</span>
+      <div class="frame">
+        <div class="tdp-head"><span class="t">把 run target 升到 v2 并冻结 effort</span>
+          <span class="tdp-badge tone-running">Running</span></div>
+        <div class="tdp-section-title">Details</div>
+        <div class="tdp-field"><span class="tdp-field-label">Assignee</span><span class="sel">orbit</span></div>
+        <div class="tdp-field"><span class="tdp-field-label">Provider</span>
+          <span class="sel ph">Assignee's (claude)</span></div>
+        <div class="tdp-field"><span class="tdp-field-label">Model</span><span class="sel ph">Provider default</span></div>
+        <div class="tdp-field"><span class="tdp-field-label">List</span><span class="sel ph">No list</span></div>
+        <div class="tdp-field"><span class="tdp-field-label">Created by</span><span class="sel">coordinator</span></div>
+        <div style="height:44px"></div>
+      </div>
+      <figcaption>今天只有 Provider / Model 两个 pin，不 pin 就跟着 Agent 走。</figcaption>
+    </figure>
+    <figure>
+      <span class="tag new">改后</span>
+      <div class="frame">
+        <div class="tdp-head"><span class="t">把 run target 升到 v2 并冻结 effort</span>
+          <span class="tdp-badge tone-running">Running</span></div>
+        <div class="tdp-section-title">Details</div>
+        <div class="tdp-field"><span class="tdp-field-label">Assignee</span><span class="sel">orbit</span></div>
+        <div class="tdp-field"><span class="tdp-field-label">Suggested</span>
+          <div class="fcol chg"><span class="sel"><span class="lvl m"></span>M · Sonnet 5.5 · medium <span class="cv">▾</span></span>
+            <span class="fsub">Coordinator: one service plus its spec; an acceptance command decides it</span></div></div>
+        <div class="tdp-field"><span class="tdp-field-label">Provider</span>
+          <span class="sel ph">Assignee's (claude)</span></div>
+        <div class="tdp-field"><span class="tdp-field-label">Model</span>
+          <span class="sel ph chg">✦ Smart selection</span></div>
+        <div class="tdp-field"><span class="tdp-field-label">List</span><span class="sel ph">No list</span></div>
+        <div class="tdp-field"><span class="tdp-field-label">Created by</span><span class="sel">coordinator</span></div>
+      </div>
+      <figcaption>档位下面一行灰字是 coordinator 写的理由。Model 的占位文字只在 Assignee 开了智能选择时才变；
+        没开时，建议照样会记下来，只是不影响模型（影子模式里会记录「如果开了会选什么」）。</figcaption>
+    </figure>
+    <figure>
+      <span class="tag new">点开 Suggested</span>
+      <div class="frame">
+        <div class="dd">
+          <div class="o none"><div><div class="on">No suggestion</div>
+            <div class="od">Keeps the agent's model, as today</div></div></div>
+          <div class="o"><span class="lvl s"></span><div><div class="on">S · Sonnet 5.5 · low</div>
+            <div class="od">Rename, copy change, version bump, mechanical edits</div></div></div>
+          <div class="o cur"><span class="lvl m"></span><div><div class="on">M · Sonnet 5.5 · medium</div>
+            <div class="od">A clear feature or fix with a known shape</div></div></div>
+          <div class="o"><span class="lvl l"></span><div><div class="on">L · Opus 5.5 · high</div>
+            <div class="od">Unknown root cause, concurrency, cross-module, migrations, the dispatch path</div></div></div>
+          <div class="o"><span class="lvl xl"></span><div><div class="on">XL · Opus 5.5 · max</div>
+            <div class="od">Architecture, design, long unattended work</div></div></div>
+        </div>
+      </div>
+      <figcaption>存的是<b>档位</b>，界面直接显示它对应的模型和 effort；模型换代时只改档位表，任务不用动。
+        Codex 任务这里显示的是 Codex 的模型。每一档下面一句话说清楚什么样的活算这一档，人和 coordinator 用同一把尺子。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 3 ───────────────────────────────────────────────────────────── -->
+<section>
+  <div class="sechead">3 · 任务详情 · Runs：每次运行用了什么、为什么</div>
+  <p class="secsub">
+    每一行副标题加上「模型 · effort · 档位」。档位标签 ✦M 是智能选的，↑ 表示因为上次失败升了一档。点开一行的档位标签，展开「为什么」。
+    没开智能选择的 Agent 也会显示一行紫色的影子提示：「如果开了会选什么」，帮你决定要不要开。
+  </p>
+  <div class="pair trio">
+    <figure>
+      <span class="tag now">现状</span>
+      <div class="frame">
+        <div class="tdp-section-title">Runs (2)</div>
+        <div class="tdp-session"><span class="tdp-dot FAILED"></span>
+          <div class="tdp-session-main"><div class="tdp-session-title">orbit</div>
+            <div class="tdp-session-sub">Oct 3, 09:12</div></div>
+          <span class="tdp-badge tone-failed">Failed</span></div>
+        <div class="tdp-session"><span class="tdp-dot RUNNING"></span>
+          <div class="tdp-session-main"><div class="tdp-session-title">orbit</div>
+            <div class="tdp-session-sub">Oct 3, 10:24</div></div>
+          <span class="tdp-badge tone-running">Running</span></div>
+        <div style="height:150px"></div>
+      </div>
+      <figcaption>看不出两次运行用的是不是同一个模型，第二次为什么还会成功也无从判断。</figcaption>
+    </figure>
+    <figure>
+      <span class="tag new">改后 · 已开启</span>
+      <div class="frame">
+        <div class="tdp-section-title">Runs (2)</div>
+        <div class="tdp-session"><span class="tdp-dot FAILED"></span>
+          <div class="tdp-session-main"><div class="tdp-session-title">orbit</div>
+            <div class="tdp-session-sub">Oct 3, 09:12 · <span class="chg">Sonnet 5.5 · medium <span class="rt">✦ M</span></span></div></div>
+          <span class="tdp-badge tone-failed">Failed</span></div>
+        <div class="tdp-session hover"><span class="tdp-dot RUNNING"></span>
+          <div class="tdp-session-main"><div class="tdp-session-title">orbit</div>
+            <div class="tdp-session-sub">Oct 3, 10:24 · <span class="chg">Opus 5.5 · high <span class="rt up">✦ L ↑</span></span></div></div>
+          <span class="tdp-badge tone-running">Running</span></div>
+        <div class="why changed">
+          <div class="wt">Why Opus 5.5 · high</div>
+          <ul>
+            <li><b>Tier L</b> — one above run 1 (M), because run 1 failed its acceptance command</li>
+            <li>Run 1 started at <b>M</b>: suggested by the coordinator — one service plus its spec</li>
+            <li>Engine <b>claude</b>: this agent's own engine</li>
+            <li>Opus weekly quota at 41% — no step-down needed</li>
+          </ul>
+          <div class="wf">Policy v1 · decided Oct 3, 10:24 · a failure from a usage limit would not have moved the tier</div>
+        </div>
+      </div>
+      <figcaption>第一次按 M 档用 Sonnet；验收命令没过，第二次<b>自动升一档</b>到 Opus。
+        「为什么」直接来自路由决策记录里的理由，不是事后推测。</figcaption>
+    </figure>
+    <figure>
+      <span class="tag shadow">改后 · 影子模式（未开启）</span>
+      <div class="frame">
+        <div class="tdp-section-title">Runs (2)</div>
+        <div class="tdp-session"><span class="tdp-dot DONE"></span>
+          <div class="tdp-session-main"><div class="tdp-session-title">orbit</div>
+            <div class="tdp-session-sub">Oct 2, 16:40 · Opus 5.5 · default effort</div>
+            <div class="would"><span class="chg">✦ Smart selection would have picked Sonnet 5.5 · low (S)</span></div></div>
+          <span class="tdp-badge tone-done">Done</span></div>
+        <div class="tdp-session"><span class="tdp-dot DONE"></span>
+          <div class="tdp-session-main"><div class="tdp-session-title">orbit</div>
+            <div class="tdp-session-sub">Oct 2, 18:05 · Opus 5.5 · default effort</div>
+            <div class="would"><span class="chg">✦ Smart selection would have picked Opus 5.5 · high (L)</span></div></div>
+          <span class="tdp-badge tone-done">Done</span></div>
+        <div style="height:140px"></div>
+      </div>
+      <figcaption>Agent 没开智能选择时，行为完全不变，只多这一行紫字。
+        攒一段时间就能看出：哪些活其实用 Sonnet 就够了。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- 4 ───────────────────────────────────────────────────────────── -->
+<section>
+  <div class="sechead">4 · 任务会话的输入框：模型标签标出「智能选的」</div>
+  <p class="secsub">
+    只在「由任务派发、且模型是路由选的」会话里变样：标签换成浅蓝底 + ✦。点开下拉，顶上一段说明为什么是它；
+    在这里换模型只影响这一次运行（就是今天的改配置），任务下一次运行仍然重新选 —— 想固定，去任务上 pin。
+  </p>
+  <div class="pair">
+    <figure>
+      <span class="tag now">现状</span>
+      <div class="frame">
+        <div class="msg">Run 1 failed its acceptance command; this run picks it up from the failing spec.</div>
+        <div class="gap"></div>
+        <div class="cmp">
+          <div class="ph">Reply…</div>
+          <div class="cbar"><span class="plus">+</span><span>Auto</span><span class="sp"></span>
+            <span class="mchip"><b>Opus 5.5</b> High</span>
+            <span class="meter"><i></i>22%</span><span class="meter"><span class="ring"></span>41%</span>
+            <span class="sendb">↑</span></div>
+        </div>
+      </div>
+      <figcaption>今天看不出这个模型是谁定的：可能是任务 pin、Agent 默认，也可能是 runner 默认。</figcaption>
+    </figure>
+    <figure>
+      <span class="tag new">改后（点开标签）</span>
+      <div class="frame">
+        <div class="msg">Run 1 failed its acceptance command; this run picks it up from the failing spec.</div>
+        <div class="gap"></div>
+        <div class="pop changed">
+          <div class="ph1"><span class="spark">✦</span>Picked by smart selection · tier L</div>
+          <div class="pb">Run 1 on <b>Sonnet 5.5</b> failed its acceptance command, so this run moved up one tier.</div>
+          <div class="pb">Changing the model here applies to this run only. To fix the model for every run,
+            set it on the task.</div>
+          <div class="sepl"></div>
+          <div class="ml cur"><span>✓ Opus 5.5</span><span class="dim">High</span></div>
+          <div class="ml"><span>Sonnet 5.5</span></div>
+          <div class="ml"><span>Fable 5.1</span></div>
+          <div class="lnk">Open task ›</div>
+        </div>
+        <div class="cmp">
+          <div class="ph">Reply…</div>
+          <div class="cbar"><span class="plus">+</span><span>Auto</span><span class="sp"></span>
+            <span class="mchip smart changed"><span class="spark">✦</span><b>Opus 5.5</b> High</span>
+            <span class="meter"><i></i>22%</span><span class="meter"><span class="ring"></span>41%</span>
+            <span class="sendb">↑</span></div>
+        </div>
+      </div>
+      <figcaption>标签本身只多一个 ✦ 和浅底色，不加字、不变宽。说明放在下拉里，平时不占地方。
+        你自己开的会话、没开智能选择的任务会话，标签和今天<b>完全一样</b>。</figcaption>
+    </figure>
+  </div>
+</section>
+</html>

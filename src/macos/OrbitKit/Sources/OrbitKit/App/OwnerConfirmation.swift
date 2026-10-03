@@ -114,11 +114,14 @@ public struct OwnerConfirmationView: Codable, Equatable, Sendable {
     public let waiting: OwnerConfirmationWaiting?
     /// Every decision recorded about this task, oldest first.
     public let decisions: [RecordedOwnerDecision]
+    /// What confirming sets off, while a run is waiting; nil otherwise, and from an older server.
+    public let ifConfirmed: OwnerConfirmationIfConfirmed?
 
     public init(taskId: String, title: String, status: String, projectId: String? = nil,
                 completionCriterion: String, acceptanceCriteria: String? = nil,
                 waiting: OwnerConfirmationWaiting? = nil,
-                decisions: [RecordedOwnerDecision] = []) {
+                decisions: [RecordedOwnerDecision] = [],
+                ifConfirmed: OwnerConfirmationIfConfirmed? = nil) {
         self.taskId = taskId
         self.title = title
         self.status = status
@@ -127,6 +130,115 @@ public struct OwnerConfirmationView: Codable, Equatable, Sendable {
         self.acceptanceCriteria = acceptanceCriteria
         self.waiting = waiting
         self.decisions = decisions
+        self.ifConfirmed = ifConfirmed
+    }
+}
+
+// MARK: - what confirming sets off (`OwnerConfirmationIfConfirmed` in `@orbit/shared`)
+
+/// When a task waiting on this one starts once it is DONE: by itself with a slot free, by itself
+/// once a slot frees, or not by itself — it becomes ready and waits for somebody.
+public enum OwnerConfirmationStart: String, Codable, Equatable, Sendable {
+    case now = "NOW"
+    case whenSlotFrees = "WHEN_SLOT_FREES"
+    case manual = "MANUAL"
+}
+
+/// One task that waits on this one and that confirming releases.
+public struct OwnerConfirmationStartsTask: Codable, Equatable, Sendable {
+    public let id: String
+    public let title: String
+    public let starts: OwnerConfirmationStart
+
+    public init(id: String, title: String, starts: OwnerConfirmationStart) {
+        self.id = id
+        self.title = title
+        self.starts = starts
+    }
+}
+
+/// Whether the run's branch is on main — a merge receipt first, the runner's verdict where no
+/// receipt answers, UNKNOWN when neither says.
+public enum OwnerConfirmationOnMain: String, Codable, Equatable, Sendable {
+    case yes = "YES"
+    case no = "NO"
+    case unknown = "UNKNOWN"
+}
+
+/// The branch the waiting run worked on.
+public struct OwnerConfirmationBranch: Codable, Equatable, Sendable {
+    public let name: String
+    public let linesAdded: Int
+    public let linesRemoved: Int
+    public let files: Int
+    public let onMain: OwnerConfirmationOnMain
+
+    public init(name: String, linesAdded: Int, linesRemoved: Int, files: Int,
+                onMain: OwnerConfirmationOnMain) {
+        self.name = name
+        self.linesAdded = linesAdded
+        self.linesRemoved = linesRemoved
+        self.files = files
+        self.onMain = onMain
+    }
+}
+
+/// How the task's work reaches main once it is DONE: not at all, onto the project's integration
+/// line with main asking the owner again, or onto main by itself once the check is clean. `NONE` is
+/// `landsNothing` here so that it can never be read as an optional's `.none`.
+public enum OwnerConfirmationLanding: String, Codable, Equatable, Sendable {
+    case landsNothing = "NONE"
+    case lineThenOwner = "LINE_THEN_OWNER"
+    case autoMain = "AUTO_MAIN"
+}
+
+/// The task's run, which its DONE ends, with its `bg_run` jobs still running.
+public struct OwnerConfirmationEndsSession: Codable, Equatable, Sendable {
+    public let sessionId: String
+    public let runningBgJobs: Int
+
+    public init(sessionId: String, runningBgJobs: Int) {
+        self.sessionId = sessionId
+        self.runningBgJobs = runningBgJobs
+    }
+}
+
+/// What the card shows above its buttons. Best-effort on the server, item by item: an item it
+/// could not read is absent, never a guess — and so is one this client cannot read, so a value it
+/// does not know costs that item and never the card. A branch or a run that is null draws exactly
+/// what an absent one does: no row.
+public struct OwnerConfirmationIfConfirmed: Codable, Equatable, Sendable {
+    /// The tasks waiting on this one that its DONE releases, in the order they start.
+    public let startsTasks: [OwnerConfirmationStartsTask]?
+    /// True when those tasks are released by the work LANDING, not by the confirmation.
+    public let startsAfterLanding: Bool?
+    public let branch: OwnerConfirmationBranch?
+    public let landing: OwnerConfirmationLanding?
+    public let endsSession: OwnerConfirmationEndsSession?
+
+    public init(startsTasks: [OwnerConfirmationStartsTask]? = nil, startsAfterLanding: Bool? = nil,
+                branch: OwnerConfirmationBranch? = nil, landing: OwnerConfirmationLanding? = nil,
+                endsSession: OwnerConfirmationEndsSession? = nil) {
+        self.startsTasks = startsTasks
+        self.startsAfterLanding = startsAfterLanding
+        self.branch = branch
+        self.landing = landing
+        self.endsSession = endsSession
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case startsTasks, startsAfterLanding, branch, landing, endsSession
+    }
+
+    public init(from decoder: Decoder) throws {
+        let box = try? decoder.container(keyedBy: CodingKeys.self)
+        startsTasks = try? box?.decodeIfPresent([OwnerConfirmationStartsTask].self,
+                                                forKey: .startsTasks)
+        startsAfterLanding = try? box?.decodeIfPresent(Bool.self, forKey: .startsAfterLanding)
+        branch = try? box?.decodeIfPresent(OwnerConfirmationBranch.self, forKey: .branch)
+        landing = try? box?.decodeIfPresent(OwnerConfirmationLanding.self, forKey: .landing)
+        endsSession = try? box?.decodeIfPresent(OwnerConfirmationEndsSession.self,
+                                                forKey: .endsSession)
     }
 }
 
@@ -395,6 +507,18 @@ public enum OwnerConfirmations {
     /// short enough that the buttons stay on a phone's screen.
     public static let reportClamp = 240
 
+    /// The block right above Confirm done (`IF_YOU_CONFIRM`): what the press sets off, as Orbit
+    /// computed it from its own records. It wears no author — the two boxes above it quote the
+    /// task and the agent, this does not.
+    public static let ifYouConfirm = "IF YOU CONFIRM"
+    public static let notOnMain = "Not on main yet"
+    public static let noRecordOnMain = "No record of this branch on main"
+    public static let doesNotMerge = "confirming doesn’t merge it"
+    public static let lineThenOwner =
+        "Goes onto the integration line; merging into main asks you again"
+    public static let autoMain = "Lands on main by itself if the checks pass"
+    public static let endsSession = "Ends this session"
+
     /// The door's refusals that mean "this card is out of date", in the door's own spelling
     /// (`OWNER_CONFIRMATION_STALE_CODES`).
     public static let staleCodes: [String] = [
@@ -616,6 +740,121 @@ public enum OwnerConfirmations {
         var cut = String(said.prefix(reportClamp))
         while cut.last?.isWhitespace == true { cut.removeLast() }
         return (cut + "…", true)
+    }
+
+    /// What the folded criteria row counts (`criteriaItemsLabel`): `6 items`. Top-level list items
+    /// when the criteria are a list, paragraphs when they are not; nil when nobody wrote any, and
+    /// the box says so instead of folding. Counted on the plain lines, which keep a bullet as `•`
+    /// and an ordered item's number.
+    public static func criteriaItemsLabel(_ markdown: String?) -> String? {
+        let lines = plainText(markdown).components(separatedBy: "\n")
+        var items = lines.filter {
+            $0.range(of: "^(?:• |[0-9]{1,9}[.)][ \\t]|[0-9]{1,9}[、）])",
+                     options: .regularExpression) != nil
+        }.count
+        if items == 0 {
+            items = lines.indices.filter { index in
+                !lines[index].trimmingCharacters(in: .whitespaces).isEmpty
+                    && (index == 0 || lines[index - 1].trimmingCharacters(in: .whitespaces).isEmpty)
+            }.count
+        }
+        return items == 0 ? nil : counted(items, "item", "items")
+    }
+
+    // MARK: if you confirm
+
+    /// One row of the block (`IfConfirmedRow`): its symbol, its first line, the branch's added
+    /// lines said after it in the diff's green, and a quieter second line.
+    public struct IfConfirmedRow: Equatable, Sendable, Decodable {
+        public enum Kind: String, Equatable, Sendable, Decodable {
+            case start = "START"
+            case branch = "BRANCH"
+            case landing = "LANDING"
+            case endsSession = "ENDS_SESSION"
+        }
+
+        public let kind: Kind
+        public let lead: String
+        public let added: String?
+        public let detail: String?
+
+        public init(kind: Kind, lead: String, added: String? = nil, detail: String? = nil) {
+            self.kind = kind
+            self.lead = lead
+            self.added = added
+            self.detail = detail
+        }
+    }
+
+    /// The block's rows, in its order (`ifConfirmedRows`): the tasks it starts (one row per tier,
+    /// their titles under it), the branch while it is not known to be on main, how the work lands,
+    /// and the run it ends. An item the read left out draws no row; no rows, no block.
+    ///
+    /// The branch row says confirming does not merge it only where the landing is read and is not
+    /// Automatic's — there the DONE does lead to main, as the landing row says.
+    public static func ifConfirmedRows(_ ifConfirmed: OwnerConfirmationIfConfirmed?)
+        -> [IfConfirmedRow] {
+        guard let ifConfirmed else { return [] }
+        var rows: [IfConfirmedRow] = []
+        let afterLanding = ifConfirmed.startsAfterLanding == true
+        for starts in [OwnerConfirmationStart.now, .whenSlotFrees, .manual] {
+            let tier = (ifConfirmed.startsTasks ?? []).filter { $0.starts == starts }
+            guard !tier.isEmpty else { continue }
+            rows.append(IfConfirmedRow(
+                kind: .start,
+                lead: startsLine(starts, tier.count, afterLanding: afterLanding),
+                detail: tier.map(\.title).joined(separator: " · ")))
+        }
+        let landing = ifConfirmed.landing
+        if let branch = ifConfirmed.branch, branch.onMain != .yes {
+            let unmerged = branch.onMain == .no
+            let staysOff = landing == .landsNothing || landing == .lineThenOwner
+            rows.append(IfConfirmedRow(
+                kind: .branch,
+                lead: unmerged ? notOnMain : noRecordOnMain,
+                added: unmerged && branch.linesAdded > 0
+                    ? "+\(OrbitLinkCopy.number(branch.linesAdded))" : nil,
+                detail: staysOff ? "\(branch.name) — \(doesNotMerge)" : branch.name))
+        }
+        if landing == .lineThenOwner {
+            rows.append(IfConfirmedRow(kind: .landing, lead: lineThenOwner))
+        } else if landing == .autoMain {
+            rows.append(IfConfirmedRow(kind: .landing, lead: autoMain))
+        }
+        if let ends = ifConfirmed.endsSession {
+            let jobs = ends.runningBgJobs
+            let stop = jobs == 1 ? "stops" : "stop"
+            rows.append(IfConfirmedRow(
+                kind: .endsSession,
+                lead: jobs > 0
+                    ? "\(endsSession) · \(counted(jobs, "background job", "background jobs")) \(stop)"
+                    : endsSession))
+        }
+        return rows
+    }
+
+    /// The line for the tasks of one tier — and when the project holds them until the work lands,
+    /// that they start then and not at the press.
+    private static func startsLine(_ starts: OwnerConfirmationStart, _ count: Int,
+                                   afterLanding: Bool) -> String {
+        let tasks = counted(count, "task", "tasks")
+        switch starts {
+        case .now:
+            return afterLanding ? "Starts \(tasks) once this lands"
+                                : "Starts \(tasks) waiting on this one"
+        case .whenSlotFrees:
+            let start = count == 1 ? "starts" : "start"
+            return afterLanding ? "\(tasks) \(start) once this lands and a slot frees"
+                                : "\(tasks) \(start) when a slot frees"
+        case .manual:
+            let become = count == 1 ? "becomes" : "become"
+            return afterLanding ? "\(tasks) \(become) ready to start once this lands"
+                                : "\(tasks) \(become) ready to start"
+        }
+    }
+
+    private static func counted(_ count: Int, _ one: String, _ many: String) -> String {
+        "\(count) \(count == 1 ? one : many)"
     }
 
     /// The moment, in the words both receipts use: "16:00", or "9/10 16:00" when it was another

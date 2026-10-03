@@ -92,6 +92,7 @@ struct ComposerView: View {
     @Bindable var console: ConsoleModel
     /// Focus the field as soon as it appears — used by the draft "new session" composer, where the
     /// user came here to type. A live console leaves it false so opening a session doesn't grab focus.
+    /// Turning it on later focuses too: an iPad's draft appears unasked with it off, and ✎ turns it on.
     var autoFocus = false
     @State private var slashIndex = 0
     @State private var slashDismissed: String?
@@ -129,7 +130,8 @@ struct ComposerView: View {
         if !models.contains(where: { $0.id == console.modelID }) {
             models.insert(ModelOption(
                 id: console.modelID,
-                name: AgentDefaults.friendlyName(console.modelID, catalog: console.modelCatalog,
+                name: AgentDefaults.friendlyName(console.modelID, for: console.provider,
+                                                  catalog: console.modelCatalog,
                                                   configured: console.configuredProviders)), at: 0)
         }
         return models
@@ -327,6 +329,9 @@ struct ComposerView: View {
                 return nil
             }
             #endif
+        }
+        .onChange(of: autoFocus) { _, now in
+            if now { requestFocus() }
         }
         // The app-level session list refreshes from control-plane activity and carries capability
         // changes (including runner heartbeat recovery). Feed that newer snapshot into the open
