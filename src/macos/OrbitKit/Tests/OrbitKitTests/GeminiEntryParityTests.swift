@@ -68,6 +68,9 @@ final class GeminiEntryParityTests: XCTestCase {
         XCTAssertTrue(console.contains("providers/new/gemini"))
         XCTAssertTrue(console.contains("api.installAntigravity(runnerID)"))
         XCTAssertTrue(console.contains("runnerInstall = try await api.installAntigravity(runnerID)"))
+        XCTAssertTrue(console.contains("showTransientStatus(\"Installing Antigravity CLI…\")"))
+        XCTAssertTrue(console.contains("func showTransientStatus(_ msg: String)"),
+                      "the install confirmation calls the console's existing toast helper")
         XCTAssertTrue(console.contains("runnerInstall = runner.install"))
         XCTAssertTrue(console.contains("guard let runnerID, canInstallAntigravity else"))
         XCTAssertTrue(console.contains("runnerAntigravity?.supported == true"))

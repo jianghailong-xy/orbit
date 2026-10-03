@@ -187,7 +187,7 @@ final class ConsoleModel {
         defer { antigravityInstalling = false }
         do {
             runnerInstall = try await api.installAntigravity(runnerID)
-            showToast("Installing Antigravity CLI…")
+            showTransientStatus("Installing Antigravity CLI…")
         } catch { statusMessage = "Couldn't install Antigravity CLI — \(APIClient.failureReason(error))." }
     }
 
