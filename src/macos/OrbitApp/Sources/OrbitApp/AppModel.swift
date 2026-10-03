@@ -1439,7 +1439,14 @@ final class AppModel {
     /// nil selection (opening ~10+ sessions in a row) has nothing left to race.
     func openCreatedAgentSession(_ session: Session) {
         registerCreatedAgentSession(session)
-        nav.replaceTop(with: .console(sessionID: session.id, origin: .list))
+        if composingAgentSession {
+            nav.replaceTop(with: .console(sessionID: session.id, origin: .list))
+        } else {
+            // The draft an iPad draws at its pane's root has no frame to replace
+            // (`AgentConsoleDetail.showsDraft`): its session is selected as a row's is — over a
+            // folder's page it goes on top, so the folder stays the column's page.
+            selectedAgentSessionID = session.id
+        }
     }
 
     /// Seed every Native session store for a freshly created record. The compact compose page keeps

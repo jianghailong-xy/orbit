@@ -28,6 +28,16 @@ function windowsOf(snapshot: PlanUsageSnapshot): PlanUsageWindow[] {
  *  run started on it would soon meet its limit and have to move. The composer's gauge turns amber here. */
 const NEAR_LIMIT_UTILIZATION = 90;
 
+/** The same for a window of five hours or less (SHORT_WINDOW_MINS), which runs out far sooner: every
+ *  session already on the account stays there and spends what is left along with the new one. On
+ *  2026-10-02 eighteen sessions shared one account's 5-hour window and three hit its limit in the same
+ *  minute — one started after the window passed 80% — while Default had used 1% of its own. A
+ *  scheduling margin only: the gauge still turns amber at NEAR_LIMIT_UTILIZATION. A window's length
+ *  decides it, never its slot: Codex reports a Pro login's weekly window as its `primary`, the slot a
+ *  Plus login's 5-hour one takes. */
+const SHORT_WINDOW_NEAR_LIMIT_UTILIZATION = 80;
+const SHORT_WINDOW_MINS = 5 * 60;
+
 /** Every window of one snapshot with its length in minutes: Claude's named windows by their names,
  *  Codex's as they report it (null when one does not). */
 function windowsWithLength(snapshot: PlanUsageSnapshot): Array<{ window: PlanUsageWindow; mins: number | null }> {
@@ -65,10 +75,14 @@ export function quotaExpiresAt(snapshot: PlanUsageSnapshot | null | undefined, n
   return Math.max(...pick.map(({ window }) => Date.parse(window.resetsAt!)));
 }
 
-/** Whether any window of `snapshot` is nearly spent (NEAR_LIMIT_UTILIZATION) and not past its reset. */
+/** Whether any window of `snapshot` is nearly spent — SHORT_WINDOW_NEAR_LIMIT_UTILIZATION for one of
+ *  five hours or less, NEAR_LIMIT_UTILIZATION for a longer one or one of unknown length — and not past
+ *  its reset. */
 export function quotaNearLimit(snapshot: PlanUsageSnapshot | null | undefined, now: Date): boolean {
-  return (snapshot ? windowsOf(snapshot) : []).some(
-    (w) => w.utilization >= NEAR_LIMIT_UTILIZATION && !(Date.parse(w.resetsAt ?? '') <= now.getTime()),
+  return (snapshot ? windowsWithLength(snapshot) : []).some(
+    ({ window: w, mins }) =>
+      w.utilization >= (mins !== null && mins <= SHORT_WINDOW_MINS ? SHORT_WINDOW_NEAR_LIMIT_UTILIZATION : NEAR_LIMIT_UTILIZATION)
+      && !(Date.parse(w.resetsAt ?? '') <= now.getTime()),
   );
 }
 
@@ -279,8 +293,8 @@ export type AccountEngine = 'codex' | 'claude';
  * - Only an account the CLI does not say is signed out is a candidate.
  * - One with a spent window — at 100% and not past its reset, or with no reset time to go by — is
  *   passed over while another can run.
- * - One with a window nearly spent (90%) comes after the rest: a run started there would soon meet
- *   its limit and have to move.
+ * - One with a window nearly spent (80% of a 5-hour one, 90% of a longer one — quotaNearLimit) comes
+ *   after the rest: a run started there would soon meet its limit and have to move.
  * - Then soonest-expiring first: the reset of each account's longest window (quotaExpiresAt).
  *   Different plans hold very different amounts, so how much is left is not compared across accounts
  *   — only when it expires. An account with nothing reported has nothing known to expire, and comes

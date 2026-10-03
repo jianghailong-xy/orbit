@@ -1,7 +1,7 @@
 import { Popover } from 'antd';
 import { useRef, useState, type KeyboardEvent } from 'react';
 import type { PlanUsageSnapshot } from '@orbit/shared';
-import { planUsageRows } from '../lib/planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
 import {
   CodexResetConfirm,
   CodexResetCreditCard,
@@ -34,7 +34,7 @@ export function PlanUsageIndicator({
   reset?: CodexResetContext;
   account?: PlanUsageAccount;
 }) {
-  const rows = planUsageRows(usage);
+  const rows = currentPlanUsageRows(usage);
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -42,8 +42,9 @@ export function PlanUsageIndicator({
   // dialog. A hover never pulls focus out of what the user is typing in.
   const focusOnOpen = useRef(false);
   const credit = useCodexResetCredit(reset, open, () => panel.current?.focus());
-  if (rows.length === 0) return null;
-  const primary = rows[0];
+  // The pill's one number is the window that stops this login (bindingPlanUsageRow), not the first.
+  const primary = bindingPlanUsageRow(rows);
+  if (!primary) return null;
 
   const close = () => {
     setOpen(false);

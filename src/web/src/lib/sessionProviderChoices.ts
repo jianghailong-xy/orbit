@@ -2,7 +2,7 @@ import { AgentProvider, PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shar
 import type { PlanUsage, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
 import { accountPlanUsage } from './engineAccounts';
 import { encodeId } from './idCodec';
-import { planUsageRows } from './planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows } from './planUsage';
 import {
   defaultModelForProvider,
   modelOptionsForProvider,
@@ -214,15 +214,10 @@ export function providerChoices(
       (slug === AgentProvider.CODEX || slug === AgentProvider.CLAUDE) && !blocker && (health?.accounts?.length ?? 0) >= 2
         ? health!.accounts!.map((account): AccountChoice => {
             const snapshot = accountPlanUsage(planUsage, slug, account.id);
-            // The window closest to its limit: a Claude login's 5-hour window can read 0% while its
-            // weekly one is spent, and the first window alone would say it has room.
+            // The window that stops it: a Claude login's 5-hour window can read 0% while its weekly
+            // one is spent, and the first window alone would say it has room.
             const quota =
-              account.auth === 'yes' && snapshot
-                ? planUsageRows(snapshot).reduce<ReturnType<typeof planUsageRows>[number] | undefined>(
-                    (tightest, row) => (!tightest || row.percent > tightest.percent ? row : tightest),
-                    undefined,
-                  )
-                : undefined;
+              account.auth === 'yes' && snapshot ? bindingPlanUsageRow(currentPlanUsageRows(snapshot)) : undefined;
             return {
               id: account.id,
               label: account.id === 'default' ? 'Default' : account.name || `Account ${account.id}`,

@@ -92,6 +92,7 @@ struct ComposerView: View {
     @Bindable var console: ConsoleModel
     /// Focus the field as soon as it appears — used by the draft "new session" composer, where the
     /// user came here to type. A live console leaves it false so opening a session doesn't grab focus.
+    /// Turning it on later focuses too: an iPad's draft appears unasked with it off, and ✎ turns it on.
     var autoFocus = false
     @State private var slashIndex = 0
     @State private var slashDismissed: String?
@@ -327,6 +328,9 @@ struct ComposerView: View {
                 return nil
             }
             #endif
+        }
+        .onChange(of: autoFocus) { _, now in
+            if now { requestFocus() }
         }
         // The app-level session list refreshes from control-plane activity and carries capability
         // changes (including runner heartbeat recovery). Feed that newer snapshot into the open
@@ -1390,7 +1394,7 @@ private struct PlanUsageIndicator: View {
     }
 
     var body: some View {
-        if let pct = usage.primaryPercent {
+        if let pct = usage.bindingRow()?.percent {
             Button { showDetail.toggle() } label: {
                 HStack(spacing: 5) {
                     UsageBar(percent: pct).frame(width: gaugeShowsNumber ? 26 : 20, height: 4)
@@ -1637,7 +1641,7 @@ private struct PlanUsageDetailPresentation: ViewModifier {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Plan usage").font(.headline)
                 if let account { PlanUsageAccountRow(account: account, compact: true) }
-                PlanUsageDetailRows(rows: usage.rows, compact: true)
+                PlanUsageDetailRows(rows: usage.currentRows(), compact: true)
             }
             .padding(14)
             .frame(width: 260)
@@ -1652,7 +1656,7 @@ private struct PlanUsageDetailPresentation: ViewModifier {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Plan usage").font(.headline)
                     if let account { PlanUsageAccountRow(account: account) }
-                    PlanUsageDetailRows(rows: usage.rows)
+                    PlanUsageDetailRows(rows: usage.currentRows())
                     if let resetConsole, resetConsole.codexResetCardVisible {
                         CodexResetCreditCard(console: resetConsole)
                     }
@@ -1672,7 +1676,7 @@ private struct PlanUsageDetailPresentation: ViewModifier {
                     if let account {
                         PlanUsageAccountRow(account: account).padding(.bottom, 18)
                     }
-                    PlanUsageDetailRows(rows: usage.rows)
+                    PlanUsageDetailRows(rows: usage.currentRows())
                     if let resetConsole, resetConsole.codexResetCardVisible {
                         CodexResetCreditCard(console: resetConsole)
                             .padding(.top, 18)
