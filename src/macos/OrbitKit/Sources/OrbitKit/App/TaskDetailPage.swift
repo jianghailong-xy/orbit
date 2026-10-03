@@ -725,6 +725,14 @@ public enum TaskDetailLogic {
             }
     }
 
+    /// A tier's name as a menu item: every space but the one after a `·` no-break, so where an
+    /// iOS menu (about 190 pt of text) has to wrap it, it wraps after a dot — and, since it will not
+    /// leave one word alone on the last line, not inside the model's name either.
+    public static func menuTitle(_ label: String) -> String {
+        label.replacingOccurrences(of: " ", with: "\u{00A0}")
+            .replacingOccurrences(of: "\u{00A0}·\u{00A0}", with: "\u{00A0}· ")
+    }
+
     /// The grey line under the picker: the coordinator's reason, while there is a tier it argues for.
     public static func modelHintNote(_ task: TaskItem) -> String? {
         guard let hint = task.modelHint, !hint.isEmpty,

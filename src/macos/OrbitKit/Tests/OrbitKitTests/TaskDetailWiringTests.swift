@@ -157,7 +157,7 @@ final class TaskDetailWiringTests: XCTestCase {
                       "each tier as the server resolved it — no tier table on this side")
         // A Toggle per tier: the only menu item shape whose second Text is drawn as its subtitle.
         XCTAssertTrue(picker.contains("Toggle(isOn: Binding("))
-        XCTAssertTrue(picker.contains("Text(pick.label.replacingOccurrences(of: \" · \", with: \"\\u{00A0}· \"))"))
+        XCTAssertTrue(picker.contains("Text(TaskDetailLogic.menuTitle(pick.label))"))
         XCTAssertTrue(picker.contains("Text(pick.detail)"))
         XCTAssertTrue(picker.contains("await tasks.setModelHint(task.id, pick.value)"))
         XCTAssertTrue(picker.contains("guard on, pick.value != task.modelHint else { return }"),

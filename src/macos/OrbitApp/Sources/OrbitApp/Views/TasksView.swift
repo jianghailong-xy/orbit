@@ -1760,8 +1760,9 @@ private struct TaskDetailContent: View {
                             Task { await tasks.setModelHint(task.id, pick.value) }
                         }
                     )) {
-                        // Where a tier's name wraps, the dot stays at the end of the line it closes.
-                        Text(pick.label.replacingOccurrences(of: " · ", with: "\u{00A0}· "))
+                        // A tier's name breaks only after a dot, so a wrapped one never splits its
+                        // model's name ("M ·" over "Sonnet 5.5 · medium").
+                        Text(TaskDetailLogic.menuTitle(pick.label))
                         Text(pick.detail)
                     }
                 }
