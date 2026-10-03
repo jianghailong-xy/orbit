@@ -1746,37 +1746,44 @@ private struct TaskDetailContent: View {
     /// a model picked below wins over both.
     private func suggestedPicker(_ task: TaskItem) -> some View {
         let picks = TaskDetailLogic.modelHintPicks(task.modelHintOptions)
-        return Picker(TaskDetailCopy.suggestedLabel, selection: Binding(
-            get: { task.modelHint },
-            set: { level in
-                guard level != task.modelHint else { return }
-                Task { await tasks.setModelHint(task.id, level) }
+        let current = picks.first { $0.value == task.modelHint }?.label ?? task.modelHint ?? TaskDetailCopy.noSuggestion
+        return LabeledContent(TaskDetailCopy.suggestedLabel) {
+            Menu {
+                // A Toggle rather than a Picker row: a menu item's second Text is its subtitle only in
+                // this shape (as `lineRow` in ApprovalCards draws it), so each tier says the work it is
+                // for, and the tick is drawn for the one that is on.
+                ForEach(picks) { pick in
+                    Toggle(isOn: Binding(
+                        get: { pick.value == task.modelHint },
+                        set: { on in
+                            guard on, pick.value != task.modelHint else { return }
+                            Task { await tasks.setModelHint(task.id, pick.value) }
+                        }
+                    )) {
+                        Text(pick.label)
+                        Text(pick.detail)
+                    }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text(current)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    // macOS draws its own disclosure mark beside a borderless menu's title.
+                    #if os(iOS)
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.orbitLabel.weight(.semibold))
+                        .foregroundStyle(Color.secondary.opacity(0.7))
+                    #endif
+                }
+                .foregroundStyle(Color.secondary)
             }
-        )) {
-            ForEach(picks) { pick in
-                modelHintOption(pick).tag(pick.value)
-            }
-            // A tier this build has no row for still reads as itself.
-            if let hint = task.modelHint, !picks.contains(where: { $0.value == hint }) {
-                Text(hint).tag(Optional(hint))
-            }
+            .borderlessMenuStyle()
+            #if os(macOS)
+            .fixedSize()
+            #endif
         }
-        .pickerStyle(.menu)
         .disabled(tasks.isMutating(task.id))
-    }
-
-    /// A tier's row in the picker's menu: its name, and on iOS the work it is for as the row's
-    /// subtitle — the second Text, as the composer's menus draw theirs.
-    @ViewBuilder
-    private func modelHintOption(_ pick: TaskDetailLogic.ModelHintPick) -> some View {
-        #if os(iOS)
-        VStack(alignment: .leading) {
-            Text(pick.label)
-            Text(pick.detail)
-        }
-        #else
-        Text(pick.label)
-        #endif
     }
 
     /// The agent this task runs on, resolved from the loaded agent list — its provider is what an
@@ -2183,10 +2190,15 @@ private struct TaskDetailContent: View {
                         .buttonStyle(.borderless)
                         .accessibilityLabel(TaskDetailCopy.why(pick))
                     }
-                    Image(systemName: "chevron.right")
-                        .font(.orbitLabel.weight(.semibold))
-                        .foregroundStyle(Color.secondary.opacity(0.7))
-                        .accessibilityHidden(true)
+                    // The way in too, beside ⓘ rather than under it: the row's own press, again.
+                    Button { model.route(to: .session(session.id)) } label: {
+                        Image(systemName: "chevron.right")
+                            .font(.orbitLabel.weight(.semibold))
+                            .foregroundStyle(Color.secondary.opacity(0.7))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityHidden(true)
                 }
             }
         } header: {
@@ -2259,11 +2271,14 @@ private struct TaskDetailContent: View {
             .fixedSize()
     }
 
-    /// A run's model by the name the catalogues give it — the Suggested picker's own tiers first.
+    /// A run's model by the name the catalogues give it — the Suggested picker's own tiers first, then
+    /// the assignee's runner, then any runner's (a run outlives its assignee).
     private func runModelName(_ id: String, _ task: TaskItem) -> String {
-        TaskDetailLogic.modelLabel(id, options: task.modelHintOptions,
-                                   catalog: model.agents?.modelCatalog(for: assigneeAgent(task)?.runnerId),
-                                   configured: model.agents?.configuredProviders)
+        let own = model.agents?.modelCatalog(for: assigneeAgent(task)?.runnerId)
+        let every = Array((model.agents?.runnerModelCatalog ?? [:]).values)
+        return TaskDetailLogic.modelLabel(id, options: task.modelHintOptions,
+                                          catalogs: (own.map { [$0] } ?? []) + every,
+                                          configured: model.agents?.configuredProviders)
     }
 
     /// How long a run has been going while it goes; when it started, once it has stopped.

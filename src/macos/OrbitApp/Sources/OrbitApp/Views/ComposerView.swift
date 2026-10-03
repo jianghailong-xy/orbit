@@ -90,6 +90,8 @@ extension CGFloat {
 struct ComposerView: View {
     @Environment(AppModel.self) private var app
     @Bindable var console: ConsoleModel
+    /// On the phone's console a page this conversation opens is pushed over it (`OpensPagesOverConsoleKey`).
+    @Environment(\.opensPagesOverConsole) private var opensPagesOverConsole
     /// Focus the field as soon as it appears — used by the draft "new session" composer, where the
     /// user came here to type. A live console leaves it false so opening a session doesn't grab focus.
     /// Turning it on later focuses too: an iPad's draft appears unasked with it off, and ✎ turns it on.
@@ -568,10 +570,20 @@ struct ComposerView: View {
             if let route = smartRoute {
                 Section {
                     Text("✦ " + TaskDetailCopy.pickedBySmartSelection(tier: route.level ?? ""))
+                    #if os(macOS)
+                    // A Mac menu draws each item on one line however long: the sentences come as the
+                    // lines of a paragraph instead.
+                    let lines = (route.reasons.first.map { ComposerLogic.menuLines($0) } ?? [])
+                        + ComposerLogic.menuLines(TaskDetailCopy.modelChangeAppliesToThisRun)
+                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                    }
+                    #else
                     if let reason = route.reasons.first {
                         Text(reason)
                     }
                     Text(TaskDetailCopy.modelChangeAppliesToThisRun)
+                    #endif
                 }
                 Divider()
             }
@@ -695,13 +707,29 @@ struct ComposerView: View {
             }
             if smartRoute != nil, let taskID = console.taskID {
                 Divider()
-                Button(TaskDetailCopy.openTask) { app.route(to: .task(taskID)) }
+                Button(TaskDetailCopy.openTask) {
+                    app.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole)
+                }
             }
         } label: {
             modelChipLabel
         }
         .menuOrder(.fixed)
         .footerMenuChrome()
+        #if os(macOS)
+        // A borderless menu draws its label as a title and drops a ground under it: on the Mac the
+        // light blue of a routed model goes on the control itself.
+        .padding(.horizontal, smartRoute != nil ? 6 : 0)
+        .padding(.vertical, smartRoute != nil ? 2 : 0)
+        .background(smartRoute != nil ? Color.accentColor.opacity(0.12) : Color.clear, in: Capsule())
+        #endif
+        .accessibilityLabel(chipAccessibilityLabel)
+    }
+
+    /// What the chip is called aloud — web parity, the chip's `aria-label`.
+    private var chipAccessibilityLabel: String {
+        let base = "Model \(modelDisplayName), effort \(console.effort.label)"
+        return smartRoute == nil ? base : base + TaskDetailCopy.chipPickedBySmartSelection
     }
 
     /// The decision behind this task run, while the chip still shows the model it picked

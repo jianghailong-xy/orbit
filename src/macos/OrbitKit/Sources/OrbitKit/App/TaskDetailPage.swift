@@ -213,6 +213,8 @@ public enum TaskDetailCopy {
 
     // The task run's composer (`WorkspaceView.tsx`): the model menu of a run still on the pick.
     public static func pickedBySmartSelection(tier: String) -> String { "Picked by smart selection · tier \(tier)" }
+    /// What the chip's accessibility label ends on while it carries the ✦.
+    public static let chipPickedBySmartSelection = ", picked by smart selection"
     public static let modelChangeAppliesToThisRun =
         "Changing the model here applies to this run only. To fix the model for every run, set it on the task."
     public static let openTask = "Open task ›"
@@ -742,12 +744,19 @@ public enum TaskDetailLogic {
         return route
     }
 
-    /// A model id by the name the catalogues give it: the picker's own tiers first, then the
-    /// runner's catalogue, else the id itself.
-    public static func modelLabel(_ model: String, options: [ModelHintOption]?, catalog: RunnerModelCatalog?,
+    /// A model id by the name the catalogues give it (`modelLabel` / `catalogModelLabel`): the
+    /// picker's own tiers first, then the runners' catalogues in the order given, then a configured
+    /// provider's own list, else the id itself.
+    public static func modelLabel(_ model: String, options: [ModelHintOption]?, catalogs: [RunnerModelCatalog],
                                   configured: [ConfiguredProvider]?) -> String {
         if let label = options?.first(where: { $0.model == model })?.label, !label.isEmpty { return label }
-        return AgentDefaults.friendlyName(model, catalog: catalog, configured: configured)
+        for catalog in catalogs {
+            for provider in ["claude", "codex", "kimi", "opencode", "antigravity"] {
+                let rows: [ModelOption] = catalog.models(for: provider) ?? []
+                if let name = rows.first(where: { $0.id == model })?.name { return name }
+            }
+        }
+        return AgentDefaults.friendlyName(model, catalog: nil, configured: configured)
     }
 
     /// What a routed run was (or would have been) put on: `Opus 5.5 · high`.
