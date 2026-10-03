@@ -1,0 +1,2 @@
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProviderPoolViews.swift:538:69: error: extra argument 'mine' in call
+** BUILD FAILED **
