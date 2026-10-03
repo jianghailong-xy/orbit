@@ -86,6 +86,9 @@ test('UI list and detail payloads include the same derived capabilities', async 
         titleManagedByProject: true,
         titleBeforeProjectManagement: 'Dormant session',
       }),
+      // Which of the rows are runs of a task, for the evidence cards of dispatched tasks a run can
+      // hold (`tasks/pending-evidence-judgments.ts#countDispatchedEvidenceJudgments`): none.
+      findMany: async () => [],
     },
     // The list's `pendingApprovals` is blocked tool calls plus the owner decisions each row is the
     // surface for (`projects/owner-decision-signal.ts`). This row coordinates nothing and no

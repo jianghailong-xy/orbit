@@ -306,7 +306,8 @@ async function coordinatorHolds(
  * whether the project's coordinator holds it (`coordinatorHolds`) — the population both the queue
  * and the badge's count (`countPendingEvidenceJudgments`) place, read by one query so the two
  * cannot come to disagree about it. `projectIds` narrows it to those projects, and `dispatched` to
- * the tasks a session filed in no project.
+ * the tasks a session filed in no project — further, when it names `taskIds`, to tasks the given
+ * conversations could draw a card for (`countDispatchedEvidenceJudgments`).
  *
  * A dispatched row — in no project, with a dispatching session — also carries whether that session
  * holds it (`reviewerHolds`), where the owner's card for it is drawn (`ownerEvidenceCard`), and the
@@ -316,13 +317,25 @@ async function unansweredLatestEvidence(
   tx: PrismaTypes.TransactionClient,
   ownerId: string,
   readAt: Date,
-  scope: { projectIds?: readonly string[]; dispatched?: true } = {},
+  scope: {
+    projectIds?: readonly string[];
+    dispatched?: { creatorSessionIds?: readonly string[]; taskIds?: readonly string[] };
+  } = {},
 ) {
+  const narrowed = scope.dispatched?.creatorSessionIds !== undefined;
   const tasks = await tx.task.findMany({
     where: {
       ownerId,
       ...(scope.projectIds ? { projectId: { in: [...scope.projectIds] } } : {}),
       ...(scope.dispatched ? { projectId: null, creatorSessionId: { not: null } } : {}),
+      ...(narrowed
+        ? {
+          OR: [
+            { creatorSessionId: { in: [...scope.dispatched!.creatorSessionIds!] } },
+            { id: { in: [...(scope.dispatched!.taskIds ?? [])] } },
+          ],
+        }
+        : {}),
       completionCriterion: 'EVIDENCE_JUDGMENT',
       status: { in: [...UNSETTLED] },
       completionEvidence: { some: {} },
@@ -594,14 +607,30 @@ export async function countPendingEvidenceJudgments(
  * that session has stopped holding — by that conversation (`ownerEvidenceCard`). The "Needs you"
  * badge's source for them (`owner-decision-signal.ts`), asked in the queue's own order: a live
  * standard, not held, and a decision the door would take in the dispatching session's name.
+ *
+ * `sessionIds` narrows the read to the cards those conversations could hold — tasks they filed, and
+ * the tasks they are runs of (a card moves to the run when its dispatching session is in Trash) —
+ * so a session row's summary, built on every publish, reads that and not the whole account.
  */
 export async function countDispatchedEvidenceJudgments(
   tx: PrismaTypes.TransactionClient,
   ownerId: string,
   readAt: Date = new Date(),
+  sessionIds?: readonly string[],
 ): Promise<Map<string, number>> {
   const counts = new Map<string, number>();
-  const unanswered = await unansweredLatestEvidence(tx, ownerId, readAt, { dispatched: true });
+  if (sessionIds && sessionIds.length === 0) return counts;
+  const runs = sessionIds
+    ? await tx.session.findMany({
+      where: { ownerId, id: { in: [...sessionIds] }, taskId: { not: null } },
+      select: { taskId: true },
+    })
+    : [];
+  const unanswered = await unansweredLatestEvidence(tx, ownerId, readAt, {
+    dispatched: sessionIds
+      ? { creatorSessionIds: sessionIds, taskIds: runs.flatMap((run) => (run.taskId ? [run.taskId] : [])) }
+      : {},
+  });
   for (const { task, latest, dispatching, heldByReviewer, ownerCard } of unanswered) {
     if (!dispatching || !ownerCard || heldByReviewer) continue;
     if ((await criterionStandingRefusal(tx, task, latest.evidence)) !== null) continue;

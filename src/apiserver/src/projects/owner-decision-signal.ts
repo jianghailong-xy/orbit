@@ -269,7 +269,7 @@ async function readDispatchedEvidenceSignals(
   ownerId: string,
   sessionIds: readonly string[] | undefined,
 ): Promise<OwnerDecisionSignal[]> {
-  const counts = await countDispatchedEvidenceJudgments(tx, ownerId);
+  const counts = await countDispatchedEvidenceJudgments(tx, ownerId, new Date(), sessionIds);
   const wanted = [...counts.keys()].filter((id) => !sessionIds || sessionIds.includes(id));
   if (wanted.length === 0) return [];
   const open = await tx.session.findMany({
