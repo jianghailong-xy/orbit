@@ -911,11 +911,6 @@ function AddEngineAccount({
           spellCheck={false}
         />
       </label>
-      <div className="re-panel-hint re-add-hint">
-        Only a label for this page. Orbit gives the account its own{' '}
-        <code className="re-cmd">{engine === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME'}</code> on
-        this machine; your terminal keeps using Default.
-      </div>
       <RunnerSignIn runnerId={runnerId} engine={engine} accountName={name} autoStart onCancel={onClose} />
     </>
   );
