@@ -86,6 +86,8 @@ function harness(options: HarnessOptions = {}) {
     // (`sessions/abandoned-approvals.ts`). These fixtures raise no approvals, so it collects none.
     approval: { updateMany: async () => ({ count: 0 }), findMany: async () => [] },
     sessionRequest: noSessionRequests(),
+    // No confirmation request was put to this session for review (owner-confirmation-review.ts T5).
+    taskOwnerConfirmationReview: { findMany: async () => [] },
     conversationTurn: {
       findMany: async () => [],
       updateMany: async () => {

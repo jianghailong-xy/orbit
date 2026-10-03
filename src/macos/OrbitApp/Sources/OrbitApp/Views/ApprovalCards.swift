@@ -998,7 +998,12 @@ private struct OwnerConfirmationCardView: View {
             if let view = console.ownerConfirmation {
                 lead(view)
                 OwnerConfirmationBoxes(acceptanceCriteria: view.acceptanceCriteria,
-                                       report: standing.waiting?.report)
+                                       report: standing.waiting?.report, foldsCriteria: true)
+                // Right above the buttons: the card is taller than a phone's screen, and this is
+                // what is in view at the press. Only while this card's report is the one waiting —
+                // the read describes the waiting run, and a card for another report must not
+                // borrow its consequences.
+                ifYouConfirm(view, standing)
             } else {
                 // The address and nothing else: a read that has not come back is not a description
                 // of anything, and this card kept no copy of an earlier one.
@@ -1061,6 +1066,17 @@ private struct OwnerConfirmationCardView: View {
         }
     }
 
+    /// What confirming sets off, or nothing — when the read says nothing, or this card's report is
+    /// no longer the one waiting.
+    @ViewBuilder
+    private func ifYouConfirm(_ view: OwnerConfirmationView,
+                              _ standing: OwnerConfirmationStanding) -> some View {
+        let rows = standing.waiting == nil ? [] : OwnerConfirmations.ifConfirmedRows(view.ifConfirmed)
+        if !rows.isEmpty {
+            OwnerConfirmationIfYouConfirm(rows: rows)
+        }
+    }
+
     // MARK: actions
     //
     // The one rule both clients are under: an action that cannot succeed is disabled rather than
@@ -1113,8 +1129,12 @@ private struct OwnerConfirmationCardView: View {
 private struct OwnerConfirmationBoxes: View {
     let acceptanceCriteria: String?
     let report: OwnerConfirmationReport?
+    /// Fold the criteria to one row that opens in place — the card's, whose buttons need the
+    /// height. The receipt's own fold already stands in front of them.
+    var foldsCriteria = false
 
     @State private var reportOpen = false
+    @State private var criteriaOpen = false
 
     private var criteria: String { OwnerConfirmations.plainText(acceptanceCriteria) }
     private var said: String { OwnerConfirmations.plainText(report?.text) }
@@ -1124,8 +1144,12 @@ private struct OwnerConfirmationBoxes: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: ApprovalMetrics.spacing) {
-            box(OwnerConfirmations.whatSettlesIt) {
-                quietOrText(criteria, OwnerConfirmations.noCriteria)
+            if foldsCriteria, let items = OwnerConfirmations.criteriaItemsLabel(acceptanceCriteria) {
+                criteriaFold(items)
+            } else {
+                box(OwnerConfirmations.whatSettlesIt) {
+                    quietOrText(criteria, OwnerConfirmations.noCriteria)
+                }
             }
             // The heading carries the moment the run said it, when it said anything — a report
             // whose time is missing is still a report.
@@ -1160,6 +1184,41 @@ private struct OwnerConfirmationBoxes: View {
                     in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
     }
 
+    /// What counts as done, as one row at rest — the box's heading, how many items are behind it, a
+    /// caret — that opens in place, in the same box. The whole row is the press, a full row tall on
+    /// a phone.
+    private func criteriaFold(_ items: String) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                PlatformHaptics.tap()
+                criteriaOpen.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Text(OwnerConfirmations.whatSettlesIt)
+                        .font(.orbitMonoFine).foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    Text(items).font(.orbitLabel).foregroundStyle(.secondary)
+                    Image(systemName: criteriaOpen ? "chevron.down" : "chevron.right")
+                        .font(.orbitMeta).foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity, minHeight: ApprovalMetrics.rowMinHeight,
+                       alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(.isButton)
+            if criteriaOpen {
+                quietOrText(criteria, OwnerConfirmations.noCriteria)
+                    .padding(.bottom, 8)
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.05),
+                    in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+    }
+
     /// A body that may be blank: the card says why rather than rendering an empty box.
     @ViewBuilder
     private func quietOrText(_ text: String, _ whenEmpty: String) -> some View {
@@ -1170,6 +1229,70 @@ private struct OwnerConfirmationBoxes: View {
             Text(text).font(.orbitProse)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+}
+
+/// What confirming sets off, right above Confirm done — web's `OwnerConfirmationIfYouConfirm`. Orbit's
+/// own facts rather than anybody's words, so it is drawn unlike the two boxes above it: white, a
+/// symbol per row, and no author. Every line is a row `OwnerConfirmations.ifConfirmedRows` made.
+private struct OwnerConfirmationIfYouConfirm: View {
+    let rows: [OwnerConfirmations.IfConfirmedRow]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(OwnerConfirmations.ifYouConfirm)
+                .font(.orbitMonoFine).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Image(systemName: Self.symbol(row.kind))
+                        .font(.orbitLabel)
+                        .foregroundStyle(row.kind == .start ? Color.accentColor : Color.secondary)
+                        .frame(width: 18)
+                    VStack(alignment: .leading, spacing: 1) {
+                        // Wraps rather than truncates: in the transcript's list a row's first line
+                        // was cut to one line (the probe's "Goes onto the integration line; mergin…").
+                        lead(row)
+                            .font(.orbitSubtext.weight(.semibold))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if let detail = row.detail {
+                            Text(detail)
+                                .font(.orbitLabel).foregroundStyle(.secondary)
+                                .lineLimit(1).truncationMode(.tail)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Self.fill, in: RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: ApprovalMetrics.rowRadius)
+                .strokeBorder(Color.primary.opacity(0.12))
+        }
+    }
+
+    /// The first line, with the branch's added lines after it in the diff's green.
+    private func lead(_ row: OwnerConfirmations.IfConfirmedRow) -> Text {
+        guard let added = row.added else { return Text(row.lead) }
+        return Text(row.lead) + Text(" · ") + Text(added).foregroundStyle(Color.green)
+    }
+
+    private static func symbol(_ kind: OwnerConfirmations.IfConfirmedRow.Kind) -> String {
+        switch kind {
+        case .start: return "play.fill"
+        case .branch: return "arrow.triangle.branch"
+        case .landing: return "arrow.triangle.merge"
+        case .endsSession: return "power"
+        }
+    }
+
+    /// White on the blue card in light mode, and a raised grey in dark, where white would glare.
+    private static var fill: Color {
+        Color(light: .white, dark: Color(red: 0.17, green: 0.17, blue: 0.18))
     }
 }
 

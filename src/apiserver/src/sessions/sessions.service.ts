@@ -33,6 +33,13 @@ import {
   readTurnRequestIds,
   settleUnrunSessionRequests,
 } from './session-request';
+import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
+import {
+  isConfirmationReviewContentTurn,
+  queuedConfirmationReviewContent,
+  readConfirmationReturnCard,
+  readConfirmationReviewRequestCard,
+} from '../tasks/owner-confirmation-review-turn';
 
 import { createHash, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
@@ -52,6 +59,8 @@ import {
   type RunnerModelCatalog,
   FilePatch,
   MAX_PROMPT_CHARS,
+  type ConfirmationReturnCard,
+  type ConfirmationReviewRequestCard,
   type OpenItemDeliveryCard,
   type ProjectStartedCard,
   type SessionMessageCard,
@@ -233,10 +242,14 @@ import {
 
 /**
  * A turn the control plane queued with no words of anybody's, whose content is written in at delivery:
- * a background job's or a wakeup's wake, or the outcomes of the session's own requests handed back.
+ * a background job's or a wakeup's wake, the outcomes of the session's own requests handed back, or a
+ * confirmation request's review handed to its reviewer and a reviewer's return handed to the run
+ * (tasks/owner-confirmation-review-turn.ts).
  */
 function isPlatformContentTurn(clientTurnId: string | null | undefined): boolean {
-  return isBackgroundWakeTurn(clientTurnId) || isSessionReplyTurn(clientTurnId);
+  return isBackgroundWakeTurn(clientTurnId)
+    || isSessionReplyTurn(clientTurnId)
+    || isConfirmationReviewContentTurn(clientTurnId);
 }
 
 
@@ -287,6 +300,11 @@ interface ListedQueuedTurn {
    *  client taking it off the queue unrun hands none of it back to the owner's composer: the words
    *  are the sending session's. Absent on every turn nobody's session sent. */
   sessionMessage?: SessionMessageCard;
+  /** A confirmation request handed to this session for review, and a reviewer's return handed to a
+   *  run (docs/owner-confirmation-review-contract.md D7, B3): the cards the runner's echo will carry,
+   *  for the reason `openItemDelivery` is here. Absent on every other turn. */
+  confirmationReviewRequest?: ConfirmationReviewRequestCard;
+  confirmationReturn?: ConfirmationReturnCard;
   /** The control plane wrote this turn itself (`isOrbitAuthoredTurn`): nobody typed its words, so a
    *  client taking it off the queue unrun hands none of them back to the composer. Absent on every
    *  turn somebody sent. */
@@ -3112,6 +3130,11 @@ export class SessionsService {
     // Who is waiting on whose reply (session-request.ts, contract §6): on each row, the sessions it
     // asked and still waits on, and the sessions waiting on it.
     const requests = await readOpenRequestPeers(this.prisma, ownerId, sessions.map((s) => s.id));
+    // The confirmation still with its reviewer, which the row says instead of counting it
+    // (docs/owner-confirmation-review-contract.md §5 N3).
+    const underReview = await readConfirmationsUnderReview(this.prisma, ownerId, {
+      sessionIds: sessions.map((s) => s.id),
+    });
     return sessions.map((s) => {
       const approvals = byId.get(s.id) ?? 0;
       const waiting = decisions.get(s.id);
@@ -3120,6 +3143,9 @@ export class SessionsService {
         ...s,
         pendingApprovals: approvals + (waiting?.count ?? 0),
         waitingKind: sessionWaitingKind(approvals, waiting),
+        // Always sent, as null when there is none: a client folding a summary into a row it holds
+        // reads null as "clear it".
+        confirmationUnderReview: underReview.get(s.id) ?? null,
         // Which of the four owner items are waiting here, for the banner that has to name one and
         // open its card rather than only say that a number is not zero (§7.6 V13).
         ownerItems: ownerItemsForRow(waiting),
@@ -5407,10 +5433,12 @@ export class SessionsService {
       const deliveryCards = await this.openItemDeliveryCards(queued.map(({ turn }) => turn));
       const startedCards = await this.projectStartedCards(ownerId, queued.map(({ turn }) => turn));
       const messageCards = await this.sessionMessageCards(ownerId, id, queued.map(({ turn }) => turn));
+      const reviewCards = await this.confirmationReviewCards(queued.map(({ turn }) => turn));
       return queued.map(({ turn, content }) => {
         const card = deliveryCards.get(turn.id);
         const started = startedCards.get(turn.id);
         const message = messageCards.get(turn.id);
+        const review = reviewCards.get(turn.id);
         return {
           turnId: turn.id,
           kind: turn.kind,
@@ -5422,6 +5450,7 @@ export class SessionsService {
           ...(card ? { openItemDelivery: card } : {}),
           ...(started ? { projectStarted: started } : {}),
           ...(message ? { sessionMessage: message } : {}),
+          ...review,
           ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
         };
       });
@@ -5475,11 +5504,13 @@ export class SessionsService {
     const deliveryCards = await this.openItemDeliveryCards(activeRows.map(({ turn }) => turn));
     const startedCards = await this.projectStartedCards(ownerId, activeRows.map(({ turn }) => turn));
     const messageCards = await this.sessionMessageCards(ownerId, id, activeRows.map(({ turn }) => turn));
+    const reviewCards = await this.confirmationReviewCards(activeRows.map(({ turn }) => turn));
     const activeTurns: ListedActiveTurn[] = activeRows
       .map(({ turn, placement, content }) => {
         const card = deliveryCards.get(turn.id);
         const started = startedCards.get(turn.id);
         const message = messageCards.get(turn.id);
+        const review = reviewCards.get(turn.id);
         return {
           turnId: turn.id,
           kind: turn.kind,
@@ -5498,6 +5529,7 @@ export class SessionsService {
           ...(card ? { openItemDelivery: card } : {}),
           ...(started ? { projectStarted: started } : {}),
           ...(message ? { sessionMessage: message } : {}),
+          ...review,
           ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
           content,
           createdAt: turn.createdAt.toISOString(),
@@ -5536,6 +5568,23 @@ export class SessionsService {
       if (!itemId) continue;
       const card = await readOpenItemDeliveryCard(this.prisma, itemId);
       if (card) cards.set(turn.id, card);
+    }
+    return cards;
+  }
+
+  /** The confirmation-review card each of these turns is drawn as, by turn id — a review handed to
+   *  its reviewer or a return handed to the run, read by the same functions the ingest path records
+   *  the echo's with, and for those turns only. */
+  private async confirmationReviewCards(
+    turns: ReadonlyArray<{ id: string; clientTurnId: string | null }>,
+  ): Promise<Map<string, Pick<ListedQueuedTurn, 'confirmationReviewRequest' | 'confirmationReturn'>>> {
+    const cards = new Map<string, Pick<ListedQueuedTurn, 'confirmationReviewRequest' | 'confirmationReturn'>>();
+    for (const turn of turns) {
+      if (!isConfirmationReviewContentTurn(turn.clientTurnId)) continue;
+      const requested = await readConfirmationReviewRequestCard(this.prisma, turn.clientTurnId);
+      if (requested) cards.set(turn.id, { confirmationReviewRequest: requested });
+      const returned = await readConfirmationReturnCard(this.prisma, turn.clientTurnId);
+      if (returned) cards.set(turn.id, { confirmationReturn: returned });
     }
     return cards;
   }
@@ -5607,6 +5656,11 @@ export class SessionsService {
       if (isSessionReplyTurn(turn.clientTurnId)) {
         const replies = await queuedRepliesContent(this.prisma, sessionId, turn.clientTurnId);
         if (replies) wakeContent.set(turn.id, replies);
+        continue;
+      }
+      if (isConfirmationReviewContentTurn(turn.clientTurnId)) {
+        const block = await queuedConfirmationReviewContent(this.prisma, turn.clientTurnId);
+        if (block) wakeContent.set(turn.id, block);
         continue;
       }
       if (!isBackgroundWakeTurn(turn.clientTurnId)) continue;

@@ -467,6 +467,54 @@ export class PushService {
   }
 
   /**
+   * A task's reviewer found problems after its owner had confirmed it
+   * (docs/owner-confirmation-review-contract.md §9 L5). The caller sends it once, after the PROBLEMS
+   * record commits and only while the task is DONE; a request carries at most one such record, and
+   * the banner collapses on it all the same. Every word is Orbit's — the task's title and how many
+   * problems — and none is the reviewer's. No badge: a settled task is not waiting on anybody.
+   * The tap opens the run's session, where the receipt the problems hang under is drawn.
+   */
+  async notifyConfirmationProblems(recordId: string): Promise<void> {
+    if (!this.enabled) return;
+    try {
+      const record = await this.prisma.taskOwnerConfirmationReviewRecord.findUnique({
+        where: { id: recordId },
+        select: {
+          kind: true,
+          ownerId: true,
+          taskId: true,
+          body: true,
+          task: { select: { title: true } },
+          review: { select: { request: { select: { sessionId: true } } } },
+        },
+      });
+      if (!record || record.kind !== 'PROBLEMS') return;
+      const count = ((record.body ?? {}) as { problems?: unknown[] }).problems?.length ?? 0;
+      const tokens = await this.prisma.deviceToken.findMany({ where: { userId: record.ownerId } });
+      if (tokens.length === 0) return;
+      const auth = this.authToken();
+      if (!auth) return;
+      const body = JSON.stringify({
+        aps: {
+          alert: {
+            title: record.task.title,
+            body: count === 1 ? '1 problem found after you confirmed' : `${count} problems found after you confirmed`,
+          },
+          sound: 'default',
+          'thread-id': `task-${record.taskId}`,
+        },
+        kind: 'confirmation-problems',
+        sessionID: record.review.request.sessionId,
+        taskID: record.taskId,
+        recordID: recordId,
+      });
+      await this.deliver(tokens, body, 'alert', '10', auth, `confirmation-problems-${recordId}`);
+    } catch (err) {
+      this.log.warn(`confirmation problems notify failed: ${(err as Error).message}`);
+    }
+  }
+
+  /**
    * The alert a NOTIFY_USER watch's Match causes (docs/watch-contract.md §6). The delivery worker
    * calls it only after it has acknowledged the delivery, so it runs at most once per generation;
    * collapsed on the watch and generation all the same, so nothing could ever stack a second banner

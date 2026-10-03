@@ -1759,7 +1759,21 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // fence and names none of the six preserved objects; no row is inserted or deleted. (Written
       // as 0366 on its own branch and renumbered before it landed: 0366 is the retry claim lease
       // above, and 0367 and 0368 were spelled by branches not yet landed.)
-      '0369_workspace_position_backfill'],
+      '0369_workspace_position_backfill',
+      // A confirmation request's review (0370, docs/owner-confirmation-review-contract.md §3): three new
+      // enums, two new tables (`task_owner_confirmation_review` and its records), one nullable CHAR(40)
+      // column on `task_owner_confirmation_request` and one on `session`, three nullable columns on
+      // `task_owner_decision` with a foreign key and a CHECK on the new values only, and one new
+      // trigger with its own new function on `session`. Read against every claim above: `task` is
+      // named only as the target of the new tables' foreign keys — no column of it is added, dropped or
+      // retyped, and no stored row moves; `task.acceptance_command`, `task.acceptance_expected_exit_code`,
+      // `task_executable_acceptance_pair` and `task_completion_criterion` are not named. Its one
+      // `CREATE OR REPLACE FUNCTION` is the new trigger's own, so it is not another writer of the DONE
+      // fence and names none of the six preserved objects; 0267's CHECKs are left as they were. No
+      // INSERT, UPDATE or DELETE: no request or decision is backfilled. (Written as 0365 on its own
+      // branch and renumbered before it landed: 0365, 0366, 0367 and 0369 landed first, just above,
+      // and 0368 is spelled by another project's branch not yet landed.)
+      '0370_owner_confirmation_review'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

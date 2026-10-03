@@ -254,7 +254,7 @@ import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { accountEnvVar } from '../providers/account';
-import { readWaitingOwnerConfirmations } from './owner-confirmation-read';
+import { readOwnerConfirmationRows } from './owner-confirmation-read';
 import { accountPoolRuntime } from '../providers/custom-provider';
 import {
   criterionNeedsProjectRefusal,
@@ -1472,10 +1472,18 @@ export function autoDispatchStillValid(current: bigint, observed: bigint): boole
  * anything and grouped by project it is one pass of ~6ms, where the same count as a correlated
  * subquery per candidate was 294ms a count on the 109,878-task project (2026-09-29).
  */
-const PROJECT_OCCUPIED_SQL = Prisma.sql`
+const PROJECT_OCCUPIED_SQL = projectOccupiedSql();
+
+/**
+ * PROJECT_OCCUPIED_SQL, with `settling` counted as the DONE it is about to be: a completion asked
+ * about ahead of time gives back the slot its own run holds now (`dependentRelease`).
+ */
+function projectOccupiedSql(settling?: string): Prisma.Sql {
+  return Prisma.sql`
   SELECT o.project_id, count(*)::int AS "tasks"
     FROM task o
-   WHERE o.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)
+   WHERE o.status NOT IN ('DONE'::task_status, 'CANCELLED'::task_status)${settling ? Prisma.sql`
+     AND o.id <> ${settling}::uuid` : Prisma.empty}
      AND EXISTS (
        SELECT 1 FROM session s
         WHERE s.task_id = o.id
@@ -1485,6 +1493,17 @@ const PROJECT_OCCUPIED_SQL = Prisma.sql`
           )})
      )
    GROUP BY o.project_id`;
+}
+
+/** What one completion releases among its dependents (`TasksService.dependentRelease`). */
+export interface DependentRelease {
+  /** Given a slot, in the order the pass offered them, with the moment (0137) each was read at. */
+  start: Array<{ id: string; epoch: bigint }>;
+  /** Opted into running by themselves, but with no slot free for them yet: the sweep's to start. */
+  waitingForSlot: string[];
+  /** They do not start by themselves (`autoRunWhenReady = false`): somebody's decision. */
+  undecided: string[];
+}
 
 /** What the sweep is allowed to materialise, per runner and per capped list. */
 export interface MaterialisationBudget {
@@ -2793,12 +2812,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * whose dependent is in `taskIds`, joined to its prerequisite's status, group by
    * dependent and reduce. Tasks with no prerequisites are absent (caller reads absent as
    * 'NONE'). Mirrors withRunning's single-grouped-query approach to avoid N+1.
+   *
+   * `assumeDone` asks the question one completion early: every edge whose chain ends at that task
+   * reads as satisfied, as it will once the task is DONE (`dependentRelease`).
    */
   private async dependencyStatesFor(
     ownerId: string,
     taskIds: string[],
+    assumeDone?: string,
   ): Promise<Map<string, DependencyState>> {
-    return new Map([...await this.dependencyFactsFor(ownerId, taskIds)]
+    return new Map([...await this.dependencyFactsFor(ownerId, taskIds, assumeDone)]
       .map(([taskId, facts]) => [taskId, computeDependencyState(facts)]));
   }
 
@@ -2813,6 +2836,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private async dependencyFactsFor(
     ownerId: string,
     taskIds: string[],
+    assumeDone?: string,
   ): Promise<Map<string, DependencyPrerequisiteFact[]>> {
     type ChainFact = {
       id: string;
@@ -2914,14 +2938,17 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         .filter((entry) => entry.status === TaskStatus.DONE)
         .map((entry) => entry.id),
     );
-    return new Map([...resolvedByTask].map(([taskId, entries]) => [taskId, entries.map((entry) => ({
-      status: entry.status,
-      verificationGate: dependencyEpochGate(entry.id, epochs, dependents.get(taskId)),
-      verificationGateStalled: dependencyEpochStalled(entry.id, epochs, dependents.get(taskId)),
-      // Absent — not `false` — for anything this read said nothing about, which is what the field
-      // means: a prerequisite with no landing to do (`task-dependencies.ts`).
-      landed: landing.get(entry.id),
-    }))]));
+    return new Map([...resolvedByTask].map(([taskId, entries]) => [taskId, entries.map((entry) => (
+      // The completion asked about ahead of time reads as finished with nothing left of its own —
+      // whether its landing will hold its dependents is the caller's to say (`dependentRelease`).
+      entry.id === assumeDone ? { status: TaskStatus.DONE } : {
+        status: entry.status,
+        verificationGate: dependencyEpochGate(entry.id, epochs, dependents.get(taskId)),
+        verificationGateStalled: dependencyEpochStalled(entry.id, epochs, dependents.get(taskId)),
+        // Absent — not `false` — for anything this read said nothing about, which is what the field
+        // means: a prerequisite with no landing to do (`task-dependencies.ts`).
+        landed: landing.get(entry.id),
+      }))]));
   }
 
   /**
@@ -6480,7 +6507,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       dependencyState,
       blocked: !canRun(dependencyState),
       runnable,
-      awaitingOwnerConfirmation: awaitingIds.has(id),
+      awaitingOwnerConfirmation: awaitingIds.awaiting.has(id),
+      confirmationUnderReview: awaitingIds.underReview.has(id),
     };
   }
 
@@ -6671,7 +6699,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dependencyState,
         blocked: !canRun(dependencyState),
         runnable: runnableIds.has(task.id),
-        awaitingOwnerConfirmation: awaitingIds.has(task.id),
+        awaitingOwnerConfirmation: awaitingIds.awaiting.has(task.id),
+        confirmationUnderReview: awaitingIds.underReview.has(task.id),
       };
     });
     const nextCursor =
@@ -6785,23 +6814,31 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * The tasks among these whose OWNER_CONFIRMED run is waiting on the owner right now — the same
-   * reading the session list's needs-you signal takes (`readWaitingOwnerConfirmations`), so a row
+   * reading the session list's needs-you signal takes (`readWaitingOwnerConfirmations`, here through
+   * `readOwnerConfirmationRows`, which answers it and its other half at once), so a row
    * and the conversation it points at say it together. Only a row that declares OWNER_CONFIRMED
    * and has not settled can be waiting, so a page without one asks nothing at all.
+   *
+   * `underReview` is the other half of the same population: a run's confirmation still with its
+   * reviewer (docs/owner-confirmation-review-contract.md §5 N3), which the row says "Under review"
+   * about instead. A task is in at most one of the two.
    */
   private async awaitingOwnerConfirmation(
     ownerId: string,
     rows: ReadonlyArray<{ id: string; completionCriterion: string | null; status: string }>,
-  ): Promise<Set<string>> {
+  ): Promise<{ awaiting: Set<string>; underReview: Set<string> }> {
     const wanted = new Set(
       rows
         .filter((row) => row.completionCriterion === 'OWNER_CONFIRMED'
           && (row.status === 'OPEN' || row.status === 'IN_PROGRESS'))
         .map((row) => row.id),
     );
-    if (wanted.size === 0) return wanted;
-    const waiting = await readWaitingOwnerConfirmations(this.prisma, ownerId);
-    return new Set(waiting.map((entry) => entry.taskId).filter((id) => wanted.has(id)));
+    if (wanted.size === 0) return { awaiting: wanted, underReview: new Set() };
+    const { waiting, underReview } = await readOwnerConfirmationRows(this.prisma, ownerId);
+    return {
+      awaiting: new Set(waiting.map((entry) => entry.taskId).filter((id) => wanted.has(id))),
+      underReview: new Set(underReview.map((entry) => entry.taskId).filter((id) => wanted.has(id))),
+    };
   }
 
   /**
@@ -6864,7 +6901,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dependencyState,
         blocked: !canRun(dependencyState),
         runnable: runnableIds.has(task.id),
-        awaitingOwnerConfirmation: awaitingIds.has(task.id),
+        awaitingOwnerConfirmation: awaitingIds.awaiting.has(task.id),
+        confirmationUnderReview: awaitingIds.underReview.has(task.id),
       };
     });
     return { items, total, truncated: total > items.length };
@@ -9356,8 +9394,49 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * themselves (`autoRunWhenReady = false`): a release that is a decision for the coordinator
    * rather than a dispatch. Each caller hands them to `DEPENDENT_READY`'s door once its own facts
    * are delivered; nothing here is told to anybody.
+   *
+   * What to start is `dependentRelease`'s answer; this only acts on it.
    */
   async dispatchDependentsOf(ownerId: string, doneTaskId: string): Promise<string[]> {
+    const release = await this.dependentRelease(ownerId, doneTaskId);
+    for (const dep of release.start) {
+      try {
+        // Carrying WHICH MOMENT this scan read, so `execute` can prove it is still acting on it:
+        // between here and its own re-read the user may have scheduled this task for later, or the
+        // prerequisite may have reopened, and either replaces the reason this loop had for starting
+        // it. Both advance the epoch, so both are one comparison rather than a value check per fact.
+        await this.dispatchReadyTask(ownerId, dep.id, dep.epoch);
+      } catch (e) {
+        this.logger.warn(
+          `auto-run of dependent task ${dep.id} failed: ${e instanceof Error ? e.message : e}`,
+        );
+      }
+    }
+    return release.undecided;
+  }
+
+  /**
+   * What `doneTaskId` finishing releases among the tasks that depend on it — the completion edge's
+   * whole predicate, read and not acted on. `dispatchDependentsOf` starts what it gives a slot, and
+   * the owner's confirmation card reads the same answer as what confirming would start
+   * (`owner-confirmation-if-confirmed.ts`), so the card cannot promise what the edge would not do.
+   *
+   * A dependent is released when it is READY with this completion and still OPEN. Then it is
+   * `undecided` when it does not start by itself; passed over when its project does not move by
+   * itself, it is scheduled for later or nothing runs it; `waitingForSlot` when its list ranks other
+   * ready work above it or its project, runner or list has no room; and in `start` otherwise, in the
+   * order the pass offered the slots. Every one of them but `start` is left OPEN and READY.
+   *
+   * `assumeCompleted` asks before the completion is written: `doneTaskId` reads as DONE to its
+   * dependents and as no longer holding its project's slot, which is what its DONE will make true.
+   * Its own landing (§2.5 J9) is read as nothing to wait for — whether it will hold the release is
+   * the caller's to say.
+   */
+  async dependentRelease(
+    ownerId: string,
+    doneTaskId: string,
+    { assumeCompleted = false }: { assumeCompleted?: boolean } = {},
+  ): Promise<DependentRelease> {
     // The stored edge may still name W while the completion event comes from its tail S. Resolve
     // that relation in PostgreSQL, using the same fail-closed rules as the candidate scans and
     // commit trigger. This is the instant path; without the reverse-tail match only the periodic
@@ -9400,8 +9479,12 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
          AND d."depends_on_task_id" IN (SELECT "id" FROM chain)
     `);
     const dependentIds = [...new Set(edges.map((e) => e.taskId))];
-    if (!dependentIds.length) return [];
-    const states = await this.dependencyStatesFor(ownerId, dependentIds);
+    if (!dependentIds.length) return { start: [], waitingForSlot: [], undecided: [] };
+    const states = await this.dependencyStatesFor(
+      ownerId,
+      dependentIds,
+      assumeCompleted ? doneTaskId : undefined,
+    );
     const dependents = await this.prisma.task.findMany({
       where: { id: { in: dependentIds }, ownerId },
       select: {
@@ -9445,6 +9528,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // READY, and the sweep this edge anticipates materialises it the moment a slot frees.
     const budget = await this.materialisationBudget();
     const now = new Date();
+    const start: DependentRelease['start'] = [];
+    const waitingForSlot: string[] = [];
     const undecided: string[] = [];
     // One completion can release several tasks of one list; the list's slots go to them by priority
     // as the sweep would deal them, and in the order they were read while nothing is raised.
@@ -9484,30 +9569,32 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // default everything nobody raised outranks it, so a lowered task is left to the sweep
       // without asking.
       if (dep.listId != null) {
-        if (dep.priority < 0) continue;
+        if (dep.priority < 0) {
+          waitingForSlot.push(dep.id);
+          continue;
+        }
         ranked ??= await this.readyPriorityAbove(released);
-        if ((ranked.get(dep.listId) ?? 0) > dep.priority) continue;
+        if ((ranked.get(dep.listId) ?? 0) > dep.priority) {
+          waitingForSlot.push(dep.id);
+          continue;
+        }
       }
       // Its project is running as many tasks as it may: left OPEN and READY, and the sweep starts it
       // once a slot frees — spending nothing of the runner's or the list's on it now.
-      projectRoom ??= await this.projectBudget(released.map((candidate) => candidate.projectId));
-      if (projectBudgetSpent(projectRoom, dep.projectId)) continue; // left to the sweep
-      if (!takeBudget(budget, dep.assignee.runnerId, dep.listId)) continue; // left to the sweep
-      spendProjectBudget(projectRoom, dep.projectId);
-      const epoch = dep.dispatchEpoch?.epoch ?? 0n;
-      try {
-        // Carrying WHICH MOMENT this scan read, so `execute` can prove it is still acting on it:
-        // between here and its own re-read the user may have scheduled this task for later, or the
-        // prerequisite may have reopened, and either replaces the reason this loop had for starting
-        // it. Both advance the epoch, so both are one comparison rather than a value check per fact.
-        await this.dispatchReadyTask(ownerId, dep.id, epoch);
-      } catch (e) {
-        this.logger.warn(
-          `auto-run of dependent task ${dep.id} failed: ${e instanceof Error ? e.message : e}`,
-        );
+      projectRoom ??= await this.projectBudget(
+        released.map((candidate) => candidate.projectId),
+        assumeCompleted ? doneTaskId : undefined,
+      );
+      // Both left to the sweep.
+      if (projectBudgetSpent(projectRoom, dep.projectId)
+        || !takeBudget(budget, dep.assignee.runnerId, dep.listId)) {
+        waitingForSlot.push(dep.id);
+        continue;
       }
+      spendProjectBudget(projectRoom, dep.projectId);
+      start.push({ id: dep.id, epoch: dep.dispatchEpoch?.epoch ?? 0n });
     }
-    return undecided;
+    return { start, waitingForSlot, undecided };
   }
 
   /**
@@ -10249,12 +10336,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * outstanding tasks that a live or queued session occupies (PROJECT_OCCUPIED_SQL) — the count the
    * independent release has always spent — for `projectBudgetSpent` and `spendProjectBudget`. One
    * statement for a pass, whatever it holds; a pass with no task in a project asks nothing.
+   * `settling` is a task counted as already DONE (`projectOccupiedSql`).
    */
-  private async projectBudget(projectIds: Iterable<string | null>): Promise<Map<string, number>> {
+  private async projectBudget(
+    projectIds: Iterable<string | null>,
+    settling?: string,
+  ): Promise<Map<string, number>> {
     const ids = [...new Set([...projectIds].filter((id): id is string => id != null))];
     if (ids.length === 0) return new Map();
     const rows = await this.prisma.$queryRaw<Array<{ projectId: string; free: number }>>(Prisma.sql`
-      WITH occupied AS MATERIALIZED (${PROJECT_OCCUPIED_SQL})
+      WITH occupied AS MATERIALIZED (${projectOccupiedSql(settling)})
       SELECT p.id AS "projectId", p.max_concurrent_tasks - COALESCE(occupied."tasks", 0) AS "free"
         FROM project p
         LEFT JOIN occupied ON occupied.project_id = p.id

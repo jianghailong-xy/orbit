@@ -1,0 +1,498 @@
+<!-- DESIGN MOCK (2026-10-02). The owner-confirmation card on a phone, with two additions: an Orbit-computed
+     "If you confirm" block right above the buttons, and a review block written by the task's reviewer (the
+     project's coordinator, or the session that filed the task). The four phones follow the screenshot's task
+     (34YlGb8ou0rxjIZJ8kx5u) in time: today, step 1 (Orbit's facts only), under review, reviewed.
+     Geometry is the owner's iPhone screenshot (1179×2556 @3x → 393×852pt): nav to 113, needs-you bar 113–151,
+     card 16–377, Confirm done 518–552, Chat about this 562–596, bottom band from 620.
+     Real data: title, criteria, branch, commit, +9,432, CI run 36973057413, PG 2298/2298, the npm-audit stop,
+     the four optional review items, the waiting task's title. Demo data: every review time, every word the
+     reviewer says, the "needs you" item, 7c1e2a0, and the late finding.
+     Render:
+       chromium --headless=new --disable-gpu --no-sandbox --hide-scrollbars \
+         --force-device-scale-factor=1.5 --window-size=1764,2600 --virtual-time-budget=4000 \
+         --screenshot=docs/mocks/owner-confirmation-review-ios.png \
+         file://$PWD/docs/mocks/owner-confirmation-review-ios.html
+     One phone at device scale: append ?only=1|2|3|4 and use --window-size=393,852 --force-device-scale-factor=3 -->
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>任务确认卡：补上「按下后会发生什么」和审查方的意见 — iPhone 效果图</title>
+<style>
+  :root { --tint:#3B6CF2; --label:#000; --label-2:rgba(60,60,67,.6); --label-3:rgba(60,60,67,.3);
+          --sep:rgba(60,60,67,.29); --green:#248A3D; --red:#D93025; --orange:#C2610C;
+          --wash:#EEF3FE; --wash-line:rgba(59,108,242,.24); --box:#E3E9F3; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 36px 56px; background:#ececef; color:#16161a; width:1764px;
+         font:15px/1.55 -apple-system,"SF Pro Text","Nimbus Sans","Noto Sans CJK SC",sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; letter-spacing:-.01em; margin:0 0 8px; }
+  .lede { color:#55555e; max-width:1500px; margin:0 0 6px; font-size:15px; }
+  .lede b { color:#16161a; }
+  code, .mono { font-family:"DejaVu Sans Mono",ui-monospace,monospace; }
+  code { font-size:12.5px; background:#e0e0e6; border-radius:4px; padding:1px 5px; }
+  .row { display:flex; gap:40px; align-items:flex-start; margin-top:24px; }
+  .row2 { margin-top:46px; }
+  figure { margin:0; width:393px; flex:none; }
+  figcaption { margin-top:14px; font-size:13.5px; line-height:1.6; color:#55555e; }
+  figcaption > b:first-child { display:block; font-size:14.5px; color:#16161a; margin-bottom:3px; }
+  figcaption ol, figcaption ul { margin:6px 0 0; padding-left:18px; } figcaption li { margin-top:3px; }
+  figcaption li b { color:#16161a; }
+  .tag { display:inline-block; font:600 12px/1 "DejaVu Sans Mono",monospace; padding:4px 8px; border-radius:6px; margin-bottom:10px; }
+  .tag.now { background:#ffe4e0; color:#b3261e; } .tag.new { background:#e3ebff; color:#2346c4; }
+  .tag.open { background:#fff1d6; color:#8a5300; }
+  .note { margin-top:34px; max-width:1692px; font-size:14px; line-height:1.7; color:#55555e; border-top:1px solid #d6d6dc; padding-top:14px; }
+  .note b { color:#16161a; } .note ol { margin:4px 0 0; padding-left:20px; } .note li { margin-top:4px; }
+
+  /* ── phone: 393×852 pt, the owner's screenshot ── */
+  .phone { width:393px; height:852px; border-radius:54px; overflow:hidden; position:relative; background:#fff; color:var(--label);
+           box-shadow:0 14px 44px rgba(0,0,0,.18); border:1px solid rgba(0,0,0,.08);
+           font-family:-apple-system,"SF Pro Text","Nimbus Sans","Noto Sans CJK SC",sans-serif; }
+  .sb { position:absolute; top:0; left:0; right:0; height:56px; display:flex; justify-content:space-between; align-items:center; padding:4px 34px 0 50px; }
+  .sb .time { font-size:17px; font-weight:700; letter-spacing:-.2px; }
+  .sb .sys { display:flex; gap:7px; align-items:center; }
+  .sb .bat { background:#1c1c1e; color:#fff; border-radius:6px; font:700 12px/1 "Nimbus Sans",sans-serif; padding:3px 6px; }
+  .nav { position:absolute; top:56px; left:0; right:0; height:57px; background:#fff; }
+  .circ { position:absolute; top:3px; width:46px; height:46px; border-radius:50%; background:#fff; border:1px solid rgba(0,0,0,.07);
+          box-shadow:0 2px 10px rgba(0,0,0,.08); display:grid; place-items:center; }
+  .circ.back { left:15px; } .circ.share { right:15px; }
+  .ttl { position:absolute; left:74px; right:74px; top:7px; text-align:center; }
+  .t1 { font-size:17px; font-weight:600; line-height:22px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .t2 { font-size:12px; line-height:16px; color:var(--label-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:2px; }
+  .ny { position:absolute; top:113px; left:0; right:0; height:38px; background:#FBEADF; display:flex; align-items:center;
+        padding:0 16px 0 19px; gap:11px; font-size:16px; z-index:2; }
+  .ny .dot { width:9px; height:9px; border-radius:50%; background:#F0882B; flex:none; }
+  .ny svg { margin-left:auto; }
+  .tx { position:absolute; left:0; right:0; top:151px; bottom:232px; overflow:hidden; display:flex; flex-direction:column; justify-content:flex-end; }
+  .phone.nobar .tx { top:113px; }
+  .band { position:absolute; left:0; right:0; bottom:0; height:232px; background:#fff; }
+  .band::before { content:""; position:absolute; top:0; left:0; right:0; height:1px; transform:scaleY(.5); transform-origin:top; background:var(--sep); }
+  .bp { position:absolute; left:16px; right:16px; top:21px; height:30px; border:1px solid #D4D4D9; border-radius:15px; display:flex; align-items:center; gap:8px; padding:0 12px; }
+  .bp b { font-size:15px; font-weight:600; } .bp .v { font-size:13px; color:var(--label-2); } .bp .c { margin-left:auto; }
+  .wt { position:absolute; left:16px; right:16px; top:59px; height:30px; border:1px solid #D4D4D9; border-radius:15px; display:flex; align-items:center; gap:7px; padding:0 3px 0 4px; }
+  .wt .chip { font:13px/1 "DejaVu Sans Mono",monospace; background:#EDEDF0; border:1px solid #DADADF; border-radius:9px; padding:4px 7px; color:#55555e; }
+  .wt .add, .wt .del { font:14px/1 "DejaVu Sans Mono",monospace; } .add { color:var(--green); } .del { color:var(--red); }
+  .wt .mg { margin-left:auto; height:24px; border:1.5px solid #9DB4F7; background:#E8EEFF; border-radius:12px; color:var(--tint);
+            font-size:15px; font-weight:500; display:flex; align-items:center; gap:9px; padding:0 9px 0 11px; }
+  .wt .mg i { width:1px; height:16px; background:#9DB4F7; }
+  .cmp { position:absolute; left:16px; right:16px; top:99px; height:87px; border:1px solid #D4D4D9; border-radius:26px; padding:13px 16px; }
+  .cmp .ph { font-size:17px; color:var(--label-3); }
+  .cmp .tb { position:absolute; left:14px; right:10px; bottom:9px; display:flex; align-items:center; gap:14px; font-size:16px; color:#55555e; }
+  .cmp .tb .md { margin-left:auto; color:#1c1c1e; font-weight:600; } .cmp .tb .md span { color:var(--label-2); font-weight:400; }
+  .cmp .tb .bar { width:22px; height:3px; border-radius:2px; background:var(--tint); }
+  .cmp .tb .send { width:32px; height:32px; border-radius:50%; background:#AEAEB2; display:grid; place-items:center; }
+
+  /* ── the card, the way ApprovalCards.swift draws it ── */
+  .card { margin:0 16px -26px; background:var(--wash); border:1px solid var(--wash-line); border-bottom:0; border-radius:20px 20px 0 0;
+          padding:0 13px 0; position:relative; }
+  .card.whole { margin:0; border-bottom:1px solid var(--wash-line); border-radius:20px; padding-bottom:14px; }
+  .qb { background:var(--box); border-radius:16px; padding:12px 14px 13px; margin-top:12px; position:relative; }
+  .qh { font:500 12.5px/16px "DejaVu Sans Mono",monospace; letter-spacing:.03em; color:var(--label-2); text-transform:uppercase;
+        display:flex; gap:8px; }
+  .qh .cjk { font-family:"Noto Sans CJK SC",sans-serif; letter-spacing:0; font-size:12.5px; }
+  .qh .who { display:flex; flex:1; min-width:0; white-space:nowrap; }
+  .qh .who .cjk { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .qh .sha { margin-left:auto; flex:none; text-transform:none; } .qh .sha.gone { text-decoration:line-through; }
+  .qt { font-size:17px; line-height:22px; margin-top:9px; word-break:break-word; }
+  .more { margin-top:11px; font-size:15px; display:flex; align-items:center; gap:7px; }
+  .b1 { margin-top:12px; height:36px; border-radius:18px; background:var(--tint); color:#fff; font-size:17px; font-weight:500; display:grid; place-items:center; position:relative; }
+  .b2 { margin-top:10px; height:36px; border-radius:18px; background:#E4E6EB; color:var(--tint); font-size:17px; display:grid; place-items:center; }
+  .hint { margin-top:13px; font-size:15px; line-height:20px; color:var(--label-2); padding-bottom:4px; }
+
+  /* Orbit's own facts: white, with symbols, no author */
+  .fx { background:#fff; border:1px solid rgba(60,60,67,.14); border-radius:16px; margin-top:12px; padding:10px 14px 12px; }
+  .fh { font:500 12.5px/16px "DejaVu Sans Mono",monospace; letter-spacing:.03em; color:var(--label-2); text-transform:uppercase; }
+  .fr { display:flex; gap:10px; margin-top:8px; }
+  .fr .ic { width:18px; flex:none; padding-top:2px; display:grid; justify-items:center; }
+  .fr .a { font-size:15px; line-height:20px; font-weight:600; }
+  .fr > div { min-width:0; }
+  .fr .b { font-size:13px; line-height:17px; color:var(--label-2); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  /* the reviewer's words: a quoted box, like the agent's own, with a name on it */
+  .rv .st { display:flex; align-items:center; gap:7px; margin-top:9px; font-size:17px; line-height:22px; font-weight:600; }
+  .rv .sub { font-size:15px; line-height:20px; color:var(--label-2); margin-top:3px; }
+  .rv .hl { margin-top:8px; font-size:17px; line-height:22px; font-weight:600; }
+  .rv .hl.warn { color:var(--orange); }
+  .rv .hl.go { display:flex; align-items:center; gap:7px; color:var(--green); }
+  .rr { display:grid; grid-template-columns:80px 1fr; column-gap:8px; margin-top:6px; font-size:15px; line-height:20px; }
+  .rr .k { font-size:13px; color:var(--label-2); line-height:20px; }
+  .rr .k.ok { color:var(--green); } .rr .k.no { color:var(--orange); }
+  .rq { margin-top:9px; font-size:15px; line-height:20px; color:#2c2c30; }
+  .rq::before { content:"“"; } .rq::after { content:"”"; }
+  .rb { margin-top:10px; height:32px; border-radius:16px; background:#fff; border:1px solid rgba(60,60,67,.18); color:var(--tint);
+        font-size:15px; display:grid; place-items:center; }
+
+  /* snippets: a card at phone width, out of its phone */
+  .snip { width:393px; background:#fff; border-radius:24px; padding:14px 16px 16px; box-shadow:0 8px 28px rgba(0,0,0,.12); }
+  .snip + .snip { margin-top:14px; }
+  .sl { font:600 11.5px/1 "DejaVu Sans Mono",monospace; color:#8a8a93; letter-spacing:.04em; margin:0 0 9px 2px; }
+  .ch { display:flex; align-items:center; gap:8px; padding-top:14px; }
+  .seal { width:22px; height:22px; border-radius:50%; background:var(--tint); display:grid; place-items:center; flex:none; }
+  .ch .h { font-size:17px; font-weight:600; }
+  .prov { font-size:13px; color:var(--label-2); margin-top:8px; }
+  .ld1 { font-size:17px; line-height:22px; font-weight:700; margin-top:8px; }
+  .ld2 { font-size:13px; line-height:18px; color:var(--label-2); margin-top:3px; } .ld2 .mono { font-size:11.5px; }
+  .frow { margin-top:12px; background:var(--box); border-radius:14px; height:44px; display:flex; align-items:center; gap:8px; padding:0 13px 0 14px;
+          font:500 12.5px/16px "DejaVu Sans Mono",monospace; letter-spacing:.03em; color:var(--label-2); text-transform:uppercase; }
+  .frow .n { margin-left:auto; text-transform:none; letter-spacing:0; }
+  .rc { margin-top:4px; display:flex; align-items:flex-start; gap:9px; padding-top:12px; }
+  .rc .t { font-size:15px; line-height:20px; font-weight:600; } .rc .w { font-size:13px; line-height:18px; color:var(--label-2); }
+  .lst { background:#fff; border-radius:16px; overflow:hidden; }
+  .lr { display:flex; gap:11px; align-items:flex-start; padding:11px 14px 11px 12px; position:relative; }
+  .lr + .lr::before { content:""; position:absolute; top:0; left:44px; right:0; height:1px; transform:scaleY(.5); transform-origin:top; background:var(--sep); }
+  .lr .gl { width:22px; height:22px; flex:none; display:grid; place-items:center; margin-top:1px; }
+  .lr .m { flex:1; min-width:0; }
+  .lr .a { font-size:16px; line-height:21px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .lr .b { font-size:13.5px; line-height:18px; color:var(--label-2); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .lr .b.amber { color:#B86A00; }
+  .lr .tm { font-size:13px; color:var(--label-2); margin-top:2px; }
+  .lb { background:#F2F2F7; border-radius:20px; padding:10px; }
+
+  .bd { position:absolute; width:20px; height:20px; border-radius:50%; background:#e5372b; color:#fff; z-index:3;
+        font:700 12px/20px "Nimbus Sans",sans-serif; text-align:center; box-shadow:0 0 0 2px #fff; }
+
+  /* ?only=N: one phone alone, edge to edge, like a device screenshot */
+  body.only { padding:0; width:393px; background:#fff; }
+  body.only h1, body.only .lede, body.only .note, body.only figcaption, body.only .tag, body.only .row2 { display:none; }
+  body.only .row { margin:0; }
+  body.only .phone { border-radius:0; box-shadow:none; border:0; }
+</style>
+
+<h1>任务确认卡：补上「按下后会发生什么」和审查方的意见</h1>
+<p class="lede">截图那一单：执行会话 14:55 声明完成，派活的会话还在审，卡片已经在叫你。你 15:00:49 按下确认，<b>1 秒后下游任务开跑，以一条没审完、也没进 main 的分支为基线</b>。卡片上能看到的只有验收标准和执行者自己的话。下面四台手机按时间顺序画同一单：现状、第一步（只加 Orbit 算出来的事实）、审查中、审查完成。第二排是还没拍板的那一处对照，以及其余几种状态。</p>
+
+<div class="row">
+
+  <!-- ① now -->
+  <figure>
+    <span class="tag now">现状 · 15:00 截图</span>
+    <div class="phone" data-time="3:00" data-sub="Waiting for your confirmation · Open · 5m ago" data-bar="1">
+      <div class="tx">
+        <div class="card">
+          <div class="qb" style="margin-top:0"><div class="qt">5. 回复已经写入、但交付出错时，session_reply 仍返回成功，由后台补交。<br>6. 回信临时投递失败，或在执行中途被收尾流程直接标成已处理时，结局都会在发送方下一次被投递 turn 时补上。</div></div>
+          <div class="qb">
+            <div class="qh">What the agent said · 14:55</div>
+            <div class="qt">This wake only reports background jobs that already finished; their results are the ones I reported, and nothing is still running.<br><br>All six P1 review findings are fixed and pushed to orbit/p1-1c207b at commit 59d98153ef85c565646fede291f66f6…</div>
+            <div class="more">Show all <span data-ic="down"></span></div>
+            <span class="bd" style="right:10px;top:10px">1</span>
+          </div>
+          <div class="b1">Confirm done<span class="bd" style="right:12px;top:8px">2</span></div>
+          <div class="b2">Chat about this</div>
+          <div class="hint">Your next message goes to this agent. The task stays open.</div>
+        </div>
+      </div>
+      <span class="bd" style="right:44px;top:122px">3</span>
+    </div>
+    <figcaption>
+      <b>现状（截图同一份数据）</b>
+      <ol>
+        <li>「agent 说了什么」取的是<b>停下来那一轮</b>的最后一条消息。这里那一轮是一次后台作业唤醒，前 240 字被它的开场白占了，真正的报告挤到了折叠后面。</li>
+        <li>没有一句话说按下去会怎样：一个等着它的任务会立刻开跑，这条分支也不在 main 上。</li>
+        <li>任务说明写的是「那个会话检查完，再请 owner 确认」。可派活的会话还在审，标题和顶部提示条已经在叫你了。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <!-- ② step 1: Orbit's facts only -->
+  <figure>
+    <span class="tag new">第一步 · 只加 Orbit 算出来的事实</span>
+    <div class="phone" data-time="3:00" data-sub="Waiting for your confirmation · Open · 5m ago" data-bar="1">
+      <div class="tx">
+        <div class="card">
+          <div class="qb">
+            <div class="qh">What the agent said · 14:54</div>
+            <div class="qt">All six P1 review findings are fixed and pushed to orbit/p1-1c207b at commit 59d98153ef85c565646fede291f66f61940573c7. This branch also carries P0, P1 and the attribution follow-up merged onto current main. One rename: P1’s…</div>
+            <div class="more">Show all <span data-ic="down"></span></div>
+          </div>
+          <div class="fx">
+            <div class="fh">If you confirm</div>
+            <div class="fr"><span class="ic" data-ic="play"></span><div><div class="a">Starts 1 task waiting on this one</div><div class="b">会话间消息署名：自动重试遇到请求、手动 Retry、计数口径三处待定</div></div></div>
+            <div class="fr"><span class="ic" data-ic="branch"></span><div><div class="a">Not on main yet · <span class="add" style="font-weight:500">+9,432</span></div><div class="b">orbit/p1-1c207b — confirming doesn’t merge it</div></div></div>
+          </div>
+          <div class="b1">Confirm done</div>
+          <div class="b2">Chat about this</div>
+          <div class="hint">Your next message goes to this agent. The task stays open.</div>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>第一步：不需要任何 agent 参与</b>
+      <ul>
+        <li>报告改取<b>声明完成那一轮</b>的最后一条消息（图中是示意：去掉了唤醒那句开场白）。</li>
+        <li><b>If you confirm</b> 紧贴在按钮上方。卡片比一屏高，你按按钮的那一刻，屏幕上能看到的就是这一块。</li>
+        <li>两行都是服务端现成的事实：确认后会被放行的下游任务，以及分支在不在 main 上。如果任务属于项目，第二行改写成落地方式：「进集成线；合入 main 时会再问你」，或者「项目分支 + Automatic：检查通过就自动合入 main」。</li>
+        <li>没有下游任务、也没有分支时，这一块整个不出现。</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- ③ under review -->
+  <figure>
+    <span class="tag new">建议 · 审查中（14:57）</span>
+    <div class="phone nobar" data-time="2:57" data-sub="Under review · Open · 2m ago">
+      <div class="tx">
+        <div class="card">
+          <div class="qb">
+            <div class="qh">What the agent said · 14:54</div>
+            <div class="qt">All six P1 review findings are fixed and pushed to orbit/p1-1c207b at commit 59d98153ef85c565646fede291f66f61940573c7. This branch also carries P0, P1 and the attribution follow-up merged onto current main. One rename: P1’s…</div>
+            <div class="more">Show all <span data-ic="down"></span></div>
+          </div>
+          <div class="qb rv">
+            <div class="qh"><span class="who"><span>Review ·&nbsp;</span><span class="cjk">会话间消息参数与回复设计</span></span></div>
+            <div class="st"><span data-ic="clock"></span>Reviewing since 14:55</div>
+            <div class="sub">Orbit will ask you once the review is in. You can still confirm now.</div>
+          </div>
+          <div class="fx">
+            <div class="fh">If you confirm</div>
+            <div class="fr"><span class="ic" data-ic="play"></span><div><div class="a">Starts 1 task waiting on this one</div><div class="b">会话间消息署名：自动重试遇到请求、手动 Retry、计数口径三处待定</div></div></div>
+            <div class="fr"><span class="ic" data-ic="branch"></span><div><div class="a">Not on main yet · <span class="add" style="font-weight:500">+9,432</span></div><div class="b">orbit/p1-1c207b — confirming doesn’t merge it</div></div></div>
+          </div>
+          <div class="b1">Confirm done</div>
+          <div class="b2">Chat about this</div>
+          <div class="hint">Your next message goes to this agent. The task stays open.</div>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>审查中：卡片在，但不来叫你</b>
+      <ul>
+        <li><b>不亮 needs-you</b>：没有顶部提示条，标题写 Under review，会话列表里也不点橙色。事情还在审查方手里时不叫你，沿用 owner decision 10「还在 coordinator 手里的事不计数」。</li>
+        <li>卡片照常显示，按钮照常能按，<b>不锁门</b>。审查栏写明正在审、从几点开始；确认的后果就在它下面。</li>
+        <li>审查完成或超时（先定 30 分钟）后再叫你。审查方审出问题，直接让执行会话去改；改完重新声明，新卡片顶掉这一张，全程不经过你。</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- ④ reviewed, option B -->
+  <figure>
+    <span class="tag new">建议 · 审查完成（15:12，方案 B）</span>
+    <div class="phone" data-time="3:12" data-sub="Waiting for your confirmation · Open · now" data-bar="1">
+      <div class="tx">
+        <div class="card">
+          <div class="qb">
+            <div class="qh">What the agent said · 14:54</div>
+            <div class="qt">All six P1 review findings are fixed and pushed to orbit/p1-1c207b at commit 59d98153ef85c565646fede291f66f61940573c7. This branch also carries P0, P1 and the attribution follow-up merged onto current main. One rename: P1’s…</div>
+            <div class="more">Show all <span data-ic="down"></span></div>
+          </div>
+          <div class="qb rv">
+            <div class="qh"><span class="who"><span>Review ·&nbsp;</span><span class="cjk">会话间消息参数与回复设计</span><span>&nbsp;· 15:12</span></span><span class="sha">59d9815</span></div>
+            <div class="hl">1 not checked · nothing needs you</div>
+            <div class="rr"><span class="k ok">Checked</span><span>Criteria 1–6 · PG 2298/2298</span></div>
+            <div class="rr"><span class="k no">Not checked</span><span>JS tests never ran on CI</span></div>
+            <div class="rr"><span class="k">Left open</span><span>4 optional review items</span></div>
+            <div class="rq">OK to confirm. Merge after JS runs on CI.</div>
+          </div>
+          <div class="fx">
+            <div class="fh">If you confirm</div>
+            <div class="fr"><span class="ic" data-ic="play"></span><div><div class="a">Starts 1 task waiting on this one</div><div class="b">会话间消息署名：自动重试遇到请求、手动 Retry、计数口径三处待定</div></div></div>
+            <div class="fr"><span class="ic" data-ic="branch"></span><div><div class="a">Not on main yet · <span class="add" style="font-weight:500">+9,432</span></div><div class="b">orbit/p1-1c207b — confirming doesn’t merge it</div></div></div>
+          </div>
+          <div class="b1">Confirm done</div>
+          <div class="b2">Chat about this</div>
+          <div class="hint">Your next message goes to this agent. The task stays open.</div>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>审查完成：先说还剩什么，再说审查方怎么看</b>
+      <ul>
+        <li>审查栏注明审查方、时间，以及它审的是哪个提交（右上角的 <code>59d9815</code>）。审完之后分支再有新提交，这一栏会自动标成过期。</li>
+        <li><b>开头一行由 Orbit 根据审查方填的条目算出来</b>：「没核实 N 项 · 要你判断 N 件」。审查方自己的一句话放在最后，加引号。</li>
+        <li>按钮仍然只有你能按，也不会因为审查结论被预先选中。回执里另外记一笔「审查方当时怎么说」，以后可以对账。</li>
+        <li>审查栏里的内容是演示数据，不是那个会话的真实结论。</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+</div>
+
+<div class="row row2">
+
+  <!-- A -->
+  <figure>
+    <span class="tag open">待定 · 方案 A：审查方的结论放在最前</span>
+    <div class="snip">
+      <div class="card whole" style="padding-top:1px">
+        <div class="qb rv">
+          <div class="qh"><span class="who"><span>Review ·&nbsp;</span><span class="cjk">会话间消息参数与回复设计</span><span>&nbsp;· 15:12</span></span><span class="sha">59d9815</span></div>
+          <div class="hl go"><span data-ic="check"></span>Recommends confirming</div>
+          <div class="rr"><span class="k ok">Checked</span><span>Criteria 1–6 · PG 2298/2298</span></div>
+          <div class="rr"><span class="k no">Not checked</span><span>JS tests never ran on CI</span></div>
+          <div class="rr"><span class="k">Left open</span><span>4 optional review items</span></div>
+          <div class="rq">OK to confirm. Merge after JS runs on CI.</div>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>A：开头写审查方的结论（可以确认 / 要你判断 / 建议打回）</b>
+      <ul>
+        <li>读起来最快，和提问卡上的 Recommended、项目级「是否完成」请求里的 judgment 是同一个路数。</li>
+        <li>代价：你在这类卡上基本全部照准。Automatic 项目里 35 个要你确认的任务，你全都手动按了，真正需要你的约 10 个；合入 main 的卡 21 张里有 20 张在几分钟内按下；evidence 卡 100 张你按了 96 张。开头摆一个绿色的「建议确认」，只会让你按得更快，下面那条没核实的事很容易被跳过。</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- B -->
+  <figure>
+    <span class="tag open">待定 · 方案 B（推荐）：剩下的事放在最前</span>
+    <div class="snip">
+      <div class="card whole" style="padding-top:1px">
+        <div class="qb rv">
+          <div class="qh"><span class="who"><span>Review ·&nbsp;</span><span class="cjk">会话间消息参数与回复设计</span><span>&nbsp;· 15:12</span></span><span class="sha">59d9815</span></div>
+          <div class="hl warn">Needs you: the 50/hour cap can overshoot — ship as is?</div>
+          <div class="rr"><span class="k ok">Checked</span><span>Criteria 1–6 · PG 2298/2298</span></div>
+          <div class="rr"><span class="k no">Not checked</span><span>JS tests never ran on CI</span></div>
+          <div class="rr"><span class="k">Left open</span><span>3 more optional review items</span></div>
+          <div class="rq">Everything asked for is there. The cap is a trade-off, so it’s yours.</div>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>B：开头写「还剩什么」，由 Orbit 从条目推出来</b>
+      <ul>
+        <li>有「要你判断」的事时，开头一行就是那件事本身，橙色显示（图中这件是演示：把审查可选项里「50 条上限在并发下会超」当成要你拍板的取舍）。没有的话，就是第 ④ 台手机那样：「没核实 N 项 · 没有要你判断的」。</li>
+        <li>开头这一行审查方写不进去，只能从它填的条目推出来，所以没核实的事不会被一句「可以确认」盖住。审查方的结论保留在最后一行，原话加引号。</li>
+        <li>推荐 B。它和 evidence 卡把「这份证据没能证明的」放在最前，是同一个道理。</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- other states -->
+  <figure>
+    <span class="tag new">建议 · 其余三种状态</span>
+    <div class="snip">
+      <div class="sl">REVIEW TIMED OUT</div>
+      <div class="card whole" style="padding-top:1px">
+        <div class="qb rv">
+          <div class="qh"><span class="who"><span>Review ·&nbsp;</span><span class="cjk">会话间消息参数与回复设计</span></span></div>
+          <div class="st"><span data-ic="dash"></span>Not reviewed</div>
+          <div class="sub">No answer within 30 min. Only the agent that did the work has checked this.</div>
+        </div>
+      </div>
+    </div>
+    <div class="snip">
+      <div class="sl">THE BRANCH MOVED AFTER THE REVIEW</div>
+      <div class="card whole" style="padding-top:1px">
+        <div class="qb rv">
+          <div class="qh"><span class="who"><span>Review ·&nbsp;</span><span class="cjk">会话间消息参数与回复设计</span><span>&nbsp;· 15:12</span></span><span class="sha gone">59d9815</span></div>
+          <div class="st" style="color:var(--orange)">Outdated</div>
+          <div class="sub">Written for 59d9815. The branch is at 7c1e2a0 now, so this says nothing about the last commit.</div>
+          <div class="more" style="color:var(--label-2)">Show the old review <span data-ic="down"></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="snip">
+      <div class="sl">YOU CONFIRMED FIRST, THE REVIEW CAME LATER</div>
+      <div class="card whole" style="padding-top:1px">
+        <div class="rc"><span data-ic="seal"></span><div><div class="t">Confirmed done by you · 15:00</div><div class="w">Before the review came in</div></div></div>
+        <div class="qb rv">
+          <div class="qh"><span class="who"><span>Review ·&nbsp;</span><span class="cjk">会话间消息参数与回复设计</span><span>&nbsp;· 15:12</span></span><span class="sha">59d9815</span></div>
+          <div class="hl warn">1 problem found after you confirmed</div>
+          <div class="rr"><span class="k no">Problem</span><span>JS tests fail on CI: SessionReplyCard.test.tsx</span></div>
+          <div class="rb">Reopen task</div>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>其余状态（演示数据）</b>
+      <ul>
+        <li><b>超时</b>：直接写「没人审过」，不留一块空白。没有审查方的任务（你在 app 里自己建的）连这一栏都不出现。</li>
+        <li><b>过期</b>：审查绑定在某个提交上，分支有了新提交就整栏降级，旧内容收起来。</li>
+        <li><b>你先确认、审查后到</b>：这正是截图那一单的情况。回执下面补上这份审查；如果它发现了问题，就推到你面前，并给出重开任务的入口。</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- top of the card + list rows -->
+  <figure>
+    <span class="tag new">建议 · 卡片顶部，以及会话列表</span>
+    <div class="snip">
+      <div class="sl">THE TOP OF THE CARD (SCROLLED UP)</div>
+      <div class="card whole">
+        <div class="ch"><span class="seal" data-ic="sealw"></span><span class="h">Confirm this task is done?</span></div>
+        <div class="prov">From Orbit</div>
+        <div class="ld1">会话间请求与回复：修复 P1 审查发现的问题</div>
+        <div class="ld2">You decide when this is done <span class="mono">34YlGb8ou0rxjIZJ8kx5u</span></div>
+        <div class="frow">What counts as done<span class="n">6 items</span><span data-ic="right"></span></div>
+        <div class="qb">
+          <div class="qh">What the agent said · 14:54</div>
+          <div class="qt" style="color:var(--label-2)">All six P1 review findings are fixed and pushed to…</div>
+        </div>
+      </div>
+    </div>
+    <div class="snip">
+      <div class="sl">THE SESSION LIST</div>
+      <div class="lb">
+        <div class="lst">
+          <div class="lr"><span class="gl" data-ic="clock"></span><div class="m"><div class="a">执行任务：会话间请求与回复：修复 P1 审查发现的问题</div><div class="b">Under review · 会话间消息参数与回复设计</div></div><span class="tm">2m</span></div>
+          <div class="lr"><span class="gl" data-ic="pause"></span><div class="m"><div class="a">执行任务：会话间请求与回复：修复 P1 审查发现的问题</div><div class="b amber">Waiting for your confirmation</div></div><span class="tm">now</span></div>
+        </div>
+      </div>
+    </div>
+    <figcaption>
+      <b>卡片顶部和会话列表</b>
+      <ul>
+        <li>验收标准平时收成一行（「6 items」），点开就地展开。省下来的高度留给审查栏和 If you confirm，让它们和按钮在同一屏。</li>
+        <li>会话列表里，第一行是审查中：灰色，不计入 needs-you。第二行是审查完成或超时之后：和今天一样，橙色的 Waiting for your confirmation。列表行是示意。</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+</div>
+
+<div class="note">
+  <b>需要补的数据（按推进顺序）：</b>
+  <ol>
+    <li><b>If you confirm</b> 只读服务端已有的事实：确认后会被放行的下游任务（<code>autoRunWhenReady</code>，并且其余依赖都已满足）、运行会话的 <code>branchMerged</code> / <code>changedFiles</code>，以及任务是否在项目里、项目怎么落地。这些数据加进 <code>GET /tasks/:id/owner-confirmation</code> 这个读接口，三端都从这里读。</li>
+    <li><b>报告</b>改取声明完成（<code>task_request_confirmation</code>）那一轮的最后一条消息，而不是「停下来」那一轮的最后一条。</li>
+    <li><b>审查方</b>：任务属于项目时，默认是项目的协调会话；不属于项目时，是建这个任务的会话；你在 app 里自己建的任务没有审查方。声明完成时，Orbit 向审查方发一条要求回复的会话请求，复用正在做的 expectReply。请求的几种结局（已回复 / 超时 / 对方已结束）正好对应审查栏的几种状态。审查期间这张卡不计入 needs-you，回复或超时之后再计。</li>
+    <li><b>审查内容</b>沿用服务端已有的「项目是否完成」请求的结构（<code>DoneRequest</code>：judgment，加逐条核查和证据引用），按任务拆成 已核实 / 没核实 / 要你判断 / 遗留 这四类条目，并绑定在 requestId 和提交上。审查方能写条目和一句结论，但写不了按钮，也写不了开头那一行。</li>
+    <li>还没拍板的：开头用 A 还是 B（推荐 B）；超时时长（先用 30 分钟）；像这一单这样「机器能验、审查方能审」的任务，要不要直接由审查方结案，你只负责合入 main。</li>
+  </ol>
+</div>
+
+<script>
+  const IC = {
+    down: '<svg width="13" height="8" viewBox="0 0 14 8"><path d="M1.5 1.5 7 6.5l5.5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    right: '<svg width="8" height="13" viewBox="0 0 8 13"><path d="M1.5 1.5 6.5 6.5 1.5 11.5" fill="none" stroke="#BDBDC2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    play: '<svg width="14" height="16" viewBox="0 0 14 16"><path d="M2.5 1.8v12.4L12.6 8z" fill="#3B6CF2"/></svg>',
+    branch: '<svg width="16" height="17" viewBox="0 0 16 17" fill="none" stroke="#6b6b73" stroke-width="1.6" stroke-linecap="round"><circle cx="4.5" cy="3.5" r="1.9"/><circle cx="4.5" cy="13.5" r="1.9"/><circle cx="11.5" cy="5.5" r="1.9"/><path d="M4.5 5.4v6.2M11.5 7.4c0 3-7 1.6-7 4.2"/></svg>',
+    clock: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="#6b6b73" stroke-width="1.6"><circle cx="8" cy="8" r="6.3"/><path d="M8 4.4V8l2.6 1.7" stroke-linecap="round"/></svg>',
+    dash: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="#6b6b73" stroke-width="1.6"><circle cx="8" cy="8" r="6.3"/><path d="M4.8 8h6.4" stroke-linecap="round"/></svg>',
+    check: '<svg width="16" height="16" viewBox="0 0 14 14"><path d="M2.3 7.4 5.5 10.6 11.8 3.4" fill="none" stroke="#248A3D" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    seal: '<svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="#248A3D"/><path d="M5.8 10.3 8.6 13 14.3 7" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    sealw: '<svg width="12" height="12" viewBox="0 0 14 14"><path d="M2.3 7.4 5.5 10.6 11.8 3.4" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    pause: '<svg width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="9" fill="#F0A020"/><rect x="6.6" y="5.6" width="2.4" height="8.8" rx="1" fill="#fff"/><rect x="11" y="5.6" width="2.4" height="8.8" rx="1" fill="#fff"/></svg>',
+  };
+  document.querySelectorAll('[data-ic]').forEach((el) => { el.innerHTML = IC[el.dataset.ic] || ''; });
+
+  // The phone around each transcript: status bar, nav, the needs-you bar when it lights, and the band.
+  const SIGNAL = '<svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>';
+  const WIFI = '<svg width="17" height="12" viewBox="0 0 17 12"><path d="M8.5 11.2 6.3 8.8a3.1 3.1 0 0 1 4.4 0z"/><path d="M3.9 6.4a6.6 6.6 0 0 1 9.2 0l-1.3 1.3a4.8 4.8 0 0 0-6.6 0z"/><path d="M1.4 3.9a10.2 10.2 0 0 1 14.2 0l-1.3 1.3a8.4 8.4 0 0 0-11.6 0z"/></svg>';
+  const BACK = '<svg width="13" height="21" viewBox="0 0 13 21"><path d="M10.5 2 2.5 10.5l8 8.5" fill="none" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const SHARE = '<svg width="21" height="26" viewBox="0 0 21 26" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 16V2.5M5.8 7 10.5 2.3 15.2 7"/><path d="M7 10.5H3.5v13h14v-13H14"/></svg>';
+  const TERM = '<svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="#55555e" stroke-width="1.5"><rect x="1" y="1" width="18" height="14" rx="3"/><path d="M5 6l2.5 2L5 10M9.5 10.5h4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const FORK = '<svg width="11" height="13" viewBox="0 0 11 13" fill="none" stroke="#6b6b73" stroke-width="1.4" stroke-linecap="round"><path d="M2 1v4.5c0 1.6 3.5 1.6 3.5 3.2V12M9 1v4.5c0 1.6-3.5 1.6-3.5 3.2"/></svg>';
+  const UP = '<svg width="14" height="16" viewBox="0 0 14 16" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14V2.5M2 7l5-5 5 5"/></svg>';
+  const RING = '<svg width="22" height="22" viewBox="0 0 22 22" fill="none" stroke-width="2.6"><circle cx="11" cy="11" r="8.4" stroke="#DCE5FF"/><path d="M11 2.6a8.4 8.4 0 1 1-8.1 10.6" stroke="#3B6CF2" stroke-linecap="round"/></svg>';
+  document.querySelectorAll('.phone').forEach((p) => {
+    const top = document.createElement('div');
+    top.innerHTML =
+      `<div class="sb"><span class="time">${p.dataset.time}<svg width="14" height="15" viewBox="0 0 14 15" style="margin-left:6px;vertical-align:-1px"><rect x="1" y="1" width="12" height="13" rx="2.5" fill="#000"/><rect x="4" y="4" width="6" height="2" rx="1" fill="#fff"/><rect x="4" y="8" width="6" height="2" rx="1" fill="#fff"/></svg></span><span class="sys">${SIGNAL}${WIFI}<span class="bat">100</span></span></div>` +
+      `<div class="nav"><div class="circ back">${BACK}</div><div class="ttl"><div class="t1">执行任务：会话间请求与回复：修复 P1 审查发现的问题</div><div class="t2">${p.dataset.sub}</div></div><div class="circ share">${SHARE}</div></div>` +
+      (p.dataset.bar ? `<div class="ny"><span class="dot"></span>1 open question below${IC.down.replace('currentColor', 'rgba(60,60,67,.45)')}</div>` : '');
+    p.prepend(...top.childNodes);
+    const band = document.createElement('div');
+    band.className = 'band';
+    band.innerHTML =
+      `<div class="bp">${TERM}<b>Background processes</b><span class="v">10 total</span><span class="c">${IC.right}</span></div>` +
+      `<div class="wt"><span class="chip">${FORK} orb…07b</span><span class="add">+9,432</span><span class="del">−11…</span><span class="mg">Merge to main<i></i>${IC.down.replace('currentColor', '#3B6CF2')}</span></div>` +
+      `<div class="cmp"><div class="ph">Message...</div><div class="tb"><span style="font-size:26px;font-weight:300;line-height:1">+</span><span>Auto</span><span class="md">Opus 5.5 <span>Max</span></span><span class="bar"></span>${RING}<span class="send">${UP}</span></div></div>`;
+    p.append(band);
+  });
+
+  const only = new URLSearchParams(location.search).get('only');
+  if (only) {
+    document.body.classList.add('only');
+    document.querySelectorAll('.row:not(.row2) figure').forEach((f, i) => { if (String(i + 1) !== only) f.remove(); });
+  }
+</script>
+</html>
