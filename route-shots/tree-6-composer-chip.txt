@@ -1,0 +1,99 @@
+Attributes: Application, 0x1189bd040, pid: 24186, label: 'RouteProbe'
+Element subtree:
+ →Application, 0x1189bd040, pid: 24186, label: 'RouteProbe'
+    Window (Main), 0x1189bd180, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x1189bc3c0, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x1189bc500, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x1189bc640, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x1189bc780, {{0.0, 0.0}, {402.0, 874.0}}
+              Other, 0x1189bc8c0, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x1189bca00, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                  Button, 0x1189bcb40, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Back'
+                  Other, 0x1189bcc80, {{80.0, 66.7}, {242.0, 34.7}}
+                    Other, 0x1189bcdc0, {{80.0, 66.7}, {242.0, 34.7}}
+                      Button, 0x1189bcf00, {{80.0, 66.7}, {242.0, 34.7}}, label: '执行任务：把 run target 升到 v2 并冻结 effort, Waiting for your reply · Open · 13m ago'
+                        StaticText, 0x1189bd2c0, {{82.5, 66.7}, {237.0, 20.3}}, label: '执行任务：把 run target 升到 v2 并冻结 effort'
+                        StaticText, 0x1189bdf40, {{98.7, 88.0}, {204.7, 13.3}}, label: 'Waiting for your reply · Open · 13m ago'
+                  Other, 0x1189be080, {{346.0, 66.0}, {36.0, 36.0}}, identifier: 'square.and.arrow.up', label: 'Share session'
+                    Other, 0x1189be1c0, {{346.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x1189be300, {{349.7, 66.0}, {28.7, 36.0}}, identifier: 'square.and.arrow.up', label: 'Share session'
+                Other, 0x1189be440, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x1189be580, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x1189be6c0, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x1189be800, {{0.0, 0.0}, {402.0, 874.0}}
+                        Other, 0x1189be940, {{0.0, 116.0}, {402.0, 603.0}}
+                        CollectionView, 0x1189bea80, {{0.0, 0.0}, {402.0, 719.0}}
+                          Other, 0x1189bebc0, {{0.0, -1322.0}, {402.0, 3152.0}}
+                          Other, 0x1189bed00, {{0.0, 0.0}, {402.0, 719.0}}
+                            Other, 0x1189bee40, {{0.0, 0.0}, {402.0, 170.8}}
+                          Other, 0x1189bef80, {{0.0, 0.0}, {402.0, 719.0}}
+                          Cell, 0x1189bf0c0, {{0.0, 116.0}, {402.0, 159.0}}
+                            Other, 0x1189bf200, {{0.0, 116.0}, {402.0, 159.0}}
+                              Other, 0x1189bf340, {{0.0, 116.0}, {402.0, 159.0}}
+                                Other, 0x1189bf480, {{0.0, 116.0}, {402.0, 159.0}}
+                            Other, 0x1189bf5c0, {{0.0, 116.0}, {402.0, 159.0}}
+                              Other, 0x1189bf700, {{0.0, 116.0}, {402.0, 159.0}}
+                                Other, 0x1189bf840, {{0.0, 116.0}, {402.0, 159.0}}
+                                  TextView, 0x1189bf980, {{94.0, 130.0}, {280.0, 112.0}}, value: 执行任务：把 run target ...
+                                    TextView, 0x1189bfac0, {{94.0, 130.0}, {280.0, 54.6}}, label: '执行任务：把 run target 升到 v2 并冻结 effort'
+                                    TextView, 0x1189bfc00, {{94.0, 192.6}, {280.0, 49.3}}, label: '验收命令：pnpm –filter apiserver test:spec run-target'
+                                    Other, 0x1189bfd40, {{341.0, 130.0}, {30.0, 112.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x1189bfe80, {{368.0, 133.0}, {3.0, 106.0}}
+                                    Other, 0x106e2b480, {{94.0, 209.0}, {280.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x118914f00, {{97.0, 236.0}, {274.0, 3.0}}
+                                  Button, 0x118914500, {{307.3, 253.7}, {28.0, 15.0}}, identifier: 'doc.on.doc', label: 'Copy'
+                                  StaticText, 0x118992440, {{341.3, 254.3}, {44.7, 13.3}}, label: '18m ago'
+                          Cell, 0x118992800, {{0.0, 275.0}, {402.0, 116.0}}
+                            Other, 0x118992940, {{0.0, 275.0}, {402.0, 116.0}}
+                              Other, 0x1189bae40, {{0.0, 275.0}, {402.0, 116.0}}
+                                Other, 0x1189baf80, {{0.0, 275.0}, {402.0, 116.0}}
+                            Other, 0x1189bb0c0, {{0.0, 275.0}, {402.0, 116.0}}
+                              Other, 0x1189bb700, {{0.0, 275.0}, {402.0, 116.0}}
+                                Other, 0x1189bb5c0, {{0.0, 275.0}, {402.0, 116.0}}
+                                  TextView, 0x1189bb840, {{16.0, 281.0}, {356.0, 104.0}}, value: run 1 的失败在 effort ...
+                                    TextView, 0x1189bbc00, {{16.0, 281.0}, {356.0, 103.9}}, label: 'run 1 的失败在 effort 冻结：派发后 Agent 改了 effort，run 跟着变了。已把 effort 在 claim 时写进 run，spec 已改到 v2 的形状，正在跑验收命令。'
+                                    Other, 0x1189bb200, {{339.0, 281.0}, {30.0, 104.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                                      Other, 0x1189bb340, {{366.0, 284.0}, {3.0, 98.0}}
+                                    Other, 0x1189bb980, {{16.0, 352.0}, {356.0, 30.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                                      Other, 0x1189bbac0, {{19.0, 379.0}, {350.0, 3.0}}
+                          Cell, 0x1189bbd40, {{0.0, 391.0}, {402.0, 1.0}}
+                            Other, 0x1189bbe80, {{0.0, 391.0}, {402.0, 1.0}}
+                              Other, 0x1189bb480, {{0.0, 391.0}, {402.0, 1.0}}
+                                Other, 0x1189f4000, {{0.0, 391.0}, {402.0, 1.0}}
+                            Other, 0x1189f4140, {{0.0, 391.0}, {402.0, 1.0}}
+                              Other, 0x1189f4280, {{0.0, 391.0}, {402.0, 1.0}}
+                                Other, 0x1189f43c0, {{0.0, 391.0}, {402.0, 1.0}}
+                                  Other, 0x1189f4500, {{0.0, 391.0}, {402.0, 1.0}}
+                          Other, 0x1189f4640, {{369.0, 116.0}, {30.0, 603.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x1189f4780, {{396.0, 709.0}, {3.0, 7.0}}
+                          Other, 0x1189f48c0, {{369.0, 116.0}, {30.0, 603.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x1189f4a00, {{396.0, 709.0}, {3.0, 7.0}}
+                        Other, 0x1189f4b40, {{201.0, 739.0}, {0.0, 0.0}}
+                        TextView, 0x1189f4c80, {{32.0, 754.0}, {338.0, 22.0}}
+                          StaticText, 0x1189f4dc0, {{32.0, 754.0}, {338.0, 20.3}}, label: 'Message…'
+                          Other, 0x1189f4f00, {{337.0, 754.0}, {30.0, 22.0}}, label: 'Vertical scroll bar, 1 page', value: 0%
+                            Other, 0x1189f5040, {{364.0, 737.0}, {3.0, 36.0}}
+                          Other, 0x1189f5180, {{32.0, 762.0}, {338.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                            Other, 0x1189f52c0, {{35.0, 770.0}, {332.0, 3.0}}
+                        Button, 0x1189f5400, {{24.0, 790.0}, {32.0, 32.0}}, label: 'Add'
+                          Button, 0x1189f5540, {{24.0, 790.0}, {32.0, 32.0}}
+                            Image, 0x1189f5680, {{24.0, 790.0}, {32.0, 32.0}}, identifier: 'plus', label: 'Add'
+                        Button, 0x1189f57c0, {{64.0, 797.0}, {88.3, 18.0}}, label: 'Accept Edits'
+                          Button, 0x1189f5900, {{64.0, 797.0}, {88.3, 18.0}}
+                            StaticText, 0x1189f5a40, {{64.0, 797.0}, {88.3, 18.0}}, label: 'Accept Edits'
+                        Button, 0x1189f5b80, {{181.7, 795.0}, {132.3, 22.0}}, label: 'Model Opus 5.5, effort High, picked by smart selection'
+                          Button, 0x1189f5cc0, {{181.7, 795.0}, {132.3, 22.0}}
+                            StaticText, 0x1189f5e00, {{188.7, 797.0}, {12.0, 18.0}}, label: '✦'
+                            StaticText, 0x1189f5f40, {{205.7, 797.0}, {64.3, 18.0}}, label: 'Opus 5.5'
+                            StaticText, 0x1189f6080, {{275.0, 797.0}, {32.0, 18.0}}, label: 'High'
+                        Button, 0x1189f61c0, {{322.1, 798.1}, {15.8, 15.8}}, label: 'Context window not reported yet · 1M window'
+                        Button, 0x1189f6300, {{346.0, 790.0}, {32.0, 32.0}}, identifier: 'arrow.up.circle.fill', label: 'Arrow Up Circle', Disabled
+                Other, 0x1189f6440, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x1189f6580, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x1189bd040, pid: 24186, label: 'RouteProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.routeprobe'
+  Output: {
+    Application, 0x1189f66c0, pid: 24186, label: 'RouteProbe'
+  }

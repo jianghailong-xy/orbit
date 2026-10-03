@@ -1,0 +1,10 @@
+1-task-details: in view after 1 drag(s) at (32.0, 247.6666717529297, 338.0, 34.33332824707031)
+1-task-details Assignee row: 9 label="Assignee, orbit" value="" frame=(32.0, 247.6666717529297, 338.0, 34.33332824707031) hittable=true
+1-task-details Provider row: 9 label="Provider, Assignee's (Claude)" value="" frame=(32.0, 351.6666564941406, 338.0, 34.333343505859375) hittable=true
+1-task-details Model row: 9 label="Model, ✦ Smart selection" value="" frame=(32.0, 403.6666564941406, 338.0, 34.333343505859375) hittable=true
+1-task-details List row: 9 label="List, No list" value="" frame=(32.0, 455.6666564941406, 338.0, 34.333343505859375) hittable=true
+1-task-details Suggested label: 48 label="Suggested" value="" frame=(32.0, 306.16666666666663, 82.33333333333333, 20.33333333333337) hittable=false
+1-task-details Suggested cell: 75 label="" value="" frame=(16.0, 290.3333333333333, 370.0, 52.0) hittable=true
+1-task-details Suggested menu button: 9 label="Suggested, M · Sonnet 5.5 · medium" value="" frame=(16.0, 290.3333333333333, 370.0, 52.0) hittable=true
+1-task-details coordinator line: 48 label="Coordinator: one service plus its spec; an acceptance command decides it" value="" frame=(32.0, 558.6666666666667, 328.3333333333333, 31.66666666666663) hittable=true
+1-task-details created line: 48 label="Created by Wikova · Oct 2, 3:36 PM" value="" frame=(32.0, 594.3333333333334, 214.33333333333334, 15.666666666666742) hittable=true

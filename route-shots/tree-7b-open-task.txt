@@ -1,0 +1,165 @@
+Attributes: Application, 0x1189bd540, pid: 24186, label: 'RouteProbe'
+Element subtree:
+ →Application, 0x1189bd540, pid: 24186, label: 'RouteProbe'
+    Window (Main), 0x1189bd680, {{0.0, 0.0}, {402.0, 874.0}}
+      Other, 0x1189bd7c0, {{0.0, 0.0}, {402.0, 874.0}}
+        Other, 0x1189bc000, {{0.0, 0.0}, {402.0, 874.0}}
+          Other, 0x1189bc140, {{0.0, 0.0}, {402.0, 874.0}}
+            Other, 0x1189bc280, {{0.0, 0.0}, {402.0, 874.0}}
+              Other, 0x1189bc3c0, {{0.0, 0.0}, {402.0, 874.0}}
+                NavigationBar, 0x1189bc500, {{0.0, 62.0}, {402.0, 54.0}}, identifier: '_TtGC7SwiftUI32NavigationStackHosting'
+                  Button, 0x1189bc640, {{16.0, 62.0}, {44.0, 44.0}}, identifier: 'BackButton', label: 'Back'
+                  Other, 0x1189bc780, {{346.0, 66.0}, {36.0, 36.0}}, label: 'Task actions'
+                    Other, 0x1189bd900, {{346.0, 66.0}, {36.0, 36.0}}
+                      Button, 0x1189bda40, {{349.0, 66.0}, {30.0, 36.0}}, label: 'Task actions'
+                        Button, 0x1189bdb80, {{349.0, 66.0}, {30.0, 36.0}}
+                          Image, 0x1189bdcc0, {{353.0, 73.0}, {22.0, 22.0}}, identifier: 'ellipsis.circle', label: 'More'
+                Other, 0x1189bde00, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x1189bdf40, {{0.0, 0.0}, {402.0, 874.0}}
+                    Other, 0x1189be080, {{0.0, 0.0}, {402.0, 874.0}}
+                      Other, 0x1189be1c0, {{0.0, 0.0}, {402.0, 874.0}}
+                        CollectionView, 0x1189be300, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x1189be440, {{-16.0, -1632.0}, {434.0, 1956.3}}
+                          Other, 0x1189be580, {{0.0, 0.0}, {402.0, 874.0}}
+                          Other, 0x1189be6c0, {{0.0, 0.0}, {402.0, 874.0}}
+                          Cell, 0x1189be800, {{16.0, 151.0}, {370.0, 93.3}}
+                            Other, 0x1189be940, {{16.0, 151.0}, {370.0, 93.3}}
+                              Other, 0x1189bea80, {{16.0, 151.0}, {370.0, 93.3}}
+                                Other, 0x1189bebc0, {{16.0, 151.0}, {370.0, 93.3}}
+                            Other, 0x1189bed00, {{16.0, 151.0}, {370.0, 93.3}}
+                              Other, 0x1189bee40, {{16.0, 151.0}, {370.0, 93.3}}
+                                Other, 0x1189bef80, {{16.0, 151.0}, {370.0, 93.3}}
+                                  StaticText, 0x1189bf0c0, {{20.0, 155.0}, {334.3, 26.3}}, label: '把 run target 升到 v2 并冻结 effort'
+                                  StaticText, 0x1189bf200, {{39.0, 192.7}, {43.0, 13.3}}, label: 'Running'
+                                  StaticText, 0x1189bf340, {{96.0, 189.3}, {20.0, 20.0}}, label: 'O'
+                                  StaticText, 0x1189bf480, {{121.0, 190.3}, {32.0, 18.0}}, label: 'orbit'
+                                  StaticText, 0x1189bf5c0, {{161.0, 190.3}, {53.7, 18.0}}, label: '· 1d ago'
+                                  Image, 0x1189bf700, {{29.0, 221.3}, {15.0, 15.0}}, identifier: 'checkmark.seal', label: 'Verified', Selected
+                                  StaticText, 0x1189bf840, {{49.0, 221.0}, {226.7, 15.7}}, label: 'Judged by · its acceptance command'
+                          Cell, 0x1189bf980, {{16.0, 244.3}, {370.0, 62.3}}
+                            Other, 0x1189bfac0, {{16.0, 244.3}, {370.0, 62.3}}
+                              Other, 0x1189bfc00, {{16.0, 244.3}, {370.0, 62.3}}
+                                Other, 0x1189bfd40, {{16.0, 244.3}, {370.0, 62.3}}
+                            Other, 0x1189bfe80, {{16.0, 244.3}, {370.0, 62.3}}
+                              Other, 0x118a33c00, {{16.0, 244.3}, {370.0, 62.3}}
+                                Other, 0x118a33d40, {{16.0, 244.3}, {370.0, 62.3}}
+                                  Button, 0x118a33e80, {{16.0, 244.3}, {370.0, 62.3}}, label: 'Open the run'
+                                    Image, 0x1189ffac0, {{133.0, 269.3}, {20.0, 16.3}}, identifier: 'arrow.right', label: 'Right'
+                                    StaticText, 0x1189ffc00, {{16.0, 252.3}, {370.0, 50.3}}, label: 'Open the run'
+                          Other, 0x1189ff0c0, {{-16.0, 324.3}, {434.0, 421.3}}
+                          Cell, 0x1189ff200, {{16.0, 324.3}, {370.0, 44.0}}
+                            Other, 0x1189ff340, {{16.0, 324.3}, {370.0, 44.0}}
+                            Other, 0x1189ff480, {{16.0, 324.3}, {370.0, 44.0}}
+                              Other, 0x1189ff5c0, {{16.0, 324.3}, {370.0, 44.0}}
+                                Other, 0x1189ff700, {{16.0, 324.3}, {370.0, 44.0}}
+                                  StaticText, 0x1189ff840, {{16.0, 324.3}, {370.0, 44.0}}, label: 'Details'
+                          Cell, 0x1189ff980, {{16.0, 368.3}, {370.0, 52.0}}
+                            Other, 0x118a28000, {{16.0, 368.3}, {370.0, 52.0}}
+                              Other, 0x118a28140, {{16.0, 368.3}, {370.0, 52.0}}
+                            Other, 0x118a28280, {{16.0, 368.3}, {370.0, 52.0}}
+                              Other, 0x118a283c0, {{16.0, 368.3}, {370.0, 52.0}}
+                                Other, 0x118a28500, {{16.0, 368.3}, {370.0, 52.0}}
+                                  StaticText, 0x118a28640, {{32.0, 384.2}, {69.7, 20.3}}, label: 'Assignee'
+                                  Button, 0x118a28780, {{32.0, 377.3}, {338.0, 34.3}}, label: 'Assignee, orbit'
+                                    StaticText, 0x118a288c0, {{318.0, 384.3}, {35.3, 20.3}}, label: 'orbit'
+                          Cell, 0x118a28a00, {{16.0, 420.0}, {370.0, 52.0}}
+                            Other, 0x118a28b40, {{16.0, 420.0}, {370.0, 52.0}}
+                              Other, 0x118a28c80, {{16.0, 420.0}, {370.0, 52.0}}
+                            Other, 0x118a28dc0, {{16.0, 420.0}, {370.0, 52.0}}
+                              Other, 0x118a28f00, {{16.0, 420.0}, {370.0, 52.0}}
+                                Other, 0x118a29040, {{16.0, 420.0}, {370.0, 52.0}}
+                                  StaticText, 0x118a29180, {{32.0, 435.8}, {82.3, 20.3}}, label: 'Suggested'
+                                  Button, 0x118a292c0, {{16.0, 420.0}, {370.0, 52.0}}, label: 'Suggested, M · Sonnet 5.5 · medium'
+                                    Button, 0x118a29400, {{166.7, 436.0}, {203.3, 20.3}}
+                                      StaticText, 0x118a29540, {{166.7, 435.8}, {184.7, 20.3}}, label: 'M · Sonnet 5.5 · medium'
+                                      Image, 0x118a29680, {{359.0, 439.3}, {9.3, 13.3}}, identifier: 'chevron.up.chevron.down', label: 'Up And Down Chevrons'
+                          Other, 0x118a297c0, {{32.0, 419.0}, {338.0, 1.0}}
+                          Cell, 0x118a29900, {{16.0, 472.3}, {370.0, 52.0}}
+                            Other, 0x118a29a40, {{16.0, 472.3}, {370.0, 52.0}}
+                              Other, 0x118a29b80, {{16.0, 472.3}, {370.0, 52.0}}
+                            Other, 0x118a29cc0, {{16.0, 472.3}, {370.0, 52.0}}
+                              Other, 0x118a29e00, {{16.0, 472.3}, {370.0, 52.0}}
+                                Other, 0x118a29f40, {{16.0, 472.3}, {370.0, 52.0}}
+                                  StaticText, 0x118a2a080, {{32.0, 488.2}, {63.3, 20.3}}, label: 'Provider'
+                                  Button, 0x118a2a1c0, {{32.0, 481.3}, {338.0, 34.3}}, label: 'Provider, Assignee's (Claude)'
+                                    StaticText, 0x118a2a300, {{201.0, 488.3}, {152.3, 20.3}}, label: 'Assignee's (Claude)'
+                          Other, 0x118a2a440, {{32.0, 471.3}, {338.0, 1.0}}
+                          Cell, 0x118a2a580, {{16.0, 524.3}, {370.0, 52.0}}
+                            Other, 0x118a2a6c0, {{16.0, 524.3}, {370.0, 52.0}}
+                              Other, 0x118a2a800, {{16.0, 524.3}, {370.0, 52.0}}
+                            Other, 0x118a2a940, {{16.0, 524.3}, {370.0, 52.0}}
+                              Other, 0x118a2aa80, {{16.0, 524.3}, {370.0, 52.0}}
+                                Other, 0x118a2abc0, {{16.0, 524.3}, {370.0, 52.0}}
+                                  StaticText, 0x118a2ad00, {{32.0, 540.2}, {47.3, 20.3}}, label: 'Model'
+                                  Button, 0x118a2ae40, {{32.0, 533.3}, {338.0, 34.3}}, label: 'Model, ✦ Smart selection'
+                                    StaticText, 0x118a2af80, {{217.0, 540.3}, {136.7, 20.3}}, label: '✦ Smart selection'
+                          Other, 0x118a2b0c0, {{32.0, 523.3}, {338.0, 1.0}}
+                          Cell, 0x118a2b200, {{16.0, 576.3}, {370.0, 52.0}}
+                            Other, 0x118a2b340, {{16.0, 576.3}, {370.0, 52.0}}
+                              Other, 0x118a2b480, {{16.0, 576.3}, {370.0, 52.0}}
+                            Other, 0x118a2b5c0, {{16.0, 576.3}, {370.0, 52.0}}
+                              Other, 0x118a2b700, {{16.0, 576.3}, {370.0, 52.0}}
+                                Other, 0x118a2b840, {{16.0, 576.3}, {370.0, 52.0}}
+                                  StaticText, 0x118a2b980, {{32.0, 592.2}, {27.3, 20.3}}, label: 'List'
+                                  Button, 0x118a2bac0, {{32.0, 585.3}, {338.0, 34.3}}, label: 'List, No list'
+                                    StaticText, 0x118a2bc00, {{305.3, 592.3}, {48.0, 20.3}}, label: 'No list'
+                          Other, 0x118a2bd40, {{32.0, 575.3}, {338.0, 1.0}}
+                          Cell, 0x118a2be80, {{16.0, 628.3}, {370.0, 52.0}}
+                            Other, 0x118a2c000, {{16.0, 628.3}, {370.0, 52.0}}
+                              Other, 0x118a2c140, {{16.0, 628.3}, {370.0, 52.0}}
+                            Other, 0x118a2c280, {{16.0, 628.3}, {370.0, 52.0}}
+                              Other, 0x118a2c3c0, {{16.0, 628.3}, {370.0, 52.0}}
+                                Other, 0x118a2c500, {{16.0, 628.3}, {370.0, 52.0}}
+                                  Button, 0x118a2c640, {{16.0, 628.3}, {370.0, 52.0}}, label: 'Start at, Not set'
+                                    StaticText, 0x118a2c780, {{32.0, 644.2}, {56.3, 20.3}}, label: 'Start at'
+                                    StaticText, 0x118a2c8c0, {{293.7, 644.2}, {55.7, 20.3}}, label: 'Not set'
+                                    Image, 0x118a2ca00, {{359.0, 647.7}, {9.3, 13.3}}, identifier: 'chevron.up.chevron.down', label: 'Up And Down Chevrons'
+                          Other, 0x118a2cb40, {{32.0, 627.3}, {338.0, 1.0}}
+                          Cell, 0x118a2cc80, {{16.0, 680.3}, {370.0, 65.3}}
+                            Other, 0x118a2cdc0, {{16.0, 680.3}, {370.0, 65.3}}
+                            Other, 0x118a2cf00, {{16.0, 680.3}, {370.0, 65.3}}
+                              Other, 0x118a2d040, {{16.0, 680.3}, {370.0, 65.3}}
+                                Other, 0x118a2d180, {{16.0, 680.3}, {370.0, 65.3}}
+                                  StaticText, 0x118a2d2c0, {{32.0, 688.3}, {328.3, 31.7}}, label: 'Coordinator: one service plus its spec; an acceptance command decides it'
+                                  StaticText, 0x118a2d400, {{32.0, 724.0}, {212.3, 15.7}}, label: 'Created by Wikova · Oct 2, 3:41 PM'
+                          Other, 0x118a2d540, {{-16.0, 745.7}, {434.0, 165.7}}
+                          Cell, 0x118a2d680, {{16.0, 745.7}, {370.0, 44.0}}
+                            Other, 0x118a2d7c0, {{16.0, 745.7}, {370.0, 44.0}}
+                            Other, 0x118a2d900, {{16.0, 745.7}, {370.0, 44.0}}
+                              Other, 0x118a2da40, {{16.0, 745.7}, {370.0, 44.0}}
+                                Other, 0x118a2db80, {{16.0, 745.7}, {370.0, 44.0}}
+                                  StaticText, 0x118a2dcc0, {{16.0, 745.7}, {370.0, 44.0}}, label: 'Dependencies'
+                          Cell, 0x118a2de00, {{16.0, 789.7}, {370.0, 52.0}}
+                            Other, 0x118a2df40, {{16.0, 789.7}, {370.0, 52.0}}
+                              Other, 0x118a2e080, {{16.0, 789.7}, {370.0, 52.0}}
+                            Other, 0x118a2e1c0, {{16.0, 789.7}, {370.0, 52.0}}
+                              Other, 0x118a2e300, {{16.0, 789.7}, {370.0, 52.0}}
+                                Other, 0x118a2e440, {{16.0, 789.7}, {370.0, 52.0}}
+                                  StaticText, 0x118a2e580, {{16.0, 789.7}, {370.0, 52.0}}, label: 'No dependencies'
+                          Cell, 0x118a2e6c0, {{16.0, 841.7}, {370.0, 52.0}}
+                            Other, 0x118a2e800, {{16.0, 841.7}, {370.0, 52.0}}
+                              Other, 0x118a2e940, {{16.0, 841.7}, {370.0, 52.0}}
+                            Other, 0x118a2ea80, {{16.0, 841.7}, {370.0, 52.0}}
+                              Other, 0x118a2ebc0, {{16.0, 841.7}, {370.0, 52.0}}
+                                Other, 0x118a2ed00, {{16.0, 841.7}, {370.0, 52.0}}
+                                  Button, 0x118a2ee40, {{16.0, 841.7}, {370.0, 52.0}}, label: 'Add prerequisite'
+                                    Image, 0x118a2ef80, {{33.3, 857.0}, {21.7, 21.7}}, identifier: 'plus.circle', label: 'Add'
+                                    StaticText, 0x118a2f0c0, {{33.3, 857.0}, {164.0, 21.7}}, label: 'Add prerequisite'
+                          Other, 0x118a2f200, {{32.0, 840.7}, {338.0, 1.0}}
+                          Other, 0x118a2f340, {{369.0, 116.0}, {30.0, 658.0}}, label: 'Vertical scroll bar, 3 pages', value: 0%
+                            Other, 0x118a2f480, {{396.0, 764.0}, {3.0, 7.0}}
+                          Other, 0x118a2f5c0, {{369.0, 116.0}, {30.0, 658.0}}, label: 'Vertical scroll bar, 3 pages', value: 0%
+                            Other, 0x118a2f700, {{396.0, 764.0}, {3.0, 7.0}}
+                        TextField, 0x118a2f840, {{32.0, 799.0}, {308.0, 22.0}}, placeholderValue: 'Add a comment… type @Workspace to mention'
+                          Other, 0x118a2f980, {{41.0, 807.0}, {299.0, 11.0}}, label: 'Horizontal scroll bar, 1 page', value: 0%
+                            Other, 0x118a2fac0, {{44.0, 815.0}, {293.0, 3.0}}
+                        Button, 0x118a2fc00, {{348.0, 797.0}, {30.0, 30.0}}, identifier: 'paperplane.fill', label: 'Send comment', Disabled
+                Other, 0x118a2fd40, {{0.0, 0.0}, {402.0, 874.0}}
+                  Other, 0x118a2fe80, {{0.0, 0.0}, {402.0, 874.0}}
+Path to element:
+ →Application, 0x1189bd540, pid: 24186, label: 'RouteProbe'
+Query chain:
+ →Find: Target Application 'io.orbitd.routeprobe'
+  Output: {
+    Application, 0x1189fe1c0, pid: 24186, label: 'RouteProbe'
+  }

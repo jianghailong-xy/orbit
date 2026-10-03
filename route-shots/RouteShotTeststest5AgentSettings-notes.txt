@@ -1,0 +1,9 @@
+5-agent-settings: in view after 1 drag(s) at (16.0, 621.3333333333334, 370.0, 177.0)
+switch: 40 label="Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." value="1" frame=(16.0, 621.3333333333334, 370.0, 177.0) hittable=true
+section header: 48 label="Task runs" value="" frame=(16.0, 581.0, 370.0, 40.33333333333337) hittable=true
+switch after the tap: 40 label="Smart model selection for tasks, Task runs use the model and effort of the tier suggested for the task, and go one tier up after a failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always wins. Sessions you open yourself are not affected." value="0" frame=(16.0, 621.3333333333334, 370.0, 177.0) hittable=true
+PATCH lines in requests.log:
+    PATCH /api/tasks/T1 body: {"modelHintReason":null,"modelHint":"L"}
+18:08:09 "PATCH /api/tasks/T1 HTTP/1.1" 200 -
+    PATCH /api/agents/a1 body: {"name":"orbit","effort":"","workDir":"\/srv\/orbit","enabled":true,"modelRouting":false}
+18:11:00 "PATCH /api/agents/a1 HTTP/1.1" 200 -
