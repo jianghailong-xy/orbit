@@ -19,6 +19,7 @@ struct ToastRequest: Equatable {
     var tone: ToastTone = .success
     var key: String?
     var inProgress = false
+    var mergeConflict: ToastMergeConflict?
 }
 
 /// Top-level app state: instance + auth + the Open session list. All UI-driving state lives
@@ -492,6 +493,7 @@ final class AppModel {
         consoleRegistry?.onToast = { [weak self] request, sessionID in
             self?.showToast(request.message, sessionID: sessionID,
                             detail: request.detail, tone: request.tone,
+                            mergeConflict: request.mergeConflict,
                             key: request.key.map { "\($0):\(sessionID ?? "")" }, inProgress: request.inProgress)
         }
         // The permission posture a session inherits when it stores none, and where a Mode picked in
@@ -1673,6 +1675,7 @@ final class AppModel {
     /// trash state).
     private(set) var toasts = ToastFeed()
     @ObservationIgnored private var toastExpiry: Task<Void, Never>?
+    @ObservationIgnored private var heldToastID: ToastItem.ID?
     @ObservationIgnored private var toastFold: Task<Void, Never>?
 
     /// Refresh whichever session lists are on screen (Open always; the agent list if
@@ -1698,16 +1701,17 @@ final class AppModel {
     func showToast(_ message: String, subtitle: String? = nil, sessionID: String? = nil,
                    sessionTitle: String? = nil, detail: String? = nil, tone: ToastTone = .success,
                    icon: String? = nil, canUndo: Bool = false, awaitsApproval: Bool = false,
+                   mergeConflict: ToastMergeConflict? = nil,
                    key: String? = nil, inProgress: Bool = false) {
         let line = subtitle ?? sessionTitle ?? sessionID.flatMap(toastSessionTitle)
         let item = ToastItem(message: message, subtitle: line, detail: detail, tone: tone, icon: icon,
                              sessionID: sessionID, canUndo: canUndo, awaitsApproval: awaitsApproval,
-                             key: key, inProgress: inProgress)
+                             key: key, inProgress: inProgress, mergeConflict: mergeConflict)
         guard let id = toasts.post(item, at: Date()), let shown = toasts.item(id) else { return }
         announce(shown)
         if shown.level == .attention {
             foldToastLater(id)
-        } else if let dwell = shown.dwell {
+        } else if let dwell = shown.dwell, heldToastID != id {
             expireToastLater(id, after: dwell)
         }
     }
@@ -1759,12 +1763,15 @@ final class AppModel {
         foldToastLater(id)
     }
 
-    /// The pointer resting on a toast keeps it; its dwell starts over when the pointer leaves.
+    /// A finger or pointer resting on a toast keeps it; its dwell starts over when released.
     func holdToast(_ id: ToastItem.ID) {
-        if toasts.transient?.id == id { toastExpiry?.cancel() }
+        guard toasts.transient?.id == id else { return }
+        heldToastID = id
+        toastExpiry?.cancel()
     }
 
     func releaseToast(_ id: ToastItem.ID) {
+        if heldToastID == id { heldToastID = nil }
         guard let toast = toasts.transient, toast.id == id, let dwell = toast.dwell else { return }
         expireToastLater(id, after: dwell)
     }
@@ -1785,6 +1792,18 @@ final class AppModel {
         guard let sessionID = toasts.item(id)?.sessionID else { return }
         toasts.dismiss(id)
         route(to: .session(sessionID))
+    }
+
+    /// The conflict card hands the same branch and target to the session as the worktree bar does.
+    func resolveToastConflict(_ id: ToastItem.ID) {
+        guard let toast = toasts.item(id), let sessionID = toast.sessionID,
+              let conflict = toast.mergeConflict, let registry = consoleRegistry else { return }
+        toasts.dismiss(id)
+        route(to: .session(sessionID))
+        Task {
+            await registry.resolveInSession(sessionID: sessionID,
+                                            branch: conflict.branch, target: conflict.target)
+        }
     }
 
     /// Complete a session, drop it from any open pane and offer Undo.

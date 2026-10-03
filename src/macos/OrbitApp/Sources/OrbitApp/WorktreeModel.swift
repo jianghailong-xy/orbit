@@ -302,10 +302,14 @@ final class WorktreeModel {
             case "merged":
                 return ToastRequest(message: "Merged into \(target)", key: "merge")
             case "conflict":
+                let target = WorktreeBarLogic.conflictTarget(
+                    mergeTarget: detail.mergeTarget, targets: detail.mergeTargets ?? [],
+                    agentDefaultTarget: detail.agent?.defaultMergeTarget)
                 return ToastRequest(
-                    message: "Merge conflict in \(target)",
-                    detail: "Merge aborted; your branch is unchanged. Resolve it from the worktree bar.",
-                    tone: .warning, key: "merge")
+                    message: "Couldn't merge into \(target)",
+                    detail: Self.trimmed(detail.mergeError),
+                    tone: .error, key: "merge",
+                    mergeConflict: detail.branch.map { ToastMergeConflict(branch: $0, target: target) })
             case "error":
                 return ToastRequest(message: "Couldn't merge into \(target)",
                                     detail: Self.trimmed(detail.mergeError), tone: .error, key: "merge")

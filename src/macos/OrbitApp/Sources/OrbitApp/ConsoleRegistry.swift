@@ -125,6 +125,11 @@ final class ConsoleRegistry {
         }
     }
 
+    /// A pinned merge-conflict card can resolve from any page, even after its console was evicted.
+    func resolveInSession(sessionID: String, branch: String, target: String) async {
+        await model(for: sessionID).worktree.resolveInSession(branch: branch, target: target)
+    }
+
     /// Non-mutating lookup, safe inside a view `body`. Non-nil once `model(for:)` has run (the
     /// debounced activation pre-warms it), so the detail pane renders the warm transcript with no
     /// spinner.
