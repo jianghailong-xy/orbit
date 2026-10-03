@@ -256,23 +256,39 @@ describe('a runner with two Codex accounts', () => {
     expect(loginPosts()).toEqual([{ engine: 'codex', account: 'default' }]);
   });
 
-  it('adds an account under the name typed for it, and not before there is one', async () => {
+  it('adds an account the moment + Account is pressed, under a name it picks, and never under none', async () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
 
     await click(button(rows(page, '.re-grp')[0], '+ Account'));
-    const start = button(page, 'Sign in to Codex');
-    // A blank name would read as no account at all — the runner's own login.
-    expect(start.disabled).toBe(true);
-
+    // Default and Work are the machine's first two accounts, so this one is its third.
     const input = page.querySelector<HTMLInputElement>('.re-add input')!;
-    await act(async () => {
-      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-      set.call(input, '  Personal ');
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    expect(button(page, 'Sign in to Codex').disabled).toBe(false);
+    expect(input.value).toBe('Account 3');
+    expect(loginPosts()).toEqual([{ engine: 'codex', accountName: 'Account 3' }]);
+    expect(page.textContent).toContain('Starting sign-in on the runner…');
+
+    // Cancelled, the panel offers the sign-in again — under whatever name is typed, and not under a
+    // blank one, which would read as no account at all: the runner's own login.
+    const answer = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(async (path: string, options?: { method?: string }) =>
+      path.endsWith('/login') && options?.method === 'DELETE'
+        ? { status: null, engine: null, url: null, userCode: null, message: null, account: null }
+        : answer(path, options),
+    );
+    await click(button(page, 'Cancel'));
+    const type = async (value: string) =>
+      act(async () => {
+        const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+        set.call(input, value);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    await type('  ');
+    expect(button(page, 'Sign in to Codex').disabled).toBe(true);
+    await type('  Personal ');
     await click(button(page, 'Sign in to Codex'));
-    expect(loginPosts()).toEqual([{ engine: 'codex', accountName: 'Personal' }]);
+    expect(loginPosts()).toEqual([
+      { engine: 'codex', accountName: 'Account 3' },
+      { engine: 'codex', accountName: 'Personal' },
+    ]);
   });
 
   it('lets a folded card say an account still needs signing in', () => {
