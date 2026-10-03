@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState, type JSX } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import { api } from '../api';
@@ -444,6 +444,7 @@ export function settlementHeldOnConfirmation(
  * disabled, as on the native card.
  */
 export function AcceptanceConfirmationCard({
+  ref,
   standing,
   criteria,
   projectTitle,
@@ -454,6 +455,8 @@ export function AcceptanceConfirmationCard({
   onStart,
   onChatAbout,
 }: {
+  /** The card's own element, which is where its keyboard claim says it is drawn (`CardHotkey.ts`). */
+  ref?: Ref<HTMLDivElement>;
   /** The confirmation standing, or null when it could not be read. */
   standing: StandardSetConfirmationStanding | null;
   /** The stated criteria, or null when the project document could not be read. */
@@ -482,7 +485,7 @@ export function AcceptanceConfirmationCard({
   const stale = acceptanceConfirmationStaleExplanation(standing);
   const items = [...(criteria ?? [])].sort((a, b) => a.ordinal - b.ordinal);
   return (
-    <div className="approval-card settlement-card">
+    <div ref={ref} className="approval-card settlement-card">
       <div className="approval-head settlement-card-head">
         <span className="settlement-card-heading">{ACCEPTANCE_CONFIRMATION_TITLE}</span>
         <span className="criteria-provenance" title={ACCEPTANCE_PROVENANCE_TITLE}>
@@ -795,14 +798,17 @@ export function SessionCriteriaConfirmationCard({
   };
   // A press in flight, or one the door has taken, holds no confirmation key.
   const asking = shown && !answeredHere;
+  const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
     confirmEnabled: asking && !confirm.isPending && acceptanceConfirmationAnswerable(standing),
     onConfirm: start,
+    anchor,
   });
 
   if (!shown || answeredHere) return null;
   return (
     <AcceptanceConfirmationCard
+      ref={anchor}
       standing={standing}
       criteria={criteria}
       projectTitle={title}

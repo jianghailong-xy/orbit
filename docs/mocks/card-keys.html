@@ -241,7 +241,7 @@
   </div>
 </div>
 
-<h2 class="sec">两张卡同时在问 <span>键位收回：一次回车不能答两个问题</span></h2>
+<h2 class="sec">两张卡同时在问 <span>最上面那张先拿键：一次按键只答一个问题</span></h2>
 <div class="cards2">
   <div class="mini">
     <div class="approval-card">
@@ -249,7 +249,7 @@
       <div class="approval-body">
         <div class="chip">整理 9 月发票并归档</div>
         <div class="actions">
-          <div class="btn primary">Confirm done</div>
+          <div class="btn primary">Confirm done<span class="kbd">Enter</span></div>
           <div class="btn secondary">Chat about this</div>
         </div>
       </div>
@@ -268,16 +268,18 @@
     </div>
   </div>
 </div>
-<p class="lede" style="margin-top:14px">两张（或更多）同时在问时，<b>四张卡都不带键位、Enter 也不响应</b>：回车得在两问之间挑一个，而<b>按错门的键</b>比没有键更糟。读者照旧点他正在看的那颗按钮。只剩一张卡在问时，键位自己回来——包括另一张卡被答掉、走 stale、或它自己那一下正在飞的时候。</p>
+<p class="lede" style="margin-top:14px">两张（或更多）同时在问时，<b>键位只给页面上最靠上的那张</b>（2026-10-03 改，之前是谁都不给）：键位提示只画在它的按钮上，按下去之前就看得见会按到哪颗。它被答掉、走 stale、或它自己那一下正在飞时，键位<b>顺延</b>到下一张，提示跟着走。“最上面”按卡片在页面上的位置算，不按谁的数据先到。<b>按住不放</b>只算一次：自动重复的按键不响，一次长按不会连答两张卡。</p>
 
 <h2 class="sec">键位落在哪 <span>四张卡 + 审批卡共用同一段判定</span></h2>
 <table class="copy">
   <tr><th>操作</th><th>结果</th></tr>
   <tr><td class="k"><code>Enter</code></td><td>第一动作：Confirm done / Start the project / Confirm the criteria / 审批卡的 Approve。</td></tr>
   <tr><td class="k"><code>⌘ + Enter</code>（非 Mac 是 <code>Ctrl + Enter</code>）</td><td>第二动作：Chat about this——接管底部主输入框，下一次发送就是理由；审批卡上是 Always allow。</td></tr>
-  <tr><td class="k">输入框里已有文字（底部主输入框、任何 textarea/input）</td><td>两颗键都不响：打字的地方归打字；输入框为空时，快捷键仍交给唯一在问的卡片。</td></tr>
+  <tr><td class="k"><code>⌘ + Enter</code> 在 Merge to main / 判据放宽卡上</td><td>第一动作：<code>Merge to main</code> / <code>Approve &amp; re-seal</code>。这两颗按下去不好收回，所以不吃裸 <code>Enter</code>。</td></tr>
+  <tr><td class="k">输入框里已有文字（底部主输入框、任何 textarea/input）</td><td>两颗键都不响：打字的地方归打字；输入框为空时，快捷键仍交给最上面那张在问的卡片。</td></tr>
   <tr><td class="k">焦点在按钮上 + <code>Enter</code></td><td>让给那颗按钮自己的回车（焦点在哪颗就按哪颗）；<code>⌘ + Enter</code> 仍然归卡片。</td></tr>
   <tr><td class="k">按钮 disabled（走 stale、按下正在飞、已记录）</td><td>那颗按钮的键跟着死，另一颗不受影响。</td></tr>
+  <tr><td class="k">按住不放（自动重复）</td><td>只算一次：重复的按键不响，不会顺延去答下一张卡。</td></tr>
 </table>
 
 </body>

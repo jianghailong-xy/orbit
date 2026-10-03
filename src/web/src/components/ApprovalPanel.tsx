@@ -1,4 +1,4 @@
-import { useState, type JSX } from 'react';
+import { useRef, useState, type JSX } from 'react';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ApprovalInfo, PermissionRule } from '../api';
@@ -330,10 +330,11 @@ export function ApprovalPanel({
   // yields one rule per distinct sub-command.
   const rules = isQuestion ? [] : rememberRulesFor(approval);
   // One claim for the card, so that the two triggers below are one card asking rather than two.
-  // The keys are the card's only while it is the ONLY card asking: a question card elsewhere on
-  // the screen that can be answered with the same press stands this one down, and vice versa
-  // (`CardHotkey.ts`) — the hint goes with the keys, because it and the keys are one fact.
-  const keys = useCardKeyClaim(armed && !isQuestion);
+  // The keys are the card's only while it is the highest card asking: a question card above it on
+  // the screen holds them first, and this one holds them over every card below it (`CardHotkey.ts`)
+  // — the hint goes with the keys, because it and the keys are one fact.
+  const anchor = useRef<HTMLDivElement>(null);
+  const keys = useCardKeyClaim(armed && !isQuestion, anchor);
   // Plain card: Enter approves; ⌘/Ctrl + Enter always-allows (only when that option exists).
   // Questions have no submit hotkey — they submit only via the Submit button.
   useApproveHotkey(keys, () => onDecide(approval.id, 'allow'), { requireMod: false });
@@ -371,7 +372,7 @@ export function ApprovalPanel({
           ? (blocker.subjectTitle || blocker.kind || 'this blocker')
           : null;
   return (
-    <div className="approval-card">
+    <div ref={anchor} className="approval-card">
       <div className="approval-head">
         {isPlan(approval)
           ? '📋 Confirm: exit plan mode and proceed with this plan?'
