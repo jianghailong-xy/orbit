@@ -16,7 +16,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { accountPoolRuntime, isBuiltinProvider } from '../providers/custom-provider';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { followsRuntimeCatalog } from '../providers/preset-overlay';
-import { signedOutEngineRefusal, type EnginePreflightRunner } from '../sessions/engine-signin-preflight';
+import { signedOutEngineRefusal } from '../sessions/engine-signin-preflight';
 import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { readExecutableAcceptanceOutcome } from './executable-acceptance-round';
 import {
@@ -178,7 +178,7 @@ function engineState(
     bringsOwnCredentials: false,
     workspaceEnv: agent.env,
     accounts,
-    runner: runner as EnginePreflightRunner,
+    runner,
     nowMs: now.getTime(),
   }) !== null;
   const account = runAccount(engine, agent.env, accounts, runner.engines);
