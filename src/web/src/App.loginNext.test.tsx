@@ -92,6 +92,14 @@ async function unmount(): Promise<void> {
   if (!root) return;
   const mounted = root;
   root = null;
+  // antd's Form debounces each field's error list on a timer it never clears (ErrorList's
+  // useDebounce, 10 ms for an empty list), so the last render's four outlived the unmount. After the
+  // file's last login they outlived its jsdom too, and set state with no `window` left: four
+  // "window is not defined", a red run with every test green (workstation-gpu, 2026-10-03). Let them
+  // fire while the page is still here — the timers due by then run before this one.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  });
   await act(async () => mounted.unmount());
   container.remove();
 }

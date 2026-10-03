@@ -75,6 +75,13 @@ func TestCodexProviderArgsLoadInTheInstalledCodex(t *testing.T) {
 				args := codexAppServerCommandArgs(job, filepath.Join(home, "state"), "")
 				cmd = exec.CommandContext(ctx, exe, args...)
 			}
+			// And production's own process tree, which is what lets the cleanup below return. The
+			// `codex` on PATH can be npm's codex.js, which runs the native binary as a child on the
+			// same stdio; cancelling kills the wrapper alone, and the native app-server lived on
+			// holding our pipes, with its stdin still open because Wait closes that only once it
+			// returns. So Wait never did, and on such a host (codex-cli 0.160.0 on workstation-gpu,
+			// 2026-10-03) the package sat out its 10-minute go test timeout.
+			configureSessionProcessTree(cmd)
 			cmd.Env = env
 			cmd.Stderr = codexProbeWriter{&output, &outputMu}
 			var stdin io.WriteCloser
@@ -89,11 +96,12 @@ func TestCodexProviderArgsLoadInTheInstalledCodex(t *testing.T) {
 				t.Fatalf("starting codex %s: %v", path, err)
 			}
 			exited := make(chan struct{})
-			go func() { _ = cmd.Wait(); close(exited) }()
+			go func() { _ = waitSessionProcessTree(cmd); close(exited) }()
 			t.Cleanup(func() { cancel(); <-exited })
 
 			if path == "app-server" {
-				driveCodexProviderAppServer(t, stdin, stdout, job, dir, exited, logged)
+				// What it says on stdout is logged beside stderr, so a failure shows how far it got.
+				driveCodexProviderAppServer(t, stdin, io.TeeReader(stdout, codexProbeWriter{&output, &outputMu}), job, dir, exited, logged)
 			}
 			select {
 			case <-rec.first:
@@ -145,6 +153,10 @@ func driveCodexProviderAppServer(t *testing.T, stdin io.WriteCloser, stdout io.R
 		if _, err := stdin.Write(append(b, '\n')); err != nil {
 			t.Fatalf("codex app-server is gone before %s (its config was refused?):\n%s", method, logged())
 		}
+		// One deadline for the whole request. The notifications it streams meanwhile are not an
+		// answer, and a timer restarted by each of them never fired for a server that kept talking.
+		deadline := time.NewTimer(90 * time.Second)
+		defer deadline.Stop()
 		for {
 			select {
 			case line, ok := <-lines:
@@ -167,8 +179,8 @@ func driveCodexProviderAppServer(t *testing.T, stdin io.WriteCloser, stdout io.R
 				}
 			case <-exited:
 				t.Fatalf("codex app-server exited during %s:\n%s", method, logged())
-			case <-time.After(90 * time.Second):
-				t.Fatalf("no answer to %s within 90s:\n%s", method, logged())
+			case <-deadline.C:
+				t.Fatalf("no answer to %s within 90s of asking; the app-server's output so far:\n%s", method, logged())
 			}
 		}
 	}
