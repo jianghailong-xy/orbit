@@ -79,6 +79,8 @@ type agyProcess struct {
 	waitErr    error
 
 	// Read and written by the session loop only.
+	// gate is Orbit's approval gate when this process runs behind it, nil otherwise.
+	gate        *agyApprovalGate
 	initialized bool
 	retiring    bool // interrupted or reconfigured: never written to again
 	eventsDone  bool
@@ -230,8 +232,9 @@ func (w *agyStderrWriter) line(raw string) {
 	w.emit(evSystem, map[string]interface{}{"stderr": line + "\n"})
 }
 
-// antigravityArgs is the argv for one agy process (§1.1).
-func antigravityArgs(job *ClaimedSession, geminiDir string) []string {
+// antigravityArgs is the argv for one agy process (§1.1). gated: Orbit's approval hook is confirmed
+// in force for it (antigravityPermissionArgs).
+func antigravityArgs(job *ClaimedSession, geminiDir string, gated bool) []string {
 	args := []string{
 		"--gemini_dir=" + geminiDir,
 		// `--print=`, with the `=`: a bare --print followed by a flag is an error (§1.2).
@@ -246,7 +249,7 @@ func antigravityArgs(job *ClaimedSession, geminiDir string) []string {
 		args = append(args, "--conversation", id)
 	}
 	args = append(args, antigravityModelArgs(job.Agent.Model, job.Agent.Effort, antigravityCatalogModels())...)
-	return append(args, antigravityPermissionArgs(job.Agent.PermissionMode)...)
+	return append(args, antigravityPermissionArgs(job.Agent.PermissionMode, gated)...)
 }
 
 // antigravityEnv is agy's environment: the agent's on top of the runner's, the session context Orbit's
@@ -274,10 +277,11 @@ func antigravityEnv(job *ClaimedSession, execDir string) []string {
 
 // startAgyProcess starts agy and the goroutines that read it. The process leads its own process
 // group (configureSessionProcessTree): an interrupt signals the group, and every teardown — context
-// cancel, the reaper below — kills the group and every descendant it can still see.
-func startAgyProcess(ctx context.Context, job *ClaimedSession, execDir, geminiDir string, emit emitFn) (*agyProcess, error) {
+// cancel, the reaper below — kills the group and every descendant it can still see. gate is the
+// approval gate the process runs behind, already confirmed (installAntigravityApprovalGate), or nil.
+func startAgyProcess(ctx context.Context, job *ClaimedSession, execDir, geminiDir string, gate *agyApprovalGate, emit emitFn) (*agyProcess, error) {
 	procCtx, cancel := context.WithCancel(ctx)
-	cmd := exec.CommandContext(procCtx, agyExecutable, antigravityArgs(job, geminiDir)...)
+	cmd := exec.CommandContext(procCtx, agyExecutable, antigravityArgs(job, geminiDir, gate != nil)...)
 	configureSessionProcessTree(cmd)
 	cmd.Dir = execDir
 	cmd.Env = antigravityEnv(job, execDir)
@@ -288,6 +292,7 @@ func startAgyProcess(ctx context.Context, job *ClaimedSession, execDir, geminiDi
 		events:    make(chan map[string]interface{}, 256),
 		exited:    make(chan struct{}),
 		abandoned: make(chan struct{}),
+		gate:      gate,
 	}
 	stderr := &agyStderrWriter{proc: p, emit: emit}
 	// A writer rather than a pipe, so Wait itself drains stderr to the end: the AGY_ERROR line of a
@@ -536,8 +541,10 @@ func agyPermission(rawName string) string {
 	return rawName
 }
 
+// agyRefusal is agy's own refusal, which only the modes that ask nobody see: in Default and Accept
+// Edits a person decides through Orbit's approval hook instead.
 func agyRefusal(rawName string) string {
-	return "Antigravity refuses the \"" + agyPermission(rawName) + "\" permission in this session's permission mode, and Orbit cannot ask for approval on Antigravity yet."
+	return "Antigravity refuses the \"" + agyPermission(rawName) + "\" permission in this session's permission mode, which does not ask for approval."
 }
 
 // agySoftDenied reports whether a turn ended because agy refused a tool nobody could approve (§5.2):
@@ -594,20 +601,54 @@ type agyDriver struct {
 	// first, the process is killed with its tree.
 	stopTimer *time.Timer
 	ctxPing   contextPinger
+	// gateBroken is why the approval gate stopped holding (breakGate): the session ends once the
+	// process it broke in is gone.
+	gateBroken string
 }
 
-// spawn starts the next agy, continuing the session's conversation if it has one.
+// spawn starts the next agy, continuing the session's conversation if it has one. In the modes that
+// ask, it does not start one until agy has confirmed Orbit's approval hook is loaded.
 func (d *agyDriver) spawn() error {
-	dir, err := prepareAntigravityGeminiDir(d.scratchDir, d.job, orbitCLIExecutable())
+	orbitExe := orbitCLIExecutable()
+	dir, err := prepareAntigravityGeminiDir(d.scratchDir, d.job, orbitExe)
 	if err != nil {
 		return fmt.Errorf("prepare the private Gemini directory: %w", err)
 	}
-	proc, err := startAgyProcess(d.ctx, d.job, d.execDir, dir, d.emit)
+	var gate *agyApprovalGate
+	if antigravityAsksForApproval(d.job.Agent.PermissionMode) {
+		if gate, err = installAntigravityApprovalGate(d.ctx, d.job, d.execDir, dir, orbitExe); err != nil {
+			return err
+		}
+	} else if err := removeAntigravityApprovalGate(dir); err != nil {
+		return fmt.Errorf("remove the approval hook a mode that asked left behind: %w", err)
+	}
+	proc, err := startAgyProcess(d.ctx, d.job, d.execDir, dir, gate, d.emit)
 	if err != nil {
 		return err
 	}
 	d.proc = proc
 	return nil
+}
+
+// breakGate stops a process whose approval gate no longer holds (agyApprovalGate.check): its turn
+// fails with the reason, agy is interrupted — which stops a command it is running — and the session
+// ends with it rather than go on with nobody in the loop.
+func (d *agyDriver) breakGate(problem string) {
+	d.gateBroken = "Orbit stopped Antigravity because its approval hook is no longer in force: " + problem +
+		". Without it nothing would ask before agy acts, so this session cannot go on."
+	logln("antigravity:", d.job.SessionID+":", d.gateBroken)
+	if d.turn != nil {
+		d.failTurn(d.gateBroken)
+	} else {
+		d.emit(evError, map[string]interface{}{"message": d.gateBroken})
+	}
+	if p := d.proc; p != nil && !p.retiring {
+		p.retiring = true
+		p.interrupt()
+		if d.stopTimer == nil {
+			d.stopTimer = time.NewTimer(agyInterruptGrace)
+		}
+	}
 }
 
 // events and exited are the select cases for the current process: its events until they are all
@@ -653,7 +694,17 @@ func (d *agyDriver) handleEvent(event map[string]interface{}) {
 		d.handleInit(event)
 	case "step_update":
 		step := mapValue(event["step_update"])
-		if step == nil || d.turn == nil {
+		if step == nil {
+			return
+		}
+		// Every step, a turn's or not: agy can call the model by itself between turns.
+		if p := d.proc; p != nil && p.gate != nil && d.gateBroken == "" {
+			if problem := p.gate.check(step); problem != "" {
+				d.breakGate(problem)
+				return
+			}
+		}
+		if d.turn == nil {
 			return
 		}
 		handleAgyStep(step, d.turn, d.emit)
@@ -808,7 +859,7 @@ func (d *agyDriver) finishTurn(result map[string]interface{}, failure string) {
 	case agySoftDenied(turn, result):
 		status, subtype = stFailed, "permission_denied"
 		errText = "This turn stopped at a tool that was not allowed to run: " + agyRefusal(turn.lastTool.rawName) +
-			" To let it run, switch the session to Accept Edits (file writes in the workspace) or Bypass permissions, or allow it with a permission rule."
+			" To let it run, switch the session to Default or Accept Edits (you are asked first) or Bypass permissions, or allow it with a permission rule."
 	}
 	if turn.pending != nil {
 		emitAgyToolResult(d.emit, *turn.pending, subtype == "permission_denied")
@@ -1034,6 +1085,9 @@ func runAntigravitySessionProcess(ctx context.Context, shutdownCtx context.Conte
 		// Between turns, queued work runs once the process it would be written to — if one is on its
 		// way out — is gone: a new process must not open the conversation while the old one still has it.
 		if d.turn == nil && (d.proc == nil || !d.proc.retiring) {
+			if d.gateBroken != "" {
+				return stFailed, true, false
+			}
 			if endRequested {
 				return stSucceeded, true, false
 			}
