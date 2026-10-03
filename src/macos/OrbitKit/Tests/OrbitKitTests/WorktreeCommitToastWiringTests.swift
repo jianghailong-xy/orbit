@@ -101,7 +101,7 @@ final class WorktreeCommitToastWiringTests: XCTestCase {
                 + "commitError: detail.commitError, commitResultMessage: detail.commitResultMessage)"),
             "the failure card has to read the failure the way the bar does. Branch as written: \(branch)")
         XCTAssertTrue(
-            branch.contains(#"message: "Commit failed", detail: failure?.why, tone: .error"#),
+            branch.contains(#"message: "Couldn't commit", detail: failure?.why, tone: .error"#),
             "and say it under THIS headline, in the error tone. Branch as written: \(branch)")
     }
 

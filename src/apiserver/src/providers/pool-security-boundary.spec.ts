@@ -122,7 +122,6 @@ function database(rows: ProviderRow[]) {
     slug: pool.slug,
     label: pool.label,
     engine: 'claude',
-    logins: [],
     createdAt: at,
     updatedAt: at,
     members: pool.members.map((providerId) => {
@@ -140,8 +139,9 @@ function database(rows: ProviderRow[]) {
     modelProvider: {
       findMany: async (args: { where: Where }) => {
         const { where } = args;
-        if (where.id?.in && where.OR && where.slug?.not) {
-          return rows.filter((r) => where.id.in.includes(r.id) && r.slug !== where.slug.not && visible(where)(r));
+        // The compatibility guard rows (opencode, antigravity) are never a candidate member.
+        if (where.id?.in && where.OR && Array.isArray(where.slug?.notIn)) {
+          return rows.filter((r) => where.id.in.includes(r.id) && !where.slug.notIn.includes(r.slug) && visible(where)(r));
         }
         if (typeof where.slug?.startsWith === 'string' && Object.keys(where).length === 1) {
           return rows.filter((r) => r.slug.startsWith(where.slug.startsWith)).map((r) => ({ slug: r.slug }));
@@ -185,6 +185,15 @@ function database(rows: ProviderRow[]) {
           }
         }
         return { count };
+      },
+    },
+    poolCodexLogin: {
+      // A pool's ChatGPT accounts, which this stand-in's Claude pools hold none of: read beside the pool
+      // by pool id (migration 0371), and anything else is a query admission should not be making.
+      findMany: async (args: { where: Where }) => {
+        const { where } = args;
+        if (Array.isArray(where.poolId?.in)) return [];
+        return unexpected('poolCodexLogin.findMany', args);
       },
     },
   };

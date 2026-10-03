@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -68,6 +69,9 @@ func TestScanAgentDirsReportsExistenceAndGitSeparately(t *testing.T) {
 			t.Errorf("%s: exists=%v isGit=%v, want exists=%v isGit=%v",
 				tc.agent, p.Exists, p.IsGitRepo, tc.exists, tc.isGit)
 		}
+		if p.RepoURL != "" {
+			t.Errorf("%s: repoUrl=%q, want absent without origin", tc.agent, p.RepoURL)
+		}
 	}
 }
 
@@ -78,14 +82,90 @@ func TestScanAgentDirsTreatsRepoSubdirAsGit(t *testing.T) {
 	if out, err := exec.Command("git", "-C", repo, "init").CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v (%s)", err, out)
 	}
+	const origin = "git@github.com:orbit/example.git"
+	mustGit(t, repo, "remote", "add", "origin", origin)
 	sub := filepath.Join(repo, "packages", "web")
 	if err := os.MkdirAll(sub, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	got := scanAgentDirs(context.Background(), []AgentDirTarget{{AgentID: "sub", WorkDir: sub}})
 	p, ok := probeByAgent(got, "sub")
-	if !ok || !p.Exists || !p.IsGitRepo {
-		t.Fatalf("repo subdir probe = %#v, want exists+isGitRepo", got)
+	if !ok || !p.Exists || !p.IsGitRepo || p.RepoURL != origin || p.WorkDir != sub {
+		t.Fatalf("repo subdir probe = %#v, want exists+isGitRepo with origin and original workDir", got)
+	}
+}
+
+func TestScanAgentDirsReportsOriginWithoutCredentials(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		origin string
+		want   string
+	}{
+		{"https", "https://github.com/owner/repo.git", "https://github.com/owner/repo.git"},
+		{"scp", "git@github.com:owner/repo.git", "git@github.com:owner/repo.git"},
+		{"ssh", "ssh://git@github.com:2222/owner/repo.git", "ssh://git@github.com:2222/owner/repo.git"},
+		{"http credentials", "https://alice:secret@github.com/owner/repo.git?token=secret#secret", "https://github.com/owner/repo.git"},
+		{"http token username", "https://secret@github.com/owner/repo.git", "https://github.com/owner/repo.git"},
+		{"ssh password", "ssh://git:secret@github.com/owner/repo.git", "ssh://git@github.com/owner/repo.git"},
+		{"empty", "", ""},
+		{"multiline", "https://github.com/owner/repo.git\nhttps://github.com/other/repo.git", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := t.TempDir()
+			mustGit(t, repo, "init")
+			mustGit(t, repo, "remote", "add", "origin", tc.origin)
+			workDir := repo + string(filepath.Separator) + "."
+			got := scanAgentDirs(context.Background(), []AgentDirTarget{{AgentID: "repo", WorkDir: workDir}})
+			if len(got) != 1 || got[0].RepoURL != tc.want || got[0].WorkDir != workDir {
+				t.Fatalf("probe = %#v, want repoUrl=%q and workDir=%q", got, tc.want, workDir)
+			}
+		})
+	}
+}
+
+func TestScanAgentDirsReportsLinkedWorktreeOrigin(t *testing.T) {
+	repo := initRepo(t)
+	const origin = "git@github.com:owner/repo.git"
+	mustGit(t, repo, "remote", "add", "origin", origin)
+	worktree := filepath.Join(t.TempDir(), "linked")
+	mustGit(t, repo, "worktree", "add", "--detach", worktree)
+	got := scanAgentDirs(context.Background(), []AgentDirTarget{{AgentID: "linked", WorkDir: worktree}})
+	if len(got) != 1 || !got[0].IsGitRepo || got[0].RepoURL != origin {
+		t.Fatalf("linked worktree probe = %#v, want isGitRepo and origin=%q", got, origin)
+	}
+}
+
+func TestScanAgentDirsDoesNotGuessAnotherRemote(t *testing.T) {
+	repo := t.TempDir()
+	mustGit(t, repo, "init")
+	mustGit(t, repo, "remote", "add", "upstream", "git@github.com:owner/repo.git")
+	got := scanAgentDirs(context.Background(), []AgentDirTarget{{AgentID: "repo", WorkDir: repo}})
+	if len(got) != 1 || !got[0].IsGitRepo || got[0].RepoURL != "" {
+		t.Fatalf("probe = %#v, want isGitRepo with absent repoUrl when origin is missing", got)
+	}
+}
+
+func TestScanAgentDirsBoundsOriginProbe(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell-backed fake git is Unix-only")
+	}
+	binDir := t.TempDir()
+	// Repository detection succeeds, then reading origin stalls. The shared scan deadline
+	// must bound this second command too, without reporting a remote from a failed query.
+	script := "#!/bin/sh\nif [ \"$3\" = rev-parse ]; then echo true; else exec /bin/sleep 30; fi\n"
+	if err := os.WriteFile(filepath.Join(binDir, "git"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir)
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	got := scanAgentDirs(ctx, []AgentDirTarget{{AgentID: "repo", WorkDir: binDir}})
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Fatalf("origin probe took %s, want <1s", elapsed)
+	}
+	if len(got) != 1 || !got[0].IsGitRepo || got[0].RepoURL != "" {
+		t.Fatalf("probe = %#v, want absent repoUrl when origin query times out", got)
 	}
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import { api } from '../api';
@@ -384,17 +384,35 @@ export type EvidenceDecisionAddress = Pick<PendingDecisionRow, 'taskId' | 'evide
  * `pending` is already scoped by the server to rows this session may decide. The first two checks
  * are the second half of that rule, read off the door's own answers carried on the row exactly as
  * the rail reads them; the third is this card's own — a conversation shows the judgments of the
- * project it coordinates, and a row from another project, or from none, gets no card here.
+ * project it coordinates, and a row from another project gets no card here. A row of a task a
+ * session dispatched outside any project carries the one conversation its card is drawn in
+ * (`ownerCard`), and gets a card there and nowhere else. A legacy row in no project, with no
+ * `ownerCard`, gets none.
  */
 export function evidenceDecisionCardRows(
   queue: PendingDecisionQueue | null | undefined,
   projectId: string | null | undefined,
+  sessionId?: string | null,
 ): PendingDecisionRow[] {
-  if (!projectId) return [];
   return (queue?.pending ?? []).filter(
     (row) =>
-      row.decidability.decidable && row.independence.independent && row.projectId === projectId,
+      row.decidability.decidable
+      && row.independence.independent
+      && (row.ownerCard
+        ? Boolean(sessionId) && row.ownerCard.sessionId === sessionId
+        : Boolean(projectId) && row.projectId === projectId),
   );
+}
+
+/**
+ * The session a press on this row's card decides as: the one its `ownerCard` names — the session
+ * that dispatched the task, which did none of the work — or else the conversation it is pressed in.
+ */
+export function evidenceDecidingSession(
+  row: Pick<PendingDecisionRow, 'ownerCard'>,
+  sessionId: string,
+): string {
+  return row.ownerCard?.decidingSessionId ?? sessionId;
 }
 
 /**
@@ -419,9 +437,10 @@ export function evidenceDecisionStanding(
   queue: PendingDecisionQueue | null | undefined,
   projectId: string | null | undefined,
   address: EvidenceDecisionAddress,
+  sessionId?: string | null,
 ): EvidenceDecisionStanding {
   if (!queue) return { state: 'UNREAD', address };
-  const rows = evidenceDecisionCardRows(queue, projectId);
+  const rows = evidenceDecisionCardRows(queue, projectId, sessionId);
   const key = decisionRowKey(address);
   const row = rows.find((each) => decisionRowKey(each) === key) ?? null;
   if (row) return { state: 'DECIDABLE', address, row };
@@ -513,6 +532,7 @@ export function evidenceDecisionRecordedLine(result: EvidenceDecisionResult): st
  * saying why sits above the dead row, so it reads as the reason the row is dead.
  */
 export function EvidenceDecisionCard({
+  ref,
   standing,
   busy = false,
   error = null,
@@ -521,6 +541,8 @@ export function EvidenceDecisionCard({
   onConfirm,
   onChatAbout,
 }: {
+  /** The card's own element, which is where its keyboard claim says it is drawn (`CardHotkey.ts`). */
+  ref?: Ref<HTMLDivElement>;
   standing: EvidenceDecisionStanding;
   /** A press from this card is on its way to the door. */
   busy?: boolean;
@@ -542,6 +564,7 @@ export function EvidenceDecisionCard({
     // Where the rail's pointer lands: `revealDecisionCard` looks for this key, computed from its own
     // copy of the same row, so there is no map between the two to fall out of step.
     <div
+      ref={ref}
       className="approval-card decision-ask evidence-decision"
       data-decision-row={decisionRowKey(standing.address)}
     >
@@ -663,7 +686,8 @@ function EvidenceDecisionSlot({
 }): JSX.Element {
   const qc = useQueryClient();
   const answer = useMutation({
-    mutationFn: (row: PendingDecisionRow) => sendEvidenceDecision(row, sessionId, 'CONFIRM'),
+    mutationFn: (row: PendingDecisionRow) =>
+      sendEvidenceDecision(row, evidenceDecidingSession(row, sessionId), 'CONFIRM'),
     // Re-read whichever way the door answered: a recorded decision leaves the queue, and a refusal
     // for staleness means the queue has moved. Returned rather than fired off, so the card stays
     // busy until the read it derives from has caught up with the press.
@@ -680,12 +704,15 @@ function EvidenceDecisionSlot({
   };
   // Enter follows the confirmation button's liveness. Chat about this leaves by the composer.
   const live = standing.state === 'DECIDABLE' && !answer.isPending && !answer.isSuccess;
+  const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
     confirmEnabled: live,
     onConfirm: confirm,
+    anchor,
   });
   return (
     <EvidenceDecisionCard
+      ref={anchor}
       standing={standing}
       busy={answer.isPending}
       error={answer.isError ? answer.error : null}
@@ -716,9 +743,11 @@ export function SessionEvidenceDecisionCard({
   projectId,
   onSendBack,
 }: {
-  /** The session a press decides FROM, and the one the pending read is scoped to. */
+  /** The session a press decides FROM — unless the row's `ownerCard` names another — and the one
+   *  the pending read is scoped to. */
   sessionId: string;
-  /** The project this session coordinates. Ordinary sessions have none and get no card. */
+  /** The project this session coordinates, whose rows it draws cards for. Every session also draws
+   *  the cards of tasks dispatched outside any project that the read places in it (`ownerCard`). */
   projectId: string | null | undefined;
   /** Arm the bottom composer to send this version back, given the row it is about: it is handed
    *  the row, and the send that follows presses the door with the typed reason. The card stays
@@ -728,12 +757,12 @@ export function SessionEvidenceDecisionCard({
   const [seen, setSeen] = useState<EvidenceDecisionAddress[]>([]);
   const pending = useQuery({
     ...pendingDecisionsQuery(sessionId),
-    enabled: Boolean(sessionId) && Boolean(projectId),
+    enabled: Boolean(sessionId),
     refetchInterval: 20_000,
   });
   const queue = pending.data ?? null;
   useEffect(() => {
-    const arrived = evidenceDecisionCardRows(queue, projectId);
+    const arrived = evidenceDecisionCardRows(queue, projectId, sessionId);
     if (arrived.length === 0) return;
     setSeen((previous) => {
       const known = new Set(previous.map(decisionRowKey));
@@ -742,9 +771,8 @@ export function SessionEvidenceDecisionCard({
         .map((row) => ({ taskId: row.taskId, evidenceRevision: row.evidenceRevision }));
       return fresh.length === 0 ? previous : [...previous, ...fresh];
     });
-  }, [queue, projectId]);
+  }, [queue, projectId, sessionId]);
 
-  if (!projectId) return null;
   const known = new Set(seen.map(decisionRowKey));
   // A version this conversation has decided is drawn in the transcript as its receipt, at the
   // moment it was decided (`EvidenceDecisionReceipt`), so its card goes — the one just pressed
@@ -752,7 +780,7 @@ export function SessionEvidenceDecisionCard({
   const receipted = new Set((queue?.decided ?? []).map(decisionRowKey));
   const addresses = [
     ...seen,
-    ...evidenceDecisionCardRows(queue, projectId)
+    ...evidenceDecisionCardRows(queue, projectId, sessionId)
       .filter((row) => !known.has(decisionRowKey(row)))
       .map((row) => ({ taskId: row.taskId, evidenceRevision: row.evidenceRevision })),
   ].filter((address) => !receipted.has(decisionRowKey(address)));
@@ -766,7 +794,7 @@ export function SessionEvidenceDecisionCard({
         <EvidenceDecisionSlot
           key={decisionRowKey(address)}
           sessionId={sessionId}
-          standing={evidenceDecisionStanding(read, projectId, address)}
+          standing={evidenceDecisionStanding(read, projectId, address, sessionId)}
           onSendBack={onSendBack}
         />
       ))}

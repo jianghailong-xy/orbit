@@ -180,8 +180,12 @@ interface SidebarRollupRow {
  * classifies AWAITING_VERIFICATION and is not work in flight however its row reads.
  *
  * `lastActivityAt` is `max(updated_at)` over the project's tasks — the index's own value, not a
- * stand-in like `Project.updatedAt`, which does not move when work does. It is the part of this
- * read that still walks every task of every open project, and it is why this is not free.
+ * stand-in like `Project.updatedAt`, which does not move when work does. `task_project_activity_idx`
+ * (0361) orders `updated_at` right after the project, so PostgreSQL answers this `max()` with one
+ * backward probe per project instead of reading every task of every open project, which was 87% of
+ * this read's buffers. That path exists only while the LATERAL is a lone `max()` over one table: an
+ * aggregate added beside it puts the whole walk back, silently, and
+ * `project-sidebar-activity-plan.pg.spec.ts` is what notices.
  * `taskCount > 0` is not asked for here: a project with no tasks is an empty aggregate and the
  * caller reads it as zero and null, like the index does.
  */

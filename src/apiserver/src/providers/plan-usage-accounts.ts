@@ -6,7 +6,7 @@
  * under that snapshot's `accounts`, by the account's id (src/runner-go/{codex,claude}_account_usage.go).
  */
 import type { PlanUsage, PlanUsageSnapshot } from '@orbit/shared';
-import { ENGINE_ACCOUNTS_MAX, sanitizeRunnerEngines } from '../common/runner-engines';
+import { ENGINE_ACCOUNTS_MAX, namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
 import {
   accountDir,
   accountOfEnv,
@@ -180,10 +180,18 @@ export function accountAfterUsageLimit(
   return to ? { from, to } : null;
 }
 
-/** What an account is called where one is named: "Default", or what the user called it. */
-export function accountLabel(engine: AccountEngine, id: string, runnerEngines: unknown): string {
-  if (id === DEFAULT_ACCOUNT) return 'Default';
-  return accountsOf(engine, runnerEngines)?.find((account) => account.id === id)?.name || `Account ${id}`;
+/** What an account's name is read from: the runner's report, and the names its accounts were given in
+ *  Orbit (namedRunnerEngines). Both, so a select that forgets the names does not compile. */
+export type NamedRunner = { engines: unknown; accountNames: unknown };
+
+/** What an account is called where one is named: what the user called it — Default too, once renamed
+ *  — else "Default", or the slot's id when the name it was added under is gone. */
+export function accountLabel(engine: AccountEngine, id: string, runner: NamedRunner): string {
+  const name = namedRunnerEngines(runner)
+    ?.find((entry) => entry.engine === engine)
+    ?.accounts?.find((account) => account.id === id)?.name;
+  if (name) return name;
+  return id === DEFAULT_ACCOUNT ? 'Default' : `Account ${id}`;
 }
 
 /**
@@ -194,9 +202,9 @@ export function accountLabel(engine: AccountEngine, id: string, runnerEngines: u
 export function accountSwitchNotice(
   engine: AccountEngine,
   move: { from: string; to: string },
-  runnerEngines: unknown,
+  runner: NamedRunner,
 ): string {
-  return `Switched to ${accountLabel(engine, move.to, runnerEngines)} — the usage limit on ${accountLabel(engine, move.from, runnerEngines)} is reached`;
+  return `Switched to ${accountLabel(engine, move.to, runner)} — the usage limit on ${accountLabel(engine, move.from, runner)} is reached`;
 }
 
 const accountsOf = (engine: AccountEngine, runnerEngines: unknown) =>

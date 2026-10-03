@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Toast 通知系统 · ④ 规则</title>
+<link rel="stylesheet" href="toast.css">
+<style>
+  .flow { display: flex; flex-direction: column; gap: 10px; }
+  .q { display: grid; grid-template-columns: 44px 1fr 120px 420px; align-items: center; gap: 16px; padding: 14px 20px; }
+  .q .qn { width: 32px; height: 32px; border-radius: 16px; background: #eef0f3; color: var(--ink); font-weight: 800; font-size: 15px; display: flex; align-items: center; justify-content: center; }
+  .q .qt b { display: block; font-size: 16px; margin-bottom: 3px; }
+  .q .qt span { font-size: 13px; color: var(--ink3); line-height: 1.6; }
+  .q .yes { font-size: 13px; font-weight: 700; color: var(--ink3); text-align: right; }
+  .q .res { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; min-height: 64px;
+            background-color: #f6f7f9; background-image: repeating-linear-gradient(180deg, transparent 0 14px, #eceef1 14px 20px, transparent 20px 30px); }
+  .q .res .name { flex: none; width: 88px; font-size: 14px; font-weight: 800; }
+  .q .res .card { width: auto; flex: 1; }
+  .none { font-size: 13.5px; color: var(--ink2); line-height: 1.55; }
+
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+  .box { padding: 20px 24px; }
+  .box ul { margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.8; color: var(--ink2); }
+  .box li + li { margin-top: 4px; }
+  .mini { position: relative; height: 210px; margin: 0 0 16px; border-radius: 16px; overflow: hidden; background: #fff; box-shadow: inset 0 0 0 1px #e3e5e9;
+          background-image: repeating-linear-gradient(180deg, transparent 0 96px, #f1f2f4 96px 104px, transparent 104px 118px); }
+  .mini .bar { position: absolute; left: 0; right: 0; top: 0; height: 64px; border-bottom: 1px solid #eef0f3; background: #fafafa; }
+  .mini .b1 { position: absolute; top: 14px; width: 36px; height: 36px; border-radius: 18px; background: #fff; box-shadow: 0 0 0 .5px rgba(0,0,0,.14), 0 3px 10px rgba(0,0,0,.06); }
+  .mini .slot { position: absolute; left: 0; right: 0; display: flex; justify-content: center; }
+  .mini .tagl { position: absolute; right: 12px; font-size: 11.5px; font-weight: 700; color: #e8590c; }
+  table.t { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 14px; }
+  table.t th, table.t td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #eef0f3; vertical-align: top; line-height: 1.55; }
+  table.t th { font-size: 13px; color: var(--ink3); font-weight: 700; background: #f6f7f9; }
+  table.t tr:last-child td { border-bottom: 0; }
+  table.copy td:nth-child(2) { color: #b3380a; }
+  table.copy td:nth-child(3) { color: #1a7f37; }
+  table.copy td small { display: block; color: var(--ink3); font-size: 12px; }
+  .gram { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 16px; }
+  .gram div { padding: 14px 16px; }
+  .gram b { display: block; font-size: 15px; margin-bottom: 6px; }
+  .gram p { margin: 0; font-size: 13px; line-height: 1.65; color: var(--ink2); }
+  .gram code { font-size: 12px; }
+  .three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .three .box h3 { margin: 0 0 10px; font-size: 16px; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <h1>Toast 通知系统 · ④ 规则：用哪一级、怎么排、怎么写</h1>
+  <p class="lede">每次要弹 toast，先按顺序过下面 5 个问题，第一个答「是」的就是答案；文案按同一个语法写。三端共用一份规则和一份文案表（沿用现有的 copy-parity 测试锁住）。</p>
+
+  <h2><span class="n">1</span>选哪一级</h2>
+  <div class="flow">
+    <div class="panel q"><span class="qn">1</span><div class="qt"><b>失败了，或者要你批准、要你决定？</b><span>服务器拒绝、权限不够、冲突、等你批准的工具调用。例外：表单字段的校验错误写在字段下面，不弹。</span></div><span class="yes">是 →</span>
+      <div class="res"><span class="name">③ 需要处理</span><div class="pill glass red"><svg class="ico"><use href="#excl"/></svg>Couldn't merge into main<svg class="chev"><use href="#cr"/></svg></div></div></div>
+    <div class="panel q"><span class="qn">2</span><div class="qt"><b>结果在你点的地方已经看得见？</b><span>开关翻了、行滑走了、按钮变成 ✓、分支条变成 Merged。</span></div><span class="yes">是 →</span>
+      <div class="res"><span class="name">不弹</span><span class="none">界面自己的变化就是反馈。例：会话里点 Merge，分支条显示 Merging… → ✓ Merged。</span></div></div>
+    <div class="panel q"><span class="qn">3</span><div class="qt"><b>要花超过 1 秒？</b><span>合并、提交、导入、批量操作。完成后原地变成 ① / ② / ③。</span></div><span class="yes">是 →</span>
+      <div class="res"><span class="name">进行中</span><div class="pill glass"><svg class="ico"><use href="#spin"/></svg>Merging into main…</div></div></div>
+    <div class="panel q"><span class="qn">4</span><div class="qt"><b>结果落在一个对象上，你可能想撤销或打开它？</b><span>完成 / 移到废纸篓 / 移动工作区，能撤销或能跳过去看。</span></div><span class="yes">是 →</span>
+      <div class="res"><span class="name">② 结果</span><div class="card glass" style="padding:8px 8px 8px 12px"><svg class="ico" style="width:22px;height:22px"><use href="#trash"/></svg><span class="t"><b>Moved to Trash</b><small>部署 0.1.204</small></span><span class="btn">Undo</span></div></div></div>
+    <div class="panel q"><span class="qn">5</span><div class="qt"><b>其他</b><span>你刚做的事成功了，没有后续。</span></div><span class="yes">→</span>
+      <div class="res"><span class="name">① 确认</span><div class="pill glass"><svg class="ico"><use href="#ok"/></svg>Link copied</div></div></div>
+  </div>
+  <div class="panel" style="margin-top:12px;padding:14px 20px;font-size:14px;line-height:1.7;color:var(--ink2)"><b style="color:var(--ink)">时机：写入一返回就弹</b>，不等后面的刷新（今天 Wiki 审阅要等写入 + 三次刷新）。乐观更新的操作（行滑走、卡片翻到下一张）在点下去时就给反馈，失败了回滚并弹 ③。离开了发起页面才到的结果，第二行一定写对象。</div>
+
+  <div class="two">
+    <div>
+      <h2><span class="n">2</span>同时来了好几条</h2>
+      <div class="panel box">
+        <div class="mini">
+          <div class="bar"></div><div class="b1" style="left:14px"></div><div class="b1" style="right:14px"></div>
+          <div class="slot" style="top:76px"><div class="pill glass red"><svg class="ico"><use href="#excl"/></svg>Couldn't merge into main<svg class="chev"><use href="#cr"/></svg></div></div>
+          <div class="slot" style="top:124px"><div class="pill glass"><svg class="ico"><use href="#ok"/></svg>Link copied</div></div>
+          <span class="tagl" style="top:88px">钉住的 ③</span><span class="tagl" style="top:136px">临时位（1 条）</span>
+        </div>
+        <ul>
+          <li><b>iPhone 同一时刻</b>：顶部钉住的 ③（多条叠成一个，带 +N）＋ 下面 1 条临时的。新的临时 toast 直接替换旧的临时 toast。</li>
+          <li><b>大屏</b>：右上角最多 3 张，③ 在最上，临时的往下排，旧的先走。</li>
+          <li><b>③ 不会被替换</b>：只有 ✕、处理掉、或在别处解决掉才消失。</li>
+          <li><b>同一个操作同一个 key</b>：进行中 → 结果原地更新，不重新入场。</li>
+          <li><b>2 秒内的重复合并</b>：连点两次 Copy 只弹一次。</li>
+          <li><b>不跟页面走</b>：toast 挂在根视图上，切页面不清空（今天就是这样）。</li>
+        </ul>
+      </div>
+    </div>
+    <div>
+      <h2><span class="n">3</span>停留多久<small>按住 / 悬停时一律暂停</small></h2>
+      <div class="panel box" style="padding:8px 10px">
+        <table class="t">
+          <tr><th style="width:110px"></th><th>iPhone</th><th>iPad · Mac · web</th><th>今天</th></tr>
+          <tr><td><b>① 确认</b></td><td>3 秒</td><td>3 秒</td><td>4 秒（web Message 也是 4 秒）</td></tr>
+          <tr><td><b>进行中</b></td><td>直到完成</td><td>直到完成</td><td>4 秒就走，不管做完没有</td></tr>
+          <tr><td><b>② 结果</b></td><td>6 秒</td><td>6 秒</td><td>6 秒（不变）</td></tr>
+          <tr><td><b>③ 需要处理</b></td><td>不自动消失；6 秒后缩成顶部胶囊</td><td>不自动消失，保持展开</td><td>不消失，但 iOS 会被下一条顶掉</td></tr>
+        </table>
+      </div>
+      <div class="panel box" style="margin-top:16px">
+        <ul>
+          <li><b>上滑关掉</b>任何一级（③ 上滑 = 关掉，不是缩起）。</li>
+          <li><b>点胶囊 / 卡片</b>：带 › 的打开对象或展开；不带的点了没反应、点击穿透到下面。</li>
+          <li><b>按钮</b>：② 最多 1 个，③ 最多 2 个 + ✕。主按钮写动作本身（Resolve in session、Retry、Review），不写 OK。</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <h2><span class="n">4</span>怎么写<small>界面文案是英文，示例取自现有调用</small></h2>
+  <div class="gram">
+    <div class="panel"><b>成功：结果 + 对象</b><p>泛指的对象写进标题：<code>Link copied</code>、<code>Schedule saved</code>。具体的名字（条目、会话、任务标题）放第二行。</p></div>
+    <div class="panel"><b>进行中：-ing + 对象 + …</b><p><code>Merging into main…</code>、<code>Committing 2 files…</code>。完成后同一个 toast 改成过去式。</p></div>
+    <div class="panel"><b>失败：Couldn't + 动作 + 对象</b><p>标题说哪一步失败，服务器原话放原因块，不当标题。统一用 <code>Couldn't</code>，不用 Could not / Failed to / … failed。</p></div>
+    <div class="panel"><b>不写空话</b><p><code>Decided</code>、<code>Done</code>、<code>Success</code>、<code>Error</code>、<code>Failed</code> 单独出现都不行：读的人不知道是什么事。</p></div>
+  </div>
+  <div class="panel" style="padding:6px 10px">
+    <table class="t copy">
+      <tr><th style="width:250px">场景</th><th>今天</th><th>改成</th></tr>
+      <tr><td>Wiki 审阅 · Accept</td><td>Decided</td><td>Accepted <small>第二行：条目标题</small></td></tr>
+      <tr><td>Wiki 审阅 · 退役卡上点 Retire</td><td>Decided</td><td>Retired <small>第二行：条目标题</small></td></tr>
+      <tr><td>Wiki 审阅 · 退役卡上点 Keep</td><td>Rejected <small>发的是 reject，读起来像条目被拒了，和操作相反</small></td><td>Kept <small>第二行：条目标题</small></td></tr>
+      <tr><td>Wiki 设置</td><td>Saved</td><td>Wiki settings saved</td></tr>
+      <tr><td>web 保存被服务器拒绝 <small>web 九十多处只放原话的 <code>message.error(e.message)</code> 之一；原话为示例</small></td><td>revision 12 is stale <small>只有原话，看不出是哪个操作</small></td><td>Couldn't save the schedule <small>原因块：revision 12 is stale · 按钮：Retry</small></td></tr>
+      <tr><td>复制失败</td><td>Could not copy · Copy failed · Couldn't copy <small>三种说法</small></td><td>Couldn't copy the link</td></tr>
+      <tr><td>下载失败</td><td>Download failed: 〈原话〉</td><td>Couldn't download report.pdf <small>原因块：〈原话〉</small></td></tr>
+      <tr><td>合并</td><td>Merging… <small>4 秒后消失，结果另弹一张</small></td><td>Merging into main… → Merged into main <small>同一个 toast；在会话里不弹（分支条已显示）</small></td></tr>
+      <tr><td>提交</td><td>Committing… → Changes committed</td><td>Committing 2 files… → Committed 2 files</td></tr>
+      <tr><td>合并冲突</td><td>Merge conflict in main <small>Merge aborted; your branch is unchanged. Resolve it from the worktree bar.</small></td><td>Couldn't merge into main <small>原因块：冲突文件 · 按钮：Resolve in session（不用再让人去找分支条）</small></td></tr>
+    </table>
+  </div>
+
+  <h2><span class="n">5</span>动效 · 触感 · 读屏</h2>
+  <div class="three">
+    <div class="panel box"><h3>动效</h3><ul>
+      <li>进场：从上方 12pt 滑入 + 淡入 + 0.96→1，弹簧 0.35s</li>
+      <li>离场：向上淡出 0.25s</li>
+      <li>进行中 → 结果：图标交叉淡化（SF Symbol <code>.replace</code>），宽度弹性过渡，不重新进场</li>
+      <li>③ 缩起：卡片收成胶囊，停在原位（matched geometry）</li>
+      <li>减弱动态效果打开时：只淡入淡出</li></ul></div>
+    <div class="panel box"><h3>触感（iPhone）</h3><ul>
+      <li>③ 到达：<code>.error</code> / 等你批准 <code>.warning</code></li>
+      <li>进行中完成：<code>.success</code>（你可能已经不在看了）</li>
+      <li>① ②：不震——按钮本身已经给过反馈</li>
+      <li>静音、低电量模式下照系统设置</li></ul></div>
+    <div class="panel box"><h3>读屏（VoiceOver）</h3><ul>
+      <li>① ② 进行中：礼貌播报，读标题 + 第二行</li>
+      <li>③：立即播报，连原因一起读</li>
+      <li>缩起的胶囊读作「1 issue: Couldn't merge into main. Double-tap to expand.」</li>
+      <li>动态字体放大时胶囊自动换成卡片，不截断标题</li></ul></div>
+  </div>
+</div>
+<script src="toast.js"></script>
+</body>
+</html>

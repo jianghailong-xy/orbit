@@ -23,6 +23,8 @@ import {
   UNDER_AUTOMATIC,
   type PromotionProjectView,
 } from './ProjectPromotionCard';
+import { SHORTCUT_HINT } from './CardHotkey';
+import { CriteriaDecisionCard, type PendingCriteriaDecisionRow } from './CriteriaDecisionCard';
 import { FROM_ORBIT } from './ProjectProgressStatus';
 
 /**
@@ -699,6 +701,115 @@ describe('the presses', () => {
       method: 'POST',
       body: { sourceSha: promotion().sourceSha },
     });
+  });
+
+  /** One keypress, as the browser delivers it: on the window, with whatever focus is standing. */
+  async function key(init: KeyboardEventInit = {}) {
+    await act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...init }),
+      );
+    });
+  }
+
+  it('merges on ⌘/Ctrl + Enter, says so on the button, and leaves the bare key alone', async () => {
+    apiMock.mockResolvedValue({ ...promotion(), state: 'CONFIRMED' });
+    await draw(
+      <ProjectPromotionCard
+        projectId={PROJECT_ID}
+        promotion={promotion()}
+        item={null}
+        project={project()}
+        now={NOW}
+      />,
+    );
+    expect(press(MERGE_TO_MAIN).querySelector('.approval-kbd')?.textContent).toBe(SHORTCUT_HINT);
+
+    await key();
+    expect(apiMock, 'the bare key merged').not.toHaveBeenCalled();
+
+    await key({ metaKey: true });
+    await until(() => apiMock.mock.calls.length > 0, 'the confirm');
+    // The same request the button sends: the confirm door, naming the SHA the card was drawn from.
+    expect(apiMock.mock.calls).toEqual([
+      [
+        `/projects/${PROJECT_ID}/promotions/${PROMOTION_ID}/confirm`,
+        { method: 'POST', body: { sourceSha: promotion().sourceSha } },
+      ],
+    ]);
+  });
+
+  it('waits its turn under the ruler’s card, whichever of the two started asking first', async () => {
+    // The coordinator conversation of the owner's report (2026-10-03): the ruler's card drawn above
+    // the merge, both asking. The merge was asking first; the keys still go to the card on top, and
+    // come down to the merge once the ruler's question is no longer open (`CardHotkey.ts`).
+    apiMock.mockResolvedValue({ ...promotion(), state: 'CONFIRMED' });
+    const decide = vi.fn();
+    const ruler: PendingCriteriaDecisionRow = {
+      intentId: '4TdXP1ChQx7vLmN3pR5sT8',
+      projectId: PROJECT_ID,
+      commitToken: 'token-4TdXP1ChQx7vLmN3pR5sT8',
+      actionDigest: 'a'.repeat(64),
+      filedAt: at(MINUTE),
+      ageSeconds: 60,
+      baselineSeal: 'b'.repeat(64),
+      currentSeal: 'b'.repeat(64),
+      proposed: [],
+      diff: { entries: [], sameCount: 0, changedCount: 0, newCount: 0, removedCount: 0 },
+      supersededIntentId: null,
+      decidability: { decidable: true, refusal: null, requiredAction: null },
+    };
+    const screen = (rulerBusy: boolean): JSX.Element => (
+      <>
+        <CriteriaDecisionCard
+          standing={{ state: 'DECIDABLE', intentId: ruler.intentId, row: ruler }}
+          busy={rulerBusy}
+          onDecide={decide}
+        />
+        <ProjectPromotionCard
+          projectId={PROJECT_ID}
+          promotion={promotion()}
+          item={null}
+          project={project()}
+          now={NOW}
+        />
+      </>
+    );
+    /** Which card the one hint on screen is drawn in. */
+    const hinted = (): string[] =>
+      [...host.querySelectorAll('.approval-kbd')].map((hint) => hint.closest('.approval-card')!.id);
+
+    await draw(screen(true));
+    expect(hinted(), 'the merge was asking alone').toEqual([`promotion-${PROMOTION_ID}`]);
+
+    await draw(screen(false));
+    expect(hinted(), 'the card on top took the keys').toEqual([`criteria-decision-${ruler.intentId}`]);
+    await key({ metaKey: true });
+    expect(decide.mock.calls).toEqual([['APPROVE']]);
+    expect(apiMock, 'one chord answered both cards').not.toHaveBeenCalled();
+
+    // The ruler's answer is on its way, so its card stops asking and the merge is next.
+    await draw(screen(true));
+    expect(hinted()).toEqual([`promotion-${PROMOTION_ID}`]);
+    await key({ metaKey: true });
+    await until(() => apiMock.mock.calls.length > 0, 'the confirm');
+    expect(apiMock.mock.calls[0]![0]).toBe(`/projects/${PROJECT_ID}/promotions/${PROMOTION_ID}/confirm`);
+    expect(decide).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds no key while the merge it would make is already under way', async () => {
+    await draw(
+      <ProjectPromotionCard
+        projectId={PROJECT_ID}
+        promotion={promotion({ state: 'CONFIRMED' })}
+        item={null}
+        project={project()}
+        now={NOW}
+      />,
+    );
+    expect(host.querySelector('.approval-kbd')).toBeNull();
+    await key({ metaKey: true });
+    expect(apiMock).not.toHaveBeenCalled();
   });
 
   it('declines at the decline door, which merges nothing', async () => {

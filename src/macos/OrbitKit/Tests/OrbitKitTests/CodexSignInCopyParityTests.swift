@@ -12,8 +12,8 @@ import XCTest
 ///
 /// Deliberately not compared: "New pool" — a pool is made on the web (it opens straight to signing in),
 /// as a shared pool's is; the words only a phone has to say (the swipe's own label is `Sign out`, the
-/// web mark's name); and the sheet's layout, where the web's one line under the pool's name is the
-/// phone's head plus the Accounts section's footer (both compared as that one line).
+/// web mark's name); and the page the accounts are drawn on, whose words — its head, its way out, who can
+/// use it — are `PoolAccessCopyParityTests`'.
 final class CodexSignInCopyParityTests: XCTestCase {
 
     private static let dialog = "src/web/src/components/CodexSignIn.tsx"
@@ -95,7 +95,14 @@ final class CodexSignInCopyParityTests: XCTestCase {
         for fact in CodexSignIn.facts(pool("{pool.label}")) {
             assertSays(source, "<b>\(fact.lead)</b>\(fact.rest)", in: Self.dialog)
         }
-        assertSays(source, "<b>\(CodexSignIn.risk.lead)</b>\(CodexSignIn.risk.rest)", in: Self.dialog)
+        // The same notice read by one of the people the pool lets sign an account of their own in
+        // (migration 0371): whose it is for the whole pool, and the warning in their own words.
+        for fact in CodexSignIn.facts(pool("{pool.label}"), mine: false) {
+            assertSays(source, "<b>\(fact.lead)</b>\(fact.rest)", in: Self.dialog)
+        }
+        let mineRisk = CodexSignIn.risk(mine: true)
+        assertSays(source, "<b>{mine ? '\(mineRisk.lead)' : '\(CodexSignIn.risk(mine: false).lead)'}</b>\(mineRisk.rest)",
+                   in: Self.dialog)
         assertSays(source, "<Button onClick={close}>\(CodexSignIn.cancel)</Button>", in: Self.dialog)
         // The press gets the one-time code: the sign-in itself finishes on OpenAI's page.
         assertSays(source, "onClick={() => void start()}> \(CodexSignIn.start) </Button>", in: Self.dialog)
@@ -119,6 +126,9 @@ final class CodexSignInCopyParityTests: XCTestCase {
         let lead = CodexSignIn.anotherLeadPrefix + "<b>{pool.label}</b>" + CodexSignIn.anotherLeadSuffix(two)
         assertSays(source, asWeb(lead, "2 accounts", "{accounts} account{accounts === 1 ? '' : 's'}"), in: Self.dialog)
         for fact in CodexSignIn.anotherFacts(two) {
+            assertSays(source, "<b>\(fact.lead)</b>\(fact.rest)", in: Self.dialog)
+        }
+        for fact in CodexSignIn.anotherFacts(two, mine: false) {
             assertSays(source, "<b>\(fact.lead)</b>\(fact.rest)", in: Self.dialog)
         }
         assertSays(source, "<b>\(CodexSignIn.anotherRisk.lead)</b>\(CodexSignIn.anotherRisk.rest)", in: Self.dialog)
@@ -190,25 +200,10 @@ final class CodexSignInCopyParityTests: XCTestCase {
                        "\(Self.dialog) reads POOL_CODEX_ACCOUNT_TAKEN again — so should CodexSignIn")
     }
 
-    /// The pool's page: what it is and how many of its accounts can run, "Add account" always, the
-    /// Accounts card with its count, signing one out, and the way out.
+    /// The pool's page, signing one of its accounts out: the account it signs out is named — by its
+    /// fingerprint to the server, by its email here.
     func testThePoolPageSaysWhatTheWebPageSays() throws {
         let page = try web(Self.poolPage)
-        let footer = CodexLoginPool.accountsFooter.prefix(1).lowercased() + CodexLoginPool.accountsFooter.dropFirst()
-        assertSays(page, "\(CodexLoginPool.pageTitle) · \(CodexLoginPool.justMe) · {availabilityOf(pool, NO_REFUSALS)} · \(footer)",
-                   in: Self.poolPage)
-        assertSays(page, "> \(CodexLoginPool.addAccount) </Button>", in: Self.poolPage)
-        assertSays(page, "\(CodexLoginPool.accountsHeader)<span className=\"pool-head-count\">{logins.length}</span>",
-                   in: Self.poolPage)
-        XCTAssertEqual(CodexLoginPool.deleteNote(pool("P", accounts: 1)),
-                       "Its ChatGPT sign-in is deleted from the Orbit server with it.")
-        assertSays(page, "const deleteNote = `" + asWeb(CodexLoginPool.deleteNote(pool("P", accounts: 2)), "sign-ins are",
-                                                        "sign-in${logins.length === 1 ? ' is' : 's are'}") + "`;",
-                   in: Self.poolPage)
-        assertSays(page, "title={`\(CodexLoginPool.deleteTitle(pool("${pool.label}")))`}", in: Self.poolPage)
-        assertSays(page, "okText=\"\(CodexLoginPool.delete)\"", in: Self.poolPage)
-        assertSays(page, "> \(CodexLoginPool.deletePool) </Button>", in: Self.poolPage)
-        // Signing out names the account it signs out — by its fingerprint to the server, by its email here.
         assertSays(page, "message.success(`\(CodexLoginPool.signedOut(account(email: "${loginName(login)}")))`)",
                    in: Self.poolPage)
         assertSays(page, "/account?fingerprint=${encodeURIComponent(login.fingerprint)}", in: Self.poolPage)
@@ -218,13 +213,23 @@ final class CodexSignInCopyParityTests: XCTestCase {
     /// NEXT mark only among several, and what signing it out leaves running.
     func testTheAccountsRowSaysWhatTheWebRowSays() throws {
         let row = try web(Self.accountPools)
-        assertSays(row, "<div className=\"pool-note\"> \(CodexLoginPool.noAccount) </div>", in: Self.accountPools)
-        assertSays(row, "<span className=\"re-summary\">\(CodexLoginPool.justMe) · {availabilityOf(pool, refusals)}</span>",
+        // No account yet: one sentence whose last words are the pool's answer to who may sign one in —
+        // "you sign in" for whoever the pool admits (its owner, or a member its rule lets, 0371).
+        assertSays(row, "<div className=\"pool-note\"> No account yet — no session can start on this pool until {!shared || canAddAccount(shared) ? 'you sign in' : 'its owner signs in'} with ChatGPT. </div>",
                    in: Self.accountPools)
-        XCTAssertEqual(CodexLoginPool.summary(pool("P", accounts: 2)), "Just me · 2 of 2 accounts available")
+        XCTAssertEqual(CodexLoginPool.noAccount,
+                       "No account yet — no session can start on this pool until you sign in with ChatGPT.")
+        XCTAssertEqual(CodexLoginPool.noAccountOwner,
+                       "No account yet — no session can start on this pool until its owner signs in with ChatGPT.")
+        assertSays(row, "<span className=\"re-summary\">\(CodexPoolPage.justMe) · {availabilityOf(pool, refusals)}</span>",
+                   in: Self.accountPools)
+        XCTAssertEqual(ProvidersOverview.codexPoolLine(pool("P", accounts: 2)), "Just me · 2 of 2 accounts available")
         assertSays(row, "<span className=\"re-quota-none\">\(CodexLoginPool.noQuota)</span>", in: Self.accountPools)
         assertSays(row, "resets {formatResetTime(row.window.resetsAt)}", in: Self.accountPools)
-        assertSays(row, "<div className=\"pool-why\">\(CodexLoginPool.signedOutReason)</div>", in: Self.accountPools)
+        // Why it is out, and the way back — to the person who signed it in (migration 0371), whose the
+        // sign-in again is; anybody else reads that only they can, named where the pool's people are read.
+        assertSays(row, "<div className=\"pool-why\"> {signInAgain ? '\(CodexLoginPool.signedOutReason)' : `\(CodexLoginPool.signedOutReasonNotYours("${contributor ? contributor.name : 'the person who signed it in'}"))`} </div>",
+                   in: Self.accountPools)
         assertSays(row, "> \(CodexLoginPool.signInAgain) </Button>", in: Self.accountPools)
         let signingOut = account(email: "${member.label}")
         assertSays(row, "title={`\(CodexLoginPool.signOutTitle(signingOut))`}", in: Self.accountPools)
@@ -255,10 +260,11 @@ final class CodexSignInCopyParityTests: XCTestCase {
     }
 
     /// The head names the account the next session starts on — just named while it is the pool's only
-    /// account, "Next:" among several — and reads its tightest window by its short name.
+    /// account, "Next:" among several, "Next for you:" once other people use the pool — and reads its
+    /// tightest window by its short name.
     func testTheHeadSaysWhatTheWebPoolGaugeSays() throws {
         let card = try web(Self.accountPools)
-        assertSays(card, "{member.login && pool.members.length === 1 ? member.label : `Next: ${member.label}`}",
+        assertSays(card, "{pool.shared && hasPeople(pool.shared) ? `Next for you: ${member.label}` : member.login && pool.members.length === 1 ? member.label : `Next: ${member.label}`}",
                    in: Self.accountPools)
         let usage = PlanUsageSnapshot(provider: "codex",
                                       primary: PlanUsageWindow(utilization: 6, windowDurationMins: 300),
@@ -272,6 +278,8 @@ final class CodexSignInCopyParityTests: XCTestCase {
         assertSays(card, "{`${compactWindowLabel(quota.label)} ${quota.percent}%`}", in: Self.accountPools)
         let unread = codexPool("P", [CodexLogin(email: "e", fingerprint: "…016a")])
         XCTAssertEqual(ProviderPools.headGauge(unread)?.label, CodexLoginPool.noQuota)
-        assertSays(card, "<span className=\"pool-gauge-none\">\(CodexLoginPool.noQuota)</span>", in: Self.accountPools)
+        // A key with no cap has nothing to fill: it says so in the same place.
+        assertSays(card, "<span className=\"pool-gauge-none\">{member.key ? '\(ProviderPools.noLimit)' : '\(CodexLoginPool.noQuota)'}</span>",
+                   in: Self.accountPools)
     }
 }

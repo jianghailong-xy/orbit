@@ -8,8 +8,7 @@ import XCTest
 /// (`client.yml`). What it holds is the wiring a compiler would let drift in silence: the transcript
 /// draws reply cards for a turn that handed outcomes back (after the cards the session-message wiring
 /// test pins, so neither check moves the other); the "From" card shows the request's state when the
-/// message is one; every session row layout says who is waiting on whom; and none of it gives the
-/// owner a way to answer for a session.
+/// message is one; and none of it gives the owner a way to answer for a session.
 final class SessionRequestWiringTests: XCTestCase {
 
     private enum WiringError: Error, CustomStringConvertible {
@@ -26,7 +25,6 @@ final class SessionRequestWiringTests: XCTestCase {
     private static let consolePath = "src/macos/OrbitApp/Sources/OrbitApp/Views/Console/ConsoleView.swift"
     private static let messageCardPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/SessionMessageCardView.swift"
     private static let replyCardPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/SessionReplyCardView.swift"
-    private static let agentsPath = "src/macos/OrbitApp/Sources/OrbitApp/Views/AgentsView.swift"
     private static let iosProject = "src/ios/project.yml"
 
     private func source(_ relative: String) throws -> String {
@@ -91,7 +89,7 @@ final class SessionRequestWiringTests: XCTestCase {
 
     func testTheReplyCardOpensTheOriginalRequestAndOffersNothingToAnswer() throws {
         let file = try source(Self.replyCardPath)
-        let card = statements(try section(file, from: "struct SessionReplyCardView: View", to: "struct SessionRequestsLine"))
+        let card = statements(try section(file, from: "struct SessionReplyCardView: View", to: "\n}\n"))
         XCTAssertTrue(card.contains("if let url = SessionRequestCopy.requestLink(reply) {"))
         XCTAssertTrue(card.contains("Button(SessionRequestCopy.openRequest) { openURL(url) }"))
         // Read-only, both cards: the owner does not answer for a session (contract §9.3). Over the
@@ -100,12 +98,6 @@ final class SessionRequestWiringTests: XCTestCase {
         for control in ["TextField", "TextEditor", "sessionReply(", "session-requests/"] {
             XCTAssertFalse(code.contains(control), "a request card offers \(control)")
         }
-    }
-
-    func testEveryRowLayoutSaysWhoIsWaitingOnWhom() throws {
-        let row = try section(try source(Self.agentsPath), from: "struct AgentSessionRow", to: "private var liveIndicator")
-        let lines = statements(row).filter { $0 == "SessionRequestsLine(session: session)" }
-        XCTAssertEqual(lines.count, 3, "the macOS row, the iPad row and the iPhone row each say it")
     }
 
     func testBothNativeClientsDrawTheOneCard() throws {

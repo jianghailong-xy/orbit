@@ -13,12 +13,13 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -51,8 +52,6 @@ func TestCodexProviderArgsLoadInTheInstalledCodex(t *testing.T) {
 			job := &ClaimedSession{Agent: AgentExecConfig{Model: "gpt-5.5", Env: agentEnv}}
 			dir := t.TempDir()
 
-			ctx, cancel := context.WithCancel(context.Background())
-			t.Cleanup(cancel)
 			var output strings.Builder
 			var outputMu sync.Mutex
 			logged := func() string {
@@ -67,33 +66,57 @@ func TestCodexProviderArgsLoadInTheInstalledCodex(t *testing.T) {
 				// is added, ahead of the trailing "-" that reads the prompt from stdin.
 				args := codexExecCommandArgs(job, dir, dir, nil, "")
 				args = append(append(args[:len(args)-1:len(args)-1], state...), "-")
-				cmd = exec.CommandContext(ctx, exe, args...)
+				cmd = exec.Command(exe, args...)
 				cmd.Stdin = strings.NewReader("Say DONE.")
 			case "app-server":
 				// Production's own app-server argv (which appends codexProviderArgs) minus the Orbit
 				// MCP server, so no helper process is launched.
 				args := codexAppServerCommandArgs(job, filepath.Join(home, "state"), "")
-				cmd = exec.CommandContext(ctx, exe, args...)
+				cmd = exec.Command(exe, args...)
 			}
+			// The npm wrapper can exit before the native process stops writing into its home.
+			// Cleanup joins the group, sharing the waiter used to detect early config failures.
+			configureCodexProbeProcess(cmd)
 			cmd.Env = env
 			cmd.Stderr = codexProbeWriter{&output, &outputMu}
 			var stdin io.WriteCloser
+			var stdinR *os.File
 			var stdout io.ReadCloser
 			if path == "app-server" {
-				stdin, _ = cmd.StdinPipe()
+				// Own the write end: the background Wait must not close it before cleanup.
+				var err error
+				stdinR, stdin, err = os.Pipe()
+				if err != nil {
+					t.Fatal(err)
+				}
+				cmd.Stdin = stdinR
 				stdout, _ = cmd.StdoutPipe()
 			} else {
 				cmd.Stdout = codexProbeWriter{&output, &outputMu}
 			}
 			if err := cmd.Start(); err != nil {
+				if stdinR != nil {
+					err = errors.Join(err, stdinR.Close(), stdin.Close())
+				}
 				t.Fatalf("starting codex %s: %v", path, err)
 			}
+			if stdinR != nil {
+				if err := stdinR.Close(); err != nil {
+					t.Errorf("codex app-server stdin reader cleanup: %v", err)
+				}
+			}
 			exited := make(chan struct{})
-			go func() { _ = cmd.Wait(); close(exited) }()
-			t.Cleanup(func() { cancel(); <-exited })
+			waited := make(chan error, 1)
+			go func() { waited <- cmd.Wait(); close(exited) }()
+			t.Cleanup(func() {
+				if err := stopCodexProbeProcessWithWait(cmd, stdin, waited); err != nil {
+					t.Errorf("codex %s probe cleanup: %v", path, err)
+				}
+			})
 
 			if path == "app-server" {
-				driveCodexProviderAppServer(t, stdin, stdout, job, dir, exited, logged)
+				// What it says on stdout is logged beside stderr, so a failure shows how far it got.
+				driveCodexProviderAppServer(t, stdin, io.TeeReader(stdout, codexProbeWriter{&output, &outputMu}), job, dir, exited, logged)
 			}
 			select {
 			case <-rec.first:
@@ -145,6 +168,10 @@ func driveCodexProviderAppServer(t *testing.T, stdin io.WriteCloser, stdout io.R
 		if _, err := stdin.Write(append(b, '\n')); err != nil {
 			t.Fatalf("codex app-server is gone before %s (its config was refused?):\n%s", method, logged())
 		}
+		// One deadline for the whole request. The notifications it streams meanwhile are not an
+		// answer, and a timer restarted by each of them never fired for a server that kept talking.
+		deadline := time.NewTimer(90 * time.Second)
+		defer deadline.Stop()
 		for {
 			select {
 			case line, ok := <-lines:
@@ -167,8 +194,8 @@ func driveCodexProviderAppServer(t *testing.T, stdin io.WriteCloser, stdout io.R
 				}
 			case <-exited:
 				t.Fatalf("codex app-server exited during %s:\n%s", method, logged())
-			case <-time.After(90 * time.Second):
-				t.Fatalf("no answer to %s within 90s:\n%s", method, logged())
+			case <-deadline.C:
+				t.Fatalf("no answer to %s within 90s of asking; the app-server's output so far:\n%s", method, logged())
 			}
 		}
 	}

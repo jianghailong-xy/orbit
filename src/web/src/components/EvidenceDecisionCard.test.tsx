@@ -33,6 +33,7 @@ import {
   SessionEvidenceDecisionCard,
   decisionClaimFold,
   decisionGapsMore,
+  evidenceDecidingSession,
   evidenceDecisionRecordedLine,
   evidenceDecisionRefusal,
   evidenceDecisionRequest,
@@ -664,6 +665,85 @@ describe('which rows get a card in this conversation', () => {
   });
 });
 
+describe('a task a session dispatched outside any project: its card is where the read says', () => {
+  // The B line (apiserver tasks/evidence-review.ts): the read names the one conversation the owner's
+  // card for such a row is drawn in (`ownerCard`), and the session its decision is recorded as —
+  // the dispatching session, which did none of the work, even when the card has moved to the run.
+  const DISPATCHER_ID = '34N1DispatchingSessAa';
+  const dispatched = row({
+    taskId: '34N2TaskOutsideProjectX',
+    projectId: null,
+    claim: '项目外由派活会话审的活',
+    ownerCard: { sessionId: SESSION_ID, decidingSessionId: SESSION_ID },
+  });
+  const inTheRun = row({
+    ...dispatched,
+    ownerCard: { sessionId: SESSION_ID, decidingSessionId: DISPATCHER_ID },
+  });
+
+  it('draws its card in the conversation its ownerCard names, whether or not that one coordinates a project', () => {
+    expect(roots(sessionCards([dispatched], null))).toEqual([decisionRowKey(dispatched)]);
+    expect(roots(sessionCards([dispatched], PROJECT_ID))).toEqual([decisionRowKey(dispatched)]);
+    expect(roots(sessionCards([inTheRun], null))).toEqual([decisionRowKey(inTheRun)]);
+  });
+
+  it('draws none in any other conversation, nor for one this session may not answer', () => {
+    expect(sessionCards([row({ ...dispatched, ownerCard: { sessionId: DISPATCHER_ID, decidingSessionId: DISPATCHER_ID } })], null))
+      .toBe('');
+    expect(sessionCards([row({
+      ...dispatched,
+      independence: {
+        independent: false,
+        disqualification: 'EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION',
+        requiredAction: 'DECIDE_FROM_A_SESSION_THAT_DID_NOT_DO_THIS_WORK',
+      },
+    })], null)).toBe('');
+    // A row in no project with no ownerCard is the population nobody dispatched: no card anywhere.
+    expect(sessionCards([row({ ...dispatched, ownerCard: null })], null)).toBe('');
+  });
+
+  it('re-derives its standing through the same filter', () => {
+    const read = queue([dispatched]);
+    expect(evidenceDecisionStanding(read, null, dispatched, SESSION_ID).state).toBe('DECIDABLE');
+    expect(evidenceDecisionStanding(read, null, dispatched, DISPATCHER_ID).state).toBe('ALREADY_DECIDED');
+  });
+
+  it('a press decides as the session the card names, which is not the run it is drawn in', async () => {
+    expect(evidenceDecidingSession(inTheRun, SESSION_ID)).toBe(DISPATCHER_ID);
+    expect(evidenceDecidingSession(dispatched, SESSION_ID)).toBe(SESSION_ID);
+    expect(evidenceDecidingSession(row(), SESSION_ID)).toBe(SESSION_ID);
+
+    const qc = newClient();
+    qc.setQueryData(pendingDecisionsQuery(SESSION_ID).queryKey, queue([inTheRun]));
+    apiMock.mockImplementation((async (_path: string, options?: { method?: string }) =>
+      options?.method === 'POST' ? receipt({ taskId: inTheRun.taskId }) : queue([])) as never);
+    const rendered = await mount(
+      <QueryClientProvider client={qc}>
+        <SessionEvidenceDecisionCard sessionId={SESSION_ID} projectId={null} onSendBack={() => {}} />
+      </QueryClientProvider>,
+    );
+    await click(press(rendered, DECISION_CONFIRM_ACTION));
+    await settle();
+    const posts = apiMock.mock.calls.filter(
+      ([, options]) => (options as { method?: string } | undefined)?.method === 'POST',
+    );
+    expect(posts).toEqual([
+      [
+        `/tasks/${inTheRun.taskId}/evidence/decision`,
+        {
+          method: 'POST',
+          body: { decidingSessionId: DISPATCHER_ID, evidenceRevision: '2', decision: 'CONFIRM' },
+        },
+      ],
+    ]);
+    // And the read it re-derives from is still this conversation's.
+    expect(
+      apiMock.mock.calls.filter(([path]) =>
+        String(path) === `/tasks/evidence-decisions/pending?decidingSessionId=${SESSION_ID}`),
+    ).toHaveLength(1);
+  });
+});
+
 describe('a press, end to end inside the browser', () => {
   it('posts straight to the door, re-reads the queue, and leaves the card saying what it recorded', async () => {
     const live = row();
@@ -780,14 +860,16 @@ describe('a press, end to end inside the browser', () => {
     ]);
   });
 
-  it('stands down while two versions of one task are asking at once', async () => {
+  it('gives the keys to the higher of two versions asking at once, and decides only that one', async () => {
     // This is the one card of the four that can be on screen more than once — one per version of
-    // the evidence — and the keys are held by the ONLY card asking or by none: with two questions
-    // up, one press would have to choose between them (`CardHotkey.ts`).
+    // the evidence — and one press answers one question: the keys are held by the highest card
+    // asking, and its hint is the only one on screen (`CardHotkey.ts`).
     const first = row();
     const second = row({ evidenceRevision: '3', claim: 'A newer version of the same evidence.' });
     const qc = newClient();
     qc.setQueryData(pendingDecisionsQuery(SESSION_ID).queryKey, queue([first, second]));
+    apiMock.mockImplementation((async (_path: string, options?: { method?: string }) =>
+      options?.method === 'POST' ? receipt() : queue([second])) as never);
 
     const rendered = await mount(
       <QueryClientProvider client={qc}>
@@ -798,13 +880,19 @@ describe('a press, end to end inside the browser', () => {
         />
       </QueryClientProvider>,
     );
-    expect(rendered.querySelectorAll('[data-decision-row]'), 'both versions were asking').toHaveLength(2);
-    for (const button of rendered.querySelectorAll<HTMLElement>('button.card-action')) {
-      expect(hintOn(button), 'a card showed a key it cannot honour').toBeNull();
-    }
+    const cards = [...rendered.querySelectorAll<HTMLElement>('[data-decision-row]')];
+    expect(cards, 'both versions were asking').toHaveLength(2);
+    expect(
+      cards.map((card) =>
+        [...card.querySelectorAll<HTMLElement>('button.card-action')].map(hintOn).filter(Boolean)),
+      'only the higher card shows a key',
+    ).toEqual([[ENTER_HINT], []]);
 
     await key();
-    expect(apiMock, 'one press decided two versions').not.toHaveBeenCalled();
+    const decided = apiMock.mock.calls
+      .filter(([, options]) => (options as { method?: string } | undefined)?.method === 'POST')
+      .map(([, options]) => (options as { body: { evidenceRevision: string } }).body.evidenceRevision);
+    expect(decided, 'one press decided one version, the one drawn higher').toEqual([first.evidenceRevision]);
   });
 });
 

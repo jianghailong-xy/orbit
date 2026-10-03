@@ -118,6 +118,11 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
     /// nothing is waiting any more — which is how the Needs-you bar lets go of a card somebody
     /// answered — and `.some(items)` is what is waiting now.
     public let ownerItems: [SessionOwnerItem]??
+    /// The confirmation on this run's session that is still with its reviewer (contract §5 N3).
+    /// Doubly optional for `retryAt`'s reason: `nil` is an older control plane that never sends the
+    /// key (keep the row's), `.some(nil)` is this server saying none is under review any more — how a
+    /// row stops saying "Under review" — and `.some(value)` is the one that is.
+    public let confirmationUnderReview: ConfirmationUnderReview??
     /// The sessions this one asked for a reply and still waits on, and the ones waiting on it
     /// (session requests). Doubly optional for `ownerItems`' reason: `nil` is an older control plane
     /// that never sends the key, `.some([])` is this server saying none is open any more.
@@ -181,6 +186,9 @@ public struct ControlSessionSummary: Codable, Equatable, Sendable {
         // a statement ("nothing is waiting on you here") and a missing key is not.
         ownerItems = values.contains(.ownerItems)
             ? .some(try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems) ?? [])
+            : nil
+        confirmationUnderReview = values.contains(.confirmationUnderReview)
+            ? .some(try? values.decodeIfPresent(ConfirmationUnderReview.self, forKey: .confirmationUnderReview))
             : nil
         awaitingReplyFrom = values.contains(.awaitingReplyFrom)
             ? .some((try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .awaitingReplyFrom)) ?? [])

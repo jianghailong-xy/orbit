@@ -93,7 +93,7 @@ const operationKey = (runnerId: string | undefined, operationId: string | undefi
 function announce(toast: ReturnType<typeof useToast>, copy: CodexResetStatusCopy): void {
   const text = `${copy.title}. ${copy.detail}`;
   if (copy.tone === 'success') toast.success(text);
-  else if (copy.tone === 'error') toast.error(text);
+  else if (copy.tone === 'error') toast.error(copy.title, copy.detail);
   else if (copy.tone === 'warning') toast.warning(text);
   else toast.info(text);
 }

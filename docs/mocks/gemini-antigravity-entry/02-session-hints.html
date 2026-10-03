@@ -1,0 +1,56 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>board</title>
+<link rel="stylesheet" href="board.css"><script src="glyphs.js"></script><script src="board.js"></script></head>
+<body>
+<h1>会话里的修复提示：引导去连接 Gemini</h1>
+<p class="lede" style="width:900px">会话里的提示改为引导去连接 Gemini，不再让人把 key 写进 workspace 环境变量。runner 版本不够、没装 agy 时，说清楚是哪台 runner、怎么解决。Providers 页的改动见改前/改后对比图。</p>
+
+<div class="row" style="gap:34px">
+  <!-- right: transcript hints -->
+  <div>
+    <div class="cap"><span class="tag n">现状 → 改后</span>会话里的修复提示</div>
+    <div class="lab">现状：内置 Antigravity 没有 key</div>
+    <div class="hint old">
+      <div class="ht"><i>!</i>Antigravity couldn't start</div>
+      Antigravity runs on the Gemini API key in its environment. Set <code>GEMINI_API_KEY</code> in this workspace's environment variables, or on the runner, then send your message again.
+    </div>
+    <div class="gap"></div>
+    <div class="lab">改后：没有 key</div>
+    <div class="hint">
+      <div class="ht"><i>!</i>Antigravity needs a Gemini API key</div>
+      Connect Gemini in Providers. Orbit stores the key encrypted, and this conversation can continue on it.
+      <div class="acts"><span class="btn pri">Connect Gemini</span><span class="btn">Switch to Gemini</span></div>
+    </div>
+    <div class="gap"></div>
+    <div class="lab">改后：runner 版本不够（会话在排队）</div>
+    <div class="hint">
+      <div class="ht"><i>!</i>Waiting for a newer runner</div>
+      <b>HPC</b> runs Orbit runner 0.1.208; Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then.
+      <div class="acts"><span class="btn">Open in Providers</span></div>
+    </div>
+    <div class="gap"></div>
+    <div class="lab">改后：runner 上没装 agy</div>
+    <div class="hint">
+      <div class="ht"><i>!</i>Antigravity CLI isn't installed on workstation</div>
+      Install it from Providers, then send your message again.
+      <div class="acts"><span class="btn pri">Install</span><span class="btn ghost">Open in Providers</span></div>
+    </div>
+    <ul class="notes" style="width:430px">
+      <li>不再引导把 key 写进 workspace 环境变量：那里是明文存储，接口会原样返回。</li>
+      <li><b>Switch to Gemini</b> 用的是现有的同运行时切换：内置 Antigravity 和 Gemini 跑在同一个 CLI 上，可以接着原来的对话。</li>
+      <li>runner 版本不够时，现在只挂一句英文报错；改为说清楚是哪台 runner、需要哪个版本、什么时候会自己好。</li>
+    </ul>
+  </div>
+</div>
+
+<div class="box" style="width:900px">
+  <h2>实现要点</h2>
+  <table>
+    <tr><th style="width:150px">位置</th><th>改什么</th></tr>
+    <tr><td>apiserver</td><td>provider 列表和 runner 数据里带上每台 runner 对 Antigravity 的就绪状态（是否声明支持、agy 是否安装、版本）；按「runner 环境或 workspace 环境变量里有 <code>GEMINI_API_KEY</code>」算出内置 Antigravity 是否可选，web 和 macOS/iOS 共用这一个结果</td></tr>
+    <tr><td>web</td><td>选择器（<code>sessionProviderChoices.ts</code>）按上面的结果显示或隐藏内置项，补「Update runner」状态和默认模型文案；Providers 页 runner 卡片加 Antigravity CLI 一行（<code>RunnerEngines.tsx</code>），Gemini 一行补状态说明；会话提示（<code>Transcript.tsx</code>）换文案和按钮</td></tr>
+    <tr><td>macOS / iOS</td><td><code>SessionProviderChoices.swift</code>、<code>EngineAuth.swift</code> 同步；OrbitKit 的对照测试会读 web 源码，两边要一起改</td></tr>
+    <tr><td>runner</td><td>不用改：doctor 已经按环境里有没有 <code>GEMINI_API_KEY</code> 上报 Antigravity 的 auth，也已经会安装 agy</td></tr>
+  </table>
+</div>
+</body></html>

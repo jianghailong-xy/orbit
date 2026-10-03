@@ -14,9 +14,13 @@ import {
   DisconnectOutlined,
   DownloadOutlined,
   DownOutlined,
+  EditOutlined,
+  EllipsisOutlined,
   EyeOutlined,
+  FolderOutlined,
   GlobalOutlined,
   InfoCircleOutlined,
+  LeftOutlined,
   LinkOutlined,
   LoadingOutlined,
   MessageOutlined,
@@ -40,7 +44,6 @@ import {
   referenceToken,
   type ReferenceMap,
 } from '../lib/composerRefs';
-import { requestPeersLine } from '../lib/sessionRequest';
 import { settleThinking } from '../lib/thinkingDraft';
 import {
   NEAR_BOTTOM,
@@ -88,6 +91,7 @@ import {
   restingOffset,
   sessionSwipeActions,
   settleSwipe,
+  swipeActionsOnScreen,
   swipeGeometry,
   swipeWidths,
   type SwipeAction,
@@ -102,6 +106,7 @@ import {
   providersQuery,
   SESSION_PAGE_SIZE,
   sessionQuery,
+  sessionFoldersQuery,
   type SessionListView,
   sessionsQuery,
   sessionTagsQuery,
@@ -115,6 +120,18 @@ import {
   watchesQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
+import { SessionMoveModal, type MoveDialogSession } from './SessionMoveModal';
+import {
+  FOLDER_COPY,
+  MOVE_COPY,
+  folderDeleteFailure,
+  folderNameDraft,
+  folderNameFailure,
+  listShowsFolders,
+  sessionFolderListing,
+  sessionsInFolder,
+  type SessionFolderRow,
+} from '../lib/sessionFolders';
 import {
   type SessionTagRef,
   sessionTagSections,
@@ -154,7 +171,7 @@ import {
   type LocalStatusRow,
 } from '../lib/slashCommands';
 import { sessionPlanUsage } from '../lib/planUsage';
-import { accountPlanUsage } from '../lib/engineAccounts';
+import { accountNameOf, accountPlanUsage } from '../lib/engineAccounts';
 import { poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
 import { sharedPoolAsProviderPool, sharedPoolsQuery } from '../lib/sharedPools';
 import {
@@ -208,8 +225,10 @@ import {
   commitSession,
   createMergeRepairSession,
   createInteractiveSession,
+  createSessionFolder,
   decideApproval,
   deleteSession,
+  deleteSessionFolder,
   cleanUpWorkspaceRepo,
   enableWorkspaceIsolation,
   getBackgroundShells,
@@ -230,8 +249,10 @@ import {
   resendSessionRetryMessage,
   type TranscriptAroundPage,
   renameSession,
+  renameSessionFolder,
   restoreSession,
   resumeSession,
+  type SessionFolder,
   sendTurn,
   sessionEventsUrl,
   unpinSession,
@@ -292,14 +313,19 @@ import {
   OWNER_SENDING_BACK_PREFIX,
   type OwnerConfirmationWaiting,
   OwnerDecisionReceipt,
+  ReviewerReturnRecord,
   SessionOwnerConfirmationCard,
   WAITING_FOR_CONFIRMATION,
   ownerConfirmationWaitingIn,
   ownerDecisionReceiptsIn,
   ownerDecisionRefusal,
   refreshOwnerConfirmationViews,
+  reviewerReturnsIn,
   sendOwnerDecision,
 } from './OwnerConfirmationCard';
+import { OwnerConfirmationReopen } from './OwnerConfirmationReopen';
+import { UNDER_REVIEW, underReviewLine } from './OwnerConfirmationReview';
+import { ReviewRequestedCard, SentBackByReviewerCard } from './ConfirmationReviewTurnCards';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
@@ -307,6 +333,8 @@ import type { Runner } from './TasksSidePanel';
 import { accountsOf } from './AccountSelect';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
 import type {
+  ConfirmationReturnCard,
+  ConfirmationReviewRequestCard,
   OpenItemDeliveryCard as OpenItemDelivery,
   ProjectStartedCard as ProjectStarted,
   SessionMessageCard as SessionMessage,
@@ -450,6 +478,10 @@ export interface QueuedTurn {
   openItemDelivery?: OpenItemDelivery;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStarted;
+  /** And for a confirmation review's two turns: the request a reviewer is handed, and the reviewer's
+   *  return handed to the run (`ActiveSessionTurn.confirmationReviewRequest` / `confirmationReturn`). */
+  confirmationReviewRequest?: ConfirmationReviewRequestCard;
+  confirmationReturn?: ConfirmationReturnCard;
   /** Another Orbit session's message, and who sent it (`ActiveSessionTurn.sessionMessage`): drawn as
    *  the "From [that session]" card its echo will be, and never handed back to the reader's composer. */
   sessionMessage?: SessionMessage;
@@ -562,6 +594,7 @@ const MODE_OPTIONS = Object.keys(MODE_TO_PERMISSION);
 const IS_MAC =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
 const NEW_SESSION_HINT = IS_MAC ? '⌘N' : 'Ctrl N';
+const COMPLETE_SESSION_HINT = IS_MAC ? '⌘D' : 'Ctrl D';
 /** A runner that carries a session's conversation onto another of its accounts (runner
  *  codex_account_move.go, claude_account_move.go) — the one kind the composer offers the move on. */
 const ACCOUNT_MOVE_CAPABILITY: Record<AccountEngine, string> = {
@@ -892,7 +925,7 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
 // background process or a watch that will resume it, default = reply content.
 type SessionLine = {
   text: string;
-  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching';
+  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review';
 };
 // The line for a message of YOURS the workspace hasn't answered yet. Prefixed, because the preview
 // line is otherwise the workspace's voice: unmarked, a message you sent and a reply to it read
@@ -968,6 +1001,11 @@ export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | 
   // decision waiting for an answer left this row reading as an idle reply preview.
   if (live && (s.pendingApprovals ?? 0) > 0)
     return { text: waitingLabel(s), tone: 'approval' };
+  // The same place for a run whose report is still with its reviewer (contract §5 N3): its card is
+  // drawn and can be pressed, but nobody is asking the owner yet, so the row says who has it in the
+  // secondary tone — never the amber of a row waiting on you, and never counted.
+  if (live && s.confirmationUnderReview)
+    return { text: underReviewLine(s.confirmationUnderReview.reviewerTitle), tone: 'review' };
   // Outranks the generating preview below. While the engine is starting, or compacting, it has
   // produced nothing since the wait began, so that preview would echo the message back as though it
   // were being answered (see waitingNoticeFor). Blue, because this is progress — just not the
@@ -1039,10 +1077,19 @@ export const SESSION_SHARED_TIP = 'Shared · anyone with the link';
 
 /** The title is the only flexible item: time, merge state, and coordinator relation stay visible
  * while a long title ellipsizes into whatever width remains. */
-export function SessionTitleRow({ session: s, hoverTipOpen = false }: { session: any; hoverTipOpen?: boolean }) {
+export function SessionTitleRow({
+  session: s,
+  hoverTipOpen = false,
+  showPinned = false,
+}: { session: any; hoverTipOpen?: boolean; showPinned?: boolean }) {
   return (
     <div className="session-title-row">
       <div className="session-title">{s.title}</div>
+      {showPinned && s.pinnedAt && (
+        <span className="session-pin-indicator" title="Pinned" aria-label="Pinned">
+          <PushpinFilled />
+        </span>
+      )}
       {(s.mergeStatus === 'error' || s.mergeStatus === 'conflict') && (
         <Tooltip
           title={s.mergeStatus === 'conflict' ? 'Merge conflict — needs resolving' : 'Merge failed'}
@@ -1063,17 +1110,6 @@ export function SessionTitleRow({ session: s, hoverTipOpen = false }: { session:
       <CoordinatorBadge projectId={s.projectId} />
     </div>
   );
-}
-
-/**
- * Who this row is waiting on for a reply, and who is waiting on it (session requests, contract §6):
- * "Waiting on Worker 2 · Owes a reply to Coordinator". Read off the row's own `awaitingReplyFrom` /
- * `owesReplyTo`, which every list read and every live summary carries; nothing when neither is open.
- */
-export function SessionRequestsLine({ session: s }: { session: any }) {
-  const text = requestPeersLine(s.awaitingReplyFrom, s.owesReplyTo);
-  if (!text) return null;
-  return <div className="session-requests" title={text}>{text}</div>;
 }
 
 /** Compact tag summary for a session-list row. The first tag is the one users can scan; the
@@ -1135,6 +1171,8 @@ export function statusLabel(session: any, watching?: string | null): string {
   // Same ordering as `sessionLine`, and outside the generating gate for the same reason: an owner
   // decision is not held open by a turn, so it is still waiting once the conversation parks.
   if ((session.pendingApprovals ?? 0) > 0) return waitingLabel(session);
+  // Where `Waiting for your confirmation` would be, while the report is with its reviewer (§5 N3).
+  if (session.confirmationUnderReview) return UNDER_REVIEW;
   if (state === 'SUCCEEDED') return 'Succeeded';
   if (waitingNoticeFor(session)) return startingLabel(session);
   if (isGenerating(session, state)) return 'Running';
@@ -1180,6 +1218,26 @@ export function orbitLinkStateWord(row: any): string {
   return statusLabel(row, watchingCountWord(row?.watching));
 }
 
+/**
+ * StatusIcon reduced to its motion, branch for branch in its order: the spinner of a session at
+ * work, the breathing terminal of a background job in flight, or neither. A folder row reports
+ * these for the sessions filed in it (lib/sessionFolders), so a folder and its rows can't disagree.
+ */
+export function statusGlyphMotion(session: any, watching?: string | null): 'spinner' | 'pulse' | null {
+  const state = sessionRunStateOf(session);
+  if ((session.pendingApprovals ?? 0) > 0 || state === 'SUCCEEDED') return null;
+  if (waitingNoticeFor(session) || isGenerating(session, state)) return 'spinner';
+  if (state !== 'AWAITING_INPUT') return null;
+  const work = parkedWorkLabel(session);
+  if (!work || (watching && work.kind !== 'subagent')) return null;
+  return work.kind === 'subagent' ? 'spinner' : work.active ? 'pulse' : null;
+}
+
+/** Whether a session counts toward a folder row's needs-you number: it waits on you, and not only to
+ *  have its project started, which lights no tally anywhere (the rail's and the drawer's rule). */
+export const sessionNeedsYou = (session: any): boolean =>
+  (session.pendingApprovals ?? 0) > 0 && session.waitingKind !== 'START_REQUEST';
+
 // One glyph per session state. Colour carries the meaning: blue = working,
 // amber = needs a human decision, green = the run reported success, red = real failure,
 // grey = neutral terminal (ended / interrupted / disconnected). A runner that
@@ -1199,6 +1257,13 @@ export function StatusIcon({ session, watching }: { session: any; watching?: str
     return (
       <Tooltip title={waitingLabel(session)}>
         <PauseCircleOutlined style={{ color: 'var(--warning-solid)', fontSize }} />
+      </Tooltip>
+    );
+  // Under review: a clock in the neutral tone, beside the row's line in the same place (§5 N3).
+  if (session.confirmationUnderReview)
+    return (
+      <Tooltip title={UNDER_REVIEW}>
+        <ClockCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
   if (state === 'SUCCEEDED')
@@ -1670,8 +1735,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     localStorage.setItem(PINNED_COLLAPSED_KEY, next ? '1' : '0');
   };
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null); // session row whose action menu is open
-  // Touch swipe actions for session rows: hover has no touch equivalent, so on mobile the row's
-  // actions sit behind a swipe instead, laid out like the iOS list (lib/sessionSwipe) — swipe right
+  // Touch swipe actions for session rows: on mobile the row's actions sit behind a swipe,
+  // laid out like the iOS list (lib/sessionSwipe) — swipe right
   // for Complete / Move to Open + Pin, swipe left for Delete.
   const [swipeOpen, setSwipeOpen] = useState<{ id: string; side: SwipeSide } | null>(null); // row held open by a swipe
   // The row under a finger drag: its live offset (px; negative = leftward), and whether releasing
@@ -1690,6 +1755,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   } | null>(null);
   const swipeClickGuard = useRef(false); // eat the click that trails a horizontal swipe
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
+  // A row's Share action opens the share dialog for that row rather than for the open session.
+  const [shareRowId, setShareRowId] = useState<string | null>(null);
+  // The session the Move dialog is open for: a row's, or the open conversation's.
+  const [moveTarget, setMoveTarget] = useState<MoveDialogSession | null>(null);
+  // New Folder… and Rename…'s inline name field (`id` null for a new folder), and the folder row
+  // whose ⋯ menu is open — it keeps the row's hover look while it is.
+  const [folderEdit, setFolderEdit] = useState<{
+    id: string | null;
+    draft: string;
+    error: string | null;
+    saving: boolean;
+  } | null>(null);
+  const [folderMenuOpenId, setFolderMenuOpenId] = useState<string | null>(null);
+  // The field's latest state for its handlers: a blur fired as Return or Esc unmounts the field
+  // reads it closed and saves nothing, and a second Return can't race the first save.
+  const folderEditRef = useRef(folderEdit);
+  folderEditRef.current = folderEdit;
+  const folderSaving = useRef(false);
   // Controlled because the multi-select tag items stay open after a choice; ordinary actions
   // close it explicitly (Ant Dropdown otherwise keeps every item open in multiple-select mode).
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
@@ -1717,7 +1800,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     target:
       | { kind: 'approval'; id: string }
       | { kind: 'ownerConfirmation'; taskId: string; requestId: string }
-      | { kind: 'evidenceDecision'; taskId: string; evidenceRevision: string }
+      // `decidingSessionId`: the session the card it was armed from decides as, when that is not
+      // this one (`evidenceDecidingSession`) — a dispatched task's card drawn in its run.
+      | { kind: 'evidenceDecision'; taskId: string; evidenceRevision: string; decidingSessionId: string | null }
       | { kind: 'planChange'; projectId: string; criteriaDigest: string };
     /** What the reply bar says it is about to answer, whole — built by whoever armed it. */
     banner: string;
@@ -2187,6 +2272,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // How much of the list is loaded. One page on open; scrolling toward the end widens the
   // window (see loadMoreSessions), which re-keys the query to the larger page.
   const [sessionLimit, setSessionLimit] = useState(SESSION_PAGE_SIZE);
+  // The owner's folders, and this workspace's (docs/session-folders-move-design.md §3, §7).
+  const foldersQ = useQuery(sessionFoldersQuery());
+  const workspaceFolders = useMemo(
+    () => (foldersQ.data ?? []).filter((f) => f.workspaceId === scopeWorkspaceId),
+    [foldersQ.data, scopeWorkspaceId],
+  );
+  // Folders split the list on the client, as on iOS, so a workspace that has any loads its whole
+  // list for the view rather than one page: a folder's count, its marks and its page all need every
+  // session filed in it. That is the request every native client makes for every list; a workspace
+  // without folders keeps paging as before.
+  const listByTag = !!tagFilter || groupByTag;
+  const foldersShown = listShowsFolders(effectiveView, listByTag) && workspaceFolders.length > 0;
   // One factory call drives both the list query and the optimistic-update key below, so
   // they can never drift apart; it's also the exact key the BootGate splash pre-warms.
   const sessionsOpts = sessionsQuery({
@@ -2194,7 +2291,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     workspaceId: scopeWorkspaceId,
     view: effectiveView,
     tagId: tagFilter,
-    limit: sessionLimit,
+    limit: foldersShown ? null : sessionLimit,
   });
   const sessionsKey = sessionsOpts.queryKey;
   // While the control-plane stream is connected it pushes list changes (a coalesced refetch per
@@ -2223,6 +2320,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     qc.invalidateQueries({ queryKey: ['sessions'] });
     if (selectedId) qc.invalidateQueries({ queryKey: ['session', selectedId] });
   }, [runner.id, runner.online, selectedId, qc]);
+  // A row saying "Under review" stops saying it when the review's window runs out, which nothing on
+  // the server announces (contract §5 N5): the window is read, never swept. So the list reads again a
+  // second after the earliest such row is due, rather than at the next event that happens by.
+  const reviewDueAt = (sessionsQ.data ?? []).reduce<number | null>((earliest, row: any) => {
+    const due = Date.parse(row?.confirmationUnderReview?.dueAt ?? '');
+    return Number.isNaN(due) || (earliest !== null && earliest <= due) ? earliest : due;
+  }, null);
+  useEffect(() => {
+    if (reviewDueAt === null) return;
+    const wait = reviewDueAt + 1_000 - Date.now();
+    if (wait > 2 ** 31 - 1) return;
+    const timer = setTimeout(() => void qc.invalidateQueries({ queryKey: ['sessions'] }), Math.max(0, wait));
+    return () => clearTimeout(timer);
+  }, [qc, reviewDueAt]);
   // The owner's tag library, for the filter menu and the "Group by Tag" headings.
   const sessionTags = useQuery(sessionTagsQuery()).data ?? [];
 
@@ -2417,7 +2528,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             sessionId: operation.id,
             sessionTitle: operation.title,
             event: 'merge-result',
-            headline: `Merge into ${target} failed`,
+            headline: `Couldn't merge into ${target}`,
             detail: d.mergeError ?? 'See the status bar for details.',
             tone: 'error',
           });
@@ -2447,7 +2558,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           sessionId: operation.id,
           sessionTitle: operation.title,
           event: 'commit-result',
-          headline: 'Commit failed',
+          headline: "Couldn't commit",
           // The runner's plain sentence when it gave one; git's words otherwise (commitFailureCopy).
           detail: commitFailureCopy(d.commitError, d.commitResultMessage).why,
           tone: 'error',
@@ -2515,10 +2626,56 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (tagFilter) list = sessionsWithTag(list, tagFilter);
     return list;
   }, [sessions, resolvedWorkspaceId, tagFilter]);
+  // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
+  // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
+  // shows folders at all.
+  const folderParam = searchParams.get('folder');
+  const openFolder = useMemo(() => {
+    const id = routeId(folderParam);
+    return foldersShown && id ? (workspaceFolders.find((f) => f.id === id) ?? null) : null;
+  }, [folderParam, foldersShown, workspaceFolders]);
+  // A folder page whose folder is gone — deleted here or on another client, or a link into another
+  // workspace's — goes back to the list. Only once both the folders and the list's workspace are
+  // known: before that a missing folder is one not loaded yet.
+  useEffect(() => {
+    if (!folderParam || openFolder || !foldersQ.isSuccess || !scopeWorkspaceId) return;
+    if (!listShowsFolders(effectiveView, listByTag)) return;
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('folder');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [folderParam, openFolder, foldersQ.isSuccess, scopeWorkspaceId, effectiveView, listByTag, setSearchParams]);
+  // The list split into its folder rows and the sessions in no folder — the ones the Pinned and
+  // time sections below are made of. A folder's page lists the sessions filed in it instead.
+  const folderListing = useMemo(
+    () =>
+      foldersShown && !openFolder
+        ? sessionFolderListing(visibleSessions, workspaceFolders, {
+            view: effectiveView,
+            byTag: false,
+            runnerOffline: runner.online === false,
+            needsYou: sessionNeedsYou,
+            motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
+          })
+        : null,
+    [foldersShown, openFolder, visibleSessions, workspaceFolders, effectiveView, runner.online, watchingBySession],
+  );
+  const listedSessions = useMemo(
+    () => (openFolder ? sessionsInFolder(visibleSessions, openFolder.id) : (folderListing?.sessions ?? visibleSessions)),
+    [openFolder, folderListing, visibleSessions],
+  );
+  // Where a session opened from this list lives. On a folder's page the page goes along, so the
+  // list stays on it while the conversations it lists are opened one after another.
+  const folderSearch = openFolder ? `?folder=${encodeId(openFolder.id)}` : '';
+  const sessionPath = useCallback((id: string) => `/sessions/${encodeId(id)}${folderSearch}`, [folderSearch]);
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
-  const hasMoreSessions = (sessionsQ.data?.length ?? 0) >= sessionLimit;
+  const hasMoreSessions = !foldersShown && (sessionsQ.data?.length ?? 0) >= sessionLimit;
   // The column has nothing to show yet for this scope (a switch to a workspace not in cache), or
   // is widening its window — `isPlaceholderData` is exactly that, since the guard above only
   // keeps rows within one scope. Neither is the ordinary background refresh, which must not
@@ -2559,13 +2716,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const sections = useMemo(
     () =>
       groupByTag
-        ? sessionTagSections(visibleSessions).map((s) => ({
+        ? sessionTagSections(listedSessions).map((s) => ({
             key: s.tag?.id ?? '__untagged__',
             tag: s.tag,
             title: s.tag?.name ?? 'Untagged',
             sessions: s.sessions,
           }))
-        : sessionTimeSections(visibleSessions, {
+        : sessionTimeSections(listedSessions, {
             pinnedFirst: view === 'open' && !tagFilter,
           }).map((s) => ({
             key: s.title,
@@ -2574,7 +2731,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
             sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
           })),
-    [visibleSessions, groupByTag, view, tagFilter, pinnedCollapsed],
+    [listedSessions, groupByTag, view, tagFilter, pinnedCollapsed],
   );
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
@@ -2589,7 +2746,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // when the Open list is empty (the first-run empty state).
   const composing =
     !selectedId &&
-    (composingRoute || view !== 'open' || (sessionsQ.isSuccess && visibleSessions.length === 0));
+    (composingRoute || view !== 'open' || (sessionsQ.isSuccess && listedSessions.length === 0));
   // The Projects CTA lands on the ordinary New Session route with one piece of transient framing:
   // this turn is meant to create a project. Keeping it in the URL makes refresh/back truthful and
   // lets dismissing it return to the byte-for-byte ordinary compose without a second screen/state.
@@ -2622,18 +2779,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // button (it returns here, which would immediately redirect into a session again).
     if (isMobile || selectedId || composingRoute || view !== 'open' || !sessionsQ.isSuccess)
       return;
+    // Not before the folders are known: the session opened is one the list shows, and until then a
+    // session filed in a folder could be picked from under it. A server without folders answers
+    // with an error, which is known too.
+    if (foldersQ.isPending) return;
     const remembered = scopeWorkspaceId ? lastSessionByWorkspace.get(scopeWorkspaceId) : undefined;
-    const target = visibleSessions.find((s) => s.id === remembered) ?? visibleSessions[0];
-    if (target) navigate(`/sessions/${encodeId(target.id)}`, { replace: true });
+    const target = listedSessions.find((s) => s.id === remembered) ?? listedSessions[0];
+    if (target) navigate(sessionPath(target.id), { replace: true });
   }, [
     isMobile,
     selectedId,
     composingRoute,
     view,
     sessionsQ.isSuccess,
-    visibleSessions,
+    foldersQ.isPending,
+    listedSessions,
     scopeWorkspaceId,
     navigate,
+    sessionPath,
   ]);
 
   // Step the open session up/down the visible list, for the window-level Up/Down handler
@@ -2651,10 +2814,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         next = cur + dir;
         if (next < 0 || next >= orderedSessions.length) return false; // stop at the ends
       }
-      navigate(`/sessions/${encodeId(orderedSessions[next].id)}`);
+      navigate(sessionPath(orderedSessions[next].id));
       return true;
     },
-    [orderedSessions, selectedId, view, navigate],
+    [orderedSessions, selectedId, view, navigate, sessionPath],
   );
 
   // Up/Down arrows step through the session list (left column), switching the open
@@ -2663,6 +2826,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      if (menuOpenId || e.defaultPrevented) return;
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       const el = document.activeElement;
       if (
@@ -2674,7 +2838,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [stepSession]);
+  }, [menuOpenId, stepSession]);
 
   // Keep the highlighted row in view when arrowing through a long list.
   useEffect(() => {
@@ -4278,12 +4442,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   });
 
   // Which of those rows the pinned strip lists: the ones the evidence card below is drawn for, by
-  // the card's own filter over the same read and the project this session coordinates. The strip
+  // the card's own filter over the same read, the project this session coordinates and this
+  // session itself (a dispatched task's card names the one conversation it is drawn in). The strip
   // counts and points at those and no others; a row this conversation draws no card for is counted
-  // by the coordinator that draws it.
+  // by the conversation that draws it.
   const decisionCards = new Set(
-    evidenceDecisionCardRows(pendingDecisions.data ?? null, selectedSession?.projectId ?? null)
-      .map(decisionRowKey),
+    evidenceDecisionCardRows(
+      pendingDecisions.data ?? null,
+      selectedSession?.projectId ?? null,
+      selectedId,
+    ).map(decisionRowKey),
   );
 
   // The confirmation of the OWNER_CONFIRMED task this session runs, through the key the card below
@@ -4304,7 +4472,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       sendOwnerDecision(press.taskId, press.requestId, press.decision, press.note),
     // Said as staleness when that is what the door's code means, for the reason the card gives: a
     // reader told only "it failed" has been told the button is broken.
-    onError: (error: Error) => void message.error(ownerDecisionRefusal(error).title),
+    onError: (error: Error) => {
+      const refusal = ownerDecisionRefusal(error);
+      message.error("Couldn't send the task back", refusal.stale ? refusal.title : error.message);
+    },
     onSettled: (_data, _error, press) => refreshOwnerConfirmationViews(qc, press.taskId),
   });
   // The send-back the composer completes from the evidence card's "Chat about this": it presses the
@@ -4316,20 +4487,27 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const evidenceDecision = useMutation({
     mutationFn: (press: {
       sessionId: string;
+      decidingSessionId: string;
       taskId: string;
       evidenceRevision: string;
       note: string;
-    }) => sendEvidenceDecision(press, press.sessionId, 'SEND_BACK', press.note),
+    }) => sendEvidenceDecision(press, press.decidingSessionId, 'SEND_BACK', press.note),
     // Said as staleness when that is what the door's code means, for the reason the card gives: a
     // reader told only "it failed" has been told the button is broken.
-    onError: (error: Error) => void message.error(evidenceDecisionRefusal(error).title),
+    onError: (error: Error) => {
+      const refusal = evidenceDecisionRefusal(error);
+      message.error("Couldn't send the task back", refusal.stale ? refusal.title : error.message);
+    },
     onSettled: (_data, _error, press) =>
       qc.invalidateQueries({ queryKey: pendingDecisionsQuery(press.sessionId).queryKey }),
   });
   // A run ending its turn moves this session's row, not the task, so no task event re-reads the
   // confirmation. Re-read it when the row moves, and the card arrives with the report rather than
   // on the card's next poll.
-  const selectedRunMoment = `${selectedSession?.runState ?? ''}|${selectedSession?.lastTurnAt ?? ''}`;
+  // The row's review status is in it too: a reviewer that ends, answers or runs out of time moves
+  // this row and nothing about the task (contract §5 N5), and the card has to follow the row.
+  const selectedRunMoment = `${selectedSession?.runState ?? ''}|${selectedSession?.lastTurnAt ?? ''}|${
+    selectedSession?.confirmationUnderReview?.requestId ?? ''}`;
   useEffect(() => {
     if (!selectedTaskId) return;
     void qc.invalidateQueries({ queryKey: ownerConfirmationQuery(selectedTaskId).queryKey });
@@ -4363,13 +4541,36 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       }),
       ...ownerDecisionReceiptsIn(ownerConfirmation.data, selectedId).flatMap((decided) => {
         const anchor = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
-        return anchor === null || !ownerConfirmation.data
+        const view = ownerConfirmation.data;
+        return anchor === null || !view
           ? []
           : [{
               anchor,
               moment: decided.decidedAt,
               key: `owner-decision-receipt:${decided.id}`,
-              element: <OwnerDecisionReceipt view={ownerConfirmation.data} decided={decided} />,
+              element: (
+                <OwnerDecisionReceipt
+                  view={view}
+                  decided={decided}
+                  // Offered where the review that came in later found problems, once the task has
+                  // settled — the task panel's own Reopen task (contract §9 L4).
+                  reopen={<OwnerConfirmationReopen taskId={view.taskId} projectId={view.projectId} status={view.status} />}
+                />
+              ),
+            }];
+      }),
+      // A report its reviewer sent back to the run: the card it was is drawn as the record it
+      // became, at the moment it was sent back (contract §8 B6).
+      ...reviewerReturnsIn(ownerConfirmation.data, selectedId).flatMap((returned) => {
+        const at = returned.review.returned?.recordedAt;
+        const anchor = at ? decisionReceiptAnchor(transcriptEvents, at) : null;
+        return anchor === null || !at || !ownerConfirmation.data
+          ? []
+          : [{
+              anchor,
+              moment: at,
+              key: `owner-confirmation-returned:${returned.requestId}`,
+              element: <ReviewerReturnRecord view={ownerConfirmation.data} returned={returned} />,
             }];
       }),
       // The set somebody signed for this project, at the moment they signed it. This one is the
@@ -4614,9 +4815,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       const read = pendingDecisions.data;
       if (!read) return;
       const address = decisionRowKey(replyTo.target);
-      const still = evidenceDecisionCardRows(read, selectedSession?.projectId ?? null).some(
-        (row) => decisionRowKey(row) === address,
-      );
+      const still = evidenceDecisionCardRows(
+        read, selectedSession?.projectId ?? null, selectedId,
+      ).some((row) => decisionRowKey(row) === address);
       if (!still) setReplyTo(null);
       return;
     }
@@ -4867,6 +5068,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         attachmentIds,
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
+        // Composed on a folder's page: the session starts in that folder.
+        ...(openFolder && openFolder.workspaceId === workspaceId ? { folderId: openFolder.id } : {}),
       });
       // Only an *edited* Mode is worth remembering on the workspace: the untouched seed is the Auto
       // default, possibly clamped for this provider (Auto -> Default on a model that can't run
@@ -4931,7 +5134,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           .then(() => qc.invalidateQueries({ queryKey: meQuery().queryKey }))
           .catch(() => {});
       }
-      navigate(`/sessions/${encodeId(id)}`);
+      navigate(sessionPath(id));
       setText((draft) => composerDraftAfterSend(draft, true));
       setComposerRefs({});
       // Hand the sent image previews to the transcript, keyed by turnId, so they show in
@@ -5020,7 +5223,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         setRunConflict({ conflict, vars });
         return;
       }
-      message.error(e.message);
+      message.error("Couldn't send the message", e.message);
     },
   });
   const sendMutateForConflict = send.mutate;
@@ -5069,7 +5272,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       setRunConflict(null);
       void qc.invalidateQueries({ queryKey: ['tasks'] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't clear the task's pin", e.message),
   });
   /**
    * The reader's answer to whichever question the conflict asked.
@@ -5119,7 +5322,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       setQueued([]);
       qc.invalidateQueries({ queryKey: ['sessions'] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't stop the session", e.message),
   });
   // Withdraw a queued message. Optimistically remove it; if the runner already leased
   // it (it's no longer cancellable) it'll arrive in the transcript via its `user` event.
@@ -5192,7 +5395,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: session.id,
         sessionTitle: session.title,
         event: 'restore-error',
-        headline: 'Could not move to Open',
+        headline: "Couldn't move to Open",
         detail: e.message,
         tone: 'error',
       }),
@@ -5228,11 +5431,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const idx = orderedSessions.findIndex((s) => s.id === id);
     const next = idx >= 0 ? (orderedSessions[idx + 1] ?? orderedSessions[idx - 1]) : null;
     if (next) {
-      navigate(`/sessions/${encodeId(next.id)}`);
+      navigate(sessionPath(next.id));
       return;
     }
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-    navigate(a ? `/workspaces/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
+    navigate(a ? `/workspaces/${encodeId(a)}${folderSearch}` : `/runners/${encodeId(runner.id)}`);
   };
   // After leaveIfOpen re-scopes to the workspace, the auto-open effect picks that workspace's
   // next session — but it reads the cached list, which still holds the row we just
@@ -5257,7 +5460,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: session.id,
         sessionTitle: session.title,
         event: 'complete-error',
-        headline: 'Could not complete session',
+        headline: "Couldn't complete the session",
         detail: e.message,
         tone: 'error',
       }),
@@ -5273,13 +5476,38 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     },
     [completeMut, message, selectedSession],
   );
-  // ⌘/Ctrl+D completes the open session — the keyboard twin of the action on its row. Fires
-  // even while the composer is focused; preventDefault swallows the browser's bookmark
-  // shortcut. The endpoint handles ending a live run and moving it to Completed.
+  // An open row menu owns the shortcut, including when its Complete action cannot run.
+  // Otherwise ⌘/Ctrl+D completes the selected session, even while the composer is focused.
+  // Never let a disabled/missing menu action fall through and complete a different session.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key.toLowerCase() !== 'd' || e.shiftKey || e.altKey) return;
+      if (menuOpenId && e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        // Restore focus before the controlled dropdown begins its exit animation.
+        listRef.current?.querySelector<HTMLButtonElement>('.session-row.menu-open .session-kebab')?.focus();
+        setMenuOpenId(null);
+        return;
+      }
+      if (e.key.toLowerCase() !== 'd' || e.shiftKey || e.altKey || e.isComposing) return;
       if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.repeat) {
+        e.preventDefault();
+        return;
+      }
+      if (menuOpenId) {
+        e.preventDefault();
+        e.stopPropagation();
+        const row = orderedSessions.find((s) => s.id === menuOpenId);
+        const source = selectedSession?.id === menuOpenId ? selectedSession : row;
+        if (
+          !row || view !== 'open' || !source ||
+          !isCompleteShortcutEligible(source, sessionLifecycleStateOf(source, { listView: view }))
+        ) return;
+        setMenuOpenId(null);
+        requestComplete(row);
+        return;
+      }
       if (
         !selected ||
         !isCompleteShortcutEligible(selectedSession, selectedLifecycleState)
@@ -5289,9 +5517,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       setHeaderMenuOpen(false);
       requestComplete(selected);
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [selected, selectedSession, selectedLifecycleState, requestComplete]);
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [menuOpenId, orderedSessions, view, selected, selectedSession, selectedLifecycleState, requestComplete]);
+  useEffect(() => {
+    if (menuOpenId && !orderedSessions.some((s) => s.id === menuOpenId)) setMenuOpenId(null);
+  }, [menuOpenId, orderedSessions]);
   const deleteMut = useMutation({
     mutationFn: (session: SessionToastTarget) => deleteSession(session.id),
     onSuccess: (_d, session) => {
@@ -5305,7 +5536,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: session.id,
         sessionTitle: session.title,
         event: 'trash-error',
-        headline: 'Could not move to Trash',
+        headline: "Couldn't move to Trash",
         detail: e.message,
         tone: 'error',
       }),
@@ -5348,7 +5579,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         workspace: { name: session.workspace?.name ?? null },
       });
     } catch (e) {
-      message.error(`Download failed: ${(e as Error).message}`);
+      message.error("Couldn't download the HTML", (e as Error).message);
     } finally {
       setDownloadingHtml(false);
     }
@@ -5356,7 +5587,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Copy link: the signed-in address, for the owner's own use — never the public one (§8).
   const copySessionLink = (session: any): void => {
     void copyText(`${window.location.origin}/sessions/${encodeId(session.id)}`).then((ok) =>
-      ok ? message.success('Link copied') : message.error('Could not copy'),
+      ok ? message.success('Link copied') : message.error("Couldn't copy the link"),
     );
   };
   // Permanent delete (from Trash): unlike deleteMut there's no undo — the row and all its
@@ -5381,7 +5612,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: session.id,
         sessionTitle: session.title,
         event: 'purge-error',
-        headline: 'Permanent deletion failed',
+        headline: "Couldn't delete the session permanently",
         detail: e.message,
         tone: 'error',
       }),
@@ -5406,7 +5637,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
         Array.isArray(old) ? old.map((s) => (s.id === id ? { ...s, title } : s)) : old,
       ),
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't rename the session", e.message),
     onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   });
   // Pin/unpin a session to the top of the list. Optimistically flip pinnedAt in every cached
@@ -5422,16 +5653,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             )
           : old,
       ),
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error, { pin }) =>
+      message.error(pin ? "Couldn't pin the session" : "Couldn't unpin the session", e.message),
     onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   });
-  // A tapped swipe button (or a full swipe) runs the same request as the row's hover or menu
+  // A tapped swipe button (or a full swipe) runs the same request as the row's menu
   // action; the row settles closed either way.
   const runSwipeAction = (action: SwipeAction, s: any): void => {
     setSwipeOpen(null);
     if (action === 'complete') requestComplete(s);
     else if (action === 'restore') requestRestore(s);
     else if (action === 'pin') pinMut.mutate({ id: s.id, pin: !s.pinnedAt });
+    else if (action === 'share') setShareRowId(s.id);
+    else if (action === 'move') openMove(s);
     else if (action === 'delete') requestTrash(s);
     else confirmPurge({ id: s.id, title: s.title });
   };
@@ -5460,7 +5694,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       if (context?.previousDetail !== undefined) {
         qc.setQueryData(['session', id], context.previousDetail);
       }
-      message.error(e.message);
+      message.error("Couldn't update the tags", e.message);
     },
     onSettled: (_data, _error, { id }) => {
       tagSaveInFlight.current = false;
@@ -5474,7 +5708,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     mutationFn: (workspaceId: string) => enableWorkspaceIsolation(workspaceId),
     onSuccess: () =>
       message.success('Isolation enabled — the next run will initialize git and isolate.'),
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't enable worktree isolation", e.message),
   });
   const askEnableIsolation = (workspaceId: string) =>
     modal.confirm({
@@ -5497,7 +5731,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       message.success(REPO_CLEANUP_QUEUED);
       void qc.invalidateQueries({ queryKey: workspacesQuery().queryKey });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't clean up the checkout", e.message),
   });
   const askCleanUpRepo = (workspaceId: string, root: string) =>
     modal.confirm({
@@ -5532,7 +5766,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: vars.id,
         sessionTitle: vars.title,
         event: 'merge-request-error',
-        headline: `Could not start merge${vars.target ? ` into ${vars.target}` : ''}`,
+        headline: `Couldn't start the merge${vars.target ? ` into ${vars.target}` : ''}`,
         detail: e.message,
         tone: 'error',
       }),
@@ -5554,7 +5788,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       navigate(`/sessions/${encodeId(session.id)}`);
       void qc.invalidateQueries({ queryKey: ['sessions'] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't start the repair session", e.message),
   });
   // Resolve a merge conflict in-session: revive the session so its own workspace rebases the branch
   // onto the target that conflicted and fixes the conflicts (it has the context for its own
@@ -5611,7 +5845,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: vars.id,
         sessionTitle: vars.title,
         event: 'resolve-conflict-error',
-        headline: 'Could not start conflict resolution',
+        headline: "Couldn't start resolving the conflict",
         detail: e.message,
         tone: 'error',
       }),
@@ -5649,7 +5883,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: vars.id,
         sessionTitle: vars.title,
         event: 'resolve-commit-error',
-        headline: 'Could not hand the commit to the session',
+        headline: "Couldn't hand the commit to the session",
         detail: e.message,
         tone: 'error',
       }),
@@ -5676,7 +5910,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: session.id,
         sessionTitle: session.title,
         event: 'commit-request-error',
-        headline: 'Could not start commit',
+        headline: "Couldn't start the commit",
         detail: e.message,
         tone: 'error',
       }),
@@ -5702,7 +5936,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         sessionId: session.id,
         sessionTitle: session.title,
         event: 'adopt-branch-error',
-        headline: 'Could not update tracked branch',
+        headline: "Couldn't update the tracked branch",
         detail: e.message,
         tone: 'error',
       }),
@@ -5729,9 +5963,22 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       );
       return { prev };
     },
-    onError: (e: Error, _cfg, ctx) => {
+    onError: (e: Error, cfg, ctx) => {
       if (ctx?.prev) qc.setQueryData(sessionsKey, ctx.prev);
-      message.error(e.message);
+      // Named by what was picked: a provider switch carries the model, mode and effort that follow
+      // it, and a model switch its mode and effort.
+      message.error(
+        cfg.provider !== undefined
+          ? "Couldn't switch the provider"
+          : cfg.model !== undefined
+            ? "Couldn't change the model"
+            : cfg.permissionMode !== undefined
+              ? "Couldn't change the mode"
+              : cfg.effort !== undefined
+                ? "Couldn't change the effort"
+                : "Couldn't change the speed",
+        e.message,
+      );
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
   });
@@ -5740,7 +5987,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const accountMut = useMutation({
     mutationFn: ({ id, account }: { id: string; account: string }) => switchSessionAccount(id, account),
     onError: (e: Error) => {
-      message.error(e.message);
+      message.error("Couldn't switch the account", e.message);
     },
     onSettled: (_result, _error, vars) => {
       void qc.invalidateQueries({ queryKey: ['sessions'] });
@@ -5819,7 +6066,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // Drop the failed chip and free its preview; the toast explains why.
         setImages((prev) => prev.filter((im) => im.uid !== uid));
         if (previewUrl) URL.revokeObjectURL(previewUrl);
-        message.error((e as Error).message);
+        message.error(
+          isInlineImage ? "Couldn't upload the image" : "Couldn't upload the file",
+          (e as Error).message,
+        );
       }
     },
     [canAttach, selected, message],
@@ -5939,7 +6189,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         const catalogKnown = slashItems.some((it) => it.type !== 'local');
         const knownRunnerCommand = slashItems.some((it) => it.type !== 'local' && it.name === commandName);
         if (catalogKnown && !knownRunnerCommand) {
-          message.warning(`/${commandName} isn't in this runner's catalog — sending anyway`);
+          message.info(`/${commandName} isn't in this runner's catalog — sending anyway`);
         }
       }
     }
@@ -5974,13 +6224,19 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       // is sent and the bar stays armed.
       if (replyTo.target.kind === 'evidenceDecision') {
         if (!c || !selectedId) return;
-        const { taskId, evidenceRevision } = replyTo.target;
+        const { taskId, evidenceRevision, decidingSessionId } = replyTo.target;
         pinToBottom();
         setReplyTo(null);
         setText('');
         setComposerRefs({});
         setHistIdx(-1);
-        evidenceDecision.mutate({ sessionId: selectedId, taskId, evidenceRevision, note: c });
+        evidenceDecision.mutate({
+          sessionId: selectedId,
+          decidingSessionId: decidingSessionId ?? selectedId,
+          taskId,
+          evidenceRevision,
+          note: c,
+        });
         return;
       }
       // Talking about a plan before it is started reaches no door either: it is an ordinary turn at
@@ -6042,8 +6298,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // workspace, so resolve it from the open session (scopeWorkspaceId), then the first workspace.
   const goNew = (): void => {
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
+    // On a folder's page the draft is for that folder: the session it starts is filed there.
     navigateWithPaneSlide('push', () =>
-      navigate(a ? `/workspaces/${encodeId(a)}/new` : `/runners/${encodeId(runner.id)}`, {
+      navigate(a ? `/workspaces/${encodeId(a)}/new${folderSearch}` : `/runners/${encodeId(runner.id)}`, {
         state: stampFromList(),
       }),
     );
@@ -6404,6 +6661,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         kind: 'evidenceDecision',
         taskId: row.taskId,
         evidenceRevision: row.evidenceRevision,
+        decidingSessionId: row.ownerCard?.decidingSessionId ?? null,
       },
       banner: DECISION_SENDING_BACK_PREFIX + row.title,
       placeholder: DECISION_SEND_BACK_LABEL,
@@ -6543,13 +6801,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const shownAccountsHere = shownAccountEngine ? accountsOf(runner, shownAccountEngine) : [];
   const shownAccountRow =
     shownAccountsHere.length >= 2
-      ? (shownAccountsHere.find((account) => account.id === shownAccount) ?? { id: 'default', name: undefined })
+      ? (shownAccountsHere.find((account) => account.id === shownAccount) ??
+        // An account the runner does not report runs on Default — under whatever Default is called.
+        shownAccountsHere.find((account) => account.id === 'default') ?? { id: 'default', name: undefined })
       : null;
-  const shownAccountLabel = shownAccountRow
-    ? shownAccountRow.id === 'default'
-      ? 'Default'
-      : shownAccountRow.name || `Account ${shownAccountRow.id}`
-    : null;
+  const shownAccountLabel = shownAccountRow ? accountNameOf(shownAccountRow) : null;
   const shownPlanUsage = shownPool
     ? (shownPoolAccount?.member.planUsage ?? null)
     : (shownProvider === 'codex' || shownProvider === 'claude') && shownAccount !== 'default'
@@ -6620,7 +6876,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const resendFromSession = useMutation({
     mutationFn: (sessionId: string) => resendSessionRetryMessage(sessionId),
     onSuccess: (_answer, sessionId) => qc.invalidateQueries({ queryKey: ['session', sessionId] }),
-    onError: (e: Error) => message.error(e.message || 'Could not re-send that message'),
+    // Said, not returned: an error toast stays until it is dismissed, and React Query waits on what
+    // `onError` hands back before the press stops being in flight. Returned, a press that failed — or
+    // whose answer was lost — held Retry disabled for as long as the toast stood, and pressing again
+    // is exactly how such a press is answered (§8 criterion 22): the server's key is the failure's.
+    onError: (e: Error) => void message.error("Couldn't re-send the message", e.message),
   });
   const resendFromSessionMutate = resendFromSession.mutate;
   const sendMutate = send.mutate;
@@ -6701,7 +6961,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     try {
       await cancelQueuedTurn(selectedId, turn.turnId);
     } catch (e) {
-      message.error(e instanceof Error ? e.message : 'Could not discard that message');
+      message.error("Couldn't discard the message", e instanceof Error ? e.message : undefined);
     }
   };
   // The same retry, plus the pending auto-retry, for the quota / provider-error card. Disarming
@@ -6746,14 +7006,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ? () => {
             cancelAutoRetry(selected.id)
               .then(() => qc.invalidateQueries({ queryKey: ['session', selected.id] }))
-              .catch((e: Error) => message.error(e.message));
+              .catch((e: Error) => message.error("Couldn't turn off auto-retry", e.message));
           }
         : undefined,
       onArmAuto: selected?.id
         ? (at: Date) => {
             armAutoRetry(selected.id, at)
               .then(() => qc.invalidateQueries({ queryKey: ['session', selected.id] }))
-              .catch((e: Error) => message.error(e.message));
+              .catch((e: Error) => message.error("Couldn't turn on auto-retry", e.message));
           }
         : undefined,
     }),
@@ -6865,11 +7125,224 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // has no workspace in the URL, so fall back to the open session's workspace, then runner.
   const headWorkspaceName =
     lockedWorkspace?.name ?? selected?.workspace?.name ?? runner.displayName ?? runner.name;
+
+  // ── Folders (docs/session-folders-move-design.md §3, §7) ──
+  // In and out of a folder's page is a change of the `folder` param on whichever route the console
+  // is at, so the conversation on the right stays put. On a phone it slides like opening a session.
+  const setFolderParam = (folderId: string | null, replace = false): void => {
+    navigateWithPaneSlide(
+      folderId ? 'push' : 'pop',
+      () =>
+        setSearchParams(
+          (current) => {
+            const next = new URLSearchParams(current);
+            if (folderId) next.set('folder', encodeId(folderId));
+            else next.delete('folder');
+            return next;
+          },
+          { replace },
+        ),
+      { swapsPane: false },
+    );
+  };
+  const enterFolder = (folder: SessionFolder): void => {
+    setSwipeOpen(null);
+    setFolderEdit(null);
+    setFolderParam(folder.id);
+  };
+  const leaveFolder = (replace = false): void => {
+    setFolderEdit(null);
+    setFolderParam(null, replace);
+  };
+  const startNewFolder = (): void => setFolderEdit({ id: null, draft: '', error: null, saving: false });
+  // New Folder… and Rename… save on Return (or when the field is left with a name in it); an empty
+  // or unchanged name just closes the field. A name the workspace already has is said under it.
+  const saveFolderEdit = async (): Promise<void> => {
+    const edit = folderEditRef.current;
+    if (!edit || folderSaving.current) return;
+    const name = folderNameDraft(edit.draft);
+    const current = edit.id ? workspaceFolders.find((f) => f.id === edit.id) : null;
+    if (!name || (current && current.name === name) || !scopeWorkspaceId) {
+      setFolderEdit(null);
+      return;
+    }
+    folderSaving.current = true;
+    setFolderEdit({ ...edit, saving: true, error: null });
+    try {
+      const saved = edit.id
+        ? await renameSessionFolder(edit.id, name)
+        : await createSessionFolder({ workspaceId: scopeWorkspaceId, name });
+      qc.setQueryData<SessionFolder[]>(['session-folders'], (old) =>
+        old ? (edit.id ? old.map((f) => (f.id === saved.id ? saved : f)) : [...old, saved]) : old,
+      );
+      void qc.invalidateQueries({ queryKey: ['session-folders'] });
+      setFolderEdit(null);
+    } catch (error) {
+      setFolderEdit({
+        ...edit,
+        saving: false,
+        error: folderNameFailure(error, name, headWorkspaceName, edit.id ? 'renamed' : 'created'),
+      });
+    } finally {
+      folderSaving.current = false;
+    }
+  };
+  const folderEditKeys = (e: React.KeyboardEvent<HTMLInputElement>): void => {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      void saveFolderEdit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setFolderEdit(null);
+    }
+  };
+  // Delete Folder…: only the folder goes. Its sessions are back in the list, none of them deleted.
+  const confirmDeleteFolder = (folder: SessionFolder): void => {
+    modal.confirm({
+      title: FOLDER_COPY.deleteTitle(folder.name),
+      content: FOLDER_COPY.deleteMessage,
+      okText: FOLDER_COPY.deleteConfirm,
+      okButtonProps: { danger: true },
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          await deleteSessionFolder(folder.id);
+        } catch (error) {
+          message.error(folderDeleteFailure(error));
+          return;
+        }
+        qc.setQueryData<SessionFolder[]>(['session-folders'], (old) => old?.filter((f) => f.id !== folder.id));
+        qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
+          Array.isArray(old) ? old.map((s) => (s.folderId === folder.id ? { ...s, folderId: null } : s)) : old,
+        );
+        void qc.invalidateQueries({ queryKey: ['session-folders'] });
+        void qc.invalidateQueries({ queryKey: ['sessions'] });
+        if (openFolder?.id === folder.id) leaveFolder(true);
+      },
+    });
+  };
+  // A folder's two management entries — its row's ⋯ and its page's ⋯ offer the same pair.
+  const folderMenuItems = (folder: SessionFolder): MenuProps['items'] => [
+    {
+      key: 'rename',
+      icon: <EditOutlined />,
+      label: FOLDER_COPY.rename,
+      onClick: ({ domEvent }) => {
+        domEvent.stopPropagation();
+        setFolderMenuOpenId(null);
+        setFolderEdit({ id: folder.id, draft: folder.name, error: null, saving: false });
+      },
+    },
+    {
+      key: 'delete',
+      icon: <DeleteOutlined />,
+      label: FOLDER_COPY.delete,
+      danger: true,
+      onClick: ({ domEvent }) => {
+        domEvent.stopPropagation();
+        setFolderMenuOpenId(null);
+        confirmDeleteFolder(folder);
+      },
+    },
+  ];
+  // Move… from a row, the open conversation's ⋯ or a swipe: the row as the list has it, so the
+  // dialog ticks the folder the list shows the session in.
+  const openMove = (s: any): void => {
+    setSwipeOpen(null);
+    setMenuOpenId(null);
+    setHeaderMenuOpen(false);
+    setMoveTarget({ id: s.id, title: s.title, folderId: s.folderId ?? null });
+  };
+  // A folder row: the folder, who in it waits on you, how many sessions it holds. Activity sits on
+  // the folder itself as on the sidebar's Workspace rows: a still dot while a session runs, a
+  // breathing one while only a background job does. Its ⋯ takes the chevron's place on hover.
+  const folderRowView = (row: SessionFolderRow): ReactNode => {
+    const enter = (): void => enterFolder(row.folder);
+    const waiting = `${row.needsYou} ${row.needsYou === 1 ? 'session needs' : 'sessions need'} your reply`;
+    return (
+      <div
+        key={row.folder.id}
+        className={`session-folder-row${folderMenuOpenId === row.folder.id ? ' menu-open' : ''}`}
+        role="button"
+        tabIndex={0}
+        onClick={enter}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+          e.preventDefault();
+          enter();
+        }}
+      >
+        <span className="session-icon session-folder-icon">
+          <FolderOutlined />
+          {row.running ? (
+            <span className="session-folder-activity" title="Running" />
+          ) : row.jobs ? (
+            <span className="session-folder-activity jobs" title="Background job running" />
+          ) : null}
+        </span>
+        <span className="session-folder-name">{row.folder.name}</span>
+        {row.needsYou > 0 && (
+          <span className="session-folder-needs" title={waiting} aria-label={waiting}>
+            {row.needsYou}
+          </span>
+        )}
+        <span className="session-folder-count">{row.sessionCount}</span>
+        <span className="session-folder-end">
+          <RightOutlined className="session-folder-chev" />
+          <Dropdown
+            trigger={['click']}
+            placement="bottomRight"
+            open={folderMenuOpenId === row.folder.id}
+            onOpenChange={(open) => setFolderMenuOpenId(open ? row.folder.id : null)}
+            menu={{ items: folderMenuItems(row.folder) }}
+          >
+            <span
+              className="session-kebab session-folder-more"
+              role="button"
+              aria-label={FOLDER_COPY.more}
+              title={FOLDER_COPY.more}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreOutlined />
+            </span>
+          </Dropdown>
+        </span>
+      </div>
+    );
+  };
+  // New Folder…'s field (id null) or Rename…'s, in the folder row's place.
+  const folderEditRow = (id: string | null): ReactNode =>
+    folderEdit && (
+      <div key={id ?? 'new-folder'} className="session-folder-row editing">
+        <span className="session-icon session-folder-icon">
+          <FolderOutlined />
+        </span>
+        <span className="session-folder-edit">
+          <input
+            className={`folder-name-input${folderEdit.error ? ' error' : ''}`}
+            autoFocus
+            maxLength={60}
+            placeholder={FOLDER_COPY.namePlaceholder}
+            aria-label={id ? 'Folder name' : 'New folder name'}
+            value={folderEdit.draft}
+            readOnly={folderEdit.saving}
+            onFocus={(e) => e.currentTarget.select()}
+            onChange={(e) => setFolderEdit({ ...folderEdit, draft: e.target.value, error: null })}
+            onKeyDown={folderEditKeys}
+            onBlur={() => void saveFolderEdit()}
+          />
+          <span className={folderEdit.error ? 'session-folder-error' : 'session-folder-hint'}>
+            {folderEdit.error ?? FOLDER_COPY.editHint}
+          </span>
+        </span>
+      </div>
+    );
   // The view the header names (and the menu check-marks).
   const shownView: SessionView = effectiveView;
   // Switching view while a session transcript is open closes it: the open session belongs
   // to the view it was opened from, so browsing another one means leaving the conversation.
   const switchView = (next: SessionView): void => {
+    setMenuOpenId(null);
     setView(next);
     if (!selectedId) return;
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
@@ -7088,7 +7561,38 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       : [];
     return rows.length > 1 ? rows : [];
   };
+  // A task run whose model smart selection picked (docs/model-routing-design.md §9): the chip carries
+  // a ✦ on a light blue ground, and its menu opens on why — the decision's own first sentence — and
+  // on where to fix the model for every run. Only while the chip still shows the pick: a model
+  // changed here is this run's own. A session opened by hand has no route, and a run on an Agent
+  // without smart selection has one that was not applied, so both look as they always have.
+  const smartRoute = (() => {
+    const route = detailForSelected?.route;
+    return selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null;
+  })();
   const modelMenuItems: MenuProps['items'] = [
+    ...(smartRoute
+      ? [
+          {
+            key: 'smart-route',
+            type: 'group' as const,
+            label: (
+              <div className="composer-route-note">
+                <div className="composer-route-head">
+                  <span className="composer-model-spark">✦</span>
+                  Picked by smart selection · tier {smartRoute.level}
+                </div>
+                {smartRoute.reasons[0] && <div className="composer-route-reason">{smartRoute.reasons[0]}</div>}
+                <div className="composer-route-reason">
+                  Changing the model here applies to this run only. To fix the model for every run, set it on the
+                  task.
+                </div>
+              </div>
+            ),
+          },
+          { key: 'smart-route-divider', type: 'divider' as const },
+        ]
+      : []),
     // Only when there is somewhere to go: a second account with the same vendor, another endpoint on
     // the same CLI, or another of the runner's Codex accounts. One entry means no switch is possible,
     // and the row is left out rather than shown inert — the common case, one Claude sign-in and no
@@ -7245,6 +7749,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           },
         ]
       : []),
+    ...(smartRoute
+      ? [
+          { key: 'smart-route-open-divider', type: 'divider' as const },
+          {
+            key: 'open-task',
+            label: <span className="composer-route-open">Open task ›</span>,
+            onClick: () => navigate(`/tasks/${encodeId(selected.taskId)}`),
+          },
+        ]
+      : []),
   ];
   const selectedSessionTagIds = ((selected?.tags ?? []) as SessionTagRef[]).map((t) => t.id);
   const setTagsFromMenu = ({
@@ -7339,6 +7853,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           },
         ]
       : []),
+    // Where iOS keeps it, in the menu that scopes the list (§3.4). Only where folders show: a list
+    // narrowed to or grouped by a tag, or Trash, would have nowhere to draw the new one.
+    ...(scopeWorkspaceId && listShowsFolders(shownView, listByTag)
+      ? [
+          { key: 'folder-divider', type: 'divider' as const },
+          {
+            key: 'new-folder',
+            label: <span className="scope-menu-row">{FOLDER_COPY.newFolder}</span>,
+            onClick: startNewFolder,
+          },
+        ]
+      : []),
   ];
   // Header subtitle keeps run outcome and lifecycle location visibly separate, followed by
   // last activity. Task state remains on its own task affordance above the title.
@@ -7350,7 +7876,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     ? sessionLifecycleLabel(selectedLifecycleState)
     : null;
   const headSub = composing
-    ? `${headWorkspaceName} · New session`
+    ? [headWorkspaceName, openFolder?.name, 'New session'].filter(Boolean).join(' · ')
     : selected
       ? [
           headRunWord,
@@ -7382,23 +7908,66 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   return (
     <div className={`workspace-split${selectedId || composingRoute ? ' show-conversation' : ''}`}>
       <aside className="session-col" style={{ width: colWidth }}>
-        <div className="session-col-head">
-          <span className={`workspace-status-dot ${runner.online ? 'online' : ''}`} />
-          <span className="session-col-title">{headWorkspaceName}</span>
-          {/* View + tag filter/grouping, folded into one menu rather than a tab row and a
-              chip row — both read as clutter in a narrow column, and Open is nearly always
-              the answer. The trigger names the current view so a list scoped to
-              Completed/Trash always explains itself. (The native clients still tab.) */}
-          <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: scopeItems }}>
-            <span
-              className={`session-scope-menu${shownView !== 'open' || tagFilter || groupByTag ? ' on' : ''}`}
-              title="Switch view, filter and group"
+        {openFolder ? (
+          // A folder's page: back to the workspace's list, the folder (and the workspace it is in),
+          // and the folder's own two entries. It lists the view it was opened from.
+          <div className="session-col-head session-folder-head">
+            <button
+              type="button"
+              className="session-folder-back"
+              aria-label={FOLDER_COPY.back(headWorkspaceName)}
+              title={FOLDER_COPY.back(headWorkspaceName)}
+              onClick={() => leaveFolder()}
             >
-              {SESSION_VIEWS.find((v) => v.value === shownView)?.label}
-              <DownOutlined />
+              <LeftOutlined />
+            </button>
+            <span className="session-folder-titles">
+              {folderEdit?.id === openFolder.id ? (
+                <input
+                  className={`folder-name-input${folderEdit.error ? ' error' : ''}`}
+                  autoFocus
+                  maxLength={60}
+                  aria-label="Folder name"
+                  value={folderEdit.draft}
+                  readOnly={folderEdit.saving}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) => setFolderEdit({ ...folderEdit, draft: e.target.value, error: null })}
+                  onKeyDown={folderEditKeys}
+                  onBlur={() => void saveFolderEdit()}
+                />
+              ) : (
+                <span className="session-folder-title">{openFolder.name}</span>
+              )}
+              <span className="session-folder-workspace">{headWorkspaceName}</span>
             </span>
-          </Dropdown>
-        </div>
+            <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: folderMenuItems(openFolder) }}>
+              <span className="session-kebab session-folder-head-more" role="button" aria-label={FOLDER_COPY.more}>
+                <MoreOutlined />
+              </span>
+            </Dropdown>
+          </div>
+        ) : (
+          <div className="session-col-head">
+            <span className={`workspace-status-dot ${runner.online ? 'online' : ''}`} />
+            <span className="session-col-title">{headWorkspaceName}</span>
+            {/* View + tag filter/grouping, folded into one menu rather than a tab row and a
+                chip row — both read as clutter in a narrow column, and Open is nearly always
+                the answer. The trigger names the current view so a list scoped to
+                Completed/Trash always explains itself. (The native clients still tab.) */}
+            <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: scopeItems }}>
+              <span
+                className={`session-scope-menu${shownView !== 'open' || tagFilter || groupByTag ? ' on' : ''}`}
+                title="Switch view, filter and group"
+              >
+                {SESSION_VIEWS.find((v) => v.value === shownView)?.label}
+                <DownOutlined />
+              </span>
+            </Dropdown>
+          </div>
+        )}
+        {openFolder && folderEdit?.id === openFolder.id && folderEdit.error && (
+          <div className="session-folder-error">{folderEdit.error}</div>
+        )}
         <div className={`session-new ${composing ? 'active' : ''}`} onClick={goNew}>
           <PlusOutlined />
           <span>New session</span>
@@ -7424,20 +7993,31 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           {!isMobile && <kbd className="session-search-kbd">{SEARCH_HINT}</kbd>}
         </div>
         <div
-          className="workspace-sessions session-col-list"
+          className="workspace-sessions session-col-list autohide-scrollbar"
           ref={listRef}
           onScroll={onSessionListScroll}
         >
-          {visibleSessions.length === 0 && !loadingSessions && (
-            <div className="chat-note">
-              {tagFilter
-                ? 'No sessions with this tag.'
-                : view === 'open'
-                  ? 'No sessions yet.'
-                  : view === 'completed'
-                    ? 'No completed sessions.'
-                    : 'Trash is empty.'}
-            </div>
+          {openFolder
+            ? listedSessions.length === 0 &&
+              !loadingSessions && <div className="chat-note">No sessions in this folder.</div>
+            : visibleSessions.length === 0 &&
+              !loadingSessions && (
+                <div className="chat-note">
+                  {tagFilter
+                    ? 'No sessions with this tag.'
+                    : view === 'open'
+                      ? 'No sessions yet.'
+                      : view === 'completed'
+                        ? 'No completed sessions.'
+                        : 'Trash is empty.'}
+                </div>
+              )}
+          {/* The workspace's folders on top (§3.3), New Folder…'s field above them while it is
+              open. A folder row reports for the sessions filed in it, which the time sections
+              below leave out. */}
+          {!openFolder && folderEdit?.id === null && folderEditRow(null)}
+          {folderListing?.folders.map((row) =>
+            folderEdit?.id === row.folder.id ? folderEditRow(row.folder.id) : folderRowView(row),
           )}
           {sections.map((sec) => (
             <Fragment key={sec.key}>
@@ -7466,42 +8046,6 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
                 const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
                 const canRestoreRow = sessionCapabilityOf(actionSession, 'canRestore', true);
-                const restoreItem = {
-                  key: 'restore',
-                  icon: <UndoOutlined />,
-                  label: view === 'completed' ? 'Move to Open' : 'Restore to Open',
-                  disabled: !canRestoreRow,
-                  onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
-                    domEvent.stopPropagation();
-                    requestRestore(s);
-                  },
-                };
-                const deleteItem = {
-                  key: 'delete',
-                  icon: <DeleteOutlined />,
-                  label: 'Delete',
-                  danger: true,
-                  onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
-                    domEvent.stopPropagation();
-                    requestTrash(s);
-                  },
-                };
-                const purgeItem = {
-                  key: 'purge',
-                  icon: <DeleteOutlined />,
-                  label: 'Delete permanently',
-                  danger: true,
-                  onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
-                    domEvent.stopPropagation();
-                    confirmPurge({ id: s.id, title: s.title });
-                  },
-                };
-                const menuItems: MenuProps['items'] =
-                  view === 'completed'
-                    ? [restoreItem, { type: 'divider' }, deleteItem]
-                    : view === 'trash'
-                      ? [restoreItem, { type: 'divider' }, purgeItem]
-                      : [restoreItem];
                 // Open and Completed rows open their transcript; only
                 // Trash rows stay closed.
                 const openable = view !== 'trash';
@@ -7522,12 +8066,43 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   pin: s.pinnedAt
                     ? { label: 'Unpin', icon: <PushpinFilled />, disabled: false }
                     : { label: 'Pin', icon: <PushpinOutlined />, disabled: false },
+                  share: { label: 'Share', icon: <GlobalOutlined />, disabled: false },
+                  move: { label: 'Move', icon: <FolderOutlined />, disabled: false },
                   delete: { label: 'Delete', icon: <DeleteOutlined />, disabled: false },
                   purge: { label: 'Delete permanently', icon: <DeleteOutlined />, disabled: false },
                 };
+                const menuItem = (action: SwipeAction) => ({
+                  key: action,
+                  icon: swipeButtons[action].icon,
+                  disabled: swipeButtons[action].disabled,
+                  danger: action === 'delete' || action === 'purge',
+                  label: action === 'complete' ? (
+                    <div className="session-menu-label">
+                      <span>Complete</span>
+                      <kbd>{COMPLETE_SESSION_HINT}</kbd>
+                    </div>
+                  ) : action === 'move' ? MOVE_COPY.action
+                    : action === 'share' ? 'Share…'
+                      : action === 'purge' ? 'Delete Permanently…'
+                        : swipeButtons[action].label,
+                  title: action === 'complete'
+                    ? !canCompleteRow ? 'Complete unavailable right now'
+                      : isSessionLive(actionSession) ? 'Ends the run and moves to Completed' : undefined
+                    : action === 'restore' && !canRestoreRow ? 'Move to Open unavailable right now' : undefined,
+                });
+                const menuItems: MenuProps['items'] = view === 'trash'
+                  ? [menuItem('restore'), { type: 'divider' }, menuItem('purge')]
+                  : [
+                      ...swipeActions.leading.map(menuItem),
+                      { type: 'divider' },
+                      menuItem('share'),
+                      menuItem('move'),
+                      { type: 'divider' },
+                      menuItem('delete'),
+                    ];
                 return (
                   <div
-                    className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}${view === 'open' && s.pinnedAt ? ' pinned' : ''}`}
+                    className={`session-row${openable ? '' : ' no-open'}${s.id === selectedId ? ' active' : ''}${menuOpenId === s.id ? ' menu-open' : ''}`}
                     key={s.id}
                     onClick={() => {
                       if (swipeClickGuard.current) {
@@ -7538,9 +8113,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         setSwipeOpen(null); // a tap anywhere on an open row just closes it
                         return;
                       }
+                      setMenuOpenId(null);
                       if (openable)
                         navigateWithPaneSlide('push', () =>
-                          navigate(`/sessions/${encodeId(s.id)}`, { state: stampFromList() }),
+                          navigate(sessionPath(s.id), { state: stampFromList() }),
                         );
                     }}
                     onTouchStart={(e) => onRowTouchStart(e, s, canFullSwipe)}
@@ -7555,7 +8131,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           className={`session-swipe-actions ${side}${drag ? ' dragging' : ''}${side === 'leading' && drag?.armed ? ' armed' : ''}`}
                           style={{ width: Math.max(0, side === 'leading' ? swipeTx : -swipeTx) }}
                         >
-                          {swipeActions[side].map((action) => (
+                          {swipeActionsOnScreen(side, swipeActions[side]).map((action) => (
                             <button
                               key={action}
                               type="button"
@@ -7581,7 +8157,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                         <StatusIcon session={actionSession} watching={watching?.word} />
                       </span>
                       <div className="session-main">
-                        <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
+                        <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} showPinned={view !== 'trash'} />
                         {/* Tags lead the second line and the reply preview follows them. They sat
                             beside the title as bare colour dots until the naming pass started
                             writing semantic ones ("登录", "性能"): a dot cannot show a word, so the
@@ -7599,70 +8175,46 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                             {line.text}
                           </div>
                         </div>
-                        <SessionRequestsLine session={s} />
                       </div>
                     </div>
                     <div className="session-right">
                       <div className="session-actions" onClick={(e) => e.stopPropagation()}>
-                        {view === 'open' ? (
-                          <>
-                            <Tooltip title={s.pinnedAt ? 'Unpin' : 'Pin to top'} placement="top" open={hoverTipOpen}>
-                              <span
-                                className="session-kebab session-pin-toggle"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  pinMut.mutate({ id: s.id, pin: !s.pinnedAt });
-                                  setSwipeOpen(null);
-                                }}
-                              >
-                                {s.pinnedAt ? <PushpinFilled /> : <PushpinOutlined />}
-                              </span>
-                            </Tooltip>
-                            <Tooltip
-                              title={canCompleteRow ? 'Complete' : 'Complete unavailable right now'}
-                              placement="top"
-                              open={hoverTipOpen}
-                            >
-                              <span
-                                className={`session-kebab session-complete${canCompleteRow ? '' : ' disabled'}`}
-                                role="button"
-                                aria-label="Complete"
-                                aria-disabled={!canCompleteRow}
-                                tabIndex={canCompleteRow ? 0 : -1}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  requestComplete(s);
-                                  setSwipeOpen(null);
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key !== 'Enter' && e.key !== ' ') return;
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  requestComplete(s);
-                                  setSwipeOpen(null);
-                                }}
-                              >
-                                <CheckOutlined />
-                              </span>
-                            </Tooltip>
-                          </>
-                        ) : (
-                          <Dropdown
-                            trigger={['click']}
-                            placement="bottomRight"
-                            open={menuOpenId === s.id}
-                            onOpenChange={(o) => setMenuOpenId(o ? s.id : null)}
-                            menu={{ items: menuItems }}
+                        <Dropdown
+                          trigger={['click']}
+                          placement="bottomRight"
+                          autoFocus
+                          classNames={{ root: 'session-row-menu' }}
+                          open={menuOpenId === s.id}
+                          onOpenChange={(open) => {
+                            setMenuOpenId((current) => open ? s.id : current === s.id ? null : current);
+                            if (open) setSwipeOpen(null);
+                          }}
+                          menu={{
+                            items: menuItems,
+                            onClick: ({ key, domEvent }) => {
+                              domEvent.stopPropagation();
+                              setMenuOpenId(null);
+                              runSwipeAction(key as SwipeAction, s);
+                            },
+                          }}
+                        >
+                          <button
+                            type="button"
+                            className="session-kebab"
+                            aria-label="More actions"
+                            aria-haspopup="menu"
+                            aria-expanded={menuOpenId === s.id}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => {
+                              if (e.key !== 'ArrowDown') return;
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setMenuOpenId(s.id);
+                            }}
                           >
-                            <span
-                              className="session-kebab"
-                              title="More actions"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <MoreOutlined />
-                            </span>
-                          </Dropdown>
-                        )}
+                            <EllipsisOutlined />
+                          </button>
+                        </Dropdown>
                       </div>
                     </div>
                   </div>
@@ -7913,6 +8465,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                   requestRestore(selected);
                                 },
                               },
+                              {
+                                key: 'move',
+                                icon: <FolderOutlined />,
+                                label: MOVE_COPY.action,
+                                onClick: () => openMove(selectedSession ?? selected),
+                              },
                               { type: 'divider' as const },
                             ]
                           : selectedLifecycleState === 'OPEN'
@@ -7926,6 +8484,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                     setHeaderMenuOpen(false);
                                     requestComplete(selected);
                                   },
+                                },
+                                // Filing it, beside the other move it can make (§2).
+                                {
+                                  key: 'move',
+                                  icon: <FolderOutlined />,
+                                  label: MOVE_COPY.action,
+                                  onClick: () => openMove(selectedSession ?? selected),
                                 },
                                 { type: 'divider' as const },
                               ]
@@ -7995,6 +8560,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             rootId={selected.id}
           />
         )}
+        {shareRowId && (
+          <ShareModal open onClose={() => setShareRowId(null)} kind="SESSION" rootId={shareRowId} />
+        )}
+        <SessionMoveModal
+          open={!!moveTarget}
+          session={moveTarget}
+          workspace={scopeWorkspaceId ? { id: scopeWorkspaceId, name: headWorkspaceName } : null}
+          folders={workspaceFolders}
+          onClose={() => setMoveTarget(null)}
+        />
 
         {/* Flush under the header, above everything that scrolls or that the conversation pushes
             around: what this session is being asked to decide is STATE — recomputed from the ledger
@@ -8009,9 +8584,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               openSettlementIn?.sessionId === selectedId ? openSettlementIn.question : false
             }
             // Named in the card's own words, with how long the run has waited — never a number
-            // first. Only when the card below is drawn in this session, so a press always arrives.
+            // first. Only when the card below is drawn in this session, so a press always arrives;
+            // and not while its report is still with its reviewer, which is somebody else's to look
+            // at first — the card is there, but nothing points the owner at it (contract §5 N1).
             ownerConfirmation={
-              ownerWaiting && ownerConfirmation.data
+              ownerWaiting && ownerConfirmation.data && ownerWaiting.review?.state !== 'UNDER_REVIEW'
                 ? {
                     title: ownerConfirmation.data.title,
                     ageSeconds: Math.max(
@@ -8387,6 +8964,40 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       />
                     }
                   />
+                ) : q.confirmationReviewRequest || q.confirmationReturn ? (
+                  // A confirmation review's turns are Orbit's on the queue too: the card the
+                  // transcript draws once a runner takes them, with the queue's line at its foot.
+                  q.confirmationReviewRequest ? (
+                    <ReviewRequestedCard
+                      key={q.turnId}
+                      card={q.confirmationReviewRequest}
+                      ts={q.createdAt}
+                      queued={
+                        <QueuedTurnMeta
+                          placement={q.placement}
+                          delivery={q.delivery}
+                          deliveryCode={q.deliveryCode}
+                          deliveryReason={q.deliveryReason}
+                          onCancel={() => cancelQueued(q.turnId)}
+                        />
+                      }
+                    />
+                  ) : (
+                    <SentBackByReviewerCard
+                      key={q.turnId}
+                      card={q.confirmationReturn!}
+                      ts={q.createdAt}
+                      queued={
+                        <QueuedTurnMeta
+                          placement={q.placement}
+                          delivery={q.delivery}
+                          deliveryCode={q.deliveryCode}
+                          deliveryReason={q.deliveryReason}
+                          onCancel={() => cancelQueued(q.turnId)}
+                        />
+                      }
+                    />
+                  )
                 ) : q.projectStarted ? (
                   // The message telling the coordinator its project was started, as the card the
                   // transcript draws once a runner takes it — the same reason as the delivery above.
@@ -9037,6 +9648,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               }
               if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
+                // An Enter with something to send is the send's alone. The send empties the box
+                // before the key reaches the window, where a waiting card answers Enter on an
+                // empty field (CardHotkey) — so the same press also started a project. An Enter on
+                // an empty box still goes on to the card.
+                if (text.trim() || readyImages.length > 0) e.stopPropagation();
                 onSend();
               }
             }}
@@ -9214,10 +9830,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               >
                 <button
                   type="button"
-                  className="composer-model-chip"
+                  className={`composer-model-chip${smartRoute ? ' is-smart' : ''}`}
                   disabled={!configEditable}
-                  aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}`}
+                  aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${
+                    smartRoute ? ', picked by smart selection' : ''
+                  }`}
                 >
+                  {smartRoute && (
+                    <span className="composer-model-spark" aria-hidden="true">
+                      ✦
+                    </span>
+                  )}
                   <span className="composer-model-name">{shownModelLabel}</span>
                   <span className="composer-model-effort">
                     {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}

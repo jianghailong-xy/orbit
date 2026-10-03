@@ -76,13 +76,19 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
     public let codex: [RunnerModelInfo]?
     public let kimi: [RunnerModelInfo]?
     public let opencode: [RunnerModelInfo]?
+    /// From `agy models`, whose slugs carry their level (`gemini-3.8-flash-high`): the runner folds
+    /// them into one row per base model (`gemini-3.8-flash`) with its levels as `reasoningLevels`,
+    /// and a session passes the two back as `--model` and `--effort`.
+    public let antigravity: [RunnerModelInfo]?
 
     public init(claude: [RunnerModelInfo]? = nil, codex: [RunnerModelInfo]? = nil,
-                kimi: [RunnerModelInfo]? = nil, opencode: [RunnerModelInfo]? = nil) {
+                kimi: [RunnerModelInfo]? = nil, opencode: [RunnerModelInfo]? = nil,
+                antigravity: [RunnerModelInfo]? = nil) {
         self.claude = claude
         self.codex = codex
         self.kimi = kimi
         self.opencode = opencode
+        self.antigravity = antigravity
     }
 
     public func models(for provider: String) -> [ModelOption]? {
@@ -91,6 +97,7 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
         case "codex": rows = codex
         case "kimi":     rows = kimi
         case "opencode": rows = opencode
+        case "antigravity": rows = antigravity
         default:         rows = claude
         }
         guard let rows, !rows.isEmpty else { return nil }
@@ -98,7 +105,10 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
     }
 
     public func contextWindow(for id: String) -> Int? {
-        let all = (claude ?? []) + (codex ?? []) + (kimi ?? []) + (opencode ?? [])
+        // A list rather than one `(rows ?? []) + …` chain: at five runtimes that expression is past
+        // what the Swift type-checker resolves in reasonable time, and it fails the build outright.
+        let runtimes: [[RunnerModelInfo]?] = [claude, codex, kimi, opencode, antigravity]
+        let all = runtimes.flatMap { $0 ?? [] }
         return all.first { $0.value == id }?.contextWindow
     }
 
@@ -111,15 +121,18 @@ public struct RunnerModelCatalog: Codable, Equatable, Sendable {
         case "codex": rows = codex
         case "kimi": rows = kimi
         case "opencode": rows = opencode
+        case "antigravity": rows = antigravity
         default: rows = claude
         }
         return rows?.first { $0.value == model }
     }
 
     /// Runtimes whose reasoning levels are declared per model: Codex efforts, OpenCode variants,
-    /// and Kimi's `supportEfforts` (K2.7 Coding declares none; K3 declares low/high/max).
+    /// Kimi's `supportEfforts` (K2.7 Coding declares none; K3 declares low/high/max), and the
+    /// levels agy lists per Gemini model (3.1 Pro has low/high only).
     public func reasoningLevels(for provider: String, model: String) -> [String]? {
-        guard provider == "codex" || provider == "opencode" || provider == "kimi" else { return nil }
+        guard provider == "codex" || provider == "opencode" || provider == "kimi"
+                || provider == "antigravity" else { return nil }
         return modelInfo(for: provider, model: model)?.reasoningLevels
     }
 
@@ -207,7 +220,8 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
 public struct RunnerEngineAccount: Codable, Equatable, Sendable, Identifiable {
     /// `default`, or the slot's id — what a session is created with (`codexAccount`).
     public let id: String
-    /// What the user called it. Absent for Default.
+    /// What the user called it: the name it was renamed to in Orbit, else the one it was added under.
+    /// Absent for a Default never renamed.
     public let name: String?
     /// The CLI's own answer for this account: `yes` / `no` / `unknown`.
     public let auth: String?
@@ -335,6 +349,13 @@ public struct StartLoginRequest: Encodable, Sendable {
         self.account = account
         self.accountName = accountName
     }
+}
+
+/// PATCH /runners/:id/accounts/:engine/:account — a new name for one of the runner's accounts,
+/// Default included. Only a label, kept by the control plane: nothing on the machine changes.
+public struct RenameRunnerAccountRequest: Encodable, Sendable {
+    public let name: String
+    public init(name: String) { self.name = name }
 }
 
 /// POST /runners/:id/login/code — hand back the code the sign-in page gave the user.

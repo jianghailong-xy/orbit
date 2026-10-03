@@ -95,8 +95,10 @@ final class AgentDefaultsTests: XCTestCase {
     }
 
     func testProviderOptions() {
-        XCTAssertEqual(AgentDefaults.providers.map(\.id), ["claude", "codex", "kimi", "opencode"])
-        XCTAssertEqual(AgentDefaults.providers.map(\.name), ["Claude", "Codex", "Kimi", "OpenCode"])
+        XCTAssertEqual(AgentDefaults.providers.map(\.id),
+                       ["claude", "codex", "kimi", "opencode", "antigravity"])
+        XCTAssertEqual(AgentDefaults.providers.map(\.name),
+                       ["Claude", "Codex", "Kimi", "OpenCode", "Antigravity"])
     }
 
     func testEffortsForProvider() {
@@ -381,11 +383,13 @@ final class AgentDefaultsTests: XCTestCase {
 
     func testMergedProviderOptions() {
         XCTAssertEqual(AgentDefaults.providers(configured: [deepseek]).map(\.id),
-                       ["claude", "codex", "kimi", "opencode", "deepseek"])
+                       ["claude", "codex", "kimi", "opencode", "antigravity", "deepseek"])
         XCTAssertEqual(AgentDefaults.providers(configured: [deepseek]).last?.name, "DeepSeek")
         // No configured providers → the built-ins only, in their fixed order.
-        XCTAssertEqual(AgentDefaults.providers(configured: nil).map(\.id), ["claude", "codex", "kimi", "opencode"])
-        XCTAssertEqual(AgentDefaults.providers(configured: []).map(\.id), ["claude", "codex", "kimi", "opencode"])
+        XCTAssertEqual(AgentDefaults.providers(configured: nil).map(\.id),
+                       ["claude", "codex", "kimi", "opencode", "antigravity"])
+        XCTAssertEqual(AgentDefaults.providers(configured: []).map(\.id),
+                       ["claude", "codex", "kimi", "opencode", "antigravity"])
     }
 
     func testModelsForConfiguredProvider() {
@@ -887,6 +891,204 @@ final class AgentDefaultsTests: XCTestCase {
                                                    model: "project/only", catalog: catalog))
         XCTAssertEqual(AgentDefaults.normalizedEffort(ultra, for: "opencode",
                                                       model: "project/only", catalog: catalog), ultra)
+    }
+
+    // MARK: Antigravity (web parity: workspaceDefaults.test.ts "Antigravity defaults")
+
+    /// What a runner reports from `agy models`: one row per model, its levels folded out of the slug.
+    private let agyCatalog = RunnerModelCatalog(antigravity: [
+        RunnerModelInfo(value: "gemini-3.8-flash", label: "Gemini 3.8 Flash", contextWindow: 1_048_576,
+                        reasoningLevels: ["low", "medium", "high"]),
+        RunnerModelInfo(value: "gemini-3.1-pro", label: "Gemini 3.1 Pro", reasoningLevels: ["low", "high"]),
+    ])
+
+    func testAntigravityIsABuiltInRuntimeOfItsOwn() {
+        XCTAssertTrue(AgentDefaults.isBuiltInProvider("antigravity"))
+        XCTAssertEqual(AgentDefaults.providerName("antigravity", configured: nil), "Antigravity")
+        // Its catalog and Runtime default are keyed on its own name, never Claude's.
+        XCTAssertEqual(AgentDefaults.runtime(for: "antigravity"), "antigravity")
+        // agy runs Auto as --dangerously-skip-permissions on any model, so it is not a per-model question.
+        XCTAssertTrue(AgentDefaults.supportsAuto("gemini-3.1-pro", provider: "antigravity"))
+        XCTAssertEqual(AgentDefaults.clampPermissionMode(.auto, for: "gemini-3.1-pro",
+                                                         provider: "antigravity"), .auto)
+        // No fast lane, whatever its catalog row says.
+        XCTAssertFalse(AgentDefaults.fastModeAvailable(
+            runtime: AgentDefaults.runtime(for: "antigravity"), model: "gemini-3.8-flash",
+            catalog: agyCatalog))
+    }
+
+    func testAntigravityOffersTheRunnersModelsAndItsOwnPickOnlyUntilThen() {
+        XCTAssertEqual(AgentDefaults.models(for: "antigravity", catalog: agyCatalog).map(\.id),
+                       ["gemini-3.8-flash", "gemini-3.1-pro"])
+        XCTAssertEqual(AgentDefaults.models(for: "antigravity", catalog: agyCatalog).map(\.name),
+                       ["Gemini 3.8 Flash", "Gemini 3.1 Pro"])
+        // No catalog, or one that reports only other runtimes: the one choice that is true on every
+        // agy — no `--model`. Never Claude's rows.
+        for catalog in [nil, liveClaudeCatalog] as [RunnerModelCatalog?] {
+            XCTAssertEqual(AgentDefaults.models(for: "antigravity", catalog: catalog).map(\.id), [""])
+            XCTAssertEqual(AgentDefaults.models(for: "antigravity", catalog: catalog).map(\.name),
+                           ["Managed by Antigravity"])
+        }
+        XCTAssertEqual(AgentDefaults.models(for: "antigravity"), AgentDefaults.antigravityModels)
+        XCTAssertEqual(AgentDefaults.friendlyName("gemini-3.1-pro", catalog: agyCatalog), "Gemini 3.1 Pro")
+        XCTAssertEqual(AgentDefaults.friendlyName("", for: "antigravity", catalog: nil, configured: nil),
+                       "Managed by Antigravity")
+        // Left on "" after the catalog replaced that row, it still reads as agy's own pick — the id
+        // alone would find OpenCode's row first.
+        XCTAssertEqual(AgentDefaults.friendlyName("", for: "antigravity", catalog: agyCatalog,
+                                                  configured: nil), "Managed by Antigravity")
+        XCTAssertEqual(AgentDefaults.friendlyName("", for: "opencode", catalog: agyCatalog,
+                                                  configured: nil), "Managed by OpenCode")
+    }
+
+    func testAntigravityDefaultsLikeTheOtherBuiltInsAndNeverToAClaudeModel() {
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "antigravity", catalog: agyCatalog, configured: nil,
+            runtimeDefaults: ["antigravity": "gemini-3.1-pro"]), "gemini-3.1-pro")
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "antigravity", catalog: agyCatalog, configured: nil, runtimeDefaults: [:]),
+            "gemini-3.8-flash")
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "antigravity", catalog: agyCatalog), "gemini-3.8-flash")
+        // No catalog and no reported default: no `--model`, which is what dispatch sends too —
+        // whatever the runner reports for Claude.
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "antigravity"), "")
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "antigravity", catalog: nil, configured: nil, runtimeDefaults: nil), "")
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "antigravity", catalog: liveClaudeCatalog, configured: nil,
+            runtimeDefaults: ["claude": "claude-sonnet-5"]), "")
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "antigravity", catalog: liveClaudeCatalog,
+                                                  configured: nil), "")
+        XCTAssertEqual(AgentDefaults.refreshedDefaultModel(
+            currentModel: "claude-opus-5", for: "antigravity", catalog: nil, configured: nil,
+            runtimeDefaults: nil, runnerSnapshotLoaded: true, configuredProvidersLoaded: false), "")
+    }
+
+    func testAntigravityShowsTheModelAModelLessSessionActuallyRunsOn() {
+        // "" stood in for a catalog not reported yet, not a pick that outlives one: a model-less
+        // session runs on the reported default, so the pin drops out and the caller re-resolves.
+        // (OpenCode's "", a choice, is kept — see testLivePinKeepsEveryPinTheCatalogCannotSpeakFor.)
+        for catalog in [agyCatalog, nil] as [RunnerModelCatalog?] {
+            XCTAssertNil(AgentDefaults.livePin("", provider: "antigravity", catalog: catalog,
+                                               configured: nil, runtimeDefaults: nil))
+        }
+        XCTAssertEqual(AgentDefaults.newSessionModel(
+            for: "antigravity", accountModels: ["antigravity": ""], fallback: "gemini-3.8-flash",
+            catalog: agyCatalog, configured: nil), "gemini-3.8-flash")
+        // A pin the runner still lists stays; one it no longer lists falls to the current default.
+        XCTAssertEqual(AgentDefaults.livePin("gemini-3.1-pro", provider: "antigravity",
+                                             catalog: agyCatalog, configured: nil,
+                                             runtimeDefaults: nil), "gemini-3.1-pro")
+        XCTAssertNil(AgentDefaults.livePin("gemini-2.9-pro", provider: "antigravity",
+                                           catalog: agyCatalog, configured: nil, runtimeDefaults: nil))
+        XCTAssertEqual(AgentDefaults.newSessionModel(
+            for: "antigravity", accountModels: ["antigravity": "gemini-2.9-pro"],
+            fallback: "gemini-3.8-flash", catalog: agyCatalog, configured: nil), "gemini-3.8-flash")
+        // Judged against agy's own rows: Claude's catalog says nothing about a Gemini pin, and the
+        // id agy itself reports as its default is current by definition.
+        XCTAssertEqual(AgentDefaults.livePin("gemini-3.1-pro", provider: "antigravity",
+                                             catalog: liveClaudeCatalog, configured: nil,
+                                             runtimeDefaults: nil), "gemini-3.1-pro")
+        XCTAssertEqual(AgentDefaults.livePin("gemini-3.9-pro", provider: "antigravity",
+                                             catalog: agyCatalog, configured: nil,
+                                             runtimeDefaults: ["antigravity": "gemini-3.9-pro"]),
+                       "gemini-3.9-pro")
+    }
+
+    func testAntigravityOffersEachModelOnlyTheThinkingLevelsItHas() {
+        XCTAssertEqual(AgentDefaults.efforts(for: "antigravity"), [.default, .low, .medium, .high])
+        XCTAssertEqual(AgentDefaults.efforts(for: "antigravity", model: "gemini-3.1-pro",
+                                             catalog: agyCatalog), [.default, .low, .high])
+        XCTAssertEqual(AgentDefaults.efforts(for: "antigravity", model: "gemini-3.8-flash",
+                                             catalog: agyCatalog), [.default, .low, .medium, .high])
+        // A model the catalog does not report gets agy's whole vocabulary, not Claude's.
+        XCTAssertEqual(AgentDefaults.efforts(for: "antigravity", model: "", catalog: agyCatalog),
+                       AgentDefaults.efforts(for: "antigravity"))
+        XCTAssertEqual(AgentDefaults.efforts(for: "antigravity", model: "gemini-3.1-pro", catalog: nil),
+                       AgentDefaults.efforts(for: "antigravity"))
+        XCTAssertFalse(AgentDefaults.supportsEffort(.medium, for: "antigravity",
+                                                    model: "gemini-3.1-pro", catalog: agyCatalog))
+        XCTAssertTrue(AgentDefaults.supportsEffort(.medium, for: "antigravity",
+                                                   model: "gemini-3.8-flash", catalog: agyCatalog))
+        // A closed vocabulary: an unreported model is held to it rather than trusted like
+        // OpenCode's project models.
+        XCTAssertFalse(AgentDefaults.supportsEffort(.max, for: "antigravity", model: "", catalog: agyCatalog))
+        XCTAssertTrue(AgentDefaults.supportsEffort(.high, for: "antigravity", model: "", catalog: nil))
+        XCTAssertEqual(agyCatalog.reasoningLevels(for: "antigravity", model: "gemini-3.1-pro"),
+                       ["low", "high"])
+    }
+
+    func testAntigravityMovesAnEffortFromAnotherRuntimeOntoItsLevelsThenTheModelsOwn() {
+        func shown(_ effort: Effort, _ model: String, _ catalog: RunnerModelCatalog?) -> Effort {
+            AgentDefaults.normalizedEffort(effort, for: "antigravity", model: model, catalog: catalog)
+        }
+        // A Codex level, carried in raw from the server or an account default.
+        let noneLevel = Effort(rawValue: "none")!
+        // agy starts at Low and tops out at High: what lies outside collapses onto the nearer end.
+        XCTAssertEqual(AgentDefaults.normalizeEffort(noneLevel, for: "antigravity"), .low)
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.minimal, for: "antigravity"), .low)
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.medium, for: "antigravity"), .medium)
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.xhigh, for: "antigravity"), .high)
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.max, for: "antigravity"), .high)
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.ultra, for: "antigravity"), .high)
+        XCTAssertEqual(AgentDefaults.normalizeEffort(.default, for: "antigravity"), .default)
+
+        XCTAssertEqual(shown(.max, "gemini-3.8-flash", agyCatalog), .high)
+        XCTAssertEqual(shown(.ultra, "gemini-3.8-flash", agyCatalog), .high)
+        XCTAssertEqual(shown(.minimal, "gemini-3.8-flash", agyCatalog), .low)
+        XCTAssertEqual(shown(noneLevel, "gemini-3.8-flash", agyCatalog), .low)
+        // Gemini 3.1 Pro has no Medium: Default rather than a level agy would refuse.
+        XCTAssertEqual(shown(.medium, "gemini-3.1-pro", agyCatalog), .default)
+        XCTAssertEqual(shown(.xhigh, "gemini-3.1-pro", agyCatalog), .high)
+        // No row: agy's closed vocabulary still applies, so an OpenCode variant is dropped.
+        XCTAssertEqual(shown(.max, "", agyCatalog), .high)
+        XCTAssertEqual(shown(Effort(rawValue: "project-custom")!, "", agyCatalog), .default)
+        XCTAssertEqual(shown(.medium, "gemini-3.1-pro", nil), .medium)
+        XCTAssertEqual(shown(.default, "gemini-3.1-pro", agyCatalog), .default)
+        XCTAssertEqual(
+            AgentDefaults.newSessionEffort(accountDefault: "max", legacyWorkspaceDefault: nil,
+                                           for: "antigravity", model: "gemini-3.1-pro",
+                                           catalog: agyCatalog),
+            .high)
+    }
+
+    func testAntigravityContextWindowComesFromTheRunnerCatalogOnly() {
+        XCTAssertEqual(AgentDefaults.contextWindow(for: "gemini-3.8-flash", catalog: agyCatalog), 1_048_576)
+        // A row without a window, or no catalog: nobody knows, and nothing is shipped for agy.
+        XCTAssertNil(AgentDefaults.contextWindow(for: "gemini-3.1-pro", catalog: agyCatalog))
+        XCTAssertNil(AgentDefaults.contextWindow(for: "gemini-3.8-flash", catalog: nil))
+    }
+
+    // MARK: a Gemini key on Antigravity (web parity: "A Gemini key, which runs on Antigravity")
+
+    /// A row connected from the Gemini preset, as GET /providers serves it: the server puts agy's
+    /// fallback list and the modelsFromRuntime flag on it.
+    private let geminiKey = ConfiguredProvider(
+        slug: "gemini", label: "Gemini", runtime: "antigravity",
+        models: [
+            ConfiguredProviderModel(value: "gemini-3.8-flash", label: "Gemini 3.8 Flash", contextWindow: 1_048_576),
+            ConfiguredProviderModel(value: "gemini-3.7-flash", label: "Gemini 3.7 Flash", contextWindow: 1_048_576),
+        ],
+        defaultModel: "gemini-3.8-flash", presetSlug: "gemini", modelsFromRuntime: true)
+
+    func testAGeminiKeyRunsOnTheAntigravityRuntimeItBorrows() {
+        XCTAssertEqual(AgentDefaults.runtime(for: "gemini", configured: [geminiKey]), "antigravity")
+        // agy's own models, from the runner — not Claude's, which is where the row used to read.
+        XCTAssertEqual(AgentDefaults.models(for: "gemini", catalog: agyCatalog, configured: [geminiKey]).map(\.id),
+                       ["gemini-3.8-flash", "gemini-3.1-pro"])
+        XCTAssertEqual(AgentDefaults.models(for: "gemini", catalog: liveClaudeCatalog,
+                                            configured: [geminiKey]).map(\.id),
+                       ["gemini-3.8-flash", "gemini-3.7-flash"])
+        XCTAssertEqual(AgentDefaults.effectiveDefaultModel(
+            for: "gemini", catalog: agyCatalog, configured: [geminiKey],
+            runtimeDefaults: ["claude": "claude-opus-5", "antigravity": "gemini-3.1-pro"]), "gemini-3.1-pro")
+        XCTAssertEqual(AgentDefaults.defaultModel(for: "gemini", catalog: agyCatalog, configured: [geminiKey]),
+                       "gemini-3.8-flash")
+        // A pin from when the row ran on Codex is one agy has never listed.
+        XCTAssertNil(AgentDefaults.livePin("gemini-2.5-pro", provider: "gemini", catalog: agyCatalog,
+                                           configured: [geminiKey], runtimeDefaults: nil))
+        XCTAssertEqual(AgentDefaults.livePin("gemini-3.1-pro", provider: "gemini", catalog: agyCatalog,
+                                             configured: [geminiKey], runtimeDefaults: nil), "gemini-3.1-pro")
     }
 
     // MARK: efforts a self-hosted model declares (web parity: "Efforts a self-hosted model declares")

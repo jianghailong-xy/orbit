@@ -60,7 +60,7 @@ export function EnrollPage() {
       await api(`/runners/device/${encodeURIComponent(code)}/approve`, { method: 'POST' });
       setApproved(true);
     } catch (e) {
-      message.error((e as Error).message);
+      message.error("Couldn't register this machine", (e as Error).message);
     } finally {
       setSubmitting(false);
     }

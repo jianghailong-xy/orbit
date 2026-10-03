@@ -56,7 +56,7 @@ export function runReadyTaskMutationOptions(
       message.success('Run started');
       return refreshTaskScheduleViews(qc, taskId, projectId);
     },
-    onError: (error: Error) => message.error(error.message),
+    onError: (error: Error) => message.error("Couldn't start the task", error.message),
   };
 }
 
@@ -83,7 +83,7 @@ export function resumePausedListMutationOptions(
         qc.invalidateQueries({ queryKey: ['task-lists'] }),
       ]);
     },
-    onError: (error: Error) => message.error(error.message),
+    onError: (error: Error) => message.error("Couldn't resume the task list", error.message),
   };
 }
 

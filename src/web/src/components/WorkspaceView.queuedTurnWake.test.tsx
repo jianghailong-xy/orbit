@@ -117,9 +117,24 @@ const composer = (): HTMLTextAreaElement | null =>
 
 // Below the test budget, so a wait that runs out fails its test instead of outliving it.
 const waitForUi = async (assertion: () => void): Promise<void> => {
-  await act(async () => {
+  // The act environment is off while the window is waited out, as RTL's own asyncWrapper
+  // does it: React queues every render scheduled inside an in-flight act callback and flushes
+  // none of them until that callback settles, so a page that answers inside the window can
+  // never draw what the window exists to see — the wait times out with the data already in
+  // the cache (workstation-gpu: e85b63ee9's second full run; the merge check reds here).
+  const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+  const previous = env.IS_REACT_ACT_ENVIRONMENT;
+  env.IS_REACT_ACT_ENVIRONMENT = false;
+  try {
     await vi.waitFor(assertion, { timeout: 20_000, interval: 20 });
-  });
+  } finally {
+    env.IS_REACT_ACT_ENVIRONMENT = previous;
+  }
+  // And one act to close the window: the last commit the wait saw leaves its passive effects
+  // scheduled, and what they carry — React Query's mutation options among it — is what the
+  // test's next press runs on. The old act-wrapped wait flushed them on its way out; this
+  // keeps that, without the freeze that made the wait itself blind.
+  await act(async () => {});
 };
 
 const click = async (el: Element): Promise<void> => {
@@ -336,6 +351,13 @@ const BG_WAKE = [
 ].join('\n');
 const ACCEPTANCE = 'npm test -w @orbit/web';
 const BRIEF = '请开始执行任务「Fix the race」。\n\n任务描述：the dispatcher double-counts a slot.';
+// A job that ended while the turn ran is written into that turn (a steer), not queued behind it: it
+// waits for the runner in the same tail, but it is on its way into the running turn and nothing takes
+// it back (BackgroundWakeSteer.test.tsx).
+const BG_STEERED = BG_WAKE.replace('bgj_10bca948d369', 'bgj_3c9d2e1f0a4b').replace(
+  'has news you were waiting for; the control plane opened this turn for it:',
+  'has news you were waiting for. It ended while you were working, so this message was added to the turn you are in:',
+);
 
 describe('turns nobody typed, taken off the queue unrun', { timeout: 60_000 }, () => {
   beforeEach(() => {
@@ -346,6 +368,10 @@ describe('turns nobody typed, taken off the queue unrun', { timeout: 60_000 }, (
       { turnId: 'turn-acceptance', kind: 'shell', placement: 'queued', content: ACCEPTANCE, createdAt: at, authoredByOrbit: true },
       { turnId: 'turn-brief', kind: 'message', placement: 'queued', content: BRIEF, createdAt: at, authoredByOrbit: true },
       { turnId: 'turn-typed', kind: 'message', placement: 'queued', content: TYPED, createdAt: at },
+      {
+        turnId: 'turn-steered-wake', kind: 'steer', placement: 'steer', targetTurnId: 'turn-running',
+        content: BG_STEERED, createdAt: at, authoredByOrbit: true,
+      },
     ];
   });
 
@@ -382,6 +408,13 @@ describe('turns nobody typed, taken off the queue unrun', { timeout: 60_000 }, (
     await click(cancelIn(bubbleSaying('请开始执行任务')));
     await waitForUi(() => expect(cancelMock).toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-brief'));
     expect(composer()?.value).toBe('');
+
+    // The wake written into the running turn is the one row here with nothing to withdraw: it says
+    // how far it has got instead, and stays.
+    const steered = [...mounted().querySelectorAll('.bgwake')].find((line) => line.textContent?.includes('Sending…'));
+    expect(steered, 'the steered wake is drawn with its steer state').toBeDefined();
+    expect(steered!.querySelectorAll('a')).toHaveLength(0);
+    expect(cancelMock).not.toHaveBeenCalledWith(SESSION_PUBLIC, 'turn-steered-wake');
 
     // The same Cancel on a message somebody typed still hands it back, so the empty composer above
     // is the rule and not a Cancel that restores nothing.

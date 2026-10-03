@@ -16,11 +16,11 @@ import { ProvidersPage } from './ProvidersPage';
 /**
  * One Codex pool (scheme A, docs/mocks/account-pool-access/) on its own page and on /providers, mounted
  * for real against a fake API, as its owner and as somebody they added read it: the owner's ChatGPT
- * accounts — "Only you" once the pool is shared, one locked line to everybody else — its API keys
- * ("Everyone here"), "Who can use it" with its two settings and each person's row, what "Add account"
- * asks first, what sharing and going back to "Just me" say before they happen, and the pool's card on the
- * Providers page. The pool and its people are the boards' own: jianghailong's Codex Pool, shared with
- * Zhang Min and Lin Wei.
+ * accounts — "Everyone here" once the pool is shared, read the same way by everybody it runs the
+ * sessions of (2026-10-03) — its API keys (also "Everyone here"), "Who can use it" with its two settings
+ * and each person's row, what "Add account" asks first, what sharing and going back to "Just me" say
+ * before they happen, and the pool's card on the Providers page. The pool and its people are the boards'
+ * own: jianghailong's Codex Pool, shared with Zhang Min and Lin Wei.
  */
 
 vi.mock('../api', async (importOriginal) => ({
@@ -44,6 +44,9 @@ const spend = (costUsd: number) => ({ inputTokens: 0, outputTokens: 0, costUsd }
 
 /** One of jianghailong's ChatGPT accounts, as GET /providers/pools serves it to him. */
 const account = (email: string, plan: string, fingerprint: string, fiveHour: number, weekly: number): CodexLogin => ({
+  // Signed in by jianghailong, the pool's owner (migration 0371): the row's `userId` is who may sign it in
+  // again, and the pages say whose account it is by this.
+  userId: JIANG,
   state: 'ACTIVE',
   email,
   plan,
@@ -76,11 +79,20 @@ const ownPool = (): ProviderPool => ({
   members: [],
 });
 
-/** Who can use the pool and its API keys (GET /providers/shared-pools[/:id]), as `viewer` reads them.
- *  `people` are the ones in it besides its owner; the keys are orbit-org-1 (his) and zm-proj (Zhang Min's). */
-function access(viewer: string, people: string[], keyLabels: string[] = ['orbit-org-1', 'zm-proj']): SharedPool {
+/** Who can use the pool, its ChatGPT accounts and its API keys (GET /providers/shared-pools[/:id]), as
+ *  `viewer` reads them. `people` are the ones in it besides its owner; the keys are orbit-org-1 (his) and
+ *  zm-proj (Zhang Min's); `logins` is what the pool holds of his accounts. */
+function access(
+  viewer: string,
+  people: string[],
+  keyLabels: string[] = ['orbit-org-1', 'zm-proj'],
+  logins: CodexLogin[] = ACCOUNTS,
+): SharedPool {
   const usage: Record<string, number> = { [JIANG]: 2, [ZHANG]: 5.5, [LIN]: 2.5 };
   const sessions: Record<string, number> = { [JIANG]: 23, [ZHANG]: 19, [LIN]: 6 };
+  // The server marks the ONE credential the viewer's next session would run on: while the pool holds an
+  // account that can run, no key is it.
+  const keyNext = logins.length === 0;
   const keys: SharedPoolKey[] = [
     {
       id: id(11),
@@ -93,7 +105,7 @@ function access(viewer: string, people: string[], keyLabels: string[] = ['orbit-
       contributor: { userId: JIANG, name: NAMES[JIANG], you: viewer === JIANG },
       usage: { ...spend(14), othersCostUsd: 12.4 },
       running: false,
-      next: viewer === JIANG,
+      next: keyNext && viewer === JIANG,
     },
     {
       id: id(12),
@@ -106,7 +118,7 @@ function access(viewer: string, people: string[], keyLabels: string[] = ['orbit-
       contributor: { userId: ZHANG, name: NAMES[ZHANG], you: viewer === ZHANG },
       usage: { ...spend(3.1), othersCostUsd: 3.1 },
       running: true,
-      next: viewer === ZHANG,
+      next: keyNext && viewer === ZHANG,
     },
   ].filter((key) => keyLabels.includes(key.label)) as SharedPoolKey[];
   const person = (userId: string): SharedPoolPerson => ({
@@ -125,8 +137,12 @@ function access(viewer: string, people: string[], keyLabels: string[] = ['orbit-
     label: 'Codex Pool',
     engine: 'codex',
     shared: false,
-    ownerHasChatGPT: true,
+    // The pool's ChatGPT accounts, as everybody in it reads them (the server's own choice of which one the
+    // viewer's next session runs on marked `next` — the one it sorts first, 97% of its week spent being
+    // "near limit").
+    logins: logins.map((login, index) => ({ ...login, next: index === 1 })),
     membersCanAdd: true,
+    membersCanAddAccounts: true,
     ownKeyFirst: true,
     viewerRole: viewer === JIANG ? 'ADMIN' : 'MEMBER',
     window: { start: '2026-10-01T00:00:00.000Z', end: '2026-11-01T00:00:00.000Z' },
@@ -151,11 +167,11 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
   let sharedList: SharedPool[] = [];
   let ownAccess: SharedPool | null = null;
 
-  /** jianghailong, with `people` added to his pool and `keys` in it. */
-  const asOwner = (people: string[], keys?: string[]) => {
-    ownPools = [ownPool()];
+  /** jianghailong, with `people` added to his pool, `keys` in it and `accounts` of his signed in. */
+  const asOwner = (people: string[], keys?: string[], accounts: CodexLogin[] = ACCOUNTS) => {
+    ownPools = [{ ...ownPool(), login: accounts[0] ?? null, logins: accounts }];
     sharedList = [];
-    ownAccess = access(JIANG, people, keys);
+    ownAccess = access(JIANG, people, keys, accounts);
   };
   /** Zhang Min, whom he added along with Lin Wei. */
   const asZhang = () => {
@@ -295,8 +311,11 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     expect(text(container.querySelector('.pool-detail .pool-gauge-name'))).toBe('Next: jianghailong.rd@gmail.com');
     expect(text(container.querySelector('.pool-detail .pool-gauge-pct'))).toBe('Weekly 97%');
     // Nobody else uses it: nothing to say whose sessions each account runs.
-    expect(text(rowOf('jianghailong.rd@gmail.com').querySelector('.pool-key-mask'))).toBe('ChatGPT Plus · …016a');
-    expect(text(rowOf('hl.work@gmail.com').querySelector('.pool-key-mask'))).toBe('ChatGPT Pro · …7QX4');
+    // Whose each account is, led by the person who signed it in — its owner's own, here (migration 0371).
+    expect(text(rowOf('jianghailong.rd@gmail.com').querySelector('.pool-key-mask'))).toBe(
+      'jianghailong · ChatGPT Plus · …016a',
+    );
+    expect(text(rowOf('hl.work@gmail.com').querySelector('.pool-key-mask'))).toBe('jianghailong · ChatGPT Pro · …7QX4');
 
     expect(text(who().querySelector('.re-runner'))).toBe('Who can use it');
     expect(setting()).toBe('Just me');
@@ -314,7 +333,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     await mount(PAGE);
     expect(text(container.querySelector('.pool-page-title .pool-shared-chip'))).toBe('SHARED');
     expect(text(container.querySelector('.pool-sub'))).toBe(
-      'Codex pool · Me and 2 people · 4 of 4 accounts available · your sessions start on your ChatGPT accounts; everyone else’s run on the API keys.',
+      'Codex pool · Me and 2 people · 4 of 4 accounts available · each session starts on your ChatGPT accounts; the API keys when none of them can run.',
     );
     expect(button('Add account')).not.toBeNull();
     expect(text(container.querySelector('.pool-detail .re-runner'))).toBe('Accounts4');
@@ -323,11 +342,11 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     );
     expect(text(container.querySelector('.pool-detail .pool-gauge-pct'))).toBe('Weekly 97%');
 
-    // Its accounts first, then its keys; a ChatGPT account is only ever his, a key everybody's.
+    // Its accounts first, then its keys — everybody here runs on either since 2026-10-03.
     const rows = Array.from(container.querySelectorAll<HTMLElement>('.pool-detail .pool-row'));
     expect(rows.map((row) => [text(row.querySelector('.re-name')), text(row.querySelector('.pool-key-mask'))])).toEqual([
-      ['jianghailong.rd@gmail.comNEXT', 'ChatGPT Plus · …016a · Only you'],
-      ['hl.work@gmail.com', 'ChatGPT Pro · …7QX4 · Only you'],
+      ['jianghailong.rd@gmail.comNEXT', 'jianghailong · ChatGPT Plus · …016a · Everyone here'],
+      ['hl.work@gmail.com', 'jianghailong · ChatGPT Pro · …7QX4 · Everyone here'],
       ['orbit-org-1you', 'jianghailong · sk-…AB12 · Everyone here'],
       ['zm-proj', 'Zhang Min · sk-…7K2P · Everyone here'],
     ]);
@@ -355,8 +374,8 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
       ]),
     ).toEqual([
       ['jianghailongyouOWNER', 'Runs on everything — your ChatGPT accounts first · 23 sessions', '20%'],
-      ['Zhang Min', 'Runs on the API keys · 1 key · 19 sessions', '55%'],
-      ['Lin Wei', 'Runs on the API keys · no key · 6 sessions', '25%'],
+      ['Zhang Min', 'Runs on everything — your ChatGPT accounts first · 19 sessions', '55%'],
+      ['Lin Wei', 'Runs on everything — your ChatGPT accounts first · 6 sessions', '25%'],
     ]);
     expect(labelled('Manage jianghailong')).toHaveLength(0);
     expect(labelled('Manage Zhang Min')).toHaveLength(1);
@@ -367,9 +386,9 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     );
     expect(who().querySelector('button.ant-switch')?.getAttribute('aria-checked')).toBe('true');
     expect(text(who().querySelector('.who-foot'))).toBe(
-      'Your ChatGPT accounts only ever run your own sessions. OpenAI’s terms don’t allow a ChatGPT account to be shared, so nobody you add can run on one — or see which accounts they are.',
+      'Your ChatGPT accounts run everyone’s sessions here. The people you add start on them, and fall to the API keys when none can run. OpenAI’s terms treat account sharing as a violation — an account used that way can be suspended.',
     );
-    expect(who().querySelector('.who-foot .anticon-lock')).not.toBeNull();
+    expect(who().querySelector('.who-foot .anticon-warning')).not.toBeNull();
     expect(text(container.querySelector('.pool-danger-note'))).toBe(
       'Its ChatGPT sign-ins and API keys are deleted from the Orbit server, and nobody can run on it.',
     );
@@ -380,35 +399,36 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     expect(items).toEqual(['Remove from pool']);
   });
 
-  it('draws the same pool for somebody its owner added: his ChatGPT accounts one locked line, its keys theirs to run on (02, member)', async () => {
+  it('draws the same pool for somebody its owner added: his ChatGPT accounts as theirs to run on too, and its keys beside them (02, member)', async () => {
     asZhang();
     await mount(PAGE);
     expect(text(container.querySelector('.pool-page-title .pool-shared-chip'))).toBe('SHARED');
     expect(text(container.querySelector('.pool-sub'))).toBe(
-      'Codex pool · jianghailong’s · 3 people · 2 of 2 keys you can run on available · your sessions run on the API keys, your own first.',
+      'Codex pool · jianghailong’s · 3 people · 4 of 4 accounts and keys you can run on available · each session starts on its ChatGPT accounts; the API keys when none of them can run.',
     );
-    expect(button('Add a key')).not.toBeNull();
-    expect(button('Add account')).toBeNull();
+    // The pool's own rule lets them sign a ChatGPT account of their own in (migration 0371), so the press
+    // is the same one its owner has.
+    expect(button('Add account')).not.toBeNull();
+    expect(button('Add a key')).toBeNull();
     expect(text(container.querySelector('.pool-detail .re-runner'))).toBe('Accounts');
-    expect(text(container.querySelector('.pool-detail .pool-gauge-name'))).toBe('Next for you: zm-proj');
-    expect(text(container.querySelector('.pool-detail .pool-gauge-none'))).toBe('No limit');
+    // Their next session starts on one of his accounts (the one the server chose), not on a key.
+    expect(text(container.querySelector('.pool-detail .pool-gauge-name'))).toBe('Next for you: hl.work@gmail.com');
+    expect(text(container.querySelector('.pool-detail .pool-gauge-pct'))).toBe('Weekly 40%');
 
-    const locked = container.querySelector<HTMLElement>('.pool-row-locked')!;
-    expect(text(locked.querySelector('.re-name'))).toBe('jianghailong’s ChatGPT accounts');
-    expect(text(locked.querySelector('.pool-key-mask'))).toBe(
-      'Only jianghailong’s sessions run on them — a ChatGPT account can’t be shared.',
-    );
-    expect(locked.querySelector('.pool-lock-tile .anticon-lock')).not.toBeNull();
-    // Nothing of the accounts themselves: whose subscription they are is all it says.
-    for (const secret of ['jianghailong.rd@gmail.com', 'hl.work@gmail.com', 'ChatGPT Plus', '…016a', 'Weekly']) {
-      expect(document.body.textContent).not.toContain(secret);
-    }
-    // Their own key first, as their sessions take them; neither says whose sessions it runs.
-    const rows = Array.from(container.querySelectorAll<HTMLElement>('.pool-detail .pool-row-key'));
+    // The accounts are theirs to read, as the owner reads them: email, plan, `…AB12` and quota — and whose
+    // each one is. None is theirs, so neither offers a way to sign one in or out (migration 0371: that is
+    // the person who signed it in's, with the pool's admins for taking it out).
+    const rows = Array.from(container.querySelectorAll<HTMLElement>('.pool-detail .pool-row'));
     expect(rows.map((row) => [text(row.querySelector('.re-name')), text(row.querySelector('.pool-key-mask'))])).toEqual([
-      ['zm-projyouNEXT', 'Zhang Min · sk-…7K2P'],
+      ['jianghailong.rd@gmail.com', 'jianghailong · ChatGPT Plus · …016a'],
+      ['hl.work@gmail.comNEXT', 'jianghailong · ChatGPT Pro · …7QX4'],
+      ['zm-projyou', 'Zhang Min · sk-…7K2P'],
       ['orbit-org-1', 'jianghailong · sk-…AB12'],
     ]);
+    expect(labelled('Sign out jianghailong.rd@gmail.com')).toHaveLength(0);
+    expect(labelled('Sign out hl.work@gmail.com')).toHaveLength(0);
+    expect(text(rowOf('jianghailong.rd@gmail.com').querySelector('.pool-login-quota'))).toContain('Weekly');
+    // Their own key first, as their sessions take them; neither says whose sessions it runs.
     expect(labelled('Disable zm-proj')).toHaveLength(1);
     expect(labelled('Remove zm-proj from this pool')).toHaveLength(1);
     expect(labelled('Remove orbit-org-1 from this pool')).toHaveLength(0);
@@ -440,7 +460,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     expect(text(dialog()?.querySelector('.ant-modal-title'))).toBe('Add an account to Codex Pool');
     const kinds = Array.from(dialog()!.querySelectorAll<HTMLElement>('.add-kind'));
     expect(kinds.map((kind) => text(kind.querySelector('.ant-radio-label')))).toEqual([
-      'Sign in with ChatGPTAnother ChatGPT account of yours. Only your sessions run on it, even after the pool is shared.',
+      'Sign in with ChatGPTAnother ChatGPT account of yours. Everyone in the pool runs on it once you share the pool — until then, your sessions alone.',
       'Paste an OpenAI API keyAn organization or project key. Everyone who can use this pool runs on it, up to a monthly limit you set.',
     ]);
     expect(kinds.map((kind) => kind.querySelector<HTMLInputElement>('input')?.checked)).toEqual([true, false]);
@@ -460,7 +480,7 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     expect(sent).toEqual([]);
   });
 
-  it('says before sharing what the people added get and never get, then adds them (03-4)', async () => {
+  it('says before sharing what the people added get, then adds them (03-4)', async () => {
     asOwner([], ['orbit-org-1']);
     await mount(PAGE);
     await pick('Me and people I add');
@@ -469,7 +489,8 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     expect(text(modal.querySelector('.np-field-l'))).toBe('Emails of their Orbit accounts');
     expect(Array.from(modal.querySelectorAll('.pa-facts li')).map((li) => li.textContent)).toEqual([
       'They see Codex Pool on their Providers page and in the session picker, and can start sessions on it.',
-      'Their sessions run on the pool’s API keys, which is orbit-org-1 now. Your 2 ChatGPT accounts stay yours alone: they can’t run on them or see which accounts they are.',
+      'Their sessions start on your ChatGPT accounts, and fall to the pool’s API keys — orbit-org-1 — when none of them can run.',
+      'They can sign in ChatGPT accounts of their own, which then run everyone’s sessions here too — theirs and yours — until they take them out again.',
       'Everyone sees each person’s share of this month’s API key use.',
     ]);
     expect(text(modal.querySelector('.ant-checkbox-wrapper'))).toBe('They can add their own API keys');
@@ -489,28 +510,44 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     ]);
   });
 
-  it('says first that a pool with no API key can’t take their sessions yet, and offers to add one first (03-4, no key)', async () => {
+  it('says before sharing a pool with no API key that they start on the accounts and wait when none can run (03-4, no key)', async () => {
     asOwner([], []);
     await mount(PAGE);
     await pick('Me and people I add');
-    let modal = dialog()!;
+    const modal = dialog()!;
+    expect(text(modal.querySelector('.ant-modal-title'))).toBe('Share Codex Pool');
+    expect(modal.querySelector('.pa-risk')).toBeNull();
+    expect(Array.from(modal.querySelectorAll('.pa-facts li')).map((li) => li.textContent)).toEqual([
+      'They see Codex Pool on their Providers page and in the session picker, and can start sessions on it.',
+      'Their sessions start on your ChatGPT accounts, and wait when none of them can run — the pool has no API key to fall to yet.',
+      'They can sign in ChatGPT accounts of their own, which then run everyone’s sessions here too — theirs and yours — until they take them out again.',
+      'Everyone sees each person’s share of this month’s API key use.',
+    ]);
+    expect(Array.from(modal.querySelectorAll('.ant-modal-footer button')).map((el) => el.textContent)).toEqual([
+      'Cancel',
+      'Share',
+    ]);
+    await type(modal.querySelector<HTMLInputElement>('.pool-share-emails input'), 'zhang.min@orbitd.io');
+    await click(button('Share', modal));
+    expect(sent).toEqual([{ method: 'POST', path: `${AT}/people`, body: { email: 'zhang.min@orbitd.io' } }]);
+  });
+
+  it('warns and offers to add a key first only when the pool holds nothing they could run on (03-4, empty)', async () => {
+    asOwner([], [], []);
+    await mount(PAGE);
+    await pick('Me and people I add');
+    const modal = dialog()!;
     expect(text(modal.querySelector('.ant-modal-title'))).toBe('Share Codex Pool');
     expect(modal.querySelector('.pa-facts')).toBeNull();
     expect(modal.querySelector('.ant-checkbox-wrapper')).toBeNull();
     expect(text(modal.querySelector('.pa-risk'))).toBe(
-      'Codex Pool has no API key yet. They’ll see it but can’t start a session until it has one, because your ChatGPT accounts only run your own sessions.',
+      'Codex Pool has no API key yet. They’ll see it but can’t start a session until it has one, and no ChatGPT account is signed in either.',
     );
     expect(Array.from(modal.querySelectorAll('.ant-modal-footer button')).map((el) => el.textContent)).toEqual([
       'Cancel',
       'Share anyway',
       'Add an API key first',
     ]);
-    await type(modal.querySelector<HTMLInputElement>('.pool-share-emails input'), 'zhang.min@orbitd.io');
-    await click(button('Share anyway', modal));
-    expect(sent).toEqual([{ method: 'POST', path: `${AT}/people`, body: { email: 'zhang.min@orbitd.io' } }]);
-
-    await pick('Me and people I add');
-    modal = dialog()!;
     await click(button('Add an API key first', modal));
     expect(text(dialog()?.querySelector('.ant-modal-title'))).toBe('Add a key to Codex Pool');
   });
@@ -561,7 +598,9 @@ describe('a Codex pool, as its owner and as somebody they added read it', { time
     asZhang();
     await mount('/providers');
     expect(text(head().querySelector('.pool-shared-chip'))).toBe('SHARED');
-    expect(text(head().querySelector('.re-summary'))).toBe('jianghailong’s · 2 keys you can run on');
+    expect(text(head().querySelector('.re-summary'))).toBe(
+      'jianghailong’s · 4 accounts and keys you can run on',
+    );
     expect(head().querySelector('.pool-people')).toBeNull();
     expect(head().querySelector('.pool-gauge')).toBeNull();
     expect(text(head().querySelector('.re-manage'))).toBe('Manage →');

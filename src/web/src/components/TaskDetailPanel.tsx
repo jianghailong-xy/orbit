@@ -14,13 +14,14 @@ import {
 import { MentionDeliveryNotes } from './MentionDeliveryNotes';
 import { TaskInputs } from './TaskInputs';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import type { RunnerModelCatalog } from '@orbit/shared';
 import { Alert, Avatar, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Spin, Switch, Tooltip, Typography } from 'antd';
-import { lazy, Suspense, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, lazy, Suspense, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
-import { api, getShareLink } from '../api';
+import { api, getShareLink, type ModelHintLevel, type ModelHintOption, type TaskRunRoute } from '../api';
 import { copyText } from '../lib/clipboard';
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import { reportTaskRunConflict, type TaskRunConflictToast } from './TaskRunHandoffNotice';
@@ -70,6 +71,7 @@ import {
   refreshOwnerConfirmationViews,
   sendOwnerDecision,
 } from './OwnerConfirmationCard';
+import { UNDER_REVIEW } from './OwnerConfirmationReview';
 
 // Graph rendering pulls in React Flow + dagre. Keep that weight out of the initial task-list
 // bundle; it is fetched only when someone opens a task with dependencies and selects Graph.
@@ -499,6 +501,63 @@ export function runNowMutationOptions(
   };
 }
 
+/**
+ * Smart model selection in the panel (docs/model-routing-design.md §9): the tier suggested for the
+ * task, and what each run was routed to and why. A tier is named here only by the work it is for —
+ * which model and effort it runs as is the server's answer (`modelHintOptions`), so no tier table
+ * is kept on this side.
+ */
+export const MODEL_HINT_LEVELS: readonly ModelHintLevel[] = ['S', 'M', 'L', 'XL'];
+export const NO_SUGGESTION = 'No suggestion';
+export const NO_SUGGESTION_DETAIL = "Keeps the agent's model, as today";
+export const MODEL_HINT_DETAIL: Record<ModelHintLevel, string> = {
+  S: 'Rename, copy change, version bump, mechanical edits',
+  M: 'A clear feature or fix with a known shape',
+  L: 'Unknown root cause, concurrency, cross-module, migrations, the dispatch path',
+  XL: 'Architecture, design, long unattended work',
+};
+/** The Model field's placeholder while the assignee picks a model per task run. */
+export const SMART_SELECTION_PLACEHOLDER = '✦ Smart selection';
+/** How the Why of a run that a failure moved up a tier ends. */
+export const USAGE_LIMIT_NOTE = 'a failure from a usage limit would not have moved the tier';
+
+/** A tier as the Suggested picker names it — `M · Sonnet 5.5 · medium` — or the bare tier where the
+ *  server could not resolve it to a model. */
+export function modelHintLabel(level: ModelHintLevel, options?: ModelHintOption[] | null): string {
+  const option = options?.find((o) => o.level === level);
+  return [level, option?.label, option?.effort].filter(Boolean).join(' · ');
+}
+
+/** A model id as a runner's catalogue names it (`claude-opus-5-5` reads "Opus 5.5"), else the id. */
+export function catalogModelLabel(
+  model: string,
+  runners?: Array<{ modelCatalog?: RunnerModelCatalog | null }> | null,
+): string {
+  for (const runner of runners ?? []) {
+    for (const rows of Object.values(runner.modelCatalog ?? {})) {
+      const label = rows?.find((row) => row.value === model)?.label;
+      if (label) return label;
+    }
+  }
+  return model;
+}
+
+/** A routed run's tier tag: `✦ M`, and `✦ L ↑` when the run before it failed and moved it up. */
+export const routeTierTag = (route: TaskRunRoute): string =>
+  `✦ ${route.level}${route.escalated ? ' ↑' : ''}`;
+
+/** The Why's last line: the policy that decided, and when — from the decision itself. */
+export const routeWhyFooter = (route: TaskRunRoute): string =>
+  [`Policy v${route.policyVersion}`, `decided ${fmt(route.decidedAt)}`, ...(route.escalated ? [USAGE_LIMIT_NOTE] : [])]
+    .join(' · ');
+
+/** One row of the Suggested picker: '' is No suggestion. */
+interface ModelHintPick {
+  value: '' | ModelHintLevel;
+  label: string;
+  detail: string;
+}
+
 // The list row passed in for an instant header render before /tasks/:id resolves.
 export interface TaskSummary {
   id: string;
@@ -516,6 +575,8 @@ interface WorkspaceRow {
   runnerId?: string | null;
   /** The workspace's own provider — what a task with no pin of its own inherits. */
   provider?: string | null;
+  /** Smart model selection: its task runs get a model and effort picked per run. */
+  modelRouting?: boolean;
 }
 
 export function TaskDetailPanel({
@@ -711,6 +772,28 @@ export function TaskDetailPanel({
     () => modelOptionsForProvider(effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders),
     [effectiveProvider, assigneeRunner?.modelCatalog, configuredProviders],
   );
+  // Each tier with the model and effort it runs as for this task, as the server resolved them on the
+  // assignee's runner, and the work it is for.
+  const modelHintOptions: ModelHintOption[] | null = q.data?.modelHintOptions ?? null;
+  const modelHintPicks = useMemo<ModelHintPick[]>(
+    () => [
+      { value: '', label: NO_SUGGESTION, detail: NO_SUGGESTION_DETAIL },
+      ...MODEL_HINT_LEVELS.map((level) => ({
+        value: level,
+        label: modelHintLabel(level, modelHintOptions),
+        detail: MODEL_HINT_DETAIL[level],
+      })),
+    ],
+    [modelHintOptions],
+  );
+  // A run's model by the name the catalogues give it — the picker's own tiers first.
+  const modelLabel = (model: string): string =>
+    modelHintOptions?.find((o) => o.model === model)?.label ?? catalogModelLabel(model, runnersQ.data);
+  // What a routed run was (or would have been) put on: `Opus 5.5 · high`.
+  const routePick = (route: TaskRunRoute): string =>
+    [route.model ? modelLabel(route.model) : route.provider, route.effort].filter(Boolean).join(' · ');
+  // The run whose Why is open, if any.
+  const [whyOpen, setWhyOpen] = useState<string | null>(null);
 
   // Esc closes the panel.
   useEffect(() => {
@@ -744,7 +827,7 @@ export function TaskDetailPanel({
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       qc.invalidateQueries({ queryKey: ['tasks'] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't change the assignee", e.message),
   });
 
   // Pin (or clear, when null) the provider/model this task's runs use instead of the assignee
@@ -757,7 +840,22 @@ export function TaskDetailPanel({
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       qc.invalidateQueries({ queryKey: ['tasks'] });
     },
-    onError: (e: Error) => message.error(e.message),
+    // Only the Provider field's write carries `provider`; the Model field's carries `model` alone.
+    onError: (e: Error, body) =>
+      message.error('provider' in body ? "Couldn't change the provider" : "Couldn't change the model", e.message),
+  });
+
+  // The tier this task's runs are routed at (model routing §3.1). A pick here is the person's own,
+  // so it clears the coordinator's reason along with the tier that reason argued for; No suggestion
+  // clears both, as `--clear-model-hint` does.
+  const updateModelHint = useMutation({
+    mutationFn: (modelHint: ModelHintLevel | null) =>
+      api(`/tasks/${taskId}`, { method: 'PATCH', body: { modelHint, modelHintReason: null } }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['task', taskId] });
+      qc.invalidateQueries({ queryKey: ['tasks'] });
+    },
+    onError: (e: Error) => message.error("Couldn't change the suggested tier", e.message),
   });
 
   // Take a stopped task back to Open, in place (see REOPENABLE_STATUSES). Nothing is toasted on a
@@ -777,7 +875,7 @@ export function TaskDetailPanel({
       qc.invalidateQueries({ queryKey: ['tasks'] });
       qc.invalidateQueries({ queryKey: ['task-lists'] });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't change the task's list", e.message),
   });
 
   const execute = useMutation(runNowMutationOptions(qc, message, taskId, q.data?.projectId));
@@ -805,14 +903,14 @@ export function TaskDetailPanel({
     mutationFn: (dependsOnTaskId: string) =>
       api(`/tasks/${taskId}/dependencies`, { method: 'POST', body: { dependsOnTaskId } }),
     onSuccess: refreshTaskViews,
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't add the prerequisite", e.message),
   });
 
   const removeDependency = useMutation({
     mutationFn: (dependsOnTaskId: string) =>
       api(`/tasks/${taskId}/dependencies/${dependsOnTaskId}`, { method: 'DELETE' }),
     onSuccess: refreshTaskViews,
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't remove the prerequisite", e.message),
   });
 
   const expandDependencyBranch = useMutation({
@@ -870,14 +968,15 @@ export function TaskDetailPanel({
         };
       });
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't expand the dependency branch", e.message),
   });
 
   const setAutoRun = useMutation({
     mutationFn: (autoRunWhenReady: boolean) =>
       api(`/tasks/${taskId}`, { method: 'PATCH', body: { autoRunWhenReady } }),
     onSuccess: refreshTaskViews,
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error, autoRunWhenReady) =>
+      message.error(autoRunWhenReady ? "Couldn't turn on auto-run" : "Couldn't turn off auto-run", e.message),
   });
 
   const addComment = useMutation({
@@ -889,7 +988,7 @@ export function TaskDetailPanel({
       qc.invalidateQueries({ queryKey: ['task', taskId] });
       notifyMentions(vars.mentions);
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't send the comment", e.message),
   });
 
   // A workspace is mentioned when `@<name>` appears as a standalone token in the body.
@@ -1068,7 +1167,7 @@ export function TaskDetailPanel({
       message.success('Confirmed done');
       return refreshOwnerConfirmationViews(qc, taskId);
     },
-    onError: (e: Error) => message.error(e.message),
+    onError: (e: Error) => message.error("Couldn't confirm the task", e.message),
   });
 
   // Drag the panel's left edge to resize; it sits on the right, so dragging left widens it.
@@ -1150,13 +1249,15 @@ export function TaskDetailPanel({
         <div className="tdp-head-actions">
           {ownerWaiting ? (
             // A run is waiting on the owner: its card in that session is where this is answered,
-            // so the panel only takes the reader there.
+            // so the panel only takes the reader there. While its report is still with its reviewer
+            // the pointer says so, in the quieter tone, as the session's row does (contract §5 N3).
             <Link
-              className="tdp-owner-confirmation-pointer"
+              className={`tdp-owner-confirmation-pointer${
+                ownerWaiting.review?.state === 'UNDER_REVIEW' ? ' is-under-review' : ''}`}
               to={`/sessions/${encodeId(ownerWaiting.sessionId)}`}
               state={{ revealOwnerConfirmation: true }}
             >
-              {WAITING_FOR_CONFIRMATION}
+              {ownerWaiting.review?.state === 'UNDER_REVIEW' ? UNDER_REVIEW : WAITING_FOR_CONFIRMATION}
             </Link>
           ) : confirmHere ? (
             <Button loading={confirmDone.isPending} onClick={() => confirmDone.mutate()}>
@@ -1234,7 +1335,7 @@ export function TaskDetailPanel({
                 onClick: () => {
                   setMenuOpen(false);
                   void copyText(taskAppUrl(taskId)).then((ok) =>
-                    ok ? message.success('Link copied') : message.error('Could not copy'),
+                    ok ? message.success('Link copied') : message.error("Couldn't copy the link"),
                   );
                 },
               },
@@ -1262,7 +1363,7 @@ export function TaskDetailPanel({
                   setMenuOpen(false);
                   if (!q.data) return;
                   void copyText(taskMarkdown(q.data, taskAppUrl(taskId))).then((ok) =>
-                    ok ? message.success('Markdown copied') : message.error('Could not copy'),
+                    ok ? message.success('Markdown copied') : message.error("Couldn't copy the Markdown"),
                   );
                 },
               },
@@ -1321,6 +1422,49 @@ export function TaskDetailPanel({
                 onChange={(val) => updateAssignee.mutate(val ?? null)}
               />
             </div>
+            {/* The tier the coordinator suggested (model routing §3.1), with the model and effort it
+                runs as and the reason it was given under it. A suggestion, not a pin: a failed run
+                still moves the next one up, and a model picked below wins over both. */}
+            <div className="tdp-field">
+              <span className="tdp-field-label">Suggested</span>
+              <div className="tdp-field-stack">
+                <Select<ModelHintPick['value'], ModelHintPick>
+                  className="tdp-assignee-select"
+                  classNames={{ popup: { root: 'tdp-hint-popup' } }}
+                  variant="borderless"
+                  value={q.data?.modelHint ?? undefined}
+                  placeholder={NO_SUGGESTION}
+                  loading={updateModelHint.isPending}
+                  disabled={updateModelHint.isPending}
+                  popupMatchSelectWidth={false}
+                  options={modelHintPicks}
+                  labelRender={({ value, label }) => (
+                    <span className="tdp-hint-value">
+                      <span className={`tdp-hint-dot is-${String(value).toLowerCase()}`} />
+                      {label}
+                    </span>
+                  )}
+                  optionRender={(option) => (
+                    <div className={`tdp-hint-option${option.data.value ? '' : ' is-none'}`}>
+                      {option.data.value && (
+                        <span className={`tdp-hint-dot is-${option.data.value.toLowerCase()}`} />
+                      )}
+                      <div>
+                        <div className="tdp-hint-option-name">{option.data.label}</div>
+                        <div className="tdp-hint-option-detail">{option.data.detail}</div>
+                      </div>
+                    </div>
+                  )}
+                  onChange={(next) => {
+                    const level = next || null;
+                    if (level !== (q.data?.modelHint ?? null)) updateModelHint.mutate(level);
+                  }}
+                />
+                {q.data?.modelHint && q.data.modelHintReason && (
+                  <span className="tdp-field-note">Coordinator: {q.data.modelHintReason}</span>
+                )}
+              </div>
+            </div>
             <div className="tdp-field">
               <span className="tdp-field-label">Provider</span>
               <Select
@@ -1347,7 +1491,8 @@ export function TaskDetailPanel({
                 className="tdp-assignee-select"
                 variant="borderless"
                 value={q.data?.model ?? undefined}
-                placeholder="Provider default"
+                // Unpinned on an assignee with smart selection on, each run's model is picked for it.
+                placeholder={assigneeWorkspace?.modelRouting ? SMART_SELECTION_PLACEHOLDER : 'Provider default'}
                 allowClear
                 showSearch
                 optionFilterProp="label"
@@ -1562,23 +1707,73 @@ export function TaskDetailPanel({
               sessions.map((s: any) => {
                 const state = sessionRunStateOf(s);
                 const meta = sessionStatusMeta(s);
+                // The decision behind this run, when it named a tier (model routing §9). Applied,
+                // the run is on its pick; not, the run kept the Agent's own model and the pick is
+                // what smart selection would have made.
+                const route: TaskRunRoute | null = s.route?.level ? s.route : null;
+                const applied = route?.applied === true;
+                // What the run ran on: its own row, or the pick for a run not claimed yet.
+                const ranOn: string | null = s.model || (applied ? route?.model : null) || null;
+                const ranAt: string | null = s.effort || (applied ? route?.effort : null) || null;
+                const whyShown = route != null && whyOpen === s.id;
+                // The row is the way into the run; its tier answers why instead.
+                const toggleWhy = (e: ReactMouseEvent) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setWhyOpen(whyShown ? null : s.id);
+                };
                 return (
-                  <Link
-                    key={s.id}
-                    to={`/sessions/${encodeId(s.id)}`}
-                    className={`tdp-session${state === 'FAILED' ? ' is-failed' : ''}`}
-                  >
-                    <span className={`tdp-dot ${state}`} />
-                    <div className="tdp-session-main">
-                      {/* Workspace leads — it's what tells two runs of the same task apart; the
-                          system-generated title just repeats the task name. */}
-                      <div className="tdp-session-title">
-                        {s.workspace?.name || s.title || 'Untitled session'}
+                  <Fragment key={s.id}>
+                    <Link
+                      to={`/sessions/${encodeId(s.id)}`}
+                      className={`tdp-session${state === 'FAILED' ? ' is-failed' : ''}`}
+                    >
+                      <span className={`tdp-dot ${state}`} />
+                      <div className="tdp-session-main">
+                        {/* Workspace leads — it's what tells two runs of the same task apart; the
+                            system-generated title just repeats the task name. */}
+                        <div className="tdp-session-title">
+                          {s.workspace?.name || s.title || 'Untitled session'}
+                        </div>
+                        <div className="tdp-session-sub">
+                          {fmt(s.createdAt)}
+                          {ranOn && ` · ${modelLabel(ranOn)} · ${ranAt ?? 'default effort'}`}
+                          {route && applied && (
+                            <button
+                              type="button"
+                              className={`tdp-route-tag${route.escalated ? ' is-up' : ''}`}
+                              aria-expanded={whyShown}
+                              onClick={toggleWhy}
+                            >
+                              {routeTierTag(route)}
+                            </button>
+                          )}
+                        </div>
+                        {route && !applied && (
+                          <button
+                            type="button"
+                            className="tdp-route-would"
+                            aria-expanded={whyShown}
+                            onClick={toggleWhy}
+                          >
+                            ✦ Smart selection would have picked {routePick(route)} ({route.level})
+                          </button>
+                        )}
                       </div>
-                      <div className="tdp-session-sub">{fmt(s.createdAt)}</div>
-                    </div>
-                    <span className={`tdp-badge tone-${meta.tone}`}>{meta.label}</span>
-                  </Link>
+                      <span className={`tdp-badge tone-${meta.tone}`}>{meta.label}</span>
+                    </Link>
+                    {route && whyShown && (
+                      <div className="tdp-route-why">
+                        <div className="tdp-route-why-title">Why {routePick(route)}</div>
+                        <ul>
+                          {route.reasons.map((reason, i) => (
+                            <li key={i}>{reason}</li>
+                          ))}
+                        </ul>
+                        <div className="tdp-route-why-foot">{routeWhyFooter(route)}</div>
+                      </div>
+                    )}
+                  </Fragment>
                 );
               })
             )}

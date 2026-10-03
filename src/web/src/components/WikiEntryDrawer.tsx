@@ -7,7 +7,7 @@ import {
   StopOutlined,
   SwapOutlined,
 } from '@ant-design/icons';
-import { App, Button, Dropdown, Input, Modal } from 'antd';
+import { Button, Dropdown, Input, Modal } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { LINK_PREVIEW_MAX_REFS, type LinkPreviewRef } from '@orbit/shared';
@@ -59,6 +59,7 @@ import {
   useWikiWrite,
   wikiIdempotencyKey,
 } from '../lib/wikiWrites';
+import { useToast } from '../lib/toast';
 
 /**
  * One entry, as a drawer over the page it was opened from.
@@ -88,7 +89,7 @@ export function WikiEntryDrawer({
   onClose: () => void;
 }) {
   const entry = useQuery(wikiEntryQuery(entryId));
-  const { message } = App.useApp();
+  const message = useToast();
   const phone = useMediaQuery(PHONE_QUERY);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editor, setEditor] = useState<'edit' | 'supersede' | 'retire' | null>(null);
@@ -390,6 +391,13 @@ function historyWord(authorKind: string): string {
   }
 }
 
+/** What a refused write says, by the form it came from; the server's reason goes on the line under it. */
+const ENTRY_WRITE_FAILED = {
+  edit: "Couldn't save the entry",
+  supersede: "Couldn't supersede the entry",
+  retire: "Couldn't retire the entry",
+} as const;
+
 /**
  * The drawer's two forms, one component: a supersede is an edit that keeps the entry's id and gets a
  * new lineage, so the fields are the same and only the op differs.
@@ -410,7 +418,7 @@ function EntryEditor({
   const write = useWikiWrite((body: { ops: ReturnType<typeof amendOp>[]; rationale: string; idempotencyKey: string }) =>
     proposeToWiki(entry.spaceId, body),
   );
-  const { message } = App.useApp();
+  const message = useToast();
 
   const submit = async () => {
     const op =
@@ -431,7 +439,7 @@ function EntryEditor({
       message.success(mode === 'retire' ? 'Retired' : mode === 'supersede' ? 'Superseded' : 'Saved');
       onClose();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'The server refused it');
+      message.error(ENTRY_WRITE_FAILED[mode], error instanceof Error ? error.message : undefined);
     }
   };
 

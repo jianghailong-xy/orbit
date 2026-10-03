@@ -18,6 +18,10 @@ import OrbitKit
 /// drawn from `Transcript.tsx`'s `NodeView` once delivered and from `WorkspaceView.tsx`'s queued
 /// tail until then. The words are OrbitKit's `BackgroundWakeCard`, which
 /// `BackgroundWakeCopyParityTests` holds to the web's.
+///
+/// A job that ends while a turn runs is written into that turn (a steer): the same line, inside the
+/// running turn, saying how far it got (`steerState`) — and, while it waits for the runner, with no
+/// Cancel, because nothing takes a steer back.
 struct BackgroundWakeCardView: View {
     let wake: BackgroundWake
     var ts: String?
@@ -28,15 +32,20 @@ struct BackgroundWakeCardView: View {
     /// is empty, so handing the leftover block back to a user bubble drew an empty bubble under the
     /// wake — a message with no words in it, signed with the reader's own name.
     var attached: (kind: String, text: String)?
-    /// Cancels a wake that is still queued. Nil once a runner has taken it, and on every settled
-    /// line. Unlike a watch's wake this is an ordinary cancel — nothing ever re-sends it — so it
-    /// asks nothing first and uses the words a queued message already uses.
+    /// Cancels a wake that is still queued. Nil once a runner has taken it, on every settled line,
+    /// and on a steer, which the server refuses to withdraw. Unlike a watch's wake this is an ordinary
+    /// cancel — nothing ever re-sends it — so it asks nothing first and uses the words a queued
+    /// message already uses.
     var onCancelQueued: (() -> Void)?
+    /// How far a wake written into the running turn has got (`BackgroundWakeCard.steerState`), said
+    /// under the line — in place of a queued wake's Cancel while it still waits for the runner.
+    var steerState: String?
+    /// Still waiting for a runner rather than an event yet: drawn dashed, the browser's
+    /// `.bgwake.is-queued`.
+    var queued: Bool = false
 
     @State private var open = false
     @State private var showingRaw = false
-
-    private var queued: Bool { onCancelQueued != nil }
     private var failed: Bool { wake.jobs.contains(where: BackgroundWakeCard.isFailed) }
     private var several: Bool { wake.jobs.count > 1 }
     /// The tails a failure leaves out of the fold: why it failed is what woke anybody.
@@ -54,7 +63,7 @@ struct BackgroundWakeCardView: View {
                         Text(BackgroundWakeCard.name(job))
                             .font(.orbitMeta).foregroundStyle(Color.secondary)
                     }
-                    BackgroundWakeOutput(text: job.outputTail)
+                    BackgroundWakeFailedOutput(text: job.outputTail)
                 }
                 .padding(.leading, 20)
             }
@@ -64,14 +73,19 @@ struct BackgroundWakeCardView: View {
                     .font(.orbitMeta).foregroundStyle(.orange)
                     .padding(.leading, 20)
             }
+            if let steerState {
+                // Keep the delivery state; localize only this card's confirmed receipt.
+                Text(steerState == "Sent into this turn" ? "已送达当前轮次" : steerState)
+                    .font(.orbitMeta).foregroundStyle(.secondary)
+                    .padding(.leading, 20)
+            }
             if let onCancelQueued { queuedFoot(onCancelQueued).padding(.leading, 20) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// The one line. Everything on it when it fits; where it does not — a phone, beside a long
-    /// description — the name takes a line of its own under the title (web's `max-width: 600px` rule)
-    /// rather than being cut to a few letters.
+    /// Everything stays on one line when it fits; on a phone or beside a long description, the name
+    /// and closing metadata each take a line under the title so the details label cannot crowd it.
     private var line: some View {
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -84,11 +98,14 @@ struct BackgroundWakeCardView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                     mark
                     title
-                    closing
                 }
                 if let name = BackgroundWakeCard.lineName(wake) {
                     nameText(name).lineLimit(1).truncationMode(.tail).padding(.leading, 20)
                 }
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    closing
+                }
+                .padding(.leading, 20)
             }
         }
         .font(.orbitLabel)
@@ -144,6 +161,8 @@ struct BackgroundWakeCardView: View {
         if let ts, let when = RelativeTime.format(ts) {
             Text(when).font(.orbitMeta).foregroundStyle(Color.secondary).fixedSize()
         }
+        Text(wake.jobs.isEmpty ? "详情" : "任务详情")
+            .font(.orbitMeta).foregroundStyle(Color.secondary).fixedSize()
         // One glyph turned, never two swapped (`ToolCardView`'s chevron, for the same reason).
         Image(systemName: "chevron.right")
             .font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)
@@ -263,9 +282,34 @@ struct BackgroundWakeCardView: View {
     }
 }
 
-/// A block of the output a wake carried, folded past the few lines the line shows — web's `Pre` at
-/// the line's own threshold (`BackgroundWakeCard.tailLines`), in the words a tool card's output
-/// already folds behind.
+/// A failed job's received output tail, bounded by rendered lines so compact JSON cannot fill the
+/// transcript. Its disclosure is independent of the job details above it.
+private struct BackgroundWakeFailedOutput: View {
+    let text: String
+    @State private var open = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("输出末尾")
+                .font(.orbitMeta).foregroundStyle(.secondary)
+            Text(text)
+                .font(.orbitMono)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .lineLimit(open ? nil : 3)
+                .truncationMode(.tail)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button(open ? "收起输出" : "展开输出") { open.toggle() }
+                .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
+        }
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 6))
+    }
+}
+
+/// A scheduled wakeup's prompt, retaining the logical-line fold shared with web's `Pre`.
 private struct BackgroundWakeOutput: View {
     let text: String
     @State private var open = false

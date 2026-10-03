@@ -119,7 +119,7 @@ function fixture(opts: {
     task: {
       findFirst: async () => ({
         id: TASK_ID, title: 'Ship it', description: null, status: 'OPEN', runAt: null,
-        projectId: null, listId: null, dispatchHold: false, dispatchAuthority: 'LEGACY',
+        projectId: null, listId: null, dispatchHold: false,
         completionPolicy: 'MANUAL', children: [], supersededByTaskId: null, terminalReason: null,
         verifies: null, list: null, assignee: { id: WORKSPACE_ID, runnerId: 'runner-1' },
         ...task,

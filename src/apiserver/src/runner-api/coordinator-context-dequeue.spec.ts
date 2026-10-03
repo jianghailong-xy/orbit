@@ -227,7 +227,7 @@ test('a lifecycle capability for another runtime cannot suppress legacy delivery
   assert.match(turn?.content ?? '', /<orbit_project_coordinator_context>/);
 });
 
-for (const provider of [AgentProvider.KIMI, AgentProvider.OPENCODE]) {
+for (const provider of [AgentProvider.KIMI, AgentProvider.OPENCODE, AgentProvider.ANTIGRAVITY]) {
   test(`${provider} stays on correctness-first delivery without a compaction contract`, async () => {
     const contextAckKey = contextKeyFor();
     const { dequeue } = harness({ contextAckKey, provider });

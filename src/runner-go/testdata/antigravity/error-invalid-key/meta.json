@@ -1,0 +1,27 @@
+{
+  "agy": "1.2.15",
+  "recorded": "2026-10-03",
+  "argv": [
+    "--gemini_dir=/work/orbit-gemini",
+    "--print=",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json"
+  ],
+  "settings": {
+    "enableTelemetry": false
+  },
+  "exit": 3,
+  "note": "API key rejected (400 API_KEY_INVALID): error_message step, result status ERROR, AGY_ERROR JSON on stderr, process exits 3 and the second prompt is never answered.",
+  "mock_args": [
+    "-want-key",
+    "the-right-key"
+  ],
+  "driver": [
+    "write stdin line 1",
+    "wait for result #1",
+    "write stdin line 2",
+    "wait for exit"
+  ]
+}

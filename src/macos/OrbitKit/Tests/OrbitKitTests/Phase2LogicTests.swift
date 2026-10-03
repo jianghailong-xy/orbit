@@ -303,6 +303,8 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(u.flatSnapshot.bindingRow()?.key, "sevenDayOpus")
         XCTAssertEqual(u.flatSnapshot.bindingRow()?.percent, 92)
         XCTAssertNil(u.snapshot(for: "opencode"))      // never show Claude quota for OpenCode
+        XCTAssertNil(u.snapshot(for: "antigravity"))   // …nor for Antigravity, which has no plan usage
+        XCTAssertNil(AgentDefaults.planUsage(for: "antigravity", runner: u, configured: nil))
         XCTAssertNil(PlanUsage(fiveHour: nil, sevenDay: nil, sevenDayOpus: nil,
                                sevenDaySonnet: nil, fetchedAt: nil).flatSnapshot.bindingRow())
 
@@ -459,9 +461,9 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertTrue(ComposerSlash.matches(items: scoped, token: nil, scope: nil).isEmpty)
     }
 
-    /// Runtime-owned registries are isolated: Codex and OpenCode only keep local Orbit commands,
-    /// Kimi only sees tagged Kimi entries, and Claude/custom providers accept legacy nil + Claude
-    /// tags.
+    /// Runtime-owned registries are isolated: Codex, OpenCode and Antigravity only keep local Orbit
+    /// commands, Kimi only sees tagged Kimi entries, and Claude/custom providers accept legacy nil +
+    /// Claude tags.
     func testSlashForProvider() {
         let items = ComposerHostCommand.slashItems + [
             SlashCommandInfo(name: "commit", type: "command"),
@@ -471,6 +473,9 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "codex").map(\.name),
                        ["status"])
         XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "opencode").map(\.name),
+                       ["status"])
+        // agy is started with --disable-slash-commands: slash text is an ordinary prompt there.
+        XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "antigravity").map(\.name),
                        ["status"])
         XCTAssertEqual(ComposerSlash.forProvider(items: items, provider: "claude").map(\.name),
                        ["status", "commit", "loop"])

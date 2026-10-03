@@ -4,12 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
   type OnModuleDestroy,
 } from '@nestjs/common';
-import { RunEventType, type PlanUsageSnapshot } from '@orbit/shared';
+import { AgentProvider, RunEventType, type PlanUsageSnapshot } from '@orbit/shared';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -60,7 +61,7 @@ import { encryptSecret } from './provider-crypto';
  *        ┌───────────────────────────────────────────┴────────────────────────────────┐
  *        │  ACTIVE  ──(upstream 401 through the gateway: markSignedOut)──▶  SIGNED_OUT │
  *        │     ▲                                                                  │    │
- *        │     └────────── the owner signs in again (only they can) ──────────────┘    │
+ *        │     └─── its contributor signs in again (only they can, since 0371) ──┘    │
  *        └──────────────────────────────────────────────────────────────────────────────┘
  *
  * The row's own two states are ACTIVE and SIGNED_OUT, and only the credential's fate moves them. A quota
@@ -73,9 +74,11 @@ import { encryptSecret } from './provider-crypto';
  *     email and `…AB12`, and a refusal carries neither the tokens nor the ciphertext.
  *   * The CLI is spawned with a small, named environment (see loginEnv) so this server's own secrets —
  *     PROVIDER_SECRET_KEY above all — are not inherited by it.
- *   * A pool is its owner's alone: every method here resolves the pool by (id, ownerId, not shared) and a
- *     pool that is not the caller's answers 404, exactly as one that does not exist. Re-login is the same
- *     door, so nobody but the owner can sign an account in, out, or again.
+ *   * A pool is reached by its people: every method here resolves the caller's place in it (migration
+ *     0371; the owner alone before it) and a pool the caller is not one of the people of answers 404,
+ *     exactly as one that does not exist. A member may sign an account in while the pool's rule for it is
+ *     on (an admin always may), and an account already in the pool is its contributor's to sign in again,
+ *     to take out — with the pool's admins — and nobody else's.
  */
 
 /** How long an attempt may live by default: the CLI's own words are "expires in 15 minutes" for the code
@@ -190,14 +193,17 @@ export class CodexLoginService implements OnModuleDestroy {
   }
 
   /**
-   * Start a device-code login for one of the caller's own codex pools, whatever accounts it already holds:
-   * the one this signs in joins them (`store`). A second start on the same pool takes the place of the
-   * first: one attempt per pool, so the child process, the directory and the code that is out there all
-   * belong to one flow.
+   * Start a device-code login for a codex pool the caller is one of the people of, whatever accounts it
+   * already holds: the one this signs in joins them (`store`), credited to this caller. A second start by
+   * the same person takes the place of their first: one attempt per person per pool, so the child process,
+   * the directory and the code that is out there all belong to one flow — another person's attempt on the
+   * same pool is theirs and is not touched.
    */
   async start(userId: string, poolId: string): Promise<CodexLoginAttemptView> {
-    const pool = await this.ownPool(userId, poolId);
-    const previous = this.attempts.get(pool.id);
+    const pool = await this.poolOf(userId, poolId);
+    this.assertMayAddAccount(pool);
+    const key = this.attemptKey(pool.id, userId);
+    const previous = this.attempts.get(key);
     if (previous) await this.abandon(previous, 'CANCELLED', null);
 
     const dir = await mkdtemp(join(tmpdir(), 'orbit-codex-login-'));
@@ -214,7 +220,7 @@ export class CodexLoginService implements OnModuleDestroy {
       expiresAt: Date.now() + codexLoginTtlMs(),
       timer: null,
     };
-    this.attempts.set(pool.id, attempt);
+    this.attempts.set(key, attempt);
     attempt.timer = setTimeout(() => {
       void this.expire(attempt);
     }, codexLoginTtlMs());
@@ -246,7 +252,7 @@ export class CodexLoginService implements OnModuleDestroy {
     const challenge = await this.awaitChallenge(attempt);
     if (!challenge) {
       await this.abandon(attempt, 'FAILED', attempt.error ?? 'the codex CLI offered no device code');
-      this.attempts.delete(pool.id);
+      this.attempts.delete(key);
       throw new ServiceUnavailableException({
         code: 'CODEX_LOGIN_NO_CHALLENGE',
         message: attempt.error ?? 'the codex CLI offered no device code',
@@ -273,15 +279,17 @@ export class CodexLoginService implements OnModuleDestroy {
   }
 
   /**
-   * Where the login stands. The first poll after the owner approved is the one that stores the account —
-   * encrypted, and only then does anything of it reach the database. Another account than those the pool
-   * holds is one more row; a second sign-in of an account the pool already runs on is refused here with
-   * the same 409 a second add of a key gets; the same account after a SIGNED_OUT is not a second one: it
-   * is the re-login, and it takes the row over.
+   * Where the caller's own login stands. The first poll after they approved is the one that stores the
+   * account — encrypted, and only then does anything of it reach the database, credited to them. Another
+   * account than those the pool holds is one more row; a second sign-in of an account the pool already
+   * runs on is refused here with the same 409 a second add of a key gets; the same account after a
+   * SIGNED_OUT is not a second one for the person who signed it in: it is their re-login, and it takes the
+   * row over.
    */
   async poll(userId: string, poolId: string): Promise<CodexLoginPollView> {
-    const pool = await this.ownPool(userId, poolId);
-    const attempt = this.attempts.get(pool.id);
+    const pool = await this.poolOf(userId, poolId);
+    this.assertMayAddAccount(pool);
+    const attempt = this.attempts.get(this.attemptKey(pool.id, userId));
     if (!attempt) return { status: 'NONE', ...(await this.accounts(pool.id)) };
 
     if (attempt.status === 'PENDING') {
@@ -296,55 +304,60 @@ export class CodexLoginService implements OnModuleDestroy {
     if (attempt.status === 'CONFIRMED') {
       try {
         const stored = await this.store(pool, attempt);
-        this.attempts.delete(pool.id);
-        this.publish(poolId, userId);
+        this.attempts.delete(this.attemptKey(attempt.poolId, attempt.userId));
+        await this.publishPool(poolId);
         return { status: 'CONFIRMED', ...stored };
       } catch (e) {
         // A refused login is over, whichever way it was refused: the tokens it was holding go with the
         // attempt — nothing of them is kept for a retry — and the answer is the refusal itself.
-        this.attempts.delete(pool.id);
+        this.attempts.delete(this.attemptKey(attempt.poolId, attempt.userId));
         await this.release(attempt);
         attempt.tokens = null;
         throw e;
       }
     }
     const { status, error } = attempt;
-    this.attempts.delete(pool.id);
+    this.attempts.delete(this.attemptKey(pool.id, userId));
     return { status, error: error ?? undefined, ...(await this.accounts(pool.id)) };
   }
 
   /**
-   * Give up on the attempt in flight: the child is killed, its directory removed, and nothing of it is
-   * stored. A pool with nothing in flight answers NONE rather than claiming to have cancelled something.
+   * Give up on the caller's own attempt in flight: the child is killed, its directory removed, and nothing
+   * of it is stored. A caller with nothing in flight answers NONE rather than claiming to have cancelled
+   * something — another person's attempt on the same pool is not theirs to give up.
    */
   async cancel(userId: string, poolId: string): Promise<CodexLoginPollView> {
-    const pool = await this.ownPool(userId, poolId);
-    const attempt = this.attempts.get(pool.id);
+    const pool = await this.poolOf(userId, poolId);
+    this.assertMayAddAccount(pool);
+    const key = this.attemptKey(pool.id, userId);
+    const attempt = this.attempts.get(key);
     if (!attempt) return { status: 'NONE', ...(await this.accounts(pool.id)) };
     // Killed and cleaned up BEFORE this answers: once it says CANCELLED, the child is gone and so is the
     // directory it was writing in.
     await this.abandon(attempt, 'CANCELLED', null);
-    this.attempts.delete(pool.id);
+    this.attempts.delete(key);
     return { status: 'CANCELLED', ...(await this.accounts(pool.id)) };
   }
 
   /**
-   * The owner takes one account out of the pool: its row goes, and with it the only copy this server
-   * holds of its tokens. The pool's session tokens are not touched — none of them names an account since
-   * migration 0355 — so a session that was running on it keeps its token and is answered by the gateway
-   * as a pool holding no account, until a claim moves it. The account is named by its fingerprint,
-   * `…AB12`, as every response names it; with none, it is the pool's
-   * first — its `login`, the account a page that names one shows. Every other account the pool holds
-   * stays as it is, and so does a sign-in in flight: it is no account until it is stored. What a session
-   * does next is the claim's business, as for a pool deleted under it. An account the pool does not hold
-   * answers { removed: 0 }; a fingerprint two of its accounts share is refused rather than read as either.
+   * One account out of the pool: its row goes, and with it the only copy this server holds of its tokens.
+   * The person who signed it in may take it out at any time — nobody else has that account's credential —
+   * and so may any of the pool's admins, who own the pool's contents. The pool's session tokens are not
+   * touched — none of them names an account since migration 0355 — so a session that was running on it
+   * keeps its token and is answered by the gateway as a pool holding no account, until a claim moves it.
+   * The account is named by its fingerprint, `…AB12`, as every response names it; with none, it is the
+   * pool's first — its `login`, the account a page that names one shows. Every other account the pool
+   * holds stays as it is, and so does a sign-in in flight: it is no account until it is stored. What a
+   * session does next is the claim's business, as for a pool deleted under it. An account the pool does
+   * not hold answers { removed: 0 }; a fingerprint two of its accounts share is refused rather than read
+   * as either.
    */
   async signOut(userId: string, poolId: string, fingerprint?: string) {
-    const pool = await this.ownPool(userId, poolId);
+    const pool = await this.poolOf(userId, poolId);
     const rows = await this.prisma.poolCodexLogin.findMany({
       where: { poolId: pool.id },
       orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
-      select: { accountId: true },
+      select: { accountId: true, userId: true },
     });
     const named =
       fingerprint === undefined ? rows.slice(0, 1) : rows.filter((row) => maskedAccount(row.accountId) === fingerprint);
@@ -355,10 +368,16 @@ export class CodexLoginService implements OnModuleDestroy {
       });
     }
     if (!named.length) return { removed: 0 };
+    // A member's own account, or anything at all for an admin of the pool.
+    if (named[0].userId !== userId && pool.role !== 'ADMIN') {
+      throw new ForbiddenException(
+        'Only the person who signed this ChatGPT account in, or the pool\'s admins, can take it out',
+      );
+    }
     const { count } = await this.prisma.poolCodexLogin.deleteMany({
       where: { poolId: pool.id, accountId: named[0].accountId },
     });
-    if (count > 0) this.publish(poolId, userId);
+    if (count > 0) await this.publishPool(poolId);
     return { removed: count };
   }
 
@@ -378,13 +397,21 @@ export class CodexLoginService implements OnModuleDestroy {
     return count > 0;
   }
 
-  /** `publish`, for a write that knows the pool and not its owner. */
+  /**
+   * `publish`, for a write that knows the pool and not whose sessions it decides: every person of the
+   * pool re-reads their providers. Its ChatGPT accounts run the sessions of everyone in it
+   * (pool-credential-select.ts, 2026-10-03), so an account's state — signed out, spent, reset — is on the
+   * people the owner added's pickers as much as on the owner's. Every Codex pool has its owner's person
+   * row (migration 0358), so the owner is reached like the rest.
+   */
   private async publishPool(poolId: string): Promise<void> {
-    const pool = await this.prisma.providerPool.findUnique({
-      where: { id: poolId },
-      select: { ownerId: true },
-    });
-    if (pool) this.publish(poolId, pool.ownerId);
+    await this.publish(poolId, await this.peopleOf(poolId));
+  }
+
+  /** The people of the pool, its owner included (migration 0358's row). */
+  private async peopleOf(poolId: string): Promise<string[]> {
+    const people = await this.prisma.providerPoolPerson.findMany({ where: { poolId }, select: { userId: true } });
+    return people.map((person) => person.userId);
   }
 
   /**
@@ -438,17 +465,42 @@ export class CodexLoginService implements OnModuleDestroy {
   }
 
   /**
-   * The pool this caller may sign in on: one of their own, on Codex, not shared. Anything else is not
-   * found — another owner's pool is answered exactly as one that does not exist, and a Claude pool of
-   * their own has no ChatGPT login to hold.
+   * The pool this caller may sign a ChatGPT account in on: a Codex pool they are one of the people of —
+   * one of their own (migration 0358's ADMIN row) or one somebody else made and added them to (migration
+   * 0371) — of either kind, a shared pool included. Anything else is not found: another's pool they are
+   * not in, and a Claude pool, are answered exactly as one that does not exist.
    */
-  private async ownPool(userId: string, poolId: string) {
-    const pool = await this.prisma.providerPool.findFirst({
-      where: { id: poolId, ownerId: userId, shared: false, engine: 'codex' },
-      select: { id: true, label: true },
+  private async poolOf(userId: string, poolId: string) {
+    const place = await this.prisma.providerPoolPerson.findUnique({
+      where: { poolId_userId: { poolId, userId } },
+      select: {
+        role: true,
+        pool: { select: { id: true, label: true, engine: true, membersCanAddAccounts: true } },
+      },
     });
-    if (!pool) throw new NotFoundException('pool not found');
-    return pool;
+    if (!place || place.pool.engine !== AgentProvider.CODEX) throw new NotFoundException('pool not found');
+    return {
+      id: place.pool.id,
+      label: place.pool.label,
+      role: place.role,
+      membersCanAddAccounts: place.pool.membersCanAddAccounts,
+    };
+  }
+
+  /** Whether this person may sign another account of their own into the pool: any of its admins may, and
+   *  a member while the pool's rule for it is on (migration 0371). */
+  private assertMayAddAccount(pool: { role: string; membersCanAddAccounts: boolean }): void {
+    if (pool.role === 'ADMIN' || pool.membersCanAddAccounts) return;
+    throw new ForbiddenException("Only the pool's admins can add ChatGPT accounts to it");
+  }
+
+  /**
+   * The key an attempt is kept under: one per person per pool. Two people signing into one pool are two
+   * flows — two CLI children, two directories, two codes — and neither may take the other's place, cancel
+   * it, or read its outcome; before migration 0371 the owner was the only person who could start one.
+   */
+  private attemptKey(poolId: string, userId: string): string {
+    return `${poolId}:${userId}`;
   }
 
   /**
@@ -535,10 +587,14 @@ export class CodexLoginService implements OnModuleDestroy {
     if (!tokens) throw new Error('a confirmed attempt with no tokens');
     const rows = await this.prisma.poolCodexLogin.findMany({
       where: { poolId: pool.id },
-      select: { accountId: true, state: true },
+      select: { accountId: true, state: true, userId: true },
     });
     const held = rows.find((row) => row.accountId === tokens.accountId);
-    if (held && held.state === 'ACTIVE') {
+    // Already in the pool — running, or signed out under the person who signed it in. A signed-out row is
+    // only its own contributor's to put back: the row is theirs (a login belongs to a person of the pool,
+    // migration 0371), it leaves the pool with their membership, and signing back in is what only they can
+    // do. Somebody else's sign-in of that same account is refused as the duplicate it is.
+    if (held && (held.state === 'ACTIVE' || held.userId !== attempt.userId)) {
       throw new ConflictException({
         code: 'POOL_CODEX_ACCOUNT_DUPLICATE',
         message: `This ChatGPT account is already in "${pool.label}"`,
@@ -567,7 +623,9 @@ export class CodexLoginService implements OnModuleDestroy {
     };
   }
 
-  private publish(poolId: string, ownerId: string): void {
-    this.realtime.publishForUser(ownerId, RunEventType.PROVIDER_CHANGED, poolId);
+  private async publish(poolId: string, userIds: Iterable<string>): Promise<void> {
+    for (const userId of new Set(userIds)) {
+      this.realtime.publishForUser(userId, RunEventType.PROVIDER_CHANGED, poolId);
+    }
   }
 }

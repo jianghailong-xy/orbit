@@ -19,15 +19,18 @@ import {
   type CodexLoginPoll,
 } from '../lib/codexLogin';
 import { formatResetTime, type ProviderPool } from '../lib/providerPools';
+import { ownsPool } from '../lib/sharedPools';
 import { ProviderTile } from './ProviderGallery';
 
 /**
- * "Sign in with ChatGPT": the accounts a Codex pool of one's own runs on go in by the official codex
- * CLI's device flow, run on the Orbit server (CodexLoginService) — one account per sign-in, as many as
- * its owner signs in. First what that means — the account is theirs alone, its sign-in stays on the
- * server, and it is not to be shared — then the page to open and the one-time code to enter there, while
- * this polls until the person has approved it; then the account, by its email and `…AB12`, never a token,
- * and how many accounts the pool holds now. The same dialog puts an account OpenAI signed out back in.
+ * "Sign in with ChatGPT": the accounts a Codex pool runs on go in by the official codex CLI's device flow,
+ * run on the Orbit server (CodexLoginService) — one account per sign-in, as many as the pool's people
+ * sign in (migration 0371; its owner alone before that). First what that means — the account runs the
+ * sessions of everyone in the pool, its sign-in stays on the server, and only one's own accounts may go
+ * in — then the page to open and the one-time code to enter there, while this polls until the person has
+ * approved it; then the account, by its email and `…AB12`, never a token, and how many accounts the pool
+ * holds now. The same dialog puts
+ * an account OpenAI signed out back in.
  *
  * Closing it before the code is approved gives the sign-in up on the server: nothing half-done is left
  * running there.
@@ -101,6 +104,9 @@ export function CodexSignInModal({
   const [starting, setStarting] = useState(false);
   const held = login;
   const again = held !== null;
+  // Whose pool it is, from the view it carries: a pool of one's own (no `shared`) or one the reader is
+  // its owner of. The account runs the whole pool's sessions either way (migration 0371).
+  const mine = !pool.shared || ownsPool(pool.shared);
   // How many accounts the pool holds now: what the notice says it is adding one to.
   const accounts = poolLogins(pool).length;
   const path = codexLoginPath(pool.id);
@@ -206,7 +212,7 @@ export function CodexSignInModal({
   return (
     <Modal open width={500} title="Sign in with ChatGPT" footer={footer} onCancel={close}>
       {/* Adding one more to a pool that already runs on an account of its own: the notice says what the
-          pool runs on now, that this account is the owner's alone even once the pool is shared, and
+          pool runs on now, that everyone in the pool — once it is shared — runs on this account too, and
           what the pool does without it. */}
       {step.kind === 'consent' && !again && accounts > 0 && (
         <div className="pa-consent">
@@ -216,8 +222,17 @@ export function CodexSignInModal({
           </div>
           <ul className="pa-facts">
             <li>
-              <b>Only you can use it.</b> Sessions on a ChatGPT account are yours alone, even when{' '}
-              {pool.label} is shared: the people in it can’t run on it or see which account it is.
+              {mine ? (
+                <>
+                  <b>Everyone in the pool runs on it.</b> Once {pool.label} is shared, the people you add
+                  run their sessions on this account too — and see it, with its usage, on the pool’s page.
+                </>
+              ) : (
+                <>
+                  <b>Everyone in the pool runs on it.</b> Everyone here runs their sessions on this
+                  account too — you included — and sees it, with its usage, on the pool’s page.
+                </>
+              )}
             </li>
             <li>
               <b>The sign-in stays on the Orbit server.</b> It never goes to a runner. Runners get a
@@ -230,8 +245,9 @@ export function CodexSignInModal({
           <div className="pa-risk">
             <WarningFilled />
             <span>
-              <b>Only your own accounts.</b> Signing in with someone else’s ChatGPT account is sharing
-              it. OpenAI’s terms don’t allow that, and an account used that way can be suspended.
+              <b>Only your own accounts.</b> Signing in with someone else’s ChatGPT account is sharing it,
+              and so is putting yours in a pool others run on: OpenAI’s terms treat both as a violation,
+              and an account used that way can be suspended.
             </span>
           </div>
         </div>
@@ -252,8 +268,17 @@ export function CodexSignInModal({
           </div>
           <ul className="pa-facts">
             <li>
-              <b>Only you can use it.</b> Sessions on {pool.label} are yours alone — nobody else in Orbit
-              sees this pool or its account.
+              {mine ? (
+                <>
+                  <b>Yours, and whoever you add.</b> A pool that is just yours runs your sessions alone;
+                  add people and their sessions start on this account too.
+                </>
+              ) : (
+                <>
+                  <b>Everyone in this pool runs on it.</b> Add it, and everyone here — you included —
+                  runs their sessions on this account.
+                </>
+              )}
             </li>
             <li>
               <b>The sign-in stays on the Orbit server.</b> It never goes to a runner — runners get a
@@ -266,8 +291,9 @@ export function CodexSignInModal({
           <div className="pa-risk">
             <WarningFilled />
             <span>
-              <b>Don’t share your account.</b> OpenAI’s terms don’t allow a ChatGPT account to be shared
-              — an account used that way can be suspended.
+              <b>{mine ? 'Adding people shares your account.' : 'Everyone here runs on your account.'}</b>{' '}
+              Their sessions run on it — OpenAI’s terms treat account sharing as a violation, and an
+              account used that way can be suspended.
             </span>
           </div>
         </div>

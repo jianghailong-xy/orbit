@@ -18,7 +18,9 @@
  *  - a chain that crosses owners resolves to NOTHING — the assertion the moved line owns;
  *  - a chain whose successor pointer was cleared, leaving SUPERSEDED behind, resolves to nothing;
  *  - the branch that stops the walk is unreachable, and the two CHECKs that make it so are there;
- *  - an id belonging to no task resolves to nothing, which is the first read's other job.
+ *  - an id belonging to no task resolves to nothing, which is the first read's other job;
+ *  - and the whole set the walk lands on is the set `everyPrerequisiteTailDoneSql` builds WITHOUT
+ *    walking (a closure over the same rows), which the last case pins on every branch above.
  *
  * Give it its own database — it runs against the real migrated schema, because the function IS a
  * migration and a hand-built subset would only ever agree with itself:
@@ -35,6 +37,7 @@ import {
   assertCoordinatorPgUrlIsIsolated,
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
+import { everyPrerequisiteTailDoneSql } from './task-dependencies';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -108,6 +111,14 @@ async function tailOf(db: Db, id: string): Promise<string | null> {
     `SELECT task_dependency_tail_id($1::uuid) AS "tail"`, id,
   );
   return row.tail;
+}
+
+/** One prerequisite edge, which is what a guard is asked about. */
+async function edge(db: Db, taskId: string, dependsOnTaskId: string): Promise<void> {
+  await db.$executeRawUnsafe(
+    `INSERT INTO "task_dependency" ("id","task_id","depends_on_task_id") VALUES ($1,$2::uuid,$3::uuid)`,
+    randomUUID(), taskId, dependsOnTaskId,
+  );
 }
 
 test('task_dependency_tail_id on real PostgreSQL', { skip, concurrency: 1 }, async (t) => {
@@ -189,6 +200,89 @@ test('task_dependency_tail_id on real PostgreSQL', { skip, concurrency: 1 }, asy
 
   await t.test('an id belonging to no task resolves to nothing', async () => {
     assert.equal(await tailOf(db, randomUUID()), null);
+  });
+
+  await t.test('the guard builds the same set the walk lands on, branch for branch', async () => {
+    // `everyPrerequisiteTailDoneSql` is the necessary condition the two project reads ask of every
+    // row before paying for `dependenciesSatisfiedSql`, and it must answer what the walk answers: a
+    // FALSE where the walk says TRUE drops the row out of the ready list, silently. It cannot ask
+    // the walk — that is a primary-key probe per EDGE, and this deployment's largest project has
+    // 110,869 of them, 460,736 blocks to find 167 rows — so it builds the set of tails the walk
+    // would land on as a closure over the DONE rows and the supersession links. This case pins that
+    // closure against BOTH spellings of the walk, over one fixture per branch the walk has.
+    const tail = await task(db, { status: 'DONE' });
+    const middle = await task(db, {
+      status: 'CANCELLED', supersededBy: tail, terminalReason: 'SUPERSEDED',
+    });
+    const head = await task(db, {
+      status: 'FAILED', supersededBy: middle, terminalReason: 'SUPERSEDED',
+    });
+    const broken = await task(db, {
+      status: 'CANCELLED', supersededBy: null, terminalReason: 'SUPERSEDED',
+    });
+    const foreign = await task(db, { owner: OTHER_OWNER, status: 'DONE' });
+    const crosses = await task(db);
+    await linkPastTheGuard(db, crosses, foreign, 'FAILED', 'SUPERSEDED');
+    const plainDone = await task(db, { status: 'DONE' });
+    const plainOpen = await task(db);
+
+    const dependents: Array<[string, string[], boolean]> = [];
+    const dependent = async (on: string[], expected: boolean): Promise<void> => {
+      const id = await task(db);
+      for (const prerequisite of on) await edge(db, id, prerequisite);
+      dependents.push([id, on, expected]);
+    };
+    await dependent([plainDone], true);
+    await dependent([plainOpen], false);
+    await dependent([tail], true);
+    await dependent([middle], true);          // one hop to the DONE tail
+    await dependent([head], true);            // two hops
+    await dependent([broken], false);         // SUPERSEDED with no successor behind it
+    await dependent([crosses], false);        // the chain leaves its owner
+    await dependent([], true);                // nothing to wait for
+    await dependent([plainDone, plainOpen], false);  // it is EVERY prerequisite, not any
+    await dependent([head, plainDone], true);
+    // The seed's two extra conditions — no successor, and no SUPERSEDED — are the walk's `RETURN
+    // cursor_id` branch, and like the walk's other fail-closed branch they have no row: a DONE row
+    // is checked to carry neither. Mirroring them is still the honest transcription, and this is
+    // what says so rather than a comment claiming it — the day that CHECK is dropped, the row
+    // becomes representable and this fixture must grow the case it cannot build today.
+    await assert.rejects(
+      task(db, { status: 'DONE', supersededBy: null, terminalReason: 'SUPERSEDED' }),
+      /task_retirement_status_check/u,
+      'a DONE row can carry SUPERSEDED now; the seed\'s conditions are reachable and untested',
+    );
+
+    const ids = [...dependents.map(([id]) => id), tail, middle, head, broken];
+    const rows = await db.$queryRawUnsafe<Array<{
+      id: string; guard: boolean; walk: boolean; fn: boolean;
+    }>>(
+      `SELECT t."id"::text AS "id",
+              (${everyPrerequisiteTailDoneSql('t')}) AS "guard",
+              (NOT EXISTS (
+                 SELECT 1 FROM task_dependency dep
+                  WHERE dep.task_id = t."id"
+                    AND NOT EXISTS (SELECT 1 FROM task chain_task
+                                     WHERE chain_task.id =
+                                           task_dependency_tail_id(dep.depends_on_task_id)
+                                       AND chain_task.status = 'DONE'))) AS "walk",
+              (NOT EXISTS (
+                 SELECT 1 FROM task_dependency dep
+                  WHERE dep.task_id = t."id"
+                    AND NOT task_dependency_tail_satisfied(dep.depends_on_task_id))) AS "fn"
+         FROM task t
+        WHERE t."id" = ANY($1::uuid[])
+        ORDER BY t."id"`,
+      ids,
+    );
+    assert.equal(rows.length, ids.length, 'the fixture did not come back whole');
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    for (const [id, , expected] of dependents) {
+      const row = byId.get(id)!;
+      assert.equal(row.walk, expected, `fixture: the walk is not ${expected} for ${id}`);
+      assert.equal(row.guard, row.walk, `the guard and the walk disagree about ${id}`);
+      assert.equal(row.fn, row.walk, `task_dependency_tail_satisfied and the walk disagree about ${id}`);
+    }
   });
 
   await t.test('the function is labelled for parallel workers', async () => {

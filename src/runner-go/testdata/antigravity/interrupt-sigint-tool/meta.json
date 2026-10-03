@@ -1,0 +1,25 @@
+{
+  "agy": "1.2.15",
+  "recorded": "2026-10-03",
+  "argv": [
+    "--gemini_dir=/work/orbit-gemini",
+    "--print=",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--dangerously-skip-permissions"
+  ],
+  "settings": {
+    "enableTelemetry": false
+  },
+  "exit": 1,
+  "note": "SIGINT while run_command runs: agy kills the command's process group, the tool step never reaches DONE, result ERROR \"interrupted\", exit 1.",
+  "driver": [
+    "write stdin line 1",
+    "wait for an event containing \"state\":\"ACTIVE\",\"step_type\":\"tool\"",
+    "sleep 2s",
+    "send SIGINT to agy",
+    "wait for exit"
+  ]
+}

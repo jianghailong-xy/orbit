@@ -58,9 +58,11 @@ function poolQueue(members: Array<PlanUsageSnapshot | null>): QueueService {
     providerPool: {
       findFirst: async ({ where }: { where: { slug: string; ownerId: string } }) =>
         where.slug === POOL && where.ownerId === OWNER_ID
-          ? { engine: 'claude', logins: [], members: rows.map((provider) => ({ provider })) }
+          ? { engine: 'claude', members: rows.map((provider) => ({ provider })) }
           : null,
     },
+    // A Claude pool holds no ChatGPT account; the claim asks after them by pool id (migration 0371).
+    poolCodexLogin: { findMany: async () => [] },
   };
   const planUsage = { snapshot: (row: (typeof rows)[number]) => row.usage, usageStanding: () => null };
   return new QueueService(prisma as never, {} as never, planUsage as never);

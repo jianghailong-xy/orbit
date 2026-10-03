@@ -27,24 +27,43 @@ public enum ProvidersOverview {
         return runner.online == true ? line : "Offline · \(line)"
     }
 
-    /// A pool's value: why nothing in it can run, when that is so; otherwise how many of its accounts
-    /// a session could start on now, in the words a phone gives the web card's head ("2 of 3
+    /// A pool of Claude keys' value: why nothing in it can run, when that is so; otherwise how many of its
+    /// accounts a session could start on now, in the words a phone gives the web card's head ("2 of 3
     /// available" — the web drops "accounts" at that width to keep the pool's name).
     public static func poolSummary(_ pool: ProviderPool) -> String {
-        // A pool of one's own ChatGPT accounts says its count on the line under its name
-        // (`CodexLoginPool.summary`), and here the head's gauge, as its web card does.
-        if CodexLoginPool.isLoginPool(pool) { return CodexLoginPool.overviewValue(pool) }
         if let unavailable = pool.unavailable { return unavailable }
         return "\(ProviderPools.readyCount(pool)) of \(pool.members.count) available"
     }
 
-    /// A shared pool's value: how many of its keys a session could start on now.
-    public static func sharedPoolSummary(_ pool: SharedPool) -> String {
-        "\(SharedPoolPage.availableCount(pool)) of \(pool.keys.count) available"
+    // MARK: a Codex pool, by who reads it (web's `PoolCard` head, docs/mocks/account-pool-access/03-6)
+
+    /// Whether the row wears SHARED: anybody but its owner can use the pool — which is so for everybody it
+    /// was shared with.
+    public static func isShared(_ pool: ProviderPool) -> Bool {
+        pool.shared.map(SharedPoolPage.hasPeople) ?? false
     }
 
-    /// A shared pool's second line, under its name: "Shared · 4 members".
-    public static func sharedPoolLine(_ pool: SharedPool) -> String {
-        "Shared · \(SharedPoolPage.plural(pool.people.count, "member"))"
+    /// A Codex pool's line under its name: to somebody its owner added, whose it is and how many keys they
+    /// can run on — its accounts and its gauge are on its page; a pool its owner keeps to themselves, "Just
+    /// me" and how many of its accounts are left to run on; once shared, how many of them a session could
+    /// start on now, beside SHARED.
+    public static func codexPoolLine(_ pool: ProviderPool) -> String {
+        if ProviderPools.readByMember(pool) {
+            let owner = pool.shared.flatMap(SharedPoolPage.owner)?.name ?? ""
+            return "\(CodexPoolPage.whose(owner)) · \(pool.members.count) \(ProviderPools.memberNoun(pool, pool.members.count))"
+        }
+        if isShared(pool) { return ProviderPools.availability(pool) }
+        return "\(CodexPoolPage.justMe) · \(ProviderPools.availability(pool))"
+    }
+
+    /// A Codex pool's value at the row's end: its head's gauge (web's `PoolGauge`) less the account's name,
+    /// which a phone's row has no room for — the tightest window of the account the next session starts on
+    /// — or, with none to start on, when the first frees up or why. Nil to somebody its owner added: their
+    /// gauge is on the pool's page.
+    public static func codexPoolValue(_ pool: ProviderPool, now: Date = Date(),
+                                      timeZone: TimeZone = .current) -> PoolStatus? {
+        guard !ProviderPools.readByMember(pool) else { return nil }
+        return ProviderPools.headGauge(pool)
+            ?? PoolStatus(label: ProviderPools.headline(pool, now: now, timeZone: timeZone), tone: .neutral)
     }
 }

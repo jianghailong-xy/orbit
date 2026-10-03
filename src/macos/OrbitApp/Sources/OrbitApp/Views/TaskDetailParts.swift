@@ -398,3 +398,59 @@ struct TaskFollowSheet: View {
         }
     }
 }
+
+/// The Why of one routed run (docs/model-routing-design.md §9): what smart selection picked for it
+/// — or would have — the decision's reasons as the router wrote them, and its policy and time.
+struct TaskRouteWhy: Identifiable, Equatable {
+    /// The run's session id.
+    let id: String
+    let title: String
+    let reasons: [String]
+    let footer: String
+}
+
+/// The web panel's `tdp-route-why` block, as a sheet: a phone has no room to open it under the row.
+struct TaskRouteWhySheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let why: TaskRouteWhy
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(Array(why.reasons.enumerated()), id: \.offset) { index, reason in
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            Text("\(index + 1)")
+                                .font(.orbitLabel.weight(.semibold))
+                                .foregroundStyle(Color.accentColor)
+                            Text(reason)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .textSelection(.enabled)
+                        }
+                    }
+                } header: {
+                    // A Mac sheet draws no navigation title: the pick is said here instead.
+                    #if os(macOS)
+                    Text(why.title).font(.headline).textCase(nil)
+                    #endif
+                } footer: {
+                    Text(why.footer)
+                }
+            }
+            .navigationTitle(why.title)
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+        #if os(iOS)
+        .presentationDetents([.medium, .large])
+        #else
+        .frame(minWidth: 420, minHeight: 320)
+        #endif
+    }
+}

@@ -1128,6 +1128,9 @@ public final class APIClient: @unchecked Sendable {
         let pools: [LossyDecodable<SharedPool>] = try await get("providers/shared-pools")
         return pools.compactMap(\.value)
     }
+    /// One pool as the caller reads it — how a Codex pool of their own, which the list above leaves out
+    /// (it is on their providers), has its people and keys read (migration 0358).
+    public func sharedPool(_ id: String) async throws -> SharedPool { try await get("providers/shared-pools/\(id)") }
     public func updateSharedPool(_ id: String, _ req: UpdateSharedPoolRequest) async throws -> SharedPool {
         try await patch("providers/shared-pools/\(id)", body: req)
     }
@@ -1239,6 +1242,15 @@ public final class APIClient: @unchecked Sendable {
     public func removeRunnerAccount(_ id: String, engine: LoginEngine,
                                     account: String) async throws -> RunnerAccountRemoveState {
         try await delete("runners/\(id)/accounts/\(engine.rawValue)/\(account)")
+    }
+
+    /// Rename one of the runner's accounts, Default included; answers with the account as the runner
+    /// list now shows it.
+    @discardableResult
+    public func renameRunnerAccount(_ id: String, engine: LoginEngine, account: String,
+                                    name: String) async throws -> RunnerEngineAccount {
+        try await patch("runners/\(id)/accounts/\(engine.rawValue)/\(account)",
+                        body: RenameRunnerAccountRequest(name: name))
     }
 
     // MARK: runner enrollment (Phase 4 — one-app device flow)

@@ -347,10 +347,6 @@ struct AgentPanes: View {
     /// Whether the iOS list is grouped by tag instead of by recency (iOS list only).
     @State private var groupByTag = false
     #if os(iOS)
-    /// Whether the title's workspace switcher is open. The title slot is the switcher here for the
-    /// same reason it is on the new-session draft (see `WorkspaceTitleSwitcher`): the workspace is
-    /// the standing context of everything below it, and the bar's title is where you look to read it.
-    @State private var showWorkspaceSwitcher = false
     /// What came back for the current query. The list searches in place — the hits replace its
     /// sections — rather than opening the palette sheet over the very list you're looking at.
     @State private var hits: [SessionSearchHit] = []
@@ -395,7 +391,7 @@ struct AgentPanes: View {
         // there the List has nothing to select (and in a plain stack wouldn't respond to a tap).
         List(selection: listSelection) {
             #if os(iOS)
-            // ChatGPT-style recency sections (Pinned / Today / Yesterday / Previous 7 Days / …) — a
+            // ChatGPT-style recency sections (Pinned / Today / Yesterday / 2–7 days ago / …) — a
             // deliberate divergence from web's flat list, grouping the tall iOS session column by
             // last activity. Bucketing is the pure, tested `SessionTimeGrouping`. macOS keeps the flat
             // list (its 3-pane window reads fine without sections).
@@ -585,7 +581,7 @@ struct AgentPanes: View {
                 }
                 .accessibilityLabel("Start a new session with \(agent.name)")
             }
-            // The same workspace switcher the new-session draft carries (`WorkspaceTitleSwitcher`),
+            // The same workspace title the new-session draft carries (`WorkspaceTitle`),
             // but at the *leading* slot rather than the title one. In the title slot iOS 26 only
             // centres a custom title view while its whole ideal width fits what is left of the bar
             // after reserving the widest side's chrome on both sides — here the two trailing
@@ -611,12 +607,12 @@ struct AgentPanes: View {
             // fallback branch is the same item with nothing to hide.
             if #available(iOS 26.0, *) {
                 ToolbarItem(placement: .topBarLeading) {
-                    WorkspaceTitleSwitcher(name: agent.name) { showWorkspaceSwitcher = true }
+                    WorkspaceTitle(name: agent.name)
                 }
                 .sharedBackgroundVisibility(.hidden)
             } else {
                 ToolbarItem(placement: .topBarLeading) {
-                    WorkspaceTitleSwitcher(name: agent.name) { showWorkspaceSwitcher = true }
+                    WorkspaceTitle(name: agent.name)
                 }
             }
             #else
@@ -649,17 +645,6 @@ struct AgentPanes: View {
         .sheet(isPresented: $showSettings) {
             AgentSettingsSheet(agents: agents, agent: agent)
         }
-        #if os(iOS)
-        // The same picker the draft's title opens. Selecting there *composes* with the workspace
-        // because a draft is what that screen is for; here it *enters* it — `openAgent` is what the
-        // drawer's rows and ⌘1…⌘9 call, so a switch from the title lands exactly where they do.
-        .sheet(isPresented: $showWorkspaceSwitcher) {
-            AgentSwitchSheet(agents: app.orderedAgents, currentID: agent.id,
-                             configuredProviders: app.agents?.configuredProviders ?? []) { id in
-                app.openAgent(id)
-            }
-        }
-        #endif
         // The tag picker for the row whose "Tags…" action was tapped (list-owned for reliable
         // presentation). Works on both platforms; the filter chips / grouping above are iOS-only.
         .sheet(item: $taggingSession) { s in
@@ -1083,7 +1068,7 @@ struct AgentConsoleDetail: View {
                            folderID: draftFolderID,
                            focusesComposer: app.composingAgentSession,
                            // The session column beside this pane names the workspace already.
-                           agentSwitcherInBar: false) { session in
+                           workspaceTitleInBar: false) { session in
                 app.openCreatedAgentSession(session)
             }
             // Rebuild when settings change the selected Agent's execution identity/defaults too;
@@ -1157,13 +1142,14 @@ struct NewSessionView: View {
     /// iPad's detail column also draws it unasked, at the root of the stack (`AgentConsoleDetail`),
     /// and ✎ then turns this on for that same view.
     let focusesComposer: Bool
-    /// Whether the navigation bar's title slot carries the workspace switcher (iOS): the phone's pushed
-    /// draft, where nothing else names the workspace. An iPad's draws beside a session column that
-    /// already does, and two switchers on one screen would read as two different choices.
-    let agentSwitcherInBar: Bool
+    /// Whether the iOS navigation bar names the workspace. The iPad detail pane leaves this to
+    /// the session column beside it; the phone's pushed draft needs its own title.
+    let workspaceTitleInBar: Bool
     @State private var draft: ConsoleModel
     @Environment(AppModel.self) private var app
+    #if os(macOS)
     @State private var showSwitcher = false
+    #endif
     @State private var showProviderPicker = false
 
     init(agent: Agent, registry: ConsoleRegistry, defaultModel: String,
@@ -1175,7 +1161,7 @@ struct NewSessionView: View {
          defaultEffort: String? = nil,
          folderID: String? = nil,
          focusesComposer: Bool = true,
-         agentSwitcherInBar: Bool = true,
+         workspaceTitleInBar: Bool = true,
          onCreated: @escaping (Session) -> Void) {
         self.agent = agent
         self.defaultModel = defaultModel
@@ -1187,7 +1173,7 @@ struct NewSessionView: View {
         self.defaultEffort = defaultEffort
         self.folderID = folderID
         self.focusesComposer = focusesComposer
-        self.agentSwitcherInBar = agentSwitcherInBar
+        self.workspaceTitleInBar = workspaceTitleInBar
         _draft = State(initialValue: registry.draftModel(
             for: agent, defaultModel: defaultModel,
             configuredProviders: configuredProviders,
@@ -1205,9 +1191,8 @@ struct NewSessionView: View {
                 VStack(spacing: 18) {
                     // Who runs this session is the hero — the native port of web's
                     // `NewSessionProviderHero`: the vendor's own mark, then its name as the one
-                    // tappable identity. Which *agent* is being tasked rides in the navigation bar
-                    // instead (see `agentSwitcher`): it's a different decision, made less often, and
-                    // stacking both as centre-stage controls is what made this screen read cluttered.
+                    // tappable identity. The workspace name sits in the iOS navigation bar;
+                    // macOS keeps its workspace switcher below the hero.
                     VStack(spacing: 14) {
                         ProviderMark(provider: draft.provider, size: 68,
                                      brandKey: currentProviderChoice.brandKey,
@@ -1302,13 +1287,10 @@ struct NewSessionView: View {
             }
         }
         #if os(iOS)
-        // The agent is *where* the session runs — a standing context, not a per-session choice, so
-        // it belongs in the navigation bar's title slot rather than centre stage. Replacing the
-        // plain title with this button keeps the same information in the same place while making it
-        // the switcher (the hero below now belongs to the provider).
+        // The title names the workspace this draft will run in.
         .toolbar {
-            if agentSwitcherInBar {
-                ToolbarItem(placement: .principal) { agentSwitcher }
+            if workspaceTitleInBar {
+                ToolbarItem(placement: .principal) { WorkspaceTitle(name: agent.name) }
             }
         }
         #endif
@@ -1338,12 +1320,14 @@ struct NewSessionView: View {
         .task(id: defaultEffort) {
             draft.adoptDraftDefaultEffort(defaultEffort, legacyWorkspaceDefault: agent.effort)
         }
+        #if os(macOS)
         .sheet(isPresented: $showSwitcher) {
             AgentSwitchSheet(agents: app.orderedAgents, currentID: agent.id,
                              configuredProviders: app.agents?.configuredProviders ?? []) { id in
                 app.composeWithAgent(id)
             }
         }
+        #endif
         .sheet(isPresented: $showProviderPicker) {
             // The draft's own runnerID is only set for a live session, so take the agent's — it is
             // the machine this draft would run on, and the one whose Engines section fixes a row.
@@ -1359,13 +1343,12 @@ struct NewSessionView: View {
         }
     }
 
-    /// "Which agent am I about to task", as a compact switcher. Sits in the navigation bar on iOS
-    /// (title slot) and under the hero on macOS, which has no bar here. The shape is shared with the
-    /// session list's title (`WorkspaceTitleSwitcher`) so the two can't drift; only the selection's
-    /// meaning is this screen's own — here it composes rather than enters (`composeWithAgent` below).
+    #if os(macOS)
+    /// Switches the draft's workspace from below the hero on macOS.
     private var agentSwitcher: some View {
         WorkspaceTitleSwitcher(name: agent.name) { showSwitcher = true }
     }
+    #endif
 
     /// Engines first, then this account's pools — its own and the shared ones it is in — then its
     /// configured providers. Built from the draft's own snapshot so the list matches the model space
@@ -1448,7 +1431,6 @@ struct AgentSessionRow: View {
                         Text(line.text).font(.orbitListSubtitle)
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
                     }
-                    SessionRequestsLine(session: session)
                 }
                 Spacer()
                 if let n = session.pendingApprovals, n > 0 {
@@ -1502,7 +1484,6 @@ struct AgentSessionRow: View {
                     .foregroundStyle(lineColor(line.tone))
                     .lineLimit(1)
             }
-            SessionRequestsLine(session: session)
         }
         .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
@@ -1536,7 +1517,6 @@ struct AgentSessionRow: View {
                 }
                 Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
             }
-            SessionRequestsLine(session: session)
         }
         .padding(.vertical, 2)
         // Combine the row's text into one VoiceOver element and speak the session's state as its
@@ -1564,7 +1544,7 @@ struct AgentSessionRow: View {
 
     private func lineColor(_ tone: SessionLine.Tone) -> Color {
         switch tone {
-        case .preview, .queued, .background, .watching: return .secondary
+        case .preview, .queued, .background, .watching, .review: return .secondary
         case .running:                       return .blue
         case .approval:                      return .orange
         }
@@ -1635,6 +1615,10 @@ struct SessionLiveIndicator: View {
         // not a process). The glyph has already let a question for you or work of its own outrank it.
         case (.symbol("eye"), _):
             Image(systemName: "eye").font(.orbitGlyph).foregroundStyle(.secondary)
+        // Under review (contract §5 N3): the clock the macOS row and the web glyph draw, in the
+        // quiet tone — the report is somebody else's to look at first, and nothing here is amber.
+        case (.symbol("clock"), .neutral) where session.confirmationUnderReview != nil:
+            Image(systemName: "clock").font(.orbitGlyph).foregroundStyle(.secondary)
         // The one background state that is NOT quiet. A compact row's only live cue used to go
         // silent here, which is exactly the reading the session row stopped giving: a job in
         // flight is work happening with nobody generating, and this is the surface where the row
@@ -1717,7 +1701,8 @@ struct SpinnerGlyph: View {
 }
 
 /// The edit form. Fields mirror the web RunnerDetailPage agent form: name, effort, Instructions
-/// (appendSystemPrompt), working directory, enabled. There is no runtime field — an agent holds no
+/// (appendSystemPrompt), working directory, enabled, and smart model selection for its task runs.
+/// There is no runtime field — an agent holds no
 /// provider; that is picked per session in the composer. Nor a permission mode: migration 0094
 /// dropped that column (the posture is per-run, seeded from the account — Settings → Default
 /// permission). Empty Instructions / workDir omit the key (no change) — matching the web, which
@@ -1732,6 +1717,7 @@ struct AgentFormContent: View {
     @State private var instructions = ""
     @State private var workDir = ""
     @State private var enabled = true
+    @State private var modelRouting = false
     @State private var confirmingDelete = false
 
     /// Not an editable field: an agent holds no provider. This is what the project last ran on,
@@ -1784,6 +1770,20 @@ struct AgentFormContent: View {
                           prompt: Text("/path/to/project on the runner (optional)"))
             }
 
+            // Off by default, and only the owner's to turn on: it decides what task runs cost, so the
+            // agent tools cannot set it (docs/model-routing-design.md §7.2).
+            Section("Task runs") {
+                Toggle(isOn: $modelRouting) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(TaskDetailCopy.smartSelectionSwitch)
+                        Text(TaskDetailCopy.smartSelectionSwitchDetail)
+                            .font(.orbitLabel)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
             if let env = agent.env, !env.isEmpty {
                 Section("Environment") {
                     ForEach(env.sorted(by: { $0.key < $1.key }), id: \.key) { k, v in
@@ -1834,6 +1834,7 @@ struct AgentFormContent: View {
         instructions = agent.appendSystemPrompt ?? ""
         workDir = agent.workDir ?? ""
         enabled = agent.enabled ?? true
+        modelRouting = agent.modelRouting ?? false
     }
 
     /// True when the working copy diverges from the agent as prefilled — mirrors `prefill()` field
@@ -1849,6 +1850,7 @@ struct AgentFormContent: View {
         || instructions != (agent.appendSystemPrompt ?? "")
         || workDir != (agent.workDir ?? "")
         || enabled != (agent.enabled ?? true)
+        || modelRouting != (agent.modelRouting ?? false)
     }
 
     /// Save (only if changed and still valid) then close. An emptied name is invalid — the form was
@@ -1868,7 +1870,9 @@ struct AgentFormContent: View {
             // previously-set effort — omitting (nil) would leave the old value unchanged.
             effort: effort.rawValue,
             workDir: workDir.isEmpty ? nil : workDir,
-            enabled: enabled
+            enabled: enabled,
+            // Only when moved: the switch is written by the user API alone, and only by a press.
+            modelRouting: modelRouting != (agent.modelRouting ?? false) ? modelRouting : nil
         )
         Task { await agents.save(agent.id, req) }
     }

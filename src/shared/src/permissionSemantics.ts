@@ -13,6 +13,16 @@ import type { ApprovalSupport, PermissionSemantics, RunnerModelCatalog } from '.
  *                       ahead of execution (the runner refuses to start rather than pretend).
  *  - OPENCODE none    — driven as a one-shot non-interactive CLI, which REJECTS an "ask"
  *                       decision; there is no channel to answer.
+ *  - ANTIGRAVITY full — in Default and Accept Edits the runner starts agy behind Orbit's own
+ *                       PreToolUse hook (`orbit hook antigravity-approval`), which files the same
+ *                       card and fails CLOSED, and agy starts only once it has confirmed the hook
+ *                       is loaded (docs/antigravity-runtime-contract.md §14). Full because every
+ *                       call that acts reaches that hook — measured on agy 1.2.16 for each tool it
+ *                       declares, MCP calls included. The two that do not: `ask_question`, which
+ *                       runs nothing (headless agy answers it "User Skipped" itself), and a
+ *                       subagent's own calls, which is why the hook refuses to launch subagents in
+ *                       those modes. Plan keeps agy's own `--mode plan` and Don't Ask its own
+ *                       refusal: neither asks, as neither does on Claude.
  *  - CODEX    partial — in an ask-me mode the runner starts it with approvalPolicy "untrusted",
  *                       and in Auto with "on-request"; both bridge its approval requests to the
  *                       same card. Those cover command execution and patches — its dangerous
@@ -26,6 +36,7 @@ import type { ApprovalSupport, PermissionSemantics, RunnerModelCatalog } from '.
 export function runtimeApprovalSupport(provider: string): ApprovalSupport {
   switch (provider) {
     case AgentProvider.CLAUDE:
+    case AgentProvider.ANTIGRAVITY:
       return 'full';
     case AgentProvider.KIMI:
     case AgentProvider.CODEX:
@@ -70,7 +81,8 @@ export const AUTO_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
  * Whether Auto — "let the model decide when to ask a human" — is a mode this runtime actually has.
  *
  * Every runtime but Claude has it runtime-wide, for any model: Codex spells it `on-request` ("the
- * model decides when to ask the user for approval"), Kimi and OpenCode expose it as a plain mode.
+ * model decides when to ask the user for approval"), Kimi and OpenCode expose it as a plain mode,
+ * and Antigravity runs it as `--dangerously-skip-permissions`, on any model it lists.
  * Claude alone makes it model-specific, and the assigned runner's catalogue is where that answer
  * comes from — its row lists the modes the CLI that will run the model accepts. Only a model that
  * row does not cover falls back to the static list above. A configured (BYOK) provider's model

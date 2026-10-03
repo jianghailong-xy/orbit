@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Prisma, type ConversationTurn, type SessionRequest } from '@prisma/client';
 import {
   deriveSessionState,
+  RunEventType,
   uuidToBase62,
   WATCH_LIMITS,
   type SessionReplyCard,
@@ -586,15 +587,15 @@ export type UnrunSessionRequests =
  * Two kinds of turn are taken. A REQUEST another session sent here that no engine read is closed
  * UNDELIVERED, with what took it: one still queued, and — when a run is ending — a steer still in
  * flight that the engine never acknowledged. The one exception is the turn the retry re-sends (§8
- * criterion 18): its request stays OPEN and goes with the re-sent turn, because those words are not
- * being dropped. A turn of this session as an ASKER may carry outcomes
- * back to it — a reply turn still queued, or any turn they were written into when it was handed out —
- * and those outcomes are not lost with it, nor with the turn whose failure is ending the run. When
- * the session lives on — interrupted, the owner withdrew the turn, or a retry is armed — they are held
- * on their rows for the next turn it is handed: stopping means stopping, so no new reply turn is
- * queued for them, and a retry's re-send is that next turn (a failed reply turn is re-sent as one,
- * auto-retry.service.ts). When its run is over they are let go again, and the hand-off finds an asker
- * that has ended, holds them and writes on its task (§4.3).
+ * criteria 18 and 23): its request stays OPEN and goes with the re-sent turn, because those words are
+ * not being dropped — provided the retry can find them again. A turn of this session as an ASKER may
+ * carry outcomes back to it — a reply turn still queued, or any turn they were written into when it
+ * was handed out — and those outcomes are not lost with it, nor with the turn whose failure is ending
+ * the run. When the session lives on — interrupted, the owner withdrew the turn, or a retry is armed —
+ * they are held on their rows for the next turn it is handed: stopping means stopping, so no new reply
+ * turn is queued for them, and a retry's re-send is that next turn (a failed reply turn is re-sent as
+ * one, auto-retry.service.ts). When its run is over they are let go again, and the hand-off finds an
+ * asker that has ended, holds them and writes on its task (§4.3).
  */
 export async function settleUnrunSessionRequests(
   tx: Prisma.TransactionClient,
@@ -629,11 +630,18 @@ export async function settleUnrunSessionRequests(
   // (`moveSessionRequestToTurn`). Closing it UNDELIVERED would tell the asker the request was dropped
   // for good, and the block on the re-sent turn would say it is closed, which is the one reading the
   // retry exists to avoid. Without a retry armed the words really are gone and it is UNDELIVERED.
-  const resent = ending && unrun.retryArmed && unrun.failedTurnKey
-    ? new Set(unrunTurns.filter((turn) => turn.clientTurnId === unrun.failedTurnKey).map((turn) => turn.id))
-    : null;
+  //
+  // §8 criterion 23: and only when the sweep can find those words again. It reads them off what the
+  // runner recorded for the turn (`turnsTheRetryCanFind`); a failed turn with no record at all would be
+  // passed over for an older message, and its request would sit OPEN on a turn nothing will ever
+  // deliver until its deadline. Such a turn is not re-sent, so its request is UNDELIVERED now.
+  const resent = new Set(ending && unrun.retryArmed && unrun.failedTurnKey
+    ? await turnsTheRetryCanFind(tx, sessionId, unrunTurns
+        .filter((turn) => turn.clientTurnId === unrun.failedTurnKey)
+        .map((turn) => turn.id))
+    : []);
   const queued = unrunTurns
-    .filter((turn) => turn.status === 'PENDING' && !resent?.has(turn.id))
+    .filter((turn) => turn.status === 'PENDING' && !resent.has(turn.id))
     .map((turn) => turn.id);
   if (queued.length > 0) {
     await tx.sessionRequest.updateMany({
@@ -675,6 +683,41 @@ export async function closeUnreadSteerRequests(
 }
 
 /**
+ * The runner's receipt for a message it was handed and could not give the engine: a `user_delivery`
+ * whose `delivery` is `failed`, naming the turn in its payload. For Claude it is the ONLY trace of such
+ * a message — a write queue that refuses the turn (a CLI that stopped reading stdin, a process already
+ * gone) fails it before the `user` echo is written (runner-go session.go, `failUndeliveredTurn`), so a
+ * reader that looks for the words by their echo alone walks past the message that failed to the one
+ * before it. The retry reads its words off the receipt's turn instead (`AutoRetryService.messageToResend`).
+ */
+export const FAILED_DELIVERY_RECEIPT = {
+  type: RunEventType.USER_DELIVERY,
+  payload: { path: ['delivery'], equals: 'failed' },
+} satisfies Prisma.RunEventWhereInput;
+
+/**
+ * Of these failed turns, the ones the auto-retry will find again — the words it re-sends are read off
+ * a turn's `user` echo, or, for a message the engine was never handed, off the runner's receipt saying
+ * so (`FAILED_DELIVERY_RECEIPT`). Both are filed against the turn they are about.
+ */
+export async function turnsTheRetryCanFind(
+  db: Pick<Prisma.TransactionClient, 'runEvent'>,
+  sessionId: string,
+  turnIds: readonly string[],
+): Promise<string[]> {
+  if (turnIds.length === 0) return [];
+  const recorded = await db.runEvent.findMany({
+    where: {
+      sessionId,
+      turnId: { in: [...turnIds] },
+      OR: [{ type: RunEventType.USER }, FAILED_DELIVERY_RECEIPT],
+    },
+    select: { turnId: true },
+  });
+  return [...new Set(recorded.flatMap((event) => (event.turnId ? [event.turnId] : [])))];
+}
+
+/**
  * Whether any outcome of this session's own requests is waiting for a turn to be said on: closed, and
  * on no turn of it yet — held, or about to be handed back. What decides that the auto-retry sweep
  * re-sends a failed reply turn as a reply turn rather than dropping it: the turn's own failure held
@@ -694,11 +737,14 @@ export async function hasHeldSessionReplies(
 }
 
 /**
- * How long a claim (`retry_claimed_at`) is believed. The sweep writes the turn it claimed the retry
- * for in the next transaction — seconds, even with attachments to copy — so a claim older than this
- * is one whose writer died between the two, and that session is not coming back on its own: believing
- * it anyway would hold an outcome for a turn that will never be handed, and say nothing on the task.
- * Bounded rather than cleared, because there is nobody left to clear it.
+ * How long a claim (`retry_claimed_at`) is believed: its lease. The sweep writes the turn it claimed
+ * the retry for in the next transaction — seconds, even with attachments to copy — so a claim older
+ * than this is one whose writer died between the two, and that session is not coming back on its own:
+ * believing it anyway would hold an outcome for a turn that will never be handed, and say nothing on
+ * the task. Both ends keep to it. Readers stop believing a claim past it, the re-send is written only
+ * inside it (`AutoRetryService.whileClaimHeld`), and the sweep gives up a claim that outlived it
+ * (`AutoRetryService.releaseExpiredClaims`, §8 criterion 24) — in a statement migration 0352's trigger
+ * reads as the retry given up, which is what hands over whatever was held for it.
  */
 export const RETRY_CLAIM_WINDOW_MS = 10 * 60_000;
 

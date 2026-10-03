@@ -32,9 +32,11 @@ final class EvidenceDecisionTests: XCTestCase {
                      independent: Bool = true,
                      criterion: EvidenceDecisionCriterion? =
                          EvidenceDecisionCriterion(key: "6KG2mjp63PrtVvGwxRLvFY",
-                                                   text: "提交一条完成证据后…")) -> EvidenceDecisionRow {
+                                                   text: "提交一条完成证据后…"),
+                     ownerCard: EvidenceDecisionOwnerCard? = nil) -> EvidenceDecisionRow {
         EvidenceDecisionRow(
             taskId: taskId, title: "改掉 update() 的头注释", projectId: projectId,
+            ownerCard: ownerCard,
             criterion: criterion,
             evidenceRevision: revision, ageSeconds: 1200, claim: claim, gaps: gaps,
             citations: citations,
@@ -156,6 +158,49 @@ final class EvidenceDecisionTests: XCTestCase {
         XCTAssertTrue(EvidenceDecisions.cardRows(queue: nil, projectId: Self.project).isEmpty)
         XCTAssertEqual(EvidenceDecisions.cardRows(queue: queue([r]), projectId: Self.project), [r],
                        "the same row, pending and in its own project's conversation, is a card")
+    }
+
+    /// A task a session dispatched outside any project (the B line, apiserver
+    /// `tasks/evidence-review.ts`): the read names the one conversation its owner card is drawn in,
+    /// whether or not that conversation coordinates a project, and no other conversation draws it.
+    func testADispatchedTasksRowGetsACardOnlyWhereItsOwnerCardIs() {
+        let here = "34JbyLO3TvHgOmBBHLgZu"
+        let dispatched = row(taskId: "dispatched", projectId: nil, gaps: [],
+                             ownerCard: EvidenceDecisionOwnerCard(sessionId: here, decidingSessionId: here))
+        XCTAssertEqual(EvidenceDecisions.cardRows(queue: queue([dispatched]), projectId: nil, sessionId: here)
+                           .map(\.taskId), ["dispatched"])
+        XCTAssertEqual(EvidenceDecisions.cardRows(queue: queue([dispatched]), projectId: Self.project,
+                                                  sessionId: here).map(\.taskId), ["dispatched"],
+                       "a coordinator that dispatched it draws it too")
+        XCTAssertTrue(EvidenceDecisions.cardRows(queue: queue([dispatched]), projectId: nil,
+                                                 sessionId: "another").isEmpty)
+        XCTAssertTrue(EvidenceDecisions.cardRows(queue: queue([dispatched]), projectId: nil).isEmpty,
+                      "a caller that names no session draws none of them")
+        let notMine = row(taskId: "not-mine", projectId: nil, gaps: [], independent: false,
+                          ownerCard: EvidenceDecisionOwnerCard(sessionId: here, decidingSessionId: here))
+        XCTAssertTrue(EvidenceDecisions.cardRows(queue: queue([notMine]), projectId: nil, sessionId: here).isEmpty)
+        // And a legacy row in no project, with no owner card, is still no conversation's.
+        XCTAssertTrue(EvidenceDecisions.cardRows(queue: queue([row(taskId: "legacy", projectId: nil, gaps: [])]),
+                                                 projectId: nil, sessionId: here).isEmpty)
+        XCTAssertEqual(EvidenceDecisions.standing(queue: queue([dispatched]), projectId: nil, sessionId: here,
+                                                  taskId: "dispatched", evidenceRevision: "1").answerable, true)
+    }
+
+    /// A card that has moved to the task's run decides in the dispatching session's name: the run
+    /// did the work, and the door refuses it.
+    func testAPressDecidesAsTheSessionTheOwnerCardNames() {
+        let run = "34RunSessionOfTheTaskXy"
+        let dispatcher = "34DispatchingSessionAbc"
+        let moved = row(taskId: "moved", projectId: nil, gaps: [],
+                        ownerCard: EvidenceDecisionOwnerCard(sessionId: run, decidingSessionId: dispatcher))
+        XCTAssertEqual(EvidenceDecisions.decidingSession(row: moved, sessionID: run), dispatcher)
+        XCTAssertEqual(EvidenceDecisions.request(row: moved, decision: .confirm, decidingSessionID: run)?
+                           .decidingSessionId, dispatcher)
+        XCTAssertEqual(EvidenceDecisions.request(row: moved, decision: .sendBack, note: "show the counts",
+                                                 decidingSessionID: run)?.decidingSessionId, dispatcher)
+        let plain = row(gaps: [])
+        XCTAssertEqual(EvidenceDecisions.request(row: plain, decision: .confirm, decidingSessionID: run)?
+                           .decidingSessionId, run, "a project's row decides as the conversation it is in")
     }
 
     /// A delivered card is addressed by the revision as well as the task — a newer revision is a
@@ -288,7 +333,8 @@ final class EvidenceDecisionTests: XCTestCase {
            "decidability":{"decidable":true,"refusal":null,"requiredAction":null},
            "independence":{"independent":true,"disqualification":null,"requiredAction":null}},
           {"taskId":"34LVxFqhGAi1xul4wjUHP","title":"不在任何项目下","status":"OPEN",
-           "projectId":null,"criterion":null,
+           "projectId":null,"ownerCard":{"sessionId":"34JbyLO3TvHgOmBBHLgZu",
+                                         "decidingSessionId":"34JbyLO3TvHgOmBBHLgZu"},"criterion":null,
            "evidenceRevision":"2","submittedAt":"2026-09-09T00:50:00.000Z","ageSeconds":600,
            "claim":"","gaps":[],"citations":[],
            "decidability":{"decidable":true,"refusal":null,"requiredAction":null},
@@ -302,6 +348,13 @@ final class EvidenceDecisionTests: XCTestCase {
         XCTAssertEqual(q.pending.first?.citations.first?.label, "Bash · swift test")
         XCTAssertEqual(q.pending.first?.projectId, "34JdnRJOxuG05yi0TpLq4")
         XCTAssertNil(q.pending.last?.projectId, "a task filed under no project decodes as one")
+        XCTAssertNil(q.pending.first?.ownerCard, "a project's row carries no owner card")
+        XCTAssertEqual(q.pending.last?.ownerCard,
+                       EvidenceDecisionOwnerCard(sessionId: "34JbyLO3TvHgOmBBHLgZu",
+                                                 decidingSessionId: "34JbyLO3TvHgOmBBHLgZu"))
+        XCTAssertEqual(EvidenceDecisions.cardRows(queue: q, projectId: nil, sessionId: "34JbyLO3TvHgOmBBHLgZu")
+                           .map(\.taskId), ["34LVxFqhGAi1xul4wjUHP"],
+                       "and the dispatched one is a card in the conversation it names")
         XCTAssertTrue(q.waitingOnYou.isEmpty)
         XCTAssertEqual(EvidenceDecisions.cardRows(queue: q, projectId: Self.project).map(\.taskId),
                        ["34LMiluvx0jK63cj8arWl"])

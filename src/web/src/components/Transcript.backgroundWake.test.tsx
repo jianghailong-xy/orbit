@@ -75,7 +75,7 @@ const EN_DONE = [
   '</background-job-wake>',
 ].join('\n');
 
-/** Twelve lines of tail, so what the fold does to a long one is witnessed rather than assumed. */
+/** A long tail whose complete contents must survive the independent output disclosure. */
 const FAILED_TAIL = Array.from({ length: 12 }, (_, i) => `        error line ${i + 1}`);
 const EN_FAILED = [
   '<background-job-wake>',
@@ -189,7 +189,7 @@ describe('a wake turn in the transcript', () => {
     );
   });
 
-  it('leaves a failed job’s output out of the fold, collapsed past a few lines', async () => {
+  it('keeps the failed output preview and its disclosure independent of job details', async () => {
     await mount([wakeEvent(EN_FAILED)]);
 
     expect(line().className).toContain('is-failed');
@@ -203,11 +203,36 @@ describe('a wake turn in the transcript', () => {
     const tail = line().querySelector('.bgwake-tail')!;
     expect(tail, 'the failure’s tail is drawn').not.toBeNull();
     expect(fold().contains(tail), 'why it failed is what woke anybody: not behind the fold').toBe(false);
-    const pre = tail.querySelector('.chat-pre')!;
-    expect(pre.textContent).toContain('error line 1');
-    expect(pre.textContent).toContain('error line 8');
-    expect(pre.textContent, 'past the threshold, folded').not.toContain('error line 9');
-    expect(tail.querySelector('.chat-more')?.textContent).toBe('Show 4 more lines');
+    expect(row().querySelector('.bgwake-details-label')?.textContent).toBe('任务详情');
+    expect(tail.querySelector('.bgwake-output-label')?.textContent).toBe('输出末尾');
+    const output = tail.querySelector<HTMLDetailsElement>('details.bgwake-output')!;
+    const toggle = output.querySelector('summary')!;
+    expect(output.open).toBe(false);
+    // Layout is clamped by CSS; the stored excerpt is never shortened or reformatted.
+    const text = FAILED_TAIL.map((line) => line.trim()).join('\n');
+    expect(output.querySelector('.bgwake-output-preview')?.textContent).toBe(text);
+    await act(async () => { toggle.click(); });
+    expect(output.open).toBe(true);
+    expect(output.querySelector('.bgwake-output-full')?.textContent).toBe(text);
+    expect(fold().open, 'opening output must not open job metadata').toBe(false);
+    await act(async () => { toggle.click(); });
+    expect(output.open).toBe(false);
+  });
+
+  it('provides an output disclosure for long single-line JSON and strips terminal color codes', async () => {
+    const json = JSON.stringify(Array.from({ length: 30 }, (_, i) => ({
+      Action: 'fail', Package: 'orbit', Test: `TestCodexReset${i}`,
+    })));
+    await mount([wakeEvent(EN_FAILED.replace(FAILED_TAIL.join('\n'), `        \x1b[31m${json}\x1b[0m`))]);
+
+    const output = line().querySelector<HTMLDetailsElement>('details.bgwake-output')!;
+    expect(output.open).toBe(false);
+    expect(output.querySelector('.bgwake-output-preview')?.textContent).toBe(json);
+    expect(output.querySelector('.bgwake-output-expand')?.textContent).toBe('展开输出');
+    await act(async () => { output.querySelector('summary')!.click(); });
+    expect(output.open).toBe(true);
+    expect(output.querySelector('.bgwake-output-full')?.textContent).toBe(json);
+    expect(fold().open).toBe(false);
   });
 
   it('draws the same line for the wording that shipped until 2026-09-15', async () => {
@@ -347,6 +372,21 @@ describe('a wake turn in the transcript', () => {
     // A static file has no JS: both folds have to be ones the browser itself can open.
     expect(exported.querySelector('details.bgwake-fold > summary.bgwake-row')).not.toBeNull();
     expect(exported.querySelector('details.bgwake-fold details.bgwake-raw pre')?.textContent).toBe(EN_DONE);
+  });
+
+  it('keeps failed output expandable without JavaScript in an exported transcript', () => {
+    const html = renderToStaticMarkup(
+      <ExportCtx.Provider value={{ images: new Map() }}>
+        <Transcript events={[wakeEvent(EN_FAILED)]} live={false} />
+      </ExportCtx.Provider>,
+    );
+    const exported = new DOMParser().parseFromString(html, 'text/html');
+    const output = exported.querySelector<HTMLDetailsElement>('details.bgwake-output')!;
+    expect(output.open).toBe(false);
+    expect(output.querySelector('summary')).not.toBeNull();
+    expect(output.querySelector('.bgwake-output-full')?.textContent).toBe(
+      FAILED_TAIL.map((line) => line.trim()).join('\n'),
+    );
   });
 });
 

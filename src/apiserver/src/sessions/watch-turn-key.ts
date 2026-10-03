@@ -23,11 +23,34 @@ export const SESSION_REPLY_TURN_KEY_PREFIX = 'session-reply:';
  */
 export const AUTO_RETRY_TURN_KEY_PREFIX = 'auto-retry:';
 
+/**
+ * The three namespaces a confirmation request's review is carried in
+ * (docs/owner-confirmation-review-contract.md §10 G6, tasks/owner-confirmation-review-turn.ts): the
+ * request handed to its reviewer, the reviewer's return handed to the run, and the owner's answers
+ * handed back to the reviewer. Each key is derived from the row it carries, so a caller who took one
+ * would stand between that row and its only delivery. Spelled here for the reason the reply prefix
+ * is.
+ */
+export const OWNER_CONFIRMATION_REVIEW_TURN_KEY_PREFIX = 'owner-confirmation-review:v1:';
+export const CONFIRMATION_RETURN_TURN_KEY_PREFIX = 'confirmation-return:v1:';
+export const OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX = 'owner-confirmation-answers:v1:';
+
+/**
+ * The namespace an evidence revision of a task filed outside any project is handed to the session
+ * that dispatched it in, for that session to decide (tasks/evidence-review.ts). Keyed by the evidence
+ * row, for the reason the three above are.
+ */
+export const EVIDENCE_REVIEW_TURN_KEY_PREFIX = 'evidence-review:v1:';
+
 /** Every prefix a caller's own `clientTurnId` may not start with. */
 const RESERVED_TURN_KEY_PREFIXES = [
   WATCH_TURN_KEY_PREFIX,
   SESSION_REPLY_TURN_KEY_PREFIX,
   AUTO_RETRY_TURN_KEY_PREFIX,
+  OWNER_CONFIRMATION_REVIEW_TURN_KEY_PREFIX,
+  CONFIRMATION_RETURN_TURN_KEY_PREFIX,
+  OWNER_CONFIRMATION_ANSWERS_TURN_KEY_PREFIX,
+  EVIDENCE_REVIEW_TURN_KEY_PREFIX,
 ] as const;
 
 /**
@@ -66,6 +89,11 @@ export function assertClientTurnIdNotReserved(clientTurnId: string | undefined |
   if (reserved === AUTO_RETRY_TURN_KEY_PREFIX) {
     throw new BadRequestException(
       `clientTurnId must not start with "${AUTO_RETRY_TURN_KEY_PREFIX}" — that prefix is reserved for the messages the server re-sends itself after a failed turn (docs/session-request-reply-contract.md §2.1). Choose your own key, such as a UUID.`,
+    );
+  }
+  if (reserved) {
+    throw new BadRequestException(
+      `clientTurnId must not start with "${reserved}" — that prefix is reserved for the confirmation and evidence reviews the server delivers itself (docs/owner-confirmation-review-contract.md §10 G6, docs/task-completion-criteria.md). Choose your own key, such as a UUID.`,
     );
   }
 }

@@ -21,6 +21,9 @@ struct RunnerSignInView: View {
     /// Sign in a NEW account, which the runner adds under this name. The button waits for one: a
     /// blank name would read as no account at all, which is the runner's own login.
     var accountName: String? = nil
+    /// Start signing in as the card appears, not on its button: the press that raised it — Add Account
+    /// — already asked for the sign-in.
+    var autoStart = false
     /// Offered the moment the sign-in lands: re-send whatever the failure ate. Nil where there is
     /// nothing to re-send (a proactive sign-in from the Runners screen).
     var onDone: (() async -> Void)?
@@ -41,11 +44,17 @@ struct RunnerSignInView: View {
         }
         .task(id: runnerID) {
             guard let baseURL = app.baseURL else { return }
+            let fresh = model == nil
             let m = model ?? RunnerSignInModel(runnerID: runnerID, engine: engine, account: account,
                                                adding: accountName != nil,
                                                baseURL: baseURL, tokenStore: app.tokenStore)
             model = m
-            await m.refresh()
+            // Started by the card's first appearance only: a later one picks the relay back up.
+            if autoStart, fresh {
+                await m.begin(accountName: accountName)
+            } else {
+                await m.refresh()
+            }
         }
         // The card can go off-screen while a sign-in runs (the transcript scrolls, the sheet
         // closes). Stop the poll with it; the `task` above picks the relay back up on return.
@@ -233,8 +242,9 @@ private struct PasteBackForm: View {
 ///
 /// The remedy depends on where the credentials live (see `EngineAuth.remedy`): a built-in engine
 /// signs in on the runner itself, OpenCode's provider-specific login can only be run on that
-/// machine, and any other slug is a configured API key — which these clients can't edit, so the
-/// card says where it lives instead of offering a button that goes nowhere.
+/// machine, Antigravity's key is a variable in its environment, and any other slug is a configured
+/// API key — which these clients can't edit, so the card says where it lives instead of offering a
+/// button that goes nowhere.
 struct AuthErrorCardView: View {
     let console: ConsoleModel
     let message: String
@@ -261,6 +271,8 @@ struct AuthErrorCardView: View {
             return "Sign-in expired on “\(name)”"
         case .runCommand:
             return "Sign-in expired"
+        case .environmentKey:
+            return "Gemini API key rejected"
         case .apiKey:
             return "Provider authentication failed"
         }
@@ -281,6 +293,9 @@ struct AuthErrorCardView: View {
             }
         case .runCommand(let command):
             Text("Run \(Text(command).font(.orbitMono)) on that machine and choose the provider there — OpenCode's sign-in is provider-specific, so it can't be driven from here.")
+                .font(.orbitLabel).foregroundStyle(.secondary)
+        case .environmentKey(let variable):
+            Text("Antigravity runs on the Gemini API key in its environment. Set \(Text(variable).font(.orbitMono)) in this workspace's environment variables, or on the runner, then send your message again.")
                 .font(.orbitLabel).foregroundStyle(.secondary)
         case .apiKey(let slug):
             Text("The API key for \(Text(slug).font(.orbitMono)) was rejected. Update it in Providers on the Orbit web app, then send your message again.")

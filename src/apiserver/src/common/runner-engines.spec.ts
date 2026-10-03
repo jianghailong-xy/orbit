@@ -179,3 +179,25 @@ test('OpenCode is reported like any other engine, and sign-in stays a narrower q
   // Anything outside both sets is still dropped rather than half-read.
   assert.equal(sanitizeRunnerEngines([{ engine: 'aider', installed: true, auth: 'yes' }]), null);
 });
+
+test('Antigravity is reported like OpenCode: installed and versioned, never a sign-in row', () => {
+  const engines = sanitizeRunnerEngines([
+    { engine: 'antigravity', installed: true, auth: 'unknown', version: ' 1.2.15 ' },
+    { engine: 'opencode', installed: true, auth: 'unknown', version: '1.18.16' },
+    { engine: 'claude', installed: true, auth: 'yes', version: '2.1.228' },
+  ])!;
+  assert.deepEqual(
+    engines.map((e) => e.engine),
+    ['claude', 'opencode', 'antigravity'],
+    'reported in REPORTED_ENGINES order, sign-in engines first',
+  );
+  assert.deepEqual(engines[2], {
+    engine: 'antigravity',
+    installed: true,
+    version: '1.2.15',
+    auth: 'unknown',
+  });
+  // agy runs on a Gemini key in its own environment; there is no browser sign-in to relay.
+  assert.equal(isLoginEngine('antigravity'), false);
+  assert.equal(isReportedEngine('antigravity'), true);
+});

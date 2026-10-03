@@ -204,15 +204,25 @@ export function loginSpentNotice(login: { email: string | null; accountId: strin
 }
 
 /**
- * Why a login pool's session can send nothing: its account was signed out by OpenAI, and signing it in
- * again is its owner's alone — the session's owner, since a login pool is nobody else's (migration 0323).
+ * Why a session of a Codex pool can send nothing: its account was signed out by OpenAI, and signing it in
+ * again is the person who signed it in's alone (migration 0371; the pool's owner's alone before that, and
+ * an admin of the pool cannot either — they have no credential for that account). `byContributor` says
+ * whose session is owed the line — the account's own contributor's, or somebody else's, who can only ask.
  * The gateway's refusal, and the line the transcript is owed when it happens.
  */
-export function loginSignedOutNotice(login: { email: string | null; accountId: string }, poolLabel: string): string {
-  return `The ChatGPT account ${accountName(login)} on "${poolLabel}" was signed out by OpenAI — only you can sign in again, on the pool's page`;
+export function loginSignedOutNotice(
+  login: { email: string | null; accountId: string },
+  poolLabel: string,
+  byContributor = true,
+): string {
+  const way = byContributor
+    ? 'only you can sign in again'
+    : 'only the person who signed it in can sign in again';
+  return `The ChatGPT account ${accountName(login)} on "${poolLabel}" was signed out by OpenAI — ${way}, on the pool's page`;
 }
 
-/** Why a login pool's session can send nothing because the pool holds no account. */
+/** Why a session of a Codex pool can send nothing because the pool holds no account. Whoever may add one
+ *  (an admin, or a member while the pool's rule for it is on) does it there, so the sentence is one. */
 export function loginMissingReason(poolLabel: string): string {
-  return `"${poolLabel}" has no ChatGPT account signed in — only you can sign one in, on the pool's page`;
+  return `"${poolLabel}" has no ChatGPT account signed in — sign one in on the pool's page`;
 }

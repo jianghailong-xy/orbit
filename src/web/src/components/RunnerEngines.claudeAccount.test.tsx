@@ -184,19 +184,17 @@ describe('a runner with two Claude accounts', () => {
     expect(accounts[1].querySelector('.re-quota')?.textContent).toBe('Sign in to see quota');
   });
 
-  it('offers + Account on the Claude row, and signs a new one in as a Claude account', async () => {
+  it('offers + Account on the Claude row, and starts signing a new one in as a Claude account', async () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
     const head = rows(page, '.re-grp')[0];
+    const open = vi.spyOn(window, 'open');
     await click(button(head, '+ Account'));
-    const name = page.querySelector<HTMLInputElement>('.re-add input');
-    expect(name).not.toBeNull();
-    await act(async () => {
-      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-      setter.call(name!, 'Personal');
-      name!.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await click(button(page, 'Sign in to Claude Code'));
-    expect(loginPosts()).toEqual([{ engine: 'claude', accountName: 'Personal' }]);
+    expect(page.querySelector<HTMLInputElement>('.re-add input')?.value).toBe('Account 3');
+    expect(loginPosts()).toEqual([{ engine: 'claude', accountName: 'Account 3' }]);
+    // No tab parked for the sign-in page: the press was on + Account, not on this card, so the page
+    // opens from the card's own link once the runner prints it.
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
   });
 
   it('re-signs in a signed-out account of its own, naming the account', async () => {
@@ -210,7 +208,8 @@ describe('a runner with two Claude accounts', () => {
   it('removes an added account on its own route once asked, and never Default', async () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
     const [defaultRow, workRow] = rows(page, '.re-acct');
-    expect(rows(defaultRow, 'button').map(labelOf)).toEqual(['Re-sign in']);
+    // Default can be renamed like any other account, but never removed: it is the machine's own login.
+    expect(rows(defaultRow, 'button').map(labelOf)).toEqual(['Rename', 'Re-sign in']);
 
     // The press asks first: the slot's sign-in is deleted from the machine, and nothing is sent until
     // the question is answered.
