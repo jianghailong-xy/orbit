@@ -187,6 +187,8 @@ interface UpdateProjectIntegrationDto {
 
 没有代码库行时创建：`canonical_repo_url` 取项目协调工作区的 `repo_url`，缺失则 409 `INTEGRATION_REPOSITORY_UNKNOWN`。写 `project.exception_escalation_seconds` 的方法里不得出现 `status:` 键（`project-status-write-sites.spec.ts` 按「同一方法内有 `.project.update` 且有 `status:`」认写入方）。
 
+`workspace.repo_url` 可手动填写，也由 runner 的目录探测自动补空：读取工作目录的 `origin`，去掉 URL 中的凭据后随下一次心跳上报；服务端仅在 workspace 的 runner、原始 `workDir` 仍匹配且 `repo_url` 为 NULL 或空字符串时回填。新建和既有工作区都走这条路径；旧 runner 未上报、目录不存在或没有 origin 时不写，不覆盖已有地址，也不改变已建立的项目代码库绑定。检测是异步的，尚无地址时应提示等待 runner 检测或在工作区设置填写 Repository URL。
+
 **L6（upstream 不探测）**：apiserver 没有仓库可问。`upstream_ref` 默认 `refs/heads/main`，owner 可在锁定前改。runner 在作业里发现它不存在时，作业以 `ERROR / BASE_REF_NOT_FOUND` 结束并生成待办（§2.6），**不回退到 master**：产品与仓库无关（owner 决定 3），猜分支名就是在为仓库约定做特判。
 
 **L7（平台合并不回写）**：集成作业（§2）与晋升（§3）不读、不写 `workspace.default_merge_target`。它的写入方保持现状：`SessionsService.mergeToMain` 在用户显式选目标时回写，另有 workspace 创建与更新、runner agent 路由、`clone-result`。

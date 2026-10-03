@@ -15,7 +15,9 @@ export const ANTIGRAVITY_RUNNER_UPGRADE_ERROR =
  * session on one of these, claimed by such a runner, would start `claude` on a conversation that
  * belongs to another CLI. Claude, Codex and Kimi are not here: they predate the advertisement, so
  * a header without them says nothing about them. The claim SQL (QueueService.trySessionClaim) and
- * the database triggers behind it (migrations 0080 and 0367) hold the same list.
+ * the database triggers behind it (migrations 0080 and 0367) hold the same list. A session is on a
+ * runtime by its slug or by the configured row it names — a Gemini key borrows Antigravity — so
+ * each gate asks providerSlugsOn's question, and 0372 widened 0367's trigger to match.
  */
 export const ADVERTISED_RUNTIMES: ReadonlyArray<{
   provider: AgentProvider;

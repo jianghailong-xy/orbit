@@ -131,8 +131,7 @@ interface Workspace {
   lastProvider?: string;
   provider?: string;
   workDir?: string | null;
-  /** The git remote this workspace's checkout came from, as declared here. Recorded only — it is
-   *  what a project's integration line is bound from, so nothing else may invent it. */
+  /** Repository for project integration, entered here or detected from the checkout's origin. */
   repoUrl?: string | null;
   env?: Record<string, string> | null;
   /** Which Codex account on its runner this workspace's Codex sessions run on: the id of a slot the
@@ -678,10 +677,7 @@ export function RunnerDetailPage() {
           )}
         </div>
       </div>
-      {/* Recorded, never cloned, and never guessed from the checkout on the machine: this is the
-          remote a project's integration line is bound from, and a guess would be indistinguishable
-          from a declaration at every later read. Full width below the grid — a URL is the longest
-          thing this form asks for. */}
+      {/* Full width below the grid — a URL is the longest thing this form asks for. */}
       <div className="rd-form-field">
         <div className="rd-form-label">Repository URL</div>
         <Input
@@ -693,8 +689,8 @@ export function RunnerDetailPage() {
           placeholder="https://github.com/owner/repo (optional)"
         />
         <div className="rd-path-hint rd-path-muted">
-          Where this checkout came from. A project's integration line is bound from it — with none
-          recorded, a project whose coordination workspace is this one cannot start one.
+          Used for project integration. When empty, the runner detects origin on its next directory
+          scan and fills this in. You can also enter the repository URL here.
         </div>
       </div>
       {/* Shown only when this directory has something to offer — an empty path, a directory nobody
