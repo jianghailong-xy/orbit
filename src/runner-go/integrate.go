@@ -207,16 +207,25 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	// ── J-S2 MAIN_SYNC ────────────────────────────────────────────────────────────────────────
 	// Only a project branch absorbs upstream: on a MAIN line the target IS upstream.
 	base := targetSha
+	absorbedBySource := false
 	if cmd.TargetRef != cmd.UpstreamRef && !isAncestor(scratch, upstreamSha, targetSha) {
-		report("MAIN_SYNC", nil)
-		merged, conflicts, err := integrationMerge(scratch, upstreamSha,
-			fmt.Sprintf("Merge %s into %s", cmd.UpstreamRef, cmd.TargetRef))
-		if err != nil {
-			result.State, result.Phase, result.Conflicts = "CONFLICT", "MAIN_SYNC", conflicts
-			return result
+		if sourceCarriesTheAbsorb(scratch, sourceSha, targetSha, upstreamSha) {
+			// The source has already made this merge, with whatever resolution it took (§3.1 M3).
+			// Making it again on the target's tip asks git for that resolution a second time, and
+			// conflicts where the source already answered — so nothing is merged here, and J-S4
+			// lands the source as it is.
+			absorbedBySource = true
+		} else {
+			report("MAIN_SYNC", nil)
+			merged, conflicts, err := integrationMerge(scratch, upstreamSha,
+				fmt.Sprintf("Merge %s into %s", cmd.UpstreamRef, cmd.TargetRef))
+			if err != nil {
+				result.State, result.Phase, result.Conflicts = "CONFLICT", "MAIN_SYNC", conflicts
+				return result
+			}
+			result.MainSyncSha = merged
+			base = merged
 		}
-		result.MainSyncSha = merged
-		base = merged
 	}
 
 	// ── J-S3 already contained ────────────────────────────────────────────────────────────────
@@ -257,10 +266,11 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	fork, _ := git(scratch, "merge-base", sourceSha, base)
 	merges, _ := git(scratch, "rev-list", "--merges", fork+".."+sourceSha)
 	var tested string
-	if strings.TrimSpace(merges) != "" {
+	if absorbedBySource || strings.TrimSpace(merges) != "" {
 		// A source that contains merge commits carries somebody's conflict resolutions inside
 		// them. A rebase would replay the sides and ask for those resolutions again; a merge keeps
-		// them (§2.4 J-S4).
+		// them (§2.4 J-S4). A source that absorbed the upstream itself always comes this way: the
+		// target's tip is its ancestor, so the merge is exactly the source's tree.
 		report("MERGE", nil)
 		merged, conflicts, err := integrationMerge(scratch, sourceSha,
 			fmt.Sprintf("Merge %s into %s", cmd.SourceRef, cmd.TargetRef))
@@ -377,6 +387,26 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	}
 	result.State, result.Phase = "LANDED", "VERIFY"
 	return result
+}
+
+// sourceCarriesTheAbsorb reports a source that has already done J-S2's merge itself: it contains
+// the upstream tip and the target tip this job fetched (§3.1 M3).
+//
+// THE CONFLICT THIS EXISTS FOR (2026-10-03, project 34Y7My8sqhKLWtmCQYv1l). The project branch and
+// main had each added a migration to the same ledger, so absorbing main into the branch conflicted.
+// J-S2 tried that absorb on the target's own tip before it looked at the source, so a branch that
+// had merged both tips and resolved the ledger met the conflict it had already resolved, and so did
+// the task reopened to rework it: every landing on that line stopped at MAIN_SYNC.
+//
+// Both tips, measured on this job's fetch. A source that absorbed an upstream that has moved since,
+// or that was cut from a target tip that has moved since, does not carry this absorb, and J-S2
+// makes it as before: a conflict there is still the MAIN_SYNC conflict it always was.
+//
+// Not the upstream tip itself, which has nothing of its own to land. Taking this path for it would
+// push a bare main sync and turn J-S3's NOTHING_TO_LAND (0300) into a landing.
+func sourceCarriesTheAbsorb(dir, sourceSha, targetSha, upstreamSha string) bool {
+	return sourceSha != upstreamSha &&
+		isAncestor(dir, upstreamSha, sourceSha) && isAncestor(dir, targetSha, sourceSha)
 }
 
 // promoteOnce is one pass at merging a project's finished work into its upstream

@@ -1159,6 +1159,7 @@ function landingNextStep(projectId: string, taskId: string, payload: Integration
     + '落地失败不改它的状态；task_start 只会再跑一遍任务、开一条新分支，不会重新排这次落地。\n';
   const rework = '用 task_reopen 把任务退回返工、另起一个取代它的任务（task_create 带 supersedesTaskId），'
     + '或者取消（task_update 置 CANCELLED）';
+  if (payload.phase === 'MAIN_SYNC') return read + mainSyncNextStep(payload);
   if (payload.failureClass === 'CONFLICT' || (payload.files?.length ?? 0) > 0) {
     return read
       + '冲突只有改过的分支才能解开：原样重跑会再冲突一次，integration_retry 也不接受冲突。'
@@ -1170,6 +1171,33 @@ function landingNextStep(projectId: string, taskId: string, payload: Integration
     + `（projectId 传 ${projectId}，taskId 传 ${taskId}，reason 写明这次为什么会不同）重排一次落地：`
     + '它入队这项任务的下一代落地，成了就进项目分支、继续往后的合并检查，没成会再开一条待办给你。'
     + '这类落地去留由你判，不拿去问账号所有者。';
+}
+
+/**
+ * The next step a MAIN_SYNC conflict leaves its coordinator (§3.1 M3).
+ *
+ * The line conflicted while absorbing the upstream into the project branch, before it looked at the
+ * task's branch, so the conflict is the line's and not the task's work. The general advice — send the
+ * task back to rework — was followed on 2026-10-03 (task 34ZNP0XRLAnAreGEOvKuw) and its next landing
+ * stopped in the same place. What resolves it is a source branch that already contains that absorb:
+ * J-S2 then leaves the project branch's tip alone and J-S4 lands the source by MERGE.
+ */
+function mainSyncNextStep(payload: IntegrationItemPayload): string {
+  const line = payload.targetRef ? `项目分支 ${payload.targetRef} ` : '项目分支';
+  return `这次冲突停在 MAIN_SYNC：平台先把 upstream（project_get 的 integration.upstreamRef）合进${line}的 tip，`
+    + '在那里就冲突了，还没看这项任务的提交。冲突在项目线和 upstream 之间，不在这项任务的工作里：'
+    + '原样重跑会再冲突一次，integration_retry 也不接受冲突；只让任务重做自己的工作也解不开，'
+    + '下一次落地照样先停在这里。\n'
+    + '先在项目线上吸收 upstream、解决冲突，再落地：\n'
+    + `1. 在这项任务的源分支上，把${line}的 tip 和 upstream 的 tip 合进来，解掉上面这些文件的冲突，`
+    + '提交这个合并提交。任务原来的工作留着，不用重做。\n'
+    + '2. 源分支同时包含这两个 tip，它的下一次落地就不再先合 upstream，而是按 J-S4 的 MERGE 模式落地，'
+    + '进项目分支的树就是源分支的树。落地时其中一个 tip 又往前走了，源分支就缺了它，'
+    + '落地会照旧停在 MAIN_SYNC，那就再合一次。\n'
+    + '3. 这个合并提交由这项任务自己的会话放进源分支：先用 task_comment 在任务上写明这一轮只做第 1 步，'
+    + '再用 task_reopen 把它退回。它再次 DONE 就会排下一次落地。\n'
+    + '这条待办开着时，同一条集成线上其他任务的落地都在等（M2），只有这项任务自己的下一次落地不用等。'
+    + '它落进项目分支后，这条待办由平台关闭，排着的落地接着走。';
 }
 
 /**

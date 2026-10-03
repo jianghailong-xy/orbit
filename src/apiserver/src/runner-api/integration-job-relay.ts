@@ -355,13 +355,22 @@ async function claimOne(
          -- same paths and open exactly the same card, once per queued task. The item is the retry
          -- mechanism (J5): when the coordinator has dealt with it and the item closes, the queue
          -- moves again on its own.
+         --
+         -- Except the conflicted task's own later landings. Sending that task back is how a merge
+         -- commit absorbing the upstream reaches its source branch (§3.1 M3), and held here, its
+         -- next landing would wait on the item it is there to close. The claim cannot read git, so
+         -- only the task is decided here; whether the source carries the absorb is J-S2's call on
+         -- the runner. With both tips in it, the source lands by J-S4 MERGE and that landing closes
+         -- the item. Without them, it meets the same conflict and opens another item, and every
+         -- other task's landing waits as before.
          AND NOT EXISTS (
            SELECT 1 FROM "project_open_item" i
              JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
             WHERE f."serial_key" = c."serial_key"
               AND f."phase" = 'MAIN_SYNC'
               AND i."kind" = 'INTEGRATION_CONFLICT'
-              AND i."state" = 'OPEN')
+              AND i."state" = 'OPEN'
+              AND f."task_id" IS DISTINCT FROM c."task_id")
          AND (
            -- A queued job whose repository and target ref nobody holds.
            (c."state" = 'QUEUED' AND NOT EXISTS (

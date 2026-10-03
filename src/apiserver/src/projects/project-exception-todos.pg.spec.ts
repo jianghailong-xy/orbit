@@ -605,6 +605,19 @@ async function claimedLanding(
   w: World,
   label: string,
 ): Promise<{ task: Attempt; job: IntegrationJobCommand }> {
+  const a = await queuedLanding(stack, w, label);
+  const claimed = await stack.jobs.dispatch({
+    runnerId: w.runnerId,
+    leaseOwner: `lease-${label}`,
+    draining: false,
+    capabilities: [INTEGRATION_JOB_CLAIM],
+  });
+  assert.equal(claimed.length, 1, `the DONE queued no landing — ${await jobsOf(stack.db, w.projectId)}`);
+  return { task: a, job: claimed[0]! };
+}
+
+/** `claimedLanding` up to the heartbeat: the task DONE, its session finished, its landing queued. */
+async function queuedLanding(stack: Stack, w: World, label: string): Promise<Attempt> {
   const a = await attempt(stack, w, label, {
     acceptance: { command: 'exit 0', expectedExitCode: 0 },
     branch: `orbit/${label}`,
@@ -638,15 +651,7 @@ async function claimedLanding(
       worktreeDirty: false,
     },
   });
-
-  const claimed = await stack.jobs.dispatch({
-    runnerId: w.runnerId,
-    leaseOwner: `lease-${label}`,
-    draining: false,
-    capabilities: [INTEGRATION_JOB_CLAIM],
-  });
-  assert.equal(claimed.length, 1, `the DONE queued no landing — ${await jobsOf(stack.db, w.projectId)}`);
-  return { task: a, job: claimed[0]! };
+  return a;
 }
 
 /** The result a runner posts for a job that did not land, over the route it posts it on. */
@@ -1488,6 +1493,72 @@ test('a landing answers the conflict item an earlier generation of the same task
       assert.equal(after?.resolution, 'LANDED', 'the fact that answered it is the landing, not a retry');
       assert.equal(after?.resolvedBy, 'PLATFORM');
       assert.equal((await jobRow(stack.db, claimed!.jobId)).state, 'LANDED');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a MAIN_SYNC conflict holds the line\'s other landings, but not the next landing of the task it stopped',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      // §3.1 M2 and M3. The absorb of the upstream conflicted, so every other landing on the line
+      // would meet the same paths: they wait. The conflicted task's own next landing does not: its
+      // branch changed, and a branch that now contains both tips is how the conflict is resolved.
+      // Before this, that landing waited on the item it was there to answer.
+      const w = await integratingWorld(stack, 'main-sync-held', 'PARKED');
+      const { task, job } = await claimedLanding(stack, w, 'main-sync-held');
+      await reportFailure(stack, w, job, {
+        state: 'CONFLICT',
+        phase: 'MAIN_SYNC',
+        sourceSha: 'a'.repeat(40),
+        targetShaBefore: 'c'.repeat(40),
+        conflicts: ['src/apiserver/src/tasks/task-judgment-data-preserved.spec.ts'],
+      });
+      const item = await onlyItemFor(stack.db, w, task.taskId, 'the absorb conflicted');
+      assert.equal(item.state, 'OPEN');
+
+      // The other task finishes after the line's starting beat, as it would in real time: within that
+      // beat its DONE back-queues every finished task of the project (L3 step 4), this one included.
+      await stack.db.projectCodebase.updateMany({
+        where: { projectId: w.projectId },
+        data: { integrationStartedAt: new Date(Date.now() - 60_000) },
+      });
+      const other = await queuedLanding(stack, w, 'main-sync-held-other');
+      const heartbeat = (lease: string) => stack.jobs.dispatch({
+        runnerId: w.runnerId,
+        leaseOwner: lease,
+        draining: false,
+        capabilities: [INTEGRATION_JOB_CLAIM],
+      });
+      assert.deepEqual(await heartbeat('lease-held'), [], 'another task\'s landing waits while the absorb is unresolved');
+
+      await stack.tasks.update(w.ownerId, task.taskId, { status: DeclaredTaskStatus.IN_PROGRESS });
+      await rework(stack, w, task, 'main-sync-held');
+      const claimed = await heartbeat('lease-rework');
+      const landingOf = async (jobId: string) => (await stack.db.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: jobId },
+        select: { taskId: true, generation: true },
+      }));
+      assert.deepEqual(
+        await Promise.all(claimed.map((row) => landingOf(row.jobId))),
+        [{ taskId: task.taskId, generation: 2 }],
+        `the conflicted task's next landing is claimed, and only it — ${await jobsOf(stack.db, w.projectId)}`,
+      );
+
+      // It lands, by J-S4 MERGE on the runner, and the landing answers the item.
+      assert.equal((await reportLanding(stack, w, claimed[0]!)).accepted, true);
+      const [after] = (await items(stack.db, w.projectId)).filter((row) => row.id === item.id);
+      assert.equal(after?.state, 'RESOLVED');
+      assert.equal(after?.resolution, 'LANDED');
+
+      // The line moves on its own from there: the other task's landing is claimed.
+      const next = await heartbeat('lease-after');
+      const nextTasks = await Promise.all(next.map((row) => landingOf(row.jobId)));
+      assert.ok(
+        nextTasks.some((row) => row.taskId === other.taskId),
+        `the other task's landing is still held — ${await jobsOf(stack.db, w.projectId)}`,
+      );
     } finally {
       await stack.db.$disconnect();
     }
