@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test": "vitest run --maxWorkers=2"
+    "test": "vitest run --maxWorkers=2",
+    "test:ui-migration": "playwright test --config ui-migration/playwright.config.mjs",
+    "pretest:ui-migration": "npm run build -w @orbit/shared && npm run build"
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",
@@ -28,6 +30,7 @@
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.63.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",

@@ -1,0 +1,62 @@
+
+> @orbit/web@0.1.0 test:ui-migration
+> playwright test --config ui-migration/playwright.config.mjs performance.browser.mjs --project=chromium-light-desktop
+
+[WebServer] (node:3896637) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 1 test using 1 worker
+
+(node:3896789) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✘  1 [chromium-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline (24.4s)
+
+
+  1) [chromium-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: getByRole('menu').filter({ has: getByRole('menuitem', { name: 'File', exact: true }) })
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" getByRole('menu').filter({ has: getByRole('menuitem', { name: 'File', exact: true }) }) with timeout 15000ms
+      - waiting for getByRole('menu').filter({ has: getByRole('menuitem', { name: 'File', exact: true }) })
+
+
+      110 |         await measure('attachment-menu-open', async () => {
+      111 |           await attach.click();
+    > 112 |           await expect(menu).toBeVisible();
+          |                              ^
+      113 |         });
+      114 |         await measure('attachment-menu-close', async () => {
+      115 |           await composer.click();
+        at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/src/web/ui-migration/performance.browser.mjs:112:30
+        at measure (/root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/src/web/ui-migration/performance.browser.mjs:98:9)
+        at /root/.orbit/worktrees/1ddccde9-7cbb-5d77-88ba-81b1a77ebabb/src/web/ui-migration/performance.browser.mjs:110:9
+
+    attachment #1: browser-performance-samples (application/json) ──────────────────────────────────
+    .ui-migration-results/performance.browser.mjs-record-browser-performance-baseline-chromium-light-desktop/attachments/browser-performance-samples-8bb581e24edb067e6823fad7bb756fd3ce98e87a.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: .ui-migration-results/performance.browser.mjs-record-browser-performance-baseline-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    .ui-migration-results/performance.browser.mjs-record-browser-performance-baseline-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace .ui-migration-results/performance.browser.mjs-record-browser-performance-baseline-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline 
+npm error Lifecycle script `test:ui-migration` failed with error:
+npm error code 1
+npm error path /root/.orbit/worktrees/***/src/web
+npm error workspace @orbit/web@0.1.0
+npm error location /root/.orbit/worktrees/***/src/web
+npm error command failed
+npm error command sh -c playwright test --config ui-migration/playwright.config.mjs performance.browser.mjs --project=chromium-light-desktop

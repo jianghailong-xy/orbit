@@ -1,0 +1,49 @@
+{
+  "recordedAt": "2026-10-03T19:48:48.662648+00:00",
+  "package": "playwright-core",
+  "version": "1.63.0",
+  "source": "node_modules/playwright-core/lib/coreBundle.js",
+  "sourceSha256": "549070af3acabb3efcc4f55bfe6210f9f7c2fcf633cf7eaa59bfe60719969171",
+  "findings": [
+    {
+      "finding": "setFixedTime installs clock",
+      "sourceLine": 12497,
+      "excerpt": "async setFixedTime(time) {\n        await this._installIfNeeded();\n        const timeMillis = parseTime(time);\n        this._initScripts.push(await this._browserContext.addInitScript(nullProgress, `globalThis.__pwClock.controller.log('setFixedTime', ${Date.now()}, ${timeMillis})`));\n        await this._evaluateInFrames(`globalThis.__pwClock.controller.setFixedTime(${timeMillis})`);\n      }\n      async setSystemTime(time) {\n        await this._installIfNeeded();\n        const timeMillis = parseTime(time);\n        this._initScripts.push(await this._browserContext.addInitScript(nullProgress, `globalThis.__pwClock.controller.log('setSystemTime', ${Date.now()}, ${timeMillis})`));\n        await thi"
+    },
+    {
+      "finding": "all clock APIs are replaced by default",
+      "sourceLine": 12023,
+      "excerpt": "const toFake = ((_b = config.toFake) == null ? void 0 : _b.length) ? config.toFake : Object.keys(originals);\n  for (const method of toFake) {\n    if (method === \"Date\") {\n      globalObject.Date = mirrorDateProperties(api.Date, globalObject.Date);\n    } else if (method === \"Intl\") {\n      globalObject.Intl = api[method];\n    } else if (method === \"AbortSignal\") {\n      globalObject.AbortSignal = api[method];\n    } else if (method === \"performance\") {\n      globalObject.performance = api[method];\n      const kEventTimeStamp = /* @__PURE__ */ Symbol(\"playwrightEventTimeStamp\");\n      Object.defineProperty(Event.prototype, \"timeStamp\", {\n        get() {\n          var _a2;\n        "
+    },
+    {
+      "finding": "timeline entries are discarded",
+      "sourceLine": 12023,
+      "excerpt": "function fakePerformance(clock, performance) {\n  const result = {\n    now: () => clock.performanceNow()\n  };\n  result.__defineGetter__(\"timeOrigin\", () => clock._now.origin || 0);\n  for (const key of Object.keys(performance.__proto__)) {\n    if (key === \"now\" || key === \"timeOrigin\")\n      continue;\n    if (key === \"getEntries\" || key === \"getEntriesByName\" || key === \"getEntriesByType\")\n      result[key] = () => [];\n    else if (key === \"mark\")\n      result[key] = (name) => new FakePerformanceEntry(name, \"mark\", 0, 0);\n    else if (key === \"measure\")\n      result[key] = (name) => new FakePerformanceEntry(name, \"measure\", 0, 50);\n    else\n      result[key] = () => {\n      };\\"
+    },
+    {
+      "finding": "performance ticks are rounded up",
+      "sourceLine": 12023,
+      "excerpt": "performanceNow: () => Math.ceil(originals.raw.performance.now()),\n    setTimeout: (task, timeout) => {\n      const timerId = originals.bound.setTimeout(task, timeout);\n      return () => originals.bound.clearTimeout(timerId);\n    },\n    setInterval: (task, delay) => {\n      const intervalId = originals.bound.setInterval(task, delay);\n      return () => originals.bound.clearInterval(intervalId);\n    }\n  };\n  const clock = new ClockController(embedder);\n  const api = createApi(clock, originals.bound, config.browserName);\n  return { clock, api, originals: originals.raw };\n}\nfunction install(globalObject, config = {}) {\n  var _a, _b;\n  if ((_a = globalObject.Date) == null ? void "
+    },
+    {
+      "finding": "animation frame uses clock timer",
+      "sourceLine": 12023,
+      "excerpt": "requestAnimationFrame: (callback) => {\n      return clock.addTimer({\n        type: \"AnimationFrame\" /* AnimationFrame */,\n        func: callback,\n        delay: clock.getTimeToNextFrame()\n      });\n    },\n    cancelAnimationFrame: (timerId) => {\n      if (timerId)\n        return clock.clearTimer(timerId, \"AnimationFrame\" /* AnimationFrame */);\n    },\n    requestIdleCallback: (callback, options) => {\n      let timeToNextIdlePeriod = 0;\n      if (clock.countTimers() > 0)\n        timeToNextIdlePeriod = 50;\n      return clock.addTimer({\n        type: \"IdleCallback\" /* IdleCallback */,\n        func: callback,\n        delay: (options == null ? void 0 : options.timeout) ? Math.min"
+    }
+  ],
+  "oldMethod": "page.clock.setFixedTime(new Date(FIXED_NOW))",
+  "newMethod": "installFixedDate(page): a Proxy replaces Date only; native timers, requestAnimationFrame, performance and Performance Timeline remain untouched.",
+  "oldEvidenceInterpretation": {
+    "hostMs": "Node process performance.now measurements are unaffected by page.clock and remain valid observations of host elapsed time for the OLD shimmed browser workload. They are not evidence of a native-clock workload and should not be directly mixed with new samples. The page load field hostReadyMs has the same limitation.",
+    "browserMs": "The old browserMs and browserReadyMs were elapsed synthetic clock ticks derived from Math.ceil(native performance.now), not native Performance API measurements. Keep as historical diagnostic data; do not use them as the corrected native-clock performance baseline.",
+    "navigationAndPaint": "Old empty arrays came from fakePerformance.getEntriesByType returning []; they do not establish missing or zero navigation/paint events.",
+    "oldMethodologyCorrection": "The old claim that performance.now, navigation timing and animation frames remain real was incorrect. This audit supersedes that claim without modifying or deleting the original records.",
+    "screenshotsAndBehavior": "Original screenshots and visible interaction observations remain historical evidence. A full default-entry run with native timers must compare existing PNGs without updating them to establish that the corrected clock preserves these baselines."
+  },
+  "requiredGuardAssertions": [
+    "Each page load has exactly one native Navigation Timing entry.",
+    "Each page load includes first-contentful-paint in native Paint Timing.",
+    "Date.now(), new Date().toISOString(), and Date() all resolve to the fixed wall time."
+  ],
+  "retention": "Preserve earlier independent performance.json and full-run reports in their existing paths as records of the old method. Identify the corrected full-run performance attachment separately."
+}

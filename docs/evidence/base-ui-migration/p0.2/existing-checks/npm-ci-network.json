@@ -1,0 +1,6 @@
+{
+  "command": "npm ci --ignore-scripts --no-audit --no-fund --cache /tmp/orbit-p02-npm-cache --fetch-retries=0 --fetch-timeout=15000",
+  "exitCode": 0,
+  "network": "Executed outside sandbox after DNS failures in sandbox.",
+  "log": "npm-ci-network.log"
+}
