@@ -605,10 +605,10 @@ export type UnrunSessionRequests =
  * UNDELIVERED, with what took it: one still queued, and — when a run is ending — a steer still in
  * flight that the engine never acknowledged. The one exception is the turn the retry re-sends (§8
  * criteria 18 and 23): its request stays OPEN and goes with the re-sent turn, because those words are
- * not being dropped — provided the retry can find them again. A message in flight when a reap or a
- * finalize ends the run keeps its request the same way: the runner took it, and the retry re-sends it
- * even when the runner went away before recording anything of it (§8 criterion 27, `retryRecords`); if
- * another turn takes that retry's place, what no engine read is closed then
+ * not being dropped — provided the retry can find them again. So does a message in flight when a reap
+ * or a finalize ends the run, which the retry re-sends even when the runner went away before recording
+ * anything of it (§8 criterion 27, `retryRecords`); one the retry cannot find is UNDELIVERED here, as a
+ * queued one is. If another turn later takes the retry's place, what no engine read is closed then
  * (`closeRequestsTheRetryWillNotResend`). A turn of this session as an ASKER may
  * carry outcomes back to it — a reply turn still queued, or any turn they were written into when it
  * was handed out — and those outcomes are not lost with it, nor with the turn whose failure is ending
@@ -652,13 +652,16 @@ export async function settleUnrunSessionRequests(
   // for good, and the block on the re-sent turn would say it is closed, which is the one reading the
   // retry exists to avoid. Without a retry armed the words really are gone and it is UNDELIVERED.
   //
-  // §8 criterion 23: and only when the sweep can find those words again. It reads them off the records
-  // the sweep's own chooser reads (`turnsTheRetryCanFind`); a failed turn with no record at all would be
-  // passed over for an older message, and its request would sit OPEN on a turn nothing will ever
-  // deliver until its deadline. Such a turn is not re-sent, so its request is UNDELIVERED now.
-  const resent = new Set(ending && unrun.retryArmed && unrun.failedTurnKey
+  // §8 criteria 23 and 27: and only when the sweep can find those words again — asked of every message
+  // the end takes unrun, the queued and the one in flight alike, with the very records the sweep's own
+  // chooser reads (`turnsTheRetryCanFind`). A turn with no record would be passed over for an older
+  // message, and its request would sit OPEN on a turn nothing will ever deliver, to be judged NO_REPLY
+  // against what the re-send of something else says. Such a turn is not re-sent, so its request is
+  // UNDELIVERED now. A queued message the runner echoed and put back (its engine never came up) is one
+  // the sweep does find, and its request stays with it.
+  const resent = new Set(ending && unrun.retryArmed
     ? await turnsTheRetryCanFind(tx, sessionId, unrunTurns
-        .filter((turn) => turn.clientTurnId === unrun.failedTurnKey)
+        .filter((turn) => turn.kind === 'message')
         .map((turn) => turn.id))
     : []);
   const queued = unrunTurns
@@ -672,6 +675,15 @@ export async function settleUnrunSessionRequests(
         closeReason: unrun.code === 'TURN_INTERRUPTED' ? 'INTERRUPTED' : unrun.code === 'TURN_WITHDRAWN' ? 'WITHDRAWN' : 'DRAINED',
         closedAt: new Date(),
       },
+    });
+  }
+  const lost = unrunTurns
+    .filter((turn) => turn.kind === 'message' && turn.status === 'IN_FLIGHT' && !resent.has(turn.id))
+    .map((turn) => turn.id);
+  if (lost.length > 0) {
+    await tx.sessionRequest.updateMany({
+      where: { toSessionId: sessionId, turnId: { in: lost }, state: 'OPEN' },
+      data: { state: 'UNDELIVERED', closeReason: 'LOST_IN_FLIGHT', closedAt: new Date() },
     });
   }
   await closeUnreadSteerRequests(tx, sessionId, unrunTurns
@@ -716,6 +728,23 @@ export const FAILED_DELIVERY_RECEIPT = {
   payload: { path: ['delivery'], equals: 'failed' },
 } satisfies Prisma.RunEventWhereInput;
 
+/**
+ * The runner's receipt that a message it had echoed was never read after all: a `user_delivery` whose
+ * `delivery` is `requeued` — a steer whose engine was fenced before it read the frame goes back to the
+ * queue as a message of its own (runner-go session.go, `deliveryRequeued`).
+ */
+const REQUEUED_DELIVERY_RECEIPT = {
+  type: RunEventType.USER_DELIVERY,
+  payload: { path: ['delivery'], equals: 'requeued' },
+} satisfies Prisma.RunEventWhereInput;
+
+/**
+ * What says a message's engine replied to it: the workspace's own reply (runnerApi's ANSWERS_USER_TURN).
+ * A system line, stderr, a background job's event, an engine refusing the turn, or the interrupt a
+ * draining runner files as it tears the turn down is none of these.
+ */
+const ENGINE_REPLIES = [RunEventType.ASSISTANT, RunEventType.RESULT];
+
 /** How many of the runner's records the retry reads back: enough to cover a run of image-only turns. */
 const RETRY_RECORDS = 20;
 
@@ -754,10 +783,10 @@ function receiptTurn(receipt: { payload: Prisma.JsonValue; turnId: string | null
  *     re-send. A handful covers a run of image-only turns, which carry no text;
  *   - its receipt saying it could not hand one over (FAILED_DELIVERY_RECEIPT), for the turn the receipt
  *     names: for Claude the only trace of a message the runtime refused before writing it;
- *   - and last, the message it took and went away with before writing anything of it (`lostDelivery`).
+ *   - and last, the message it took and went away with before recording it (`lostDelivery`).
  */
 export async function retryRecords(
-  db: Pick<Prisma.TransactionClient, 'runEvent' | 'conversationTurn'>,
+  db: Pick<Prisma.TransactionClient, 'runEvent' | 'conversationTurn' | 'session'>,
   sessionId: string,
 ): Promise<RetryRecord[]> {
   const select = { payload: true, turnId: true, seq: true } as const;
@@ -782,42 +811,68 @@ export async function retryRecords(
 }
 
 /**
- * The message the runner took last, when it went away holding it before writing anything of it — no
- * echo, no receipt, no reply: the runner was reaped as offline, or the run finalized with its engine
- * gone, and the run's drain answered the turn unrun (§8 criterion 27). The claim's stamp, which that
- * drain leaves on the row (`delivered_at`), is all there is to say it was taken, and it is the message
- * the retry re-sends (§2.1) — not the one before it, which was answered. Message turns are taken one at
- * a time and in order, so it is the newest message there is, unless one after it has a record of its
- * own: put back in the queue when its engine never came up, and failed there.
+ * The message the runner took last, when the run ended under it before the runner recorded it — no
+ * `user` echo, no receipt saying it could not hand it over — and before its engine replied to it (§8
+ * criterion 27): the runner was reaped as offline, or the run finalized with its engine gone, and the
+ * run's drain answers the turn unrun. The claim's stamp, which that drain leaves on the row
+ * (`delivered_at`), is all there is to say it was taken, and it is the message the retry re-sends (§2.1)
+ * — not the one before it, which was answered.
+ *
+ * Other events can be filed under it all the same: the runner points its output at a turn as it takes
+ * it, before it echoes the turn (runner-go session.go and codex.go, `setTurn`), so a system line, stderr,
+ * a background job's event, or the engine refusing the turn ("already has an active turn") lands on the
+ * lost message. None of them is the engine replying to it (`ENGINE_REPLIES`).
+ *
+ * "Last" is by turn: message and shell turns are taken one at a time and in order, so a shell the owner
+ * revived the session with after it is newer, and so is a message put back in the queue with a record of
+ * its own. "The run ended under it": answered unrun, or — inside the very transaction that ends the run
+ * and drains it, after the end is written — still out on its delivery.
  */
 async function lostDelivery(
-  db: Pick<Prisma.TransactionClient, 'runEvent' | 'conversationTurn'>,
+  db: Pick<Prisma.TransactionClient, 'runEvent' | 'conversationTurn' | 'session'>,
   sessionId: string,
   records: readonly RetryRecord[],
 ): Promise<string | null> {
   const taken = await db.conversationTurn.findFirst({
-    where: { sessionId, kind: 'message', deliveredAt: { not: null } },
+    where: { sessionId, kind: { in: ['message', 'shell'] }, deliveredAt: { not: null } },
     orderBy: { seq: 'desc' },
-    select: { id: true, seq: true, status: true },
+    select: { id: true, seq: true, kind: true, status: true },
   });
   const recorded = new Set(records.flatMap((record) => (record.turnId ? [record.turnId] : [])));
-  // Still out on its delivery, or found by its own record.
-  if (!taken || taken.status !== 'ANSWERED' || recorded.has(taken.id)) return null;
-  // An engine that answered it left its reply under it, whatever became of the echo.
-  if (await db.runEvent.findFirst({ where: { sessionId, turnId: taken.id }, select: { id: true } })) return null;
+  if (!taken || taken.kind !== 'message' || recorded.has(taken.id)) return null;
+  if (taken.status !== 'ANSWERED') {
+    const session = await db.session.findUnique({ where: { id: sessionId }, select: { status: true } });
+    if (!session || !RUN_ENDED.includes(session.status)) return null;
+  }
+  // Looked for under the turn itself, not in the window of records.
+  const reached = await db.runEvent.findFirst({
+    where: {
+      sessionId,
+      OR: [
+        { turnId: taken.id, type: { in: [RunEventType.USER, ...ENGINE_REPLIES] } },
+        { ...FAILED_DELIVERY_RECEIPT, turnId: taken.id },
+        { type: RunEventType.USER_DELIVERY, AND: [{ payload: FAILED_DELIVERY_RECEIPT.payload }, { payload: { path: ['turnId'], equals: taken.id } }] },
+      ],
+    },
+    select: { id: true },
+  });
+  if (reached) return null;
   const after = recorded.size === 0 ? null : await db.conversationTurn.findFirst({
-    where: { sessionId, kind: 'message', seq: { gt: taken.seq }, id: { in: [...recorded] } },
+    where: { sessionId, kind: { in: ['message', 'shell'] }, seq: { gt: taken.seq }, id: { in: [...recorded] } },
     select: { id: true },
   });
   return after ? null : taken.id;
 }
+
+/** A run that is over: what a reap or a finalize writes before it drains the run's turns. */
+const RUN_ENDED: string[] = ['SUCCEEDED', 'FAILED', 'CANCELLED'];
 
 /**
  * Of these failed turns, the ones the auto-retry will find again: a turn the records it reads are about
  * (`retryRecords`), so the drain keeps a request for exactly the re-send the chooser will make.
  */
 export async function turnsTheRetryCanFind(
-  db: Pick<Prisma.TransactionClient, 'runEvent' | 'conversationTurn'>,
+  db: Pick<Prisma.TransactionClient, 'runEvent' | 'conversationTurn' | 'session'>,
   sessionId: string,
   turnIds: readonly string[],
 ): Promise<string[]> {
@@ -830,8 +885,9 @@ export async function turnsTheRetryCanFind(
 /**
  * Of these message turns, the ones an engine was handed (§4, §8 criterion 26): the runner's last word on
  * each is its `user` echo, written as it hands the words over, and not a receipt after it saying the
- * handing failed — Claude echoes a message as it queues it for the CLI, and a write that then fails says
- * so on a receipt (FAILED_DELIVERY_RECEIPT).
+ * frame never reached the engine — Claude echoes a message as it queues it for the CLI, and a write that
+ * then fails says so (FAILED_DELIVERY_RECEIPT), as a steer put back in the queue unread does
+ * (REQUEUED_DELIVERY_RECEIPT).
  */
 async function turnsAnEngineWasHanded(
   db: Pick<Prisma.TransactionClient, 'runEvent'>,
@@ -849,7 +905,11 @@ async function turnsAnEngineWasHanded(
   }
   if (lastEcho.size === 0) return new Set();
   const refusals = await db.runEvent.findMany({
-    where: { sessionId, ...FAILED_DELIVERY_RECEIPT, seq: { gt: Math.min(...lastEcho.values()) } },
+    where: {
+      sessionId,
+      seq: { gt: Math.min(...lastEcho.values()) },
+      OR: [FAILED_DELIVERY_RECEIPT, REQUEUED_DELIVERY_RECEIPT],
+    },
     select: { payload: true, turnId: true, seq: true },
   });
   for (const refusal of refusals) {
@@ -1170,6 +1230,7 @@ const UNDELIVERED_BECAUSE: Record<string, string> = {
   DRAINED: '这条请求没有送到：对方正在跑的那一轮失败了，排队中的消息随队列一起被清掉（平台会重试失败的那一轮，但不会重发这条请求）。对方从没看到它。',
   STEER_UNCONFIRMED: '这条请求没有送到：它本要插进对方正在跑的那一轮，但对方的引擎没有确认收到它——没能写进去，或者那一轮在它送达前就结束了。对方很可能没看到它，需要的话请重新发送。',
   NOT_RESENT: '这条请求没有送到：承载它的那一轮在对方的引擎收到它之前就失败了，之后对方的会话由另一条消息接着跑下去，失败的那一轮不会再重发。对方从没看到它，需要的话请重新发送。',
+  LOST_IN_FLIGHT: '这条请求没有送到：对方的 runner 领走它之后，那一轮随对方的 run 一起结束了，平台的自动重试找不回这一轮，不会重发它。需要的话请重新发送。',
 };
 
 /** §4.2: one outcome, as the asker reads it. */

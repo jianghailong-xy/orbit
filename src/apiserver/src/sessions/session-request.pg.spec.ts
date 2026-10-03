@@ -28,7 +28,7 @@
  *     session wakes it;
  *   - `session_reply` succeeds once REPLIED is written, whatever happens to the hand-off after it.
  *
- * And the auto-retry, from both ends of a request (§8 criteria 14, 17, 18, 20, 21 and 23–25):
+ * And the auto-retry, from both ends of a request (§8 criteria 14, 17, 18, 20, 21 and 23–27):
  *
  *  14. a request whose turn the auto-retry re-sends goes with it — the request names the new turn,
  *      the block the engine reads asks for a reply, the echo's card names the request — and a session
@@ -54,7 +54,15 @@
  *      its lease runs out, and what was held for it is said where the asker stands then — and a writer
  *      that comes back after its lease writes nothing;
  *  25. the owner turning the retry off while it is claimed is the retry given up: the re-send is not
- *      written, and the outcome held for it is said once.
+ *      written, and the outcome held for it is said once;
+ *  26. a request kept for a re-send that will not come is settled at once: when the owner takes over from
+ *      the retry it is UNDELIVERED if no engine was handed it (no echo, or a receipt after the echo saying
+ *      the frame failed or was put back unread), and judged as read when the owner's turn settles if one
+ *      was; a FAILED run whose retry is turned off or given up closes it RECIPIENT_ENDED, said once;
+ *  27. a run that ends with its runner holding a message it never echoed — reaped as offline, or finalized —
+ *      has that message re-sent with its request, whatever the runner filed under it first; one the retry
+ *      cannot find is UNDELIVERED as the run ends, and what a run's end keeps for the retry is exactly what
+ *      the retry re-sends.
  *
  * And an outcome whose asker is armed again does not hold the request worker's place in line.
  *
@@ -2265,7 +2273,7 @@ test('a session asks another for a reply, and every request comes to exactly one
     }
   });
 
-  await t.test('a runner goes away holding a message it never echoed: the retry re-sends that message, the request goes with it, and one never re-sent is UNDELIVERED at once (§8 criterion 27)', async () => {
+  await t.test('a run that ends with its runner holding a message it never echoed: the retry re-sends that message with its request, and one it cannot find is UNDELIVERED at once (§8 criterion 27)', async () => {
     // A machine of its own, so that its silence reaps none of this file's other sessions.
     const lostRunnerId = randomUUID();
     const lostWorkspaceId = randomUUID();
@@ -2279,16 +2287,34 @@ test('a session asks another for a reply, and every request comes to exactly one
     const lostHeartbeat = (at = new Date()) =>
       prisma.runner.update({ where: { id: lostRunnerId }, data: { lastHeartbeatAt: at } });
     const reaper = new ReaperService(db, realtime as never);
+    const reap = async () => {
+      // The machine stops answering; this file's own keeps beating, so only this machine's run is reaped.
+      await lostHeartbeat(new Date(Date.now() - 10 * 60_000));
+      await heartbeat();
+      await (reaper as unknown as { sweep(): Promise<void> }).sweep();
+    };
     const retrier = new AutoRetryService(db, sessions, realtime as never);
+    /** What a runner writes under a turn once it points its output at it, before it echoes it (runner-go
+     *  session.go and codex_appserver.go): a stderr line, and the engine refusing the turn. */
+    const stderr = { type: RunEventType.SYSTEM, payload: { stderr: 'warning: falling back to the bundled ripgrep\n' } };
+    const refusal = { type: RunEventType.ERROR, payload: { message: 'codex app-server already has an active turn' } };
 
     /**
-     * A recipient on that machine that has answered the owner once, and is then asked `question`: the
-     * runner takes the turn and goes silent before writing anything of it — no echo, no receipt, no
-     * completion — and the reaper reaps the run as 'runner offline', with a retry armed.
+     * A recipient on that machine that has answered the owner once, and is then asked `question`. The
+     * runner takes the turn, files `before` under it, and the run ends with the turn still in flight —
+     * `reaped` (the machine goes silent, the reaper reaps the run as 'runner offline') or `finalized` (the
+     * runner finalizes it FAILED on a spent quota) — before the runner echoes it. A retry is armed either way.
      */
-    async function lostInFlight(label: string, question: string) {
+    async function heldWhenTheRunEnded(
+      label: string,
+      question: string,
+      { before = [], ending = 'reaped' }: {
+        before?: Array<{ type: RunEventType; payload: Record<string, unknown> }>;
+        ending?: 'reaped' | 'finalized';
+      } = {},
+    ) {
       const asker = await session(`Worker: asks one whose runner goes away (${label})`);
-      const recipient = await session(`Coordinator: its runner goes away holding the question (${label})`, {
+      const recipient = await session(`Coordinator: its run ends with the question in flight (${label})`, {
         workspaceId: lostWorkspaceId, assignedRunnerId: lostRunnerId,
       });
       await lostHeartbeat();
@@ -2302,43 +2328,48 @@ test('a session asks another for a reply, and every request comes to exactly one
       const request = await ask(asker, recipient, question);
       const taken = await deliver(recipient, lostRunnerId);
       assert.equal(taken.turnId, request.turnId);
-      // The machine stops answering; this file's own keeps beating, so only this run is reaped.
-      await lostHeartbeat(new Date(Date.now() - 10 * 60_000));
-      await heartbeat();
-      await (reaper as unknown as { sweep(): Promise<void> }).sweep();
-      const reaped = await prisma.session.findUniqueOrThrow({ where: { id: recipient } });
-      assert.equal(reaped.status, RunStatus.FAILED, `${label}: the run was not reaped`);
-      assert.equal(reaped.error, 'runner offline');
-      assert.ok(reaped.retryAt, `${label}: the reaper armed no retry`);
-      const lost = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: taken.turnId } });
-      assert.equal(lost.status, 'ANSWERED');
-      assert.ok(lost.deliveredAt, `${label}: the claim left no stamp`);
-      assert.equal(await prisma.runEvent.count({ where: { sessionId: recipient, turnId: taken.turnId } }), 0,
-        `${label}: the fixture recorded something of the message it says was lost`);
-      assert.equal((await requestRow(request.id)).state, 'OPEN', `${label}: closed although the retry would re-send it`);
+      for (const event of before) await say(recipient, taken.turnId, event.type, event.payload, lostRunnerId);
+      if (ending === 'reaped') {
+        await reap();
+      } else {
+        await api.finalize({ id: lostRunnerId } as never, recipient, { status: 'FAILED', error: SESSION_LIMIT } as never);
+      }
+      const ended = await prisma.session.findUniqueOrThrow({ where: { id: recipient } });
+      assert.equal(ended.status, RunStatus.FAILED, `${label}: the run did not end`);
+      if (ending === 'reaped') assert.equal(ended.error, 'runner offline');
+      assert.ok(ended.retryAt, `${label}: no retry was armed`);
+      const held = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: taken.turnId } });
+      assert.equal(held.status, 'ANSWERED');
+      assert.ok(held.deliveredAt, `${label}: the claim left no stamp`);
+      assert.equal(await prisma.runEvent.count({ where: { sessionId: recipient, turnId: taken.turnId } }), before.length,
+        `${label}: the fixture recorded more of the message than it says`);
       return { asker, recipient, request };
     }
 
-    // The machine comes back: the retry re-sends the message it went away with — not the owner's earlier,
-    // answered question — and the request goes with it, asked and judged on the turn it rides now.
-    {
-      const question = 'is the release branch cut? (lost in flight)';
-      const { asker, recipient, request } = await lostInFlight('re-sent', question);
+    /** The machine comes back and the retry comes due: it re-sends `question` with its request, asked and
+     *  judged on the turn it rides now — not the owner's earlier, answered question. */
+    async function resentWithItsRequest(
+      label: string,
+      held: { asker: string; recipient: string; request: { id: string; requestId: string } },
+      question: string,
+    ) {
+      const { asker, recipient, request } = held;
+      assert.equal((await requestRow(request.id)).state, 'OPEN', `${label}: closed although the retry re-sends it`);
       // The failure card promises what the sweep is about to do.
       const card = await retrier.retryMessage(ownerId, recipient);
-      assert.equal(card.text, question, 'the failure card offers the message before the one the runner lost');
+      assert.equal(card.text, question, `${label}: the failure card offers the message before the one the run ended under`);
       assert.equal(card.sessionMessage?.requestId, request.requestId);
 
       await lostHeartbeat();
       await retryComesDue(recipient, retrier);
       const [resent, ...more] = await resentOn(recipient);
-      assert.ok(resent, 'the sweep re-sent nothing');
-      assert.equal(more.length, 0, 'the sweep re-sent twice');
+      assert.ok(resent, `${label}: the sweep re-sent nothing`);
+      assert.equal(more.length, 0, `${label}: the sweep re-sent twice`);
       assert.equal(resent.content, question,
-        'the sweep re-sent the message before the one the runner lost — an answered question, asked again');
-      assert.equal(resent.senderSessionId, asker, 'the re-send dropped its sender');
+        `${label}: the sweep re-sent the message before the one the run ended under — an answered question, asked again`);
+      assert.equal(resent.senderSessionId, asker, `${label}: the re-send dropped its sender`);
       const moved = await requestRow(request.id);
-      assert.equal(moved.turnId, resent.id, 'the request stayed on the turn the runner lost');
+      assert.equal(moved.turnId, resent.id, `${label}: the request stayed on the turn the run ended under`);
       assert.equal(moved.state, 'OPEN');
 
       const again = await deliver(recipient, lostRunnerId);
@@ -2347,18 +2378,63 @@ test('a session asks another for a reply, and every request comes to exactly one
       assert.match(again.content, /对方在等你回复/);
       await prisma.session.update({ where: { id: recipient }, data: { inboxLeaseOwner: null } });
       await say(recipient, again.turnId, RunEventType.USER, { text: again.content }, lostRunnerId);
-      await finish(recipient, again.turnId, 'checking the release branch', lostRunnerId);
+      await finish(recipient, again.turnId, `looking into it now (${label})`, lostRunnerId);
       const judged = await requestRow(request.id);
       assert.equal(judged.state, 'NO_REPLY');
-      assert.equal(judged.excerpt, 'checking the release branch', 'judged against words about something else');
+      assert.equal(judged.excerpt, `looking into it now (${label})`, `${label}: judged against words about something else`);
+    }
+
+    /** Nothing the retry reads finds the turn: its request is UNDELIVERED as the run ends — not left OPEN to
+     *  be judged NO_REPLY against the words of whatever the retry re-sends instead — and said once. */
+    async function undeliveredAsTheRunEnds(label: string, asker: string, request: { id: string }) {
+      const row = await requestRow(request.id);
+      assert.equal(row.state, 'UNDELIVERED', `${label}: left OPEN on a turn the retry will not re-send`);
+      assert.equal(row.closeReason, 'LOST_IN_FLIGHT');
+      assert.equal(row.excerpt, null);
+      assert.ok((await worker.drain()).handedOff.includes(request.id), `${label}: the worker did not hand it back`);
+      assert.ok(!(await worker.drain()).handedOff.includes(request.id), `${label}: handed back twice`);
+      const told = await deliver(asker);
+      assert.equal(blocksFor(told.content, request.id), 1, `${label}: the asker was not told once`);
+      assert.match(told.content, /outcome="UNDELIVERED"/);
+      assert.match(told.content, /找不回这一轮/);
+    }
+
+    // Reaped, with a stderr line and the engine refusing the turn filed under it before any echo.
+    {
+      const question = 'is the release branch cut? (reaped)';
+      const held = await heldWhenTheRunEnded('reaped', question, { before: [stderr, refusal] });
+      await resentWithItsRequest('reaped', held, question);
+    }
+    // Finalized by its runner on a spent quota, with a stderr line under it.
+    {
+      const question = 'is the release branch cut? (finalized)';
+      const held = await heldWhenTheRunEnded('finalized', question, { before: [stderr], ending: 'finalized' });
+      await resentWithItsRequest('finalized', held, question);
+    }
+    // The engine had replied to it, and no echo or receipt says so: it is not a message the runner went away
+    // with before recording it, and nothing else the retry reads names it.
+    {
+      const { asker, request } = await heldWhenTheRunEnded('replied, reaped', 'and is the tag pushed? (reaped)', {
+        before: [stderr, { type: RunEventType.ASSISTANT, payload: { text: 'checking the tags…' } }],
+      });
+      await undeliveredAsTheRunEnds('replied, reaped', asker, request);
+    }
+    {
+      const { asker, request } = await heldWhenTheRunEnded('replied, finalized', 'and is the tag pushed? (finalized)', {
+        before: [{ type: RunEventType.ASSISTANT, payload: { text: 'checking the tags…' } }],
+        ending: 'finalized',
+      });
+      await undeliveredAsTheRunEnds('replied, finalized', asker, request);
     }
 
     // The owner sends a message of their own instead: the lost words will never be re-sent, and no engine
     // read them — UNDELIVERED at once, not NO_REPLY with the words of the owner's turn.
     {
-      const { asker, recipient, request } = await lostInFlight('taken over', 'and is the tag pushed? (lost in flight)');
+      const { asker, recipient, request } = await heldWhenTheRunEnded('taken over', 'and the changelog? (taken over)', {
+        before: [stderr],
+      });
       await lostHeartbeat();
-      await sessions.resume(ownerId, recipient, { clientTurnId: randomUUID(), content: 'forget the tag, rebase onto main' });
+      await sessions.resume(ownerId, recipient, { clientTurnId: randomUUID(), content: 'forget it, rebase onto main' });
       const row = await requestRow(request.id);
       assert.equal(row.state, 'UNDELIVERED', 'left OPEN on a turn that will never be re-sent');
       assert.equal(row.closeReason, 'NOT_RESENT');
@@ -2374,6 +2450,98 @@ test('a session asks another for a reply, and every request comes to exactly one
       assert.equal(blocksFor(told.content, request.id), 1, 'the asker was not told once');
       assert.match(told.content, /outcome="UNDELIVERED"/);
       assert.deepEqual(await resentOn(recipient), [], 'the lost words were re-sent after all');
+    }
+
+    // The owner revives it with a shell command instead: the shell is the newer turn the runner takes, so the
+    // message the earlier run ended under is no longer the last one — and when the shell's own run is lost
+    // too, the failure card does not offer the message the owner moved on from.
+    {
+      const question = 'and the release notes? (a shell after it)';
+      const { recipient, request } = await heldWhenTheRunEnded('a shell after it', question, { before: [stderr] });
+      await lostHeartbeat();
+      await sessions.resume(ownerId, recipient, { clientTurnId: randomUUID(), content: 'git status', kind: 'shell' });
+      assert.equal((await requestRow(request.id)).state, 'UNDELIVERED', 'the shell took the retry’s place and left the request OPEN');
+      await prisma.session.update({ where: { id: recipient }, data: { status: RunStatus.RUNNING } });
+      const handed = await (api as unknown as {
+        dequeueTurn: (sessionId: string, runnerId: string, leaseGeneration: string | null) => Promise<Record<string, unknown> | null>;
+      }).dequeueTurn.call(api, recipient, lostRunnerId, null);
+      assert.equal((await prisma.conversationTurn.findUniqueOrThrow({ where: { id: String(handed?.turnId) } })).kind, 'shell');
+      await reap();
+      assert.ok((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).retryAt);
+      const card = await retrier.retryMessage(ownerId, recipient);
+      assert.notEqual(card.text, question, 'the message the owner moved on from is offered again, as if it were the last');
+    }
+  });
+
+  await t.test('what a run’s end keeps for the retry is what the retry re-sends: a message echoed and put back, and a steer put back unread (§8 criteria 18, 26, 27)', async () => {
+    // A message the runner echoed and put back in the queue — its engine never came up — then drained by the
+    // runner finalizing the run: the retry finds it by its echo and re-sends it, so its request is kept for
+    // that re-send and moves with it, rather than closed DRAINED and re-sent all the same.
+    {
+      const asker = await session('Worker: asks one whose engine never comes up');
+      const recipient = await session('Coordinator: its engine never comes up, and its runner finalizes the run');
+      await sessions.createTurn(ownerId, recipient, { clientTurnId: randomUUID(), content: 'the owner’s earlier question (put back)' });
+      const first = await deliver(recipient);
+      await say(recipient, first.turnId, RunEventType.USER, { text: first.content });
+      await finish(recipient, first.turnId, 'the earlier answer (put back)');
+      const request = await ask(asker, recipient, 'which migration number is free? (put back)');
+      const handed = await deliver(recipient);
+      await say(recipient, handed.turnId, RunEventType.USER, { text: handed.content });
+      await api.turnComplete({ id: runnerId } as never, recipient, {
+        turnId: handed.turnId, status: SharedRunStatus.SUCCEEDED, subtype: 'success', numTurns: 0, costUsd: 0,
+      } as never);
+      const putBack = await prisma.conversationTurn.findUniqueOrThrow({ where: { id: handed.turnId } });
+      assert.equal(putBack.status, 'PENDING', 'the turn that produced nothing was not put back in the queue');
+      assert.ok((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).retryAt, 'no retry was armed');
+      await api.finalize({ id: runnerId } as never, recipient, { status: 'FAILED', error: 'the engine exited before its first turn' } as never);
+      assert.equal((await prisma.session.findUniqueOrThrow({ where: { id: recipient } })).status, RunStatus.FAILED);
+      assert.equal((await requestRow(request.id)).state, 'OPEN', 'closed DRAINED although the retry re-sends it');
+
+      await retryComesDue(recipient);
+      const [resent, ...more] = await resentOn(recipient);
+      assert.ok(resent, 'the sweep re-sent nothing');
+      assert.equal(more.length, 0);
+      assert.equal(resent.content, 'which migration number is free? (put back)');
+      assert.equal((await requestRow(request.id)).turnId, resent.id, 'the request stayed on the turn the run ended with');
+      const again = await deliver(recipient);
+      assert.match(again.content, new RegExp(`request-id="${uuidToBase62(request.id)}"`));
+    }
+
+    // A steer the runner echoed and then put back unread — its engine was fenced before it read the frame —
+    // runs as a message of its own; the run ends with it in flight, and the owner takes over from the retry.
+    // Its echo is not the engine reading it: the receipt after it says so, and it is UNDELIVERED — not left
+    // OPEN to be judged NO_REPLY as a request read and left unanswered.
+    {
+      const asker = await session('Worker: steers a request that comes back unread');
+      const recipient = await session('Coordinator: its steer comes back unread, and its owner takes over');
+      const running = await busy(recipient);
+      await say(recipient, running, RunEventType.USER, { text: 'the owner\'s own task' });
+      const request = await ask(asker, recipient, 'quick one: which port? (put back unread)');
+      const steer = await deliverSteer(recipient);
+      assert.equal(steer.turnId, request.turnId);
+      await say(recipient, steer.turnId, RunEventType.USER, { text: steer.content, steer: true, delivery: 'enqueued' });
+      await say(recipient, running, RunEventType.USER_DELIVERY, { turnId: steer.turnId, delivery: 'requeued' });
+      await requeueSteer(recipient, steer.turnId);
+      await finish(recipient, running, 'done with the task');
+      const asMessage = await deliver(recipient);
+      assert.equal(asMessage.turnId, steer.turnId);
+      await api.finalize({ id: runnerId } as never, recipient, { status: 'FAILED', error: SESSION_LIMIT } as never);
+      const failed = await prisma.session.findUniqueOrThrow({ where: { id: recipient } });
+      assert.equal(failed.status, RunStatus.FAILED);
+      assert.ok(failed.retryAt, 'no retry was armed');
+      assert.equal((await requestRow(request.id)).state, 'OPEN', 'closed although the retry would re-send it');
+
+      await heartbeat();
+      await sessions.resume(ownerId, recipient, { clientTurnId: randomUUID(), content: 'never mind, check the logs instead' });
+      const row = await requestRow(request.id);
+      assert.equal(row.state, 'UNDELIVERED', 'an echo put back unread was taken for the engine reading it');
+      assert.equal(row.closeReason, 'NOT_RESENT');
+      const own = await deliver(recipient);
+      await prisma.session.update({ where: { id: recipient }, data: { inboxLeaseOwner: null } });
+      await say(recipient, own.turnId, RunEventType.USER, { text: own.content });
+      await finish(recipient, own.turnId, 'the logs are clean');
+      assert.equal((await requestRow(request.id)).state, 'UNDELIVERED');
+      assert.ok((await worker.drain()).handedOff.includes(request.id), 'the worker did not hand it back');
     }
   });
 });
