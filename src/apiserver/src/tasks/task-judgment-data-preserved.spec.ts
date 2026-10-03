@@ -1727,6 +1727,20 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // UPDATE or DELETE. (Written as 0360 on its own branch and renumbered before it landed: 0359 is
       // spelled by a branch not yet landed, and 0361, 0362, 0364 and 0365 landed first.)
       '0366_session_retry_claim_lease',
+      // A confirmation request's review (0368, docs/owner-confirmation-review-contract.md §3): three new
+      // enums, two new tables (`task_owner_confirmation_review` and its records), one nullable CHAR(40)
+      // column on `task_owner_confirmation_request` and one on `session`, three nullable columns on
+      // `task_owner_decision` with a foreign key and a CHECK on the new values only, and one new
+      // trigger with its own new function on `session`. Read against every claim above: `task` is
+      // named only as the target of the new tables' foreign keys — no column of it is added, dropped or
+      // retyped, and no stored row moves; `task.acceptance_command`, `task.acceptance_expected_exit_code`,
+      // `task_executable_acceptance_pair` and `task_completion_criterion` are not named. Its one
+      // `CREATE OR REPLACE FUNCTION` is the new trigger's own, so it is not another writer of the DONE
+      // fence and names none of the six preserved objects; 0267's CHECKs are left as they were. No
+      // INSERT, UPDATE or DELETE: no request or decision is backfilled. (Written as 0365 on its own
+      // branch and renumbered before it landed: 0365 and 0366 landed first, just above, and 0367 is
+      // spelled by a branch not yet landed. 0369, just below, landed before this one and left 0368 to it.)
+      '0368_owner_confirmation_review',
       // Every live workspace's place in the sidebar, written down (0369): one UPDATE … FROM of
       // `workspace.position`, computed from `workspace` and `runner` rows and nothing else. Read
       // against every claim above: neither table is a preserved relation, and no `task`, `session`,

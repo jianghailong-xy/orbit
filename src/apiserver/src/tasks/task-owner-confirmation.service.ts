@@ -11,8 +11,12 @@ import {
   ownerConfirmationClaimForTurn,
   readOwnerConfirmation,
   recordOwnerConfirmationClaim,
+  returnedByReviewer,
   type OwnerConfirmationView,
 } from './owner-confirmation-read';
+import { confirmationReviewStates, decisionReview, type DecisionReview } from './owner-confirmation-review';
+import { writeOwnerAnswersComment } from './owner-confirmation-review-turn';
+import { OwnerConfirmationReviewService } from './owner-confirmation-review.service';
 import {
   deriveTaskCompletionStatus,
   type TaskCompletionCriterionValue,
@@ -40,6 +44,14 @@ export interface DecideOwnerConfirmation {
   /** The request the card was drawn for; omitted or null for a press that answers no run. */
   requestId?: string | null;
   note?: string | null;
+  /**
+   * The REVIEW record the card drew as the request's current review, or null when it drew none.
+   * ABSENT (undefined) is a client older than reviews (docs/owner-confirmation-review-contract.md
+   * §7 Q3), which is never refused on account of one.
+   */
+  reviewRecordId?: string | null;
+  /** The owner's answers to that review's questions (Q3). */
+  answers?: unknown;
 }
 
 /** What the door returns once it has recorded a decision. */
@@ -80,6 +92,11 @@ interface WrittenDecision {
   requestId: string | null;
 }
 
+/** The standing a decision is taken against, with the moment its newest request was made. */
+type LockedStanding = OwnerConfirmationStanding & {
+  latestRequest: (NonNullable<OwnerConfirmationStanding['latestRequest']> & { requestedAt: Date }) | null;
+};
+
 /**
  * The fourth criterion's door: the account owner confirms an OWNER_CONFIRMED task done, or sends it
  * back with a reason (`task-owner-confirmation.ts` states the rules).
@@ -99,6 +116,8 @@ export class TaskOwnerConfirmationService {
     private readonly sessions: SessionsService,
     @Optional() private readonly tasks?: TasksService,
     @Optional() private readonly realtime?: RealtimeService,
+    /** Tells a request's reviewer what the owner answered (§7 Q5); optional for the specs. */
+    @Optional() private readonly reviews?: OwnerConfirmationReviewService,
   ) {}
 
   async read(ownerId: string, taskId: string): Promise<OwnerConfirmationView> {
@@ -192,10 +211,15 @@ export class TaskOwnerConfirmationService {
       throw new BadRequestException('requestId is invalid');
     }
     const note = ownerDecisionNote(input.decision, input.note);
+    // A send-back carries no answers, and is refused for nothing a review says (Q3): checked here,
+    // before the turn that delivers its reason is begun.
+    if (input.decision === 'SEND_BACK') {
+      decisionReview({ decision: 'SEND_BACK', answering, review: undefined, reviewRecordId: null, answers: input.answers });
+    }
 
-    const receipt = input.decision === 'CONFIRM'
-      ? await this.confirm(ownerId, taskId, answering, note)
-      : await this.sendBack(ownerId, taskId, answering as string | null, note as string);
+    const { receipt, answered } = input.decision === 'CONFIRM'
+      ? await this.confirm(ownerId, taskId, answering, note, input)
+      : { receipt: await this.sendBack(ownerId, taskId, answering as string | null, note as string), answered: false };
 
     // After the commit: the task's views re-read, and the list row the run's session had lit goes
     // dark — a session row is refreshed by nothing that happens to a task.
@@ -210,20 +234,32 @@ export class TaskOwnerConfirmationService {
           + `${error instanceof Error ? error.message : error}`);
       });
     }
+    // Q5 2: the reviewer is told what the owner answered, after the commit and best-effort.
+    if (answered) await this.reviews?.deliverAnswers(receipt.id);
     return receipt;
   }
 
-  /** CONFIRM: one row and the DONE it derives, in one transaction under the task's row lock. */
+  /**
+   * CONFIRM: one row and the DONE it derives, in one transaction under the task's row lock — with
+   * what it says about the request's review (§7 Q3–Q4) and, when it answers that review's questions,
+   * the comment that records the answers on the task (Q5 1).
+   */
   private confirm(
     ownerId: string,
     taskId: string,
     answering: string | null,
     note: string | null,
-  ): Promise<OwnerDecisionReceipt> {
+    input: Pick<DecideOwnerConfirmation, 'reviewRecordId' | 'answers'>,
+  ): Promise<{ receipt: OwnerDecisionReceipt; answered: boolean }> {
     return withTransactionRetry(this.prisma, async (tx) => {
       const standing = await lockedStanding(tx, ownerId, taskId);
       const refusal = ownerDecisionRefusal(standing, 'CONFIRM', answering);
       if (refusal) throwOwnerConfirmationRefusal(refusal);
+      const reviewed = await reviewOfDecision(tx, taskId, standing, answering, {
+        decision: 'CONFIRM',
+        reviewRecordId: input.reviewRecordId,
+        answers: input.answers,
+      });
       const written = await writeDecision(tx, {
         id: randomUUID(),
         taskId,
@@ -231,7 +267,16 @@ export class TaskOwnerConfirmationService {
         requestId: answering,
         decision: 'CONFIRM',
         note,
+        reviewed,
       });
+      if (reviewed.answers?.length) {
+        await writeOwnerAnswersComment(tx, {
+          decisionId: written.id,
+          taskId,
+          answers: reviewed.answers,
+          needsYou: reviewed.needsYou,
+        });
+      }
       const completed = deriveTaskCompletionStatus({
         completionCriterion: standing.completionCriterion,
         ownerDecision: written.decision,
@@ -257,11 +302,14 @@ export class TaskOwnerConfirmationService {
       if (settled && completed === TaskStatus.DONE) {
         await enqueueForDoneTask(tx, ownerId, taskId);
       }
-      return receiptOf(written, {
-        completed: settled,
-        sessionId: answering === null ? null : standing.latestRequest?.sessionId ?? null,
-        turnId: null,
-      });
+      return {
+        receipt: receiptOf(written, {
+          completed: settled,
+          sessionId: answering === null ? null : standing.latestRequest?.sessionId ?? null,
+          turnId: null,
+        }),
+        answered: (reviewed.answers?.length ?? 0) > 0,
+      };
     }, loggedRetry(this.logger, 'taskOwnerConfirmation.confirm'));
   }
 
@@ -294,11 +342,8 @@ export class TaskOwnerConfirmationService {
         participateSendTransaction: async (tx) => {
           // A request belongs to one session, so the request still waiting being the one answered
           // is also the session this message was addressed to still being the right one.
-          const late = ownerDecisionRefusal(
-            await lockedStanding(tx, ownerId, taskId),
-            'SEND_BACK',
-            answering,
-          );
+          const standing = await lockedStanding(tx, ownerId, taskId);
+          const late = ownerDecisionRefusal(standing, 'SEND_BACK', answering);
           if (late) throwOwnerConfirmationRefusal(late);
           recorded.row = await writeDecision(tx, {
             id: decisionId,
@@ -307,6 +352,12 @@ export class TaskOwnerConfirmationService {
             requestId: answering,
             decision: 'SEND_BACK',
             note,
+            // Never refused on a review's account: only recorded (Q4).
+            reviewed: await reviewOfDecision(tx, taskId, standing, answering, {
+              decision: 'SEND_BACK',
+              reviewRecordId: null,
+              answers: undefined,
+            }),
           });
         },
       },
@@ -320,12 +371,34 @@ export class TaskOwnerConfirmationService {
   }
 }
 
+/**
+ * Q3–Q4: what the decision says about the review of the request it answers, read under the task's
+ * row lock after the door's own refusals passed — or the refusal that sends the card to be read again.
+ */
+async function reviewOfDecision(
+  tx: Prisma.TransactionClient,
+  taskId: string,
+  standing: LockedStanding,
+  answering: string | null,
+  input: { decision: OwnerDecisionValue; reviewRecordId: string | null | undefined; answers: unknown },
+): Promise<DecisionReview> {
+  const latest = standing.latestRequest;
+  const review = answering && latest?.id === answering
+    ? (await confirmationReviewStates(
+      tx,
+      [{ id: latest.id, taskId, sessionId: latest.sessionId, requestedAt: latest.requestedAt }],
+      new Date(),
+    )).get(latest.id)
+    : undefined;
+  return decisionReview({ ...input, answering, review });
+}
+
 /** The task row, locked, and the request it is waiting on. */
 async function lockedStanding(
   tx: Prisma.TransactionClient,
   ownerId: string,
   taskId: string,
-): Promise<OwnerConfirmationStanding> {
+): Promise<LockedStanding> {
   const [task] = await tx.$queryRaw<Array<{
     status: string;
     completionCriterion: TaskCompletionCriterionValue;
@@ -411,9 +484,15 @@ async function unlockedStanding(
 async function latestRequestStanding(
   tx: Prisma.TransactionClient,
   taskId: string,
-): Promise<OwnerConfirmationStanding['latestRequest']> {
+): Promise<LockedStanding['latestRequest']> {
   const latest = await latestOwnerConfirmationRequest(tx, taskId);
-  return latest && { id: latest.id, sessionId: latest.sessionId, decided: latest.decisions.length > 0 };
+  return latest && {
+    id: latest.id,
+    sessionId: latest.sessionId,
+    requestedAt: latest.requestedAt,
+    decided: latest.decisions.length > 0,
+    returned: returnedByReviewer(latest),
+  };
 }
 
 /**
@@ -430,15 +509,20 @@ async function writeDecision(
     requestId: string | null;
     decision: OwnerDecisionValue;
     note: string | null;
+    reviewed: DecisionReview;
   },
 ): Promise<WrittenDecision> {
   const [clock] = await tx.$queryRaw<Array<{ now: Date }>>`SELECT clock_timestamp() AS "now"`;
+  const { reviewed, ...decision } = row;
   return tx.taskOwnerDecision.create({
     data: {
-      ...row,
+      ...decision,
       decidedAt: clock.now,
       decidedByType: CreatorType.USER,
       decidedById: row.ownerId,
+      reviewState: reviewed.reviewState,
+      reviewRecordId: reviewed.reviewRecordId,
+      ...(reviewed.answers ? { answers: reviewed.answers as unknown as Prisma.InputJsonValue } : {}),
     },
     select: {
       id: true,
