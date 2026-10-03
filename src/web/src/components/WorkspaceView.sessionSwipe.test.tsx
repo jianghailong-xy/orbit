@@ -75,9 +75,24 @@ let root: Root | null = null;
 let client: QueryClient | null = null;
 
 const waitForUi = async (assertion: () => void): Promise<void> => {
-  await act(async () => {
+  // The act environment is off while the window is waited out, as RTL's own asyncWrapper
+  // does it: React queues every render scheduled inside an in-flight act callback and flushes
+  // none of them until that callback settles, so a page that answers inside the window can
+  // never draw what the window exists to see — the wait times out with the data already in
+  // the cache (workstation-gpu: e85b63ee9's second full run; the merge check reds here).
+  const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+  const previous = env.IS_REACT_ACT_ENVIRONMENT;
+  env.IS_REACT_ACT_ENVIRONMENT = false;
+  try {
     await vi.waitFor(assertion, { timeout: 8_000, interval: 20 });
-  });
+  } finally {
+    env.IS_REACT_ACT_ENVIRONMENT = previous;
+  }
+  // And one act to close the window: the last commit the wait saw leaves its passive effects
+  // scheduled, and what they carry — React Query's mutation options among it — is what the
+  // test's next press runs on. The old act-wrapped wait flushed them on its way out; this
+  // keeps that, without the freeze that made the wait itself blind.
+  await act(async () => {});
 };
 
 beforeEach(() => {
@@ -202,7 +217,7 @@ describe('session row swipes on a phone', () => {
   it('swiping right exposes Complete then Pin, and Complete completes the session', async () => {
     const row = await mountRow();
     expect(labels(row, 'leading')).toEqual(['Complete', 'Pin']);
-    expect(labels(row, 'trailing')).toEqual(['Delete']);
+    expect(labels(row, 'trailing')).toEqual(['Share', 'Move', 'Delete']);
     expect(offset(row), 'a row at rest is not slid').toBe('');
 
     await swipe(row, 100);
@@ -215,11 +230,11 @@ describe('session row swipes on a phone', () => {
     expect(deleteMock).not.toHaveBeenCalled();
   });
 
-  it('swiping left exposes Delete, which moves the session to Trash', async () => {
+  it('swiping left exposes Share · Move · Delete, and Delete moves the session to Trash', async () => {
     const row = await mountRow();
-    await swipe(row, -60);
-    expect(offset(row)).toBe('translateX(-72px)');
-    expect(row.querySelector<HTMLElement>('.session-swipe-actions.trailing')!.style.width).toBe('72px');
+    await swipe(row, -120);
+    expect(offset(row)).toBe('translateX(-216px)');
+    expect(row.querySelector<HTMLElement>('.session-swipe-actions.trailing')!.style.width).toBe('216px');
 
     await tap(row.querySelector('[aria-label="Delete"]')!);
     await waitForUi(() => expect(deleteMock).toHaveBeenCalledWith(SESSION_PUBLIC));
@@ -229,11 +244,11 @@ describe('session row swipes on a phone', () => {
   it('a long swipe right completes on release; a long swipe left only opens Delete', async () => {
     const row = await mountRow();
     await swipe(row, -390);
-    expect(offset(row)).toBe('translateX(-72px)');
+    expect(offset(row)).toBe('translateX(-216px)');
     expect(deleteMock, 'Delete never fires from a swipe alone').not.toHaveBeenCalled();
 
     // Straight from the open Delete edge through to past 60% of the row.
-    await swipe(row, 330);
+    await swipe(row, 460);
     await waitForUi(() => expect(completeMock).toHaveBeenCalledWith(SESSION_PUBLIC));
     expect(deleteMock).not.toHaveBeenCalled();
   });

@@ -226,7 +226,7 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 		return InstallResultRequest{
 			Status:  installFailed,
 			Command: spec.installCmd,
-			Message: "the installer finished but `" + spec.bin + "` still isn't on this machine's service PATH.\nTry instead: " + spec.installAlt,
+			Message: "the installer finished but `" + spec.executable() + "` still isn't on this machine's service PATH.\nTry instead: " + spec.installAlt,
 		}
 	}
 	logln("engine-install (requested):", spec.name, "installed at", path)
@@ -297,8 +297,9 @@ func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
 	}
 	// A just-installed CLI has no credentials, and the sign-in needs a human. Say so as an
 	// authentication failure so the web transcript offers its sign-in card instead of a
-	// bare error line.
-	if probeAuth(bin, path) == authNo {
+	// bare error line. Not for an API-key engine: its key comes with the session, and
+	// engineAuthPreflight, which runs next, asks with the session's environment.
+	if spec.apiKeyEnv == "" && probeAuth(bin, path) == authNo {
 		return engineSignedOutMessage(bin)
 	}
 	notify(spec.name + " installed. Continuing…")
@@ -376,6 +377,8 @@ func hasInjectedCredentials(bin string, agentEnv map[string]string) bool {
 		// OpenCode resolves per-provider credentials itself, from its own auth store
 		// and provider-specific environment variables Orbit does not model.
 		return false
+	case providerAntigravity:
+		keys = []string{"GEMINI_API_KEY"}
 	}
 	for _, k := range keys {
 		if strings.TrimSpace(agentEnv[k]) != "" {
@@ -387,12 +390,17 @@ func hasInjectedCredentials(bin string, agentEnv map[string]string) bool {
 
 // lookEngine resolves an engine binary the way the runner will actually exec it: the
 // service PATH first (which includes ~/.local/bin, where installers drop binaries this
-// process's own PATH may predate), then this process's PATH.
-func lookEngine(bin string) (string, bool) {
-	if p, ok := lookPathIn(bin, serviceLoginPath()); ok {
+// process's own PATH may predate), then this process's PATH. engine is the engine's name,
+// which for every engine but antigravity (agy) is also its executable's.
+func lookEngine(engine string) (string, bool) {
+	exe := engine
+	if spec, ok := specFor(engine); ok {
+		exe = spec.executable()
+	}
+	if p, ok := lookPathIn(exe, serviceLoginPath()); ok {
 		return p, true
 	}
-	return lookPathIn(bin, os.Getenv("PATH"))
+	return lookPathIn(exe, os.Getenv("PATH"))
 }
 
 func lastLine(s string) string {

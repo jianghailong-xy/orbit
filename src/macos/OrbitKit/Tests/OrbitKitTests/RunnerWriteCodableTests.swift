@@ -51,6 +51,29 @@ final class RunnerWriteCodableTests: XCTestCase {
         XCTAssertEqual(model.reasoningLevels, ["low", "high"])
     }
 
+    /// What the runner folds `agy models` into: one row per base model, its levels out of the slug.
+    func testRunnerDecodesAntigravityModelCatalog() throws {
+        let json = """
+        {"id":"r1","name":"box","runtimeDefaultModels":{"antigravity":"gemini-3.1-pro"},
+         "modelCatalog":{"antigravity":[
+          {"value":"gemini-3.8-flash","label":"Gemini 3.8 Flash","reasoningLevels":["low","medium","high"]},
+          {"value":"gemini-3.1-pro","label":"Gemini 3.1 Pro","reasoningLevels":["low","high"],
+           "contextWindow":1048576}
+        ]}}
+        """
+        let runner = try JSONDecoder().decode(Runner.self, from: Data(json.utf8))
+        let catalog = try XCTUnwrap(runner.modelCatalog)
+        XCTAssertEqual(catalog.antigravity?.map(\.value), ["gemini-3.8-flash", "gemini-3.1-pro"])
+        XCTAssertEqual(catalog.models(for: "antigravity")?.map(\.name), ["Gemini 3.8 Flash", "Gemini 3.1 Pro"])
+        XCTAssertEqual(catalog.modelInfo(for: "antigravity", model: "gemini-3.1-pro")?.reasoningLevels,
+                       ["low", "high"])
+        XCTAssertEqual(catalog.contextWindow(for: "gemini-3.1-pro"), 1_048_576)
+        XCTAssertEqual(runner.runtimeDefaultModels?["antigravity"], "gemini-3.1-pro")
+        // Keyed on its own name: none of it reads as Claude's, the rows an unknown key falls to.
+        XCTAssertNil(catalog.models(for: "claude"))
+        XCTAssertNil(catalog.modelInfo(for: "claude", model: "gemini-3.1-pro"))
+    }
+
     func testUpdateRunnerEncoding() throws {
         let clear = try jsonObject(UpdateRunnerRequest(displayName: ""))
         XCTAssertEqual(clear["displayName"] as? String, "")       // "" clears the alias (sent, not omitted)

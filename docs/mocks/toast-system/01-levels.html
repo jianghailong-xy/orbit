@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Toast 通知系统 · ① 分级与样式</title>
+<link rel="stylesheet" href="toast.css">
+<style>
+  .probs { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+  .prob { padding: 16px 16px 15px; }
+  .prob .pn { display: inline-flex; width: 22px; height: 22px; border-radius: 11px; background: #b3380a; color: #fff; font-size: 12.5px; font-weight: 700;
+              align-items: center; justify-content: center; margin-bottom: 8px; }
+  .prob b { display: block; font-size: 15px; margin-bottom: 6px; }
+  .prob p { margin: 0; font-size: 13px; line-height: 1.65; color: var(--ink2); }
+
+  .shapes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+  .shape { display: flex; align-items: center; gap: 18px; padding: 16px 20px; }
+  .shape .demo { flex: none; width: 330px; display: flex; justify-content: center; }
+  .shape p { margin: 0; font-size: 13.5px; line-height: 1.7; color: var(--ink2); }
+  .shape p b:first-child { font-size: 15px; }
+
+  .lv { display: grid; grid-template-columns: 300px 560px 400px; gap: 24px; align-items: stretch; padding: 22px 0; border-top: 1px solid #d5d8de; }
+  .lv:last-of-type { border-bottom: 1px solid #d5d8de; }
+  .lab h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; font-size: 20px; font-weight: 800; }
+  .lab .what { margin: 0 0 10px; font-size: 14px; line-height: 1.6; color: var(--ink); font-weight: 600; }
+  .lab ul { margin: 0; padding: 0 0 0 16px; font-size: 13px; line-height: 1.75; color: var(--ink2); }
+  .stage { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 22px 16px;
+           border-radius: 18px; overflow: hidden; background-color: #fff;
+           background-image: repeating-linear-gradient(180deg, transparent 0 18px, #eef0f3 18px 26px, transparent 26px 40px); }
+  .stage.dk { background-color: #000; background-image: repeating-linear-gradient(180deg, transparent 0 18px, #1c1c1e 18px 26px, transparent 26px 40px); }
+  .stage .row { display: flex; align-items: center; gap: 12px; }
+  .stage .arrow { color: #9aa0a8; font-size: 18px; font-weight: 700; }
+  .stage .lbl { position: absolute; left: 14px; top: 10px; font-size: 11.5px; font-weight: 700; color: #9aa0a8; letter-spacing: .3px; }
+  .stage.dk .lbl { color: #636366; }
+
+  table.spec { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13.5px; background: #fff; border-radius: 16px; overflow: hidden; }
+  table.spec th, table.spec td { padding: 10px 14px; text-align: left; border-bottom: 1px solid #eef0f3; vertical-align: top; }
+  table.spec th { background: #f6f7f9; font-size: 13px; color: var(--ink); }
+  table.spec td:first-child { width: 110px; color: var(--ink3); font-weight: 600; }
+  table.spec tr:last-child td { border-bottom: 0; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <h1>Toast 通知系统 · ① 分级与样式</h1>
+  <p class="lede">现在三端只有一种样子：iOS / macOS 是一张全宽卡，web 是一张 360px 的卡。从 <code>Link copied</code> 到 <code>Merge into main failed</code> 都长一个样。新系统按<b>它要你做什么</b>分级：只是告诉你成功了 → <b>胶囊</b>；你可能要撤销或打开 → <b>卡片</b>；失败了或者要你批准 → <b>着色卡片</b>，不会自己走，也不会被别的挤掉。另外加一个「进行中」状态：一个操作从头到尾只用一个 toast。</p>
+
+  <h2><span class="n">1</span>现在的问题<small>三端近 300 处调用的盘点（web ≈ 240，iOS / macOS ≈ 50）</small></h2>
+  <div class="probs">
+    <div class="panel prob"><span class="pn">1</span><b>一种样子画所有事</b><p>iOS 一个词也占一整张全宽卡；web 的两层（Message / 会话卡）是刻意画成同一张卡的。看不出轻重，重要的反而不显眼。</p></div>
+    <div class="panel prob"><span class="pn">2</span><b>文案没有语法</b><p>只有动词没有对象：<code>Decided</code>、<code>Saved</code>、<code>Recorded</code>。web 122 处错误里九十多处只放服务器原话（<code>e.message</code>），不说是哪一步失败。</p></div>
+    <div class="panel prob"><span class="pn">3</span><b>出得晚</b><p>等写入 + 刷新都跑完才弹，常常落在已经切过去的页面上，跟刚才的操作对不上（Wiki 的 <code>Decided</code>）。</p></div>
+    <div class="panel prob"><span class="pn">4</span><b>会丢，或者会堆</b><p>iOS / macOS 只有一个槽：没读完的错误会被后来的 <code>Link copied</code> 直接顶掉。web 相反：错误一直叠下去，要逐个点 ×。</p></div>
+    <div class="panel prob"><span class="pn">5</span><b>进行中没有状态</b><p><code>Merging…</code> 4 秒就走，结果再弹一张新的；合并慢的时候，中间什么都没有。</p></div>
+  </div>
+
+  <h2><span class="n">2</span>两种形状，四种用途</h2>
+  <div class="shapes">
+    <div class="panel shape"><div class="demo"><div class="pill glass"><svg class="ico"><use href="#ok"/></svg>Link copied</div></div>
+      <p><b>胶囊 = 一句话。</b>不带按钮，宽度随内容，居中。用于 ① 确认、进行中，以及 ③ 缩起来以后的样子。可以有第二行写对象；能点的（回到会话、展开错误）末尾带 ›。</p></div>
+    <div class="panel shape"><div class="demo"><div class="card glass" style="width:330px"><svg class="ico"><use href="#ok"/></svg><span class="t"><b>Session completed</b><small>会话间消息参数与回复设计</small></span><span class="btn">Undo</span></div></div>
+      <p><b>卡片 = 要你看或要你动手。</b>带按钮或带原因，和内容同宽。用于 ② 结果、③ 需要处理。tone 只决定图标颜色；只有 ③ 会给整张卡着色（红 = 失败，橙 = 等你批准）。</p></div>
+  </div>
+
+  <div class="lv">
+    <div class="lab">
+      <h3>① 确认 <span class="tag gray">胶囊</span></h3>
+      <p class="what">你刚做的事成功了，不用再做什么。</p>
+      <ul>
+        <li>宽度随内容，最宽 300pt</li>
+        <li>一行；结果落在具体对象上时，第二行写对象</li>
+        <li>3 秒 · 不拦点击 · 上滑可以提前关掉</li>
+        <li>例：Link copied、Schedule saved、Accepted</li>
+      </ul>
+    </div>
+    <div class="stage"><span class="lbl">LIGHT</span>
+      <div class="row"><div class="pill glass"><svg class="ico"><use href="#ok"/></svg>Link copied</div><div class="pill glass"><svg class="ico"><use href="#ok"/></svg>Wiki settings saved</div></div>
+      <div class="pill two glass"><svg class="ico"><use href="#ok"/></svg><span class="t">Accepted<small>Use pnpm for workspace installs</small></span></div>
+      <div class="pill two glass"><svg class="ico"><use href="#ok"/></svg><span class="t">Kept<small>CI 只在 main 上跑完整 e2e</small></span></div>
+    </div>
+    <div class="stage dk"><span class="lbl">DARK</span>
+      <div class="pill two glass dk"><svg class="ico"><use href="#ok"/></svg><span class="t">Accepted<small>Use pnpm for workspace installs</small></span></div>
+      <div class="pill glass dk"><svg class="ico"><use href="#ok"/></svg>Link copied</div>
+    </div>
+  </div>
+
+  <div class="lv">
+    <div class="lab">
+      <h3>进行中 <span class="tag gray">胶囊 + 转圈</span></h3>
+      <p class="what">要花一会儿的操作。一个操作从开始到结束只有一个 toast。</p>
+      <ul>
+        <li>不计时，直到完成</li>
+        <li>完成后<b>原地</b>变成结果：成功 → ①；失败 → 展开成 ③</li>
+        <li>离开了发起的页面，第二行写对象，结果带 › 可点回去</li>
+        <li>发起的地方已经在显示进度（如分支条）就不弹</li>
+      </ul>
+    </div>
+    <div class="stage"><span class="lbl">LIGHT</span>
+      <div class="row"><div class="pill glass"><svg class="ico"><use href="#spin"/></svg>Merging into main…</div><span class="arrow">→</span><div class="pill glass"><svg class="ico"><use href="#ok"/></svg>Merged into main</div></div>
+      <div class="row"><div class="pill glass"><svg class="ico"><use href="#spin"/></svg>Committing 2 files…</div><span class="arrow">→</span><div class="pill glass"><svg class="ico"><use href="#ok"/></svg>Committed 2 files</div></div>
+      <div class="row"><div class="pill glass"><svg class="ico"><use href="#spin"/></svg>Merging into main…</div><span class="arrow">→</span><div class="pill glass red"><svg class="ico"><use href="#excl"/></svg>Couldn't merge into main<svg class="chev"><use href="#cr"/></svg></div></div>
+    </div>
+    <div class="stage dk"><span class="lbl">DARK</span>
+      <div class="pill two glass dk"><svg class="ico"><use href="#spin"/></svg><span class="t">Merging into main…<small>滚动到底按钮显示逻辑</small></span></div>
+      <div class="pill two glass dk"><svg class="ico"><use href="#ok"/></svg><span class="t">Merged into main<small>滚动到底按钮显示逻辑</small></span><svg class="chev"><use href="#cr"/></svg></div>
+    </div>
+  </div>
+
+  <div class="lv">
+    <div class="lab">
+      <h3>② 结果 <span class="tag gray">卡片</span></h3>
+      <p class="what">结果落在一个对象上，你可能想撤销或打开它。</p>
+      <ul>
+        <li>和内容同宽（iPhone 361pt，桌面 360px）</li>
+        <li>最多 1 个按钮：Undo 或 View</li>
+        <li>点卡片打开那个对象（会话、任务、条目）</li>
+        <li>6 秒；手指按住 / 鼠标悬停时暂停</li>
+      </ul>
+    </div>
+    <div class="stage"><span class="lbl">LIGHT</span>
+      <div class="card glass"><svg class="ico"><use href="#ok"/></svg><span class="t"><b>Session completed</b><small>会话间消息参数与回复设计</small></span><span class="btn">Undo</span></div>
+      <div class="card glass"><svg class="ico"><use href="#trash"/></svg><span class="t"><b>Moved to Trash</b><small>部署 0.1.204</small></span><span class="btn">Undo</span></div>
+      <div class="card glass"><svg class="ico"><use href="#folder"/></svg><span class="t"><b>Moved to wikova-develop</b><small>侧栏工作区排序</small></span><span class="btn">View</span></div>
+    </div>
+    <div class="stage dk"><span class="lbl">DARK</span>
+      <div class="card glass dk"><svg class="ico"><use href="#ok"/></svg><span class="t"><b>Session completed</b><small>会话间消息参数与回复设计</small></span><span class="btn">Undo</span></div>
+      <div class="card glass dk"><svg class="ico"><use href="#trash"/></svg><span class="t"><b>Moved to Trash</b><small>部署 0.1.204</small></span><span class="btn">Undo</span></div>
+    </div>
+  </div>
+
+  <div class="lv">
+    <div class="lab">
+      <h3>③ 需要处理 <span class="tag gray">着色卡片</span></h3>
+      <p class="what">失败了，或者要你批准、要你决定。</p>
+      <ul>
+        <li>红 = 失败，橙 = 等你批准</li>
+        <li>标题说哪一步失败；服务器原话单独一块，可选中复制</li>
+        <li>最多 2 个按钮 + ✕</li>
+        <li><b>不会自己消失，也不会被后来的顶掉</b></li>
+        <li>iPhone 上 6 秒后缩成顶部胶囊，点开恢复；桌面保持展开</li>
+        <li>在别处处理掉了（另一台设备批准了）自动收走</li>
+      </ul>
+    </div>
+    <div class="stage"><span class="lbl">LIGHT</span>
+      <div class="card attn glass red">
+        <div class="head"><svg class="ico"><use href="#err"/></svg><span class="t"><b>Couldn't merge into main</b><small>orbit…9bab9 → main · 2 files</small></span><span class="xbtn"><svg width="13" height="13"><use href="#xm"/></svg></span></div>
+        <div class="detail">CONFLICT (content): Merge conflict in<br>Views/ToastHost.swift — merge aborted,<br>your branch is unchanged.</div>
+        <div class="acts"><span class="btn pri">Resolve in session</span><span class="btn sec">Copy error</span></div>
+      </div>
+      <div class="card attn glass amber">
+        <div class="head"><svg class="ico"><use href="#bell"/></svg><span class="t"><b>Waiting for your approval</b><small>P1 修复的合并确认 · Bash</small></span><span class="xbtn"><svg width="13" height="13"><use href="#xm"/></svg></span></div>
+        <div class="detail">git push origin main</div>
+        <div class="acts"><span class="btn pri">Review</span></div>
+      </div>
+      <div class="row" style="flex-wrap:wrap;justify-content:center;max-width:520px">
+        <div class="pill glass red"><svg class="ico"><use href="#excl"/></svg>Couldn't merge into main<svg class="chev"><use href="#cr"/></svg></div>
+        <div class="pill glass amber"><svg class="ico"><use href="#bell"/></svg>Approval waiting<svg class="chev"><use href="#cr"/></svg></div>
+        <div class="pill glass red"><svg class="ico"><use href="#excl"/></svg>Couldn't save the schedule<span class="count">+1</span><svg class="chev"><use href="#cr"/></svg></div>
+      </div>
+    </div>
+    <div class="stage dk"><span class="lbl">DARK</span>
+      <div class="card attn glass dk red">
+        <div class="head"><svg class="ico"><use href="#err"/></svg><span class="t"><b>Couldn't merge into main</b><small>orbit…9bab9 → main · 2 files</small></span><span class="xbtn"><svg width="13" height="13"><use href="#xm"/></svg></span></div>
+        <div class="detail">CONFLICT (content): Merge conflict in<br>Views/ToastHost.swift — merge aborted,<br>your branch is unchanged.</div>
+        <div class="acts"><span class="btn pri">Resolve in session</span><span class="btn sec">Copy error</span></div>
+      </div>
+      <div class="pill glass dk red"><svg class="ico"><use href="#excl"/></svg>Couldn't merge into main<svg class="chev"><use href="#cr"/></svg></div>
+      <div class="pill glass dk amber"><svg class="ico"><use href="#bell"/></svg>Approval waiting<svg class="chev"><use href="#cr"/></svg></div>
+    </div>
+  </div>
+
+  <h2><span class="n">3</span>尺寸<small>iPhone，单位 pt；桌面端同比例换成 px</small></h2>
+  <table class="spec">
+    <tr><th></th><th>胶囊 · 一行</th><th>胶囊 · 两行</th><th>卡片</th><th>着色卡片</th></tr>
+    <tr><td>高度</td><td>40</td><td>52</td><td>≥ 56，随内容</td><td>随内容（原因最多 4 行，超出可滚）</td></tr>
+    <tr><td>宽度</td><td colspan="2">随内容，最宽 300；居中</td><td colspan="2">和内容同宽：iPhone 361（左右各 16），iPad / 桌面 360</td></tr>
+    <tr><td>圆角</td><td>20（胶囊）</td><td>26（胶囊）</td><td>22</td><td>22；原因块 10</td></tr>
+    <tr><td>图标</td><td colspan="2">22，SF Symbol 实心圆款</td><td colspan="2">26</td></tr>
+    <tr><td>文字</td><td colspan="2">15 semibold；第二行 13 regular 次要色，单行截断</td><td>15 semibold + 13 次要色</td><td>同左；原因 12 等宽字</td></tr>
+    <tr><td>按钮</td><td colspan="2">无（能点的末尾带 ›）</td><td>1 个，32 高的胶囊按钮</td><td>最多 2 个（主按钮实心）+ ✕</td></tr>
+    <tr><td>材质</td><td colspan="3">iOS 26 <code>.glassEffect(.regular)</code>；iOS 17–25 <code>.regularMaterial</code> + 阴影</td><td>玻璃加色：红 <code>.tint(.red)</code> / 橙 <code>.tint(.orange)</code></td></tr>
+    <tr><td>位置</td><td colspan="4">iPhone：导航栏下方 8pt、居中（今天的 52pt 不变），不挡导航栏、不挡底部输入框。iPad / Mac / web：右上角竖排，见 ③。</td></tr>
+  </table>
+</div>
+<script src="toast.js"></script>
+</body>
+</html>

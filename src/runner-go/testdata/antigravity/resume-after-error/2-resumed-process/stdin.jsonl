@@ -1,0 +1,2 @@
+{"event": "user", "message": {"content": "turn A\nmock:text A ok"}}
+{"event": "user", "message": {"content": "turn B\nmock:text B ok"}}

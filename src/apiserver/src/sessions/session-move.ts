@@ -25,6 +25,7 @@ const RUNTIME_LABEL: Record<AgentProvider, string> = {
   [AgentProvider.CODEX]: 'Codex',
   [AgentProvider.KIMI]: 'Kimi',
   [AgentProvider.OPENCODE]: 'OpenCode',
+  [AgentProvider.ANTIGRAVITY]: 'Antigravity',
 };
 
 /** Why a session cannot move at all (§5.2, "会话自身"). */
@@ -88,8 +89,14 @@ export function sessionMoveVerdict(s: SessionMoveFacts): SessionMoveVerdict {
   if (s.coordinatesProject || s.dispatchOrigin === 'PROJECT_COORDINATOR') return refuse(MOVE_REFUSAL.COORDINATOR);
   if (s.taskId) return refuse(MOVE_REFUSAL.TASK);
   if (s.importSourceCwd != null) return refuse(MOVE_REFUSAL.IMPORTING);
-  // How their conversations would carry over has not been verified.
-  if (s.runtime === AgentProvider.KIMI || s.runtime === AgentProvider.OPENCODE) {
+  // How their conversations would carry over has not been verified. agy's lives in a per-session
+  // gemini directory on the runner (docs/antigravity-runtime-contract.md §3.1), and a resume from
+  // any other directory silently starts a new conversation (§4.3).
+  if (
+    s.runtime === AgentProvider.KIMI ||
+    s.runtime === AgentProvider.OPENCODE ||
+    s.runtime === AgentProvider.ANTIGRAVITY
+  ) {
     return refuse(`Moving ${RUNTIME_LABEL[s.runtime]} sessions isn't supported yet.`);
   }
   const ended = ENDED.includes(s.status);

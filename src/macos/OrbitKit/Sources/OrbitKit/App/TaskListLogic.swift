@@ -37,6 +37,9 @@ public enum TaskListViewMode: String, Sendable {
 public enum TaskRowPhrase: Equatable, Sendable {
     /// An OWNER_CONFIRMED run is waiting on the owner — `OwnerConfirmations.waitingForConfirmation`.
     case waitingForConfirmation
+    /// The same run's report is still with its reviewer — `OwnerConfirmations.underReview`, in the
+    /// place the line above takes, and never amber (contract §5 N3).
+    case underReview
     /// A prerequisite failed or was cancelled — the web row's red-lock tooltip.
     case prerequisiteCancelled
     /// Waiting for prerequisites — the web row's grey-lock tooltip.
@@ -219,6 +222,7 @@ public enum TaskListLogic {
     public static func rowPhrase(_ task: TaskItem, timeZone: TimeZone = .current,
                                  locale: Locale = .current) -> TaskRowPhrase? {
         if task.awaitingOwnerConfirmation == true { return .waitingForConfirmation }
+        if task.confirmationUnderReview == true { return .underReview }
         if isBlocked(task) {
             return task.dependencyState == "BLOCKED_FAILED" ? .prerequisiteCancelled : .waitingForPrerequisites
         }

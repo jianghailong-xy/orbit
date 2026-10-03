@@ -23,9 +23,43 @@ orbit task delete <task-id> --json
 orbit task-list create --title "Release" --json
 ```
 
+To create a task with existing uploaded Orbit attachments, pass their IDs:
+
+```bash
+orbit task create --title "Review screenshots" --completion-criterion EVIDENCE_JUDGMENT \
+  --attachment-id '<attachment-id>,<attachment-id>' --json
+```
+
+`--attachment-id` is optional and repeatable. Attachments must belong to your account; they are copied
+into the new task's inputs, preserving the originals. Batch task JSON and the MCP tools `task_create`
+and `task_create_batch` accept the optional `attachmentIds` array on each task.
+
 Inside a task-backed Orbit session, task commands may omit the task ID and use `ORBIT_TASK_ID`. In-session
 CLI mutations are attributed to the current agent and session. Headless mutations that use only a runner
 credential fall back to the runner owner.
+
+### Reviewing a confirmation request
+
+When a run of an `OWNER_CONFIRMED` task declares its work finished (`orbit task request-confirmation`), Orbit
+hands the request to the task's reviewer first — the project's coordinator conversation, or outside a project
+the session the task was filed from — as an `<orbit-confirmation-review>` block, and the owner is not asked
+until the review is in or its window runs out (`docs/owner-confirmation-review-contract.md`). The reviewer
+answers with one of:
+
+```bash
+orbit task confirmation-review --input-file - --json <<'EOF'
+{"taskId": "<task>", "requestId": "<request-id>", "reviewedSha": "<sha>", "judgment": "Ready; one call for you.",
+ "checked": [{"text": "suite passes", "evidenceRefs": ["<ci run>"]}], "notChecked": [], "leftOpen": [],
+ "needsYou": [{"text": "Ship it behind the flag?", "options": [{"label": "Yes"}, {"label": "No"}], "recommendedOption": 0}]}
+EOF
+orbit task confirmation-return --input '{"taskId": "<task>", "requestId": "<request-id>", "reason": "…", "problems": [{"text": "…"}]}'
+```
+
+Both take the whole input as one JSON object (`--input JSON` or `--input-file -`), name the task the block
+names rather than `ORBIT_TASK_ID`, and are accepted only from the session the request was handed to, inside a
+turn. Neither confirms anything: only the owner does, in the app. A return sends the reason to the run as its
+next message without asking the owner; after the owner has confirmed, it records the problems under their
+receipt and tells them instead.
 
 ## Projects
 

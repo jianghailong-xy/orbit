@@ -6,7 +6,7 @@ import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { pathToFileURL } from 'node:url';
 import { Client } from 'pg';
-import { RunEventType } from '@orbit/shared';
+import { RunEventType, SESSION_CURRENT_WORK_ROUTING_V1 } from '@orbit/shared';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { SessionsService } from './sessions.service';
 import { AutoRetryService } from './auto-retry.service';
@@ -41,6 +41,7 @@ const SESSION_ID = '63333333-3333-4333-8333-333333333333';
 const SEED_TURN_ID = '64444444-4444-4444-8444-444444444444';
 const TYPED_TURN_ID = '65555555-5555-4555-8555-555555555555';
 const BARE_WAKE_TURN_ID = '66666666-6666-4666-8666-666666666666';
+const RUNNING_TURN_ID = '67777777-7777-4777-8777-777777777777';
 
 const JOB_ID = 'bgj_0123456789ab';
 const SECOND_JOB_ID = 'bgj_cba987654321';
@@ -304,6 +305,56 @@ scenario('a queued background-job wake is listed, with the block the browser rea
   assert.equal(wake.jobs[0].description, 'the release build');
   assert.equal(wake.jobs[0].outputTail, OUTPUT_TAIL);
   assert.equal(wake.jobs[0].outputTo, 4096);
+});
+
+scenario('a wake written into the running turn is listed as a steer, in both views', async () => {
+  // Every other case here files its wake into an idle session, where a wake waits for the next turn.
+  // A job that exits while a turn runs, behind a runner that declared routing-v1, is written into
+  // that turn instead (runner-api/background-wake-steer.pg.spec.ts) — and what both clients draw
+  // while it waits is a steer's state, which they read off these two views.
+  await seedIdleSession();
+  await admin.query(
+    `UPDATE "runner" SET capabilities = $2::text[] WHERE id = $1::uuid`,
+    [RUNNER_ID, [SESSION_CURRENT_WORK_ROUTING_V1]],
+  );
+  try {
+    await admin.query(`UPDATE "session" SET status = 'RUNNING' WHERE id = $1::uuid`, [SESSION_ID]);
+    await admin.query(
+      `INSERT INTO "conversation_turn"(
+         id, session_id, seq, client_turn_id, kind, content, status, delivered_at, lease_deadline_at
+       ) VALUES (
+         $1::uuid, $2::uuid, 2, 'typed-while-it-built', 'message', 'and fix the flaky test', 'IN_FLIGHT',
+         clock_timestamp(), clock_timestamp() + interval '2 minutes'
+       )`,
+      [RUNNING_TURN_ID, SESSION_ID],
+    );
+    const turnId = (await fileWake(JOB_ID)).turnId!;
+
+    // Web's view: `steer`, aimed at the running turn, with the block the claim will hand the runner.
+    const active = await sessions.listQueuedTurns(OWNER_ID, SESSION_ID, 'active') as Array<{
+      turnId: string;
+      kind: string;
+      placement: string;
+      targetTurnId?: string;
+      content: string;
+    }>;
+    const steer = active.find((turn) => turn.turnId === turnId);
+    assert.ok(steer, 'the steered wake is not in the active view');
+    assert.equal(steer.kind, 'steer');
+    assert.equal(steer.placement, 'steer');
+    assert.equal(steer.targetTurnId, RUNNING_TURN_ID);
+    const wake = parseBackgroundWake(steer.content);
+    assert.ok(wake, 'the browser reads a wake out of the steer it lists');
+    assert.deepEqual(wake.jobs.map((job) => job.id), [JOB_ID]);
+
+    // The installed native client's view: the same row, its kind the only thing that says it is a
+    // steer — which is what keeps its Cancel off a wake that is already on its way into the turn.
+    const queueOnly = await sessions.listQueuedTurns(OWNER_ID, SESSION_ID);
+    assert.deepEqual(queueOnly.map((turn) => [turn.turnId, turn.kind]), [[turnId, 'steer']]);
+    assert.equal(queueOnly[0].content, steer.content);
+  } finally {
+    await admin.query(`UPDATE "runner" SET capabilities = '{}' WHERE id = $1::uuid`, [RUNNER_ID]);
+  }
 });
 
 scenario('a wakeup that came due onto the same turn is listed with it', async () => {

@@ -36,14 +36,22 @@ It will, in order:
    reverting. Modified tracked files abort the upgrade; untracked files only warn
    (they are additive, not a silent divergence from HEAD). `--allow-dirty`
    proceeds anyway, loudly.
-1. Resolve the checked-out commit as `ORBIT_SOURCE_SHA`, then run
+1. **Pull main first.** On `main` the checkout is fast-forwarded to origin
+   (`git pull --ff-only`) before anything is built. Merges also reach origin
+   without passing through this checkout (another machine's runner, a GitHub
+   merge), and a stale checkout rebuilds an old tree while still reporting
+   success. Fast-forward only: a checkout that has diverged from origin stops
+   the upgrade before any build; one that is only ahead (a local fast-forward
+   not pushed yet) deploys as it is. Off `main` nothing is pulled unless you
+   pass `--pull`; `--no-pull` skips the pull.
+2. Resolve the checked-out commit as `ORBIT_SOURCE_SHA`, then run
    `docker compose build apiserver web` to rebuild from that exact source revision.
-2. `docker compose up -d --wait apiserver web gateway` — recreate only the
+3. `docker compose up -d --wait apiserver web gateway` — recreate only the
    services whose image or config changed (the freshly built `apiserver`/`web`,
    and `gateway` only if its image or mounted `nginx.conf` changed), and block
    until they pass their healthcheck (apiserver runs migrations on boot).
    `postgres` is left running untouched — it is not in the recreate set.
-3. Print `docker compose ps`.
+4. Print `docker compose ps`.
 
 With `--pull-base` it instead first runs `docker compose pull postgres gateway`
 and then a full `docker compose up -d --wait`, so a genuinely new base image is
@@ -51,8 +59,10 @@ applied — this is the only path that may recreate (restart) `postgres`.
 
 ### Flags
 
-- `--pull` — `git pull --ff-only` first, to upgrade to the latest committed
-  source before building.
+- `--no-pull` — skip the pull and deploy the checkout exactly as it is (a
+  pinned or offline deploy).
+- `--pull` — pull even when the checkout is not on `main` (on `main` it is the
+  default).
 - `--pull-base` — also refresh the pinned base images (`postgres`, `gateway`)
   and run a full recreate. This is the only path that may restart `postgres`;
   omit it (the default) to leave an unchanged `postgres` running.
@@ -65,7 +75,7 @@ applied — this is the only path that may recreate (restart) `postgres`.
   remember the change exists in no commit: the next clean rebuild reverts it.
 
 ```bash
-.claude/skills/upgrade/upgrade.sh --pull --prune
+.claude/skills/upgrade/upgrade.sh --prune
 ```
 
 ## Requirements

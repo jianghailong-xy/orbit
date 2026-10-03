@@ -11,14 +11,18 @@ priority order or an escalation chain:
   credentialed principal and bound to the exact evidence version it names. It is also the
   compatibility value for a task
   that predates the field or whose legacy user/JWT creator omitted it. It does not mean another
-  criterion failed.
+  criterion failed. Outside a project it is the session that filed the task that decides it (see
+  "Outside a project, the dispatching session settles the evidence" below).
 - `OWNER_CONFIRMED` is satisfied only by the account owner's own decision: their newest decision
   about the task, recorded from the app with no session header (`POST /tasks/:taskId/owner-confirmation`),
   is a `CONFIRM`. It takes `completionPolicy: MANUAL` and no command or verifier, and it is declarable
   inside a project or outside one. The owner is asked on a card in that run's own session when a run
   of the task DECLARES its work finished (`task_request_confirmation`, and only from the task's own
   execution session, inside a turn) and then stops working — nothing executable queued behind the
-  turn, no background job or sub-workspace of its own in flight, no wake-up it asked for. A run that
+  turn, no background job or sub-workspace of its own in flight, no wake-up it asked for. The card
+  shows what the run said in the turn it declared in, and what confirming sets off, computed by the
+  server (`ifConfirmed` on `GET /tasks/:taskId/owner-confirmation`): the dependents the DONE starts,
+  whether the run's branch is on main, how the work lands, and the session the DONE ends. A run that
   declares nothing is never carded: the task stays OPEN and is confirmed from its detail panel, which
   is also where a task no run is waiting on has always been confirmed. `Send back` needs a reason,
   which is delivered to that session as the owner's next message while the task stays open; the next
@@ -45,9 +49,39 @@ priority order or an escalation chain:
   project or the criterion it serves: rows that already exist are not rewritten, and an edit that
   declares nothing new (a rename, a `FAILED` report, re-declaring the key it already serves) passes.
   Writes with no session header — the owner in the app, the user API, the CLI in the owner's own
-  terminal — projects with Automatic off, and tasks in no project are unaffected. The rule is in the
-  task service (`src/apiserver/src/tasks/owner-confirmed-automatic-delegation.ts`), so the user
-  door, the runner door and a direct call meet the same check.
+  terminal — are unaffected; projects with Automatic off and tasks in no project are not asked this
+  question, but the next one. The rule is in the task service
+  (`src/apiserver/src/tasks/owner-confirmed-automatic-delegation.ts`), so the user door, the runner
+  door and a direct call meet the same check.
+
+  Everywhere else — a task in no project, or in a project whose Automatic is off — a session that
+  declares it names why only the owner can settle the result (rules of 2026-10-03,
+  `src/apiserver/src/tasks/owner-confirmation-reason.ts`). Of the 77 tasks the owner was asked to
+  confirm in the 30 days before, every one had been filed by an agent, and of 30 sampled outside
+  any project two needed the owner at all. The reason is one of four, with one optional sentence
+  beside it, and both are stored on the task and read back by `task_get`
+  (`ownerConfirmationReason`, `ownerConfirmationReasonNote`; migration 0373):
+
+  - `DEPLOY` — a release, a deploy, shipping a build, a change to a live database;
+  - `IRREVERSIBLE` — a step that cannot be undone, such as a `DROP` or deleting data;
+  - `OWNER_DEVICE_OR_ACCOUNT` — the owner's own device, account or keys;
+  - `OWNER_TRADE_OFF` — a trade-off only the owner can make.
+
+  It binds exactly whom and when the Automatic rule binds: a single create, a batch create, or an
+  update that moves the task's criterion, its project or the criterion it serves, carrying a
+  session header, judged on the row it would leave. Without a reason the write is refused whole
+  with `409 OWNER_CONFIRMATION_REASON_REQUIRED` and nothing is written — a batch writes none of its
+  items, and the body carries the failing item's `itemIndex`. The body points at the way forward:
+  `requiredAction: DECLARE_EVIDENCE_JUDGMENT_THE_DISPATCHING_SESSION_SETTLES`,
+  `suggestedCriterion: EVIDENCE_JUDGMENT`, `reasonField: ownerConfirmationReason`, and the four
+  `reasons`; its message says how EVIDENCE_JUDGMENT is settled where the task lands. A reason sent
+  beside any other criterion, or a sentence without a reason, is a `400`. A write that takes the
+  task off `OWNER_CONFIRMED` clears both; `null` on the update door clears both too. Writes with no
+  session header are not asked, and rows that already stand are not rewritten. MCP
+  (`task_create`, `task_create_batch` items, `task_update`) and the CLI
+  (`--owner-confirmation-reason`, `--owner-confirmation-reason-note`,
+  `--clear-owner-confirmation-reason` on update) carry the field; a runner older than it sends
+  none and is refused with the same hint, which is the intended behaviour.
 
 Runner CLI, MCP, and runner REST creates require `completionCriterion` explicitly on every task
 and batch item. Command, policy, or verifier-relation fields do not stand in for that declaration;
@@ -56,6 +90,48 @@ user/JWT API and existing rows retain omission compatibility.
 
 An unsatisfied criterion is a current view of missing evidence. It is not an exceptional signal
 that somebody must later clear.
+
+## Outside a project, the dispatching session settles the evidence
+
+A task filed outside any project by a session — `creator_session_id`, the dispatching session — may
+declare `EVIDENCE_JUDGMENT` (rules of 2026-10-03, `src/apiserver/src/tasks/evidence-review.ts`).
+Its evidence quotes the task's own `acceptanceCriteria`, as every task in no project does, so state
+them. A write with no dispatching session — the owner's own, or one filed with no session header — is
+still refused that declaration with `EVIDENCE_JUDGMENT_REQUIRES_PROJECT`: nobody would be handed its
+evidence.
+
+- **Delivery.** Each evidence revision the run submits is handed to the dispatching session as a
+  platform turn, `evidence-review:v1:<evidenceId>`, the same kind of delivery a confirmation request
+  makes to its reviewer (`docs/owner-confirmation-review-contract.md` §2 D2): queued behind whatever
+  that session is doing, with no words of anybody's, its `<orbit-evidence-review>` block rendered
+  from the rows when the turn is handed out and recorded as Orbit's note, re-sent as itself when the
+  turn fails, and never reviving a session that has ended. The key is reserved — no caller may use
+  it — and one revision is delivered once. A revision that is no longer the latest, already
+  decided, undecidable, or whose dispatching session has ended is not delivered at all.
+- **Decision.** The dispatching session decides it with `task_evidence_decide` (CONFIRM, or
+  SEND_BACK with a note). The decision door and its independence rule are unchanged: the run that
+  did the work still cannot decide it.
+- **Back to the owner.** While the dispatching session holds the revision, nobody else is asked: no
+  card, no count. It holds it while the delivery turn exists, that session has not ended, and 30
+  minutes have not passed since the delivery — read at read time, nothing scheduled. After that, or
+  as soon as that session has ended, the owner's evidence card is drawn in the dispatching session,
+  or — when that session is in Trash — in the task's run (the session that submitted the revision).
+  Either way the decision is recorded in the dispatching session's name, which is what the card
+  posts as `decidingSessionId`: the run did the work, and the door refuses it. The pending read
+  (`GET /tasks/evidence-decisions/pending`) carries `ownerCard: { sessionId, decidingSessionId }` on
+  such a row and returns it to that one conversation only; web, macOS and iOS draw the card where it
+  names. The conversation's row counts it in needs-you (owner-decision kind `EVIDENCE_DECISION`,
+  which reads "Waiting for approval" like a project's evidence card), in the Open scope only. A
+  delivery that was refused, or never made, is the owner's from the start.
+- **No dispatching session at all.** A task in no project whose dispatching session was deleted for
+  good (Delete permanently empties `creator_session_id`), or that never had one (a row from before
+  this rule), has nobody to hold its revision: its owner card is drawn in the run that submitted it
+  from the start — no 30 minutes — and counted there. The decision is recorded in that run's name,
+  the only conversation left, and the door takes it from the account owner pressing the card in the
+  app and from nobody else (`ownerDecidesInTheRun`, read the way the OWNER_CONFIRMED door reads its
+  caller: the app's door, with no session header). An agent, a request carrying a session header, or
+  any other session deciding as the run is still refused `EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION`:
+  the owner decides there, not the run.
 
 ## Shape advice and deliberate overrides
 

@@ -90,6 +90,8 @@ extension CGFloat {
 struct ComposerView: View {
     @Environment(AppModel.self) private var app
     @Bindable var console: ConsoleModel
+    /// On the phone's console a page this conversation opens is pushed over it (`OpensPagesOverConsoleKey`).
+    @Environment(\.opensPagesOverConsole) private var opensPagesOverConsole
     /// Focus the field as soon as it appears — used by the draft "new session" composer, where the
     /// user came here to type. A live console leaves it false so opening a session doesn't grab focus.
     /// Turning it on later focuses too: an iPad's draft appears unasked with it off, and ✎ turns it on.
@@ -130,7 +132,8 @@ struct ComposerView: View {
         if !models.contains(where: { $0.id == console.modelID }) {
             models.insert(ModelOption(
                 id: console.modelID,
-                name: AgentDefaults.friendlyName(console.modelID, catalog: console.modelCatalog,
+                name: AgentDefaults.friendlyName(console.modelID, for: console.provider,
+                                                  catalog: console.modelCatalog,
                                                   configured: console.configuredProviders)), at: 0)
         }
         return models
@@ -562,6 +565,31 @@ struct ComposerView: View {
     /// menu does, whichever way the system opens it.
     private var modelMenu: some View {
         Menu {
+            // A task run on smart selection's pick opens on why it is this model, and on where to fix
+            // the model for every run (model routing §9; web parity: the `smart-route` group).
+            if let route = smartRoute {
+                Section {
+                    Text("✦ " + TaskDetailCopy.pickedBySmartSelection(tier: route.level ?? ""))
+                    #if os(macOS)
+                    // A Mac menu draws each item on one line however long: the sentences come as the
+                    // lines of a paragraph instead.
+                    let lines = (route.reasons.first.map { ComposerLogic.menuLines($0) } ?? [])
+                        + ComposerLogic.menuLines(TaskDetailCopy.modelChangeAppliesToThisRun)
+                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                        Text(line)
+                    }
+                    #else
+                    if let reason = route.reasons.first {
+                        Text(reason)
+                    }
+                    // An iOS menu item ends at its third line: the note's two sentences are two items.
+                    ForEach(ComposerLogic.sentences(TaskDetailCopy.modelChangeAppliesToThisRun), id: \.self) {
+                        Text($0)
+                    }
+                    #endif
+                }
+                Divider()
+            }
             // Only when there is somewhere to go: a second account with the same vendor, another
             // endpoint on the same CLI, or another of the runner's accounts of this engine. One entry
             // means no switch is possible, and the row is left out rather than shown inert.
@@ -680,11 +708,38 @@ struct ComposerView: View {
                     menuSubmenuLabel("Speed", value: console.fastMode ? "Fast" : "Standard")
                 }
             }
+            if smartRoute != nil, let taskID = console.taskID {
+                Divider()
+                Button(TaskDetailCopy.openTask) {
+                    app.openFromConversation(.task(taskID), overConsole: opensPagesOverConsole)
+                }
+            }
         } label: {
             modelChipLabel
         }
         .menuOrder(.fixed)
         .footerMenuChrome()
+        #if os(macOS)
+        // A borderless menu draws its label as a title and drops a ground under it: on the Mac the
+        // light blue of a routed model goes on the control itself.
+        .padding(.horizontal, smartRoute != nil ? 6 : 0)
+        .padding(.vertical, smartRoute != nil ? 2 : 0)
+        .background(smartRoute != nil ? Color.accentColor.opacity(0.12) : Color.clear, in: Capsule())
+        #endif
+        .accessibilityLabel(chipAccessibilityLabel)
+    }
+
+    /// What the chip is called aloud — web parity, the chip's `aria-label`.
+    private var chipAccessibilityLabel: String {
+        let base = "Model \(modelDisplayName), effort \(console.effort.label)"
+        return smartRoute == nil ? base : base + TaskDetailCopy.chipPickedBySmartSelection
+    }
+
+    /// The decision behind this task run, while the chip still shows the model it picked
+    /// (`ComposerLogic.smartRoute`); nil on a session opened by hand and on a shadow-only run.
+    private var smartRoute: TaskRunRoute? {
+        ComposerLogic.smartRoute(taskID: console.taskID, route: console.worktree.detail?.route,
+                                 modelID: console.modelID)
     }
 
     /// The model's name as the chip shows it: "Runtime default" for a draft whose provider has not
@@ -702,10 +757,17 @@ struct ComposerView: View {
     /// Explicit `Color`s rather than the hierarchical `.primary` / `.secondary`, which inside an
     /// iOS menu label resolve against the control's tint. On iOS the name truncates and the effort
     /// never does; macOS draws a borderless menu's label as one title, so it gets one `Text`.
+    /// A model smart selection picked for this task run carries a ✦ on a light blue ground.
     @ViewBuilder
     private var modelChipLabel: some View {
+        let smart = smartRoute != nil
         #if os(iOS)
         HStack(alignment: .firstTextBaseline, spacing: 5) {
+            if smart {
+                Text("✦")
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+            }
             Text(modelDisplayName)
                 .fontWeight(.semibold)
                 .foregroundStyle(Color.primary)
@@ -716,9 +778,13 @@ struct ComposerView: View {
                 .lineLimit(1)
                 .fixedSize()
         }
+        .padding(.horizontal, smart ? 7 : 0)
+        .padding(.vertical, smart ? 2 : 0)
+        .background(smart ? Color.accentColor.opacity(0.12) : Color.clear, in: Capsule())
         .contentShape(Rectangle())
         #else
-        (Text(modelDisplayName).fontWeight(.semibold).foregroundStyle(Color.primary)
+        (Text(smart ? "✦ " : "").foregroundStyle(Color.accentColor)
+            + Text(modelDisplayName).fontWeight(.semibold).foregroundStyle(Color.primary)
             + Text(" ")
             + Text(chipEffortLabel).foregroundStyle(Color.secondary))
             .lineLimit(1)

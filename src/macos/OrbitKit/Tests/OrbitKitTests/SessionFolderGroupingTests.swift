@@ -201,7 +201,7 @@ final class SessionFolderGroupingTests: XCTestCase {
         XCTAssertEqual(page.map(\.id), SessionFilter.forAgent(open, agentID: "w1", view: .open)
             .filter { $0.folderId == "f1" }.map(\.id))
         XCTAssertEqual(SessionTimeGrouping.sections(page, pinnedFirst: true, now: now, calendar: utc).map(\.title),
-                       ["Pinned", "Today", "Previous 30 Days"])
+                       ["Pinned", "Today", "8–30 days ago"])
 
         // Completed keeps the server's order (completion time), as the Completed list does.
         let completed = [session("first", folder: "f1", lifecycle: .completed, lastTurnAt: "2026-09-01T09:00:00Z"),

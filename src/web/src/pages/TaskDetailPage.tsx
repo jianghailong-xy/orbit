@@ -166,7 +166,7 @@ export function taskAcceptanceMutations(
       },
       // The toast and nothing else: the panel keeps showing what the server holds, the reader's
       // edit stays in the box, and this button is the retry.
-      onError: (e: Error) => message.error(e.message),
+      onError: (e: Error) => message.error("Couldn't save the acceptance criteria", e.message),
     },
   };
 }

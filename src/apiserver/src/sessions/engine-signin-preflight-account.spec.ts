@@ -187,6 +187,19 @@ test('a workspace on Default is judged on Default, and named as such only among 
   }
 });
 
+test('an account renamed in Orbit is refused by that name — Default too', async () => {
+  // runner.account_names, as RunnersService.renameAccount writes it: read by create()'s own select.
+  const runner = { accountNames: { codex: { default: 'jianghailong.main', [WORK]: 'Research' } } };
+
+  const onDefault = await refusal({ codexAccount: 'default', engines: codex('no', 'yes'), runner });
+  assert.ok(isEngineSignedOut(onDefault));
+  assert.match(onDefault.message, /^Codex account "jianghailong\.main" is signed out on runner "build-box"/);
+
+  const onWork = await refusal({ codexAccount: WORK, engines: codex('yes', 'no'), runner });
+  assert.ok(isEngineSignedOut(onWork));
+  assert.match(onWork.message, /^Codex account "Research" is signed out on runner "build-box"/);
+});
+
 /**
  * Everything that must NOT be refused. Each case picks Work and would be refused were its rule
  * missing: a session that fails at spawn with an actionable message is a far better outcome than

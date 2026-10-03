@@ -272,7 +272,9 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	} else {
 		report("REBASE", nil)
 		onto := fork
-		if cmd.SessionBaseSha != "" && isAncestor(scratch, cmd.SessionBaseSha, sourceSha) {
+		// A session base at or before the fork would replay commits base already contains. Keep
+		// the fork then; only a session base beyond it that is still on the source overrides it.
+		if cmd.SessionBaseSha != "" && isAncestor(scratch, cmd.SessionBaseSha, sourceSha) && !isAncestor(scratch, cmd.SessionBaseSha, fork) {
 			onto = cmd.SessionBaseSha
 		}
 		rebased, conflicts, err := integrationRebase(scratch, base, onto, sourceSha)
@@ -485,10 +487,12 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 	var tested string
 	if taskBranch {
 		// The task's own branch replayed onto the upstream tip, anchored the way every other rebase
-		// in this file is: at the session's recorded base when that is still an ancestor of the
-		// source, and at the fork point otherwise (J-S4).
-		onto, _ := git(scratch, "merge-base", sourceSha, upstreamSha)
-		if cmd.SessionBaseSha != "" && isAncestor(scratch, cmd.SessionBaseSha, sourceSha) {
+		// in this file is (J-S4): use the fork when the session base is at or before it, avoiding
+		// replay of commits already in upstream; only a session base beyond the fork that is still
+		// an ancestor of the source overrides it.
+		fork, _ := git(scratch, "merge-base", sourceSha, upstreamSha)
+		onto := fork
+		if cmd.SessionBaseSha != "" && isAncestor(scratch, cmd.SessionBaseSha, sourceSha) && !isAncestor(scratch, cmd.SessionBaseSha, fork) {
 			onto = cmd.SessionBaseSha
 		}
 		rebased, conflicts, rebaseErr := integrationRebase(scratch, upstreamSha, onto, sourceSha)

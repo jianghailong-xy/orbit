@@ -32,10 +32,11 @@ public enum CodexAccounts {
         return windows(own).isEmpty ? nil : own
     }
 
-    /// What an account is called where one is named: "Default", or what the user called it.
+    /// What an account is called where one is named: what the user called it — Default too, once
+    /// renamed in Orbit — else "Default", or the slot's own id (web `accountNameOf`).
     public static func label(_ id: String, accounts: [RunnerEngineAccount]?) -> String {
-        if id == defaultID { return "Default" }
-        return accounts?.first { $0.id == id }?.name ?? "Account \(id)"
+        if let name = accounts?.first(where: { $0.id == id })?.name, !name.isEmpty { return name }
+        return id == defaultID ? "Default" : "Account \(id)"
     }
 
     /// `wanted` when the runner reports it, else Default — the account dispatch runs a session on

@@ -16,34 +16,20 @@ public struct PoolStatus: Equatable, Sendable {
     }
 }
 
-/// A shared pool's page on iOS — Settings → Providers → a shared pool — in the web page's five blocks
-/// and words: what the pool is and "Add a key", its keys, its people, its two rules, and deleting or
-/// leaving it. Every sentence here is the web's (`SharedPoolCopyParityTests` reads them back out of the
-/// web source); what the page makes of the pool's numbers is worked out here the way web's
-/// `lib/sharedPools.ts` works it out, and is tested. Which key is next, which one a session is running
-/// on and who may do what are the server's answers, so nothing here re-derives them.
+/// What a Codex pool's page says of its API keys and its people — web's key rows (`KeyRow` in
+/// components/AccountPools.tsx), its people's rows and menus (components/SharedPool.tsx) and the pool
+/// view's own answers (`lib/sharedPools.ts`) — for the page `CodexPoolPage` draws. Every sentence here is the
+/// web's (`SharedPoolCopyParityTests` reads them back out of the web source); what the page makes of the
+/// pool's numbers is worked out here the way web's `lib/sharedPools.ts` works it out, and is tested. Which
+/// key is next, which one a session is running on and who may do what are the server's answers, so nothing
+/// here re-derives them.
 public enum SharedPoolPage {
-    // MARK: head
-
-    /// The head's title: what the pool is, where the web's line under the pool's name starts.
-    public static let title = "Shared Codex pool"
-    public static let sharedChip = "SHARED"
-    public static let addKey = "Add a key"
-
-    /// "4 members · 2 of 5 keys available".
-    public static func subtitle(_ pool: SharedPool) -> String {
-        "\(plural(pool.people.count, "member")) · \(availableCount(pool)) of \(plural(pool.keys.count, "key")) available"
-    }
-
     // MARK: keys
 
-    public static let keysHeader = "Keys"
     /// What stopped the keys that cannot run, when none of them can: the month's caps, or OpenAI's own
     /// out-of-budget mark (web's `PoolGauge` chooses between the same two).
     public static let allAtCapWords = "All at cap"
     public static let allOutOfBudgetWords = "All out of budget"
-    /// The web's sentence under the pool's name; on a phone, the Keys section's footer.
-    public static let keysFooter = "Each session starts on the key with the most room, and stays on it until that one runs out."
     public static let noKeys = "No keys yet — no session can start on this pool until one is added."
     public static let you = "you"
     public static let nextChip = "NEXT"
@@ -120,28 +106,11 @@ public enum SharedPoolPage {
         return !stopped.isEmpty && stopped.allSatisfy { $0.spentUntil != nil }
     }
 
-    /// When `key` can run again: OpenAI's own out-of-budget mark, else the first of the next month, when
-    /// a share cap counts from zero. Nil when the pool names no month to read it from.
-    static func reset(_ key: SharedPoolKey, in pool: SharedPool) -> String? {
-        key.spentUntil ?? pool.window?.end
-    }
-
-    /// The EARLIEST of some reset instants — one key free of its reason is enough for work to continue —
-    /// parsed rather than compared as text, so the answer does not ride on how the server spells a time.
+    /// The EARLIEST of some reset instants — one key or account free of its reason is enough for work to
+    /// continue — parsed rather than compared as text, so the answer does not ride on how the server
+    /// spells a time.
     static func earliest(_ resets: [String]) -> String? {
         resets.min { (RelativeTime.parse($0) ?? .distantFuture) < (RelativeTime.parse($1) ?? .distantFuture) }
-    }
-
-    /// When the first key of a pool that cannot run comes back: the earliest of the stops' own resets,
-    /// which is what a pool's head names. Nil while one of its keys can run, or with none stopped.
-    static func firstReset(_ pool: SharedPool) -> String? {
-        let stopped = pool.keys.filter { keyState($0) == .spent }.compactMap { reset($0, in: pool) }
-        return stopped.isEmpty ? nil : earliest(stopped)
-    }
-
-    /// The "2" of "2 of 5 keys available": the keys a session of the caller's could start on now.
-    public static func availableCount(_ pool: SharedPool) -> Int {
-        pool.keys.filter { [.available, .running].contains(keyState($0)) }.count
     }
 
     /// "$12.40 of $50": what the others spent on the key this month, against the cap its contributor
@@ -160,49 +129,21 @@ public enum SharedPoolPage {
         return min(100, max(0, Int((spent / Double(cap) * 100).rounded())))
     }
 
-    /// The key a session the caller starts now runs on — the server's answer.
-    public static func nextKey(_ pool: SharedPool) -> SharedPoolKey? {
-        pool.keys.first(where: \.next)
-    }
-
-    /// The Keys header's trailing words (web's `PoolGauge`): the key the next session starts on; with
-    /// none, why — none in the pool, none that can run — or, when every one that can is stopped, what
-    /// stopped them and when the first of them comes back: the month turning, or OpenAI's own mark.
-    public static func keysHeadline(_ pool: SharedPool) -> String {
-        if let next = nextKey(pool) { return "Next: \(next.label)" }
-        if pool.keys.isEmpty { return "No keys" }
-        if !pool.keys.contains(where: { $0.enabled && $0.state == .active }) { return "No key can run" }
-        let stopped = pool.keys.filter { keyState($0) == .spent }
-        if !stopped.isEmpty {
-            let words = allOutOfBudget(pool) ? allOutOfBudgetWords : allAtCapWords
-            guard let at = firstReset(pool), let date = capReset(at) else { return words }
-            return "\(words) · resets \(date)"
-        }
-        return "No key can run"
-    }
-
     // MARK: people
 
-    public static let membersHeader = "Members"
-    public static let shareHeader = "Share of this month’s use"
-    public static let addMembers = "Add members"
     public static let adminChip = "ADMIN"
-    public static let addMembersNote = "They see it on their Providers page and in the session picker, and can start sessions on it."
-    public static let emailPlaceholder = "name@example.com"
-    public static let add = "Add"
     public static let makeAdmin = "Make admin"
     public static let makeMember = "Make member"
     public static let removeFromPool = "Remove from pool"
     public static let removePersonNote = "Their keys leave with them."
 
-    public static func addMembersTitle(_ pool: SharedPool) -> String { "Add members to \(pool.label)" }
-    public static func added(_ pool: SharedPool) -> String { "Added to \(pool.label)" }
     public static func removePersonTitle(_ person: SharedPoolPerson, in pool: SharedPool) -> String {
         "Remove \(person.name) from \(pool.label)?"
     }
 
     /// "2 keys · 23 sessions" / "No key · 6 sessions": what a person put in, and how much they ran on
-    /// the pool this month. Having no key is no bar to running on it.
+    /// the pool this month — what anybody but its owner reads under each name. Having no key is no bar to
+    /// running on it.
     public static func personLine(_ person: SharedPoolPerson) -> String {
         "\(person.keys == 0 ? "No key" : plural(person.keys, "key")) · \(plural(person.sessions, "session"))"
     }
@@ -214,34 +155,18 @@ public enum SharedPoolPage {
         return min(100, max(0, Int((person.usage.costUsd / total * 100).rounded())))
     }
 
-    /// Whether the caller manages `person`: an admin, over anyone but themselves and the pool's creator.
-    public static func canManage(_ person: SharedPoolPerson, in pool: SharedPool) -> Bool {
-        isAdmin(pool) && !person.you && !person.creator
-    }
+    // MARK: whose it is
 
-    // MARK: rules
+    /// Whose the pool is: the person who made it, whose ChatGPT accounts are in it and who says who else can
+    /// use it (web's `poolOwner`).
+    public static func owner(_ pool: SharedPool) -> SharedPoolPerson? { pool.people.first(where: \.creator) }
 
-    public static let rulesHeader = "Rules"
-    public static let membersCanAdd = "Members can add keys"
-    public static let ownKeyFirst = "Own key first"
-    public static let ownKeyFirstHint = "A member’s sessions start on a key they added while it has room, then move on to the others’."
-    public static let setByAdmins = "Set by the pool’s admins"
+    /// Whether the caller is the pool's owner — the page drawn for them — rather than one of the people they
+    /// added (web's `ownsPool`).
+    public static func ownsPool(_ pool: SharedPool) -> Bool { pool.people.contains { $0.you && $0.creator } }
 
-    public static func membersCanAddHint(_ pool: SharedPool) -> String {
-        "Anyone in \(pool.label) can put an OpenAI API key in. Off: only admins can."
-    }
-
-    // MARK: delete / leave
-
-    public static let deletePool = "Delete pool"
-    public static let deletePoolNote = "Its keys are removed from the Orbit server and no session can run on it."
-    public static let leavePool = "Leave pool"
-    public static let leavePoolNote = "Your keys leave with you."
-    public static let delete = "Delete"
-    public static let leave = "Leave"
-
-    public static func deleteTitle(_ pool: SharedPool) -> String { "Delete \(pool.label)?" }
-    public static func leaveTitle(_ pool: SharedPool) -> String { "Leave \(pool.label)?" }
+    /// "Me and people I add" rather than "Just me": anybody is in it besides its owner (web's `hasPeople`).
+    public static func hasPeople(_ pool: SharedPool) -> Bool { pool.people.count > 1 }
 
     // MARK: what the caller may do
 
@@ -249,6 +174,33 @@ public enum SharedPoolPage {
 
     /// Admins always; members while the pool lets them.
     public static func canAddKey(_ pool: SharedPool) -> Bool { isAdmin(pool) || pool.membersCanAdd }
+
+    /// Admins always; members while the pool's own rule for accounts lets them (migration 0371) — apart
+    /// from the keys' rule, which says nothing about accounts (web's `canAddAccount`).
+    public static func canAddAccount(_ pool: SharedPool) -> Bool { isAdmin(pool) || pool.membersCanAddAccounts }
+
+    /// The caller's own person id, from the pool's people (their `you` row) — who an account's `userId` has
+    /// to be for the caller to be the one who signed it in (web's `viewerId`).
+    public static func viewerId(_ pool: SharedPool) -> String? { pool.people.first(where: \.you)?.userId }
+
+    /// Whether `login` is the caller's own: signed in by them (migration 0371). A payload without the
+    /// account's `userId` — an older server — is nobody's.
+    public static func signedIn(_ login: CodexLogin, by pool: SharedPool) -> Bool {
+        guard let viewer = viewerId(pool), let userId = login.userId else { return false }
+        return PublicID.storageKey(viewer) == PublicID.storageKey(userId)
+    }
+
+    /// Whether the caller may take `login` out: the person who signed it in, or an admin (web's
+    /// `canSignOutAccount`).
+    public static func canSignOut(_ login: CodexLogin, in pool: SharedPool) -> Bool {
+        signedIn(login, by: pool) || isAdmin(pool)
+    }
+
+    /// Whether the caller may sign `login` in again: the person who signed it in, and nobody else — not
+    /// even the pool's admins, who have no credential for it (web's `canSignInAgain`).
+    public static func canSignInAgain(_ login: CodexLogin, in pool: SharedPool) -> Bool {
+        signedIn(login, by: pool)
+    }
 
     /// Its contributor, or an admin.
     public static func canRemove(_ key: SharedPoolKey, in pool: SharedPool) -> Bool {
@@ -295,5 +247,13 @@ public enum SharedPoolPage {
         return formatter.string(from: at)
     }
 
-    static func plural(_ n: Int, _ one: String) -> String { "\(n) \(one)\(n == 1 ? "" : "s")" }
+    static func plural(_ n: Int, _ one: String, _ many: String? = nil) -> String {
+        "\(n) \(n == 1 ? one : many ?? "\(one)s")"
+    }
+
+    /// `a`, `a and b`, `a, b and c`: names in a sentence (web's `listOf`).
+    static func listOf(_ items: [String]) -> String {
+        guard let last = items.last, items.count > 1 else { return items.first ?? "" }
+        return "\(items.dropLast().joined(separator: ", ")) and \(last)"
+    }
 }

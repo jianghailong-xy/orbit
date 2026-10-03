@@ -27,7 +27,7 @@ interface CreateResult {
   generatedPassword?: string;
 }
 
-// Admin-only account management (gated by role on both the nav entry and every
+// Admin-only account management (gated by role on both the account-menu entry and every
 // endpoint). Create/reset return a one-time password shown once in a dialog.
 export function AdminUsersPage() {
   const { modal } = AntdApp.useApp();
@@ -70,7 +70,8 @@ export function AdminUsersPage() {
       setName('');
       announce(r.reset ? `Password reset for ${r.email}` : `Created ${r.email}`, r.generatedPassword);
     },
-    onError: (e: Error) => message.error(e.message || 'Failed'),
+    onError: (e: Error, { force }) =>
+      message.error(force ? "Couldn't reset the password" : "Couldn't create the user", e.message),
   });
 
   const roleMut = useMutation({
@@ -80,7 +81,7 @@ export function AdminUsersPage() {
       invalidate();
       message.success('Role updated');
     },
-    onError: (e: Error) => message.error(e.message || 'Failed'),
+    onError: (e: Error) => message.error("Couldn't change the role", e.message),
   });
 
   const deleteMut = useMutation({
@@ -89,7 +90,7 @@ export function AdminUsersPage() {
       invalidate();
       message.success('User deleted');
     },
-    onError: (e: Error) => message.error(e.message || 'Failed'),
+    onError: (e: Error) => message.error("Couldn't delete the user", e.message),
   });
 
   const columns: TableColumnsType<AdminUser> = [

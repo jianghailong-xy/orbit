@@ -51,16 +51,18 @@ export interface ProviderPreset {
   /**
    * Runtime the provider borrows: `claude` for Anthropic-compatible endpoints (default),
    * `codex` for endpoints that serve the OpenAI Responses API (OpenAI itself) — codex has no other
-   * dialect since it dropped Chat Completions in February 2026 — and `kimi` for Moonshot's own API,
-   * which the Kimi CLI speaks natively, so a Kimi key runs on Kimi.
+   * dialect since it dropped Chat Completions in February 2026 — `kimi` for Moonshot's own API,
+   * which the Kimi CLI speaks natively, so a Kimi key runs on Kimi, and `antigravity` for Google's
+   * Gemini API, which the Antigravity CLI (agy) speaks natively, so a Gemini key runs on agy.
    */
-  runtime?: 'claude' | 'codex' | 'kimi';
+  runtime?: 'claude' | 'codex' | 'kimi' | 'antigravity';
   /**
    * True when this vendor's endpoint IS the runtime CLI's own — Anthropic for `claude`, OpenAI
-   * for `codex`. The runner probes those CLIs for their live model list (see the runner's
-   * claude_models.go / codex_models.go), so the picker follows the installed CLI and nobody has
-   * to maintain a list that goes stale the day a model ships. `models` below stays as the
-   * fallback for a runner whose probe hasn't landed yet, but it is not editable in the UI.
+   * for `codex`, Gemini for `antigravity`. The runner probes those CLIs for their live model list
+   * (see the runner's claude_models.go / codex_models.go / antigravity_models.go), so the picker
+   * follows the installed CLI and nobody has to maintain a list that goes stale the day a model
+   * ships. `models` below stays as the fallback for a runner whose probe hasn't landed yet, but it
+   * is not editable in the UI.
    *
    * A third-party Anthropic-compatible endpoint (DeepSeek, Moonshot, GLM…) is NOT this: the
    * runner's probe reports what its own CLI offers, which says nothing about what that vendor
@@ -123,22 +125,28 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
     keyUrl: 'https://platform.openai.com/api-keys',
   },
   {
+    // `antigravity` is the built-in engine's slug, which this borrows: picking Gemini runs the
+    // Antigravity CLI (agy) either way, on this key instead of one set on the runner. agy is given
+    // the key and this endpoint as GEMINI_API_KEY / GOOGLE_GEMINI_BASE_URL and appends the
+    // /v1beta/models/… path itself, so the base URL is the bare host.
     slug: 'gemini',
     label: 'Gemini',
-    runtime: 'codex',
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    runtime: 'antigravity',
+    baseUrl: 'https://generativelanguage.googleapis.com',
+    // Fallback only (modelsFromRuntime below): the runner reports what `agy models` lists, one row
+    // per model with its thinking levels folded out of the slug (`gemini-3.8-flash-high`), and
+    // these are those rows as agy 1.2.16 lists them. agy refuses a model it doesn't list, so a
+    // Gemini API id that agy doesn't know (gemini-2.5-pro) can't be offered here, and no models.dev
+    // refresh is either. The default is the catalogue's first row, which is what a model-less
+    // session runs once a runner has reported.
     models: [
-      { value: 'gemini-2.5-pro', label: 'Gemini 2.5 Pro', contextWindow: 1_000_000 },
-      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', contextWindow: 1_000_000 },
+      { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash', contextWindow: 1_048_576 },
+      { value: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash', contextWindow: 1_048_576 },
+      { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash', contextWindow: 1_048_576 },
+      { value: 'gemini-3.1-pro', label: 'Gemini 3.1 Pro', contextWindow: 1_048_576 },
     ],
-    defaultModel: 'gemini-2.5-pro',
-    catalog: { source: 'google', match: /^gemini-\d/ },
-    // Kept, not deleted: the preset is a vendor identity rows already carry, and the day Google's
-    // compatibility layer serves /responses it works again with no change here. Until then the note
-    // is the owner's warning, and the connection test (which probes /responses for codex) is what
-    // stops a key from being saved into a provider no session can use.
-    note:
-      "Google Gemini via its OpenAI-compatible endpoint. Codex needs the OpenAI Responses API, which that endpoint doesn't serve yet — so sessions on this provider can't run today.",
+    defaultModel: 'gemini-3.8-flash',
+    modelsFromRuntime: true,
     brand: { mono: 'G', from: '#4285f4', to: '#9b72cb' },
     keyUrl: 'https://aistudio.google.com/apikey',
   },

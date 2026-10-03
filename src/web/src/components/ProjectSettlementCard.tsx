@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import { api } from '../api';
@@ -366,6 +366,7 @@ function ordinalOf(project: SettlementProjectDocument, criterion: SettlementCrit
  * is where the work starts.
  */
 export function ProjectSettlementCard({
+  ref,
   project,
   standing,
   settled,
@@ -375,6 +376,8 @@ export function ProjectSettlementCard({
   onConfirm,
   onDelegate,
 }: {
+  /** The card's own element, which is where its keyboard claim says it is drawn (`CardHotkey.ts`). */
+  ref?: Ref<HTMLDivElement>;
   /** The project document, with the projection on it. */
   project: SettlementProjectDocument;
   /** The standard-set standing, read only when the confirmation clause is withholding. */
@@ -397,7 +400,7 @@ export function ProjectSettlementCard({
   const confirmable = standing != null && standing.state !== 'CONFIRMED';
 
   return (
-    <div className="approval-card project-settlement">
+    <div ref={ref} className="approval-card project-settlement">
       <div className="approval-head project-settlement-head">
         {/* The heading belongs to the STATE: a card whose projection stopped withholding says so
             in its heading instead of asking a question its own body has already answered. */}
@@ -607,7 +610,8 @@ export function SessionProjectSettlementCard({
   const offersConfirmation = document?.derivedDone?.withheld.includes(CONFIRMATION_CLAUSE) ?? false;
   const confirmable = standing != null && standing.state !== 'CONFIRMED';
   const asking = shown && document !== null && !settled;
-  const keys = useCardKeyClaim(asking);
+  const anchor = useRef<HTMLDivElement>(null);
+  const keys = useCardKeyClaim(asking, anchor);
   useApproveHotkey(keys && offersConfirmation && confirmable && !confirm.isPending, confirmSet, { requireMod: false });
   useApproveHotkey(keys, delegate);
 
@@ -615,6 +619,7 @@ export function SessionProjectSettlementCard({
   const title = document.title || project;
   return (
     <ProjectSettlementCard
+      ref={anchor}
       project={document}
       standing={standing}
       settled={settled}

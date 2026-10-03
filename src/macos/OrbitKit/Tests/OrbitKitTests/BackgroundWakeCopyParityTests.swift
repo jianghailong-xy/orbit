@@ -29,6 +29,8 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
 
     private static let webWake = "src/web/src/lib/backgroundWake.ts"
     private static let webCard = "src/web/src/components/BackgroundWakeCard.tsx"
+    private static let nativeCard = "src/macos/OrbitApp/Sources/OrbitApp/Views/BackgroundWakeCardView.swift"
+    private static let webTranscript = "src/web/src/components/Transcript.tsx"
 
     private enum ParityError: Error, CustomStringConvertible {
         case noRepo
@@ -305,9 +307,43 @@ final class BackgroundWakeCopyParityTests: XCTestCase {
         assertRendered(web, BackgroundWakeCard.rawSummary,
                        "the fold the original text stays behind", Self.webCard)
 
-        // How much of a failed job's output is shown before the rest is folded away.
+        // Scheduled prompts keep their logical-line threshold; failed output uses visual lines.
         let shown = try capture(web, "const TAIL_LINES = (\\d+)", "TAIL_LINES", Self.webCard)
         XCTAssertEqual(String(BackgroundWakeCard.tailLines), shown)
+    }
+
+    func testTheOutputTailAndDetailsUseTheSameWordsOnBothClients() throws {
+        let web = try flat(Self.webCard)
+        let native = try flat(Self.nativeCard)
+        for label in ["输出末尾", "展开输出", "收起输出"] {
+            assertRendered(web, label, "the output tail's label or disclosure", Self.webCard)
+            assertWritten(native, label, "the output tail's label or disclosure", Self.nativeCard)
+        }
+        for label in ["任务详情", "详情", "已送达当前轮次"] {
+            assertWritten(web, label, "the details or confirmed receipt", Self.webCard)
+            assertWritten(native, label, "the details or confirmed receipt", Self.nativeCard)
+        }
+    }
+
+    /// A job that ends while a turn runs is written into that turn (a steer), and both ends say under
+    /// its line how far it got, in a steer's words (`SteerDelivery`, held to the web's own table by
+    /// `steerDeliveryParity.test.ts`) — for a steer alone, and never for one known not to have arrived,
+    /// which the undelivered line already says.
+    func testASteeredWakeSaysHowFarItGotWhereTheWebLineDoes() throws {
+        let card = try flat(Self.webCard)
+        assertBuilt(card, "steer === 'Sent into this turn' ? '已送达当前轮次' : steer",
+                    "only the confirmed receipt is localized on the wake card", Self.webCard)
+        let transcript = try flat(Self.webTranscript)
+        assertBuilt(transcript, "const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';",
+                    "which wake lines count as never having arrived", Self.webTranscript)
+        assertBuilt(transcript, "steer={node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined}",
+                    "which wake lines say how far they got", Self.webTranscript)
+
+        XCTAssertEqual(BackgroundWakeCard.steerState(steer: true, delivery: "written", undelivered: false),
+                       SteerDelivery.state("written").label)
+        XCTAssertNil(BackgroundWakeCard.steerState(steer: true, delivery: "unconfirmed", undelivered: false))
+        XCTAssertNil(BackgroundWakeCard.steerState(steer: true, delivery: "failed", undelivered: true))
+        XCTAssertNil(BackgroundWakeCard.steerState(steer: false, delivery: "written", undelivered: false))
     }
 
     func testTheRowsUnderTheCardMatchTheWebCard() throws {

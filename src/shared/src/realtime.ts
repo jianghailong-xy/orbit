@@ -7,6 +7,7 @@ import {
   SessionState,
 } from './enums';
 import type { SessionCapabilities } from './dto';
+import type { ConfirmationUnderReview } from './owner-confirmation-review';
 import type { SessionOwnerItem, SessionWaitingKind } from './project-progress';
 import type { SessionRequestPeer } from './session-request';
 
@@ -167,6 +168,13 @@ export interface ControlSessionSummary {
    *  item's own word rather than "Waiting for approval". Null otherwise; absent from an older
    *  control plane. */
   waitingKind?: SessionWaitingKind | null;
+  /** The OWNER_CONFIRMED request on this run's session that is still with its reviewer
+   *  (docs/owner-confirmation-review-contract.md §5 N3): the row says "Under review" where it would
+   *  say "Waiting for your confirmation", and it is not counted in `pendingApprovals`. Always sent by
+   *  a server that knows about reviews, as null when there is none — a client folding this summary
+   *  into a row it holds clears its own on that null; only an absent key, from an older control
+   *  plane, means "unchanged". */
+  confirmationUnderReview?: ConfirmationUnderReview | null;
   /** Which of the four owner items are waiting on this conversation, oldest first (§7.6 V13) — so
    *  the "needs you" banner can name one and open its card instead of only counting. Always sent
    *  by a server that knows about them, as `[]` when none: a client folds this summary into a row

@@ -55,6 +55,9 @@ public extension Session {
             // Travelling with the same count, and cleared by the same rule: a summary that says
             // nothing is waiting here has to be able to take the bar's card away with it.
             ownerItems: summary.ownerItems,
+            // Overwritten with the same count, by the same rule: the summary that says a review is
+            // over (null) is what turns the row from "Under review" to whatever comes next.
+            confirmationUnderReview: summary.confirmationUnderReview,
             // Who is waiting on whose reply travels with every summary and is overwritten with it,
             // by `ownerItems`' rule: an empty list is the server saying none is open any more.
             awaitingReplyFrom: summary.awaitingReplyFrom,
@@ -140,6 +143,8 @@ public extension Session {
                          // Doubly optional for the same reason: nil keeps the row's items, and
                          // `.some([])` is the server saying there are none.
                          ownerItems: [SessionOwnerItem]?? = nil,
+                         // Doubly optional for the same reason: `.some(nil)` is "none under review".
+                         confirmationUnderReview: ConfirmationUnderReview?? = nil,
                          // Doubly optional for the same reason.
                          awaitingReplyFrom: [SessionRequestPeer]?? = nil,
                          owesReplyTo: [SessionRequestPeer]?? = nil,
@@ -212,6 +217,7 @@ public extension Session {
                 claudeAccountPinned: claudeAccountPinned,
                 awaitingReplyFrom: awaitingReplyFrom ?? self.awaitingReplyFrom,
                 owesReplyTo: owesReplyTo ?? self.owesReplyTo,
-                folderId: folderId ?? self.folderId)
+                folderId: folderId ?? self.folderId,
+                confirmationUnderReview: confirmationUnderReview ?? self.confirmationUnderReview)
     }
 }

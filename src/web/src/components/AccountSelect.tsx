@@ -1,6 +1,6 @@
 import { Select } from 'antd';
 import type { LoginEngine, RunnerEngineAccount } from '@orbit/shared';
-import { accountDir, accountPlanUsage } from '../lib/engineAccounts';
+import { accountDir, accountNameOf, accountPlanUsage } from '../lib/engineAccounts';
 import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
 import { tildePath } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
@@ -93,13 +93,17 @@ export function AccountSelect({
   const health = runner.engines?.find((entry) => entry.engine === engine);
   const accounts = accountsOf(runner, engine);
   const automatic = accounts.length >= 2;
+  // Default renamed in Orbit goes by its name, with what it is — the machine's own login — under it.
   const options: AccountOption[] = accounts.map((account) => ({
     value: account.id,
     label:
-      account.id === DEFAULT
+      account.id === DEFAULT && !account.name
         ? `Default (${tildePath(accountDir(account))})`
-        : account.name || `Account ${account.id}`,
-    status: accountStatus(runner, engine, account),
+        : accountNameOf(account),
+    status:
+      account.id === DEFAULT && account.name
+        ? `Default · ${tildePath(accountDir(account))} · ${accountStatus(runner, engine, account)}`
+        : accountStatus(runner, engine, account),
   }));
   // A runner that lists no accounts still has Default: the engine's own sign-in is its.
   if (!accounts.some((account) => account.id === DEFAULT)) {

@@ -227,9 +227,24 @@ const cardsOfState = (state: string): number =>
   mounted().querySelectorAll(`.project-promotion[data-state="${state}"]`).length;
 
 const waitForUi = async (assertion: () => void): Promise<void> => {
-  await act(async () => {
+  // The act environment is off while the window is waited out, as RTL's own asyncWrapper
+  // does it: React queues every render scheduled inside an in-flight act callback and flushes
+  // none of them until that callback settles, so a page that answers inside the window can
+  // never draw what the window exists to see — the wait times out with the data already in
+  // the cache (workstation-gpu: e85b63ee9's second full run; the merge check reds here).
+  const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+  const previous = env.IS_REACT_ACT_ENVIRONMENT;
+  env.IS_REACT_ACT_ENVIRONMENT = false;
+  try {
     await vi.waitFor(assertion, { timeout: 8_000, interval: 20 });
-  });
+  } finally {
+    env.IS_REACT_ACT_ENVIRONMENT = previous;
+  }
+  // And one act to close the window: the last commit the wait saw leaves its passive effects
+  // scheduled, and what they carry — React Query's mutation options among it — is what the
+  // test's next press runs on. The old act-wrapped wait flushed them on its way out; this
+  // keeps that, without the freeze that made the wait itself blind.
+  await act(async () => {});
 };
 
 beforeEach(() => {
@@ -306,7 +321,7 @@ beforeEach(() => {
     }
     if (path.startsWith('/tasks/page')) return reply({ items: [], nextCursor: null });
     if (path.startsWith('/tasks')) return reply({ items: [], total: 0, counts: {} });
-    if (path === '/providers' || path === '/providers/pools' || path === '/session-tags' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true') return reply([]);
+    if (path === '/providers' || path === '/providers/pools' || path === '/session-tags' || path === '/session-folders' || path === '/task-lists' || path === '/runners' || path === '/watches' || path === '/watches?state=ACTIVE' || path === '/watches?state=PAUSED' || path === '/watches?needsAttention=true') return reply([]);
     unstubbed.push(path);
     return reply([]);
   }) as unknown as typeof api);
@@ -440,8 +455,11 @@ describe('the record a merge leaves, in the conversation it happened in', { time
 
     await waitForUi(() => {
       expect(cardsOfState('READY'), 'the next candidate is not being asked about').toBe(1);
+      // The record too, and in the same window: it is drawn from its own read of the merges on
+      // record, and reading it synchronously right after the window is how a loaded host took a
+      // null where a receipt was asserted.
+      expect(count('.project-promotion-receipt'), 'the merge stopped being drawn at all').toBe(1);
     });
-    expect(count('.project-promotion-receipt'), 'the merge stopped being drawn at all').toBe(1);
     const receipt = record()!;
     expect(receipt.getAttribute('data-state'), 'the record followed the new candidate').toBe('MERGED');
     expect(receipt.textContent, 'the record now names a commit that never landed').toContain(MERGED_SHA.slice(0, 7));
@@ -455,6 +473,11 @@ describe('the record a merge leaves, in the conversation it happened in', { time
     await mount(`/sessions/${COORDINATOR_PUBLIC}`);
     await waitForUi(() => {
       expect(mounted().textContent).toContain(`${NOTE[COORDINATOR_PUBLIC]}, opening`);
+      // The record itself, not only the note: the merges on record are their own read, and they can
+      // land after the conversation's opening. Read synchronously, `record()` came back null on a
+      // merge check and the very next line's `compareDocumentPosition` threw on it
+      // (workstation-gpu, the sibling task's third generation).
+      expect(record(), 'the merge was not drawn as a record').not.toBeNull();
     });
     // Older than every loaded event: drawn ABOVE the conversation's first row, not dropped and not
     // at the tail (see `decisionReceiptAnchor`) — a record that disappears on a long conversation

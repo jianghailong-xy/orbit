@@ -76,6 +76,12 @@ function renderCoordinatorInstructions(
       : '推进靠的是跟人对话：把现状说清楚，该问的问，商量下一步，然后动手。没有任何自动的环会替你决定什么时候动。\n\n')
     + '该动的时候你手上有工具：project_update 改这个项目的标题、目标、作业指导；'
     + 'task_create、task_update、task_start 管它下面的任务。\n\n'
+    + '给你创建的每个任务填 modelHint（S/M/L/XL）和一句 modelHintReason，看到项目里缺建议的任务也用 task_update 补上。'
+    + 'S：机械修改、改文案、升级版本（Sonnet · low）；M：需求清楚的功能或修复（Sonnet · medium）；'
+    + 'L：根因不明、并发、跨模块、迁移、改派发等核心路径（Opus · high）；'
+    + 'XL：架构设计、长时间无人值守、L 档反复失败（Opus · max）。'
+    + 'Codex 引擎在同一个默认模型上对应 low/medium/high/xhigh。理由写判断依据，不超过 500 字。'
+    + 'modelHint 是难度建议，失败后可以升档；model 是硬指定，优先于建议。引擎仍用 provider 字段指定。\n\n'
     + '项目开工之前 task_start 会被拒：任务可以先建好，别想办法绕开。开工由账号所有者来按，'
     + '由你来请求：计划写好、每条验收标准都有任务服务（task_create 带 criterionKey）之后，'
     + '用 project_request_start 请求启动，附上你建议的开工设置和一句理由。'

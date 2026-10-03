@@ -1,10 +1,11 @@
 import type { ReactNode } from 'react';
-import { CheckCircleFilled, ClockCircleOutlined, CloseCircleFilled, RightOutlined } from '@ant-design/icons';
+import { CheckCircleFilled, ClockCircleOutlined, CloseCircleFilled, DownOutlined, RightOutlined } from '@ant-design/icons';
+import { stripAnsi } from '../lib/ansi';
 import type { BackgroundWake, BackgroundWakeJob } from '../lib/backgroundWake';
 import { formatSpan } from '../lib/watches';
 import { Pre, relTime } from './Transcript';
 
-/** How much of a failed job's output the line shows before folding the rest away. */
+/** Scheduled wakeup prompts keep the existing text-line fold inside their details. */
 const TAIL_LINES = 8;
 
 const isFailed = (job: BackgroundWakeJob) => job.status === 'failed' || job.status === 'killed';
@@ -53,6 +54,25 @@ function JobMark({ job }: { job: BackgroundWakeJob }) {
   return job.ended ? <CheckCircleFilled /> : <ClockCircleOutlined />;
 }
 
+/** Native disclosure also works in a static export; CSS bounds wrapped output to three lines. */
+function FailedOutput({ text }: { text: string }) {
+  const clean = stripAnsi(text);
+  return (
+    <details className="bgwake-output">
+      <summary aria-label="输出末尾">
+        <span className="bgwake-output-label">输出末尾</span>
+        <span className="chat-pre bgwake-output-preview">{clean}</span>
+        <span className="bgwake-output-action">
+          <span className="bgwake-output-expand">展开输出</span>
+          <span className="bgwake-output-collapse">收起输出</span>
+          <DownOutlined />
+        </span>
+      </summary>
+      <pre className="chat-pre bgwake-output-full">{clean}</pre>
+    </details>
+  );
+}
+
 /**
  * A turn the control plane opened because a background job had news, or a wakeup came due
  * (lib/backgroundWake `parseBackgroundWake`), drawn as one event line in the agent's stream — the
@@ -70,6 +90,10 @@ function JobMark({ job }: { job: BackgroundWakeJob }) {
  *
  * The queued tail draws the same line while the wake waits behind the running turn, dashed, with
  * the queue's status line under it, so it keeps its shape when a runner takes it.
+ *
+ * A job that ended while a turn was running is written into that turn (a steer), so its line sits in
+ * the running turn's own stream, and how far it got is the line's to say — using a steer's delivery
+ * state (lib/steerDelivery), with a compact receipt once confirmed.
  */
 export function BackgroundWakeCard({
   wake,
@@ -77,6 +101,7 @@ export function BackgroundWakeCard({
   ts,
   undelivered,
   queued,
+  steer,
   attached,
 }: {
   wake: BackgroundWake;
@@ -87,6 +112,8 @@ export function BackgroundWakeCard({
   undelivered?: boolean;
   /** The queued tail's status line, while the wake still waits for its turn. */
   queued?: ReactNode;
+  /** How far a wake written into the running turn has got (`steerDeliveryState(...).label`). */
+  steer?: string;
   /**
    * Whatever else the same note carried, as its own folded entry.
    *
@@ -116,7 +143,10 @@ export function BackgroundWakeCard({
           {name && <span className={`bgwake-name${nameIsCommand ? ' is-command' : ''}`}>{name}</span>}
           {closing && <span className="bgwake-status">{closing}</span>}
           {ts && <span className="bgwake-time">{relTime(ts)}</span>}
-          <RightOutlined className="bgwake-caret" />
+          <span className="bgwake-details-label">
+            {wake.jobs.length > 0 ? '任务详情' : '详情'}
+            <RightOutlined className="bgwake-caret" />
+          </span>
         </summary>
         <div className="bgwake-body">
           {wake.jobs.length > 0 && (
@@ -174,15 +204,15 @@ export function BackgroundWakeCard({
           {attached}
         </div>
       </details>
-      {/* Why it failed is the whole reason this turn woke anybody: the tail stays out of the fold,
-          collapsed past a few lines like any other block of output. */}
+      {/* The failure stays visible while its output and job metadata unfold independently. */}
       {wake.jobs.filter((job) => isFailed(job) && job.outputTail !== '').map((job) => (
         <div className="bgwake-tail" key={job.id}>
           {several && <div className="bgwake-tail-name">{job.description || job.command}</div>}
-          <Pre text={job.outputTail} threshold={TAIL_LINES} />
+          <FailedOutput text={job.outputTail} />
         </div>
       ))}
       {undelivered && <div className="bgwake-undelivered">The session has not confirmed it received this.</div>}
+      {steer && <div className="bgwake-steer">{steer === 'Sent into this turn' ? '已送达当前轮次' : steer}</div>}
       {queued && <div className="bgwake-queued">{queued}</div>}
     </div>
   );

@@ -28,8 +28,8 @@ test('a proxy or compatible vendor is never asked, so the key stays with Anthrop
   }
 });
 
-test('OpenAI-dialect runtimes are skipped even on an Anthropic URL', () => {
-  for (const runtime of ['codex', 'kimi']) {
+test('runtimes other than Claude are skipped even on an Anthropic URL', () => {
+  for (const runtime of ['codex', 'kimi', 'antigravity']) {
     assert.equal(
       probesSubscriptionUsage({ runtime, baseUrl: 'https://api.anthropic.com' }, OAT),
       false,

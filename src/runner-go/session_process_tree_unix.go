@@ -29,6 +29,23 @@ func configureSessionProcessTree(cmd *exec.Cmd) {
 	cmd.WaitDelay = 5 * time.Second
 }
 
+// interruptSessionProcessGroup sends SIGINT to the whole process group the engine leads, not just
+// the engine: an engine that exits on it can leave its own children behind, which a PID-only signal
+// orphans. Measured with agy 1.2.16 — a PreToolUse hook's child survived a SIGINT to agy's PID and
+// was gone after the same SIGINT to the group (docs/antigravity-runtime-contract.md §13). The group
+// is the one configureSessionProcessTree made the engine lead, so it holds nothing this runner did
+// not start; terminateSessionProcessTree remains the backstop for anything that ignores the signal.
+func interruptSessionProcessGroup(cmd *exec.Cmd) error {
+	if cmd == nil || cmd.Process == nil {
+		return os.ErrProcessDone
+	}
+	err := syscall.Kill(-cmd.Process.Pid, syscall.SIGINT)
+	if errors.Is(err, syscall.ESRCH) {
+		return os.ErrProcessDone
+	}
+	return err
+}
+
 // terminateSessionProcessTree also handles children that create a new process
 // group/session of their own (OpenCode deliberately starts its shell tool with
 // detached:true), which a plain group kill would miss. Freeze the runtime's own

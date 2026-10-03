@@ -16,7 +16,14 @@ import {
   readRunnerRepoHealth,
   repoHealthForWorkspace,
 } from '../common/runner-repo-health';
+import { MODEL_ROUTING_ENGINES } from '../tasks/model-routing';
 import { CreateWorkspaceDto, UpdateWorkspaceDto } from './dto';
+
+/** The engines a list names, each once and in the order the router weighs them. Absent stays absent:
+ *  a patch that says nothing about the list leaves it as it is. */
+function modelRoutingEngines(engines: string[] | undefined): string[] | undefined {
+  return engines && MODEL_ROUTING_ENGINES.filter((engine) => engines.includes(engine));
+}
 
 @Injectable()
 export class WorkspacesService {
@@ -73,6 +80,8 @@ export class WorkspacesService {
         autoInitGit: dto.autoInitGit ?? false,
         enableWorktree: dto.enableWorktree ?? false,
         defaultMergeTarget: dto.defaultMergeTarget,
+        modelRouting: dto.modelRouting ?? false,
+        modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders) ?? [],
       },
     });
     // Brand-new: no sessions yet, so the seed is the floor. Shaped like every other read.
@@ -269,6 +278,8 @@ export class WorkspacesService {
       defaultMergeTarget: dto.defaultMergeTarget,
       codexAccount: dto.codexAccount,
       claudeAccount: dto.claudeAccount,
+      modelRouting: dto.modelRouting,
+      modelRoutingProviders: modelRoutingEngines(dto.modelRoutingProviders),
     };
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;
     if (dto.providerFallbacks) {

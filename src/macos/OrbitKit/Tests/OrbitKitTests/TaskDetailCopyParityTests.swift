@@ -27,6 +27,8 @@ final class TaskDetailCopyParityTests: XCTestCase {
     private static let watchEditor = "src/web/src/components/WatchEditor.tsx"
     private static let dependencyList = "src/web/src/components/TaskDependencyList.tsx"
     private static let sharedTask = "src/web/src/pages/SharedTaskPage.tsx"
+    private static let runnerDetail = "src/web/src/pages/RunnerDetailPage.tsx"
+    private static let workspace = "src/web/src/components/WorkspaceView.tsx"
 
     private struct Missing: Error, CustomStringConvertible {
         let file: String
@@ -243,5 +245,79 @@ final class TaskDetailCopyParityTests: XCTestCase {
         assertSays(editor, hint, in: Self.watchEditor)
         assertSays(editor, "'\(TaskDetailCopy.followMatchedAtOnce)'", in: Self.watchEditor)
         assertSays(editor, ": '\(TaskDetailCopy.following)',", in: Self.watchEditor)
+    }
+
+    // MARK: smart model selection (docs/model-routing-design.md §9)
+
+    func testTheSuggestedPickersWords() throws {
+        let web = try source(Self.panel)
+        assertSays(web, "<span className=\"tdp-field-label\">\(TaskDetailCopy.suggestedLabel)</span>", in: Self.panel)
+        assertSays(web, "export const NO_SUGGESTION = '\(TaskDetailCopy.noSuggestion)';", in: Self.panel)
+        assertSays(web, "export const NO_SUGGESTION_DETAIL = \"\(TaskDetailCopy.noSuggestionDetail)\";", in: Self.panel)
+        XCTAssertEqual(Set(TaskDetailCopy.modelHintDetail.keys), Set(TaskDetailLogic.modelHintLevels))
+        for level in TaskDetailLogic.modelHintLevels {
+            assertSays(web, "\(level): '\(TaskDetailCopy.modelHintDetail[level] ?? "")',", in: Self.panel)
+        }
+        assertSays(web, "export const MODEL_HINT_LEVELS: readonly ModelHintLevel[] = ['S', 'M', 'L', 'XL'];",
+                   in: Self.panel)
+        // A tier's name: the tier, then the model and effort the server resolved it to, where it did.
+        assertSays(web, "return [level, option?.label, option?.effort].filter(Boolean).join(' · ');", in: Self.panel)
+        assertSays(web, "<span className=\"tdp-field-note\">"
+                    + TaskDetailCopy.coordinatorReason("{q.data.modelHintReason}") + "</span>", in: Self.panel)
+        assertSays(web, "export const SMART_SELECTION_PLACEHOLDER = '\(TaskDetailCopy.smartSelectionPlaceholder)';",
+                   in: Self.panel)
+        // A pick by hand clears the coordinator's reason with it; No suggestion clears both.
+        assertSays(web, "body: { modelHint, modelHintReason: null }", in: Self.panel)
+    }
+
+    func testTheRunsSayWhatEachRunWasRoutedToAndWhy() throws {
+        let web = try source(Self.panel)
+        assertSays(web, "{ranOn && ` · ${modelLabel(ranOn)} · ${ranAt ?? '\(TaskDetailCopy.defaultEffort)'}`}",
+                   in: Self.panel)
+        assertSays(web, "export const routeTierTag = (route: TaskRunRoute): string => `✦ ${route.level}${route.escalated ? ' ↑' : ''}`;",
+                   in: Self.panel)
+        assertSays(web, "> " + TaskDetailCopy.wouldHavePicked("{routePick(route)}", level: "{route.level}") + " </button>",
+                   in: Self.panel)
+        assertSays(web, "<div className=\"tdp-route-why-title\">" + TaskDetailCopy.why("{routePick(route)}") + "</div>",
+                   in: Self.panel)
+        assertSays(web, "[`Policy v${route.policyVersion}`, `decided ${fmt(route.decidedAt)}`, ...(route.escalated ? [USAGE_LIMIT_NOTE] : [])] .join(' · ')",
+                   in: Self.panel)
+        assertSays(web, "export const USAGE_LIMIT_NOTE = '\(TaskDetailCopy.usageLimitNote)';", in: Self.panel)
+        assertSays(web, "[route.model ? modelLabel(route.model) : route.provider, route.effort].filter(Boolean).join(' · ')",
+                   in: Self.panel)
+
+        // The sentences the native rows build, rendered with sentinels where the web interpolates.
+        let route = TaskRunRoute(level: "L", provider: "claude", model: "claude-opus-5-5", effort: "high", applied: true,
+                                 escalated: true, reasons: [], policyVersion: 23,
+                                 decidedAt: "2026-10-03T02:24:00.000Z")
+        XCTAssertEqual(TaskDetailLogic.routeTierTag(route), "✦ L ↑")
+        let footer = TaskDetailLogic.routeWhyFooter(route, timeZone: TimeZone(identifier: "UTC")!,
+                                                    locale: Locale(identifier: "en_US"))
+        // ICU puts a narrow no-break space before AM/PM, as the browser's `toLocaleString` does.
+        XCTAssertEqual(footer.replacingOccurrences(of: "\u{202F}", with: " "),
+                       "Policy v23 · decided Oct 3, 2:24 AM · \(TaskDetailCopy.usageLimitNote)")
+    }
+
+    func testTheAgentsSwitchSaysWhatTheWebSwitchSays() throws {
+        let web = try source(Self.runnerDetail)
+        assertSays(web, "label=\"\(TaskDetailCopy.smartSelectionSwitch)\" desc=\"\(TaskDetailCopy.smartSelectionSwitchDetail)\"",
+                   in: Self.runnerDetail)
+    }
+
+    func testTheComposersModelMenuSaysWhyItIsThisModel() throws {
+        let web = try source(Self.workspace)
+        assertSays(web, "<span className=\"composer-model-spark\">✦</span> "
+                    + TaskDetailCopy.pickedBySmartSelection(tier: "{smartRoute.level}") + " </div>", in: Self.workspace)
+        assertSays(web, "{smartRoute.reasons[0] && <div className=\"composer-route-reason\">{smartRoute.reasons[0]}</div>}",
+                   in: Self.workspace)
+        assertSays(web, "<div className=\"composer-route-reason\"> \(TaskDetailCopy.modelChangeAppliesToThisRun) </div>",
+                   in: Self.workspace)
+        assertSays(web, "<span className=\"composer-route-open\">\(TaskDetailCopy.openTask)</span>", in: Self.workspace)
+        // The chip's name aloud, and what it ends on while it carries the ✦.
+        assertSays(web, "aria-label={`Model ${shownModelLabel}, effort ${shownEffortLabel}${ smartRoute ? '"
+                    + TaskDetailCopy.chipPickedBySmartSelection + "' : '' }`}", in: Self.workspace)
+        // Only while the chip still shows the pick (`ComposerLogic.smartRoute`).
+        assertSays(web, "selected?.taskId && route?.applied && route.level && route.model === shownModel ? route : null",
+                   in: Self.workspace)
     }
 }

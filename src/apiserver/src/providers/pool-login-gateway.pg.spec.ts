@@ -371,6 +371,12 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
   const stranger = await person(db, 'Stranger');
 
   /** One more ChatGPT account signed in on `poolId`, as the sign-in would store it. */
+  /**
+   * How many accounts this spec has added, so each gets a `created_at` of its own: the column is
+   * TIMESTAMP(3), and two rows added within the same millisecond order by their random account id — which
+   * one a claim lands on would be a coin flip (the pool's accounts are ordered by `created_at` first).
+   */
+  let accountsAdded = 0;
   async function addAccount(poolId: string, access?: { exp?: number }) {
     const accountId = `acct-${randomUUID()}`;
     const email = `owner-${randomUUID().slice(0, 8)}@chatgpt.invalid`;
@@ -379,6 +385,7 @@ suite("a login pool's gateway, end to end on real PostgreSQL", { timeout: 600_00
       data: {
         poolId, userId: owner.id, accountId, email, plan: 'plus',
         accessTokenEnc: encryptSecret(login.access), refreshTokenEnc: encryptSecret(login.refresh), expiresAt: login.exp,
+        createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000 + accountsAdded++ * 60_000),
       },
     });
     secrets.push(stored.accessTokenEnc, stored.refreshTokenEnc);

@@ -10,6 +10,9 @@ const LEASE_OWNER = '44444444-4444-4444-8444-444444444444';
 test('runner restart reclaims every open session so cold checkouts remain protected', async () => {
   let where: unknown;
   const prisma = {
+    // A runner that names no runtime makes the claim/reclaim ask which providers borrow one
+    // (providerSlugsOn); none do here.
+    modelProvider: { findMany: async () => [] },
     session: {
       findMany: async (args: { where: unknown }) => {
         where = args.where;
@@ -47,6 +50,9 @@ test('reclaim preserves lease state and snapshots an inherited runtime model onc
   let storedModel: string | null = null;
   const modelWrites: string[] = [];
   const prisma = {
+    // A runner that names no runtime makes the claim/reclaim ask which providers borrow one
+    // (providerSlugsOn); none do here.
+    modelProvider: { findMany: async () => [] },
     session: {
       findMany: async () => [
         {
@@ -118,6 +124,9 @@ test('reclaim preserves lease state and snapshots an inherited runtime model onc
 test('a concurrent Session model edit wins reclaim materialization', async () => {
   const sessionId = '11111111-1111-4111-8111-111111111111';
   const prisma = {
+    // A runner that names no runtime makes the claim/reclaim ask which providers borrow one
+    // (providerSlugsOn); none do here.
+    modelProvider: { findMany: async () => [] },
     session: {
       findMany: async () => [
         {
@@ -199,5 +208,42 @@ test('session meta preserves the OpenCode runtime provider', async () => {
     runtimeSessionId: 'opencode-runtime-1',
     workDir: null,
     title: 'OpenCode session',
+  });
+});
+
+test('session meta preserves the Antigravity runtime provider', async () => {
+  // `orbit resume` reattaches to agy's conversation, not to a Claude session of the same id.
+  const sessionId = '11111111-1111-4111-8111-111111111111';
+  const runnerId = '22222222-2222-4222-8222-222222222222';
+  const prisma = {
+    session: {
+      findUnique: async () => ({
+        id: sessionId,
+        assignedRunnerId: runnerId,
+        provider: AgentProvider.ANTIGRAVITY,
+        providerBuiltin: true,
+        runtimeSessionId: 'agy-conversation-1',
+        claudeSessionId: null,
+        workspaceId: null,
+        title: 'Antigravity session',
+      }),
+    },
+  } as never;
+  const controller = new RunnerApiController(
+    prisma,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
+  );
+
+  assert.deepEqual(await controller.getSessionMeta({ id: runnerId }, sessionId), {
+    provider: AgentProvider.ANTIGRAVITY,
+    sessionUuid: 'agy-conversation-1',
+    runtimeSessionId: 'agy-conversation-1',
+    workDir: null,
+    title: 'Antigravity session',
   });
 });

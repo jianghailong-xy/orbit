@@ -227,6 +227,33 @@ test('an OpenCode init event persists the runtime id without counting as turn ac
   assert.equal('lastTurnAt' in calls.update[0].data, false);
 });
 
+test('an Antigravity init event persists the conversation id without counting as turn activity', async () => {
+  const { calls, controller } = makeController(RunStatus.AWAITING_INPUT, null);
+
+  await controller.events({ id: 'runner-1' }, 'session-1', {
+    events: [
+      {
+        seq: 7,
+        type: RunEventType.SYSTEM,
+        ts: '2026-10-03T12:00:00.000Z',
+        // The shape docs/antigravity-runtime-contract.md §2.2 gives agy's `init`.
+        payload: {
+          subtype: 'init',
+          provider: 'antigravity',
+          sessionId: 'agy-conversation-1',
+        },
+      },
+    ],
+  });
+
+  assert.equal(calls.createMany.length, 1, 'the runtime handshake remains durable');
+  // The reaper's startup watchdog stands down on exactly this write: the runtime came up.
+  assert.equal(calls.update.length, 1);
+  assert.deepEqual(calls.update[0].where, { id: 'session-1' });
+  assert.equal(calls.update[0].data.runtimeSessionId, 'agy-conversation-1');
+  assert.equal('lastTurnAt' in calls.update[0].data, false);
+});
+
 test('a respawn handshake clears background work left by the previous process', async () => {
   const { calls, controller } = makeController(RunStatus.AWAITING_INPUT, 'runtime-1', {
     runningBgShells: ['toolu_prev'],
@@ -1007,6 +1034,9 @@ const RUNNER_OWNER = '22222222-2222-4222-8222-222222222222';
  */
 function makeReclaimController(runEventTable: RunEventRow[], sessionId: string) {
   const prisma = {
+    // A runner that names no runtime makes the claim/reclaim ask which providers borrow one
+    // (providerSlugsOn); none do here.
+    modelProvider: { findMany: async () => [] },
     session: {
       findMany: async () => [
         {

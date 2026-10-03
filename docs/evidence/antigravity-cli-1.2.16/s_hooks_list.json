@@ -1,0 +1,4 @@
+{"name": "hooks_list",
+ "hooks": {"orbit-approval": {"PreToolUse": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOOK PreToolUse", "timeout": 86400}]}],
+                               "PreInvocation": [{"type": "command", "command": "$HOOK PreInvocation", "timeout": 30}]}},
+ "print": ["--print=/hooks", "--output-format", "json"]}

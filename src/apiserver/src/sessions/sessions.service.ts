@@ -33,6 +33,13 @@ import {
   readTurnRequestIds,
   settleUnrunSessionRequests,
 } from './session-request';
+import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
+import {
+  isConfirmationReviewContentTurn,
+  queuedConfirmationReviewContent,
+  readConfirmationReturnCard,
+  readConfirmationReviewRequestCard,
+} from '../tasks/owner-confirmation-review-turn';
 
 import { createHash, randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
@@ -52,6 +59,8 @@ import {
   type RunnerModelCatalog,
   FilePatch,
   MAX_PROMPT_CHARS,
+  type ConfirmationReturnCard,
+  type ConfirmationReviewRequestCard,
   type OpenItemDeliveryCard,
   type ProjectStartedCard,
   type SessionMessageCard,
@@ -94,6 +103,7 @@ import {
   taskRunProviderSwitchConfirmation,
   type TaskRunEffectFence,
 } from '../tasks/task-run-receipt';
+import { readTaskRouteSummaries } from '../tasks/task-route-decision';
 import { TASK_OCCUPYING } from '../tasks/reclaim-stalled-task';
 import {
   accountDefaultPermissionMode,
@@ -232,10 +242,14 @@ import {
 
 /**
  * A turn the control plane queued with no words of anybody's, whose content is written in at delivery:
- * a background job's or a wakeup's wake, or the outcomes of the session's own requests handed back.
+ * a background job's or a wakeup's wake, the outcomes of the session's own requests handed back, or a
+ * confirmation request's review handed to its reviewer and a reviewer's return handed to the run
+ * (tasks/owner-confirmation-review-turn.ts).
  */
 function isPlatformContentTurn(clientTurnId: string | null | undefined): boolean {
-  return isBackgroundWakeTurn(clientTurnId) || isSessionReplyTurn(clientTurnId);
+  return isBackgroundWakeTurn(clientTurnId)
+    || isSessionReplyTurn(clientTurnId)
+    || isConfirmationReviewContentTurn(clientTurnId);
 }
 
 
@@ -286,6 +300,11 @@ interface ListedQueuedTurn {
    *  client taking it off the queue unrun hands none of it back to the owner's composer: the words
    *  are the sending session's. Absent on every turn nobody's session sent. */
   sessionMessage?: SessionMessageCard;
+  /** A confirmation request handed to this session for review, and a reviewer's return handed to a
+   *  run (docs/owner-confirmation-review-contract.md D7, B3): the cards the runner's echo will carry,
+   *  for the reason `openItemDelivery` is here. Absent on every other turn. */
+  confirmationReviewRequest?: ConfirmationReviewRequestCard;
+  confirmationReturn?: ConfirmationReturnCard;
   /** The control plane wrote this turn itself (`isOrbitAuthoredTurn`): nobody typed its words, so a
    *  client taking it off the queue unrun hands none of them back to the composer. Absent on every
    *  turn somebody sent. */
@@ -814,9 +833,9 @@ export class SessionsService {
     // the chosen workspace's machine (workspaces belong to a runner) — picking a workspace is
     // enough to know which machine + project dir to run in.
     let assignedRunnerId: string | undefined = dto.assignedRunnerId;
-    // The session's provider identity: a built-in ("claude"/"codex"/"opencode") or a custom
-    // slug ("deepseek"). Stored verbatim; runtime is derived below. A workspace holds no provider of
-    // its own — absent an explicit pick this is seeded from what the project last ran on.
+    // The session's provider identity: a built-in ("claude"/"codex"/"kimi"/"opencode"/"antigravity")
+    // or a custom slug ("deepseek"). Stored verbatim; runtime is derived below. A workspace holds no
+    // provider of its own — absent an explicit pick this is seeded from what the project last ran on.
     let provider: string = AgentProvider.CLAUDE;
     let providerBuiltin = true;
     // Per-workspace worktree toggle: default off. A workspace with it turned off (the default)
@@ -1068,7 +1087,7 @@ export class SessionsService {
     // everything this deliberately lets through.
     const targetRunner = await this.prisma.runner.findFirst({
       where: { id: assignedRunnerId, ownerId },
-      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, planUsage: true },
+      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true, planUsage: true },
     });
     // The Codex or Claude account this session runs on: the one picked for it — which pins it there —
     // else, when its workspace leaves the account to Orbit, the runner's account whose quota resets
@@ -1124,7 +1143,7 @@ export class SessionsService {
         provider,
         providerBuiltin,
         // Pre-generate the Claude session id so the runner spawns with --session-id.
-        // Codex/Kimi/OpenCode create and return their own thread id after process init.
+        // Codex/Kimi/OpenCode/Antigravity create and return their own thread id after process init.
         runtimeSessionId: runtime === AgentProvider.CLAUDE ? runtimeSessionId : null,
         model: dto.model,
         // Old replicas omit this post-0079 column and receive its false default. That lets claim
@@ -3111,6 +3130,11 @@ export class SessionsService {
     // Who is waiting on whose reply (session-request.ts, contract §6): on each row, the sessions it
     // asked and still waits on, and the sessions waiting on it.
     const requests = await readOpenRequestPeers(this.prisma, ownerId, sessions.map((s) => s.id));
+    // The confirmation still with its reviewer, which the row says instead of counting it
+    // (docs/owner-confirmation-review-contract.md §5 N3).
+    const underReview = await readConfirmationsUnderReview(this.prisma, ownerId, {
+      sessionIds: sessions.map((s) => s.id),
+    });
     return sessions.map((s) => {
       const approvals = byId.get(s.id) ?? 0;
       const waiting = decisions.get(s.id);
@@ -3119,6 +3143,9 @@ export class SessionsService {
         ...s,
         pendingApprovals: approvals + (waiting?.count ?? 0),
         waitingKind: sessionWaitingKind(approvals, waiting),
+        // Always sent, as null when there is none: a client folding a summary into a row it holds
+        // reads null as "clear it".
+        confirmationUnderReview: underReview.get(s.id) ?? null,
         // Which of the four owner items are waiting here, for the banner that has to name one and
         // open its card rather than only say that a number is not zero (§7.6 V13).
         ownerItems: ownerItemsForRow(waiting),
@@ -3221,8 +3248,14 @@ export class SessionsService {
     const tags = tagLinks
       .map((l) => l.tag)
       .sort((a, b) => Number(b.isSystem) - Number(a.isSystem) || a.position - b.position);
+    // The Route Decision this task run was planned with (model routing §7.5). Only a task's run
+    // can have one, so no other session pays for the read.
+    const route = session.taskId
+      ? (await readTaskRouteSummaries(this.prisma, ownerId, [session.id])).get(session.id) ?? null
+      : null;
     return withSessionCapabilities({
       ...rest,
+      route,
       mergeRepairSession: children[0] ? withSessionState(children[0]) : null,
       mergeRecoverySupported: session.assignedRunner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1) ?? false,
       tags,
@@ -4387,6 +4420,27 @@ export class SessionsService {
     );
   }
 
+  /**
+   * The engine turn a server-routed send is written into (createTurn's `steerIfLive`), or null for
+   * one that waits behind it. Explicit CURRENT_WORK's questions in its order — a live engine turn, a
+   * runtime and runner that take an exact-target steer, and that turn's lease asked again on the
+   * database clock once the capability reads are done — answered with a route instead of a refusal.
+   */
+  private async steerTargetIfLive(
+    tx: Prisma.TransactionClient,
+    sessionId: string,
+    session: {
+      provider: string;
+      providerBuiltin: boolean;
+      ownerId: string;
+      assignedRunnerId: string | null;
+    },
+  ): Promise<{ id: string } | null> {
+    const live = await this.liveEngineTurn(tx, sessionId);
+    if (!live || !(await this.runtimeTakesSteer(tx, session))) return null;
+    return this.liveEngineTurn(tx, sessionId, live.id);
+  }
+
   /** The pre-routing-protocol decision used only when an installed client omits `intent`.
    * It deliberately retains Claude's legacy always-steer behaviour and Codex's existing
    * capability gate; routing-v1 is required only for explicit, exact-target CURRENT_WORK. */
@@ -4571,7 +4625,7 @@ export class SessionsService {
     if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin)) return null;
     const runner = await tx.runner.findUnique({
       where: { id: session.assignedRunnerId },
-      select: { engines: true, planUsage: true, capabilities: true },
+      select: { engines: true, accountNames: true, planUsage: true, capabilities: true },
     });
     if (!runner || !runnerCarriesAccounts(runner, engine)) return null;
     const workspace = session.workspaceId
@@ -4598,7 +4652,7 @@ export class SessionsService {
     return {
       ...(codex ? { codexAccount: move.to } : { claudeAccount: move.to }),
       // Said on the `resumed` that reload earns, unless another line is already owed.
-      ...(session.poolSwitchNotice ? {} : { poolSwitchNotice: accountSwitchNotice(engine, move, runner.engines) }),
+      ...(session.poolSwitchNotice ? {} : { poolSwitchNotice: accountSwitchNotice(engine, move, runner) }),
     };
   }
 
@@ -4632,12 +4686,28 @@ export class SessionsService {
       /** Full logical resume payload hash. Present only when resume delegates to this live path. */
       requestFingerprint?: string;
       /**
+       * A NEXT_TURN message the server may write into the turn already running instead: filed as a
+       * CURRENT_WORK steer aimed at the live engine turn when there is one and this runtime and its
+       * runner can take an exact-target steer — the same two questions explicit CURRENT_WORK asks,
+       * answered under the same Session lock in the same transaction — and as the NEXT_TURN message
+       * it was otherwise. A route, never a refusal: nothing here answers 409 for a turn that cannot
+       * steer. An option of this call and never a field of `dto`, so no request body can ask for it;
+       * a background job's exit is its one caller (runner-api `backgroundWake`).
+       */
+      steerIfLive?: boolean;
+      /**
        * A turn that joins one already queued rather than adding another. Called for a NEW operation
        * only, under the Session lock and after the lifecycle refusals: a turn it returns is this
        * request's receipt, and nothing more is written or woken; null lets the turn be written as
-       * usual. Whatever it wrote rolls back with a refusal it throws.
+       * usual. Whatever it wrote rolls back with a refusal it throws. `route` is where the turn would
+       * be written — a `steer` names the running turn it joins — decided before this is called, so a
+       * turn joined is one on the same route.
        */
-      coalesce?: (tx: Prisma.TransactionClient, session: Session) => Promise<ConversationTurn | null>;
+      coalesce?: (
+        tx: Prisma.TransactionClient,
+        session: Session,
+        route: { kind: 'message' | 'shell' | 'steer'; targetTurnId?: string },
+      ) => Promise<ConversationTurn | null>;
       /**
        * What rides on the turn just written, written beside it: called once for a NEW turn, in this
        * transaction and under the Session lock, after the row exists — the session-to-session doors'
@@ -4692,16 +4762,23 @@ export class SessionsService {
         include: { attachments: { select: { id: true } } },
       });
       if (existing) {
+        // A server-routed send may have been filed either way, and a missed steer is a NEXT_TURN
+        // message by now: its retry replays whichever the row is.
+        const routedSteer = opts?.steerIfLive === true
+          && intent === 'NEXT_TURN'
+          && dto.kind !== 'shell'
+          && existing.sendIntent === 'CURRENT_WORK';
         if (
           (intent === 'CURRENT_WORK' && existing.sendIntent !== 'CURRENT_WORK')
           || (intent === 'NEXT_TURN'
             && existing.sendIntent != null
-            && existing.sendIntent !== 'NEXT_TURN')
+            && existing.sendIntent !== 'NEXT_TURN'
+            && !routedSteer)
           || (intent === undefined && existing.sendIntent === 'CURRENT_WORK')
         ) {
           throw new ConflictException(`clientTurnId was already used with ${existing.sendIntent ?? 'legacy intent'}`);
         }
-        const expectedKinds = intent === 'CURRENT_WORK'
+        const expectedKinds = intent === 'CURRENT_WORK' || routedSteer
           ? ['steer']
           : dto.kind === 'shell'
             ? ['shell']
@@ -4746,7 +4823,19 @@ export class SessionsService {
       if (SessionsService.TERMINAL.includes(session.status) || session.cancelRequestedAt) {
         throw new SessionNotSendable('the session has ended');
       }
-      const joined = await opts?.coalesce?.(tx, session);
+      // A server-routed send is placed before anything may join it: whether it goes into the running
+      // turn or waits behind it decides which queued turn it can join, and a placement changed after
+      // joining could only be undone in a second transaction — the fallback this lock exists to avoid.
+      const steerTarget = opts?.steerIfLive && intent === 'NEXT_TURN' && dto.kind !== 'shell'
+        ? await this.steerTargetIfLive(tx, id, session)
+        : null;
+      const joined = await opts?.coalesce?.(
+        tx,
+        session,
+        steerTarget
+          ? { kind: 'steer', targetTurnId: steerTarget.id }
+          : { kind: dto.kind === 'shell' ? 'shell' : 'message' },
+      );
       if (joined) {
         return {
           turn: joined,
@@ -4853,6 +4942,11 @@ export class SessionsService {
         }
         kind = 'steer';
         targetTurnId = liveTarget.id;
+      } else if (steerTarget) {
+        // Placed above, under this lock and before the turn could join anything.
+        kind = 'steer';
+        targetTurnId = steerTarget.id;
+        await opts?.participateSendTransaction?.(tx);
       } else {
         if (intent === 'NEXT_TURN') {
           kind = dto.kind === 'shell' ? 'shell' : 'message';
@@ -4886,7 +4980,8 @@ export class SessionsService {
         content: dto.content,
         clientTurnId: dto.clientTurnId,
         ...(opts?.requestFingerprint ? { requestFingerprint: opts.requestFingerprint } : {}),
-        ...(intent ? { sendIntent: intent } : {}),
+        // A server-routed steer is the CURRENT_WORK shape the row constraints accept for one.
+        ...(steerTarget ? { sendIntent: 'CURRENT_WORK' } : intent ? { sendIntent: intent } : {}),
         ...(targetTurnId ? { targetTurnId } : {}),
         ...(opts?.senderSessionId ? { senderSessionId: opts.senderSessionId } : {}),
       });
@@ -5338,10 +5433,12 @@ export class SessionsService {
       const deliveryCards = await this.openItemDeliveryCards(queued.map(({ turn }) => turn));
       const startedCards = await this.projectStartedCards(ownerId, queued.map(({ turn }) => turn));
       const messageCards = await this.sessionMessageCards(ownerId, id, queued.map(({ turn }) => turn));
+      const reviewCards = await this.confirmationReviewCards(queued.map(({ turn }) => turn));
       return queued.map(({ turn, content }) => {
         const card = deliveryCards.get(turn.id);
         const started = startedCards.get(turn.id);
         const message = messageCards.get(turn.id);
+        const review = reviewCards.get(turn.id);
         return {
           turnId: turn.id,
           kind: turn.kind,
@@ -5353,6 +5450,7 @@ export class SessionsService {
           ...(card ? { openItemDelivery: card } : {}),
           ...(started ? { projectStarted: started } : {}),
           ...(message ? { sessionMessage: message } : {}),
+          ...review,
           ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
         };
       });
@@ -5406,11 +5504,13 @@ export class SessionsService {
     const deliveryCards = await this.openItemDeliveryCards(activeRows.map(({ turn }) => turn));
     const startedCards = await this.projectStartedCards(ownerId, activeRows.map(({ turn }) => turn));
     const messageCards = await this.sessionMessageCards(ownerId, id, activeRows.map(({ turn }) => turn));
+    const reviewCards = await this.confirmationReviewCards(activeRows.map(({ turn }) => turn));
     const activeTurns: ListedActiveTurn[] = activeRows
       .map(({ turn, placement, content }) => {
         const card = deliveryCards.get(turn.id);
         const started = startedCards.get(turn.id);
         const message = messageCards.get(turn.id);
+        const review = reviewCards.get(turn.id);
         return {
           turnId: turn.id,
           kind: turn.kind,
@@ -5429,6 +5529,7 @@ export class SessionsService {
           ...(card ? { openItemDelivery: card } : {}),
           ...(started ? { projectStarted: started } : {}),
           ...(message ? { sessionMessage: message } : {}),
+          ...review,
           ...(isOrbitAuthoredTurn(turn.clientTurnId) ? { authoredByOrbit: true as const } : {}),
           content,
           createdAt: turn.createdAt.toISOString(),
@@ -5467,6 +5568,23 @@ export class SessionsService {
       if (!itemId) continue;
       const card = await readOpenItemDeliveryCard(this.prisma, itemId);
       if (card) cards.set(turn.id, card);
+    }
+    return cards;
+  }
+
+  /** The confirmation-review card each of these turns is drawn as, by turn id — a review handed to
+   *  its reviewer or a return handed to the run, read by the same functions the ingest path records
+   *  the echo's with, and for those turns only. */
+  private async confirmationReviewCards(
+    turns: ReadonlyArray<{ id: string; clientTurnId: string | null }>,
+  ): Promise<Map<string, Pick<ListedQueuedTurn, 'confirmationReviewRequest' | 'confirmationReturn'>>> {
+    const cards = new Map<string, Pick<ListedQueuedTurn, 'confirmationReviewRequest' | 'confirmationReturn'>>();
+    for (const turn of turns) {
+      if (!isConfirmationReviewContentTurn(turn.clientTurnId)) continue;
+      const requested = await readConfirmationReviewRequestCard(this.prisma, turn.clientTurnId);
+      if (requested) cards.set(turn.id, { confirmationReviewRequest: requested });
+      const returned = await readConfirmationReturnCard(this.prisma, turn.clientTurnId);
+      if (returned) cards.set(turn.id, { confirmationReturn: returned });
     }
     return cards;
   }
@@ -5530,7 +5648,7 @@ export class SessionsService {
    *  out of the list — that empty row is what listing every wake turn would otherwise produce. */
   private async queuedWakeContent(
     sessionId: string,
-    turns: ReadonlyArray<{ id: string; clientTurnId: string | null; status: string }>,
+    turns: ReadonlyArray<{ id: string; clientTurnId: string | null; status: string; kind: string }>,
   ): Promise<Map<string, string>> {
     const wakeContent = new Map<string, string>();
     for (const turn of turns) {
@@ -5540,9 +5658,15 @@ export class SessionsService {
         if (replies) wakeContent.set(turn.id, replies);
         continue;
       }
+      if (isConfirmationReviewContentTurn(turn.clientTurnId)) {
+        const block = await queuedConfirmationReviewContent(this.prisma, turn.clientTurnId);
+        if (block) wakeContent.set(turn.id, block);
+        continue;
+      }
       if (!isBackgroundWakeTurn(turn.clientTurnId)) continue;
       const { clientTurnId } = turn;
-      const jobs = await appendBackgroundWakeContext(this.prisma, sessionId, clientTurnId, '');
+      // In the turn's own kind, as the claim writes it: a steer's block says which turn it joins.
+      const jobs = await appendBackgroundWakeContext(this.prisma, sessionId, clientTurnId, '', turn.kind);
       const block = await appendScheduledWakeupContext(this.prisma, sessionId, clientTurnId, jobs);
       if (block) wakeContent.set(turn.id, block);
     }
@@ -7777,10 +7901,11 @@ export class SessionsService {
       if (session.numTurns === 0) await this.ensurePromptSeeded(tx, session);
       // Whether there is anything to say the new config TO. `setconfig` is a stream-json
       // control_request, and claude is the only runtime spoken to that way: codex and kimi are
-      // driven over ACP/JSON-RPC, opencode runs one process per turn, and none of their session
-      // loops has an arm for the kind — one filed there is acked on delivery and applied by
-      // nobody, which is worse than the wait this split removed. For them the live half stays
-      // what it always was: part of the re-spawn, effort included.
+      // driven over ACP/JSON-RPC, opencode runs one process per turn, antigravity's stream-json
+      // input takes nothing but user messages (agy exits on a control_request, contract §1.1), and
+      // none of their session loops has an arm for the kind — one filed there is acked on delivery
+      // and applied by nobody, which is worse than the wait this split removed. For them the live
+      // half stays what it always was: part of the re-spawn, effort included.
       //
       // Asked of the RUNTIME, the way deliverSteer asks its own question, and read off
       // `resolveProviderExec` — whose `provider` IS that runtime (`execRuntime`), resolved after
@@ -7912,7 +8037,7 @@ export class SessionsService {
           claudeAccount: true,
           claudeAccountPinned: true,
           workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
-          assignedRunner: { select: { engines: true, planUsage: true, capabilities: true } },
+          assignedRunner: { select: { engines: true, accountNames: true, planUsage: true, capabilities: true } },
         },
       });
       const engine: AccountEngine | null =
@@ -7943,14 +8068,14 @@ export class SessionsService {
         const roomier = spent ? accountToMoveTo(engine, accounts, usage, now, current) : null;
         if (roomier) {
           to = roomier;
-          notice = accountSwitchNotice(engine, { from: current, to }, runner.engines);
+          notice = accountSwitchNotice(engine, { from: current, to }, runner);
         }
       } else {
         const row = accounts?.find((entry) => entry.id === account);
         if (!row) throw new BadRequestException("that account is not one this session's runner reports");
         if (row.auth === 'no') throw new ConflictException("that account is signed out on this session's runner");
         to = account;
-        if (to !== current) notice = `Switched to ${accountLabel(engine, to, runner.engines)}`;
+        if (to !== current) notice = `Switched to ${accountLabel(engine, to, runner)}`;
       }
       const moves = to !== current;
       if (moves && !runner.capabilities.includes(engine === AgentProvider.CODEX ? CODEX_ACCOUNT_MOVE_V1 : CLAUDE_ACCOUNT_MOVE_V1)) {

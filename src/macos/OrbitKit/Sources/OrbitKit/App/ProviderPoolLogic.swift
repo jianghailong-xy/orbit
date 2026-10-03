@@ -89,9 +89,9 @@ public enum ProviderPools {
         guard !pool.members.contains(where: \.next), unavailableReason(pool) == nil,
               pool.members.contains(where: { $0.state == .spent }) else { return nil }
         guard let resetsAt = pool.resetsAt else { return spentHead(pool) }
-        // A shared pool's keys are capped rather than spent: the month turning is what frees them,
+        // A pool of nothing but keys is capped rather than spent: the month turning is what frees them,
         // and a date says that where a clock would not (web's `PoolGauge`).
-        if pool.shared != nil {
+        if keysOnly(pool) {
             guard let date = SharedPoolPage.capReset(resetsAt) else { return spentHead(pool) }
             return "\(spentHead(pool)) · resets \(date)"
         }
@@ -101,28 +101,54 @@ public enum ProviderPools {
         return "\(spentHead(pool)) · resets \(time)"
     }
 
-    /// What a pool with nothing left to run on is headed with (web's `PoolGauge`): a shared pool's keys
-    /// ran out of what their contributors let the others spend this month, which is a cap — or OpenAI
-    /// itself put them out of budget, when that is the only reason, which is the two words the pool's
-    /// own page heads its keys with (`SharedPoolPage.keysHeadline`).
+    /// What a pool with nothing left to run on is headed with (web's `PoolGauge`): a pool of nothing but
+    /// keys ran out of what their contributors let the others spend this month, which is a cap — or OpenAI
+    /// itself put them out of budget, when that is the only reason. A ChatGPT account in it is spent, and
+    /// comes back by the hour.
     static func spentHead(_ pool: ProviderPool) -> String {
-        guard let shared = pool.shared else { return "All spent" }
+        guard keysOnly(pool), let shared = pool.shared else { return "All spent" }
         return SharedPoolPage.allOutOfBudget(shared) ? SharedPoolPage.allOutOfBudgetWords : SharedPoolPage.allAtCapWords
+    }
+
+    /// Only a pool of nothing but keys is capped (web's `keysOnly`): one read with its people and keys
+    /// that holds a ChatGPT account of its owner's runs on that account first.
+    static func keysOnly(_ pool: ProviderPool) -> Bool {
+        pool.shared != nil && !pool.members.contains { $0.login != nil }
+    }
+
+    /// Whether `pool` is drawn for one of the people its owner added rather than for its owner (web's
+    /// `readByMember`).
+    public static func readByMember(_ pool: ProviderPool) -> Bool {
+        pool.shared.map { !SharedPoolPage.ownsPool($0) } ?? false
+    }
+
+    /// "2 of 3 accounts available" — "2 of 2 keys you can run on available" for somebody the owner added:
+    /// the members a session could start on right now (web's `availabilityOf`, less the admission
+    /// refusals only the web page reads).
+    public static func availability(_ pool: ProviderPool) -> String {
+        "\(readyCount(pool)) of \(pool.members.count) \(memberNoun(pool, pool.members.count)) available"
+    }
+
+    /// What `n` of a pool's members are to whoever reads it (web's `memberNoun`): to its owner, accounts —
+    /// each ChatGPT account and API key of a Codex pool, each subscription of a Claude one — and to the
+    /// people they added, what they can run on: the pool's ChatGPT accounts and its keys, whichever of the
+    /// two it holds (the accounts run their sessions too, 2026-10-03).
+    public static func memberNoun(_ pool: ProviderPool, _ n: Int) -> String {
+        guard readByMember(pool) else { return "account\(n == 1 ? "" : "s")" }
+        let accounts = pool.members.contains { $0.login != nil }
+        let keys = pool.members.contains { $0.key != nil }
+        if accounts && keys { return "account\(n == 1 ? "" : "s") and key\(n == 1 ? "" : "s") you can run on" }
+        return (keys ? "key\(n == 1 ? "" : "s")" : "account\(n == 1 ? "" : "s")") + " you can run on"
     }
 
     // MARK: the pool's page (Settings → Providers → an account pool)
 
     /// The page's head: what the pool is, and how many of its accounts a session could start on now
-    /// (web's `availabilityOf`, less the admission refusals only the web page reads).
+    /// (`availability`).
     public static let pageTitle = "Account pool"
     public static let accountsHeader = "Accounts"
     /// The web page's sentence under the pool's name; on a phone, the Accounts section's footer.
     public static let accountsFooter = "Each session starts on the account whose quota resets soonest, so none of it goes unused, and stays on it until that one runs out."
-
-    public static func pageSubtitle(_ pool: ProviderPool) -> String {
-        let n = pool.members.count
-        return "\(readyCount(pool)) of \(n) account\(n == 1 ? "" : "s") available"
-    }
 
     /// The "2" of "2 of 3 accounts available": the members a session could start on now (web's
     /// `canTakeWork`). One that reports no quota counts — the claim still picks it, just last — and so
@@ -133,17 +159,21 @@ public enum ProviderPools {
 
     /// The Accounts header's trailing words (web's `PoolGauge`): the account the next session starts
     /// on — named, in a pool of one's own ChatGPT account that holds just the one and so has nothing to
-    /// choose between — then the gauge `headGauge` reads; with none, when the first spent one frees up;
-    /// with none that can run, why.
+    /// choose between, and once other people use the pool, as the reader's next session, theirs running
+    /// elsewhere — then the gauge `headGauge` reads; with none, when the first spent one frees up; with
+    /// none that can run, why.
     public static func headline(_ pool: ProviderPool, now: Date = Date(), timeZone: TimeZone = .current) -> String {
         if let next = pool.members.first(where: \.next) {
+            if let shared = pool.shared, SharedPoolPage.hasPeople(shared) { return "Next for you: \(next.label)" }
             return next.login != nil && pool.members.count == 1 ? next.label : "Next: \(next.label)"
         }
         if let unavailable = pool.unavailable { return unavailable }
         if pool.members.contains(where: { $0.state == .spent }) {
             return spentNote(pool, now: now, timeZone: timeZone) ?? "All spent"
         }
-        return "No account can run"
+        // A pool holding ChatGPT accounts is spent rather than capped (web's `poolHeadline`): the accounts
+        // come back by the hour, where keys spent to their caps come back with the month.
+        return keysOnly(pool) ? "No key can run" : "No account can run"
     }
 
     /// A member's status tag (web's `memberStatus`).
@@ -184,15 +214,18 @@ public enum ProviderPools {
 
     /// The head's gauge beside its account (web's `PoolGauge`): the tightest window of the account the
     /// next session starts on (`memberQuota`), by its short name — "Weekly 97%" — in the warning tone at
-    /// 90% or more; for an account that reports no quota, that it reports none. Nil with no account to
-    /// start on — `headline` says when or why — and for a key, which has no window to fill.
+    /// 90% or more; for a key with no cap, that it has none to fill; for an account that reports no
+    /// quota, that it reports none. Nil with no account to start on — `headline` says when or why.
     public static func headGauge(_ pool: ProviderPool) -> PoolStatus? {
         guard let next = pool.members.first(where: \.next) else { return nil }
         guard let quota = memberQuota(next) else {
-            return next.key == nil ? PoolStatus(label: CodexLoginPool.noQuota, tone: .neutral) : nil
+            return PoolStatus(label: next.key != nil ? noLimit : CodexLoginPool.noQuota, tone: .neutral)
         }
         return PoolStatus(label: quotaReading(quota), tone: quota.nearLimit ? .warning : .neutral)
     }
+
+    /// The head's gauge for a key with no cap: nothing to fill.
+    public static let noLimit = "No limit"
 
     /// A window's reading in the words a gauge has room for: its short name and how much of it is used
     /// ("Weekly 97%", "5h 6%").

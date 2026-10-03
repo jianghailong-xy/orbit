@@ -5,7 +5,6 @@ import {
   CheckCircleFilled,
   EllipsisOutlined,
   ExclamationCircleFilled,
-  LockOutlined,
   UserAddOutlined,
   WarningFilled,
 } from '@ant-design/icons';
@@ -74,8 +73,8 @@ export function PeopleStack({ pool }: { pool: SharedPool }) {
 }
 
 /** A write to a shared pool, after which every provider read — the pool's page, its card, the
- *  pickers — reads again. */
-function usePoolWrite<T>(write: (input: T) => Promise<unknown>, onDone?: () => void) {
+ *  pickers — reads again. `failed` names the write in the toast when it doesn't go through. */
+function usePoolWrite<T>(failed: string, write: (input: T) => Promise<unknown>, onDone?: () => void) {
   const qc = useQueryClient();
   const message = useToast();
   return useMutation({
@@ -84,7 +83,7 @@ function usePoolWrite<T>(write: (input: T) => Promise<unknown>, onDone?: () => v
       void qc.invalidateQueries({ queryKey: ['providers'] });
       onDone?.();
     },
-    onError: (e: Error) => message.error(e.message || 'Failed'),
+    onError: (e: Error) => message.error(failed, e.message),
   });
 }
 
@@ -120,11 +119,13 @@ export function WhoCanUseItCard({
   // Everybody in it but its owner: the people they added.
   const added = pool.people.filter((person) => !person.creator);
   const [sharing, setSharing] = useState(false);
-  const save = usePoolWrite((rules: { membersCanAdd: boolean }) =>
-    api(poolPath(pool), { method: 'PATCH', body: rules }),
+  const save = usePoolWrite(
+    "Couldn't change the setting",
+    (rules: { membersCanAdd?: boolean; membersCanAddAccounts?: boolean }) =>
+      api(poolPath(pool), { method: 'PATCH', body: rules }),
   );
   // Back to Just me: everybody but its owner out, and their keys and session tokens with them.
-  const keepToSelf = usePoolWrite(async () => {
+  const keepToSelf = usePoolWrite("Couldn't make the pool just yours", async () => {
     for (const person of pool.people) {
       if (!person.creator) await api(`${poolPath(pool)}/people/${encodeId(person.userId)}`, { method: 'DELETE' });
     }
@@ -178,36 +179,54 @@ export function WhoCanUseItCard({
       )}
       {people && pool.people.map((person) => <PersonRow key={person.userId} pool={pool} person={person} accounts={accounts} />)}
       {mine && people && (
-        <div className="pool-rule">
-          <div>
-            <div className="pool-rule-t">They can add their own API keys</div>
-            <div className="pool-rule-h">
-              Off: only you put keys in. A key they add runs everyone’s sessions here, theirs first.
+        <>
+          <div className="pool-rule">
+            <div>
+              <div className="pool-rule-t">They can add their own API keys</div>
+              <div className="pool-rule-h">
+                Off: only you put keys in. A key they add runs everyone’s sessions here, theirs first.
+              </div>
             </div>
+            <Switch
+              checked={pool.membersCanAdd}
+              loading={save.isPending}
+              onChange={(on) => save.mutate({ membersCanAdd: on })}
+              aria-label="They can add their own API keys"
+            />
           </div>
-          <Switch
-            checked={pool.membersCanAdd}
-            loading={save.isPending}
-            onChange={(on) => save.mutate({ membersCanAdd: on })}
-            aria-label="They can add their own API keys"
-          />
-        </div>
+          <div className="pool-rule">
+            <div>
+              <div className="pool-rule-t">They can add their own ChatGPT accounts</div>
+              <div className="pool-rule-h">
+                Off: only you sign ChatGPT accounts in. An account they sign in runs everyone’s sessions
+                here too, and only they can sign it in again.
+              </div>
+            </div>
+            <Switch
+              checked={pool.membersCanAddAccounts}
+              loading={save.isPending}
+              onChange={(on) => save.mutate({ membersCanAddAccounts: on })}
+              aria-label="They can add their own ChatGPT accounts"
+            />
+          </div>
+        </>
       )}
-      {mine && people && accounts !== null && (
+      {mine && people && accounts !== null && accounts > 0 && (
         <div className="who-foot">
-          <LockOutlined />
+          <WarningFilled />
           <span>
-            <b>Your ChatGPT accounts only ever run your own sessions.</b> OpenAI’s terms don’t allow a ChatGPT
-            account to be shared, so nobody you add can run on one — or see which accounts they are.
+            <b>Your ChatGPT accounts run everyone’s sessions here.</b> The people you add start on them, and
+            fall to the API keys when none can run. OpenAI’s terms treat account sharing as a violation — an
+            account used that way can be suspended.
           </span>
         </div>
       )}
-      {mine && people && pool.keys.length === 0 && (
+      {mine && people && pool.keys.length === 0 && (accounts === null || accounts === 0) && (
         <div className="who-warn">
           <WarningFilled />
           <span>
             <b>{listOf(added.map((person) => person.name))} can’t start a session here yet.</b> {pool.label} has no
-            API key{accounts !== null ? ', and your ChatGPT accounts only run your own sessions' : ''}.
+            API key{accounts !== null ? ' and no ChatGPT account signed in' : ''}.
           </span>
           <Button size="small" type="primary" onClick={onAddKey}>
             Add an API key
@@ -237,9 +256,9 @@ function PersonRow({
   const ran = pool.people.some((row) => row.usage.costUsd > 0);
   const share = personShare(pool, person);
   const sessions = plural(person.sessions, 'session');
-  // The owner's own sessions run on its ChatGPT accounts first; everybody else's — and everybody's in a
-  // pool of keys alone — on its API keys.
-  const everything = person.creator && accounts !== null;
+  // Everyone's sessions run on the pool's ChatGPT accounts first while it holds any (2026-10-03); in a
+  // pool of keys alone — a shared pool, or one whose accounts have all been taken out — on its API keys.
+  const everything = accounts !== null && accounts > 0;
   return (
     <div className="pool-person" data-person={person.userId}>
       <div className="pool-person-id">
@@ -290,8 +309,10 @@ function PersonRow({
 function PersonMenu({ pool, person }: { pool: SharedPool; person: SharedPoolPerson }) {
   const { modal } = App.useApp();
   const at = `${poolPath(pool)}/people/${encodeId(person.userId)}`;
-  const setRole = usePoolWrite((role: 'ADMIN' | 'MEMBER') => api(at, { method: 'PATCH', body: { role } }));
-  const remove = usePoolWrite(() => api(at, { method: 'DELETE' }));
+  const setRole = usePoolWrite("Couldn't change the role", (role: 'ADMIN' | 'MEMBER') =>
+    api(at, { method: 'PATCH', body: { role } }),
+  );
+  const remove = usePoolWrite("Couldn't remove the person from the pool", () => api(at, { method: 'DELETE' }));
   const items: MenuProps['items'] = [
     ...(pool.shared ? [{ key: 'role', label: person.role === 'ADMIN' ? 'Make member' : 'Make admin' }] : []),
     { key: 'remove', label: 'Remove from pool', danger: true },
@@ -380,6 +401,9 @@ function SharePoolModal({
   const [canAdd, setCanAdd] = useState(pool.membersCanAdd);
   const typed = [...new Set([...emails, typing].map((email) => email.trim()).filter(Boolean))];
   const noKey = pool.keys.length === 0;
+  // Nothing the people added could run on: no key to fall to, and no ChatGPT account signed in either —
+  // the accounts run everyone's sessions (2026-10-03). The one case a share is worth warning about.
+  const empty = noKey && !(accounts && accounts > 0);
   const share = useMutation({
     mutationFn: async () => {
       const missed: string[] = [];
@@ -402,10 +426,10 @@ function SharePoolModal({
     },
     onError: (e: Error) => {
       void qc.invalidateQueries({ queryKey: ['providers'] });
-      message.error(e.message || 'Failed');
+      message.error("Couldn't share the pool", e.message);
     },
   });
-  const footer = noKey ? (
+  const footer = empty ? (
     <>
       <Button onClick={onClose}>Cancel</Button>
       <Button disabled={typed.length === 0} loading={share.isPending} onClick={() => share.mutate()}>
@@ -448,12 +472,12 @@ function SharePoolModal({
           aria-label="People to add"
         />
       </div>
-      {noKey ? (
+      {empty ? (
         <div className="pa-risk">
           <WarningFilled />
           <span>
             <b>{pool.label} has no API key yet.</b> They’ll see it but can’t start a session until it has one
-            {accounts !== null ? ', because your ChatGPT accounts only run your own sessions' : ''}.
+            {accounts !== null ? ', and no ChatGPT account is signed in either' : ''}.
           </span>
         </div>
       ) : (
@@ -464,13 +488,29 @@ function SharePoolModal({
               sessions on it.
             </li>
             <li>
-              <b>Their sessions run on the pool’s API keys</b>, which {pool.keys.length === 1 ? 'is' : 'are'}{' '}
-              {listOf(pool.keys.map((key) => key.label))} now.
-              {accounts === 1 &&
-                ' Your ChatGPT account stays yours alone: they can’t run on it or see which account it is.'}
-              {(accounts ?? 0) > 1 &&
-                ` Your ${accounts} ChatGPT accounts stay yours alone: they can’t run on them or see which accounts they are.`}
+              {noKey ? (
+                <>
+                  <b>Their sessions start on your ChatGPT accounts</b>, and wait when none of them can run —
+                  the pool has no API key to fall to yet.
+                </>
+              ) : accounts && accounts > 0 ? (
+                <>
+                  <b>Their sessions start on your ChatGPT accounts</b>, and fall to the pool’s API keys —{' '}
+                  {listOf(pool.keys.map((key) => key.label))} — when none of them can run.
+                </>
+              ) : (
+                <>
+                  <b>Their sessions run on the pool’s API keys</b>, which {pool.keys.length === 1 ? 'is' : 'are'}{' '}
+                  {listOf(pool.keys.map((key) => key.label))} now.
+                </>
+              )}
             </li>
+            {pool.membersCanAddAccounts && (
+              <li>
+                <b>They can sign in ChatGPT accounts of their own</b>, which then run everyone’s sessions
+                here too — theirs and yours — until they take them out again.
+              </li>
+            )}
             <li>
               <b>Everyone sees each person’s share</b> of this month’s API key use.
             </li>

@@ -89,15 +89,6 @@ enum ProjectRunState {
   @@map("project_run_state")
 }
 
-/// Which scheduler is currently authorized to create a task-bound Session. This is a database-
-/// maintained projection of Project.coordinatorEnabled, not a second policy setting.
-enum TaskDispatchAuthority {
-  LEGACY
-  COORDINATOR
-
-  @@map("task_dispatch_authority")
-}
-
 /// The authority under which a task-bound Session was inserted. Kept separate from runSource:
 /// runSource is product provenance, while this column is consumed by the database authorization
 /// trigger during mixed-version deployment.
@@ -230,6 +221,47 @@ enum TaskOwnerDecisionValue {
   @@map("task_owner_decision_value")
 }
 
+/// Who reviews a confirmation request before its owner is asked (migration 0370,
+/// docs/owner-confirmation-review-contract.md §1): the project's coordinator conversation, or —
+/// outside a project — the conversation the task was filed from.
+enum OwnerConfirmationReviewerKind {
+  PROJECT_COORDINATOR
+  TASK_CREATOR
+
+  @@map("owner_confirmation_reviewer_kind")
+}
+
+/// What became of a review's one delivery to its reviewer (§2 D4): written once, from PENDING.
+enum OwnerConfirmationReviewDelivery {
+  PENDING
+  DELIVERED
+  REFUSED
+
+  @@map("owner_confirmation_review_delivery")
+}
+
+/// What a reviewer handed back (§3.2): a review for the owner, the request returned to its run, or
+/// the problems found after the owner had already confirmed.
+enum OwnerConfirmationReviewRecordKind {
+  REVIEW
+  RETURN
+  PROBLEMS
+
+  @@map("owner_confirmation_review_record_kind")
+}
+
+/// Why only the account owner can settle a task an agent declared OWNER_CONFIRMED (migration 0373,
+/// `tasks/owner-confirmation-reason.ts`): a release, an irreversible step, the owner's own device
+/// or account, or a trade-off only they can make.
+enum OwnerConfirmationReason {
+  DEPLOY
+  IRREVERSIBLE
+  OWNER_DEVICE_OR_ACCOUNT
+  OWNER_TRADE_OFF
+
+  @@map("owner_confirmation_reason")
+}
+
 /// Whether the reliable in-app delivery also becomes due APNs work. IN_APP_ONLY still receives a
 /// terminal device-ledger receipt so suppression is an auditable fact rather than a missing row.
 enum TaskJudgmentDevicePolicy {
@@ -274,6 +306,7 @@ model User {
   ownedSessions    Session[]         @relation("SessionOwner")
   createdSessions  Session[]         @relation("SessionCreator")
   ownedTasks       Task[] // tasks this user owns (tenant scope)
+  taskRouteDecisions TaskRouteDecision[]
   taskLists        TaskList[] // task lists this user owns (tenant scope)
   projects         Project[] // projects this user owns (tenant scope)
   attachments      Attachment[] // blobs this user uploaded (tenant scope)
@@ -535,6 +568,11 @@ model Runner {
   // Per-engine health on this machine — installed / version / signed in — reported by heartbeat
   // from the same probe `orbit doctor` prints. Shape: @orbit/shared RunnerEngineHealth[].
   engines        Json?     @map("engines")
+  // What the user calls each account `engines` reports, set in Orbit rather than on the machine —
+  // the accounts' displayName. Shape: { "<engine>": { "<account id>": "<name>" } }. Laid over the
+  // reported names wherever an account is named (namedRunnerEngines), which is how Default, the one
+  // account the machine never names, gets a name at all. NULL until the first rename.
+  accountNames   Json?     @map("account_names")
 
   // Browser-driven install of one engine CLI, the same one-slot relay shape as the sign-in above
   // (a machine installs one CLI at a time; the request is redelivered until the runner reports).
@@ -696,6 +734,9 @@ model Workspace {
   // Default reasoning effort a new session inherits when its create request omits one
   // ('' / null = the model's default). Claude: low|medium|high|xhigh|max; codex adds minimal.
   effort              String?   @map("effort")
+  // Owner-controlled routing; false records shadow decisions without changing dispatch.
+  modelRouting        Boolean   @default(false) @map("model_routing")
+  modelRoutingProviders String[] @default([]) @map("model_routing_providers")
   // routing: bind to a specific runner and/or match runner labels
   targetRunnerId      String?   @map("target_runner_id") @db.Uuid
   targetLabels        String[]  @default([]) @map("target_labels")
@@ -705,14 +746,10 @@ model Workspace {
   runner              Runner?   @relation(fields: [runnerId], references: [id], onDelete: Cascade)
   // The project directory the runtime runs in for this workspace, and its coding-tool key.
   workDir             String?   @map("work_dir")
-  // The git remote this workspace's `workDir` holds, as a person states it (the workspace form's
-  // "Repository URL"), recorded and never cloned. Its one reader is `projects/
-  // project-integration-line.ts`, which bootstraps a project's ProjectCodebase binding from the
-  // remote its coordination workspace (or the integrated task's session) names — a remote nobody
-  // stated is one it refuses to invent (INTEGRATION_REPOSITORY_UNKNOWN). The "create a workspace
-  // from a repo URL" path that also wrote it was withdrawn in migration 0273; the column outlives
-  // that path because this reader remains. Deliberately NOT backfilled from any checkout's own
-  // `origin`: at every later read a guessed remote is indistinguishable from a recorded one.
+  // The workspace's repository, used to bootstrap a project's ProjectCodebase binding. The
+  // "Repository URL" form can state it explicitly; while empty, the runner's directory probe
+  // backfills it from `origin`. A probe must match the current runner and workDir and never
+  // overwrites a recorded URL. Recording a URL does not clone or change the checkout.
   repoUrl             String?   @map("repo_url")
   // Custom environment variables injected into this workspace's runtime process (string map).
   env                 Json?     @map("env")
@@ -977,7 +1014,8 @@ model Session {
   batchMaxConcurrent   Int?      @map("batch_max_concurrent")
   // Runtime thread/session id, always owned by the runtime named in `provider`. Claude's is
   // pre-generated at creation (--session-id on first spawn, --resume on reclaim/respawn);
-  // Codex/Kimi/OpenCode mint their own after process initialization, so it stays null then.
+  // Codex/Kimi/OpenCode/Antigravity mint their own after process initialization, so it stays
+  // null then.
   runtimeSessionId     String?   @map("runtime_session_id")
   // For a session created by importing a local Claude transcript: the transcript's original cwd
   // (CLI import) or the workspace workDir used to locate and verify the transcript against (web
@@ -1289,6 +1327,10 @@ model Session {
   // divergence ("On <branch> — not tracked") instead of a stale "✓ In main", and offers Adopt
   // (which re-points `branch` here). Null = not isolated / not reported (older runner).
   worktreeBranch       String?   @map("worktree_branch")
+  // The tip of the run's branch, as the runner last reported it (heartbeat, turn-complete, diff) —
+  // written when reported and left alone otherwise (migration 0370). A confirmation review written
+  // for another commit is OUTDATED once this moves (docs/owner-confirmation-review-contract.md §4).
+  branchSha            String?   @map("branch_sha") @db.Char(40)
   // ── "Commit" (UI button on the worktree status bar, for a live session) ─────
   // worktreeDirty is the runner's last-reported `git status` for the live worktree: true
   // → the bar shows Commit (commit the uncommitted work onto `branch`), false → Merge.
@@ -1356,7 +1398,10 @@ model Session {
   // retry given up looks like; this is the fact that tells them apart (`awaitsAutoRetry`). NULL =
   // no claim in flight. Cleared by the turn the resume writes, a re-arm, a disarm and the attempt
   // a give-up hands back; a reader also treats a claim older than `RETRY_CLAIM_WINDOW_MS` as dead,
-  // so a sweep that died mid-claim cannot leave a session reading as on-its-way forever.
+  // so a sweep that died mid-claim cannot leave a session reading as on-its-way forever — and the
+  // sweep gives such a claim up (migration 0366, §8 criterion 24). It is also the claim's lease: the
+  // re-send is written only while the claim it was claimed for is still this column's value.
+  // Partially indexed in 0366 (`session_retry_claimed_at_idx`), which schema.prisma cannot express.
   retryClaimedAt       DateTime? @map("retry_claimed_at")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
@@ -4011,6 +4056,13 @@ model Task {
   /// the acceptance prose. NULL means no override was needed or recorded; the text is audit
   /// evidence only and is never interpreted as completion evidence.
   completionCriterionOverrideReason String? @map("completion_criterion_override_reason")
+  /// Why only the account owner can settle this OWNER_CONFIRMED task, as the agent that declared it
+  /// said (migration 0373). A session declaring OWNER_CONFIRMED outside an Automatic project names
+  /// one (`tasks/owner-confirmation-reason.ts`); the owner may, and nobody else is asked. Cleared by
+  /// the write that takes the task off OWNER_CONFIRMED. Audit material: no gate reads it afterwards.
+  ownerConfirmationReason     OwnerConfirmationReason? @map("owner_confirmation_reason")
+  /// The one sentence that may accompany the reason. Never present without it (CHECK).
+  ownerConfirmationReasonNote String?                  @map("owner_confirmation_reason_note")
   /// WHICH of the project's stated acceptance criteria this work says it serves, as a relation
   /// rather than the name of one (migration 0232). `CreateTaskDto.criterionKey` is still how a
   /// caller spells it — a content-addressed key read back from `project_get` — and this is where
@@ -4073,13 +4125,16 @@ model Task {
   /// property of the human-facing task, not of a run.
   runAt            DateTime?   @map("run_at")
   // Per-task override for the runs this task dispatches: a built-in engine slug
-  // ("claude"/"codex"/"kimi"/"opencode") or one of the owner's configured ModelProvider slugs,
-  // and a model id inside that provider's space. NULL keeps the historical behaviour — the run
-  // inherits whatever its assignee agent is set to. Pinning the provider makes the next run
-  // start a fresh session rather than continue the last one, since a session's provider is
-  // fixed for its lifetime (see TasksService.runAgentOnTask).
+  // ("claude"/"codex"/"kimi"/"opencode"/"antigravity") or one of the owner's configured
+  // ModelProvider slugs, and a model id inside that provider's space. NULL keeps the historical
+  // behaviour — the run inherits whatever its assignee agent is set to. Pinning the provider makes
+  // the next run start a fresh session rather than continue the last one, since a session's
+  // provider is fixed for its lifetime (see TasksService.runAgentOnTask).
   provider         String?
   model            String?
+  // Suggested tier, separate from the model pin. The migration checks S/M/L/XL or NULL.
+  modelHint        String?     @map("model_hint")
+  modelHintReason  String?     @map("model_hint_reason")
   // When all prerequisites are DONE, auto-run this task (the dependency "pipeline"
   // default). Turn off to keep the gate but trigger the run manually.
   autoRunWhenReady Boolean     @default(true) @map("auto_run_when_ready")
@@ -4106,9 +4161,6 @@ model Task {
   /// work that outranks it. Equal priorities keep the order the pass read them in, so while every
   /// task says 0 every door dispatches exactly what it did before the column existed.
   priority         Int         @default(0)
-  // Derived by database triggers from (project_id, project.coordinator_enabled). No service may
-  // use this as a second policy knob; it is the mixed-version dispatch brake.
-  dispatchAuthority TaskDispatchAuthority @default(LEGACY) @map("dispatch_authority")
   // Monotonic action-key epoch. Every first observation of a Coordinator dispatch outcome advances
   // it in the same transaction; duplicate delivery of the same action key does not.
   dispatchAttempt   BigInt @default(0) @map("dispatch_attempt")
@@ -4249,6 +4301,7 @@ model Task {
   /// Public links with this task as their root, ended ones included (migration 0306).
   shareLinks   ShareLink[]
   completionEvidence TaskCompletionEvidence[]
+  routeDecisions TaskRouteDecision[]
   legacyEvidenceImports TaskLegacyEvidenceImport[]
   evidenceDecisions TaskEvidenceDecision[]
   /// OWNER_CONFIRMED (0267): the times a run of this task asked its owner, and what the owner
@@ -4256,6 +4309,9 @@ model Task {
   ownerConfirmationClaims TaskOwnerConfirmationClaim[]
   ownerConfirmationRequests TaskOwnerConfirmationRequest[]
   ownerDecisions TaskOwnerDecision[]
+  /// (0370) Each request's review, and what its reviewer handed back.
+  ownerConfirmationReviews TaskOwnerConfirmationReview[]
+  ownerConfirmationReviewRecords TaskOwnerConfirmationReviewRecord[]
   sessions     Session[]        @relation("SessionTask") // agent sessions run under this task (one Task -> many Session)
   /// Conversations ABOUT this task that do not execute it — an @-mention's reply thread. Separate
   /// from `sessions` on purpose: those hold the task's execution claim and follow its lifecycle,
@@ -4343,6 +4399,16 @@ model Task {
   /// The predicate is half the point here rather than a size optimisation: those two conditions are
   /// the statement's own filters, so the predicate is what lets the planner match this index to it.
   @@index([projectId, assigneeId], map: "task_project_assignee_idx")
+  /// `GET /projects/sidebar`'s `lastActivityAt`: `max(updated_at)` over each OPEN project's tasks,
+  /// polled every 15 seconds. The covering index above carries `updated_at` last, after `status`
+  /// and `id`, so it answered that maximum by reading every task of every open project — 9,054 of
+  /// the read's 10,421 buffers on 2026-10-03. Ordered directly after the project, the same `max()`
+  /// is PostgreSQL's min/max path: one backward probe per project. It stands in for a maintained
+  /// "newest task write" column, which every task write would have had to rewrite and lock.
+  ///
+  /// Created PARTIAL (`WHERE project_id IS NOT NULL`, migration 0361), which this schema cannot
+  /// spell — the predicate the covering index above carries, for the same reason.
+  @@index([ownerId, projectId, updatedAt], map: "task_project_activity_idx")
   @@index([status])
   /// The scheduled sweep's way in: the due tasks, in the order they came due. Created PARTIAL
   /// (`WHERE run_at IS NOT NULL`, see migration 0110) — a predicate this schema cannot spell, the
@@ -4375,6 +4441,9 @@ model Task {
   /// list's `?creatorSessionId=` scope, plus the lookup side of the column's SET NULL on session
   /// purge (migration 0305). Plain, not partial — nearly every task has a creator session.
   @@index([creatorSessionId], map: "task_creator_session_idx")
+  /// The "Tasks created here" row read off the index alone (migration 0365): its counts, and each
+  /// status's newest rows, without reading — or holding — every task of a 110k-task session.
+  @@index([ownerId, creatorSessionId, status, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_creator_session_status_created_id_idx")
   /// The criterion declaration's lookup index, and the referencing side of its foreign key. Both
   /// directions need it: "which work serves this criterion" is the read, and without it every
   /// criterion delete scans `task` to find the rows its SET NULL applies to.
@@ -4384,6 +4453,34 @@ model Task {
   /// 0120 used for (decision, project).
   @@unique([id, ownerId], map: "task_id_owner_id_key")
   @@map("task")
+}
+
+/// One routing decision per run request, including shadow and unrouted decisions.
+model TaskRouteDecision {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  ownerId       String   @map("owner_id") @db.Uuid
+  owner         User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  taskId        String   @map("task_id") @db.Uuid
+  task          Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  requestToken  String   @map("request_token")
+  // The planned session may not exist yet, so this id deliberately has no foreign key.
+  sessionId     String?  @map("session_id") @db.Uuid
+  applied       Boolean
+  policyVersion Int      @map("policy_version")
+  // NULL means no routing; the migration checks S/M/L/XL for non-null values.
+  level         String?
+  provider      String
+  model         String?
+  effort        String?
+  baseline      Json     @db.JsonB
+  features      Json     @db.JsonB
+  reasons       String[]
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([taskId, requestToken])
+  @@index([ownerId, createdAt])
+  @@index([sessionId])
+  @@map("task_route_decision")
 }
 
 /// An explicit, immutable claim that structured completion evidence was submitted for a Task.
@@ -4539,7 +4636,13 @@ model TaskOwnerConfirmationRequest {
   claimId String?                       @map("claim_id") @db.Uuid
   claim   TaskOwnerConfirmationClaim?   @relation(fields: [claimId, taskId], references: [id, taskId], onDelete: Restrict, map: "task_owner_confirmation_request_claim_fkey")
 
+  /// The run's branch tip as the completion that recorded this request reported it (0370): the
+  /// commit a review of it is bound to. Null when the runner reported none.
+  branchSha String? @map("branch_sha") @db.Char(40)
+
   decisions TaskOwnerDecision[]
+  /// Its review (0370): at most one, by `task_owner_confirmation_review_request_key`.
+  reviews   TaskOwnerConfirmationReview[]
 
   @@unique([id, taskId], map: "task_owner_confirmation_request_id_task_key")
   /// One request per turn: a retried completion never asks twice.
@@ -4576,10 +4679,92 @@ model TaskOwnerDecision {
   decidedByType CreatorType @map("decided_by_type")
   decidedById   String      @map("decided_by_id") @db.Uuid
 
+  /// What the decision was made against (0370, docs/owner-confirmation-review-contract.md §7 Q4):
+  /// the REVIEW record the card drew, the review's state at that moment (NONE, UNDER_REVIEW,
+  /// REVIEWED, NOT_REVIEWED or OUTDATED; null for a panel confirmation that answered no request), and
+  /// the owner's answers to that review's questions (`OwnerConfirmationAnswer[]`).
+  reviewRecordId String?                            @map("review_record_id") @db.Uuid
+  reviewRecord   TaskOwnerConfirmationReviewRecord? @relation(fields: [reviewRecordId], references: [id], onDelete: Restrict, map: "task_owner_decision_review_record_fkey")
+  reviewState    String?                            @map("review_state")
+  answers        Json?
+
   /// One decision per run report.
   @@unique([requestId], map: "task_owner_decision_request_key")
   @@index([taskId, decidedAt], map: "task_owner_decision_task_decided_idx")
   @@map("task_owner_decision")
+}
+
+/// The review of one confirmation request (migration 0370, docs/owner-confirmation-review-contract.md
+/// §3.1): who reviews it, the window its owner is not asked in, and its one delivery. Written by
+/// `runnerApi.turnComplete` in the transaction that records the request, so the first read after
+/// that turn is already "under review"; at most one per request. Its state is read, never stored
+/// (`owner-confirmation-review.ts#confirmationReviewStates`).
+///
+/// `reviewerSessionId` and `projectId` are snapshots with no foreign key, like the request's own
+/// `sessionId`: the reviewer is the one the request was put to, whatever later happens to the
+/// project. `reviewerEndedAt` is written by migration 0370's trigger in the statement that ends that
+/// session, and `abandonedAt` when it read the request and stopped with nothing left to wake it.
+model TaskOwnerConfirmationReview {
+  id        String                       @id @default(uuid(7)) @db.Uuid
+  requestId String                       @map("request_id") @db.Uuid
+  taskId    String                       @map("task_id") @db.Uuid
+  ownerId   String                       @map("owner_id") @db.Uuid
+  request   TaskOwnerConfirmationRequest @relation(fields: [requestId, taskId], references: [id, taskId], onDelete: Cascade, map: "task_owner_confirmation_review_request_fkey")
+  task      Task                         @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "task_owner_confirmation_review_task_fkey")
+
+  reviewerKind         OwnerConfirmationReviewerKind   @map("reviewer_kind")
+  reviewerSessionId    String?                         @map("reviewer_session_id") @db.Uuid
+  projectId            String?                         @map("project_id") @db.Uuid
+  windowSeconds        Int                             @map("window_seconds")
+  dueAt                DateTime                        @map("due_at")
+  delivery             OwnerConfirmationReviewDelivery @default(PENDING)
+  deliveryRefusal      String?                         @map("delivery_refusal")
+  deliveryTurnClientId String?                         @map("delivery_turn_client_id")
+  deliveredAt          DateTime?                       @map("delivered_at")
+  abandonedAt          DateTime?                       @map("abandoned_at")
+  reviewerEndedAt      DateTime?                       @map("reviewer_ended_at")
+  createdAt            DateTime                        @default(now()) @map("created_at")
+
+  records TaskOwnerConfirmationReviewRecord[]
+
+  /// One review per request (§2 D4).
+  @@unique([requestId], map: "task_owner_confirmation_review_request_key")
+  @@unique([id, requestId], map: "task_owner_confirmation_review_id_request_key")
+  @@index([reviewerSessionId, delivery], map: "task_owner_confirmation_review_reviewer_idx")
+  @@map("task_owner_confirmation_review")
+}
+
+/// What a reviewer handed back about one request (migration 0370, §3.2): a REVIEW for the owner, a
+/// RETURN of the request to its run, or the PROBLEMS found after the owner had confirmed. Inserted
+/// once and never updated; at most one of each kind per request. `sessionId` and `turnId` are the
+/// reviewer's session and the turn it was in, as snapshots.
+model TaskOwnerConfirmationReviewRecord {
+  id        String                      @id @default(uuid(7)) @db.Uuid
+  reviewId  String                      @map("review_id") @db.Uuid
+  requestId String                      @map("request_id") @db.Uuid
+  taskId    String                      @map("task_id") @db.Uuid
+  ownerId   String                      @map("owner_id") @db.Uuid
+  review    TaskOwnerConfirmationReview @relation(fields: [reviewId, requestId], references: [id, requestId], onDelete: Cascade, map: "task_owner_confirmation_review_record_review_fkey")
+  task      Task                        @relation(fields: [taskId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "task_owner_confirmation_review_record_task_fkey")
+
+  kind               OwnerConfirmationReviewRecordKind
+  reviewedSha        String?  @map("reviewed_sha") @db.Char(40)
+  /// REVIEW only: the reviewer's call, in a sentence or two.
+  judgment           String?
+  /// RETURN and PROBLEMS only: what must change.
+  reason             String?
+  /// REVIEW: the four lists; RETURN and PROBLEMS: `{ problems }`.
+  body               Json
+  sessionId          String   @map("session_id") @db.Uuid
+  turnId             String   @map("turn_id") @db.Uuid
+  /// RETURN only: the key of the turn that carries it to the run, derived from this row's id.
+  returnClientTurnId String?  @map("return_client_turn_id")
+  recordedAt         DateTime @map("recorded_at")
+
+  decisions TaskOwnerDecision[]
+
+  @@unique([reviewId, kind], map: "task_owner_confirmation_review_record_kind_key")
+  @@map("task_owner_confirmation_review_record")
 }
 
 /// The audit receipt for an explicit conversion of one historical TaskComment into one structured
@@ -5313,8 +5498,9 @@ model ModelProvider {
   slug          String   @unique
   label         String
   // Which configurable runtime CLI drives it: "claude" (Anthropic-compatible endpoint),
-  // "codex" (OpenAI-compatible) or "kimi" (Moonshot's own API, which the Kimi CLI speaks
-  // natively). Borrowing the Kimi runtime is not the same as claiming the built-in `kimi`
+  // "codex" (OpenAI-compatible), "kimi" (Moonshot's own API, which the Kimi CLI speaks
+  // natively) or "antigravity" (Google's Gemini API, which agy speaks natively). Borrowing the
+  // Kimi or Antigravity runtime is not the same as claiming the built-in `kimi` / `antigravity`
   // slug, which stays reserved.
   runtime       String   @default("claude")
   baseUrl       String   @map("base_url")
@@ -5381,15 +5567,13 @@ model ProviderPool {
   // the shared/codex pair together and admits both engines to a pool that is not shared.
   engine        String               @default("claude")
   shared        Boolean              @default(false)
-  // A shared pool's two rules, set by its admins: whether a MEMBER may put a key in (an admin always
-  // may), and whether a person's sessions start on a key of their own while one can run.
-  membersCanAdd Boolean              @default(true) @map("members_can_add")
-  ownKeyFirst   Boolean              @default(true) @map("own_key_first")
+  // A pool's three rules, set by its admins: whether a MEMBER may put a key in (an admin always may),
+  // whether a person's sessions start on a key of their own while one can run, and — migration 0366,
+  // the account-side twin of the first — whether a member may sign a ChatGPT account of their own in.
+  membersCanAdd         Boolean    @default(true) @map("members_can_add")
+  ownKeyFirst           Boolean    @default(true) @map("own_key_first")
+  membersCanAddAccounts Boolean    @default(true) @map("members_can_add_accounts")
   people        ProviderPoolPerson[]
-  // Migration 0323: the ChatGPT login a `codex` pool of one person's own runs on. The primary key of a
-  // row is (pool, account), so a pool may hold more than one — the flow in use keeps it at one (the
-  // service refuses a second account while one is signed in) and the direction says one login.
-  logins        PoolCodexLogin[]
   // Migration 0324: the session tokens a login pool's claims mint, and its ledger.
   loginTokens   PoolLoginToken[]
   loginUsage    PoolLoginUsage[]
@@ -5427,6 +5611,8 @@ model ProviderPoolPerson {
   role      String
   keys      PoolApiKey[]
   tokens    PoolGatewayToken[]
+  // Migration 0366: the ChatGPT logins this person signed in for the pool, which leave with them.
+  logins    PoolCodexLogin[]
   createdAt DateTime           @default(now()) @map("created_at")
 
   @@id([poolId, userId])
@@ -5526,9 +5712,11 @@ model PoolUsage {
 /// be taken leaves it alone. `lastError` is why it is SIGNED_OUT, in the upstream's own words.
 model PoolCodexLogin {
   poolId          String       @map("pool_id") @db.Uuid
-  // The pool's owner: `user_id` is in the foreign key so the database refuses a login naming anyone else.
+  // Who signed it in — a person of the pool, held to it by the composite key below (migration 0366; the
+  // pool's owner alone before it). They and the pool's admins may take it out, and they alone may sign it
+  // in again.
   userId          String       @map("user_id") @db.Uuid
-  pool            ProviderPool @relation(fields: [poolId, userId], references: [id, ownerId], onDelete: Cascade, onUpdate: NoAction)
+  person          ProviderPoolPerson @relation(fields: [poolId, userId], references: [poolId, userId], onDelete: Cascade, onUpdate: NoAction)
   accountId       String       @map("account_id")
   email           String?
   plan            String?

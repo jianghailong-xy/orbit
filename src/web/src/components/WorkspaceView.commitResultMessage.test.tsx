@@ -6,6 +6,8 @@ import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
+import { ToastViewport } from './ToastViewport';
+import { clearToasts } from '../lib/toastStore';
 
 vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
@@ -126,16 +128,32 @@ const mounted = (): HTMLDivElement => {
 };
 
 const waitForUi = async (assertion: () => void): Promise<void> => {
-  await act(async () => {
+  // The act environment is off while the window is waited out, as RTL's own asyncWrapper
+  // does it: React queues every render scheduled inside an in-flight act callback and flushes
+  // none of them until that callback settles, so a page that answers inside the window can
+  // never draw what the window exists to see — the wait times out with the data already in
+  // the cache (workstation-gpu: e85b63ee9's second full run; the merge check reds here).
+  const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+  const previous = env.IS_REACT_ACT_ENVIRONMENT;
+  env.IS_REACT_ACT_ENVIRONMENT = false;
+  try {
     await vi.waitFor(assertion, { timeout: 8_000, interval: 20 });
-  });
+  } finally {
+    env.IS_REACT_ACT_ENVIRONMENT = previous;
+  }
+  // And one act to close the window: the last commit the wait saw leaves its passive effects
+  // scheduled, and what they carry — React Query's mutation options among it — is what the
+  // test's next press runs on. The old act-wrapped wait flushed them on its way out; this
+  // keeps that, without the freeze that made the wait itself blind.
+  await act(async () => {});
 };
 
 /** The card the user reads, as rendered — not the payload it was built from. */
 const toastStatus = (): string | null =>
-  document.body.querySelector('.session-lifecycle-toast-status')?.textContent ?? null;
+  document.body.querySelector('.toast-viewport .toast-head')?.textContent ?? null;
+// A result card's diagnostic line, or a failure's block of the runner's words.
 const toastDetail = (): string | null =>
-  document.body.querySelector('.session-lifecycle-toast-detail')?.textContent ?? null;
+  document.body.querySelector('.toast-viewport .toast-detail, .toast-viewport .toast-reason')?.textContent ?? null;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -184,7 +202,7 @@ beforeEach(() => {
       return reply([]);
     }
     if (path.startsWith('/sessions')) return reply([sessionRow()]);
-    if (path === '/providers' || path === '/providers/pools' || path === '/session-tags' || path === '/runners' || path === '/task-lists') {
+    if (path === '/providers' || path === '/providers/pools' || path === '/session-tags' || path === '/session-folders' || path === '/runners' || path === '/task-lists') {
       return reply([]);
     }
     // The decision strip renders from this queue and has nothing to draw here; it must still be a
@@ -234,6 +252,7 @@ afterEach(async () => {
   client = null;
   container = null;
   try {
+    await act(async () => clearToasts());
     if (mountedRoot) await act(async () => mountedRoot.unmount());
   } finally {
     try {
@@ -279,6 +298,7 @@ async function commitAndAwaitOutcome(outcome: {
           <AntApp>
             <WorkspaceView runner={RUNNER} />
           </AntApp>
+          <ToastViewport />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -334,7 +354,7 @@ describe('a finished commit reports the runner line', () => {
       error: 'error: Your local changes to the following files would be overwritten by merge',
     });
 
-    expect(toastStatus()).toBe('Commit failed');
+    expect(toastStatus()).toBe("Couldn't commit");
     expect(toastDetail()).toBe(
       'error: Your local changes to the following files would be overwritten by merge',
     );
@@ -351,7 +371,7 @@ describe('a finished commit reports the runner line', () => {
       error: "fatal: Unable to create '/work/.git/index.lock': File exists.",
     });
 
-    expect(toastStatus()).toBe('Commit failed');
+    expect(toastStatus()).toBe("Couldn't commit");
     expect(toastDetail()).toBe(plain);
   });
 });

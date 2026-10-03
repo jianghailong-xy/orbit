@@ -3,16 +3,15 @@ import Observation
 import OrbitKit
 
 /// Drives the Agents section: its Workspace list plus edit/delete. macOS keeps the historical
-/// runner grouping; iOS flattens the same stable order and shows Runner as row metadata instead.
+/// runner grouping; iOS follows the web's workspace order and shows Runner as row metadata.
 /// Owned by `AppModel` so the list and the edit form share it. Runner names are best-effort.
 @MainActor
 @Observable
 final class AgentsModel {
     private(set) var items: [Agent] = []
     private(set) var runnerNames: [String: String] = [:]
-    /// Runner ids in the order `GET /runners` returns them (the user's persisted runner order), so
-    /// flat iOS Workspace rows and macOS groups match the web sidebar. Empty until that fetch lands,
-    /// which leaves Runner order first-seen.
+    /// Runner ids in the order `GET /runners` returns them, for the macOS sidebar's groups.
+    /// Empty until that fetch lands, which leaves Runner order first-seen.
     private(set) var runnerOrder: [String] = []
     /// runnerId → is-online, for iOS Workspace folder badges.
     /// Populated from the same best-effort `runners()` fetch that feeds `runnerNames`.

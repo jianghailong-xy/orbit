@@ -1,7 +1,7 @@
 import Foundation
 
-// Pure logic for the Agents page's runner grouping. UI-free so it is unit-tested; the SwiftUI
-// list renders `grouped` and gets new-session model defaults from the owning runner instead.
+// Pure logic for workspace navigation order. macOS renders runner groups; iOS uses the flat
+// workspace order shared with the web.
 
 public struct AgentGroup: Equatable, Sendable, Identifiable {
     public let runnerId: String?
@@ -10,14 +10,13 @@ public struct AgentGroup: Equatable, Sendable, Identifiable {
 }
 
 public enum AgentListLogic {
-    /// Group agents by their runner; host-level agents (no runnerId) sink to the bottom — like the
-    /// web's "Shared" group.
+    /// Group agents by their runner for the macOS sidebar; host-level agents (no runnerId) sink
+    /// to the bottom in the "Shared" group.
     ///
     /// `runnerOrder` is the runner ids in their persisted display order (`GET /runners`, which the
-    /// server sorts by the user's runner `position`). Groups follow it so the drawer lists machines
-    /// in the same order as the web sidebar; runners missing from it (a stale agent pointing at a
-    /// runner the list no longer carries) keep their first-seen position behind the known ones.
-    /// Mirrors the web `orderWorkspaceGroupsByRunners`.
+    /// server sorts by the user's runner `position`). Runners missing from it (a stale agent
+    /// pointing at a runner the list no longer carries) keep their first-seen position behind
+    /// the known ones.
     public static func grouped(_ agents: [Agent], runnerOrder: [String] = []) -> [AgentGroup] {
         var order: [String] = []
         var map: [String: [Agent]] = [:]
@@ -47,10 +46,14 @@ public enum AgentListLogic {
         return groups
     }
 
-    /// Agents flattened in sidebar display order — runner groups (in `runnerOrder`) then host
-    /// "Shared". This is the order ⌘1…⌘9 index into, so it stays in lockstep with what `grouped`
-    /// renders.
+    /// Sidebar order, also used by workspace switching and the default launch landing. macOS
+    /// keeps its runner groups. iOS keeps the API's global workspace order (position, then
+    /// createdAt), moving only runner-less workspaces to the bottom like the web.
     public static func ordered(_ agents: [Agent], runnerOrder: [String] = []) -> [Agent] {
+        #if os(macOS)
         grouped(agents, runnerOrder: runnerOrder).flatMap(\.agents)
+        #else
+        agents.filter { $0.runnerId != nil } + agents.filter { $0.runnerId == nil }
+        #endif
     }
 }

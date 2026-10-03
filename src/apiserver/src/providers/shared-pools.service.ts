@@ -1,6 +1,6 @@
 import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { AgentProvider, RunEventType } from '@orbit/shared';
+import { AgentProvider, RunEventType, type PlanUsageSnapshot } from '@orbit/shared';
 import { GENERATING_SESSION_FILTER } from '../common/session-generating';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -13,7 +13,8 @@ import {
   UpdateSharedPoolDto,
   UpdateSharedPoolPersonDto,
 } from './dto';
-import { choosePoolKey } from './pool-key-select';
+import { codexLoginView, type CodexLoginView } from './codex-login';
+import { choosePoolCredential } from './pool-credential-select';
 import { encryptSecret } from './provider-crypto';
 import { slugBase } from './provider-slug';
 import { ProvidersService } from './providers.service';
@@ -31,6 +32,8 @@ const POOL_VIEW_SELECT = {
   shared: true,
   membersCanAdd: true,
   ownKeyFirst: true,
+  // Migration 0371: whether a member may sign a ChatGPT account of their own in beside the pool's keys.
+  membersCanAddAccounts: true,
   createdAt: true,
   updatedAt: true,
   people: {
@@ -53,8 +56,27 @@ const KEY_VIEW_SELECT = {
   createdAt: true,
 } satisfies Prisma.PoolApiKeySelect;
 
+/** A ChatGPT account of a pool of somebody's own as its page reads it — the same columns the owner's own
+ *  page reads (ProvidersService.POOL_SELECT), and never either token. */
+const LOGIN_VIEW_SELECT = {
+  poolId: true,
+  accountId: true,
+  // Who signed it in (migration 0371): the person whose account a row is, and the one who may sign it in
+  // again.
+  userId: true,
+  email: true,
+  plan: true,
+  state: true,
+  lastError: true,
+  expiresAt: true,
+  createdAt: true,
+  spentUntil: true,
+  usage: true,
+} satisfies Prisma.PoolCodexLoginSelect;
+
 type PoolRow = Prisma.ProviderPoolGetPayload<{ select: typeof POOL_VIEW_SELECT }>;
 type KeyRow = Prisma.PoolApiKeyGetPayload<{ select: typeof KEY_VIEW_SELECT }>;
+type LoginRow = Prisma.PoolCodexLoginGetPayload<{ select: typeof LOGIN_VIEW_SELECT }>;
 type UsageRow = Prisma.PoolUsageGetPayload<object>;
 
 /** What some ledger rows add up to: tokens, and dollars (the ledger counts millionths of one). */
@@ -78,18 +100,19 @@ interface PoolActivity {
 }
 
 /**
- * A shared pool as one of its people reads it: the rules, who is in it, how many sessions each started on
- * it and what each spent this month, and each key — whose it is, its label, `sk-…` and its last four
- * characters, where it stands, its cap, what it has run this month (of which `othersCostUsd` is what its
- * cap limits), whether a session is generating on it now, and whether it is the one a session the viewer
- * starts now would run on (`next`: the claim's own choice, choosePoolKey, asked for a session that has
- * no key yet). No key's secret or fingerprint is selected to build this, so none can reach it.
+ * A pool as one of its people reads it: the rules, who is in it, how many sessions each started on it and
+ * what each spent this month, and each key — whose it is, its label, `sk-…` and its last four characters,
+ * where it stands, its cap, what it has run this month (of which `othersCostUsd` is what its cap limits),
+ * whether a session is generating on it now, and whether it is the one a session the viewer starts now
+ * would run on (`next`: the claim's own choice, choosePoolCredential, asked for a session with no
+ * credential yet). No key's secret or fingerprint is selected to build this, so none can reach it.
  *
- * Of the ChatGPT accounts a pool of somebody's own holds (migration 0323) it says one thing, to everyone
- * in it: whether there are any (`ownerHasChatGPT`), which is what the page's locked line — "<owner>'s
- * ChatGPT accounts — Only <owner>'s sessions run on them" — needs. Their email, plan, `…AB12`, quota and
- * why OpenAI refused one are their owner's, read on the providers page (ProvidersService, CodexLoginService),
- * and no column holding any of them is selected here, so none can reach the people the owner added.
+ * Of the ChatGPT accounts a pool of somebody's own holds (migration 0323) it says what its owner's own
+ * page says (CodexLoginService): each one's email, plan, `…AB12`, state and quota, and which of them the
+ * viewer's next session would run on. Since 2026-10-03 they run the sessions of everyone in the pool,
+ * not its owner's alone (pool-credential-select.ts), so the people the owner added read them as the
+ * owner does — signing one in or out is still the owner's alone, and nothing here offers it. A shared
+ * pool (migration 0321) holds none.
  */
 function poolView(
   pool: PoolRow,
@@ -98,20 +121,26 @@ function poolView(
   activity: PoolActivity,
   viewerId: string,
   now: Date,
-  ownerHasChatGPT: boolean,
+  logins: LoginRow[],
 ) {
   const names = new Map(pool.people.map((person) => [person.userId, person.user.name]));
   const viewer = pool.people.find((person) => person.userId === viewerId);
   const othersOn = (key: KeyRow) =>
     usage.filter((row) => row.keyId === key.id && row.userId !== key.contributorId);
-  const next = choosePoolKey(
-    keys.map((key) => ({
-      ...key,
-      othersCostMicros: othersOn(key).reduce((sum, row) => sum + Number(row.costMicros), 0),
-    })),
-    viewerId,
-    pool.ownKeyFirst,
-    null,
+  // What a session starting now would run on, asked exactly as the claim asks it for a session that has
+  // no credential yet: one of the pool's ChatGPT accounts while any can run, else a key. `chosen` is null
+  // while nothing can run, which is what the page reads as "none of them" rather than a mark on one.
+  const { chosen } = choosePoolCredential(
+    {
+      ownerId: pool.ownerId,
+      accounts: logins.map((login) => ({ ...login, usage: login.usage as PlanUsageSnapshot | null })),
+      keys: keys.map((key) => ({
+        ...key,
+        othersCostMicros: othersOn(key).reduce((sum, row) => sum + Number(row.costMicros), 0),
+      })),
+      ownKeyFirst: pool.ownKeyFirst,
+    },
+    { ownerId: viewerId, accountId: null, keyId: null },
     now,
   );
   return {
@@ -123,9 +152,15 @@ function poolView(
     membersCanAdd: pool.membersCanAdd,
     ownKeyFirst: pool.ownKeyFirst,
     viewerRole: viewer?.role as PoolRole,
-    ownerHasChatGPT,
+    // The pool's ChatGPT accounts (a pool of somebody's own; a shared pool holds none), as the owner's
+    // page reads them and with which of them this viewer's next session would run on. Never a token.
+    logins: logins.map((login) => ({
+      ...codexLoginView(login, login.usage as PlanUsageSnapshot | null, now)!,
+      next: chosen?.accountId === login.accountId,
+    })),
     // The month a share cap and every usage figure below count, UTC.
     window: { start: usageWindowStart(now).toISOString(), end: nextUsageWindowStart(now).toISOString() },
+    membersCanAddAccounts: pool.membersCanAddAccounts,
     people: pool.people.map((person) => ({
       userId: person.userId,
       name: person.user.name,
@@ -158,7 +193,7 @@ function poolView(
           othersCostUsd: spend(othersOn(key)).costUsd,
         },
         running: activity.running.has(key.id),
-        next: next?.id === key.id,
+        next: chosen?.keyId === key.id,
         createdAt: key.createdAt,
       };
     }),
@@ -210,9 +245,11 @@ function ownPoolOneAdmin() {
  * above; taking every other person out is how it goes back to "Just me" — who can use a pool is its
  * people, never `shared` — and their keys and session tokens go with them. Its owner is its only admin:
  * the people they add are members, nobody else can be made one, and so nobody else can delete the pool
- * (its accounts with it) or change its rules. The people it takes run on its API keys alone — its ChatGPT
- * accounts are its owner's, and so are the sessions they run (QueueService.resolveLoginPool) — and no
- * answer here says anything about those accounts but whether there are any (`ownerHasChatGPT`).
+ * (its accounts with it) or change its rules. The people it takes run on its ChatGPT accounts first and on
+ * its API keys when none can (pool-credential-select.ts, 2026-10-03) — the accounts are its owner's, and
+ * signing one in or out stays theirs alone (CodexLoginService), but the sessions they run are everyone's
+ * in the pool — so the read above hands them the accounts as they are (login rows), and no route here
+ * offers to change one.
  */
 @Injectable()
 export class SharedPoolsService {
@@ -270,7 +307,12 @@ export class SharedPoolsService {
     await this.adminOf(userId, poolId, 'change its rules');
     await this.prisma.providerPool.update({
       where: { id: poolId },
-      data: { label: dto.label, membersCanAdd: dto.membersCanAdd, ownKeyFirst: dto.ownKeyFirst },
+      data: {
+        label: dto.label,
+        membersCanAdd: dto.membersCanAdd,
+        membersCanAddAccounts: dto.membersCanAddAccounts,
+        ownKeyFirst: dto.ownKeyFirst,
+      },
     });
     this.publish(await this.peopleOf(poolId), poolId);
     return this.get(userId, poolId);
@@ -576,12 +618,14 @@ export class SharedPoolsService {
       },
       _count: { _all: true },
     });
-    // Which pools hold a ChatGPT account of their owner's: of each account, only the pool it is in is read.
+    // The ChatGPT accounts a pool of somebody's own holds (migration 0323), read as the owner's own page
+    // reads them (ProvidersService) — they run the sessions of everyone in the pool (2026-10-03), so the
+    // people the owner added read them too. A shared pool (0321) holds none: the query finds nothing.
     const logins = await this.prisma.poolCodexLogin.findMany({
       where: { poolId: { in: ids } },
-      select: { poolId: true },
+      orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }],
+      select: LOGIN_VIEW_SELECT,
     });
-    const withAccounts = new Set(logins.map((login) => login.poolId));
     const runningKeys = new Set(running.flatMap((session) => (session.poolKeyId ? [session.poolKeyId] : [])));
     return pools.map((pool) =>
       poolView(
@@ -596,7 +640,7 @@ export class SharedPoolsService {
         },
         viewerId,
         now,
-        withAccounts.has(pool.id),
+        logins.filter((login) => login.poolId === pool.id),
       ),
     );
   }

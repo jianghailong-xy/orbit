@@ -1,0 +1,26 @@
+{
+  "agy": "1.2.15",
+  "recorded": "2026-10-03",
+  "argv": [
+    "--gemini_dir=/work/orbit-gemini",
+    "--print=",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json"
+  ],
+  "settings": {
+    "enableTelemetry": false
+  },
+  "exit": 0,
+  "note": "A second prompt written while turn 1's model call is in flight is queued and becomes its own turn after turn 1's result (default queuedMessages; send-immediately behaves the same in print mode).",
+  "driver": [
+    "write stdin line 1",
+    "wait for an event containing user_input",
+    "sleep 1s",
+    "write stdin line 2",
+    "wait for result #2",
+    "close stdin",
+    "wait for exit"
+  ]
+}

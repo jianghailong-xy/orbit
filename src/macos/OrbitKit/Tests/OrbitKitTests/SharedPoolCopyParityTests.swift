@@ -3,9 +3,10 @@ import XCTest
 @testable import OrbitKit
 
 /// A pool's page on iOS says what the web's pool page says. `SharedPoolPage`, `AddPoolKey` and the
-/// account pool's words in `ProviderPools` carry the web page's words over to the phone, and nothing in
-/// either build notices a word changed at one end only — so each one is looked up in the web source it
-/// came from. A sentence that names the pool, a key or a person is rendered with the web's own
+/// account pool's words in `ProviderPools` carry the web page's words for a pool's keys and people over to
+/// the phone — what scheme A added to the page (who can use it, sharing, the locked line) is
+/// `PoolAccessCopyParityTests`' — and nothing in either build notices a word changed at one end only — so
+/// each one is looked up in the web source it came from. A sentence that names the pool, a key or a person is rendered with the web's own
 /// expression in that place (`{pool.label}`, `${key.label}`), so the comparison is of the whole
 /// sentence. A missing counterpart is a FAILURE, never an `XCTSkip`.
 ///
@@ -68,21 +69,9 @@ final class SharedPoolCopyParityTests: XCTestCase {
                       contributor: PoolKeyContributor(userId: "u", name: contributor, you: you))
     }
 
-    /// The head, the Keys section and the way out, in the pool page's words.
+    /// What the pool page says of a key it took out, and of a pool that is gone.
     func testThePoolPageSaysWhatTheWebPageSays() throws {
         let page = try web(Self.poolPage)
-        assertSays(page, "\(SharedPoolPage.title) · {plural(pool.people.length, 'member')}", in: Self.poolPage)
-        // The web head's sentence ends in what the phone puts under the keys.
-        let footer = SharedPoolPage.keysFooter.prefix(1).lowercased() + SharedPoolPage.keysFooter.dropFirst()
-        assertSays(page, "· \(footer)", in: Self.poolPage)
-        assertSays(page, "<span className=\"re-chip pool-shared-chip\">\(SharedPoolPage.sharedChip)</span>", in: Self.poolPage)
-        assertSays(page, "> \(SharedPoolPage.addKey) </Button>", in: Self.poolPage)
-        assertSays(page, "<span className=\"re-runner\">\(SharedPoolPage.keysHeader)</span>", in: Self.poolPage)
-        assertSays(page, "? '\(SharedPoolPage.deletePoolNote)' : '\(SharedPoolPage.leavePoolNote)'", in: Self.poolPage)
-        assertSays(page, "admin ? `\(SharedPoolPage.deleteTitle(pool("${pool.label}")))` : `\(SharedPoolPage.leaveTitle(pool("${pool.label}")))`",
-                   in: Self.poolPage)
-        assertSays(page, "okText={admin ? '\(SharedPoolPage.delete)' : '\(SharedPoolPage.leave)'}", in: Self.poolPage)
-        assertSays(page, "{admin ? '\(SharedPoolPage.deletePool)' : '\(SharedPoolPage.leavePool)'}", in: Self.poolPage)
         assertSays(page, "message.success(`\(SharedPoolPage.removedKey(key(label: "${key.label}")))`)", in: Self.poolPage)
         assertSays(page, "\(ProvidersOverview.poolGone)", in: Self.poolPage)
     }
@@ -106,9 +95,9 @@ final class SharedPoolCopyParityTests: XCTestCase {
         // "No keys yet — …", in the web's one sentence for both kinds of pool.
         assertSays(row, "No {shared ? 'keys' : 'accounts'}\(SharedPoolPage.noKeys.dropFirst("No keys".count))",
                    in: Self.accountPools)
-        // The first run of a stopped shared pool's head: "All at cap", or "All out of budget" when that
-        // is what stopped them (`SharedPoolPage.keysHeadline` says the same over the keys).
-        assertSays(row, "!pool.shared ? 'All spent' : allOutOfBudget(pool.shared) ? '\(SharedPoolPage.allOutOfBudgetWords)' : '\(SharedPoolPage.allAtCapWords)'",
+        // The first run of a stopped pool of keys' head: "All at cap", or "All out of budget" when that
+        // is what stopped them (`ProviderPools.spentHead` says the same).
+        assertSays(row, "!keysOnly ? 'All spent' : allOutOfBudget(pool.shared!) ? '\(SharedPoolPage.allOutOfBudgetWords)' : '\(SharedPoolPage.allAtCapWords)'",
                    in: Self.accountPools)
     }
 
@@ -128,7 +117,7 @@ final class SharedPoolCopyParityTests: XCTestCase {
         assertSays(tags, "label: '\(status(invalid))', color: 'red'", in: Self.providerPools)
         assertSays(tags, "label: '\(status(off))', color: 'default'", in: Self.providerPools)
         assertSays(tags, "`At cap · resets ${formatCapReset(member.resetsAt)}` : 'At cap'", in: Self.providerPools)
-        assertSays(tags, "pool.shared ? 'No key can run' : 'No account can run'", in: Self.providerPools)
+        assertSays(tags, "keysOnly ? 'No key can run' : 'No account can run'", in: Self.providerPools)
 
         // A key OpenAI put out of budget (P2's `spentUntil`) says so, with the date its mark runs to, in
         // the web's own sentence and colour — and out of budget outranks the cap.
@@ -137,14 +126,15 @@ final class SharedPoolCopyParityTests: XCTestCase {
         XCTAssertEqual(status(outOfBudget), "Out of budget · resets Sep 30")
         assertSays(tags, "label: `Out of budget · resets ${formatCapReset(member.key.spentUntil)}`, color: 'orange'",
                    in: Self.providerPools)
-        // ...and the Keys header, when none of them can run, says which of the two stopped them, in the
+        // ...and the Accounts header, when none of them can run, says which of the two stopped them, in the
         // two words the web's pool head chooses between.
         let gauge = try web(Self.accountPools)
-        assertSays(gauge, "allOutOfBudget(pool.shared) ? '\(SharedPoolPage.allOutOfBudgetWords)' : '\(SharedPoolPage.allAtCapWords)'",
+        assertSays(gauge, "allOutOfBudget(pool.shared!) ? '\(SharedPoolPage.allOutOfBudgetWords)' : '\(SharedPoolPage.allAtCapWords)'",
                    in: Self.accountPools)
 
         let lib = try web(Self.sharedPools)
-        assertSays(lib, "pool.keys.length === 0 ? 'No keys' : 'No key can run'", in: Self.sharedPools)
+        assertSays(lib, "pool.keys.length === 0 ? pool.shared ? 'No keys' : 'Not signed in' : 'No key can run',",
+                   in: Self.sharedPools)
         assertSays(lib, "{ month: 'short', day: 'numeric', timeZone: 'UTC' }", in: Self.sharedPools)
         assertSays(lib, "`sk-…${key.trim().slice(-4)}`", in: Self.sharedPools)
         // The colours people wear, in the web's order.
@@ -152,37 +142,19 @@ final class SharedPoolCopyParityTests: XCTestCase {
         assertSays(lib, "[\(palette)]", in: Self.sharedPools)
     }
 
-    /// Members, and what an admin does to one.
-    func testMembersSayWhatTheWebCardSays() throws {
+    /// A person's row as anybody but the pool's owner reads it, and what its owner does to one.
+    func testPeopleSayWhatTheWebCardSays() throws {
         let card = try web(Self.sharedPool)
-        assertSays(card, "\(SharedPoolPage.membersHeader)<span className=\"pool-head-count\">", in: Self.sharedPool)
-        assertSays(card, "<span className=\"pool-head-note\">\(SharedPoolPage.shareHeader)</span>", in: Self.sharedPool)
-        assertSays(card, "> \(SharedPoolPage.addMembers) </Button>", in: Self.sharedPool)
         assertSays(card, "<span className=\"re-chip\">\(SharedPoolPage.adminChip)</span>", in: Self.sharedPool)
-        assertSays(card, "{person.keys ? plural(person.keys, 'key') : 'No key'} · {plural(person.sessions, 'session')}",
-                   in: Self.sharedPool)
+        let person = SharedPoolPerson(userId: "u", name: "N", keys: 2, sessions: 1)
+        XCTAssertEqual(SharedPoolPage.personLine(person), "2 keys · 1 session")
+        assertSays(card, "`${person.keys ? plural(person.keys, 'key') : 'No key'} · ${sessions}`", in: Self.sharedPool)
         assertSays(card, "person.role === 'ADMIN' ? '\(SharedPoolPage.makeMember)' : '\(SharedPoolPage.makeAdmin)'",
                    in: Self.sharedPool)
         assertSays(card, "label: '\(SharedPoolPage.removeFromPool)', danger: true", in: Self.sharedPool)
         let someone = SharedPoolPerson(userId: "u", name: "${person.name}")
         assertSays(card, "title: `\(SharedPoolPage.removePersonTitle(someone, in: pool("${pool.label}")))`", in: Self.sharedPool)
         assertSays(card, "content: '\(SharedPoolPage.removePersonNote)'", in: Self.sharedPool)
-        assertSays(card, "title={`\(SharedPoolPage.addMembersTitle(pool("${pool.label}")))`}", in: Self.sharedPool)
-        assertSays(card, "placeholder=\"\(SharedPoolPage.emailPlaceholder)\"", in: Self.sharedPool)
-        assertSays(card, "> \(SharedPoolPage.addMembersNote) </div>", in: Self.sharedPool)
-        assertSays(card, "okText=\"\(SharedPoolPage.add)\"", in: Self.sharedPool)
-        assertSays(card, "message.success(`\(SharedPoolPage.added(pool("${pool.label}")))`)", in: Self.sharedPool)
-    }
-
-    /// The two rules, their sentences, and who sets them.
-    func testRulesSayWhatTheWebCardSays() throws {
-        let card = try web(Self.sharedPool)
-        assertSays(card, "<span className=\"re-runner\">\(SharedPoolPage.rulesHeader)</span>", in: Self.sharedPool)
-        assertSays(card, "<span className=\"pool-head-note\">\(SharedPoolPage.setByAdmins)</span>", in: Self.sharedPool)
-        assertSays(card, "<div className=\"pool-rule-t\">\(SharedPoolPage.membersCanAdd)</div>", in: Self.sharedPool)
-        assertSays(card, "> \(SharedPoolPage.membersCanAddHint(pool("{pool.label}"))) </div>", in: Self.sharedPool)
-        assertSays(card, "<div className=\"pool-rule-t\">\(SharedPoolPage.ownKeyFirst)</div>", in: Self.sharedPool)
-        assertSays(card, "> \(SharedPoolPage.ownKeyFirstHint) </div>", in: Self.sharedPool)
     }
 
     /// "Add a key", step by step, and "Replace key".
@@ -249,17 +221,22 @@ final class SharedPoolCopyParityTests: XCTestCase {
         }
         let drawn = SharedPools.asProviderPool(pool([capped]))
 
-        // The adapter, line for line: a key is the member, its state keyState's, its cap's gauge.
+        // The adapter, line for line: a key is the member, its state keyState's, its cap's gauge — and a
+        // pool of somebody's own gets its ChatGPT accounts as members first (2026-10-03).
         assertSays(lib, "presetSlug: 'openai',", in: Self.sharedPools)
         assertSays(lib, "planUsage: keyWindow(key, pool),", in: Self.sharedPools)
+        assertSays(lib, "...(pool.logins ?? []).map((login) => loginMember(pool, login)), ...keyMembers(pool)",
+                   in: Self.sharedPools)
+        assertSays(lib, "next: login.next,", in: Self.sharedPools)
         // A stopped key's reset is its own mark when OpenAI set one, else the month's end; the pool's is
-        // the EARLIEST of those, both as this client reads them (`SharedPoolPage.firstReset`).
+        // the EARLIEST of those, both as this client reads them (`SharedPoolPage.earliest`).
         assertSays(lib, "resetsAt: state === 'SPENT' ? (key.spentUntil ?? pool.window.end) : null,",
                    in: Self.sharedPools)
         assertSays(lib, "next: key.next,", in: Self.sharedPools)
-        assertSays(lib, "resetsAt: !free && stops.length > 0 ? stops.reduce((a, b) => (Date.parse(a) <= Date.parse(b) ? a : b)) : null,",
+        assertSays(lib, "resetsAt: !free && stops.length > 0 ? earliest(stops) : null,", in: Self.sharedPools)
+        assertSays(lib, "const earliest = (stops: string[]): string => stops.reduce((a, b) => (Date.parse(a) <= Date.parse(b) ? a : b));",
                    in: Self.sharedPools)
-        assertSays(lib, "unavailable: runnable ? null : pool.keys.length === 0 ? 'No keys' : 'No key can run',",
+        assertSays(lib, "unavailable: revives ? null : accounts.length > 0 ? 'Signed out' : pool.keys.length === 0 ? pool.shared ? 'No keys' : 'Not signed in' : 'No key can run',",
                    in: Self.sharedPools)
         assertSays(lib, "shared: pool,", in: Self.sharedPools)
         XCTAssertEqual(drawn.members[0].presetSlug, "openai")
@@ -337,7 +314,7 @@ final class SharedPoolCopyParityTests: XCTestCase {
         assertSays(card, "`Next: ${member.label}`", in: Self.accountPools)
         let three = ProviderPool(id: "p", slug: "p", label: "P",
                                  members: [member(.available), member(.spent), member(.disabled)])
-        XCTAssertEqual(ProviderPools.pageSubtitle(three), "1 of 3 accounts available")
+        XCTAssertEqual(ProviderPools.availability(three), "1 of 3 accounts available")
         assertSays(card, "${pool.members.length} ${memberNoun(pool, pool.members.length)} available", in: Self.accountPools)
     }
 }

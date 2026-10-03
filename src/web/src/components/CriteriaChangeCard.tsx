@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type JSX } from 'react';
+import { useEffect, useId, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import type { CriteriaChangesSinceConfirmed } from '@orbit/shared';
@@ -90,6 +90,7 @@ export function criteriaChangeCounts(changes: CriteriaChangesSinceConfirmed): st
 }
 
 export function CriteriaChangeCard({
+  ref,
   projectTitle,
   standing,
   changes,
@@ -100,6 +101,8 @@ export function CriteriaChangeCard({
   onConfirm,
   onChatAbout,
 }: {
+  /** The card's own element, which is where its keyboard claim says it is drawn (`CardHotkey.ts`). */
+  ref?: Ref<HTMLDivElement>;
   projectTitle: string;
   standing: StandardSetConfirmationStanding;
   changes: CriteriaChangesSinceConfirmed;
@@ -148,7 +151,7 @@ export function CriteriaChangeCard({
   );
   const answerable = !busy;
   return (
-    <div className="approval-card settlement-card criteria-change-card">
+    <div ref={ref} className="approval-card settlement-card criteria-change-card">
       <div className="approval-head settlement-card-head">
         <span className="settlement-card-heading">{CRITERIA_CHANGE_TITLE}</span>
         <span className="criteria-provenance prov-brand" title={ACCEPTANCE_PROVENANCE_TITLE}>
@@ -293,14 +296,17 @@ export function SessionCriteriaChangeCard({
       question: 'CRITERIA_CHANGE',
     });
   };
+  const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
     confirmEnabled: onScreen && !confirm.isPending,
     onConfirm: press,
+    anchor,
   });
 
   if (!onScreen || !standing?.changesSinceConfirmed) return null;
   return (
     <CriteriaChangeCard
+      ref={anchor}
       projectTitle={title}
       standing={standing}
       changes={standing.changesSinceConfirmed}
