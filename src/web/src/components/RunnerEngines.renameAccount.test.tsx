@@ -189,7 +189,12 @@ describe('renaming an account on a runner', () => {
     await type(input, '  jianghailong.main ');
     await press(input, 'Enter');
 
-    expect(renames()).toEqual([[`/runners/${RUNNER_ID}/accounts/claude/default`, { name: 'jianghailong.main' }]]);
+    // The rename can be emitted one step after the press — a mutation whose scope is busy waits for
+    // the one in flight before it runs (the rename account panel's sign-in) — so what was SENT is
+    // waited for, not read synchronously.
+    await vi.waitFor(() =>
+      expect(renames()).toEqual([[`/runners/${RUNNER_ID}/accounts/claude/default`, { name: 'jianghailong.main' }]]),
+    );
     await vi.waitFor(() => expect(apiMock.mock.calls.filter(([path]) => path === '/runners').length).toBeGreaterThan(0));
     // The row the press redraws, not the request it fires. The press closes the editor, and the
     // redraw after it is the settled mutation standing on the list's OLD name — `shown` falls back
@@ -218,7 +223,9 @@ describe('renaming an account on a runner', () => {
     await type(input, 'jianghailong.research');
     await act(async () => input.blur());
 
-    expect(renames()).toEqual([[`/runners/${RUNNER_ID}/accounts/claude/fad98727`, { name: 'jianghailong.research' }]]);
+    await vi.waitFor(() =>
+      expect(renames()).toEqual([[`/runners/${RUNNER_ID}/accounts/claude/fad98727`, { name: 'jianghailong.research' }]]),
+    );
     await vi.waitFor(() => expect(nameOf(accountsOf(page)[1])).toBe('jianghailong.research'));
     // An added account is not Default, renamed or not.
     expect(chipsOf(accountsOf(page)[1])).toEqual([]);
@@ -255,7 +262,9 @@ describe('renaming an account on a runner', () => {
     await type(input, 'Default');
     await press(input, 'Enter');
 
-    expect(renames()).toEqual([[`/runners/${RUNNER_ID}/accounts/claude/default`, { name: 'Default' }]]);
+    await vi.waitFor(() =>
+      expect(renames()).toEqual([[`/runners/${RUNNER_ID}/accounts/claude/default`, { name: 'Default' }]]),
+    );
     await vi.waitFor(() => expect(nameOf(accountsOf(page)[0])).toBe('Default'));
     expect(chipsOf(accountsOf(page)[0])).not.toContain('DEFAULT');
   });
@@ -270,7 +279,9 @@ describe('renaming an account on a runner', () => {
     await type(input, 'Orbit');
     await press(input, 'Enter');
 
-    expect(renames()).toEqual([[`/runners/${RUNNER_ID}/accounts/claude/29e631a9`, { name: 'Orbit' }]]);
+    await vi.waitFor(() =>
+      expect(renames()).toEqual([[`/runners/${RUNNER_ID}/accounts/claude/29e631a9`, { name: 'Orbit' }]]),
+    );
   });
 
   it('says where a removed account’s workspaces go by the name Default goes by', async () => {
@@ -345,7 +356,9 @@ describe('naming an account while + Account adds it', () => {
 
     await type(input, ' Personal ');
     await press(input, 'Enter');
-    expect(renames()).toEqual([[`/runners/${RUNNER_ID}/accounts/claude/7c41d2aa`, { name: 'Personal' }]]);
+    await vi.waitFor(() =>
+      expect(renames()).toEqual([[`/runners/${RUNNER_ID}/accounts/claude/7c41d2aa`, { name: 'Personal' }]]),
+    );
     await vi.waitFor(() => expect(nameOf(accountsOf(page)[1])).toBe('Personal'));
 
     await act(async () => input.focus());
