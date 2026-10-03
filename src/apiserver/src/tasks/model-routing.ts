@@ -86,7 +86,7 @@ const FAILURE_WORDING = {
 } as const;
 const EFFORT_ORDER = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
 
-function priorLevel(run: ModelRoutingRun, runtime: string): ModelRoutingLevel | null {
+export function priorLevel(run: ModelRoutingRun, runtime: string): ModelRoutingLevel | null {
   if (run.level) return run.level;
   const model = run.model ?? '';
   if (model === 'opus' || model.startsWith('claude-opus-')) return 'L';
