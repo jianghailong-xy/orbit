@@ -428,6 +428,28 @@ model 一律取**实际运行**的（会话上首次 claim 之后的值）：生
 - Codex 运行之前不落 token，P1 补上 `usage` 行，`cost_usd` 记 0（订阅计费，没有按量价格）：跨引擎只能比 token，不能比花费。
 - 额度失败不计入失败次数，但它用掉的 token 照算。
 
+**报告接口契约（P5）**：用户 bearer 鉴权的 `GET /tasks/model-routing/report?since=&agentId=`，返回
+`{ shadow: ReportGroup[], applied: ReportGroup[] }`。`since` 是可选的 ISO 时间（含边界，筛决策的 `created_at`）；
+`agentId` 是可选的 Agent（workspace）公开 id / UUID，筛实际运行的 `workspace_id`，不读任务当前的指派。
+没有匹配项（含别人的 Agent）返回空数组；无效时间 / id 返回 400；所有关联数据都限定为当前 owner。
+
+每组含 `policyVersion`、`level`（NULL = not routed）、`provider`、`model`，以及：
+
+| 字段 | 含义 |
+|---|---|
+| `sampleCount` | 匹配过滤条件且已创建工作会话的决策数 |
+| `taskCount` / `completedTaskCount` / `firstPassTaskCount` | 首次工作运行的决策匹配过滤条件的任务数 / 当前 DONE 数 / 一次通过数 |
+| `firstPassRate` | `firstPassTaskCount / taskCount`（0–1）；任务当前 DONE、仅有一次工作运行、运行未 FAILED 且没有验证 FAIL / 退回才算一次通过 |
+| `averageFailureCount` | 每个入组任务的失败工作运行次数均值；运行 FAILED、验证 FAIL、SEND_BACK 在同一次工作运行上去重，额度失败除外 |
+| `tokensPerCompletedTask` / `costUsdPerCompletedTask` | 组内 DONE 任务的全部工作运行的 token / 会话花费之和，除以 DONE 任务数；包含后续升档、换 Agent、无决策或额度失败的工作运行 |
+| `durationP50Ms` | 匹配样本中已结束工作运行的耗时 p50（毫秒，偶数样本线性插值） |
+
+没有任务级样本时，通过率与失败均值为 NULL；没有 DONE 任务时，每完成任务的 token / 花费为 NULL；
+没有已结束样本时，耗时为 NULL。首次运行按 `session.created_at, id` 确定，读取全部 `starts_task_work` 历史，
+不因 `since` / `agentId` 截断而重新编号；第一次运行没有决策的任务只计运行级指标。
+验证 FAIL 用 verifier 的当前 `verdict` 和 `updated_at`，SEND_BACK 用 `decided_at`，归到判定时最近创建的工作运行；
+同一工作运行的多个失败信号只计一次。任务当前状态与完成判据从 task 读取，不把 SUCCEEDED 会话当作 DONE 任务。
+
 ### 10.2 开启节奏
 
 1. **影子两周**：P1 的影子接入与 P2 的建议档位都落地后开始计时。所有 Agent 默认关闭，每次新建运行都写影子决策。期间看两件事：
