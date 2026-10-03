@@ -262,6 +262,40 @@ function render(runners: Runner[], { open = true, path = '/providers' } = {}) {
 }
 
 describe('the "On your runners" section', () => {
+  it.each([
+    [{ supported: false, installed: true, version: '1.2.16', envKeyAvailable: false }, 'Update runner'],
+    [{ supported: true, installed: false, version: null, envKeyAvailable: false }, 'Not installed'],
+    [{ supported: true, installed: true, version: 'agy 1.2.16', envKeyAvailable: false }, 'Ready'],
+  ] as const)('adds an Antigravity installation row without sign-in or quota: %s', (state, label) => {
+    const box = runner({ antigravity: state, engines: [health({ engine: 'kimi' })] });
+    const html = render([box], { path: `/providers?runner=${encodeId(box.id)}&engine=antigravity` });
+    const row = html.slice(html.indexOf('data-engine="antigravity"'));
+    expect(html.match(/re-row focused/g)).toHaveLength(1);
+    expect(row).toContain('Antigravity CLI');
+    expect(row).toContain(label);
+    expect(row).toContain('No sign-in · runs on your Gemini key');
+    expect(row).not.toContain('>Sign in<');
+    expect(html).toContain('1 runner · 1 signed in');
+    expect(summaryOf(box)).toBe('1 of 3 signed in');
+    expect(summaryOf({ ...box, install: install({ engine: 'antigravity', status: 'installing' }) })).toBe('1 of 3 signed in');
+    if (!state.supported) {
+      expect(row).toContain('Needs Orbit runner 0.1.209+ — updates itself when idle');
+      expect(row).not.toContain('>Install<');
+    } else if (!state.installed) {
+      expect(row).toContain('Not installed — Orbit can install it here');
+      expect(row).toContain('>Install<');
+    } else {
+      expect(row).toContain('1.2.16');
+      expect(row).not.toContain('>Install<');
+    }
+  });
+
+  it('shows the Antigravity row even before an older runner reports its engines', () => {
+    const html = render([runner({ engines: null, antigravity: { supported: false, installed: null, version: null, envKeyAvailable: false } })]);
+    expect(html).toContain('Antigravity CLI');
+    expect(html).toContain('Update runner');
+  });
+
   it('shows every engine on a runner that reported, with its state and way out', () => {
     const html = render([
       runner({

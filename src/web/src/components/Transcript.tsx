@@ -181,6 +181,13 @@ export interface AuthErrorHelp {
   runnerName?: string;
   /** Runner id, which unlocks signing in from the browser instead of on that machine. */
   runnerId?: string;
+  runtime?: string;
+  runnerVersion?: string | null;
+  onConnectGemini?: () => void;
+  onSwitchToGemini?: () => void;
+  onOpenProviders?: () => void;
+  onInstall?: () => void;
+  installDisabled?: boolean;
   /** Re-send the last user message, once the user has signed back in. */
   onRetry?: () => void;
   /** A re-send is already in flight, so the button offers none: one failure, one attempt. */
@@ -192,6 +199,55 @@ export interface AuthErrorHelp {
   onUseApiKey?: () => void;
 }
 export const AuthErrorCtx = createContext<AuthErrorHelp | null>(null);
+
+export type AntigravityRepair = 'needsKey' | 'updateRunner' | 'notInstalled';
+
+export function antigravityRepair(message: string): AntigravityRepair | null {
+  if (message.startsWith('Failed to authenticate: Antigravity runs on an API key (GEMINI_API_KEY), and neither this session nor the runner has one')) return 'needsKey';
+  if (message === 'Antigravity requires a newer Orbit runner; update this runner first') return 'updateRunner';
+  if (/Antigravity(?: CLI)? isn't installed|Antigravity CLI \("agy"\) not found/.test(message)) return 'notInstalled';
+  return null;
+}
+
+export function AntigravityRepairCard({ repair, help, seq }: {
+  repair: AntigravityRepair;
+  help: AuthErrorHelp;
+  seq?: number;
+}) {
+  const machine = help.runnerName || 'this runner';
+  return (
+    <div className="chat-authfix" data-seq={seq}>
+      <div className="chat-authfix-head">
+        <WarningFilled className="chat-authfix-icon" />
+        <div className="chat-authfix-title">
+          {repair === 'needsKey' ? 'Antigravity needs a Gemini API key'
+            : repair === 'updateRunner' ? 'Waiting for a newer runner'
+              : `Antigravity CLI isn't installed on ${machine}`}
+        </div>
+      </div>
+      <div className="chat-authfix-desc">
+        {repair === 'needsKey'
+          ? 'Connect Gemini in Providers. Orbit stores the key encrypted, and this conversation can continue on it.'
+          : repair === 'updateRunner'
+            ? `${machine} runs Orbit runner ${help.runnerVersion || 'an unknown version'}; Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then.`
+            : 'Install it from Providers, then send your message again.'}
+      </div>
+      <div className="chat-authfix-actions">
+        {repair === 'needsKey' ? (
+          <>
+            {help.onConnectGemini && <button className="chat-authfix-go" type="button" onClick={help.onConnectGemini}>Connect Gemini</button>}
+            <button className="chat-authfix-retry" type="button" onClick={help.onSwitchToGemini} disabled={!help.onSwitchToGemini}>Switch to Gemini</button>
+          </>
+        ) : (
+          <>
+            {repair === 'notInstalled' && help.onInstall && <button className="chat-authfix-go" type="button" onClick={help.onInstall} disabled={help.installDisabled}>Install</button>}
+            {help.onOpenProviders && <button className="chat-authfix-retry" type="button" onClick={help.onOpenProviders}>Open in Providers</button>}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /**
  * Put an undelivered message back into the composer, so a message the engine never received can
@@ -1409,6 +1465,7 @@ function StandaloneResult({ node }: { node: ResultNode }) {
 // to the card that contains it.
 function NodeView({ node, live }: { node: Node; live?: boolean }) {
   const exporting = useContext(ExportCtx);
+  const authHelp = useContext(AuthErrorCtx);
   switch (node.kind) {
     case 'user': {
       // Another Orbit session's message (`session_send` / `project_send`): somebody's words, but not
@@ -1613,6 +1670,10 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
       );
     }
     case 'error': {
+      const repair = antigravityRepair(node.message);
+      if (repair && authHelp && (authHelp.runtime ?? authHelp.provider) === 'antigravity') {
+        return <AntigravityRepairCard repair={repair} help={authHelp} seq={node.seq} />;
+      }
       const failure = parseToolFailureSummary(node.message);
       if (failure) return <ToolFailureCard node={node} summary={failure} />;
       // An engine's own log line is its running commentary — often advice that ends in "…in the
@@ -1719,7 +1780,7 @@ const LOCAL_LOGIN = new Set(['claude', 'codex', 'kimi', 'opencode', 'antigravity
  * picks an underlying provider interactively, which the browser relay's DTO cannot express, so
  * the runner refuses such a request outright (loginFlowFor in login.go). Its card names the
  * command to run instead of offering a button that cannot work. Antigravity has no sign-in at
- * all: agy runs on the Gemini API key in its environment, so its card names that variable.
+ * all: its card connects an encrypted Gemini key in Providers.
  */
 const RELAY_LOGIN = new Set(['claude', 'codex', 'kimi']);
 
@@ -1743,6 +1804,9 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
   const provider = help?.provider;
   const local = !!provider && LOCAL_LOGIN.has(provider);
   const relayable = !!provider && RELAY_LOGIN.has(provider);
+  if (help && (provider === 'antigravity' || (help.runtime === 'antigravity' && antigravityRepair(message) === 'needsKey'))) {
+    return <AntigravityRepairCard repair="needsKey" help={help} seq={seq} />;
+  }
   return (
     <div className="chat-authfix" data-seq={seq}>
       <div className="chat-authfix-head">
@@ -1750,9 +1814,7 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
         <div className="chat-authfix-title">
           {!help
             ? 'Authentication failed'
-            : help.provider === 'antigravity'
-              ? 'Gemini API key rejected'
-              : local
+            : local
                 ? `Sign-in expired${help.runnerName ? ` on “${help.runnerName}”` : ''}`
                 : 'Provider authentication failed'}
         </div>
@@ -1768,12 +1830,6 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
               onUseApiKey={help.onUseApiKey}
             />
           )
-        ) : provider === 'antigravity' ? (
-          <div className="chat-authfix-desc">
-            Antigravity runs on the Gemini API key in its environment. Set{' '}
-            <code>GEMINI_API_KEY</code> in this workspace's environment variables, or on the runner,
-            then send your message again.
-          </div>
         ) : (
           <div className="chat-authfix-desc">
             Run <code>opencode auth login</code> on that machine and choose the provider there —

@@ -88,6 +88,7 @@ extension CGFloat {
 }
 
 struct ComposerView: View {
+    @Environment(\.openURL) private var openURL
     @Environment(AppModel.self) private var app
     @Bindable var console: ConsoleModel
     /// On the phone's console a page this conversation opens is pushed over it (`OpensPagesOverConsoleKey`).
@@ -613,19 +614,20 @@ struct ComposerView: View {
                         // that, so it is greyed out with its reason instead.
                         let fixable = blocked && choice.fixEngine != nil
                         let reason = choice.unavailable ?? ""
-                        let fix = fixable ? ", sign in →" : ""
+                        let fix = fixable ? (choice.fixEngine == "antigravity" ? " →" : ", sign in →") : ""
                         Button {
                             // Picking a blocked row isn't a switch — it's a request for the
                             // sign-in that would make it one, so go to that runner's Engines
                             // section rather than doing nothing.
                             if fixable {
-                                if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                                if choice.fixEngine == "antigravity", let url = console.antigravityProvidersURL { openURL(url) }
+                                else if let rid = console.runnerID { app.route(to: .runner(rid)) }
                             } else if !blocked {
                                 Task { await console.selectProvider(choice.slug) }
                             }
                         } label: {
                             menuItemLabel(
-                                blocked ? "\(choice.label) — \(reason)\(fix)" : choice.label,
+                                blocked ? "\(choice.label) — \(reason)\(fix)" : [choice.label, choice.labelDetail].compactMap { $0 }.joined(separator: " · "),
                                 selected: choice.slug == console.provider && !listsAccounts)
                         }
                         .disabled(blocked && !fixable)

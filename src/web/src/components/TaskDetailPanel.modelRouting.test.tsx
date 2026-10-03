@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encodeId } from '../lib/idCodec';
+import type { ConfiguredProvider } from '../lib/workspaceDefaults';
 
 /**
  * Smart model selection in the task panel (docs/model-routing-design.md §9; the web mock §2–§3).
@@ -110,7 +111,7 @@ async function settle(): Promise<void> {
 }
 
 /** The panel over this read, with the assignee Agent and its runner as the workspace list reports them. */
-async function mount(data: Record<string, unknown>, agent: Record<string, unknown> = {}): Promise<void> {
+async function mount(data: Record<string, unknown>, agent: Record<string, unknown> = {}, machine: Record<string, unknown> = {}, providers: ConfiguredProvider[] = []): Promise<void> {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
   client.setQueryData(['task', TASK], data);
   client.setQueryData(['workspaces'], [{ id: AGENT, name: 'orbit', runnerId: RUNNER, provider: 'claude', ...agent }]);
@@ -125,9 +126,10 @@ async function mount(data: Record<string, unknown>, agent: Record<string, unknow
           { value: 'claude-sonnet-5-5', label: 'Sonnet 5.5' },
         ],
       },
+      ...machine,
     },
   ]);
-  client.setQueryData(['providers'], []);
+  client.setQueryData(['providers'], providers);
   container = document.createElement('div');
   document.body.appendChild(container);
   const next = createRoot(container);
@@ -307,6 +309,38 @@ describe('the Suggested tier in Details', { timeout: 60_000 }, () => {
 
     await mount(detail(), { modelRouting: false });
     expect(field('Model').querySelector('.ant-select-placeholder')?.textContent).toBe('Provider default');
+  });
+});
+
+describe('Gemini task provider pins', () => {
+  const gemini: ConfiguredProvider = { slug: 'gemini', label: 'Gemini', runtime: 'antigravity', presetSlug: 'gemini', models: [] };
+
+  it.each([false, true])('uses the workspace server key boolean %s and links unsupported Gemini to Providers', async (keyAvailable) => {
+    await mount(detail(), { antigravityKeyAvailableByRunner: { [RUNNER]: keyAvailable } }, {
+      antigravity: { supported: false, installed: true, version: '1.2.16', envKeyAvailable: true },
+    }, [gemini]);
+    await act(async () => {
+      field('Provider').querySelector('.ant-select-content')!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+    });
+    await vi.waitFor(() => expect(document.body.querySelectorAll('.ant-select-item-option').length).toBe(keyAvailable ? 6 : 5));
+    const options = [...document.body.querySelectorAll<HTMLElement>('.ant-select-item-option')];
+    const builtin = options.find((option) => option.textContent?.startsWith('Antigravity'));
+    expect(!!builtin).toBe(keyAvailable);
+    if (builtin) expect(builtin.textContent).toContain('env key');
+    expect(options.some((option) => option.textContent === 'OpenCode')).toBe(true);
+    const provider = options.find((option) => option.textContent?.startsWith('Gemini'))!;
+    expect(provider.textContent).toContain('Antigravity CLI');
+    expect(provider.textContent).toContain('Update runner');
+    await click(provider, 'Gemini needing a runner update');
+    expect(where).toBe('/providers');
+    expect(patches()).toEqual([]);
+  });
+
+  it('keeps a pinned Antigravity provider visible with its environment key label', async () => {
+    await mount(detail({ provider: 'antigravity' }), { antigravityKeyAvailableByRunner: { [RUNNER]: false } }, {
+      antigravity: { supported: true, installed: true, version: '1.2.16', envKeyAvailable: false },
+    }, [gemini]);
+    expect(field('Provider').textContent).toContain('Antigravityenv key');
   });
 });
 

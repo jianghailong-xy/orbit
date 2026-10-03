@@ -952,6 +952,9 @@ export interface CodexRateLimitResetResultRefusal {
 /** Engines a runner signs in with on its own machine, rather than using a configured API key. */
 export type LoginEngine = 'claude' | 'codex' | 'kimi';
 
+/** Engines with an install action in Providers; Antigravity has no sign-in action. */
+export type InstallEngine = LoginEngine | 'antigravity';
+
 /**
  * Every engine CLI a runner reports on, which is a wider set than the ones it can sign into:
  * OpenCode authenticates per-provider with no relayable flow, and Antigravity runs on a Gemini API
@@ -960,6 +963,20 @@ export type LoginEngine = 'claude' | 'codex' | 'kimi';
  * these a given page offers to sign in is that page's question.
  */
 export type ReportedEngine = LoginEngine | 'opencode' | 'antigravity';
+
+/** Control-plane answer for the Gemini runtime. No credential values leave the server. */
+export interface RunnerAntigravityState {
+  /** The runner's latest heartbeat explicitly declared the Antigravity runtime. */
+  supported: boolean;
+  /** Null until the runner has reported the CLI's installation state. */
+  installed: boolean | null;
+  version: string | null;
+  /** The runner process has a Gemini API key, independent of a workspace's environment. */
+  envKeyAvailable: boolean;
+}
+
+/** A workspace's built-in Antigravity availability, resolved for every runner its owner controls. */
+export type AntigravityKeyAvailableByRunner = Record<string, boolean>;
 
 /**
  * Control plane → runner: drive the interactive sign-in on the runner's own machine.
@@ -1154,7 +1171,7 @@ export interface RunnerEngineUpdate {
  */
 export interface InstallCommand {
   /** Absent only for `mode: 'update'`, which is about every engine on the machine. */
-  engine?: LoginEngine;
+  engine?: InstallEngine;
   /** Identifies this install, so the runner can tell a redelivered request from a new one. */
   attempt?: string;
   /** `update` reuses this one relay slot to update every engine already on the machine instead
@@ -1181,7 +1198,7 @@ export interface RunnerInstallState {
   status: 'pending' | 'installing' | 'done' | 'failed' | null;
   /** Which engine is being installed; null when nothing is in flight, and for `update`, which
    *  is the whole machine's business rather than one row's. */
-  engine: LoginEngine | null;
+  engine: InstallEngine | null;
   command: string | null;
   message: string | null;
   /** Which of the two jobs the slot is running. Null when nothing is in flight; `install` on a

@@ -1185,6 +1185,8 @@ struct NewSessionView: View {
             onCreated: onCreated))
     }
 
+    @Environment(\.openURL) private var openURL
+
     var body: some View {
         VStack(spacing: 0) {
             if draft.localStatusCards.isEmpty {
@@ -1203,6 +1205,9 @@ struct NewSessionView: View {
                             HStack(spacing: 7) {
                                 Text(currentProviderChoice.label)
                                     .font(.title.weight(.bold)).foregroundStyle(.primary).lineLimit(1)
+                                if let detail = currentProviderChoice.labelDetail {
+                                    Text(detail).font(.footnote).foregroundStyle(.secondary)
+                                }
                                 Image(systemName: "chevron.down").font(.subheadline.weight(.semibold))
                                     .foregroundStyle(.secondary)
                             }
@@ -1218,7 +1223,11 @@ struct NewSessionView: View {
                         if let blocker = currentProviderChoice.unavailable,
                            currentProviderChoice.fixEngine != nil {
                             Button {
-                                if let rid = agent.runnerId { app.route(to: .runner(rid)) }
+                                if let rid = agent.runnerId {
+                                    if currentProviderChoice.fixEngine == "antigravity",
+                                       let url = draft.providersURL(engine: "antigravity", runnerID: rid) { openURL(url) }
+                                    else { app.route(to: .runner(rid)) }
+                                }
                             } label: {
                                 Text("\(blocker) on this runner · Fix it")
                                     .font(.callout).foregroundStyle(Color.accentColor).lineLimit(2)
@@ -1332,14 +1341,17 @@ struct NewSessionView: View {
             // The draft's own runnerID is only set for a live session, so take the agent's — it is
             // the machine this draft would run on, and the one whose Engines section fixes a row.
             ProviderSwitchSheet(
-                choices: providerChoices, currentSlug: draft.provider, agentName: agent.name,
+                choices: providerChoices.contains { $0.slug == draft.provider } ? providerChoices : [currentProviderChoice] + providerChoices, currentSlug: draft.provider, agentName: agent.name,
                 currentAccount: draft.provider == "claude" ? draft.account(for: "claude") : draft.codexAccount,
                 automatic: ["codex", "claude"].reduce(into: [String: Bool]()) { offered, engine in
                     if draft.automaticOffered(engine) { offered[engine] = draft.draftAutomatic(engine) }
                 },
                 onSelect: { slug in draft.pickDraftProvider(slug) },
                 onSelectAccount: { slug, account in draft.pickDraftAccount(slug, account) },
-                onFixRunner: agent.runnerId.map { rid in { app.route(to: .runner(rid)) } })
+                onFixRunner: agent.runnerId.map { rid in { engine in
+                    if engine == "antigravity", let url = draft.providersURL(engine: engine, runnerID: rid) { openURL(url) }
+                    else { app.route(to: .runner(rid)) }
+                } })
         }
     }
 
@@ -1358,13 +1370,16 @@ struct NewSessionView: View {
                                        catalog: draft.modelCatalog,
                                        engines: draft.runnerEngines,
                                        pools: draft.allPools,
-                                       planUsage: draft.runnerPlanUsage)
+                                       planUsage: draft.runnerPlanUsage,
+                                       antigravity: draft.runnerAntigravity,
+                                       antigravityKeyAvailable: agent.antigravityKeyAvailableByRunner?[draft.runnerID ?? agent.runnerId ?? ""] == true)
     }
 
     private var currentProviderChoice: ProviderChoice {
         SessionProviderChoices.current(draft.provider, in: providerChoices,
                                        configured: draft.configuredProviders,
-                                       catalog: draft.modelCatalog)
+                                       catalog: draft.modelCatalog,
+                                       antigravity: draft.runnerAntigravity)
     }
 
     /// The full model name (the composer footer only carries a truncated one). No funding label:

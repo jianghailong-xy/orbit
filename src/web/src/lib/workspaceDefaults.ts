@@ -121,8 +121,9 @@ export const OPENCODE_MODEL_OPTIONS = [{ value: '', label: 'Managed by OpenCode'
 // per model with its thinking levels). Until a runner reports them, the one choice that is true on
 // every agy is passing no `--model` and letting agy pick its own. Only a fallback, unlike OpenCode's
 // sentinel: once a catalogue is reported, dispatch runs a session that names no model on its first
-// row, so offering '' beside it would name a choice nothing makes.
-export const ANTIGRAVITY_MODEL_OPTIONS = [{ value: '', label: 'Managed by Antigravity' }];
+// row, so offering '' beside it would name a choice nothing makes. The fallback names Gemini's
+// preset default while preserving the empty dispatch value.
+export const ANTIGRAVITY_MODEL_OPTIONS = [{ value: '', label: 'Gemini 3.8 Flash' }];
 
 // Last-resort context windows for the composer's gauge, for a runner too old to report one of its
 // own. Not the source of truth and not maintained as if it were: the window belongs to the engine

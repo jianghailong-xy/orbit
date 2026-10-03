@@ -185,6 +185,22 @@ public struct RotateTokenResponse: Codable, Equatable, Sendable {
     public let token: String
 }
 
+/// Server-resolved Antigravity support, CLI readiness, and runner-environment key availability.
+public struct RunnerAntigravityState: Codable, Equatable, Sendable {
+    public let supported: Bool
+    public let installed: Bool?
+    public let version: String?
+    public let envKeyAvailable: Bool
+
+    public init(supported: Bool, installed: Bool? = nil, version: String? = nil,
+                envKeyAvailable: Bool = false) {
+        self.supported = supported
+        self.installed = installed
+        self.version = version
+        self.envKeyAvailable = envKeyAvailable
+    }
+}
+
 /// One coding-engine CLI's health on a runner, reported each heartbeat (shared `RunnerEngineHealth`).
 /// `engine` stays a raw string rather than `LoginEngine`: a server that starts reporting a fourth
 /// engine must not fail the decode of the whole runner row and blank the list.
@@ -277,6 +293,8 @@ public struct RunnerInstallState: Codable, Equatable, Sendable {
     public let command: String?
     public let message: String?
     public let mode: String?
+    /// One runner has one install relay; another engine's active install occupies it too.
+    public var inFlight: Bool { status == "pending" || status == "installing" }
 }
 
 /// Browser-facing account-removal relay. Raw engine/status strings preserve forward compatibility.
