@@ -103,6 +103,11 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     const refetchProviders = (): void => {
       void qc.invalidateQueries({ queryKey: ['providers'] });
     };
+    // The owner's session folders, made, renamed or deleted on another client. Filing a session
+    // moves one list row and arrives as `session.updated` instead.
+    const refetchFolders = (): void => {
+      void qc.invalidateQueries({ queryKey: ['session-folders'] });
+    };
     // The two reads a decision card is drawn from, which none of the list refetches above reach.
     // Evidence being submitted or decided arrives as `task.changed`, and its read is keyed by the
     // session DECIDING rather than by the task, so every session's copy is dirty. A held criteria
@@ -161,6 +166,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       tasks: refetchTasks,
       workspaces: refetchWorkspaces,
       tags: refetchTags,
+      folders: refetchFolders,
       providers: refetchProviders,
       decisions: refetchPendingDecisions,
       watches: refetchWatches,
@@ -176,6 +182,8 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       if (type.startsWith('task.')) return ['tasks']; // incl. task.list.changed
       if (type.startsWith('workspace.')) return ['workspaces', 'sessions'];
       if (type.startsWith('tag.')) return ['tags', 'sessions'];
+      // A deleted folder's sessions are back in their workspace's list, so the rows move too.
+      if (type.startsWith('folder.')) return ['folders', 'sessions'];
       if (type.startsWith('provider.')) return ['providers'];
       // The server naming a watch itself: it was made, edited, paused, resumed or stopped; it
       // matched, expired or ended unmatched; or one of its deliveries delivered or dead-lettered

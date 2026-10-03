@@ -217,7 +217,7 @@ describe('session row swipes on a phone', () => {
   it('swiping right exposes Complete then Pin, and Complete completes the session', async () => {
     const row = await mountRow();
     expect(labels(row, 'leading')).toEqual(['Complete', 'Pin']);
-    expect(labels(row, 'trailing')).toEqual(['Delete']);
+    expect(labels(row, 'trailing')).toEqual(['Share', 'Move', 'Delete']);
     expect(offset(row), 'a row at rest is not slid').toBe('');
 
     await swipe(row, 100);
@@ -230,11 +230,11 @@ describe('session row swipes on a phone', () => {
     expect(deleteMock).not.toHaveBeenCalled();
   });
 
-  it('swiping left exposes Delete, which moves the session to Trash', async () => {
+  it('swiping left exposes Share · Move · Delete, and Delete moves the session to Trash', async () => {
     const row = await mountRow();
-    await swipe(row, -60);
-    expect(offset(row)).toBe('translateX(-72px)');
-    expect(row.querySelector<HTMLElement>('.session-swipe-actions.trailing')!.style.width).toBe('72px');
+    await swipe(row, -120);
+    expect(offset(row)).toBe('translateX(-216px)');
+    expect(row.querySelector<HTMLElement>('.session-swipe-actions.trailing')!.style.width).toBe('216px');
 
     await tap(row.querySelector('[aria-label="Delete"]')!);
     await waitForUi(() => expect(deleteMock).toHaveBeenCalledWith(SESSION_PUBLIC));
@@ -244,11 +244,11 @@ describe('session row swipes on a phone', () => {
   it('a long swipe right completes on release; a long swipe left only opens Delete', async () => {
     const row = await mountRow();
     await swipe(row, -390);
-    expect(offset(row)).toBe('translateX(-72px)');
+    expect(offset(row)).toBe('translateX(-216px)');
     expect(deleteMock, 'Delete never fires from a swipe alone').not.toHaveBeenCalled();
 
     // Straight from the open Delete edge through to past 60% of the row.
-    await swipe(row, 330);
+    await swipe(row, 460);
     await waitForUi(() => expect(completeMock).toHaveBeenCalledWith(SESSION_PUBLIC));
     expect(deleteMock).not.toHaveBeenCalled();
   });

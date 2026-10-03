@@ -14,9 +14,12 @@ import {
   DisconnectOutlined,
   DownloadOutlined,
   DownOutlined,
+  EditOutlined,
   EyeOutlined,
+  FolderOutlined,
   GlobalOutlined,
   InfoCircleOutlined,
+  LeftOutlined,
   LinkOutlined,
   LoadingOutlined,
   MessageOutlined,
@@ -88,6 +91,7 @@ import {
   restingOffset,
   sessionSwipeActions,
   settleSwipe,
+  swipeActionsOnScreen,
   swipeGeometry,
   swipeWidths,
   type SwipeAction,
@@ -102,6 +106,7 @@ import {
   providersQuery,
   SESSION_PAGE_SIZE,
   sessionQuery,
+  sessionFoldersQuery,
   type SessionListView,
   sessionsQuery,
   sessionTagsQuery,
@@ -115,6 +120,18 @@ import {
   watchesQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
+import { SessionMoveModal, type MoveDialogSession } from './SessionMoveModal';
+import {
+  FOLDER_COPY,
+  MOVE_COPY,
+  folderDeleteFailure,
+  folderNameDraft,
+  folderNameFailure,
+  listShowsFolders,
+  sessionFolderListing,
+  sessionsInFolder,
+  type SessionFolderRow,
+} from '../lib/sessionFolders';
 import {
   type SessionTagRef,
   sessionTagSections,
@@ -208,8 +225,10 @@ import {
   commitSession,
   createMergeRepairSession,
   createInteractiveSession,
+  createSessionFolder,
   decideApproval,
   deleteSession,
+  deleteSessionFolder,
   cleanUpWorkspaceRepo,
   enableWorkspaceIsolation,
   getBackgroundShells,
@@ -230,8 +249,10 @@ import {
   resendSessionRetryMessage,
   type TranscriptAroundPage,
   renameSession,
+  renameSessionFolder,
   restoreSession,
   resumeSession,
+  type SessionFolder,
   sendTurn,
   sessionEventsUrl,
   unpinSession,
@@ -1180,6 +1201,26 @@ export function orbitLinkStateWord(row: any): string {
   return statusLabel(row, watchingCountWord(row?.watching));
 }
 
+/**
+ * StatusIcon reduced to its motion, branch for branch in its order: the spinner of a session at
+ * work, the breathing terminal of a background job in flight, or neither. A folder row reports
+ * these for the sessions filed in it (lib/sessionFolders), so a folder and its rows can't disagree.
+ */
+export function statusGlyphMotion(session: any, watching?: string | null): 'spinner' | 'pulse' | null {
+  const state = sessionRunStateOf(session);
+  if ((session.pendingApprovals ?? 0) > 0 || state === 'SUCCEEDED') return null;
+  if (waitingNoticeFor(session) || isGenerating(session, state)) return 'spinner';
+  if (state !== 'AWAITING_INPUT') return null;
+  const work = parkedWorkLabel(session);
+  if (!work || (watching && work.kind !== 'subagent')) return null;
+  return work.kind === 'subagent' ? 'spinner' : work.active ? 'pulse' : null;
+}
+
+/** Whether a session counts toward a folder row's needs-you number: it waits on you, and not only to
+ *  have its project started, which lights no tally anywhere (the rail's and the drawer's rule). */
+export const sessionNeedsYou = (session: any): boolean =>
+  (session.pendingApprovals ?? 0) > 0 && session.waitingKind !== 'START_REQUEST';
+
 // One glyph per session state. Colour carries the meaning: blue = working,
 // amber = needs a human decision, green = the run reported success, red = real failure,
 // grey = neutral terminal (ended / interrupted / disconnected). A runner that
@@ -1690,6 +1731,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   } | null>(null);
   const swipeClickGuard = useRef(false); // eat the click that trails a horizontal swipe
   const [shareOpen, setShareOpen] = useState(false); // share dialog for the open session
+  // A row's Share swipe opens the share dialog for that row rather than for the open session.
+  const [shareRowId, setShareRowId] = useState<string | null>(null);
+  // The session the Move dialog is open for: a row's, or the open conversation's.
+  const [moveTarget, setMoveTarget] = useState<MoveDialogSession | null>(null);
+  // New Folder… and Rename…'s inline name field (`id` null for a new folder), and the folder row
+  // whose ⋯ menu is open — it keeps the row's hover look while it is.
+  const [folderEdit, setFolderEdit] = useState<{
+    id: string | null;
+    draft: string;
+    error: string | null;
+    saving: boolean;
+  } | null>(null);
+  const [folderMenuOpenId, setFolderMenuOpenId] = useState<string | null>(null);
+  // The field's latest state for its handlers: a blur fired as Return or Esc unmounts the field
+  // reads it closed and saves nothing, and a second Return can't race the first save.
+  const folderEditRef = useRef(folderEdit);
+  folderEditRef.current = folderEdit;
+  const folderSaving = useRef(false);
   // Controlled because the multi-select tag items stay open after a choice; ordinary actions
   // close it explicitly (Ant Dropdown otherwise keeps every item open in multiple-select mode).
   const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
@@ -2187,6 +2246,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // How much of the list is loaded. One page on open; scrolling toward the end widens the
   // window (see loadMoreSessions), which re-keys the query to the larger page.
   const [sessionLimit, setSessionLimit] = useState(SESSION_PAGE_SIZE);
+  // The owner's folders, and this workspace's (docs/session-folders-move-design.md §3, §7).
+  const foldersQ = useQuery(sessionFoldersQuery());
+  const workspaceFolders = useMemo(
+    () => (foldersQ.data ?? []).filter((f) => f.workspaceId === scopeWorkspaceId),
+    [foldersQ.data, scopeWorkspaceId],
+  );
+  // Folders split the list on the client, as on iOS, so a workspace that has any loads its whole
+  // list for the view rather than one page: a folder's count, its marks and its page all need every
+  // session filed in it. That is the request every native client makes for every list; a workspace
+  // without folders keeps paging as before.
+  const listByTag = !!tagFilter || groupByTag;
+  const foldersShown = listShowsFolders(effectiveView, listByTag) && workspaceFolders.length > 0;
   // One factory call drives both the list query and the optimistic-update key below, so
   // they can never drift apart; it's also the exact key the BootGate splash pre-warms.
   const sessionsOpts = sessionsQuery({
@@ -2194,7 +2265,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     workspaceId: scopeWorkspaceId,
     view: effectiveView,
     tagId: tagFilter,
-    limit: sessionLimit,
+    limit: foldersShown ? null : sessionLimit,
   });
   const sessionsKey = sessionsOpts.queryKey;
   // While the control-plane stream is connected it pushes list changes (a coalesced refetch per
@@ -2515,10 +2586,56 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (tagFilter) list = sessionsWithTag(list, tagFilter);
     return list;
   }, [sessions, resolvedWorkspaceId, tagFilter]);
+  // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
+  // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
+  // shows folders at all.
+  const folderParam = searchParams.get('folder');
+  const openFolder = useMemo(() => {
+    const id = routeId(folderParam);
+    return foldersShown && id ? (workspaceFolders.find((f) => f.id === id) ?? null) : null;
+  }, [folderParam, foldersShown, workspaceFolders]);
+  // A folder page whose folder is gone — deleted here or on another client, or a link into another
+  // workspace's — goes back to the list. Only once both the folders and the list's workspace are
+  // known: before that a missing folder is one not loaded yet.
+  useEffect(() => {
+    if (!folderParam || openFolder || !foldersQ.isSuccess || !scopeWorkspaceId) return;
+    if (!listShowsFolders(effectiveView, listByTag)) return;
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('folder');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [folderParam, openFolder, foldersQ.isSuccess, scopeWorkspaceId, effectiveView, listByTag, setSearchParams]);
+  // The list split into its folder rows and the sessions in no folder — the ones the Pinned and
+  // time sections below are made of. A folder's page lists the sessions filed in it instead.
+  const folderListing = useMemo(
+    () =>
+      foldersShown && !openFolder
+        ? sessionFolderListing(visibleSessions, workspaceFolders, {
+            view: effectiveView,
+            byTag: false,
+            runnerOffline: runner.online === false,
+            needsYou: sessionNeedsYou,
+            motion: (s) => statusGlyphMotion(s, sessionWatching(watchingBySession, s.id)?.word),
+          })
+        : null,
+    [foldersShown, openFolder, visibleSessions, workspaceFolders, effectiveView, runner.online, watchingBySession],
+  );
+  const listedSessions = useMemo(
+    () => (openFolder ? sessionsInFolder(visibleSessions, openFolder.id) : (folderListing?.sessions ?? visibleSessions)),
+    [openFolder, folderListing, visibleSessions],
+  );
+  // Where a session opened from this list lives. On a folder's page the page goes along, so the
+  // list stays on it while the conversations it lists are opened one after another.
+  const folderSearch = openFolder ? `?folder=${encodeId(openFolder.id)}` : '';
+  const sessionPath = useCallback((id: string) => `/sessions/${encodeId(id)}${folderSearch}`, [folderSearch]);
 
   // Paging. The server answered with a full page, so there is probably more behind it; a short
   // answer means this scope is exhausted.
-  const hasMoreSessions = (sessionsQ.data?.length ?? 0) >= sessionLimit;
+  const hasMoreSessions = !foldersShown && (sessionsQ.data?.length ?? 0) >= sessionLimit;
   // The column has nothing to show yet for this scope (a switch to a workspace not in cache), or
   // is widening its window — `isPlaceholderData` is exactly that, since the guard above only
   // keeps rows within one scope. Neither is the ordinary background refresh, which must not
@@ -2559,13 +2676,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const sections = useMemo(
     () =>
       groupByTag
-        ? sessionTagSections(visibleSessions).map((s) => ({
+        ? sessionTagSections(listedSessions).map((s) => ({
             key: s.tag?.id ?? '__untagged__',
             tag: s.tag,
             title: s.tag?.name ?? 'Untagged',
             sessions: s.sessions,
           }))
-        : sessionTimeSections(visibleSessions, {
+        : sessionTimeSections(listedSessions, {
             pinnedFirst: view === 'open' && !tagFilter,
           }).map((s) => ({
             key: s.title,
@@ -2574,7 +2691,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
             sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
           })),
-    [visibleSessions, groupByTag, view, tagFilter, pinnedCollapsed],
+    [listedSessions, groupByTag, view, tagFilter, pinnedCollapsed],
   );
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
@@ -2589,7 +2706,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // when the Open list is empty (the first-run empty state).
   const composing =
     !selectedId &&
-    (composingRoute || view !== 'open' || (sessionsQ.isSuccess && visibleSessions.length === 0));
+    (composingRoute || view !== 'open' || (sessionsQ.isSuccess && listedSessions.length === 0));
   // The Projects CTA lands on the ordinary New Session route with one piece of transient framing:
   // this turn is meant to create a project. Keeping it in the URL makes refresh/back truthful and
   // lets dismissing it return to the byte-for-byte ordinary compose without a second screen/state.
@@ -2622,18 +2739,24 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // button (it returns here, which would immediately redirect into a session again).
     if (isMobile || selectedId || composingRoute || view !== 'open' || !sessionsQ.isSuccess)
       return;
+    // Not before the folders are known: the session opened is one the list shows, and until then a
+    // session filed in a folder could be picked from under it. A server without folders answers
+    // with an error, which is known too.
+    if (foldersQ.isPending) return;
     const remembered = scopeWorkspaceId ? lastSessionByWorkspace.get(scopeWorkspaceId) : undefined;
-    const target = visibleSessions.find((s) => s.id === remembered) ?? visibleSessions[0];
-    if (target) navigate(`/sessions/${encodeId(target.id)}`, { replace: true });
+    const target = listedSessions.find((s) => s.id === remembered) ?? listedSessions[0];
+    if (target) navigate(sessionPath(target.id), { replace: true });
   }, [
     isMobile,
     selectedId,
     composingRoute,
     view,
     sessionsQ.isSuccess,
-    visibleSessions,
+    foldersQ.isPending,
+    listedSessions,
     scopeWorkspaceId,
     navigate,
+    sessionPath,
   ]);
 
   // Step the open session up/down the visible list, for the window-level Up/Down handler
@@ -2651,10 +2774,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         next = cur + dir;
         if (next < 0 || next >= orderedSessions.length) return false; // stop at the ends
       }
-      navigate(`/sessions/${encodeId(orderedSessions[next].id)}`);
+      navigate(sessionPath(orderedSessions[next].id));
       return true;
     },
-    [orderedSessions, selectedId, view, navigate],
+    [orderedSessions, selectedId, view, navigate, sessionPath],
   );
 
   // Up/Down arrows step through the session list (left column), switching the open
@@ -4867,6 +4990,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         attachmentIds,
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
+        // Composed on a folder's page: the session starts in that folder.
+        ...(openFolder && openFolder.workspaceId === workspaceId ? { folderId: openFolder.id } : {}),
       });
       // Only an *edited* Mode is worth remembering on the workspace: the untouched seed is the Auto
       // default, possibly clamped for this provider (Auto -> Default on a model that can't run
@@ -4931,7 +5056,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           .then(() => qc.invalidateQueries({ queryKey: meQuery().queryKey }))
           .catch(() => {});
       }
-      navigate(`/sessions/${encodeId(id)}`);
+      navigate(sessionPath(id));
       setText((draft) => composerDraftAfterSend(draft, true));
       setComposerRefs({});
       // Hand the sent image previews to the transcript, keyed by turnId, so they show in
@@ -5228,11 +5353,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const idx = orderedSessions.findIndex((s) => s.id === id);
     const next = idx >= 0 ? (orderedSessions[idx + 1] ?? orderedSessions[idx - 1]) : null;
     if (next) {
-      navigate(`/sessions/${encodeId(next.id)}`);
+      navigate(sessionPath(next.id));
       return;
     }
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
-    navigate(a ? `/workspaces/${encodeId(a)}` : `/runners/${encodeId(runner.id)}`);
+    navigate(a ? `/workspaces/${encodeId(a)}${folderSearch}` : `/runners/${encodeId(runner.id)}`);
   };
   // After leaveIfOpen re-scopes to the workspace, the auto-open effect picks that workspace's
   // next session — but it reads the cached list, which still holds the row we just
@@ -5432,6 +5557,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (action === 'complete') requestComplete(s);
     else if (action === 'restore') requestRestore(s);
     else if (action === 'pin') pinMut.mutate({ id: s.id, pin: !s.pinnedAt });
+    else if (action === 'share') setShareRowId(s.id);
+    else if (action === 'move') openMove(s);
     else if (action === 'delete') requestTrash(s);
     else confirmPurge({ id: s.id, title: s.title });
   };
@@ -6042,8 +6169,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // workspace, so resolve it from the open session (scopeWorkspaceId), then the first workspace.
   const goNew = (): void => {
     const a = scopeWorkspaceId ?? workspacesForRunner[0]?.id;
+    // On a folder's page the draft is for that folder: the session it starts is filed there.
     navigateWithPaneSlide('push', () =>
-      navigate(a ? `/workspaces/${encodeId(a)}/new` : `/runners/${encodeId(runner.id)}`, {
+      navigate(a ? `/workspaces/${encodeId(a)}/new${folderSearch}` : `/runners/${encodeId(runner.id)}`, {
         state: stampFromList(),
       }),
     );
@@ -6867,6 +6995,218 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // has no workspace in the URL, so fall back to the open session's workspace, then runner.
   const headWorkspaceName =
     lockedWorkspace?.name ?? selected?.workspace?.name ?? runner.displayName ?? runner.name;
+
+  // ── Folders (docs/session-folders-move-design.md §3, §7) ──
+  // In and out of a folder's page is a change of the `folder` param on whichever route the console
+  // is at, so the conversation on the right stays put. On a phone it slides like opening a session.
+  const setFolderParam = (folderId: string | null, replace = false): void => {
+    navigateWithPaneSlide(
+      folderId ? 'push' : 'pop',
+      () =>
+        setSearchParams(
+          (current) => {
+            const next = new URLSearchParams(current);
+            if (folderId) next.set('folder', encodeId(folderId));
+            else next.delete('folder');
+            return next;
+          },
+          { replace },
+        ),
+      { swapsPane: false },
+    );
+  };
+  const enterFolder = (folder: SessionFolder): void => {
+    setSwipeOpen(null);
+    setFolderEdit(null);
+    setFolderParam(folder.id);
+  };
+  const leaveFolder = (replace = false): void => {
+    setFolderEdit(null);
+    setFolderParam(null, replace);
+  };
+  const startNewFolder = (): void => setFolderEdit({ id: null, draft: '', error: null, saving: false });
+  // New Folder… and Rename… save on Return (or when the field is left with a name in it); an empty
+  // or unchanged name just closes the field. A name the workspace already has is said under it.
+  const saveFolderEdit = async (): Promise<void> => {
+    const edit = folderEditRef.current;
+    if (!edit || folderSaving.current) return;
+    const name = folderNameDraft(edit.draft);
+    const current = edit.id ? workspaceFolders.find((f) => f.id === edit.id) : null;
+    if (!name || (current && current.name === name) || !scopeWorkspaceId) {
+      setFolderEdit(null);
+      return;
+    }
+    folderSaving.current = true;
+    setFolderEdit({ ...edit, saving: true, error: null });
+    try {
+      const saved = edit.id
+        ? await renameSessionFolder(edit.id, name)
+        : await createSessionFolder({ workspaceId: scopeWorkspaceId, name });
+      qc.setQueryData<SessionFolder[]>(['session-folders'], (old) =>
+        old ? (edit.id ? old.map((f) => (f.id === saved.id ? saved : f)) : [...old, saved]) : old,
+      );
+      void qc.invalidateQueries({ queryKey: ['session-folders'] });
+      setFolderEdit(null);
+    } catch (error) {
+      setFolderEdit({
+        ...edit,
+        saving: false,
+        error: folderNameFailure(error, name, headWorkspaceName, edit.id ? 'renamed' : 'created'),
+      });
+    } finally {
+      folderSaving.current = false;
+    }
+  };
+  const folderEditKeys = (e: React.KeyboardEvent<HTMLInputElement>): void => {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+      e.preventDefault();
+      void saveFolderEdit();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setFolderEdit(null);
+    }
+  };
+  // Delete Folder…: only the folder goes. Its sessions are back in the list, none of them deleted.
+  const confirmDeleteFolder = (folder: SessionFolder): void => {
+    modal.confirm({
+      title: FOLDER_COPY.deleteTitle(folder.name),
+      content: FOLDER_COPY.deleteMessage,
+      okText: FOLDER_COPY.deleteConfirm,
+      okButtonProps: { danger: true },
+      cancelText: 'Cancel',
+      onOk: async () => {
+        try {
+          await deleteSessionFolder(folder.id);
+        } catch (error) {
+          message.error(folderDeleteFailure(error));
+          return;
+        }
+        qc.setQueryData<SessionFolder[]>(['session-folders'], (old) => old?.filter((f) => f.id !== folder.id));
+        qc.setQueriesData<any[]>({ queryKey: ['sessions'] }, (old) =>
+          Array.isArray(old) ? old.map((s) => (s.folderId === folder.id ? { ...s, folderId: null } : s)) : old,
+        );
+        void qc.invalidateQueries({ queryKey: ['session-folders'] });
+        void qc.invalidateQueries({ queryKey: ['sessions'] });
+        if (openFolder?.id === folder.id) leaveFolder(true);
+      },
+    });
+  };
+  // A folder's two management entries — its row's ⋯ and its page's ⋯ offer the same pair.
+  const folderMenuItems = (folder: SessionFolder): MenuProps['items'] => [
+    {
+      key: 'rename',
+      icon: <EditOutlined />,
+      label: FOLDER_COPY.rename,
+      onClick: ({ domEvent }) => {
+        domEvent.stopPropagation();
+        setFolderMenuOpenId(null);
+        setFolderEdit({ id: folder.id, draft: folder.name, error: null, saving: false });
+      },
+    },
+    {
+      key: 'delete',
+      icon: <DeleteOutlined />,
+      label: FOLDER_COPY.delete,
+      danger: true,
+      onClick: ({ domEvent }) => {
+        domEvent.stopPropagation();
+        setFolderMenuOpenId(null);
+        confirmDeleteFolder(folder);
+      },
+    },
+  ];
+  // Move… from a row, the open conversation's ⋯ or a swipe: the row as the list has it, so the
+  // dialog ticks the folder the list shows the session in.
+  const openMove = (s: any): void => {
+    setSwipeOpen(null);
+    setMenuOpenId(null);
+    setHeaderMenuOpen(false);
+    setMoveTarget({ id: s.id, title: s.title, folderId: s.folderId ?? null });
+  };
+  // A folder row: the folder, who in it waits on you, how many sessions it holds. Activity sits on
+  // the folder itself as on the sidebar's Workspace rows: a still dot while a session runs, a
+  // breathing one while only a background job does. Its ⋯ takes the chevron's place on hover.
+  const folderRowView = (row: SessionFolderRow): ReactNode => {
+    const enter = (): void => enterFolder(row.folder);
+    const waiting = `${row.needsYou} ${row.needsYou === 1 ? 'session needs' : 'sessions need'} your reply`;
+    return (
+      <div
+        key={row.folder.id}
+        className={`session-folder-row${folderMenuOpenId === row.folder.id ? ' menu-open' : ''}`}
+        role="button"
+        tabIndex={0}
+        onClick={enter}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+          e.preventDefault();
+          enter();
+        }}
+      >
+        <span className="session-icon session-folder-icon">
+          <FolderOutlined />
+          {row.running ? (
+            <span className="session-folder-activity" title="Running" />
+          ) : row.jobs ? (
+            <span className="session-folder-activity jobs" title="Background job running" />
+          ) : null}
+        </span>
+        <span className="session-folder-name">{row.folder.name}</span>
+        {row.needsYou > 0 && (
+          <span className="session-folder-needs" title={waiting} aria-label={waiting}>
+            {row.needsYou}
+          </span>
+        )}
+        <span className="session-folder-count">{row.sessionCount}</span>
+        <span className="session-folder-end">
+          <RightOutlined className="session-folder-chev" />
+          <Dropdown
+            trigger={['click']}
+            placement="bottomRight"
+            open={folderMenuOpenId === row.folder.id}
+            onOpenChange={(open) => setFolderMenuOpenId(open ? row.folder.id : null)}
+            menu={{ items: folderMenuItems(row.folder) }}
+          >
+            <span
+              className="session-kebab session-folder-more"
+              role="button"
+              aria-label={FOLDER_COPY.more}
+              title={FOLDER_COPY.more}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreOutlined />
+            </span>
+          </Dropdown>
+        </span>
+      </div>
+    );
+  };
+  // New Folder…'s field (id null) or Rename…'s, in the folder row's place.
+  const folderEditRow = (id: string | null): ReactNode =>
+    folderEdit && (
+      <div key={id ?? 'new-folder'} className="session-folder-row editing">
+        <span className="session-icon session-folder-icon">
+          <FolderOutlined />
+        </span>
+        <span className="session-folder-edit">
+          <input
+            className={`folder-name-input${folderEdit.error ? ' error' : ''}`}
+            autoFocus
+            maxLength={60}
+            placeholder={FOLDER_COPY.namePlaceholder}
+            aria-label={id ? 'Folder name' : 'New folder name'}
+            value={folderEdit.draft}
+            readOnly={folderEdit.saving}
+            onFocus={(e) => e.currentTarget.select()}
+            onChange={(e) => setFolderEdit({ ...folderEdit, draft: e.target.value, error: null })}
+            onKeyDown={folderEditKeys}
+            onBlur={() => void saveFolderEdit()}
+          />
+          <span className={folderEdit.error ? 'session-folder-error' : 'session-folder-hint'}>
+            {folderEdit.error ?? FOLDER_COPY.editHint}
+          </span>
+        </span>
+      </div>
+    );
   // The view the header names (and the menu check-marks).
   const shownView: SessionView = effectiveView;
   // Switching view while a session transcript is open closes it: the open session belongs
@@ -7382,6 +7722,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           },
         ]
       : []),
+    // Where iOS keeps it, in the menu that scopes the list (§3.4). Only where folders show: a list
+    // narrowed to or grouped by a tag, or Trash, would have nowhere to draw the new one.
+    ...(scopeWorkspaceId && listShowsFolders(shownView, listByTag)
+      ? [
+          { key: 'folder-divider', type: 'divider' as const },
+          {
+            key: 'new-folder',
+            label: <span className="scope-menu-row">{FOLDER_COPY.newFolder}</span>,
+            onClick: startNewFolder,
+          },
+        ]
+      : []),
   ];
   // Header subtitle keeps run outcome and lifecycle location visibly separate, followed by
   // last activity. Task state remains on its own task affordance above the title.
@@ -7393,7 +7745,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     ? sessionLifecycleLabel(selectedLifecycleState)
     : null;
   const headSub = composing
-    ? `${headWorkspaceName} · New session`
+    ? [headWorkspaceName, openFolder?.name, 'New session'].filter(Boolean).join(' · ')
     : selected
       ? [
           headRunWord,
@@ -7425,23 +7777,66 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   return (
     <div className={`workspace-split${selectedId || composingRoute ? ' show-conversation' : ''}`}>
       <aside className="session-col" style={{ width: colWidth }}>
-        <div className="session-col-head">
-          <span className={`workspace-status-dot ${runner.online ? 'online' : ''}`} />
-          <span className="session-col-title">{headWorkspaceName}</span>
-          {/* View + tag filter/grouping, folded into one menu rather than a tab row and a
-              chip row — both read as clutter in a narrow column, and Open is nearly always
-              the answer. The trigger names the current view so a list scoped to
-              Completed/Trash always explains itself. (The native clients still tab.) */}
-          <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: scopeItems }}>
-            <span
-              className={`session-scope-menu${shownView !== 'open' || tagFilter || groupByTag ? ' on' : ''}`}
-              title="Switch view, filter and group"
+        {openFolder ? (
+          // A folder's page: back to the workspace's list, the folder (and the workspace it is in),
+          // and the folder's own two entries. It lists the view it was opened from.
+          <div className="session-col-head session-folder-head">
+            <button
+              type="button"
+              className="session-folder-back"
+              aria-label={FOLDER_COPY.back(headWorkspaceName)}
+              title={FOLDER_COPY.back(headWorkspaceName)}
+              onClick={() => leaveFolder()}
             >
-              {SESSION_VIEWS.find((v) => v.value === shownView)?.label}
-              <DownOutlined />
+              <LeftOutlined />
+            </button>
+            <span className="session-folder-titles">
+              {folderEdit?.id === openFolder.id ? (
+                <input
+                  className={`folder-name-input${folderEdit.error ? ' error' : ''}`}
+                  autoFocus
+                  maxLength={60}
+                  aria-label="Folder name"
+                  value={folderEdit.draft}
+                  readOnly={folderEdit.saving}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) => setFolderEdit({ ...folderEdit, draft: e.target.value, error: null })}
+                  onKeyDown={folderEditKeys}
+                  onBlur={() => void saveFolderEdit()}
+                />
+              ) : (
+                <span className="session-folder-title">{openFolder.name}</span>
+              )}
+              <span className="session-folder-workspace">{headWorkspaceName}</span>
             </span>
-          </Dropdown>
-        </div>
+            <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: folderMenuItems(openFolder) }}>
+              <span className="session-kebab session-folder-head-more" role="button" aria-label={FOLDER_COPY.more}>
+                <MoreOutlined />
+              </span>
+            </Dropdown>
+          </div>
+        ) : (
+          <div className="session-col-head">
+            <span className={`workspace-status-dot ${runner.online ? 'online' : ''}`} />
+            <span className="session-col-title">{headWorkspaceName}</span>
+            {/* View + tag filter/grouping, folded into one menu rather than a tab row and a
+                chip row — both read as clutter in a narrow column, and Open is nearly always
+                the answer. The trigger names the current view so a list scoped to
+                Completed/Trash always explains itself. (The native clients still tab.) */}
+            <Dropdown trigger={['click']} placement="bottomRight" menu={{ items: scopeItems }}>
+              <span
+                className={`session-scope-menu${shownView !== 'open' || tagFilter || groupByTag ? ' on' : ''}`}
+                title="Switch view, filter and group"
+              >
+                {SESSION_VIEWS.find((v) => v.value === shownView)?.label}
+                <DownOutlined />
+              </span>
+            </Dropdown>
+          </div>
+        )}
+        {openFolder && folderEdit?.id === openFolder.id && folderEdit.error && (
+          <div className="session-folder-error">{folderEdit.error}</div>
+        )}
         <div className={`session-new ${composing ? 'active' : ''}`} onClick={goNew}>
           <PlusOutlined />
           <span>New session</span>
@@ -7471,16 +7866,27 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           ref={listRef}
           onScroll={onSessionListScroll}
         >
-          {visibleSessions.length === 0 && !loadingSessions && (
-            <div className="chat-note">
-              {tagFilter
-                ? 'No sessions with this tag.'
-                : view === 'open'
-                  ? 'No sessions yet.'
-                  : view === 'completed'
-                    ? 'No completed sessions.'
-                    : 'Trash is empty.'}
-            </div>
+          {openFolder
+            ? listedSessions.length === 0 &&
+              !loadingSessions && <div className="chat-note">No sessions in this folder.</div>
+            : visibleSessions.length === 0 &&
+              !loadingSessions && (
+                <div className="chat-note">
+                  {tagFilter
+                    ? 'No sessions with this tag.'
+                    : view === 'open'
+                      ? 'No sessions yet.'
+                      : view === 'completed'
+                        ? 'No completed sessions.'
+                        : 'Trash is empty.'}
+                </div>
+              )}
+          {/* The workspace's folders on top (§3.3), New Folder…'s field above them while it is
+              open. A folder row reports for the sessions filed in it, which the time sections
+              below leave out. */}
+          {!openFolder && folderEdit?.id === null && folderEditRow(null)}
+          {folderListing?.folders.map((row) =>
+            folderEdit?.id === row.folder.id ? folderEditRow(row.folder.id) : folderRowView(row),
           )}
           {sections.map((sec) => (
             <Fragment key={sec.key}>
@@ -7539,9 +7945,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                     confirmPurge({ id: s.id, title: s.title });
                   },
                 };
+                const moveItem = {
+                  key: 'move',
+                  icon: <FolderOutlined />,
+                  label: MOVE_COPY.action,
+                  onClick: ({ domEvent }: { domEvent: { stopPropagation: () => void } }) => {
+                    domEvent.stopPropagation();
+                    openMove(s);
+                  },
+                };
                 const menuItems: MenuProps['items'] =
                   view === 'completed'
-                    ? [restoreItem, { type: 'divider' }, deleteItem]
+                    ? [restoreItem, moveItem, { type: 'divider' }, deleteItem]
                     : view === 'trash'
                       ? [restoreItem, { type: 'divider' }, purgeItem]
                       : [restoreItem];
@@ -7565,6 +7980,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   pin: s.pinnedAt
                     ? { label: 'Unpin', icon: <PushpinFilled />, disabled: false }
                     : { label: 'Pin', icon: <PushpinOutlined />, disabled: false },
+                  share: { label: 'Share', icon: <GlobalOutlined />, disabled: false },
+                  move: { label: 'Move', icon: <FolderOutlined />, disabled: false },
                   delete: { label: 'Delete', icon: <DeleteOutlined />, disabled: false },
                   purge: { label: 'Delete permanently', icon: <DeleteOutlined />, disabled: false },
                 };
@@ -7583,7 +8000,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       }
                       if (openable)
                         navigateWithPaneSlide('push', () =>
-                          navigate(`/sessions/${encodeId(s.id)}`, { state: stampFromList() }),
+                          navigate(sessionPath(s.id), { state: stampFromList() }),
                         );
                     }}
                     onTouchStart={(e) => onRowTouchStart(e, s, canFullSwipe)}
@@ -7598,7 +8015,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                           className={`session-swipe-actions ${side}${drag ? ' dragging' : ''}${side === 'leading' && drag?.armed ? ' armed' : ''}`}
                           style={{ width: Math.max(0, side === 'leading' ? swipeTx : -swipeTx) }}
                         >
-                          {swipeActions[side].map((action) => (
+                          {swipeActionsOnScreen(side, swipeActions[side]).map((action) => (
                             <button
                               key={action}
                               type="button"
@@ -7649,6 +8066,26 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       <div className="session-actions" onClick={(e) => e.stopPropagation()}>
                         {view === 'open' ? (
                           <>
+                            <Tooltip title={MOVE_COPY.action} placement="top" open={hoverTipOpen}>
+                              <span
+                                className="session-kebab session-move"
+                                role="button"
+                                aria-label={MOVE_COPY.action}
+                                tabIndex={0}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openMove(s);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  openMove(s);
+                                }}
+                              >
+                                <FolderOutlined />
+                              </span>
+                            </Tooltip>
                             <Tooltip title={s.pinnedAt ? 'Unpin' : 'Pin to top'} placement="top" open={hoverTipOpen}>
                               <span
                                 className="session-kebab session-pin-toggle"
@@ -7956,6 +8393,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                   requestRestore(selected);
                                 },
                               },
+                              {
+                                key: 'move',
+                                icon: <FolderOutlined />,
+                                label: MOVE_COPY.action,
+                                onClick: () => openMove(selectedSession ?? selected),
+                              },
                               { type: 'divider' as const },
                             ]
                           : selectedLifecycleState === 'OPEN'
@@ -7969,6 +8412,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                                     setHeaderMenuOpen(false);
                                     requestComplete(selected);
                                   },
+                                },
+                                // Filing it, beside the other move it can make (§2).
+                                {
+                                  key: 'move',
+                                  icon: <FolderOutlined />,
+                                  label: MOVE_COPY.action,
+                                  onClick: () => openMove(selectedSession ?? selected),
                                 },
                                 { type: 'divider' as const },
                               ]
@@ -8038,6 +8488,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             rootId={selected.id}
           />
         )}
+        {shareRowId && (
+          <ShareModal open onClose={() => setShareRowId(null)} kind="SESSION" rootId={shareRowId} />
+        )}
+        <SessionMoveModal
+          open={!!moveTarget}
+          session={moveTarget}
+          workspace={scopeWorkspaceId ? { id: scopeWorkspaceId, name: headWorkspaceName } : null}
+          folders={workspaceFolders}
+          onClose={() => setMoveTarget(null)}
+        />
 
         {/* Flush under the header, above everything that scrolls or that the conversation pushes
             around: what this session is being asked to decide is STATE — recomputed from the ledger
