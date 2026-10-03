@@ -161,6 +161,14 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
   // who may answer it.
   'src/apiserver/src/tasks/task-evidence-decision.ts':
     'refuses the evidence submitter its own decision; reads no task project provenance',
+  // The B line's evidence review reads the same N10 column for one thing: which run submitted the
+  // revision, so the owner's card can fall back to that run's conversation when the session that
+  // dispatched the task is in Trash, and so the block handed to that session names the run. Who
+  // decides is still the decision door's, and no project provenance is read.
+  'src/apiserver/src/tasks/evidence-review.ts':
+    'names the run that submitted a completion-evidence revision; reads no task project provenance',
+  'src/apiserver/src/tasks/pending-evidence-judgments.ts':
+    'places an evidence card in the run that submitted it; reads no task project provenance',
   'src/apiserver/src/tasks/task-signoff-migration.cli.ts':
     'forwards an operator-named legacy evidence source Session; does not read Task provenance',
   'src/apiserver/src/tasks/task-judgment-repair.cli.ts':

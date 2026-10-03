@@ -211,6 +211,15 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-hover);
 }
+/* A list marked .autohide-scrollbar shows its thumb only while it scrolls (lib/scrollbarAutohide
+   sets data-scrolling for that long) or while the pointer is on it, to grab it. The gutter stays
+   either way, so nothing shifts when the thumb appears. */
+.autohide-scrollbar:not([data-scrolling])::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+.autohide-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+}
 
 /* Off-screen but still in the accessibility tree — the toast live region (see lib/toast.tsx). */
 .sr-only {
@@ -4818,6 +4827,19 @@ html[data-theme='dark'] .session-tag-chip {
 :root[data-theme='dark'] .session-swipe-action.purge {
   background: #ff453a;
 }
+/* Share and Move sit inside Delete, in the colours the iOS row gives them (blue, indigo). */
+.session-swipe-action.share {
+  background: #007aff;
+}
+.session-swipe-action.move {
+  background: #5856d6;
+}
+:root[data-theme='dark'] .session-swipe-action.share {
+  background: #0a84ff;
+}
+:root[data-theme='dark'] .session-swipe-action.move {
+  background: #5e5ce6;
+}
 @media (hover: hover) {
   .session-row:hover {
     background: var(--bg-hover);
@@ -5032,6 +5054,394 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .session-status {
   font-size: 12.5px;
+}
+
+/* ---- Session folders (docs/session-folders-move-design.md §3, §7) ---- */
+/* A folder row: one line above Pinned and the time sections, shorter than a session row so the
+   two read apart at a glance. The folder is indigo — Move's colour, and not the grey folder a
+   Workspace row draws in the sidebar. */
+.session-folder-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 44px;
+  padding: 0 8px;
+  border-bottom: 1px solid var(--bg-hover);
+  cursor: pointer;
+  --row-bg: var(--bg-raised);
+}
+.session-folder-row.menu-open {
+  background: var(--bg-hover);
+  --row-bg: var(--bg-hover);
+}
+.session-folder-row:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+.session-folder-row.editing {
+  height: auto;
+  min-height: 44px;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  align-items: flex-start;
+  cursor: default;
+}
+.session-folder-icon {
+  position: relative;
+  justify-content: center;
+  color: #5856d6;
+  font-size: 16px;
+}
+:root[data-theme='dark'] .session-folder-icon {
+  color: #7d7aff;
+}
+.session-folder-row.editing .session-folder-icon {
+  margin-top: 5px;
+}
+/* What the sessions inside are doing, on the folder as the sidebar marks a Workspace: still while
+   one runs, breathing while only a background job does. */
+.session-folder-activity {
+  position: absolute;
+  right: -3px;
+  bottom: -1px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  box-shadow: 0 0 0 1.5px var(--row-bg);
+}
+.session-folder-activity.jobs {
+  animation: status-glyph-breathe 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .session-folder-activity.jobs {
+    animation: none;
+  }
+}
+.session-folder-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-folder-needs {
+  flex: none;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+}
+.session-folder-count {
+  flex: none;
+  min-width: 10px;
+  text-align: right;
+  font-size: 12.5px;
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+}
+/* The trailing slot: the chevron at rest, the folder's ⋯ in its place on hover or while its menu
+   is open. On touch there is no hover, and the folder's page carries the same ⋯. */
+.session-folder-end {
+  position: relative;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+}
+.session-folder-chev {
+  color: var(--text-4);
+  font-size: 10px;
+}
+.session-kebab.session-folder-more {
+  position: absolute;
+  display: none;
+  width: 24px;
+  height: 24px;
+  font-size: 15px;
+}
+.session-folder-row.menu-open .session-folder-chev {
+  display: none;
+}
+.session-folder-row.menu-open .session-folder-more {
+  display: flex;
+  background: var(--bg-hover-strong);
+  color: var(--text-1);
+}
+@media (hover: hover) {
+  .session-folder-row:hover {
+    background: var(--bg-hover);
+    --row-bg: var(--bg-hover);
+  }
+  .session-folder-row:hover .session-folder-chev {
+    display: none;
+  }
+  .session-folder-row:hover .session-folder-more {
+    display: flex;
+  }
+}
+/* New Folder… and Rename…: the name is typed where the folder's name goes. */
+.session-folder-edit {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.folder-name-input {
+  box-sizing: border-box;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--bg-raised);
+  box-shadow: 0 0 0 2px var(--brand-tint);
+  color: var(--text-1);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+.folder-name-input.error {
+  border-color: var(--error);
+  box-shadow: 0 0 0 2px var(--error-bg, rgba(255, 77, 79, 0.12));
+}
+.session-folder-hint {
+  font-size: 12px;
+  color: var(--text-4);
+}
+.session-folder-error {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--error);
+}
+.session-folder-head + .session-folder-error {
+  margin: -4px 0 6px 30px;
+}
+/* A folder's page: back to the list · the folder, over the workspace it is in · its ⋯. */
+.session-folder-head {
+  gap: 4px;
+}
+.session-folder-back {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: -6px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+.session-folder-back:hover {
+  background: var(--bg-sunken);
+  color: var(--text-1);
+}
+.session-folder-titles {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+.session-folder-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 19px;
+  color: var(--text-1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-folder-workspace {
+  font-size: 12px;
+  line-height: 15px;
+  color: var(--text-4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.session-kebab.session-folder-head-more {
+  margin-left: auto;
+  cursor: pointer;
+}
+
+/* ---- The Move dialog (§4, §5) ---- */
+.move-dialog-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.move-dialog-back {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-left: -6px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+}
+.move-dialog-back:hover:not(:disabled) {
+  background: var(--bg-sunken);
+}
+.move-dialog-sub {
+  margin: -4px 0 14px;
+  font-size: 13px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.move-dialog-group {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-4);
+}
+.move-dialog-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0 -8px 14px;
+}
+.move-dialog-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-1);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.move-dialog-option:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.move-dialog-option:disabled {
+  cursor: default;
+}
+.move-dialog-option.new,
+.move-dialog-option.new .move-dialog-icon {
+  color: var(--brand);
+}
+.move-dialog-option.off .move-dialog-name {
+  color: var(--text-4);
+}
+.move-dialog-option.off .move-dialog-tile {
+  opacity: 0.4;
+}
+.move-dialog-option.editing {
+  cursor: default;
+}
+.move-dialog-icon {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  width: 18px;
+  color: var(--text-3);
+  font-size: 16px;
+}
+.move-dialog-icon.folder {
+  color: #5856d6;
+}
+:root[data-theme='dark'] .move-dialog-icon.folder {
+  color: #7d7aff;
+}
+.move-dialog-tile {
+  display: flex;
+  flex: none;
+}
+.move-dialog-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.move-dialog-name small {
+  display: block;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--text-4);
+}
+.move-dialog-option.off .move-dialog-name small {
+  color: var(--text-3);
+}
+.move-dialog-count {
+  flex: none;
+  font-size: 12.5px;
+  color: var(--text-4);
+}
+.move-dialog-check {
+  flex: none;
+  color: var(--brand);
+  font-size: 14px;
+}
+.move-dialog-chev {
+  flex: none;
+  color: var(--text-4);
+  font-size: 10px;
+}
+.move-dialog-pill {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  color: var(--text-3);
+  font-size: 11.5px;
+}
+.move-dialog-note {
+  margin: -6px 0 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.move-dialog-error {
+  margin: 2px 8px 6px 36px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--error);
+}
+.move-dialog-foot {
+  margin: -6px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-3);
+}
+.move-dialog-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.move-confirm-body p {
+  margin: 0 0 10px;
+}
+.move-confirm-body p:last-child {
+  margin-bottom: 0;
 }
 
 /* ---- Add a runner (Option A) ---- */

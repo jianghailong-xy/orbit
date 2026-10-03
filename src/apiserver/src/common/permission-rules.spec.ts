@@ -82,8 +82,8 @@ test("a workspace's standing grants ride along with a claude dispatch", () => {
 });
 
 test("antigravity gets them too: the runner writes each as agy's own scoped allow rule", () => {
-  // Headless agy refuses whatever needs approval and has nobody to ask, so these are the only way
-  // a grant somebody already gave reaches it (docs/antigravity-runtime-contract.md §5.1:
+  // In the modes that ask nobody agy refuses whatever needs approval, so these are the only way a
+  // grant somebody already gave reaches it there (docs/antigravity-runtime-contract.md §5.1:
   // `Bash(npm test:*)` becomes `command(npm test)`, still scoped).
   assert.deepEqual(
     dispatchAllowedTools(AgentProvider.ANTIGRAVITY, BASE, [
@@ -92,8 +92,18 @@ test("antigravity gets them too: the runner writes each as agy's own scoped allo
     ]),
     ['mcp__orbit__*', 'Bash(npm test:*)', 'Edit'],
   );
-  // It never asks, so nothing of its ever reaches the control plane's matcher.
-  assert.equal(serverMatchedRuntime(AgentProvider.ANTIGRAVITY), false);
+});
+
+test("antigravity's approval hook is answered from the same rules, as Kimi's bridge is", () => {
+  // In Default and Accept Edits agy runs behind Orbit's approval hook, which never matches a
+  // command prefix itself: a command an earlier card answered "always allow" to — in this session
+  // or another — is answered here instead of asking again (contract §14).
+  assert.equal(serverMatchedRuntime(AgentProvider.ANTIGRAVITY), true);
+  assert.equal(ruleCoversApproval(AgentProvider.ANTIGRAVITY, 'Bash', bash('npm test'), NPM_TEST), true);
+  assert.equal(
+    ruleCoversApproval(AgentProvider.ANTIGRAVITY, 'Bash', bash('npm test && rm -rf /'), NPM_TEST),
+    false,
+  );
 });
 
 test('no other runtime gets them: the rest read this list as something else', () => {

@@ -45,16 +45,27 @@ func offeredPermissionModesFor(root bool) []string {
 }
 
 // antigravityPermissionArgs is how an Orbit permission mode reaches agy, whose headless mode cannot
-// ask anyone: what needs approval is either granted up front — by these flags, or by an allow rule
-// in its settings (antigravitySettings) — or refused on the spot (docs/antigravity-runtime-contract.md
-// §5.1). Default and Don't Ask therefore take no flag: refusing is already what agy does with
-// nobody to ask. Bypass needs nothing special under root, unlike claude.
-func antigravityPermissionArgs(mode string) []string {
+// ask anyone by itself: what needs approval is granted up front — by these flags, or by an allow
+// rule in its settings (antigravitySettings) — or refused on the spot (docs/antigravity-runtime-
+// contract.md §5.1). Default and Accept Edits are where a person is asked instead, through Orbit's
+// approval hook, and that takes --dangerously-skip-permissions: under any other flag agy refuses
+// before the hook's answer counts (§5.4). gated says the hook has been confirmed in force for this
+// process (installAntigravityApprovalGate); without it those two modes keep agy's own refusal, so a
+// gate that is not there can never become a flag that lets everything through. Bypass needs nothing
+// special under root, unlike claude.
+func antigravityPermissionArgs(mode string, gated bool) []string {
 	switch strings.TrimSpace(mode) {
 	case "plan":
 		return []string{"--mode", "plan"}
 	case "acceptEdits":
+		if gated {
+			return []string{"--dangerously-skip-permissions"}
+		}
 		return []string{"--mode", "accept-edits"}
+	case "default":
+		if gated {
+			return []string{"--dangerously-skip-permissions"}
+		}
 	case "auto", "bypassPermissions":
 		return []string{"--dangerously-skip-permissions"}
 	}

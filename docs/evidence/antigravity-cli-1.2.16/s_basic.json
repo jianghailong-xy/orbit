@@ -1,0 +1,6 @@
+{"name": "basic",
+ "flags": ["--dangerously-skip-permissions"],
+ "hooks": {"orbit-approval": {"PreToolUse": [{"matcher": "", "hooks": [{"type": "command", "command": "$HOOK PreToolUse", "timeout": 600}]}],
+                               "PreInvocation": [{"type": "command", "command": "$HOOK PreInvocation", "timeout": 30}]}},
+ "ctl": {"PreInvocation": {"sleep": 2}},
+ "messages": ["hello\nmock:text hi there"]}
