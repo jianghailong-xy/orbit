@@ -3,6 +3,7 @@ import type { PlanUsage, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultM
 import { accountPlanUsage } from './engineAccounts';
 import { encodeId } from './idCodec';
 import { bindingPlanUsageRow, currentPlanUsageRows } from './planUsage';
+import { ownsPool, type SharedPool } from './sharedPools';
 import {
   defaultModelForProvider,
   modelOptionsForProvider,
@@ -30,7 +31,8 @@ export type ProviderChoiceKind = 'engine' | 'byok' | 'pool';
 
 /** An account pool as the picker needs it: its slug, its name, and which providers it holds — and,
  *  when none of them can run, why (ProviderPool.unavailable) and the pool's id, whose page fixes it.
- *  `shared` marks a shared pool of OpenAI keys, which runs on Codex rather than Claude. */
+ *  `shared` marks a pool read as one of its people (sharedPoolAsProviderPool) — a shared pool of OpenAI
+ *  keys, or somebody else's own Codex pool they were added to — which runs on Codex rather than Claude. */
 export interface PoolChoiceSource {
   id: string;
   slug: string;
@@ -39,7 +41,7 @@ export interface PoolChoiceSource {
   unavailable?: string | null;
   /** `codex` for a pool of one's own ChatGPT account (migration 0323); absent or `claude` otherwise. */
   engine?: string;
-  shared?: object;
+  shared?: SharedPool;
 }
 
 export interface ProviderChoice {
@@ -246,6 +248,10 @@ export function providerChoices(
   // which the server says (`unavailable`) and refuses the pool without. A shared pool's CLI is Codex,
   // whose runs carry a session token for the pool's gateway — and so is a pool of one's own ChatGPT
   // account's, whose account the server holds.
+  //
+  // Somebody a pool's owner added runs on its API keys alone, so for them that reason is always the one
+  // thing, whatever else the pool holds: no key they can run on — while its owner's ChatGPT accounts may
+  // be running the owner's own sessions all along (docs/mocks/account-pool-access/02, note 4).
   const accountPools: ProviderChoice[] = pools.map((pool) => {
     const runtime = pool.shared || pool.engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
     const blocker = byokBlocker(engineHealth?.find((e) => e.engine === runtime));
@@ -260,7 +266,10 @@ export function providerChoices(
       ...(blocker
         ? { unavailable: blocker, fixEngine: runtime }
         : pool.unavailable
-          ? { unavailable: pool.unavailable, fixHref: `/providers/pools/${encodeId(pool.id)}` }
+          ? {
+              unavailable: pool.shared && !ownsPool(pool.shared) ? 'No key you can run on' : pool.unavailable,
+              fixHref: `/providers/pools/${encodeId(pool.id)}`,
+            }
           : {}),
     };
   });

@@ -13882,6 +13882,31 @@ button.chat-jump-start:hover {
   color: var(--text-2);
   font-weight: 600;
 }
+/* Shared with people, and no API key yet: none of them can start a session, and what fixes it. */
+.who-warn {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 14px;
+  border-top: 1px solid var(--warning-border);
+  background: var(--warning-bg);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.who-warn > .anticon {
+  flex: none;
+  font-size: 15px;
+  color: var(--warning-solid);
+}
+.who-warn b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.who-warn .ant-btn {
+  flex: none;
+  margin-left: auto;
+}
 .pool-share-emails {
   width: 100%;
 }
