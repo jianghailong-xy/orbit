@@ -31,6 +31,14 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     /// agent's own. Both nil = inherit from the assignee (the common case).
     public let provider: String?
     public let model: String?
+    /// The tier suggested for this task's runs (S / M / L / XL), and the one sentence given for it
+    /// (docs/model-routing-design.md §7.1). A suggestion, not a pin: a failed run can move the next
+    /// one up, and a `model` pinned above wins over both. Nil = No suggestion.
+    public let modelHint: String?
+    public let modelHintReason: String?
+    /// Each tier as the server resolved it for this task's engine on its assignee's runner — what
+    /// the Suggested picker shows (§7.5), so no tier table is kept here. Detail payload only.
+    public let modelHintOptions: [ModelHintOption]?
     public let autoRunWhenReady: Bool?
     public let creatorSessionId: String?
     public let creatorType: String?
@@ -105,6 +113,7 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, description, status, assigneeId, listId, dueDate, provider, model
+        case modelHint, modelHintReason, modelHintOptions
         case projectId, terminalReason
         case completionCriterion
         case autoRunWhenReady
@@ -207,6 +216,12 @@ public struct SessionRef: Codable, Equatable, Sendable, Identifiable {
     public let deletedAt: String?
     public let createdAt: String?
     public let agent: AgentNameRef?
+    /// What the run actually ran on — its own row, so a run smart selection only shadowed still
+    /// says what it used. Nil before it was claimed, and on `creatorSession`.
+    public let model: String?
+    public let effort: String?
+    /// The routing decision this run was planned with (§7.5); nil on any other session.
+    public let route: TaskRunRoute?
 
     /// Resolve the task detail's modern run state first, retaining compatibility with older
     /// servers that only returned the raw runner status or the legacy mixed session state.
@@ -218,6 +233,74 @@ public struct SessionRef: Codable, Equatable, Sendable, Identifiable {
 
 public struct AgentNameRef: Codable, Equatable, Sendable {
     public let name: String?
+}
+
+/// One tier of a task's Suggested picker, resolved by the server for the task's engine on its
+/// Agent's runner (`modelHintOptions`, docs/model-routing-design.md §7.5). `model`, `label` and
+/// `effort` are nil where the engine has no tier table or no runner has reported its models.
+public struct ModelHintOption: Codable, Equatable, Sendable {
+    public let level: String
+    public let provider: String?
+    public let model: String?
+    public let label: String?
+    public let effort: String?
+
+    public init(level: String, provider: String? = nil, model: String? = nil, label: String? = nil,
+                effort: String? = nil) {
+        self.level = level
+        self.provider = provider
+        self.model = model
+        self.label = label
+        self.effort = effort
+    }
+}
+
+/// The routing decision a task run was planned with (§7.5), as the task detail's runs and the
+/// session detail carry it. `level` nil = not routed; `applied` false = shadow: what smart selection
+/// would have picked while the run kept the Agent's own model. Decoded leniently — a field this
+/// build cannot read costs the decision its detail, never the task page it sits on.
+public struct TaskRunRoute: Codable, Equatable, Sendable {
+    public let level: String?
+    public let provider: String
+    public let model: String?
+    public let effort: String?
+    public let applied: Bool
+    /// One tier above the previous run, because that run failed.
+    public let escalated: Bool
+    /// The router's own sentences, shown as they are.
+    public let reasons: [String]
+    public let policyVersion: Int
+    public let decidedAt: String
+
+    public init(level: String?, provider: String, model: String?, effort: String?, applied: Bool,
+                escalated: Bool = false, reasons: [String] = [], policyVersion: Int = 1, decidedAt: String = "") {
+        self.level = level
+        self.provider = provider
+        self.model = model
+        self.effort = effort
+        self.applied = applied
+        self.escalated = escalated
+        self.reasons = reasons
+        self.policyVersion = policyVersion
+        self.decidedAt = decidedAt
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case level, provider, model, effort, applied, escalated, reasons, policyVersion, decidedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        level = try c.decodeIfPresent(String.self, forKey: .level)
+        provider = try c.decodeIfPresent(String.self, forKey: .provider) ?? ""
+        model = try c.decodeIfPresent(String.self, forKey: .model)
+        effort = try c.decodeIfPresent(String.self, forKey: .effort)
+        applied = try c.decodeIfPresent(Bool.self, forKey: .applied) ?? false
+        escalated = try c.decodeIfPresent(Bool.self, forKey: .escalated) ?? false
+        reasons = try c.decodeIfPresent([String].self, forKey: .reasons) ?? []
+        policyVersion = try c.decodeIfPresent(Int.self, forKey: .policyVersion) ?? 0
+        decidedAt = try c.decodeIfPresent(String.self, forKey: .decidedAt) ?? ""
+    }
 }
 
 // MARK: - list/page responses
@@ -364,8 +447,9 @@ public struct CreateTaskRequest: Encodable, Sendable {
     }
 }
 
-/// PATCH /tasks/:id — `assigneeId`/`listId`/`dueDate`/`provider`/`model` are three-state (omit /
-/// null=clear / set), mirroring `UpdateTaskDto` where they're typed `string | null`.
+/// PATCH /tasks/:id — `assigneeId`/`listId`/`dueDate`/`provider`/`model`/`modelHint`/
+/// `modelHintReason` are three-state (omit / null=clear / set), mirroring `UpdateTaskDto` where
+/// they're typed `string | null`.
 /// `dependsOnTaskIds` replaces the complete prerequisite set when present: nil omits the field,
 /// [] clears it.
 public struct UpdateTaskRequest: Encodable, Sendable {
@@ -393,6 +477,10 @@ public struct UpdateTaskRequest: Encodable, Sendable {
     public var acceptanceCriteria: FieldUpdate<String>
     public var acceptanceCommand: FieldUpdate<String>
     public var acceptanceExpectedExitCode: FieldUpdate<Int>
+    /// The tier suggested for the task and its reason (`TaskDetailLogic.modelHintRequest` writes
+    /// both: a tier picked by hand clears the reason that argued for another).
+    public var modelHint: FieldUpdate<String>
+    public var modelHintReason: FieldUpdate<String>
 
     public init(title: String? = nil, description: String? = nil, status: TaskStatus? = nil,
                 assigneeId: FieldUpdate<String> = .keep, listId: FieldUpdate<String> = .keep,
@@ -404,7 +492,9 @@ public struct UpdateTaskRequest: Encodable, Sendable {
                 runAt: FieldUpdate<String> = .keep,
                 acceptanceCriteria: FieldUpdate<String> = .keep,
                 acceptanceCommand: FieldUpdate<String> = .keep,
-                acceptanceExpectedExitCode: FieldUpdate<Int> = .keep) {
+                acceptanceExpectedExitCode: FieldUpdate<Int> = .keep,
+                modelHint: FieldUpdate<String> = .keep,
+                modelHintReason: FieldUpdate<String> = .keep) {
         self.title = title
         self.description = description
         self.status = status
@@ -421,6 +511,8 @@ public struct UpdateTaskRequest: Encodable, Sendable {
         self.acceptanceCriteria = acceptanceCriteria
         self.acceptanceCommand = acceptanceCommand
         self.acceptanceExpectedExitCode = acceptanceExpectedExitCode
+        self.modelHint = modelHint
+        self.modelHintReason = modelHintReason
     }
 
     enum CodingKeys: String, CodingKey {
@@ -428,6 +520,7 @@ public struct UpdateTaskRequest: Encodable, Sendable {
         case dependsOnTaskIds, autoRunWhenReady
         case supersededByTaskId, terminalReason
         case runAt, acceptanceCriteria, acceptanceCommand, acceptanceExpectedExitCode
+        case modelHint, modelHintReason
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -448,6 +541,8 @@ public struct UpdateTaskRequest: Encodable, Sendable {
         try acceptanceCriteria.encode(into: &c, forKey: .acceptanceCriteria)
         try acceptanceCommand.encode(into: &c, forKey: .acceptanceCommand)
         try acceptanceExpectedExitCode.encode(into: &c, forKey: .acceptanceExpectedExitCode)
+        try modelHint.encode(into: &c, forKey: .modelHint)
+        try modelHintReason.encode(into: &c, forKey: .modelHintReason)
     }
 }
 
