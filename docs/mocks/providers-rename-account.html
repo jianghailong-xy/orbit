@@ -1,0 +1,430 @@
+<!doctype html>
+<!-- Design mock: renaming an account on a runner — Default included — on the Providers page, and
+     where the new name shows up. Geometry copied from src/web/src/components/RunnerEngines.tsx
+     (.re-runner-card/.re-row/.re-acct/.re-act); the inline editor follows the session title's
+     (.workspace-name-input), the native one SessionRenameAlert.swift; palette from
+     src/web/src/index.css. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Providers · Rename an account on a runner</title>
+<link rel="stylesheet" href="../../src/web/src/index.css">
+<link rel="stylesheet" href="project-progress/mock.css">
+<style>
+  .m-sheet { width: 1960px; }
+  .stage-body { width: 900px; }
+  .m-col .m-stage { padding: 14px 16px 18px; }
+  .m-grid2 + .m-stage { margin-top: 22px; }
+  .m-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: start; }
+
+  /* what the shipped page already draws, in the shapes antd gives it */
+  .m-tag { display: inline-block; font-size: 12px; line-height: 20px; padding: 0 7px; border-radius: 4px;
+           border: 1px solid; white-space: nowrap; }
+  .m-tag.green { color: #389e0d; background: #f6ffed; border-color: #b7eb8f; }
+  .m-tag.orange { color: #d46b08; background: #fff7e6; border-color: #ffd591; }
+  .m-btn { display: inline-flex; align-items: center; height: 24px; padding: 0 7px; border-radius: 4px;
+           border: 1px solid var(--border); background: var(--bg-raised); color: var(--text-1); font-size: 14px; white-space: nowrap; }
+  .m-ico { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+           border-radius: 4px; color: var(--text-3); flex: none; }
+  .m-ico svg { width: 14px; height: 14px; fill: currentColor; }
+  .m-ico.dis { color: rgba(0, 0, 0, .25); }
+  .re-manage { margin-right: 2px; }
+
+  /* the shapes this change adds: a pencil after the name, and the name as the session title's
+     underlined input — same font, hugging the text */
+  .m-pen { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
+           margin-left: 3px; border-radius: 4px; color: var(--text-3); vertical-align: -5px; }
+  .m-pen svg { width: 12px; height: 12px; fill: currentColor; }
+  .m-pen.hover { color: var(--text-1); background: var(--fill-muted); }
+  .m-input { display: inline-flex; align-items: center; height: 19px; border-bottom: 1px solid var(--brand);
+             font-size: 13px; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .m-sel { background: #b4d5fe; }
+  .m-caret { display: inline-block; width: 1px; height: 15px; margin: 0 1px; background: var(--text-1); }
+  .re-name .m-mark, .m-pen.m-mark { outline-offset: 3px; }
+  .m-tip { position: absolute; z-index: 3; width: 290px; padding: 6px 9px; border-radius: 6px;
+           background: rgba(0, 0, 0, .85); color: #fff; font-size: 12px; line-height: 1.55; font-weight: 400;
+           box-shadow: 0 6px 16px rgba(0, 0, 0, .12); white-space: normal; }
+  .m-tip::before { content: ''; position: absolute; top: -5px; left: 24px; border: 5px solid transparent;
+                   border-top: 0; border-bottom-color: rgba(0, 0, 0, .85); }
+  .m-tip code { font-size: 11.5px; color: #fff; background: rgba(255, 255, 255, .14); padding: 0 3px; border-radius: 3px; }
+
+  /* one row on its own, for the states: name, status and actions — no quota */
+  .m-minicard { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-raised); margin: 2px 0 14px; }
+  .m-minicard .re-row { grid-template-columns: minmax(0, 1fr) 100px 64px; align-items: start; padding-top: 13px; padding-bottom: 13px; }
+  .m-minicard .re-acct .re-id { padding-left: 14px; }
+  .m-minicard.offline { background: var(--bg-subtle); }
+  .m-minicard.offline .re-meta,
+  .m-minicard.offline .re-status,
+  .m-minicard.offline .m-name-text { opacity: .62; }
+  .a-card .a-hint { line-height: 1.75; }
+  .a-card .a-hint b { color: var(--text-2); }
+
+  /* where the name shows up */
+  .m-where-h { display: flex; align-items: baseline; gap: 8px; margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--text-1); }
+  .m-where-h .a-hint { font-weight: 400; }
+  .m-field-l { font-size: 13px; color: var(--text-2); margin: 0 0 6px; }
+  .m-select { display: flex; align-items: center; justify-content: space-between; height: 32px; padding: 0 11px;
+              border: 1px solid var(--brand); border-radius: 6px; background: var(--bg-raised); font-size: 14px;
+              box-shadow: 0 0 0 2px var(--brand-tint); }
+  .m-select i { color: var(--text-4); font-style: normal; font-size: 11px; }
+  .m-drop { margin-top: 4px; padding: 4px; border-radius: 8px; background: var(--bg-raised);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, .08), 0 3px 6px -4px rgba(0, 0, 0, .12), 0 9px 28px 8px rgba(0, 0, 0, .05); }
+  .m-opt { padding: 5px 12px; border-radius: 4px; font-size: 14px; line-height: 22px; }
+  .m-opt.on { background: #e6f4ff; font-weight: 600; }
+  .m-opt-s { font-size: 12px; line-height: 18px; color: var(--text-3); font-weight: 400; }
+  .m-menu { width: 330px; padding: 4px; border-radius: 8px; background: var(--bg-raised);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, .08), 0 3px 6px -4px rgba(0, 0, 0, .12), 0 9px 28px 8px rgba(0, 0, 0, .05); }
+  .m-mrow { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border-radius: 4px; font-size: 14px; }
+  .m-mrow .grow { flex: 1; min-width: 0; }
+  .m-mrow .v { color: var(--text-3); font-size: 12.5px; }
+  .m-mrow .v.near { color: var(--warning); }
+  .m-mrow .tick { width: 14px; color: var(--brand); text-align: center; flex: none; }
+  .m-mrow.acct { padding-left: 34px; }
+  .m-mrow.hl { background: var(--fill-muted); }
+  .m-notice { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-3); }
+  .m-notice::before, .m-notice::after { content: ''; flex: 1; height: 1px; background: var(--border-subtle); }
+  .m-notice b { color: var(--text-2); font-weight: 600; }
+  .m-old { margin-top: 8px; font-size: 12px; color: var(--text-4); }
+  .m-old s { color: var(--text-3); }
+
+  /* iOS: the engine page (RunnerEnginePage.swift) under a row's long-press menu, and the rename alert */
+  .ios-wrap { display: flex; gap: 14px; align-items: flex-start; }
+  .ios { position: relative; width: 300px; flex: none; padding: 12px 0 16px; border-radius: 22px; background: #f2f2f7;
+         font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif; color: #000; overflow: hidden;
+         border: 1px solid #dfe1e6; }
+  .ios-dim { filter: blur(1.2px); opacity: .45; }
+  .ios-nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 2px 14px 12px; font-size: 16px; }
+  .ios-nav .back { color: #007aff; }
+  .ios-nav .t { font-weight: 600; font-size: 16px; }
+  .ios-h { padding: 0 16px 6px 32px; font-size: 12px; color: #6d6d72; text-transform: uppercase; letter-spacing: .02em; }
+  .ios-group { margin: 0 16px; border-radius: 10px; background: #fff; overflow: hidden; }
+  .ios-row { position: relative; display: flex; align-items: center; gap: 8px; min-height: 58px; padding: 9px 14px; background: #fff; }
+  .ios-row + .ios-row::before { content: ''; position: absolute; top: 0; left: 14px; right: 0; height: 1px; background: #e5e5ea; }
+  .ios-row .n { font-size: 15.5px; font-weight: 600; }
+  .ios-row .s { font-size: 12.5px; color: #8a8a8e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ios-row .st { margin-left: auto; font-size: 13px; color: #248a3d; white-space: nowrap; }
+  .ios-row.add { min-height: 44px; color: #007aff; font-size: 15.5px; }
+  .ios-lift { position: absolute; left: 16px; right: 16px; top: 67px; border-radius: 12px; overflow: hidden;
+              box-shadow: 0 10px 34px rgba(0, 0, 0, .22); transform: scale(1.03); }
+  .ios-menu { position: absolute; left: 16px; top: 140px; width: 220px; border-radius: 13px; overflow: hidden;
+              background: rgba(250, 250, 250, .98); box-shadow: 0 10px 34px rgba(0, 0, 0, .2); }
+  .ios-menu .it { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; font-size: 16px; }
+  .ios-menu .it svg { width: 17px; height: 17px; fill: #000; }
+  .ios-alert { width: 252px; flex: none; margin-top: 56px; border-radius: 14px; background: rgba(242, 242, 247, .98);
+               box-shadow: 0 10px 40px rgba(0, 0, 0, .18); text-align: center; overflow: hidden;
+               font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif; color: #000; }
+  .ios-alert .b { padding: 18px 16px 15px; }
+  .ios-alert .t { font-size: 16px; font-weight: 600; }
+  .ios-alert .m { margin-top: 3px; font-size: 12.5px; line-height: 1.4; color: #3c3c43; }
+  .ios-alert .f { display: flex; align-items: center; margin-top: 13px; height: 30px; padding: 0 8px; border-radius: 7px;
+                  border: 1px solid #c7c7cc; background: #fff; font-size: 13.5px; text-align: left; }
+  .ios-alert .btns { display: grid; grid-template-columns: 1fr 1fr; border-top: 1px solid #d1d1d6; }
+  .ios-alert .btns span { padding: 11px 0; font-size: 16px; color: #007aff; }
+  .ios-alert .btns span + span { border-left: 1px solid #d1d1d6; font-weight: 600; }
+</style>
+</head>
+<body class="m">
+<div class="m-sheet">
+  <h1 class="m-h1">Providers · renaming an account on a runner</h1>
+  <p class="m-sub zh">一台机器上的 Claude Code / Codex 账号，名字只是这一页的标签（「+ Account」面板的原话：<i>Only a label for this page</i>）。这张图让每个账号——包括 Default——都能改名：名字旁的铅笔、就地编辑、Default 改名后的标记，以及这个名字出现的其它地方。Default 的目录、id、不能删，一样都不动。所有色值都来自 <code>src/web/src/index.css</code> 的真实 token。</p>
+
+  <div class="m-grid2">
+    <!-- ─────────────── 改前 ─────────────── -->
+    <div class="m-col">
+      <div class="m-stage">
+        <div class="m-stage-l"><span class="m-k">改前</span><span class="zh">Default 永远叫 Default；别的账号名字一定下就改不了</span></div>
+        <div class="stage-body">
+          <div class="re-card re-runner-card">
+            <div class="re-head">
+              <div class="re-toggle"><span class="re-chev open">▸</span><span class="re-dot on"></span>
+                <span class="re-runner">wikova</span><span class="re-runner-meta">vmi3129740 · runner 0.1.205</span></div>
+              <span class="re-head-sp"></span><span class="re-manage">Manage runner →</span>
+            </div>
+
+            <div class="re-row re-grp">
+              <div class="re-id">
+                <div class="provider-tile" style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c)"><svg class="g-claude" viewBox="0 0 24 24" width="16" height="16" fill="#fff"></svg></div>
+                <div style="min-width:0"><div class="re-name">Claude Code</div>
+                  <div class="re-meta">2.1.288 · <b>2 of 3 accounts available</b><span class="re-upd"> · checked 32m ago</span></div></div>
+              </div>
+              <div class="re-act"><span class="m-btn">+ Account</span></div>
+            </div>
+
+            <div class="re-row re-acct">
+              <div class="re-id"><span class="re-rail"></span>
+                <div style="min-width:0"><div class="re-name">Default</div>
+                  <div class="re-meta">~/.claude</div></div>
+              </div>
+              <div class="re-status"><span class="m-tag green">Available</span></div>
+              <div class="re-quota">
+                <div class="re-window"><div class="re-quota-head"><b>5-hour limit</b><span>13%</span></div>
+                  <div class="runner-util"><span class="runner-util-fill" style="width:13%"></span></div><div class="re-reset">resets 13:30</div></div>
+                <div class="re-window"><div class="re-quota-head"><b>Weekly · all models</b><span>11%</span></div>
+                  <div class="runner-util"><span class="runner-util-fill" style="width:11%"></span></div><div class="re-reset">resets Fri 12:00</div></div>
+              </div>
+              <div class="re-act"><span class="m-ico i-login"></span></div>
+            </div>
+
+            <div class="re-row re-acct">
+              <div class="re-id"><span class="re-rail"></span>
+                <div style="min-width:0"><div class="re-name">jianghailong.rd</div>
+                  <div class="re-meta">~/.orbit/claude-accounts/fad98727</div></div>
+              </div>
+              <div class="re-status"><span class="m-tag orange">Spent · resets Mon 19:00</span></div>
+              <div class="re-quota">
+                <div class="re-window"><div class="re-quota-head"><b>5-hour limit</b><span>0%</span></div>
+                  <div class="runner-util"><span class="runner-util-fill" style="width:0%"></span></div></div>
+                <div class="re-window"><div class="re-quota-head"><b>Weekly · all models</b><span>100%</span></div>
+                  <div class="runner-util full"><span class="runner-util-fill" style="width:100%"></span></div><div class="re-reset">resets Mon 19:00</div></div>
+              </div>
+              <div class="re-act"><span class="m-ico i-del"></span><span class="m-ico i-login"></span></div>
+            </div>
+
+            <div class="re-row re-acct re-acct-end">
+              <div class="re-id"><span class="re-rail"></span>
+                <div style="min-width:0"><div class="re-name">jianghailong.orbit<span class="re-chip">NEXT</span></div>
+                  <div class="re-meta">~/.orbit/claude-accounts/29e631a9</div></div>
+              </div>
+              <div class="re-status"><span class="m-tag green">Available</span></div>
+              <div class="re-quota">
+                <div class="re-window"><div class="re-quota-head"><b>5-hour limit</b><span>73%</span></div>
+                  <div class="runner-util"><span class="runner-util-fill" style="width:73%"></span></div><div class="re-reset">resets 13:20</div></div>
+                <div class="re-window"><div class="re-quota-head"><b>Weekly · all models</b><span>79%</span></div>
+                  <div class="runner-util"><span class="runner-util-fill" style="width:79%"></span></div><div class="re-reset">resets Wed 06:00</div></div>
+              </div>
+              <div class="re-act"><span class="m-ico i-del"></span><span class="m-ico i-login"></span></div>
+            </div>
+          </div>
+        </div>
+        <p class="m-cap zh">Default 这一行看不出登的是哪个订阅（页面故意不显示邮箱，Claude 也没有 fingerprint）。另外两个的名字是「+ Account」时起的，之后改不了；想改只能 Remove 再加一次——目录连同里面的会话记录一起删掉，选了它的工作区退回 Default，还得重新登录。</p>
+      </div>
+    </div>
+
+    <!-- ─────────────── 改后 ─────────────── -->
+    <div class="m-col">
+      <div class="m-stage">
+        <div class="m-stage-l"><span class="m-k new">改后</span><span class="zh">每个名字旁一支铅笔；Default 也能改，改了带上 DEFAULT 标记</span></div>
+        <div class="stage-body">
+          <div class="re-card re-runner-card">
+            <div class="re-head">
+              <div class="re-toggle"><span class="re-chev open">▸</span><span class="re-dot on"></span>
+                <span class="re-runner">wikova</span><span class="re-runner-meta">vmi3129740 · runner 0.1.205</span></div>
+              <span class="re-head-sp"></span><span class="re-manage">Manage runner →</span>
+            </div>
+
+            <div class="re-row re-grp">
+              <div class="re-id">
+                <div class="provider-tile" style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c)"><svg class="g-claude" viewBox="0 0 24 24" width="16" height="16" fill="#fff"></svg></div>
+                <div style="min-width:0"><div class="re-name">Claude Code</div>
+                  <div class="re-meta">2.1.288 · <b>2 of 3 accounts available</b><span class="re-upd"> · checked 32m ago</span></div></div>
+              </div>
+              <div class="re-act"><span class="m-btn">+ Account</span></div>
+            </div>
+
+            <!-- Default, named: its role moves into a mark -->
+            <div class="re-row re-acct">
+              <div class="re-id"><span class="re-rail"></span>
+                <div style="min-width:0"><div class="re-name"><span class="m-mark">jianghailong.main<span class="re-chip">DEFAULT</span><span class="m-n">2</span></span><span class="m-pen i-edit"></span></div>
+                  <div class="re-meta">~/.claude</div></div>
+              </div>
+              <div class="re-status"><span class="m-tag green">Available</span></div>
+              <div class="re-quota">
+                <div class="re-window"><div class="re-quota-head"><b>5-hour limit</b><span>13%</span></div>
+                  <div class="runner-util"><span class="runner-util-fill" style="width:13%"></span></div><div class="re-reset">resets 13:30</div></div>
+                <div class="re-window"><div class="re-quota-head"><b>Weekly · all models</b><span>11%</span></div>
+                  <div class="runner-util"><span class="runner-util-fill" style="width:11%"></span></div><div class="re-reset">resets Fri 12:00</div></div>
+              </div>
+              <div class="re-act"><span class="m-ico i-login"></span></div>
+            </div>
+
+            <!-- an added account, mid-rename -->
+            <div class="re-row re-acct">
+              <div class="re-id"><span class="re-rail"></span>
+                <div style="min-width:0">
+                  <div class="re-name"><span class="m-mark"><span class="m-input">jianghailong.research<span class="m-caret"></span></span><span class="m-n">3</span></span></div>
+                  <div class="re-meta">~/.orbit/claude-accounts/fad98727</div></div>
+              </div>
+              <div class="re-status"><span class="m-tag orange">Spent · resets Mon 19:00</span></div>
+              <div class="re-quota">
+                <div class="re-window"><div class="re-quota-head"><b>5-hour limit</b><span>0%</span></div>
+                  <div class="runner-util"><span class="runner-util-fill" style="width:0%"></span></div></div>
+                <div class="re-window"><div class="re-quota-head"><b>Weekly · all models</b><span>100%</span></div>
+                  <div class="runner-util full"><span class="runner-util-fill" style="width:100%"></span></div><div class="re-reset">resets Mon 19:00</div></div>
+              </div>
+              <div class="re-act"><span class="m-ico i-del"></span><span class="m-ico i-login"></span></div>
+            </div>
+
+            <!-- the pencil under the pointer -->
+            <div class="re-row re-acct re-acct-end">
+              <div class="re-id"><span class="re-rail"></span>
+                <div style="min-width:0"><div class="re-name">jianghailong.orbit<span class="re-chip">NEXT</span><span class="m-pen hover i-edit m-mark" title="Rename"><span class="m-n">1</span></span></div>
+                  <div class="re-meta">~/.orbit/claude-accounts/29e631a9</div></div>
+              </div>
+              <div class="re-status"><span class="m-tag green">Available</span></div>
+              <div class="re-quota">
+                <div class="re-window"><div class="re-quota-head"><b>5-hour limit</b><span>73%</span></div>
+                  <div class="runner-util"><span class="runner-util-fill" style="width:73%"></span></div><div class="re-reset">resets 13:20</div></div>
+                <div class="re-window"><div class="re-quota-head"><b>Weekly · all models</b><span>79%</span></div>
+                  <div class="runner-util"><span class="runner-util-fill" style="width:79%"></span></div><div class="re-reset">resets Wed 06:00</div></div>
+              </div>
+              <div class="re-act"><span class="m-ico i-del"></span><span class="m-ico i-login"></span></div>
+            </div>
+          </div>
+        </div>
+        <p class="m-cap zh">runner 还是 0.1.205：名字存在控制面，这个改动不碰机器。右边那一列一点没变。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── 状态 ─────────────── -->
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k state">状态</span><span class="zh">编辑、改了名的 Default、机器离线</span></div>
+    <div class="m-grid3">
+      <div class="a-card">
+        <div class="a-card-h"><span class="a-card-t zh">编辑 Default</span><span class="a-hint">③</span></div>
+        <div class="m-minicard">
+          <div class="re-row re-acct">
+            <div class="re-id">
+              <div style="min-width:0">
+                <div class="re-name"><span class="m-input"><span class="m-caret"></span><span class="m-sel">Default</span></span></div>
+                <div class="re-meta">~/.claude</div></div>
+            </div>
+            <div class="re-status"><span class="m-tag green">Available</span></div>
+            <div class="re-act"><span class="m-ico i-login"></span></div>
+          </div>
+        </div>
+        <div class="a-hint zh">点铅笔或双击名字，名字原地变成输入框并全选（光标停在开头）。<b>和会话标题改名同一套规则</b>：Enter 或点别处保存，Esc 取消；首尾空格去掉，<b>空的或没变就不改</b>；最长 60 字（和「+ Account」一样）。想让 Default 叫回「Default」，就输入 Default。</div>
+      </div>
+
+      <div class="a-card">
+        <div class="a-card-h"><span class="a-card-t zh">改了名的 Default</span><span class="a-hint">②</span></div>
+        <div class="m-minicard">
+          <div class="re-row re-acct">
+            <div class="re-id">
+              <div style="min-width:0; position:relative">
+                <div class="re-name">jianghailong.main<span class="re-chip" style="background:#e4e6ea">DEFAULT</span><span class="m-pen i-edit"></span></div>
+                <div class="re-meta">~/.claude</div>
+                <div class="m-tip" style="left:96px; top:30px">This machine’s own login — <code>~/.claude</code>, the one <code>claude</code> in a terminal uses. Signing in from a terminal changes which account this is.</div>
+              </div>
+            </div>
+            <div class="re-status"><span class="m-tag green">Available</span></div>
+            <div class="re-act"><span class="m-ico i-login"></span></div>
+          </div>
+        </div>
+        <div class="a-hint zh" style="margin-top:62px"><b>DEFAULT 标记只在名字不是「Default」时出现</b>，悬停说明它是这台机器自己的登录：终端里的 <code>claude</code> 也用它，所以它仍然没有 Remove；有人在终端里换了号，这一行的账号也跟着换——名字是你起的，标记是机器的事实。</div>
+      </div>
+
+      <div class="a-card">
+        <div class="a-card-h"><span class="a-card-t zh">Runner 离线</span><span class="a-hint">④</span></div>
+        <div class="m-minicard offline">
+          <div class="re-row re-acct">
+            <div class="re-id">
+              <div style="min-width:0">
+                <div class="re-name"><span class="m-name-text">jianghailong.orbit</span><span class="m-pen i-edit m-mark"><span class="m-n">4</span></span></div>
+                <div class="re-meta">~/.orbit/claude-accounts/29e631a9</div></div>
+            </div>
+            <div class="re-status"><span class="m-tag green">Available</span></div>
+            <div class="re-act"><span class="m-ico dis i-del"></span><span class="m-ico dis i-login"></span></div>
+          </div>
+        </div>
+        <div class="a-hint zh">右边那一列是要机器去做的事——登录、删除——机器离线时禁用。<b>名字存在控制面，不经过机器</b>：离线也能改，保存后所有端立刻用新名字，不等下一次心跳。离线卡片整行变淡，<b>铅笔不跟着变淡</b>，免得看起来也被禁用了。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── 名字出现的地方 ─────────────── -->
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k state">别处</span><span class="zh">同一个名字出现的地方 ⑤ ⑥</span></div>
+    <div class="m-grid3">
+      <div class="a-card">
+        <div class="m-where-h"><span class="zh">工作区设置 · Claude account</span><span class="a-hint">AccountSelect</span></div>
+        <div class="m-field-l">Claude account</div>
+        <div class="m-select"><span>Automatic</span><i>▼</i></div>
+        <div class="m-drop">
+          <div class="m-opt on">Automatic<div class="m-opt-s">each new session starts on the account whose quota resets soonest</div></div>
+          <div class="m-opt"><span class="m-mark">jianghailong.main<span class="m-n">5</span></span><div class="m-opt-s">Default · ~/.claude · 5-hour limit 13% · signed in</div></div>
+          <div class="m-opt">jianghailong.rd<div class="m-opt-s">Weekly · all models 100% · signed in</div></div>
+          <div class="m-opt">jianghailong.orbit<div class="m-opt-s">Weekly · all models 79% · signed in</div></div>
+        </div>
+        <div class="m-old zh">改前这一项是 <s>Default (~/.claude)</s>。名字换成你起的，「Default」和路径挪到下面那行小字。</div>
+      </div>
+
+      <div class="a-card">
+        <div class="m-where-h"><span class="zh">Composer / 新会话 · Provider 菜单</span></div>
+        <div class="m-menu">
+          <div class="m-mrow"><div class="provider-tile" style="width:20px;height:20px;border-radius:5px;background:linear-gradient(135deg,#d97757,#c15f3c)"><svg class="g-claude" viewBox="0 0 24 24" width="11" height="11" fill="#fff"></svg></div><span class="grow">Claude Code</span><span class="v">Opus 5.5</span></div>
+          <div class="m-mrow acct"><span class="grow">Automatic</span><span class="v">Resets soonest</span><span class="tick"></span></div>
+          <div class="m-mrow acct hl"><span class="grow">jianghailong.main</span><span class="v">5h 13%</span><span class="tick">✓</span></div>
+          <div class="m-mrow acct"><span class="grow">jianghailong.rd</span><span class="v near">Weekly 100%</span><span class="tick"></span></div>
+          <div class="m-mrow acct"><span class="grow">jianghailong.orbit</span><span class="v">Weekly 79%</span><span class="tick"></span></div>
+        </div>
+        <div class="m-old zh">改前第二行是 <s>Default</s>。</div>
+        <div class="m-where-h" style="margin-top:22px"><span class="zh">会话里的切换提示</span></div>
+        <div class="m-notice"><span>Switched to <b>jianghailong.main</b> — the usage limit on <b>jianghailong.orbit</b> is reached</span></div>
+        <div class="m-old zh">改前是 <s>Switched to Default — …</s>。已经写进会话的提示保留原文，不回头改写。</div>
+      </div>
+
+      <div class="a-card">
+        <div class="m-where-h"><span class="zh">macOS / iOS · 引擎页</span><span class="a-hint">RunnerEnginePage.swift</span></div>
+        <div class="ios-wrap">
+          <div class="m-mark" style="flex:none; outline-offset:3px; border-radius:22px">
+          <div class="ios">
+            <div class="ios-dim">
+              <div class="ios-nav"><span class="back">‹ wikova</span><span class="t">Claude Code</span><span></span></div>
+              <div class="ios-h">Accounts</div>
+              <div class="ios-group">
+                <div class="ios-row"><div style="min-width:0"><div class="n">Default</div><div class="s">~/.claude</div></div><span class="st">Signed in</span></div>
+                <div class="ios-row"><div style="min-width:0"><div class="n">jianghailong.rd</div><div class="s">~/.orbit/claude-accounts/fad98727</div></div><span class="st">Signed in</span></div>
+                <div class="ios-row"><div style="min-width:0"><div class="n">jianghailong.orbit</div><div class="s">~/.orbit/claude-accounts/29e631a9</div></div><span class="st">Signed in</span></div>
+                <div class="ios-row add">Add Account</div>
+              </div>
+            </div>
+            <div class="ios-lift"><div class="ios-row"><div style="min-width:0"><div class="n">Default</div><div class="s">~/.claude</div></div><span class="st">Signed in</span></div></div>
+            <div class="ios-menu"><div class="it">Rename…<svg class="i-edit-raw" viewBox="64 64 896 896"></svg></div></div>
+          </div>
+          <span class="m-n">6</span>
+          </div>
+          <div class="ios-alert">
+            <div class="b">
+              <div class="t">Rename Account</div>
+              <div class="m">Only a label in Orbit — nothing on wikova changes.</div>
+              <div class="f">jianghailong.main<span class="m-caret"></span></div>
+            </div>
+            <div class="btns"><span>Cancel</span><span>Save</span></div>
+          </div>
+        </div>
+        <div class="m-old zh">长按（iOS）/ 右键（macOS）账号行 → Rename… → 系统改名对话框，和会话、文件夹改名同一个样式。改了名的 Default，副标题写成「~/.claude · Default」。</div>
+      </div>
+    </div>
+
+    <ul class="m-notes zh">
+      <li><span class="m-n">1</span><span><b>名字旁边一支铅笔，每个账号都有，Default 也有</b>；双击名字也行，和会话标题一样。灰色、平时就在（触屏没有悬停），指上去变深。它不放进右边那一列：那一列是要机器去做的事——登录、删除——机器离线时禁用，而改名只改这一页的标签。账号行只在一台机器有两个以上账号时才列出来，铅笔跟着它。</span></li>
+      <li><span class="m-n">2</span><span><b>Default 改了名，名字后面挂 DEFAULT 标记</b>（和 NEXT 同一种 <code>.re-chip</code>），说明这是这台机器自己的登录 <code>~/.claude</code>。没改名时仍只写「Default」，不重复挂。Default 依然没有 Remove，目录和 id 不动。</span></li>
+      <li><span class="m-n">3</span><span><b>就地编辑，和会话标题同一个输入框</b>（同字号的下划线输入框，宽度贴着文字）：进入即全选；Enter 或点别处保存，Esc 取消；首尾空格去掉，空的或没变就不改；最长 60 字。</span></li>
+      <li><span class="m-n">4</span><span><b>名字存在控制面</b>（按 runner、引擎、账号 id），不经过机器：保存即生效，runner 离线也能改，也不用升级 runner；账号被删掉时名字跟着删。</span></li>
+      <li><span class="m-n">5</span><span><b>名字处处同一个</b>：工作区的账号选择、composer 和新会话页的 Provider 菜单、会话里的「Switched to …」、删除确认里的「Workspaces set to this account run on …」、Runner 页的「Next: …」，读的都是它。已经写进会话记录的提示保留原文。</span></li>
+      <li><span class="m-n">6</span><span><b>macOS / iOS 用长按 / 右键菜单里的 Rename…</b>，打开系统改名对话框，规则同上。不放进左滑——左滑是直接执行的动作，改名要先打开编辑器（<code>SessionRowActions.swift</code> 里的现成规矩）。</span></li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  // The icons, once each: antd's own paths (@ant-design/icons-svg) and the Anthropic glyph the
+  // shipped tile draws (src/web/src/lib/providerGlyphs.ts).
+  const PATHS = {
+    login: 'M521.7 82c-152.5-.4-286.7 78.5-363.4 197.7-3.4 5.3.4 12.3 6.7 12.3h70.3c4.8 0 9.3-2.1 12.3-5.8 7-8.5 14.5-16.7 22.4-24.5 32.6-32.5 70.5-58.1 112.7-75.9 43.6-18.4 90-27.8 137.9-27.8 47.9 0 94.3 9.3 137.9 27.8 42.2 17.8 80.1 43.4 112.7 75.9 32.6 32.5 58.1 70.4 76 112.5C865.7 417.8 875 464.1 875 512c0 47.9-9.4 94.2-27.8 137.8-17.8 42.1-43.4 80-76 112.5s-70.5 58.1-112.7 75.9A352.8 352.8 0 01520.6 866c-47.9 0-94.3-9.4-137.9-27.8A353.84 353.84 0 01270 762.3c-7.9-7.9-15.3-16.1-22.4-24.5-3-3.7-7.6-5.8-12.3-5.8H165c-6.3 0-10.2 7-6.7 12.3C234.9 863.2 368.5 942 520.6 942c236.2 0 428-190.1 430.4-425.6C953.4 277.1 761.3 82.6 521.7 82zM395.02 624v-76h-314c-4.4 0-8-3.6-8-8v-56c0-4.4 3.6-8 8-8h314v-76c0-6.7 7.8-10.5 13-6.3l141.9 112a8 8 0 010 12.6l-141.9 112c-5.2 4.1-13 .4-13-6.3z',
+    del: 'M360 184h-8c4.4 0 8-3.6 8-8v8h304v-8c0 4.4 3.6 8 8 8h-8v72h72v-80c0-35.3-28.7-64-64-64H352c-35.3 0-64 28.7-64 64v80h72v-72zm504 72H160c-17.7 0-32 14.3-32 32v32c0 4.4 3.6 8 8 8h60.4l24.7 523c1.6 34.1 29.8 61 63.9 61h454c34.2 0 62.3-26.8 63.9-61l24.7-523H888c4.4 0 8-3.6 8-8v-32c0-17.7-14.3-32-32-32zM731.3 840H292.7l-24.2-512h487l-24.2 512z',
+    edit: 'M257.7 752c2 0 4-.2 6-.5L431.9 722c2-.4 3.9-1.3 5.3-2.8l423.9-423.9a9.96 9.96 0 000-14.1L694.9 114.9c-1.9-1.9-4.4-2.9-7.1-2.9s-5.2 1-7.1 2.9L256.8 538.8c-1.5 1.5-2.4 3.3-2.8 5.3l-29.5 168.2a33.5 33.5 0 009.4 29.8c6.6 6.4 14.9 9.9 23.8 9.9zm67.4-174.4L687.8 215l73.3 73.3-362.7 362.6-88.9 15.7 15.6-89zM880 836H144c-17.7 0-32 14.3-32 32v36c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-36c0-17.7-14.3-32-32-32z',
+    check: 'M912 190h-69.9c-9.8 0-19.1 4.5-25.1 12.2L404.7 724.5 207 474a32 32 0 00-25.1-12.2H112c-6.7 0-10.4 7.7-6.3 12.9l273.9 347c12.8 16.2 37.4 16.2 50.3 0l488.4-618.9c4.1-5.1.4-12.8-6.3-12.8z',
+    close: 'M799.86 166.31c.02 0 .04.02.08.06l57.69 57.7c.04.03.05.05.06.08a.12.12 0 010 .06c0 .03-.02.05-.06.09L569.93 512l287.7 287.7c.04.04.05.06.06.09a.12.12 0 010 .07c0 .02-.02.04-.06.08l-57.7 57.69c-.03.04-.05.05-.07.06a.12.12 0 01-.07 0c-.03 0-.05-.02-.09-.06L512 569.93l-287.7 287.7c-.04.04-.06.05-.09.06a.12.12 0 01-.07 0c-.02 0-.04-.02-.08-.06l-57.69-57.7c-.04-.03-.05-.05-.06-.07a.12.12 0 010-.07c0-.03.02-.05.06-.09L454.07 512l-287.7-287.7c-.04-.04-.05-.06-.06-.09a.12.12 0 010-.07c0-.02.02-.04.06-.08l57.7-57.69c.03-.04.05-.05.07-.06a.12.12 0 01.07 0c.03 0 .05.02.09.06L512 454.07l287.7-287.7c.04-.04.06-.05.09-.06a.12.12 0 01.07 0z',
+  };
+  const CLAUDE = 'M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z';
+  const svg = (d) => `<svg viewBox="64 64 896 896"><path d="${d}"/></svg>`;
+  for (const [name, d] of Object.entries(PATHS)) {
+    for (const el of document.querySelectorAll(`.i-${name}`)) el.insertAdjacentHTML('afterbegin', svg(d));
+    for (const el of document.querySelectorAll(`.i-${name}-raw`)) el.innerHTML = `<path d="${d}"/>`;
+  }
+  for (const el of document.querySelectorAll('.g-claude')) el.innerHTML = `<path d="${CLAUDE}"/>`;
+</script>
+</body>
+</html>
