@@ -727,11 +727,13 @@ suite('(q) the core tables keep every trigger that predates this project', async
   // `session`: 12 since 0350 added `session_request_recipient_ended`, which closes the session
   // requests still waiting on a session whose run ends, and writes only `session_request`; 13 since
   // 0352 added `session_request_asker_stopped`, which marks the outcomes held for an asking session
-  // that stopped for good, and writes only `session_request` too. Additions by a later project: the
+  // that stopped for good, and writes only `session_request` too. Additions by later projects: the
   // number moves, the claim does not. 14 since 0367 added `session_antigravity_runner_claim_guard`,
   // which keeps an older control plane from claiming an Antigravity session as Claude and writes
-  // nothing at all — another addition, by the Antigravity runtime.
-  assert.deepEqual(counts, { run_event: 1, session: 14, task: 31 });
+  // nothing at all; 15 since 0370 added `task_owner_confirmation_review_reviewer_ended`, which
+  // records on the confirmation reviews still waiting on a session that their reviewer ended, and
+  // writes only `task_owner_confirmation_review`.
+  assert.deepEqual(counts, { run_event: 1, session: 15, task: 31 });
 
   // And every one that went is named, so a reader can tell a removal from an accident.
   for (const trigger of [

@@ -13,6 +13,7 @@ import { TaskCompletionEvidenceService } from './task-completion-evidence.servic
 import { PendingEvidenceJudgmentsController } from './pending-evidence-judgments.controller';
 import { TaskOwnerConfirmationController } from './task-owner-confirmation.controller';
 import { TaskOwnerConfirmationService } from './task-owner-confirmation.service';
+import { OwnerConfirmationReviewService } from './owner-confirmation-review.service';
 import { TaskProgressController } from './task-progress.controller';
 import { TaskProgressService } from './task-progress.service';
 import { SessionCreatedTasksController } from './session-created-tasks.controller';
@@ -48,6 +49,7 @@ import { TaskModelRoutingReportService } from './task-model-routing-report.servi
     ReferenceExpansionService,
     TaskCompletionEvidenceService,
     TaskOwnerConfirmationService,
+    OwnerConfirmationReviewService,
     TaskProgressService,
     SessionCreatedTasksService,
     TaskModelRoutingReportService,
@@ -60,6 +62,7 @@ import { TaskModelRoutingReportService } from './task-model-routing-report.servi
     ReferenceExpansionService,
     TaskCompletionEvidenceService,
     TaskOwnerConfirmationService,
+    OwnerConfirmationReviewService,
     TaskProgressService,
   ],
 })

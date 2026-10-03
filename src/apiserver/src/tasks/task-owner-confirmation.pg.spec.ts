@@ -24,7 +24,14 @@
  *   (8) a send-back needs a reason, files it as the next message of that session, and leaves the
  *       task open and no longer waiting;
  *   (9) the next turn that declares asks again, and an answer to the report it replaced is refused;
- *  (10) the owner confirms the new report: DONE, the session goes dark, and both decisions stay.
+ *  (10) the owner confirms the new report: DONE, the session goes dark, and both decisions stay;
+ *  (11) in an Automatic project a run's request goes to the coordinator first, and while it is
+ *       under review the run's row stays as dark as the coordinator's does
+ *       (docs/owner-confirmation-review-contract.md §5 N1, N3).
+ *
+ * Every task above is filed from no session, so it has no reviewer (contract §1 S2) and the rows
+ * light exactly as they did before reviews existed — which is what (1)–(10) still pin. Reviews have
+ * their own spec, `owner-confirmation-review.pg.spec.ts`.
  *
  * Destructive: it truncates. COORDINATOR_PG_URL must name the disposable guarded database with
  * current migrations applied.
@@ -65,6 +72,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { RunnerTaskOwnerConfirmationController } from '../runner-api/runner-task-owner-confirmation.controller';
 import { SessionsService } from '../sessions/sessions.service';
 import type { CreateTaskDto, DecideOwnerConfirmationDto, UpdateTaskDto } from './dto';
+import { OwnerConfirmationReviewService } from './owner-confirmation-review.service';
 import { TaskOwnerConfirmationController } from './task-owner-confirmation.controller';
 import { TaskOwnerConfirmationService } from './task-owner-confirmation.service';
 import { TasksService } from './tasks.service';
@@ -120,9 +128,10 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
     const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
     const sessions = new SessionsService(prisma, queue, realtime);
     const tasks = new TasksService(prisma, sessions, realtime);
-    const confirmations = new TaskOwnerConfirmationService(prisma, sessions, tasks, realtime);
+    const reviews = new OwnerConfirmationReviewService(prisma, sessions, realtime);
+    const confirmations = new TaskOwnerConfirmationService(prisma, sessions, tasks, realtime, reviews);
     const userDoor = new TaskOwnerConfirmationController(confirmations);
-    const runnerDoor = new RunnerTaskOwnerConfirmationController(confirmations);
+    const runnerDoor = new RunnerTaskOwnerConfirmationController(confirmations, reviews);
     const runnerApi = new RunnerApiController(
       prisma,
       queue,
@@ -874,5 +883,63 @@ suite('OWNER_CONFIRMED: the owner settles it, no session can, and a send-back go
         ConflictException,
       );
       assert.equal(later.code, 'OWNER_CONFIRMATION_TASK_SETTLED');
+    });
+
+    // (11) ----------------------------------------------------------------------------------------
+    await t.test('an Automatic project\'s run under review stays as dark as its coordinator\'s row', async () => {
+      const automaticId = randomUUID();
+      await db.project.create({
+        data: { id: automaticId, ownerId, title: 'automatic', coordinatorEnabled: true, coordinatorSessionId },
+      });
+      const filedTaskId = randomUUID();
+      const filedSessionId = randomUUID();
+      const filedTurnId = randomUUID();
+      await db.task.create({
+        data: {
+          id: filedTaskId, ownerId, title: 'filed by the coordinator', creatorType: CreatorType.AGENT,
+          creatorId: workspaceId, creatorSessionId: coordinatorSessionId, projectId: automaticId,
+          assigneeId: workspaceId, status: TaskStatus.OPEN, completionCriterion: 'OWNER_CONFIRMED',
+          autoRunWhenReady: false,
+        },
+      });
+      await db.session.create({
+        data: {
+          id: filedSessionId, ownerId, creatorId: ownerId, taskId: filedTaskId, workspaceId,
+          assignedRunnerId: runnerId, title: 'filed by the coordinator', prompt: 'do it', provider: 'claude',
+          status: RunStatus.RUNNING, dispatchOrigin: SessionDispatchOrigin.USER, startsTaskWork: true,
+          startedAt: new Date(),
+        },
+      });
+      await db.conversationTurn.create({
+        data: {
+          id: filedTurnId, sessionId: filedSessionId, seq: 1, clientTurnId: `message:${filedTurnId}`,
+          kind: 'message', content: 'do it', status: 'IN_FLIGHT', deliveredAt: new Date(),
+        },
+      });
+      await db.runEvent.create({
+        data: { sessionId: filedSessionId, seq: 1, type: 'assistant', payload: { text: LAST_REPORT }, turnId: filedTurnId },
+      });
+      await runnerDoor.claim(runner, filedTaskId, filedSessionId);
+      await runnerApi.turnComplete({ id: runnerId }, filedSessionId, {
+        turnId: filedTurnId,
+        status: SharedRunStatus.SUCCEEDED,
+      } as never);
+
+      const view = await confirmations.read(ownerId, filedTaskId);
+      assert.ok(view.waiting, 'the card is drawn');
+      assert.equal(view.waiting.review?.state, 'UNDER_REVIEW', 'and its coordinator has it first');
+      const rows = await sessions.list(ownerId, { view: 'open' }) as Array<{
+        id: string; pendingApprovals: number; waitingKind?: string | null;
+        confirmationUnderReview?: { requestId: string } | null;
+      }>;
+      const run = rows.find((each) => each.id === filedSessionId);
+      assert.equal(run?.pendingApprovals, 0, 'the run\'s row is dark while it is under review');
+      assert.equal(run?.waitingKind ?? null, null);
+      assert.equal(run?.confirmationUnderReview?.requestId, view.waiting.requestId, 'and says Under review');
+      // The coordinator's row stays dark too: reviewing a run's report asks the owner nothing.
+      const coordinatorRow = rows.find((each) => each.id === coordinatorSessionId);
+      assert.equal(coordinatorRow?.pendingApprovals, 0);
+      assert.equal(coordinatorRow?.waitingKind ?? null, null);
+      assert.equal(await waitingOn(filedSessionId), 0);
     });
   });

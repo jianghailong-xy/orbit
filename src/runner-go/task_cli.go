@@ -37,6 +37,8 @@ Usage:
   orbit task start [task-id] [--json]
   orbit task comment [task-id] (--body TEXT | --body-file -) [--json]
   orbit task request-confirmation [task-id] [--json]
+  orbit task confirmation-review [task-id] (--input JSON | --input-file -) [--json]
+  orbit task confirmation-return [task-id] (--input JSON | --input-file -) [--json]
   orbit task progress [task-id] [--phase TEXT] [--current N] [--total N] [--message TEXT] [--expected-revision N] [--json]
   orbit task dependency-graph [task-id] [--max-depth N] [--max-nodes N] [--json]
   orbit task dependency-add [task-id] --depends-on ID [--json]
@@ -58,9 +60,11 @@ Usage:
 `
 
 var taskActionHelp = map[string]string{
-	"await":    taskAwaitHelp,
-	"progress": taskProgressHelp,
-	"reopen":   taskReopenHelp,
+	"await":               taskAwaitHelp,
+	"progress":            taskProgressHelp,
+	"reopen":              taskReopenHelp,
+	"confirmation-review": taskConfirmationReviewHelp,
+	"confirmation-return": taskConfirmationReturnHelp,
 	"list": `orbit task list — list tasks
 
 Usage:
@@ -794,6 +798,8 @@ func cmdTaskCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliTaskComment(args[1:], in, out)
 	case "request-confirmation":
 		return cliTaskRequestConfirmation(args[1:], out)
+	case "confirmation-review", "confirmation-return":
+		return cliTaskConfirmationAnswer(action, args[1:], in, out)
 	case "progress":
 		return cliTaskProgress(args[1:], out)
 	case "dependency-graph":
@@ -2849,6 +2855,8 @@ var baseCLICapabilities = withTaskCompletionCapabilityArgs([]cliCapabilitySpec{
 	{Tool: "task_start", Argv: []string{"orbit", "task", "start"}, Usage: "orbit task start [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Mutates: true},
 	{Tool: "task_comment", Argv: []string{"orbit", "task", "comment"}, Usage: "orbit task comment [task-id] (--body TEXT | --body-file -) [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--body <text> | --body-file - (required)", "--json"}, Description: "Add a comment to a task, authored by this agent inside a session (like the MCP path) or by the runner owner when run headless.", Mutates: true},
 	{Tool: "task_request_confirmation", Argv: []string{"orbit", "task", "request-confirmation"}, Usage: "orbit task request-confirmation [task-id] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--json"}, Description: "Declare, as this run, that the task's work is finished — the one thing that asks an OWNER_CONFIRMED task's owner. With no declaration there is no card: the task stays OPEN and is confirmed only from its detail panel. Requires ORBIT_SESSION_ID and a turn in flight, and is accepted only from the task's own execution session. The question waits for the turn that ends the run (nothing queued, no background job or sub-workspace of its own in flight, no wake-up it asked for), so declaring while more work is coming asks nothing yet; declaring again in one turn is one declaration. Confirming or sending back is the account owner's own act in the app.", Mutates: true},
+	{Tool: "task_confirmation_review", Argv: []string{"orbit", "task", "confirmation-review"}, Usage: "orbit task confirmation-review [task-id] (--input JSON | --input-file -) [--json]", Arguments: []string{"[task-id] (or the input's taskId: the review block's task=\"…\"; no ORBIT_TASK_ID default)", "--input <JSON object> | --input-file - (required): {taskId, requestId, reviewedSha, judgment, checked, notChecked, needsYou, leftOpen}", "--json"}, Description: "Record your review of an OWNER_CONFIRMED task's confirmation request — the one an <orbit-confirmation-review> block handed this session. The owner is not asked until it is recorded or its window runs out; then their card shows it under REVIEW, and Orbit writes the card's first line from your lists (the first needsYou question, else how many lines you could not check). needsYou lines carry 2–4 options and the one you recommend. Only the session the request was handed to may record it, from inside a turn (ORBIT_SESSION_ID); a retry in the same turn returns what was recorded. It cannot confirm the task: only the owner can.", Mutates: true},
+	{Tool: "task_confirmation_return", Argv: []string{"orbit", "task", "confirmation-return"}, Usage: "orbit task confirmation-return [task-id] (--input JSON | --input-file -) [--json]", Arguments: []string{"[task-id] (or the input's taskId: the review block's task=\"…\"; no ORBIT_TASK_ID default)", "--input <JSON object> | --input-file - (required): {taskId, requestId, reviewedSha, reason, problems}", "--json"}, Description: "Send an OWNER_CONFIRMED task's confirmation request back to its run, when something must change before the owner looks: the reason is the run's next message and the owner is not asked. Once per request and at most 3 times between two decisions of the owner's; refused while the project's Automatic is off or its coordinator is paused, once the run has ended, or after the owner sent it back. After the owner has confirmed, the problems are recorded under their receipt and they are told instead. Only the session the request was handed to for review may call it, from inside a turn.", Mutates: true},
 	{Tool: "task_progress_report", Argv: []string{"orbit", "task", "progress"}, Usage: "orbit task progress [task-id] [--phase TEXT | --clear-phase] [--current N | --clear-current] [--total N | --clear-total] [--message TEXT | --clear-message] [--expected-revision N] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--phase <text> | --clear-phase", "--current <n> | --clear-current", "--total <n> | --clear-total (needs a current it bounds)", "--message <text> | --clear-message (never progress on its own)", "--expected-revision <n> (expectedRevision: report only if the progress is still at this revision)", "--json"}, Mutates: true},
 	{Tool: "task_dependency_graph", Argv: []string{"orbit", "task", "dependency-graph"}, Usage: "orbit task dependency-graph [task-id] [--max-depth N] [--max-nodes N] [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--max-depth <n> (server default when unset)", "--max-nodes <n> (server default when unset)", "--json"}},
 	{Tool: "task_dependency_add", Argv: []string{"orbit", "task", "dependency-add"}, Usage: "orbit task dependency-add [task-id] --depends-on ID [--json]", Arguments: []string{"[task-id] (defaults to ORBIT_TASK_ID)", "--depends-on <id> (required)", "--json"}, Description: "Add one dependency edge: taskId waits for --depends-on. Point it at the SUBJECT rather than at that subject's verification task: once anything checks that task, the server holds the edge until its latest check has PASSED. An edge naming the check resolves to the same gate, so older plans keep working.", Mutates: true},

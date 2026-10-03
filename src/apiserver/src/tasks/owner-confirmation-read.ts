@@ -1,7 +1,15 @@
+import { Logger } from '@nestjs/common';
 import { TaskStatus } from '@prisma/client';
 import type { CreatorType, Prisma as PrismaTypes } from '@prisma/client';
-import { RunEventType, type OwnerConfirmationIfConfirmed } from '@orbit/shared';
+import {
+  RunEventType,
+  type ConfirmationUnderReview,
+  type OwnerConfirmationAnswer,
+  type OwnerConfirmationIfConfirmed,
+  type OwnerConfirmationReviewView,
+} from '@orbit/shared';
 import { readIfConfirmed, type DependentReleaseReader } from './owner-confirmation-if-confirmed';
+import { confirmationReviewStates, type ReviewedRequest } from './owner-confirmation-review';
 import type { TaskCompletionCriterionValue } from './task-completion-criterion';
 import {
   OWNER_CONFIRMATION_UNSETTLED_STATUSES,
@@ -31,6 +39,13 @@ import {
 
 const UNSETTLED: TaskStatus[] = OWNER_CONFIRMATION_UNSETTLED_STATUSES.map((status) => TaskStatus[status]);
 
+const logger = new Logger('OwnerConfirmationRead');
+
+/** A request a reviewer returned to its run (§8 B3): answered, like one with a decision. */
+const RETURNED: PrismaTypes.TaskOwnerConfirmationRequestWhereInput = {
+  reviews: { some: { records: { some: { kind: 'RETURN' } } } },
+};
+
 /** What a run said in the turn it declared the work finished: its last assistant message there. */
 export interface OwnerConfirmationReport {
   text: string;
@@ -44,6 +59,8 @@ export interface OwnerConfirmationWaiting {
   sessionId: string;
   requestedAt: Date;
   report: OwnerConfirmationReport | null;
+  /** Its review (docs/owner-confirmation-review-contract.md §3.4); null when it has no reviewer. */
+  review: OwnerConfirmationReviewView<Date> | null;
 }
 
 /** One decision the owner recorded, as its receipt draws it. */
@@ -59,6 +76,22 @@ export interface RecordedOwnerDecision {
   sessionId: string | null;
   /** What that run had reported, so a receipt can say what settled it. */
   report: OwnerConfirmationReport | null;
+  /** The answered request's review as it stands now (§9 L3), drawn under the receipt. */
+  review: OwnerConfirmationReviewView<Date> | null;
+  /** The review's state when the owner decided (§7 Q4); null for a panel confirmation. */
+  reviewStateAtDecision: string | null;
+  /** The REVIEW record the decision was made against (§7 Q4). */
+  reviewRecordId: string | null;
+  /** The owner's answers to that review's questions (§7 Q4). */
+  answers: OwnerConfirmationAnswer[];
+}
+
+/** A request its reviewer returned to the run (§8 B6): the card draws itself as this record. */
+export interface ReviewerReturnedRequest {
+  requestId: string;
+  sessionId: string;
+  requestedAt: Date;
+  review: OwnerConfirmationReviewView<Date>;
 }
 
 /** `GET /tasks/:taskId/owner-confirmation`. */
@@ -76,6 +109,8 @@ export interface OwnerConfirmationView {
   ifConfirmed: OwnerConfirmationIfConfirmed | null;
   /** Every decision recorded about this task, oldest first. */
   decisions: RecordedOwnerDecision[];
+  /** The requests a reviewer sent back to the run, oldest first: no decision answers them. */
+  reviewerReturns: ReviewerReturnedRequest[];
 }
 
 /**
@@ -205,12 +240,23 @@ export async function waitingScheduledWakeup(
  */
 export async function recordOwnerConfirmationRequest(
   tx: PrismaTypes.TransactionClient,
-  request: { taskId: string; ownerId: string; sessionId: string; turnId: string; claimId: string },
-): Promise<void> {
-  await tx.taskOwnerConfirmationRequest.create({ data: request, select: { id: true } });
+  request: {
+    taskId: string;
+    ownerId: string;
+    sessionId: string;
+    turnId: string;
+    claimId: string;
+    /** The run's branch tip as this completion reported it (0370); null when it reported none. */
+    branchSha: string | null;
+  },
+): Promise<{ id: string; requestedAt: Date }> {
+  return tx.taskOwnerConfirmationRequest.create({ data: request, select: { id: true, requestedAt: true } });
 }
 
-/** The task's newest request, with whether a decision answers it. */
+/**
+ * The task's newest request, with whether a decision answers it — or a return of its reviewer's
+ * (§8 B3), which answers it as well: a returned request is waiting on nobody.
+ */
 export function latestOwnerConfirmationRequest(tx: PrismaTypes.TransactionClient, taskId: string) {
   return tx.taskOwnerConfirmationRequest.findFirst({
     where: { taskId },
@@ -222,8 +268,14 @@ export function latestOwnerConfirmationRequest(tx: PrismaTypes.TransactionClient
       requestedAt: true,
       claim: { select: { turnId: true } },
       decisions: { select: { id: true }, take: 1 },
+      reviews: { select: { records: { where: { kind: 'RETURN' }, select: { id: true }, take: 1 } } },
     },
   });
+}
+
+/** Whether a request read by `latestOwnerConfirmationRequest` was returned by its reviewer. */
+export function returnedByReviewer(request: { reviews: Array<{ records: unknown[] }> }): boolean {
+  return request.reviews.some((review) => review.records.length > 0);
 }
 
 /**
@@ -300,6 +352,7 @@ export async function readOwnerConfirmation(
         id: latest.id,
         sessionId: latest.sessionId,
         decided: latest.decisions.length > 0,
+        returned: returnedByReviewer(latest),
       },
     })
     : null;
@@ -313,9 +366,28 @@ export async function readOwnerConfirmation(
       decidedAt: true,
       decidedByType: true,
       requestId: true,
-      request: { select: { sessionId: true, turnId: true, claim: { select: { turnId: true } } } },
+      reviewState: true,
+      reviewRecordId: true,
+      answers: true,
+      request: {
+        select: { sessionId: true, turnId: true, requestedAt: true, claim: { select: { turnId: true } } },
+      },
     },
   });
+  // The requests a reviewer sent back (§8 B6): no decision answers them, so the card draws each as a
+  // record of its own rather than as a question.
+  const returned = await tx.taskOwnerConfirmationRequest.findMany({
+    where: { taskId, ownerId, ...RETURNED },
+    orderBy: [{ requestedAt: 'asc' }, { id: 'asc' }],
+    select: { id: true, sessionId: true, requestedAt: true },
+  });
+  const reviews = await reviewsOf(tx, [
+    ...(latest ? [{ id: latest.id, taskId, sessionId: latest.sessionId, requestedAt: latest.requestedAt }] : []),
+    ...recorded.flatMap((row) => (row.requestId && row.request
+      ? [{ id: row.requestId, taskId, sessionId: row.request.sessionId, requestedAt: row.request.requestedAt }]
+      : [])),
+    ...returned.map((row) => ({ ...row, taskId })),
+  ]);
   const decisions: RecordedOwnerDecision[] = [];
   for (const row of recorded) {
     decisions.push({
@@ -327,6 +399,10 @@ export async function readOwnerConfirmation(
       requestId: row.requestId,
       sessionId: row.request?.sessionId ?? null,
       report: row.request ? await ownerConfirmationReport(tx, row.request) : null,
+      review: row.requestId ? reviews.get(row.requestId) ?? null : null,
+      reviewStateAtDecision: row.reviewState,
+      reviewRecordId: row.reviewRecordId,
+      answers: (row.answers as OwnerConfirmationAnswer[] | null) ?? [],
     });
   }
   const waiting = asked && latest
@@ -335,6 +411,7 @@ export async function readOwnerConfirmation(
       sessionId: asked.sessionId,
       requestedAt: latest.requestedAt,
       report: await ownerConfirmationReport(tx, latest),
+      review: reviews.get(latest.id) ?? null,
     }
     : null;
   return {
@@ -349,7 +426,29 @@ export async function readOwnerConfirmation(
       ? await readIfConfirmed(tx, { ownerId, taskId, sessionId: waiting.sessionId }, releases)
       : null,
     decisions,
+    reviewerReturns: returned.flatMap((row) => {
+      const review = reviews.get(row.id);
+      return review ? [{ requestId: row.id, sessionId: row.sessionId, requestedAt: row.requestedAt, review }] : [];
+    }),
   };
+}
+
+/**
+ * The card's reviews, best-effort as everything else the card adds to the rows it is drawn from: a
+ * read that fails leaves the review bars off this read rather than failing the card the owner
+ * confirms on.
+ */
+async function reviewsOf(
+  tx: PrismaTypes.TransactionClient,
+  requests: ReviewedRequest[],
+): Promise<Map<string, OwnerConfirmationReviewView<Date>>> {
+  const unique = [...new Map(requests.map((request) => [request.id, request])).values()];
+  try {
+    return await confirmationReviewStates(tx, unique, new Date());
+  } catch (error) {
+    logger.warn(`confirmation reviews could not be read: ${error instanceof Error ? error.message : error}`);
+    return new Map();
+  }
 }
 
 /** One task session an owner confirmation is waiting on: the "where" of the list's signal. */
@@ -357,6 +456,7 @@ export interface WaitingOwnerConfirmation {
   sessionId: string;
   taskId: string;
   projectId: string | null;
+  requestId: string;
   requestedAt: Date;
 }
 
@@ -369,12 +469,83 @@ export interface WaitingOwnerConfirmation {
  * older one's session. And only an Open-scope conversation is returned, for the reason the
  * coordinator badge has — a signal says "go here now", and here cannot be a conversation the owner
  * filed away or put in Trash. The question itself is still on the task's own read.
+ *
+ * Nor is one still with its reviewer (docs/owner-confirmation-review-contract.md §5 N1): the card is
+ * drawn and can be pressed, but it is somebody else's to look at first, so it does not call the owner
+ * — the rule `coordinatorHolds` applies to an evidence revision. It comes back here, and lights the
+ * row, the moment its review leaves UNDER_REVIEW; `readConfirmationsUnderReview` says the rest.
  */
 export async function readWaitingOwnerConfirmations(
   tx: PrismaTypes.TransactionClient,
   ownerId: string,
   scope?: { sessionIds?: readonly string[] },
 ): Promise<WaitingOwnerConfirmation[]> {
+  const open = await readOpenOwnerConfirmations(tx, ownerId, scope);
+  return open
+    .filter((entry) => entry.review?.state !== 'UNDER_REVIEW')
+    .map((entry) => ({
+      sessionId: entry.sessionId,
+      taskId: entry.taskId,
+      projectId: entry.projectId,
+      requestId: entry.requestId,
+      requestedAt: entry.requestedAt,
+    }));
+}
+
+/**
+ * The run sessions whose owner confirmation is still with its reviewer (N3), by session: what the
+ * row says instead of "Waiting for your confirmation". The same population `readWaitingOwnerConfirmations`
+ * leaves out, read by the same function, so a row is exactly one of the two.
+ */
+export async function readConfirmationsUnderReview(
+  tx: PrismaTypes.TransactionClient,
+  ownerId: string,
+  scope?: { sessionIds?: readonly string[] },
+): Promise<Map<string, ConfirmationUnderReview<Date>>> {
+  const underReview = new Map<string, ConfirmationUnderReview<Date>>();
+  for (const entry of await readOpenOwnerConfirmations(tx, ownerId, scope)) {
+    if (entry.review?.state !== 'UNDER_REVIEW') continue;
+    underReview.set(entry.sessionId, {
+      requestId: entry.requestId,
+      taskId: entry.taskId,
+      reviewerSessionId: entry.review.reviewer.sessionId,
+      reviewerTitle: entry.review.reviewer.title,
+      since: entry.requestedAt,
+      dueAt: entry.review.dueAt,
+    });
+  }
+  return underReview;
+}
+
+/**
+ * Both answers for one set of rows, from one read: the task list asks for a page's worth of each, and
+ * the two halves of one population are one question about it.
+ */
+export async function readOwnerConfirmationRows(
+  tx: PrismaTypes.TransactionClient,
+  ownerId: string,
+  scope?: { sessionIds?: readonly string[] },
+): Promise<{ waiting: WaitingOwnerConfirmation[]; underReview: WaitingOwnerConfirmation[] }> {
+  const open = await readOpenOwnerConfirmations(tx, ownerId, scope);
+  const strip = (entry: WaitingOwnerConfirmation): WaitingOwnerConfirmation => ({
+    sessionId: entry.sessionId,
+    taskId: entry.taskId,
+    projectId: entry.projectId,
+    requestId: entry.requestId,
+    requestedAt: entry.requestedAt,
+  });
+  return {
+    waiting: open.filter((entry) => entry.review?.state !== 'UNDER_REVIEW').map(strip),
+    underReview: open.filter((entry) => entry.review?.state === 'UNDER_REVIEW').map(strip),
+  };
+}
+
+/** The two reads above, before either decides what the review means for the row. */
+async function readOpenOwnerConfirmations(
+  tx: PrismaTypes.TransactionClient,
+  ownerId: string,
+  scope?: { sessionIds?: readonly string[] },
+): Promise<Array<WaitingOwnerConfirmation & { review: OwnerConfirmationReviewView<Date> | null }>> {
   const sessionIds = scope?.sessionIds;
   if (sessionIds && sessionIds.length === 0) return [];
   const candidates = await tx.taskOwnerConfirmationRequest.findMany({
@@ -382,6 +553,7 @@ export async function readWaitingOwnerConfirmations(
       ownerId,
       ...(sessionIds ? { sessionId: { in: [...sessionIds] } } : {}),
       decisions: { none: {} },
+      NOT: RETURNED,
       task: { completionCriterion: 'OWNER_CONFIRMED', status: { in: UNSETTLED } },
     },
     select: {
@@ -411,12 +583,15 @@ export async function readWaitingOwnerConfirmations(
     select: { id: true },
   });
   const openIds = new Set(open.map((session) => session.id));
-  return current
-    .filter((candidate) => openIds.has(candidate.sessionId))
-    .map((candidate) => ({
-      sessionId: candidate.sessionId,
-      taskId: candidate.taskId,
-      projectId: candidate.task.projectId,
-      requestedAt: candidate.requestedAt,
-    }));
+  const shown = current.filter((candidate) => openIds.has(candidate.sessionId));
+  if (shown.length === 0) return [];
+  const reviews = await confirmationReviewStates(tx, shown, new Date());
+  return shown.map((candidate) => ({
+    sessionId: candidate.sessionId,
+    taskId: candidate.taskId,
+    projectId: candidate.task.projectId,
+    requestId: candidate.id,
+    requestedAt: candidate.requestedAt,
+    review: reviews.get(candidate.id) ?? null,
+  }));
 }

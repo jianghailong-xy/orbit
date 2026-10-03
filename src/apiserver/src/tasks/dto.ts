@@ -274,6 +274,23 @@ export class DecideOwnerConfirmationDto {
   @IsString()
   @MaxLength(MAX_OWNER_DECISION_NOTE_CHARS)
   note?: string;
+
+  /**
+   * The REVIEW record the card drew as the request's current review, or null when it drew none
+   * (docs/owner-confirmation-review-contract.md §7 Q3). A client that knows about reviews always sends
+   * this key; one that leaves it out predates them, and is never refused on a review's account.
+   */
+  @IsOptional()
+  @IsPublicId()
+  reviewRecordId?: string | null;
+
+  /**
+   * The owner's answers to that review's questions: `{ key, option?, text? }` each, checked against
+   * the review by the service (Q3), which is also what refuses a malformed one with 400.
+   */
+  @IsOptional()
+  @IsArray()
+  answers?: Array<{ key: string; option?: number | null; text?: string | null }>;
 }
 
 /** The shared read shape of one recorded decision. */

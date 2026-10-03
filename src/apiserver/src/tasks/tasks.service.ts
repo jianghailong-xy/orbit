@@ -254,7 +254,7 @@ import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
 import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { accountEnvVar } from '../providers/account';
-import { readWaitingOwnerConfirmations } from './owner-confirmation-read';
+import { readOwnerConfirmationRows } from './owner-confirmation-read';
 import { accountPoolRuntime } from '../providers/custom-provider';
 import {
   criterionNeedsProjectRefusal,
@@ -6507,7 +6507,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       dependencyState,
       blocked: !canRun(dependencyState),
       runnable,
-      awaitingOwnerConfirmation: awaitingIds.has(id),
+      awaitingOwnerConfirmation: awaitingIds.awaiting.has(id),
+      confirmationUnderReview: awaitingIds.underReview.has(id),
     };
   }
 
@@ -6698,7 +6699,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dependencyState,
         blocked: !canRun(dependencyState),
         runnable: runnableIds.has(task.id),
-        awaitingOwnerConfirmation: awaitingIds.has(task.id),
+        awaitingOwnerConfirmation: awaitingIds.awaiting.has(task.id),
+        confirmationUnderReview: awaitingIds.underReview.has(task.id),
       };
     });
     const nextCursor =
@@ -6812,23 +6814,31 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * The tasks among these whose OWNER_CONFIRMED run is waiting on the owner right now — the same
-   * reading the session list's needs-you signal takes (`readWaitingOwnerConfirmations`), so a row
+   * reading the session list's needs-you signal takes (`readWaitingOwnerConfirmations`, here through
+   * `readOwnerConfirmationRows`, which answers it and its other half at once), so a row
    * and the conversation it points at say it together. Only a row that declares OWNER_CONFIRMED
    * and has not settled can be waiting, so a page without one asks nothing at all.
+   *
+   * `underReview` is the other half of the same population: a run's confirmation still with its
+   * reviewer (docs/owner-confirmation-review-contract.md §5 N3), which the row says "Under review"
+   * about instead. A task is in at most one of the two.
    */
   private async awaitingOwnerConfirmation(
     ownerId: string,
     rows: ReadonlyArray<{ id: string; completionCriterion: string | null; status: string }>,
-  ): Promise<Set<string>> {
+  ): Promise<{ awaiting: Set<string>; underReview: Set<string> }> {
     const wanted = new Set(
       rows
         .filter((row) => row.completionCriterion === 'OWNER_CONFIRMED'
           && (row.status === 'OPEN' || row.status === 'IN_PROGRESS'))
         .map((row) => row.id),
     );
-    if (wanted.size === 0) return wanted;
-    const waiting = await readWaitingOwnerConfirmations(this.prisma, ownerId);
-    return new Set(waiting.map((entry) => entry.taskId).filter((id) => wanted.has(id)));
+    if (wanted.size === 0) return { awaiting: wanted, underReview: new Set() };
+    const { waiting, underReview } = await readOwnerConfirmationRows(this.prisma, ownerId);
+    return {
+      awaiting: new Set(waiting.map((entry) => entry.taskId).filter((id) => wanted.has(id))),
+      underReview: new Set(underReview.map((entry) => entry.taskId).filter((id) => wanted.has(id))),
+    };
   }
 
   /**
@@ -6891,7 +6901,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         dependencyState,
         blocked: !canRun(dependencyState),
         runnable: runnableIds.has(task.id),
-        awaitingOwnerConfirmation: awaitingIds.has(task.id),
+        awaitingOwnerConfirmation: awaitingIds.awaiting.has(task.id),
+        confirmationUnderReview: awaitingIds.underReview.has(task.id),
       };
     });
     return { items, total, truncated: total > items.length };
