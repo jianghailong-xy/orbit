@@ -1000,6 +1000,13 @@ struct TaskRowView: View {
                 .font(.orbitListSubtitle.weight(.medium))
                 .foregroundStyle(.orange)
                 .lineLimit(1)
+        case .underReview?:
+            // Its report is still with its reviewer: in the same place, in the quiet tone.
+            HStack(spacing: 4) {
+                Image(systemName: "clock").font(.orbitMeta)
+                Text(OwnerConfirmations.underReview).font(.orbitListSubtitle).lineLimit(1)
+            }
+            .foregroundStyle(.secondary)
         case .prerequisiteCancelled?:
             HStack(spacing: 4) {
                 Image(systemName: "lock.fill").font(.orbitMeta)
@@ -1542,6 +1549,16 @@ private struct TaskDetailContent: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.orange)
+            .controlSize(.large)
+        case .underReview(let sessionID):
+            // The same way to the card while its report is still with its reviewer — not orange:
+            // nobody is asking the owner yet (contract §5 N3).
+            Button { model.route(to: .session(sessionID)) } label: {
+                Label(OwnerConfirmations.underReview, systemImage: "clock")
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
             .controlSize(.large)
         case .confirmDone:
             Button { Task { _ = await tasks.confirmOwner(task.id) } } label: {

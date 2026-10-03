@@ -641,6 +641,9 @@ public struct TranscriptReducer: Sendable, Codable {
                 // And who sent it, when it is another session's message: drawn "From [that session]"
                 // while it waits, and never handed back to the composer (web parity: `q.sessionMessage`).
                 bubble.sessionMessage = turn.senderCard
+                // And a confirmation review's two turns, as the cards their echoes will be.
+                bubble.reviewRequest = turn.reviewRequestCard
+                bubble.reviewReturn = turn.reviewReturnCard
                 bubble.authoredByOrbit = turn.authoredByOrbit == true
                 reconciled.append(bubble)
             } else {
@@ -651,7 +654,9 @@ public struct TranscriptReducer: Sendable, Codable {
                                              itemCard: turn.itemCard,
                                              startedCard: turn.startedCard,
                                              sessionMessage: turn.senderCard,
-                                             authoredByOrbit: turn.authoredByOrbit == true))
+                                             authoredByOrbit: turn.authoredByOrbit == true,
+                                             reviewRequest: turn.reviewRequestCard,
+                                             reviewReturn: turn.reviewReturnCard))
             }
         }
 
@@ -1093,6 +1098,10 @@ public struct TranscriptReducer: Sendable, Codable {
         // And the outcomes of this session's own requests a turn handed back (`sessionReplies`,
         // `SessionReply.parse`), by the same rule.
         let sessionReplies = SessionReply.parse(ev.payload)
+        // And a confirmation review's two turns (`confirmationReviewRequest` / `confirmationReturn`,
+        // `ConfirmationReviewTurns.swift`), by the same rule.
+        let reviewRequest = ConfirmationReviewRequestCard.parse(ev.payload)
+        let reviewReturn = ConfirmationReturnCard.parse(ev.payload)
         // The runner echoes `attachments` (an array of `{id, mime, name}`) on the durable user
         // event, NOT `attachmentIds` — parse those so the bubble can render images / file chips
         // after a reload (web reads the same field).
@@ -1152,6 +1161,8 @@ public struct TranscriptReducer: Sendable, Codable {
                 b.startedCard = startedCard
                 b.sessionMessage = sessionMessage
                 b.sessionReplies = sessionReplies
+                b.reviewRequest = reviewRequest
+                b.reviewReturn = reviewReturn
                 if !atts.isEmpty { b.attachments = atts }   // durable refs carry mime; keep ids if absent
                 b.ts = ev.ts ?? b.ts
                 b.steer = b.steer || steer
@@ -1174,7 +1185,9 @@ public struct TranscriptReducer: Sendable, Codable {
                                             itemCard: itemCard, taskStart: taskStart,
                                             startedCard: startedCard,
                                             sessionMessage: sessionMessage,
-                                            sessionReplies: sessionReplies)))
+                                            sessionReplies: sessionReplies,
+                                            reviewRequest: reviewRequest,
+                                            reviewReturn: reviewReturn)))
     }
 
     private mutating func appendInterrupt(seq: Int, dropsQueue: Bool) {

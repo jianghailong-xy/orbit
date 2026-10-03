@@ -144,6 +144,83 @@ final class NeedsYouOwnerDecisionTests: XCTestCase {
         XCTAssertEqual(SessionGrouping.group([alsoAnItem]).needsYou.map(\.id), ["coordinator"])
     }
 
+    /// A run whose report is still with its reviewer is NOT waiting on you
+    /// (docs/owner-confirmation-review-contract.md §5 N1): the server leaves it out of
+    /// `pendingApprovals`, so nothing here may put it back — not the grouping, not the bar, not the
+    /// drawer's badge, and not the bar inside the conversation that counts the cards below. The row
+    /// and the header say "Under review" in the quiet tone instead, with the reviewer's name.
+    func testARunUnderReviewIsDrawnButNotCounted() {
+        let review = ConfirmationUnderReview(requestId: "req-1", taskId: "task-1",
+                                             reviewerSessionId: "coordinator",
+                                             reviewerTitle: "会话间消息参数与回复设计",
+                                             since: "2026-10-02T14:55:00Z", dueAt: "2026-10-02T15:25:00Z")
+        let run = Session(id: "run", title: "执行任务：会话间请求与回复", status: .awaitingInput,
+                          agentId: "orbit", assignedRunnerId: "runner", pendingApprovals: 0,
+                          taskId: "task-1", branch: nil, updatedAt: nil,
+                          lastAssistantText: "All six P1 review findings are fixed.",
+                          agent: SessionAgentRef(id: "orbit", name: "orbit", provider: nil,
+                                                 model: nil, effort: nil),
+                          lastTurnAt: "2026-10-02T14:55:00Z", confirmationUnderReview: review)
+
+        let groups = SessionGrouping.group([run])
+        XCTAssertTrue(groups.needsYou.isEmpty, "a report under review is not something that needs you")
+        XCTAssertNil(NeedsYouLogic.banner(waiting: groups.needsYou), "no bar")
+        XCTAssertEqual(NeedsYouLogic.byAgent([run]), [:], "no count on its workspace")
+        XCTAssertNil(MenuBar.summary(from: [run]).badge, "and no badge")
+
+        XCTAssertEqual(SessionLine.make(for: run, live: true),
+                       SessionLine(text: "Under review · 会话间消息参数与回复设计", tone: .review))
+        XCTAssertEqual(SessionHeader.statusWord(for: run), OwnerConfirmations.underReview)
+        XCTAssertEqual(SessionHeader.subtitle(for: run, now: Date(timeIntervalSince1970: 1_791_000_000))?
+                        .hasPrefix("Under review · Open · "), true,
+                       "the header's subtitle: `Under review · Open · 2m ago`")
+        let glyph = SessionStatusGlyph.make(for: run)
+        XCTAssertEqual(glyph.shape, .symbol("clock"))
+        XCTAssertEqual(glyph.tone, .neutral, "never the amber of a row waiting on you")
+        XCTAssertEqual(glyph.label, OwnerConfirmations.underReview)
+
+        // Something else waiting on the owner in the same conversation still lights it.
+        let alsoBlocked = Session(id: "run", title: nil, status: .awaitingInput, agentId: "orbit",
+                                  assignedRunnerId: "runner", pendingApprovals: 1, branch: nil,
+                                  updatedAt: nil, confirmationUnderReview: review)
+        XCTAssertEqual(SessionLine.make(for: alsoBlocked, live: true).tone, .approval)
+
+        // A summary saying the review is over clears the row; one from an older server leaves it.
+        let cleared = run.applying(try! JSONDecoder().decode(ControlSessionSummary.self, from: Data(
+            #"{"id":"run","status":"AWAITING_INPUT","pendingApprovals":1,"waitingKind":"OWNER_CONFIRMATION","confirmationUnderReview":null}"#.utf8)))
+        XCTAssertNil(cleared.confirmationUnderReview)
+        XCTAssertEqual(SessionLine.make(for: cleared, live: true),
+                       SessionLine(text: OwnerConfirmations.waitingForConfirmation, tone: .approval))
+        let older = run.applying(try! JSONDecoder().decode(ControlSessionSummary.self, from: Data(
+            #"{"id":"run","status":"AWAITING_INPUT","pendingApprovals":0}"#.utf8)))
+        XCTAssertEqual(older.confirmationUnderReview, review)
+    }
+
+    /// The bar inside the conversation ("1 open question below") counts the cards still asking the
+    /// owner, and a card whose report is with its reviewer is not one of them — while the card
+    /// itself stays open, drawn and pressable (§5 N1, §0.2 G2).
+    func testTheBarBelowLeavesOutACardStillUnderReview() {
+        func standing(_ state: OwnerConfirmationReviewState?) -> OwnerConfirmationStanding {
+            let review = state.map {
+                OwnerConfirmationReviewView(reviewId: "rv1", state: $0,
+                                            reviewer: .init(kind: "TASK_CREATOR", sessionId: "s", title: "R"),
+                                            since: "2026-10-02T14:55:00Z", dueAt: "2026-10-02T15:25:00Z",
+                                            windowSeconds: 1800)
+            }
+            let waiting = OwnerConfirmationWaiting(requestId: "req-1", sessionId: "run",
+                                                   requestedAt: "2026-10-02T14:55:00Z", review: review)
+            let view = OwnerConfirmationView(taskId: "task-1", title: "T", status: "OPEN",
+                                             completionCriterion: "OWNER_CONFIRMED", waiting: waiting)
+            return OwnerConfirmations.standing(view, sessionID: "run", requestID: "req-1")
+        }
+        XCTAssertTrue(OwnerConfirmations.isOpen(standing(.underReview)), "still a question on screen")
+        XCTAssertTrue(standing(.underReview).answerable, "and the door still takes an answer")
+        XCTAssertFalse(OwnerConfirmations.asksNow(standing(.underReview)), "but not counted below")
+        for counted: OwnerConfirmationReviewState? in [nil, .reviewed, .notReviewed, .outdated] {
+            XCTAssertTrue(OwnerConfirmations.asksNow(standing(counted)), "\(String(describing: counted))")
+        }
+    }
+
     /// A blocked tool call is unchanged by the hoist: it holds the turn open, so it was already
     /// inside the gate and is now simply ahead of it.
     func testABlockedToolCallStillReadsTheSameWay() {

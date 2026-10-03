@@ -154,6 +154,12 @@ public struct UserBubble: Equatable, Sendable, Codable {
     /// recorded them beside the echo (`sessionReplies`, see `SessionReply.parse`). Nobody typed them:
     /// the console draws a reply card per outcome. Nil for every other turn.
     public var sessionReplies: [SessionReply]?
+    /// A confirmation request handed to this conversation to review, and a reviewer's return handed
+    /// to the run, when the control plane recorded them beside the echo (`confirmationReviewRequest`
+    /// / `confirmationReturn`, see `ConfirmationReviewTurns.swift`). Orbit's turns, drawn as their
+    /// cards. Nil for every other turn.
+    public var reviewRequest: ConfirmationReviewRequestCard?
+    public var reviewReturn: ConfirmationReturnCard?
     /// The control plane wrote this queued turn itself (`QueuedTurnInfo.authoredByOrbit`), so nobody
     /// typed it: taken off the queue unrun, it hands nothing back to the composer.
     public var authoredByOrbit: Bool
@@ -176,7 +182,9 @@ public struct UserBubble: Equatable, Sendable, Codable {
                 taskStart: TaskStart? = nil,
                 startedCard: ProjectStarted? = nil, sessionMessage: SessionMessage? = nil,
                 sessionReplies: [SessionReply]? = nil,
-                authoredByOrbit: Bool = false) {
+                authoredByOrbit: Bool = false,
+                reviewRequest: ConfirmationReviewRequestCard? = nil,
+                reviewReturn: ConfirmationReturnCard? = nil) {
         self.id = id
         self.text = text
         self.attachments = attachments
@@ -195,6 +203,8 @@ public struct UserBubble: Equatable, Sendable, Codable {
         self.sessionMessage = sessionMessage
         self.sessionReplies = sessionReplies
         self.authoredByOrbit = authoredByOrbit
+        self.reviewRequest = reviewRequest
+        self.reviewReturn = reviewReturn
     }
 
     // Tolerant decode so transcript snapshots written before `attachments`/`ts` existed still
@@ -202,7 +212,7 @@ public struct UserBubble: Equatable, Sendable, Codable {
     enum CodingKeys: String, CodingKey {
         case id, text, attachments, ts, clientTurnId, turnId, pending, queued, undelivered
         case note, steer, delivery, itemCard, taskStart, startedCard, sessionMessage, sessionReplies
-        case authoredByOrbit
+        case authoredByOrbit, reviewRequest, reviewReturn
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -229,6 +239,9 @@ public struct UserBubble: Equatable, Sendable, Codable {
         // And for the outcomes a turn handed back: a snapshot from before they existed keeps its reading.
         sessionReplies = try? c.decodeIfPresent([SessionReply].self, forKey: .sessionReplies)
         authoredByOrbit = (try? c.decodeIfPresent(Bool.self, forKey: .authoredByOrbit)) ?? false
+        // And for a review's two turns: a snapshot from before they existed keeps its reading.
+        reviewRequest = try? c.decodeIfPresent(ConfirmationReviewRequestCard.self, forKey: .reviewRequest)
+        reviewReturn = try? c.decodeIfPresent(ConfirmationReturnCard.self, forKey: .reviewReturn)
     }
 }
 

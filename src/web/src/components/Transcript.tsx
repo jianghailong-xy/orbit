@@ -82,6 +82,9 @@ import { TaskStartCard } from './TaskStartCard';
 import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
 import { parseSessionMessage } from '../lib/sessionMessage';
+import { parseConfirmationReturn, parseConfirmationReviewRequest } from '../lib/confirmationReviewTurns';
+import type { ConfirmationReturnCard, ConfirmationReviewRequestCard } from '@orbit/shared';
+import { ReviewRequestedCard, SentBackByReviewerCard } from './ConfirmationReviewTurnCards';
 import type { SessionMessageCard as SessionMessage, SessionReplyCard as SessionReply } from '@orbit/shared';
 import { SessionMessageCard } from './SessionMessageCard';
 import { parseSessionReplies, withoutReplyBlocks } from '../lib/sessionRequest';
@@ -357,6 +360,10 @@ type TextNode = {
   // The outcomes of this session's own requests the turn handed back, when the control plane
   // recorded them beside the echo (`sessionReplies`, lib/sessionRequest). Drawn as reply cards.
   sessionReplies?: SessionReply[];
+  // A confirmation request handed to this conversation to review, and a reviewer's return handed to
+  // the run (lib/confirmationReviewTurns). Orbit's turns, drawn as their cards.
+  reviewRequest?: ConfirmationReviewRequestCard;
+  reviewReturn?: ConfirmationReturnCard;
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
@@ -731,6 +738,8 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         const startedCard = parseProjectStarted(p) ?? undefined;
         const sessionMessage = parseSessionMessage(p) ?? undefined;
         const sessionReplies = parseSessionReplies(p) ?? undefined;
+        const reviewRequest = parseConfirmationReviewRequest(p) ?? undefined;
+        const reviewReturn = parseConfirmationReturn(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
@@ -754,6 +763,8 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
             startedCard,
             sessionMessage,
             sessionReplies,
+            reviewRequest,
+            reviewReturn,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
@@ -1348,6 +1359,30 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
             seq={node.seq}
             ts={node.ts}
             undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+          />
+        );
+      }
+      // A confirmation review's two turns (lib/confirmationReviewTurns): the request a reviewer is
+      // handed, and the reviewer's return handed to the run. Both are Orbit's — the block the agent
+      // read rides at the foot as the note it is — and neither is the reader's bubble.
+      if (node.reviewRequest || node.reviewReturn) {
+        const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
+        const attached = node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />;
+        return node.reviewRequest ? (
+          <ReviewRequestedCard
+            card={node.reviewRequest}
+            seq={node.seq}
+            ts={node.ts}
+            undelivered={undelivered}
+            attached={attached}
+          />
+        ) : (
+          <SentBackByReviewerCard
+            card={node.reviewReturn!}
+            seq={node.seq}
+            ts={node.ts}
+            undelivered={undelivered}
+            attached={attached}
           />
         );
       }
