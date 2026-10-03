@@ -399,6 +399,14 @@ describe('taking an undelivered message back into the composer', () => {
     placement = 'queued';
     await mount();
 
+    // The window opens only once the snapshot the session asks for on open (SWITCH_DEBOUNCE_MS
+    // after mount) has been asked for. A re-send queued before it is a row the page already knew
+    // when it asked, and this stub's snapshot never lists the re-send, so its answer takes the row
+    // away again and Cancel never draws — on a fast host the click came first about two runs in
+    // three.
+    await waitForUi(() => {
+      expect(requested).toContain(`GET /sessions/${SESSION_PUBLIC}/turns?view=active`);
+    });
     await waitForUi(() => {
       expect(mounted().querySelector('.chat-authfix-retry')).not.toBeNull();
     });
