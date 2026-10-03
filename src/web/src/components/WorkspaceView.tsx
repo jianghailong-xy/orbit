@@ -313,14 +313,19 @@ import {
   OWNER_SENDING_BACK_PREFIX,
   type OwnerConfirmationWaiting,
   OwnerDecisionReceipt,
+  ReviewerReturnRecord,
   SessionOwnerConfirmationCard,
   WAITING_FOR_CONFIRMATION,
   ownerConfirmationWaitingIn,
   ownerDecisionReceiptsIn,
   ownerDecisionRefusal,
   refreshOwnerConfirmationViews,
+  reviewerReturnsIn,
   sendOwnerDecision,
 } from './OwnerConfirmationCard';
+import { OwnerConfirmationReopen } from './OwnerConfirmationReopen';
+import { UNDER_REVIEW, underReviewLine } from './OwnerConfirmationReview';
+import { ReviewRequestedCard, SentBackByReviewerCard } from './ConfirmationReviewTurnCards';
 import { ComposerMirror } from './ComposerMirror';
 import { FIND_HINT, openSessionFind, SessionFind } from './SessionFind';
 import { ShareModal } from './ShareModal';
@@ -328,6 +333,8 @@ import type { Runner } from './TasksSidePanel';
 import { accountsOf } from './AccountSelect';
 import { PlanUsageIndicator } from './PlanUsageIndicator';
 import type {
+  ConfirmationReturnCard,
+  ConfirmationReviewRequestCard,
   OpenItemDeliveryCard as OpenItemDelivery,
   ProjectStartedCard as ProjectStarted,
   SessionMessageCard as SessionMessage,
@@ -471,6 +478,10 @@ export interface QueuedTurn {
   openItemDelivery?: OpenItemDelivery;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStarted;
+  /** And for a confirmation review's two turns: the request a reviewer is handed, and the reviewer's
+   *  return handed to the run (`ActiveSessionTurn.confirmationReviewRequest` / `confirmationReturn`). */
+  confirmationReviewRequest?: ConfirmationReviewRequestCard;
+  confirmationReturn?: ConfirmationReturnCard;
   /** Another Orbit session's message, and who sent it (`ActiveSessionTurn.sessionMessage`): drawn as
    *  the "From [that session]" card its echo will be, and never handed back to the reader's composer. */
   sessionMessage?: SessionMessage;
@@ -913,7 +924,7 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
 // background process or a watch that will resume it, default = reply content.
 type SessionLine = {
   text: string;
-  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching';
+  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review';
 };
 // The line for a message of YOURS the workspace hasn't answered yet. Prefixed, because the preview
 // line is otherwise the workspace's voice: unmarked, a message you sent and a reply to it read
@@ -989,6 +1000,11 @@ export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | 
   // decision waiting for an answer left this row reading as an idle reply preview.
   if (live && (s.pendingApprovals ?? 0) > 0)
     return { text: waitingLabel(s), tone: 'approval' };
+  // The same place for a run whose report is still with its reviewer (contract §5 N3): its card is
+  // drawn and can be pressed, but nobody is asking the owner yet, so the row says who has it in the
+  // secondary tone — never the amber of a row waiting on you, and never counted.
+  if (live && s.confirmationUnderReview)
+    return { text: underReviewLine(s.confirmationUnderReview.reviewerTitle), tone: 'review' };
   // Outranks the generating preview below. While the engine is starting, or compacting, it has
   // produced nothing since the wait began, so that preview would echo the message back as though it
   // were being answered (see waitingNoticeFor). Blue, because this is progress — just not the
@@ -1156,6 +1172,8 @@ export function statusLabel(session: any, watching?: string | null): string {
   // Same ordering as `sessionLine`, and outside the generating gate for the same reason: an owner
   // decision is not held open by a turn, so it is still waiting once the conversation parks.
   if ((session.pendingApprovals ?? 0) > 0) return waitingLabel(session);
+  // Where `Waiting for your confirmation` would be, while the report is with its reviewer (§5 N3).
+  if (session.confirmationUnderReview) return UNDER_REVIEW;
   if (state === 'SUCCEEDED') return 'Succeeded';
   if (waitingNoticeFor(session)) return startingLabel(session);
   if (isGenerating(session, state)) return 'Running';
@@ -1240,6 +1258,13 @@ export function StatusIcon({ session, watching }: { session: any; watching?: str
     return (
       <Tooltip title={waitingLabel(session)}>
         <PauseCircleOutlined style={{ color: 'var(--warning-solid)', fontSize }} />
+      </Tooltip>
+    );
+  // Under review: a clock in the neutral tone, beside the row's line in the same place (§5 N3).
+  if (session.confirmationUnderReview)
+    return (
+      <Tooltip title={UNDER_REVIEW}>
+        <ClockCircleOutlined style={{ color: 'var(--text-3)', fontSize }} />
       </Tooltip>
     );
   if (state === 'SUCCEEDED')
@@ -2294,6 +2319,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     qc.invalidateQueries({ queryKey: ['sessions'] });
     if (selectedId) qc.invalidateQueries({ queryKey: ['session', selectedId] });
   }, [runner.id, runner.online, selectedId, qc]);
+  // A row saying "Under review" stops saying it when the review's window runs out, which nothing on
+  // the server announces (contract §5 N5): the window is read, never swept. So the list reads again a
+  // second after the earliest such row is due, rather than at the next event that happens by.
+  const reviewDueAt = (sessionsQ.data ?? []).reduce<number | null>((earliest, row: any) => {
+    const due = Date.parse(row?.confirmationUnderReview?.dueAt ?? '');
+    return Number.isNaN(due) || (earliest !== null && earliest <= due) ? earliest : due;
+  }, null);
+  useEffect(() => {
+    if (reviewDueAt === null) return;
+    const wait = reviewDueAt + 1_000 - Date.now();
+    if (wait > 2 ** 31 - 1) return;
+    const timer = setTimeout(() => void qc.invalidateQueries({ queryKey: ['sessions'] }), Math.max(0, wait));
+    return () => clearTimeout(timer);
+  }, [qc, reviewDueAt]);
   // The owner's tag library, for the filter menu and the "Group by Tag" headings.
   const sessionTags = useQuery(sessionTagsQuery()).data ?? [];
 
@@ -4452,7 +4491,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // A run ending its turn moves this session's row, not the task, so no task event re-reads the
   // confirmation. Re-read it when the row moves, and the card arrives with the report rather than
   // on the card's next poll.
-  const selectedRunMoment = `${selectedSession?.runState ?? ''}|${selectedSession?.lastTurnAt ?? ''}`;
+  // The row's review status is in it too: a reviewer that ends, answers or runs out of time moves
+  // this row and nothing about the task (contract §5 N5), and the card has to follow the row.
+  const selectedRunMoment = `${selectedSession?.runState ?? ''}|${selectedSession?.lastTurnAt ?? ''}|${
+    selectedSession?.confirmationUnderReview?.requestId ?? ''}`;
   useEffect(() => {
     if (!selectedTaskId) return;
     void qc.invalidateQueries({ queryKey: ownerConfirmationQuery(selectedTaskId).queryKey });
@@ -4486,13 +4528,36 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       }),
       ...ownerDecisionReceiptsIn(ownerConfirmation.data, selectedId).flatMap((decided) => {
         const anchor = decisionReceiptAnchor(transcriptEvents, decided.decidedAt);
-        return anchor === null || !ownerConfirmation.data
+        const view = ownerConfirmation.data;
+        return anchor === null || !view
           ? []
           : [{
               anchor,
               moment: decided.decidedAt,
               key: `owner-decision-receipt:${decided.id}`,
-              element: <OwnerDecisionReceipt view={ownerConfirmation.data} decided={decided} />,
+              element: (
+                <OwnerDecisionReceipt
+                  view={view}
+                  decided={decided}
+                  // Offered where the review that came in later found problems, once the task has
+                  // settled — the task panel's own Reopen task (contract §9 L4).
+                  reopen={<OwnerConfirmationReopen taskId={view.taskId} projectId={view.projectId} status={view.status} />}
+                />
+              ),
+            }];
+      }),
+      // A report its reviewer sent back to the run: the card it was is drawn as the record it
+      // became, at the moment it was sent back (contract §8 B6).
+      ...reviewerReturnsIn(ownerConfirmation.data, selectedId).flatMap((returned) => {
+        const at = returned.review.returned?.recordedAt;
+        const anchor = at ? decisionReceiptAnchor(transcriptEvents, at) : null;
+        return anchor === null || !at || !ownerConfirmation.data
+          ? []
+          : [{
+              anchor,
+              moment: at,
+              key: `owner-confirmation-returned:${returned.requestId}`,
+              element: <ReviewerReturnRecord view={ownerConfirmation.data} returned={returned} />,
             }];
       }),
       // The set somebody signed for this project, at the moment they signed it. This one is the
@@ -8512,9 +8577,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               openSettlementIn?.sessionId === selectedId ? openSettlementIn.question : false
             }
             // Named in the card's own words, with how long the run has waited — never a number
-            // first. Only when the card below is drawn in this session, so a press always arrives.
+            // first. Only when the card below is drawn in this session, so a press always arrives;
+            // and not while its report is still with its reviewer, which is somebody else's to look
+            // at first — the card is there, but nothing points the owner at it (contract §5 N1).
             ownerConfirmation={
-              ownerWaiting && ownerConfirmation.data
+              ownerWaiting && ownerConfirmation.data && ownerWaiting.review?.state !== 'UNDER_REVIEW'
                 ? {
                     title: ownerConfirmation.data.title,
                     ageSeconds: Math.max(
@@ -8890,6 +8957,40 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       />
                     }
                   />
+                ) : q.confirmationReviewRequest || q.confirmationReturn ? (
+                  // A confirmation review's turns are Orbit's on the queue too: the card the
+                  // transcript draws once a runner takes them, with the queue's line at its foot.
+                  q.confirmationReviewRequest ? (
+                    <ReviewRequestedCard
+                      key={q.turnId}
+                      card={q.confirmationReviewRequest}
+                      ts={q.createdAt}
+                      queued={
+                        <QueuedTurnMeta
+                          placement={q.placement}
+                          delivery={q.delivery}
+                          deliveryCode={q.deliveryCode}
+                          deliveryReason={q.deliveryReason}
+                          onCancel={() => cancelQueued(q.turnId)}
+                        />
+                      }
+                    />
+                  ) : (
+                    <SentBackByReviewerCard
+                      key={q.turnId}
+                      card={q.confirmationReturn!}
+                      ts={q.createdAt}
+                      queued={
+                        <QueuedTurnMeta
+                          placement={q.placement}
+                          delivery={q.delivery}
+                          deliveryCode={q.deliveryCode}
+                          deliveryReason={q.deliveryReason}
+                          onCancel={() => cancelQueued(q.turnId)}
+                        />
+                      }
+                    />
+                  )
                 ) : q.projectStarted ? (
                   // The message telling the coordinator its project was started, as the card the
                   // transcript draws once a runner takes it — the same reason as the delivery above.

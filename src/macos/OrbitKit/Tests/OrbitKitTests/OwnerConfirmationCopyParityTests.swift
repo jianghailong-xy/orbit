@@ -24,6 +24,10 @@ final class OwnerConfirmationCopyParityTests: XCTestCase {
     private static let webCard = "src/web/src/components/OwnerConfirmationCard.tsx"
     private static let webConsole = "src/web/src/components/WorkspaceView.tsx"
     private static let webTaskPanel = "src/web/src/components/TaskDetailPanel.tsx"
+    /// The review bar's words and the turn cards a review puts into a conversation
+    /// (docs/owner-confirmation-review-contract.md §12).
+    private static let webReview = "src/web/src/components/OwnerConfirmationReview.tsx"
+    private static let webReviewTurns = "src/web/src/components/ConfirmationReviewTurnCards.tsx"
 
     /// The repo root, found by walking up from this file until the web card is under foot.
     /// Not a fixed number of `..` hops: the depth of this file is not the thing being asserted.
@@ -271,6 +275,116 @@ final class OwnerConfirmationCopyParityTests: XCTestCase {
         }
         assertContains(web, "export const OWNER_CONFIRMATION_STALE_CODES",
                        "the list of refusals that mean the card is out of date")
+    }
+
+    // MARK: the review bar (docs/owner-confirmation-review-contract.md §6–§9, §12)
+
+    /// Every word the bar says, declared at both ends with the same spelling. Where a sentence is put
+    /// together around a value, the whole sentence is compared, with the value put back as the web
+    /// template's own interpolation.
+    func testTheReviewBarsWordsMatchTheWebBar() throws {
+        let web = try flat(Self.webReview)
+        let declared: [(String, String, String)] = [
+            ("UNDER_REVIEW", OwnerConfirmations.underReview, "what a row under review says"),
+            ("REVIEW_HEADING", OwnerConfirmations.reviewHeading, "the bar's label"),
+            ("REVIEWER_FALLBACK", OwnerConfirmations.reviewerFallback, "an unreadable reviewer's name"),
+            ("REVIEWING_SINCE", OwnerConfirmations.reviewingSincePrefix, "the under-review status"),
+            ("REVIEW_WILL_ASK", OwnerConfirmations.reviewWillAsk, "the under-review note"),
+            ("REVIEW_WILL_SHOW_HERE", OwnerConfirmations.reviewWillShowHere, "the receipt's under-review note"),
+            ("REVIEW_NEEDS_YOU", OwnerConfirmations.reviewNeedsYou, "the first line's question prefix"),
+            ("REVIEW_NOTHING_NEEDS_YOU", OwnerConfirmations.reviewNothingNeedsYou, "the first line's all-clear"),
+            ("REVIEW_CHECKED", OwnerConfirmations.reviewChecked, "the Checked row"),
+            ("REVIEW_NOT_CHECKED", OwnerConfirmations.reviewNotChecked, "the Not checked row"),
+            ("REVIEW_LEFT_OPEN", OwnerConfirmations.reviewLeftOpen, "the Left open row"),
+            ("REVIEW_PROBLEM", OwnerConfirmations.reviewProblem, "a Problem row"),
+            ("NOT_REVIEWED", OwnerConfirmations.notReviewed, "the not-reviewed status"),
+            ("NOT_REVIEWED_TAIL", OwnerConfirmations.notReviewedTail, "who has checked it"),
+            ("NOT_REVIEWED_REVIEWER_ENDED", OwnerConfirmations.notReviewedReviewerEnded, "REVIEWER_ENDED"),
+            ("NOT_REVIEWED_REVIEWER_STOPPED", OwnerConfirmations.notReviewedReviewerStopped, "REVIEWER_STOPPED"),
+            ("NOT_REVIEWED_COORDINATOR_PAUSED", OwnerConfirmations.notReviewedCoordinatorPaused,
+             "COORDINATOR_PAUSED"),
+            ("NOT_REVIEWED_AUTOMATIC_OFF", OwnerConfirmations.notReviewedAutomaticOff, "AUTOMATIC_OFF"),
+            ("NOT_REVIEWED_NO_COORDINATOR", OwnerConfirmations.notReviewedNoCoordinator, "NO_COORDINATOR"),
+            ("NOT_REVIEWED_UNREACHABLE", OwnerConfirmations.notReviewedUnreachable, "UNREACHABLE"),
+            ("REVIEW_OUTDATED", OwnerConfirmations.reviewOutdated, "the outdated status"),
+            ("REVIEW_EARLIER_REPORT", OwnerConfirmations.reviewEarlierReport, "a newer report's note"),
+            ("SHOW_OLD_REVIEW", OwnerConfirmations.showOldReview, "the old review's fold"),
+            ("RETURNED_TO_AGENT", OwnerConfirmations.returnedToAgent, "the returned record's status"),
+            ("RETURNED_FOOTER", OwnerConfirmations.returnedFooter, "the returned record's last line"),
+            ("SENT_BACK_BY_REVIEWER", OwnerConfirmations.sentBackByReviewer, "the return's turn card"),
+            ("REVIEW_EVIDENCE", OwnerConfirmations.reviewEvidence, "a question's evidence fold"),
+            ("ANSWERS_SENT_WITH_CONFIRM", OwnerConfirmations.answersSentWithConfirm, "the answers' hint"),
+            ("YOUR_ANSWERS", OwnerConfirmations.yourAnswers, "the receipt's answers"),
+            ("ANSWER_NOT_SHOWN", OwnerConfirmations.answerNotShown, "an answer the owner was not shown"),
+            ("BEFORE_REVIEW", OwnerConfirmations.beforeReview, "a decision made before the review"),
+            ("REVIEW_REQUESTED", OwnerConfirmations.reviewRequested, "the reviewer's turn card"),
+        ]
+        for (name, value, what) in declared {
+            assertDeclares(web, name, value, what)
+        }
+
+        // The sentences put together around a value, compared whole.
+        assertContains(web, "`" + template(OwnerConfirmations.reviewingSince("14:55"), [
+            (OwnerConfirmations.reviewingSincePrefix, "${REVIEWING_SINCE}"), ("14:55", "${time}"),
+        ]) + "`", "Reviewing since <time>")
+        assertContains(web, "`" + template(OwnerConfirmations.reviewNeedsYouLine("Q", more: 2), [
+            (OwnerConfirmations.reviewNeedsYou, "${REVIEW_NEEDS_YOU}"), ("Q", "${text}"), ("2", "${more}"),
+        ]) + "`", "Needs you: <question> (+N more)")
+        assertContains(web, "`" + template(OwnerConfirmations.reviewNothingNeedsYouLine(3), [
+            ("3", "${notChecked}"), (OwnerConfirmations.reviewNothingNeedsYou, "${REVIEW_NOTHING_NEEDS_YOU}"),
+        ]) + "`", "<N> not checked · nothing needs you")
+        assertContains(web, "'\(OwnerConfirmations.problemsFoundLine(1))'", "one problem found")
+        assertContains(web, "`" + template(OwnerConfirmations.problemsFoundLine(4), [("4", "${problems}")]) + "`",
+                       "N problems found")
+        assertContains(web, "`" + template(OwnerConfirmations.noAnswerWithin("30 min"), [("30 min", "${window}")])
+                           + "`", "No answer within <window>.")
+        assertContains(web, "`" + template(OwnerConfirmations.writtenFor("aaaaaaa", now: "bbbbbbb"), [
+            ("aaaaaaa", "${reviewed}"), ("bbbbbbb", "${now}"),
+        ]) + "`", "Written for <commit> … <commit> now")
+        assertContains(web, "`" + template(OwnerConfirmations.reviewDue("15:25"), [("15:25", "${time}")]) + "`",
+                       "Due <time>")
+        assertContains(web, "`" + template(OwnerConfirmations.underReviewLine("zz-reviewer"), [
+            (OwnerConfirmations.underReview, "${UNDER_REVIEW}"),
+            ("zz-reviewer", "${reviewerName(reviewerTitle)}"),
+        ]) + "`", "the row's Under review · <reviewer>")
+        // The window's three shapes: `30 min`, `2 h`, `1 h 30 min`.
+        assertContains(web, "`${rest} min`", "a window under an hour")
+        assertContains(web, "`${hours} h`", "a window of whole hours")
+        assertContains(web, "`${hours} h ${rest} min`", "a window of hours and minutes")
+        XCTAssertEqual(OwnerConfirmations.reviewWindowWords(5400), "1 h 30 min")
+    }
+
+    /// The question card's own words, which the answer blocks reuse at both ends (§7 Q2).
+    func testTheAnswerBlocksReuseTheQuestionCardsWords() throws {
+        let review = try flat(Self.webReview)
+        assertContains(review, "import { OTHER_OPTION, RECOMMENDED } from './CoordinatorQuestionCard';",
+                       "the web answer blocks reusing the question card's words")
+        let question = try flat("src/web/src/components/CoordinatorQuestionCard.tsx")
+        assertDeclares(question, "RECOMMENDED", CoordinatorQuestions.recommended, "the Recommended tag")
+        assertDeclares(question, "OTHER_OPTION", CoordinatorQuestions.otherOption, "the Other row")
+    }
+
+    /// The card's mark, now that an agent's words stand on it twice, each in a box naming who wrote
+    /// it (§10 G3) — and the console and the task panel saying Under review where they would say
+    /// Waiting for your confirmation (§5 N3).
+    func testTheMarkTheRowAndThePanelSayWhatAReviewMeans() throws {
+        let card = try flat(Self.webCard)
+        assertDeclares(card, "OWNER_CONFIRMATION_AUTHORSHIP_TITLE", OwnerConfirmations.authorshipTitle,
+                       "what the card's mark says about itself")
+
+        let console = try flat(Self.webConsole)
+        assertContains(console, "if (session.confirmationUnderReview) return UNDER_REVIEW;",
+                       "the header word under review")
+        assertContains(console, "return { text: underReviewLine(s.confirmationUnderReview.reviewerTitle), tone: 'review' };",
+                       "the row's line under review")
+
+        let panel = try flat(Self.webTaskPanel)
+        assertContains(panel, "ownerWaiting.review?.state === 'UNDER_REVIEW' ? UNDER_REVIEW : WAITING_FOR_CONFIRMATION",
+                       "the task panel's pointer under review")
+
+        let turns = try flat(Self.webReviewTurns)
+        assertDeclares(turns, "OPEN_TASK_SESSION", OwnerConfirmations.openTaskSession,
+                       "the Review requested card's way onto the run")
     }
 
     // MARK: the task panel's rule — one state, one place to answer

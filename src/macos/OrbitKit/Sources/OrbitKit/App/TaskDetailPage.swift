@@ -182,6 +182,9 @@ public struct TaskDetailActionRow: Equatable, Sendable {
     public enum Leading: Equatable, Sendable {
         /// A run of the task is waiting on the owner: go to its card (`OwnerConfirmations.PanelAction.pointer`).
         case waitingForConfirmation(sessionID: String)
+        /// The same run's report is still with its reviewer: the same way to its card, saying so
+        /// (`OwnerConfirmations.PanelAction.underReview`).
+        case underReview(sessionID: String)
         /// Confirm it from here (`OwnerConfirmations.PanelAction.confirm`).
         case confirmDone
         /// Take a stopped task back to Open (`TaskReopen.isOffered`).
@@ -208,6 +211,7 @@ public struct TaskDetailActionRow: Equatable, Sendable {
     /// The pointer's label does not fit half a phone's width: in that one state the presses stack.
     public var stacked: Bool {
         if case .waitingForConfirmation = leading { return trailing != nil }
+        if case .underReview = leading { return trailing != nil }
         return false
     }
 
@@ -340,6 +344,7 @@ public enum TaskDetailLogic {
         let leading: TaskDetailActionRow.Leading?
         switch owner {
         case .pointer(let sessionId): leading = .waitingForConfirmation(sessionID: sessionId)
+        case .underReview(let sessionId): leading = .underReview(sessionID: sessionId)
         case .confirm: leading = .confirmDone
         case nil: leading = reopenable ? .reopen : nil
         }

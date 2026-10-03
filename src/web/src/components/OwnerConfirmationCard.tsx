@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX, type Ref } from 'react';
+import { useEffect, useRef, useState, type JSX, type ReactNode, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
   BranchesOutlined,
@@ -8,7 +8,12 @@ import {
   PoweroffOutlined,
   RightOutlined,
 } from '@ant-design/icons';
-import type { OwnerConfirmationIfConfirmed, OwnerConfirmationStart } from '@orbit/shared';
+import type {
+  OwnerConfirmationAnswer,
+  OwnerConfirmationIfConfirmed,
+  OwnerConfirmationReviewView,
+  OwnerConfirmationStart,
+} from '@orbit/shared';
 import { Alert } from 'antd';
 import { useLocation } from 'react-router-dom';
 import { api } from '../api';
@@ -19,6 +24,17 @@ import { ENTER_HINT, useDecisionCardKeys } from './CardHotkey';
 import { PROVENANCE_LABEL } from './CriteriaDecisionCard';
 import { revealOwnerConfirmationCard } from './DecisionRail';
 import { decisionReceiptTime } from './EvidenceDecisionCard';
+import {
+  BEFORE_REVIEW,
+  OwnerAnswers,
+  OwnerConfirmationReviewBar,
+  reviewAnswered,
+  reviewAnswersComplete,
+  reviewCameInAfter,
+  type OwnerAnswerBody,
+  type ReviewChoice,
+  type ReviewChoices,
+} from './OwnerConfirmationReview';
 
 /**
  * The card that asks the account owner whether an OWNER_CONFIRMED task is done.
@@ -58,6 +74,15 @@ import { decisionReceiptTime } from './EvidenceDecisionCard';
  * The card goes, and a receipt (`OwnerDecisionReceipt`) is drawn into the conversation at the moment
  * the decision was made, read back from the decision rows — so a reload or another device shows it
  * too, as the evidence card's receipt is.
+ *
+ * AND WHAT A REVIEW ADDS
+ * ----------------------
+ * A run's report goes to its reviewer before its owner (docs/owner-confirmation-review-contract.md),
+ * and the review bar between the report and If you confirm says how far that got
+ * (`OwnerConfirmationReview.tsx`). It locks nothing: the buttons are the same in every state, and a
+ * review's questions only add answers that ride with Confirm done. A review that comes in after the
+ * decision is drawn under the receipt, with Reopen task when it found a problem; a report the
+ * reviewer sent back is drawn as the record it became (`ReviewerReturnRecord`).
  */
 
 export interface OwnerConfirmationReport {
@@ -72,6 +97,8 @@ export interface OwnerConfirmationWaiting {
   sessionId: string;
   requestedAt: string;
   report: OwnerConfirmationReport | null;
+  /** Its review; null when it has no reviewer, absent from an older server. */
+  review?: OwnerConfirmationReviewView | null;
 }
 
 export interface RecordedOwnerDecision {
@@ -85,6 +112,22 @@ export interface RecordedOwnerDecision {
    *  confirmation pressed while no run was waiting. */
   sessionId: string | null;
   report: OwnerConfirmationReport | null;
+  /** The answered request's review as it stands now, drawn under the receipt (§9 L3). */
+  review?: OwnerConfirmationReviewView | null;
+  /** The review's state when the owner decided; null for a panel confirmation. */
+  reviewStateAtDecision?: string | null;
+  /** The REVIEW record the decision was made against. */
+  reviewRecordId?: string | null;
+  /** The owner's answers to that review's questions. */
+  answers?: OwnerConfirmationAnswer[];
+}
+
+/** A report its reviewer sent back to the run: no decision answers it (§8 B6). */
+export interface ReviewerReturnedRequest {
+  requestId: string;
+  sessionId: string;
+  requestedAt: string;
+  review: OwnerConfirmationReviewView;
 }
 
 /** `GET /tasks/:taskId/owner-confirmation`. */
@@ -99,6 +142,8 @@ export interface OwnerConfirmationView {
   decisions: RecordedOwnerDecision[];
   /** What confirming sets off, while a run is waiting; null otherwise, absent from an older server. */
   ifConfirmed?: OwnerConfirmationIfConfirmed | null;
+  /** The reports a reviewer sent back to the run, oldest first; absent from an older server. */
+  reviewerReturns?: ReviewerReturnedRequest[];
 }
 
 export type OwnerDecision = 'CONFIRM' | 'SEND_BACK';
@@ -139,17 +184,22 @@ export const OWNER_HIDE_WHAT_SETTLED_IT = 'Hide what counted as done';
 /** What a session row and the session header say while one of these cards is waiting. */
 export const WAITING_FOR_CONFIRMATION = 'Waiting for your confirmation';
 
-/** What the mark says about itself. */
-export const OWNER_CONFIRMATION_PROVENANCE_TITLE =
-  'Orbit drew this card because a run of this task ended its turn. The title, what settles it and '
-  + 'the report are the record\'s own words; the buttons go straight to Orbit with your own sign-in, '
-  + 'and no agent session can press them.';
+/** What the mark says about itself, now that an agent's words can stand on the card twice — the
+ *  report and the review — each in a box naming who wrote it (contract §10 G3). */
+export const OWNER_CONFIRMATION_AUTHORSHIP_TITLE =
+  'Orbit composed this card and authorised its buttons. Anything an agent wrote is shown in a box '
+  + 'that names who wrote it.';
 
-/** The door's refusals that mean "this card is out of date", in the door's own spelling. */
+/** The door's refusals that mean "this card is out of date", in the door's own spelling — the two a
+ *  review adds among them (§7 Q3): the review the card drew is not the one waiting now, or its
+ *  questions were not all answered. Read again, the card draws the review and its questions as they
+ *  are now. */
 export const OWNER_CONFIRMATION_STALE_CODES: readonly string[] = [
   'OWNER_CONFIRMATION_STALE',
   'OWNER_CONFIRMATION_NOTHING_TO_SEND_BACK',
   'OWNER_CONFIRMATION_TASK_SETTLED',
+  'OWNER_CONFIRMATION_REVIEW_STALE',
+  'OWNER_CONFIRMATION_ANSWERS_REQUIRED',
 ];
 
 /** Where the report starts being folded: long enough for a sentence or two, short enough that the
@@ -280,31 +330,59 @@ export function ownerDecisionReceiptsIn(
   return view.decisions.filter((decided) => decided.sessionId === sessionId);
 }
 
-/** The body the door takes. `note` rides with a send-back and with nothing else. */
+/** The reports of this session's run that its reviewer sent back: each was a card here, and is drawn
+ *  as the record it became, at the moment it was sent back (contract §8 B6). */
+export function reviewerReturnsIn(
+  view: OwnerConfirmationView | null | undefined,
+  sessionId: string | null | undefined,
+): ReviewerReturnedRequest[] {
+  if (!view || !sessionId) return [];
+  return (view.reviewerReturns ?? []).filter((returned) => returned.sessionId === sessionId);
+}
+
+/** The body the door takes. `note` rides with a send-back and with nothing else; `reviewRecordId`
+ *  and `answers` with a confirmation and with nothing else. */
 export interface OwnerDecisionRequestBody {
   decision: OwnerDecision;
   requestId: string | null;
   note?: string;
+  reviewRecordId?: string | null;
+  answers?: OwnerAnswerBody[];
+}
+
+/** What a confirmation says about the review the card drew (`reviewAnswered`). */
+export interface OwnerDecisionReview {
+  reviewRecordId: string | null;
+  answers: OwnerAnswerBody[];
 }
 
 /**
  * The request one press makes, as data, so what goes to the door can be asserted without a network.
  * `requestId` is the report the card was drawn for — the door's compare-and-set — and null from the
  * task panel, which answers "no run is waiting".
+ *
+ * A confirmation always names the review record it was drawn with, as null when it drew none: the
+ * key being there is how the door knows this client knows about reviews (contract §7 Q3), and holds
+ * its answers to the review's questions. A send-back carries neither.
  */
 export function ownerDecisionRequest(
   taskId: string,
   requestId: string | null,
   decision: OwnerDecision,
   note?: string,
+  review?: OwnerDecisionReview,
 ): { path: string; body: OwnerDecisionRequestBody } {
   const reason = note?.trim() ?? '';
+  const answers = review?.answers ?? [];
   return {
     path: `/tasks/${encodeURIComponent(taskId)}/owner-confirmation`,
     body: {
       decision,
       requestId,
       ...(decision === 'SEND_BACK' && reason !== '' ? { note: reason } : {}),
+      ...(decision === 'CONFIRM'
+        ? { reviewRecordId: review?.reviewRecordId ?? null, ...(answers.length > 0 ? { answers } : {}) }
+        : {}),
     },
   };
 }
@@ -315,8 +393,9 @@ export function sendOwnerDecision(
   requestId: string | null,
   decision: OwnerDecision,
   note?: string,
+  review?: OwnerDecisionReview,
 ): Promise<unknown> {
-  const request = ownerDecisionRequest(taskId, requestId, decision, note);
+  const request = ownerDecisionRequest(taskId, requestId, decision, note, review);
   return api(request.path, { method: 'POST', body: request.body });
 }
 
@@ -472,12 +551,16 @@ function OwnerConfirmationIfYouConfirm({
  */
 export function OwnerConfirmationActions({
   disabled,
+  confirmDisabled = false,
   keys = false,
   onConfirm,
   onSendBack,
 }: {
   /** Whether no answer from here could succeed right now. Every control below follows it. */
   disabled: boolean;
+  /** Whether Confirm done alone would be refused as it stands: an Other the owner picked for one of
+   *  the review's questions and has not written yet (contract §6 H4). Chat about this stays live. */
+  confirmDisabled?: boolean;
   /** Whether this card holds the keyboard, and so shows the two keys on its buttons. Both buttons
    *  are one `disabled` here, so both keys come and go with it. */
   keys?: boolean;
@@ -488,9 +571,9 @@ export function OwnerConfirmationActions({
   return (
     <>
       <CardActions className="decision-ask-actions">
-        <CardActionButton tone="primary" disabled={disabled} onClick={onConfirm}>
+        <CardActionButton tone="primary" disabled={disabled || confirmDisabled} onClick={onConfirm}>
           {OWNER_CONFIRM_ACTION}
-          {keys && !disabled && <span className="approval-kbd">{ENTER_HINT}</span>}
+          {keys && !disabled && !confirmDisabled && <span className="approval-kbd">{ENTER_HINT}</span>}
         </CardActionButton>
         <CardActionButton tone="secondary" disabled={disabled} onClick={onSendBack}>
           {OWNER_SEND_BACK_ACTION}
@@ -511,6 +594,8 @@ export function OwnerConfirmationCard({
   busy = false,
   error = null,
   keys = false,
+  choices = {},
+  onChoose = () => {},
   onDecide,
   onSendBack,
 }: {
@@ -524,6 +609,10 @@ export function OwnerConfirmationCard({
   error?: Error | null;
   /** Whether this card holds the keyboard — see `CardHotkey.ts`. A static render never does. */
   keys?: boolean;
+  /** The owner's answers so far to the review's questions; a question absent here keeps its
+   *  recommendation. */
+  choices?: ReviewChoices;
+  onChoose?: (key: string, choice: ReviewChoice) => void;
   onDecide: (decision: OwnerDecision, note?: string) => void;
   /** Hand the send-back to the composer. The door is pressed by the send that follows, not here. */
   onSendBack: () => void;
@@ -538,7 +627,7 @@ export function OwnerConfirmationCard({
     >
       <div className="approval-head decision-ask-head">
         <span className="evidence-decision-heading">{OWNER_CONFIRMATION_HEADING}</span>
-        <span className="criteria-provenance" title={OWNER_CONFIRMATION_PROVENANCE_TITLE}>
+        <span className="criteria-provenance" title={OWNER_CONFIRMATION_AUTHORSHIP_TITLE}>
           {PROVENANCE_LABEL}
         </span>
       </div>
@@ -550,6 +639,11 @@ export function OwnerConfirmationCard({
             <span className="owner-confirmation-id">{view.taskId}</span>
           </div>
           <OwnerConfirmationBoxes acceptanceCriteria={view.acceptanceCriteria} report={waiting.report} foldCriteria />
+          {/* The reviewer's box, between what the agent said and what confirming sets off (contract
+              §6 H1): where the review stands, and its questions for the owner when it asks any. */}
+          {waiting.review ? (
+            <OwnerConfirmationReviewBar review={waiting.review} place="CARD" choices={choices} onChoose={onChoose} />
+          ) : null}
           {/* Right above the buttons: the card is taller than a phone's screen, and this is what is
               in view at the press. A refused press says why between it and the buttons. */}
           <OwnerConfirmationIfYouConfirm ifConfirmed={view.ifConfirmed} />
@@ -564,6 +658,7 @@ export function OwnerConfirmationCard({
           ) : null}
           <OwnerConfirmationActions
             disabled={busy}
+            confirmDisabled={!reviewAnswersComplete(waiting.review, choices)}
             keys={keys}
             onConfirm={() => onDecide('CONFIRM')}
             onSendBack={onSendBack}
@@ -602,8 +697,8 @@ export function SessionOwnerConfirmationCard({
   });
   const waiting = ownerConfirmationWaitingIn(read.data, sessionId);
   const answer = useMutation({
-    mutationFn: (press: { requestId: string; decision: OwnerDecision; note?: string }) =>
-      sendOwnerDecision(taskId ?? '', press.requestId, press.decision, press.note),
+    mutationFn: (press: { requestId: string; decision: OwnerDecision; note?: string; review?: OwnerDecisionReview }) =>
+      sendOwnerDecision(taskId ?? '', press.requestId, press.decision, press.note, press.review),
     // Re-read whichever way the door answered: a recorded decision takes the card away, and a
     // refusal for staleness means what is waiting has moved.
     onSettled: () => (taskId ? refreshOwnerConfirmationViews(qc, taskId) : undefined),
@@ -616,11 +711,39 @@ export function SessionOwnerConfirmationCard({
     if (reveal && shownRequest) revealOwnerConfirmationCard();
   }, [reveal, shownRequest]);
 
+  // The owner's answers to the review's questions, kept for the record they answer: a newer review
+  // asks its own questions, and answers chosen for the old one are not carried over to it.
+  const review = waiting?.review ?? null;
+  const recordId = review?.review?.recordId ?? null;
+  const [answering, setAnswering] = useState<{ recordId: string | null; choices: ReviewChoices }>({
+    recordId: null,
+    choices: {},
+  });
+  const choices = answering.recordId === recordId ? answering.choices : {};
+  const choose = (key: string, choice: ReviewChoice): void =>
+    setAnswering({ recordId, choices: { ...choices, [key]: choice } });
+  const answered = reviewAnswersComplete(review, choices);
+
+  // Nothing on the server moves a review out of "under review" when its window runs out — it reads
+  // as not reviewed from then on (contract §5 N5). So a card showing one reads again a second after
+  // it is due, rather than at its next poll.
+  const dueAt = review?.state === 'UNDER_REVIEW' ? review.dueAt : null;
+  useEffect(() => {
+    if (!dueAt || !taskId) return;
+    const wait = Date.parse(dueAt) + 1_000 - Date.now();
+    if (Number.isNaN(wait) || wait > MAX_TIMER_MS) return;
+    const timer = setTimeout(() => {
+      void qc.invalidateQueries({ queryKey: ownerConfirmationQuery(taskId).queryKey });
+    }, Math.max(0, wait));
+    return () => clearTimeout(timer);
+  }, [qc, dueAt, taskId]);
+
   // The confirmation button and Enter make the same write; Chat about this arms the composer.
   // A card that cannot confirm holds no keys (`CardHotkey.ts`).
   const decide = (decision: OwnerDecision): void => {
     if (!waiting) return;
-    answer.mutate({ requestId: waiting.requestId, decision });
+    if (decision === 'CONFIRM' && !answered) return;
+    answer.mutate({ requestId: waiting.requestId, decision, review: reviewAnswered(review, choices) });
   };
   const chatAbout = (): void => {
     if (!read.data || !waiting) return;
@@ -629,7 +752,7 @@ export function SessionOwnerConfirmationCard({
   const asking = waiting !== null && read.data !== undefined && !answer.isPending;
   const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
-    confirmEnabled: asking,
+    confirmEnabled: asking && answered,
     onConfirm: () => decide('CONFIRM'),
     anchor,
   });
@@ -644,11 +767,16 @@ export function SessionOwnerConfirmationCard({
       busy={answer.isPending}
       error={answer.isError ? answer.error : null}
       keys={keys}
+      choices={choices}
+      onChoose={choose}
       onDecide={decide}
       onSendBack={chatAbout}
     />
   );
 }
+
+/** The longest delay a browser timer keeps: a longer one fires at once. */
+const MAX_TIMER_MS = 2 ** 31 - 1;
 
 /**
  * What a decision about this session's run leaves in its conversation, drawn where it was made.
@@ -660,9 +788,12 @@ export function SessionOwnerConfirmationCard({
 export function OwnerDecisionReceipt({
   view,
   decided,
+  reopen,
 }: {
   view: Pick<OwnerConfirmationView, 'title' | 'acceptanceCriteria'>;
   decided: RecordedOwnerDecision;
+  /** Reopen task, drawn when the review that came in after the decision found problems (§9 L4). */
+  reopen?: ReactNode;
 }): JSX.Element {
   const [open, setOpen] = useState(false);
   const confirmed = decided.decision === 'CONFIRM';
@@ -678,7 +809,7 @@ export function OwnerDecisionReceipt({
         <span className="evidence-decision-heading">
           {confirmed ? OWNER_CONFIRMED_HEADING : OWNER_SENT_BACK_HEADING}
         </span>
-        <span className="criteria-provenance" title={OWNER_CONFIRMATION_PROVENANCE_TITLE}>
+        <span className="criteria-provenance" title={OWNER_CONFIRMATION_AUTHORSHIP_TITLE}>
           {PROVENANCE_LABEL}
         </span>
       </div>
@@ -686,6 +817,15 @@ export function OwnerDecisionReceipt({
         <section className="decision-ask-q">
           <div className="decision-ask-chip">{view.title}</div>
           <div className="decision-ask-picked">{ownerDecisionReceiptLine(decided)}</div>
+          {reviewCameInAfter(decided) ? (
+            <div className="owner-confirmation-before-review">{BEFORE_REVIEW}</div>
+          ) : null}
+          {/* The answered report's review as it stands now — including one that came in after the
+              decision — and what the owner answered its questions with (contract §9 L3). */}
+          {decided.review ? (
+            <OwnerConfirmationReviewBar review={decided.review} place="RECEIPT" reopen={reopen} />
+          ) : null}
+          <OwnerAnswers decided={decided} />
           {confirmed && (
             <button
               type="button"
@@ -699,6 +839,41 @@ export function OwnerDecisionReceipt({
           {confirmed && open ? (
             <OwnerConfirmationBoxes acceptanceCriteria={view.acceptanceCriteria} report={decided.report} />
           ) : null}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * What a card becomes when its reviewer sends the report back to the run (contract §8 B6): a record,
+ * not a question. The owner was not asked, so there is nothing to press — the buttons are gone
+ * rather than disabled — and the review bar says who sent it back, why, and what is wrong. The
+ * reason reached the run as its next message, which the conversation draws as `Sent back by the
+ * reviewer`.
+ */
+export function ReviewerReturnRecord({
+  view,
+  returned,
+}: {
+  view: Pick<OwnerConfirmationView, 'title'>;
+  returned: ReviewerReturnedRequest;
+}): JSX.Element {
+  return (
+    <div
+      className="approval-card decision-ask evidence-decision evidence-decision-receipt owner-confirmation"
+      data-owner-confirmation-returned={returned.requestId}
+    >
+      <div className="approval-head decision-ask-head">
+        <span className="evidence-decision-heading">{OWNER_CONFIRMATION_HEADING}</span>
+        <span className="criteria-provenance" title={OWNER_CONFIRMATION_AUTHORSHIP_TITLE}>
+          {PROVENANCE_LABEL}
+        </span>
+      </div>
+      <div className="approval-body is-questions decision-ask-body">
+        <section className="decision-ask-q">
+          <div className="decision-ask-chip">{view.title}</div>
+          <OwnerConfirmationReviewBar review={returned.review} place="CARD" />
         </section>
       </div>
     </div>

@@ -14,6 +14,7 @@ public struct SessionLine: Equatable, Sendable {
         case queued      // waiting for a slot
         case background  // a process the agent left up — outlives the turn, but isn't work
         case watching    // parked on a watch that will resume it — not a process, not waiting on you
+        case review      // its report is with its reviewer — drawn, not counted, never amber
     }
     public let text: String
     public let tone: Tone
@@ -43,6 +44,12 @@ public struct SessionLine: Equatable, Sendable {
         // is the card in the session.
         if live && (s.pendingApprovals ?? 0) > 0 {
             return SessionLine(text: SessionHeader.waitingWord(for: s), tone: .approval)
+        }
+        // The same place for a run whose report is still with its reviewer (contract §5 N3): who has
+        // it, in the quiet tone — the card is drawn and can be pressed, but nobody is asking the owner
+        // yet, so the row neither lights nor counts. Web parity: `sessionLine`'s `review` tone.
+        if live, let review = s.confirmationUnderReview {
+            return SessionLine(text: OwnerConfirmations.underReviewLine(review.reviewerTitle), tone: .review)
         }
         if live && s.isGenerating {
             if let t = s.lastToolUse, !t.isEmpty { return SessionLine(text: "Running \(fmtTool(t))…", tone: .running) }
