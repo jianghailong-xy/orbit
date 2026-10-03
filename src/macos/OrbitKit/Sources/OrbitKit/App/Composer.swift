@@ -18,6 +18,63 @@ public enum ComposerLogic {
     /// anything larger. Very large content belongs in an uploaded file, not a prompt.
     public static let maxPromptChars = 50_000
 
+    /// The decision behind a task run whose model smart selection picked, while the composer still
+    /// shows that model (docs/model-routing-design.md §9): it marks the model chip ✦ and opens its
+    /// menu on why. A model changed here is this run's own, a session opened by hand has no route,
+    /// and a run on an Agent without smart selection has one that was not applied — all three keep
+    /// the chip as it always was (web parity: `smartRoute` in WorkspaceView.tsx).
+    public static func smartRoute(taskID: String?, route: TaskRunRoute?, modelID: String) -> TaskRunRoute? {
+        guard let taskID, !taskID.isEmpty, let route, route.applied,
+              let level = route.level, !level.isEmpty, route.model == modelID else { return nil }
+        return route
+    }
+
+    /// A short paragraph's sentences, each with its full stop — what an iOS menu shows as items of
+    /// their own, since it cuts one item off at its third line.
+    public static func sentences(_ text: String) -> [String] {
+        let parts = text.components(separatedBy: ". ")
+        return parts.enumerated().map { index, part in index < parts.count - 1 ? part + "." : part }
+    }
+
+    /// A sentence as a Mac menu can show it — the lines of a paragraph, each its own item, since an
+    /// NSMenu draws an item on one line however long. Breaks at spaces; a run with none (a long id,
+    /// a CJK sentence, whose characters count double) breaks where it fills the line. Past
+    /// `maxLines` the last line ends on `…`: the whole of it is in the task's Why.
+    public static func menuLines(_ text: String, columns: Int = 64, maxLines: Int = 4) -> [String] {
+        func width(_ c: Character) -> Int { (c.unicodeScalars.first?.value ?? 0) >= 0x1100 ? 2 : 1 }
+        var lines: [String] = []
+        var line = ""
+        var used = 0
+        for word in text.split(whereSeparator: { $0.isWhitespace }) {
+            let w = word.reduce(0) { $0 + width($1) }
+            if used > 0, used + 1 + w <= columns {
+                line += " " + String(word)
+                used += 1 + w
+                continue
+            }
+            if used > 0 {
+                lines.append(line)
+                line = ""
+                used = 0
+            }
+            for c in word {
+                if used + width(c) > columns {
+                    lines.append(line)
+                    line = ""
+                    used = 0
+                }
+                line.append(c)
+                used += width(c)
+            }
+        }
+        if !line.isEmpty { lines.append(line) }
+        if lines.count > maxLines {
+            lines = Array(lines.prefix(maxLines))
+            lines[maxLines - 1] += "…"
+        }
+        return lines
+    }
+
     /// Whether a Completed-session composer should explain that sending will return it to Open.
     /// A missing capability keeps the legacy optimistic presentation, but an explicit server
     /// denial is authoritative and must leave only the more useful blocked-reason copy visible.

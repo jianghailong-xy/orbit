@@ -174,6 +174,50 @@ public enum TaskDetailCopy {
 
     public static let noRuns = "No runs yet"
     public static let noComments = "No comments yet"
+
+    // MARK: smart model selection (docs/model-routing-design.md §9)
+
+    // Details: the tier suggested for the task, as `TaskDetailPanel.tsx` words it.
+    public static let suggestedLabel = "Suggested"
+    public static let noSuggestion = "No suggestion"
+    public static let noSuggestionDetail = "Keeps the agent's model, as today"
+    /// The work each tier is for, under its name in the picker (`MODEL_HINT_DETAIL`).
+    public static let modelHintDetail: [String: String] = [
+        "S": "Rename, copy change, version bump, mechanical edits",
+        "M": "A clear feature or fix with a known shape",
+        "L": "Unknown root cause, concurrency, cross-module, migrations, the dispatch path",
+        "XL": "Architecture, design, long unattended work",
+    ]
+    /// The coordinator's sentence for the tier, in grey under the picker.
+    public static func coordinatorReason(_ reason: String) -> String { "Coordinator: \(reason)" }
+    /// The Model field's empty value while the assignee picks a model per task run.
+    public static let smartSelectionPlaceholder = "✦ Smart selection"
+
+    // Runs: what each run ran on, the tier it was routed at, and why.
+    /// A run's model with no effort of its own: the model's default.
+    public static let defaultEffort = "default effort"
+    /// The line under a run whose Agent kept its own model: what smart selection would have done.
+    public static func wouldHavePicked(_ pick: String, level: String) -> String {
+        "✦ Smart selection would have picked \(pick) (\(level))"
+    }
+    public static func why(_ pick: String) -> String { "Why \(pick)" }
+    /// How the Why of a run that a failure moved up a tier ends (`USAGE_LIMIT_NOTE`).
+    public static let usageLimitNote = "a failure from a usage limit would not have moved the tier"
+
+    // The Agent's settings (`RunnerDetailPage.tsx`).
+    public static let smartSelectionSwitch = "Smart model selection for tasks"
+    public static let smartSelectionSwitchDetail =
+        "Task runs use the model and effort of the tier suggested for the task, and go one tier up after a "
+        + "failed run. Tasks with no suggestion start on this Agent's model. A model pinned on a task always "
+        + "wins. Sessions you open yourself are not affected."
+
+    // The task run's composer (`WorkspaceView.tsx`): the model menu of a run still on the pick.
+    public static func pickedBySmartSelection(tier: String) -> String { "Picked by smart selection · tier \(tier)" }
+    /// What the chip's accessibility label ends on while it carries the ✦.
+    public static let chipPickedBySmartSelection = ", picked by smart selection"
+    public static let modelChangeAppliesToThisRun =
+        "Changing the model here applies to this run only. To fix the model for every run, set it on the task."
+    public static let openTask = "Open task ›"
 }
 
 /// The two presses under a task's title: the one that concludes it on the left, the one that moves
@@ -651,5 +695,116 @@ public enum TaskDetailLogic {
     /// What the toast says once a Follow went through.
     public static func followedToast(_ watch: Watch) -> String {
         watch.state == .matched ? TaskDetailCopy.followMatchedAtOnce : TaskDetailCopy.following
+    }
+
+    // MARK: smart model selection (docs/model-routing-design.md §9)
+
+    /// The tiers a task can be suggested at (`task.modelHint`, §3.1), smallest first.
+    public static let modelHintLevels = ["S", "M", "L", "XL"]
+
+    /// One row of the Suggested picker: nil is No suggestion.
+    public struct ModelHintPick: Equatable, Sendable, Identifiable {
+        public let value: String?
+        public let label: String
+        public let detail: String
+        public var id: String { value ?? "" }
+    }
+
+    /// A tier as the picker names it — `M · Sonnet 5.5 · medium` — or the bare tier where the server
+    /// could not resolve it to a model (`modelHintLabel`).
+    public static func modelHintLabel(_ level: String, options: [ModelHintOption]?) -> String {
+        let option = options?.first { $0.level == level }
+        return [level, option?.label, option?.effort]
+            .compactMap { $0 }
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+    }
+
+    /// No suggestion, then each tier with the model and effort it runs as for this task and the work
+    /// it is for. Which model a tier is comes from the server alone (`modelHintOptions`).
+    public static func modelHintPicks(_ options: [ModelHintOption]?) -> [ModelHintPick] {
+        [ModelHintPick(value: nil, label: TaskDetailCopy.noSuggestion, detail: TaskDetailCopy.noSuggestionDetail)]
+            + modelHintLevels.map { level in
+                ModelHintPick(value: level, label: modelHintLabel(level, options: options),
+                              detail: TaskDetailCopy.modelHintDetail[level] ?? "")
+            }
+    }
+
+    /// A tier's name as a menu item: every space but the one after a `·` no-break, so where an
+    /// iOS menu (about 190 pt of text) has to wrap it, it wraps after a dot — and, since it will not
+    /// leave one word alone on the last line, not inside the model's name either.
+    public static func menuTitle(_ label: String) -> String {
+        label.replacingOccurrences(of: " ", with: "\u{00A0}")
+            .replacingOccurrences(of: "\u{00A0}·\u{00A0}", with: "\u{00A0}· ")
+    }
+
+    /// The grey line under the picker: the coordinator's reason, while there is a tier it argues for.
+    public static func modelHintNote(_ task: TaskItem) -> String? {
+        guard let hint = task.modelHint, !hint.isEmpty,
+              let reason = task.modelHintReason, !reason.isEmpty else { return nil }
+        return TaskDetailCopy.coordinatorReason(reason)
+    }
+
+    /// A tier picked here is the person's own, so the coordinator's reason goes with the tier it was
+    /// written for; No suggestion (nil) clears both — the browser's `{ modelHint, modelHintReason: null }`.
+    public static func modelHintRequest(_ level: String?) -> UpdateTaskRequest {
+        UpdateTaskRequest(modelHint: level.map { .set($0) } ?? .clear, modelHintReason: .clear)
+    }
+
+    /// The decision behind a run, when it named a tier. A route with no tier routed nothing.
+    public static func runRoute(_ session: SessionRef) -> TaskRunRoute? {
+        guard let route = session.route, let level = route.level, !level.isEmpty else { return nil }
+        return route
+    }
+
+    /// A model id by the name the catalogues give it (`modelLabel` / `catalogModelLabel`): the
+    /// picker's own tiers first, then the runners' catalogues in the order given, then a configured
+    /// provider's own list, else the id itself.
+    public static func modelLabel(_ model: String, options: [ModelHintOption]?, catalogs: [RunnerModelCatalog],
+                                  configured: [ConfiguredProvider]?) -> String {
+        if let label = options?.first(where: { $0.model == model })?.label, !label.isEmpty { return label }
+        for catalog in catalogs {
+            for provider in ["claude", "codex", "kimi", "opencode", "antigravity"] {
+                let rows: [ModelOption] = catalog.models(for: provider) ?? []
+                if let name = rows.first(where: { $0.id == model })?.name { return name }
+            }
+        }
+        return AgentDefaults.friendlyName(model, catalog: nil, configured: configured)
+    }
+
+    /// What a routed run was (or would have been) put on: `Opus 5.5 · high`.
+    public static func routePick(_ route: TaskRunRoute, modelLabel: (String) -> String) -> String {
+        [route.model.map(modelLabel) ?? route.provider, route.effort ?? ""]
+            .filter { !$0.isEmpty }
+            .joined(separator: " · ")
+    }
+
+    /// What the run ran on — `Sonnet 5.5 · medium` — from its own row, or from the pick for a run on
+    /// it that has not been claimed yet; nil while neither says.
+    public static func runModelLine(_ session: SessionRef, modelLabel: (String) -> String) -> String? {
+        let applied = runRoute(session)?.applied == true
+        let ranOn = nonEmpty(session.model) ?? (applied ? nonEmpty(session.route?.model) : nil)
+        guard let ranOn else { return nil }
+        let ranAt = nonEmpty(session.effort) ?? (applied ? nonEmpty(session.route?.effort) : nil)
+        return "\(modelLabel(ranOn)) · \(ranAt ?? TaskDetailCopy.defaultEffort)"
+    }
+
+    /// A routed run's tier tag: `✦ M`, and `✦ L ↑` when the run before it failed and moved it up.
+    public static func routeTierTag(_ route: TaskRunRoute) -> String {
+        "✦ \(route.level ?? "")\(route.escalated ? " ↑" : "")"
+    }
+
+    /// The Why's last line: the policy that decided, and when — from the decision itself.
+    public static func routeWhyFooter(_ route: TaskRunRoute, timeZone: TimeZone = .current,
+                                      locale: Locale = .current) -> String {
+        let decided = formatted(route.decidedAt, timeZone: timeZone, locale: locale) ?? route.decidedAt
+        return (["Policy v\(route.policyVersion)", "decided \(decided)"]
+                + (route.escalated ? [TaskDetailCopy.usageLimitNote] : []))
+            .joined(separator: " · ")
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        guard let value, !value.isEmpty else { return nil }
+        return value
     }
 }
