@@ -6529,7 +6529,10 @@ export class RunnerApiController {
    * alone: a retry re-sends the person's latest message, and that message was answered before
    * this turn began, so arming here re-sent an already-answered question until one attempt got
    * through. The notification that woke it is not lost — the runtime hands it over with the next
-   * message it is sent.
+   * message it is sent. Its account's usage limit still says that account is spent, though: a session
+   * on Automatic moves off it as below, and only the re-send is left out. Left where it was, its engine
+   * stayed on the spent account and every background agent still running in it met the same limit —
+   * on 2026-10-02 a session sat there until its owner moved it by hand.
    */
   private async retryPlanFor(
     tx: RetryPlanTransaction,
@@ -6540,7 +6543,7 @@ export class RunnerApiController {
   ): Promise<{ retryAt?: Date | null; retryAttempts?: number; claudeAccount?: string; poolSwitchNotice?: string }> {
     const quotaSpent = isUsageLimitErrorText(text);
     if (!quotaSpent && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
-    if (!delivered) return {};
+    if (!delivered && !quotaSpent) return {};
     const session = await tx.session.findUnique({
       where: { id: sessionId },
       select: {
@@ -6550,11 +6553,16 @@ export class RunnerApiController {
         codexAccount: true,
         claudeAccount: true,
         claudeAccountPinned: true,
+        poolSwitchNotice: true,
         workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
       },
     });
     if (!session) return {};
     if (!quotaSpent) return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
+    // A turn nobody delivered, in a session that still owes its "Switched to" line, ran on the engine
+    // that line's move is replacing: the account it found spent is the one already left, and taking it
+    // for the new one moved the session again — back onto the spent one when the snapshot lags.
+    if (!delivered && session.poolSwitchNotice) return {};
     // A built-in Claude session on Automatic — nobody picked its account by hand, and its workspace
     // leaves the account to Orbit — moves to another of the runner's accounts with room and is re-sent
     // at once: the events path queues the reload that re-spawns its engine there, and the runner
@@ -6578,12 +6586,13 @@ export class RunnerApiController {
         : null;
       if (move) {
         return {
-          retryAt: new Date(),
+          ...(delivered ? { retryAt: new Date() } : {}),
           claudeAccount: move.to,
           poolSwitchNotice: accountSwitchNotice('claude', move, runner?.engines),
         };
       }
     }
+    if (!delivered) return {};
     const at = await this.quotaRetryAt(tx, runnerId, session, text, session.workspace);
     // No defensible moment → leave any earlier arming standing rather than replacing it with
     // nothing; the card falls back to a manual retry.

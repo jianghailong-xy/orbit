@@ -27,6 +27,9 @@
  *       cannot carry the conversation, stay where they are.
  *   (9) A task's run is moved by its usage limit as (6) is — it used to wait out the reset beside an
  *       account with room — and its task is told nothing while the re-send is on its way.
+ *  (10) A usage limit met in a turn nobody sent — a background agent reporting in — moves the session
+ *       as well, re-sending nothing; and the engine being replaced saying so again does not move it a
+ *       second time.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/sessions/session-account-choice.pg.spec.ts
  *
@@ -509,5 +512,48 @@ test('which of its runner’s accounts a session runs on — picked by hand, or 
     assert.equal(await db.taskComment.count({ where: { taskId } }), 0, 'a failure note beside a run that is going on');
     const task = await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { status: true } });
     assert.equal(task.status, 'OPEN', 'the task was reclaimed under a run that is going on');
+  });
+
+  await t.test('(10) a limit met in a turn nobody sent moves the session too, and re-sends nothing', async () => {
+    const m = await machine('undelivered-limit');
+    // The runner's snapshot has not caught up with the limit: Default still reads as having room.
+    const lagging = {
+      claude: {
+        provider: AgentProvider.CLAUDE,
+        fiveHour: { utilization: 30, resetsAt: LATER },
+        sevenDay: { utilization: 10, resetsAt: LATER },
+        accounts: { [WORK]: (USAGE.claude as { accounts: Record<string, unknown> }).accounts[WORK] },
+      },
+    };
+    await db.runner.update({ where: { id: m.runnerId }, data: { planUsage: lagging as unknown as Prisma.InputJsonValue } });
+    // What a background agent reporting in sounds like: the runtime's own turn, so no turn id.
+    const limitSaid = (id: string, seq: number) =>
+      api.events({ id: m.runnerId }, id, {
+        events: [{
+          seq,
+          type: RunEventType.ASSISTANT,
+          ts: new Date().toISOString(),
+          payload: { text: "You've hit your session limit · resets 7:30pm (Europe/Berlin)" },
+        }],
+      });
+
+    const id = await sessionOn(m, 'claude', RunStatus.AWAITING_INPUT, { engineTurnActive: true });
+    await limitSaid(id, 1);
+    const after = await row(id);
+    assert.equal(after.claude_account, WORK, 'the engine was left on the spent account');
+    assert.equal(after.pool_switch_notice, 'Switched to Work — the usage limit on Default is reached');
+    assert.equal(after.retry_ms, null, 'a message already answered was armed to be sent again');
+    assert.deepEqual(await reloads(id), [{ content: JSON.stringify({ provider: 'claude' }), status: 'PENDING' }]);
+
+    // The engine on Default says it again before the reload replaces it. That limit is Default's.
+    await limitSaid(id, 2);
+    assert.equal((await row(id)).claude_account, WORK, 'moved off Work on the word of the engine it is leaving');
+    assert.equal((await reloads(id)).length, 1);
+
+    // An account picked by hand is where it stays.
+    const pinned = await sessionOn(m, 'claude', RunStatus.AWAITING_INPUT, { claudeAccountPinned: true });
+    await limitSaid(pinned, 1);
+    assert.equal((await row(pinned)).claude_account, 'default');
+    assert.deepEqual(await reloads(pinned), []);
   });
 });
