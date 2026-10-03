@@ -345,10 +345,10 @@ final class ProviderPoolsTests: XCTestCase {
     /// The page's head and its Accounts header: how many can run, and the one the next session starts on.
     func testThePageSaysHowManyCanRunAndWhichIsNext() {
         let three = pool([member(1, .running), member(2, .available, next: true, label: "Home"), member(3, .spent)])
-        XCTAssertEqual(ProviderPools.pageSubtitle(three), "2 of 3 accounts available")
+        XCTAssertEqual(ProviderPools.availability(three), "2 of 3 accounts available")
         XCTAssertEqual(ProviderPools.headline(three, now: now, timeZone: utc), "Next: Home")
         let spent = pool([member(1, .spent)], resetsAt: "2026-09-25T10:30:00.000Z")
-        XCTAssertEqual(ProviderPools.pageSubtitle(spent), "0 of 1 account available")
+        XCTAssertEqual(ProviderPools.availability(spent), "0 of 1 account available")
         XCTAssertEqual(ProviderPools.headline(spent, now: now, timeZone: utc), "All spent · resets 10:30")
         XCTAssertEqual(ProviderPools.headline(pool([member(1, .refused)], unavailable: "No account can run"), now: now),
                        "No account can run")
@@ -357,7 +357,7 @@ final class ProviderPoolsTests: XCTestCase {
         // The live regression: a pool of nothing but setup tokens runs on one of them — it is not headed
         // with "No account can run", and the account counts towards the ones a session could start on.
         let setup = pool([member(1, .usageUnknown), member(2, .usageUnknown, next: true, label: "Laptop")])
-        XCTAssertEqual(ProviderPools.pageSubtitle(setup), "2 of 2 accounts available")
+        XCTAssertEqual(ProviderPools.availability(setup), "2 of 2 accounts available")
         XCTAssertEqual(ProviderPools.headline(setup, now: now, timeZone: utc), "Next: Laptop")
         XCTAssertNil(ProviderPools.unavailableReason(setup))
     }

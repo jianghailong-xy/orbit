@@ -165,7 +165,7 @@ final class SharedPoolAdapterTests: XCTestCase {
 
     /// A key OpenAI itself put out of budget comes back at its own mark rather than the month's end, and
     /// a pool left with nothing but such keys says that instead — the words the pool's own page heads
-    /// its keys with (`SharedPoolPage.keysHeadline`), at the earliest key back.
+    /// its accounts with (`ProviderPools.headline`), at the earliest key back.
     func testAKeyOpenAIPutOutOfBudgetComesBackAtItsMark() {
         let spent = SharedPools.asProviderPool(self.pool([key("a", spentUntil: "2026-09-30T06:00:00.000Z")]))
         XCTAssertEqual(spent.members[0].state, .spent)
