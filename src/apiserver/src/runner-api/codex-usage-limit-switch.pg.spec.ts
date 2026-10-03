@@ -16,6 +16,8 @@
  *   (5) A runner too old to carry a thread to another account (no codex-account-move/v1) would resume
  *       the session where its thread is, whatever the claim said: it is not moved, and waits.
  *   (6) An account somebody picked for the session by hand is where it stays: it waits for the reset.
+ *   (7) A task's run goes on the same way — moved to the account with room, or waiting out its own
+ *       reset when none has any — and its task is told nothing while the re-send is on its way.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/codex-usage-limit-switch.pg.spec.ts
  *
@@ -102,12 +104,13 @@ interface Fixture {
   runnerId: string;
   sessionId: string;
   turnId: string;
+  taskId: string | null;
 }
 
 /**
  * One owner, a runner with Default and Work signed in, and a Codex session on Default RUNNING with a
- * turn out on delivery. `inbox_lease_owner` is left null so the turn-complete lease check passes with
- * no token, as turn-complete-unanswered.pg.spec.ts builds it.
+ * turn out on delivery — a task's run when `task` is set. `inbox_lease_owner` is left null so the
+ * turn-complete lease check passes with no token, as turn-complete-unanswered.pg.spec.ts builds it.
  */
 async function fixture(
   db: PrismaClient,
@@ -117,7 +120,8 @@ async function fixture(
     workUsed = 3,
     capabilities = [CODEX_ACCOUNT_MOVE_V1],
     pinned = false,
-  }: { workspaceAccount?: string | null; workUsed?: number; capabilities?: string[]; pinned?: boolean } = {},
+    task = false,
+  }: { workspaceAccount?: string | null; workUsed?: number; capabilities?: string[]; pinned?: boolean; task?: boolean } = {},
 ): Promise<Fixture> {
   const ownerId = randomUUID();
   const runnerId = randomUUID();
@@ -143,6 +147,21 @@ async function fixture(
   await db.workspace.create({
     data: { id: workspaceId, ownerId, runnerId, name: `${label}-workspace`, enabled: true, codexAccount: workspaceAccount },
   });
+  const taskId = task ? randomUUID() : null;
+  if (taskId) {
+    await db.task.create({
+      data: {
+        id: taskId,
+        ownerId,
+        assigneeId: workspaceId,
+        title: `${label} task`,
+        creatorType: 'AGENT',
+        creatorId: workspaceId,
+        status: 'OPEN',
+        completionCriterion: 'EVIDENCE_JUDGMENT',
+      } as never,
+    });
+  }
   await db.session.create({
     data: {
       id: sessionId,
@@ -150,6 +169,7 @@ async function fixture(
       creatorId: ownerId,
       workspaceId,
       assignedRunnerId: runnerId,
+      ...(taskId ? { taskId, startsTaskWork: true } : {}),
       title: `${label} session`,
       prompt: 'fix the flaky test',
       provider: 'codex',
@@ -177,7 +197,7 @@ async function fixture(
     },
     select: { id: true },
   });
-  return { runnerId, sessionId, turnId: turn.id };
+  return { runnerId, sessionId, turnId: turn.id, taskId };
 }
 
 /** What the runner reports for a turn Codex ended on its usage limit (codex_appserver.go). */
@@ -304,5 +324,30 @@ test('a Codex session its account’s usage limit stopped goes on — on another
     assert.equal(after.codex_account, 'default');
     assert.equal(after.pool_switch_notice, null);
     assert.ok(withinJitterOf(after.retry_at, DEFAULT_RESET), `not armed for Default's reset: ${after.retry_at?.toISOString()}`);
+  });
+
+  await t.test('(7) a task’s run moves, or waits for its reset, and its task is told nothing meanwhile', async () => {
+    const toldNothing = async (taskId: string) => {
+      assert.equal(await db.taskComment.count({ where: { taskId } }), 0, 'a failure note beside a run that is going on');
+      const task = await db.task.findUniqueOrThrow({ where: { id: taskId }, select: { status: true } });
+      assert.equal(task.status, 'OPEN', 'the task was reclaimed under a run that is going on');
+    };
+
+    const moves = await fixture(db, 'task-moves', { task: true });
+    const before = Date.now();
+    await api.turnComplete({ id: moves.runnerId }, moves.sessionId, failed(moves));
+    const moved = await row(moves.sessionId);
+    assert.equal(moved.codex_account, WORK, 'a task’s run sat on the spent account beside one with room');
+    assert.equal(moved.pool_switch_notice, 'Switched to Work — the usage limit on Default is reached');
+    assert.ok(moved.retry_at && moved.retry_at.getTime() >= before - 1_000 && moved.retry_at.getTime() <= Date.now() + 1_000,
+      `the re-send is not now: ${moved.retry_at?.toISOString()}`);
+    await toldNothing(moves.taskId!);
+
+    const waits = await fixture(db, 'task-all-spent', { task: true, workUsed: 100 });
+    await api.turnComplete({ id: waits.runnerId }, waits.sessionId, failed(waits));
+    const waiting = await row(waits.sessionId);
+    assert.equal(waiting.codex_account, 'default');
+    assert.ok(withinJitterOf(waiting.retry_at, DEFAULT_RESET), `not armed for Default's reset: ${waiting.retry_at?.toISOString()}`);
+    await toldNothing(waits.taskId!);
   });
 });

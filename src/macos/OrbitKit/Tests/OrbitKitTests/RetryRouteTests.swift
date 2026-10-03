@@ -53,10 +53,12 @@ final class RetryRouteTests: XCTestCase {
         XCTAssertNil(own.sessionMessage)
     }
 
-    /// What the Retry posts: the key, and nothing a caller could use to name somebody else as the sender.
-    func testTheReSendCarriesOnlyItsKey() throws {
-        let body = try JSONEncoder().encode(RetryResendRequest(clientTurnId: "0f6a9d4e-5b1c-4e2a-9d3f-7c8b6a5e4d21"))
+    /// What the Retry posts: nothing at all — no key to spell a second turn with, and nothing a caller
+    /// could use to name somebody else as the sender. The idempotency key is the server's, derived from
+    /// the failed message (§2.1, criterion 19).
+    func testTheReSendCarriesNothingButTheDoor() throws {
+        let body = try JSONEncoder().encode(RetryResendRequest())
         let object = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
-        XCTAssertEqual(object.keys.sorted(), ["clientTurnId"])
+        XCTAssertEqual(object.keys.sorted(), [])
     }
 }

@@ -391,6 +391,36 @@ export function sessionHasEnded(session: SessionEnding): boolean {
     || run === SessionRunState.FAILED;
 }
 
+/**
+ * Whether a conversation that cannot take a turn right now is only DOWN rather than over: its run
+ * FAILED — the provider turned a turn away (a 429, an overload), its sign-in expired, its runner went
+ * away — and nobody closed it. No end is recorded and it is still Open, so a retry, the owner's or
+ * the auto-retry sweep's, brings the same conversation back.
+ *
+ * `sessionHasEnded` says yes to it, and is right to for what it guards: a platform turn does not
+ * revive a conversation, and `createTurn` refuses a FAILED one anyway. Who an exception item waits
+ * for is a different question. Handing every item opened during an outage straight to the owner
+ * made them the coordinator's errand-runner for something it recovers from on the next retry
+ * (2026-10-02: a merge conflict opened while the coordinator sat FAILED on 429s went to the owner,
+ * who had to revive the coordinator and then press "Ask the coordinator again"). So an item stays
+ * the coordinator's while it is down, is delivered when its next turn ends (§4.4 X-D4 3), and goes
+ * to the owner by the clock if it is not back within the window (§4.6 X-E1).
+ *
+ * `cancelRequestedAt` is not read: a failed turn and the reaper both write it beside FAILED, to have
+ * the runner tear the process down, and neither is anybody ending the conversation.
+ */
+export function conversationIsDown(session: SessionEnding): boolean {
+  return deriveSessionRunState(session) === SessionRunState.FAILED
+    && !session.endReason
+    && deriveSessionLifecycleState(session) === SessionLifecycleState.OPEN;
+}
+
+/** Whether an exception item has no conversation left to wait for: it ended, and is not merely
+ *  down (`conversationIsDown`). This, not `sessionHasEnded`, is what hands an item to the owner. */
+export function conversationIsOver(session: SessionEnding): boolean {
+  return sessionHasEnded(session) && !conversationIsDown(session);
+}
+
 /** A task failure, as the door that wrote it knows it. */
 export interface TaskFailure {
   taskId: string;
@@ -510,9 +540,10 @@ interface ChainReading {
  * means one fact opens one item however many times the door is replayed.
  *
  * The assignee is decided here, from rows this transaction can see: the chain's failure count first
- * (§4.5), then whether this project has a coordinator conversation that can still read anything. A
- * delivery that later finds the conversation ended hands the item to the owner (§4.4 X-D6); this is
- * the same decision made earlier, when it can be made without waiting for the commit.
+ * (§4.5), then whether this project has a coordinator conversation that can still read anything — a
+ * conversation that is only down will, once it is retried (`conversationIsOver`). A delivery that
+ * later finds the conversation over hands the item to the owner (§4.4 X-D6); this is the same
+ * decision made earlier, when it can be made without waiting for the commit.
  */
 export async function recordTaskFailure(
   tx: Prisma.TransactionClient,
@@ -545,7 +576,7 @@ export async function recordTaskFailure(
   const [assignee, assigneeReason]: [OpenItemAssignee, OpenItemAssigneeReason] =
     failuresInChain >= TASK_FAILURE_CHAIN_LIMIT ? ['OWNER', 'CHAIN_LIMIT']
       : !coordinator ? ['OWNER', 'NO_COORDINATOR']
-        : sessionHasEnded(coordinator) ? ['OWNER', 'COORDINATOR_ENDED']
+        : conversationIsOver(coordinator) ? ['OWNER', 'COORDINATOR_ENDED']
           : ['COORDINATOR', 'DEFAULT'];
   const now = new Date();
   const payload = {
@@ -649,7 +680,7 @@ export async function recordIntegrationFailure(
     : null;
   const [assignee, assigneeReason]: [OpenItemAssignee, OpenItemAssigneeReason] =
     !coordinator ? ['OWNER', 'NO_COORDINATOR']
-      : sessionHasEnded(coordinator) ? ['OWNER', 'COORDINATOR_ENDED']
+      : conversationIsOver(coordinator) ? ['OWNER', 'COORDINATOR_ENDED']
         : ['COORDINATOR', 'DEFAULT'];
   const now = new Date();
   const [created] = await tx.projectOpenItem.createManyAndReturn({
@@ -781,6 +812,14 @@ export type UnrunOpenItemTurn =
  * same transaction; an interrupt or a withdrawal leaves the conversation alive, so the item stays
  * with the coordinator and is delivered again when its next turn ends (§4.4 X-D4).
  *
+ * An ending drain whose run FAILED is the exception: the conversation is down, not over
+ * (`conversationIsDown`), so the item stays the coordinator's too. A failed turn, the runner's
+ * finalize and the reaper write that FAILED before they drain, which is what the read below sees;
+ * an end somebody asked for drains before its status is written, and goes to the owner as before.
+ * The drained turn is retired in place and keeps its key, which would make the next delivery a
+ * replay of a turn nobody ran — so the assignment is re-made, same assignee and same clock, and
+ * that delivery is a turn of its own.
+ *
  * Called from every drain and delete that `deadLetterQueuedWatchWakes` is called from, immediately
  * beside it and for the same reason: nothing else would ever say the wake did not arrive.
  *
@@ -819,6 +858,18 @@ export async function returnQueuedTurns(
     data: { returnedAt: now, returnCode: unrun.code },
   });
   if (!('ending' in unrun)) return;
+  const session = await tx.session.findUnique({ where: { id: sessionId }, select: SESSION_ENDING_SELECT });
+  if (session && conversationIsDown(session)) {
+    await tx.projectOpenItem.updateMany({
+      where: {
+        id: { in: sent.map((delivery) => delivery.itemId) },
+        state: 'OPEN',
+        assignee: 'COORDINATOR',
+      },
+      data: { assignedAt: now },
+    });
+    return;
+  }
   await tx.projectOpenItem.updateMany({
     where: {
       id: { in: sent.map((delivery) => delivery.itemId) },

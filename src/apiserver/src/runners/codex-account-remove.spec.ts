@@ -65,10 +65,17 @@ function harness(row: Row = {}) {
       return { count: 1 };
     },
   };
+  /** The values of every hand-written statement: here, only the Orbit name a removal takes with it
+   *  (RunnersService.renameAccount keeps those names; the done report drops the removed account's). */
+  const raw: unknown[][] = [];
   const prisma = {
     runner: runnerModel,
     workspace: { findMany: async () => [] },
     codexRateLimitResetOperation: { findMany: async () => [] },
+    $executeRaw: async (_sql: TemplateStringsArray, ...values: unknown[]) => {
+      raw.push(values);
+      return 1;
+    },
   } as never;
   const realtime = { drainCancellations: async () => [], drainArtifactRequests: async () => [] } as never;
   const runnerApi = new RunnerApiController(
@@ -83,6 +90,8 @@ function harness(row: Row = {}) {
   const runners = new RunnersController(new RunnersService(prisma));
   return {
     runner,
+    /** Which accounts' Orbit names the reports took out: each statement's engine and account. */
+    namesTaken: () => raw.map((values) => values.filter((v) => v !== RUNNER_ID).slice(0, 2)),
     /** DELETE /runners/:id/codex-accounts/:account, as the page sends it. */
     remove: (account: string): Promise<RunnerAccountRemoveState> =>
       runners.removeCodexAccount(USER, RUNNER_ID, account),
@@ -135,6 +144,7 @@ test('the account the page names is the account in the removal the runner is han
   });
   assert.deepEqual(applied, { ok: true, applied: true });
   assert.deepEqual(h.state(), { engine: 'codex', account: SLOT, status: 'done', message: null });
+  assert.deepEqual(h.namesTaken(), [['codex', SLOT]], 'the name it was given in Orbit goes with it');
   assert.equal(await h.beat(), undefined, 'nothing is redelivered once the runner has reported');
 });
 
@@ -149,6 +159,7 @@ test('a removal the machine refused is reported back with the machine’s own wo
     { ok: true, applied: true },
   );
   assert.deepEqual(h.state(), { engine: 'codex', account: SLOT, status: 'failed', message });
+  assert.deepEqual(h.namesTaken(), [], 'an account still on the machine keeps its name');
 
   // Asking again starts a new attempt — the first one's report does not answer it.
   await h.remove(SLOT);
@@ -223,6 +234,7 @@ test('a report about a removal the row has moved past changes nothing', async ()
     { ok: true, applied: false },
   );
   assert.deepEqual(h.state(), { engine: 'codex', account: OTHER_SLOT, status: 'pending', message: null });
+  assert.deepEqual(h.namesTaken(), [], 'a report that does not apply takes no name');
 
   // A report about an account that is not the one being removed is not this removal's either.
   assert.deepEqual(
@@ -234,6 +246,7 @@ test('a report about a removal the row has moved past changes nothing', async ()
     { ok: true, applied: true },
   );
   assert.deepEqual(h.state(), { engine: 'codex', account: OTHER_SLOT, status: 'done', message: null });
+  assert.deepEqual(h.namesTaken(), [['codex', OTHER_SLOT]]);
 });
 
 test('a report that cannot be one is refused', async () => {

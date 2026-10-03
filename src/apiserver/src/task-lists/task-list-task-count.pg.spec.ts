@@ -361,19 +361,20 @@ test('the index answers _count.tasks from the column, and stops aggregating the 
     assert.deepEqual(aggregates, []);
 
     // Exactly two statements still read `task`, both scoped to this owner's list ids: the grouped
-    // one that produces `runningTasks`, and the one that counts each list's tasks filed under no
-    // project (`tasksOutsideProjects`), which reads only the project_id index's NULL entries — the
-    // few hundred standalone tasks, never a project's hundred thousand. The DONE group-by that
-    // 0287 removed (`"task"."status"` grouped by `list_id`) would bring this to 3; the count and
-    // the shapes below are what hold that removal in place rather than leaving it to the comment
-    // above.
-    const taskReads = sql.filter((s) => s.includes('"public"."task"'));
+    // one that produces `runningTasks` — raw SQL now, because "a work session carries it" is the
+    // shared predicate in sessions/task-work-carrier.ts and has no Prisma spelling — and the one
+    // that counts each list's tasks filed under no project (`tasksOutsideProjects`), which reads
+    // only the project_id index's NULL entries — the few hundred standalone tasks, never a
+    // project's hundred thousand. The DONE group-by that 0287 removed (`"task"."status"` grouped
+    // by `list_id`) would bring this to 3; the count and the shapes below are what hold that
+    // removal in place rather than leaving it to the comment above.
+    const taskReads = sql.filter((s) => s.includes('"public"."task"') || /FROM "task" t\b/.test(s));
     assert.deepEqual(
       taskReads.length,
       2,
       `expected exactly two reads of task, got ${taskReads.length}:\n${taskReads.join('\n')}`,
     );
-    for (const read of taskReads) assert.match(read, /"list_id" IN \(/);
+    for (const read of taskReads) assert.match(read, /"list_id" (?:IN \(|= ANY\()/);
     assert.equal(taskReads.filter((s) => s.includes('"project_id" IS NULL')).length, 1);
     assert.equal(taskReads.filter((s) => s.includes('"public"."task"."status"')).length, 0);
   } finally {

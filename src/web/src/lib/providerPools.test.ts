@@ -39,6 +39,12 @@ const fiveHour = (utilization: number, resetsAt = at(2 * HOUR)) => ({
   provider: 'claude' as never,
   fiveHour: { utilization, resetsAt },
 });
+/** A ChatGPT account's two windows as Codex reports them: the 5-hour one, then the weekly one. */
+const codex = (fiveHourUsed: number, weeklyUsed: number) => ({
+  provider: 'codex' as never,
+  primary: { utilization: fiveHourUsed, resetsAt: at(2 * HOUR), windowDurationMins: 300 },
+  secondary: { utilization: weeklyUsed, resetsAt: at(72 * HOUR), windowDurationMins: 7 * 24 * 60 },
+});
 const pool = (members: PoolMember[], resetsAt: string | null = null): ProviderPool => ({
   id: id(900),
   slug: 'claude-accounts',
@@ -175,17 +181,46 @@ describe("a member's status", () => {
     );
   });
 
-  it("draws a spent account's binding window, and anyone else's 5-hour window", () => {
+});
+
+describe("the window an account's gauge draws", () => {
+  it('is the one closest to its limit: a weekly limit at 97% stops it before a 5-hour window at 6%', () => {
+    const lin = member(1, { state: 'AVAILABLE', planUsage: codex(6, 97), next: true });
+    expect(memberQuota(lin)).toMatchObject({ label: 'Weekly limit', percent: 97, nearLimit: true });
+    // What the pool's head reads, for the account the next session runs on.
+    expect(poolHeadline(pool([lin]))).toMatchObject({
+      kind: 'next',
+      quota: { label: 'Weekly limit', percent: 97, nearLimit: true },
+    });
+    // A Claude account the same: its weekly window, all models.
+    const busy = member(2, { state: 'AVAILABLE', planUsage: { ...fiveHour(40), sevenDay: { utilization: 95 } } });
+    expect(memberQuota(busy)).toMatchObject({ key: 'sevenDay', percent: 95, nearLimit: true });
+  });
+
+  it('is the 5-hour window when that one is the tighter, and when the two are level', () => {
+    expect(memberQuota(member(1, { state: 'AVAILABLE', planUsage: codex(64, 41) }))).toMatchObject({
+      label: '5h limit',
+      percent: 64,
+      nearLimit: false,
+    });
+    expect(memberQuota(member(1, { state: 'RUNNING', planUsage: codex(50, 50) }))?.label).toBe('5h limit');
+    expect(memberQuota(member(2, { state: 'AVAILABLE', planUsage: fiveHour(30) }))?.key).toBe('fiveHour');
+  });
+
+  it('is, for a spent account, still the window that stopped it', () => {
     const weeklySpent = member(1, {
       state: 'SPENT',
       planUsage: { ...fiveHour(40), sevenDay: { utilization: 100, resetsAt: at(48 * HOUR) } },
     });
     expect(memberQuota(weeklySpent)?.key).toBe('sevenDay');
-    const busy = member(2, {
-      state: 'AVAILABLE',
-      planUsage: { ...fiveHour(40), sevenDay: { utilization: 95 } },
-    });
-    expect(memberQuota(busy)).toMatchObject({ key: 'fiveHour', percent: 40, nearLimit: false });
+    // Its 5-hour window stopped it, and that is the one drawn — not the weekly one at 97% beside it.
+    const spent = member(2, { state: 'SPENT', planUsage: codex(100, 97), resetsAt: at(2 * HOUR) });
+    expect(memberQuota(spent)).toMatchObject({ label: '5h limit', percent: 100, nearLimit: true });
+    // And a pool with nothing else to run on still says when it frees up, not a window's reading.
+    expect(poolHeadline(pool([spent], at(2 * HOUR)))).toEqual({ kind: 'spent', resetsAt: at(2 * HOUR) });
+  });
+
+  it('is none for an account that reports no quota', () => {
     expect(memberQuota(member(3))).toBeNull();
   });
 });

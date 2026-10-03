@@ -17,6 +17,8 @@ import { TaskProgressController } from './task-progress.controller';
 import { TaskProgressService } from './task-progress.service';
 import { SessionCreatedTasksController } from './session-created-tasks.controller';
 import { SessionCreatedTasksService } from './session-created-tasks.service';
+import { TaskModelRoutingReportController } from './task-model-routing-report.controller';
+import { TaskModelRoutingReportService } from './task-model-routing-report.service';
 
 @Module({
   imports: [
@@ -39,6 +41,7 @@ import { SessionCreatedTasksService } from './session-created-tasks.service';
     TaskOwnerConfirmationController,
     TaskProgressController,
     SessionCreatedTasksController,
+    TaskModelRoutingReportController,
   ],
   providers: [
     TasksService,
@@ -47,6 +50,7 @@ import { SessionCreatedTasksService } from './session-created-tasks.service';
     TaskOwnerConfirmationService,
     TaskProgressService,
     SessionCreatedTasksService,
+    TaskModelRoutingReportService,
   ],
   // Exported so RunnerApiModule can reuse this single instance. Providing TasksService
   // in a second module would construct a second one, and its onModuleInit would start a

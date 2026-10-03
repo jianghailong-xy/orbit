@@ -38,6 +38,35 @@ final class CodexAccountsTests: XCTestCase {
         XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(100, 18, 92), now: now), pro, "last still beats spent")
     }
 
+    func testLeavesTheLastFifthOfAPlusLoginsFiveHoursAndAProLoginsWeekItsLastTenth() {
+        // Default's week ends first, so it takes the run — until its 5-hour window passes 80%.
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(79, 18, 40, proReset: "2026-08-10T00:00:00Z"), now: now), "default")
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(80, 18, 40, proReset: "2026-08-10T00:00:00Z"), now: now), pro)
+        // Pro reports its week in the slot Plus reports its 5 hours in: at 85% it is not nearly spent.
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(5, 18, 85, proReset: "2026-08-05T13:00:00Z"), now: now), pro)
+    }
+
+    func testCallsAFiveHourWindowNearlySpentAtEightyPercentAndALongerOneAtNinety() {
+        let inTwoHours = "2026-08-03T15:00:00Z", inThreeDays = "2026-08-06T13:00:00Z"
+        func claude(_ fiveHour: Double, _ sevenDay: Double) -> PlanUsageSnapshot {
+            PlanUsageSnapshot(provider: "claude", fiveHour: PlanUsageWindow(utilization: fiveHour, resetsAt: inTwoHours),
+                              sevenDay: PlanUsageWindow(utilization: sevenDay, resetsAt: inThreeDays))
+        }
+        func codex(_ window: PlanUsageWindow) -> PlanUsageSnapshot { PlanUsageSnapshot(provider: "codex", primary: window) }
+        XCTAssertFalse(CodexAccounts.nearlySpent(claude(79, 89), now: now))
+        XCTAssertTrue(CodexAccounts.nearlySpent(claude(80, 0), now: now))
+        XCTAssertTrue(CodexAccounts.nearlySpent(claude(0, 90), now: now))
+        // By the window's length, never its slot: a Plus login's 5 hours and a Pro login's week both
+        // come as `primary`.
+        XCTAssertTrue(CodexAccounts.nearlySpent(codex(win(80, 300, inTwoHours)), now: now))
+        XCTAssertFalse(CodexAccounts.nearlySpent(codex(win(89, 10080, inTwoHours)), now: now))
+        XCTAssertTrue(CodexAccounts.nearlySpent(codex(win(90, 10080, inTwoHours)), now: now))
+        // One that does not say how long it is is held to the longer windows' mark.
+        XCTAssertFalse(CodexAccounts.nearlySpent(codex(PlanUsageWindow(utilization: 89, resetsAt: inTwoHours)), now: now))
+        let lapsed = PlanUsageSnapshot(provider: "claude", fiveHour: PlanUsageWindow(utilization: 100, resetsAt: "2026-08-03T12:00:00Z"))
+        XCTAssertFalse(CodexAccounts.nearlySpent(lapsed, now: now))
+    }
+
     func testAQuotaExpiresWhenItsLongestWindowResets() {
         let inTwoHours = "2026-08-03T15:00:00Z", inThreeDays = "2026-08-06T13:00:00Z"
         func at(_ iso: String) -> Double { ISO8601DateFormatter().date(from: iso)!.timeIntervalSince1970 }
@@ -62,8 +91,8 @@ final class CodexAccountsTests: XCTestCase {
     }
 
     func testRanksAnUnreadAccountAfterOnesWithRoomButTakesItOverASpentOne() {
-        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(80, 18, nil), now: now), "default")
-        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(90, 18, nil), now: now), pro, "ahead of one nearly spent")
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(79, 18, nil), now: now), "default")
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(80, 18, nil), now: now), pro, "ahead of one nearly spent")
         XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(100, 18, nil), now: now), pro)
     }
 
@@ -106,6 +135,18 @@ final class CodexAccountsTests: XCTestCase {
         XCTAssertEqual(CodexAccounts.label("default", accounts: accounts), "Default")
         XCTAssertEqual(CodexAccounts.label(pro, accounts: accounts), "kxugfvukxczwl@mail.com")
         XCTAssertEqual(CodexAccounts.label("c0ffee42", accounts: accounts), "Account c0ffee42")
+    }
+
+    func testAnAccountRenamedInOrbitIsNamedByItDefaultIncluded() {
+        let accounts = [account("default", name: "jianghailong.main"), account(pro, name: "Research"), account("c0ffee42", name: "")]
+        XCTAssertEqual(CodexAccounts.label("default", accounts: accounts), "jianghailong.main")
+        XCTAssertEqual(CodexAccounts.label(pro, accounts: accounts), "Research")
+        XCTAssertEqual(CodexAccounts.label("c0ffee42", accounts: accounts), "Account c0ffee42", "an empty name is none")
+        // The picker reads the same rule.
+        let engines = [RunnerEngineHealth(engine: "claude", installed: true, auth: "yes", accounts: accounts)]
+        XCTAssertEqual(SessionProviderChoices.choices(configured: [], engines: engines)
+                        .first { $0.slug == "claude" }?.accounts?.map(\.label),
+                       ["jianghailong.main", "Research", "Account c0ffee42"])
     }
 
     func testAnIdTheRunnerDoesNotReportRunsOnDefault() {
@@ -211,6 +252,22 @@ final class CodexAccountsTests: XCTestCase {
         // Default's 5-hour window reads 0% but its weekly one is spent: the other account has room.
         XCTAssertEqual(CodexAccounts.toStartOn(both, usage: claudeUsage(defaultFive: 0, defaultWeek: 100, workWeek: 28), now: now), pro)
         XCTAssertEqual(CodexAccounts.toStartOn(both, usage: claudeUsage(defaultFive: 0, defaultWeek: 10, workWeek: 28), now: now), "default")
+    }
+
+    func testAClaudeSessionStartsWhereTheWeekEndsFirstUntilThatAccountsFiveHoursPassEightyPercent() {
+        // 2026-10-02 on wikova, in miniature: Work's week ends days before Default's, and every new
+        // session went to Work while Default sat at 1% of its 5 hours.
+        func usage(workFive: Double) -> PlanUsageSnapshot {
+            PlanUsageSnapshot(
+                provider: "claude",
+                fiveHour: PlanUsageWindow(utilization: 1, resetsAt: earlier),
+                sevenDay: PlanUsageWindow(utilization: 0, resetsAt: "2026-08-09T03:59:59Z"),
+                accounts: [pro: PlanUsageSnapshot(provider: "claude",
+                                                  fiveHour: PlanUsageWindow(utilization: workFive, resetsAt: earlier),
+                                                  sevenDay: PlanUsageWindow(utilization: 59, resetsAt: "2026-08-06T21:59:59Z"))])
+        }
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(workFive: 79), now: now), pro)
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(workFive: 85), now: now), "default")
     }
 
     func testThePickerListsClaudeAccountsUnderClaudeByTheirTightestWindow() {

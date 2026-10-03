@@ -82,7 +82,7 @@ func TestHeartbeatCadenceSurvivesBlockedTelemetryWithManyColdSessions(t *testing
 	ticksDone := make(chan struct{})
 	go func() {
 		defer close(ticksDone)
-		runHeartbeatTicks(stop, ticks, func() {
+		runHeartbeatTicks(stop, ticks, nil, func() {
 			_, _, _ = sendHeartbeatCycle(pool, telemetry, HeartbeatRequest{}, func(request HeartbeatRequest) (*HeartbeatResponse, error) {
 				posted <- len(request.SupervisedSessionIDs)
 				return &HeartbeatResponse{}, nil
@@ -140,6 +140,31 @@ func TestHeartbeatCadenceSurvivesBlockedTelemetryWithManyColdSessions(t *testing
 		t.Fatalf("max concurrent telemetry scans = %d, want 1", got)
 	}
 
+}
+
+// A sign-in from the web asks for a beat at once: the engine probe it re-ran is what the Providers
+// page is waiting on, and the next tick can be half a minute off.
+func TestHeartbeatBeatsBetweenTicksWhenAskedTo(t *testing.T) {
+	stop := make(chan struct{})
+	now := make(chan struct{}, 1)
+	beats := make(chan struct{}, 4)
+	loopDone := make(chan struct{})
+	go func() {
+		defer close(loopDone)
+		// No ticker at all: every beat this loop makes is one it was asked for.
+		runHeartbeatTicks(stop, nil, now, func() { beats <- struct{}{} })
+	}()
+	defer func() {
+		close(stop)
+		<-loopDone
+	}()
+
+	now <- struct{}{}
+	select {
+	case <-beats:
+	case <-time.After(time.Second):
+		t.Fatal("asked for a beat now, and none came")
+	}
 }
 
 func TestHeartbeatTelemetryRefreshCoalescesToLatestSnapshot(t *testing.T) {

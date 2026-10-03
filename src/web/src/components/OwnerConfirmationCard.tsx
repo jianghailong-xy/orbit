@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react';
+import { useEffect, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Alert } from 'antd';
 import { useLocation } from 'react-router-dom';
@@ -324,6 +324,7 @@ export function OwnerConfirmationActions({
 
 /** The card. Presentational: it takes the read and issues no request. */
 export function OwnerConfirmationCard({
+  ref,
   view,
   waiting,
   busy = false,
@@ -332,6 +333,8 @@ export function OwnerConfirmationCard({
   onDecide,
   onSendBack,
 }: {
+  /** The card's own element, which is where its keyboard claim says it is drawn (`CardHotkey.ts`). */
+  ref?: Ref<HTMLDivElement>;
   view: Pick<OwnerConfirmationView, 'taskId' | 'title' | 'acceptanceCriteria'>;
   waiting: OwnerConfirmationWaiting;
   /** A press from this card is on its way to the door. */
@@ -348,6 +351,7 @@ export function OwnerConfirmationCard({
   return (
     // Where the pinned line's pointer lands (`revealOwnerConfirmationCard`).
     <div
+      ref={ref}
       className="approval-card decision-ask evidence-decision owner-confirmation"
       data-owner-confirmation={waiting.requestId}
     >
@@ -439,14 +443,17 @@ export function SessionOwnerConfirmationCard({
     onSendBack(waiting, read.data.title);
   };
   const asking = waiting !== null && read.data !== undefined && !answer.isPending;
+  const anchor = useRef<HTMLDivElement>(null);
   const keys = useDecisionCardKeys({
     confirmEnabled: asking,
     onConfirm: () => decide('CONFIRM'),
+    anchor,
   });
 
   if (!taskId || !read.data || !waiting) return null;
   return (
     <OwnerConfirmationCard
+      ref={anchor}
       key={waiting.requestId}
       view={read.data}
       waiting={waiting}

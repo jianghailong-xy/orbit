@@ -852,25 +852,44 @@ private struct ChangePasswordPage: View {
 // MARK: - Providers
 
 /// Where the account's models come from: the engines signed in on each runner (a row opens that runner,
-/// where signing in lives), the account's pools (a row opens the pool's page) and its API keys.
+/// where signing in lives), the account's pools (a row opens the pool's page) and its API keys. A Codex
+/// pool of the account's own is drawn with its people and keys, read pool by pool beside its accounts.
 private struct ProvidersSettingsPage: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         ProvidersOverviewForm(runners: model.runners?.runners ?? [],
-                              pools: model.agents?.providerPools ?? [],
+                              pools: pools,
                               sharedPools: model.sharedPools?.pools ?? [],
                               keys: model.agents?.configuredProviders ?? [])
             .navigationTitle(SettingsPage.providers.title)
             .task { await model.runners?.load() }
             .task { await model.agents?.load() }
             .task { await model.sharedPools?.load() }
+            .task(id: codexPoolIDs) {
+                for id in codexPoolIDs { await model.sharedPools?.loadAccess(id) }
+            }
+    }
+
+    /// The account's own pools, each Codex one drawn with its people and keys once they are read.
+    private var pools: [ProviderPool] {
+        (model.agents?.providerPools ?? []).map { pool -> ProviderPool in
+            guard CodexLoginPool.isLoginPool(pool),
+                  let access = model.sharedPools?.access(pool.id) else { return pool }
+            return SharedPools.ownPoolWithAccess(pool, access)
+        }
+    }
+
+    /// The account's own Codex pools, whose people and keys are read one by one.
+    private var codexPoolIDs: [String] {
+        (model.agents?.providerPools ?? []).filter(CodexLoginPool.isLoginPool).map(\.id)
     }
 }
 
-/// An account pool's page: the pool as Providers last read it — read-only for a pool of Claude keys, and
-/// run from here for a Codex pool of one's own ChatGPT account (signing it in, again, or out, and
-/// deleting the pool). Deleting the pool closes the page.
+/// An account pool's page: the pool as Providers last read it — read-only for a pool of Claude keys; for a
+/// Codex pool of one's own, its page (`CodexPoolPageView`) with its people and keys read beside its ChatGPT
+/// accounts, run from here: an account signed in, in again or out, keys and people added and taken out,
+/// the pool deleted. Deleting the pool closes the page.
 private struct AccountPoolSettingsPage: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -880,14 +899,19 @@ private struct AccountPoolSettingsPage: View {
         let key = PublicID.storageKey(poolID)
         if let agents = model.agents,
            let pool = agents.providerPools.first(where: { PublicID.storageKey($0.id) == key }) {
-            if CodexLoginPool.isLoginPool(pool) {
-                CodexPoolPageView(pool: pool, actions: CodexPoolActions(
-                    start: { try await agents.startCodexLogin(pool) },
-                    poll: { try await agents.pollCodexLogin(pool) },
-                    cancel: { await agents.cancelCodexLogin(pool) },
-                    signOut: { await agents.signOutCodexLogin(pool) },
-                    deletePool: { await close(agents, pool) },
-                    refresh: { await agents.reloadPools() }))
+            if CodexLoginPool.isLoginPool(pool),
+               let page = CodexPoolPage(own: pool, access: model.sharedPools?.access(pool.id)) {
+                CodexPoolPageView(
+                    page: page,
+                    accountActions: CodexPoolActions(
+                        start: { try await agents.startCodexLogin(pool) },
+                        poll: { try await agents.pollCodexLogin(pool) },
+                        cancel: { await agents.cancelCodexLogin(pool) },
+                        signOut: { login in await agents.signOutCodexLogin(pool, login) },
+                        refresh: { await agents.reloadPools() }),
+                    accessActions: accessActions(page),
+                    exit: { await close(agents, pool) })
+                    .task { await model.sharedPools?.loadAccess(pool.id) }
             } else {
                 AccountPoolPageView(pool: pool)
             }
@@ -896,33 +920,33 @@ private struct AccountPoolSettingsPage: View {
         }
     }
 
+    /// What its people's and keys' presses do, once they are read.
+    private func accessActions(_ page: CodexPoolPage) -> PoolAccessActions? {
+        guard let pools = model.sharedPools, let access = page.access else { return nil }
+        return poolAccessActions(pools, access)
+    }
+
     private func close(_ agents: AgentsModel, _ pool: ProviderPool) async -> String? {
         if let failure = await agents.deletePool(pool) { return failure }
+        model.sharedPools?.forget(pool.id)
         dismiss()
         return nil
     }
 }
 
-/// A shared pool's page, run from here: each press goes to the server, and the pool it answers with
-/// is the one drawn. Deleting or leaving the pool closes the page.
+/// A Codex pool the account is in as one of its people — a shared pool, or somebody else's own — run from
+/// here: each press goes to the server, and the pool it answers with is the one drawn. Deleting the pool
+/// (its owner) or leaving it (anybody else) closes the page.
 private struct SharedPoolSettingsPage: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
     let poolID: String
 
     var body: some View {
-        if let pools = model.sharedPools, let pool = pools.pool(poolID) {
-            SharedPoolPageView(pool: pool, actions: SharedPoolActions(
-                addKey: { await pools.addKey(pool, $0) },
-                replaceKey: { await pools.replaceKey(pool, $0, secret: $1) },
-                removeKey: { await pools.removeKey(pool, $0) },
-                switchKey: { await pools.switchKey(pool, $0, on: $1) },
-                setRules: { await pools.setRules(pool, $0) },
-                addPerson: { await pools.addPerson(pool, email: $0) },
-                setRole: { await pools.setRole(pool, $0, $1) },
-                removePerson: { await pools.removePerson(pool, $0) },
-                deletePool: { await close(pools, pool, delete: true) },
-                leavePool: { await close(pools, pool, delete: false) }))
+        if let pools = model.sharedPools, let pool = pools.pool(poolID),
+           let page = CodexPoolPage(own: nil, access: pool) {
+            CodexPoolPageView(page: page, accountActions: nil, accessActions: poolAccessActions(pools, pool),
+                              exit: { await close(pools, pool, delete: page.mine) })
         } else {
             ContentUnavailableView(ProvidersOverview.poolGone, systemImage: "person.3")
         }
@@ -933,6 +957,20 @@ private struct SharedPoolSettingsPage: View {
         dismiss()
         return nil
     }
+}
+
+/// What a Codex pool's page asks of its people and keys, sent for `pool` as the server last answered it.
+private func poolAccessActions(_ pools: SharedPoolsModel, _ pool: SharedPool) -> PoolAccessActions {
+    PoolAccessActions(
+        addKey: { await pools.addKey(pool, $0) },
+        replaceKey: { await pools.replaceKey(pool, $0, secret: $1) },
+        removeKey: { await pools.removeKey(pool, $0) },
+        switchKey: { await pools.switchKey(pool, $0, on: $1) },
+        setRules: { await pools.setRules(pool, $0) },
+        share: { await pools.share(pool, emails: $0, membersCanAdd: $1) },
+        keepToSelf: { await pools.keepToSelf(pool) },
+        setRole: { await pools.setRole(pool, $0, $1) },
+        removePerson: { await pools.removePerson(pool, $0) })
 }
 
 // MARK: - Shared links

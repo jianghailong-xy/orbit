@@ -703,11 +703,11 @@ public struct RetryMessage: Codable, Sendable {
 }
 
 /// POST /sessions/:id/retry-message — the failure card's Retry, asking the server to re-send another
-/// session's message as that session's (docs/session-request-reply-contract.md §2.1). Keyed like any
-/// send, so a replay after a lost response is the same re-send.
+/// session's message as that session's (docs/session-request-reply-contract.md §2.1). No idempotency
+/// key: the server derives one from the failed message (criterion 19), so there is nothing here for a
+/// second press to spell differently.
 public struct RetryResendRequest: Codable, Sendable {
-    public let clientTurnId: String
-    public init(clientTurnId: String) { self.clientTurnId = clientTurnId }
+    public init() {}
 }
 
 /// POST /sessions/:id/turns — send a user message or raw shell command.

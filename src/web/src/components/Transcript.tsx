@@ -180,6 +180,8 @@ export interface AuthErrorHelp {
   runnerId?: string;
   /** Re-send the last user message, once the user has signed back in. */
   onRetry?: () => void;
+  /** A re-send is already in flight, so the button offers none: one failure, one attempt. */
+  retryDisabled?: boolean;
   /** What that re-send would say, so the card can show it rather than make the user trust it. */
   retryText?: string;
   /** Open Providers — the other way back in, and the only one when the rejected credential is
@@ -1358,15 +1360,21 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
       // a folded entry in the line's own fold, because it is the control plane's too. It used to be
       // an entry in a user bubble under the card, which drew an empty bubble: a message with no
       // words in it, in the reader's own name.
+      //
+      // A job that ended while a turn ran is written into that turn as a steer: the same line, in
+      // the running turn's stream where its echo landed, saying how far it got as a steer's bubble
+      // would — never the bubble itself.
       const background = parseBackgroundWake(node.note);
       if (background) {
+        const undelivered = node.delivery === 'failed' || node.delivery === 'unconfirmed';
         return (
           <>
             <BackgroundWakeCard
               wake={background}
               seq={node.seq}
               ts={node.ts}
-              undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+              undelivered={undelivered}
+              steer={node.steer && !undelivered ? steerDeliveryState(node.delivery).label : undefined}
               attached={
                 background.rest !== '' && (
                   <ControlPlaneNote kind={describeNote(background.rest)} text={background.rest} />
@@ -1574,7 +1582,12 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
               (the card is the whole session). Quote it, clamped, so the button is a decision
               rather than a leap of faith. */}
           {help.retryText && <div className="chat-authfix-last">{help.retryText}</div>}
-          <button className="chat-authfix-retry" onClick={help.onRetry} type="button">
+          <button
+            className="chat-authfix-retry"
+            onClick={help.onRetry}
+            disabled={help.retryDisabled}
+            type="button"
+          >
             Retry — re-send my last message
           </button>
         </>
@@ -1603,6 +1616,8 @@ export interface AutoRetryHelp {
   attempts?: number;
   /** Re-send the message now, without waiting. */
   onRetry?: () => void;
+  /** A re-send is already in flight, so the button offers none: one failure, one attempt. */
+  retryDisabled?: boolean;
   /** What that re-send would say. */
   retryText?: string;
   /**
@@ -1843,6 +1858,7 @@ function AutoRetryCard({
               className="chat-quota-retry"
               data-primary={!armed}
               onClick={help.onRetry}
+              disabled={help.retryDisabled}
               type="button"
             >
               {armed ? 'Retry now anyway' : 'Retry now'}

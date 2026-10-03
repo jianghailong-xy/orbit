@@ -274,6 +274,7 @@ model User {
   ownedSessions    Session[]         @relation("SessionOwner")
   createdSessions  Session[]         @relation("SessionCreator")
   ownedTasks       Task[] // tasks this user owns (tenant scope)
+  taskRouteDecisions TaskRouteDecision[]
   taskLists        TaskList[] // task lists this user owns (tenant scope)
   projects         Project[] // projects this user owns (tenant scope)
   attachments      Attachment[] // blobs this user uploaded (tenant scope)
@@ -535,6 +536,11 @@ model Runner {
   // Per-engine health on this machine — installed / version / signed in — reported by heartbeat
   // from the same probe `orbit doctor` prints. Shape: @orbit/shared RunnerEngineHealth[].
   engines        Json?     @map("engines")
+  // What the user calls each account `engines` reports, set in Orbit rather than on the machine —
+  // the accounts' displayName. Shape: { "<engine>": { "<account id>": "<name>" } }. Laid over the
+  // reported names wherever an account is named (namedRunnerEngines), which is how Default, the one
+  // account the machine never names, gets a name at all. NULL until the first rename.
+  accountNames   Json?     @map("account_names")
 
   // Browser-driven install of one engine CLI, the same one-slot relay shape as the sign-in above
   // (a machine installs one CLI at a time; the request is redelivered until the runner reports).
@@ -696,6 +702,9 @@ model Workspace {
   // Default reasoning effort a new session inherits when its create request omits one
   // ('' / null = the model's default). Claude: low|medium|high|xhigh|max; codex adds minimal.
   effort              String?   @map("effort")
+  // Owner-controlled routing; false records shadow decisions without changing dispatch.
+  modelRouting        Boolean   @default(false) @map("model_routing")
+  modelRoutingProviders String[] @default([]) @map("model_routing_providers")
   // routing: bind to a specific runner and/or match runner labels
   targetRunnerId      String?   @map("target_runner_id") @db.Uuid
   targetLabels        String[]  @default([]) @map("target_labels")
@@ -1350,6 +1359,17 @@ model Session {
   // answers with something that is not one of those failures — not merely when a retry is
   // dispatched, which would let a provider that fails identically every time loop unbounded.
   retryAttempts        Int       @default(0) @map("retry_attempts")
+  // When the auto-retry sweep CLAIMED this retry — cleared `retry_at` and began writing the turn
+  // that fulfils it (migration 0354, docs/session-request-reply-contract.md §8 criterion 20).
+  // Between the claim and that turn the row is parked with `retry_at` NULL, which is also what a
+  // retry given up looks like; this is the fact that tells them apart (`awaitsAutoRetry`). NULL =
+  // no claim in flight. Cleared by the turn the resume writes, a re-arm, a disarm and the attempt
+  // a give-up hands back; a reader also treats a claim older than `RETRY_CLAIM_WINDOW_MS` as dead,
+  // so a sweep that died mid-claim cannot leave a session reading as on-its-way forever — and the
+  // sweep gives such a claim up (migration 0366, §8 criterion 24). It is also the claim's lease: the
+  // re-send is written only while the claim it was claimed for is still this column's value.
+  // Partially indexed in 0366 (`session_retry_claimed_at_idx`), which schema.prisma cannot express.
+  retryClaimedAt       DateTime? @map("retry_claimed_at")
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 
@@ -4072,6 +4092,9 @@ model Task {
   // fixed for its lifetime (see TasksService.runAgentOnTask).
   provider         String?
   model            String?
+  // Suggested tier, separate from the model pin. The migration checks S/M/L/XL or NULL.
+  modelHint        String?     @map("model_hint")
+  modelHintReason  String?     @map("model_hint_reason")
   // When all prerequisites are DONE, auto-run this task (the dependency "pipeline"
   // default). Turn off to keep the gate but trigger the run manually.
   autoRunWhenReady Boolean     @default(true) @map("auto_run_when_ready")
@@ -4241,6 +4264,7 @@ model Task {
   /// Public links with this task as their root, ended ones included (migration 0306).
   shareLinks   ShareLink[]
   completionEvidence TaskCompletionEvidence[]
+  routeDecisions TaskRouteDecision[]
   legacyEvidenceImports TaskLegacyEvidenceImport[]
   evidenceDecisions TaskEvidenceDecision[]
   /// OWNER_CONFIRMED (0267): the times a run of this task asked its owner, and what the owner
@@ -4335,6 +4359,16 @@ model Task {
   /// The predicate is half the point here rather than a size optimisation: those two conditions are
   /// the statement's own filters, so the predicate is what lets the planner match this index to it.
   @@index([projectId, assigneeId], map: "task_project_assignee_idx")
+  /// `GET /projects/sidebar`'s `lastActivityAt`: `max(updated_at)` over each OPEN project's tasks,
+  /// polled every 15 seconds. The covering index above carries `updated_at` last, after `status`
+  /// and `id`, so it answered that maximum by reading every task of every open project — 9,054 of
+  /// the read's 10,421 buffers on 2026-10-03. Ordered directly after the project, the same `max()`
+  /// is PostgreSQL's min/max path: one backward probe per project. It stands in for a maintained
+  /// "newest task write" column, which every task write would have had to rewrite and lock.
+  ///
+  /// Created PARTIAL (`WHERE project_id IS NOT NULL`, migration 0361), which this schema cannot
+  /// spell — the predicate the covering index above carries, for the same reason.
+  @@index([ownerId, projectId, updatedAt], map: "task_project_activity_idx")
   @@index([status])
   /// The scheduled sweep's way in: the due tasks, in the order they came due. Created PARTIAL
   /// (`WHERE run_at IS NOT NULL`, see migration 0110) — a predicate this schema cannot spell, the
@@ -4367,6 +4401,9 @@ model Task {
   /// list's `?creatorSessionId=` scope, plus the lookup side of the column's SET NULL on session
   /// purge (migration 0305). Plain, not partial — nearly every task has a creator session.
   @@index([creatorSessionId], map: "task_creator_session_idx")
+  /// The "Tasks created here" row read off the index alone (migration 0365): its counts, and each
+  /// status's newest rows, without reading — or holding — every task of a 110k-task session.
+  @@index([ownerId, creatorSessionId, status, createdAt(sort: Desc), id(sort: Desc)], map: "task_owner_creator_session_status_created_id_idx")
   /// The criterion declaration's lookup index, and the referencing side of its foreign key. Both
   /// directions need it: "which work serves this criterion" is the read, and without it every
   /// criterion delete scans `task` to find the rows its SET NULL applies to.
@@ -4376,6 +4413,34 @@ model Task {
   /// 0120 used for (decision, project).
   @@unique([id, ownerId], map: "task_id_owner_id_key")
   @@map("task")
+}
+
+/// One routing decision per run request, including shadow and unrouted decisions.
+model TaskRouteDecision {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  ownerId       String   @map("owner_id") @db.Uuid
+  owner         User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  taskId        String   @map("task_id") @db.Uuid
+  task          Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  requestToken  String   @map("request_token")
+  // The planned session may not exist yet, so this id deliberately has no foreign key.
+  sessionId     String?  @map("session_id") @db.Uuid
+  applied       Boolean
+  policyVersion Int      @map("policy_version")
+  // NULL means no routing; the migration checks S/M/L/XL for non-null values.
+  level         String?
+  provider      String
+  model         String?
+  effort        String?
+  baseline      Json     @db.JsonB
+  features      Json     @db.JsonB
+  reasons       String[]
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([taskId, requestToken])
+  @@index([ownerId, createdAt])
+  @@index([sessionId])
+  @@map("task_route_decision")
 }
 
 /// An explicit, immutable claim that structured completion evidence was submitted for a Task.
@@ -5539,7 +5604,6 @@ model PoolCodexLogin {
   usageReadAt     DateTime?    @map("usage_read_at")
   createdAt       DateTime     @default(now()) @map("created_at")
   updatedAt       DateTime     @updatedAt @map("updated_at")
-  tokens          PoolLoginToken[]
 
   @@id([poolId, accountId])
   @@map("pool_codex_login")
@@ -5548,25 +5612,23 @@ model PoolCodexLogin {
 /// A session token of a Codex pool of one person's own (migration 0324) — the login pools' twin of
 /// PoolGatewayToken, which cannot hold one: its person is a row of `provider_pool_person`, and a login
 /// pool has no people. Only the hash is stored. (pool_id, user_id) → provider_pool(id, owner_id) holds its
-/// person to the pool's owner; (pool_id, account_id) → pool_codex_login binds it to the account its claim
-/// found, so taking that account out of the pool deletes it (a token minted while the pool held no
-/// account has none, and is answered with that); and its session's deletion deletes it too.
+/// person to the pool's owner; its session's deletion deletes it too. It names no account (migration
+/// 0355): what a request of its goes out on is the account its session is on (`session.pool_codex_account_id`),
+/// read by the gateway at every request, so taking one account out of the pool leaves the token alone and
+/// a session that moved to another account sends on that one.
 model PoolLoginToken {
-  id        String          @id @default(uuid(7)) @db.Uuid
-  tokenHash String          @unique @map("token_hash")
-  poolId    String          @map("pool_id") @db.Uuid
-  userId    String          @map("user_id") @db.Uuid
-  pool      ProviderPool    @relation(fields: [poolId, userId], references: [id, ownerId], onDelete: Cascade, onUpdate: NoAction)
-  accountId String?         @map("account_id")
-  login     PoolCodexLogin? @relation(fields: [poolId, accountId], references: [poolId, accountId], onDelete: Cascade, onUpdate: NoAction)
-  sessionId String          @map("session_id") @db.Uuid
-  session   Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  createdAt DateTime        @default(now()) @map("created_at")
-  expiresAt DateTime        @map("expires_at")
-  revokedAt DateTime?       @map("revoked_at")
+  id        String       @id @default(uuid(7)) @db.Uuid
+  tokenHash String       @unique @map("token_hash")
+  poolId    String       @map("pool_id") @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  pool      ProviderPool @relation(fields: [poolId, userId], references: [id, ownerId], onDelete: Cascade, onUpdate: NoAction)
+  sessionId String       @map("session_id") @db.Uuid
+  session   Session      @relation(fields: [sessionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  createdAt DateTime     @default(now()) @map("created_at")
+  expiresAt DateTime     @map("expires_at")
+  revokedAt DateTime?    @map("revoked_at")
 
   @@index([sessionId])
-  @@index([poolId, accountId])
   @@map("pool_login_token")
 }
 
@@ -6304,6 +6366,7 @@ model WikiMaintenanceRun {
   expectKind      String?   @map("expect_kind")
   expectRef       String?   @map("expect_ref")
   sessionId       String?   @map("session_id") @db.Uuid
+  /// The run's first start, never written again (migration 0356): a retry or a rerun is `lastStartedAt`.
   startedAt       DateTime? @map("started_at") @db.Timestamptz(3)
   endedAt         DateTime? @map("ended_at") @db.Timestamptz(3)
   /// `succeeded` | `failed` | `truncated`, as the run reported it.
@@ -6312,6 +6375,19 @@ model WikiMaintenanceRun {
   opsRefused      Int?      @map("ops_refused")
   report          Json?
   error           String?
+  /// How many times a session started the run, and the latest of them (contract `maintenance.job.recovery.attempts`).
+  attempts        Int       @default(0)
+  lastStartedAt   DateTime? @map("last_started_at") @db.Timestamptz(3)
+  /// `infra` | `content` — whose a failed or truncated run's failure was; set exactly when the outcome is one of those.
+  failureKind     String?   @map("failure_kind")
+  /// How many times the platform started the run's task again after its session died of an infra failure.
+  reruns          Int       @default(0)
+  rerunAt         DateTime? @map("rerun_at") @db.Timestamptz(3)
+  /// `active` | `paused` — made while the space was behind (contract `maintenance.job.catchUp`, migration 0357);
+  /// NULL for a run made while it was not.
+  catchUp         String?   @map("catch_up")
+  /// The provider the run was pinned to answers on this machine or a private network (`catchUp.localEndpoint`).
+  localEndpoint   Boolean   @default(false) @map("local_endpoint")
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 

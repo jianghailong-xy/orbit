@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The steps of an integration job, against real repositories
@@ -817,6 +818,136 @@ func TestAutomaticPromotionWithNoCheckedTipLandsNothing(t *testing.T) {
 	}
 	if got := r.originRev("refs/heads/main"); got != checked.UpstreamSha {
 		t.Fatalf("main moved to %s, want it left at %s", got, checked.UpstreamSha)
+	}
+}
+
+// ownerLanding is the LAND_PROMOTION an owner confirmed (M-T4): the same facts automaticLanding
+// carries, without the mark — so it lands onto an upstream that moved since the check rather than
+// handing the candidate back (M5, M-T12).
+func ownerLanding(r *integrationRepo, sourceSha string, checked integrationResult) IntegrationJobCommand {
+	land := r.promotionCommand("LAND_PROMOTION", "project/p", "PROJECT_BRANCH")
+	land.SourceSha = sourceSha
+	land.UpstreamShaChecked = checked.UpstreamSha
+	land.MergeTreeSha = checked.TestedTreeSha
+	return land
+}
+
+// moveOriginMainAhead moves main at the origin WITHOUT moving this checkout's remote-tracking ref:
+// a push by URL updates no `refs/remotes/*`. The next fetch in this repository therefore has a ref
+// update to perform — which is what a competing fetch takes the lock for — rather than nothing to
+// do.
+func moveOriginMainAhead(t *testing.T, r *integrationRepo) string {
+	t.Helper()
+	r.checkoutNew("moved-main", "main")
+	r.write("upstream-moved.txt", "another landing\n")
+	moved := r.commit("main moved")
+	mustRun(t, r.work, "git", "push", "--quiet", r.origin, "HEAD:refs/heads/main")
+	r.checkout("main")
+	mustRun(t, r.work, "git", "branch", "-D", "moved-main")
+	return moved
+}
+
+// holdRefLock takes the lock git itself takes on a remote-tracking ref, the way a fetch competing
+// with the job in the same repository holds it while it updates that ref.
+func holdRefLock(t *testing.T, r *integrationRepo, ref string) string {
+	t.Helper()
+	lock := filepath.Join(r.work, ".git", "refs", "remotes", "origin", ref+".lock")
+	if err := os.MkdirAll(filepath.Dir(lock), 0o755); err != nil {
+		t.Fatalf("could not make the ref's directory: %v", err)
+	}
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatalf("could not take the ref lock: %v", err)
+	}
+	return lock
+}
+
+// releaseRefLockOnFirstRetry makes the competing process finish at the moment the job's first
+// attempt has failed — the pause before it tries again, which is a moment nothing outside the fetch
+// can observe.
+func releaseRefLockOnFirstRetry(t *testing.T, lock string) {
+	t.Helper()
+	restore := integrationFetchLockPause
+	released := false
+	integrationFetchLockPause = func(d time.Duration) {
+		if !released {
+			released = true
+			_ = os.Remove(lock)
+		}
+		restore(d)
+	}
+	t.Cleanup(func() {
+		integrationFetchLockPause = restore
+		_ = os.Remove(lock)
+	})
+}
+
+// TestPromoteFetchRefLockRetriesAndLands is the 2026-10-02 incident (project 34Yjjgt2ERe9tU5TUmjAP),
+// reproduced against the real thing.
+//
+// `git fetch <remote> <ref>` does not only write FETCH_HEAD: it updates
+// `refs/remotes/<remote>/<branch>`, and that ref is shared by every job and every session worktree
+// of this checkout. Two fetches arriving together and the second one's ref update is refused with
+// "cannot lock ref …". Before this, that lost race ended the job — reported as BASE_REF_NOT_FOUND,
+// "the upstream branch does not exist", which sent a reader to look at a branch that was never the
+// problem — and the promotion it was a step of went BLOCKED. Here the lock is held the way a
+// competing fetch holds it, and released as soon as the job has lost once, which is what the other
+// process does a moment later: the job waits, fetches again, and lands.
+func TestPromoteFetchRefLockRetriesAndLands(t *testing.T) {
+	r := newIntegrationRepo(t)
+	sourceSha, checked := checkedProjectBranch(t, r)
+	moved := moveOriginMainAhead(t, r)
+
+	releaseRefLockOnFirstRetry(t, holdRefLock(t, r, "main"))
+
+	landed := runIntegrationJob(ownerLanding(r, sourceSha, checked), silent)
+	if landed.ErrorCode == "BASE_REF_NOT_FOUND" {
+		t.Fatalf("a ref another process was updating was reported as a missing branch: %v", landed.ErrorDetail)
+	}
+	if landed.State != "LANDED" {
+		t.Fatalf("landing state = %s (%s %s), want LANDED after the retry: %v",
+			landed.State, landed.ErrorCode, landed.Phase, landed.ErrorDetail)
+	}
+	if got := r.originRev("refs/heads/main"); got != landed.LandedSha {
+		t.Fatalf("origin main is %s, the result claims %s", got, landed.LandedSha)
+	}
+	// The fetch that was retried is the one that read the upstream, so the landing is onto the tip
+	// the origin had by then — the one the checkpoint did not see.
+	if parent, _ := git(r.work, "rev-parse", landed.LandedSha+"^1"); parent != moved {
+		t.Fatalf("the merge's first parent is %s, want the upstream tip that moved %s", parent, moved)
+	}
+}
+
+// TestPromoteFetchRefLockThatOutlivesItsRetriesIsNotABranchThatIsMissing: the lock is held for every
+// attempt. What the job then reports is the fetch failing — FETCH_FAILED, a condition a rerun
+// answers — and NOT BASE_REF_NOT_FOUND, which is a statement about the upstream branch and sends the
+// reader to check whether it exists.
+func TestPromoteFetchRefLockThatOutlivesItsRetriesIsNotABranchThatIsMissing(t *testing.T) {
+	r := newIntegrationRepo(t)
+	sourceSha, checked := checkedProjectBranch(t, r)
+	moved := moveOriginMainAhead(t, r)
+
+	lock := holdRefLock(t, r, "main")
+	restore := integrationFetchLockPause
+	// Three attempts, at once: the lock is the fact under test, not the wait between them.
+	integrationFetchLockPause = func(time.Duration) {}
+	t.Cleanup(func() {
+		integrationFetchLockPause = restore
+		_ = os.Remove(lock)
+	})
+
+	result := runIntegrationJob(ownerLanding(r, sourceSha, checked), silent)
+	if result.State != "ERROR" || result.Phase != "FETCH" {
+		t.Fatalf("result = %s %s (%s), want an ERROR in FETCH", result.State, result.Phase, result.ErrorCode)
+	}
+	if result.ErrorCode != "FETCH_FAILED" {
+		t.Fatalf("errorCode = %q, want FETCH_FAILED — a lock another process held is not a missing branch",
+			result.ErrorCode)
+	}
+	if detail, _ := result.ErrorDetail["detail"].(string); !strings.Contains(detail, "cannot lock ref") {
+		t.Fatalf("the error does not carry git's own words: %v", result.ErrorDetail)
+	}
+	if got := r.originRev("refs/heads/main"); got != moved {
+		t.Fatalf("main is %s, want it left at %s — a failed FETCH lands nothing", got, moved)
 	}
 }
 

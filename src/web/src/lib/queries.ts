@@ -7,6 +7,7 @@ import type {
   ProjectPromotionView,
   SessionCreatedTasks,
   SessionSearchResponse,
+  TaskRunReason,
   WatchView,
 } from '@orbit/shared';
 import {
@@ -482,15 +483,27 @@ export function projectsQueryKey(filter: ProjectFilter): [string, ProjectFilter]
 }
 
 /**
- * The open projects, as the sidebar's Projects group reads them — the Projects page's own Open
- * read, same key and same URL, so the two share one request and one cache entry. Polled because
- * the control-plane stream names no project: a task starting, or a coordinator taking a turn,
- * reaches the group's working dot within one interval.
+ * The open projects, as the sidebar's Projects group reads them — `GET /projects/sidebar`, the
+ * rail's own read rather than the Projects page's Open one.
+ *
+ * Its own endpoint because of what the two ask: the page draws seven task lanes, integration lines
+ * and the whole attention summary, while the rail draws a working dot, an amber count and an
+ * order. The index answers the first by classifying every task of every project, and this query
+ * runs every 15 seconds in every open tab — on 2026-09-29 that was ~5,400 calls and ~100 minutes
+ * of PostgreSQL execution a day for one open browser tab. The rail's read reaches the same
+ * `running` and `lastActivityAt` from the rows that can be RUNNING, at about 5% of the cost.
+ *
+ * Keyed UNDER `['projects']` and apart from its filters, so a project write still refreshes it
+ * (one `['projects']` invalidation reaches every entry), while the page's own Open entry is no
+ * longer dragged onto this cadence — it keeps its `PROJECTS_REFRESH_MS`.
+ *
+ * Polled because the control-plane stream names no project: a task starting, or a coordinator
+ * taking a turn, reaches the group's working dot within one interval.
  */
 export const openProjectsQuery = () =>
   queryOptions({
-    queryKey: projectsQueryKey('OPEN'),
-    queryFn: () => api<SidebarProject[]>(projectsPath('OPEN')),
+    queryKey: ['projects', 'sidebar'] as const,
+    queryFn: () => api<SidebarProject[]>('/projects/sidebar'),
     refetchInterval: 15_000,
   });
 
@@ -571,6 +584,13 @@ export interface ProjectReadyToRunItem {
   runState: ProjectReadyToRunState;
   /** Active Session for QUEUED/RUNNING rows; null for READY/PAUSED rows. */
   sessionId: string | null;
+  /**
+   * Why a QUEUED/RUNNING row is active: a turn, a background job its run is waiting on, or a
+   * wake-up it is waiting for. Absent from an older server.
+   */
+  runReason?: TaskRunReason | null;
+  /** A RUNNING row whose background jobs have stopped producing output. */
+  runStalled?: boolean;
   /** The list-level action needed before a PAUSED row can expose Run. */
   pausedList: ProjectReadyToRunPausedList | null;
   /** Null only when the project is too large to compute transitive impact safely. */

@@ -69,9 +69,10 @@ public struct SessionLine: Equatable, Sendable {
             return SessionLine(text: "\(subagentRunningLabel(n))…", tone: .running)
         }
         // Parked on a live watch that will resume it: not idle, not waiting on you, and — whatever
-        // else it left running — not a background process (contract §9.2). Said in the watch's words.
+        // else it left running — not a background process (contract §9.2). Said in the strip's own
+        // line, so the row and the strip above its composer read the same (web parity).
         if live, let watching, s.effectiveRunState == .awaitingInput {
-            return SessionLine(text: "\(watching.word) · \(watching.progress)", tone: .watching)
+            return SessionLine(text: watching.rowLine, tone: .watching)
         }
         // Parked (AWAITING_INPUT) but a background process is still running — not idle, though
         // not the agent working either (see the glyph): muted, not the working blue.

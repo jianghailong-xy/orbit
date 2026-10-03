@@ -38,7 +38,6 @@ import {
   SessionRenameDto,
   SessionResumeDto,
   SessionInterruptDto,
-  SessionRetryResendDto,
   SessionTurnDto,
   RecordMergeReceiptDto,
 } from './dto';
@@ -593,17 +592,15 @@ export class SessionsController {
   /** Re-send that message now, the way the auto-retry does: the Retry button's door when the message
    *  is another session's (`sessionMessage` on the answer above), so it goes out with that session as
    *  its sender and the request it was, charged to nobody's hourly limit (contract §2.1) — not through
-   *  the owner's own door, which would say it again in the owner's name. */
+   *  the owner's own door, which would say it again in the owner's name.
+   *
+   *  The turn key is the server's own, derived from the failed message (contract §2.1, §8 criterion
+   *  19): the caller names nothing, so no click can queue a second turn for the same failure. A body
+   *  carrying `clientTurnId` from a client that predates that is ignored, not refused — the key it
+   *  chose is simply not the one the re-send goes out under. */
   @Post(':id/retry-message')
-  resendRetryMessage(
-    @CurrentUser() user: AuthUser,
-    @Param('id', PublicIdPipe) id: string,
-    @Body() dto: SessionRetryResendDto,
-  ) {
-    const clientTurnId = typeof dto?.clientTurnId === 'string' ? dto.clientTurnId.trim() : '';
-    if (!clientTurnId) throw new BadRequestException('clientTurnId is required');
-    assertClientTurnIdNotReserved(clientTurnId);
-    return this.autoRetry.resendRetryMessage(user.userId, id, clientTurnId);
+  resendRetryMessage(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.autoRetry.resendRetryMessage(user.userId, id);
   }
 
   /** Turn off the pending auto-retry on this session. Arming happens by itself when a quota or a
@@ -651,9 +648,16 @@ export class SessionsController {
     return this.sessions.unpin(user.userId, id);
   }
 
-  /** File this session in one of its workspace's folders, or in none (`folderId` null or omitted).
-   *  A `workspaceId` other than the session's own is a 409 until moving between workspaces exists.
-   *  See SessionsService.move. */
+  /** What the Move panel shows: this workspace's folders, the other workspaces the session can or
+   *  cannot move to and why, and whether it has to be ended first. See SessionsService.moveTargets. */
+  @Get(':id/move-targets')
+  moveTargets(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.moveTargets(user.userId, id);
+  }
+
+  /** File this session in one of its workspace's folders, or in none (`folderId` null or omitted);
+   *  with a `workspaceId` other than its own, move an ended session to that workspace (and folder).
+   *  A move the rules refuse is a 409 with the reason. See SessionsService.move. */
   @Post(':id/move')
   move(
     @CurrentUser() user: AuthUser,

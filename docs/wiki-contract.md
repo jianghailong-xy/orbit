@@ -827,6 +827,8 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
   另一次被判 behind。
 - CLI：`orbit wiki dossier --space <id> [--after <token>] [--limit N] [--json]`、
   `orbit wiki cursor advance --space <id> --to <token> [--outcome …] [--error TEXT] [--json]`，只有 CLI、没有 MCP 工具，三张 family 表都登记。
+- `orbit wiki maintain` 在 op 记下后就用同样的 compare-and-set 推进游标（`POST …/maintenance/advance`，19.4 第 8 步），只动位置、不写健康字段；
+  它在这条路由上之后的成功报告不再移动游标，失败报告照样计一次失败。
 
 ### 16.5 维护会话的运行：干净启动与护栏
 
@@ -852,8 +854,17 @@ JSON 里是 `maintenance.run`；服务端在 `wiki/wiki-maintenance-session.ts`�
   走 x-api-key，vLLM 回 401，所以这个变量根本不交给引擎。thinking 默认关：`CLAUDE_CODE_EFFORT_LEVEL=unset` 加
   `MAX_THINKING_TOKENS=0`（只设前者仍会发 `thinking: adaptive`）。环境从零搭：provider 的端点、token、模型、自定义头、上下文窗口，
   runner 的 PATH、locale、TMPDIR、证书与代理，`ORBIT_HOME` 和会话上下文；runner 与 workspace 的其他变量都不带。
+- **一次 Bash 跑完整个运行**（`cleanStart.bash`、`bashCall`）：环境里 `BASH_DEFAULT_TIMEOUT_MS` 与 `BASH_MAX_TIMEOUT_MS` 都是
+  `bashTimeoutMs`（18000000，5 小时），`CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`：模型不传 timeout 也有 5 小时，而不是 2 分钟；
+  命令也不会被挪到后台（只有 Bash、没有 Read 的运行读不到后台命令的结局）。`--settings` 不带 env 块，它会盖过进程环境。
+  但调用自己传的 timeout 优先于默认值：10-03 有一次运行给了 600000，10 分钟被截断，又用 1800000 重跑，再被截断（exit 143），
+  会话内唯一一次重试也白用了。所以维护任务和 plan 作业任务的描述（19.3、21.7、21.9）与系统提示都写明：Bash 调用给
+  `timeout: 18000000`，不许更短；工具在命令结束前就返回（超时或被截断）时不要再跑，换什么 timeout 都不跑，也不占那一次重试，
+  汇报截断前打印的内容就结束。接着做的是下一次运行（维护靠游标）、owner 的下一次要求（起草、修订作业记失败），或下一次生成
+  （已写的节原样保留）。这和 19.7 里「服务端 5xx 后命令自己说可以再跑」不是一回事。
 - **截断算失败**：开场 prompt 用满 120 个模型回合，CLI 以 `error_max_turns` 结束这一回合；runner 把回合记为 FAILED，并在游标路由上
-  报 `outcome: truncated`——space 的连续失败加一，游标不动。
+  报 `outcome: truncated`——space 的连续失败加一，游标不再移动：在 op 记下之前被截断的，游标没动过；之后被截断的，游标停在
+  `orbit wiki maintain` 推进到的位置（19.4 第 8 步）。
 
 ## 17. 锚点复验（判据 4）
 
@@ -1026,13 +1037,18 @@ JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端�
   space 再到期也不建任务。merge receipt 与判据修订自己不发事件：它们照样计入 backlog，由下一个到达的事实一起带进来。
 - 到期：水位之后有事实的会话 ≥ `rules.backlogThreshold`（20），或新事实到达时最老的未处理事实已超过 `maxPendingAgeHours`（24）。
   年龄只在事实到达时读，从不等：夜里悄悄满一天的 space，早上第一个事实到达时才建任务。
-- 不建：维护关了或缺 workspace / 清单；清单里有未结束（OPEN / IN_PROGRESS）的任务；这个 space 有排队（`queued`）的 plan 作业
+- 不建：维护关了或缺 workspace / 清单；清单里有未结束（OPEN / IN_PROGRESS）、且不是「死任务」（19.7）的任务——死任务先被重跑或关单，
+  只有等着重跑的那个仍占着清单；这个 space 有排队（`queued`）的 plan 作业
   （21.7「plan 作业先走」：触发改为把作业的任务建出来）；提示不是新事实；没到期；过了 120 秒宽限的事实里没有可覆盖的；被挡住（19.2）。
 - 建任务在维护清单那一行的锁下进行，锁内再读一遍未结束的任务、排队的 plan 作业和当天次数：两个事实同时到达只建一个，其间排上的作业照样先走。
+- **追赶时**（19.8）：space 落后超过 24 小时、追赶没有暂停时，上一次维护运行的结束本身就是一个新事实——提示点名的是 space 最新那次运行的任务、
+  或它的一个会话，且该任务已结束——没有别的新事实也照常往下问（到期、当天次数、审阅队列）。不在追赶、或追赶暂停时，维护作业自己的事件
+  仍不算新事实。
 
 ### 19.2 被挡住：健康状态里的 `held`
 
-- `daily_limit_reached`：这个 space 自 UTC 零点起建出的维护任务已达 `settings.maintenance.dailyRunLimit`（`wikiMaintenanceRunsToday`，不论结局）。
+- `daily_limit_reached`：这个 space 自 UTC 零点起建出的维护任务已达 `settings.maintenance.dailyRunLimit`（`wikiMaintenanceRunsToday`，不论结局；
+  但追赶中不计数的运行除外，见 19.8），且下一次运行会计数——追赶中钉在本地端点上的运行不计数，所以不会被挡。
 - `review_queue_full`：Manual 模式下每条提议都等 owner，审阅队列连一个会话的提议都放不下。
 - 记在 `wiki_cursor.held_reason` / `held_at`，游标状态里是 `held: { reason, at }` 或 null；同一原因保留第一次被挡的时刻，建出任务时清空。
 
@@ -1040,8 +1056,11 @@ JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端�
 
 - 在 space 隐藏的「Wiki maintenance」清单里；标题 `Wiki maintenance: <space 标题>`；指派给维护设置的 workspace，provider 钉死为
   维护设置的 provider（认领时按 §16.5 干净启动）；`runAt` 为建出的时刻；创建者为 owner（USER）。
-- 描述就是运行的指令：用 Bash 跑一次 `orbit wiki maintain --space <id>`，跑完用 task_progress_report 与一条 task_comment 汇报，
-  含 token 花费；失败时贴最后几行；不跑别的，失败最多重试一次。
+- 描述就是运行的指令：用 Bash 跑一次 `orbit wiki maintain --space <id>`，Bash 调用给 `timeout: 18000000`（5 小时），不许更短（16.5）；
+  跑完用 task_progress_report 与一条 task_comment 汇报，含 token 花费；失败时贴最后几行；不跑别的，失败最多重试一次。
+  服务端答 5xx 或不答时命令自己先等服务恢复（19.7），所以它说可以再跑的那次可以立刻重跑；它说服务端没回来时不要再跑——
+  下一次运行会读同一批案卷。工具在命令结束前就返回（超时或被截断）时不要再跑，也不占那一次重试：汇报截断前打印的内容就结束，
+  下一次运行接着做。
 - 判据 EXECUTABLE：`orbit wiki check --space <id> --expect-cursor <token>`，期望退出码 0，时限 `rules.checkTimeoutSeconds`（300 秒）。
 - **期望位置**：从游标起、只看过了宽限的事实，按案卷页的同一走法数够 `runSize` 个会话时页会停在的位置。运行从同一游标翻页
   （案卷路由的 `until`）正好走到这里。
@@ -1051,7 +1070,9 @@ JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端�
 
 ### 19.4 `orbit wiki maintain --space <id> [--model MODEL] [--concurrency N] [--json]`
 
-只有维护会话能跑（其余 `WIKI_NOT_MAINTENANCE_SESSION`），一次跑完以下各步，任何一步失败或被截断都不推进游标；熔断扣下 op 不算失败，游标停在被扣下的案卷之前；op 没拿到核实结论也不算失败（第 8 步）：
+只有维护会话能跑（其余 `WIKI_NOT_MAINTENANCE_SESSION`），一次跑完以下各步。**游标在 op 记下之后立刻推进**（判据 3 第 4 版，第 8 步）：
+记下之前的任何一步失败或被截断都不推进游标；记下之后核实、锚点或文档失败，运行照样记 failed、连续失败加一，但游标留在推进到的位置，
+下一次运行不再重读这些会话。熔断扣下 op 不算失败，游标停在被扣下的案卷之前；op 没拿到核实结论也不算失败（第 9 步）：
 
 1. **起点**：`GET …/maintenance/run` 拿 space 与仓库、维护 workspace 的工作目录、主题表、护栏数字和期望位置，同时记下运行开始、是哪个会话。
 2. **checkout**：维护 workspace 的工作目录（`~` 按 runner 账号的家目录展开——会话里 HOME 是干净目录），先 fetch；它的 origin 与 space
@@ -1071,7 +1092,11 @@ JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端�
    从这一页起的 op 全部扣下不提议（`heldBackByBreaker`），一个会话出现在几页时按最后一页算；游标只推进到这一页的 `from`，下一次运行
    重读这些案卷，扣下的知识不丢，已提议的也不会被重读。这一步不写任何东西，也不让运行失败。
 7. **提议**：`POST …/maintenance/changesets`，origin 为 `maintenance`；此时还有 op 被拒就判失败。
-8. **核实**：Automatic 下走 `orbit wiki verify` 对本次运行自己的 op 的核实，没拿到结论的再核一遍：第二遍的提示里写明上一遍的回答
+8. **推进游标**（判据 3 第 4 版）：所有批次都记下后，立刻 `POST …/maintenance/advance`，带最后一页的 token（熔断扣下过 op 时，是第一个被扣下的页的
+   `from`）：游标越过这些 op 所属的会话。只用游标的比较并交换往前移，不写运行的健康字段（`last_ok_at`、连续失败、`last_outcome`）；token
+   在游标处或之后已被越过的，什么都不动。从这里往后的步骤失败，运行照样以 failed 收尾，游标不回退；报告带 `cursorAdvanced: true`。
+   服务端没有这条路由（旧版本）时，游标照旧在收尾时推进。
+9. **核实**：Automatic 下走 `orbit wiki verify` 对本次运行自己的 op 的核实，没拿到结论的再核一遍：第二遍的提示里写明上一遍的回答
    为什么没被收下（例如 duplicateOf 不是列出的条目），并列出 duplicateOf 能填的编号（一条都没列时，说明它不可能是 duplicate）；回答照样
    严格解析，不宽读成别的结论。然后接手已结束的会话留下的等核实的 op（§7.4），每次最多 `adoptOpsMax`（50）个，本次运行没抽取过就先为
    它们备好模型。**没拿到结论的 op 不让运行失败**，本次运行自己的（两遍之后）和接手的一样：没结论就不生效，照旧等核实；运行照常往下走、
@@ -1079,27 +1104,33 @@ JSON 里是 `maintenance.job`；迁移 `0320_wiki_maintenance_run`；服务端�
    起因：2026-09-30 与 10-01 的运行因 89 个 op 里 1 个、79 个里 4 个没结论而整次失败，游标不动，下一次重读同一批案卷、按同样的比例
    再失败。真正的停止照旧让运行失败：模型端点 401、服务端出错。space 已不是 Automatic 时核实停下，没核的 op 等它再切回 Automatic，
    这同样不让运行失败。
-9. **锚点**：`orbit wiki anchors verify`，`--repo` 取上面的 checkout。
-10. **文档**（判据 3 第 3 版，19.6）：有已确认的 plan 时，只重写本次运行的事实碰到的节——条目碰到的、仓库材料在 origin/main 上变了的、
+10. **锚点**：`orbit wiki anchors verify`，`--repo` 取上面的 checkout。
+11. **文档**（判据 3 第 3 版，19.6）：有已确认的 plan 时，只重写本次运行的事实碰到的节——条目碰到的、仓库材料在 origin/main 上变了的、
     被撤过句的，以及没有生成作业在等时还从没写过的——落不进任何一节的新知识至多产出一条 plan 修改建议；没有已确认的 plan 就不写文档，
-    报告里注明（`docs.skipped: no_confirmed_plan`）。按主题的文章不再重写。这一步不让运行失败：没写成的，下一次运行照样会重写。
-11. **收尾**：`POST …/maintenance/finish`，带最后一页的 token（熔断扣下过 op 时，是第一个被扣下的页的 `from`）、outcome 与运行报告；
-    失败时 outcome 为 failed、带原因，游标不动、连续失败加一。
-    被 maxTurns 截断时由 runner 在游标路由上报 truncated（§16.5），同样记到运行上。
+    报告里注明（`docs.skipped: no_confirmed_plan`）。space 落后时建出的运行（追赶中或追赶暂停，19.8）整步跳过：不写任何一节，也不产出
+    修改建议（`docs.skipped: catching_up`）。按主题的文章不再重写。这一步不让运行失败：没写成的，下一次运行照样会重写。
+12. **收尾**：`POST …/maintenance/finish`，带推进到的那个 token（最后一页的，或熔断扣下过 op 时第一个被扣下的页的 `from`）、outcome 与运行报告；
+    成功时游标已在那里，不再移动，只记下成功（`last_ok_at`、连续失败清零）。失败时 outcome 为 failed、带原因、连续失败加一；游标在第 8 步
+    之前失败的不动，之后失败的留在第 8 步推进到的位置。
+    被 maxTurns 截断时由 runner 在游标路由上报 truncated（§16.5），同样记到运行上；游标不会超过已记下的 op。
 
 运行报告（`WikiMaintenanceReport`）：会话、案卷、跳过、离题数，条目（抽到 / 保留 / 丢弃 / 锚点在库外 / principle），
 op（提议 / 记下 / 被拒 / 自检丢弃 / 被配额挡住 / 被熔断扣下 / 直接生效 / 等待），核实（本次运行自己的 op；接手的单列为
 `verification.adopted {ops, verified, failed}`，CLI 输出里是一行 `- adopted: …`；没拿到结论、等下一次运行接手的 op——本次运行
 自己的与接手的合计——单列为 `verification.waitingForNextRun`，CLI 输出里是一行 `- waiting for the next run: …`）、锚点、文档（`docs`，19.6）各自的结果，**token（输入、输出、
-调用次数，含抽取、核实、文档的节与 plan 修改建议）**与耗时，失败时 `stoppedAt`。最多 16,000 字节 JSON，存在运行那一行上，`ops.refused` 单独
+调用次数，含抽取、核实、文档的节与 plan 修改建议）**与耗时，失败时 `stoppedAt`，游标在 op 记下后推进过时 `cursorAdvanced: true`。最多 16,000 字节 JSON，存在运行那一行上，`ops.refused` 单独
 成列。判据 3 第 3 版之前的运行报的是 `articles`，不是 `docs`。
 
 ### 19.5 `orbit wiki check --space <id> --expect-cursor <token> [--json]`
 
 - `GET /api/runner/wiki/spaces/:id/maintenance/check?expect=<token>`：只读。任务的验收命令在会话回合之后、在没有会话上下文的 shell
   里跑，所以它接受 owner 的 runner 不带会话的调用；带了会话头的，须是该 space 的维护会话。
-- 通过的条件：游标已在期望位置或之后，**并且**期望这个位置的最新一次运行以 succeeded 收尾、`ops.refused` 为 0。
+- 通过的条件：游标已在期望位置或之后，**并且**期望这个位置的最新一次运行以 succeeded 收尾、`ops.refused` 为 0。判据原文的两条
+  ——游标没推进、有 op 校验不过就非 0 退出——是它失败的其中两个原因，不是全部。
 - 否则退出码 1，每条原因一句：游标没到；没有任务期望这个位置；运行没说怎么结束的或没成功；运行没报它的 op；服务端拒了 op。
+- **游标已推进、后续步骤失败**（判据 3 第 4 版）：`reached` 为 true，运行 outcome 为 failed——退出码 1，原因写明游标已越过 op 记下的会话、
+  下一次运行不再重读它们，以及运行停在哪一步、为什么。任务因此 FAILED；运行行记 outcome failed、failureKind、error 和报告（`stoppedAt`、
+  `cursorAdvanced`）；space 的连续失败加一。
 
 ### 19.6 文档跟着变化走：只重写受影响的节，落不进的产出修改建议（判据 3 第 3 版）
 
@@ -1127,15 +1158,74 @@ owner 09-29：agent 往 `docs/` 里写的设计文档，wiki 要主动跟上。
   没放进这条建议的新知识留给下一次运行。修改建议没过闸不让运行失败，报告里写明原因。
 - **报告**：`docs { planVersion, skipped?, repoSha, affected { byEntries, byRepo, stale, unwritten, total }, withdrawn { paths, sentences },
   sections { written, unchanged, failed }, unplaced { designDocs, entries }, proposal: { outcome, id, doc, newDoc, facts, rounds, reason, error } | null,
-  tokens { input, output, calls }, seconds, error? }`（`WikiMaintenanceDocsReport`）：这一步自己的模型调用与耗时另算一份，也计在运行的 token 里。`skipped` 为 `no_confirmed_plan`（没有已确认的 plan，什么都不写）或 `no_server_support`（服务端还没有 22.12
-  的路由）。
+  tokens { input, output, calls }, seconds, error? }`（`WikiMaintenanceDocsReport`）：这一步自己的模型调用与耗时另算一份，也计在运行的 token 里。`skipped` 为 `no_confirmed_plan`（没有已确认的 plan，什么都不写）、`no_server_support`（服务端还没有 22.12
+  的路由）或 `catching_up`（space 落后时建出的运行，文档留给追平后的第一次运行，19.8）。
+
+### 19.7 死在基础设施上的任务不再挡住维护（`maintenance.job.recovery`，迁移 `0356_wiki_maintenance_run_attempts`）
+
+起因（10-01 至 10-02 线上）：维护任务的会话在 runner 重启时被 reaper 判 `runner offline`，任务停在 OPEN、没有活会话；
+触发器把任何 OPEN 任务都当作「运行中」，四个多小时没建新维护。调度器为什么没重派：reaper 对开了 autoRunWhenReady 的任务
+不挂会话重试，让给调度器；而调度器的三条自动扫描各要一样维护任务没有的东西——依赖边（`AUTO_RUN_READY_SQL`）、所属项目
+（`PROJECT_INDEPENDENT_READY_SQL`）、未到期的 `runAt`（`SCHEDULED_DUE_SQL`，首次派发已把它消费成 NULL）；`rearmEndedAutoRuns`
+只认 `dep:` 回执，维护任务唯一的回执是 `sched:<task>:0`。于是谁也不会再启动它。
+
+- **失败类别**（`failureKinds`）：`infra`——平台的失败：会话被判 `runner offline`、引擎没起来（`<provider> runtime not initialized`、
+  一轮都没跑成）、服务端 5xx 或连不上、磁盘满（`No space left on device`）、provider 过载；`content`——其余：读到的内容、模型的回答、
+  被服务端拒的 op、轮数上限、有人停掉的会话。运行自己上报失败时（`failureKind`）以它为准；没说的（比这个字段旧的 runner）按 error 的字样判：5xx、连接断开、
+  磁盘满这类算 `infra`，其余算 `content`。
+- **死任务**（`deadTask`）：清单里 OPEN / IN_PROGRESS 的任务，跑过会话、最新会话已结束、没有 PENDING / RUNNING / AWAITING_INPUT /
+  INTERRUPTED 的会话、没有挂着的会话自身重试、也没有等着的 `runAt`。它不再算「未完成」。
+- **谁来处理**：维护触发器，在死后的第一个提示上——死掉的会话自己的终态事件就是一个提示——在清单行的锁下，先于触发器的其他判断。
+  不用时钟。清单里的 plan 作业任务同样处理。
+- **重跑一次**（`rerun`）：`infra` 的死、且重跑次数未达 `rules.rerunsMax`（1）：给同一任务设 `runAt` = max(现在, 会话结束 +
+  `rules.rerunAfterMinutes`（10 分钟）)，由调度器的定时扫描到点再启动——新会话、钉死的 workspace 与 provider，只有它的 runner
+  在线时才会认领。运行行记 `reruns`、`rerunAt`，并在重跑开始前写明这次死（outcome failed、failureKind infra、原因）。等重跑期间它占着清单。
+- **关单**（`close`）：`content` 的死，或重跑后又死：任务记 FAILED；运行行没说过怎么结束的，补 outcome failed、failureKind 和原因。清单空出来，
+  下一个事实照常建下一次运行（游标没动，space 仍到期）。
+- **孤儿运行行**（`orphan`）：任务已终态（DONE / FAILED / CANCELLED）而运行行没有 outcome 的，补 outcome failed、failureKind infra、
+  error `The run did not report its end.`，ended_at 不早于最后一次开始。现存的由迁移 0356 一次补齐，之后由触发器在每个提示上补本 space 的。
+- **多次尝试**（`attempts`）：运行行保留首次开始（`startedAt`，不再改写），另记最后一次开始（`lastStartedAt`）与次数（`attempts`）；
+  会话内重试和平台重跑都算一次。每次开始清掉上一次尝试说的结局（outcome、endedAt、error、failureKind、opsRefused、report），
+  所以运行行说的是最近一次尝试的结局，`endedAt` 不会早于 `startedAt`。迁移 0356 把已经「先结束后开始」的行改成两次尝试，
+  首次开始取该任务最早的会话。
+- **会话内**（`inSession`）：`orbit wiki maintain` 遇到服务端答 5xx 或不答时先等服务恢复，最多 `rules.serverWaitMinutes`（15 分钟），
+  用一个只读、会读数据库的请求探活（`/api/health` 不碰数据库，磁盘满时照样答 200）：开始之前等，因为某一步停在服务端上而失败时，
+  也等到服务恢复再上报（失败报告只发一次）。停在服务端或模型端点上的失败上报 `failureKind: infra`，输出里说可以再跑一次；
+  等不到服务恢复就不上报，输出里说这是基础设施失败、本会话不要再跑，运行行由孤儿规则补结局。被 Bash 工具截断的调用不在此列：
+  命令没跑完，也就没说过可以再跑，一次也不再跑（16.5）。
+- **健康**：读接口带 `lastFailure`（20.1），客户端据此区分平台失败与运行失败。
+
+### 19.8 追赶（`maintenance.job.catchUp`，判据 3 第 4 版，迁移 `0357_wiki_maintenance_catch_up`）
+
+起因（10-02）：游标停在 09-19 00:41，落后约 13 天，积压 1,800–1,970 条，一直不降：每天最多 8 次、失败的也算，每次只处理 20 个会话，
+plan 确认后每次运行都重写文档（10-01 10:40 那次 93 分钟里文档占 54 分钟）。owner 06:36Z 选了「开追赶模式」。
+
+- **落后**：游标之后最老的未处理事实早于 `rules.behindHours`（24）小时前（`wikiMaintenanceBehind`）；游标越过所有那么老的事实后即不再落后。
+  只在提示到达时按事实读，从不等，不用时钟启动任何东西（硬约束 5）。
+- **暂停**：落后时，space 最近 `rules.pauseAfterFailures`（3）次已结束的运行全部失败（failed / truncated，按运行行自己的结局数——会话死掉、
+  由 19.7 补了结局的也算），追赶暂停；下一次运行成功即恢复。暂停时每日上限照常起作用，运行结束也不再是触发事实。
+- **状态**：触发器建运行时判定并记在运行行上（`catch_up`）：`active`——落后且未暂停；`paused`——落后且暂停；null——不落后，或不是
+  触发器建的运行。运行的起点（`GET …/maintenance/run`）带 `catchUp`。
+- **触发**：追赶进行中（active），上一次维护运行的结束本身就是触发事实：提示点名 space 最新那次运行的任务或它的会话，且任务已结束——
+  验收回合判定任务之后该会话自己发出的事件就是这样的提示。其余条件照旧（清单空闲、没有排队的 plan 作业、到期、每日上限按下一条、审阅队列）。
+- **每日上限**：追赶中建出的运行，钉住的 provider 是本地端点的，或运行失败的（failed / truncated），不计入
+  `settings.maintenance.dailyRunLimit`；公网 provider 上没失败的照计。暂停时或不落后时建出的运行照旧计数，不论结局。追赶中钉在本地端点上的运行
+  不受当天上限阻挡；钉在公网 provider 上的只在当天还有名额时建——它成功就要计数。健康读接口的 `dailyLimitReached` 与此一致。
+- **本地端点**（`localEndpoint`）：space 维护设置钉住的 provider，是不出自厂商预设（`presetSlug` 为 null——预设就是该厂商的计费 API）
+  的已配置 provider，且 `baseUrl` 的主机在本机或私有网络：`localhost` 或 `.localhost` 下的名字、回环地址（127.0.0.0/8、::1）、私有 IPv4
+  （10.0.0.0/8、172.16.0.0/12、192.168.0.0/16）、IPv6 唯一本地地址（fc00::/7）、链路本地地址（169.254.0.0/16、fe80::/10）
+  （`wikiMaintenanceEndpointIsLocal`、`wikiMaintenanceProviderIsLocal`）。其他主机名一律不算（名字不说明它解析到哪里，判错的代价只是计数），
+  厂商预设、内置引擎、账号池、不存在的 slug 也不算。建运行时判定，记在运行行上（`local_endpoint`）。local-vllm（`http://127.0.0.1:8000`）是本地端点。
+- **文档**：space 落后时建出的运行（active 或 paused）整步跳过文档：不写任何一节，也不产出 plan 修改建议（`docs.skipped: catching_up`）。
+  不再落后后建出的第一次运行照 19.6 重写追赶期间受影响的节：`byEntries` 从每节自己的 `generatedAt` 算起、`byRepo` 从每节自己的 `repoSha`
+  算起，所以推迟的一节都不丢；材料指纹没变的节照旧不重写。
 
 ## 20. 健康可见：Wiki 首页的状态行与连续失败的通知（判据 5）
 
 JSON 里是 `maintenance.health`；服务端在 `src/apiserver/src/wiki/wiki-health.ts`（读）与 `wiki-maintenance.ts` 的
 `advanceCursor`（通知），用户门在 `wiki/wiki-health.controller.ts`；共享类型与 look 的判定在 `src/shared/src/wikiHealth.ts`；
 两端的文案在 web `lib/wikiHealth.ts` 与 OrbitKit `WikiHealthLogic.swift`，由 `src/shared/src/wiki-health.fixture.json` 锁住。
-没有新迁移：读的是 0315 的 `wiki_cursor` 与 0320 的 `wiki_maintenance_run`。
+读的是 0315 的 `wiki_cursor` 与 0320 的 `wiki_maintenance_run`（0356 给运行行加了尝试次数与失败类别，见 19.7）。
 
 ### 20.1 读：`GET /api/wiki/spaces/:id/health`
 
@@ -1146,9 +1236,12 @@ JSON 里是 `maintenance.health`；服务端在 `src/apiserver/src/wiki/wiki-hea
   - `enabled`；`lastOkAt`（上次成功）、`lastRunAt`（上次有运行报告，不论结局）；`consecutiveFailures`（连续失败次数，成功即清零）；
   - `backlog`、`oldestPendingAt`、`lagSeconds`：游标之后的事实数（§16.2 的 backlog）、其中最老的一条及其年龄，**读时现算**——
     游标行上存的那份只是上一次运行写下的。只在维护开着时算：关着的 space 读作 0 / null / 0；
-  - `dailyLimitReached`：今天（UTC）建出的维护任务已达 `dailyRunLimit`；`held`：§19.2 的 `{reason, at}` 或 null；
-  - `running`：已开始、未结束、且它的任务仍是 OPEN / IN_PROGRESS 的那次运行 `{sessionId, startedAt}`，或 null；
+  - `dailyLimitReached`：今天（UTC）建出的维护任务已达 `dailyRunLimit`（追赶中不计数的运行除外，19.8），且下一次运行会计数——追赶中钉在本地端点上时为 false；`held`：§19.2 的 `{reason, at}` 或 null；
+  - `running`：已开始、未结束、且它的任务仍是 OPEN / IN_PROGRESS 的那次运行 `{sessionId, startedAt}`，或 null；`startedAt`
+    是它最近一次尝试的开始（会话内重试或平台重跑的开始，不是首次开始）；
   - `lastRun`：最后结束的那次运行 `{sessionId, outcome, endedAt}`，或 null——状态行的 View run 打开它的会话；
+  - `lastFailure`：最近一次尝试失败（failed / truncated）的运行里最后结束的那个 `{kind, reason, at, sessionId}`，或 null；
+    `kind` 是 `infra` 或 `content`（19.7），`reason` 是它的 error。客户端据此区分「平台挂了」与「运行本身失败」；本契约版本客户端尚未使用。
   - `look`：状态行画哪一种（20.2）。
 
 ### 20.2 四种样子（另加「正在跑」）
@@ -1294,7 +1387,8 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
 - **作业是维护清单里的任务**：起草（`draft`，跑 `orbit wiki plan draft`）、修订（`revise`，跑 `orbit wiki plan revise`，带 owner 的修改意见）
   和生成（`build`，跑 `orbit wiki docs build`，owner 确认一个版本后按它写全部文档，21.9）都建在该 space 隐藏的「Wiki maintenance」清单里，所以跑它的会话就是维护会话
   （`isWikiMaintenanceSession`），plan 的 runner 门只对它开放。任务：指派 `settings.maintenance.workspaceId`，provider 钉
-  `settings.maintenance.provider`，`runAt` 为建出的那一刻，创建者是 owner（`USER`）；描述就是指令，修订时把 owner 的原话引在后面；
+  `settings.maintenance.provider`，`runAt` 为建出的那一刻，创建者是 owner（`USER`）；描述就是指令，修订时把 owner 的原话引在后面，
+  并写明 Bash 调用给 `timeout: 18000000`、不许更短，工具在命令结束前就返回时不要再跑、汇报截断前打印的内容就结束（16.5）；
   判据 `EXECUTABLE`：`orbit wiki plan check --space <id> --job <id>`，超时 `rules.checkTimeoutSeconds`（300 秒）。
 - **事实触发，不用时钟**（`triggers`）：`space_created`——新建 space（`POST /api/wiki/spaces`，或会话提议时隐式建的 space）；
   `owner`——owner 在 plan 页要求（`POST /api/wiki/spaces/:id/plan/redraft`，只认 JWT，带会话头一律 `WIKI_OWNER_CHANNEL_ONLY`；
@@ -1356,7 +1450,7 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
 - **谁要的**：owner 确认一个版本（`POST …/plan/versions/:version/confirm`）是一个事实。确认提交之后，服务端据此要一个生成作业（`trigger:
   owner`，`version` 为刚确认的版本），失败了也不影响确认本身；作业照 21.7 建任务、排队、held、不计每日次数、维护关着也能跑。
 - **任务**：标题 `Wiki documents: <space 标题>`，描述是指令——跑一次 `orbit wiki docs build --space <id>`，再汇报写了、没变、失败的篇与节、
-  token 与耗时；验收命令同样是 `orbit wiki plan check --space <id> --job <id>`：作业以 succeeded 结束、它写的版本是 owner 确认过的，才通过。
+  token 与耗时（Bash 调用同样给 `timeout: 18000000`；被截断时不再跑，已写的节保留，下一次生成原样不动，16.5）；验收命令同样是 `orbit wiki plan check --space <id> --job <id>`：作业以 succeeded 结束、它写的版本是 owner 确认过的，才通过。
 - **怎么跑**：`orbit wiki docs build` 在这个任务的会话里先问 `GET …/plan/job`——本会话的作业是生成作业，就按已确认的 plan 写全部文档（22.11），
   每开始写一篇报一次 `progress`，最后 `finish`：没有节写失败才是 succeeded，并带 `version` 与报告（`WikiPlanBuildReport`：`planVersion`、
   `repoSha`、`docs { total, written }`、`sections { written, unchanged, failed }`、`tokens`、`seconds`、`model`）。不是作业（`WIKI_PLAN_NO_JOB`）

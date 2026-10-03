@@ -1,4 +1,5 @@
 import { TaskStatus } from '@prisma/client';
+import type { TaskRunReason } from '@orbit/shared';
 import type {
   ProjectTaskVerificationState,
   ProjectTaskWorkState,
@@ -52,7 +53,8 @@ import type {
  * A task as this module needs it: identity, what it says, where it stands, whose child it is —
  * and whether a session is on it right now.
  *
- * `running` / `queued` are the LIVE reading (a RUNNING / PENDING Session), which is a different
+ * `running` / `queued` are the LIVE reading (a work Session carrying the task — a turn running, or
+ * the session parked waiting to be woken — and a PENDING one), which is a different
  * fact from `status`: nothing writes `IN_PROGRESS` when a run is dispatched, so a task being
  * worked on this second is `OPEN` in its row and stays `OPEN` here. The task list and the
  * task-rooted graph have always carried these two flags alongside the status for that reason, and
@@ -66,6 +68,9 @@ export interface FoldTask {
   parentTaskId: string | null;
   running?: boolean;
   queued?: boolean;
+  /** Why it is running, and whether its background jobs went quiet (sessions/task-work-carrier.ts). */
+  runReason?: TaskRunReason | null;
+  runStalled?: boolean;
   /** Canonical project work lane; never recomputed from graph indegree by the client. */
   workState?: ProjectTaskWorkState;
   verificationState?: ProjectTaskVerificationState | null;
@@ -75,6 +80,8 @@ export interface FoldTask {
 export interface LiveTaskState {
   running: boolean;
   queued: boolean;
+  runReason: TaskRunReason | null;
+  runStalled: boolean;
 }
 
 /** Prerequisite → dependent, the direction the arrows are drawn in. */
@@ -207,6 +214,8 @@ const liveStatus = (task: FoldTask): TaskStatus =>
 const live = (task: FoldTask): LiveTaskState => ({
   running: !!task.running,
   queued: !!task.queued,
+  runReason: task.runReason ?? null,
+  runStalled: !!task.runStalled,
 });
 
 /**

@@ -8,7 +8,7 @@
 # recreating it applies any new migrations against the persisted volume.
 set -euo pipefail
 
-GIT_PULL=0
+GIT_PULL=auto
 NO_CACHE=0
 PRUNE=0
 PULL_BASE=0
@@ -16,9 +16,11 @@ ALLOW_DIRTY=0
 
 usage() {
   cat <<'EOF'
-Usage: upgrade.sh [--pull] [--pull-base] [--no-cache] [--prune] [--allow-dirty]
+Usage: upgrade.sh [--no-pull] [--pull] [--pull-base] [--no-cache] [--prune] [--allow-dirty]
 
-  --pull       git pull --ff-only before building (get the latest source)
+  --no-pull    deploy the checkout as it is. By default a checkout on main is
+               fast-forwarded first (git pull --ff-only), so origin's main ships
+  --pull       git pull --ff-only even when the checkout is not on main
   --pull-base  also refresh the pinned base images (postgres, gateway). This is
                the only path that may recreate/restart postgres — omit it and an
                unchanged postgres is left running untouched.
@@ -34,6 +36,7 @@ EOF
 while [ $# -gt 0 ]; do
   case "$1" in
     --pull)      GIT_PULL=1 ;;
+    --no-pull)   GIT_PULL=0 ;;
     --pull-base) PULL_BASE=1 ;;
     --no-cache)  NO_CACHE=1 ;;
     --prune)     PRUNE=1 ;;
@@ -121,9 +124,25 @@ if [ -n "$UNTRACKED" ]; then
   echo "$UNTRACKED" | sed 's/^/         /' >&2
 fi
 
+# Deploying main means deploying origin's main, not whatever this checkout last heard of: merges also
+# reach origin without passing through here (another machine's runner, a GitHub merge), and a
+# checkout that missed them rebuilds a stale tree and still reports success. So a checkout on main is
+# fast-forwarded before anything is built. --ff-only merges and rewrites nothing — a checkout that has
+# diverged from origin stops here. --no-pull deploys the checkout as it is; --pull also pulls off main.
+if [ "$GIT_PULL" = auto ]; then
+  if [ "$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD 2>/dev/null)" = main ]; then
+    GIT_PULL=1
+  else
+    GIT_PULL=0
+  fi
+fi
 if [ "$GIT_PULL" -eq 1 ]; then
   echo "==> git pull --ff-only"
-  git pull --ff-only
+  if ! git pull --ff-only; then
+    echo "error: git pull --ff-only failed — nothing was built or recreated." >&2
+    echo "       Reconcile this checkout with its upstream, or pass --no-pull to deploy it as it is." >&2
+    exit 1
+  fi
 fi
 
 # The web image builds the downloadable runner from a deliberately narrow Docker context that

@@ -38,3 +38,17 @@ export function recordingQueryRaw(
   };
   return { statements, $queryRaw };
 }
+
+/**
+ * Which of a run door's session reads `query` is, if any (`planWorkspaceRun`, `batchExecute`):
+ * `CARRIER` asks for the work session carrying the task — the run a press would collide with —
+ * and `PAUSED` for the idle paused run a press would continue. Both are one composed `Prisma.Sql`
+ * over `"session" s`, which is how a double that answers its other raw reads with a canned row
+ * keeps that row from reading as somebody else's live run.
+ */
+export function runDoorSessionRead(query: unknown): 'CARRIER' | 'PAUSED' | null {
+  if (Array.isArray(query) || typeof (query as Prisma.Sql | null)?.text !== 'string') return null;
+  const { text } = query as Prisma.Sql;
+  if (!text.includes('FROM "session" s')) return null;
+  return text.includes('s."workspace_id" = ') ? 'PAUSED' : 'CARRIER';
+}

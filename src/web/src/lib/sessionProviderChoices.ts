@@ -1,8 +1,10 @@
 import { AgentProvider, PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shared';
 import type { PlanUsage, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
-import { accountPlanUsage } from './engineAccounts';
+import type { CodexLogin } from './codexLogin';
+import { accountNameOf, accountPlanUsage } from './engineAccounts';
 import { encodeId } from './idCodec';
-import { planUsageRows } from './planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows } from './planUsage';
+import type { SharedPool } from './sharedPools';
 import {
   defaultModelForProvider,
   modelOptionsForProvider,
@@ -30,16 +32,18 @@ export type ProviderChoiceKind = 'engine' | 'byok' | 'pool';
 
 /** An account pool as the picker needs it: its slug, its name, and which providers it holds — and,
  *  when none of them can run, why (ProviderPool.unavailable) and the pool's id, whose page fixes it.
- *  `shared` marks a shared pool of OpenAI keys, which runs on Codex rather than Claude. */
+ *  `shared` marks a pool read as one of its people (sharedPoolAsProviderPool) — a shared pool of OpenAI
+ *  keys, or somebody else's own Codex pool they were added to — which runs on Codex rather than Claude. */
 export interface PoolChoiceSource {
   id: string;
   slug: string;
   label: string;
-  members: { slug: string }[];
+  /** What the pool holds; `login` says a member is one of its ChatGPT accounts rather than a key. */
+  members: { slug: string; login?: CodexLogin }[];
   unavailable?: string | null;
   /** `codex` for a pool of one's own ChatGPT account (migration 0323); absent or `claude` otherwise. */
   engine?: string;
-  shared?: object;
+  shared?: SharedPool;
 }
 
 export interface ProviderChoice {
@@ -94,7 +98,7 @@ export interface AccountChoice {
 
 /** A window's name short enough for a row beside an account's: "5h", "Weekly", "Weekly Opus" — Codex's
  *  "5h limit" and Claude's "5-hour limit" and "Weekly · all models" alike. */
-const compactWindowLabel = (label: string): string =>
+export const compactWindowLabel = (label: string): string =>
   label.replace(/ limit$/, '').replace(/^5-hour$/, '5h').replace(/ · all models$/, '').replace(' · ', ' ');
 
 const ENGINE_LABELS: Record<string, string> = {
@@ -214,18 +218,13 @@ export function providerChoices(
       (slug === AgentProvider.CODEX || slug === AgentProvider.CLAUDE) && !blocker && (health?.accounts?.length ?? 0) >= 2
         ? health!.accounts!.map((account): AccountChoice => {
             const snapshot = accountPlanUsage(planUsage, slug, account.id);
-            // The window closest to its limit: a Claude login's 5-hour window can read 0% while its
-            // weekly one is spent, and the first window alone would say it has room.
+            // The window that stops it: a Claude login's 5-hour window can read 0% while its weekly
+            // one is spent, and the first window alone would say it has room.
             const quota =
-              account.auth === 'yes' && snapshot
-                ? planUsageRows(snapshot).reduce<ReturnType<typeof planUsageRows>[number] | undefined>(
-                    (tightest, row) => (!tightest || row.percent > tightest.percent ? row : tightest),
-                    undefined,
-                  )
-                : undefined;
+              account.auth === 'yes' && snapshot ? bindingPlanUsageRow(currentPlanUsageRows(snapshot)) : undefined;
             return {
               id: account.id,
-              label: account.id === 'default' ? 'Default' : account.name || `Account ${account.id}`,
+              label: accountNameOf(account),
               ...(quota
                 ? {
                     quota: `${compactWindowLabel(quota.label)} ${quota.percent}%`,
@@ -251,6 +250,10 @@ export function providerChoices(
   // which the server says (`unavailable`) and refuses the pool without. A shared pool's CLI is Codex,
   // whose runs carry a session token for the pool's gateway — and so is a pool of one's own ChatGPT
   // account's, whose account the server holds.
+  //
+  // Somebody a pool's owner added runs on the pool's ChatGPT accounts first and on its keys when none
+  // can (pool-credential-select.ts, 2026-10-03), so what the pool holds is what they can run on, and the
+  // pool's own answer (`unavailable`, built the same way for them as for its owner) is the whole reason.
   const accountPools: ProviderChoice[] = pools.map((pool) => {
     const runtime = pool.shared || pool.engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
     const blocker = byokBlocker(engineHealth?.find((e) => e.engine === runtime));
@@ -261,7 +264,9 @@ export function providerChoices(
       ...brandForProvider(pool.slug, pool.label, ENGINE_PRESET[runtime]),
       modelLabel: defaultModelLabel(pool.slug, modelCatalog, configured, runtimeDefaultModels),
       poolSize: pool.members.length,
-      ...(pool.shared ? { poolUnit: 'key' as const } : {}),
+      // 'N keys' only where the pool really is nothing but keys; a pool holding ChatGPT accounts counts
+      // accounts (the viewer's own words — AccountPools' memberNoun).
+      ...(pool.shared && !pool.members.some((member) => member.login) ? { poolUnit: 'key' as const } : {}),
       ...(blocker
         ? { unavailable: blocker, fixEngine: runtime }
         : pool.unavailable

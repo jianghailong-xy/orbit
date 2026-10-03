@@ -61,6 +61,8 @@ func modelContextWindow(runtime, model string) int {
 		models = catalog.Kimi
 	case providerOpenCode:
 		models = catalog.OpenCode
+	case providerAntigravity:
+		models = catalog.Antigravity
 	default:
 		models = catalog.Claude
 	}

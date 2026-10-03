@@ -38,6 +38,12 @@ import (
 // the entries changed since a section was written, the commits since its repoSha, the stale flags — so a
 // section left unwritten, or a proposal that did not pass, is taken up again; the run reports it and still
 // succeeds. A space with no confirmed plan writes no document at all, and the report says so.
+//
+// A SPACE THAT IS BEHIND WAITS (criterion 3, revision 4; contract `maintenance.job.catchUp.docs`). A run made
+// while the space was behind — catching up, or its catch-up paused — skips the step whole: no section is written
+// and no change to the plan proposed. Since what is written again is recomputed from state, the first run after
+// the space has caught up takes up every section the entries and origin/main changed meanwhile, once, and leaves
+// a section whose material did not change as it is: on 2026-10-01 the documents took 54 of a run's 93 minutes.
 
 // The contract's numbers (`maintenance.job.docs.rules`), which wiki_maintain_docs_test.go holds to the JSON.
 const (
@@ -172,6 +178,12 @@ type wikiMaintainProposalReport struct {
 func (r *wikiMaintainRun) docs() error {
 	report := &wikiMaintainDocsReport{}
 	r.report.Docs = report
+	if r.context.CatchUp != "" {
+		report.Skipped = "catching_up"
+		r.say("The space is catching up: its oldest fact not taken in is more than a day old, so no document was written and " +
+			"no change to the plan proposed — the first run after it has caught up writes what changed meanwhile.")
+		return nil
+	}
 	started := time.Now()
 	r.mu.Lock()
 	before := r.report.Tokens
@@ -1092,6 +1104,10 @@ func describeWikiMaintainDocs(d *wikiMaintainDocsReport) string {
 		return b.String()
 	case d.Skipped == "no_server_support":
 		b.WriteString("\n- documents: this Orbit server predates the documents' maintenance — none was written")
+		return b.String()
+	case d.Skipped == "catching_up":
+		b.WriteString("\n- documents: the space is catching up — none was written and no change to the plan proposed; the " +
+			"first run after it has caught up writes what changed meanwhile")
 		return b.String()
 	case d.PlanVersion == nil:
 		fmt.Fprintf(&b, "\n- documents: not written — %s", d.Error)

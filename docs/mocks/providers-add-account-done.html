@@ -1,0 +1,405 @@
+<!doctype html>
+<!-- Design mock: the "+ Account" panel folds away once the account it added is signed in, reported by
+     the runner and named, leaving that account's own row. Geometry copied from
+     src/web/src/components/RunnerEngines.tsx (.re-runner-card/.re-row/.re-panel, AddEngineAccount) and
+     RunnerSignIn.tsx (.rsi*); the native card from RunnerEnginePage.swift; palette from
+     src/web/src/index.css. Not shipped code. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Providers · + Account folds away once it is done</title>
+<link rel="stylesheet" href="../../src/web/src/index.css">
+<link rel="stylesheet" href="project-progress/mock.css">
+<style>
+  .m-sheet { width: 1960px; }
+  .stage-body { width: 900px; }
+  .m-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; align-items: start; }
+
+  /* what the shipped page already draws, in the shapes antd gives it */
+  .m-tag { display: inline-block; font-size: 12px; line-height: 20px; padding: 0 7px; border-radius: 4px;
+           border: 1px solid; white-space: nowrap; }
+  .m-tag.green { color: #389e0d; background: #f6ffed; border-color: #b7eb8f; }
+  .m-btn { display: inline-flex; align-items: center; height: 24px; padding: 0 7px; border-radius: 4px;
+           border: 1px solid var(--border); background: var(--bg-raised); color: var(--text-1); font-size: 14px; white-space: nowrap; }
+  .m-ico { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px;
+           border-radius: 4px; color: var(--text-3); flex: none; }
+  .m-ico svg, .re-rename svg { width: 14px; height: 14px; fill: currentColor; }
+  .re-rename svg { width: 12px; height: 12px; }
+  .re-manage { margin-right: 2px; }
+  .rsi svg { width: 14px; height: 14px; fill: currentColor; flex: none; }
+  .rsi-row svg { color: var(--brand); }
+
+  /* a text field drawn as the shipped .rsi-input, with the caret where the user is typing */
+  .m-field { display: flex; align-items: center; min-height: 32px; box-sizing: border-box; white-space: nowrap; overflow: hidden; }
+  .m-field.focus { border-color: var(--brand-border); }
+  .m-field.ph { color: var(--text-4); }
+  .m-caret { display: inline-block; width: 1px; height: 16px; margin: 0 1px; background: var(--text-1); flex: none; }
+
+  /* the flow's cards are narrower than a page: the account rows there keep name, status and actions */
+  .m-flow .re-runner-card .re-row:not(.re-grp) { grid-template-columns: minmax(0, 1fr) 96px 64px; }
+  .m-flow .re-runner-card { margin: 2px 0 12px; }
+  .a-card .a-hint { line-height: 1.75; }
+  .a-card .a-hint b { color: var(--text-2); }
+  .m-shipped { font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 4px; background: var(--fill-muted); color: var(--text-3); }
+
+  /* iOS: the engine page (RunnerEnginePage.swift) with its Add Account card */
+  .ios-wrap { display: flex; gap: 26px; align-items: flex-start; }
+  .ios-col { display: flex; flex-direction: column; gap: 8px; }
+  .ios-l { font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+  .ios { position: relative; width: 340px; flex: none; padding: 12px 0 16px; border-radius: 22px; background: #f2f2f7;
+         font-family: -apple-system, "SF Pro Text", "Helvetica Neue", sans-serif; color: #000; overflow: hidden;
+         border: 1px solid #dfe1e6; }
+  .ios-nav { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; padding: 2px 14px 12px; font-size: 16px; }
+  .ios-nav .back { color: #007aff; }
+  .ios-nav .t { font-weight: 600; font-size: 16px; }
+  .ios-h { padding: 0 16px 6px 32px; font-size: 12px; color: #6d6d72; text-transform: uppercase; letter-spacing: .02em; }
+  .ios-group { margin: 0 16px; border-radius: 10px; background: #fff; overflow: hidden; }
+  .ios-row { position: relative; display: flex; align-items: center; gap: 8px; min-height: 58px; padding: 9px 14px; background: #fff; }
+  .ios-row + .ios-row::before { content: ''; position: absolute; top: 0; left: 14px; right: 0; height: 1px; background: #e5e5ea; }
+  .ios-row > div { flex: 1; min-width: 0; }
+  .ios-row .n { font-size: 15.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ios-row .s { font-size: 12.5px; color: #8a8a8e; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ios-row .st { margin-left: auto; font-size: 13px; color: #248a3d; white-space: nowrap; }
+  .ios-row.add { min-height: 44px; color: #007aff; font-size: 15.5px; }
+  .ios-card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px 14px; }
+  .ios-field { align-self: stretch; display: flex; align-items: center; height: 30px; padding: 0 8px; border-radius: 6px;
+               border: 1px solid #c7c7cc; background: #fff; font-size: 13.5px; }
+  .ios-ok { display: flex; align-items: center; gap: 7px; font-size: 13px; }
+  .ios-ok svg { width: 15px; height: 15px; fill: #34c759; }
+  .ios-close { font-size: 13px; color: #007aff; }
+</style>
+</head>
+<body class="m">
+<div class="m-sheet">
+  <h1 class="m-h1">Providers · 「+ Account」登录完成后自动收起</h1>
+  <p class="m-sub zh">上一版让「+ Account」一点就用默认名开始登录，名字随时可改。可登录完成后面板一直停着：输入框和新账号行上的铅笔是同一个名字的两个编辑处，这时也没有关闭按钮。这张图让面板在<b>登录成功、runner 已上报新账号、名字已存好</b>之后自己收起，只留下新账号那一行，以后改名都用那支铅笔。所有色值都来自 <code>src/web/src/index.css</code> 的真实 token。</p>
+
+  <div class="m-grid2">
+    <!-- ─────────────── 改前 ─────────────── -->
+    <div class="m-col">
+      <div class="m-stage">
+        <div class="m-stage-l"><span class="m-k">改前</span><span class="zh">现在：登录完成后，面板停在那里</span></div>
+        <div class="stage-body">
+          <div class="re-card re-runner-card">
+            <div class="re-head">
+              <div class="re-toggle"><span class="re-chev open">▸</span><span class="re-dot on"></span>
+                <span class="re-runner">HPC</span><span class="re-runner-meta">workstation · runner 0.1.207</span></div>
+              <span class="re-head-sp"></span><span class="re-manage">Manage runner →</span>
+            </div>
+
+            <div class="re-row re-grp">
+              <div class="re-id">
+                <div class="provider-tile" style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c)"><svg class="g-claude" viewBox="0 0 24 24" width="16" height="16" fill="#fff"></svg></div>
+                <div style="min-width:0"><div class="re-name">Claude Code</div>
+                  <div class="re-meta">2.1.288 · <b>2 of 2 accounts available</b><span class="re-upd"> · checked 2m ago</span></div></div>
+              </div>
+              <div class="re-act"><span class="m-btn">+ Account</span></div>
+              <div class="re-panel">
+                <label class="re-add"><span class="re-add-label">Account name</span>
+                  <span class="m-mark" style="flex:1; min-width:0; display:flex"><span class="rsi-input m-field focus" style="flex:1">jian<span class="m-caret"></span>ghailong.rd@gmail.com</span><span class="m-n">1</span></span></label>
+                <div class="rsi rsi-done"><span class="m-mark" style="display:inline-flex; align-items:center; gap:8px"><span class="i-okc" style="display:inline-flex"></span>Signed in — this runner is ready.<span class="m-n">2</span></span></div>
+              </div>
+            </div>
+
+            <div class="re-row re-acct">
+              <div class="re-id"><span class="re-rail"></span>
+                <div style="min-width:0"><div class="re-name">Default<button class="re-rename i-edit"></button></div>
+                  <div class="re-meta">~/.claude</div></div>
+              </div>
+              <div class="re-status"><span class="m-tag green">Available</span></div>
+              <div class="re-quota">
+                <div class="re-window"><div class="re-quota-head"><b>5-hour limit</b><span>85%</span></div>
+                  <div class="runner-util"><span class="runner-util-fill" style="width:85%"></span></div><div class="re-reset">resets 18:29</div></div>
+                <div class="re-window"><div class="re-quota-head"><b>Weekly · all models</b><span>38%</span></div>
+                  <div class="runner-util"><span class="runner-util-fill" style="width:38%"></span></div><div class="re-reset">resets Fri 11:59</div></div>
+              </div>
+              <div class="re-act"><span class="m-ico i-login"></span></div>
+            </div>
+
+            <div class="re-row re-acct re-acct-end">
+              <div class="re-id"><span class="re-rail"></span>
+                <div style="min-width:0"><div class="re-name">jianghailong.rd@gmail.com<span class="re-chip">NEXT</span><span class="m-mark" style="display:inline-flex; margin-left:3px"><button class="re-rename i-edit" style="margin-left:0"></button><span class="m-n">1</span></span></div>
+                  <div class="re-meta">~/.orbit/claude-accounts/1e84046c</div></div>
+              </div>
+              <div class="re-status"><span class="m-tag green">Signed in</span></div>
+              <div class="re-quota"><span class="re-quota-none">No quota reported</span></div>
+              <div class="re-act"><span class="m-ico i-del"></span><span class="m-ico i-login"></span></div>
+            </div>
+          </div>
+        </div>
+        <p class="m-cap zh">① 同一个名字两处能改：面板里的输入框，和新账号行上的铅笔。② 完成状态里没有关闭按钮，只能再点一次「+ Account」，可那个按钮读起来像「再加一个账号」。</p>
+      </div>
+    </div>
+
+    <!-- ─────────────── 改后 ─────────────── -->
+    <div class="m-col">
+      <div class="m-stage">
+        <div class="m-stage-l"><span class="m-k new">改后</span><span class="zh">同一时刻：面板已经收起，留下的就是新账号那一行</span></div>
+        <div class="stage-body">
+          <div class="re-card re-runner-card">
+            <div class="re-head">
+              <div class="re-toggle"><span class="re-chev open">▸</span><span class="re-dot on"></span>
+                <span class="re-runner">HPC</span><span class="re-runner-meta">workstation · runner 0.1.207</span></div>
+              <span class="re-head-sp"></span><span class="re-manage">Manage runner →</span>
+            </div>
+
+            <div class="re-row re-grp">
+              <div class="re-id">
+                <div class="provider-tile" style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c)"><svg class="g-claude" viewBox="0 0 24 24" width="16" height="16" fill="#fff"></svg></div>
+                <div style="min-width:0"><div class="re-name">Claude Code</div>
+                  <div class="re-meta">2.1.288 · <b>2 of 2 accounts available</b><span class="re-upd"> · checked 2m ago</span></div></div>
+              </div>
+              <div class="re-act"><span class="m-btn">+ Account</span></div>
+            </div>
+
+            <div class="re-row re-acct">
+              <div class="re-id"><span class="re-rail"></span>
+                <div style="min-width:0"><div class="re-name">Default<button class="re-rename i-edit"></button></div>
+                  <div class="re-meta">~/.claude</div></div>
+              </div>
+              <div class="re-status"><span class="m-tag green">Available</span></div>
+              <div class="re-quota">
+                <div class="re-window"><div class="re-quota-head"><b>5-hour limit</b><span>85%</span></div>
+                  <div class="runner-util"><span class="runner-util-fill" style="width:85%"></span></div><div class="re-reset">resets 18:29</div></div>
+                <div class="re-window"><div class="re-quota-head"><b>Weekly · all models</b><span>38%</span></div>
+                  <div class="runner-util"><span class="runner-util-fill" style="width:38%"></span></div><div class="re-reset">resets Fri 11:59</div></div>
+              </div>
+              <div class="re-act"><span class="m-ico i-login"></span></div>
+            </div>
+
+            <div class="re-row re-acct re-acct-end">
+              <div class="re-id"><span class="re-rail"></span>
+                <div style="min-width:0"><div class="re-name"><span class="m-mark">jianghailong.rd@gmail.com<span class="re-chip">NEXT</span><button class="re-rename i-edit"></button><span class="m-n">3</span></span></div>
+                  <div class="re-meta">~/.orbit/claude-accounts/1e84046c</div></div>
+              </div>
+              <div class="re-status"><span class="m-tag green">Signed in</span></div>
+              <div class="re-quota"><span class="re-quota-none">No quota reported</span></div>
+              <div class="re-act"><span class="m-ico i-del"></span><span class="m-ico i-login"></span></div>
+            </div>
+          </div>
+        </div>
+        <p class="m-cap zh">③ 结果就在新账号这一行：名字、Signed in，以后改名用它的铅笔（已上线的就地改名）。「+ Account」回到普通状态，再点就是再加一个。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── 过程 ─────────────── -->
+  <div class="m-stage m-flow">
+    <div class="m-stage-l"><span class="m-k state">过程</span><span class="zh">一次添加，从点下到收起</span></div>
+    <div class="m-grid3">
+      <div class="a-card">
+        <div class="a-card-h"><span class="a-card-t zh">点「+ Account」</span><span class="m-shipped zh">已上线</span></div>
+        <div class="re-card re-runner-card">
+          <div class="re-row re-grp">
+            <div class="re-id">
+              <div class="provider-tile" style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c)"><svg class="g-claude" viewBox="0 0 24 24" width="16" height="16" fill="#fff"></svg></div>
+              <div style="min-width:0"><div class="re-name">Claude Code</div><div class="re-meta">2.1.288</div></div>
+            </div>
+            <div class="re-act"><span class="m-btn">+ Account</span></div>
+            <div class="re-panel">
+              <label class="re-add"><span class="re-add-label">Account name</span><span class="rsi-input m-field" style="flex:1">Account 2</span></label>
+              <div class="rsi">
+                <div class="rsi-row"><span class="i-load" style="display:inline-flex"></span>Starting sign-in on the runner…</div>
+                <div class="rsi-hint">The runner picks it up on its next check-in, so the link can take up to a minute to show here.</div>
+                <button class="rsi-link" type="button">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="a-hint zh">名字先填好：Default 是第 1 个，新账号就是 Account 2，名字被占用就往后数。点下的同时登录就开始了。</div>
+      </div>
+
+      <div class="a-card">
+        <div class="a-card-h"><span class="a-card-t zh">登录中改名</span><span class="m-shipped zh">已上线</span></div>
+        <div class="re-card re-runner-card">
+          <div class="re-row re-grp">
+            <div class="re-id">
+              <div class="provider-tile" style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c)"><svg class="g-claude" viewBox="0 0 24 24" width="16" height="16" fill="#fff"></svg></div>
+              <div style="min-width:0"><div class="re-name">Claude Code</div><div class="re-meta">2.1.288</div></div>
+            </div>
+            <div class="re-act"><span class="m-btn">+ Account</span></div>
+            <div class="re-panel">
+              <label class="re-add"><span class="re-add-label">Account name</span><span class="rsi-input m-field focus" style="flex:1">jianghailong.rd@gmail.com<span class="m-caret"></span></span></label>
+              <div class="rsi">
+                <a class="rsi-open"><span class="i-export" style="display:inline-flex"></span> Open the sign-in page</a>
+                <div class="rsi-hint">Approve it there, then paste the code the page gives you:</div>
+                <div class="rsi-form"><span class="rsi-input m-field ph">Paste the code</span><button class="rsi-btn" type="button" disabled>Submit</button></div>
+                <button class="rsi-link" type="button">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="a-hint zh">回车或点别处就保存。新账号要登录成功后 runner 才会上报，在那之前名字先记在面板里，一上报就存上。</div>
+      </div>
+
+      <div class="a-card">
+        <div class="a-card-h"><span class="a-card-t zh">完成 → 收起</span><span class="m-k new">新</span></div>
+        <div class="re-card re-runner-card">
+          <div class="re-row re-grp">
+            <div class="re-id">
+              <div class="provider-tile" style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c)"><svg class="g-claude" viewBox="0 0 24 24" width="16" height="16" fill="#fff"></svg></div>
+              <div style="min-width:0"><div class="re-name">Claude Code</div><div class="re-meta">2.1.288 · <b>2 of 2 accounts available</b></div></div>
+            </div>
+            <div class="re-act"><span class="m-btn">+ Account</span></div>
+          </div>
+          <div class="re-row re-acct">
+            <div class="re-id"><span class="re-rail"></span>
+              <div style="min-width:0"><div class="re-name">Default<button class="re-rename i-edit"></button></div><div class="re-meta">~/.claude</div></div>
+            </div>
+            <div class="re-status"><span class="m-tag green">Available</span></div>
+            <div class="re-act"><span class="m-ico i-login"></span></div>
+          </div>
+          <div class="re-row re-acct re-acct-end">
+            <div class="re-id"><span class="re-rail"></span>
+              <div style="min-width:0"><div class="re-name">jianghailong.rd@gmail.com<span class="re-chip">NEXT</span><button class="re-rename i-edit"></button></div><div class="re-meta">~/.orbit/claude-accounts/1e84046c</div></div>
+            </div>
+            <div class="re-status"><span class="m-tag green">Signed in</span></div>
+            <div class="re-act"><span class="m-ico i-del"></span><span class="m-ico i-login"></span></div>
+          </div>
+        </div>
+        <div class="a-hint zh"><b>三件事都齐了才收起</b>：登录成功、runner 的上报里已有这个新账号、面板里的名字已存上（没改过就不用存）。「Signed in」标签就说明了登录成功，不另加提示。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── 边界 ─────────────── -->
+  <div class="m-stage m-flow">
+    <div class="m-stage-l"><span class="m-k state">边界</span><span class="zh">还在打字、登录没成功，以及不自动收起的备选</span></div>
+    <div class="m-grid3">
+      <div class="a-card">
+        <div class="a-card-h"><span class="a-card-t zh">完成时还在输入</span><span class="a-hint">④</span></div>
+        <div class="re-card re-runner-card">
+          <div class="re-row re-grp">
+            <div class="re-id">
+              <div class="provider-tile" style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c)"><svg class="g-claude" viewBox="0 0 24 24" width="16" height="16" fill="#fff"></svg></div>
+              <div style="min-width:0"><div class="re-name">Claude Code</div><div class="re-meta">2.1.288 · <b>2 of 2 accounts available</b></div></div>
+            </div>
+            <div class="re-act"><span class="m-btn">+ Account</span></div>
+            <div class="re-panel">
+              <label class="re-add"><span class="re-add-label">Account name</span><span class="m-mark" style="flex:1; min-width:0; display:flex"><span class="rsi-input m-field focus" style="flex:1">jianghailong.rd@gm<span class="m-caret"></span></span><span class="m-n">4</span></span></label>
+              <div class="rsi rsi-done"><span class="i-okc" style="display:inline-flex"></span>Signed in — this runner is ready.</div>
+            </div>
+          </div>
+          <div class="re-row re-acct re-acct-end">
+            <div class="re-id"><span class="re-rail"></span>
+              <div style="min-width:0"><div class="re-name">Account 2<span class="re-chip">NEXT</span><button class="re-rename i-edit"></button></div><div class="re-meta">~/.orbit/claude-accounts/1e84046c</div></div>
+            </div>
+            <div class="re-status"><span class="m-tag green">Signed in</span></div>
+            <div class="re-act"><span class="m-ico i-del"></span><span class="m-ico i-login"></span></div>
+          </div>
+        </div>
+        <div class="a-hint zh"><b>不打断正在打的字</b>：账号已经出现了，但输入框还有焦点，面板就等着；按回车或点别处、名字存好以后再收起。</div>
+      </div>
+
+      <div class="a-card">
+        <div class="a-card-h"><span class="a-card-t zh">登录失败或取消</span><span class="a-hint">⑤</span></div>
+        <div class="re-card re-runner-card">
+          <div class="re-row re-grp">
+            <div class="re-id">
+              <div class="provider-tile" style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c)"><svg class="g-claude" viewBox="0 0 24 24" width="16" height="16" fill="#fff"></svg></div>
+              <div style="min-width:0"><div class="re-name">Claude Code</div><div class="re-meta">2.1.288</div></div>
+            </div>
+            <div class="re-act"><span class="m-btn">+ Account</span></div>
+            <div class="re-panel">
+              <label class="re-add"><span class="re-add-label">Account name</span><span class="rsi-input m-field" style="flex:1">jianghailong.rd@gmail.com</span></label>
+              <div class="rsi">
+                <div class="rsi-warn">the sign-in for this Claude Code account did not complete — start it again</div>
+                <div class="rsi-actions"><button class="rsi-btn" type="button">Try signing in to Claude Code again</button><button class="rsi-link" type="button">Cancel</button></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="a-hint zh"><b>只在成功时收起</b>。失败、取消、超时，面板都留着，和现在一样：可以再试（用框里的名字），或点 Cancel 关掉。</div>
+      </div>
+
+      <div class="a-card">
+        <div class="a-card-h"><span class="a-card-t zh">备选：不自动收起，加 Done</span><span class="a-hint">⑥</span></div>
+        <div class="re-card re-runner-card">
+          <div class="re-row re-grp">
+            <div class="re-id">
+              <div class="provider-tile" style="width:28px;height:28px;border-radius:7px;background:linear-gradient(135deg,#d97757,#c15f3c)"><svg class="g-claude" viewBox="0 0 24 24" width="16" height="16" fill="#fff"></svg></div>
+              <div style="min-width:0"><div class="re-name">Claude Code</div><div class="re-meta">2.1.288 · <b>2 of 2 accounts available</b></div></div>
+            </div>
+            <div class="re-act"><span class="m-btn">+ Account</span></div>
+            <div class="re-panel">
+              <label class="re-add"><span class="re-add-label">Account name</span><span class="rsi-input m-field" style="flex:1">jianghailong.rd@gmail.com</span></label>
+              <div class="rsi rsi-done"><span class="i-okc" style="display:inline-flex"></span>Signed in — this runner is ready.<span class="m-mark" style="margin-left:6px"><button class="rsi-link" type="button" style="margin:0">Done</button><span class="m-n">6</span></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="a-hint zh">如果不想自动收起，就在完成那一行后面加 <b>Done</b>，点了才关。代价是每次多点一下；点之前输入框和铅笔的重复也还在。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── macOS / iOS ─────────────── -->
+  <div class="m-stage">
+    <div class="m-stage-l"><span class="m-k state">macOS / iOS</span><span class="zh">引擎页的 Add Account 卡片，同样的规则 ⑦</span></div>
+    <div class="ios-wrap">
+      <div class="ios-col">
+        <div class="ios-l zh">改前：完成后卡片停着，要点 Close</div>
+        <div class="ios">
+          <div class="ios-nav"><span class="back">‹ HPC</span><span class="t">Claude Code</span><span></span></div>
+          <div class="ios-h">Accounts</div>
+          <div class="ios-group">
+            <div class="ios-row"><div style="min-width:0"><div class="n">Default</div><div class="s">~/.claude</div></div><span class="st">Signed in</span></div>
+            <div class="ios-row"><div style="min-width:0"><div class="n">jianghailong.rd@gmail.com</div><div class="s">~/.orbit/claude-accounts/1e84046c</div></div><span class="st">Signed in</span></div>
+            <div class="ios-row ios-card">
+              <div class="ios-field">jianghailong.rd@gmail.com</div>
+              <div class="ios-ok"><span class="i-okc-raw-wrap" style="display:inline-flex"></span>Signed in — this runner is ready.</div>
+              <span class="ios-close">Close</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="ios-col">
+        <div class="ios-l zh">改后：账号出现在列表里、名字存好，卡片收回成 Add Account</div>
+        <div class="ios">
+          <div class="ios-nav"><span class="back">‹ HPC</span><span class="t">Claude Code</span><span></span></div>
+          <div class="ios-h">Accounts</div>
+          <div class="ios-group">
+            <div class="ios-row"><div style="min-width:0"><div class="n">Default</div><div class="s">~/.claude</div></div><span class="st">Signed in</span></div>
+            <div class="ios-row"><div style="min-width:0"><div class="n">jianghailong.rd@gmail.com</div><div class="s">~/.orbit/claude-accounts/1e84046c</div></div><span class="st">Signed in</span></div>
+            <div class="ios-row add">Add Account</div>
+          </div>
+        </div>
+      </div>
+      <div class="a-card" style="flex:0 1 600px">
+        <div class="a-hint zh" style="line-height:1.8">原生端规则相同：登录成功、账号出现在 Accounts 列表里、卡片里改过的名字已存上，卡片就收回成「Add Account」那一行；还在输入框里打字时，等按 Return 或点到别处。以后改名用长按（iOS）/ 右键（macOS）菜单里的 <b>Rename…</b>，和已上线的一样。失败或取消时卡片留着，Close 照旧。</div>
+      </div>
+    </div>
+
+    <ul class="m-notes zh">
+      <li><span class="m-n">1</span><span><b>完成后，一个名字只留一个编辑处</b>：面板里的输入框只在添加过程中用，账号出现在列表里以后，改名都用那一行的铅笔（web）或 Rename…（macOS / iOS）。</span></li>
+      <li><span class="m-n">2</span><span><b>不需要关闭按钮</b>：成功的那一刻面板自己收起；没成功的时候（失败、取消、超时）面板里本来就有 Cancel。</span></li>
+      <li><span class="m-n">3</span><span><b>收起的条件</b>：登录成功、runner 的上报里已经有这个新账号、面板里的名字已经存上（没改过就不用存）。少一样就不收，名字不会丢。</span></li>
+      <li><span class="m-n">4</span><span><b>不打断输入</b>：输入框还有焦点时先不收，按回车或点别处保存后再收。</span></li>
+      <li><span class="m-n">5</span><span><b>只在成功时收起</b>，失败或取消时面板和现在完全一样。</span></li>
+      <li><span class="m-n">6</span><span><b>备选</b>：不自动收起，只在完成那一行加 Done。选它的话，① 的重复会一直留到点 Done。</span></li>
+      <li><span class="m-n">7</span><span><b>macOS / iOS 同一套规则</b>，卡片收回成「Add Account」那一行，不再需要点 Close。</span></li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  // The icons, once each: antd's own paths (@ant-design/icons-svg), each with its own viewBox, and the
+  // Anthropic glyph the shipped tile draws (src/web/src/lib/providerGlyphs.ts).
+  const PATHS = {
+    login: ['64 64 896 896', 'M521.7 82c-152.5-.4-286.7 78.5-363.4 197.7-3.4 5.3.4 12.3 6.7 12.3h70.3c4.8 0 9.3-2.1 12.3-5.8 7-8.5 14.5-16.7 22.4-24.5 32.6-32.5 70.5-58.1 112.7-75.9 43.6-18.4 90-27.8 137.9-27.8 47.9 0 94.3 9.3 137.9 27.8 42.2 17.8 80.1 43.4 112.7 75.9 32.6 32.5 58.1 70.4 76 112.5C865.7 417.8 875 464.1 875 512c0 47.9-9.4 94.2-27.8 137.8-17.8 42.1-43.4 80-76 112.5s-70.5 58.1-112.7 75.9A352.8 352.8 0 01520.6 866c-47.9 0-94.3-9.4-137.9-27.8A353.84 353.84 0 01270 762.3c-7.9-7.9-15.3-16.1-22.4-24.5-3-3.7-7.6-5.8-12.3-5.8H165c-6.3 0-10.2 7-6.7 12.3C234.9 863.2 368.5 942 520.6 942c236.2 0 428-190.1 430.4-425.6C953.4 277.1 761.3 82.6 521.7 82zM395.02 624v-76h-314c-4.4 0-8-3.6-8-8v-56c0-4.4 3.6-8 8-8h314v-76c0-6.7 7.8-10.5 13-6.3l141.9 112a8 8 0 010 12.6l-141.9 112c-5.2 4.1-13 .4-13-6.3z'],
+    del: ['64 64 896 896', 'M360 184h-8c4.4 0 8-3.6 8-8v8h304v-8c0 4.4 3.6 8 8 8h-8v72h72v-80c0-35.3-28.7-64-64-64H352c-35.3 0-64 28.7-64 64v80h72v-72zm504 72H160c-17.7 0-32 14.3-32 32v32c0 4.4 3.6 8 8 8h60.4l24.7 523c1.6 34.1 29.8 61 63.9 61h454c34.2 0 62.3-26.8 63.9-61l24.7-523H888c4.4 0 8-3.6 8-8v-32c0-17.7-14.3-32-32-32zM731.3 840H292.7l-24.2-512h487l-24.2 512z'],
+    edit: ['64 64 896 896', 'M257.7 752c2 0 4-.2 6-.5L431.9 722c2-.4 3.9-1.3 5.3-2.8l423.9-423.9a9.96 9.96 0 000-14.1L694.9 114.9c-1.9-1.9-4.4-2.9-7.1-2.9s-5.2 1-7.1 2.9L256.8 538.8c-1.5 1.5-2.4 3.3-2.8 5.3l-29.5 168.2a33.5 33.5 0 009.4 29.8c6.6 6.4 14.9 9.9 23.8 9.9zm67.4-174.4L687.8 215l73.3 73.3-362.7 362.6-88.9 15.7 15.6-89zM880 836H144c-17.7 0-32 14.3-32 32v36c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-36c0-17.7-14.3-32-32-32z'],
+    okc: ['64 64 896 896', 'M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm193.5 301.7l-210.6 292a31.8 31.8 0 01-51.7 0L318.5 484.9c-3.8-5.3 0-12.7 6.5-12.7h46.9c10.2 0 19.9 4.9 25.9 13.3l71.2 98.8 157.2-218c6-8.3 15.6-13.3 25.9-13.3H699c6.5 0 10.3 7.4 6.5 12.7z'],
+    load: ['0 0 1024 1024', 'M988 548c-19.9 0-36-16.1-36-36 0-59.4-11.6-117-34.6-171.3a440.45 440.45 0 00-94.3-139.9 437.71 437.71 0 00-139.9-94.3C629 83.6 571.4 72 512 72c-19.9 0-36-16.1-36-36s16.1-36 36-36c69.1 0 136.2 13.5 199.3 40.3C772.3 66 827 103 874 150c47 47 83.9 101.8 109.7 162.7 26.7 63.1 40.2 130.2 40.2 199.3.1 19.9-16 36-35.9 36z'],
+    export: ['64 64 896 896', 'M880 912H144c-17.7 0-32-14.3-32-32V144c0-17.7 14.3-32 32-32h360c4.4 0 8 3.6 8 8v56c0 4.4-3.6 8-8 8H184v656h656V520c0-4.4 3.6-8 8-8h56c4.4 0 8 3.6 8 8v360c0 17.7-14.3 32-32 32zM770.87 199.13l-52.2-52.2a8.01 8.01 0 014.7-13.6l179.4-21c5.1-.6 9.5 3.7 8.9 8.9l-21 179.4c-.8 6.6-8.9 9.4-13.6 4.7l-52.4-52.4-256.2 256.2a8.03 8.03 0 01-11.3 0l-42.4-42.4a8.03 8.03 0 010-11.3l256.1-256.3z'],
+  };
+  const CLAUDE = 'M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z';
+  const svg = ([box, d]) => `<svg viewBox="${box}"><path d="${d}"/></svg>`;
+  for (const [name, icon] of Object.entries(PATHS)) {
+    for (const el of document.querySelectorAll(`.i-${name}`)) el.insertAdjacentHTML('afterbegin', svg(icon));
+  }
+  // The native card's check is the system's green, not the web's.
+  for (const el of document.querySelectorAll('.i-okc-raw-wrap')) el.innerHTML = svg(PATHS.okc);
+  for (const el of document.querySelectorAll('.g-claude')) el.innerHTML = `<path d="${CLAUDE}"/>`;
+</script>
+</body>
+</html>

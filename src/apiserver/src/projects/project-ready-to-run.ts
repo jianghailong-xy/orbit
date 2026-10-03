@@ -1,5 +1,11 @@
 import { Prisma } from '@prisma/client';
+import type { TaskRunReason } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  runStalled,
+  sessionCarriesTaskSql,
+  sessionRunReasonSql,
+} from '../sessions/task-work-carrier';
 import { manualRunnableTaskSql } from '../tasks/manual-runnable-task-sql';
 import { dependenciesSatisfiedSql, everyPrerequisiteTailDoneSql } from '../tasks/task-dependencies';
 import { BLOCKING_MAX_UNFINISHED_TASKS } from './project-panorama-blocking';
@@ -24,6 +30,13 @@ export interface ProjectReadyToRunItem {
   runState: ProjectReadyToRunState;
   /** The active work Session to open for QUEUED/RUNNING rows. */
   sessionId: string | null;
+  /**
+   * Why a QUEUED/RUNNING row is active (sessions/task-work-carrier.ts): a turn, a background job
+   * it is waiting on, or a wake-up it is waiting for. Null on READY and PAUSED rows.
+   */
+  runReason: TaskRunReason | null;
+  /** A RUNNING row held only by background jobs that have stopped producing output. */
+  runStalled: boolean;
   /** Present only for PAUSED rows, so the UI can offer a truthful resume-list action. */
   pausedList: ProjectReadyToRunPausedList | null;
   /** Null only when the project is too large to compute its transitive closure safely. */
@@ -35,7 +48,7 @@ export interface ProjectReadyToRun {
   readyCount: number;
   /** Work Sessions waiting for a runner slot. */
   queuedCount: number;
-  /** Work Sessions actively held by a runner. */
+  /** Work Sessions running a turn, or parked waiting for something that will wake them. */
   runningCount: number;
   /** Otherwise-runnable tasks currently held by a paused task list. */
   pausedCount: number;
@@ -72,6 +85,9 @@ type ReadyRow = ReadyTotals & {
   /** Internal sort value; deliberately omitted from the public payload. */
   activeSince: Date | null;
   sessionId: string | null;
+  runReason: TaskRunReason | null;
+  runningBgJobs: string[] | null;
+  runningBgJobActivity: unknown;
   pausedListId: string | null;
   pausedListTitle: string | null;
   pausedListReadyCount: number | null;
@@ -93,6 +109,9 @@ type ReadyRow = ReadyTotals & {
  * remaining ready work, newest first. The row therefore changes state instead of disappearing
  * when the success invalidation refetches this endpoint. Only Sessions that actually start task
  * work count here — a task-linked read/salvage conversation must not take away a valid Run button.
+ * "Occupied" is the one predicate the runnable check refuses on (`sessionCarriesTaskSql`), so a
+ * session parked at AWAITING_INPUT while something will wake it — a background job, a watch, a
+ * scheduled wake-up — is a RUNNING row here and never also a READY one.
  * A held row is included only when every other manual-run gate passes and its owning list is
  * genuinely paused. It never receives a Run state: the execute endpoint intentionally refuses a
  * held task, so the client can only offer the explicit, scope-labelled list resume action.
@@ -192,9 +211,11 @@ export async function readProjectReadyToRun(
                t.id,
                t.title,
                t.status::text AS status,
+               -- PENDING is still exactly QUEUED; a turn running and a session parked with
+               -- something that will wake it are both work in progress.
                CASE s.status
-                 WHEN 'RUNNING'::run_status THEN 'RUNNING'
-                 ELSE 'QUEUED'
+                 WHEN 'PENDING'::run_status THEN 'QUEUED'
+                 ELSE 'RUNNING'
                END::text AS "runState",
                coalesce(s.started_at, s.created_at) AS "activeSince",
                s.id AS "sessionId"
@@ -204,9 +225,7 @@ export async function readProjectReadyToRun(
            AND t.owner_id = ${ownerId}::uuid
            AND t.status <> 'DONE'::task_status
            AND s.owner_id = ${ownerId}::uuid
-           AND s.deleted_at IS NULL
-           AND s.starts_task_work = true
-           AND s.status IN ('PENDING'::run_status, 'RUNNING'::run_status)
+           AND ${Prisma.raw(sessionCarriesTaskSql('s'))}
          ORDER BY t.id,
                   CASE s.status WHEN 'RUNNING'::run_status THEN 0 ELSE 1 END,
                   s.created_at DESC,
@@ -296,6 +315,10 @@ export async function readProjectReadyToRun(
            ranked."runState",
            ranked."activeSince",
            ranked."sessionId",
+           -- Read off the row the active CTE chose, after the LIMIT: the ranking never needs it.
+           (${Prisma.raw(sessionRunReasonSql('run_session'))})::text AS "runReason",
+           run_session.running_bg_jobs AS "runningBgJobs",
+           run_session.running_bg_job_activity AS "runningBgJobActivity",
            ranked."pausedListId",
            ranked."pausedListTitle",
            ranked."pausedListReadyCount",
@@ -344,6 +367,7 @@ export async function readProjectReadyToRun(
                   candidate.id ASC
          LIMIT ${limit}
       ) ranked ON true
+      LEFT JOIN session run_session ON run_session.id = ranked."sessionId"
      ORDER BY CASE
                 WHEN ranked."runState" IN ('RUNNING', 'QUEUED') THEN 0
                 WHEN ranked."runState" = 'READY' THEN 1
@@ -355,6 +379,7 @@ export async function readProjectReadyToRun(
               ranked."taskId" ASC`);
 
   const items: ProjectReadyToRunItem[] = [];
+  const now = Date.now();
   for (const row of rows) {
     if (row.taskId === null || row.title === null || row.status === null || row.runState === null) {
       continue;
@@ -384,7 +409,18 @@ export async function readProjectReadyToRun(
             autoRunReadyCount: pausedListAutoRunReadyCount,
           }
         : null;
-    items.push({ taskId, title, status, runState, sessionId, pausedList, downstreamBlocked });
+    const runReason = runState === 'RUNNING' || runState === 'QUEUED' ? row.runReason : null;
+    items.push({
+      taskId,
+      title,
+      status,
+      runState,
+      sessionId,
+      runReason,
+      runStalled: runStalled({ ...row, runReason }, now),
+      pausedList,
+      downstreamBlocked,
+    });
   }
 
   const [first] = rows;

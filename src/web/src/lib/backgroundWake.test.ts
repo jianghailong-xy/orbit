@@ -170,6 +170,22 @@ describe('the block a background job’s wake opens a turn with', () => {
     expect(wake.jobs.map((job) => job.outputTail)).toEqual(['', '']);
   });
 
+  it('reads a wake written into the running turn, whose block says it joined that turn', () => {
+    // A job that ends while a turn runs is delivered as a steer, and its block says so instead of
+    // saying a turn was opened for it (runner-api/background-job-wake.ts `WAKE_HEADS`). Nothing the
+    // card reads is in that line, so the same job comes out of either wording.
+    const steered = EN_DONE.replace(
+      'has news you were waiting for; the control plane opened this turn for it:',
+      'has news you were waiting for. It ended while you were working, so this message was added to the turn you are in:',
+    );
+    expect(steered).not.toBe(EN_DONE);
+
+    const wake = parseBackgroundWake(steered)!;
+    expect(wake.jobs).toEqual(parseBackgroundWake(EN_DONE)!.jobs);
+    expect(wake.text).toBe(steered);
+    expect(wake.rest).toBe('');
+  });
+
   it('keeps a command that runs to several lines of its own whole, and still finds the description behind it', () => {
     const wake = parseBackgroundWake(ZH_WAKE_WITH_COORDINATOR_CONTEXT)!;
 

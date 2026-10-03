@@ -20,7 +20,8 @@ test('named task list rows expose the same dependency lock state as the main tas
       taskList: {
         findFirst: async () => ({ id: LIST_ID, title: 'Pipeline', tasks }),
       },
-      session: { groupBy: async () => [] },
+      // No work session carries any of these tasks.
+      $queryRaw: async () => [],
       taskDependency: {
         findMany: async (args: any) => {
           dependencyWhere = args.where;
@@ -194,9 +195,7 @@ test('the header read fetches the list alone, with no task join at all', async (
         },
       },
       // Reaching any of these would mean the header read is still walking the list's contents.
-      session: {
-        groupBy: async () => assert.fail('header read must not query sessions'),
-      },
+      $queryRaw: async () => assert.fail('header read must not query sessions'),
       taskDependency: {
         findMany: async () => assert.fail('header read must not query dependencies'),
       },
@@ -232,9 +231,10 @@ test('the list index projects no instructions, whatever else it carries', async 
           return [{ id: LIST_ID, title: 'FineWeb Parquet', taskCount: 27468, taskDoneCount: 0 }];
         },
       },
-      // The one grouped count left: running tasks. The DONE count used to be a second one here and
-      // is now a column of the row above (0287).
+      // The grouped counts left: running tasks (in SQL) and tasks outside projects. The DONE count
+      // used to be a third one here and is now a column of the row above (0287).
       task: { groupBy: async () => [] },
+      $queryRaw: async () => [],
     } as never,
     {} as never,
     {} as never,

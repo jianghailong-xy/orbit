@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { RunStatus } from '@prisma/client';
+import { Prisma, RunStatus } from '@prisma/client';
 import { classifyFailure, FailureCause, toUuid, uuidToBase62 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { countTaskWorkCarriers } from '../sessions/task-work-carrier';
 
 /**
  * `orbit-list:<id>` / `orbit-task:<id>` inside a markdown link, the same custom scheme the
@@ -94,9 +95,12 @@ export class ReferenceExpansionService {
         where: { listId: id },
         _count: { _all: true },
       }),
-      this.prisma.session.count({
-        where: { task: { listId: id }, status: { in: [RunStatus.PENDING, RunStatus.RUNNING] } },
-      }),
+      // The list's tasks a work session is carrying, as `tasklist_get` counts them.
+      countTaskWorkCarriers(
+        this.prisma,
+        Prisma.sql`carrier."task_id" IN (
+          SELECT list_task."id" FROM "task" list_task WHERE list_task."list_id" = ${id}::uuid)`,
+      ),
       this.prisma.session.findMany({
         where: { task: { listId: id }, status: RunStatus.FAILED },
         select: { error: true },

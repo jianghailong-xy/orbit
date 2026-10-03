@@ -32,10 +32,11 @@ public enum CodexAccounts {
         return windows(own).isEmpty ? nil : own
     }
 
-    /// What an account is called where one is named: "Default", or what the user called it.
+    /// What an account is called where one is named: what the user called it — Default too, once
+    /// renamed in Orbit — else "Default", or the slot's own id (web `accountNameOf`).
     public static func label(_ id: String, accounts: [RunnerEngineAccount]?) -> String {
-        if id == defaultID { return "Default" }
-        return accounts?.first { $0.id == id }?.name ?? "Account \(id)"
+        if let name = accounts?.first(where: { $0.id == id })?.name, !name.isEmpty { return name }
+        return id == defaultID ? "Default" : "Account \(id)"
     }
 
     /// `wanted` when the runner reports it, else Default — the account dispatch runs a session on
@@ -75,8 +76,8 @@ public enum CodexAccounts {
     /// - Only an account the CLI does not say is signed out is a candidate.
     /// - One with a spent window (100% and not past its reset, or with no reset to go by) is passed
     ///   over while another can run.
-    /// - One with a window nearly spent (90%) comes after the rest: a run started there would soon meet
-    ///   its limit and have to move.
+    /// - One with a window nearly spent (80% of a 5-hour one, 90% of a longer one — `nearlySpent`) comes
+    ///   after the rest: a run started there would soon meet its limit and have to move.
     /// - Then soonest-expiring first: the reset of each account's longest window (`expiresAt`).
     ///   Different plans hold very different amounts, so how much is left is not compared across
     ///   accounts — only when it expires. An account with nothing reported comes after every one that has.
@@ -99,7 +100,7 @@ public enum CodexAccounts {
             let spent = open.filter { $0.utilization >= 100 }
             let resets = spent.map { resetTime($0) ?? .infinity }
             return Candidate(id: account.id,
-                             nearLimit: open.contains { $0.utilization >= nearLimitUtilization },
+                             nearLimit: own.map { nearlySpent($0, now: now) } ?? false,
                              expiresAt: own.map { expiresAt($0, now: now) } ?? .infinity,
                              tightest: ws.map(\.utilization).max() ?? .infinity,
                              spentUntil: spent.isEmpty ? nil : resets.max())
@@ -124,12 +125,38 @@ public enum CodexAccounts {
 
     /// At or over this share consumed, a window is nearly spent (shared `NEAR_LIMIT_UTILIZATION`).
     static let nearLimitUtilization = 90.0
+    /// The same for a window of five hours or less (shared `SHORT_WINDOW_NEAR_LIMIT_UTILIZATION`).
+    static let shortWindowNearLimitUtilization = 80.0
+    static let shortWindowMins = 5 * 60
+
+    /// Whether any window of `s` is nearly spent and not past its reset (shared `quotaNearLimit`): 80% of
+    /// one of five hours or less, 90% of a longer one or of one that does not say how long it is. By the
+    /// window's length, never its slot: Codex reports a Pro login's weekly window as its `primary`.
+    static func nearlySpent(_ s: PlanUsageSnapshot, now: Date) -> Bool {
+        withLength(s).contains { entry in
+            let open = !(resetTime(entry.window).map { $0 <= now.timeIntervalSince1970 } ?? false)
+            let short = entry.mins.map { $0 <= shortWindowMins } ?? false
+            return open && entry.window.utilization >= (short ? shortWindowNearLimitUtilization : nearLimitUtilization)
+        }
+    }
 
     /// When what an account has left of its quota goes to waste (shared `quotaExpiresAt`): the reset
     /// of its longest window — a weekly one where it has one — which gives back a full window whatever
     /// was left of the old one. When no window says how long it is, the latest reset. Infinity when no
     /// window names a reset ahead of `now`: nothing is known to expire.
     static func expiresAt(_ s: PlanUsageSnapshot, now: Date) -> Double {
+        let ahead: [(mins: Int?, at: Double)] = withLength(s).compactMap { entry in
+            guard let at = resetTime(entry.window), at > now.timeIntervalSince1970 else { return nil }
+            return (entry.mins, at)
+        }
+        guard let longest = ahead.map({ $0.mins ?? -1 }).max() else { return .infinity }
+        let pick = longest >= 0 ? ahead.filter { ($0.mins ?? -1) == longest } : ahead
+        return pick.map(\.at).max() ?? .infinity
+    }
+
+    /// Every window of one snapshot with its length in minutes (shared `windowsWithLength`): Claude's
+    /// named ones by their names, Codex's as it reports them — nil when one does not say.
+    static func withLength(_ s: PlanUsageSnapshot) -> [(window: PlanUsageWindow, mins: Int?)] {
         let week = 7 * 24 * 60
         let named: [(PlanUsageWindow?, Int)] = [(s.fiveHour, 5 * 60), (s.sevenDay, week), (s.sevenDayOpus, week),
                                                 (s.sevenDaySonnet, week)]
@@ -137,13 +164,7 @@ public enum CodexAccounts {
         let all: [(window: PlanUsageWindow, mins: Int?)] =
             named.compactMap { window, mins in window.map { ($0, $0.windowDurationMins ?? mins) } }
             + reported.compactMap { window in window.map { ($0, $0.windowDurationMins) } }
-        let ahead: [(mins: Int?, at: Double)] = all.compactMap { entry in
-            guard let at = resetTime(entry.window), at > now.timeIntervalSince1970 else { return nil }
-            return (entry.mins, at)
-        }
-        guard let longest = ahead.map({ $0.mins ?? -1 }).max() else { return .infinity }
-        let pick = longest >= 0 ? ahead.filter { ($0.mins ?? -1) == longest } : ahead
-        return pick.map(\.at).max() ?? .infinity
+        return all
     }
 
     /// Every window one snapshot reports: Claude's named ones, Codex's primary/secondary pair, and the

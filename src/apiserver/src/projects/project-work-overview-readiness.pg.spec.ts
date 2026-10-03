@@ -254,10 +254,12 @@ test('Work overview readiness is canonical, exhaustive, and verification-aware',
         world.projectId,
       );
       const state = (name: string) => states.get(world.ids[name]);
+      // No session carries any of these rows, so none of them says why it is running.
+      const NOT_RUNNING = { runReason: null, runStalled: false };
 
       await t.test('ordinary manual and automatic leaves remain READY', () => {
-        assert.deepEqual(state('manual-ready'), { workState: 'READY', verificationState: null });
-        assert.deepEqual(state('automatic-ready'), { workState: 'READY', verificationState: null });
+        assert.deepEqual(state('manual-ready'), { workState: 'READY', verificationState: null, ...NOT_RUNNING });
+        assert.deepEqual(state('automatic-ready'), { workState: 'READY', verificationState: null, ...NOT_RUNNING });
       });
 
       await t.test('ALL_CHILDREN_DONE parent is completion-owned while its child is runnable', () => {
@@ -269,6 +271,7 @@ test('Work overview readiness is canonical, exhaustive, and verification-aware',
         assert.deepEqual(state('subject-missing'), {
           workState: 'AWAITING_VERIFICATION',
           verificationState: 'MISSING',
+          ...NOT_RUNNING,
         });
       });
 
@@ -276,6 +279,7 @@ test('Work overview readiness is canonical, exhaustive, and verification-aware',
         assert.deepEqual(state('subject-open'), {
           workState: 'AWAITING_VERIFICATION',
           verificationState: 'PENDING',
+          ...NOT_RUNNING,
         });
         assert.equal(state('verifier-open')?.workState, 'READY');
       });
@@ -284,6 +288,7 @@ test('Work overview readiness is canonical, exhaustive, and verification-aware',
         assert.deepEqual(state('subject-blocked'), {
           workState: 'AWAITING_VERIFICATION',
           verificationState: 'BLOCKED',
+          ...NOT_RUNNING,
         });
         assert.equal(state('verifier-blocked')?.workState, 'BLOCKED');
       });
@@ -292,6 +297,7 @@ test('Work overview readiness is canonical, exhaustive, and verification-aware',
         assert.deepEqual(state('subject-running'), {
           workState: 'AWAITING_VERIFICATION',
           verificationState: 'RUNNING',
+          ...NOT_RUNNING,
         });
         assert.equal(state('verifier-running')?.workState, 'RUNNING');
       });
@@ -300,6 +306,7 @@ test('Work overview readiness is canonical, exhaustive, and verification-aware',
         assert.deepEqual(state('subject-failed'), {
           workState: 'AWAITING_VERIFICATION',
           verificationState: 'FAILED',
+          ...NOT_RUNNING,
         });
         assert.equal(state('verifier-failed')?.workState, 'DONE');
       });
@@ -308,6 +315,7 @@ test('Work overview readiness is canonical, exhaustive, and verification-aware',
         assert.deepEqual(state('subject-passed'), {
           workState: 'DONE',
           verificationState: 'PASSED',
+          ...NOT_RUNNING,
         });
       });
 

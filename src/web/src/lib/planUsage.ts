@@ -223,3 +223,38 @@ export function planUsageRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
     ];
   });
 }
+
+/**
+ * planUsageRows as they stand at `now`. A window whose reset has passed reads as the fresh window it
+ * now is — nothing used, no reset to name — rather than as the reading taken before it rolled over.
+ * The runner reads again just after a reset, so a past one outlives it only on a reading that has
+ * stopped refreshing, and its number is then about a window that is over: the quota decisions pass
+ * such a window by already (quotaNearLimit, accountToStartOn), and what is drawn says the same.
+ */
+export function currentPlanUsageRows(usage: PlanUsageSnapshot, now: number = Date.now()): PlanUsageDisplayRow[] {
+  return planUsageRows(usage).map((row) => {
+    const { resetsAt, ...window } = row.window;
+    const at = Date.parse(resetsAt ?? '');
+    if (Number.isNaN(at) || at > now) return row;
+    return { ...row, window: { ...window, utilization: 0 }, percent: 0, nearLimit: false };
+  });
+}
+
+/**
+ * The window that stops a login, or will stop it first: a spent one (100%) before any other — of
+ * several, the one that resets last, since the login is back only once every spent one has — else
+ * the one closest to its limit, a tie going to the first (the 5-hour window). Anything that shows one
+ * number for a login shows this one rather than the first window: a Claude login's 5-hour window can
+ * read 6% while its weekly one is spent. Pass currentPlanUsageRows, so a window past its reset is not
+ * what stops anything.
+ */
+export function bindingPlanUsageRow(rows: PlanUsageDisplayRow[]): PlanUsageDisplayRow | undefined {
+  // A spent window with no reset named holds the login for as long as anyone can tell.
+  const resetOf = (row: PlanUsageDisplayRow) => Date.parse(row.window.resetsAt ?? '') || Infinity;
+  const spent = rows.filter((row) => row.window.utilization >= 100);
+  if (spent.length > 0) return spent.reduce((last, row) => (resetOf(row) > resetOf(last) ? row : last));
+  return rows.reduce<PlanUsageDisplayRow | undefined>(
+    (tightest, row) => (!tightest || row.window.utilization > tightest.window.utilization ? row : tightest),
+    undefined,
+  );
+}

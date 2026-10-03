@@ -329,6 +329,33 @@ final class SteerDeliveryTests: XCTestCase {
         XCTAssertEqual(r.state.queued[0].turnId, "t1")
     }
 
+    func testASteerHandedBackAndDeliveredAgainIsTheSameOneRow() {
+        // A steer the engine provably never read comes back as the ordinary turn it would have been,
+        // on the same row with the same turn id, so its second `user` event is that message arriving
+        // — not a second message. It amends the row already drawn instead of drawing it twice, and
+        // stops reading as a steer (web parity: Transcript's `priorSteer`).
+        var r = TranscriptReducer()
+        r.apply(userEvent(1, turn: "t1", text: "use the other endpoint", delivery: "written", steer: true))
+        r.apply(deliveryEvent(2, turn: "t1", "requeued"))
+        XCTAssertEqual(SteerDelivery.state(bubbles(r)[0].delivery).label, "Queued for next turn instead")
+
+        r.apply(userEvent(3, turn: "t1", text: "use the other endpoint", delivery: "enqueued"))
+
+        XCTAssertEqual(bubbles(r).count, 1, "the same message, not a second copy of it")
+        XCTAssertFalse(bubbles(r)[0].steer, "it ran as a turn of its own")
+        XCTAssertEqual(bubbles(r)[0].delivery, "enqueued")
+        XCTAssertEqual(bubbles(r)[0].text, "use the other endpoint")
+    }
+
+    func testAMessageAnnouncedTwiceThatWasNeverASteerKeepsBothRows() {
+        // Only steer → message is amended: a re-leased message turn keeps its own line.
+        var r = TranscriptReducer()
+        r.apply(userEvent(1, turn: "t1", text: "refactor the parser", delivery: nil))
+        r.apply(userEvent(2, turn: "t1", text: "continue where you left off", delivery: nil))
+
+        XCTAssertEqual(bubbles(r).map(\.text), ["refactor the parser", "continue where you left off"])
+    }
+
     func testAQueueSnapshotTakenBeforeTheLeaseDoesNotResurrectASteer() {
         // The REST list only holds a steer while it is still PENDING; the moment the runner takes
         // it, it leaves. A snapshot read just before that can arrive after the steer's own `user`

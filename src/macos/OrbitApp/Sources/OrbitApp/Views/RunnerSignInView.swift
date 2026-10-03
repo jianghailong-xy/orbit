@@ -21,6 +21,9 @@ struct RunnerSignInView: View {
     /// Sign in a NEW account, which the runner adds under this name. The button waits for one: a
     /// blank name would read as no account at all, which is the runner's own login.
     var accountName: String? = nil
+    /// Start signing in as the card appears, not on its button: the press that raised it — Add Account
+    /// — already asked for the sign-in.
+    var autoStart = false
     /// Offered the moment the sign-in lands: re-send whatever the failure ate. Nil where there is
     /// nothing to re-send (a proactive sign-in from the Runners screen).
     var onDone: (() async -> Void)?
@@ -41,11 +44,17 @@ struct RunnerSignInView: View {
         }
         .task(id: runnerID) {
             guard let baseURL = app.baseURL else { return }
+            let fresh = model == nil
             let m = model ?? RunnerSignInModel(runnerID: runnerID, engine: engine, account: account,
                                                adding: accountName != nil,
                                                baseURL: baseURL, tokenStore: app.tokenStore)
             model = m
-            await m.refresh()
+            // Started by the card's first appearance only: a later one picks the relay back up.
+            if autoStart, fresh {
+                await m.begin(accountName: accountName)
+            } else {
+                await m.refresh()
+            }
         }
         // The card can go off-screen while a sign-in runs (the transcript scrolls, the sheet
         // closes). Stop the poll with it; the `task` above picks the relay back up on return.
@@ -301,7 +310,8 @@ struct AuthErrorCardView: View {
                 .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
             Button("Retry — re-send my last message") { Task { await retry() } }
                 .buttonStyle(.bordered)
-                .disabled(console.sending)
+                // A press already in flight is not offered a second one (criterion 19).
+                .disabled(console.sending || console.retryInFlight)
         }
     }
 

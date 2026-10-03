@@ -24,7 +24,7 @@ import {
   refreshRequestBody,
   usageLimitResetAt,
 } from './codex-login-gateway';
-import { loginPoolResumesAt } from './codex-login';
+import { loginPoolResumesAt } from './pool-login-select';
 import { SPENT_ERROR_CODES } from './pool-gateway.service';
 
 interface Exchange { method: string; path: string; headers: Array<[string, string]>; bodyBase64: string }
@@ -154,11 +154,16 @@ test('a spent subscription waits for the reset the backend named — then a spen
 
 test('a login pool resumes at its account\'s reset, now when it is not spent, and never by waiting when there is no account or it is signed out', () => {
   const reset = new Date(NOW.getTime() + 3_600_000);
-  assert.deepEqual(loginPoolResumesAt({ state: 'ACTIVE', spentUntil: reset }, NOW), reset);
-  assert.deepEqual(loginPoolResumesAt({ state: 'ACTIVE', spentUntil: new Date(NOW.getTime() - 1) }, NOW), NOW);
-  assert.deepEqual(loginPoolResumesAt({ state: 'ACTIVE', spentUntil: null }, NOW), NOW);
-  assert.equal(loginPoolResumesAt({ state: 'SIGNED_OUT', spentUntil: reset }, NOW), null);
-  assert.equal(loginPoolResumesAt(null, NOW), null);
+  const account = (state: string, spentUntil: Date | null) => ({ accountId: 'acct-0000-AB12', email: null, state, spentUntil, usage: null });
+  assert.deepEqual(loginPoolResumesAt([account('ACTIVE', reset)], NOW), reset);
+  assert.deepEqual(loginPoolResumesAt([account('ACTIVE', new Date(NOW.getTime() - 1))], NOW), NOW);
+  assert.deepEqual(loginPoolResumesAt([account('ACTIVE', null)], NOW), NOW);
+  assert.equal(loginPoolResumesAt([account('SIGNED_OUT', reset)], NOW), null);
+  assert.equal(loginPoolResumesAt([], NOW), null);
+  // Several: now while one of them can run, else the first to come back; a signed-out one never does.
+  const later = new Date(NOW.getTime() + 7_200_000);
+  assert.deepEqual(loginPoolResumesAt([account('ACTIVE', later), account('ACTIVE', null)], NOW), NOW);
+  assert.deepEqual(loginPoolResumesAt([account('SIGNED_OUT', null), account('ACTIVE', later), account('ACTIVE', reset)], NOW), reset);
 });
 
 test('the session is told which window of which account is spent and when it goes again — never that it switched', () => {
@@ -181,6 +186,16 @@ test('the session is told which window of which account is spent and when it goe
     'The ChatGPT account owner@example.invalid on "My Codex" was signed out by OpenAI — only you can sign in again, on the pool\'s page',
   );
   assert.equal(loginMissingReason('My Codex'), '"My Codex" has no ChatGPT account signed in — only you can sign one in, on the pool\'s page');
+  // One of the people the pool's owner added runs on it too (2026-10-03): the press is named as the
+  // owner's, not as theirs.
+  assert.equal(
+    loginSignedOutNotice(login, 'My Codex', false),
+    'The ChatGPT account owner@example.invalid on "My Codex" was signed out by OpenAI — only its owner can sign in again, on the pool\'s page',
+  );
+  assert.equal(
+    loginMissingReason('My Codex', false),
+    '"My Codex" has no ChatGPT account signed in — only its owner can sign one in, on the pool\'s page',
+  );
   // No word of these names the account's id.
   for (const words of [loginSpentNotice(login, reading, reset), loginSignedOutNotice(login, 'My Codex')]) {
     assert.ok(!words.includes(login.accountId));

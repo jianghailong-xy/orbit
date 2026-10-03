@@ -1,0 +1,42 @@
+{
+  "agy": "1.2.15",
+  "recorded": "2026-10-03",
+  "argv": [
+    "--gemini_dir=/work/orbit-gemini",
+    "--print=",
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--dangerously-skip-permissions"
+  ],
+  "settings": {
+    "enableTelemetry": false
+  },
+  "exit": 0,
+  "note": "Under --dangerously-skip-permissions a PreToolUse hook from <gemini_dir>/config/hooks.json is the gate: deny -> tool step ERROR with the hook's reason, the model continues.",
+  "files": {
+    "gd:config/hooks.json": {
+      "orbit-gate": {
+        "PreToolUse": [
+          {
+            "matcher": "",
+            "hooks": [
+              {
+                "type": "command",
+                "command": "python3 /work/tools/hook.py gate deny",
+                "timeout": 600
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "driver": [
+    "write stdin line 1",
+    "wait for result #1",
+    "close stdin",
+    "wait for exit"
+  ]
+}

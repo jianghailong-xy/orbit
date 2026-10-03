@@ -73,7 +73,10 @@ export interface ProviderPool {
   /** What it runs on: `claude` (the 0265 pools of one's own Claude keys) or `codex` — a pool of one's
    *  own ChatGPT account (migration 0323), or a shared pool. Absent from an older server: `claude`. */
   engine?: string;
-  /** A Codex pool of one's own: the ChatGPT account it runs on, or null before anyone signed in. */
+  /** A Codex pool of one's own: every ChatGPT account it holds, oldest first — the one its sessions
+   *  run on being the first of them. Absent from an older server, which names that one only. */
+  logins?: CodexLogin[];
+  /** The first of `logins` — the account the pool's sessions run on, or null before anyone signed in. */
   login?: CodexLogin | null;
   /** A shared pool (sharedPoolAsProviderPool): the whole of it as its page reads it — its people, its
    *  rules and the viewer's place in it. Absent on an account pool of the user's own. */
@@ -175,13 +178,20 @@ export function sessionPoolAccount(
   return next ? { member: next, current: false } : null;
 }
 
-/** The gauge a member row shows: the window that stopped a spent member, else the 5-hour window
- *  the pool ranks its members by. */
+/** The gauge a member row shows: the window that stopped a spent member, else the one closest to its
+ *  limit — a 5-hour window at 6% says nothing of a weekly one at 97%, which stops the account first.
+ *  A tie goes to the first of them, the 5-hour window. */
 export function memberQuota(member: PoolMember): PlanUsageDisplayRow | null {
   if (!member.planUsage) return null;
   const rows = planUsageRows(member.planUsage);
   const binding = member.state === 'SPENT' ? rows.find((row) => row.window.utilization >= 100) : undefined;
-  return binding ?? rows.find((row) => row.key === 'fiveHour') ?? rows[0] ?? null;
+  return (
+    binding ??
+    rows.reduce<PlanUsageDisplayRow | null>(
+      (tightest, row) => (!tightest || row.window.utilization > tightest.window.utilization ? row : tightest),
+      null,
+    )
+  );
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -269,5 +279,8 @@ export function poolHeadline(pool: ProviderPool): PoolHeadline {
   // member it no longer admits still reports a spent window for.
   if (pool.unavailable) return { kind: 'none', reason: pool.unavailable };
   if (pool.members.some((m) => m.state === 'SPENT')) return { kind: 'spent', resetsAt: pool.resetsAt };
-  return { kind: 'none', reason: pool.shared ? 'No key can run' : 'No account can run' };
+  // A pool holding ChatGPT accounts is spent rather than capped: the accounts come back by the hour,
+  // where keys spent to their caps come back with the month (AccountPools' PoolGauge reads the same).
+  const keysOnly = !!pool.shared && !pool.members.some((member) => member.login);
+  return { kind: 'none', reason: keysOnly ? 'No key can run' : 'No account can run' };
 }

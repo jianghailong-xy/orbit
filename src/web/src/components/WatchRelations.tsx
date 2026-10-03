@@ -16,18 +16,18 @@ import {
   describeProgress,
   expiryLabel,
   isLiveWatch,
-  linkId,
   progressOf,
   stripCounts,
+  stripLine,
   stripStaleLine,
   targetHref,
-  thresholdOf,
+  targetName,
+  targetNoun,
   watchBucket,
   watchHref,
   watchProblem,
   watchesFollowedBy,
   watchesFollowing,
-  type WatchThreshold,
 } from '../lib/watches';
 import { CountLine } from './SessionCreatedTasksStrip';
 import { TaskStatusPill } from './TaskStatusPill';
@@ -128,26 +128,6 @@ export function TaskFollowedBy({ taskId }: { taskId: string }) {
   );
 }
 
-const targetNoun = (watches: readonly WatchView[], count: number): string => {
-  const kinds = new Set(watches.flatMap((w) => w.targets.map((t) => t.targetKind)));
-  const noun = kinds.size !== 1 ? 'target' : kinds.has('TASK') ? 'task' : 'session';
-  return count === 1 ? noun : `${noun}s`;
-};
-
-/**
- * What one watch's condition asks for, over the targets its leaf can read: every one of them, any
- * one of them, or a count in between. The count is the predicate's own — an ANY watch over four
- * targets is done after one — so the middle of the line says what the wait needs, not what it
- * covers: "all 4 tasks" is four waits, "any 1 of 4 tasks" is one of four.
- */
-function thresholdLine(t: WatchThreshold, watches: readonly WatchView[]): string {
-  const noun = targetNoun(watches, t.of);
-  if (t.of === 0) return `no ${noun}`;
-  if (t.needed === t.of) return `all ${t.of} ${noun}`;
-  if (t.needed === 1) return `any 1 of ${t.of} ${noun}`;
-  return `${t.needed} of ${t.of} ${noun}`;
-}
-
 /**
  * A session's two relations, in its header: Following — the live watches it is the observer of, so
  * what it is waiting on — and Followed by — the live watches that name it. Each opens its watch rows;
@@ -222,22 +202,7 @@ export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
   const [open, setOpen] = useState(false);
   const waitingOn = watchesFollowing(rowsOf(watchesQ.data), sessionId).filter(isLiveWatch);
   if (waitingOn.length === 0) return null;
-  // Each live target once, however many watches name it, so two watches over the same task never
-  // read "2 targets".
-  const live = [
-    ...new Map(
-      waitingOn
-        .flatMap((w) => w.targets.filter((t) => t.state !== 'GONE'))
-        .map((t) => [`${t.targetKind}:${t.targetResourceId}`, t] as const),
-    ).values(),
-  ];
-  const single = waitingOn.length === 1 && live.length === 1 ? live[0] : null;
-  // What the wait is for when it names no one target: one watch states the threshold its own
-  // condition sets, several — no one condition between them — count the targets they cover.
-  const targetLine =
-    waitingOn.length === 1
-      ? thresholdLine(thresholdOf(waitingOn[0].predicate, live), waitingOn)
-      : `${live.length} ${targetNoun(waitingOn, live.length)}`;
+  const { live, single, targetLine } = stripLine(waitingOn);
   const toggle = () => setOpen((o) => !o);
   return (
     <div className={`bg-tray watch-strip${open ? ' bg-open' : ''}`}>
@@ -292,9 +257,6 @@ export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
     </div>
   );
 }
-
-/** A target by the name the watch carries for it, and by its short id when it carries none. */
-const targetName = (t: WatchTargetView): string => t.targetTitle ?? linkId(t.targetResourceId).slice(0, 8);
 
 /** The session run states' pill colours, as the app's pills use them (index.css `.status-pill`). */
 const SESSION_TARGET_TONE: Record<string, string> = {

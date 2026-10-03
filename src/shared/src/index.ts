@@ -25,6 +25,7 @@ export * from './session-message';
 export * from './session-request';
 export * from './source';
 export * from './task-start';
+export * from './task-run-reason';
 export * from './watch';
 export * from './wiki';
 export * from './wikiArticles';

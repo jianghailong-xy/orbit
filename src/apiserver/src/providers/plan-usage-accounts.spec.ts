@@ -22,6 +22,7 @@ import { transactionDouble } from '../test-support/prisma-transaction-double';
 import { resolveProviderExec } from './custom-provider';
 import {
   accountAfterUsageLimit,
+  accountLabel,
   accountSwitchNotice,
   automaticAccount,
   automaticCodexAccount,
@@ -543,16 +544,31 @@ test("a Claude session is picked and moved by its own accounts' quota, as a Code
   assert.equal(automaticAccount('claude', { ...automatic, codexAccount: 'default' }, ENGINES, claudeUsage, now), WORK);
   assert.equal(accountAfterUsageLimit('claude', { account: 'default', pinned: true }, automatic, ENGINES, claudeUsage, now), null);
   assert.equal(
-    accountSwitchNotice('claude', { from: 'default', to: WORK }, ENGINES),
+    accountSwitchNotice('claude', { from: 'default', to: WORK }, { engines: ENGINES, accountNames: null }),
     'Switched to Work — the usage limit on Default is reached',
   );
 });
 
 test('the line a moved session carries names both accounts the way the picker names them', () => {
-  assert.equal(accountSwitchNotice('codex', { from: 'default', to: WORK }, ENGINES), 'Switched to Work — the usage limit on Default is reached');
-  assert.equal(accountSwitchNotice('codex', { from: WORK, to: 'default' }, ENGINES), 'Switched to Default — the usage limit on Work is reached');
+  const runner = { engines: ENGINES, accountNames: null };
+  assert.equal(accountSwitchNotice('codex', { from: 'default', to: WORK }, runner), 'Switched to Work — the usage limit on Default is reached');
+  assert.equal(accountSwitchNotice('codex', { from: WORK, to: 'default' }, runner), 'Switched to Default — the usage limit on Work is reached');
   assert.equal(
-    accountSwitchNotice('codex', { from: 'default', to: 'c0ffee42' }, ENGINES),
+    accountSwitchNotice('codex', { from: 'default', to: 'c0ffee42' }, runner),
     'Switched to Account c0ffee42 — the usage limit on Default is reached',
+  );
+});
+
+test('the line names an account by what it was renamed to in Orbit — Default too — and only on its own engine', () => {
+  const runner = { engines: ENGINES, accountNames: { claude: { default: 'jianghailong.main', [WORK]: 'Research' } } };
+  assert.equal(
+    accountSwitchNotice('claude', { from: WORK, to: 'default' }, runner),
+    'Switched to jianghailong.main — the usage limit on Research is reached',
+  );
+  assert.equal(accountLabel('claude', 'default', runner), 'jianghailong.main');
+  // Codex's Default and Work are other accounts, named only by what the runner reports.
+  assert.equal(
+    accountSwitchNotice('codex', { from: WORK, to: 'default' }, runner),
+    'Switched to Default — the usage limit on Work is reached',
   );
 });

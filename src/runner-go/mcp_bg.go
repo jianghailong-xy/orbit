@@ -74,9 +74,12 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				" kill it. A merge or commit of this session neither waits for it nor stops it: both run" +
 				" beside it and name it in their receipt, and a commit takes any file it is still writing as" +
 				" that file stands. Read its output with bg_output. To be woken when it ends or has news, set" +
-				" wakeOnExit or wakeOnOutput: Orbit then gives this session a new turn saying what happened," +
-				" even if this coding-engine process has been recycled in the meantime — so a wait for CI or a" +
-				" deploy can end your turn instead of holding it open.",
+				" wakeOnExit or wakeOnOutput: Orbit then tells this session what happened, even if this" +
+				" coding-engine process has been recycled in the meantime — so a wait for CI or a deploy can end" +
+				" your turn instead of holding it open. News that comes while you are idle opens a new turn. A job" +
+				" that exits while you are still working in a turn is written into that turn, read at your next" +
+				" tool call, where this engine accepts a message mid-turn; new output always waits for your next" +
+				" turn.",
 			"inputSchema": obj(map[string]interface{}{
 				"command": map[string]interface{}{
 					"type":        "string",
@@ -95,9 +98,10 @@ func bgToolDescriptors(obj func(map[string]interface{}, ...string) map[string]in
 				},
 				"wakeOnExit": map[string]interface{}{
 					"type": "boolean",
-					"description": "Wake this session when the command exits: a new turn names the job, how it ended (exit" +
-						" code, or why it was killed), the end of its output and the output file. Not sent when you kill" +
-						" it yourself or when the session ends.",
+					"description": "Wake this session when the command exits, naming the job, how it ended (exit code, or" +
+						" why it was killed), the end of its output and the output file: in a new turn, or written into" +
+						" the turn you are working in if it exits mid-turn, where this engine accepts a message mid-turn." +
+						" Not sent when you kill it yourself or when the session ends.",
 				},
 				"wakeOnOutput": map[string]interface{}{
 					"type": "boolean",

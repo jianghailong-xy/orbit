@@ -293,12 +293,19 @@ public enum RunnerPageFormat {
     public struct AccountLine: Equatable, Sendable, Identifiable {
         /// `default`, or the account's id on that runner.
         public let id: String
-        /// `Default`, what the user called it, or `Account <id>`.
+        /// What the user called it — Default too, once renamed in Orbit — else `Default`, or
+        /// `Account <id>`.
         public let name: String
         /// Where its login lives on that machine, with the home directory as `~`.
         public let home: String?
         public let auth: String?
         public var isDefault: Bool { id == CodexAccounts.defaultID }
+        /// The line under the name: where its login lives — and, for a Default renamed in Orbit, that
+        /// it is still the machine's own login (web's DEFAULT mark).
+        public var subtitle: String? {
+            guard isDefault, name != "Default" else { return home }
+            return [home, "Default"].compactMap { $0 }.joined(separator: " · ")
+        }
         /// What a sign-in on this line names: the account, when the runner lists more than one; nil —
         /// the runner's own login, as every sign-in was before accounts — when it doesn't.
         public let signInAccount: String?
@@ -320,6 +327,16 @@ public enum RunnerPageFormat {
                         home: (account.home ?? account.codexHome).map(tildePath),
                         auth: account.auth, signInAccount: account.id)
         }
+    }
+
+    /// What Add Account calls a new account until the user names it: its number on the machine,
+    /// Default being the first — or the next number free, so it never takes a name an account already
+    /// goes by (web `defaultAccountName`).
+    public static func defaultAccountName(_ accounts: [RunnerEngineAccount]) -> String {
+        let taken = Set(accounts.map { CodexAccounts.label($0.id, accounts: accounts) })
+        var number = max(accounts.count, 1) + 1
+        while taken.contains("Account \(number)") { number += 1 }
+        return "Account \(number)"
     }
 
     /// What became of the last removal asked of this account: under way, or refused in the machine's

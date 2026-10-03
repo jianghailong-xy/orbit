@@ -108,7 +108,7 @@ public enum SessionProviderChoices {
             }
             return AccountChoice(
                 id: account.id,
-                label: account.id == CodexAccounts.defaultID ? "Default" : (account.name ?? "Account \(account.id)"),
+                label: CodexAccounts.label(account.id, accounts: accounts),
                 quota: row.map { r in "\(compactWindowLabel(r.label)) \(r.percent)%" },
                 nearLimit: (row?.window.utilization ?? 0) >= 90,
                 unavailable: account.auth == "no" ? "Not signed in" : nil)
@@ -156,6 +156,14 @@ public enum SessionProviderChoices {
         health?.installed == false ? "Not installed" : nil
     }
 
+    /// Why a pool none of whose credentials can run is greyed out, in the pool's own words: what it holds
+    /// is what its reader can run on — its ChatGPT accounts first and its keys when none can (2026-10-03),
+    /// built for one of the people its owner added the same way it is for its owner (web's
+    /// `providerChoices`, ProviderPool.unavailable). Mirrors web's `providerChoices`.
+    static func poolBlocker(_ pool: ProviderPool) -> String? {
+        ProviderPools.unavailableReason(pool)
+    }
+
     /// The picker's contents. Engines always come first and are always all three: they are what a
     /// user with nothing configured can still run, so the list is never empty.
     ///
@@ -193,9 +201,10 @@ public enum SessionProviderChoices {
         // Like a configured provider, a pool needs the CLI it runs on and nothing signed in: each run
         // carries one of its members' credentials. A missing CLI outranks the members, because it is
         // the one of the two a runner can fix. A shared pool's CLI is Codex, whose runs carry a
-        // session token for the pool's gateway.
+        // session token for the pool's gateway — and so is a pool of one's own ChatGPT accounts', whose
+        // accounts the server holds: which engine a pool runs is its own, not whether it is shared.
         let poolChoices = pools.map { pool -> ProviderChoice in
-            let runtime = pool.shared != nil ? "codex" : "claude"
+            let runtime = ProviderPools.runsCodex(pool) ? "codex" : "claude"
             let blocker = byokBlocker(health(runtime))
             return ProviderChoice(
                 slug: pool.slug,
@@ -203,10 +212,12 @@ public enum SessionProviderChoices {
                 kind: .pool,
                 brandKey: enginePreset[runtime],
                 modelLabel: modelLabel(for: pool.slug, configured: configured, catalog: catalog),
-                unavailable: blocker ?? ProviderPools.unavailableReason(pool),
+                unavailable: blocker ?? poolBlocker(pool),
                 fixEngine: blocker == nil ? nil : runtime,
                 poolSize: pool.members.count,
-                poolUnit: pool.shared != nil ? "key" : nil,
+                // 'N keys' only where the pool really is nothing but keys; a pool holding ChatGPT accounts
+                // counts accounts (the reader's own words — ProviderPools.memberNoun).
+                poolUnit: pool.shared != nil && !pool.members.contains { $0.login != nil } ? "key" : nil,
                 note: ProviderPools.spentNote(pool, now: now))
         }
         let poolSlugs = Set(pools.map(\.slug))

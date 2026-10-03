@@ -72,7 +72,7 @@
 ### 3.4 管理
 
 - 新建：Move 面板里的 `New Folder…`（建好直接把当前会话放进去）；列表右上角 ≡ 菜单里的 `New Folder…`。
-- 改名、删除：长按文件夹行 → `Rename…`、`Delete Folder…`。删除确认：`Delete “<name>”?` / `The N sessions in it move back to the list. No session is deleted.`
+- 改名、删除：长按文件夹行 → `Rename…`、`Delete Folder…`。删除确认：`Delete “<name>”?` / `Its sessions move back to the list. No session is deleted.`
 
 ## 4. Move 面板
 

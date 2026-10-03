@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Session 列表：挂在 watch 上的会话（web）</title>
+<script>
+  // ?board=1 / ?board=2 renders one board at a time, so each PNG stays readable.
+  const board = new URLSearchParams(location.search).get('board');
+  if (board) document.documentElement.dataset.board = board;
+</script>
+<style>
+  /* Tokens copied from src/web/src/index.css so the mockup measures like the app. */
+  .light {
+    --bg-raised: #ffffff; --bg-hover: #f5f6f7; --bg-subtle: #fafbfc; --bg-sunken: #f7f8fa;
+    --border: #dee0e3; --border-subtle: #eceef1;
+    --text-1: #1f2329; --text-2: #646a73; --text-3: #8f959e; --text-4: #a8acb3;
+    --brand: #3370ff; --brand-strong: #245ae0; --brand-tint: #eaf1ff; --brand-border: #bcd3ff;
+    --warning-solid: #fa8c16; --success-solid: #2ea121; --success: #1a7f37; --success-bg: #e8f6ec;
+    --chip-orange-bg: #fdf2e5; --chip-orange: #9a6220;
+    --chip-blue-bg: #e9f0fe; --chip-blue: #2f5fc4;
+    --chip-green-bg: #e7f5ea; --chip-green: #23773a;
+    --dot: #2ea121;
+  }
+  .dark {
+    --bg-raised: #2b2b2e; --bg-hover: #343437; --bg-subtle: #252528; --bg-sunken: #17171a;
+    --border: #424246; --border-subtle: #343437;
+    --text-1: #c9ced5; --text-2: #a7adb6; --text-3: #8b9099; --text-4: #71767f;
+    --brand: #5b8cff; --brand-strong: #7aa2ff; --brand-tint: rgba(91,140,255,.16); --brand-border: rgba(91,140,255,.32);
+    --warning-solid: #e0902b; --success-solid: #3fb45b; --success: #4ac26b; --success-bg: rgba(46,161,33,.18);
+    --chip-orange-bg: rgba(250,140,22,.22); --chip-orange: #f0b46b;
+    --chip-blue-bg: rgba(51,112,255,.22); --chip-blue: #9dbaff;
+    --chip-green-bg: rgba(46,161,33,.22); --chip-green: #84d39a;
+    --dot: #3fb45b;
+  }
+
+  * { box-sizing: border-box; }
+  html[data-board="1"] #b2, html[data-board="2"] #b1 { display: none; }
+  body {
+    margin: 0; padding: 34px 34px 44px; background: #ececef; color: #16161a;
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans CJK SC", "Segoe UI", Roboto, sans-serif;
+    width: 1260px;
+  }
+  .board + .board { margin-top: 60px; }
+  h1 { margin: 0 0 6px; font-size: 20px; font-weight: 650; }
+  .lede { margin: 0 0 22px; max-width: 1150px; color: #4b4f57; }
+  .lede b { color: #16161a; }
+  code { font-family: ui-monospace, "Noto Sans Mono", monospace; font-size: 12px; background: rgba(0,0,0,.06); padding: 1px 4px; border-radius: 4px; }
+  h2 { margin: 0 0 10px; font-size: 14px; font-weight: 650; }
+  h2.before { color: #b3380a; }
+  h2.after { color: #1a7f37; }
+  h3 { margin: 0 0 10px; font-size: 14px; font-weight: 650; color: #2b2f36; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 34px; align-items: start; }
+
+  /* ---- the session column, as WorkspaceView draws it ---- */
+  .panel { border-radius: 12px; overflow: hidden; border: 1px solid rgba(0,0,0,.10); box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+  .dark.panel { border-color: rgba(255,255,255,.08); }
+  .session-col { background: var(--bg-raised); padding: 14px 20px 10px; color: var(--text-1); }
+  .w480, .w280 { width: fit-content; }
+  .w480 .session-col { width: 520px; }
+  .w280 .session-col { width: 320px; }
+  .session-col-head { display: flex; align-items: center; gap: 10px; height: 34px; padding-left: 2px; }
+  .workspace-status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dot); flex: none; }
+  .session-col-title { font-size: 15px; font-weight: 600; }
+  .session-scope-menu { margin-left: auto; display: flex; align-items: center; gap: 4px; padding: 2px 6px; color: var(--text-3); font-size: 13px; }
+  .session-scope-menu svg { width: 10px; height: 10px; fill: var(--text-4); }
+
+  .session-row {
+    position: relative; display: flex; align-items: center; gap: 12px;
+    height: 64px; padding: 0 8px; border-bottom: 1px solid var(--bg-hover);
+  }
+  .session-row:last-child { border-bottom: 0; }
+  .session-icon { display: flex; width: 16px; flex: none; }
+  .session-icon svg { width: 16px; height: 16px; fill: currentColor; display: block; }
+  .session-main { flex: 1; min-width: 0; }
+  .session-title-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .session-title { flex: 1; min-width: 0; font-size: 14px; color: var(--text-1); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .session-time { flex: none; font-size: 12.5px; color: var(--text-4); }
+  .session-sub { display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 4px; }
+  .session-tag-chips { flex: 0 1 auto; min-width: 0; max-width: min(30%, 112px); display: flex; align-items: center; gap: 5px; }
+  .session-tag-named { display: flex; flex: 1 1 auto; min-width: 0; overflow: hidden; }
+  .session-tag-chip { display: inline-flex; align-items: center; min-width: 0; max-width: 72px; height: 18px; padding: 0 7px; border-radius: 9px; font-size: 11.5px; line-height: 1; }
+  .session-tag-chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip-orange { color: var(--chip-orange); background: var(--chip-orange-bg); }
+  .chip-blue { color: var(--chip-blue); background: var(--chip-blue-bg); }
+  .chip-green { color: var(--chip-green); background: var(--chip-green-bg); }
+  .session-tag-more { flex: none; font-size: 11px; color: var(--text-4); }
+  .session-preview { flex: 1; min-width: 0; font-size: 13px; color: var(--text-2); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tone-running { color: var(--brand); }
+  .tone-approval { color: var(--warning-solid); }
+  .tone-queued, .tone-background, .tone-watching { color: var(--text-3); }
+
+  .g-brand { color: var(--brand); }
+  .g-warn { color: var(--warning-solid); }
+  .g-muted { color: var(--text-3); }
+
+  /* ---- markup for the change ---- */
+  .mk { position: relative; outline: 1.5px dashed #d4380d; outline-offset: 3px; border-radius: 3px; }
+  .mk::after {
+    content: attr(data-n); position: absolute; top: -12px; right: -13px; z-index: 3;
+    width: 17px; height: 17px; border-radius: 50%; background: #d4380d; color: #fff;
+    font: 600 11px/17px -apple-system, "Noto Sans CJK SC", sans-serif; text-align: center;
+  }
+  .session-row.marked { overflow: visible; }
+  .mk.left::after { left: -14px; right: auto; }
+  .session-preview.mk { outline-offset: 1px; }
+  svg.ico { width: 1.05em; height: 1.05em; vertical-align: -0.17em; fill: currentColor; color: #6b7078; }
+
+  .notes { margin: 12px 0 0; padding: 0 0 0 2px; list-style: none; font-size: 13px; color: #3f444c; }
+  .notes li { position: relative; padding-left: 24px; margin: 0 0 6px; }
+  .notes li .n {
+    position: absolute; left: 0; top: 2px; width: 17px; height: 17px; border-radius: 50%;
+    font: 600 11px/17px -apple-system, "Noto Sans CJK SC", sans-serif; text-align: center; color: #fff; background: #d4380d;
+  }
+  .notes li .n.grey { background: #9aa0a8; }
+  .notes.before li .n { background: #b3380a; }
+
+  /* ---- conversation header + the Watching strip (unchanged, for reference) ---- */
+  .detail { margin-top: 30px; display: grid; grid-template-columns: 560px 1fr; gap: 34px; align-items: center; }
+  .conv { background: var(--bg-raised); padding: 14px 18px 16px; }
+  .conv-title { font-size: 15px; font-weight: 600; color: var(--text-1); }
+  .conv-sub { font-size: 12.5px; color: var(--text-3); margin: 2px 0 14px; }
+  .conv-sub b { color: var(--text-2); font-weight: 500; }
+  .bg-tray { border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-subtle); overflow: hidden; margin-bottom: 8px; }
+  .bg-tray-row { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 2px 6px 2px 10px; font-size: 12px; }
+  .bg-tray-ico { flex: none; color: var(--text-3); display: flex; }
+  .bg-tray-ico svg { width: 13px; height: 13px; fill: currentColor; }
+  .bg-tray-title { color: var(--text-1); font-weight: 500; flex: none; }
+  .ct-one { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--brand); }
+  .bg-tray-count { color: var(--text-3); }
+  .wt-spacer { flex: 1; }
+  .wt-expand { color: var(--text-3); padding: 0 4px; }
+  .status-pill { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 9px 0 7px; border-radius: 999px; font-size: 11.5px; font-weight: 600; white-space: nowrap; flex: none; }
+  .status-pill.running { background: var(--brand-tint); color: var(--brand-strong); }
+  .status-pill svg { width: 12px; height: 12px; fill: currentColor; }
+  .composer-ghost { height: 38px; border: 1px solid var(--border); border-radius: 10px; color: var(--text-4); font-size: 13px; display: flex; align-items: center; padding: 0 12px; }
+  .detail-say { font-size: 13px; color: #3f444c; }
+  .detail-say p { margin: 0 0 8px; }
+  .echo { color: #1a7f37; font-weight: 600; }
+
+  /* ---- copy decision ---- */
+  .copy { margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 34px; }
+  .opt-h { display: flex; align-items: baseline; gap: 8px; margin: 0 0 8px; }
+  .opt-h b { font-size: 14px; }
+  .tag-rec { font-size: 11px; font-weight: 600; color: #1a7f37; background: #e3f4e7; border-radius: 999px; padding: 1px 8px; }
+  .tag-alt { font-size: 11px; font-weight: 600; color: #6b7078; background: #e2e4e8; border-radius: 999px; padding: 1px 8px; }
+  .opt .session-col { padding-top: 6px; padding-bottom: 6px; }
+  .pro, .con { margin: 8px 0 0; font-size: 12.5px; color: #3f444c; padding-left: 18px; position: relative; }
+  .pro::before { content: '＋'; position: absolute; left: 0; color: #1a7f37; font-weight: 700; }
+  .con::before { content: '－'; position: absolute; left: 0; color: #b3380a; font-weight: 700; }
+
+  /* ---- board 2: the state matrix ---- */
+  .matrix { display: grid; grid-template-columns: 524px 1fr; column-gap: 26px; align-items: stretch; }
+  .matrix .panel { border-radius: 12px; }
+  .matrix .rows .session-col { padding: 4px 20px; }
+  .rules { display: flex; flex-direction: column; padding-top: 5px; }
+  .rule { height: 64px; display: flex; flex-direction: column; justify-content: center; font-size: 12.5px; color: #3f444c; }
+  .rule b { font-size: 13px; color: #16161a; font-weight: 650; }
+  .rule .k { display: inline-block; min-width: 20px; height: 18px; margin-right: 6px; border-radius: 9px; text-align: center; font: 600 11px/18px -apple-system, "Noto Sans CJK SC", sans-serif; color: #fff; background: #9aa0a8; vertical-align: 1px; }
+  .rule.new .k { background: #d4380d; }
+  .rule.keep b { color: #4b4f57; }
+  .sep { height: 1px; background: #d5d7dc; margin: 2px 0; }
+  .tiers { margin-top: 34px; display: grid; grid-template-columns: 524px 1fr; gap: 26px; align-items: start; }
+  .tiers h2 { color: #2b2f36; }
+  .cap { margin: 8px 0 0; font-size: 12.5px; color: #6b7078; }
+  .spin { animation: none; }
+</style>
+
+<body>
+<!-- Icon sprite: the antd outlined icons the web row uses (@ant-design/icons-svg paths). -->
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="eye" viewBox="64 64 896 896"><path d="M942.2 486.2C847.4 286.5 704.1 186 512 186c-192.2 0-335.4 100.5-430.2 300.3a60.3 60.3 0 000 51.5C176.6 737.5 319.9 838 512 838c192.2 0 335.4-100.5 430.2-300.3 7.7-16.2 7.7-35 0-51.5zM512 766c-161.3 0-279.4-81.8-362.7-254C232.6 339.8 350.7 258 512 258c161.3 0 279.4 81.8 362.7 254C791.5 684.2 673.4 766 512 766zm-4-430c-97.2 0-176 78.8-176 176s78.8 176 176 176 176-78.8 176-176-78.8-176-176-176zm0 288c-61.9 0-112-50.1-112-112s50.1-112 112-112 112 50.1 112 112-50.1 112-112 112z"/></symbol>
+  <symbol id="msg" viewBox="64 64 896 896"><path d="M464 512a48 48 0 1096 0 48 48 0 10-96 0zm200 0a48 48 0 1096 0 48 48 0 10-96 0zm-400 0a48 48 0 1096 0 48 48 0 10-96 0zm661.2-173.6c-22.6-53.7-55-101.9-96.3-143.3a444.35 444.35 0 00-143.3-96.3C630.6 75.7 572.2 64 512 64h-2c-60.6.3-119.3 12.3-174.5 35.9a445.350 445.350 0 00-142 96.5c-40.9 41.3-73 89.3-95.2 142.8-23 55.4-34.6 114.3-34.3 174.9A449.4 449.4 0 00112 714v152a46 46 0 0046 46h152.1A449.4 449.4 0 00510 960h2.1c59.9 0 118-11.600 172.7-34.3a444.48 444.48 0 00142.8-95.2c41.3-40.9 73.8-88.7 96.5-142 23.6-55.2 35.6-113.9 35.9-174.5.3-60.9-11.5-120-34.8-175.6zm-151.1 438C704 845.8 611 884 512 884h-1.7c-60.3-.3-120.2-15.3-173.1-43.5l-8.4-4.5H188V695.2l-4.5-8.4C155.3 633.9 140.3 574 140 513.7c-.4-99.7 37.7-193.3 107.6-263.8 69.8-70.5 163.1-109.5 262.8-109.9h1.7c50 0 98.5 9.7 144.2 28.9 44.6 18.7 84.6 45.6 119 80 34.3 34.3 61.3 74.4 80 119 19.4 46.2 29.1 95.2 28.9 145.8-.6 99.6-39.7 192.9-110.1 262.7z"/></symbol>
+  <symbol id="spin" viewBox="0 0 1024 1024"><path d="M988 548c-19.9 0-36-16.1-36-36 0-59.4-11.6-117-34.6-171.3a440.45 440.45 0 00-94.3-139.9 437.71 437.71 0 00-139.9-94.3C629 83.6 571.4 72 512 72c-19.9 0-36-16.1-36-36s16.1-36 36-36c69.1 0 136.2 13.5 199.3 40.3C772.3 66 827 103 874 150c47 47 83.900 101.8 109.7 162.7 26.7 63.1 40.2 130.2 40.2 199.3.1 19.9-16 36-35.9 36z"/></symbol>
+  <symbol id="pause" viewBox="64 64 896 896"><path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372zm-88-532h-48c-4.4 0-8 3.6-8 8v304c0 4.4 3.6 8 8 8h48c4.4 0 8-3.6 8-8V360c0-4.4-3.6-8-8-8zm224 0h-48c-4.4 0-8 3.6-8 8v304c0 4.4 3.6 8 8 8h48c4.4 0 8-3.6 8-8V360c0-4.4-3.6-8-8-8z"/></symbol>
+  <symbol id="code" viewBox="64 64 896 896"><path d="M516 673c0 4.4 3.4 8 7.5 8h185c4.1 0 7.5-3.6 7.5-8v-48c0-4.4-3.4-8-7.5-8h-185c-4.1 0-7.5 3.6-7.5 8v48zm-194.9 6.1l192-161c3.8-3.2 3.8-9.1 0-12.3l-192-160.9A7.95 7.95 0 00308 351v62.7c0 2.4 1 4.6 2.9 6.1L420.7 512l-109.8 92.2a8.1 8.1 0 00-2.9 6.1V673c0 6.8 7.9 10.5 13.1 6.1zM880 112H144c-17.7 0-32 14.3-32 32v736c0 17.7 14.3 32 32 32h736c17.7 0 32-14.3 32-32V144c0-17.7-14.3-32-32-32zm-40 728H184V184h656v656z"/></symbol>
+  <symbol id="check" viewBox="64 64 896 896"><path d="M699 353h-46.9c-10.2 0-19.9 4.9-25.9 13.3L469 584.3l-71.2-98.8c-6-8.3-15.6-13.3-25.9-13.3H325c-6.5 0-10.3 7.4-6.5 12.7l124.6 172.8a31.8 31.8 0 0051.7 0l210.6-292c3.9-5.3.1-12.7-6.4-12.7z"/><path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm0 820c-205.4 0-372-166.6-372-372s166.6-372 372-372 372 166.6 372 372-166.6 372-372 372z"/></symbol>
+  <symbol id="down" viewBox="64 64 896 896"><path d="M884 256h-75c-5.1 0-9.9 2.5-12.9 6.6L512 654.2 227.9 262.6c-3-4.1-7.8-6.6-12.9-6.6h-75c-6.5 0-10.3 7.4-6.5 12.7l352.6 486.1c12.8 17.6 39 17.6 51.7 0l352.6-486.1c3.9-5.3.1-12.7-6.4-12.7z"/></symbol>
+</svg>
+
+<!-- ================================================================== BOARD 1 -->
+<section class="board" id="b1">
+  <h1>Session 列表：挂在 watch 上、等别的会话做完再自动接着干的会话</h1>
+  <p class="lede">
+    「会话间消息参数与回复设计」此刻挂在一个 watch 上：等「执行任务：会话间请求与回复：修复 P1 审查发现的问题」这一轮结束，Orbit 会自动唤醒它。
+    点进去，头部写 <b>Watching 1 target</b>，停车栏写 <b>Watching</b>；但 web 列表行还是 <b><svg class="ico"><use href="#msg"/></svg> Waiting for your reply</b> + 上一条回复的摘要，
+    读起来像「轮到你回复了」，其实什么都不用做。macOS / iOS 的列表行早已画成 <svg class="ico"><use href="#eye"/></svg> Watching，只有 web 列表没接上
+    （<code>StatusIcon</code> / <code>sessionLine</code> 拿不到 watch；同一页面其实已经拉了 <code>watchesQuery</code>，不需要改接口）。
+  </p>
+
+  <div class="pair">
+    <div class="col">
+      <h2 class="before">现状 · web</h2>
+      <div class="panel light w480"><div class="session-col">
+        <div class="session-col-head"><span class="workspace-status-dot"></span><span class="session-col-title">orbit</span><span class="session-scope-menu">Open <svg><use href="#down"/></svg></span></div>
+        <div class="session-row">
+          <span class="session-icon g-brand"><svg><use href="#spin"/></svg></span>
+          <div class="session-main">
+            <div class="session-title-row"><div class="session-title">执行任务：会话间请求与回复：修复 P1 审查发现的问题</div><span class="session-time">just now</span></div>
+            <div class="session-sub"><div class="session-preview tone-running">Running Bash…</div></div>
+          </div>
+        </div>
+        <div class="session-row">
+          <span class="session-icon g-muted"><svg><use href="#msg"/></svg></span>
+          <div class="session-main">
+            <div class="session-title-row"><div class="session-title">会话间消息参数与回复设计</div><span class="session-time">22m ago</span></div>
+            <div class="session-sub">
+              <span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-orange"><span>项目架构</span></span></span><span class="session-tag-more">+1</span></span>
+              <div class="session-preview">你说的"绘画"应该是"会话"吧。核实过了：本会话的四次契约修订都已经进了 main</div>
+            </div>
+          </div>
+        </div>
+        <div class="session-row">
+          <span class="session-icon g-muted"><svg><use href="#msg"/></svg></span>
+          <div class="session-main">
+            <div class="session-title-row"><div class="session-title">排队区的 watch 唤醒卡片</div><span class="session-time">1h ago</span></div>
+            <div class="session-sub">
+              <span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-blue"><span>Watch</span></span></span></span>
+              <div class="session-preview">改好了：排队区的唤醒卡和送达后是同一个组件，原文默认折叠。要我合并吗？</div>
+            </div>
+          </div>
+        </div>
+        <div class="session-row">
+          <span class="session-icon g-muted"><svg><use href="#check"/></svg></span>
+          <div class="session-main">
+            <div class="session-title-row"><div class="session-title">部署 0.1.204</div><span class="session-time">3h ago</span></div>
+            <div class="session-sub">
+              <span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-green"><span>部署</span></span></span></span>
+              <div class="session-preview">已部署：apiserver 迁移已应用，runner 自更新完成。</div>
+            </div>
+          </div>
+        </div>
+      </div></div>
+      <ul class="notes before">
+        <li><span class="n">!</span>第 2 行和第 3 行长得一模一样：<svg class="ico"><use href="#msg"/></svg> + 回复摘要。真正在等你的是第 3 行，第 2 行不需要你。</li>
+        <li><span class="n">!</span>同一个会话，列表说「等你回复」，头部和停车栏说「Watching」——两处说法打架。</li>
+      </ul>
+    </div>
+
+    <div class="col">
+      <h2 class="after">改后</h2>
+      <div class="panel light w480"><div class="session-col">
+        <div class="session-col-head"><span class="workspace-status-dot"></span><span class="session-col-title">orbit</span><span class="session-scope-menu">Open <svg><use href="#down"/></svg></span></div>
+        <div class="session-row">
+          <span class="session-icon g-brand"><svg><use href="#spin"/></svg></span>
+          <div class="session-main">
+            <div class="session-title-row"><div class="session-title">执行任务：会话间请求与回复：修复 P1 审查发现的问题</div><span class="session-time">just now</span></div>
+            <div class="session-sub"><div class="session-preview tone-running">Running Bash…</div></div>
+          </div>
+        </div>
+        <div class="session-row marked">
+          <span class="session-icon g-muted mk left" data-n="1"><svg><use href="#eye"/></svg></span>
+          <div class="session-main">
+            <div class="session-title-row"><div class="session-title">会话间消息参数与回复设计</div><span class="session-time">22m ago</span></div>
+            <div class="session-sub">
+              <span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-orange"><span>项目架构</span></span></span><span class="session-tag-more">+1</span></span>
+              <div class="session-preview tone-watching mk" data-n="2">Watching 执行任务：会话间请求与回复：修复 P1 审查发现的问题</div>
+            </div>
+          </div>
+        </div>
+        <div class="session-row">
+          <span class="session-icon g-muted"><svg><use href="#msg"/></svg></span>
+          <div class="session-main">
+            <div class="session-title-row"><div class="session-title">排队区的 watch 唤醒卡片</div><span class="session-time">1h ago</span></div>
+            <div class="session-sub">
+              <span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-blue"><span>Watch</span></span></span></span>
+              <div class="session-preview">改好了：排队区的唤醒卡和送达后是同一个组件，原文默认折叠。要我合并吗？</div>
+            </div>
+          </div>
+        </div>
+        <div class="session-row">
+          <span class="session-icon g-muted"><svg><use href="#check"/></svg></span>
+          <div class="session-main">
+            <div class="session-title-row"><div class="session-title">部署 0.1.204</div><span class="session-time">3h ago</span></div>
+            <div class="session-sub">
+              <span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-green"><span>部署</span></span></span></span>
+              <div class="session-preview">已部署：apiserver 迁移已应用，runner 自更新完成。</div>
+            </div>
+          </div>
+        </div>
+      </div></div>
+      <ul class="notes">
+        <li><span class="n">1</span>图标：<svg class="ico"><use href="#msg"/></svg> → 灰色的眼睛，静止不动（它在等，不是在干活）。和停车栏是同一只眼；悬停提示 <b>Watching 1 target</b>，与头部同一个词。</li>
+        <li><span class="n">2</span>第二行：回复摘要 → 停车栏折叠行的那一句「Watching + 目标名」，灰色状态行（与 Queued / Background process 同色）。标签照旧打头。</li>
+        <li><span class="n grey">=</span>标题、时间、标签都不动。条件成立、会话被唤醒后，眼睛自动换成转圈。</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="detail">
+    <div class="panel light"><div class="conv">
+      <div class="conv-title">会话间消息参数与回复设计</div>
+      <div class="conv-sub"><b>Watching 1 target</b> · Open · 22m ago</div>
+      <div class="bg-tray"><div class="bg-tray-row">
+        <span class="bg-tray-ico"><svg><use href="#eye"/></svg></span>
+        <span class="bg-tray-title">Watching</span>
+        <span class="ct-one">执行任务：会话间请求与回复：修复 P1 审查发现的问题</span>
+        <span class="status-pill running"><svg><use href="#spin"/></svg>Running</span>
+        <span class="wt-spacer"></span><span class="wt-expand">▸</span>
+      </div></div>
+      <div class="composer-ghost">Reply…</div>
+    </div></div>
+    <div class="detail-say">
+      <h3>点进会话（已有，不改）</h3>
+      <p>头部的状态词和输入框上方的 Watching 停车栏，web 早就有了。</p>
+      <p><span class="echo">列表第二行 = 这条停车栏折叠行的一行回声</span>：同一个目标名、同一只眼睛、同一个词。
+        在列表里看到的，点进来一眼就能对上。</p>
+      <p>停车栏里的状态胶囊（Running）不搬进列表：列表一行放不下，点进来就有。</p>
+    </div>
+  </div>
+
+  <div class="copy">
+    <div class="opt">
+      <div class="opt-h"><b>第二行文案 A</b><span class="tag-rec">推荐</span></div>
+      <div class="panel light w480"><div class="session-col">
+        <div class="session-row">
+          <span class="session-icon g-muted"><svg><use href="#eye"/></svg></span>
+          <div class="session-main">
+            <div class="session-title-row"><div class="session-title">会话间消息参数与回复设计</div><span class="session-time">22m ago</span></div>
+            <div class="session-sub">
+              <span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-orange"><span>项目架构</span></span></span><span class="session-tag-more">+1</span></span>
+              <div class="session-preview tone-watching">Watching 执行任务：会话间请求与回复：修复 P1 审查发现的问题</div>
+            </div>
+          </div>
+        </div>
+      </div></div>
+      <p class="pro">直接说出在等谁；和停车栏折叠行逐字一致（多目标时也一样，见下一张）。</p>
+      <p class="con">macOS / iOS 的列表行今天写的是 B，要一起改成 A（共用的 OrbitKit <code>SessionLine</code> 一处），三端才一致。</p>
+    </div>
+    <div class="opt">
+      <div class="opt-h"><b>第二行文案 B</b><span class="tag-alt">备选</span></div>
+      <div class="panel light w480"><div class="session-col">
+        <div class="session-row">
+          <span class="session-icon g-muted"><svg><use href="#eye"/></svg></span>
+          <div class="session-main">
+            <div class="session-title-row"><div class="session-title">会话间消息参数与回复设计</div><span class="session-time">22m ago</span></div>
+            <div class="session-sub">
+              <span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-orange"><span>项目架构</span></span></span><span class="session-tag-more">+1</span></span>
+              <div class="session-preview tone-watching">Watching 1 target · 0 met</div>
+            </div>
+          </div>
+        </div>
+      </div></div>
+      <p class="pro">macOS / iOS 列表行现在就是这句，只改 web。</p>
+      <p class="con">看不出在等谁；单个目标时「0 met」在唤醒前永远是 0，等于没说。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================== BOARD 2 -->
+<section class="board" id="b2">
+  <h1>改后 · 各种情况（从上到下 = 优先级从高到低）</h1>
+  <p class="lede">
+    眼睛只在一种情况下出现：会话停着（AWAITING_INPUT），并且有活着的（ACTIVE / PAUSED）<code>RESUME_SESSION</code> watch 会唤醒它——
+    和头部状态词、停车栏是同一个集合（<code>watchesFollowing</code>）。比它更急的状态照旧压过它；它压过后台进程（契约 §9.2：watch 不借后台进程的图标和文案）。
+  </p>
+
+  <div class="matrix">
+    <div class="panel light rows"><div class="session-col">
+      <div class="session-row">
+        <span class="session-icon g-warn"><svg><use href="#pause"/></svg></span>
+        <div class="session-main">
+          <div class="session-title-row"><div class="session-title">会话间消息参数与回复设计</div><span class="session-time">22m ago</span></div>
+          <div class="session-sub"><span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-orange"><span>项目架构</span></span></span><span class="session-tag-more">+1</span></span><div class="session-preview tone-approval">Waiting for approval</div></div>
+        </div>
+      </div>
+      <div class="session-row">
+        <span class="session-icon g-brand"><svg><use href="#spin"/></svg></span>
+        <div class="session-main">
+          <div class="session-title-row"><div class="session-title">会话间消息参数与回复设计</div><span class="session-time">just now</span></div>
+          <div class="session-sub"><span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-orange"><span>项目架构</span></span></span><span class="session-tag-more">+1</span></span><div class="session-preview tone-running">Running Bash…</div></div>
+        </div>
+      </div>
+      <div class="sep"></div>
+      <div class="session-row">
+        <span class="session-icon g-muted"><svg><use href="#eye"/></svg></span>
+        <div class="session-main">
+          <div class="session-title-row"><div class="session-title">会话间消息参数与回复设计</div><span class="session-time">22m ago</span></div>
+          <div class="session-sub"><span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-orange"><span>项目架构</span></span></span><span class="session-tag-more">+1</span></span><div class="session-preview tone-watching">Watching 执行任务：会话间请求与回复：修复 P1 审查发现的问题</div></div>
+        </div>
+      </div>
+      <div class="session-row">
+        <span class="session-icon g-muted"><svg><use href="#eye"/></svg></span>
+        <div class="session-main">
+          <div class="session-title-row"><div class="session-title">项目协调：会话间请求与回复</div><span class="session-time">8m ago</span></div>
+          <div class="session-sub"><div class="session-preview tone-watching">Watching all 4 tasks · 1 running · 3/4 done</div></div>
+        </div>
+      </div>
+      <div class="session-row">
+        <span class="session-icon g-muted"><svg><use href="#eye"/></svg></span>
+        <div class="session-main">
+          <div class="session-title-row"><div class="session-title">发版前回归</div><span class="session-time">41m ago</span></div>
+          <div class="session-sub"><span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-green"><span>部署</span></span></span></span><div class="session-preview tone-watching">Watching 6 targets · 2 running · 3/6 done</div></div>
+        </div>
+      </div>
+      <div class="session-row">
+        <span class="session-icon g-muted"><svg><use href="#eye"/></svg></span>
+        <div class="session-main">
+          <div class="session-title-row"><div class="session-title">会话间消息参数与回复设计</div><span class="session-time">22m ago</span></div>
+          <div class="session-sub"><span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-orange"><span>项目架构</span></span></span><span class="session-tag-more">+1</span></span><div class="session-preview tone-watching">Watch paused · 执行任务：会话间请求与回复：修复 P1 审查发现的问题</div></div>
+        </div>
+      </div>
+      <div class="session-row">
+        <span class="session-icon g-muted"><svg><use href="#eye"/></svg></span>
+        <div class="session-main">
+          <div class="session-title-row"><div class="session-title">dev server 联调</div><span class="session-time">2h ago</span></div>
+          <div class="session-sub"><div class="session-preview tone-watching">Watching 执行任务：修复登录跳转</div></div>
+        </div>
+      </div>
+      <div class="sep"></div>
+      <div class="session-row">
+        <span class="session-icon g-muted"><svg><use href="#msg"/></svg></span>
+        <div class="session-main">
+          <div class="session-title-row"><div class="session-title">排队区的 watch 唤醒卡片</div><span class="session-time">1h ago</span></div>
+          <div class="session-sub"><span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-blue"><span>Watch</span></span></span></span><div class="session-preview">改好了：排队区的唤醒卡和送达后是同一个组件，原文默认折叠。要我合并吗？</div></div>
+        </div>
+      </div>
+    </div></div>
+
+    <div class="rules">
+      <div class="rule keep"><b><span class="k">不变</span>有审批 / 确认在等你</b><span>等你的永远排第一，watch 不能把它藏起来。</span></div>
+      <div class="rule keep"><b><span class="k">不变</span>条件成立，会话被唤醒正在跑</b><span>watch 已 MATCHED、不再活着，眼睛自然消失，换成转圈。</span></div>
+      <div class="sep"></div>
+      <div class="rule new"><b><span class="k">新</span>盯一个目标</b><span>点名：Watching + 目标标题（没有标题时用短 id），太长就截断。</span></div>
+      <div class="rule new"><b><span class="k">新</span>一个 watch 盯多个目标</b><span>说条件要什么 + 进度：all 4 tasks / any 1 of 4 tasks，后面接「1 running · 3/4 done」——停车栏折叠行原句。</span></div>
+      <div class="rule new"><b><span class="k">新</span>多个 watch</b><span>数目标（每个目标只算一次）：6 targets，后面同样接进度。</span></div>
+      <div class="rule new"><b><span class="k">新</span>watch 被暂停</b><span>眼睛不变，字改成 Watch paused：暂停期间不会被唤醒，但也不是在等你。</span></div>
+      <div class="rule new"><b><span class="k">新</span>同时还留着后台进程（dev server 等）</b><span>眼睛压过 <svg class="ico"><use href="#code"/></svg> 终端图标：会被唤醒才是这一行的重点；进程照旧在会话里的 Background processes 托盘。</span></div>
+      <div class="sep"></div>
+      <div class="rule keep"><b><span class="k">不变</span>没有 watch，真的在等你回复</b><span><svg class="ico"><use href="#msg"/></svg> + 回复摘要，保持原样——从此 <svg class="ico"><use href="#msg"/></svg> 只代表「轮到你」。</span></div>
+    </div>
+  </div>
+
+  <div class="tiers">
+    <div>
+      <h2>深色</h2>
+      <div class="panel dark w480"><div class="session-col">
+        <div class="session-row">
+          <span class="session-icon g-brand"><svg><use href="#spin"/></svg></span>
+          <div class="session-main">
+            <div class="session-title-row"><div class="session-title">执行任务：会话间请求与回复：修复 P1 审查发现的问题</div><span class="session-time">just now</span></div>
+            <div class="session-sub"><div class="session-preview tone-running">Running Bash…</div></div>
+          </div>
+        </div>
+        <div class="session-row">
+          <span class="session-icon g-muted"><svg><use href="#eye"/></svg></span>
+          <div class="session-main">
+            <div class="session-title-row"><div class="session-title">会话间消息参数与回复设计</div><span class="session-time">22m ago</span></div>
+            <div class="session-sub"><span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-orange"><span>项目架构</span></span></span><span class="session-tag-more">+1</span></span><div class="session-preview tone-watching">Watching 执行任务：会话间请求与回复：修复 P1 审查发现的问题</div></div>
+          </div>
+        </div>
+        <div class="session-row">
+          <span class="session-icon g-muted"><svg><use href="#msg"/></svg></span>
+          <div class="session-main">
+            <div class="session-title-row"><div class="session-title">排队区的 watch 唤醒卡片</div><span class="session-time">1h ago</span></div>
+            <div class="session-sub"><span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-blue"><span>Watch</span></span></span></span><div class="session-preview">改好了：排队区的唤醒卡和送达后是同一个组件，原文默认折叠。要我合并吗？</div></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+    <div>
+      <h2>默认宽度（320px 列）</h2>
+      <div class="panel light w280"><div class="session-col">
+        <div class="session-row">
+          <span class="session-icon g-muted"><svg><use href="#eye"/></svg></span>
+          <div class="session-main">
+            <div class="session-title-row"><div class="session-title">会话间消息参数与回复设计</div><span class="session-time">22m ago</span></div>
+            <div class="session-sub"><span class="session-tag-chips"><span class="session-tag-named"><span class="session-tag-chip chip-orange"><span>项目架构</span></span></span><span class="session-tag-more">+1</span></span><div class="session-preview tone-watching">Watching 执行任务：会话间请求与回复：修复 P1 审查发现的问题</div></div>
+          </div>
+        </div>
+        <div class="session-row">
+          <span class="session-icon g-muted"><svg><use href="#eye"/></svg></span>
+          <div class="session-main">
+            <div class="session-title-row"><div class="session-title">项目协调：会话间请求与回复</div><span class="session-time">8m ago</span></div>
+            <div class="session-sub"><div class="session-preview tone-watching">Watching all 4 tasks · 1 running · 3/4 done</div></div>
+          </div>
+        </div>
+      </div></div>
+      <p class="cap">列窄时截断的是目标名，开头的 Watching 永远在；进度在最右，最先被截掉——宽一点就回来。</p>
+    </div>
+  </div>
+</section>
+</body>
+</html>

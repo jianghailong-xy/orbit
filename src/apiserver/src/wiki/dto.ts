@@ -21,11 +21,13 @@ import {
   WIKI_CURSOR_OUTCOMES,
   WIKI_DECIDE_ACTIONS,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
+  WIKI_MAINTENANCE_FAILURE_KINDS,
   WIKI_MAINTENANCE_LOOKBACK_DAYS,
   WIKI_REJECT_REASONS,
   WIKI_REVIEW_MODES,
   type WikiCursorOutcome,
   type WikiDecideAction,
+  type WikiMaintenanceFailureKind,
   type WikiRejectReason,
   type WikiReviewMode,
 } from '@orbit/shared';
@@ -161,6 +163,22 @@ export class WikiCursorAdvanceDto {
   @IsString()
   @MaxLength(20_000)
   error?: string;
+
+  /** Whose a failure was (contract `maintenance.job.recovery.failureKinds`): read off the error when it is not said. */
+  @IsOptional()
+  @IsIn(WIKI_MAINTENANCE_FAILURE_KINDS)
+  failureKind?: WikiMaintenanceFailureKind;
+}
+
+/**
+ * POST /api/runner/wiki/spaces/:id/maintenance/advance — a Wiki maintenance run recorded its ops, and the cursor
+ * moves past the sessions they came from (contract `maintenance.job.run.steps`, advance): `to` is the token of the
+ * last page whose ops are recorded.
+ */
+export class WikiMaintenanceAdvanceDto {
+  @IsString()
+  @MaxLength(2_000)
+  to!: string;
 }
 
 /**

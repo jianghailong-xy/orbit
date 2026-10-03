@@ -287,7 +287,12 @@ private struct CompactSections: View {
                     // inline in the detail pane: `AgentConsoleDetail`.)
                     .navigationDestination(for: NavNode.self) { node in
                         switch node {
-                        case .compose(let agentID):      AgentComposePage(agentID: agentID)
+                        case .compose(let agentID, let folderID):
+                            AgentComposePage(agentID: agentID, folderID: folderID)
+                        // One folder's page: the sessions filed in it, opened by its row at the top of
+                        // a workspace's session list (§3.3). Its own ✎ pushes a draft over it, and
+                        // the session that draft creates lands in the folder.
+                        case .folder(let address):       SessionFolderPage(address: address)
                         // The one place the phone's console is told that what it opens goes on
                         // this stack (`opensPagesOverConsole`): its links, its Watching card, its
                         // Tasks created here card — so the back swipe returns to the conversation
@@ -1161,6 +1166,9 @@ private struct AgentComposePage: View {
     /// The agent this draft is composing for — carried by the frame showing it, so the page renders
     /// what the stack says rather than reading a second selection that could have moved on.
     let agentID: String
+    /// The folder whose page opened this draft, if any — also carried by the frame: the session it
+    /// creates lands in that folder (§3.3).
+    var folderID: String? = nil
 
     var body: some View {
         if let registry = model.consoleRegistry, let agents = model.agents,
@@ -1172,12 +1180,13 @@ private struct AgentComposePage: View {
                            providerPools: agents.providerPools,
                            sharedPools: agents.sharedPools,
                            modelCatalog: agents.modelCatalog(for: agent.runnerId),
-                           defaultEffort: model.user?.preferences?.defaultEffort) { session in
+                           defaultEffort: model.user?.preferences?.defaultEffort,
+                           folderID: folderID) { session in
                 model.openCreatedAgentSession(session)
             }
             .navigationTitle(agent.name)
             // Rebuild for in-place Agent execution-default changes as well as switching.
-            .id(newSessionDraftIdentity(agent))
+            .id(newSessionDraftIdentity(agent, folderID: folderID))
             .navigationBarTitleDisplayMode(.inline)
         } else {
             ContentUnavailableView("Select a workspace", systemImage: "folder")

@@ -1,0 +1,1 @@
+{"event": "user", "message": {"content": "ask me\nmock:tool ask_question {\"questions\": [{\"question\": \"Which colour?\", \"options\": [\"red\", \"blue\"], \"is_multi_select\": false}], \"toolSummary\": \"ask_question\", \"toolAction\": \"Using ask_question\"}\nmock:text after asking"}}

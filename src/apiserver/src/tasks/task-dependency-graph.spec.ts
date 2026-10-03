@@ -6,6 +6,7 @@ import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { RunStatus } from '@prisma/client';
 import { TaskStatus } from '@orbit/shared';
 import { TasksController } from './tasks.controller';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import { TasksService } from './tasks.service';
 
 const OWNER_ID = '00000000-0000-7000-8000-000000000001';
@@ -257,14 +258,17 @@ function graphFixture(
         return edges.filter((edge) => matches(edge, args.where)).length;
       },
     },
-    session: {
-      groupBy: async (args: any) => {
-        busyWhere = args.where;
-        return [
-          { taskId: TASK_B, status: RunStatus.RUNNING, _count: { _all: 1 } },
-          { taskId: TASK_C, status: RunStatus.PENDING, _count: { _all: 1 } },
-        ];
-      },
+    // withRunning's one read: the work sessions carrying these tasks (sessions/task-work-carrier.ts).
+    // Recorded as the owner and task ids it is bound to, which is the scope the tests below assert.
+    $queryRaw: async (...args: unknown[]) => {
+      const statement = renderRawQuery(args);
+      assert.match(statement.text, /carrier\."owner_id" = \?::uuid\s+AND carrier\."task_id" IN \(/);
+      busyWhere = { ownerId: statement.values[0], taskId: { in: statement.values.slice(1) } };
+      const carrier = (taskId: string, status: RunStatus) => ({
+        taskId, sessionId: `session-${taskId}`, status, runReason: 'TURN',
+        runningBgJobs: [], runningBgJobActivity: {}, startedAt: null,
+      });
+      return [carrier(TASK_B, RunStatus.RUNNING), carrier(TASK_C, RunStatus.PENDING)];
     },
   };
 
@@ -383,6 +387,8 @@ test('node refresh deduplicates in request order and returns current graph paylo
       ...tasks.get(FOCUS),
       running: false,
       queued: false,
+      runReason: null,
+      runStalled: false,
       runningSince: null,
       prerequisiteCount: 2,
       dependentCount: 0,
@@ -392,7 +398,9 @@ test('node refresh deduplicates in request order and returns current graph paylo
       ...tasks.get(TASK_B),
       running: true,
       queued: false,
-      // The fixture's session groupBy carries no `_min`, so no start is known.
+      runReason: 'TURN',
+      runStalled: false,
+      // The fixture's carrier has never started, so no start is known.
       runningSince: null,
       prerequisiteCount: 1,
       dependentCount: 1,
@@ -402,6 +410,8 @@ test('node refresh deduplicates in request order and returns current graph paylo
       ...tasks.get(TASK_C),
       running: false,
       queued: true,
+      runReason: 'TURN',
+      runStalled: false,
       runningSince: null,
       prerequisiteCount: 2,
       dependentCount: 1,

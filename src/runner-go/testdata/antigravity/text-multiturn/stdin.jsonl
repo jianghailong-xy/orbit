@@ -1,0 +1,2 @@
+{"event": "user", "message": {"content": "hello\nmock:think weighing how to greet\nmock:text Hello! This answer is streamed in several chunks, so the CLI emits ACTIVE text deltas before the DONE step."}}
+{"event": "user", "message": {"content": "and again\nmock:text Second turn, one chunk."}}

@@ -1,0 +1,23 @@
+-- ══════════════════════════════════════════════════════════════════════════════════════════════
+-- `runner.account_names`: what the user calls each account a runner reports, set in Orbit.
+--
+-- A runner reports its Codex and Claude Code accounts in `runner.engines` — Default, the directory its
+-- own environment selects, and every slot it added, each slot under the name it was added with. Those
+-- names live on the machine (beside each slot, src/runner-go/account_slot.go), Default has none at
+-- all, and nothing could change either: the page could only say "Default" for the account a terminal's
+-- `claude` shares, whichever subscription is signed into it.
+--
+-- This column is the accounts' displayName, the way `runner.display_name` is the runner's: kept here,
+-- laid over the report wherever an account is named (namedRunnerEngines), so a rename changes nothing
+-- on the machine, needs it neither online nor new enough to understand one, and reaches every client at
+-- once.
+--
+--   account_names   { "<engine>": { "<account id>": "<name>" } }, for the engines that keep accounts.
+--
+-- NULLABLE, and NULL is the old behaviour: every account named as its runner reports it. A rename back
+-- to the name an account would carry anyway removes its key rather than storing it.
+--
+-- ADD COLUMN only: no default, no NOT NULL, so the ALTER is catalog-only and no stored row is
+-- rewritten. No trigger on "runner" names it.
+
+ALTER TABLE "runner" ADD COLUMN "account_names" JSONB;

@@ -150,7 +150,7 @@ final class NavigationTests: XCTestCase {
     /// second mechanism pushed the split's detail over it.
     func testADraftIsReplacedInPlaceByTheConsoleItCreated() {
         var nav = NavState(section: .agents)
-        nav.push(.compose(agentID: "a1"))
+        nav.push(.compose(agentID: "a1", folderID: nil))
         XCTAssertNil(nav.focusedConsoleSessionID, "a draft streams nothing")
         XCTAssertFalse(nav.sectionAtRoot)
 
@@ -358,7 +358,7 @@ final class NavigationTests: XCTestCase {
         nav.popToRoot()
         XCTAssertNil(nav.focusedConsoleSessionID, "listed again the moment you back out")
 
-        nav.push(.compose(agentID: "a1"))
+        nav.push(.compose(agentID: "a1", folderID: nil))
         XCTAssertNil(nav.focusedConsoleSessionID, "a draft composer is not a console either")
     }
 

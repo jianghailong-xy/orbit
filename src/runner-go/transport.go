@@ -215,7 +215,7 @@ func isLeaseOwnershipError(err error) bool {
 // Sent on claim/reclaim from the first release that safely understands OpenCode. The server uses
 // this positive capability advertisement instead of trusting a stale heartbeat version during a
 // rolling upgrade. Older control planes ignore the header.
-const runnerSupportedProviders = "claude,codex,opencode"
+const runnerSupportedProviders = "claude,codex,opencode,antigravity"
 
 func NewTransport(baseURL, token string) *Transport {
 	leaseOwner, err := newLeaseGeneration()
@@ -1002,8 +1002,9 @@ func (t *Transport) notify(sessionID, message string) (json.RawMessage, error) {
 }
 
 // backgroundWakeReceipt is what the control plane did with a wake: filed it as a new turn of the
-// session (ENQUEUED), onto a wake turn nobody has been handed yet (MERGED), or nowhere, because the
-// session has ended (DROPPED).
+// session, or written into the turn it is running (ENQUEUED), onto a wake turn nobody has been handed
+// yet (MERGED), or nowhere (DROPPED) — because the session has ended, or because it is output its
+// job's exit, already filed, reports too. None of them is retried.
 type backgroundWakeReceipt struct {
 	Outcome string `json:"outcome"`
 	TurnID  string `json:"turnId,omitempty"`
