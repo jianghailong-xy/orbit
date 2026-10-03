@@ -101,12 +101,20 @@ public enum AgentDefaults {
     }
 
     /// The built-in runtime whose live catalog describes a `modelsFromRuntime` provider — the vendor
-    /// IS that CLI's own endpoint (Anthropic→claude, OpenAI→codex), so the runner's probe of the
-    /// installed CLI leads and the stored `models` list is only the fallback. Read under this key,
-    /// never the slug, so an OpenAI provider reads Codex models and can't land in Claude's namespace.
-    /// Mirrors web's `custom.runtime === CODEX ? CODEX : CLAUDE`.
+    /// IS that CLI's own endpoint (Anthropic→claude, OpenAI→codex, Gemini→antigravity), so the
+    /// runner's probe of the installed CLI leads and the stored `models` list is only the fallback.
+    /// Read under this key, never the slug, so an OpenAI provider reads Codex models (and a Gemini
+    /// one agy's) and can't land in Claude's namespace. Mirrors web's `runtimeForProvider`.
     private static func runtimeCatalogKey(for custom: ConfiguredProvider) -> String {
-        custom.runtime == "codex" ? "codex" : "claude"
+        borrowedRuntime(custom)
+    }
+
+    /// The runtime a configured provider borrows: Claude, Codex, Kimi or Antigravity. Invalid legacy
+    /// values, and a provider row that names no runtime at all, use the same safe Claude fallback as
+    /// the backend.
+    private static func borrowedRuntime(_ custom: ConfiguredProvider) -> String {
+        let borrowed = custom.runtime ?? ""
+        return ["codex", "kimi", "antigravity"].contains(borrowed) ? borrowed : "claude"
     }
 
     /// Kimi's list comes from the runner too (`kimi provider list --json`, which also carries each
@@ -289,11 +297,7 @@ public enum AgentDefaults {
     public static func runtime(for provider: String,
                                configured: [ConfiguredProvider]? = nil) -> String {
         if let custom = configuredProvider(provider, in: configured) {
-            // Configured providers borrow Claude, Codex or Kimi. Invalid legacy values, and a
-            // provider row that names no runtime at all, use the same safe Claude fallback as
-            // the backend.
-            let borrowed = custom.runtime ?? ""
-            return borrowed == "codex" || borrowed == "kimi" ? borrowed : "claude"
+            return borrowedRuntime(custom)
         }
         let value = provider
         return value == "codex" || value == "kimi" || value == "antigravity" ? value : "claude"

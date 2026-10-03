@@ -171,7 +171,8 @@ export class QueueService {
         // executeRaw deliberately discards that result (same pattern as pg_notify).
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(1330792788, 1)`;
         // Migrations 0080 and 0367 install database triggers so an older apiserver replica cannot
-        // claim OpenCode or Antigravity as Claude during a rolling control-plane deploy. These
+        // claim OpenCode or Antigravity as Claude during a rolling control-plane deploy (0372
+        // widened the Antigravity one to the configured rows that borrow it). These
         // transaction-local capabilities are the positive signal that lets only the new, capable
         // path pass. One statement for both: this runs inside the global claim lock above.
         await tx.$executeRaw`SELECT set_config('orbit.runner_supports_opencode', ${supportsOpenCode ? '1' : '0'}, true), set_config('orbit.runner_supports_antigravity', ${supportsAntigravity ? '1' : '0'}, true)`;
@@ -232,6 +233,20 @@ export class QueueService {
             AND (
               ${supportsAntigravity}
               OR COALESCE(s.provider, 'claude') <> 'antigravity'
+            )
+            -- …and for a configured provider that borrows Antigravity (a Gemini key): the slug is
+            -- the row's own, but the runner is handed an antigravity job all the same. The rows
+            -- dispatch resolves, an enabled one of the session's owner or a shared one
+            -- (providerSlugsOn); migration 0372's trigger asks the same.
+            AND (
+              ${supportsAntigravity}
+              OR NOT EXISTS (
+                SELECT 1 FROM "model_provider" mp
+                WHERE mp."slug" = s.provider
+                  AND mp."runtime" = 'antigravity'
+                  AND mp."enabled"
+                  AND (mp."owner_id" IS NULL OR mp."owner_id" = s."owner_id")
+              )
             )
             -- A runner may only ever drive sessions owned by its own owner.
             AND s."owner_id" = (SELECT r."owner_id" FROM "runner" r WHERE r.id = ${runnerId})

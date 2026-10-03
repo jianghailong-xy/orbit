@@ -808,6 +808,21 @@ artifact：agy 自己的默认模式（不加参数）下往 `<gd>/antigravity-c
 `HookNotLoaded` 分 `listing`（agy 列不出 hook，不启动）、`heartbeat`（agy 不跑 hook，第一次回答就停）、`rewritten`（运行中改了 hooks.json，
 下一个步骤就停，命令没执行）、`checkout hook`（运行中工作区冒出 `.agents/hooks.json`，同样停下，它的命令和后面的命令都没执行）。实验脚本在 [`docs/evidence/antigravity-cli-1.2.16/`](./evidence/antigravity-cli-1.2.16/)。
 
+## 15. Gemini 预设借 agy（阶段 4，agy 1.2.16）
+
+Providers 里的 Gemini 预设改借 Antigravity 运行时，迁移 `0372_gemini_antigravity_runtime` 把已存的行改过来。控制面把
+provider 的 key 和端点作为 `GEMINI_API_KEY`、`GOOGLE_GEMINI_BASE_URL` 注入会话环境（`custom-provider.ts`），runner 照内置引擎
+的方式起 agy；模型列表跟 runner 上报的 `agy models` 走（预设的 `modelsFromRuntime`）。2026-10-03 在 runner workstation 上【实测】：
+
+| 项 | 结果 | 用在哪 |
+| --- | --- | --- |
+| slug 到 API 模型（mock 记下的请求路径） | `gemini-3.8-flash`、`gemini-3.7-flash`、`gemini-3.6-flash` 各档都请求同名模型；`gemini-3.1-pro` 低档请求 `gemini-3.1-pro-preview`，高档请求 `gemini-3.1-pro-preview-customtools`；标题照旧用 `gemini-3.1-flash-lite-preview` | 连接测试按这个映射探测 `POST {base}/v1beta/models/{API 模型}:generateContent`，key 放 `x-goog-api-key` 头 |
+| 真实 key 的 `GET /v1beta/models` | 上面这些 API 模型都在，`inputTokenLimit` 都是 1,048,576 | 与 runner 的窗口表（`antigravityContextWindows`）一致，补上 §11 第 5 项 |
+| 无效 key（直接请求 API） | `generateContent` 回 400 `INVALID_ARGUMENT`，`details[].reason` 为 `API_KEY_INVALID`，不是 401/403 | 连接测试显示 `HTTP 400 — API key not valid…` |
+| 预付额度用完 | 每个模型都回 402 `RESOURCE_EXHAUSTED`（"Your prepayment credits are depleted…"）；Orbit 会话里的错误是 `agent executor error: generating and executing: Error 402, Message: …` | §11 第 3 项的一种；连接测试原样显示 Google 的说明 |
+
+§3.2 的"key 对 agent 跑的命令可见"和 §7 的"使用统计关不掉"，写在了连接 Gemini 的表单上（API key 一栏下面）。
+
 ## 附录：实测记录索引
 
 全部在 2026-10-03、agy 1.2.15、本机 runner 上进行。"样本"一栏指 `src/runner-go/testdata/antigravity/` 下的目录；
