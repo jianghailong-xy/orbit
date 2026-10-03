@@ -216,6 +216,46 @@ final class AgentsStackWiringTests: XCTestCase {
         XCTAssertTrue(console.contains("SwipeBackGestureToggle(enabled: !model.consoleFromRecents)"))
     }
 
+    /// An iPad's detail column is always on screen, so the Agents stack's root needs a page of its own
+    /// there: the new-session draft, as web's right pane composes when nothing is selected. It is the
+    /// detail view's reading of an empty stack, not a `.compose` frame the model pushes — both shells
+    /// share the stack, and a frame pushed for the wide one would open the phone's on a draft instead
+    /// of its list once the window narrows. Drawn unasked it takes no focus (a keyboard raised on every
+    /// launch and workspace switch covers half the screen); ✎ focuses that same view in place.
+    func testTheWideDetailOpensTheStacksRootOnAnUnfocusedDraft() throws {
+        let views = try appSource("Views/AgentsView.swift")
+        let shows = code(try slice(views, from: "private var showsDraft: Bool {", to: "\n    }"))
+        let ios = try slice(shows, from: "#if os(iOS)", to: "#else")
+        let mac = try slice(shows, from: "#else", to: "#endif")
+        XCTAssertTrue(ios.contains("return app.composingAgentSession || app.sectionAtRoot"),
+                      "on iOS the stack's root is the draft too")
+        XCTAssertFalse(mac.contains("sectionAtRoot"), "macOS keeps its placeholder")
+
+        let detail = code(try slice(views, from: "struct AgentConsoleDetail: View {",
+                                    to: "struct NewSessionView: View {"))
+        XCTAssertTrue(detail.contains("if showsDraft, let registry = app.consoleRegistry"),
+                      "one branch draws both drafts, so ✎ over the root's keeps what was typed")
+        XCTAssertTrue(detail.contains("focusesComposer: app.composingAgentSession"),
+                      "and only the draft someone asked for takes focus")
+
+        let draft = code(try slice(views, from: "struct NewSessionView: View {",
+                                   to: "struct AgentSessionRow: View {"))
+        XCTAssertTrue(draft.contains("focusesComposer: Bool = true,"),
+                      "the phone's pushed draft and macOS's focus as before")
+        XCTAssertTrue(draft.contains("ComposerView(console: draft, autoFocus: focusesComposer)"))
+        XCTAssertFalse(code(try appSource("Views/CompactShell.swift")).contains("focusesComposer:"),
+                       "the phone's draft is always one someone asked for")
+
+        let composer = code(try appSource("Views/ComposerView.swift"))
+        XCTAssertTrue(composer.contains(".onChange(of: autoFocus) { _, now in"),
+                      "✎ turns focus on for a field that is already showing")
+
+        let landing = code(try slice(try appSource("AppModel.swift"),
+                                     from: "private func resolveDefaultLanding() {", to: "\n    }"))
+        XCTAssertFalse(landing.contains(".compose("),
+                       "the launch lands on a workspace's root, not on a pushed draft")
+    }
+
     /// The two things the compact shell used to keep *about itself*, and the tap that repaired the
     /// tear between them, are gone — from the code and from the comments, since the acceptance for
     /// this step is a plain `grep` over these directories.
