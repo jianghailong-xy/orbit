@@ -147,6 +147,9 @@ export interface CodexLoginView {
   lastError: string | null;
   expiresAt: string;
   linkedAt: string;
+  /** Who signed it in — a person of the pool (migration 0366). They alone may sign it in again, and with
+   *  the pool's admins they may take it out; the pages say whose account a row is by this. */
+  userId: string;
   /** The account's quota as something read it; null when nothing has (not a refusal, and not SPENT). */
   usage: PlanUsageSnapshot | null;
   usageUnavailable: string | null;
@@ -162,6 +165,7 @@ export const CODEX_USAGE_UNREAD = 'no quota has been read for this account yet';
 export function codexLoginView(
   row: {
     accountId: string;
+    userId: string;
     email: string | null;
     plan: string | null;
     state: string;
@@ -182,6 +186,7 @@ export function codexLoginView(
     lastError: row.lastError,
     expiresAt: row.expiresAt.toISOString(),
     linkedAt: row.createdAt.toISOString(),
+    userId: row.userId,
     usage,
     usageUnavailable: usage ? null : CODEX_USAGE_UNREAD,
     spentUntil: row.spentUntil && row.spentUntil.getTime() > now.getTime() ? row.spentUntil.toISOString() : null,

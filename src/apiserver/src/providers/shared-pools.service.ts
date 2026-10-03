@@ -32,6 +32,8 @@ const POOL_VIEW_SELECT = {
   shared: true,
   membersCanAdd: true,
   ownKeyFirst: true,
+  // Migration 0366: whether a member may sign a ChatGPT account of their own in beside the pool's keys.
+  membersCanAddAccounts: true,
   createdAt: true,
   updatedAt: true,
   people: {
@@ -59,6 +61,9 @@ const KEY_VIEW_SELECT = {
 const LOGIN_VIEW_SELECT = {
   poolId: true,
   accountId: true,
+  // Who signed it in (migration 0366): the person whose account a row is, and the one who may sign it in
+  // again.
+  userId: true,
   email: true,
   plan: true,
   state: true,
@@ -156,6 +161,7 @@ function poolView(
     })),
     // The month a share cap and every usage figure below count, UTC.
     window: { start: usageWindowStart(now).toISOString(), end: nextUsageWindowStart(now).toISOString() },
+    membersCanAddAccounts: pool.membersCanAddAccounts,
     people: pool.people.map((person) => ({
       userId: person.userId,
       name: person.user.name,

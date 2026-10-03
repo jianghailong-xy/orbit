@@ -1099,7 +1099,6 @@ export class QueueService {
     const { next, notice } = choosePoolCredential(
       {
         ownerId: session.ownerId,
-        shared: false,
         accounts: pool.logins,
         keys: await sharedPoolKeyCandidates(db, pool.id, now),
         ownKeyFirst: pool.ownKeyFirst,
