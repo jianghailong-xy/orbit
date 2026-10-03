@@ -21,10 +21,13 @@ import {
   WIKI_CURSOR_OUTCOMES,
   WIKI_DECIDE_ACTIONS,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
+  WIKI_MAINTENANCE_FAILURE_KINDS,
+  WIKI_MAINTENANCE_LOOKBACK_DAYS,
   WIKI_REJECT_REASONS,
   WIKI_REVIEW_MODES,
   type WikiCursorOutcome,
   type WikiDecideAction,
+  type WikiMaintenanceFailureKind,
   type WikiRejectReason,
   type WikiReviewMode,
 } from '@orbit/shared';
@@ -40,29 +43,10 @@ import { IsPublicId } from '../common/public-id';
  * naming the field is the honest answer for it.
  */
 
-/** POST /api/wiki/spaces — the owner's own space, for a codebase or for nothing in particular. */
-export class CreateWikiSpaceDto {
-  @IsString()
-  @MinLength(1)
-  @MaxLength(120)
-  title!: string;
-
-  /** The repository as the owner states it; normalized on the way in (§2.1). */
-  @IsOptional()
-  @IsString()
-  @MaxLength(300)
-  repoUrl?: string;
-
-  /** Left out, the slug is derived from the repository and, with none, from the title. */
-  @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  slug?: string;
-}
-
 /**
- * `maintenance` in PATCH /api/wiki/spaces/:id (contract `space.settings.maintenance`): any of the
- * four the owner sets. `listId` is the server's and is not a field here — the whitelist drops it.
+ * `maintenance` in PATCH /api/wiki/spaces/:id, and in POST /api/wiki/spaces (contract
+ * `space.settings.maintenance`): any of the five the owner sets. Declared before the two bodies that
+ * carry it, whose decorator metadata names it as they are defined. `listId` is the server's and is not a field here — the whitelist drops it.
  */
 export class WikiMaintenanceSettingsDto {
   @IsOptional()
@@ -87,6 +71,44 @@ export class WikiMaintenanceSettingsDto {
   @Min(WIKI_MAINTENANCE_DAILY_RUN_LIMIT.min)
   @Max(WIKI_MAINTENANCE_DAILY_RUN_LIMIT.max)
   dailyRunLimit?: number;
+
+  /** How many days back the cursor starts when maintenance is turned on; null is all of history. */
+  @IsOptional()
+  @ValidateIf((_object, value) => value !== null)
+  @IsInt()
+  @Min(WIKI_MAINTENANCE_LOOKBACK_DAYS.min)
+  @Max(WIKI_MAINTENANCE_LOOKBACK_DAYS.max)
+  lookbackDays?: number | null;
+}
+
+/** POST /api/wiki/spaces — the owner's own space, for a codebase or for nothing in particular. */
+export class CreateWikiSpaceDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  title!: string;
+
+  /** The repository as the owner states it; normalized on the way in (§2.1). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  repoUrl?: string;
+
+  /** Left out, the slug is derived from the repository and, with none, from the title. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  slug?: string;
+
+  /**
+   * The space's Wiki maintenance from the start (contract `space.settings.maintenance`), as a PATCH sets
+   * it: a space created with a maintenance workspace has its plan's first draft made at once (contract
+   * `plan.jobs.trigger`). The owner channel's alone, like the PATCH.
+   */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => WikiMaintenanceSettingsDto)
+  maintenance?: WikiMaintenanceSettingsDto;
 }
 
 /** PATCH /api/wiki/spaces/:id — the owner's settings (§2.1 settings, contract `space.settings`). */
@@ -141,6 +163,22 @@ export class WikiCursorAdvanceDto {
   @IsString()
   @MaxLength(20_000)
   error?: string;
+
+  /** Whose a failure was (contract `maintenance.job.recovery.failureKinds`): read off the error when it is not said. */
+  @IsOptional()
+  @IsIn(WIKI_MAINTENANCE_FAILURE_KINDS)
+  failureKind?: WikiMaintenanceFailureKind;
+}
+
+/**
+ * POST /api/runner/wiki/spaces/:id/maintenance/advance — a Wiki maintenance run recorded its ops, and the cursor
+ * moves past the sessions they came from (contract `maintenance.job.run.steps`, advance): `to` is the token of the
+ * last page whose ops are recorded.
+ */
+export class WikiMaintenanceAdvanceDto {
+  @IsString()
+  @MaxLength(2_000)
+  to!: string;
 }
 
 /**

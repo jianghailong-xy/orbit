@@ -1131,6 +1131,17 @@ test('a merge conflict opens one item owned by the coordinator, and queues it on
     try {
       const w = await integratingWorld(stack, 'conflict', 'PARKED');
       const { task, job } = await claimedLanding(stack, w, 'conflict');
+      // The project settled the moment its one task's acceptance derived DONE — in the transaction
+      // that queued this landing. Nobody is told or judged while the work is on its way (project
+      // closing, D5): a judgment opened in that gap once filed a "merge into main" task for work
+      // that was landing by itself.
+      assert.equal(
+        await stack.db.projectCoordinatorWake.count({
+          where: { projectId: w.projectId, event: 'PROJECT_TASKS_SETTLED' },
+        }),
+        0,
+        'the settled project was judged while its landing was in flight',
+      );
 
       const answer = await reportFailure(stack, w, job, {
         state: 'CONFLICT',

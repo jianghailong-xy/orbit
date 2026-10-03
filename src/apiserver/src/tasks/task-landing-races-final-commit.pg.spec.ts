@@ -371,7 +371,7 @@ test('a landing is not judged before the work it is about has stopped moving', {
       where: { id: jobId },
       select: {
         state: true, sourceRef: true, mainSyncSha: true, targetShaBefore: true, upstreamSha: true,
-        startedAt: true, claimedAt: true,
+        sourceOnUpstream: true, receiptIds: true, startedAt: true, claimedAt: true,
         session: { select: { finishedAt: true, worktreeBranch: true, worktreeDirty: true } },
       },
     });
@@ -380,6 +380,8 @@ test('a landing is not judged before the work it is about has stopped moving', {
       mainSyncSha: row.mainSyncSha,
       targetShaBefore: row.targetShaBefore,
       upstreamSha: row.upstreamSha,
+      sourceOnUpstream: row.sourceOnUpstream,
+      receiptIds: row.receiptIds,
       sourceRef: row.sourceRef,
       startedAt: row.startedAt,
       session: row.session,

@@ -61,6 +61,7 @@ func assertOneTerminalReport(t *testing.T, api *runnerStopControlPlane, job bgJo
 // drains the jobs and then acknowledges. The kills have to be accepted before that acknowledgement
 // closes the session.
 func TestFailedTurnDeliversTheKillsOfItsDrainBeforeTheAcknowledgement(t *testing.T) {
+	shortDrainWait(t)
 	fake := newFakeClaude(t, fakeStep{Await: "user"})
 	t.Setenv("PATH", fake.Dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	job := runnerStopJob(t, "sess-failed-turn-drain")

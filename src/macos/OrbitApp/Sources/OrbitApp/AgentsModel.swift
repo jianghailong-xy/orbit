@@ -55,6 +55,10 @@ final class AgentsModel {
     /// The last (agent, view) `loadSessions` ran for, so a row action can silently refresh the same
     /// list without the view having to thread the agent id / tab back in.
     private var lastSessionQuery: (agentID: String, view: SessionView)?
+    /// The app's latest Open snapshot (`applyOpenSnapshot`), kept whichever list is on screen: an
+    /// agent's Open list is that snapshot narrowed to the agent, so a first load of one can start
+    /// from its rows instead of a blank "Loading…".
+    private var openSnapshot: [Session]?
 
     private let api: APIClient
 
@@ -128,10 +132,11 @@ final class AgentsModel {
         _ = try? await api.cancelCodexLogin(poolID: pool.id)
     }
 
-    /// Sign the pool's account out: the server deletes the sign-in it held. Why it didn't, or nil.
-    func signOutCodexLogin(_ pool: ProviderPool) async -> String? {
+    /// Sign one of the pool's accounts out: the server deletes the sign-in it held, and the pool's other
+    /// accounts stay. Why it didn't, or nil.
+    func signOutCodexLogin(_ pool: ProviderPool, _ login: CodexLogin) async -> String? {
         do {
-            try await api.signOutCodexLogin(poolID: pool.id)
+            try await api.signOutCodexLogin(poolID: pool.id, fingerprint: login.fingerprint)
             await reloadPools()
             return nil
         } catch {
@@ -169,6 +174,18 @@ final class AgentsModel {
             errorText = friendly(error)
             loadState.fail()
         }
+    }
+
+    /// Take what a cold launch restores (`AppModel.restoreLaunchSnapshot`): the workspace list and
+    /// its runner labels as the previous run had them, with the list pointed at the Open sessions of
+    /// the workspace the launch lands on — the app's Open snapshot then fills its rows before the
+    /// first frame. `loadState` is left alone: none of this is an answer from the server, and
+    /// `load()` replaces it all.
+    func adoptLaunchSnapshot(_ snapshot: LaunchSnapshot, showing agentID: String?) {
+        items = snapshot.agents
+        runnerNames = snapshot.runnerNames
+        runnerOrder = snapshot.runnerOrder
+        if let agentID { lastSessionQuery = (agentID, .open) }
     }
 
     /// Refresh only the Runner directory fields consumed by navigation and runtime defaults. This
@@ -241,6 +258,22 @@ final class AgentsModel {
         agentSessions[index] = agentSessions[index].settingTitle(title)
     }
 
+    #if os(iOS)
+    /// File this pane's row in a folder on the spot, for the same reason: a Completed row isn't in
+    /// the Open snapshot. See `AppModel.moveSession`.
+    func applyMovedSession(_ id: String, folderID: String?) {
+        guard let index = agentSessions.firstIndex(where: { $0.id == id }) else { return }
+        agentSessions[index] = agentSessions[index].settingFolder(folderID)
+    }
+
+    /// Take a row moved to another workspace out of this pane's list, which is one workspace's — for
+    /// the same reason: a Completed row isn't in the Open snapshot. See `AppModel.moveSession(_:to:…)`.
+    func applyMovedSession(_ id: String, toWorkspace workspaceID: String) {
+        guard lastSessionQuery?.agentID != workspaceID else { return }
+        agentSessions = SessionFilter.removing(id, from: agentSessions)
+    }
+    #endif
+
     /// Update relation metadata even in this pane's independently loaded Completed/Trash rows.
     /// Open rows are refreshed through `applyOpenSnapshot`, but those two scopes otherwise wait for
     /// their polling interval after a coordinator rotation or Project deletion.
@@ -271,8 +304,14 @@ final class AgentsModel {
         let sameList = lastSessionQuery.map { $0.agentID == agentID && $0.view == view } ?? false
         lastSessionQuery = (agentID, view)
         if reset && !sameList {
-            agentSessions = []
-            sessionsLoading = true
+            // With the app's Open snapshot in hand an Open list has its rows already: show them and
+            // let the fetch below refresh them in place.
+            if view == .open, let openSnapshot {
+                agentSessions = SessionFilter.forAgent(openSnapshot, agentID: agentID, view: view)
+            } else {
+                agentSessions = []
+                sessionsLoading = true
+            }
         }
         defer { sessionsLoading = false }
         do {
@@ -298,8 +337,10 @@ final class AgentsModel {
     ///
     /// Open only: Completed / Trash are different queries with their own ordering and rows the Open
     /// snapshot doesn't contain, so those keep fetching for themselves. A pane that hasn't loaded yet
-    /// (`lastSessionQuery == nil`) is left alone — its `.task` owns the first load.
+    /// (`lastSessionQuery == nil`) is left alone — its `.task` owns the first load, which starts from
+    /// the snapshot kept here.
     func applyOpenSnapshot(_ all: [Session]) {
+        openSnapshot = all
         guard let q = lastSessionQuery, q.view == .open else { return }
         agentSessions = SessionFilter.forAgent(all, agentID: q.agentID, view: q.view)
     }

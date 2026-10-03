@@ -2,6 +2,151 @@ import SwiftUI
 import Foundation
 import OrbitKit
 
+struct ToolFailureSummary {
+    let tool: String?
+    let path: String?
+    let reason: String
+
+    /// Tool verification failures arrive as engine stderr, sometimes with the file path and
+    /// explanation split over several lines. Extract only the stable summary for the folded card;
+    /// the original message remains available when the reader expands it.
+    static func parse(_ message: String) -> ToolFailureSummary? {
+        let clean = message.replacingOccurrences(of: "\r\n", with: "\n")
+        guard let marker = clean.range(of: "error=", options: .caseInsensitive) else { return nil }
+        let tail = String(clean[marker.lowerBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let rest = String(tail.dropFirst("error=".count))
+        let lowerRest = rest.lowercased()
+        let tool: String?
+        let detail: String
+        if let verification = lowerRest.range(of: " verification failed:") {
+            let toolEnd = rest.index(rest.startIndex, offsetBy: verification.lowerBound.utf16Offset(in: lowerRest))
+            let detailStart = rest.index(rest.startIndex, offsetBy: verification.upperBound.utf16Offset(in: lowerRest))
+            let parsedTool = String(rest[..<toolEnd])
+            guard !parsedTool.isEmpty else { return nil }
+            tool = parsedTool
+            detail = String(rest[detailStart...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        } else if lowerRest.hasPrefix("failed to parse function arguments") {
+            tool = nil
+            detail = rest.trimmingCharacters(in: .whitespacesAndNewlines)
+        } else {
+            // Tool-router failures that are not verification failures still carry the tool name
+            // immediately after `error=` (for example `view_image.detail ...`). Keep them on the
+            // same compact tool row instead of falling back to a raw red log line.
+            let token = rest.split(whereSeparator: { $0 == " " || $0 == "\n" || $0 == ":" }).first
+            guard let token, !token.isEmpty else { return nil }
+            tool = token.split(separator: ".", maxSplits: 1).first.map(String.init)
+            detail = rest.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        var path: String?
+        if let worktrees = detail.range(of: "/worktrees/") {
+            let afterWorktree = detail[worktrees.upperBound...]
+            if let slash = afterWorktree.firstIndex(of: "/") {
+                let candidate = afterWorktree[afterWorktree.index(after: slash)...]
+                let end = candidate.firstIndex(where: { $0 == ":" || $0 == "\n" || $0 == " " }) ?? candidate.endIndex
+                let value = String(candidate[..<end])
+                if !value.isEmpty { path = value }
+            }
+        }
+
+        let lower = detail.lowercased()
+        let reason: String
+        if lower.hasPrefix("invalid patch:") {
+            reason = "Invalid patch"
+        } else if lower.hasPrefix("failed to find expected lines") {
+            reason = "Expected lines not found"
+        } else if lower.hasPrefix("failed to parse function arguments") {
+            reason = detail
+        } else if lowerRest.contains("verification failed:") {
+            reason = "Patch verification failed"
+        } else {
+            reason = detail
+        }
+        return ToolFailureSummary(tool: tool, path: path, reason: reason)
+    }
+}
+
+struct ToolFailureCardView: View {
+    let message: String
+    let summary: ToolFailureSummary
+    @State private var expanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 7) {
+                Image(systemName: "chevron.right")
+                    .font(.orbitMeta.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(expanded ? 90 : 0))
+                Image(systemName: "wrench.and.screwdriver")
+                    .font(.orbitMeta)
+                    .foregroundStyle(.red)
+                    .frame(width: 20, height: 20)
+                    .background(Color.red.opacity(0.14), in: RoundedRectangle(cornerRadius: 5))
+                Text(summary.tool ?? "Tool call")
+                    .font(.orbitMono.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text("Failed")
+                    .font(.orbitLabel)
+                    .foregroundStyle(.red)
+                    .lineLimit(1)
+                ToolStatusGlyph(status: .error)
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { expanded.toggle() }
+            if let path = summary.path {
+                Text(path)
+                    .font(.orbitMonoFine)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+                    .padding(.leading, 58)
+                    .textSelection(.enabled)
+            }
+            Text(summary.reason)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .truncationMode(.tail)
+                .padding(.leading, 58)
+            Button {
+                expanded.toggle()
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.right")
+                        .rotationEffect(.degrees(expanded ? 90 : 0))
+                    Text(expanded ? "Hide full log" : "Show full log")
+                }
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, 56)
+            if expanded {
+                Text(message)
+                    .font(.orbitMonoFine)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(Color.gray.opacity(0.08), in: RoundedRectangle(cornerRadius: 6))
+                    .padding(.leading, 58)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, 11)
+        .padding(.trailing, 10)
+        .padding(.vertical, 6)
+        .background(Color.clear)
+        .overlay(alignment: .leading) {
+            Rectangle().fill(Color.red).frame(width: 3)
+        }
+        .animation(nil, value: expanded)
+    }
+}
+
 // The transcript's tool-call rendering: the folded/expandable card row, its semantic body (command /
 // code / markdown / diff), the red-green diff line views, and the collapsing monospace block. The
 // name→display mapping lives in `OrbitKit.ToolDisplay` so it stays in step with web and testable.

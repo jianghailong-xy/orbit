@@ -436,24 +436,27 @@ type IntegrationUpstreamMoved struct {
 // IntegrationJobResultRequest is what the job came to, with everything a reader needs to check
 // that what landed is what was tested.
 type IntegrationJobResultRequest struct {
-	ClaimGeneration string                   `json:"claimGeneration"`
-	LeaseOwner      string                   `json:"leaseOwner"`
-	State           string                   `json:"state"`
-	Phase           string                   `json:"phase,omitempty"`
-	SourceSha       string                   `json:"sourceSha,omitempty"`
-	TargetShaBefore string                   `json:"targetShaBefore,omitempty"`
-	UpstreamSha     string                   `json:"upstreamSha,omitempty"`
-	MainSyncSha     string                   `json:"mainSyncSha,omitempty"`
-	TestedSha       string                   `json:"testedSha,omitempty"`
-	TestedTreeSha   string                   `json:"testedTreeSha,omitempty"`
-	LandedSha       string                   `json:"landedSha,omitempty"`
-	LandedTreeSha   string                   `json:"landedTreeSha,omitempty"`
-	AheadOfUpstream *int                     `json:"aheadOfUpstream,omitempty"`
-	FilesChanged    *int                     `json:"filesChanged,omitempty"`
-	Checks          []IntegrationCheckResult `json:"checks,omitempty"`
-	Conflicts       []string                 `json:"conflicts,omitempty"`
-	ErrorCode       string                   `json:"errorCode,omitempty"`
-	ErrorDetail     map[string]any           `json:"errorDetail,omitempty"`
+	ClaimGeneration string `json:"claimGeneration"`
+	LeaseOwner      string `json:"leaseOwner"`
+	State           string `json:"state"`
+	Phase           string `json:"phase,omitempty"`
+	SourceSha       string `json:"sourceSha,omitempty"`
+	TargetShaBefore string `json:"targetShaBefore,omitempty"`
+	UpstreamSha     string `json:"upstreamSha,omitempty"`
+	MainSyncSha     string `json:"mainSyncSha,omitempty"`
+	TestedSha       string `json:"testedSha,omitempty"`
+	TestedTreeSha   string `json:"testedTreeSha,omitempty"`
+	LandedSha       string `json:"landedSha,omitempty"`
+	LandedTreeSha   string `json:"landedTreeSha,omitempty"`
+	AheadOfUpstream *int   `json:"aheadOfUpstream,omitempty"`
+	// With NOTHING_TO_LAND: whether the source tip is an ancestor of the upstream, as this runner
+	// measured it. Absent on every other answer, which the control plane reads as "not measured".
+	SourceOnUpstream *bool                    `json:"sourceOnUpstream,omitempty"`
+	FilesChanged     *int                     `json:"filesChanged,omitempty"`
+	Checks           []IntegrationCheckResult `json:"checks,omitempty"`
+	Conflicts        []string                 `json:"conflicts,omitempty"`
+	ErrorCode        string                   `json:"errorCode,omitempty"`
+	ErrorDetail      map[string]any           `json:"errorDetail,omitempty"`
 }
 
 // IntegrationJobResultResponse is the control plane's answer: whether it took the result.
@@ -598,7 +601,10 @@ type MergeCommand struct {
 	// carry no test evidence, and merging them is what `[K6]`'s gate exists to stop. Empty on an
 	// older control plane, or for work that is not under convergence management — then the tip is
 	// whatever the branch says, exactly as before.
-	RequiredSourceSha string `json:"requiredSourceSha,omitempty"`
+	RequiredSourceSha string                  `json:"requiredSourceSha,omitempty"`
+	RecoveryAction    string                  `json:"recoveryAction,omitempty"`
+	Recovery          *MergeRecovery          `json:"recovery,omitempty"`
+	Check             *MergeRecoveryCheckSpec `json:"check,omitempty"`
 }
 
 // ImportResultRequest settles a session's pending transcript import: ok clears the
@@ -672,11 +678,12 @@ type MergeResultRequest struct {
 	// The branch this merge advanced, the tip it had before, and the base the source was replayed
 	// onto — the fields the control plane's merge receipt (§13.7) is checked against afterwards.
 	// Omitted by an older runner; the receipt is still written, naming what it knows.
-	TargetBranch    string   `json:"targetBranch,omitempty"`
-	TargetShaBefore string   `json:"targetShaBefore,omitempty"`
-	RebaseBaseSha   string   `json:"rebaseBaseSha,omitempty"`
-	Conflicts       []string `json:"conflicts,omitempty"`
-	Message         string   `json:"message,omitempty"`
+	TargetBranch    string         `json:"targetBranch,omitempty"`
+	TargetShaBefore string         `json:"targetShaBefore,omitempty"`
+	RebaseBaseSha   string         `json:"rebaseBaseSha,omitempty"`
+	Conflicts       []string       `json:"conflicts,omitempty"`
+	Message         string         `json:"message,omitempty"`
+	Recovery        *MergeRecovery `json:"recovery,omitempty"`
 }
 
 // CommitCommand mirrors @orbit/shared: a request to commit a live session's uncommitted
@@ -1088,6 +1095,10 @@ type TurnCompleteRequest struct {
 	TurnID     string `json:"turnId"`
 	Status     string `json:"status"`
 	Result     string `json:"result,omitempty"`
+	// Error is what a failed turn failed with, when the runtime reports that as the turn's error
+	// rather than as a reply (Codex). Result is then whatever the turn said before it died, so
+	// without this the control plane recorded the agent's last sentence as the failure's reason.
+	Error string `json:"error,omitempty"`
 	// ShellExitCode/ShellOutput are populated for synchronous shell turns. Pointers preserve
 	// the difference between a real zero/empty result and an older runner that sent neither.
 	ShellExitCode *int                   `json:"shellExitCode,omitempty"`

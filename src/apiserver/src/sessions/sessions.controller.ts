@@ -29,9 +29,12 @@ import { SetSessionTagsDto } from '../session-tags/dto';
 import { SessionTagsService } from '../session-tags/session-tags.service';
 import {
   CreateSessionDto,
+  MergeRepairDto,
   MergeToMainDto,
+  MoveSessionDto,
   SessionArmRetryDto,
   SessionConfigDto,
+  SessionAccountDto,
   SessionRenameDto,
   SessionResumeDto,
   SessionInterruptDto,
@@ -269,11 +272,21 @@ export class SessionsController {
   @Post()
   create(
     @CurrentUser() user: AuthUser,
-    @Body(PublicIdPipe.forFields('workspaceId', 'agentId', 'assignedRunnerId', 'taskId', 'attachmentIds'))
+    @Body(PublicIdPipe.forFields('workspaceId', 'agentId', 'assignedRunnerId', 'taskId', 'attachmentIds', 'folderId'))
     dto: CreateSessionDto,
   ) {
     // `agentId` is the pre-rename name every shipped client still sends.
     return this.sessions.create(user.userId, { ...dto, workspaceId: dto.workspaceId ?? dto.agentId });
+  }
+
+  /** Start (or return) the repair session attached to this merge recovery. */
+  @Post(':id/merge-repair')
+  mergeRepair(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto?: MergeRepairDto,
+  ) {
+    return this.sessions.startMergeRepair(user.userId, id, dto?.preparePR === true);
   }
 
   /**
@@ -472,6 +485,16 @@ export class SessionsController {
     return this.sessions.updateConfig(user.userId, id, dto);
   }
 
+  /** Which of its runner's Codex or Claude accounts the session runs on — see switchAccount. */
+  @Patch(':id/account')
+  switchAccount(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: SessionAccountDto,
+  ) {
+    return this.sessions.switchAccount(user.userId, id, dto?.account);
+  }
+
   /** Rename a session's display title. Works on any session (live or ended) and never
    *  touches the runner — purely a metadata update. */
   @Patch(':id')
@@ -513,7 +536,7 @@ export class SessionsController {
   ) {
     // The owner's own Merge menu: the one door whose explicit pick becomes the workspace default.
     return this.sessions.mergeToMain(user.userId, id, dto?.targetBranch, dto?.waitSeconds,
-      { rememberTarget: true });
+      { rememberTarget: true, recoveryAction: dto?.recoveryAction, previewId: dto?.previewId });
   }
 
   /**
@@ -566,6 +589,20 @@ export class SessionsController {
     return this.autoRetry.retryMessage(user.userId, id);
   }
 
+  /** Re-send that message now, the way the auto-retry does: the Retry button's door when the message
+   *  is another session's (`sessionMessage` on the answer above), so it goes out with that session as
+   *  its sender and the request it was, charged to nobody's hourly limit (contract §2.1) — not through
+   *  the owner's own door, which would say it again in the owner's name.
+   *
+   *  The turn key is the server's own, derived from the failed message (contract §2.1, §8 criterion
+   *  19): the caller names nothing, so no click can queue a second turn for the same failure. A body
+   *  carrying `clientTurnId` from a client that predates that is ignored, not refused — the key it
+   *  chose is simply not the one the re-send goes out under. */
+  @Post(':id/retry-message')
+  resendRetryMessage(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.autoRetry.resendRetryMessage(user.userId, id);
+  }
+
   /** Turn off the pending auto-retry on this session. Arming happens by itself when a quota or a
    *  transient provider error kills a turn; the POST below is only for putting back what this
    *  took away, so the card's switch is a switch and not a one-way trapdoor. */
@@ -609,6 +646,25 @@ export class SessionsController {
   @Delete(':id/pin')
   unpin(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
     return this.sessions.unpin(user.userId, id);
+  }
+
+  /** What the Move panel shows: this workspace's folders, the other workspaces the session can or
+   *  cannot move to and why, and whether it has to be ended first. See SessionsService.moveTargets. */
+  @Get(':id/move-targets')
+  moveTargets(@CurrentUser() user: AuthUser, @Param('id', PublicIdPipe) id: string) {
+    return this.sessions.moveTargets(user.userId, id);
+  }
+
+  /** File this session in one of its workspace's folders, or in none (`folderId` null or omitted);
+   *  with a `workspaceId` other than its own, move an ended session to that workspace (and folder).
+   *  A move the rules refuse is a 409 with the reason. See SessionsService.move. */
+  @Post(':id/move')
+  move(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: MoveSessionDto,
+  ) {
+    return this.sessions.move(user.userId, id, dto);
   }
 
   /** Replace the set of personal colored tags applied to this session (picker sends the full

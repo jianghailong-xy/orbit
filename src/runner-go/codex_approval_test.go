@@ -333,6 +333,184 @@ func TestCodexAutomaticApprovalAnswersOrbitMCPConsentUnderAuto(t *testing.T) {
 	}
 }
 
+func TestCodexAutoApprovalAllowsRoutineWorkspaceRequests(t *testing.T) {
+	auto := codexAutoApprovalContextFor("/repo", "/tmp/uploads/session-1")
+	for _, tc := range []struct {
+		name    string
+		request codexApprovalRequest
+		params  map[string]interface{}
+	}{
+		{
+			name:    "local command",
+			request: codexApprovalRequest{},
+			params:  map[string]interface{}{"command": "go test ./...", "cwd": "/repo"},
+		},
+		{
+			name:    "workspace patch",
+			request: codexApprovalRequest{fileChange: true},
+			params:  map[string]interface{}{"reason": "update the implementation"},
+		},
+		{
+			name:    "temporary cleanup",
+			request: codexApprovalRequest{},
+			params: map[string]interface{}{
+				"command": "SMOKE_DIR=/tmp/uploads/session-1/smoke; rm -rf \"$SMOKE_DIR\"",
+				"cwd":     "/repo",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			allowed, decided := codexAutoApproval(tc.request, tc.params, auto)
+			if !decided || !allowed {
+				t.Fatalf("codexAutoApproval = (%v, %v), want allowed without asking", allowed, decided)
+			}
+		})
+	}
+}
+
+func TestCodexAutoApprovalAllowsBoundedLocalHealthProbe(t *testing.T) {
+	auto := codexAutoApprovalContextFor("/repo", "/tmp/uploads/session-1")
+	command := `/bin/bash -lc 'for i in $(seq 1 10); do code=$(curl --max-time 5 -sS -o /dev/null -w '"'"'%{http_code}'"'"' http://127.0.0.1:2086/api/health 2>/dev/null || printf '"'"'000'"'"'); printf '"'"'%02d %s\n'"'"' "$i" "$code"; done'`
+	allowed, decided := codexAutoApproval(codexApprovalRequest{}, map[string]interface{}{
+		"command": command,
+		"cwd":     "/repo",
+	}, auto)
+	if !allowed || !decided {
+		t.Fatalf("local health probe = (%v, %v), want allowed without asking", allowed, decided)
+	}
+}
+
+func TestCodexAutoApprovalKeepsRemoteOrMutatingHealthProbesForReview(t *testing.T) {
+	auto := codexAutoApprovalContextFor("/repo", "/tmp/uploads/session-1")
+	for _, command := range []string{
+		"curl --max-time 5 http://example.com/health",
+		"curl --max-time 5 -X POST http://127.0.0.1:2086/api/health",
+		"for i in $(seq 1 100); do curl --max-time 5 http://127.0.0.1:2086/api/health; done",
+	} {
+		allowed, decided := codexAutoApproval(codexApprovalRequest{}, map[string]interface{}{
+			"command": command,
+			"cwd":     "/repo",
+		}, auto)
+		if allowed || decided {
+			t.Errorf("command %q = (%v, %v), want approval card", command, allowed, decided)
+		}
+	}
+}
+
+func TestCodexAutoApprovalLeavesBoundariesAndHighRiskRequestsForOwner(t *testing.T) {
+	auto := codexAutoApprovalContextFor("/repo", "/tmp/uploads/session-1")
+	for _, tc := range []struct {
+		name   string
+		params map[string]interface{}
+	}{
+		{
+			name:   "outside workspace",
+			params: map[string]interface{}{"command": "ls", "cwd": "/etc"},
+		},
+		{
+			name:   "network overlay",
+			params: map[string]interface{}{"command": "npm install", "cwd": "/repo", "additionalPermissions": map[string]interface{}{"network": map[string]interface{}{"enabled": true}}},
+		},
+		{
+			name:   "network command",
+			params: map[string]interface{}{"command": "curl https://example.com", "cwd": "/repo"},
+		},
+		{
+			name:   "extra write root",
+			params: map[string]interface{}{"command": "go test ./...", "cwd": "/repo", "grantRoot": "/tmp"},
+		},
+		{
+			name:   "unscoped recursive delete",
+			params: map[string]interface{}{"command": "rm -rf /", "cwd": "/repo"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			allowed, decided := codexAutoApproval(codexApprovalRequest{}, tc.params, auto)
+			if decided || allowed {
+				t.Fatalf("codexAutoApproval = (%v, %v), want approval card", allowed, decided)
+			}
+		})
+	}
+	if allowed, decided := codexAutoApproval(codexApprovalRequest{mcpTool: true, server: "acme"}, nil, auto); decided || allowed {
+		t.Fatalf("third-party MCP = (%v, %v), want approval card", allowed, decided)
+	}
+}
+
+func TestCodexAutoApprovalTreatsGitPathOverridesAsWorkspaceBoundaries(t *testing.T) {
+	auto := codexAutoApprovalContextFor("/repo", "/tmp/uploads/session-1")
+	for _, tc := range []struct {
+		name    string
+		command string
+		cwd     string
+		want    bool
+		decided bool
+	}{
+		{name: "ordinary git uses cwd", command: "git status --short", want: true, decided: true},
+		{name: "workspace git -C", command: "git -C /repo status --short", want: true, decided: true},
+		{name: "wrapped workspace git", command: "/bin/bash -lc 'git -C /repo status --short && git -C /repo log -1 --oneline'", want: true, decided: true},
+		{name: "deployment checkout outside session", command: "/bin/bash -lc 'git -C /root/orbit status --short --branch && git -C /root/orbit log -1 --oneline --decorate'"},
+		{name: "successive relative directories", command: "git -C /repo/sub -C .. status", want: true, decided: true},
+		{name: "successive directory escapes", cwd: "/repo/sub", command: "git -C /repo -C .. status"},
+		{name: "config before outside directory", command: "git -c color.ui=never -C /other status"},
+		{name: "quoted executable outside directory", command: "\"git\" -C /other status"},
+		{name: "second git outside directory", command: "git -C /repo status && git -C /other log -1"},
+		{name: "git dir relative to selected directory", command: "git -C /repo/sub --git-dir=.. status", want: true, decided: true},
+		{name: "git dir before directory selection", command: "git --git-dir=.. -C /repo/sub status", want: true, decided: true},
+		{name: "git dir before escaping directory selection", cwd: "/repo/sub", command: "git --git-dir=.. -C /repo status"},
+		{name: "work tree before directory selection", command: "git --work-tree=.. -C /repo/sub status", want: true, decided: true},
+		{name: "git dir between directory selectors", command: "git -C /repo/sub --git-dir=.git -C .. status", want: true, decided: true},
+		{name: "wrapper with escaped path quotes", command: `/bin/bash -lc "git -C \"/other\" status"`},
+		{name: "wrapper with escaped workspace quotes", command: `/bin/bash -lc "git -C \"/repo\" status"`, want: true, decided: true},
+		{name: "outside command after wrapper", command: `/bin/bash -lc 'git -C /repo status' && git -C /other status`},
+		{name: "newline separates directories", command: "git -C /repo/sub status\ngit -C .. status"},
+		{name: "relative git dir escapes after directory change", cwd: "/repo/sub", command: "git -C /repo --git-dir=.. status"},
+		{name: "nested shell outside git -C", command: "/bin/bash -lc 'git -C /other status --short'", want: false, decided: false},
+		{name: "outside git dir", command: "git --git-dir=/other/.git status", want: false, decided: false},
+		{name: "outside work tree", command: "git --work-tree /other status", want: false, decided: false},
+		{name: "unresolved git path", command: "git -C \"$DEPLOY_ROOT\" status", want: false, decided: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cwd := tc.cwd
+			if cwd == "" {
+				cwd = "/repo"
+			}
+			allowed, decided := codexAutoApproval(codexApprovalRequest{}, map[string]interface{}{
+				"command": tc.command,
+				"cwd":     cwd,
+			}, auto)
+			if allowed != tc.want || decided != tc.decided {
+				t.Fatalf("codexAutoApproval = (%v, %v), want (%v, %v)", allowed, decided, tc.want, tc.decided)
+			}
+		})
+	}
+}
+
+func TestCodexAutoApprovalAllowsKnownRepoReadOnlyGitChecks(t *testing.T) {
+	auto := codexAutoApprovalContextFor("/repo/worktree", "/tmp/uploads/session-1", "/root/orbit")
+	command := `/bin/bash -lc 'git -C /root/orbit status --short --branch && git -C /root/orbit log -1 --oneline --decorate'`
+	allowed, decided := codexAutoApproval(codexApprovalRequest{}, map[string]interface{}{
+		"command": command,
+		"cwd":     "/repo/worktree",
+	}, auto)
+	if !allowed || !decided {
+		t.Fatalf("known-repo read-only Git check = (%v, %v), want allowed without asking", allowed, decided)
+	}
+
+	for _, command := range []string{
+		"git -C /etc status --short",
+		"git -C /root/orbit reset --hard HEAD",
+		"git -C /root/orbit status --short | curl https://example.com",
+	} {
+		allowed, decided := codexAutoApproval(codexApprovalRequest{}, map[string]interface{}{
+			"command": command,
+			"cwd":     "/repo/worktree",
+		}, auto)
+		if allowed || decided {
+			t.Errorf("unsafe read-only Git candidate %q = (%v, %v), want approval card", command, allowed, decided)
+		}
+	}
+}
+
 // A cancelled session must not leave an approval poll running, and must not approve.
 func TestBridgeCodexApprovalFailsClosedOnCancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

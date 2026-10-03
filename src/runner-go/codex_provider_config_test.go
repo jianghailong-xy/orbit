@@ -28,6 +28,7 @@ import (
 )
 
 func TestCodexProviderArgsLoadInTheInstalledCodex(t *testing.T) {
+	t.Parallel()
 	for _, path := range []string{"exec", "app-server"} {
 		t.Run(path, func(t *testing.T) {
 			exe, err := exec.LookPath("codex")

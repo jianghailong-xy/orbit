@@ -30,6 +30,8 @@ struct WikiHomeActions {
     var openContents: () -> Void = {}
     /// A session, by id: the status line's View run opens the run that failed (mock 12 ④).
     var openSession: (String) -> Void = { _ in }
+    /// The plan's banner (mock 26 ③): into the plan page, or — held for want of a setting — Maintenance.
+    var openPlan: (WikiPlanLogic.Banner.To) -> Void = { _ in }
 }
 
 /// One space's home: the large title with the space beside it, the status line, the search under
@@ -39,6 +41,8 @@ struct WikiHomePage: View {
     let content: WikiHomeContent
     var now: Date = Date()
     var actions = WikiHomeActions()
+    /// What the plan has to say (owner's call 2026-09-29): the phone's second banner, under Review's.
+    var planBanner: WikiPlanLogic.Banner? = nil
 
     @State private var query = ""
     @State private var hits: [WikiSearchHit] = []
@@ -170,6 +174,13 @@ struct WikiHomePage: View {
         case .reviewBanner:
             if content.proposals > 0 {
                 reviewBanner
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+            }
+            // The plan's banner is the second, under Review's (mock 26 ①); its changes are handled on the
+            // plan page, never in Review.
+            if let planBanner {
+                WikiPlanBannerRow(banner: planBanner) { actions.openPlan(planBanner.to) }
                     .listRowInsets(EdgeInsets())
                     .listRowSeparator(.hidden)
             }

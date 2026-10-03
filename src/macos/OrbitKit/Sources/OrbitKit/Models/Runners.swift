@@ -444,6 +444,73 @@ public struct PlanUsageRateLimit: Codable, Equatable, Sendable {
     }
 }
 
+/// The support answer reported by the runner for earned Codex rate-limit resets.
+///
+/// This remains a raw string instead of an enum on purpose: the runner may learn a new support
+/// state before this client is updated, and an unknown value must not make the whole runner row
+/// undecodable.
+public typealias CodexRateLimitResetSupport = String
+
+/// One earned Codex reset credit. The provider owns these values; the client only displays them.
+public struct PlanUsageRateLimitResetCredit: Codable, Equatable, Sendable {
+    public let id: String
+    public let resetType: String
+    public let status: String
+    public let grantedAt: String
+    public let expiresAt: String?
+    public let title: String?
+    public let description: String?
+
+    public init(id: String, resetType: String, status: String, grantedAt: String,
+                expiresAt: String? = nil, title: String? = nil, description: String? = nil) {
+        self.id = id
+        self.resetType = resetType
+        self.status = status
+        self.grantedAt = grantedAt
+        self.expiresAt = expiresAt
+        self.title = title
+        self.description = description
+    }
+}
+
+/// The provider's authoritative reset-credit count and optional detail rows.
+public struct PlanUsageRateLimitResetCredits: Codable, Equatable, Sendable {
+    public let availableCount: Int
+    public let credits: [PlanUsageRateLimitResetCredit]?
+
+    public init(availableCount: Int, credits: [PlanUsageRateLimitResetCredit]? = nil) {
+        self.availableCount = availableCount
+        self.credits = credits
+    }
+}
+
+/// Earned reset state for the runner's default Codex account.
+public struct PlanUsageRateLimitReset: Codable, Equatable, Sendable {
+    public let protocolVersion: Int
+    public let support: CodexRateLimitResetSupport
+    public let accountFingerprint: String?
+    public let rateLimitResetCredits: PlanUsageRateLimitResetCredits?
+    public let fetchedAt: String
+    public let generation: String
+    public let sequence: Int
+
+    public init(protocolVersion: Int = 1, support: CodexRateLimitResetSupport,
+                accountFingerprint: String? = nil,
+                rateLimitResetCredits: PlanUsageRateLimitResetCredits? = nil,
+                fetchedAt: String, generation: String, sequence: Int) {
+        self.protocolVersion = protocolVersion
+        self.support = support
+        self.accountFingerprint = accountFingerprint
+        self.rateLimitResetCredits = rateLimitResetCredits
+        self.fetchedAt = fetchedAt
+        self.generation = generation
+        self.sequence = sequence
+    }
+
+    /// The contract's v1 support values that can be rendered by the reset card.
+    public var isSupported: Bool { support == "SUPPORTED" }
+}
+
 /// One provider's usage snapshot. Claude fills fiveHour/sevenDay; Codex fills primary/secondary.
 public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     public let provider: String?
@@ -459,6 +526,8 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
     public let rateLimitReachedType: String?
     public let credits: PlanUsageCredits?
     public let rateLimits: [PlanUsageRateLimit]?
+    /// Earned Codex reset state (absent on older runners and non-Codex snapshots).
+    public let rateLimitReset: PlanUsageRateLimitReset?
     public let fetchedAt: String?
     /// The runner's other accounts of this engine, by account id, each as its own windows: this
     /// snapshot's windows are Default's (web `codexAccountSnapshot`).
@@ -471,6 +540,7 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
                 limitName: String? = nil, planType: String? = nil,
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
                 rateLimits: [PlanUsageRateLimit]? = nil,
+                rateLimitReset: PlanUsageRateLimitReset? = nil,
                 fetchedAt: String? = nil, accounts: [String: PlanUsageSnapshot]? = nil) {
         self.provider = provider
         self.fiveHour = fiveHour
@@ -485,6 +555,7 @@ public struct PlanUsageSnapshot: Codable, Equatable, Sendable {
         self.rateLimitReachedType = rateLimitReachedType
         self.credits = credits
         self.rateLimits = rateLimits
+        self.rateLimitReset = rateLimitReset
         self.fetchedAt = fetchedAt
         self.accounts = accounts
     }
@@ -506,6 +577,8 @@ public struct PlanUsage: Codable, Equatable, Sendable {
     public let rateLimitReachedType: String?
     public let credits: PlanUsageCredits?
     public let rateLimits: [PlanUsageRateLimit]?
+    /// Earned Codex reset state on a flat (legacy) provider snapshot.
+    public let rateLimitReset: PlanUsageRateLimitReset?
     public let claude: PlanUsageSnapshot?
     public let codex: PlanUsageSnapshot?
     public let kimi: PlanUsageSnapshot?
@@ -518,6 +591,7 @@ public struct PlanUsage: Codable, Equatable, Sendable {
                 limitName: String? = nil, planType: String? = nil,
                 rateLimitReachedType: String? = nil, credits: PlanUsageCredits? = nil,
                 rateLimits: [PlanUsageRateLimit]? = nil,
+                rateLimitReset: PlanUsageRateLimitReset? = nil,
                 claude: PlanUsageSnapshot? = nil, codex: PlanUsageSnapshot? = nil,
                 kimi: PlanUsageSnapshot? = nil,
                 fetchedAt: String? = nil) {
@@ -534,6 +608,7 @@ public struct PlanUsage: Codable, Equatable, Sendable {
         self.rateLimitReachedType = rateLimitReachedType
         self.credits = credits
         self.rateLimits = rateLimits
+        self.rateLimitReset = rateLimitReset
         self.claude = claude
         self.codex = codex
         self.kimi = kimi
@@ -612,8 +687,45 @@ public extension PlanUsageSnapshot {
             }
     }
 
-    /// The first displayed window's percent, or nil when no windows are reported.
-    var primaryPercent: Int? { rows.first?.percent }
+    /// `rows` as they stand at `now` (web's `currentPlanUsageRows`). A window whose reset has passed
+    /// reads as the fresh window it now is — nothing used, no reset to name — rather than as the
+    /// reading taken before it rolled over: the runner reads again just after a reset, so a past one
+    /// outlives it only on a reading that has stopped refreshing.
+    func currentRows(at now: Date = Date()) -> [PlanUsageRow] {
+        rows.map { row in
+            guard let resets = planUsageResetDate(row.window), resets <= now else { return row }
+            return PlanUsageRow(key: row.key, label: row.label, groupLabel: row.groupLabel,
+                                window: PlanUsageWindow(utilization: 0, label: row.window.label,
+                                                        windowDurationMins: row.window.windowDurationMins))
+        }
+    }
+
+    /// The window that stops this login, or will stop it first (web's `bindingPlanUsageRow`): a spent
+    /// one before any other — of several, the one that resets last, since the login is back only once
+    /// every spent one has — else the one closest to its limit, a tie going to the first. Whatever
+    /// shows one number for a login shows this one: a Claude login's 5-hour window can read 6% while
+    /// its weekly one is spent.
+    func bindingRow(at now: Date = Date()) -> PlanUsageRow? {
+        let current = currentRows(at: now)
+        let spent = current.filter { $0.window.utilization >= 100 }
+        if let first = spent.first {
+            // A spent window with no reset named holds the login for as long as anyone can tell.
+            let reset = { (row: PlanUsageRow) in planUsageResetDate(row.window) ?? .distantFuture }
+            return spent.dropFirst().reduce(first) { reset($1) > reset($0) ? $1 : $0 }
+        }
+        return current.dropFirst().reduce(current.first) { tightest, row in
+            guard let tightest else { return row }
+            return row.window.utilization > tightest.window.utilization ? row : tightest
+        }
+    }
+}
+
+/// When a window resets, or nil when it names no time this can read.
+private func planUsageResetDate(_ window: PlanUsageWindow) -> Date? {
+    guard let at = window.resetsAt else { return nil }
+    let withFraction = ISO8601DateFormatter()
+    withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return withFraction.date(from: at) ?? ISO8601DateFormatter().date(from: at)
 }
 
 public extension PlanUsage {
@@ -624,6 +736,7 @@ public extension PlanUsage {
                           limitName: limitName, planType: planType,
                           rateLimitReachedType: rateLimitReachedType, credits: credits,
                           rateLimits: rateLimits,
+                          rateLimitReset: rateLimitReset,
                           fetchedAt: fetchedAt)
     }
 
@@ -671,5 +784,95 @@ public extension PlanUsage {
     }
 
     var rows: [PlanUsageRow] { flatSnapshot.rows }
-    var primaryPercent: Int? { flatSnapshot.primaryPercent }
+}
+
+/// The request that confirms one earned Codex reset credit. The client request id makes a retried
+/// confirmation idempotent; the provider's private idempotency key never leaves the control plane.
+public struct CreateCodexRateLimitResetRequest: Codable, Equatable, Sendable {
+    public let clientRequestId: String
+    public let accountFingerprint: String
+    public let workspaceId: String?
+
+    public init(clientRequestId: String, accountFingerprint: String, workspaceId: String? = nil) {
+        self.clientRequestId = clientRequestId
+        self.accountFingerprint = accountFingerprint
+        self.workspaceId = workspaceId
+    }
+}
+
+/// The public view of one reset-credit operation. Status values stay raw so a newer server can be
+/// read by an older client without making the runner response undecodable.
+public struct CodexRateLimitResetOperation: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let runnerId: String
+    public let clientRequestId: String
+    public let accountFingerprint: String
+    public let status: String
+    public let consumeState: String
+    public let consumeOutcome: String?
+    public let refreshState: String
+    public let failureCode: String?
+    public let lastErrorCode: String?
+    public let createdAt: String
+    public let updatedAt: String
+    public let consumeConfirmedAt: String?
+    public let completedAt: String?
+
+    public init(id: String, runnerId: String, clientRequestId: String, accountFingerprint: String,
+                status: String, consumeState: String, consumeOutcome: String? = nil,
+                refreshState: String, failureCode: String? = nil, lastErrorCode: String? = nil,
+                createdAt: String, updatedAt: String, consumeConfirmedAt: String? = nil,
+                completedAt: String? = nil) {
+        self.id = id
+        self.runnerId = runnerId
+        self.clientRequestId = clientRequestId
+        self.accountFingerprint = accountFingerprint
+        self.status = status
+        self.consumeState = consumeState
+        self.consumeOutcome = consumeOutcome
+        self.refreshState = refreshState
+        self.failureCode = failureCode
+        self.lastErrorCode = lastErrorCode
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.consumeConfirmedAt = consumeConfirmedAt
+        self.completedAt = completedAt
+    }
+
+    public var isActive: Bool {
+        switch status {
+        case "PENDING", "CONSUMING", "REFRESHING": return true
+        case "SUCCEEDED", "REFRESH_FAILED", "NOTHING_TO_RESET", "NO_CREDIT", "NOT_ATTEMPTED", "UNRESOLVED":
+            return false
+        default:
+            // A newer server may add an active checkpoint before this client knows its spelling.
+            // Fail closed so the UI cannot submit a second credit while that operation is moving.
+            return true
+        }
+    }
+}
+
+/// Name used by the shared wire contract; the shorter operation name remains convenient in the UI.
+public typealias CodexRateLimitResetOperationView = CodexRateLimitResetOperation
+
+/// The operation currently in flight and the most recent settled operation for a runner.
+public struct CodexRateLimitResetOperations: Codable, Equatable, Sendable {
+    public let active: CodexRateLimitResetOperation?
+    public let latest: CodexRateLimitResetOperation?
+
+    public init(active: CodexRateLimitResetOperation?, latest: CodexRateLimitResetOperation?) {
+        self.active = active
+        self.latest = latest
+    }
+}
+
+/// The response to a reset-credit confirmation. A replay returns the original operation.
+public struct CreateCodexRateLimitResetResponse: Codable, Equatable, Sendable {
+    public let operation: CodexRateLimitResetOperation
+    public let replayed: Bool
+
+    public init(operation: CodexRateLimitResetOperation, replayed: Bool) {
+        self.operation = operation
+        self.replayed = replayed
+    }
 }

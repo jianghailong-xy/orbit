@@ -209,6 +209,67 @@ test('requestStart files the request in the runner owner scope, as the acting se
   assert.deepEqual(filed, { itemId: 'item-1', state: 'OPEN', warnings: [] });
 });
 
+test('retryIntegration is exposed as POST projects/:id/tasks/:taskId/integration/retry', () => {
+  const handler = RunnerProjectsController.prototype.retryIntegration;
+  assert.equal(
+    Reflect.getMetadata(PATH_METADATA, handler),
+    'projects/:id/tasks/:taskId/integration/retry',
+  );
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+  // The task is the second id on this route, base62 like the first: undecoded, it would reach a
+  // `::uuid` cast and answer a legitimate id with a 500.
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'retryIntegration') as
+    | Record<string, { data?: unknown; pipes?: unknown[] }>
+    | undefined;
+  for (const id of ['id', 'taskId']) {
+    const arg = Object.values(args ?? {}).find((candidate) => candidate.data === id);
+    assert.ok(arg, `no ${id} param on retryIntegration`);
+    assert.ok(
+      (arg.pipes ?? []).some((pipe) => pipe === PublicIdPipe || pipe instanceof PublicIdPipe),
+      `${id} does not resolve through PublicIdPipe`,
+    );
+  }
+});
+
+/**
+ * A rerun is asked for in the runner owner's scope, as the session that sent it — the service is what
+ * compares that session with the project's coordinator, so the header reaches it trimmed and nothing
+ * else stands in for it.
+ */
+test('retryIntegration reruns the landing in the runner owner scope, as the acting session', async () => {
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'retryIntegration') as
+    | Record<string, { data?: unknown }>
+    | undefined;
+  const headers = Object.values(args ?? {})
+    .map((arg) => arg.data)
+    .filter((data) => typeof data === 'string' && data.includes('-'));
+  assert.deepEqual(headers, ['x-orbit-session-id']);
+
+  const seen: unknown[] = [];
+  const openItems = {
+    retryIntegration: async (...call: unknown[]) => {
+      seen.push(call);
+      return { taskId: 'task-1', jobId: 'job-2', generation: 2 };
+    },
+  } as never;
+  const controller = new RunnerProjectsController(
+    {} as never,
+    acceptanceDouble(),
+    {} as never,
+    orchestrationDouble(),
+    openItems,
+  );
+  const body = { reason: 'the merge check baseline was repaired' };
+
+  const retried = await controller.retryIntegration(RUNNER, ` ${SESSION_ID} `, 'project-1', 'task-1', body);
+
+  assert.deepEqual(seen, [['owner-1', 'project-1', 'task-1', body, SESSION_ID]]);
+  assert.deepEqual(retried, { taskId: 'task-1', jobId: 'job-2', generation: 2 });
+  // A missing header is passed on as missing, for the service to refuse — never read as the owner.
+  await controller.retryIntegration(RUNNER, undefined, 'project-1', 'task-1', body);
+  assert.deepEqual(seen[1], ['owner-1', 'project-1', 'task-1', body, undefined]);
+});
+
 /**
  * An agent ending a blocker writes into the runner's owner and is recorded as the COORDINATOR.
  *
@@ -600,6 +661,11 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     // cannot produce for itself is work that landed by hand. The owner's half of the same door is the
     // user API's, which is why this one takes the acting session and refuses without it.
     'resolveOpenItem',
+    // `integration_retry` (§2.3 J-T1b): the coordinator running one of its project's failed landings
+    // again, with a reason. On the machine door for the reason the item door above is — the failure
+    // is the coordinator's to decide, and the acting session is the authority the service checks —
+    // and it spends no orchestration credential: it queues the line's own work and starts no session.
+    'retryIntegration',
     // The second half of the coordinator pair above, and the one that does not go stale: a message
     // ADDRESSED to the project, resolved to whichever conversation coordinates it at the moment of
     // delivery. `ensureCoordinator` answers with an id, and an id is exactly what a rotation between
@@ -629,6 +695,7 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     requestStart: RequestMethod.POST,
     resolveBlocker: RequestMethod.POST,
     resolveOpenItem: RequestMethod.POST,
+    retryIntegration: RequestMethod.POST,
     // POST: it writes a turn, and a rotation is a side effect it may have. Both are the send the
     // project's coordinator would have received anyway — this door moves WHERE it is addressed from
     // a session to a project, and adds no authority to it.

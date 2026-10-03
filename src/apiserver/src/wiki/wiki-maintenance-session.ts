@@ -3,9 +3,12 @@ import { Prisma } from '@prisma/client';
 import {
   AgentProvider,
   PermissionMode,
+  WIKI_MAINTENANCE_CATCH_UP,
   WIKI_MAINTENANCE_RUN,
+  wikiMaintenanceBehind,
   wikiMaintenanceSettings,
   type AgentExecConfig,
+  type WikiMaintenanceCatchUp,
   type WikiMaintenanceRun,
 } from '@orbit/shared';
 import { wikiMaintenanceProviderProblem, wikiMaintenanceSpaceOf } from './wiki-maintenance-settings';
@@ -33,7 +36,7 @@ import { wikiMaintenanceProviderProblem, wikiMaintenanceSpaceOf } from './wiki-m
  * the reclaim leaves it out, the way a pinned SOURCE is withheld from a runner that cannot pin (SR35).
  */
 
-type RunReader = Pick<Prisma.TransactionClient, 'session' | 'wikiSpace' | 'modelProvider' | 'providerPool'>;
+type RunReader = Pick<Prisma.TransactionClient, 'session' | 'wikiSpace' | 'modelProvider' | 'providerPool' | 'wikiPlanJob'>;
 
 /**
  * The run a session is claimed with when it is a maintenance session, or null for every other session.
@@ -61,8 +64,11 @@ export async function wikiMaintenanceRunOf(
     cleanStart: true,
   };
   const named = session.provider ?? AgentProvider.CLAUDE;
+  // A plan job's task (contract `plan.jobs.task`) runs in the maintenance list whether or not maintenance
+  // is on: a space is drafted a plan before its owner turns maintenance on. Everything else holds for it.
+  const planJob = (await db.wikiPlanJob.findFirst({ where: { taskId: session.taskId }, select: { id: true } })) !== null;
   let why: string | null = null;
-  if (!settings.enabled) {
+  if (!settings.enabled && !planJob) {
     why = "maintenance is off in its space: the owner turned it off after this run was made";
   } else if (!settings.workspaceId || settings.workspaceId !== session.workspaceId) {
     why = "it runs only in the workspace its space's maintenance settings name, and this session is in another one";
@@ -118,10 +124,13 @@ export function wikiMaintenanceSessionSql(sessionAlias: string): Prisma.Sql {
 /**
  * How many maintenance tasks a space has made today (the UTC day `now` is in) against its daily limit
  * (contract `space.settings.maintenance.keys.dailyRunLimit`): every task of its maintenance list made
- * since midnight UTC, however it ended. The maintenance job asks it before it makes another.
+ * since midnight UTC, however it ended — but a plan job's (contract `plan.jobs`), which is not a
+ * maintenance run and is not counted against the day, and a run made in catch-up that is not counted either
+ * (contract `maintenance.job.catchUp.dailyLimit`): one pinned to a local endpoint, or one that failed. The
+ * maintenance job asks it before it makes another.
  */
 export async function wikiMaintenanceRunsToday(
-  db: Pick<Prisma.TransactionClient, 'wikiSpace' | 'task'>,
+  db: Pick<Prisma.TransactionClient, 'wikiSpace' | 'task' | 'wikiPlanJob' | 'wikiMaintenanceRun'>,
   ownerId: string,
   spaceId: string,
   now: Date = new Date(),
@@ -133,8 +142,28 @@ export async function wikiMaintenanceRunsToday(
     : undefined;
   const settings = wikiMaintenanceSettings(stored);
   const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const planTasks = settings.listId
+    ? (await db.wikiPlanJob.findMany({ where: { ownerId, spaceId, madeAt: { gte: since }, taskId: { not: null } }, select: { taskId: true } }))
+      .map((job) => job.taskId as string)
+    : [];
+  // A run's row is made after its task, in the same transaction: one made since midnight covers every run of today's tasks.
+  const uncounted = settings.listId
+    ? (await db.wikiMaintenanceRun.findMany({
+      where: {
+        ownerId,
+        spaceId,
+        catchUp: 'active',
+        createdAt: { gte: since },
+        OR: [{ localEndpoint: true }, { outcome: { in: ['failed', 'truncated'] } }],
+      },
+      select: { taskId: true },
+    })).map((run) => run.taskId)
+    : [];
+  const left = [...planTasks, ...uncounted];
   const used = settings.listId
-    ? await db.task.count({ where: { ownerId, listId: settings.listId, createdAt: { gte: since } } })
+    ? await db.task.count({
+      where: { ownerId, listId: settings.listId, createdAt: { gte: since }, ...(left.length > 0 ? { id: { notIn: left } } : {}) },
+    })
     : 0;
   return {
     limit: settings.dailyRunLimit,
@@ -142,4 +171,39 @@ export async function wikiMaintenanceRunsToday(
     remaining: Math.max(0, settings.dailyRunLimit - used),
     since: since.toISOString(),
   };
+}
+
+/** Where a space stands on catch-up (contract `maintenance.job.catchUp`). */
+export interface WikiMaintenanceCatchUpRead {
+  /** The oldest fact after the cursor is older than `catchUp.rules.behindHours`. */
+  behind: boolean;
+  /** How many of the space's latest runs that ended failed in a row, counted as far as the pause. */
+  failures: number;
+  /** null — not behind; `active` — behind and catching up; `paused` — behind, and its last runs all failed. */
+  state: WikiMaintenanceCatchUp | null;
+}
+
+/**
+ * Whether a space whose oldest fact after the cursor is `oldestPendingAt` is catching up at `now` (contract
+ * `maintenance.job.catchUp`): behind is read off the facts, never waited for; paused, off the ends of its latest
+ * runs — a run whose session died before it said how is given its end by the trigger before this is asked, and
+ * counts — so a streak the cursor's own count never saw pauses it all the same.
+ */
+export async function wikiMaintenanceCatchUpOf(
+  db: Pick<Prisma.TransactionClient, 'wikiMaintenanceRun'>,
+  ownerId: string,
+  spaceId: string,
+  oldestPendingAt: Date | null,
+  now: Date,
+): Promise<WikiMaintenanceCatchUpRead> {
+  if (!wikiMaintenanceBehind(oldestPendingAt, now)) return { behind: false, failures: 0, state: null };
+  const ended = await db.wikiMaintenanceRun.findMany({
+    where: { ownerId, spaceId, outcome: { not: null } },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    take: WIKI_MAINTENANCE_CATCH_UP.pauseAfterFailures,
+    select: { outcome: true },
+  });
+  const succeeded = ended.findIndex((run) => run.outcome === 'succeeded');
+  const failures = succeeded < 0 ? ended.length : succeeded;
+  return { behind: true, failures, state: failures >= WIKI_MAINTENANCE_CATCH_UP.pauseAfterFailures ? 'paused' : 'active' };
 }

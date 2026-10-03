@@ -271,7 +271,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     expect(head.querySelectorAll('.pool-people .pool-av')).toHaveLength(4);
     expect(head.querySelector('.re-summary')?.textContent).toBe('2 of 5 keys available');
     expect(head.querySelector('.pool-gauge-name')?.textContent).toBe('Next: orbit-org-1');
-    expect(head.querySelector('.pool-gauge-pct')?.textContent).toBe('25%');
+    expect(head.querySelector('.pool-gauge-pct')?.textContent).toBe('Monthly 25%');
     // The account pool beside it wears Claude's mark and is nobody else's.
     expect(claude.querySelector('.re-runner')?.textContent).toBe('Claude accounts');
     expect(claude.querySelector('.pool-shared-chip')).toBeNull();
@@ -279,7 +279,7 @@ describe('a shared pool on /providers and on its own page', { timeout: 30_000 },
     // Where another pool is made.
     expect(button('New pool', container.querySelector('.pool-sec-head')!)).not.toBeNull();
     expect(container.querySelector('.pool-sec .re-sec-sub')?.textContent).toBe(
-      'Several keys under one name — each session starts on the one with the most room, and moves on when it runs out.',
+      'Several keys under one name — each session starts on one with room, and moves on when it runs out.',
     );
   });
 

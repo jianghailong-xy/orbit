@@ -1,3 +1,4 @@
+import { taskCarriedSql } from '../sessions/task-work-carrier';
 import { projectNotCancelledSql } from './project-cancelled-dispatch';
 import { dependenciesSatisfiedSql } from './task-dependencies';
 import { taskNotObsoleteSql } from './task-supersession';
@@ -8,8 +9,10 @@ import { taskNotObsoleteSql } from './task-supersession';
  * Kept as one shared SQL predicate because the Ready task tab and every project-scoped
  * "Ready to run" surface have to agree with the execute gate. A task is manually runnable when
  * it is not done, is not paused, is not filed under a cancelled project (`projectNotCancelledSql`),
- * has an enabled workspace backed by a runner, has no busy work
- * run or unresolved completion-ACK repair, has satisfied every prerequisite, is not an
+ * has an enabled workspace backed by a runner, has no work session carrying it
+ * (`sessions/task-work-carrier.ts`: a turn queued or running, or a session parked at AWAITING_INPUT
+ * with something that will wake it — a parked session with nothing to wake it is idle, and Run
+ * continues it) or unresolved completion-ACK repair, has satisfied every prerequisite, is not an
  * completion-owned task (aggregate parent or independent-verification gate row), and has not been
  * retired by supersession.
  *
@@ -38,13 +41,7 @@ export function manualRunnableTaskSql(
     SELECT 1 FROM workspace a
     WHERE a.id = ${alias}.assignee_id AND a.runner_id IS NOT NULL AND a.enabled = true
   )
-  AND NOT EXISTS (
-    SELECT 1 FROM session s
-    WHERE s.task_id = ${alias}.id
-      AND s.deleted_at IS NULL
-      AND s.starts_task_work = true
-      AND s.status IN ('PENDING'::run_status, 'RUNNING'::run_status)
-  )
+  AND NOT ${taskCarriedSql(alias, 'runnable_carrier')}
   AND ${dependenciesSatisfiedSql(alias)}
   AND NOT (
     ${alias}.completion_policy = 'VERIFICATION_PASSED'::task_completion_policy

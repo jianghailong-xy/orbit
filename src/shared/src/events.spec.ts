@@ -118,6 +118,21 @@ describe('isRetryableApiErrorText', () => {
     expect(isRetryableApiErrorText('API Error: Request timed out.')).toBe(true);
   });
 
+  // Verbatim from a DeepSeek session: the stream stayed silent until the runtime's watchdog gave
+  // up, and the non-streaming request it fell back to was answered with something not a reply.
+  it('flags the runtime’s non-streaming fallback failing after a dead stream', () => {
+    expect(
+      isRetryableApiErrorText(
+        'API Error: API returned an empty or malformed response (HTTP 200) — check for a proxy ' +
+          'or gateway intercepting the request. Response: content-type json, body is JSON but ' +
+          'not a Message, size unknown, request-id absent, server other, intermediary headers ' +
+          'content-encoding transfer-encoding via x-amz-* x-cache. This was the non-streaming ' +
+          'retry of streaming request (no Anthropic request-id), which failed with: watchdog; ' +
+          '0 stream events received.',
+      ),
+    ).toBe(true);
+  });
+
   it('leaves alone the errors a re-send reproduces exactly', () => {
     expect(
       isRetryableApiErrorText(
@@ -138,6 +153,22 @@ describe('isRetryableApiErrorText', () => {
     expect(
       isRetryableApiErrorText(
         'API Error: Request rejected (400) · Output blocked by content filtering policy',
+      ),
+    ).toBe(false);
+  });
+
+  // Codex words its own and reports it as the turn's error, with no `API Error` prefix.
+  it('flags a runtime naming the overload in its own words', () => {
+    expect(
+      isRetryableApiErrorText('Selected model is at capacity. Please try a different model.'),
+    ).toBe(true);
+    expect(
+      isRetryableApiErrorText('  Selected model is at capacity. Please try a different model.'),
+    ).toBe(true);
+    // Only as the whole message: a reply that investigates one quotes it mid-paragraph.
+    expect(
+      isRetryableApiErrorText(
+        'The run died on "Selected model is at capacity. Please try a different model." — retrying.',
       ),
     ).toBe(false);
   });

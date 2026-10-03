@@ -981,13 +981,24 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   height: 44px;
   padding: 0 8px;
+  border: 0;
   border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   cursor: pointer;
 }
-.tp-user-trigger:hover {
+.tp-user-trigger:hover,
+.tp-user-trigger.open {
   background: var(--bg-hover);
+}
+.tp-user-trigger:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
 }
 .tp-user-name {
   flex: 1;
@@ -998,6 +1009,65 @@ body {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-1);
+}
+.ant-dropdown-menu.tp-account-menu {
+  width: 280px;
+  max-width: calc(100vw - 16px);
+}
+.tp-account-menu .ant-dropdown-menu-item,
+.tp-account-menu .ant-dropdown-menu-submenu-title {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+}
+.tp-account-menu .ant-dropdown-menu-title-content {
+  flex: 1;
+  min-width: 0;
+}
+.tp-account-menu .ant-dropdown-menu-item.tp-account-profile {
+  min-height: 64px;
+}
+.tp-account-profile-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.tp-account-identity {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.35;
+}
+.tp-account-name,
+.tp-account-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tp-account-name {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.tp-account-detail,
+.tp-account-current-theme {
+  color: var(--text-2);
+  font-size: 12px;
+}
+.tp-account-appearance-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+}
+.tp-account-current-theme {
+  margin-left: auto;
+}
+.tp-account-menu .ant-dropdown-menu-item-danger,
+.tp-account-menu .ant-dropdown-menu-item-danger .ant-dropdown-menu-item-icon {
+  color: var(--error);
 }
 
 /* ---- Collapsible sidebar ---- */
@@ -2239,6 +2309,15 @@ body {
   min-width: 0;
   font-size: 12.5px;
 }
+/* Whose windows these are, when the engine has several accounts: the one a new session starts on. */
+.rd-quota-next {
+  margin-bottom: 4px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .rd-quota-head {
   display: flex;
   justify-content: space-between;
@@ -3155,6 +3234,24 @@ body {
 }
 .session-section-head:first-child {
   padding-top: 2px;
+}
+/* The Pinned heading folds its rows away, as Notes' Pinned does: the whole heading is the button,
+   and the chevron at its end points down while the rows show, right once they are folded. */
+.session-section-fold {
+  width: 100%;
+  justify-content: space-between;
+  border: 0;
+  font-family: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.session-section-chev {
+  font-size: 10px;
+  transition: transform 0.15s;
+}
+.session-section-chev.open {
+  transform: rotate(90deg);
 }
 /* Foot of the list while the next page loads. */
 .session-list-more {
@@ -4469,7 +4566,8 @@ html[data-theme='dark'] .session-tag-chip {
 :root[data-theme='dark'] .find-bar {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
 }
-/* ChatGPT-style snap-to-latest button; only mounted while scrolled up off the tail. */
+/* ChatGPT-style snap-to-latest button; only mounted while the tail is out of view — scrolled up
+   off it, or stranded below a transcript still pinned to it (WorkspaceView's `stranded`). */
 .scroll-to-bottom {
   position: absolute;
   bottom: 16px;
@@ -4672,6 +4770,16 @@ html[data-theme='dark'] .session-tag-chip {
 /* Last assistant reply, flattened to one line. Shares the second line with the row's tags
    (.session-sub owns the spacing above) — darker than the time so it reads as content,
    not metadata. */
+/* Who a session list row is waiting on for a reply, and who is waiting on it (session requests). */
+.session-requests {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--brand);
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .session-preview {
   flex: 1;
   min-width: 0;
@@ -4683,8 +4791,9 @@ html[data-theme='dark'] .session-tag-chip {
   text-overflow: ellipsis;
 }
 /* Live status line (in place of a reply, while the agent works). Colour matches the
-   status glyph: blue = running, amber = waiting on you, grey = queued or a background
-   process the agent left up (which outlives the turn but isn't the agent working). */
+   status glyph: blue = running, amber = waiting on you, grey = queued, a background
+   process the agent left up (which outlives the turn but isn't the agent working), or a
+   watch that will resume the session (nothing is running, and nobody is being asked). */
 .session-preview.tone-running {
   color: var(--brand);
 }
@@ -4692,7 +4801,8 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--warning-solid);
 }
 .session-preview.tone-queued,
-.session-preview.tone-background {
+.session-preview.tone-background,
+.session-preview.tone-watching {
   color: var(--text-3);
 }
 /* Row actions overlay the right edge instead of taking layout space: while idle
@@ -6622,7 +6732,11 @@ button.chat-jump-start:hover {
 .olc-head > :not(.olc-kind) {
   margin-left: auto;
 }
+/* The type's name keeps its width and the state beside it gives way: a failed session's state is its
+   error, which can run to a sentence, and a pill held at its full length pushed the card out of its
+   bubble. */
 .olc-kind {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -6642,6 +6756,9 @@ button.chat-jump-start:hover {
   font-size: 12px;
 }
 .olc-state {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 1px 7px;
   border: 1px solid;
   border-radius: 999px;
@@ -6747,6 +6864,16 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   color: var(--text-2);
 }
+/* One line, like the native card's: a failed coordinator's word is its error. */
+.olc-foot-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.olc-foot-time {
+  flex: none;
+}
 .olc-foot-arrow {
   margin-left: auto;
   color: var(--text-3);
@@ -6807,6 +6934,13 @@ button.chat-jump-start:hover {
 }
 .chat-file:hover {
   background: var(--bg-hover);
+}
+.chat-file.is-error {
+  border-color: var(--error-border);
+  color: var(--error);
+}
+.chat-file.is-error:hover {
+  background: var(--error-bg);
 }
 .chat-file-name {
   overflow: hidden;
@@ -7185,6 +7319,75 @@ button.chat-jump-start:hover {
   gap: 6px;
   align-items: baseline;
   overflow-wrap: anywhere;
+}
+.chat-error-card {
+  margin: 6px 0;
+  border: 0;
+  border-left: 3px solid var(--error);
+  background: transparent;
+}
+.chat-error-card-head {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  overflow-wrap: anywhere;
+}
+.chat-error-card .chat-error-card-icon {
+  color: var(--error);
+  flex: none;
+  background: var(--error-bg);
+}
+.chat-error-card .chat-error-card-status {
+  color: var(--error);
+  font-size: 12px;
+}
+.chat-error-card-detail {
+  margin: 0 10px 0 58px;
+  padding: 0 0 2px;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.chat-error-card-path {
+  margin: 0 0 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.chat-error-card-reason {
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-error-card-disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 3px 0 0 -2px;
+  padding: 0;
+  border: 0;
+  color: var(--text-2);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.chat-error-card-disclosure:hover {
+  color: var(--text-1);
+}
+.chat-error-card-log {
+  max-height: 280px;
+  margin: 4px 10px 7px 58px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--text-2);
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  overflow: auto;
 }
 .chat-error-mark {
   flex: none;
@@ -7637,6 +7840,20 @@ button.chat-jump-start:hover {
 .chat-quota-retry[data-primary='true']:hover {
   background: var(--brand-strong);
   color: #fff;
+}
+/* A Retry already in flight (docs/session-request-reply-contract.md §2.1, §8 criterion 19): the
+   button stays where it was and stops offering, so a double tap cannot read as two attempts.
+   Placed after the variants above so it wins their hovers at equal specificity. */
+.chat-authfix-retry:disabled,
+.chat-quota-retry:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.chat-authfix-retry:disabled:hover,
+.chat-quota-retry:disabled:hover {
+  border-color: var(--border);
+  background: var(--bg-raised);
+  color: var(--text-1);
 }
 .chat-quota-note {
   color: var(--text-3);
@@ -8441,6 +8658,8 @@ button.chat-jump-start:hover {
   line-height: 1.55;
   color: var(--text-1);
   overflow-wrap: anywhere;
+  /* The text keeps its paragraphs and list items on lines of their own (`markdownToPlainLines`). */
+  white-space: pre-wrap;
 }
 /* The line under the buttons on both cards whose second answer is a composer handoff: where the
    next message goes, and what pressing does not do. One rule, two cards — the sentence is the
@@ -8572,6 +8791,244 @@ button.chat-jump-start:hover {
   margin: 4px 0 0;
   font-size: 12px;
   color: var(--text-3);
+}
+/* The settings a start left the project running with, under the receipt's line and the "Project
+   started" card's title (`RunSettingsSummary`): one quiet line, with what the owner changed from the
+   coordinator's suggestion set in bold where it stands. */
+.settlement-receipt-settings {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-2);
+  overflow-wrap: anywhere;
+}
+.run-settings-changed {
+  font-weight: 600;
+  color: var(--text-1);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+/* ── Start this project? ─────────────────────────────────────────────────────────────────
+   `StartProjectCard.tsx`: the settlement card's shell, with three sections under it — the
+   criteria, the plan, and How it runs, drawn with the integration settings card's own rows
+   (`.project-integration-setting`) in a raised panel. Mock: start-mock/board2-start-web.html. */
+.start-card-section {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 14px 0 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.start-card-section + .settlement-card-criteria {
+  margin-top: 4px;
+}
+.start-card-section-aside {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--brand);
+}
+.start-card-plan {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-1);
+}
+.start-card-link {
+  margin-left: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: var(--brand);
+  text-decoration: none;
+  cursor: pointer;
+}
+.start-card-plan > .start-card-link:first-child {
+  margin-left: 0;
+}
+.start-card-link:hover {
+  text-decoration: underline;
+}
+.start-card-warn {
+  margin-top: 2px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--warning);
+}
+.start-card-settings {
+  padding: 0 12px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+/* The two lines, one under the other; the class makes these rules outrank antd's own
+   `.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. How it runs
+   (`.project-run-settings`) draws the same two. */
+.start-card-settings .start-card-lines,
+.project-run-settings .project-run-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.start-card-settings .start-card-lines .ant-radio-wrapper,
+.project-run-settings .project-run-lines .ant-radio-wrapper {
+  align-items: flex-start;
+  margin-inline-end: 0;
+}
+.start-card-settings .start-card-lines .ant-radio,
+.project-run-settings .project-run-lines .ant-radio {
+  align-self: flex-start;
+  margin-top: 3px;
+}
+.start-card-branch,
+.start-card-mono,
+.start-card-mono input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.start-card-branch {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+  overflow-wrap: anywhere;
+}
+.start-card-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-1);
+}
+.start-card-settings .start-card-count,
+.project-run-settings .start-card-count {
+  width: 72px;
+}
+/* The merge check row when Automatic would merge the branch into main with nothing run on the
+   combined tree: its label in the warning colour, and the sentence saying why under the box. */
+.project-integration-setting.is-warn .project-integration-setting-label {
+  color: var(--warning);
+}
+.start-card-note {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+}
+.start-card-checked {
+  display: flex;
+  gap: 7px;
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+.start-card-tick {
+  flex: none;
+  font-weight: 700;
+  color: var(--success);
+}
+/* 443px and the like: the settings rows go to one column at the integration card's own 640px
+   breakpoint, and the lines keep their names and lose their descriptions. */
+@media (max-width: 640px) {
+  .start-card-option-hint {
+    display: none;
+  }
+}
+
+/* ── Confirm the new criteria? ───────────────────────────────────────────────────────────
+   `CriteriaChangeCard.tsx`: only what changed, one row each — a mark, which criterion and what
+   happened to it, and its words (a stricter check's old one quieter under the new).
+   Mock: start-mock/board4-criteria-change.html. */
+.criteria-change-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: var(--bg-raised);
+}
+.criteria-change-list li {
+  display: grid;
+  grid-template-columns: 22px 100px minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-1);
+}
+.criteria-change-list li + li {
+  border-top: 1px solid var(--border-subtle);
+}
+.criteria-change-mark {
+  font-weight: 700;
+  text-align: center;
+  border-radius: 4px;
+}
+.criteria-change-kind {
+  padding-top: 1px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.criteria-change-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.criteria-change-was {
+  display: block;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.criteria-change-list .is-new .criteria-change-mark {
+  color: var(--success);
+  background: var(--success-bg);
+}
+.criteria-change-list .is-new .criteria-change-kind {
+  color: var(--success);
+}
+.criteria-change-list .is-stricter .criteria-change-mark,
+.criteria-change-list .is-revised .criteria-change-mark {
+  color: var(--brand);
+  background: var(--brand-tint);
+}
+.criteria-change-list .is-stricter .criteria-change-kind,
+.criteria-change-list .is-revised .criteria-change-kind {
+  color: var(--brand);
+}
+.criteria-change-rest {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--text-3);
+}
+.criteria-change-rest .settlement-card-read {
+  margin-top: 0;
+}
+@media (max-width: 640px) {
+  .criteria-change-list li {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+  .criteria-change-text {
+    grid-column: 2;
+  }
+}
+/* Two short answers stay side by side on a phone: the stacked action sheet below 600px exists for
+   the approval card's third, long label, and these cards have none. */
+@media (max-width: 600px) {
+  .start-card .card-actions,
+  .criteria-change-card .card-actions {
+    flex-direction: row;
+    align-items: center;
+  }
+  .start-card .card-action,
+  .criteria-change-card .card-action {
+    width: auto;
+  }
 }
 
 /* ── Why is this project not done ────────────────────────────────────────────────────────
@@ -9027,6 +9484,12 @@ button.chat-jump-start:hover {
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+/* Under a new project's criteria on its create card: approving the create does not confirm them. */
+.create-criteria-note {
+  margin: 2px 0 0;
+  color: var(--text-3);
+  font-size: 12px;
+}
 .dag-approval-ops,
 .dag-approval-changes {
   list-style: none;
@@ -9093,6 +9556,7 @@ button.chat-jump-start:hover {
   margin: 0;
   color: var(--text-2);
   line-height: 1.6;
+  white-space: pre-wrap;
 }
 .approval-input {
   white-space: pre-wrap;
@@ -9385,6 +9849,10 @@ button.chat-jump-start:hover {
 .coordinator-question .approval-body {
   background: var(--bg-raised);
   padding: 10px 14px 4px;
+  /* This card is read and answered top to bottom. Keep its body in the page flow so a
+     long question cannot turn the card itself into a nested scroll region. */
+  max-height: none;
+  overflow: visible;
 }
 .coordinator-question-text {
   margin: 2px 0 8px;
@@ -12560,6 +13028,59 @@ button.chat-jump-start:hover {
     display: none;
   }
 }
+/* A runner's engines and their accounts (RunnerEngines). Each row's quota is every window of its
+   login with when it resets, under a status that says whether the login can run now — the account
+   pools' login rows, which share these classes and keep the layout above. The status is sized for
+   the longest thing it says, "Spent · resets Mon 19:00"; the last column holds the widest pair of
+   actions, `+ Account` beside `Sign in` on a one-account row that is signed out, Re-sign in and
+   Remove being marks narrower than either. On a narrow card the quota's bar gives way before the
+   name does: the name keeps 137px, an engine's name on one line clear of the status beside it. */
+.re-runner-card .re-row {
+  grid-template-columns: minmax(137px, 1fr) 168px minmax(128px, 190px) 160px;
+  /* Against the top: the quota stacks a window per line, and the name, status and actions stay level
+     with the first of them. */
+  align-items: start;
+}
+/* A group's head has no status or quota of its own — its accounts do — so its line runs the width
+   of the row, and its one action sits level with the name it belongs to. */
+@media (min-width: 701px) {
+  .re-runner-card .re-row.re-grp {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  /* Too narrow for those floors (665px, 663 inside the border), as above: name and status, then
+     quota and actions. */
+  @container re-card (max-width: 662px) {
+    .re-runner-card .re-row {
+      grid-template-columns: minmax(0, 1fr) max-content;
+    }
+    .re-runner-card .re-row > :nth-child(2) {
+      justify-self: end;
+    }
+    .re-runner-card .re-quota {
+      margin-left: 38px;
+    }
+  }
+}
+@media (max-width: 700px) {
+  /* Name, status and the way back in on the first line, and the quota a line of its own under the
+     name, bars and resets kept — the account pools' rows on a phone. A long status gives way with an
+     ellipsis before the name does; what it would have said is in the resets under it. */
+  .re-runner-card .re-row {
+    grid-template-columns: minmax(96px, 1fr) minmax(0, max-content) max-content;
+    gap: 8px 10px;
+  }
+  .re-runner-card .re-row > .re-act {
+    grid-row: 1;
+    grid-column: 3;
+  }
+  .re-runner-card .re-quota {
+    display: block;
+    grid-row: 2;
+    grid-column: 1 / -1;
+    margin-left: 38px;
+  }
+}
 .re-id {
   display: flex;
   align-items: center;
@@ -12607,12 +13128,45 @@ button.chat-jump-start:hover {
   font-size: 11px;
   color: var(--text-4);
 }
+/* One window under another, each with when it resets — the account pools' login rows. */
+.re-window + .re-window {
+  margin-top: 8px;
+}
+.re-reset {
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+/* A reading older than the runner's reads: the numbers above are as of then, not now. A fact in the
+   resets' grey, not a warning — a runner reads an engine no workspace defaults to only while one of
+   its sessions runs, so an idle Codex login's reading is often this old with nothing wrong. */
+.re-stale {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-3);
+}
+.re-status {
+  min-width: 0;
+}
+.re-status .ant-tag {
+  max-width: 100%;
+  margin-inline-end: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
 .re-act {
   display: flex;
   justify-content: flex-end;
-  /* An account's row holds two actions — sign in, and off this machine — and a group head one;
+  /* An account's row holds two actions — off this machine, and sign in — and a group head one;
      one child is a no-op. */
   gap: 8px;
+}
+/* Re-sign in and Remove are marks, grey at rest. Remove turns red only under the pointer, like the
+   account pools' sign-out mark: red on a row that is fine reads as something wrong with it. */
+.re-act .re-icon.ant-btn:not(:disabled) {
+  color: var(--text-3);
 }
 /* Codex with more than one account: the engine's row heads a group, and each account is a row
    under it. The head keeps what the engine owns — binary, version, updates — and says how many. */
@@ -12661,7 +13215,7 @@ button.chat-jump-start:hover {
   bottom: auto;
   height: 28px;
 }
-/* DEFAULT: the machine's own ~/.codex, the one a terminal's `codex` shares. */
+/* A mark beside a name: NEXT, where the next session starts — on a pool, or among a runner's accounts. */
 .re-chip {
   display: inline-block;
   margin-left: 6px;
@@ -12884,6 +13438,11 @@ button.chat-jump-start:hover {
 .pool-gauge-pct {
   font-variant-numeric: tabular-nums;
   color: var(--text-2);
+}
+/* Its tightest window at 90% or more: orange with its bar, as the composer's quota turns. */
+.pool-gauge-pct.near-limit {
+  color: var(--warning);
+  font-weight: 600;
 }
 .pool-gauge.spent {
   color: var(--warning);
@@ -13325,6 +13884,12 @@ button.chat-jump-start:hover {
 .pool-login-window + .pool-login-window {
   margin-top: 8px;
 }
+/* The sign-out mark rests grey and turns red only under the pointer: red on a row that is fine read
+   as something wrong with it. Weightier than antd's resting colour, lighter than its :hover and
+   :active, which keep the danger button's own red. */
+.pool-row .pool-signout.ant-btn {
+  color: var(--text-3);
+}
 .pool-login-reset {
   margin-top: 3px;
   font-size: 11px;
@@ -13384,7 +13949,7 @@ button.chat-jump-start:hover {
 }
 @media (max-width: 700px) {
   /* The quota is what an account's row is about: a line of its own under the name, bars and resets
-     kept — unlike a Claude account's, whose gauge waits for a wider window. */
+     kept — as a runner's accounts have it on Providers. */
   .pool-row .re-quota.pool-login-quota {
     display: block;
     grid-column: 1 / -1;
@@ -13746,6 +14311,18 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   color: var(--text-3);
 }
+/* The ordinary empty state follows the mobile hierarchy: provider first, then the instruction,
+   then the model that this draft will actually send with. */
+.np-empty-copy {
+  margin-top: 20px;
+  font-size: 17px;
+  color: var(--text-3);
+}
+.np-current-model {
+  margin-top: 5px;
+  font-size: 14px;
+  color: var(--text-4);
+}
 .np-card {
   display: inline-flex;
   flex-direction: column;
@@ -13876,6 +14453,25 @@ button.chat-jump-start:hover {
    names, so greying it out would take away the only thing it is there to offer. */
 .ant-dropdown-menu-item.composer-provider-fix .scope-menu-row {
   color: var(--text-3);
+}
+/* A Codex account under Codex in that submenu: indented under its engine, its own quota on the right
+   where the other rows say their value, orange once a window is nearly spent. Names are often emails,
+   so the name gives way before the quota does. */
+.ant-dropdown-menu-item.composer-account-row .scope-menu-row {
+  padding-left: 14px;
+}
+.composer-account-row-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.composer-account-row .scope-menu-value-text {
+  max-width: none;
+}
+.composer-account-row.near-limit .scope-menu-value {
+  color: var(--warning);
 }
 .np-row.on {
   background: var(--brand-tint);
@@ -14017,14 +14613,17 @@ button.chat-jump-start:hover {
   margin-inline-end: 0;
 }
 
-/* The integration line, directly under the title metadata (contract §7.2 V3, mock 2 ①), with its
-   three settings behind the same row. A native <details>, so what it holds is reachable with a
-   keyboard and present in the document either way. */
+/* The integration line, directly under the title metadata (contract §7.2 V3, mock 2 ①). Its
+   settings are the project's How it runs block (`.project-run-settings`), not a disclosure here. */
 .project-integration {
   margin-top: 10px;
   background: var(--bg-subtle);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
+}
+/* On the project page the card under the line keeps its distance from it (mock board3 ④). */
+[data-project-block='integration-line'] > .project-integration {
+  margin-bottom: 14px;
 }
 .project-integration-row {
   display: flex;
@@ -14034,12 +14633,6 @@ button.chat-jump-start:hover {
   padding: 7px 10px;
   font-size: 12.5px;
   color: var(--text-2);
-  cursor: pointer;
-  list-style: none;
-}
-/* The default disclosure triangle would sit in front of a branch name and read as part of it. */
-.project-integration-row::-webkit-details-marker {
-  display: none;
 }
 .project-integration-facts {
   display: flex;
@@ -14052,20 +14645,26 @@ button.chat-jump-start:hover {
   color: var(--text-1);
   font-weight: 600;
 }
+/* A project nobody has started: one sentence beside the mark, wrapping under itself on a phone. */
+.project-integration-undecided {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+.project-integration-undecided > svg {
+  margin-top: 3px;
+}
+.project-integration-undecided b {
+  color: var(--text-1);
+  font-weight: 600;
+}
 .project-integration-branch {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   color: var(--text-1);
   font-weight: 600;
-}
-.project-integration-settings-entry {
-  margin-inline-start: auto;
-  color: var(--brand);
-}
-.project-integration-settings-card {
-  padding: 4px 12px 14px;
-  border-top: 1px solid var(--border-subtle);
 }
 .project-integration-setting {
   display: grid;
@@ -14246,18 +14845,69 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   color: var(--text-2);
 }
-.project-blockers-action {
+.project-blockers-subject a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--border);
+  text-underline-offset: 2px;
+}
+.project-blockers-question {
+  margin-top: 7px;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.project-blockers-next {
   margin-top: 2px;
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-3);
 }
+.project-blockers-next span {
+  margin-right: 5px;
+  color: var(--text-2);
+  font-weight: 600;
+}
 .project-blockers-paths {
-  margin-top: 3px;
+  margin-top: 6px;
   font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
   font-size: 11.5px;
   color: var(--text-3);
   overflow-wrap: anywhere;
+}
+.project-blockers-files {
+  margin-top: 3px;
+}
+.project-blockers-files > summary {
+  cursor: pointer;
+  list-style-position: inside;
+}
+.project-blockers-files ul {
+  margin: 5px 0 0;
+  padding-left: 18px;
+  color: var(--text-3);
+}
+.project-blockers-files code,
+.project-blockers-dialog-evidence code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.project-blockers-evidence {
+  margin-top: 7px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.project-blockers-evidence > summary {
+  cursor: pointer;
+  color: var(--text-2);
+}
+.project-blockers-evidence p {
+  margin: 5px 0 0;
+  padding-left: 18px;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 .project-blockers-side {
   display: flex;
@@ -14288,6 +14938,41 @@ button.chat-jump-start:hover {
   font-size: 12.5px;
   color: var(--text-2);
 }
+.project-blockers-dialog-question {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--brand);
+  background: var(--bg-sunken);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.project-blockers-dialog-kicker {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+.project-blockers-dialog-evidence {
+  margin: 0 0 12px;
+  padding: 9px 11px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.55;
+}
+.project-blockers-dialog-evidence p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+.project-blockers-dialog-evidence ul {
+  margin: 0;
+  padding-left: 17px;
+}
 .project-blockers-dialog-label {
   display: block;
   margin-bottom: 4px;
@@ -14304,6 +14989,16 @@ button.chat-jump-start:hover {
   margin-inline-end: auto;
   font-size: 11.5px;
   color: var(--text-3);
+}
+@media (max-width: 560px) {
+  .project-blockers-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .project-blockers-side {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
 }
 
 /* Work account and human control are one command centre: a flexible evidence card and a stable
@@ -14430,6 +15125,152 @@ button.chat-jump-start:hover {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+/* The rail holds the coordinator beside the overview. How it runs follows this row at full width,
+   so a tall settings card cannot leave a dead strip beside the overview. */
+.project-command-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.project-command-rail > .project-command-coordinator {
+  flex: 1 1 auto;
+}
+
+/* How it runs (mock board3 ④): the settings follow the command centre at full width. The two
+   groups keep execution and integration scannable without shrinking the command input into the
+   former 352px rail. */
+.project-run-settings {
+  margin-bottom: 20px;
+}
+.project-run-settings .project-open-items-hint {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  margin-left: auto;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--brand-tint);
+  color: var(--brand-strong);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+.project-run-settings-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0 18px;
+  padding: 11px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 9px;
+  background: var(--brand-tint);
+  font-size: 13px;
+}
+.project-run-settings-summary-dot {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--brand);
+}
+.project-run-settings-summary > div {
+  display: grid;
+  gap: 2px;
+}
+.project-run-settings-summary strong {
+  color: var(--text-1);
+  font-weight: 650;
+}
+.project-run-settings-summary span:not(.project-run-settings-summary-dot) {
+  color: var(--text-2);
+}
+.project-run-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px;
+}
+.project-run-settings-group {
+  min-width: 0;
+}
+.project-run-settings-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 2px;
+  color: var(--text-3);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.project-run-settings-group-head::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+.project-run-settings-grid .project-integration-setting {
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 12px;
+}
+.project-run-settings-grid .project-integration-setting-label {
+  padding-top: 4px;
+}
+.project-run-settings-grid .project-run-lines .ant-radio-wrapper-disabled {
+  color: var(--text-1);
+  cursor: default;
+}
+.project-run-settings-grid .project-run-lines .ant-radio-wrapper-disabled .ant-radio-disabled + span {
+  color: var(--text-1);
+}
+.project-run-settings-grid .project-run-lines .ant-radio-disabled.ant-radio-checked .ant-radio-inner {
+  border-color: var(--brand);
+  background: var(--brand);
+}
+.project-run-settings-grid .project-run-lines .ant-radio-disabled.ant-radio-checked .ant-radio-inner::after {
+  background-color: #fff;
+}
+.project-run-settings-grid .start-card-mono,
+.project-run-settings-grid .start-card-mono input {
+  width: 100%;
+}
+.project-run-settings-grid .project-integration-setting.is-warn .ant-input {
+  width: 100%;
+}
+.project-run-settings .project-integration-setting-actions {
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+.project-run-settings-loading {
+  padding: 16px 0 8px;
+  text-align: center;
+}
+.project-run-settings-error {
+  margin-top: 10px;
+}
+@media (max-width: 920px) {
+  .project-run-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+}
+@media (max-width: 640px) {
+  .project-run-settings .project-open-items-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .project-run-settings .project-open-items-hint {
+    margin-left: 0;
+  }
+  .project-run-settings-grid .project-integration-setting {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+  .project-run-settings-grid .project-integration-setting-label {
+    padding-top: 0;
+  }
+}
 
 /* A task row has flexible copy followed by a fixed count and, sometimes, a disclosure. AntD's
    List.Meta can visually paint an unbroken identifier outside its computed flex width: its inner
@@ -14468,6 +15309,43 @@ button.chat-jump-start:hover {
   min-width: 0;
   margin-block-start: 8px;
   margin-inline-start: 32px;
+}
+/* A row opens its task over the page (ProjectTaskRow) and is tinted the way a Tasks page row is —
+   the same two tokens for "under the pointer" and "open in the panel". The inline padding gives
+   the tint room at the row's edges; the negative margin keeps the words where they were. Scoped
+   under .ant-list to outrank AntD's own item padding without !important. */
+.ant-list .project-task-row.is-openable {
+  cursor: pointer;
+  padding-inline: 12px;
+  margin-inline: -12px;
+}
+.project-task-row.is-openable:hover {
+  background: var(--bg-hover);
+}
+.project-task-row.is-open {
+  background: var(--brand-tint);
+}
+.project-task-row.is-open:hover {
+  background: var(--brand-border);
+}
+/* The title is a link for ⌘/middle-click and the keyboard; to the eye it is the row's title. */
+.project-task-row-link,
+.project-task-row-link:hover {
+  color: inherit;
+}
+/* A task open over its project's page (ProjectTaskPanel) — the Tasks page's panel, lying over the
+   page instead of beside it. The page is a whole document (graph, cards, the task list) and
+   narrowing it would re-flow all of it, carrying the row that was pressed out of view; the Tasks
+   page narrows its table instead, which suits a table. At ≤960px both are the same full-screen page
+   (the panel's own rule). */
+@media (min-width: 961px) {
+  .project-task-panel > .task-detail-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 40;
+    box-shadow: -12px 0 32px rgba(31, 35, 41, 0.1);
+  }
 }
 /* Preserve the reading order but stop fixed metadata from squeezing the identity down to a few
    characters: the full title/excerpt gets the first band, then count + disclosure share the next. */
@@ -15743,9 +16621,8 @@ button.chat-jump-start:hover {
 /* The Watching strip (WatchRelations.tsx `SessionWatchStrip`) is drawn in the Background processes
    tray's own shell (.bg-tray) with Tasks created here's rows and links (.ct-*); these are only what a
    wait adds to them. Folded, what the wait needs (a threshold, a count) sits where a lone target's name
-   would, and truncates before the sentence beside it does. Opened, each watch is one sentence in the
-   list's grey, over the targets it waits on; the line under it is the one said only while nobody is
-   checking the watch. */
+   would, and truncates before the sentence beside it does. Opened, each watch lists its targets in the
+   list's grey; the line under it is the one said only while nobody is checking the watch. */
 .watch-strip-target {
   flex: 0 1 auto;
   min-width: 0;
@@ -16432,6 +17309,211 @@ button.chat-jump-start:hover {
   word-break: break-word;
 }
 
+/* Another Orbit session's message (components/SessionMessageCard.tsx): on the side every turn this
+   conversation is handed sits, but a raised card rather than the owner's own tinted bubble — the
+   words are another agent's, and the head says whose. */
+.smc-wrap {
+  display: flex;
+  justify-content: flex-end;
+  margin: 8px 0;
+}
+.smc {
+  width: min(560px, 88%);
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+}
+.smc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.smc-mark {
+  flex: none;
+  color: var(--brand);
+}
+.smc-from {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.smc-agent {
+  flex: none;
+  padding: 0 8px;
+  border: 1px solid var(--brand-border);
+  border-radius: 9px;
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 18px;
+}
+.smc-body {
+  margin-top: 6px;
+}
+.smc-more {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.smc-meta {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bg-hover-strong);
+  color: var(--text-3);
+  font-size: 11px;
+}
+.smc-meta a {
+  color: var(--brand);
+  text-decoration: none;
+}
+.smc-undelivered {
+  margin-top: 4px;
+  color: var(--warning);
+  font-size: 12px;
+}
+/* Still waiting to be delivered (WorkspaceView's queued tail): dashed like a queued message, with the
+   queue's status line at its foot — the same shape the delivery and project-start cards take. */
+.smc.is-queued {
+  border-style: dashed;
+}
+.smc-queued {
+  margin-top: 6px;
+}
+.smc-queued .chat-queued-meta {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  row-gap: 2px;
+}
+.smc-queued .chat-queued-why {
+  order: 1;
+  flex-basis: 100%;
+  white-space: normal;
+}
+/* A message that asks for a reply (session requests): what it asks, by when, and where it stands —
+   read live, so the state word moves while the card does not. */
+.smc-request {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.smc-request-asks {
+  font-weight: 600;
+}
+.smc-request-state {
+  padding: 0 8px;
+  border: 1px solid var(--bg-hover-strong);
+  border-radius: 9px;
+  line-height: 18px;
+  font-size: 11px;
+}
+.smc-request-state-open {
+  border-color: var(--brand-border);
+  color: var(--brand);
+}
+.smc-request-state-replied {
+  border-color: var(--success);
+  color: var(--success);
+}
+.smc-request-state-no_reply,
+.smc-request-state-recipient_ended,
+.smc-request-state-expired,
+.smc-request-state-undelivered {
+  color: var(--warning);
+}
+
+/* The outcomes of this session's own requests, handed back (SessionReplyCard.tsx): the platform's
+   turn, so the agent's side of the transcript, in the brand tone. */
+.src-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+}
+.src {
+  width: min(560px, 88%);
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  background: var(--bg-raised);
+  color: var(--text-1);
+}
+.src-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.src-mark {
+  flex: none;
+  color: var(--brand);
+}
+.src-from {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.src-outcome {
+  flex: none;
+  padding: 0 8px;
+  border: 1px solid var(--bg-hover-strong);
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--warning);
+}
+.src-outcome-replied {
+  border-color: var(--success);
+  color: var(--success);
+}
+.src-asked,
+.src-chose,
+.src-note {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.src-label {
+  color: var(--text-3);
+  font-size: 11px;
+}
+.src-body,
+.src-excerpt {
+  margin-top: 6px;
+}
+.src-excerpt {
+  padding-left: 8px;
+  border-left: 2px solid var(--bg-hover-strong);
+  color: var(--text-2);
+}
+.src-meta {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--bg-hover-strong);
+  color: var(--text-3);
+  font-size: 11px;
+}
+.src-meta a {
+  color: var(--brand);
+  text-decoration: none;
+}
+
 /* The message telling a coordinator its project was started (ProjectStartedCard.tsx): the exception
    item's card, in the brand tone — nothing here failed — with the tasks that wait on the coordinator
    as a raised list of links. */
@@ -16476,6 +17558,12 @@ button.chat-jump-start:hover {
 .psc-title {
   margin: 4px 0 2px;
   font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.psc-settings {
+  margin: 0 0 2px;
+  font-size: 12.5px;
+  color: var(--text-2);
   overflow-wrap: anywhere;
 }
 .psc-lead {
@@ -16693,6 +17781,36 @@ button.chat-jump-start:hover {
   font-size: 11.5px;
   color: var(--text-3);
 }
+/* A phone has no 210px to give the who column beside the item: who has it and for how long go under
+   what it is, the press stays beside both, and the item's own words wrap rather than cut to "Start …". */
+@media (max-width: 640px) {
+  .project-open-item-row {
+    grid-template-columns: 10px minmax(0, 1fr) auto;
+    row-gap: 2px;
+  }
+  .project-open-item-dot {
+    grid-row: 1;
+  }
+  .project-open-item-main {
+    grid-column: 2;
+  }
+  .project-open-item-who {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .project-open-item-press {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+  .project-open-item-age {
+    display: inline;
+    margin-inline-start: 6px;
+  }
+  .project-open-item-title,
+  .project-open-item-line {
+    white-space: normal;
+  }
+}
 .project-open-item-press {
   text-align: right;
 }
@@ -16723,6 +17841,35 @@ button.chat-jump-start:hover {
   background: var(--brand-strong);
   border-color: var(--brand-strong);
   color: #fff;
+}
+/* A press drawn as a button rather than a link — Review on the request to start — in the same box. */
+button.project-open-item-action {
+  font-family: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+button.project-open-item-action:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+/* The owner's own "Start…" while no coordinator has asked: the row's title is the press, and the
+   dot is quiet, because nobody is waiting on it (mock board3 ②). */
+.project-open-item-row.is-own-start .project-open-item-dot {
+  background: var(--text-4);
+}
+.project-open-item-start {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  text-align: start;
+  color: var(--brand);
+  cursor: pointer;
+}
+.project-open-item-start:hover {
+  text-decoration: underline;
 }
 /* The action row's third weight (mock 7, 方案 B): the doors that only look and only stop read as text
    links instead of boxes as heavy as the press the card is asking for — no border, no fill,
@@ -17335,6 +18482,7 @@ button.chat-jump-start:hover {
 .wk-setup-d { margin-top: 5px; font-size: 12px; line-height: 1.5; color: var(--text-3); }
 .wk-setup-limit { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); }
 .wk-setup-limit .ant-input-number { width: 72px; }
+.wk-setup-days { margin-top: 8px; }
 .wk-setup-refusal { margin: 14px 0 0; }
 @media (max-width: 600px) {
   .wk-maint-off { grid-template-columns: minmax(0, 1fr) auto; }
@@ -17618,6 +18766,397 @@ button.chat-jump-start:hover {
   .wk-az-list .m { margin-left: 0; font-size: 12.5px; }
 }
 
+/* ── the documents and the plan (criterion 10 revised 2026-09-28, criterion 11: mocks 21–28) ──────
+   Ported from the mocks' own sheet (`docs/mocks/wiki/wiki-p3.css`), its short prefixes made the Wiki's:
+   pl- → wk-pl- (the plan page), dc- → wk-dc- (a document's page), fn2 → wk-fn2 (a footnote's card and the
+   footnotes' list), s- → wk-s- (a sentence's marks). Every colour is a shipped token; a change's card is
+   Review's own `.approval-card`, the home's Plan card is the Open items card Review's is. */
+
+/* the directory by the plan */
+.wk-toc-item .no { flex: none; min-width: 24px; font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.wk-toc-item.active .no { color: var(--brand); }
+.wk-toc-item .st { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--warning-solid); margin-left: 6px; }
+.wk-toc-item.todo .lb { color: var(--text-3); }
+.wk-toc-item.sec { height: 27px; padding-left: 34px; font-size: 12.5px; color: var(--text-2); }
+.wk-toc-item.sec .no { min-width: 16px; font-size: 11.5px; }
+.wk-toc-item.sec.active { color: var(--brand); font-weight: 600; background: none; }
+.wk-toc-item .tp-count { margin-left: auto; font-size: 11px; }
+
+/* a text button that reads as a link */
+.wk-pl-page .lk, .wk-dc-tip .lk { padding: 0; border: 0; background: transparent; font: inherit; color: var(--brand); cursor: pointer; }
+.wk-dc-tip .lk { color: #8fb5ff; }
+
+/* the plan page's head: title and version, the line under them, the actions — one DOM, two arrangements */
+.wk-pl-page { min-width: 0; position: relative; }
+.wk-pl-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title acts" "meta meta"; align-items: center; gap: 0 10px; }
+.wk-pl-head > .wk-pl-titlerow { grid-area: title; }
+.wk-pl-head > .wk-pl-meta { grid-area: meta; }
+.wk-pl-head > .wk-pl-acts { grid-area: acts; }
+.wk-pl-titlerow { display: flex; align-items: center; gap: 10px; margin-top: 6px; min-width: 0; }
+.wk-pl-titlerow .t-title { margin: 0; font-size: 30px; line-height: 1.28; letter-spacing: -.02em; min-width: 0; }
+.wk-pl-titlerow .t-title .ic.lock { margin-left: 8px; font-size: 20px; color: var(--text-3); }
+.wk-pl-acts { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.wk-pl-ver { display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 11px 0 12px; border: 1px solid var(--border); border-radius: 6px;
+             background: var(--bg-raised); font: inherit; font-size: 14px; color: var(--text-1); white-space: nowrap; cursor: pointer; }
+.wk-pl-ver .ic { font-size: 10px; color: var(--text-3); }
+.wk-pl-ver .tdp-badge, .wk-pl-verrow .tdp-badge { font-size: 11px; line-height: 16px; padding: 0 6px; }
+.wk-pl-verrow { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px; align-items: center; min-width: 300px; }
+.wk-pl-verrow .v { font: 650 12.5px ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; color: var(--text-1); }
+.wk-pl-verrow .d { color: var(--text-2); font-size: 12.5px; }
+.wk-pl-meta { margin-top: 8px; font-size: 13px; color: var(--text-2); display: flex; flex-wrap: wrap; gap: 4px 9px; align-items: center; }
+.wk-pl-meta .sep { color: var(--text-4); }
+.wk-pl-meta .errn { color: var(--error); font-weight: 600; }
+.wk-pl-hint { margin-top: 6px; font-size: 12.5px; color: var(--text-3); }
+
+/* the plan check, and the job's card — an antd Alert-coloured card, one row a check */
+.wk-pl-check { margin-top: 16px; border-radius: 10px; border: 1px solid var(--border-subtle); background: var(--bg-raised); overflow: hidden; }
+.wk-pl-check > .h { display: flex; align-items: center; gap: 9px; padding: 11px 14px; border-bottom: 1px solid var(--border-subtle); font-size: 14px; }
+.wk-pl-check > .h .ic { font-size: 16px; flex: none; }
+.wk-pl-check > .h b { font-weight: 650; color: var(--text-1); white-space: nowrap; }
+.wk-pl-check > .h .sub { color: var(--text-2); font-size: 13px; min-width: 0; }
+.wk-pl-check > .h .r { margin-left: auto; font-size: 12.5px; color: var(--text-3); white-space: nowrap; }
+.wk-pl-check > .h a.r { color: var(--brand); text-decoration: none; }
+.wk-pl-check.solo > .h { border-bottom: 0; }
+.wk-pl-check.fail { border-color: var(--error-border); }
+.wk-pl-check.fail > .h { background: var(--error-bg); border-bottom-color: var(--error-border); }
+.wk-pl-check.fail > .h .ic, .wk-pl-check.fail > .h b { color: var(--error); }
+.wk-pl-check.pass { border-color: var(--success-border); }
+.wk-pl-check.pass > .h { background: var(--success-bg); border-bottom-color: var(--success-border); }
+.wk-pl-check.pass > .h .ic, .wk-pl-check.pass > .h b { color: var(--success); }
+.wk-pl-check.run { border-color: var(--brand-border); }
+.wk-pl-check.run > .h { background: var(--brand-tint); border-bottom-color: var(--brand-border); }
+.wk-pl-check.run > .h b { color: var(--brand-strong); }
+.wk-pl-check.run > .h .ic { color: var(--brand); }
+.wk-pl-check.wait > .h { background: var(--bg-subtle); }
+.wk-pl-check.wait > .h .ic { color: var(--text-3); }
+.wk-pl-check.held { border-color: var(--warning-border); }
+.wk-pl-check.held > .h { background: var(--warning-bg); border-bottom-color: var(--warning-border); }
+.wk-pl-check.held > .h .ic, .wk-pl-check.held > .h b { color: var(--warning); }
+.wk-pl-prog { padding: 10px 14px 12px; }
+.wk-pl-prog .bar { height: 6px; border-radius: 3px; background: var(--fill-muted); overflow: hidden; }
+.wk-pl-prog .bar i { display: block; height: 100%; border-radius: 3px; background: var(--brand); }
+.wk-pl-prog .next { margin-top: 7px; font-size: 12.5px; color: var(--text-2); }
+.wk-pl-ck { display: grid; grid-template-columns: 18px 150px minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 8px 14px; font-size: 13px; line-height: 1.6; }
+.wk-pl-ck + .wk-pl-ck { border-top: 1px solid var(--border-subtle); }
+.wk-pl-ck > .ic { font-size: 13px; transform: translateY(2px); }
+.wk-pl-ck.is-ok > .ic { color: var(--success); }
+.wk-pl-ck.is-bad > .ic { color: var(--error); }
+.wk-pl-ck .n { font-weight: 600; color: var(--text-1); }
+.wk-pl-ck .r { color: var(--text-1); min-width: 0; font-weight: 400; overflow-wrap: anywhere; }
+.wk-pl-ck code, .wk-pl-err code, .wk-pl-kv code, .wk-pl-src code, .wk-pl-sec code, .wk-fn2 code, .wk-dc-scope code {
+  font: 12px ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; background: var(--fill-inset); border-radius: 4px; padding: 0 4px; }
+.wk-pl-errs { grid-column: 2 / -1; margin-top: 4px; border: 1px solid var(--border-subtle); border-radius: 8px; overflow: hidden; }
+.wk-pl-errs .by { display: flex; flex-wrap: wrap; gap: 4px 14px; padding: 6px 10px; background: var(--bg-subtle); border-bottom: 1px solid var(--border-subtle); font-size: 12px; color: var(--text-2); }
+.wk-pl-errs .by b { color: var(--text-1); font-weight: 650; font-variant-numeric: tabular-nums; }
+.wk-pl-err { display: grid; grid-template-columns: 58px 86px minmax(0, 1fr); gap: 8px; align-items: baseline; padding: 6px 10px; font-size: 12.5px; line-height: 1.5; }
+.wk-pl-err + .wk-pl-err { border-top: 1px solid var(--border-subtle); }
+.wk-pl-err .at { font: 600 11.5px/18px ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; color: var(--brand); }
+.wk-pl-err .k { color: var(--text-3); white-space: nowrap; }
+.wk-pl-err .m { color: var(--text-1); min-width: 0; overflow-wrap: anywhere; }
+.wk-pl-err .m .why { color: var(--error); }
+.wk-pl-errs .more { display: block; width: 100%; text-align: left; padding: 6px 10px 7px; border: 0; border-top: 1px solid var(--border-subtle); background: transparent;
+                    font: inherit; font-size: 12.5px; color: var(--brand); cursor: pointer; }
+
+/* no plan yet */
+.wk-pl-empty { margin-top: 18px; padding: 36px 40px 30px; border: 1px dashed var(--border); border-radius: 12px; background: var(--bg-raised); text-align: center; }
+.wk-pl-empty > .ic { font-size: 40px; color: var(--text-4); }
+.wk-pl-empty > b { display: block; margin-top: 12px; font-size: 18px; font-weight: 650; color: var(--text-1); }
+.wk-pl-empty > p { max-width: 560px; margin: 8px auto 16px; font-size: 13.5px; line-height: 1.7; color: var(--text-2); }
+.wk-pl-empty > .note { max-width: 560px; margin: 12px auto 0; font-size: 12px; line-height: 1.6; color: var(--text-3); }
+
+/* changes to review: the Review card (04), with the plan's parts */
+.wk-pl-changes { margin-top: 18px; }
+.wk-pl-changes > .h { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+.wk-pl-changes > .h h2 { margin: 0; font-size: 16px; font-weight: 650; }
+.wk-pl-changes > .h .n { font-size: 12.5px; color: var(--text-3); }
+.wk-pl-changes .approval-card + .approval-card { margin-top: 14px; }
+.wk-pl-prop .approval-head .by b { color: var(--brand); font-weight: 600; }
+.wk-pl-prop .card-actions .grow { flex: 1; }
+.wk-pl-prop .card-actions .note { font-size: 12px; color: var(--text-3); }
+.wk-op.plan { min-width: 0; }
+.wk-pl-okline { display: inline-flex; align-items: center; gap: 5px; color: var(--success); font-weight: 600; font-size: 12.5px; }
+.wk-pl-new { margin-top: 2px; border: 1px solid var(--success-border); border-radius: 8px; overflow: hidden; }
+.wk-pl-new .row { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 5px 10px; font-size: 13px; }
+.wk-pl-new .row + .row { border-top: 1px solid var(--border-subtle); }
+.wk-pl-new .row.add { background: var(--success-bg); }
+.wk-pl-new .row.remove { background: var(--error-bg); }
+.wk-pl-new .row .n { font: 600 11.5px/18px ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; color: var(--text-3); }
+.wk-pl-new .row.add .n { color: var(--success); }
+.wk-pl-new .row.remove .n { color: var(--error); }
+.wk-pl-new .row.add .t { font-weight: 600; }
+.wk-pl-new .row .ty { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.wk-pl-new .row.ctx { color: var(--text-3); }
+.wk-pl-fact + .wk-pl-fact, .wk-pkv .orbit-link-card + .wk-pl-fact { margin-top: 6px; }
+.wk-pl-fact a { color: var(--brand); text-decoration: none; }
+.wk-pl-more { margin-top: 6px; font-size: 12.5px; color: var(--brand); }
+.wk-pl-refused { margin-top: 10px; padding: 8px 10px; border: 1px solid var(--error-border); border-radius: 8px; background: var(--error-bg); font-size: 12.5px; color: var(--error); }
+.wk-pl-refused ul { margin: 4px 0 0; padding-left: 18px; }
+
+/* the plan's body: category → document → section → sources */
+.wk-pl-docs-h { display: flex; align-items: baseline; gap: 8px; margin-top: 24px; padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle); }
+.wk-pl-docs-h h2 { margin: 0; font-size: 16px; font-weight: 650; }
+.wk-pl-docs-h .n { font-size: 12.5px; color: var(--text-3); }
+.wk-pl-docs-h .c { margin-left: auto; font-size: 12px; color: var(--text-3); }
+.wk-pl-cat { margin-top: 22px; }
+.wk-pl-cat-h { display: flex; align-items: baseline; gap: 9px; padding-bottom: 7px; border-bottom: 1px solid var(--border-subtle); }
+.wk-pl-cat-h .no { font: 650 14px/1 ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; color: var(--text-3); }
+.wk-pl-cat-h b { font-size: 16px; font-weight: 650; color: var(--text-1); white-space: nowrap; }
+.wk-pl-cat-h .q { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-pl-cat-h .c { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.wk-pl-doc { display: grid; grid-template-columns: 14px 34px minmax(0, 1fr) auto; gap: 0 8px; align-items: baseline; padding: 9px 4px 9px 2px; border-bottom: 1px solid var(--border-subtle); }
+.wk-pl-doc > .caret { padding: 0; border: 0; background: transparent; font-size: 9px; color: var(--text-4); cursor: pointer; transform: translateY(-1px); }
+.wk-pl-doc > .no { font: 600 12.5px/20px ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; color: var(--text-2); }
+.wk-pl-doc > .main { display: block; min-width: 0; padding: 0; border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer; }
+.wk-pl-doc .main > .t { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 14px; font-weight: 600; line-height: 20px; color: var(--text-1); }
+.wk-pl-doc .main > .t .tt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wk-pl-doc .main > .t .ic.lock { flex: none; font-size: 12px; color: var(--text-3); }
+.wk-pl-doc .main > .q { display: block; margin-top: 1px; font-size: 12.5px; line-height: 18px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-pl-doc > .meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.wk-pl-doc .errn { display: inline-flex; align-items: center; gap: 4px; color: var(--error); font-weight: 600; }
+.wk-pl-doc .errn .ic { font-size: 12px; }
+.wk-pl-chg { padding: 0 7px; border-radius: 999px; background: var(--warning-bg); color: var(--warning); font-weight: 600; font-size: 11.5px; line-height: 18px; }
+.wk-pl-diff { flex: none; padding: 0 6px; border-radius: 4px; font-size: 11px; line-height: 16px; font-weight: 600; }
+.wk-pl-diff.new { background: var(--success-bg); color: var(--success); }
+.wk-pl-diff.changed { background: var(--brand-tint); color: var(--brand-strong); }
+.wk-pl-doc.gone .main .tt { text-decoration: line-through; color: var(--text-3); }
+.wk-pl-doc.open { background: var(--bg-raised); border: 1px solid var(--brand-border); border-radius: 10px; margin: 8px 0 6px; padding: 12px 14px 8px 12px; }
+.wk-pl-doc.open > .caret { color: var(--brand); }
+.wk-pl-body { grid-column: 2 / -1; margin-top: 10px; }
+.wk-pl-kv { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 7px 12px; font-size: 13px; line-height: 1.65; }
+.wk-pl-kv > .k { color: var(--text-3); font-size: 12.5px; padding-top: 1px; white-space: nowrap; }
+.wk-pl-kv > .v { color: var(--text-1); min-width: 0; }
+.wk-pl-kv > .v ul { margin: 0; padding-left: 16px; }
+.wk-pl-kv > .v li + li { margin-top: 1px; }
+.wk-pl-kv > .v .see { color: var(--brand); white-space: nowrap; }
+.wk-pl-kv > .v .lockline { display: inline-flex; align-items: center; gap: 6px; }
+.wk-pl-kv > .v .lockline .ic { color: var(--text-3); }
+.wk-pl-kv > .v .dim { color: var(--text-3); }
+.wk-pl-secs { margin-top: 12px; border-top: 1px solid var(--border-subtle); }
+.wk-pl-secs > .h { display: flex; align-items: baseline; gap: 8px; padding: 10px 0 4px; font-size: 13px; font-weight: 650; color: var(--text-1); }
+.wk-pl-secs > .h .c { font-weight: 400; color: var(--text-3); font-size: 12px; }
+.wk-pl-sec { display: grid; grid-template-columns: 22px minmax(0, 1fr) 92px 70px minmax(0, 190px); gap: 10px; align-items: baseline; padding: 7px 0;
+             border-top: 1px solid var(--border-subtle); font-size: 13px; line-height: 1.5; }
+.wk-pl-secs > .h + .wk-pl-sec { border-top: 0; }
+.wk-pl-sec > .n { font: 600 12px/19px ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; color: var(--text-3); text-align: right; }
+.wk-pl-sec > .t { display: block; min-width: 0; padding: 0; border: 0; background: transparent; font: inherit; text-align: left; color: var(--text-1); cursor: pointer; }
+.wk-pl-sec .cov { display: block; margin-top: 1px; font-size: 12px; line-height: 1.55; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-pl-sec > .ty { font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.wk-pl-sec > .len { font-size: 12px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.wk-pl-sec > .src { font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-pl-sec.open { background: color-mix(in srgb, var(--brand-tint) 45%, var(--bg-raised)); margin: 0 -8px; padding: 7px 8px; border-radius: 6px; }
+.wk-pl-sec.gone { background: var(--error-bg); margin: 0 -8px; padding: 7px 8px; border-radius: 6px; border-top-color: transparent; }
+.wk-pl-sec.gone > .t { color: var(--text-3); text-decoration: line-through; cursor: default; }
+.wk-pl-sec.gone + .wk-pl-sec { border-top-color: transparent; }
+.wk-pl-sec .why { grid-column: 2 / -1; margin-top: -2px; font-size: 12px; color: var(--error); display: flex; align-items: center; gap: 6px; }
+.wk-pl-src { grid-column: 2 / -1; margin: 4px 0 2px; padding: 8px 10px; border-radius: 8px; background: var(--bg-raised); border: 1px solid var(--border-subtle); }
+.wk-pl-src .g { margin: 6px 0 2px; font-size: 11.5px; font-weight: 600; color: var(--text-3); letter-spacing: .2px; }
+.wk-pl-src .g:first-child { margin-top: 0; }
+.wk-pl-src .r { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 2px 0; font-size: 12.5px; line-height: 1.55; }
+.wk-pl-src .r .p { min-width: 0; overflow-wrap: anywhere; color: var(--text-1); }
+.wk-pl-src .r .p .sym { color: var(--text-2); }
+.wk-pl-src .r .ok { color: var(--success); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.wk-pl-src .r .bad { color: var(--error); font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.wk-pl-src .cond { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 3px 10px; font-size: 12.5px; line-height: 1.55; }
+.wk-pl-src .cond .k { color: var(--text-3); }
+.wk-pl-src .cond .v { color: var(--text-1); min-width: 0; }
+.wk-pl-src .cond .chip { display: inline-block; margin: 0 4px 3px 0; padding: 0 7px; border-radius: 999px; background: var(--fill-muted); font-size: 12px; line-height: 20px; color: var(--text-1); }
+.wk-pl-src .cond code { margin-right: 4px; }
+
+/* Edit (a document, in a right drawer) and Redraft… (a modal) */
+.wk-pl-drawer-t .sub { font-size: 12px; font-weight: 500; color: var(--text-3); }
+.wk-pl-form { padding: 0 0 8px; }
+.wk-pl-f { display: block; margin-top: 12px; }
+.wk-pl-f:first-child { margin-top: 0; }
+.wk-pl-f .l { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 13px; color: var(--text-1); }
+.wk-pl-f .l .dim, .wk-pl-f .dim { color: var(--text-3); font-size: 12px; }
+.wk-pl-f.row2 { display: flex; gap: 16px; align-items: flex-start; }
+.wk-pl-f.row2 .grow { flex: 1; min-width: 0; }
+.wk-pl-f .len, .wk-pl-f .sw { display: flex; align-items: center; gap: 8px; }
+.wk-pl-f.hint { font-size: 12px; color: var(--text-3); }
+.wk-pl-esec { display: grid; grid-template-columns: 16px 22px minmax(0, 1fr) 124px 22px; gap: 8px; align-items: center; padding: 6px 8px; border: 1px solid var(--border-subtle);
+              border-radius: 6px; background: var(--bg-raised); font-size: 13px; cursor: grab; }
+.wk-pl-esec + .wk-pl-esec { margin-top: 5px; }
+.wk-pl-esec.dragging { opacity: .5; }
+.wk-pl-esec .hd { color: var(--text-4); font-size: 13px; }
+.wk-pl-esec .n { font: 600 11.5px ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; color: var(--text-3); text-align: right; }
+.wk-pl-esec .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-1); }
+.wk-pl-esec .x { padding: 0; border: 0; background: transparent; color: var(--text-3); font-size: 12px; cursor: pointer; }
+.wk-pl-add { margin-top: 8px; display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; font: inherit; font-size: 13px; color: var(--brand); cursor: pointer; }
+.wk-pl-dfoot { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+.wk-pl-dfoot .l { margin-right: auto; font-size: 12px; color: var(--text-3); }
+.wk-pl-modal-t { display: inline-flex; align-items: center; gap: 8px; }
+.wk-pl-modal-t .ic { color: var(--warning-solid); }
+.wk-pl-modal-p { margin: 0 0 10px; font-size: 13px; line-height: 1.6; color: var(--text-2); }
+.wk-pl-modal-note { margin-top: 8px; font-size: 12.5px; color: var(--text-3); }
+
+/* a document's page */
+.wk-dc-warn { color: var(--warning); }
+.wk-dc-notwritten { display: flex; align-items: baseline; gap: 8px; margin-top: 12px; padding: 10px 14px; border: 1px solid var(--border-subtle); border-radius: 10px;
+                    background: var(--bg-raised); font-size: 13.5px; line-height: 1.6; color: var(--text-1); }
+.wk-dc-notwritten .ic { color: var(--text-2); }
+.wk-dc-scope { margin-top: 14px; display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 6px 12px; padding: 11px 14px; border: 1px solid var(--border-subtle);
+               border-radius: 10px; background: var(--bg-subtle); font-size: 13px; line-height: 1.65; }
+.wk-dc-scope > .k { color: var(--text-3); font-size: 12.5px; padding-top: 1px; white-space: nowrap; }
+.wk-dc-scope > .v { color: var(--text-1); min-width: 0; }
+.wk-dc-scope > .v ul { margin: 0; padding-left: 16px; }
+.wk-dc-scope > .v .see { color: var(--brand); white-space: nowrap; text-decoration: none; }
+.wk-dc-scope > .v.q { font-weight: 600; }
+.wk-dc-fold { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; margin: 2px -14px -11px; padding: 9px 14px; border: 0; border-top: 1px solid var(--border-subtle);
+              background: transparent; font: inherit; font-size: 13.5px; color: var(--text-1); text-align: left; cursor: pointer; }
+.wk-dc-fold .n { color: var(--text-3); font-size: 12.5px; }
+.wk-dc-fold .ic { margin-left: auto; font-size: 11px; color: var(--text-4); }
+.wk-dc-fold.up { justify-content: flex-end; padding: 6px 14px; }
+.wk-dc-banner { display: flex; gap: 10px; margin-top: 14px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--warning-border); background: var(--warning-bg);
+                font-size: 13.5px; line-height: 1.6; color: var(--text-1); }
+.wk-dc-banner > .ic { flex: none; margin-top: 3px; font-size: 15px; color: var(--warning-solid); }
+.wk-dc-banner b.h { color: var(--warning); font-weight: 650; }
+.wk-dc-banner .lg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin-top: 6px; font-size: 12.5px; color: var(--text-2); }
+.wk-dc-banner .lg > span { white-space: nowrap; }
+.wk-dc-banner .lg .go { margin-left: auto; padding: 0; border: 0; background: transparent; font: inherit; color: var(--brand); cursor: pointer; }
+.wk-dc-body h2 .no { color: var(--text-3); font-weight: 600; margin-right: 6px; font-variant-numeric: tabular-nums; }
+.wk-dc-sec { scroll-margin-top: 12px; }
+.wk-dc-body h3 { margin: 16px 0 6px; font-size: 15px; font-weight: 650; }
+.wk-dc-body ul { margin: 0 0 12px; padding-left: 20px; }
+.wk-dc-code { margin: 0 0 12px; padding: 10px 12px; border-radius: 6px; background: var(--fill-inset); overflow-x: auto;
+              font: 12.5px/1.6 ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; }
+.wk-dc-unwritten { color: var(--text-3); font-size: 14px; }
+.wk-dc-tag { display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--fill-muted);
+             font-size: 11.5px; font-weight: 500; color: var(--text-2); vertical-align: 3px; letter-spacing: 0; }
+.wk-dc-tag .ic { font-size: 11px; }
+/* a sentence's marks: no source (amber), not verified (red), withdrawn (struck) — the status dots' colours,
+   and the strike "Rejected by you" already uses */
+.wk-s-nosrc { background: var(--warning-bg); box-shadow: inset 0 -1.5px 0 var(--warning-solid); border-radius: 2px; cursor: help; }
+.wk-s-bad { background: var(--error-bg); box-shadow: inset 0 -1.5px 0 var(--error-solid); border-radius: 2px; cursor: help; }
+.wk-s-gone { color: var(--text-3); text-decoration: line-through; text-decoration-color: var(--text-3); cursor: help; }
+.wk-s-lab { display: inline-block; margin: 0 2px 0 3px; padding: 0 5px; border-radius: 4px; font-size: 11px; line-height: 16px; font-weight: 600; vertical-align: 2px;
+            white-space: nowrap; letter-spacing: 0; }
+.wk-s-lab.nosrc { background: var(--warning-bg); color: var(--warning); border: 1px solid var(--warning-border); }
+.wk-s-lab.bad { background: var(--error-bg); color: var(--error); border: 1px solid var(--error-border); }
+.wk-s-lab.gone { background: var(--fill-muted); color: var(--text-2); }
+.wk-fn-n.x { color: var(--error); text-decoration: line-through; }
+.wk-fn-n.x.on { background: var(--error-solid); color: #fff; }
+.wk-dc-tip { max-width: 300px; font-size: 12.5px; line-height: 1.55; }
+.wk-dc-tip b { font-weight: 650; }
+
+/* a footnote's card: the words, where they are, what they came through */
+.wk-fn2 { width: 440px; max-width: 100%; }
+.wk-fn2 .k { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+.wk-fn2 .k .num { font: 600 11.5px/18px ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; color: var(--brand); }
+.wk-fn2 .k .ic { display: inline-flex; font-size: 13px; color: var(--text-3); }
+.wk-fn2 .k .ver { margin-left: auto; color: var(--success); font-weight: 600; font-size: 12px; white-space: nowrap; }
+.wk-fn2 .k .ver.x { color: var(--error); }
+.wk-fn2 .k .dim { font-weight: 400; color: var(--text-3); }
+.wk-fn2 .olc-quote { margin-top: 8px; font-size: 13.5px; line-height: 1.6; padding: 8px 10px; }
+.wk-fn2 .olc-quote.x .wk-quote-text { color: var(--text-2); text-decoration: line-through; text-decoration-color: var(--error); }
+.wk-fn2 .xnote { margin-top: 6px; font-size: 12.5px; line-height: 1.55; color: var(--error); }
+.wk-fn2 .code { margin-top: 8px; border-radius: 6px; background: var(--fill-inset); overflow: hidden; font: 11.5px/1.65 ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; }
+.wk-fn2 .code .ln { display: grid; grid-template-columns: 34px minmax(0, 1fr); }
+.wk-fn2 .code .ln .i { padding-right: 8px; text-align: right; color: var(--text-4); user-select: none; }
+.wk-fn2 .code .ln .c { white-space: pre; overflow: hidden; text-overflow: ellipsis; color: var(--text-1); padding-right: 8px; }
+.wk-fn2 .code .ln.q { background: color-mix(in srgb, var(--success-bg) 85%, transparent); }
+.wk-fn2 .code .ln.q .i { color: var(--success); }
+.wk-fn2 .code .ln.cut .c { color: var(--text-3); }
+.wk-fn2 .loc { display: flex; align-items: baseline; gap: 6px; margin-top: 8px; font-size: 12.5px; line-height: 1.55; color: var(--text-2); }
+.wk-fn2 .loc .ic { flex: none; display: inline-flex; font-size: 12px; color: var(--text-3); transform: translateY(1px); }
+.wk-fn2 .loc .tx { min-width: 0; overflow-wrap: anywhere; }
+.wk-fn2 .loc a { color: var(--brand); text-decoration: none; white-space: nowrap; }
+.wk-fn2 .loc .mono { font: 12px ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; color: var(--text-1); }
+.wk-fn2 .via { display: flex; align-items: center; gap: 7px; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--border-subtle); font-size: 12.5px; color: var(--text-3); min-width: 0; }
+.wk-fn2 .via .lb { flex: none; }
+.wk-fn2 .via .wk-kind { flex: none; width: 18px; height: 18px; font-size: 11px; }
+.wk-fn2 .via .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-1); font-weight: 600; text-decoration: none; }
+.wk-fn2 .via .tdp-badge { flex: none; font-size: 11px; line-height: 16px; padding: 0 6px; margin-left: auto; }
+.wk-fn2.sheet { width: auto; padding: 8px 16px 16px; }
+.wk-fn2.sheet .olc-quote { padding: 9px 11px; font-size: 15px; }
+.wk-fn2.sheet .loc { font-size: 13.5px; }
+/* the footnotes at the end: one row a footnote — kind, where, the check; the words; what they came through */
+.wk-fn2-list { margin-top: 30px; }
+.wk-fn2-list > h3 { margin: 0 0 4px; font-size: 15px; font-weight: 650; color: var(--text-1); display: flex; align-items: baseline; gap: 8px; }
+.wk-fn2-list > h3 small { font-size: 12.5px; font-weight: 400; color: var(--text-3); }
+.wk-fn2-row { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; padding: 8px 0 9px; border-bottom: 1px solid var(--border-subtle); font-size: 13px; line-height: 1.55; }
+.wk-fn2-row.on { background: var(--brand-tint); border-radius: 6px; margin: 0 -8px; padding: 8px 8px 9px; border-bottom-color: transparent; }
+.wk-fn2-row .no { text-align: right; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.wk-fn2-row .main { min-width: 0; }
+.wk-fn2-row .l1 { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.wk-fn2-row .kd { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 4px; background: var(--fill-muted); font-size: 11.5px;
+                  color: var(--text-2); white-space: nowrap; }
+.wk-fn2-row .kd.s { background: var(--brand-tint); color: var(--brand-strong); }
+.wk-fn2-row .kd .anticon { font-size: 11px; }
+.wk-fn2-row .loc { min-width: 0; padding: 0; border: 0; background: transparent; font: inherit; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis;
+                   white-space: nowrap; color: var(--text-1); text-decoration: underline; text-decoration-color: var(--border); text-underline-offset: 3px; }
+.wk-fn2-row .loc.mono { font: 12px ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; }
+.wk-fn2-row .ver { flex: none; margin-left: auto; font-size: 12px; font-weight: 600; color: var(--success); white-space: nowrap; }
+.wk-fn2-row .ver.x { color: var(--error); }
+.wk-fn2-row .q { margin-top: 3px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-fn2-row .q.x { text-decoration: line-through; text-decoration-color: var(--error); }
+.wk-fn2-row .via { margin-top: 2px; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-fn2-row .via b { font-weight: 600; color: var(--text-2); }
+.wk-fn2-list .wk-more { padding: 8px 0 0 34px; }
+.wk-dc-refs { flex: none; margin-left: 6px; font-size: 11.5px; color: var(--brand); font-weight: 500; }
+
+/* Browse and the A–Z index, by document */
+.wk-browse-cat > h2 .no, .wk-browse-doc .h .no { font: 600 12.5px ui-monospace, SFMono-Regular, Menlo, "DejaVu Sans Mono", monospace; color: var(--text-3); }
+.wk-browse-cat > h2 .no { font-size: 15px; }
+.wk-browse-q { margin: 0 0 4px; font-size: 12.5px; color: var(--text-3); }
+.wk-browse-doc .h .n .st.warn { color: var(--warning); }
+.wk-browse-doc .h .n .st.muted { color: var(--text-3); }
+.wk-browse-list.secs a .sn { flex: none; min-width: 14px; color: var(--text-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+.wk-browse-list.secs a.todo .tt { color: var(--text-3); }
+
+/* the home: the Plan card over Review, and the phone's second banner */
+.wk-plan-card-text { font-size: 13px; line-height: 1.6; color: var(--text-2); }
+.wk-plan-card-link { font-size: 12.5px; color: var(--brand); text-decoration: none; }
+.wk-rv-row .wk-op.plan { font-size: 10px; }
+.wk-banner.wk-plan-banner { margin-top: 10px; }
+.wk-banner.wk-plan-banner.blue { border-color: var(--brand-border); background: var(--brand-tint); }
+.wk-banner.wk-plan-banner.blue .wk-dot { background: var(--brand); }
+
+/* narrower than the app's desktop layout: the phone mocks 22, 24, 26, 28 */
+@media (max-width: 960px) {
+  .wk-plan-card { display: none; }
+  .wk-pl-head { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "meta" "acts"; }
+  .wk-pl-titlerow { justify-content: space-between; }
+  .wk-pl-titlerow .t-title { font-size: 24px; line-height: 1.35; }
+  .wk-pl-acts { margin-top: 12px; }
+  .wk-pl-acts > .ant-btn:not(.ant-btn-icon-only) { flex: 1; height: 40px; }
+  .wk-pl-ck { grid-template-columns: 16px minmax(0, 1fr); }
+  .wk-pl-ck .r, .wk-pl-errs { grid-column: 2; }
+  .wk-pl-err { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .wk-pl-empty { padding: 28px 20px 22px; }
+  .wk-pl-empty .ant-btn { width: 100%; height: 40px; }
+  .wk-pl-cat-h .q { display: none; }
+  .wk-pl-doc.phone { grid-template-columns: 34px minmax(0, 1fr) 12px; gap: 6px; padding: 10px 2px 11px; text-decoration: none; color: inherit; }
+  .wk-pl-doc.phone .main { display: block; }
+  .wk-pl-doc.phone .main > .t { font-size: 15px; line-height: 21px; }
+  .wk-pl-doc.phone .main > .q { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 13px; }
+  .wk-pl-doc.phone .l3 { display: block; margin-top: 3px; font-size: 12.5px; color: var(--text-3); }
+  .wk-pl-doc.phone .chev, .wk-pl-sec.phone .chev { font-size: 11px; color: var(--text-4); }
+  .wk-pl-kv { grid-template-columns: minmax(0, 1fr); gap: 2px; margin-top: 12px; }
+  .wk-pl-kv > .k { margin-top: 8px; font-size: 12px; }
+  .wk-pl-sec.phone { grid-template-columns: 22px minmax(0, 1fr) 12px; gap: 6px; padding: 9px 2px 10px; text-decoration: none; color: inherit; }
+  .wk-pl-sec.phone > .t { font-size: 14.5px; line-height: 20px; }
+  .wk-pl-sec.phone .cov { white-space: normal; font-size: 12.5px; }
+  .wk-pl-sec.gone.phone { display: block; margin: 4px -4px; }
+  .wk-pl-sec.gone.phone .why { display: block; margin-top: 2px; }
+  .wk-pl-src { margin: 12px 0 0; }
+  .wk-pl-src .cond { grid-template-columns: minmax(0, 1fr); }
+  .wk-pl-prop .card-actions { flex-wrap: wrap; }
+  .wk-pl-prop .card-actions .grow { display: none; }
+  .wk-pl-prop .card-actions .note { flex-basis: 100%; }
+  .wk-pl-new .row { grid-template-columns: 26px minmax(0, 1fr); }
+  .wk-pl-new .row .ty { display: none; }
+  .wk-pl-esec { grid-template-columns: 16px 22px minmax(0, 1fr) 110px 22px; }
+  .wk-dc-scope { grid-template-columns: minmax(0, 1fr); gap: 2px; padding: 10px 12px; }
+  .wk-dc-scope > .k { font-size: 12px; }
+  .wk-dc-scope > .v.q { font-size: 14px; }
+  .wk-dc-fold { margin: 6px -12px -10px; padding: 9px 12px; }
+  .wk-dc-banner { font-size: 13.5px; padding: 10px 12px; }
+  .wk-dc-banner .lg .go { margin-left: 0; }
+  .wk-fn2-row { grid-template-columns: 24px minmax(0, 1fr); padding: 9px 2px 10px; }
+  .wk-fn2-row .no { text-align: left; }
+  .wk-browse-doc .h .n { margin-left: auto; }
+}
+
 /* ── The wiki in a conversation: the context a session was handed ──────────────────────────────
    Mock 05 (docs/mocks/wiki/05-session-touchpoints). One of its panels needs rules of its own: the
    entries under the task start card's folded Wiki context line. The link card borrows the Wiki's
@@ -17759,3 +19298,27 @@ a.wkctx-title:hover { text-decoration: underline; }
   font-size: 11.5px;
   color: var(--text-3);
 }
+
+.wt-recovery { margin: 0 12px 12px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-subtle); font-size: 12px; overflow-wrap: anywhere; }
+.wt-recovery p { margin: 10px 0; color: var(--text-2); }
+.wt-recovery summary { cursor: pointer; margin: 10px 0; }
+.wt-recovery-histories { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.wt-recovery-histories > :only-child { grid-column: 1 / -1; }
+.wt-recovery-route code { font-size: 11px; }
+.wt-recovery-origin.is-local { color: var(--warning); font-weight: 600; }
+.wt-recovery-histories small { display: block; opacity: .7; margin-bottom: 8px; }
+.wt-recovery pre { white-space: pre-wrap; max-height: 400px; overflow: auto; font-size: 11px; }
+.wt-recovery-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.wt-recovery-actions button { padding: 5px 10px; border-radius: 6px; cursor: pointer; }
+.wt-recovery-actions button:not(.wt-merge-btn) { border: 1px solid var(--border); background: var(--bg); color: var(--text-1); font: inherit; }
+.wt-recovery-actions button:disabled { opacity: .55; cursor: default; }
+.wt-recovery-repair-status { display: flex; align-items: center; gap: 10px; width: 100%; margin: 10px 0 0; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-raised); color: var(--text-1); text-align: left; cursor: pointer; font: inherit; }
+.wt-recovery-repair-status.is-running { border-color: color-mix(in srgb, var(--brand) 38%, var(--border)); background: color-mix(in srgb, var(--brand) 8%, var(--bg-raised)); }
+.wt-recovery-repair-status.is-failed { border-color: color-mix(in srgb, var(--error) 38%, var(--border)); }
+.wt-recovery-repair-status-copy { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.wt-recovery-repair-status-copy strong, .wt-recovery-repair-status-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wt-recovery-repair-status-copy small { color: var(--text-2); }
+.wt-recovery-repair-chevron { color: var(--text-2); font-size: 22px; line-height: 1; }
+.wt-recovery-repair-hint { margin: 5px 0 0 !important; font-size: 11px; }
+.wt-recovery-repair-error { color: var(--error) !important; }
+@media (max-width: 680px) { .wt-recovery-histories { grid-template-columns: 1fr; } }

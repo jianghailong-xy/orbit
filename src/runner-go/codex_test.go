@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -98,6 +99,9 @@ func TestCodexAppServerThreadParams(t *testing.T) {
 	if got["sandbox"] != "danger-full-access" {
 		t.Fatalf("sandbox = %v", got["sandbox"])
 	}
+	if _, ok := got["approvalsReviewer"]; ok {
+		t.Fatalf("approvalsReviewer should be absent outside Auto: %q", got["approvalsReviewer"])
+	}
 	if _, ok := got["developerInstructions"]; ok {
 		t.Fatalf("thread params must not replace effective developer instructions: %q", got["developerInstructions"])
 	}
@@ -121,6 +125,35 @@ func TestCodexAppServerThreadParamsForwardSystemInstructions(t *testing.T) {
 	}
 	if _, ok := got["developerInstructions"]; ok {
 		t.Fatalf("developerInstructions unexpectedly overrides local config: %q", got["developerInstructions"])
+	}
+}
+
+func TestCodexAppServerAutoUsesWorkspaceSandboxAndReviewer(t *testing.T) {
+	job := &ClaimedSession{
+		Agent: AgentExecConfig{PermissionMode: "auto"},
+		WT:    &Worktree{RepoDir: "/repo-root"},
+	}
+	thread := codexThreadParams(job, "/repo", "/tmp/uploads")
+	if thread["approvalPolicy"] != "on-request" {
+		t.Fatalf("approvalPolicy = %v, want on-request", thread["approvalPolicy"])
+	}
+	if thread["sandbox"] != "workspace-write" {
+		t.Fatalf("sandbox = %v, want workspace-write", thread["sandbox"])
+	}
+	if thread["approvalsReviewer"] != "auto_review" {
+		t.Fatalf("approvalsReviewer = %v, want auto_review", thread["approvalsReviewer"])
+	}
+	turn := codexTurnParams("thread-1", job, "/repo", "/tmp/uploads", "turn-1", "run tests", nil, codexTurnContextOptions{})
+	if turn["approvalsReviewer"] != "auto_review" {
+		t.Fatalf("turn approvalsReviewer = %v, want auto_review", turn["approvalsReviewer"])
+	}
+	sandbox, ok := turn["sandboxPolicy"].(map[string]interface{})
+	if !ok || sandbox["type"] != "workspaceWrite" || sandbox["networkAccess"] != false {
+		t.Fatalf("sandboxPolicy = %#v, want workspaceWrite with network disabled", turn["sandboxPolicy"])
+	}
+	roots, ok := sandbox["writableRoots"].([]string)
+	if !ok || len(roots) != 3 || roots[0] != "/repo" || roots[1] != "/tmp/uploads" || roots[2] != "/repo-root/.git" {
+		t.Fatalf("sandbox writableRoots = %#v", sandbox["writableRoots"])
 	}
 }
 
@@ -176,6 +209,10 @@ func TestCodexAppServerTurnParams(t *testing.T) {
 	if !ok || owner["kind"] != "application" || owner["value"] != "Owner instructions." {
 		t.Fatalf("owner append context = %#v", additional["orbit_00000000_agent_append_00000000"])
 	}
+	imageDelivery, ok := additional["orbit_00000000_image_delivery"].(map[string]interface{})
+	if !ok || imageDelivery["kind"] != "application" || imageDelivery["value"] != codexImageDeliveryInstructions {
+		t.Fatalf("image delivery context = %#v", additional["orbit_00000000_image_delivery"])
+	}
 }
 
 func TestCodexInstructionModeForUserAgent(t *testing.T) {
@@ -225,6 +262,11 @@ func TestCodexCompactionRefreshesInstructionContextOnNextTurn(t *testing.T) {
 	})
 	if generation != 1 {
 		t.Fatalf("post-compaction generation = %d, want 1", generation)
+	}
+	refreshed := codexAgentAdditionalContext(AgentExecConfig{}, "", generation, false, true)
+	imageDelivery, ok := refreshed["orbit_00000001_image_delivery"].(map[string]interface{})
+	if !ok || imageDelivery["value"] != codexImageDeliveryInstructions {
+		t.Fatalf("image delivery instructions not restored after compaction: %#v", refreshed)
 	}
 	_, stableGeneration := additional.prepareInstructionContext(func() error { return nil })
 	if stableGeneration != generation {
@@ -405,6 +447,9 @@ func TestCodexLegacyInstructionDeliveryDoesNotReplaceDeveloperInstructions(t *te
 	if len(input) != 2 || !strings.Contains(input[0]["text"].(string), "<orbit_application_context>") || input[1]["text"] != "hello" {
 		t.Fatalf("legacy input = %#v", input)
 	}
+	if !strings.Contains(input[0]["text"].(string), codexImageDeliveryInstructions) {
+		t.Fatalf("legacy input is missing image delivery instructions: %#v", input)
+	}
 	items := codexInjectedAgentItems(job.Agent, "/usr/local/bin/orbit", false, true)
 	if len(items) != 1 || items[0]["role"] != "developer" {
 		t.Fatalf("injected items = %#v", items)
@@ -412,6 +457,9 @@ func TestCodexLegacyInstructionDeliveryDoesNotReplaceDeveloperInstructions(t *te
 	content, ok := items[0]["content"].([]map[string]interface{})
 	if !ok || len(content) != 1 || content[0]["type"] != "input_text" || !strings.Contains(content[0]["text"].(string), "Owner instructions.") {
 		t.Fatalf("injected content = %#v", items[0]["content"])
+	}
+	if !strings.Contains(content[0]["text"].(string), codexImageDeliveryInstructions) {
+		t.Fatalf("developer item is missing image delivery instructions: %#v", content)
 	}
 	thread := codexThreadParams(job, "/repo", "/tmp/uploads")
 	if _, ok := thread["developerInstructions"]; ok {
@@ -481,6 +529,34 @@ func TestCodexTurnEndPayloadIncludesContextTokens(t *testing.T) {
 	noUsage := codexTurnEndPayload(codexTurnResult{Subtype: "completed"}, 1, 0, &ClaimedSession{})
 	if noUsage["contextTokens"] != 0 {
 		t.Fatalf("missing usage contextTokens = %v, want 0", noUsage["contextTokens"])
+	}
+}
+
+// A Codex turn that worked for an hour and then hit "Selected model is at capacity" ends with a
+// reply AND an error. Result carries the reply, so the error has to travel on its own: without it
+// the control plane recorded the agent's last sentence as the reason the run failed.
+func TestCodexTurnErrorTravelsBesideTheReply(t *testing.T) {
+	const capacity = "Selected model is at capacity. Please try a different model."
+	failed := codexTurnResult{Status: stFailed, Result: "Verified; now running the ledger spec.", Error: capacity}
+	if got := codexTurnError(failed); got != capacity {
+		t.Fatalf("codexTurnError = %q, want the engine's own error", got)
+	}
+	body, err := json.Marshal(TurnCompleteRequest{TurnID: "t", Status: stFailed, Result: failed.Result, Error: codexTurnError(failed)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `"error":"`+capacity+`"`) || !strings.Contains(string(body), `"result":"Verified;`) {
+		t.Fatalf("turn-complete body = %s, want both the reply and the error", body)
+	}
+
+	// A turn that did not fail has nothing to report, and says nothing.
+	done := codexTurnResult{Status: stSucceeded, Result: "done", Error: "Reconnecting... 1/5"}
+	if got := codexTurnError(done); got != "" {
+		t.Fatalf("codexTurnError on a succeeded turn = %q, want empty", got)
+	}
+	body, _ = json.Marshal(TurnCompleteRequest{TurnID: "t", Status: stSucceeded, Error: codexTurnError(done)})
+	if strings.Contains(string(body), `"error"`) {
+		t.Fatalf("turn-complete body = %s, want no error field", body)
 	}
 }
 
@@ -1142,6 +1218,109 @@ func TestHandleCodexItemImageGenerationThroughRealRewrite(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestStageCodexGeneratedImageCopiesIntoSessionUploads(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "generated_images")
+	threadDir := filepath.Join(root, "thread-1")
+	if err := os.MkdirAll(threadDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	saved := filepath.Join(threadDir, "exec-1.png")
+	wantBytes := []byte{0x89, 'P', 'N', 'G'}
+	if err := os.WriteFile(saved, wantBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	uploadRoot := filepath.Join(t.TempDir(), "uploads", "session-1")
+	staged := stageCodexGeneratedImage(saved, root, uploadRoot)
+	if staged == "" {
+		t.Fatal("stageCodexGeneratedImage returned an empty path")
+	}
+	gotBytes, err := os.ReadFile(staged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(gotBytes) != string(wantBytes) {
+		t.Fatalf("staged bytes = %v, want %v", gotBytes, wantBytes)
+	}
+	if want := filepath.Join(uploadRoot, "exec-1.png"); staged != want {
+		t.Fatalf("staged path = %q, want %q", staged, want)
+	}
+
+	outside := filepath.Join(t.TempDir(), "outside.png")
+	if err := os.WriteFile(outside, wantBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := stageCodexGeneratedImage(outside, root, uploadRoot); got != "" {
+		t.Fatalf("outside-root image staged at %q", got)
+	}
+}
+
+func TestHandleCodexItemImageGenerationFallsBackToSessionUpload(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "generated_images")
+	threadDir := filepath.Join(root, "thread-1")
+	if err := os.MkdirAll(threadDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	saved := filepath.Join(threadDir, "exec-1.png")
+	wantBytes := []byte{0x89, 'P', 'N', 'G'}
+	if err := os.WriteFile(saved, wantBytes, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	uploadRoot := filepath.Join(t.TempDir(), "uploads", "session-1")
+	var got []emittedEvent
+	emit := func(eventType string, payload map[string]interface{}) {
+		got = append(got, emittedEvent{eventType, payload})
+	}
+	var result codexTurnResult
+	var last strings.Builder
+	handleCodexItemWithImageFallback(
+		map[string]interface{}{"item": map[string]interface{}{
+			"type": "imageGeneration", "id": "exec-1", "status": "completed", "savedPath": saved,
+		}},
+		emit, &result, &last, true,
+		func(text string) string { return text }, // Simulate a failed control-plane upload.
+		func(path string) string {
+			staged := stageCodexGeneratedImage(path, root, uploadRoot)
+			if staged == "" {
+				return ""
+			}
+			return fmt.Sprintf("![generated image](%s)", staged)
+		},
+	)
+	if len(got) != 1 || got[0].typ != evAssistant {
+		t.Fatalf("events = %+v, want one assistant event", got)
+	}
+	text, _ := got[0].payload["text"].(string)
+	if !strings.Contains(text, "![generated image](") || !strings.Contains(text, uploadRoot) {
+		t.Fatalf("fallback text = %q, want a session upload path", text)
+	}
+	staged := filepath.Join(uploadRoot, "exec-1.png")
+	if gotBytes, err := os.ReadFile(staged); err != nil || string(gotBytes) != string(wantBytes) {
+		t.Fatalf("staged image = (%v, %v), want %v", gotBytes, err, wantBytes)
+	}
+}
+
+func TestHandleCodexItemImageGenerationNoticesWhenFallbackCannotStage(t *testing.T) {
+	item := map[string]interface{}{
+		"type": "imageGeneration", "id": "exec-1", "status": "completed",
+		"savedPath": "/root/.codex/generated_images/thread-1/exec-1.png",
+	}
+	var got []emittedEvent
+	var result codexTurnResult
+	var last strings.Builder
+	handleCodexItemWithImageFallback(
+		map[string]interface{}{"item": item},
+		func(eventType string, payload map[string]interface{}) {
+			got = append(got, emittedEvent{eventType, payload})
+		},
+		&result, &last, true,
+		func(text string) string { return text },
+		func(string) string { return "" },
+	)
+	if len(got) != 1 || got[0].typ != evSystem || got[0].payload["noticeKind"] != "codex-image-generation-unattached" {
+		t.Fatalf("events = %+v, want one unattached-image notice", got)
 	}
 }
 

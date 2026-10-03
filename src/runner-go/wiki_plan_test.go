@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -71,6 +72,44 @@ func TestWikiPlanClosedSetsAreTheContracts(t *testing.T) {
 	}
 }
 
+// How a gate reads a closed-set value and names what it refuses is the contract's (`plan.gate.values`): the
+// wrappers it takes off are the ones the contract lists, in its order, and what it names back is a JSON string.
+func TestWikiPlanGateValuesAreTheContracts(t *testing.T) {
+	values := wikiContract(t)["plan"].(map[string]interface{})["gate"].(map[string]interface{})["values"].(string)
+	listed := regexp.MustCompile(`\(([^()]*)\) wrap the whole of it`).FindStringSubmatch(values)
+	if listed == nil {
+		t.Fatalf("plan.gate.values lists no wrappers: %s", values)
+	}
+	shipped := []string{}
+	for _, pair := range wikiWrappers {
+		if pair[0] == pair[1] {
+			shipped = append(shipped, pair[0])
+		} else {
+			shipped = append(shipped, pair[0]+pair[1])
+		}
+	}
+	if declared := strings.Fields(listed[1]); !reflect.DeepEqual(declared, shipped) {
+		t.Errorf("plan.gate.values takes off %v, this build %v", declared, shipped)
+	}
+	for _, phrase := range []string{
+		"writes it as a JSON string", `written as \uXXXX`, "a section's kind, a session condition's entryKinds and topics",
+		"a pair counting as a wrapping only with no more of either inside", "nothing else is read loosely",
+		"The runner's own gate (plan.jobs.run) and a maintenance run's check of its proposal read and write values the same way",
+	} {
+		if !strings.Contains(values, phrase) {
+			t.Errorf("plan.gate.values does not say %q", phrase)
+		}
+	}
+	// What a revision hands the model names projects as the drafting prompts do.
+	revise := wikiContract(t)["plan"].(map[string]interface{})["jobs"].(map[string]interface{})["run"].(map[string]interface{})["revise"].(string)
+	if !strings.Contains(revise, "name their session conditions' projects by title") || !strings.Contains(revise, "never by an id the model would have to copy") {
+		t.Errorf("plan.jobs.run.revise does not say how a revision names projects: %s", revise)
+	}
+	if got := wikiQuote(" `decision`​"); got != "\" `decision`\\u200b\"" {
+		t.Errorf("a refused value is named %s", got)
+	}
+}
+
 // A draft and a proposal marshal to exactly the fields the contract's schema lists at each level: none
 // missing, none the server would refuse as made up.
 func TestWikiPlanDraftCarriesTheContractsFieldsAndNoOther(t *testing.T) {
@@ -107,6 +146,7 @@ func TestWikiPlanDraftCarriesTheContractsFieldsAndNoOther(t *testing.T) {
 		RepoCheck: wikiPlanRepoCheck{Sha: strings.Repeat("a", 40), Checked: 3, Missing: []wikiPlanRepoMiss{{Kind: "symbol", Ref: "runLoop()", At: &at}}},
 		Model:     "qwen3.8-27b-fp8",
 	}
+	request.IdempotencyKey = wikiPlanDraftKey("job-1", "session-1", request)
 	var tree map[string]interface{}
 	raw, _ := json.Marshal(request)
 	if err := json.Unmarshal(raw, &tree); err != nil {
@@ -153,6 +193,9 @@ func TestWikiPlanDraftCarriesTheContractsFieldsAndNoOther(t *testing.T) {
 		if !strings.Contains(requests["draft"].(string), key) {
 			t.Errorf("a draft request carries %s, which the contract's draft request does not name", key)
 		}
+	}
+	if _, keyed := tree["idempotencyKey"]; !keyed {
+		t.Error("a draft request does not carry its idempotency key")
 	}
 	var proposal map[string]interface{}
 	raw, _ = json.Marshal(wikiPlanProposalRequest{Reason: "It fits no section.", Change: wikiPlanChange{Doc: doc, Category: &category}, Facts: []wikiPlanFact{{Kind: "entry", ID: "34WEntry"}}})
@@ -236,5 +279,37 @@ func TestWikiPlanCallsTheContractsRoutesAndReadsTheGatesRefusal(t *testing.T) {
 	defer mu.Unlock()
 	if !reflect.DeepEqual(calls, want) {
 		t.Errorf("the calls = %v, the contract's routes %v", calls, want)
+	}
+}
+
+// A draft's key is its run's and its own (contract `plan.idempotency`): the same draft of the same run is the
+// same key however often it is sent — the key itself left out of what is digested — and a later round's draft,
+// the same draft on another base, or another run's is another. The server takes a key of at most 200 characters.
+func TestWikiPlanDraftKeyIsTheRunsAndTheDrafts(t *testing.T) {
+	one := 1
+	draft := wikiPlanDraftRequest{Target: &wikiPlanLength{Min: 3, Max: 3}, Plan: wikiPlanDraft{Categories: []wikiPlanCategory{{Key: "product", Title: "Product"}}},
+		RepoCheck: wikiPlanRepoCheck{Sha: strings.Repeat("a", 40), Checked: 3}, Model: "qwen3.8-27b-fp8"}
+	key := wikiPlanDraftKey("job-1", "session-1", draft)
+	if !strings.HasPrefix(key, "wiki-plan-") || len(key) > 200 {
+		t.Fatalf("the key %q is not the run's, or longer than the server takes", key)
+	}
+	sent := draft
+	sent.IdempotencyKey = key
+	if again := wikiPlanDraftKey("job-1", "session-1", sent); again != key {
+		t.Errorf("the same draft sent under its key digests to %s, not %s", again, key)
+	}
+	later := draft
+	later.Plan = wikiPlanDraft{Categories: []wikiPlanCategory{{Key: "product", Title: "Product, redone"}}}
+	rebased := draft
+	rebased.BaseVersion = &one
+	for name, other := range map[string]string{
+		"a later round's draft":          wikiPlanDraftKey("job-1", "session-1", later),
+		"the same draft on another base": wikiPlanDraftKey("job-1", "session-1", rebased),
+		"another job's":                  wikiPlanDraftKey("job-2", "session-1", draft),
+		"another session's":              wikiPlanDraftKey("job-1", "session-2", draft),
+	} {
+		if other == key {
+			t.Errorf("%s draft has the same key", name)
+		}
 	}
 }

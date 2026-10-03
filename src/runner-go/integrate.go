@@ -36,6 +36,21 @@ const integrateScratchPrefix = "_integrate-"
 // race forever is a queue that never reports anything.
 const integrationRefetchRounds = 2
 
+// How many times one fetch is tried again when git refused to take a ref's lock because another
+// process was updating the same ref at that moment, and how long the wait before each further try
+// is (it doubles). Three attempts inside under a second: long enough for the fetch that beat this
+// one to be over, short enough that a repository genuinely wedged on a stale `.lock` is reported
+// rather than waited on.
+const (
+	integrationFetchLockAttempts = 3
+	integrationFetchLockWait     = 200 * time.Millisecond
+)
+
+// integrationFetchLockPause is the wait between two attempts at a ref another process was holding.
+// A variable only so a test can take that other process's lock away at the moment the first attempt
+// has failed, which is a moment nothing outside this function can observe.
+var integrationFetchLockPause = func(d time.Duration) { time.Sleep(d) }
+
 // The most check output a result carries, per §2.1. The control plane clips it again; this keeps a
 // runaway command from putting a gigabyte on the wire in the first place.
 const integrationOutputTail = 16 * 1024
@@ -64,11 +79,15 @@ type integrationResult struct {
 	LandedSha       string
 	LandedTreeSha   string
 	AheadOfUpstream *int
-	FilesChanged    *int
-	Checks          []IntegrationCheckResult
-	Conflicts       []string
-	ErrorCode       string
-	ErrorDetail     map[string]any
+	// SourceOnUpstream is set with NOTHING_TO_LAND, and only there: whether the source tip is an
+	// ancestor of the upstream tip this job fetched (migration 0346). It is the one fact the control
+	// plane lets such an answer out of a criterion's landing on — see J-S3 below.
+	SourceOnUpstream *bool
+	FilesChanged     *int
+	Checks           []IntegrationCheckResult
+	Conflicts        []string
+	ErrorCode        string
+	ErrorDetail      map[string]any
 }
 
 // integrationReporter is what runIntegrationJob tells about each step it reaches. The runloop
@@ -145,14 +164,14 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	if !local {
 		// The target may legitimately not exist yet (a project branch nobody has pushed), so the
 		// two refs are fetched separately and only upstream's absence is fatal.
-		if _, err := git(repoRoot, "fetch", remote, cmd.UpstreamRef); err != nil {
-			return errorResult("FETCH", "BASE_REF_NOT_FOUND", map[string]any{
-				"ref": cmd.UpstreamRef, "detail": gitStderr(err),
-			})
+		if err := integrationFetch(repoRoot, remote, cmd.UpstreamRef); err != nil {
+			return fetchRefFailure("FETCH", cmd.UpstreamRef, err, "BASE_REF_NOT_FOUND")
 		}
-		if _, err := git(repoRoot, "fetch", remote, cmd.TargetRef); err != nil {
-			// Not an error: a first landing creates the branch.
-			_ = err
+		// A failure here is not an error — a first landing creates the branch — unless it is a ref
+		// another process was holding: this fetch is what brings the tip the job is about to work
+		// from, and reading it out of a ref nobody just updated is a guess about the remote.
+		if err := integrationFetch(repoRoot, remote, cmd.TargetRef); err != nil && isRefLockConflict(err) {
+			return fetchRefFailure("FETCH", cmd.TargetRef, err, "FETCH_FAILED")
 		}
 	}
 	upstreamSha, err := integrationTip(repoRoot, remote, cmd.UpstreamRef, local)
@@ -218,6 +237,14 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 			// Nothing to land, and nothing was pushed: the absorb commit is discarded with the
 			// worktree, exactly as in the answer below.
 			result.State, result.Phase = "NOTHING_TO_LAND", "REBASE"
+			// And where that empty tip IS, measured rather than inferred. "Contained in the base"
+			// says the tip is inside the TARGET, which on a project branch ahead of main is not
+			// main: a branch forked from the line holds nothing of its own and is still not on the
+			// upstream. The control plane lets this answer out of a criterion's landing only when
+			// the tip is an ancestor of the upstream tip fetched above (2026-10-01: a rollout task
+			// with no commit, on a line ahead of main, held its criterion off LANDED for ever).
+			onUpstream := isAncestor(scratch, sourceSha, upstreamSha)
+			result.SourceOnUpstream = &onUpstream
 			return result
 		}
 		// Nothing to land, and the absorb commit is discarded with the worktree: a merge of
@@ -323,7 +350,7 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 	// ── J-S7 VERIFY ───────────────────────────────────────────────────────────────────────────
 	report("VERIFY", nil)
 	if !local {
-		if _, err := git(repoRoot, "fetch", remote, cmd.TargetRef); err != nil {
+		if err := integrationFetch(repoRoot, remote, cmd.TargetRef); err != nil {
 			result.State, result.Phase, result.ErrorCode = "ERROR", "VERIFY", "LANDED_TREE_MISMATCH"
 			result.ErrorDetail = map[string]any{"detail": "could not read the target back: " + gitStderr(err)}
 			return result
@@ -385,15 +412,11 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 	// ── M-S1 FETCH ────────────────────────────────────────────────────────────────────────────
 	report("FETCH", nil)
 	if !local {
-		if _, err := git(repoRoot, "fetch", remote, cmd.UpstreamRef); err != nil {
-			return errorResult("FETCH", "BASE_REF_NOT_FOUND", map[string]any{
-				"ref": cmd.UpstreamRef, "detail": gitStderr(err),
-			})
+		if err := integrationFetch(repoRoot, remote, cmd.UpstreamRef); err != nil {
+			return fetchRefFailure("FETCH", cmd.UpstreamRef, err, "BASE_REF_NOT_FOUND")
 		}
-		if _, err := git(repoRoot, "fetch", remote, cmd.SourceRef); err != nil {
-			return errorResult("FETCH", "SOURCE_BRANCH_MISSING", map[string]any{
-				"ref": cmd.SourceRef, "detail": gitStderr(err),
-			})
+		if err := integrationFetch(repoRoot, remote, cmd.SourceRef); err != nil {
+			return fetchRefFailure("FETCH", cmd.SourceRef, err, "SOURCE_BRANCH_MISSING")
 		}
 	}
 	upstreamSha, err := integrationTip(repoRoot, remote, cmd.UpstreamRef, local)
@@ -572,7 +595,7 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 	// ── VERIFY ────────────────────────────────────────────────────────────────────────────────
 	report("VERIFY", nil)
 	if !local {
-		if _, err := git(repoRoot, "fetch", remote, cmd.UpstreamRef); err != nil {
+		if err := integrationFetch(repoRoot, remote, cmd.UpstreamRef); err != nil {
 			result.State, result.Phase, result.ErrorCode = "ERROR", "VERIFY", "LANDED_TREE_MISMATCH"
 			result.ErrorDetail = map[string]any{"detail": "could not read the upstream back: " + gitStderr(err)}
 			return result
@@ -797,6 +820,53 @@ func removeIntegrationWorktree(repoRoot, scratch string) {
 	_, _ = git(repoRoot, "worktree", "prune")
 }
 
+// integrationFetch fetches one remote ref into this checkout's remote-tracking copy, trying again
+// when the only thing in the way was another process updating that same ref.
+//
+// THE FAILURE THIS EXISTS FOR (2026-10-02, project 34Yjjgt2ERe9tU5TUmjAP). `git fetch <remote> <ref>`
+// does not only write FETCH_HEAD: it updates `refs/remotes/<remote>/<branch>` as well, and that ref
+// is SHARED — every integration job, every session worktree and every `git fetch` in this repository
+// writes it. Two of them arriving together and the second one's ref update is refused with
+//
+//	error: cannot lock ref 'refs/remotes/origin/main': is at 0ca3c834… but expected 869e718b…
+//
+// which is not an answer about anything the job asked for: the ref moved between this fetch reading
+// it and writing it, so the same fetch, run again, simply works. It was reported as
+// BASE_REF_NOT_FOUND — a code that means the upstream branch does not exist, and that a reader acts
+// on by going to look at the branch — and the promotion it was a step of went BLOCKED over a race
+// it would have won a moment later.
+func integrationFetch(repoRoot, remote, ref string) error {
+	var err error
+	for attempt := 0; attempt < integrationFetchLockAttempts; attempt++ {
+		if attempt > 0 {
+			integrationFetchLockPause(integrationFetchLockWait << (attempt - 1))
+		}
+		if _, err = git(repoRoot, "fetch", remote, ref); err == nil || !isRefLockConflict(err) {
+			return err
+		}
+	}
+	return err
+}
+
+// isRefLockConflict reports git refusing to take a ref's lock: another process holds the `.lock`
+// file, or moved the ref between this fetch's read of it and its write. Both spellings say "cannot
+// lock ref", and neither is a statement about the branch the job asked for.
+func isRefLockConflict(err error) bool {
+	return err != nil && strings.Contains(gitStderr(err), "cannot lock ref")
+}
+
+// fetchRefFailure is what a fetch that got nowhere is reported as: `branchCode` for a failure that
+// is about the ref itself — it is not there — and FETCH_FAILED for the one that is about the
+// machinery, a ref lock that outlived its retries. The second is deliberately not a code a reader
+// could act on by going to look at a branch.
+func fetchRefFailure(phase, ref string, err error, branchCode string) integrationResult {
+	code := branchCode
+	if isRefLockConflict(err) {
+		code = "FETCH_FAILED"
+	}
+	return errorResult(phase, code, map[string]any{"ref": ref, "detail": gitStderr(err)})
+}
+
 // integrationTip resolves a ref to a commit: the remote-tracking copy when the remote is the
 // authority, the local ref when this machine is.
 func integrationTip(repoRoot, remote, ref string, local bool) (string, error) {
@@ -878,24 +948,25 @@ func runIntegrationJobAndReport(t *Transport, job IntegrationJobCommand) {
 		})
 	})
 	body := IntegrationJobResultRequest{
-		ClaimGeneration: job.ClaimGeneration,
-		LeaseOwner:      job.LeaseOwner,
-		State:           result.State,
-		Phase:           result.Phase,
-		SourceSha:       result.SourceSha,
-		TargetShaBefore: result.TargetShaBefore,
-		UpstreamSha:     result.UpstreamSha,
-		MainSyncSha:     result.MainSyncSha,
-		TestedSha:       result.TestedSha,
-		TestedTreeSha:   result.TestedTreeSha,
-		LandedSha:       result.LandedSha,
-		LandedTreeSha:   result.LandedTreeSha,
-		AheadOfUpstream: result.AheadOfUpstream,
-		FilesChanged:    result.FilesChanged,
-		Checks:          result.Checks,
-		Conflicts:       result.Conflicts,
-		ErrorCode:       result.ErrorCode,
-		ErrorDetail:     result.ErrorDetail,
+		ClaimGeneration:  job.ClaimGeneration,
+		LeaseOwner:       job.LeaseOwner,
+		State:            result.State,
+		Phase:            result.Phase,
+		SourceSha:        result.SourceSha,
+		TargetShaBefore:  result.TargetShaBefore,
+		UpstreamSha:      result.UpstreamSha,
+		MainSyncSha:      result.MainSyncSha,
+		TestedSha:        result.TestedSha,
+		TestedTreeSha:    result.TestedTreeSha,
+		LandedSha:        result.LandedSha,
+		LandedTreeSha:    result.LandedTreeSha,
+		AheadOfUpstream:  result.AheadOfUpstream,
+		SourceOnUpstream: result.SourceOnUpstream,
+		FilesChanged:     result.FilesChanged,
+		Checks:           result.Checks,
+		Conflicts:        result.Conflicts,
+		ErrorCode:        result.ErrorCode,
+		ErrorDetail:      result.ErrorDetail,
 	}
 	for attempt := 0; attempt < 5; attempt++ {
 		answer, err := t.integrationJobResult(job.JobID, body)

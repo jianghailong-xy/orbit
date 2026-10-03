@@ -48,7 +48,7 @@ describe('Codex accounts in the New Session picker', () => {
             choices={choices}
             onPick={(slug) => picked.push([slug])}
             currentAccount={currentAccount}
-            automatic={automatic}
+            automatic={automatic === undefined ? undefined : { codex: automatic }}
             onPickAccount={(slug, account) => picked.push([slug, account])}
             runnerId={RUNNER_ID}
           />
@@ -88,9 +88,8 @@ describe('Codex accounts in the New Session picker', () => {
 
   it('lists them right under Codex and ticks the one the session would start on', async () => {
     await mount('codex', '3fa91c2e');
-    // The line under the card names no account: an email does not fit it on a phone, and the
-    // composer's quota gauge names the account in its popover.
-    expect(container.querySelector('.np-summary')?.textContent).toBe('Codex·GPT-5.5·Manage');
+    // The empty state names the current model, while the composer's quota gauge names the account.
+    expect(container.querySelector('.np-current-model')?.textContent).toBe('GPT-5.5');
 
     await click(container.querySelector('.np-card'));
     const names = Array.from(document.body.querySelectorAll('.np-list .np-row-name')).map((el) => el.textContent);
@@ -107,7 +106,7 @@ describe('Codex accounts in the New Session picker', () => {
 
   it('picks Codex on an account from another provider, and ticks nothing while Codex is not the pick', async () => {
     await mount('claude', 'default');
-    expect(container.querySelector('.np-summary')?.textContent).toBe('Claude·Opus 5.5·Manage');
+    expect(container.querySelector('.np-current-model')?.textContent).toBe('Opus 5.5');
     await click(container.querySelector('.np-card'));
     expect(document.body.querySelector('.np-account.picked')).toBeNull();
     await click(accountNamed('Work'));

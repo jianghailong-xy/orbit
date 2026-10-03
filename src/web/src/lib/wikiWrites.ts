@@ -8,10 +8,16 @@ import type {
   WikiMaintenanceSettings,
   WikiOpInput,
   WikiOpOutcome,
+  WikiPlanDecisionResult,
+  WikiPlanDocInput,
+  WikiPlanGateError,
+  WikiPlanRedraftResult,
+  WikiPlanSectionInput,
+  WikiPlanVersion,
   WikiRejectReason,
   WikiReviewMode,
 } from '@orbit/shared';
-import { api } from '../api';
+import { ApiError, api } from '../api';
 import type { WikiEntry } from './wiki';
 
 /**
@@ -160,12 +166,74 @@ export function revertWikiChangeset(changesetId: string): Promise<WikiRevertAnsw
 export interface WikiSpaceUpdate {
   reviewMode?: WikiReviewMode;
   automaticSpotChecks?: boolean;
-  maintenance?: Partial<Pick<WikiMaintenanceSettings, 'enabled' | 'workspaceId' | 'provider' | 'dailyRunLimit'>>;
+  maintenance?: Partial<Pick<WikiMaintenanceSettings, 'enabled' | 'workspaceId' | 'provider' | 'dailyRunLimit' | 'lookbackDays'>>;
 }
 
 /** `PATCH /api/wiki/spaces/:id` — the owner's settings; refused to every session. */
 export function updateWikiSpace(spaceId: string, body: WikiSpaceUpdate): Promise<unknown> {
   return api(`/wiki/spaces/${encodeURIComponent(spaceId)}`, { method: 'PATCH', body });
+}
+
+// ── The plan's writes (contract `plan.routes`), the owner's door only ───────────────────────────
+
+/**
+ * `POST /api/wiki/spaces/:id/plan/redraft` — ask for a draft of the plan; with `instructions`, a revision
+ * of its newest version. The server makes it a task of the space's maintenance list, queued behind the
+ * list's unfinished task or held with why; a draft that has not ended answers a second press.
+ */
+export function redraftWikiPlan(spaceId: string, instructions: string | null): Promise<WikiPlanRedraftResult> {
+  const words = instructions?.trim() ?? '';
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/plan/redraft`, {
+    method: 'POST',
+    body: words ? { instructions: words } : {},
+  });
+}
+
+/** `POST …/plan/versions/:version/confirm` — the owner's confirmation of the space's draft. */
+export function confirmWikiPlan(spaceId: string, version: number): Promise<WikiPlanVersion> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/plan/versions/${version}/confirm`, { method: 'POST', body: {} });
+}
+
+/**
+ * `POST …/plan/edits` — one document, or one of its sections, as the owner rewrote it: a new draft over
+ * `baseVersion`, which must still be the newest. The body is the DRAFT's shape (`wikiPlanDocEdit`).
+ */
+export function editWikiPlan(
+  spaceId: string,
+  body: { baseVersion: number; docSlug: string; doc: WikiPlanDocInput } | { baseVersion: number; docSlug: string; sectionKey: string; section: WikiPlanSectionInput },
+): Promise<WikiPlanVersion> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/plan/edits`, { method: 'POST', body });
+}
+
+/** `POST /api/wiki/plan-proposals/:id/decide` — accept (a new draft) or reject (nothing but the proposal). */
+export function decideWikiPlanProposal(proposalId: string, action: 'accept' | 'reject', note?: string): Promise<WikiPlanDecisionResult> {
+  return api(`/wiki/plan-proposals/${encodeURIComponent(proposalId)}/decide`, {
+    method: 'POST',
+    body: note ? { action, note } : { action },
+  });
+}
+
+/**
+ * Accept a proposal, and — with no other draft waiting (`wikiPlanAcceptConfirms`) — confirm the draft
+ * accepting it made: two requests, the second only once the first came back with a draft that passed
+ * the gate. A refusal of either is the caller's to show; the gate's errors are read with `wikiPlanGateErrors`.
+ */
+export async function acceptWikiPlanProposal(
+  spaceId: string,
+  proposalId: string,
+  confirm: boolean,
+): Promise<{ draft: WikiPlanVersion; confirmed: WikiPlanVersion | null }> {
+  const decided = await decideWikiPlanProposal(proposalId, 'accept');
+  if (!decided.draft) throw new Error('The server accepted the change but made no draft of it.');
+  if (!confirm) return { draft: decided.draft, confirmed: null };
+  return { draft: decided.draft, confirmed: await confirmWikiPlan(spaceId, decided.draft.version) };
+}
+
+/** The gate's errors a refusal carries (422 `WIKI_PLAN_GATE`), or null for a failure of any other kind. */
+export function wikiPlanGateErrors(error: unknown): WikiPlanGateError[] | null {
+  if (!(error instanceof ApiError) || error.code !== 'WIKI_PLAN_GATE') return null;
+  const errors = error.body?.errors;
+  return Array.isArray(errors) ? (errors as WikiPlanGateError[]) : [];
 }
 
 /**

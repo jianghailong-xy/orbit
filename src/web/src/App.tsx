@@ -23,7 +23,7 @@ import { ProjectDetailPage, ProjectsPage } from './pages/ProjectsPage';
 import { SharedLinksPage } from './pages/SharedLinksPage';
 import { SharedLinkPage, SharedProjectTaskRoute } from './pages/SharedLinkPage';
 import { SharedSessionPage } from './pages/SharedSessionPage';
-import { TaskListView } from './pages/TaskListView';
+import { TaskRoute } from './pages/TaskRoute';
 import { FollowingPage } from './pages/FollowingPage';
 import { WikiPage } from './pages/WikiPage';
 
@@ -122,9 +122,10 @@ export function App() {
               layout contract (DocView = page gutter + scroll, FlushView = full-bleed). */}
           <Route element={<AppShell />}>
             <Route index element={<DefaultLanding />} />
-            <Route path="tasks" element={<TaskListView />} />
-            <Route path="tasks/:id" element={<TaskListView />} />
-            <Route path="lists/:key" element={<TaskListView />} />
+            {/* One element for all three, so the list is one instance across them (TaskRoute). */}
+            <Route path="tasks" element={<TaskRoute />} />
+            <Route path="tasks/:id" element={<TaskRoute />} />
+            <Route path="lists/:key" element={<TaskRoute />} />
             <Route
               path="settings/profile"
               element={
@@ -231,6 +232,17 @@ export function App() {
                 </DocView>
               }
             />
+            {/* One of the project's tasks, open over its page (lib/projectTaskRoute). The same
+                element as the page's own route, so opening and closing a task keeps the page — its
+                scroll, what is expanded — where the reader left it. */}
+            <Route
+              path="projects/:id/tasks/:taskId"
+              element={
+                <DocView>
+                  <ProjectDetailPage />
+                </DocView>
+              }
+            />
             {/* The Wiki: one page component, ten routes. `/wiki/review` is declared before
                 `/wiki/:space` for the reader's sake rather than the router's — a static segment
                 already outranks a dynamic one, but the two together are what the design's URL
@@ -280,6 +292,38 @@ export function App() {
               element={
                 <DocView>
                   <WikiPage route="topic" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/d/:doc"
+              element={
+                <DocView>
+                  <WikiPage route="doc" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/plan"
+              element={
+                <DocView>
+                  <WikiPage route="plan" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/plan/d/:doc"
+              element={
+                <DocView>
+                  <WikiPage route="planDoc" />
+                </DocView>
+              }
+            />
+            <Route
+              path="wiki/:space/plan/d/:doc/:section"
+              element={
+                <DocView>
+                  <WikiPage route="planSection" />
                 </DocView>
               }
             />

@@ -1,9 +1,13 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
+  RunEventType,
   toUuid,
   WIKI_ENTRY_KINDS,
+  WIKI_PLAN_JOB_OUTCOMES,
+  WIKI_PLAN_JOB_RULES,
+  wikiMaintenanceSettings,
   WIKI_PLAN_FACT_KINDS,
   WIKI_PLAN_GATE_CHECKS,
   WIKI_PLAN_NEW_FIELD_LEVELS,
@@ -14,14 +18,22 @@ import {
   WIKI_PLAN_SECTION_KINDS,
   WIKI_SLUG_PATTERN,
   type WikiEntryKind,
+  type WikiPlanBuildProgress,
   type WikiPlanCategory,
   type WikiPlanDecisionResult,
   type WikiPlanDoc,
   type WikiPlanDocInput,
+  type WikiPlanDraftAnswer,
   type WikiPlanFactKind,
   type WikiPlanGateCheck,
   type WikiPlanGateError,
   type WikiPlanGateReport,
+  type WikiPlanJob,
+  type WikiPlanJobCheck,
+  type WikiPlanJobContext,
+  type WikiPlanJobOutcome,
+  type WikiPlanMaterials,
+  type WikiPlanRedraftResult,
   type WikiPlanNewField,
   type WikiPlanNewFieldLevel,
   type WikiPlanOrigin,
@@ -36,10 +48,26 @@ import {
   type WikiPlanVersion,
   type WikiPlanVersionSummary,
 } from '@orbit/shared';
+import { redactSecrets } from '../common/secret-redaction';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
+import {
+  finishWikiPlanJob,
+  progressWikiPlanBuild,
+  progressWikiPlanJob,
+  requestWikiPlanBuild,
+  requestWikiPlanJob,
+  startWikiPlanJob,
+  wikiPlanJobById,
+  wikiPlanJobCheck,
+  wikiPlanJobOfSession,
+  wikiPlanJobOfSpace,
+  wikiPlanMaterials,
+  type WikiPlanJobEnd,
+  type WikiPlanJobRow,
+} from './wiki-plan-job';
 import { WikiRefusalError, type WikiPrincipal } from './wiki.service';
 
 /**
@@ -67,6 +95,11 @@ import { WikiRefusalError, type WikiPrincipal } from './wiki.service';
  *   references  every project, topic and entry kind a section's session condition names exists, every
  *               document's category is one of the plan's, and every document a scope leaves something
  *               to is one of the plan's.
+ *
+ * A closed-set value — a section's kind, an entry kind, a topic, a declared field's level, a fact's kind —
+ * is read with whatever backticks or quotes wrap the whole of it taken off (`unwrapped`), and an error
+ * names a value the request gave as a JSON string (`quoted`), so what is wrong with it shows (contract
+ * `plan.gate.values`).
  *
  * What it does NOT check is the repository: a file, a docs section or a symbol exists only in a
  * checkout, which the server has none of. The drafting job checks those on the runner, at a sha, and
@@ -158,6 +191,44 @@ function chars(text: string): number {
   return Array.from(text).length;
 }
 
+/** What a message would not show: controls, format characters (a zero-width space, a BOM), separators, and every space but U+0020. */
+const UNSEEN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Zs}]/gu;
+
+/**
+ * A value the request gave, as an error names it back (contract `plan.gate.values`): a JSON string, with
+ * every character that would not show written as \uXXXX, so the backticks around a value, a space at
+ * either end and an invisible character all show. 10-01: «`decision` is no kind of entry: one of
+ * principle, convention, decision, …» read as decision refused for not being decision, three rounds
+ * running. The runner's gate writes the same (wiki_verify.go `wikiQuote`).
+ */
+function quoted(value: string): string {
+  return JSON.stringify(value).replace(UNSEEN, (c) =>
+    c === ' ' ? c : Array.from({ length: c.length }, (_, i) => `\\u${c.charCodeAt(i).toString(16).padStart(4, '0')}`).join(''));
+}
+
+/** What a model wraps a whole value in: backticks, and quotes of every kind. */
+const WRAPPERS: ReadonlyArray<readonly [string, string]> = [['`', '`'], ['"', '"'], ["'", "'"], ['“', '”'], ['‘', '’'], ['「', '」'], ['『', '』'], ['«', '»']];
+
+/**
+ * A closed-set value as the gate reads it (contract `plan.gate.values`): the whitespace at either end
+ * taken off, then whatever backticks or quotes wrap the whole of it — a pair at its two ends with no more
+ * of either inside — as often as they do: `decision` reads decision. Only the wrapping goes: `a` and `b`
+ * is no wrapped value, and a value that is not in the set is still refused. The runner's gate reads the
+ * same (wiki_verify.go `wikiUnwrap`).
+ */
+function unwrapped(value: string): string {
+  let text = value.trim();
+  for (;;) {
+    const pair = WRAPPERS.find(([open, close]) => {
+      if (text.length < open.length + close.length || !text.startsWith(open) || !text.endsWith(close)) return false;
+      const held = text.slice(open.length, text.length - close.length);
+      return !held.includes(open) && !held.includes(close);
+    });
+    if (!pair) return text;
+    text = text.slice(pair[0].length, text.length - pair[1].length).trim();
+  }
+}
+
 /**
  * One walk of a request, collecting every error rather than stopping at the first: the drafting job
  * hands the whole list back to the model, and a model told one mistake at a time needs a round each.
@@ -193,8 +264,8 @@ class Walk {
         'schema',
         `${path}.${key}`,
         declared
-          ? `${key} is declared in newFields as needing adding: put its value under ${path}.extra.${key}, not beside the schema's fields`
-          : `${key} is not a field of the plan schema (${WIKI_PLAN_SCHEMA[level].join(', ')}): remove it`
+          ? `${quoted(key)} is declared in newFields as needing adding: put its value under ${path}.extra.${key}, not beside the schema's fields`
+          : `${quoted(key)} is not a field of the plan schema (${WIKI_PLAN_SCHEMA[level].join(', ')}): remove it`
             + (holdsExtra ? `, or declare it in newFields at "${level}" and put its value under extra` : ''),
       );
     }
@@ -212,7 +283,7 @@ class Walk {
     const declared = this.declared.get(level) ?? new Set<string>();
     for (const [name, field] of Object.entries(value as Record<string, unknown>)) {
       if (!declared.has(name)) {
-        this.fail('schema', `${path}.${name}`, `${name} is not declared in newFields at "${level}": declare it as needing adding, or remove it`);
+        this.fail('schema', `${path}.${name}`, `${quoted(name)} is not declared in newFields at "${level}": declare it as needing adding, or remove it`);
         continue;
       }
       out[name] = field;
@@ -280,6 +351,18 @@ class Walk {
     return this.list(value, path, minItems).map((item, i) => this.text(item, `${path}[${i}]`, WIKI_PLAN_RULES.textMaxChars, true));
   }
 
+  /** A required value of a closed set — a kind, a topic, a level — read unwrapped: what wraps the whole of it is no part of it. */
+  closed(value: unknown, path: string, max: number): string {
+    const refused = this.errors.length;
+    const text = unwrapped(this.text(value, path, max, true));
+    if (text === '' && this.errors.length === refused) this.fail('schema', path, 'must not be empty');
+    return text;
+  }
+
+  closedList(value: unknown, path: string): string[] {
+    return this.list(value, path).map((item, i) => this.closed(item, `${path}[${i}]`, WIKI_PLAN_RULES.textMaxChars));
+  }
+
   date(value: unknown, path: string): string | null {
     if (value === undefined || value === null) return null;
     if (typeof value !== 'string' || !DATE.test(value) || Number.isNaN(Date.parse(`${value}T00:00:00Z`))) {
@@ -340,7 +423,7 @@ class Walk {
     const keys = new Set<string>();
     doc.sections.forEach((section, i) => {
       if (section.key === null) return;
-      if (keys.has(section.key)) this.fail('schema', `${path}.sections[${i}].key`, `${section.key} is the key of an earlier section of this document`);
+      if (keys.has(section.key)) this.fail('schema', `${path}.sections[${i}].key`, `${quoted(section.key)} is the key of an earlier section of this document`);
       keys.add(section.key);
     });
     return doc;
@@ -349,9 +432,9 @@ class Walk {
   section(value: unknown, path: string): PlanSection | null {
     const raw = this.object(value, path, 'section');
     if (!raw) return null;
-    const kind = this.text(raw.kind, `${path}.kind`, 64, true);
+    const kind = this.closed(raw.kind, `${path}.kind`, 64);
     if (kind !== '' && !(WIKI_PLAN_SECTION_KINDS as readonly string[]).includes(kind)) {
-      this.fail('schema', `${path}.kind`, `${kind} is not a section kind: one of ${WIKI_PLAN_SECTION_KINDS.join(', ')}`);
+      this.fail('schema', `${path}.kind`, `${quoted(kind)} is not a section kind: one of ${WIKI_PLAN_SECTION_KINDS.join(', ')}`);
     }
     return {
       key: raw.key === undefined || raw.key === null ? null : this.slug(raw.key, `${path}.key`),
@@ -400,12 +483,12 @@ class Walk {
     if (since !== null && until !== null && since > until) this.fail('schema', `${path}.until`, 'must not be before since');
     const projects = this.texts(raw.projects, `${path}.projects`);
     projects.forEach((project, i) => project !== '' && this.projects.push({ path: `${path}.projects[${i}]`, value: project }));
-    const topics = this.texts(raw.topics, `${path}.topics`);
+    const topics = this.closedList(raw.topics, `${path}.topics`);
     topics.forEach((topic, i) => topic !== '' && this.topics.push({ path: `${path}.topics[${i}]`, value: topic }));
-    const entryKinds = this.texts(raw.entryKinds, `${path}.entryKinds`);
+    const entryKinds = this.closedList(raw.entryKinds, `${path}.entryKinds`);
     entryKinds.forEach((kind, i) => {
       if (kind !== '' && !(WIKI_ENTRY_KINDS as readonly string[]).includes(kind)) {
-        this.fail('references', `${path}.entryKinds[${i}]`, `${kind} is no kind of entry: one of ${WIKI_ENTRY_KINDS.join(', ')}`);
+        this.fail('references', `${path}.entryKinds[${i}]`, `${quoted(kind)} is no kind of entry: one of ${WIKI_ENTRY_KINDS.join(', ')}`);
       }
     });
     return {
@@ -431,14 +514,14 @@ class Walk {
       const at = `${path}[${i}]`;
       const raw = this.object(item, at, 'newField');
       if (!raw) return [];
-      const level = this.text(raw.at, `${at}.at`, 32, true);
+      const level = this.closed(raw.at, `${at}.at`, 32);
       if (level !== '' && !(WIKI_PLAN_NEW_FIELD_LEVELS as readonly string[]).includes(level)) {
         this.fail('schema', `${at}.at`, `a field may be declared at ${WIKI_PLAN_NEW_FIELD_LEVELS.join(', ')}`);
       }
       const name = this.text(raw.name, `${at}.name`, 64, true);
       if (name !== '' && !/^[A-Za-z][A-Za-z0-9]*$/u.test(name)) this.fail('schema', `${at}.name`, 'must be a camelCase name');
       if ((WIKI_PLAN_SCHEMA[level as WikiPlanSchemaLevel] as readonly string[] | undefined)?.includes(name)) {
-        this.fail('schema', `${at}.name`, `${name} is a field the schema already has at "${level}"`);
+        this.fail('schema', `${at}.name`, `${quoted(name)} is a field the schema already has at "${level}"`);
       }
       return [{ at: level as WikiPlanNewFieldLevel, name, why: this.text(raw.why, `${at}.why`, WIKI_PLAN_RULES.textMaxChars, true) }];
     });
@@ -459,21 +542,21 @@ function declaredOf(newFields: readonly WikiPlanNewField[]): Map<WikiPlanNewFiel
 function checkWhole(walk: Walk, plan: PlanContent, prefix: string): void {
   const categories = new Set<string>();
   plan.categories.forEach((category, i) => {
-    if (categories.has(category.key)) walk.fail('schema', `${prefix}categories[${i}].key`, `${category.key} is the key of an earlier category`);
+    if (categories.has(category.key)) walk.fail('schema', `${prefix}categories[${i}].key`, `${quoted(category.key)} is the key of an earlier category`);
     categories.add(category.key);
   });
   const slugs = new Set<string>();
   plan.docs.forEach((doc, i) => {
-    if (slugs.has(doc.slug)) walk.fail('schema', `${prefix}docs[${i}].slug`, `${doc.slug} is the slug of an earlier document`);
+    if (slugs.has(doc.slug)) walk.fail('schema', `${prefix}docs[${i}].slug`, `${quoted(doc.slug)} is the slug of an earlier document`);
     slugs.add(doc.slug);
   });
   plan.docs.forEach((doc, i) => {
     if (doc.category !== '' && !categories.has(doc.category)) {
-      walk.fail('references', `${prefix}docs[${i}].category`, `${doc.category} is not one of the plan's categories (${[...categories].join(', ')})`);
+      walk.fail('references', `${prefix}docs[${i}].category`, `${quoted(doc.category)} is not one of the plan's categories (${[...categories].join(', ')})`);
     }
     doc.scopeOut.forEach((out, j) => out.docs.forEach((slug, k) => {
       if (slug !== '' && !slugs.has(slug)) {
-        walk.fail('references', `${prefix}docs[${i}].scopeOut[${j}].docs[${k}]`, `${slug} is no document of this plan: name the document it is left to by its slug`);
+        walk.fail('references', `${prefix}docs[${i}].scopeOut[${j}].docs[${k}]`, `${quoted(slug)} is no document of this plan: name the document it is left to by its slug`);
       }
     }));
   });
@@ -801,6 +884,64 @@ interface NewVersion {
   model: string | null;
   authorSessionId: string | null;
   authorUserId: string | null;
+  /** A drafting job's draft under an idempotency key; nothing else has one. */
+  idempotency?: DraftIdempotency;
+}
+
+/**
+ * A draft's idempotency key, and the digest of the request it came with (contract `plan.idempotency`):
+ * what tells the same draft landing again — sent again after its first answer was lost on the way
+ * back — from a key reused for another. The digest is of the request's JSON with its keys sorted, so
+ * the same draft digests the same however it was spelled, and it names the space: the key is the
+ * owner's, as a changeset's is.
+ */
+interface DraftIdempotency {
+  key: string;
+  requestSha256: string;
+}
+
+/** The longest idempotency key a draft carries, as a changeset's. */
+const IDEMPOTENCY_KEY_MAX_CHARS = 200;
+
+/** A draft's key: null when it carries none, or one the schema refuses — the refusal is in the walk. */
+function keyOf(walk: Walk, value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  const refused = walk.errors.length;
+  const key = walk.text(value, 'idempotencyKey', IDEMPOTENCY_KEY_MAX_CHARS, true);
+  return walk.errors.length === refused ? key : null;
+}
+
+function draftIdempotency(spaceId: string, key: string, raw: Record<string, unknown>): DraftIdempotency {
+  const request = {
+    spaceId,
+    baseVersion: raw.baseVersion ?? null,
+    target: raw.target ?? null,
+    plan: raw.plan ?? null,
+    repoCheck: raw.repoCheck ?? null,
+    model: raw.model ?? null,
+  };
+  return { key, requestSha256: createHash('sha256').update(JSON.stringify(canonical(request))).digest('hex') };
+}
+
+/**
+ * The version the same draft stored under this key, or null when the key stored none: a replay is
+ * answered with it and writes nothing. The key with another request is WIKI_IDEMPOTENCY_KEY_REUSED.
+ */
+async function storedUnder(db: PlanReader, ownerId: string, idempotency: DraftIdempotency): Promise<number | null> {
+  const earlier = await db.wikiPlan.findFirst({
+    where: { ownerId, idempotencyKey: idempotency.key },
+    select: { version: true, requestSha256: true },
+  });
+  if (!earlier) return null;
+  if (earlier.requestSha256 !== idempotency.requestSha256) {
+    throw new WikiRefusalError({
+      code: 'WIKI_IDEMPOTENCY_KEY_REUSED',
+      message:
+        'this idempotency key was used for a different draft: the same draft under the same key replays the version it '
+          + 'stored, and another draft needs another key',
+    });
+  }
+  return earlier.version;
 }
 
 @Injectable()
@@ -873,6 +1014,7 @@ export class WikiPlans {
       confirmed: views.find((view) => view.status === 'confirmed') ?? null,
       draft: views.find((view) => view.status === 'draft') ?? null,
       proposals: proposals.map(proposalView),
+      job: await wikiPlanJobOfSpace(this.prisma, ownerId, spaceId),
     };
   }
 
@@ -1040,9 +1182,9 @@ export class WikiPlans {
       if (found) {
         resolved.set(named.value, found);
       } else if ((byTitle.get(named.value)?.length ?? 0) > 1) {
-        walk.fail('references', named.path, `${byTitle.get(named.value)!.length} projects are titled «${named.value}»: name the one meant by its id`);
+        walk.fail('references', named.path, `${byTitle.get(named.value)!.length} projects are titled ${quoted(named.value)}: name the one meant by its id`);
       } else {
-        walk.fail('references', named.path, `no project of this account is titled «${named.value}» or has that id: name one of the account's projects exactly`);
+        walk.fail('references', named.path, `no project of this account is titled ${quoted(named.value)} or has that id: name one of the account's projects exactly`);
       }
     }
     const slugs = [...new Set(walk.topics.map((named) => named.value))];
@@ -1052,7 +1194,7 @@ export class WikiPlans {
         : (await this.prisma.wikiTopic.findMany({ where: { ownerId, spaceId, slug: { in: slugs } }, select: { slug: true } })).map((t) => t.slug),
     );
     for (const named of walk.topics) {
-      if (!topics.has(named.value)) walk.fail('references', named.path, `${named.value} is not a topic of this space`);
+      if (!topics.has(named.value)) walk.fail('references', named.path, `${quoted(named.value)} is not a topic of this space`);
     }
     for (const doc of plan.docs) {
       for (const section of doc.sections) {
@@ -1068,7 +1210,9 @@ export class WikiPlans {
    * Store a version under the space row's lock (contract `plan.versions`): it is numbered after every
    * version the space has had, it supersedes the draft there was, and its documents and sections are
    * inserted with it. `expectLatest` is the version the caller built it on; another one found under the
-   * lock is WIKI_PLAN_STALE, and nothing is written.
+   * lock is WIKI_PLAN_STALE, and nothing is written. A draft under an idempotency key that the same
+   * request stored already — committed while this one waited for the lock — is answered with that
+   * version first, replayed, and nothing is written (contract `plan.idempotency`).
    */
   private async store(
     ownerId: string,
@@ -1076,12 +1220,16 @@ export class WikiPlans {
     expectLatest: number | null,
     next: NewVersion,
     after?: (tx: Prisma.TransactionClient, version: number) => Promise<void>,
-  ): Promise<number> {
-    const version = await withTransactionRetry(
+  ): Promise<{ version: number; replayed: boolean }> {
+    const stored = await withTransactionRetry(
       this.prisma,
       async (tx) => {
         await tx.$queryRaw(Prisma.sql`
           SELECT "id" FROM "wiki_space" WHERE "id" = ${spaceId}::uuid AND "owner_id" = ${ownerId}::uuid FOR NO KEY UPDATE`);
+        if (next.idempotency) {
+          const earlier = await storedUnder(tx, ownerId, next.idempotency);
+          if (earlier !== null) return { version: earlier, replayed: true };
+        }
         const latest = await tx.wikiPlan.findFirst({
           where: { ownerId, spaceId, status: { in: ['draft', 'confirmed'] } },
           orderBy: { version: 'desc' },
@@ -1118,6 +1266,8 @@ export class WikiPlans {
             model: next.model,
             authorSessionId: next.authorSessionId,
             authorUserId: next.authorUserId,
+            idempotencyKey: next.idempotency?.key ?? null,
+            requestSha256: next.idempotency?.requestSha256 ?? null,
           },
           select: { id: true },
         });
@@ -1157,33 +1307,43 @@ export class WikiPlans {
           if (sections.length > 0) await tx.wikiPlanSection.createMany({ data: sections });
         }
         if (after) await after(tx, number);
-        return number;
+        return { version: number, replayed: false };
       },
       loggedRetry(this.logger, 'wiki.storePlanVersion'),
     );
-    this.realtime?.publishWikiChanged(ownerId, spaceId);
-    return version;
+    // A replay changed nothing to announce (contract `realtime.notPublishedWhen`).
+    if (!stored.replayed) this.realtime?.publishWikiChanged(ownerId, spaceId);
+    return stored;
   }
 
   /**
    * A draft from a maintenance run's drafting job (contract `plan.routes.draft`): the whole plan, the
    * target it was drafted to, and what the runner found when it checked the repository references. It
    * is gated as a whole — the protection check included, since the model wrote it — and stored as the
-   * space's new draft, or refused WIKI_PLAN_GATE with every error.
+   * space's new draft, or refused WIKI_PLAN_GATE with every error. Under an idempotency key, the same
+   * draft landing again is answered with the version it stored (contract `plan.idempotency`).
    */
-  async submitDraft(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiPlanVersion> {
+  async submitDraft(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiPlanDraftAnswer> {
     await this.assertMaintainer(principal, spaceId);
     const { ownerId } = principal;
     const envelope = new Walk(new Map());
     const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
-    if (!raw) throw gateRefusal([{ check: 'schema', path: '', message: 'the body is an object: { baseVersion, target, plan, repoCheck, model }' }], 'The draft');
+    if (!raw) throw gateRefusal([{ check: 'schema', path: '', message: 'the body is an object: { baseVersion, target, plan, repoCheck, model, idempotencyKey }' }], 'The draft');
     for (const key of Object.keys(raw)) {
-      if (!['baseVersion', 'target', 'plan', 'repoCheck', 'model'].includes(key)) envelope.fail('schema', key, `${key} is not a field of a draft: baseVersion, target, plan, repoCheck, model`);
+      if (!['baseVersion', 'target', 'plan', 'repoCheck', 'model', 'idempotencyKey'].includes(key)) envelope.fail('schema', key, `${quoted(key)} is not a field of a draft: baseVersion, target, plan, repoCheck, model, idempotencyKey`);
     }
     const baseVersion = raw.baseVersion === null || raw.baseVersion === undefined ? null : envelope.integer(raw.baseVersion, 'baseVersion', 1, 2_147_483_647);
     const target = targetOf(envelope, raw.target);
     const repoCheck = repoCheckOf(envelope, raw.repoCheck);
     const model = raw.model === undefined || raw.model === null ? null : envelope.text(raw.model, 'model', 200, true);
+    // The same draft landing again under its key is answered before the plan is read: the version it
+    // stored is the newest now, so its base no longer is, and it is no STALE draft but the same one.
+    const key = keyOf(envelope, raw.idempotencyKey);
+    const idempotency = key === null ? undefined : draftIdempotency(spaceId, key, raw);
+    if (idempotency) {
+      const earlier = await storedUnder(this.prisma, ownerId, idempotency);
+      if (earlier !== null) return { ...(await this.version(ownerId, spaceId, earlier)), replayed: true };
+    }
 
     const base = await this.latest(this.prisma, ownerId, spaceId);
     if ((base?.version ?? null) !== baseVersion) {
@@ -1200,7 +1360,7 @@ export class WikiPlans {
     checkProtected(walk, plan, baseContent, 'plan.');
     if (walk.errors.length > 0) throw gateRefusal(walk.errors, 'The draft');
     assignKeys(plan, baseContent);
-    const number = await this.store(ownerId, spaceId, base?.version ?? null, {
+    const stored = await this.store(ownerId, spaceId, base?.version ?? null, {
       origin: 'maintenance',
       baseVersion: base?.version ?? null,
       proposalId: null,
@@ -1211,8 +1371,9 @@ export class WikiPlans {
       model,
       authorSessionId: principal.sessionId,
       authorUserId: null,
+      idempotency,
     });
-    return this.version(ownerId, spaceId, number);
+    return { ...(await this.version(ownerId, spaceId, stored.version)), replayed: stored.replayed };
   }
 
   /**
@@ -1227,7 +1388,7 @@ export class WikiPlans {
     const envelope = new Walk(new Map());
     if (!raw) throw gateRefusal([{ check: 'schema', path: '', message: 'the body is an object: { baseVersion, docSlug, doc } or { baseVersion, docSlug, sectionKey, section }' }], 'The edit');
     for (const key of Object.keys(raw)) {
-      if (!['baseVersion', 'docSlug', 'doc', 'sectionKey', 'section'].includes(key)) envelope.fail('schema', key, `${key} is not a field of an edit: baseVersion, docSlug, doc, sectionKey, section`);
+      if (!['baseVersion', 'docSlug', 'doc', 'sectionKey', 'section'].includes(key)) envelope.fail('schema', key, `${quoted(key)} is not a field of an edit: baseVersion, docSlug, doc, sectionKey, section`);
     }
     const baseVersion = envelope.integer(raw.baseVersion, 'baseVersion', 1, 2_147_483_647);
     const docSlug = envelope.slug(raw.docSlug, 'docSlug');
@@ -1254,7 +1415,7 @@ export class WikiPlans {
       const section = walk.section(raw.section, 'section');
       if (section) {
         if (section.key !== null && section.key !== key && plan.docs[at].sections.some((other, i) => i !== s && other.key === section.key)) {
-          walk.fail('schema', 'section.key', `${section.key} is the key of another section of ${docSlug}`);
+          walk.fail('schema', 'section.key', `${quoted(section.key)} is the key of another section of ${docSlug}`);
         }
         plan.docs[at].sections[s] = { ...section, key: section.key ?? key };
       }
@@ -1268,7 +1429,7 @@ export class WikiPlans {
     checkDocCount(walk, plan, target, 'plan.docs');
     if (walk.errors.length > 0) throw gateRefusal(walk.errors, 'The edit');
     assignKeys(plan, baseContent);
-    const number = await this.store(ownerId, spaceId, base.version, {
+    const { version: number } = await this.store(ownerId, spaceId, base.version, {
       origin: 'owner',
       baseVersion: base.version,
       proposalId: null,
@@ -1286,6 +1447,11 @@ export class WikiPlans {
   /**
    * The owner's confirmation of the space's draft (contract `plan.routes.confirm`): it becomes the
    * version in force, and the one that was is superseded. The owner channel's alone.
+   *
+   * A confirmation is a fact, and it asks for the build of the version's documents (contract
+   * `plan.jobs.request`, criterion 11): a job of kind build, made at once as a task of the space's
+   * maintenance list, queued behind the list's unfinished task, or held with why — after the
+   * confirmation committed, and never failing it.
    */
   async confirm(ownerId: string, spaceId: string, version: number, actingSessionId: string | null): Promise<WikiPlanVersion> {
     ownerChannel(actingSessionId, 'confirming the plan');
@@ -1307,8 +1473,21 @@ export class WikiPlans {
       },
       loggedRetry(this.logger, 'wiki.confirmPlan'),
     );
+    await this.buildAfterConfirmation(ownerId, spaceId, version);
     this.realtime?.publishWikiChanged(ownerId, spaceId);
     return this.version(ownerId, spaceId, version);
+  }
+
+  /** The build a confirmation asks for; the task it made published. Logged, never thrown: the confirmation stands. */
+  private async buildAfterConfirmation(ownerId: string, spaceId: string, version: number): Promise<void> {
+    try {
+      const answer = await requestWikiPlanBuild(this.prisma, { ownerId, spaceId, version, requestedByUserId: ownerId });
+      if (answer.madeTaskId && typeof this.realtime?.publishForUser === 'function') {
+        this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [answer.madeTaskId], resync: false });
+      }
+    } catch (error) {
+      this.logger.warn(`the build of version ${version} of a space's plan was not asked for: ${(error as Error).message}`);
+    }
   }
 
   /**
@@ -1327,20 +1506,20 @@ export class WikiPlans {
     const walk = new Walk(declaredOf(base.newFields));
     if (!raw) throw gateRefusal([{ check: 'schema', path: '', message: 'the body is an object: { reason, change: { doc, category }, facts }' }], 'The proposal');
     for (const key of Object.keys(raw)) {
-      if (!['reason', 'change', 'facts'].includes(key)) walk.fail('schema', key, `${key} is not a field of a proposal: reason, change, facts`);
+      if (!['reason', 'change', 'facts'].includes(key)) walk.fail('schema', key, `${quoted(key)} is not a field of a proposal: reason, change, facts`);
     }
     const reason = walk.text(raw.reason, 'reason', WIKI_PLAN_RULES.reasonMaxChars, true);
     const facts = this.factsOf(walk, raw.facts);
     const change = raw.change && typeof raw.change === 'object' && !Array.isArray(raw.change) ? (raw.change as Record<string, unknown>) : null;
     if (!change) walk.fail('schema', 'change', 'must be an object: { doc, category }');
     for (const key of Object.keys(change ?? {})) {
-      if (!['doc', 'category'].includes(key)) walk.fail('schema', `change.${key}`, `${key} is not a field of a change: doc, category`);
+      if (!['doc', 'category'].includes(key)) walk.fail('schema', `change.${key}`, `${quoted(key)} is not a field of a change: doc, category`);
     }
     const doc = change ? walk.doc(change.doc, 'change.doc') : null;
     const category = change?.category === undefined || change?.category === null ? null : walk.category(change.category, 'change.category');
     const opens = category !== null && !base.categories.some((c) => c.key === category.key);
     if (category && !opens) {
-      walk.fail('schema', 'change.category.key', `${category.key} is already a category of the plan: leave category out, and file the document under it`);
+      walk.fail('schema', 'change.category.key', `${quoted(category.key)} is already a category of the plan: leave category out, and file the document under it`);
     }
     const plan = doc ? applyChange(base, doc, opens ? category : null) : base;
     checkWhole(walk, plan, 'plan.');
@@ -1369,7 +1548,9 @@ export class WikiPlans {
 
   private factsOf(walk: Walk, value: unknown): Array<{ kind: WikiPlanFactKind; id: string }> {
     const items = Array.isArray(value) ? value : [];
-    if (!Array.isArray(value) || value.length === 0) walk.fail('schema', 'facts', 'must name at least one fact: the entries and sessions this change comes from');
+    if (!Array.isArray(value) || value.length === 0) {
+      walk.fail('schema', 'facts', 'must name at least one fact: the entries, sessions and commits this change comes from');
+    }
     if (items.length > WIKI_PLAN_RULES.factsMax) walk.fail('schema', 'facts', `names at most ${WIKI_PLAN_RULES.factsMax} facts`);
     return items.slice(0, WIKI_PLAN_RULES.factsMax).flatMap((item, i) => {
       const at = `facts[${i}]`;
@@ -1378,10 +1559,21 @@ export class WikiPlans {
         walk.fail('schema', at, 'must be an object: { kind, id }');
         return [];
       }
-      for (const key of Object.keys(fact)) if (!['kind', 'id'].includes(key)) walk.fail('schema', `${at}.${key}`, `${key} is not a field of a fact: kind, id`);
-      if (!(WIKI_PLAN_FACT_KINDS as readonly unknown[]).includes(fact.kind)) {
+      for (const key of Object.keys(fact)) if (!['kind', 'id'].includes(key)) walk.fail('schema', `${at}.${key}`, `${quoted(key)} is not a field of a fact: kind, id`);
+      const kind = typeof fact.kind === 'string' ? unwrapped(fact.kind) : fact.kind;
+      if (!(WIKI_PLAN_FACT_KINDS as readonly unknown[]).includes(kind)) {
         walk.fail('schema', `${at}.kind`, `a fact is one of ${WIKI_PLAN_FACT_KINDS.join(', ')}`);
         return [];
+      }
+      if (kind === 'commit') {
+        // A commit is named by its full sha, which the maintenance run found on origin/main: the server has
+        // no checkout to look it up in (contract `plan.proposals.factKinds`).
+        const sha = String(fact.id ?? '').trim().toLowerCase();
+        if (!/^[0-9a-f]{40}$/u.test(sha)) {
+          walk.fail('schema', `${at}.id`, "a commit is named by its full sha: 40 hex characters, as origin/main has it");
+          return [];
+        }
+        return [{ kind: 'commit' as WikiPlanFactKind, id: sha }];
       }
       let id: string;
       try {
@@ -1390,11 +1582,11 @@ export class WikiPlans {
         walk.fail('schema', `${at}.id`, 'must be an id');
         return [];
       }
-      return [{ kind: fact.kind as WikiPlanFactKind, id }];
+      return [{ kind: kind as WikiPlanFactKind, id }];
     });
   }
 
-  /** A fact is an entry of this space or a session of its owner. */
+  /** A fact is an entry of this space or a session of its owner; a commit the runner found is taken as it named it. */
   private async checkFacts(walk: Walk, ownerId: string, spaceId: string, facts: ReadonlyArray<{ kind: WikiPlanFactKind; id: string }>): Promise<void> {
     const of = (kind: WikiPlanFactKind): string[] => facts.filter((fact) => fact.kind === kind).map((fact) => fact.id);
     const [entries, sessions] = await Promise.all([
@@ -1403,6 +1595,7 @@ export class WikiPlans {
     ]);
     const found = new Set([...entries, ...sessions].map((row) => row.id));
     facts.forEach((fact, i) => {
+      if (fact.kind === 'commit') return;
       if (!found.has(fact.id)) walk.fail('references', `facts[${i}].id`, fact.kind === 'entry' ? 'no entry of this space has this id' : 'no session of this account has this id');
     });
   }
@@ -1417,7 +1610,7 @@ export class WikiPlans {
     ownerChannel(actingSessionId, 'deciding a change to the plan');
     const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
     const walk = new Walk(new Map());
-    for (const key of Object.keys(raw)) if (!['action', 'note'].includes(key)) walk.fail('schema', key, `${key} is not a field of a decision: action, note`);
+    for (const key of Object.keys(raw)) if (!['action', 'note'].includes(key)) walk.fail('schema', key, `${quoted(key)} is not a field of a decision: action, note`);
     const action = raw.action;
     if (!(WIKI_PLAN_PROPOSAL_ACTIONS as readonly unknown[]).includes(action)) walk.fail('schema', 'action', `must be one of ${WIKI_PLAN_PROPOSAL_ACTIONS.join(', ')}`);
     const note = raw.note === undefined || raw.note === null ? null : walk.text(raw.note, 'note', WIKI_PLAN_RULES.reasonMaxChars, false) || null;
@@ -1464,7 +1657,7 @@ export class WikiPlans {
     checkProtected(check, plan, baseContent, 'plan.');
     if (check.errors.length > 0 || !doc) throw gateRefusal(check.errors, `This proposal, applied to version ${base.version},`);
     assignKeys(plan, baseContent);
-    const number = await this.store(
+    const { version: number } = await this.store(
       ownerId,
       spaceId,
       base.version,
@@ -1485,6 +1678,287 @@ export class WikiPlans {
     const accepted = await this.prisma.wikiPlanProposal.findFirstOrThrow({ where: { id: proposalId }, select: PROPOSAL_SELECT });
     return { proposal: proposalView(accepted), draft: await this.version(ownerId, spaceId, number) };
   }
+
+  // ── The plan's jobs (contract `plan.jobs`) ────────────────────────────────────────────────────
+
+  /**
+   * The owner asks for a draft of the space's plan — with instructions, a revision of its newest version
+   * (contract `plan.routes.redraft`). The owner channel only: a request with a session header is refused
+   * before anything is read. The space's draft that has not ended answers it, asked again whether it may
+   * be made now; otherwise a job is recorded, and made as a task of the space's maintenance list, queued
+   * behind the list's unfinished task, or held with why.
+   */
+  async redraft(ownerId: string, spaceId: string, body: unknown, actingSessionId: string | null): Promise<WikiPlanRedraftResult> {
+    ownerChannel(actingSessionId, "asking for a draft of the space's plan");
+    await this.requireSpace(ownerId, spaceId);
+    const raw = body === undefined || body === null ? {} : body;
+    if (typeof raw !== 'object' || Array.isArray(raw)) throw schemaRefusal('the body is an object: { instructions? }');
+    const record = raw as Record<string, unknown>;
+    for (const key of Object.keys(record)) {
+      if (key !== 'instructions') throw schemaRefusal(`${key} is not a field of a redraft: instructions`);
+    }
+    let instructions: string | null = null;
+    if (record.instructions !== undefined && record.instructions !== null) {
+      if (typeof record.instructions !== 'string') throw schemaRefusal('instructions is a string: what the owner wants the plan to change');
+      const text = record.instructions.trim();
+      if (chars(text) > WIKI_PLAN_JOB_RULES.instructionsMaxChars) {
+        throw schemaRefusal(`instructions are at most ${WIKI_PLAN_JOB_RULES.instructionsMaxChars} characters`);
+      }
+      instructions = text === '' ? null : text;
+    }
+    const answer = await requestWikiPlanJob(this.prisma, {
+      ownerId,
+      spaceId,
+      kind: instructions ? 'revise' : 'draft',
+      instructions,
+      trigger: 'owner',
+      requestedByUserId: ownerId,
+    });
+    if (answer.madeTaskId && typeof this.realtime?.publishForUser === 'function') {
+      this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: [answer.madeTaskId], resync: false });
+    }
+    this.realtime?.publishWikiChanged(ownerId, spaceId);
+    const job = await wikiPlanJobById(this.prisma, ownerId, answer.jobId);
+    if (!job) throw new NotFoundException('no such plan job');
+    return { created: answer.created, job };
+  }
+
+  /**
+   * Where a job's run starts (contract `plan.jobs.context`): the job its maintenance session runs, and the
+   * space, its repository and the maintenance workspace's checkout. Records that the run started.
+   */
+  async jobContext(principal: WikiPrincipal, spaceId: string): Promise<WikiPlanJobContext> {
+    await this.assertMaintainer(principal, spaceId);
+    const row = await this.jobOfRun(principal, spaceId);
+    await startWikiPlanJob(this.prisma, row.id, principal.sessionId!);
+    const job = await wikiPlanJobById(this.prisma, principal.ownerId, row.id);
+    const space = await this.prisma.wikiSpace.findFirstOrThrow({
+      where: { id: spaceId, ownerId: principal.ownerId },
+      select: { id: true, title: true, repoUrlNorm: true, rootCommitSha: true, settings: true },
+    });
+    const stored = space.settings !== null && typeof space.settings === 'object' && !Array.isArray(space.settings)
+      ? (space.settings as Record<string, unknown>).maintenance
+      : undefined;
+    const workspaceId = wikiMaintenanceSettings(stored).workspaceId;
+    const workspace = workspaceId
+      ? await this.prisma.workspace.findFirst({ where: { id: workspaceId, ownerId: principal.ownerId }, select: { id: true, workDir: true } })
+      : null;
+    this.realtime?.publishWikiChanged(principal.ownerId, spaceId);
+    return {
+      job: job!,
+      space: {
+        id: space.id,
+        title: space.title,
+        repo: { urlNorm: space.repoUrlNorm, rootCommitSha: space.rootCommitSha },
+        workspace: workspace ? { id: workspace.id, workDir: workspace.workDir } : null,
+      },
+    };
+  }
+
+  /**
+   * The gate round a job's run is on, or how far a build's has got (contract `plan.jobs.progress`): what the
+   * plan page shows as it runs.
+   */
+  async jobProgress(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiPlanJob> {
+    await this.assertMaintainer(principal, spaceId);
+    const row = await this.jobOfRun(principal, spaceId);
+    const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+    if (row.state !== 'made') throw jobEnded();
+    if (row.kind === 'build') {
+      if (!(await progressWikiPlanBuild(this.prisma, row.id, principal.sessionId!, buildProgressOf(raw)))) throw jobEnded();
+      this.realtime?.publishWikiChanged(principal.ownerId, spaceId);
+      return (await wikiPlanJobById(this.prisma, principal.ownerId, row.id))!;
+    }
+    const attempt = raw.attempt;
+    if (typeof attempt !== 'number' || !Number.isInteger(attempt) || attempt < 1 || attempt > WIKI_PLAN_JOB_RULES.attemptsMax) {
+      throw schemaRefusal(`attempt is the gate round the run is on, from 1 to ${WIKI_PLAN_JOB_RULES.attemptsMax}`);
+    }
+    if (!(await progressWikiPlanJob(this.prisma, row.id, principal.sessionId!, attempt))) throw jobEnded();
+    this.realtime?.publishWikiChanged(principal.ownerId, spaceId);
+    return (await wikiPlanJobById(this.prisma, principal.ownerId, row.id))!;
+  }
+
+  /**
+   * How a job's run ended (contract `plan.jobs.finish`): succeeded with the version it stored — a draft of
+   * this space this very session submitted — or failed with the gate's errors on its last round, what went
+   * wrong, its report and the last draft it had. Kept on its job, which is ended; a job ended already is
+   * refused WIKI_PLAN_NO_JOB.
+   */
+  async jobFinish(principal: WikiPrincipal, spaceId: string, body: unknown): Promise<WikiPlanJob> {
+    await this.assertMaintainer(principal, spaceId);
+    const row = await this.jobOfRun(principal, spaceId);
+    if (row.state !== 'made') {
+      // The same end said again by the run that said it — its first send landed and the answer was lost on
+      // the way back (the runner sends it again, `Transport.doWiki`) — is answered with what was kept. Any
+      // other word to an ended job is refused.
+      if (row.sessionId === principal.sessionId && sameJobEnd(row, body)) {
+        return (await wikiPlanJobById(this.prisma, principal.ownerId, row.id))!;
+      }
+      throw jobEnded();
+    }
+    const end = jobEndOf(body);
+    if (end.outcome === 'succeeded' && row.kind === 'build') {
+      // A build that succeeded wrote the documents of a version the owner confirmed: the one it was made for,
+      // or — confirmed while it waited — a newer one.
+      const written = await this.prisma.wikiPlan.findFirst({
+        where: { ownerId: principal.ownerId, spaceId, version: end.version!, confirmedAt: { not: null } },
+        select: { id: true },
+      });
+      if (!written) {
+        throw schemaRefusal(`version ${end.version} is not a version of this space its owner confirmed: a build that succeeded names the confirmed version it wrote`);
+      }
+    } else if (end.outcome === 'succeeded') {
+      const stored = await this.prisma.wikiPlan.findFirst({
+        where: { ownerId: principal.ownerId, spaceId, version: end.version!, authorSessionId: principal.sessionId },
+        select: { id: true },
+      });
+      if (!stored) {
+        throw schemaRefusal(`version ${end.version} is not a draft of this space this run stored: a run that succeeded names the version its draft became`);
+      }
+    }
+    if (!(await finishWikiPlanJob(this.prisma, row.id, principal.sessionId!, end, new Date(), row.kind as WikiPlanJob['kind']))) throw jobEnded();
+    this.realtime?.publishWikiChanged(principal.ownerId, spaceId);
+    return (await wikiPlanJobById(this.prisma, principal.ownerId, row.id))!;
+  }
+
+  /**
+   * `orbit wiki plan check` (contract `plan.jobs.check`): whether a job's run did what its task was made
+   * for. The owner's runner with no session — a task's acceptance command runs with none — or a
+   * maintenance run of the space; another owner's space or job is a 404. It writes nothing.
+   */
+  async jobCheck(ownerId: string, spaceId: string, jobId: string): Promise<WikiPlanJobCheck> {
+    await this.requireSpace(ownerId, spaceId);
+    const check = await wikiPlanJobCheck(this.prisma, ownerId, spaceId, jobId);
+    if (!check) throw new NotFoundException('no such plan job');
+    return { spaceId, jobId, ...check };
+  }
+
+  /** What a draft reads of Orbit besides the repository (contract `plan.jobs.materials`): a maintenance run's alone. */
+  async materials(principal: WikiPrincipal, spaceId: string): Promise<WikiPlanMaterials> {
+    await this.assertMaintainer(principal, spaceId);
+    return wikiPlanMaterials(this.prisma, principal.ownerId, spaceId);
+  }
+
+  /** The job the calling maintenance run runs, or WIKI_PLAN_NO_JOB. */
+  private async jobOfRun(principal: WikiPrincipal, spaceId: string): Promise<WikiPlanJobRow> {
+    const row = await wikiPlanJobOfSession(this.prisma, principal.ownerId, spaceId, principal.sessionId!);
+    if (!row) {
+      throw new WikiRefusalError({
+        code: 'WIKI_PLAN_NO_JOB',
+        message:
+          "this maintenance run runs no job of this space's plan: its task was not made for one. A draft or a revision "
+            + "of the plan is asked for by the space's creation or by its owner, and runs as a task the server makes.",
+      });
+    }
+    return row;
+  }
+}
+
+/** A malformed request of the plan's jobs. */
+function schemaRefusal(message: string): WikiRefusalError {
+  return new WikiRefusalError({ code: 'WIKI_SCHEMA', message });
+}
+
+/** A build's progress as its run said it, checked (contract `plan.jobs.progress`). */
+function buildProgressOf(raw: Record<string, unknown>): WikiPlanBuildProgress {
+  for (const key of Object.keys(raw)) {
+    if (!['docs', 'current'].includes(key)) throw schemaRefusal(`${key} is not a field of a build's progress: docs, current`);
+  }
+  const docs = raw.docs && typeof raw.docs === 'object' && !Array.isArray(raw.docs) ? (raw.docs as Record<string, unknown>) : null;
+  const count = (value: unknown): number | null => (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 100_000 ? value : null);
+  const done = count(docs?.done);
+  const total = count(docs?.total);
+  if (done === null || total === null || done > total) {
+    throw schemaRefusal("docs is { done, total }: the documents the build went through, of the confirmed version's, done not above total");
+  }
+  let current: WikiPlanBuildProgress['current'] = null;
+  if (raw.current !== undefined && raw.current !== null) {
+    const at = typeof raw.current === 'object' && !Array.isArray(raw.current) ? (raw.current as Record<string, unknown>) : null;
+    if (!at || typeof at.slug !== 'string' || !SLUG.test(at.slug) || typeof at.title !== 'string' || at.title.trim() === '') {
+      throw schemaRefusal('current is { slug, title }: the document the build is writing now, or null');
+    }
+    current = { slug: at.slug, title: at.title.trim().slice(0, WIKI_PLAN_RULES.titleMaxChars) };
+  }
+  return { docs: { done, total }, current };
+}
+
+/**
+ * Whether body says the end an ended job has: the same outcome, and for a success the same version (a
+ * build that failed keeps the version it was made for, whatever its run named).
+ */
+function sameJobEnd(row: WikiPlanJobRow, body: unknown): boolean {
+  try {
+    const end = jobEndOf(body);
+    return end.outcome === row.outcome && (end.outcome === 'failed' || (end.version ?? null) === (row.version ?? null));
+  } catch {
+    return false;
+  }
+}
+
+/** A job that ended already is told so, whichever way it ended. */
+function jobEnded(): WikiRefusalError {
+  return new WikiRefusalError({
+    code: 'WIKI_PLAN_NO_JOB',
+    message: "this run's plan job has ended — its run said how, or its task ended first — so nothing more is kept of it.",
+  });
+}
+
+/** A run's end as it said it, checked (contract `plan.jobs.finish`). */
+function jobEndOf(body: unknown): WikiPlanJobEnd {
+  const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : null;
+  if (!raw) throw schemaRefusal('the body is an object: { outcome, version?, errors?, error?, report?, draft?, attempt? }');
+  const known = ['outcome', 'version', 'errors', 'error', 'report', 'draft', 'attempt'];
+  for (const key of Object.keys(raw)) {
+    if (!known.includes(key)) throw schemaRefusal(`${key} is not a field of a job's end: ${known.join(', ')}`);
+  }
+  if (!(WIKI_PLAN_JOB_OUTCOMES as readonly unknown[]).includes(raw.outcome)) {
+    throw schemaRefusal(`outcome is one of ${WIKI_PLAN_JOB_OUTCOMES.join(', ')}`);
+  }
+  const outcome = raw.outcome as WikiPlanJobOutcome;
+  const version = raw.version === undefined || raw.version === null ? null : raw.version;
+  if (version !== null && (typeof version !== 'number' || !Number.isInteger(version) || version < 1)) {
+    throw schemaRefusal('version is the number of the version the run stored, 1 or more');
+  }
+  if (outcome === 'succeeded' && version === null) throw schemaRefusal('a run that succeeded names the version its draft became');
+  const errors: WikiPlanGateError[] = [];
+  if (raw.errors !== undefined && raw.errors !== null) {
+    if (!Array.isArray(raw.errors)) throw schemaRefusal('errors is a list of the gate\'s errors: [{ check, path, message }]');
+    for (const item of raw.errors.slice(0, WIKI_PLAN_RULES.errorsMax)) {
+      const error = item && typeof item === 'object' && !Array.isArray(item) ? (item as Record<string, unknown>) : null;
+      if (!error || typeof error.check !== 'string' || typeof error.path !== 'string' || typeof error.message !== 'string') {
+        throw schemaRefusal('each of errors is { check, path, message }, three strings');
+      }
+      errors.push({
+        check: error.check.slice(0, 40) as WikiPlanGateCheck,
+        path: error.path.slice(0, WIKI_PLAN_RULES.textMaxChars),
+        message: error.message.slice(0, WIKI_PLAN_RULES.reasonMaxChars),
+      });
+    }
+  }
+  let error: string | null = null;
+  if (raw.error !== undefined && raw.error !== null) {
+    if (typeof raw.error !== 'string') throw schemaRefusal('error is what went wrong, in words');
+    error = redactSecrets(raw.error.trim()).text.slice(0, WIKI_PLAN_JOB_RULES.errorMaxChars).trim() || null;
+  }
+  const object = (value: unknown, name: string, max: number): Record<string, unknown> | null => {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== 'object' || Array.isArray(value)) throw schemaRefusal(`${name} is an object`);
+    if (Buffer.byteLength(JSON.stringify(value), 'utf8') > max) throw schemaRefusal(`${name} is at most ${max} bytes of JSON`);
+    return value as Record<string, unknown>;
+  };
+  const attempt = raw.attempt === undefined || raw.attempt === null ? null : raw.attempt;
+  if (attempt !== null && (typeof attempt !== 'number' || !Number.isInteger(attempt) || attempt < 1 || attempt > WIKI_PLAN_JOB_RULES.attemptsMax)) {
+    throw schemaRefusal(`attempt is the gate round the run ended on, from 1 to ${WIKI_PLAN_JOB_RULES.attemptsMax}`);
+  }
+  return {
+    outcome,
+    version: version as number | null,
+    errors,
+    error,
+    report: object(raw.report, 'report', WIKI_PLAN_JOB_RULES.reportMaxBytes),
+    draft: object(raw.draft, 'draft', WIKI_PLAN_JOB_RULES.draftMaxBytes),
+    attempt: attempt as number | null,
+  };
 }
 
 /** The plan with one document put in: in place of the one of its slug, or after the last of its category. */
@@ -1509,7 +1983,7 @@ function targetOf(walk: Walk, value: unknown): { min: number; max: number } {
     walk.fail('schema', 'target', 'must be an object: { min, max }');
     return { min: WIKI_PLAN_RULES.docsMin, max: WIKI_PLAN_RULES.docsMax };
   }
-  for (const key of Object.keys(raw)) if (!['min', 'max'].includes(key)) walk.fail('schema', `target.${key}`, `${key} is not a field of a target: min, max`);
+  for (const key of Object.keys(raw)) if (!['min', 'max'].includes(key)) walk.fail('schema', `target.${key}`, `${quoted(key)} is not a field of a target: min, max`);
   const min = walk.integer(raw.min, 'target.min', 1, WIKI_PLAN_RULES.docsCeiling);
   const max = walk.integer(raw.max, 'target.max', 1, WIKI_PLAN_RULES.docsCeiling);
   if (max < min) walk.fail('schema', 'target', 'max must not be below min');
@@ -1523,7 +1997,7 @@ function repoCheckOf(walk: Walk, value: unknown): WikiPlanRepoCheck {
     walk.fail('schema', 'repoCheck', 'is required: { sha, checked, missing }, what the drafting job found when it checked the repository references on the runner');
     return { sha: '', checked: 0, missing: [] };
   }
-  for (const key of Object.keys(raw)) if (!['sha', 'checked', 'missing'].includes(key)) walk.fail('schema', `repoCheck.${key}`, `${key} is not a field of a repository check: sha, checked, missing`);
+  for (const key of Object.keys(raw)) if (!['sha', 'checked', 'missing'].includes(key)) walk.fail('schema', `repoCheck.${key}`, `${quoted(key)} is not a field of a repository check: sha, checked, missing`);
   const sha = typeof raw.sha === 'string' ? raw.sha.trim().toLowerCase() : '';
   if (!/^[0-9a-f]{7,64}$/u.test(sha)) walk.fail('schema', 'repoCheck.sha', 'must be the commit the references were checked at: 7 to 64 hex characters');
   const checked = walk.integer(raw.checked, 'repoCheck.checked', 0, 1_000_000);

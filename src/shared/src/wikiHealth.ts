@@ -3,7 +3,7 @@
 // wikiContract.spec.ts holds every constant below to the contract JSON.
 
 import { WIKI_MAINTENANCE_RULES, type WikiCursorOutcome } from './wiki';
-import type { WikiMaintenanceHeldReason } from './wikiMaintain';
+import type { WikiMaintenanceFailureKind, WikiMaintenanceHeldReason } from './wikiMaintain';
 
 /**
  * The looks the status line's maintenance part takes, in the order they win: the first that holds is
@@ -39,6 +39,12 @@ export interface WikiMaintenanceHealth {
   running: { sessionId: string | null; startedAt: string } | null;
   /** The run that ended last, and how: what the status line's View run opens. */
   lastRun: { sessionId: string | null; outcome: WikiCursorOutcome | null; endedAt: string } | null;
+  /**
+   * Of the runs whose latest attempt failed or was truncated, the one that ended last: whose failure it was
+   * (`infra` or `content`, contract `maintenance.job.recovery.failureKinds`) and why, so a client can tell
+   * the platform failing from the run failing. Null while no run's latest attempt failed.
+   */
+  lastFailure: { kind: WikiMaintenanceFailureKind; reason: string | null; at: string; sessionId: string | null } | null;
 }
 
 /** `GET /api/wiki/spaces/:id/health`. */

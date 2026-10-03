@@ -5,7 +5,8 @@ import Foundation
 //   • AskUserQuestion   → multiple-choice form; allow carries `answers`
 //   • ExitPlanMode      → plan render; allow/deny
 // Question/plan approvals are not repeatable, so they never get a remember rule. Ports the
-// web's ApprovalPanel logic (bashPrefix / rememberRuleFor) so behavior matches exactly.
+// web's ApprovalPanel logic (bashCommandRules / rememberRulesFor) so behavior matches exactly;
+// `src/shared/src/bash-rules.fixture.json` holds the cases both ends are proved against.
 
 /// One AskUserQuestion question, parsed from the approval's `input.questions`.
 public struct AskQuestion: Equatable, Sendable, Identifiable {
@@ -175,11 +176,12 @@ public enum Approvals {
 
     // MARK: remember-rule (allow + remember same kind)
 
-    /// The rule for "allow + remember", or nil when it doesn't apply: questions/plans aren't
-    /// repeatable, and a Bash command with no clean prefix can't be generalized. Non-Bash tools
-    /// get a tool-wide rule (no `ruleContent`). The running session stops asking, and the control
-    /// plane keeps the rule on that session's workspace so its other sessions start with it too.
-    public static func rememberRule(toolName: String, input: JSONValue) -> PermissionRule? {
+    /// The rules for "allow + remember", or none when it doesn't apply: questions/plans aren't
+    /// repeatable, and a Bash command with no clean prefix can't be generalized. A Bash line yields
+    /// one rule per distinct sub-command (`bashCommandRules`); other tools get a tool-wide rule (no
+    /// `ruleContent`). The running session stops asking, and the control plane keeps the rules on
+    /// that session's workspace so its other sessions start with them too.
+    public static func rememberRules(toolName: String, input: JSONValue) -> [PermissionRule] {
         // Orbit's own asks have no repeatable form. Every batch creates a different set of tasks
         // and every restructure releases a different set, so "always allow" would be a standing
         // yes to whatever comes next — which is the gate switched off, not a preference. Web
@@ -190,20 +192,109 @@ public enum Approvals {
         // after it a formality. (The blocker ask could not have worked with a rule anyway — it
         // comes from the runner's own gate, which asks every time whatever the engine holds.)
         if isQuestion(toolName: toolName) || isPlan(toolName: toolName)
-            || isOrbitAsk(toolName: toolName) || isProviderWrite(toolName: toolName) { return nil }
+            || isOrbitAsk(toolName: toolName) || isProviderWrite(toolName: toolName) { return [] }
         if toolName == "Bash" {
-            guard let cmd = input["command"]?.stringValue, let prefix = bashPrefix(cmd) else { return nil }
-            return PermissionRule(toolName: "Bash", ruleContent: "\(prefix):*")
+            guard let cmd = input["command"]?.stringValue else { return [] }
+            return bashCommandRules(cmd)
         }
-        return PermissionRule(toolName: toolName)
+        return [PermissionRule(toolName: toolName)]
     }
 
-    /// Human-readable scope for the "remember" button ("git commit:*" → "git commit").
-    public static func rememberLabel(_ rule: PermissionRule) -> String {
-        if rule.toolName == "Bash", let rc = rule.ruleContent {
-            return rc.hasSuffix(":*") ? String(rc.dropLast(2)) : rc
+    /// What each rule is called on the button: a Bash rule's command prefix ("git commit:*" →
+    /// "git commit"), otherwise the tool's name. Web: `ruleNames`.
+    public static func ruleNames(_ rules: [PermissionRule]) -> [String] {
+        rules.map { rule in
+            if rule.toolName == "Bash", let rc = rule.ruleContent, !rc.isEmpty {
+                return rc.hasSuffix(":*") ? String(rc.dropLast(2)) : rc
+            }
+            return rule.toolName
         }
-        return rule.toolName
+    }
+
+    /// The scope shown on the "remember" button, capped at four names so a long compound line stays
+    /// readable ("cd, git add, echo, grep +2"). Web: `rememberLabel`.
+    public static func rememberLabel(_ rules: [PermissionRule]) -> String {
+        let names = ruleNames(rules)
+        return names.count <= 4
+            ? names.joined(separator: ", ")
+            : "\(names.prefix(4).joined(separator: ", ")) +\(names.count - 4)"
+    }
+
+    /// One rule per distinct sub-command of a Bash line, so `cd x && git add …` remembers both `cd`
+    /// and `git add`, not just the leading `cd`. Empty when the line is blank, when no sub-command
+    /// has a clean prefix, or when any of them is a shell wrapper. A port of `bashCommandRules` in
+    /// `@orbit/shared`.
+    public static func bashCommandRules(_ command: String) -> [PermissionRule] {
+        guard !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return [] }
+        let segments = bashSegments(command)
+        // Codex sends commands as `/bin/bash -lc '…'`. Remembering the wrapper would be a standing
+        // grant for arbitrary shell code, and a line with a wrapper anywhere in it is equally unsafe
+        // to summarize by prefixes.
+        if segments.contains(where: isBashShellWrapperCommand) { return [] }
+        var seen = Set<String>()
+        var rules: [PermissionRule] = []
+        for segment in segments {
+            if let prefix = bashPrefix(segment), seen.insert(prefix).inserted {
+                rules.append(PermissionRule(toolName: "Bash", ruleContent: "\(prefix):*"))
+            }
+        }
+        return rules
+    }
+
+    /// A shell line's top-level sub-commands, split at unquoted `;` `&&` `||` `|` and newlines.
+    /// Quote- and backslash-aware, so an operator inside a quoted string stays literal (the `|` in
+    /// `grep "a\|b"`). Best-effort, not a full shell parser. A port of `bashSegments` in
+    /// `@orbit/shared`, walked by scalar like the web walks by code unit — a `\r\n` is one
+    /// `Character`, and the newline in it must still split.
+    public static func bashSegments(_ command: String) -> [String] {
+        let chars = Array(command.unicodeScalars)
+        var out: [String] = []
+        var cur = String.UnicodeScalarView()
+        var quote: Unicode.Scalar?
+        var i = 0
+        while i < chars.count {
+            let c = chars[i]
+            if c == "\\", i + 1 < chars.count {
+                cur.append(c)
+                cur.append(chars[i + 1])
+                i += 2
+                continue
+            }
+            if let open = quote {
+                cur.append(c)
+                if c == open { quote = nil }
+                i += 1
+                continue
+            }
+            if c == "\"" || c == "'" {
+                quote = c
+                cur.append(c)
+                i += 1
+                continue
+            }
+            if c == ";" || c == "\n" {
+                out.append(String(cur))
+                cur = String.UnicodeScalarView()
+                i += 1
+                continue
+            }
+            if c == "&" || c == "|", i + 1 < chars.count, chars[i + 1] == c {
+                out.append(String(cur))
+                cur = String.UnicodeScalarView()
+                i += 2
+                continue
+            }
+            if c == "|" {
+                out.append(String(cur))
+                cur = String.UnicodeScalarView()
+                i += 1
+                continue
+            }
+            cur.append(c)
+            i += 1
+        }
+        out.append(String(cur))
+        return out
     }
 
     /// Leading command word(s) to auto-allow: skip `FOO=bar` assignments, take the program
@@ -219,6 +310,25 @@ public enum Approvals {
         let prog = toks[i]
         if i + 1 < toks.count, isSubcommand(toks[i + 1]) { return "\(prog) \(toks[i + 1])" }
         return prog
+    }
+
+    /// Whether one sub-command runs a shell with `-c`/`-lc`-style command execution. Codex wraps
+    /// shell calls as `/bin/bash -lc '…'`, and a remember rule for that outer command would grant
+    /// arbitrary shell code. A port of `isBashShellWrapperCommand` in `@orbit/shared`.
+    public static func isBashShellWrapperCommand(_ segment: String) -> Bool {
+        let toks = segment.split(whereSeparator: \.isWhitespace).map(String.init)
+        var i = 0
+        while i < toks.count, isEnvAssignment(toks[i]) { i += 1 }
+        guard i < toks.count,
+              ["bash", "/bin/bash", "/usr/bin/bash", "sh", "/bin/sh", "/usr/bin/sh",
+               "zsh", "/bin/zsh", "/usr/bin/zsh"].contains(toks[i]),
+              i + 1 < toks.count else { return false }
+        let option = toks[i + 1]
+        if option == "--command" { return true }
+        // `^-[A-Za-z]*c[A-Za-z]*$`
+        guard option.first == "-" else { return false }
+        let flags = option.dropFirst()
+        return flags.contains("c") && flags.allSatisfy { $0.isASCII && $0.isLetter }
     }
 
     // Regex equivalents from the web (ASCII-only, like [A-Za-z…]):

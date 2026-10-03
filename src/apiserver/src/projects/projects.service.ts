@@ -105,13 +105,31 @@ import {
   refuseSessionAuthoredCriteriaDecision,
 } from './coordinator-authority';
 import { withSessionState } from '../sessions/session-state';
+import { chargeSessionMessage, SessionMessageRateLimited } from '../sessions/session-message';
+import {
+  chargeOpenRequest,
+  recordSessionRequest,
+  selfRequestRefusal,
+  type SessionRequestAsk,
+  sessionRequestReceipt,
+  TooManyOpenRequests,
+} from '../sessions/session-request';
+import {
+  readTaskWorkCarriers,
+  taskRunOverlay,
+  type TaskRunOverlay,
+} from '../sessions/task-work-carrier';
 import { SessionsService, type SessionReceiveBlockedReason } from '../sessions/sessions.service';
 import { CoordinatorConvergenceService } from './coordinator-convergence.service';
 import { coordinatorFuseUsage, readCoordinatorWakeups } from './coordinator-progress';
 import { openFuseEpisodeId } from './project-fuse';
 import { ProjectPanorama, readProjectPanorama } from './project-panorama';
 import { readTaskIntegrationViews } from './project-task-integration';
-import { emptyProjectListRollup, readProjectListRollups } from './project-list-rollup';
+import {
+  emptyProjectListRollup,
+  readProjectListRollups,
+  readProjectSidebarRollups,
+} from './project-list-rollup';
 import {
   emptyProjectListAttention,
   readProjectListAttention,
@@ -128,10 +146,12 @@ import {
 } from './project-criterion-satisfaction';
 import {
   type CriterionLanding,
-  criterionLanding,
   landingBranchesFor,
-  readCriterionLandingFacts,
 } from './project-criterion-landing';
+import {
+  readCriterionLandingReasonFacts,
+  readInFlightLandingJobs,
+} from './criterion-landing-reason';
 import {
   configureProjectIntegration,
   type IntegrationSettings,
@@ -152,12 +172,14 @@ import {
   type CriterionIndependenceAnswer,
 } from './project-criterion-independence';
 import {
+  NO_DONE_RECORD,
+  criterionLandingWithReasons,
   derivedDoneFromLanes,
   readStandardSetConfirmationState,
   storeDerivedProjectStatus,
 } from './project-done-derived';
 import { ProjectReadyToRun, readProjectReadyToRun } from './project-ready-to-run';
-import { tellCoordinatorProjectStarted } from './project-started';
+import { tellCoordinatorProjectPaused, tellCoordinatorProjectStarted } from './project-started';
 import {
   type ProjectPauseRow,
   legacySwitchPauseWrite,
@@ -167,7 +189,7 @@ import {
   resumeWrite,
 } from './project-pause';
 import { projectMoves } from '../tasks/project-pause-dispatch';
-import { readProjectTaskWorkStates } from './project-task-work-state';
+import { readProjectTaskWorkStates, type ProjectTaskWorkStateFields } from './project-task-work-state';
 import { taskNotRetiredSql, verificationFailureIsHistorySql } from '../tasks/task-supersession';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import {
@@ -409,11 +431,30 @@ const PROJECT_LIST_SELECT = {
   id: true,
   title: true,
   status: true,
+  doneBy: true,
+  doneAt: true,
+  acceptedGaps: true,
   goal: true,
   createdAt: true,
   updatedAt: true,
   ...COORDINATION_INCLUDE,
   // At most one row apiece, joined by its own unique key, like the two above.
+  coordinatorSession: { select: COORDINATOR_ACTIVITY_SELECT },
+} satisfies Prisma.ProjectSelect;
+
+/**
+ * A row of `GET /projects/sidebar`, as opposed to a project document.
+ *
+ * The rail draws four things of a project — it is working, it waits on the reader, how recently it
+ * moved, and its title — and this is the select behind them. `goal`, `updatedAt` and the
+ * coordination bindings are absent on purpose: nothing on the rail reads them, and the whole point
+ * of this endpoint is that a 15-second poll does not carry what a page view carries.
+ */
+const SIDEBAR_PROJECT_SELECT = {
+  id: true,
+  title: true,
+  status: true,
+  createdAt: true,
   coordinatorSession: { select: COORDINATOR_ACTIVITY_SELECT },
 } satisfies Prisma.ProjectSelect;
 
@@ -2430,6 +2471,7 @@ export class ProjectsService {
       satisfaction,
       landingFacts,
       codebase,
+      inFlight,
       independence,
       blockers,
       standardSetConfirmation,
@@ -2462,11 +2504,16 @@ export class ProjectsService {
       // above rather than per criterion or per task. It is a second call because the lane is bolted
       // on beside the derivation instead of inside it, which is what keeps the three clauses out of
       // reach of it; its cost is one findMany whose nested select carries every serving task's
-      // merge receipts, so it is bounded by this project's criteria and not by its work.
-      readCriterionLandingFacts(this.prisma, ownerId, id),
+      // merge receipts, so it is bounded by this project's criteria and not by its work. It carries
+      // each serving task's newest work session too, one relation further down, which is what a
+      // criterion's landing reason reads beside the receipts (`criterion-landing-reason.ts`).
+      readCriterionLandingReasonFacts(this.prisma, ownerId, id),
       // The project's binding, one statement: which two branches those receipts count on, and the
       // integration line this read serves beside the criteria.
       readProjectCodebase(this.prisma, id),
+      // And the landings and merges into the upstream queued or running, one statement: the one
+      // input of a landing reason that is not about any one criterion's work (IN_FLIGHT).
+      readInFlightLandingJobs(this.prisma, id),
       // And the independence lane, in the same batch and on the same terms. Two findManys rather
       // than one — the criteria with their serving work's sessions, and this project's authorship
       // rows — because 0251 deliberately puts no foreign key on `definition_id`, so Prisma has no
@@ -2483,7 +2530,11 @@ export class ProjectsService {
       // the column says what it says instead of re-deriving the rule for itself.
       readStandardSetConfirmationState(this.prisma, project.acceptanceCriterionDefinitions, id),
     ]);
-    const landingAnswers = criterionLanding(landingFacts, landingBranchesFor(codebase));
+    const landingAnswers = criterionLandingWithReasons(
+      landingFacts,
+      landingBranchesFor(codebase),
+      inFlight,
+    );
     const answered = new Map(satisfaction.map((row) => [row.definitionId, row]));
     const landed = new Map(landingAnswers.map((row) => [row.definitionId, row.landing]));
     const independent = new Map(independence.map((row) => [row.definitionId, row]));
@@ -2539,6 +2590,54 @@ export class ProjectsService {
         standardSetConfirmation,
       ),
     };
+  }
+
+  /**
+   * The open projects the web sidebar's Projects group draws, and only what it draws them from.
+   *
+   * `list`'s Open read is the same rows plus seven task lanes, the integration line and the whole
+   * attention summary, and the rail polls this every 15 seconds from every open tab. Classifying
+   * every task of every project for a dot that reads one lane is what made a browser tab the
+   * single largest consumer of this database (2026-09-29: ~5,400 calls/day, ~1.1s of PostgreSQL
+   * execution each, ~100 minutes/day), so the rail got its own read: the same `running` count and
+   * the same `lastActivityAt`, from `readProjectSidebarRollups`.
+   *
+   * The fields it keeps are the ones `SidebarProject` declares — `buckets` carries `running` alone,
+   * and `attention` is the same whole summary the index sends (its `ownerItems` and
+   * `startRequest` are what the row's amber count reads). Absent fields are absent for a reason:
+   * depth here is paid for twice a minute by every open tab.
+   *
+   * `buckets.running` is the index's own number, not a second reading of IN_PROGRESS — see the
+   * reader, which reaches it with the same `projectTaskWorkStateSql` the index uses. A rail that
+   * disagreed with the page it opens would be worse than a slow one.
+   */
+  listSidebar(ownerId: string) {
+    // Several open tabs poll in lockstep, and a project write invalidates all of them at once.
+    // Same argument as `list`: identical concurrent reads share one pass.
+    return this.listSingleFlight.run(`${ownerId}:sidebar`, () => this.loadSidebar(ownerId));
+  }
+
+  private async loadSidebar(ownerId: string) {
+    const projects = await this.prisma.project.findMany({
+      where: { ownerId, status: ProjectStatus.OPEN },
+      orderBy: { createdAt: 'desc' },
+      select: SIDEBAR_PROJECT_SELECT,
+    });
+    if (projects.length === 0) return [];
+    const [rollups, attention] = await Promise.all([
+      readProjectSidebarRollups(this.prisma, ownerId),
+      // The same reader the index folds, narrowed to the projects this read returns, so the rail
+      // and the page cannot disagree about what waits on the reader.
+      readProjectListAttention(this.prisma, ownerId, ProjectStatus.OPEN),
+    ]);
+    return projects.map(({ coordinatorSession, ...project }) => ({
+      ...project,
+      // A project with no tasks has no group in the aggregate, and reports nothing in flight and
+      // no activity rather than making the client read two shapes.
+      ...(rollups.get(project.id) ?? { buckets: { running: 0 }, lastActivityAt: null }),
+      attention: attention.get(project.id) ?? emptyProjectListAttention(),
+      coordinatorActivity: coordinatorActivityOf(coordinatorSession),
+    }));
   }
 
   /** The project's integration line, as `GET /projects/:id/integration` serves it (contract §1.6). */
@@ -2758,9 +2857,11 @@ export class ProjectsService {
     ]);
     const items = page.map(({ _count, ...task }) => {
       const dependency = dependencies.get(task.id) ?? UNCONNECTED_TASK;
-      const work = workStates.get(task.id) ?? {
-        workState: 'BLOCKED' as const,
+      const work: ProjectTaskWorkStateFields = workStates.get(task.id) ?? {
+        workState: 'BLOCKED',
         verificationState: null,
+        runReason: null,
+        runStalled: false,
       };
       return {
         ...task,
@@ -3012,7 +3113,7 @@ export class ProjectsService {
           ),
         ])
       : [
-          new Map<string, { running: boolean; queued: boolean }>(),
+          new Map<string, TaskRunOverlay>(),
           new Map(),
         ];
     const tasks = rowsInGraph.map(({ createdAt: _createdAt, ...task }) => ({
@@ -3074,50 +3175,34 @@ export class ProjectsService {
   }
 
   /**
-   * Which of this project's tasks have a run on them right now: `running` = a RUNNING Session,
-   * `queued` = a PENDING one with nothing running yet.
+   * Which of this project's tasks have a run on them right now: `running` = a work Session
+   * carrying it (a turn executing, or the session parked waiting for something that will wake it),
+   * `queued` = a PENDING one, plus why it is running and whether its background jobs went quiet.
    *
    * The graph needs this because `Task.status` does not carry it. Dispatch opens a Session and
    * leaves the row `OPEN` — only `reclaimStalledTask` and a retry ever write `IN_PROGRESS` — so a
    * project graph drawn from the column alone reports the task somebody is watching as untouched,
    * which is exactly the state a reader opens the picture to find.
    *
-   * The same two flags, derived the same way, as `TasksService.withRunning`: the task list, the
-   * task-rooted graph and this canvas must not describe one running task in three ways. Scoped by
-   * the tasks' PROJECT rather than by their ids, for the reason the edge query is — the id list is
-   * as long as the project, and a 23,442-element `IN` is a query plan nobody wants.
+   * The same flags, derived from the same carriers (`sessions/task-work-carrier.ts`), as
+   * `TasksService.withRunning`: the task list, the task-rooted graph and this canvas must not
+   * describe one running task in three ways. Scoped by the tasks' PROJECT rather than by their
+   * ids, for the reason the edge query is — the id list is as long as the project, and a
+   * 23,442-element `IN` is a query plan nobody wants.
    */
   private async liveTaskState(
     ownerId: string,
     projectId: string,
-  ): Promise<Map<string, { running: boolean; queued: boolean }>> {
-    const busy = await this.prisma.session.groupBy({
-      by: ['taskId', 'status'],
-      where: {
-        ownerId,
-        status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
-        task: { ownerId, projectId },
-      },
-      _count: { _all: true },
-    });
-    const running = new Set(
-      busy.filter((row) => row.status === RunStatus.RUNNING).map((row) => row.taskId),
+  ): Promise<Map<string, TaskRunOverlay>> {
+    const carriers = await readTaskWorkCarriers(
+      this.prisma,
+      Prisma.sql`carrier."owner_id" = ${ownerId}::uuid
+        AND carrier."task_id" IN (
+          SELECT project_task."id" FROM "task" project_task
+           WHERE project_task."owner_id" = ${ownerId}::uuid
+             AND project_task."project_id" = ${projectId}::uuid)`,
     );
-    const queued = new Set(
-      busy.filter((row) => row.status === RunStatus.PENDING).map((row) => row.taskId),
-    );
-    const live = new Map<string, { running: boolean; queued: boolean }>();
-    for (const taskId of new Set([...running, ...queued])) {
-      if (!taskId) continue;
-      // A task with both is simply running; `queued` is only meaningful when nothing is running
-      // yet. `session_task_execution_claim_idx` makes that pair impossible anyway — this is here
-      // so the two flags mean the same thing they mean in `TasksService.withRunning`.
-      live.set(taskId, {
-        running: running.has(taskId),
-        queued: queued.has(taskId) && !running.has(taskId),
-      });
-    }
-    return live;
+    return new Map([...carriers].map(([taskId, carrier]) => [taskId, taskRunOverlay(carrier)]));
   }
 
   /**
@@ -3229,6 +3314,11 @@ export class ProjectsService {
     const data: Prisma.ProjectUpdateInput = {
       ...(dto.title !== undefined ? { title: dto.title } : {}),
       ...(dto.status !== undefined ? { status: dto.status } : {}),
+      // Who recorded a DONE is a fact about a DONE: a project this write takes out of it carries no
+      // record of one (`project.done_*`, migration 0345).
+      ...(dto.status !== undefined && dto.status !== SharedProjectStatus.DONE
+        ? NO_DONE_RECORD
+        : {}),
       ...(dto.goal !== undefined ? { goal: ProjectsService.blankToNull(dto.goal) } : {}),
       ...(dto.instructions !== undefined
         ? { instructions: ProjectsService.blankToNull(dto.instructions) }
@@ -3465,7 +3555,9 @@ export class ProjectsService {
    * `POST /projects/:id/pause` — Pause project: nothing starts the project's tasks by itself, an
    * agent's `task_start` is refused, and Automatic merges nothing into main; runs already going
    * finish, and the owner's own Run still starts a task (`project-pause.ts`,
-   * `tasks/project-pause-dispatch.ts`). Its coordinator is still woken the way Automatic says.
+   * `tasks/project-pause-dispatch.ts`). A changed press leaves one fact-keyed notification on its
+   * existing live coordinator conversation; it is not a wake event and asks the coordinator to do
+   * nothing.
    *
    * The owner's alone: a request carrying an acting session is refused 403 before anything is read.
    * A project nobody has started is refused 409 PROJECT_NOT_STARTED — it runs nothing by itself
@@ -3480,13 +3572,14 @@ export class ProjectsService {
       (tx) => ProjectsService.writePause(tx, ownerId, id, 'PAUSE'),
       loggedRetry(this.logger, 'projects.pause'),
     );
-    return this.afterPause(ownerId, id, written);
+    return this.afterPause(ownerId, id, 'PAUSE', written);
   }
 
   /**
    * `POST /projects/:id/resume` — Resume project: the project moves by itself again, whichever way
-   * it was paused. The owner's alone, like the pause. Resuming a project that is not paused changes
-   * nothing and says so.
+   * it was paused. The owner's alone, like the pause. A changed press tells its existing live
+   * coordinator which tasks move automatically and which still wait to be started by hand.
+   * Resuming a project that is not paused changes nothing and says so.
    *
    * What the pause held is not replayed here: the automatic doors re-read the project on their own
    * next pass — the sweep within the minute, a prerequisite finishing at once — and start what is
@@ -3499,7 +3592,7 @@ export class ProjectsService {
       (tx) => ProjectsService.writePause(tx, ownerId, id, 'RESUME'),
       loggedRetry(this.logger, 'projects.resume'),
     );
-    return this.afterPause(ownerId, id, written);
+    return this.afterPause(ownerId, id, 'RESUME', written);
   }
 
   /** Refused whole before anything is read: a request from a session does not pause or resume. */
@@ -3518,7 +3611,12 @@ export class ProjectsService {
     ownerId: string,
     id: string,
     press: 'PAUSE' | 'RESUME',
-  ): Promise<{ row: ProjectPauseRow; moved: boolean }> {
+  ): Promise<{
+    row: ProjectPauseRow;
+    moved: boolean;
+    episodePausedAt: Date | null;
+    pressedAt: Date | null;
+  }> {
     const [locked] = await tx.$queryRaw<ProjectPauseRow[]>(Prisma.sql`
       SELECT "started_at" AS "startedAt", "paused_at" AS "pausedAt",
              "paused_reason" AS "pausedReason"
@@ -3526,7 +3624,8 @@ export class ProjectsService {
        WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
          FOR NO KEY UPDATE`);
     if (!locked) throw new NotFoundException('project not found');
-    const write = press === 'PAUSE' ? ownerPauseWrite(locked, new Date()) : resumeWrite(locked);
+    const pressedAt = new Date();
+    const write = press === 'PAUSE' ? ownerPauseWrite(locked, pressedAt) : resumeWrite(locked);
     if (write === 'NOT_STARTED') {
       throw new ConflictException({
         code: 'PROJECT_NOT_STARTED',
@@ -3535,19 +3634,59 @@ export class ProjectsService {
           + 'itself until its owner starts it. Nothing was written.',
       });
     }
-    if (!write) return { row: locked, moved: false };
+    if (!write) {
+      return { row: locked, moved: false, episodePausedAt: locked.pausedAt, pressedAt: null };
+    }
     await tx.project.update({ where: { id }, data: write });
-    return { row: { ...locked, ...write }, moved: true };
+    return {
+      row: { ...locked, ...write },
+      moved: true,
+      // The durable identity of either notification is the pause episode this press wrote or
+      // lifted. A legacy Automatic-off pause keeps its original instant when the owner claims it.
+      episodePausedAt: press === 'PAUSE' ? write.pausedAt : locked.pausedAt,
+      pressedAt,
+    };
   }
 
-  /** After the commit, and only when something changed: every client of the owner re-reads it. */
-  private afterPause(
+  /** After the commit, and only when something changed: clients and the coordinator are told. */
+  private async afterPause(
     ownerId: string,
     id: string,
-    written: { row: ProjectPauseRow; moved: boolean },
-  ): ProjectPauseState {
-    if (written.moved) this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, id);
-    return projectPauseState(id, written.row);
+    press: 'PAUSE' | 'RESUME',
+    written: {
+      row: ProjectPauseRow;
+      moved: boolean;
+      episodePausedAt: Date | null;
+      pressedAt: Date | null;
+    },
+  ): Promise<ProjectPauseState> {
+    const state = projectPauseState(id, written.row);
+    if (!written.moved) return state;
+
+    this.realtime?.publishForUser(ownerId, RunEventType.PROJECT_CHANGED, id);
+    if (this.sessions && written.episodePausedAt && written.pressedAt) {
+      const telling = press === 'PAUSE'
+        ? tellCoordinatorProjectPaused(this.prisma, this.sessions, {
+          ownerId,
+          projectId: id,
+          pausedAt: written.episodePausedAt,
+        })
+        : tellCoordinatorProjectStarted(this.prisma, this.sessions, {
+          ownerId,
+          projectId: id,
+          start: {
+            by: 'RESUME',
+            pausedAt: written.episodePausedAt,
+            at: written.pressedAt,
+          },
+        });
+      await telling.catch((e) =>
+        this.logger.warn(`coordinator not told project ${id} was ${
+          press === 'PAUSE' ? 'paused' : 'resumed'}: ${
+          (e as { message?: string })?.message ?? String(e)}`),
+      );
+    }
+    return state;
   }
 
   /**
@@ -3582,7 +3721,9 @@ export class ProjectsService {
    * stored must no more un-state them than a wake that could not be delivered un-records a merge.
    */
   private async reprojectProjectStatus(ownerId: string, projectId: string): Promise<void> {
-    await storeDerivedProjectStatus(this.prisma, ownerId, projectId).catch((e) =>
+    await storeDerivedProjectStatus(this.prisma, ownerId, projectId, {
+      sessions: this.sessions,
+    }).catch((e) =>
       this.logger.warn(`derived project status not re-projected after a criteria edit: ${
         (e as { message?: string })?.message ?? String(e)}`),
     );
@@ -4232,6 +4373,11 @@ export class ProjectsService {
    * supplied by the runner door, which holds that dependency) and runs under the same lock and in the
    * same transaction as the turn: a retry that observes the durable key spends nothing.
    *
+   * WHO IT IS FROM is the acting session, written on the turn as its sender — the same column, and
+   * the same hourly limit between the two sessions, `session_send` has (sessions/session-message.ts).
+   * The limit is charged beside the steer against the conversation this resolved, and is the one
+   * refusal that leaves as itself rather than as an undelivered message.
+   *
    * WHAT IT REFUSES, and this is the distinction the code above exists for: a landing that cannot
    * open does not come back here as anything of this method's making — `ensureCoordinator`'s
    * delegation raises `COORDINATOR_UNAVAILABLE`, whose addressee is the account owner. A write that
@@ -4257,6 +4403,12 @@ export class ProjectsService {
        * turn, so a retry that replays its key never reaches it.
        */
       chargeSteer?: (sessionId: string, tx: Prisma.TransactionClient) => Promise<void>;
+      /**
+       * The message asks for a reply (contract §3.1, sessions/session-request.ts). The request names
+       * the conversation this call DELIVERS to and stays with it: a later rotation does not move it,
+       * and its outcome is then RECIPIENT_ENDED.
+       */
+      ask?: SessionRequestAsk;
     },
   ): Promise<{
     sessionId: string;
@@ -4268,15 +4420,39 @@ export class ProjectsService {
     replaceReason?: SessionReceiveBlockedReason;
     /** The turn the message became, by the key the caller can repeat. */
     turn: { clientTurnId: string };
+    /** The request the message is, and its deadline, when it asked for a reply. */
+    requestId?: string;
+    replyBy?: string;
   }> {
     const resolved = await this.ensureCoordinator(ownerId, id, actingSessionId);
+    const ask = opts?.ask ?? null;
+    // A coordinator asking its own project's coordinator is asking itself (§3.1).
+    if (ask && resolved.sessionId === actingSessionId) throw selfRequestRefusal();
     const turn = { clientTurnId, content: message };
-    const charge = opts?.chargeSteer
-      ? {
-          participateSendTransaction: (tx: Prisma.TransactionClient) =>
-            opts.chargeSteer!(resolved.sessionId, tx),
-        }
-      : undefined;
+    const charge = {
+      // The message is the acting session's (contract §2.1), signed with the identity the runner door
+      // proved — the same column `session_send` writes.
+      senderSessionId: actingSessionId,
+      // §2.4's hourly limit is charged against the conversation this call resolved, the way the
+      // steer is: the pair is (caller → this coordinator), however the caller addressed it.
+      participateSendTransaction: async (tx: Prisma.TransactionClient) => {
+        await chargeSessionMessage(tx, actingSessionId, resolved.sessionId);
+        if (ask) await chargeOpenRequest(tx, actingSessionId);
+        await opts?.chargeSteer?.(resolved.sessionId, tx);
+      },
+      ...(ask
+        ? {
+            onTurnWritten: (tx: Prisma.TransactionClient, written: { id: string; clientTurnId: string; content: string | null }) =>
+              recordSessionRequest(tx, {
+                ownerId,
+                fromSessionId: actingSessionId,
+                toSessionId: resolved.sessionId,
+                turn: written,
+                ask,
+              }),
+          }
+        : {}),
+    };
     try {
       // One branch, and it is the send door's own: `resume` is the only verb that may write to a
       // conversation whose run has ended (it revives it), and `createTurn` is the only one that may
@@ -4289,6 +4465,11 @@ export class ProjectsService {
         await this.sessions.createTurn(ownerId, resolved.sessionId, turn, charge);
       }
     } catch (e) {
+      // The one refusal that is the CALLER's and not the delivery's: it has messaged this
+      // coordinator as often as one session may in an hour. Said as itself, because what to do next
+      // — wait with session_await rather than ask again — is the opposite of what an undelivered
+      // message asks for. The fifty-open-requests refusal is the caller's in the same way.
+      if (e instanceof SessionMessageRateLimited || e instanceof TooManyOpenRequests) throw e;
       // The refusals a send gives for an ordinary state of the world rather than a fault: the
       // conversation is gone, it ended or is being written right now (`SessionNotSendable` is one of
       // these), its workspace is gone or disabled, it runs on no runner, the attempt budget refused
@@ -4310,7 +4491,14 @@ export class ProjectsService {
       }
       throw e;
     }
-    return { ...resolved, turn: { clientTurnId } };
+    // What the send answers beside the delivery when it was a request: the request and its deadline,
+    // read by the key the turn went under so a replay answers the request it already made.
+    const receipt = await sessionRequestReceipt(this.prisma, resolved.sessionId, clientTurnId, ask != null);
+    if (receipt) {
+      this.realtime?.publishSessionUpdated(actingSessionId);
+      this.realtime?.publishSessionUpdated(resolved.sessionId);
+    }
+    return { ...resolved, turn: { clientTurnId }, ...(receipt ?? {}) };
   }
 
   /**

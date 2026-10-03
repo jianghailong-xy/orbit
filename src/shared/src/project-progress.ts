@@ -157,7 +157,8 @@ export interface ProjectIntegrationBuckets {
 
 /**
  * What opened an exception item, as §4.2's closed set spells it — and `START_REQUEST`, a
- * coordinator asking its owner to start the project (`project_request_start`, `project-start.ts`).
+ * coordinator asking its owner to start the project (`project_request_start`, `project-start.ts`),
+ * and `DONE_REQUEST`, one asking its owner to record the project done (`project-done.ts`).
  * The set is closed in the database too (`project_open_item_kind_chk`): a new kind is a migration.
  */
 export type OpenItemKind =
@@ -168,7 +169,8 @@ export type OpenItemKind =
   | 'PROMOTION_APPROVAL'
   | 'COORDINATOR_QUESTION'
   | 'FUSE_PAUSED'
-  | 'START_REQUEST';
+  | 'START_REQUEST'
+  | 'DONE_REQUEST';
 
 /**
  * The kinds a project's coordinator can be handling (§7.1 V1/V2): `OpenItemKind` minus the four
@@ -687,6 +689,14 @@ export interface ProjectListAttention<Instant = string> {
   nextCheckAt: Instant | null;
   ownerItems?: Array<ProjectListOwnerItem<Instant>>;
   coordinatorItems?: ProjectListCoordinatorItems<Instant> | null;
+  /**
+   * The coordinator's open request to start this project (`START_REQUEST`, `project_request_start`)
+   * while nobody has started it — since when it has been asking — or null. The fifth thing the row
+   * names as waiting on the owner ("Needs you · Ready to start"), and kept out of `ownerItems`
+   * because it is none of those four: nothing escalated, and nothing pushes. Optional for the same
+   * reason the two fields above are.
+   */
+  startRequest?: { waitingSince: Instant } | null;
 }
 
 /**
@@ -708,13 +718,20 @@ export interface SessionOwnerItem<Instant = string> {
 
 /**
  * What a session row says its `pendingApprovals` is counting, when one word says it better than
- * "approval" — the two kinds whose count is not an approval at all.
+ * "approval" — the three kinds whose count is not an approval at all.
  *
  * `OWNER_CONFIRMATION` is an OWNER_CONFIRMED task's run waiting for its owner to confirm it done.
  * `OWNER_ITEM` is one of the four above: the row says the oldest item's own word (`Escalated to
  * you`, `Paused`, …) — the same words the Needs-you banner and the card in the conversation use —
  * because on a project whose coordinator is switched off the item is the owner's precisely when
- * nobody else will take it. A row counting anything else (a blocked tool call, a proposal) keeps the
- * generic approval wording, and so does one counting two kinds at once.
+ * nobody else will take it. `START_REQUEST` is a project not started yet whose coordinator has asked
+ * to start it: the row says "Ready to start", over the "Start this project?" card. A row counting
+ * anything else (a blocked tool call, a proposal) keeps the generic approval wording, and so does
+ * one counting two kinds at once.
  */
-export type SessionWaitingKind = 'OWNER_CONFIRMATION' | 'OWNER_ITEM';
+export type SessionWaitingKind =
+  | 'OWNER_CONFIRMATION'
+  | 'OWNER_ITEM'
+  | 'START_REQUEST'
+  | 'DONE_REQUEST'
+  | 'RECORD_AS_DONE';

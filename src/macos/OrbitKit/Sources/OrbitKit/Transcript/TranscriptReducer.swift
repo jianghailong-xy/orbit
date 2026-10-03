@@ -124,6 +124,14 @@ public struct TranscriptReducer: Sendable, Codable {
     /// Transient like `bgLaunch` — excluded from the persisted keys below, so snapshots written
     /// before it existed still decode; a rehydrated session simply starts folding afresh.
     private var stderrSeen: [String: (id: String, line: String, count: Int)] = [:]
+    /// The most recent stderr row that may receive continuation lines. Tool failures from
+    /// apply_patch are emitted as adjacent events, so they should read as one card rather than a
+    /// stack of red log rows. A new timestamp or a sequence gap ends the continuation.
+    private var lastStderr: (id: String, seq: Int, continuing: Bool)?
+    /// A tool failure that was correlated from stderr. Some runtimes omit the normal tool_result,
+    /// so the failure has to settle the still-running card directly; continuation lines stay on it
+    /// even when a tool_use was interleaved or the durable sequence has a gap.
+    private var lastToolFailure: (id: String, seq: Int, continuing: Bool)?
     /// Whether this turn has already put a row on screen that accounts for how it went: a reply, the
     /// runner's own error (or the sign-in / auto-retry card it earns), or the user's own interrupt.
     /// `endTurn` speaks only when none of them did — in the recorded corpus every codex `failed`
@@ -225,6 +233,13 @@ public struct TranscriptReducer: Sendable, Codable {
             if let cw = ev.payload["contextWindow"]?.intValue, cw > 0 { state.contextWindow = cw }
         }
 
+        // A tool_use/tool_result can sit between the first stderr line and its un-timestamped
+        // continuation. Other transcript events are a hard boundary for the pending log.
+        if ev.type != .system && ev.type != .toolUse && ev.type != .toolResult {
+            lastStderr = nil
+            lastToolFailure = nil
+        }
+
         // A sub-agent's own events fold into the list kept for the Agent call that started it, not
         // into the conversation — see `TranscriptState.subagentItems`.
         if Self.subagentEventTypes.contains(ev.type), let parent = str(ev, "parentToolUseId"), !parent.isEmpty {
@@ -255,7 +270,11 @@ public struct TranscriptReducer: Sendable, Codable {
         case .taskProgress:     applyTaskProgress(ev)
         case .status, .result:  applyStatus(ev)
         case .system:
-            if str(ev, "subtype") == "resumed" { clearLiveToolOutputsAtBoundary() }
+            if str(ev, "subtype") == "resumed" {
+                clearLiveToolOutputsAtBoundary()
+                lastStderr = nil
+                lastToolFailure = nil
+            }
             // A deliberate heads-up (see `TranscriptItem.notice`) — the turn itself was fine. Never
             // sent beside stderr; if it ever were, it wins, as on web. One row per event, unfolded.
             if let notice = nonEmpty(str(ev, "notice")) {
@@ -294,6 +313,8 @@ public struct TranscriptReducer: Sendable, Codable {
         bgLaunch.removeAll()
         taskLaunch.removeAll()
         stderrSeen.removeAll()
+        lastStderr = nil
+        lastToolFailure = nil
         state.subagentItems = [:]
     }
 
@@ -617,6 +638,9 @@ public struct TranscriptReducer: Sendable, Codable {
                 bubble.itemCard = turn.itemCard
                 // And the card a project start is, on the same terms (web parity: `q.projectStarted`).
                 bubble.startedCard = turn.startedCard
+                // And who sent it, when it is another session's message: drawn "From [that session]"
+                // while it waits, and never handed back to the composer (web parity: `q.sessionMessage`).
+                bubble.sessionMessage = turn.senderCard
                 bubble.authoredByOrbit = turn.authoredByOrbit == true
                 reconciled.append(bubble)
             } else {
@@ -626,6 +650,7 @@ public struct TranscriptReducer: Sendable, Codable {
                                              steer: SteerDelivery.isSteerKind(turn.kind),
                                              itemCard: turn.itemCard,
                                              startedCard: turn.startedCard,
+                                             sessionMessage: turn.senderCard,
                                              authoredByOrbit: turn.authoredByOrbit == true))
             }
         }
@@ -1062,6 +1087,12 @@ public struct TranscriptReducer: Sendable, Codable {
         // The message telling the coordinator its project was started, by the same rule
         // (`projectStarted`, `ProjectStarted.parse`).
         let startedCard = ProjectStarted.parse(ev.payload)
+        // And who sent it, when it was another Orbit session (`sessionMessage`, `SessionMessage.parse`):
+        // what the control plane recorded, never a reading of the words.
+        let sessionMessage = SessionMessage.parse(ev.payload)
+        // And the outcomes of this session's own requests a turn handed back (`sessionReplies`,
+        // `SessionReply.parse`), by the same rule.
+        let sessionReplies = SessionReply.parse(ev.payload)
         // The runner echoes `attachments` (an array of `{id, mime, name}`) on the durable user
         // event, NOT `attachmentIds` — parse those so the bubble can render images / file chips
         // after a reload (web reads the same field).
@@ -1096,6 +1127,8 @@ public struct TranscriptReducer: Sendable, Codable {
                 b.itemCard = itemCard
                 b.taskStart = taskStart
                 b.startedCard = startedCard
+                b.sessionMessage = sessionMessage
+                b.sessionReplies = sessionReplies
                 if !atts.isEmpty { b.attachments = atts }   // durable refs carry mime; keep ids if absent
                 b.ts = ev.ts ?? b.ts
                 b.steer = b.steer || steer
@@ -1116,7 +1149,9 @@ public struct TranscriptReducer: Sendable, Codable {
                                             note: recorded?.note,
                                             steer: steer, delivery: delivery,
                                             itemCard: itemCard, taskStart: taskStart,
-                                            startedCard: startedCard)))
+                                            startedCard: startedCard,
+                                            sessionMessage: sessionMessage,
+                                            sessionReplies: sessionReplies)))
     }
 
     private mutating func appendInterrupt(seq: Int, dropsQueue: Bool) {
@@ -1137,6 +1172,18 @@ public struct TranscriptReducer: Sendable, Codable {
         // model in the loop yet — it never got to spawn), but the remedy is the same human action,
         // so it earns the same card instead of a bare error line (web parity).
         if EngineAuth.isAuthErrorText(msg) { appendAuthError(msg); return }
+        // Codex reports quota failures as `error` events. Give them the same card as quota
+        // assistant text so they carry the session's pending retry (web parity).
+        if EngineErrors.isUsageLimitErrorText(msg) {
+            appendAutoRetry(msg, variant: .quota, seq: ev.seq)
+            return
+        }
+        // A provider too busy to answer is the same pause here as in a reply (Codex reports it as
+        // the turn's error): the server has armed the re-send, so it earns the card that says so.
+        if EngineErrors.isRetryableApiErrorText(msg) {
+            appendAutoRetry(msg, variant: .apiError, seq: ev.seq)
+            return
+        }
         state.items.append(.error(id: nextID(), message: msg))
     }
 
@@ -1148,19 +1195,83 @@ public struct TranscriptReducer: Sendable, Codable {
     /// Transcript's `system` case). Everything else on a `system` event but a notice stays lifecycle
     /// noise.
     private mutating func appendEngineStderr(_ ev: RunEvent) {
-        guard let raw = str(ev, "stderr") else { return }
+        guard let raw = str(ev, "stderr") else {
+            lastStderr = nil
+            lastToolFailure = nil
+            return
+        }
         let line = EngineStderr.clean(raw)
-        guard !line.isEmpty, !EngineStderr.isBenign(line) else { return }
+        guard !line.isEmpty else {
+            lastStderr = nil
+            lastToolFailure = nil
+            return
+        }
+        guard !EngineStderr.isBenign(line) else {
+            lastStderr = nil
+            lastToolFailure = nil
+            return
+        }
+        // A failed apply_patch or malformed tool invocation can be written to stderr without a
+        // normal tool_result. Keep its continuation on the card it already settled, even when the
+        // sequence has a gap; the timestamp is the boundary between logger records.
+        if let last = lastToolFailure,
+           !EngineStderr.startsNewLog(line),
+           let i = state.items.firstIndex(where: { $0.id == last.id }),
+           case .toolCall(var card) = state.items[i], card.status == .error {
+            card.result = [card.result, line].compactMap { $0 }.joined(separator: "\n")
+            state.items[i] = .toolCall(card)
+            lastToolFailure = (id: last.id, seq: ev.seq, continuing: true)
+            return
+        }
+        if let failure = ToolFailure.parse(line),
+           let i = unresolvedToolIndex(named: failure.tool) {
+            guard case .toolCall(var card) = state.items[i] else { return }
+            card.result = line
+            card.status = .error
+            card.resultSeq = ev.seq
+            card.resultTruncated = ev.truncated
+            state.items[i] = .toolCall(card)
+            lastToolFailure = (id: card.id, seq: ev.seq, continuing: EngineStderr.canStartContinuation(line))
+            lastStderr = nil
+            return
+        }
+        lastToolFailure = nil
+        if let last = lastStderr,
+           ev.seq > 0,
+           last.seq + 1 == ev.seq,
+           last.continuing,
+           !EngineStderr.startsNewLog(line),
+           let i = state.items.firstIndex(where: { $0.id == last.id }) {
+            if case .error(_, let message) = state.items[i] {
+                state.items[i] = .error(id: last.id, message: "\(message)\n\(line)")
+                lastStderr = (id: last.id, seq: ev.seq, continuing: true)
+                return
+            }
+        }
         let key = EngineStderr.foldKey(line)
         if let seen = stderrSeen[key], let i = state.items.firstIndex(where: { $0.id == seen.id }) {
             let count = seen.count + 1
             stderrSeen[key] = (id: seen.id, line: seen.line, count: count)
             state.items[i] = .error(id: seen.id, message: "\(seen.line) ×\(count)")
+            lastStderr = (id: seen.id, seq: ev.seq, continuing: EngineStderr.canStartContinuation(line))
             return
         }
         let id = nextID()
         stderrSeen[key] = (id: id, line: line, count: 1)
+        lastStderr = (id: id, seq: ev.seq, continuing: EngineStderr.canStartContinuation(line))
         state.items.append(.error(id: id, message: line))
+    }
+
+    /// Find the latest still-running top-level call that a stderr failure belongs to. Named failures
+    /// (apply_patch verification) are matched exactly; parser errors omit the tool name and use the
+    /// most recent unresolved call instead.
+    private func unresolvedToolIndex(named name: String?) -> Int? {
+        let wanted = name?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        for i in state.items.indices.reversed() {
+            guard case .toolCall(let card) = state.items[i], card.status == .running else { continue }
+            if wanted.isEmpty || card.name.lowercased() == wanted { return i }
+        }
+        return nil
     }
 
     /// A failure that fixes itself, raised as a card carrying the pending retry rather than a bare
@@ -1490,6 +1601,27 @@ enum TurnOutcome {
 
 /// Readying an engine's raw stderr line for the transcript — the native half of the web
 /// transcript's `stripAnsi` / `LEADING_TIMESTAMP` / `isBenignEngineStderr`.
+private enum ToolFailure {
+    /// Return the named tool for verification failures, or nil for parser failures that omit it.
+    /// Anything else is ordinary engine stderr and stays on the diagnostic-row path.
+    static func parse(_ line: String) -> (tool: String?, reason: String)? {
+        guard let marker = line.range(of: "error=", options: .caseInsensitive) else { return nil }
+        let tail = String(line[marker.lowerBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        let rest = String(tail.dropFirst("error=".count))
+        let lower = rest.lowercased()
+        if let separator = lower.range(of: " verification failed:") {
+            let toolEnd = rest.index(rest.startIndex, offsetBy: separator.lowerBound.utf16Offset(in: lower))
+            let tool = String(rest[..<toolEnd])
+            let reasonStart = rest.index(rest.startIndex, offsetBy: separator.upperBound.utf16Offset(in: lower))
+            return (tool: tool, reason: String(rest[reasonStart...]))
+        }
+        if lower.hasPrefix("failed to parse function arguments") {
+            return (tool: nil, reason: String(tail.dropFirst("error=".count)))
+        }
+        return nil
+    }
+}
+
 private enum EngineStderr {
     // A pattern that fails to compile leaves the text untouched rather than dropping the line: a
     // stderr shown with its escape codes still says why the turn failed.
@@ -1505,6 +1637,20 @@ private enum EngineStderr {
 
     /// The key two occurrences of one line fold on: the line minus its leading ISO-8601 timestamp.
     static func foldKey(_ line: String) -> String { strip(leadingTimestamp, from: line) }
+
+    /// A verification error whose explanation continues on the following stderr event ends in a
+    /// colon. A timestamped line always starts a new logger record, even if its text also ends in
+    /// one.
+    static func canStartContinuation(_ line: String) -> Bool {
+        line.localizedCaseInsensitiveContains("verification failed:") &&
+            line.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix(":")
+    }
+
+    static func startsNewLog(_ line: String) -> Bool {
+        guard let leadingTimestamp else { return false }
+        let range = NSRange(line.startIndex..., in: line)
+        return leadingTimestamp.firstMatch(in: line, range: range) != nil
+    }
 
     /// Does this line say nothing about the session? Both lines below are noise Orbit's own env
     /// injection provokes: a configured provider (DeepSeek, …) borrows the claude runtime by having

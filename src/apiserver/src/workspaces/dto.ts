@@ -57,11 +57,11 @@ export class CreateWorkspaceDto {
   @IsOptional() @IsObject() env?: Record<string, string>;
   // The Codex account this workspace's Codex sessions run on: the id of a slot its runner reports,
   // or `default`. A path is never accepted — dispatch resolves the id on the runner that runs the
-  // session. null is Automatic: each new session starts on the runner's account with the most room
-  // (automaticCodexAccount), and keeps it.
+  // session. null is Automatic: each new session starts on the runner's account whose quota resets
+  // soonest (automaticAccount), and moves off it when its usage limit stops the session.
   @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) codexAccount?: string | null;
-  /** The Claude account this workspace's Claude sessions run on. Same rules as codexAccount, except that
-   *  null and `default` are both Default, stored as NULL: there is no automatic choice for Claude. */
+  /** The Claude account this workspace's Claude sessions run on. Same rules as codexAccount: null is
+   *  Automatic, `default` pins them to Default. */
   @IsOptional() @IsString() @Matches(ACCOUNT_ID_PATTERN) claudeAccount?: string | null;
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() autoInitGit?: boolean;

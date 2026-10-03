@@ -81,6 +81,11 @@ import type { TaskStartCard as TaskStart } from '@orbit/shared';
 import { TaskStartCard } from './TaskStartCard';
 import { parseProjectStarted } from '../lib/projectStarted';
 import { ProjectStartedCard } from './ProjectStartedCard';
+import { parseSessionMessage } from '../lib/sessionMessage';
+import type { SessionMessageCard as SessionMessage, SessionReplyCard as SessionReply } from '@orbit/shared';
+import { SessionMessageCard } from './SessionMessageCard';
+import { parseSessionReplies, withoutReplyBlocks } from '../lib/sessionRequest';
+import { SessionReplyCards } from './SessionReplyCard';
 import { parseBackgroundJobs, summarizeBackgroundJobs } from '../lib/backgroundJobs';
 import { parseReferencedTasks, summarizeReferencedTasks } from '../lib/referencedTask';
 import { parseWikiContext } from '../lib/wikiContext';
@@ -175,6 +180,8 @@ export interface AuthErrorHelp {
   runnerId?: string;
   /** Re-send the last user message, once the user has signed back in. */
   onRetry?: () => void;
+  /** A re-send is already in flight, so the button offers none: one failure, one attempt. */
+  retryDisabled?: boolean;
   /** What that re-send would say, so the card can show it rather than make the user trust it. */
   retryText?: string;
   /** Open Providers — the other way back in, and the only one when the rejected credential is
@@ -336,12 +343,20 @@ type TextNode = {
   // `delivery` above, which is how far a message got on its way into the engine.
   itemCard?: OpenItemDelivery;
   // The turn that starts a task's run, when the control plane recorded the task its brief was built
-  // from beside the echo (`taskStart`, lib/taskStartCard). Drawn as the task instead of a bubble, with
-  // `text` — the brief written for the agent — folded inside it.
+  // from beside the echo (`taskStart`, lib/taskStartCard), or the same snapshot carried onto an
+  // exact retry. Drawn as the task instead of a bubble, with `text` — the brief written for the
+  // agent — folded inside it.
   taskStart?: TaskStart;
   // The message telling the coordinator its project was started, when the control plane recorded
   // the facts beside the echo (`projectStarted`, lib/projectStarted). Nobody's message either.
   startedCard?: Started;
+  // Another Orbit session's message, when the control plane recorded which session sent it beside
+  // the echo (`sessionMessage`, lib/sessionMessage). Somebody's words, but not the reader's: drawn
+  // as "From [that session]" instead of the owner's bubble.
+  sessionMessage?: SessionMessage;
+  // The outcomes of this session's own requests the turn handed back, when the control plane
+  // recorded them beside the echo (`sessionReplies`, lib/sessionRequest). Drawn as reply cards.
+  sessionReplies?: SessionReply[];
 };
 type ResultNode = { kind: 'result'; seq: number; content: any; isError?: boolean; truncated?: boolean };
 type MarkerNode = { kind: 'divider' | 'interrupt'; seq: number };
@@ -394,6 +409,61 @@ function parseEngineLogLine(line: string): EngineLogLine | undefined {
   return m ? { level: m[2], source: m[3], text: m[4] } : undefined;
 }
 
+type ToolFailureSummary = { tool: string; path?: string; reason: string };
+
+// Tool failures arrive on stderr because the runner could not persist a normal tool result. Keep
+// the first screen useful by extracting the small part a reader needs, while leaving the complete
+// line (including any continuation lines) behind the disclosure control.
+function parseToolFailureSummary(message: string): ToolFailureSummary | undefined {
+  const clean = stripAnsi(message);
+  const text = parseEngineLogLine(clean)?.text ?? clean;
+  const marker = /error=/i.exec(text);
+  if (!marker) return undefined;
+  const tail = text.slice(marker.index);
+  const match = /^error=([\w.-]+)\s+verification failed:\s*([\s\S]*)/i.exec(tail);
+  if (!match) {
+    // Codex reports malformed tool input without naming the tool in the line. The caller can still
+    // associate it with the most recent unresolved tool_use; if there is no such call, keep the
+    // message as a generic folded failure card instead of exposing a raw red log row.
+    const generic = /^error=(failed to parse function arguments\b[\s\S]*)$/i.exec(tail.trim());
+    if (generic) return { tool: '', reason: generic[1].trim() };
+
+    // Some runtime/tool-router failures do not use the verification wording above, but still
+    // identify the tool immediately after `error=` (for example `view_image.detail ...`). Keep
+    // these failures on the same compact tool row so a long tracing line never becomes a red
+    // paragraph in the transcript.
+    const detail = tail.replace(/^error=/i, '').trim();
+    const token = /^([\w.-]+)/.exec(detail)?.[1];
+    if (token) return { tool: token.split('.')[0], reason: detail };
+
+    return undefined;
+  }
+
+  const detail = match[2].trim();
+  const pathMatch = /(?:^|\s)(\/[^\s:]*\/worktrees\/[^/\s]+\/([^:\n]+?))(?::|\n|$)/.exec(detail);
+  const path = pathMatch?.[2]?.trim() || undefined;
+  const lower = detail.toLowerCase();
+  let reason: string;
+  if (lower.startsWith('invalid patch:')) {
+    const tail = detail
+      .slice('invalid patch:'.length)
+      .replace(pathMatch?.[1] ?? '', '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/[.:]+$/, '');
+    reason = tail ? `Invalid patch: ${tail}` : 'Invalid patch';
+  } else if (lower.startsWith('failed to find expected lines')) {
+    reason = 'Expected lines not found';
+  } else {
+    reason = 'Patch verification failed';
+  }
+  return { tool: match[1], path, reason };
+}
+
+function canStartStderrContinuation(line: string): boolean {
+  return /verification failed:/i.test(line) && line.trimEnd().endsWith(':');
+}
+
 // A bare URL in an engine's log line ("See the sandbox prerequisites: https://…") is advice you
 // are meant to follow, so make it followable. Only http(s) is linked, and the line is rendered as
 // plain text otherwise — a log line is not Markdown, and running it through a Markdown renderer
@@ -440,6 +510,10 @@ const TURN_FINISHED_SUBTYPES = new Set(['success', 'completed']);
 function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>): Node[] {
   const roots: Node[] = [];
   const byId = new Map<string, ToolNode>();
+  // Stderr failures are emitted without a tool_use id by some runners. Keep the unresolved calls
+  // in arrival order so a verification/parser failure can still be folded into the call it names
+  // (or, for parser errors that omit the name, the most recent unresolved call).
+  const openTools: Array<{ node: ToolNode; parent?: string }> = [];
   // Legacy transcripts (pre-id) carry no tool_use id / tool_result toolUseId, so a
   // result can't be matched by id. Fall back to the most recently opened tool that
   // still has no result — results arrive right after their call in those streams.
@@ -453,11 +527,32 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
     }
     return roots;
   };
+  // A task retry re-sends the exact brief that opened the run, but its new user event has no
+  // `taskStart` payload of its own. Keep the control-plane snapshot from that run only while a
+  // retryable failure is waiting, so the re-sent brief keeps the same card shape without treating
+  // an arbitrary message that happens to contain the brief as a task start.
+  type TaskStartReplay = { text: string; card: TaskStart };
+  const taskStartByParent = new Map<string, TaskStartReplay>();
+  const taskStartRetryByParent = new Map<string, TaskStartReplay>();
+  const parentKey = (parentId?: string): string => parentId ?? '';
+  const armTaskStartRetry = (parentId?: string) => {
+    const start = taskStartByParent.get(parentKey(parentId));
+    if (start) taskStartRetryByParent.set(parentKey(parentId), start);
+  };
+  const taskStartForRetry = (parentId: string | undefined, text: string): TaskStart | undefined => {
+    const key = parentKey(parentId);
+    const retry = taskStartRetryByParent.get(key);
+    // Any next user turn closes the retry window. Only an exact replay of the recorded brief gets
+    // the card; a new message remains an ordinary user bubble.
+    taskStartRetryByParent.delete(key);
+    return retry?.text === text ? retry.card : undefined;
+  };
   // A sign-in failure is reported once per dispatch, so a session that is picked up again
   // reports the identical one seconds later. That card is a remedy, not a log line: stacking
   // two says nothing new and puts two live copies of a sign-in there is only one of — with two
   // codes to read and two Cancels for the same relay. A repeat folds into the card above it.
   const authError = (parentId: string | undefined, seq: number, message: string) => {
+    armTaskStartRetry(parentId);
     const list = into(parentId);
     const prev = list[list.length - 1];
     if (prev?.kind === 'authError' && prev.message === message) return;
@@ -475,6 +570,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
     message: string,
     variant: AutoRetryVariant,
   ) => {
+    armTaskStartRetry(parentId);
     if (liveRetry) liveRetry.stale = true;
     const list = into(parentId);
     // A quota is usually spent on the message that just went out, which puts that bubble
@@ -502,15 +598,69 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   // (rather than per sub-workspace) is deliberate — one process writes the stderr, and which tool
   // call happened to be open when it flushed is incidental.
   const stderrSeen = new Map<string, ErrorNode>();
+  let lastStderr:
+    | { error: ErrorNode; seq: number; continuing: boolean }
+    | { tool: ToolNode; seq: number; continuing: boolean }
+    | undefined;
+  const removeOpenTool = (tool: ToolNode) => {
+    const index = openTools.findIndex((entry) => entry.node === tool);
+    if (index >= 0) openTools.splice(index, 1);
+  };
+  const unresolvedTool = (name: string, parentId?: string): ToolNode | undefined => {
+    const wanted = name.trim().toLowerCase();
+    for (let i = openTools.length - 1; i >= 0; i--) {
+      const entry = openTools[i];
+      if (entry.parent !== parentId || entry.node.result) continue;
+      if (!wanted || entry.node.name.toLowerCase() === wanted) return entry.node;
+    }
+    return undefined;
+  };
   const engineStderr = (parentId: string | undefined, seq: number, line: string) => {
+    // apply_patch writes the explanation over several stderr events. Once the first line is tied to
+    // a tool call, keep un-timestamped continuation lines on that card even if another tool_use was
+    // interleaved or the event sequence has a gap. A timestamp starts a new logger record.
+    if (lastStderr && 'tool' in lastStderr && lastStderr.continuing && !LEADING_TIMESTAMP.test(line)) {
+      const result = lastStderr.tool.result;
+      if (result) {
+        const previous = resultText(result.content);
+        lastStderr.tool.result = { ...result, content: `${previous}\n${line}` };
+        lastStderr.seq = seq;
+        return;
+      }
+      lastStderr = undefined;
+    }
+    if (
+      lastStderr &&
+      'error' in lastStderr &&
+      seq > 0 &&
+      lastStderr.seq + 1 === seq &&
+      lastStderr.continuing &&
+      !LEADING_TIMESTAMP.test(line)
+    ) {
+      lastStderr.error.message += `\n${line}`;
+      lastStderr.seq = seq;
+      return;
+    }
+    const failure = parseToolFailureSummary(line);
+    if (failure) {
+      const tool = unresolvedTool(failure.tool, parentId);
+      if (tool) {
+        tool.result = { content: line, isError: true, seq };
+        removeOpenTool(tool);
+        lastStderr = { tool, seq, continuing: canStartStderrContinuation(line) };
+        return;
+      }
+    }
     const key = line.replace(LEADING_TIMESTAMP, '');
     const prev = stderrSeen.get(key);
     if (prev) {
       prev.repeats = (prev.repeats ?? 1) + 1;
+      lastStderr = { error: prev, seq, continuing: canStartStderrContinuation(line) };
       return;
     }
     const node: ErrorNode = { kind: 'error', seq, message: line };
     stderrSeen.set(key, node);
+    lastStderr = { error: node, seq, continuing: canStartStderrContinuation(line) };
     into(parentId).push(node);
   };
 
@@ -533,6 +683,9 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
   for (const ev of events) {
     const p = ev.payload ?? {};
     const parent: string | undefined = p.parentToolUseId;
+    // A tool_use/tool_result can sit between the first stderr line and its un-timestamped
+    // continuation. Other transcript events are a hard boundary for the pending log.
+    if (ev.type !== 'system' && ev.type !== 'tool_use' && ev.type !== 'tool_result') lastStderr = undefined;
     switch (ev.type) {
       case 'user': {
         outageOver();
@@ -569,9 +722,15 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // lib/openItemDelivery). Read off the event rather than out of the text, so a delivery that
         // carries no card keeps the reading it has always had.
         const itemCard = parseOpenItemDelivery(p) ?? undefined;
-        // The same for a task run's opening turn (lib/taskStartCard): the payload, never the brief.
-        const taskStart = parseTaskStartCard(p) ?? undefined;
+        // The same for a task run's opening turn (lib/taskStartCard): use the payload, or the
+        // opening payload's snapshot for an exact retry, never infer a new card from text alone.
+        const text = recorded ? recorded.text : p.text ? String(p.text) : '';
+        const taskStartFromPayload = parseTaskStartCard(p);
+        const retriedTaskStart = taskStartForRetry(parent, text);
+        const taskStart = taskStartFromPayload ?? retriedTaskStart;
         const startedCard = parseProjectStarted(p) ?? undefined;
+        const sessionMessage = parseSessionMessage(p) ?? undefined;
+        const sessionReplies = parseSessionReplies(p) ?? undefined;
         const priorSteer = ev.turnId ? userByTurn.get(ev.turnId) : undefined;
         if (priorSteer?.steer && p.steer !== true) {
           priorSteer.steer = false;
@@ -588,17 +747,22 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           const node: TextNode = {
             kind: 'user',
             seq: ev.seq,
-            text: recorded ? recorded.text : p.text ? String(p.text) : '',
+            text,
             note: recorded?.note,
             itemCard,
             taskStart,
             startedCard,
+            sessionMessage,
+            sessionReplies,
             ts: ev.ts,
             images: imgs,
             attachmentRefs: refs,
             delivery: typeof p.delivery === 'string' ? p.delivery : undefined,
             steer: p.steer === true,
           };
+          if (taskStart) {
+            taskStartByParent.set(parentKey(parent), { text, card: taskStart });
+          }
           if (ev.turnId) userByTurn.set(ev.turnId, node);
           into(parent).push(node);
         }
@@ -670,6 +834,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           children: [],
         };
         if (node.id) byId.set(node.id, node);
+        openTools.push({ node, parent });
         into(parent).push(node);
         lastOpenTool = node;
         break;
@@ -680,6 +845,8 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
           (lastOpenTool && !lastOpenTool.result ? lastOpenTool : undefined);
         if (t) {
           t.result = { content: p.content, isError: !!p.isError, seq: ev.seq, truncated: ev.truncated };
+          removeOpenTool(t);
+          if (lastStderr && 'tool' in lastStderr && lastStderr.tool === t) lastStderr = undefined;
           if (t === lastOpenTool) lastOpenTool = undefined;
         } else {
           into(parent).push({
@@ -704,6 +871,7 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         // other way.
         const subtype = typeof p.subtype === 'string' ? p.subtype : '';
         const failed = subtype !== '' && !TURN_FINISHED_SUBTYPES.has(subtype) && !turnAccountedFor;
+        if (failed) armTaskStartRetry(parent);
         roots.push(
           failed
             ? { kind: 'error', seq: ev.seq, message: TURN_ENDED_WITHOUT_REPLY }
@@ -725,12 +893,19 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         const msg = stripAnsi(String(p.message ?? 'error'));
         turnAccountedFor = true;
         if (isAuthErrorText(msg)) authError(parent, ev.seq, msg);
+        // Codex reports quota failures as `error` events. Give them the same card as quota
+        // assistant text so they carry the session's pending retry.
+        else if (isUsageLimitErrorText(msg)) autoRetry(parent, ev.seq, msg, 'quota');
+        // A provider too busy to answer is the same pause here as in a reply (Codex reports it as
+        // the turn's error): the server has armed the re-send, so it earns the card that says so.
+        else if (isRetryableApiErrorText(msg)) autoRetry(parent, ev.seq, msg, 'apiError');
         else into(parent).push({ kind: 'error', seq: ev.seq, message: msg });
         break;
       }
       case 'system':
         // A deliberate heads-up from the runner (see NoticeNode) — the turn itself was fine.
         if (p.notice) {
+          lastStderr = undefined;
           into(parent).push({ kind: 'notice', seq: ev.seq, message: String(p.notice) });
           break;
         }
@@ -745,11 +920,15 @@ function buildNodes(events: RunEvent[], turnImages?: Record<string, TurnImage[]>
         if (p.stderr) {
           const line = stripAnsi(String(p.stderr)).trim();
           if (line && !isBenignEngineStderr(line)) engineStderr(parent, ev.seq, line);
-        }
+          else lastStderr = undefined;
+        } else lastStderr = undefined;
         // A `resumed` begins a new engine run: a retry loop prints the same refusal per
         // attempt, and each attempt's failure is its own error row. The fold is per run,
         // not per session — reset it so the next identical line starts a new row.
-        if (p.subtype === 'resumed') stderrSeen.clear();
+        if (p.subtype === 'resumed') {
+          stderrSeen.clear();
+          lastStderr = undefined;
+        }
         break;
       default:
         break;
@@ -1078,6 +1257,40 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
   const exporting = useContext(ExportCtx);
   switch (node.kind) {
     case 'user': {
+      // Another Orbit session's message (`session_send` / `project_send`): somebody's words, but not
+      // the reader's, so not the reader's bubble. Who sent it is what the control plane recorded
+      // beside the echo (lib/sessionMessage), so it is asked first — before anything is read out of
+      // the words themselves, which are the sending agent's to choose. No payload, the old reading.
+      if (node.sessionMessage) {
+        return (
+          <SessionMessageCard
+            card={node.sessionMessage}
+            text={node.text}
+            seq={node.seq}
+            ts={node.ts}
+            undelivered={node.delivery === 'failed' || node.delivery === 'unconfirmed'}
+            attached={node.note && <ControlPlaneNote kind={describeNote(node.note)} text={node.note} />}
+          />
+        );
+      }
+      // The outcomes of this session's requests, handed back (lib/sessionRequest): a reply turn
+      // carries nobody's words, and a message of the owner's may carry outcomes that were held for
+      // it — then the owner's words are their bubble, first, and the outcomes follow as cards. What
+      // else delivery appended folds into the cards, as it does everywhere.
+      if (node.sessionReplies) {
+        const rest = withoutReplyBlocks(node.note);
+        return (
+          <>
+            {node.text.trim() !== '' && <UserBubble node={{ ...node, note: undefined }} />}
+            <SessionReplyCards
+              cards={node.sessionReplies}
+              seq={node.seq}
+              ts={node.ts}
+              attached={rest !== '' && <ControlPlaneNote kind={describeNote(rest)} text={rest} />}
+            />
+          </>
+        );
+      }
       // A turn a watch queued is the watch's to show, not a message the user typed.
       const wake = parseWatchWake(node.text);
       if (wake) {
@@ -1185,6 +1398,8 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
         </div>
       );
     case 'error': {
+      const failure = parseToolFailureSummary(node.message);
+      if (failure) return <ToolFailureCard node={node} summary={failure} />;
       // An engine's own log line is its running commentary — often advice that ends in "…in the
       // meantime", not this turn dying. Shown at the level the engine itself logged, with the
       // stamp and module it wrote for its log kept in the tooltip. Anything without that preamble
@@ -1219,6 +1434,63 @@ function NodeView({ node, live }: { node: Node; live?: boolean }) {
         />
       );
   }
+}
+
+function ToolFailureCard({
+  node,
+  summary,
+}: {
+  node: ErrorNode;
+  summary: ToolFailureSummary;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <div className="chat-error-card" data-seq={node.seq}>
+      <div
+        className="chat-tool-row chat-error-card-head"
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            setExpanded((value) => !value);
+          }
+        }}
+      >
+        <span className="chat-tool-caret">
+          <RightOutlined rotate={expanded ? 90 : 0} />
+        </span>
+        <span className="chat-tool-icon chat-error-card-icon">
+          <ToolOutlined />
+        </span>
+        <strong className="chat-tool-name">{summary.tool || 'Tool call'}</strong>
+        <span className="chat-tool-summary chat-error-card-status">Failed</span>
+        <CloseCircleFilled className="chat-tool-status err" />
+        {(node.repeats ?? 1) > 1 && <span className="chat-error-repeat">×{node.repeats}</span>}
+      </div>
+      <div className="chat-error-card-detail">
+        {summary.path && <div className="chat-error-card-path">{summary.path}</div>}
+        <div className="chat-error-card-reason" title={summary.reason}>
+          {summary.reason}
+        </div>
+        <button
+          className="chat-error-card-disclosure"
+          type="button"
+          aria-expanded={expanded}
+          onClick={(event) => {
+            event.stopPropagation();
+            setExpanded((value) => !value);
+          }}
+        >
+          <RightOutlined rotate={expanded ? 90 : 0} />
+          {expanded ? 'Hide full log' : 'Show full log'}
+        </button>
+      </div>
+      {expanded && <pre className="chat-error-card-log">{node.message}</pre>}
+    </div>
+  );
 }
 
 /**
@@ -1304,7 +1576,12 @@ function AuthErrorCard({ message, seq }: { message: string; seq?: number }) {
               (the card is the whole session). Quote it, clamped, so the button is a decision
               rather than a leap of faith. */}
           {help.retryText && <div className="chat-authfix-last">{help.retryText}</div>}
-          <button className="chat-authfix-retry" onClick={help.onRetry} type="button">
+          <button
+            className="chat-authfix-retry"
+            onClick={help.onRetry}
+            disabled={help.retryDisabled}
+            type="button"
+          >
             Retry — re-send my last message
           </button>
         </>
@@ -1333,6 +1610,8 @@ export interface AutoRetryHelp {
   attempts?: number;
   /** Re-send the message now, without waiting. */
   onRetry?: () => void;
+  /** A re-send is already in flight, so the button offers none: one failure, one attempt. */
+  retryDisabled?: boolean;
   /** What that re-send would say. */
   retryText?: string;
   /**
@@ -1573,6 +1852,7 @@ function AutoRetryCard({
               className="chat-quota-retry"
               data-primary={!armed}
               onClick={help.onRetry}
+              disabled={help.retryDisabled}
               type="button"
             >
               {armed ? 'Retry now anyway' : 'Retry now'}
@@ -1594,7 +1874,7 @@ function AutoRetryCard({
 // Collapse a user bubble past this many characters: a pasted blob would otherwise parse and lay
 // out as one giant node and stall the transcript. The composer caps input well above this;
 // resumed/old sessions can still carry big messages.
-const USER_BUBBLE_TRUNCATE = 6000;
+export const USER_BUBBLE_TRUNCATE = 6000;
 
 // User message bubble. The text is Markdown-rendered by the same `MD` renderer as the assistant
 // turn: the messages sent here are mostly long structured prompts (headings, lists, fenced
@@ -1778,6 +2058,50 @@ export function AttachmentImage({
   );
 }
 
+// A legacy artifact request can wait on a runner to copy a path into the control plane. Keep that
+// wait finite in the browser: an offline runner used to leave a clicked chip spinning forever, and
+// the catch below could never turn it into a retryable state. If the server eventually answers an
+// already-timed-out request, release the object URL rather than leaking it.
+const FILE_RESOLVE_TIMEOUT_MS = 15_000;
+
+function resolveFileObjectUrl(
+  resolve: (key: string) => Promise<string>,
+  key: string,
+): Promise<string> {
+  return new Promise((fulfil, reject) => {
+    let finished = false;
+    const timer = setTimeout(() => {
+      finished = true;
+      reject(new Error('file request timed out'));
+    }, FILE_RESOLVE_TIMEOUT_MS);
+    let request: Promise<string>;
+    try {
+      request = resolve(key);
+    } catch (error) {
+      clearTimeout(timer);
+      reject(error);
+      return;
+    }
+    request.then(
+      (url) => {
+        if (finished) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        finished = true;
+        clearTimeout(timer);
+        fulfil(url);
+      },
+      (error) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 function ResolvedAttachmentImage({
   id,
   className,
@@ -1800,7 +2124,7 @@ function ResolvedAttachmentImage({
     if (exp) return; // export: bytes are pre-resolved into the data-URL map, no live fetch
     let active = true;
     let made: string | null = null;
-    resolve(id)
+    resolveFileObjectUrl(resolve, id)
       .then((u) => {
         if (active) {
           made = u;
@@ -1830,6 +2154,7 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   const resolve = useContext(AttachmentResolverContext);
   const exp = useContext(ExportCtx);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const label = name || 'file';
   // Static export: the download endpoint is bearer-guarded and non-image files aren't
   // embedded, so surface the attachment's name as an inert chip rather than a dead button.
@@ -1843,9 +2168,10 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
   }
   const download = async (): Promise<void> => {
     if (busy) return;
+    setFailed(false);
     setBusy(true);
     try {
-      const objUrl = await resolve(id);
+      const objUrl = await resolveFileObjectUrl(resolve, id);
       const a = document.createElement('a');
       a.href = objUrl;
       a.download = label;
@@ -1854,14 +2180,23 @@ export function AttachmentFile({ id, name }: { id: string; name?: string }) {
       a.remove();
       setTimeout(() => URL.revokeObjectURL(objUrl), 10_000);
     } catch {
-      /* leave the chip in place so the user can retry */
+      // Keep the chip retryable, but make a failed fetch visible. Previously this catch left a
+      // clicked chip indistinguishable from an unclicked one, which looked like a dead control.
+      setFailed(true);
     } finally {
       setBusy(false);
     }
   };
   return (
-    <button type="button" className="chat-file" onClick={download} title={`Download ${label}`}>
-      {busy ? <LoadingOutlined spin /> : <PaperClipOutlined />}
+    <button
+      type="button"
+      className={`chat-file${failed ? ' is-error' : ''}`}
+      onClick={download}
+      title={failed ? `Retry download ${label}` : `Download ${label}`}
+      aria-label={failed ? `Retry download ${label}` : `Download ${label}`}
+      data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
+    >
+      {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
       <span className="chat-file-name">{label}</span>
     </button>
   );
@@ -2029,6 +2364,12 @@ function looksLikeImagePath(src: string): boolean {
   return /\.(?:png|jpe?g|gif|webp|heic|heif|bmp|tiff?)$/i.test(src.split(/[?#]/)[0] ?? src);
 }
 
+// Source references often add `:line` (or `:line-line`) after the file name. It is useful to the
+// reader, but the artifact route and the runner need the path without that location hint.
+function artifactPathFromLink(src: string): string {
+  return src.replace(/:\d+(?::\d+)?(?:-\d+(?::\d+)?)?$/, '');
+}
+
 function isLegacyArtifactSrc(src: string): boolean {
   return isLocalFileSrc(src) && /\/\.orbit\/(?:uploads|worktrees)\/[0-9a-z-]{16,}\//i.test(src);
 }
@@ -2055,10 +2396,11 @@ function MarkdownImage({ node: _node, src, alt, className: _className, ...rest }
     );
   }
   if (typeof src === 'string' && isLegacyArtifactSrc(src)) {
-    if (looksLikeImagePath(src)) {
-      return <LocalArtifactImage artifactPath={src} alt={typeof alt === 'string' ? alt : 'Image'} />;
+    const artifactPath = artifactPathFromLink(src);
+    if (looksLikeImagePath(artifactPath)) {
+      return <LocalArtifactImage artifactPath={artifactPath} alt={typeof alt === 'string' ? alt : 'Image'} />;
     }
-    return <LocalArtifactFile artifactPath={src} label={fileLabel(src)} />;
+    return <LocalArtifactFile artifactPath={artifactPath} label={fileLabel(artifactPath)} />;
   }
   if (typeof src === 'string' && isLocalImageSrc(src)) {
     return (
@@ -2088,7 +2430,7 @@ function LocalArtifactImage({ artifactPath, alt }: { artifactPath: string; alt: 
     if (!resolve || exp) return;
     let active = true;
     let made: string | null = null;
-    resolve(artifactPath)
+    resolveFileObjectUrl(resolve, artifactPath)
       .then((u) => {
         if (active) {
           made = u;
@@ -2124,6 +2466,7 @@ function LocalArtifactFile({
   const resolve = useContext(ArtifactResolverContext);
   const exp = useContext(ExportCtx);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   const shown = label || fileLabel(artifactPath);
   const filename = downloadName || fileLabel(artifactPath);
   if (!resolve || exp) {
@@ -2136,9 +2479,10 @@ function LocalArtifactFile({
   }
   const download = async (): Promise<void> => {
     if (busy) return;
+    setFailed(false);
     setBusy(true);
     try {
-      const objUrl = await resolve(artifactPath);
+      const objUrl = await resolveFileObjectUrl(resolve, artifactPath);
       const a = document.createElement('a');
       a.href = objUrl;
       a.download = filename;
@@ -2147,14 +2491,23 @@ function LocalArtifactFile({
       a.remove();
       setTimeout(() => URL.revokeObjectURL(objUrl), 10_000);
     } catch {
-      /* keep the chip retryable */
+      // The artifact endpoint may refuse a stale path or an offline runner. Surface that state so
+      // the user knows the click was handled and can retry when the runner is back.
+      setFailed(true);
     } finally {
       setBusy(false);
     }
   };
   return (
-    <button type="button" className="chat-file" onClick={download} title={`Download ${filename}`}>
-      {busy ? <LoadingOutlined spin /> : <PaperClipOutlined />}
+    <button
+      type="button"
+      className={`chat-file${failed ? ' is-error' : ''}`}
+      onClick={download}
+      title={failed ? `Retry download ${filename}` : `Download ${filename}`}
+      aria-label={failed ? `Retry download ${filename}` : `Download ${filename}`}
+      data-download-state={busy ? 'loading' : failed ? 'error' : 'idle'}
+    >
+      {busy ? <LoadingOutlined spin /> : failed ? <CloseCircleFilled /> : <PaperClipOutlined />}
       <span className="chat-file-name">{shown}</span>
     </button>
   );
@@ -2175,11 +2528,18 @@ function MarkdownLink({ node: _node, href, title, children, ...rest }: any) {
     return <AttachmentFile id={id} name={name} />;
   }
   if (typeof href === 'string' && isLegacyArtifactSrc(href)) {
+    // Older replies used ordinary links for generated images. Treat those the same as the image
+    // form so a labelled `[preview](...png)` does not degrade to a download chip forever.
+    const artifactPath = artifactPathFromLink(href);
+    const label = nodeText(children).trim() || fileLabel(artifactPath);
+    if (looksLikeImagePath(artifactPath)) {
+      return <LocalArtifactImage artifactPath={artifactPath} alt={label} />;
+    }
     return (
       <LocalArtifactFile
-        artifactPath={href}
-        label={nodeText(children).trim() || fileLabel(href)}
-        downloadName={fileLabel(href)}
+        artifactPath={artifactPath}
+        label={label}
+        downloadName={fileLabel(artifactPath)}
       />
     );
   }
@@ -2703,7 +3063,10 @@ function leadToolSummary(desc: ToolDesc): { text: string; mono: boolean } | unde
   if (desc.path) return { text: relPath(desc.path), mono: true };
   if (desc.summary) return { text: desc.summary, mono: !!desc.summaryMono };
   if (desc.meta) return { text: desc.meta, mono: true };
-  return undefined;
+  // A generic tool can have no compact input summary (apply_patch is the common example when its
+  // input only carries a file list). Naming the tool is still more useful than a red row with no
+  // lead, and keeps the failed call discoverable inside the folded group.
+  return { text: desc.label, mono: false };
 }
 
 function ToolGroupStatus({ status }: { status: ToolGroupSummary['status'] }) {
@@ -2839,6 +3202,26 @@ function describeTool(name: string, input: any, isShell?: boolean, answer?: stri
       };
     case 'Edit':
       return { label: 'Edit', icon: <EditOutlined />, tone: 'write', path: i.file_path, body: <Diff oldStr={i.old_string} newStr={i.new_string} /> };
+    case 'apply_patch': {
+      const files = Array.isArray(i.files)
+        ? i.files.filter((p: unknown): p is string => typeof p === 'string' && p.length > 0)
+        : [];
+      const patch = typeof i.patch === 'string' ? i.patch : typeof i.diff === 'string' ? i.diff : '';
+      return {
+        label: 'apply_patch',
+        icon: <EditOutlined />,
+        tone: 'write',
+        path: files[0],
+        meta: files.length > 1 ? `${files.length} files` : undefined,
+        body: patch
+          ? <Pre text={patch} threshold={16} />
+          : files.length
+            ? <KeyVals obj={{ files }} />
+            : hasKeys(i)
+              ? <KeyVals obj={i} />
+              : undefined,
+      };
+    }
     case 'MultiEdit':
       return {
         label: 'MultiEdit',
@@ -3377,8 +3760,10 @@ const safeJson = (v: any): string => {
   }
 };
 
-// A tool_result's content is either a string or an array of content blocks
-// (text/image/...). Flatten it to displayable text.
+// A tool_result's content is either a string, an array of content blocks
+// (text/image/...), or an MCP CallToolResult wrapper whose `content` holds that array. Flatten it
+// to displayable text. The wrapper matters for Codex: its app-server can pass the whole MCP result
+// through, so an image is one level below the value the runner stores on the event.
 // Exported so the background-process tray can flatten a Read-on-output result the same way.
 export function resultText(content: any): string {
   if (content == null) return '';
@@ -3388,21 +3773,77 @@ export function resultText(content: any): string {
       .map((b: any) => {
         if (typeof b === 'string') return b;
         if (b && b.type === 'text') return b.text ?? '';
-        if (b && b.type === 'image') return ''; // rendered inline by resultImages()
+        if (isResultImageBlock(b)) return ''; // rendered inline by resultImages()
+        if (hasResultImage(b)) return resultText(b);
         return safeJson(b);
       })
       .filter((s) => s !== '')
       .join('\n');
   }
+  if (isResultImageBlock(content)) return '';
+  // Do not stringify an image-bearing MCP wrapper: that would put the base64 payload into a
+  // <pre>, which is both unreadable and wide enough to stretch the transcript. Keep any text the
+  // wrapper carries alongside the image, and let resultImages render the picture separately.
+  if (hasResultImage(content)) {
+    return resultWrapperValues(content)
+      .map((value) => resultText(value))
+      .filter((text) => text !== '')
+      .join('\n');
+  }
   return safeJson(content);
+}
+
+const RESULT_WRAPPER_KEYS = ['content', 'result', 'output', 'structuredContent'] as const;
+
+function isResultImageBlock(value: any): boolean {
+  return (
+    !!value &&
+    typeof value === 'object' &&
+    (value.type === 'image' ||
+      value.type === 'input_image' ||
+      value.type === 'image_url' ||
+      typeof value.image_url === 'string' ||
+      typeof value.imageUrl === 'string' ||
+      (value.image_url && typeof value.image_url === 'object'))
+  );
+}
+
+function resultWrapperValues(content: any): any[] {
+  if (!content || typeof content !== 'object' || Array.isArray(content)) return [];
+  return RESULT_WRAPPER_KEYS.filter((key) => Object.prototype.hasOwnProperty.call(content, key)).map(
+    (key) => content[key],
+  );
+}
+
+/** Find image blocks in either Anthropic's direct array or an MCP result wrapper. */
+function resultImageBlocks(content: any): any[] {
+  const found: any[] = [];
+  const seen = new Set<any>();
+  const visit = (value: any, depth: number) => {
+    if (value == null || depth > 4) return;
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, depth + 1);
+      return;
+    }
+    if (typeof value !== 'object' || seen.has(value)) return;
+    seen.add(value);
+    if (isResultImageBlock(value)) {
+      found.push(value);
+      return;
+    }
+    for (const nested of resultWrapperValues(value)) visit(nested, depth + 1);
+  };
+  visit(content, 0);
+  return found;
 }
 
 // Whether a tool_result carries an image at all — including one the server emptied of its bytes
 // because it was too big to ship inline (see the apiserver's MAX_IMAGE_PAYLOAD). The block outlives
 // that clip, keeping its type and media_type, exactly so this stays true: a screenshot still opens
-// its card on arrival, and the open card refetches the payload whole.
+// its card on arrival, and the open card refetches the payload whole. MCP results may wrap the same
+// block in `{ content: [...] }` (or `{ result: { content: [...] } }`), so inspect those wrappers too.
 export function hasResultImage(content: any): boolean {
-  return Array.isArray(content) && content.some((b) => b && b.type === 'image');
+  return resultImageBlocks(content).length > 0;
 }
 
 // Inline images carried by a tool_result's content blocks — e.g. Read on a .png, or an
@@ -3410,11 +3851,18 @@ export function hasResultImage(content: any): boolean {
 // runner, so render it as a data URL. A block whose data the server clipped yields nothing
 // here until the untrimmed payload lands. A plain-text result yields [].
 function resultImages(content: any): string[] {
-  if (!Array.isArray(content)) return [];
   const urls: string[] = [];
-  for (const b of content) {
-    const s = b && b.type === 'image' ? b.source : null;
-    if (s && s.data && s.media_type) urls.push(`data:${s.media_type};base64,${s.data}`);
+  for (const block of resultImageBlocks(content)) {
+    const source = block.source && typeof block.source === 'object' ? block.source : undefined;
+    const data = source?.data ?? block.data;
+    const mime = source?.media_type ?? source?.mimeType ?? block.media_type ?? block.mimeType;
+    const imageUrl = block.image_url && typeof block.image_url === 'object' ? block.image_url.url : block.image_url;
+    const directUrl = imageUrl ?? block.imageUrl ?? source?.url ?? block.url;
+    if (typeof directUrl === 'string' && directUrl) {
+      urls.push(directUrl);
+    } else if (typeof data === 'string' && data && typeof mime === 'string' && mime) {
+      urls.push(data.startsWith('data:') ? data : `data:${mime};base64,${data}`);
+    }
   }
   return urls;
 }

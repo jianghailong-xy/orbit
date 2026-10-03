@@ -371,6 +371,8 @@ test('the refusals, limits and effect policy this door answers with are the cont
       ['WIKI_OWNER_CHANNEL_ONLY', 403],
       // The plan (migration 0325, contract `plan.gate`, `plan.versions`, `plan.guard`).
       ['WIKI_PLAN_GATE', 422],
+      // The plan's jobs (migration 0338, contract `plan.jobs`): a run that runs none, or whose job ended.
+      ['WIKI_PLAN_NO_JOB', 409],
       ['WIKI_PLAN_STALE', 409],
       ['WIKI_PLAN_UNCONFIRMED', 409],
       ['WIKI_PROBE_REFUSED', 422],
@@ -915,6 +917,8 @@ test('0307 · the wiki write path', { skip, concurrency: 1, timeout: 300_000 }, 
     assert.equal(answer.body.ops[0].entryId, null);
     assert.equal(answer.body.ops[1].status, 'refused', 'and it still refuses what the request would');
     assert.equal(refusalOf(answer).code, 'WIKI_PROBE_REFUSED');
+    // And the breaker as the request found it: a changeset's own, in a space too small to have one.
+    assert.deepEqual(answer.body.breaker, { scope: 'changeset', activeAtStart: 0, changed: 0, remaining: null });
     assert.equal(await h.prisma.wikiEntry.count({ where: { ownerId: owner.id } }), 0);
     assert.equal(await h.prisma.wikiChangeset.count({ where: { ownerId: owner.id } }), 0);
   });

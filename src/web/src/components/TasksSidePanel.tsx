@@ -288,6 +288,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
   // The account's photo, when it has one — nothing is fetched until `me` names a version.
   const avatar = useQuery(avatarQuery(me.data?.avatarUpdatedAt));
   const { mode, setMode } = useThemeMode();
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   // The Wiki's amber count: the proposals waiting for the owner, summed over every space (a wiki
   // belongs to the account, and Review's own page asks across all of them). Its own key root, so the
   // control plane's `wiki.changed` refresh reaches it and nothing else has to.
@@ -759,13 +760,48 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
 
       <div className="tp-user">
         <Dropdown
+          trigger={['click']}
           placement="topLeft"
+          open={accountMenuOpen}
+          onOpenChange={setAccountMenuOpen}
           menu={{
+            className: 'tp-account-menu',
             items: [
+              {
+                key: 'profile',
+                className: 'tp-account-profile',
+                label: (
+                  <span className="tp-account-profile-content">
+                    <Avatar
+                      size={36}
+                      src={avatar.data}
+                      icon={<UserOutlined />}
+                      style={{ background: 'var(--brand)', flex: 'none' }}
+                    />
+                    <span className="tp-account-identity">
+                      <span className="tp-account-name">
+                        {me.data?.name || me.data?.email || 'Profile'}
+                      </span>
+                      <span className="tp-account-detail">
+                        {me.data?.name && me.data.name !== me.data.email ? me.data.email : 'View profile'}
+                      </span>
+                    </span>
+                  </span>
+                ),
+                onClick: () => navigate('/settings/profile'),
+              },
+              { type: 'divider' },
               {
                 key: 'appearance',
                 icon: <BgColorsOutlined />,
-                label: 'Appearance',
+                label: (
+                  <span className="tp-account-appearance-label">
+                    <span>Appearance</span>
+                    <span className="tp-account-current-theme">
+                      {mode === 'system' ? 'System' : mode === 'light' ? 'Light' : 'Dark'}
+                    </span>
+                  </span>
+                ),
                 children: (
                   [
                     { key: 'system', label: 'System' },
@@ -781,14 +817,10 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                     ) : (
                       <span style={{ display: 'inline-block', width: 14 }} />
                     ),
-                  onClick: () => setMode(it.key),
+                  onClick: () => {
+                    if (mode !== it.key) setMode(it.key);
+                  },
                 })),
-              },
-              {
-                key: 'profile',
-                icon: <UserOutlined />,
-                label: 'Profile',
-                onClick: () => navigate('/settings/profile'),
               },
               {
                 key: 'settings',
@@ -797,11 +829,23 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
                 onClick: () => navigate('/settings'),
               },
               { type: 'divider' },
-              { key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: logout },
+              {
+                key: 'logout',
+                icon: <LogoutOutlined />,
+                label: 'Log out',
+                danger: true,
+                onClick: logout,
+              },
             ],
           }}
         >
-          <div className="tp-user-trigger">
+          <button
+            type="button"
+            className={`tp-user-trigger ${accountMenuOpen ? 'open' : ''}`}
+            aria-label={`Account menu, ${me.data?.name || me.data?.email || 'Profile'}`}
+            aria-haspopup="menu"
+            aria-expanded={accountMenuOpen}
+          >
             <Avatar
               size={32}
               src={avatar.data}
@@ -811,7 +855,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
             {me.data && (
               <span className="tp-user-name">{me.data.name || me.data.email}</span>
             )}
-          </div>
+          </button>
         </Dropdown>
       </div>
 

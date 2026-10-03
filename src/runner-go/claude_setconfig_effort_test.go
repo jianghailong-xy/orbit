@@ -62,8 +62,10 @@ func TestEffortFrameBytes(t *testing.T) {
 
 // Ultra is the one Orbit effort the CLI has no level for. It is ultracode, a settings key of
 // its own, and leaving it has to switch that key off by name: measured on 2.1.260, an
-// effortLevel alone leaves the mode on (claude_ultracode_requestbody_test.go). Both kinds of
-// frame are only sent to an engine that has announced the version they were measured on.
+// effortLevel alone leaves the mode on (claude_ultracode_requestbody_test.go). Entering it
+// names the level it runs at beside the key, because on 2.1.286 the key alone leaves the
+// running effort where it was. Both kinds of frame are only sent to an engine that has
+// announced the version they were measured on.
 func TestUltraEffortFrameBytes(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -72,10 +74,10 @@ func TestUltraEffortFrameBytes(t *testing.T) {
 		want    string
 	}{
 		{
-			name:    "entering ultra is the ultracode key, not a level",
+			name:    "entering ultra is the ultracode key, with the level it runs at beside it",
 			running: "low",
 			content: `{"effort":"ultra"}`,
-			want:    `{"request":{"settings":{"ultracode":true},"subtype":"apply_flag_settings"},"request_id":"req-3-1","type":"control_request"}` + "\n",
+			want:    `{"request":{"settings":{"effortLevel":"xhigh","ultracode":true},"subtype":"apply_flag_settings"},"request_id":"req-3-1","type":"control_request"}` + "\n",
 		},
 		{
 			name:    "leaving ultra for the level it runs at still switches the key off",

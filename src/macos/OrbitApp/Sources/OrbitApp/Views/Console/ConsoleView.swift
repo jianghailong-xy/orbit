@@ -97,11 +97,22 @@ struct ConsoleView: View {
         var byCard: [String: [Data]] = [:]
     }
 
+    /// Whether the conversation gets the screen while you type: on a phone (compact width), while
+    /// the composer holds the keyboard. The band's cards, the bars under the nav bar and the nav bar
+    /// itself fold away together, and come back when the keyboard goes. The wide shells keep all of it.
+    private func foldsChrome(_ console: ConsoleModel?) -> Bool {
+        #if os(iOS)
+        hSize == .compact && console?.composerEditing == true
+        #else
+        false
+        #endif
+    }
+
     private func consoleBody(navTitleWidth: CGFloat) -> some View {
         Group {
             if let console = registry.peek(sessionID) {
                 VStack(spacing: 0) {
-                    TranscriptView(console: console)
+                    TranscriptView(console: console, hidesStickyQuestion: foldsChrome(console))
                     // Pending approvals (incl. the AskUserQuestion form) render inline at the tail of
                     // the transcript now — as the agent's latest turn, web-style — not in a fixed panel
                     // here. See TranscriptView.
@@ -149,13 +160,18 @@ struct ConsoleView: View {
                                 onDismiss: dismiss)
                                 .padding(.bottom, .composerBandGap)
                         }
-                        // What this session waits on — a watch, not a process — above the real shells.
-                        WatchingCardStack(sessionID: console.sessionID)
-                        BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress)
-                        // The tasks this session's agent created, beside the code the bar below
-                        // carries — the session's two kinds of output, together.
-                        CreatedTasksCard(console: console)
-                        WorktreeBar(console: console)
+                        // The session's cards, which a phone folds while you type (`TypingFold`). The
+                        // one-off cards above stay: each is about the message being sent.
+                        VStack(spacing: 0) {
+                            // What this session waits on — a watch, not a process — above the real shells.
+                            WatchingCardStack(sessionID: console.sessionID)
+                            BackgroundTrayView(procs: console.state.background, progress: console.state.taskProgress)
+                            // The tasks this session's agent created, beside the code the bar below
+                            // carries — the session's two kinds of output, together.
+                            CreatedTasksCard(console: console)
+                            WorktreeBar(console: console)
+                        }
+                        .modifier(TypingFold(folded: foldsChrome(console)))
                         ComposerView(console: console)
                         // What the provider pick standing in the composer will do, and WHEN — the
                         // part that matters, because a run keeps its provider for its whole life.
@@ -193,13 +209,19 @@ struct ConsoleView: View {
         // list carries the bar — showing it in both columns would state one fact twice.
         // …and, when this session is itself holding a question that does NOT stop its turn, the same
         // bar pointing down into this transcript instead of away from it. See `NeedsYouBannerView`.
+        // While you type the bar folds away with the nav bar (`foldsChrome`), and a backdrop takes the
+        // nav bar's place behind the status bar so the transcript doesn't scroll under the clock.
         .safeAreaInset(edge: .top, spacing: 0) {
             if hSize == .compact {
                 let console = registry.peek(sessionID)
-                NeedsYouBannerView(
-                    excluding: sessionID,
-                    below: console?.waitingBelow,
-                    onOpenBelow: { rowID in console?.requestScroll(to: rowID) })
+                if foldsChrome(console) {
+                    Color.clear.frame(height: 0).background(.bar, ignoresSafeAreaEdges: .top)
+                } else {
+                    NeedsYouBannerView(
+                        excluding: sessionID,
+                        below: console?.waitingBelow,
+                        onOpenBelow: { rowID in console?.requestScroll(to: rowID) })
+                }
             }
         }
         // Pushed onto the compact NavigationStack (and shown as the split detail on iPad), this page
@@ -208,6 +230,9 @@ struct ConsoleView: View {
         // right under the back button. (The New-session compose page already does this; without it the
         // console reverts to the large bar the moment the session is created — the reported gap.)
         .navigationBarTitleDisplayMode(.inline)
+        // …and none at all while a phone's composer holds the keyboard (`foldsChrome`): back, the
+        // title and Share come back when the keyboard goes.
+        .toolbar(foldsChrome(registry.peek(sessionID)) ? .hidden : .automatic, for: .navigationBar)
         // Inline title: the session name over a "state · when" subtitle, matching the web Agent
         // console header (`AgentView.tsx`). Centered/two-line — the system convention (Messages/Phone)
         // — rather than web's left-aligned bar. The status word lived in the transcript's `statusBar`
@@ -276,6 +301,27 @@ struct ConsoleView: View {
     }
 }
 
+/// The band's cards while a phone's composer holds the keyboard (`foldsChrome`): folded to no
+/// height, not removed, so an open list, the branch bar's sheet host and a "View tasks ›" press made
+/// meanwhile all keep their state, and the cards come back as they were when the keyboard goes.
+/// The wide shells never fold, and macOS doesn't take the modifier at all.
+private struct TypingFold: ViewModifier {
+    let folded: Bool
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .frame(height: folded ? 0 : nil, alignment: .top)
+            .clipped()
+            .opacity(folded ? 0 : 1)
+            .allowsHitTesting(!folded)
+            .accessibilityHidden(folded)
+        #else
+        content
+        #endif
+    }
+}
+
 #if os(iOS)
 /// The pushed console's inline nav-bar title: the session name over a "state · when" subtitle,
 /// mirroring the web Agent console header (see OrbitKit `SessionHeader`). The session (with its
@@ -336,12 +382,24 @@ private struct ConsoleNavTitle: View {
 struct TranscriptView: View {
     @Environment(AppModel.self) private var app
     let console: ConsoleModel
+    /// The sticky "↑ Your question" header folds away while a phone's composer holds the keyboard,
+    /// with the rest of the console's chrome (`ConsoleView.foldsChrome`).
+    var hidesStickyQuestion = false
     private let bottomID = TranscriptRow.bottom.id
     // Mirrors web's `atBottom` (AgentView.tsx): flips false once the user scrolls up off the live
     // tail. Drives the floating jump-to-latest button AND gates the auto-follow below, so reading
     // history isn't yanked back down by streaming updates. Maintained by `ScrollTracker` (macOS 15+);
     // on the macOS 14 floor it stays true — the view keeps the unconditional follow and hides the button.
     @State private var atBottom = true
+    // Whether more than `TailPinning.nearBottom` of content sits below the viewport right now, for any
+    // reason. `atBottom` can't say: it un-pins on a scroll UP alone, so a pinned transcript whose tail
+    // left the view some other way — a row that grew under it (a card opened, an image or link card
+    // landing), the keyboard, a follow that fell short — still read as at the bottom, and the
+    // jump-to-latest button never showed. Maintained by `ScrollTracker` beside `atBottom`.
+    @State private var tailOutOfView = false
+    // Pinned, but come to rest with the tail out of view: the button's other reason to show. Decided by
+    // the `.task(id: strandKey)` in `body`, so a gap the next follow is about to close never flashes it.
+    @State private var stranded = false
     // Id of the user turn the sticky header names — the newest question above the fold — or nil at the
     // very top where none is. Derived from the top anchor + the message list by `recomputeStuck`.
     @State private var stuckID: String?
@@ -354,6 +412,14 @@ struct TranscriptView: View {
     // it clears the top edge, so "I scrolled above" can never be observed; an accumulating set only
     // grew and the header died). See `recomputeStuck` / `QuestionRuler`.
     @State private var ruler = QuestionRuler()
+    // A scroll asked for from OUTSIDE a SwiftUI update — the main-queue hop after a tap halts the coast,
+    // or after a link's page lands — carried into the next update, which makes it (the
+    // `.onChange(of: heldScroll)` in `body`). `proxy.scrollTo` picks the row's index path when it is
+    // called but scrolls when the List next updates; called from out here, a publish landing in between
+    // can remove rows, and UIKit is handed an index past the end: NSInternalInconsistencyException out of
+    // `_validateScrollingTargetIndexPath`, SIGABRT — the 0.1.2 (4028) TestFlight crash. Inside an update
+    // both halves see the same rows.
+    @State private var heldScroll: HeldScroll?
     #if os(iOS)
     // Handle to the List's UIScrollView (populated by `ScrollTouchConfigurator`) so the jump-to-latest
     // action can force a scroll to the bottom even while the list is coasting.
@@ -366,12 +432,17 @@ struct TranscriptView: View {
     /// landed as — two red compile gates.
     private func tracker(ruler: QuestionRuler) -> some ViewModifier {
         #if os(iOS)
-        return ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck,
-                             scroll: transcriptScroll)
+        return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
+                             recompute: recomputeStuck, scroll: transcriptScroll)
         #else
-        return ScrollTracker(atBottom: $atBottom, ruler: ruler, recompute: recomputeStuck)
+        return ScrollTracker(atBottom: $atBottom, tailOutOfView: $tailOutOfView, ruler: ruler,
+                             recompute: recomputeStuck)
         #endif
     }
+
+    /// What `stranded` is re-decided on: the tail leaving or entering the view, the pin, and every
+    /// publish — whose follow may yet close the gap.
+    private var strandKey: String { "\(tailOutOfView)|\(atBottom)|\(console.stateRevision)" }
 
     /// Whether the load-earlier row is offered at all. Gated to the same floor as `ScrollTracker`:
     /// below it `atBottom` can never leave true, so the follow-on publish of a prepended page would
@@ -483,7 +554,7 @@ struct TranscriptView: View {
                 console.setReadingHistory(!pinned)
             }
             .onChange(of: console.sessionID) {
-                atBottom = true; ruler.reset(); stuckID = nil
+                atBottom = true; stranded = false; ruler.reset(); stuckID = nil
                 console.setReadingHistory(false)
                 // The reader's place went with the transcript that was on screen: the new one has
                 // not been laid out yet, and the bar's direction word must not answer for the
@@ -515,11 +586,7 @@ struct TranscriptView: View {
                 // Same coast fix as the jump-to-latest disc: cancel the momentum first, or the
                 // deceleration swallows the scroll.
                 transcriptScroll.halt()
-                DispatchQueue.main.async {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(request.rowID, anchor: .center)
-                    }
-                }
+                DispatchQueue.main.async { holdScroll(to: request.rowID, anchor: .center) }
                 #else
                 withAnimation(.easeOut(duration: 0.2)) {
                     proxy.scrollTo(request.rowID, anchor: .center)
@@ -538,19 +605,34 @@ struct TranscriptView: View {
                 #if os(iOS)
                 transcriptScroll.halt()
                 #endif
-                DispatchQueue.main.async {
-                    withAnimation(.easeOut(duration: 0.2)) {
-                        proxy.scrollTo(request.rowID, anchor: .center)
-                    }
+                DispatchQueue.main.async { holdScroll(to: request.rowID, anchor: .center) }
+            }
+            // The scrolls `heldScroll` carried here, made inside this update — after the List has taken
+            // its rows, so the index path SwiftUI picks for the row is one UIKit has.
+            .onChange(of: heldScroll) { _, held in
+                guard let held else { return }
+                withAnimation(.easeOut(duration: 0.2)) {
+                    proxy.scrollTo(held.rowID, anchor: held.anchor)
                 }
             }
             .onAppear { proxy.scrollTo(bottomID, anchor: .bottom); recomputeStuck() }
-            // Floating jump-to-latest button, shown only while scrolled up (web's `.scroll-to-bottom`).
+            // Floating jump-to-latest button (web's `.scroll-to-bottom`): shown while scrolled up, and
+            // while the tail is out of view for any other reason (`stranded`).
             .overlay(alignment: .bottom) {
-                if !atBottom || console.detached {
+                if !atBottom || console.detached || stranded {
                     scrollToBottomButton(proxy: proxy)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
+            }
+            // Whether a pinned transcript is stranded off its tail, decided once it has sat that way for
+            // a moment. A publish restarts the wait: the follow it triggers lands a frame or two after
+            // the rows grew, and the gap read in between — the normal state while a reply streams (see
+            // `TailPinning`) — must not flash the button on every update. A transcript the reader
+            // scrolled up isn't decided here: `!atBottom` shows the button already.
+            .task(id: strandKey) {
+                guard atBottom, tailOutOfView else { stranded = false; return }
+                try? await Task.sleep(for: .milliseconds(400))
+                if !Task.isCancelled { stranded = true }
             }
             // Sticky "↑ Your question" header (web's `.chat-sticky-question`): pin the newest question
             // *above the fold* to the top so it stays in view during a long reply, and tap it to jump
@@ -561,12 +643,13 @@ struct TranscriptView: View {
             // the target just *below* the header, not hidden under it. iOS 18+/macOS 15+ (needs the
             // scroll/row geometry); on the earlier floor `stuckID` never updates, so this stays hidden.
             .safeAreaInset(edge: .top, spacing: 0) {
-                if #available(iOS 18, macOS 15, *), let q = stuckBubble {
+                if #available(iOS 18, macOS 15, *), !hidesStickyQuestion, let q = stuckBubble {
                     stickyQuestion(q, proxy: proxy)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
             .animation(.easeOut(duration: 0.15), value: atBottom)
+            .animation(.easeOut(duration: 0.15), value: stranded)
             // Only fires when the header appears/disappears (not on every text swap), so animating it
             // can't churn during a scroll.
             .animation(.easeOut(duration: 0.15), value: stuckID == nil)
@@ -611,7 +694,8 @@ struct TranscriptView: View {
     /// A turn the bar may point back at: asked already, and the head of a round rather than a line inside one.
     private func namesAQuestion(_ b: UserBubble) -> Bool {
         !b.queued && StickySummary.isAnchor(text: b.text, note: b.note, itemCard: b.itemCard,
-                                            taskStart: b.taskStart, startedCard: b.startedCard)
+                                            taskStart: b.taskStart, startedCard: b.startedCard,
+                                            sessionMessage: b.sessionMessage)
     }
 
     private var stuckBubble: UserBubble? {
@@ -685,7 +769,19 @@ struct TranscriptView: View {
             // checked FIRST as the transcript's own row checks it (`TranscriptItemView`): the shape
             // must not depend on which of the two states the turn is in. A delivery's paragraph is
             // neither of the two wake blocks below, so nothing is shadowed by the order.
-            if let card = bubble.itemCard {
+            //
+            // Another Orbit session's message is asked about before all of them, as the transcript's
+            // row asks it: who sent it is the projection's (`QueuedTurnInfo.senderCard`), and its words
+            // are the sending agent's to choose — they could take a wake's shape. Cancel withdraws it
+            // and hands nothing back to the composer (`ComposerLogic.restorableText`). Not offered for
+            // a steer: `session_send` into a running turn is written into it, and the server refuses
+            // to withdraw what the engine may already be reading (`UserBubbleView` hides it the same way).
+            if let card = bubble.sessionMessage {
+                SessionMessageCardView(card: card, text: bubble.text, ts: bubble.ts,
+                                       undelivered: bubble.undelivered,
+                                       onCancelQueued: bubble.turnId == nil || bubble.steer
+                                           ? nil : { Task { await console.cancelQueued(bubble) } })
+            } else if let card = bubble.itemCard {
                 OpenItemDeliveryCardView(card: card, text: bubble.text, ts: bubble.ts,
                                          undelivered: bubble.undelivered,
                                          onCancelQueued: bubble.turnId == nil
@@ -733,6 +829,12 @@ struct TranscriptView: View {
         }
     }
 
+    /// Carry a scroll into the next update rather than making it from here (see `heldScroll`). A new
+    /// tick each time, so asking twice for the same row scrolls twice.
+    private func holdScroll(to rowID: String, anchor: UnitPoint) {
+        heldScroll = HeldScroll(rowID: rowID, anchor: anchor, tick: (heldScroll?.tick ?? 0) &+ 1)
+    }
+
     // Sticky header that names the turn above the fold and scrolls back to it — web's
     // `.chat-sticky-question` (muted label + a single ellipsized line, both from `StickySummary`).
     // `anchor: .top` lands the bubble just under this header (it's a safe-area inset, so the scroll
@@ -744,7 +846,8 @@ struct TranscriptView: View {
         // card reading "not typed by you".
         let summary = StickySummary.of(text: bubble.text, note: bubble.note, itemCard: bubble.itemCard,
                                        taskStart: bubble.taskStart,
-                                       startedCard: bubble.startedCard)
+                                       startedCard: bubble.startedCard,
+                                       sessionMessage: bubble.sessionMessage)
         // `CoastingButton` (not a plain `Button`) so the tap fires even while the List is still coasting.
         return CoastingButton {
             #if os(iOS)
@@ -756,9 +859,7 @@ struct TranscriptView: View {
             // Same coast fix as the jump-to-latest disc: cancel the momentum so `proxy.scrollTo` isn't
             // swallowed by the deceleration, then scroll to the question row on the next runloop.
             transcriptScroll.halt()
-            DispatchQueue.main.async {
-                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bubble.id, anchor: .top) }
-            }
+            DispatchQueue.main.async { holdScroll(to: bubble.id, anchor: .top) }
             #else
             withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bubble.id, anchor: .top) }
             #endif
@@ -807,9 +908,7 @@ struct TranscriptView: View {
             // computed offset: a lazy List's `contentSize` is only an estimate, so an offset undershoots
             // the end (it scrolled, but stopped short of the bottom).
             transcriptScroll.halt()
-            DispatchQueue.main.async {
-                withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bottomID, anchor: .bottom) }
-            }
+            DispatchQueue.main.async { holdScroll(to: bottomID, anchor: .bottom) }
             #else
             withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo(bottomID, anchor: .bottom) }
             #endif
@@ -977,6 +1076,13 @@ struct SessionStatusCardView: View {
     }
 }
 
+/// A transcript scroll waiting for the next update to make it (`TranscriptView.heldScroll`).
+private struct HeldScroll: Equatable {
+    let rowID: String
+    let anchor: UnitPoint
+    let tick: Int
+}
+
 #if os(iOS)
 /// The iOS interactive layer for `CoastingButton`: a transparent UIKit view whose
 /// `UILongPressGestureRecognizer` (min duration 0) recognizes alongside the List's scroll and owns the
@@ -1116,8 +1222,9 @@ private struct ScrollTouchConfigurator: UIViewRepresentable {
 }
 #endif
 
-/// The single scroll observer: drives the jump-to-latest button's `atBottom`, AND feeds the sticky
-/// header by stashing the live content offset into `ruler` and asking for a recompute each frame.
+/// The single scroll observer: drives the jump-to-latest button's `atBottom` and `tailOutOfView`,
+/// AND feeds the sticky header by stashing the live content offset into `ruler` and asking for a
+/// recompute each frame.
 /// `onScrollGeometryChange` (macOS 15+/iOS 18+) is read-only — unlike `scrollPosition(id:)` +
 /// `scrollTargetLayout()` it registers no per-row scroll targets, so it won't re-break `List`
 /// virtualization (see the transcript-freeze history). On the earlier floor it's a no-op, leaving
@@ -1125,6 +1232,9 @@ private struct ScrollTouchConfigurator: UIViewRepresentable {
 /// bottom, un-pin only on an *upward* scroll — a downward content-growth delta must never strand the view.
 private struct ScrollTracker: ViewModifier {
     @Binding var atBottom: Bool
+    /// The gap alone, with the pin's slack — not whether the transcript still follows its tail, which
+    /// is `atBottom`'s question. See `TranscriptView.tailOutOfView`.
+    @Binding var tailOutOfView: Bool
     let ruler: QuestionRuler
     let recompute: () -> Void
     #if os(iOS)
@@ -1175,6 +1285,7 @@ private struct ScrollTracker: ViewModifier {
                     atBottom = TailPinning.pinned(wasPinned: atBottom, from: was, to: now,
                                                   readerDriven: readerIsMoving,
                                                   evidence: Self.evidence)
+                    tailOutOfView = now.bottomGap > TailPinning.nearBottom
                     ruler.contentOffset = CGFloat(now.offset)
                     recompute()
                 }
@@ -1232,15 +1343,25 @@ struct TranscriptItemView: View {
     var body: some View {
         switch item {
         case .user(let b):
+            // Another Orbit session's message (`session_send` / `project_send`): somebody's words,
+            // but not the reader's, so not the reader's bubble. Who sent it is what the control plane
+            // recorded beside the echo (`sessionMessage`, `SessionMessage.parse`), so it is asked
+            // FIRST — before anything is read out of the words, which are the sending agent's to
+            // choose — as the browser asks it (`NodeView`). No payload, the old reading.
+            //
             // An exception item's delivery is the control plane's too, and for a stronger reason
             // than the wakes below: nobody typed it at all. What the turn says is a paragraph
             // written for the AGENT — the tools to call, the ids to call them with — so drawing it
             // as a message is both wrong about who sent it and unreadable as a record: the item's
             // kind, its title, the files a merge conflicted on and whether the work has landed are
             // all in the payload recorded beside it (`openItemDelivery`, `OpenItemDelivery.parse`).
-            // With no payload the turn keeps its old reading — this is checked FIRST, as the browser
-            // checks it (`NodeView`).
-            if let card = b.itemCard {
+            // With no payload the turn keeps its old reading — this is checked before the wakes, as
+            // the browser checks it (`NodeView`).
+            if let card = b.sessionMessage {
+                SessionMessageCardView(card: card, text: b.text, ts: b.ts,
+                                       undelivered: b.undelivered || b.delivery == "failed",
+                                       attached: b.attached)
+            } else if let card = b.itemCard {
                 // The note the same turn carried rides inside the card (`b.attached`): nobody typed
                 // this turn either, so the control plane's words do not go back into a bubble in the
                 // reader's own name — the same rule the wake card applies to a mixed note.
@@ -1268,6 +1389,18 @@ struct TranscriptItemView: View {
                 ProjectStartedCardView(card: started, text: b.text, ts: b.ts,
                                        undelivered: b.undelivered || b.delivery == "failed",
                                        attached: b.attached)
+            } else if let replies = b.sessionReplies, !replies.isEmpty {
+                // The outcomes of this session's own requests, handed back (`sessionReplies`,
+                // `SessionReply.parse`): a reply turn carries nobody's words, and a message of the
+                // owner's may carry outcomes that were held for it — then the owner's words are their
+                // bubble, first, and the outcomes follow as cards, with what else delivery appended
+                // folded into them (web parity: NodeView).
+                VStack(alignment: .leading, spacing: 6) {
+                    if !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        UserBubbleView(bubble: withoutNote(b))
+                    }
+                    SessionReplyCardsView(replies: replies, ts: b.ts, attached: replyRest(b))
+                }
             } else if let wake = WatchWakeText.parse(b.text) {
                 // A turn a watch queued is the watch's to show, not a message the user typed: it opens
                 // with a raw UUID and carries the whole payload the agent read (web parity: NodeView).
@@ -1299,8 +1432,12 @@ struct TranscriptItemView: View {
         case .interrupt:
             Label("Interrupted", systemImage: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
         case .error(_, let message):
-            Label(message, systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red).textSelection(.enabled)
+            if let summary = ToolFailureSummary.parse(message) {
+                ToolFailureCardView(message: message, summary: summary)
+            } else {
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red).textSelection(.enabled)
+            }
         case .authError(_, let message):
             if let console {
                 AuthErrorCardView(console: console, message: message)
@@ -1331,6 +1468,12 @@ struct TranscriptItemView: View {
     /// its other blocks instead of repeating the wake beneath the card.
     private func attachedRest(_ wake: BackgroundWake) -> (kind: String, text: String)? {
         wake.rest.isEmpty ? nil : (kind: describeNote(wake.rest), text: wake.rest)
+    }
+
+    /// What the reply cards did NOT take from a turn's note, as the entry folded inside them.
+    private func replyRest(_ bubble: UserBubble) -> (kind: String, text: String)? {
+        let rest = SessionReply.withoutReplyBlocks(bubble.note)
+        return rest.isEmpty ? nil : (kind: describeNote(rest), text: rest)
     }
 
     /// The same bubble with the note taken off it: all of it is the card's now, so leaving it here

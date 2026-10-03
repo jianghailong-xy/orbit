@@ -104,6 +104,30 @@ export const RETRYABLE_API_ERROR_MARKERS = [
   // A 529 body says `overloaded_error`; the status check already covers that one, but the
   // runtime also prints the bare word when it has no response to read a status off.
   'overloaded',
+  // The runtime's last resort failing too. When a stream dies, Claude Code asks again without
+  // streaming, and when that answer is not a reply either it says "API returned an empty or
+  // malformed response (HTTP 200) — check for a proxy or gateway intercepting the request. …
+  // This was the non-streaming retry of streaming request …, which failed with: watchdog; 0
+  // stream events received." Seen on DeepSeek (2026-10-02), whose stream stayed silent until
+  // the runtime's watchdog gave up on it. The phrase is the runtime's name for this one error
+  // and is printed nowhere else; the "(HTTP 200)" is the fallback's, not a leading status.
+  'empty or malformed response',
+];
+
+/**
+ * The same transient failure in a runtime's own words, with no `API Error` prefix to key on.
+ * Codex reports what it gives up on as the turn's error (an `error` event), not as a reply, and
+ * words it itself. Matched at the start of the text, like the quota sentences: the runtime's
+ * sentence is the whole message, and a reply that merely mentions one is not one.
+ *
+ * Plain lowercase prefixes, and only wording actually observed — the same rule as the lists above.
+ */
+export const RETRYABLE_ENGINE_ERROR_PREFIXES = [
+  // Codex's `serverOverloaded`: "Selected model is at capacity. Please try a different model."
+  // OpenAI shedding load on one model. Codex does not retry it, but the same model answers again
+  // minutes later: a task run it killed on 2026-09-29 went on, on the same model, when its owner
+  // sent "continue" seven minutes after. Switching models is the fallback once retries run out.
+  'selected model is at capacity',
 ];
 
 /**
@@ -117,6 +141,9 @@ export const RETRYABLE_API_ERROR_MARKERS = [
  * into a wall.
  */
 export function isRetryableApiErrorText(text: string | null | undefined): boolean {
+  if (!text) return false;
+  const opening = text.trimStart().toLowerCase();
+  if (RETRYABLE_ENGINE_ERROR_PREFIXES.some((prefix) => opening.startsWith(prefix))) return true;
   if (!isApiErrorText(text)) return false;
   const lower = text!.toLowerCase();
   // The status, when there is one, is authoritative: a 400 whose message happens to contain

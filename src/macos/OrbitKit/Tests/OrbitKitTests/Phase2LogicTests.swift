@@ -18,20 +18,23 @@ final class Phase2LogicTests: XCTestCase {
 
     // MARK: remember-rule
 
-    func testRememberRule() {
-        let bash = Approvals.rememberRule(toolName: "Bash",
-                                          input: .object(["command": .string("git commit -m x")]))
-        XCTAssertEqual(bash, PermissionRule(toolName: "Bash", ruleContent: "git commit:*"))
-        XCTAssertEqual(bash.map(Approvals.rememberLabel), "git commit")
+    func testRememberRules() {
+        let bash = Approvals.rememberRules(toolName: "Bash",
+                                           input: .object(["command": .string("git commit -m x")]))
+        XCTAssertEqual(bash, [PermissionRule(toolName: "Bash", ruleContent: "git commit:*")])
+        XCTAssertEqual(Approvals.rememberLabel(bash), "git commit")
 
-        XCTAssertNil(Approvals.rememberRule(toolName: "AskUserQuestion", input: .null))
-        XCTAssertNil(Approvals.rememberRule(toolName: "ExitPlanMode", input: .null))
-        XCTAssertNil(Approvals.rememberRule(toolName: "Bash",
-                                            input: .object(["command": .string("|| true")])))
+        XCTAssertEqual(Approvals.rememberRules(toolName: "AskUserQuestion", input: .null), [])
+        XCTAssertEqual(Approvals.rememberRules(toolName: "ExitPlanMode", input: .null), [])
+        XCTAssertEqual(Approvals.rememberRules(toolName: "Bash",
+                                               input: .object(["command": .string("(cd /x && ls)")])), [])
+        XCTAssertEqual(Approvals.rememberRules(toolName: "Bash",
+                                               input: .object(["command": .string("/bin/bash -lc 'git status'")])), [])
+        XCTAssertEqual(Approvals.rememberRules(toolName: "Bash", input: .null), [])
 
-        let edit = Approvals.rememberRule(toolName: "Edit", input: .null)
-        XCTAssertEqual(edit, PermissionRule(toolName: "Edit"))
-        XCTAssertEqual(edit.map(Approvals.rememberLabel), "Edit")
+        let edit = Approvals.rememberRules(toolName: "Edit", input: .null)
+        XCTAssertEqual(edit, [PermissionRule(toolName: "Edit")])
+        XCTAssertEqual(Approvals.rememberLabel(edit), "Edit")
     }
 
     // MARK: AskUserQuestion parsing
@@ -295,10 +298,13 @@ final class Phase2LogicTests: XCTestCase {
         // Absent windows are skipped; present ones keep /usage order (5-hour first).
         XCTAssertEqual(u.rows.map(\.key), ["fiveHour", "sevenDayOpus"])
         XCTAssertEqual(u.rows.map(\.percent), [12, 92])
-        XCTAssertEqual(u.primaryPercent, 12)           // binding window = 5-hour
+        // The one number is the window that stops the login — Opus's week, closest to its limit —
+        // not the first window. (The 5-hour reading is past its reset by now, so it reads 0% too.)
+        XCTAssertEqual(u.flatSnapshot.bindingRow()?.key, "sevenDayOpus")
+        XCTAssertEqual(u.flatSnapshot.bindingRow()?.percent, 92)
         XCTAssertNil(u.snapshot(for: "opencode"))      // never show Claude quota for OpenCode
         XCTAssertNil(PlanUsage(fiveHour: nil, sevenDay: nil, sevenDayOpus: nil,
-                               sevenDaySonnet: nil, fetchedAt: nil).primaryPercent)
+                               sevenDaySonnet: nil, fetchedAt: nil).flatSnapshot.bindingRow())
 
         let codex = PlanUsage(provider: "codex", rateLimits: [
             PlanUsageRateLimit(limitId: "codex",
@@ -311,11 +317,45 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(codex.rows.map(\.percent), [22, 35, 90])
     }
 
+    /// Web's `bindingPlanUsageRow` over `currentPlanUsageRows`, for the composer's pill and /status.
+    func testPlanUsageBindingRowIsTheWindowThatStopsTheLogin() {
+        let now = Date(timeIntervalSince1970: 1_790_960_178)   // 2026-10-02T16:56:18Z
+        let at = { (hours: Double) in
+            ISO8601DateFormatter().string(from: now.addingTimeInterval(hours * 3600))
+        }
+        // jianghailong.rd on wikova: a 5-hour reading from before that window rolled over, and a
+        // week that is spent until Monday.
+        let rd = PlanUsageSnapshot(provider: "claude",
+                                   fiveHour: .init(utilization: 6, resetsAt: at(-5.5)),
+                                   sevenDay: .init(utilization: 100, resetsAt: at(66)))
+        XCTAssertEqual(rd.currentRows(at: now).map(\.percent), [0, 100])
+        XCTAssertNil(rd.currentRows(at: now).first?.window.resetsAt)
+        XCTAssertEqual(rd.currentRows(at: now.addingTimeInterval(-6 * 3600)).map(\.percent), [6, 100])
+        XCTAssertEqual(rd.bindingRow(at: now)?.key, "sevenDay")
+
+        // Two spent: the login is back when the later one resets.
+        let both = PlanUsageSnapshot(provider: "claude",
+                                     fiveHour: .init(utilization: 100, resetsAt: at(0.5)),
+                                     sevenDay: .init(utilization: 100, resetsAt: at(66)))
+        XCTAssertEqual(both.bindingRow(at: now)?.key, "sevenDay")
+        // None spent: the one closest to its limit, a tie going to the first.
+        XCTAssertEqual(PlanUsageSnapshot(provider: "claude", fiveHour: .init(utilization: 1),
+                                         sevenDay: .init(utilization: 59)).bindingRow(at: now)?.key, "sevenDay")
+        XCTAssertEqual(PlanUsageSnapshot(provider: "claude", fiveHour: .init(utilization: 40),
+                                         sevenDay: .init(utilization: 40)).bindingRow(at: now)?.key, "fiveHour")
+        // A spent window past its reset stops nothing; the runner's own fractional-second stamps read.
+        let rolledOver = PlanUsageSnapshot(provider: "claude",
+                                           fiveHour: .init(utilization: 100, resetsAt: "2026-10-02T11:29:59.657029+00:00"),
+                                           sevenDay: .init(utilization: 59, resetsAt: at(100)))
+        XCTAssertEqual(rolledOver.bindingRow(at: now)?.key, "sevenDay")
+        XCTAssertEqual(rolledOver.bindingRow(at: now)?.percent, 59)
+    }
+
     func testPlanUsageSelectsKimiWithoutClaudeFallback() {
         let legacyClaude = PlanUsage(
             fiveHour: .init(utilization: 17),
             sevenDay: .init(utilization: 42))
-        XCTAssertEqual(legacyClaude.snapshot(for: "claude")?.primaryPercent, 17)
+        XCTAssertEqual(legacyClaude.snapshot(for: "claude")?.rows.first?.percent, 17)
         XCTAssertNil(legacyClaude.snapshot(for: "kimi"))
 
         let kimi = PlanUsageSnapshot(provider: "kimi", primary: .init(utilization: 63))
@@ -327,7 +367,7 @@ final class Phase2LogicTests: XCTestCase {
         XCTAssertEqual(nested.snapshots.map(\.0), ["Claude quota", "Codex quota", "Kimi quota"])
 
         let flatKimi = PlanUsage(provider: "kimi", primary: .init(utilization: 71))
-        XCTAssertEqual(flatKimi.snapshot(for: "kimi")?.primaryPercent, 71)
+        XCTAssertEqual(flatKimi.snapshot(for: "kimi")?.rows.first?.percent, 71)
         XCTAssertNil(flatKimi.snapshot(for: "claude"))
         XCTAssertEqual(flatKimi.snapshots.first?.0, "Kimi quota")
     }
@@ -345,10 +385,10 @@ final class Phase2LogicTests: XCTestCase {
 
         // Built-in Claude runs on the runner's own login.
         XCTAssertEqual(AgentDefaults.planUsage(for: "claude", runner: runner,
-                                               configured: configured)?.primaryPercent, 100)
+                                               configured: configured)?.bindingRow()?.percent, 100)
         // A configured Anthropic account reports its own subscription.
         XCTAssertEqual(AgentDefaults.planUsage(for: "anthropic-2", runner: runner,
-                                               configured: configured)?.primaryPercent, 9)
+                                               configured: configured)?.bindingRow()?.percent, 9)
         // A metered key has no window at all — no gauge, rather than the runner's.
         XCTAssertNil(AgentDefaults.planUsage(for: "deepseek", runner: runner,
                                              configured: configured))

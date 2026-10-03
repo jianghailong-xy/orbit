@@ -2,7 +2,7 @@ import { AgentProvider, PROVIDER_PRESETS, type ProviderBrand } from '@orbit/shar
 import type { PlanUsage, RunnerEngineHealth, RunnerModelCatalog, RuntimeDefaultModels } from '@orbit/shared';
 import { accountPlanUsage } from './engineAccounts';
 import { encodeId } from './idCodec';
-import { planUsageRows } from './planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows } from './planUsage';
 import {
   defaultModelForProvider,
   modelOptionsForProvider,
@@ -73,8 +73,8 @@ export interface ProviderChoice {
    *  since the pool beside it already runs on it. */
   inPool?: boolean;
   /** The runner's own accounts of this engine, when it has signed in more than one: offered under
-   *  its row, so a session can start on another account than its workspace's. Codex only — the
-   *  engine a session can be started on an account of (Session.codexAccount). */
+   *  its row, so a session can start on another account than its workspace's. Codex and Claude — the
+   *  engines whose CLI keeps a login per directory (Session.codexAccount, Session.claudeAccount). */
   accounts?: AccountChoice[];
 }
 
@@ -83,14 +83,19 @@ export interface AccountChoice {
   /** `default`, or the id of a slot the runner added — what the session is created with. */
   id: string;
   label: string;
-  /** Its own quota's first window, compactly: "5h 100%", "Weekly 0%". Absent when the runner
-   *  reports none. */
+  /** Its own quota's tightest window — the one closest to its limit, which is the one that stops it
+   *  — compactly: "5h 100%", "Weekly 0%". Absent when the runner reports none. */
   quota?: string;
   /** That window is at least 90% spent — where the composer's quota pill turns orange too. */
   nearLimit?: boolean;
   /** Why it can't take a session: the CLI says it is signed out. */
   unavailable?: string;
 }
+
+/** A window's name short enough for a row beside an account's: "5h", "Weekly", "Weekly Opus" — Codex's
+ *  "5h limit" and Claude's "5-hour limit" and "Weekly · all models" alike. */
+export const compactWindowLabel = (label: string): string =>
+  label.replace(/ limit$/, '').replace(/^5-hour$/, '5h').replace(/ · all models$/, '').replace(' · ', ' ');
 
 const ENGINE_LABELS: Record<string, string> = {
   [AgentProvider.CLAUDE]: 'Claude',
@@ -192,7 +197,7 @@ function byokBlocker(health?: RunnerEngineHealth): string | undefined {
  * away. `configured` is expected to carry the pools too (poolsAsProviders), since that is where a
  * pool's models and runtime are resolved from; `pools` says which of its entries are pools.
  *
- * `planUsage` is the runner's quota report, read for each of its Codex accounts' own windows.
+ * `planUsage` is the runner's quota report, read for each of its Codex and Claude accounts' own windows.
  */
 export function providerChoices(
   configured: ConfiguredProvider[],
@@ -206,16 +211,19 @@ export function providerChoices(
     const health = engineHealth?.find((e) => e.engine === slug);
     const blocker = engineBlocker(health);
     const accounts =
-      slug === AgentProvider.CODEX && !blocker && (health?.accounts?.length ?? 0) >= 2
+      (slug === AgentProvider.CODEX || slug === AgentProvider.CLAUDE) && !blocker && (health?.accounts?.length ?? 0) >= 2
         ? health!.accounts!.map((account): AccountChoice => {
             const snapshot = accountPlanUsage(planUsage, slug, account.id);
-            const quota = account.auth === 'yes' && snapshot ? planUsageRows(snapshot)[0] : undefined;
+            // The window that stops it: a Claude login's 5-hour window can read 0% while its weekly
+            // one is spent, and the first window alone would say it has room.
+            const quota =
+              account.auth === 'yes' && snapshot ? bindingPlanUsageRow(currentPlanUsageRows(snapshot)) : undefined;
             return {
               id: account.id,
               label: account.id === 'default' ? 'Default' : account.name || `Account ${account.id}`,
               ...(quota
                 ? {
-                    quota: `${quota.label.replace(/ limit$/, '')} ${quota.percent}%`,
+                    quota: `${compactWindowLabel(quota.label)} ${quota.percent}%`,
                     ...(quota.nearLimit ? { nearLimit: true } : {}),
                   }
                 : {}),

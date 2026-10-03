@@ -11,9 +11,11 @@ extension ProjectPage {
 
     // MARK: - Work overview: when the work is not moving
 
-    /// Ready work, and nothing starting it.
-    public static func stalledOnReady(_ b: ProjectPanoramaBuckets) -> Bool {
-        b.ready > 0 && b.running == 0
+    /// Ready work, and nothing starting it — unless nobody has started the project, when it is the
+    /// start that ready work is waiting for, and the Ready cell says so instead
+    /// (`readyUntilStarted`).
+    public static func stalledOnReady(_ b: ProjectPanoramaBuckets, started: Bool? = nil) -> Bool {
+        b.ready > 0 && b.running == 0 && started != false
     }
 
     public static let stalledTitle = "Dispatch needs attention"
@@ -107,7 +109,7 @@ extension ProjectPage {
         "ACCEPTANCE_STANDARD_MOVED": BlockerHeadline(tag: "Standard moved", tone: .warning,
                                                      title: "Its acceptance criterion changed after it started"),
         "CRITERION_EXEMPTION_ARGUED": BlockerHeadline(tag: "Needs your decision", tone: .warning,
-                                                      title: "It argues a criterion doesn’t apply to it"),
+                                                      title: "Agent says this criterion doesn’t apply"),
         "MERGE_REFUSED_BY_GIT": BlockerHeadline(tag: "Merge conflict", tone: .danger, title: "Git refused to merge it"),
     ]
 
@@ -134,6 +136,35 @@ extension ProjectPage {
             parts.append("criterion \(ordinal) is now revision \(revision)")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// The question a delivery a machine may not settle puts to the reader before any note is
+    /// written, and the review dialog's two answers to it.
+    public struct BlockerDecision: Equatable, Sendable {
+        public let question: String
+        public let acceptLabel: String
+        public let keepLabel: String
+    }
+
+    /// In the web's words, keyed by the same reasons as the headlines.
+    private static let blockerDecisions: [String: BlockerDecision] = [
+        "CRITERION_EXEMPTION_ARGUED": BlockerDecision(
+            question: "Does the agent’s explanation make this criterion inapplicable to this work?",
+            acceptLabel: "Accept the explanation", keepLabel: "Leave it open"),
+        "OUTSIDE_DECLARED_SCOPE": BlockerDecision(
+            question: "Are these extra files part of the delivery you want to accept?",
+            acceptLabel: "Accept these files", keepLabel: "Leave it open"),
+        "ACCEPTANCE_STANDARD_MOVED": BlockerDecision(
+            question: "Does this delivery satisfy the criterion as it reads today?",
+            acceptLabel: "Confirm it meets the criterion", keepLabel: "Leave it open"),
+        "MERGE_REFUSED_BY_GIT": BlockerDecision(
+            question: "Has the merge conflict been resolved and checked?",
+            acceptLabel: "Mark the conflict resolved", keepLabel: "Leave it open"),
+    ]
+
+    /// The decision a blocker asks for; nil for every other kind, which is simply resolved.
+    public static func blockerDecision(_ blocker: ProjectBlocker) -> BlockerDecision? {
+        blocker.detail.reason.flatMap { blockerDecisions[$0] }
     }
 
     /// The files, short enough for one line: the first whole, the next by name when it sits in the
@@ -199,16 +230,56 @@ extension ProjectPage {
         return "\(blockers.resolvedCount) resolved · latest: \(blockerResolution(latest, timeZone: timeZone))"
     }
 
-    /// What the resolve dialog says under its title: which blocker, and that the reason is kept.
+    /// What the resolve dialog says under its title, in the web dialog's order: which blocker, the
+    /// decision it asks for, what that decision rests on — each under its label — and that the note
+    /// is kept.
     public static func resolveBlockerMessage(_ blocker: ProjectBlocker) -> String {
-        "\(blockerName(blocker))\n\n\(resolveBlockerNote)."
+        let reason = blocker.detail.reason
+        let argument = blocker.agentArgument?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let criterion = blocker.criterionText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        var parts = [blockerName(blocker)]
+        if let decision = blockerDecision(blocker) { parts.append("\(blockerDecisionLabel)\n\(decision.question)") }
+        if reason == "CRITERION_EXEMPTION_ARGUED", !argument.isEmpty {
+            parts.append("\(blockerArgumentLabel)\n\(argument)")
+        }
+        if reason == "CRITERION_EXEMPTION_ARGUED" || reason == "ACCEPTANCE_STANDARD_MOVED", !criterion.isEmpty {
+            parts.append("\(blockerCriterionLabel)\n\(criterion)")
+        }
+        if !blocker.detail.paths.isEmpty {
+            parts.append(([blockerFilesLabel] + blocker.detail.paths).joined(separator: "\n"))
+        }
+        parts.append("\(resolveBlockerNote).")
+        return parts.joined(separator: "\n\n")
     }
 
-    public static let resolveBlockerPress = "Resolve…"
-    public static let resolveBlockerTitle = "Resolve this blocker"
-    public static let resolveBlockerQuestion = "Why is it no longer blocking?"
-    public static let resolveBlockerNote = "Recorded with your name and this reason"
-    public static let resolveBlockerConfirm = "Resolve"
+    /// A decision is reviewed and answered in its own words; any other blocker is resolved.
+    public static func resolveBlockerPress(_ blocker: ProjectBlocker) -> String {
+        blockerDecision(blocker) == nil ? "Resolve…" : "Review…"
+    }
+
+    public static func resolveBlockerTitle(_ blocker: ProjectBlocker) -> String {
+        blockerDecision(blocker) == nil ? "Resolve this blocker" : "Review this blocker"
+    }
+
+    /// What the note field asks for.
+    public static func resolveBlockerQuestion(_ blocker: ProjectBlocker) -> String {
+        blockerDecision(blocker) == nil ? "Why is it no longer blocking?" : "What did you verify?"
+    }
+
+    public static func resolveBlockerConfirm(_ blocker: ProjectBlocker) -> String {
+        blockerDecision(blocker)?.acceptLabel ?? "Resolve"
+    }
+
+    public static func resolveBlockerKeep(_ blocker: ProjectBlocker) -> String {
+        blockerDecision(blocker)?.keepLabel ?? "Cancel"
+    }
+
+    public static let resolveBlockerNote = "Accepting records your name and note"
+    /// The labels the dialog puts over the decision and what it rests on.
+    public static let blockerDecisionLabel = "Your decision"
+    public static let blockerArgumentLabel = "Agent’s explanation"
+    public static let blockerCriterionLabel = "Current criterion"
+    public static let blockerFilesLabel = "Files this blocker names"
     /// The server's limit on the reason.
     public static let blockerReasonLimit = 2000
 

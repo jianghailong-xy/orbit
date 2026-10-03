@@ -13,6 +13,7 @@ import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { SessionsModule } from './sessions/sessions.module';
 import { SessionTagsModule } from './session-tags/session-tags.module';
+import { SessionFoldersModule } from './session-folders/session-folders.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TaskListsModule } from './task-lists/task-lists.module';
 import { LinkPreviewsModule } from './link-previews/link-previews.module';
@@ -29,6 +30,7 @@ import { OutcomeReconcilerHttpModule } from './outcome-reconciler/outcome-reconc
 import { WatchEvaluatorModule } from './watches/watch-evaluator.module';
 import { WatchDeliveryModule } from './watches/watch-delivery.module';
 import { ScheduledWakeupModule } from './runner-api/scheduled-wakeup.module';
+import { SessionRequestWorkerModule } from './sessions/session-request-worker.module';
 import { WikiModule } from './wiki/wiki.module';
 
 @Module({
@@ -45,6 +47,7 @@ import { WikiModule } from './wiki/wiki.module';
     WorkspacesModule,
     SessionsModule,
     SessionTagsModule,
+    SessionFoldersModule,
     TasksModule,
     TaskListsModule,
     LinkPreviewsModule,
@@ -61,6 +64,7 @@ import { WikiModule } from './wiki/wiki.module';
     WatchEvaluatorModule,
     WatchDeliveryModule,
     ScheduledWakeupModule,
+    SessionRequestWorkerModule,
     WikiModule,
   ],
   // Registered here rather than in main.ts (where WorkspaceAliasInterceptor is) because it needs

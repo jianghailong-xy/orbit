@@ -34,21 +34,12 @@ import {
   sendUpstream,
   SPENT_ERROR_CODES,
   type Answer,
+  type GatewayCaller,
 } from './pool-gateway.service';
 import { PoolLoginLedger } from './pool-login-ledger';
 import { PoolNotices } from './pool-notice';
 import { decryptSecret, encryptSecret } from './provider-crypto';
 import { readResponsesEvent, type ResponsesOutcome } from './responses-stream-tap';
-
-/**
- * What a login pool's session token may call, and nothing else: what a session's codex sends through a
- * configured provider — one POST of `/responses` per model request, its compaction's included (codex
- * 0.158, recorded: providers/fixtures/codex-gateway-recording.json). Everything else codex asks a ChatGPT
- * backend for when it is signed in itself — the model list, workspace routing, plugins, settings,
- * analytics (providers/fixtures/codex-chatgpt-backend-recording.json) — goes to the backend it was
- * configured with, never through here, and a session token reaches none of it.
- */
-const ALLOWED = [{ method: 'POST', path: '/responses' }] as const;
 
 /** How long a refresh may take before the request that needed it is answered 502. */
 const REFRESH_TIMEOUT_MS = 15_000;
@@ -70,15 +61,6 @@ const LOGIN_SELECT = {
   accountId: true, email: true, state: true, accessTokenEnc: true, expiresAt: true, spentUntil: true,
 } as const;
 
-/** Who is calling, established from their token, and the login their pool holds (or none). */
-interface Caller {
-  poolId: string;
-  poolLabel: string;
-  userId: string;
-  sessionId: string;
-  login: GatewayLogin | null;
-}
-
 /** What a refresh came to. */
 type Refreshed =
   | { kind: 'OK'; accessToken: string }
@@ -96,18 +78,31 @@ type Refreshed =
  * a log, not to a response.
  *
  * What it decides, and nothing more:
- * - WHO: the token's hash names one (pool, owner, session). A token revoked or expired, a session no longer
- *   open, moved to another provider or not its token's person's, the account it was bound to taken out of
- *   the pool, or the pool deleted — the last two delete the token row itself — is 401.
- * - WHAT: only the ALLOWED paths; anything else is 403.
- * - WHICH ACCOUNT: the one the pool holds. There is never another to choose or move to.
+ * - WHO (`caller`, for a login pool's token, `orbit-gwl-`): the token's hash names one (pool, owner,
+ *   session). A token revoked or expired, a session no longer open, moved to another provider or not its
+ *   token's person's, or the pool deleted — the last deletes the token row itself — is 401. The token names
+ *   no account (migration 0355), so no account's leaving the pool refuses it here. It authenticates and
+ *   nothing more: which upstream a request goes to is the session's (PoolGatewayController) — an owner's
+ *   session the claim put on one of the pool's API keys (migration 0358) goes to OpenAI's API on that key,
+ *   through PoolGatewayService, on this same token.
+ * - WHAT: only the allowed paths (pool-gateway.service.ts gatewayAllows); anything else is 403.
+ * - WHOSE (`forward`): a ChatGPT account of the pool is its owner's, and runs its owner's sessions only. A
+ *   session somebody else owns is refused before any account is read — whatever token it came with and
+ *   whatever its row names — so a person added to the pool, whose token is a person's (`orbit-gw-`), can
+ *   never reach the ChatGPT backend through here.
+ * - WHICH ACCOUNT: `session.pool_codex_account_id`, the account the last claim recorded on the session —
+ *   never one the token names, which is nothing. An engine warm on a token minted before the session moved
+ *   therefore sends on the account the session is on now; the gateway chooses no account and moves no
+ *   session. A session whose account the pool no longer holds, or which has none, is refused here with the
+ *   reason, and its next claim is what moves it.
  * - FRESHNESS: an access token about to expire is refreshed first, and one the backend answers 401 is
  *   refreshed and the request sent again once — the codex CLI's own recovery, on the same OAuth client and
  *   the same request (`refreshRequestBody`). This is the only place the pair is rotated, one refresh at a
  *   time per account (a refresh token is good once), under the account row's lock.
  * - WHAT THE BACKEND SAID: `usage_limit_reached` records the reset it names on the account (`spent_until`)
- *   before the 429 goes back unchanged, and the session is owed the line saying so; its retry waits for
- *   that reset (QueueService.loginPoolRetryAt) — no other account is tried. A refresh the token endpoint
+ *   before the 429 goes back unchanged, and the session is owed the line saying so; its retry goes at once
+ *   when another account can take it, whose claim moves the session there, else waits for the first reset
+ *   (QueueService.loginPoolRetryAt) — no other account is tried here. A refresh the token endpoint
  *   refuses, or a 401 on a token just refreshed, signs the account out (SIGNED_OUT, which only its owner
  *   can undo by signing in again) and is answered 403 with that — not 401, which the runner would read as
  *   its own login failing. A rate limit is waited out on the same login (sendUpstream).
@@ -137,20 +132,30 @@ export class PoolLoginGatewayService {
     this.notices = new PoolNotices(prisma, realtime);
   }
 
-  async handle(req: Request, res: Response, token: string): Promise<void> {
+  /**
+   * A request of a session on one of its pool's ChatGPT accounts (or of a login pool's session on nothing),
+   * sent on to ChatGPT's Codex backend on that account — `caller` authenticated by either kind of token, and
+   * the path already allowed (PoolGatewayController). Only for a session the pool's owner owns: the
+   * accounts are theirs, and nobody else's session is sent on one.
+   */
+  async forward(req: Request, res: Response, caller: GatewayCaller): Promise<void> {
     const started = Date.now();
     const target = gatewayTarget(req.originalUrl ?? req.url);
-    const caller = await this.caller(token);
-    if (!caller) {
-      refuse(res, 401, 'orbit_gateway_token_invalid',
-        'This Orbit session token is not valid any more — the session ended or moved, its ChatGPT account left the pool, or the pool is gone');
+    if (caller.sessionOwnerId !== caller.poolOwnerId) {
+      refuse(res, 403, 'orbit_pool_login_owner_only',
+        `The ChatGPT accounts in "${caller.poolLabel}" run its owner's sessions only — yours run on its API keys`);
+      this.log.log(`session ${caller.sessionId} pool ${caller.poolId}: not its owner's session, on an account — refused`);
       return;
     }
-    if (!ALLOWED.some((allowed) => allowed.method === req.method && allowed.path === target.path)) {
-      refuse(res, 403, 'orbit_gateway_path_not_allowed', `${req.method} ${target.path} is not something the Orbit pool gateway forwards`);
-      return;
-    }
-    const login = caller.login;
+    // The account the session is on, if the pool still holds it: the token that got here may have been
+    // minted on another, before the session moved (migration 0355). None when the session names an
+    // account the pool has since lost, and when it names none — the same answer either way.
+    const login = caller.accountId
+      ? await this.prisma.poolCodexLogin.findUnique({
+          where: { poolId_accountId: { poolId: caller.poolId, accountId: caller.accountId } },
+          select: LOGIN_SELECT,
+        })
+      : null;
     if (!login) {
       refuse(res, 403, 'orbit_pool_login_missing', loginMissingReason(caller.poolLabel));
       this.log.log(`session ${caller.sessionId} pool ${caller.poolId}: no account — refused`);
@@ -247,30 +252,33 @@ export class PoolLoginGatewayService {
     this.log.log(`session ${caller.sessionId} account ${account}: ${req.method} ${target.path} → ${status} in ${Date.now() - started}ms`);
   }
 
-  /** The token's (pool, owner, session) and its pool's login, when it may still be used; null otherwise. */
-  private async caller(token: string): Promise<Caller | null> {
+  /**
+   * A login pool's token's (pool, owner, session) and what the session runs on, when the token may still
+   * be used; null otherwise. The token names no account, so no account's leaving the pool refuses it here:
+   * a session whose account the pool no longer holds — or which has none — is answered by `forward` as the
+   * pool having no account, unless it runs on one of the pool's API keys.
+   */
+  async caller(token: string): Promise<GatewayCaller | null> {
     const row = await this.prisma.poolLoginToken.findUnique({
       where: { tokenHash: sha256(token) },
       select: {
         poolId: true,
         userId: true,
         sessionId: true,
-        accountId: true,
         expiresAt: true,
         revokedAt: true,
-        pool: {
+        pool: { select: { slug: true, label: true, engine: true, ownerId: true } },
+        session: {
           select: {
-            slug: true, label: true, shared: true, engine: true,
-            logins: { orderBy: [{ createdAt: 'asc' }, { accountId: 'asc' }], select: LOGIN_SELECT },
+            status: true, ownerId: true, provider: true, poolCodexAccountId: true, poolKeyId: true,
+            completedAt: true, deletedAt: true,
           },
         },
-        session: { select: { status: true, ownerId: true, provider: true, completedAt: true, deletedAt: true } },
       },
     });
     if (!row || row.revokedAt || row.expiresAt.getTime() <= Date.now()) return null;
     const { pool, session } = row;
     const current =
-      !pool.shared &&
       pool.engine === AgentProvider.CODEX &&
       OPEN_SESSION_STATUSES.includes(session.status) &&
       !session.completedAt &&
@@ -281,31 +289,34 @@ export class PoolLoginGatewayService {
       // A session moved onto another provider since: its old tokens name a pool it no longer runs on.
       session.provider === pool.slug;
     if (!current) return null;
-    // Bound to an account: that account, which is here — taking it out of the pool deleted the token.
-    // Bound to none (minted while the pool held none): whatever account the pool holds now, if any.
-    const login = row.accountId
-      ? pool.logins.find((candidate) => candidate.accountId === row.accountId) ?? null
-      : pool.logins[0] ?? null;
-    if (row.accountId && !login) return null;
-    return { poolId: row.poolId, poolLabel: pool.label, userId: row.userId, sessionId: row.sessionId, login };
+    return {
+      poolId: row.poolId,
+      poolLabel: pool.label,
+      poolOwnerId: pool.ownerId,
+      userId: row.userId,
+      sessionId: row.sessionId,
+      sessionOwnerId: session.ownerId,
+      accountId: session.poolCodexAccountId,
+      keyId: session.poolKeyId,
+    };
   }
 
   /** The usage limit is reached until `resetAt`: recorded on the account, and the session told why it waits. */
-  private async spent(caller: Caller, login: GatewayLogin, resetAt: Date, reading: ReturnType<typeof codexUsageSnapshot>, now: Date) {
+  private async spent(caller: GatewayCaller, login: GatewayLogin, resetAt: Date, reading: ReturnType<typeof codexUsageSnapshot>, now: Date) {
     await this.logins.markSpent(caller.poolId, login.accountId, resetAt, reading, now);
     await this.owe(caller.sessionId, loginSpentNotice(login, reading, resetAt));
     this.log.log(`session ${caller.sessionId} account ${maskedAccount(login.accountId)}: usage limit reached — waits until ${resetAt.toISOString()}`);
   }
 
   /** The login is refused for good: signed out, the session told, and the request answered with that. */
-  private async signedOut(res: Response, caller: Caller, login: GatewayLogin, reason: string): Promise<void> {
-    await this.logins.markSignedOut(caller.poolId, reason);
+  private async signedOut(res: Response, caller: GatewayCaller, login: GatewayLogin, reason: string): Promise<void> {
+    await this.logins.markSignedOut(caller.poolId, login.accountId, reason);
     await this.owe(caller.sessionId, loginSignedOutNotice(login, caller.poolLabel));
     refuse(res, 403, 'orbit_pool_login_signed_out', loginSignedOutNotice(login, caller.poolLabel));
     this.log.log(`session ${caller.sessionId} account ${maskedAccount(login.accountId)}: refused by OpenAI — signed out`);
   }
 
-  private async refreshFailed(res: Response, caller: Caller, login: GatewayLogin, refreshed: Exclude<Refreshed, { kind: 'OK' }>) {
+  private async refreshFailed(res: Response, caller: GatewayCaller, login: GatewayLogin, refreshed: Exclude<Refreshed, { kind: 'OK' }>) {
     if (refreshed.kind === 'REFUSED') {
       await this.signedOut(res, caller, login, refreshed.message);
     } else if (refreshed.kind === 'UNREACHABLE') {
@@ -325,7 +336,7 @@ export class PoolLoginGatewayService {
   }
 
   /** What the answer used, into the ledger for this session and account. */
-  private record(caller: Caller, login: GatewayLogin, outcome: ResponsesOutcome, now: Date): void {
+  private record(caller: GatewayCaller, login: GatewayLogin, outcome: ResponsesOutcome, now: Date): void {
     if (!outcome.usage) return;
     this.ledger.record({
       poolId: caller.poolId,

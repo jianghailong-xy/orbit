@@ -10,7 +10,6 @@ import { Prisma } from '@prisma/client';
 import type { WorkspacePermissionRuleInfo } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
-import { DEFAULT_ACCOUNT } from '../providers/account';
 import { lastProviderByWorkspace, withProviderSeed } from './workspace-provider';
 import {
   isBlockingRepoState,
@@ -18,16 +17,6 @@ import {
   repoHealthForWorkspace,
 } from '../common/runner-repo-health';
 import { CreateWorkspaceDto, UpdateWorkspaceDto } from './dto';
-
-/**
- * Default is stored as NULL however the request spelled it: one value means "no other account". Except
- * for Codex (`keepDefault`), where the two differ: NULL is Automatic — a new session starts on the
- * runner's account with the most room (automaticCodexAccount) — and `default` pins its sessions to Default.
- */
-function storedAccountChoice(value: string | null | undefined, keepDefault = false): string | null | undefined {
-  if (value === undefined) return undefined;
-  return value === null || (value === DEFAULT_ACCOUNT && !keepDefault) ? null : value;
-}
 
 @Injectable()
 export class WorkspacesService {
@@ -76,8 +65,10 @@ export class WorkspacesService {
         // itself (canonicalRepoUrl), so nothing here has to agree with that function's shape.
         repoUrl: dto.repoUrl,
         env: (dto.env ?? Prisma.JsonNull) as Prisma.InputJsonValue,
-        codexAccount: storedAccountChoice(dto.codexAccount, true) ?? null,
-        claudeAccount: storedAccountChoice(dto.claudeAccount) ?? null,
+        // Stored as stated, `default` included: NULL is Automatic — a new session starts on the runner's
+        // account whose quota resets soonest (automaticAccount) — and `default` pins its sessions to Default.
+        codexAccount: dto.codexAccount ?? null,
+        claudeAccount: dto.claudeAccount ?? null,
         enabled: dto.enabled ?? true,
         autoInitGit: dto.autoInitGit ?? false,
         enableWorktree: dto.enableWorktree ?? false,
@@ -276,8 +267,8 @@ export class WorkspacesService {
       canDelegate: dto.canDelegate,
       maxConcurrentTasks: dto.maxConcurrentTasks,
       defaultMergeTarget: dto.defaultMergeTarget,
-      codexAccount: storedAccountChoice(dto.codexAccount, true),
-      claudeAccount: storedAccountChoice(dto.claudeAccount),
+      codexAccount: dto.codexAccount,
+      claudeAccount: dto.claudeAccount,
     };
     if (dto.disallowedTools) data.disallowedTools = dto.disallowedTools as Prisma.InputJsonValue;
     if (dto.providerFallbacks) {

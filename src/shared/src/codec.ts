@@ -85,6 +85,12 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'integrationJobId',
   'promotionId',
   'fuseEpisodeId',
+  // A landing run again on purpose (`integration_retry`, migration 0344): the failed generation the
+  // new one reruns, the conversation that asked, and the open items the rerun superseded — each an
+  // address a reader follows to the job, the session or the item.
+  'retryOfJobId',
+  'retryRequestedBySessionId',
+  'supersededItemIds',
   // What a promotion is made of (migration 0285). Every one of them is an address a reader of the
   // card follows: the tasks the merge would carry, the two jobs that checked and landed it, the
   // account owner who confirmed it, the card itself, and the receipts it wrote. None is a fence —
@@ -186,6 +192,20 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   // no session at all.
   'authoredBySessionId',
   'actingSessionId',
+  // Who sent a turn, when it was another Orbit session (migration 0349), and the card the clients
+  // draw it from (`SessionMessageCard`): the session that sent it and the task that session runs.
+  // Addresses a reader follows — "open the session this came from" is what the card is for. Being
+  // a public id says nothing about who may write one: the column is the server's, from the caller's
+  // own identity, and no request body carries it.
+  'senderSessionId',
+  'fromSessionId',
+  'fromTaskId',
+  // The session a request was asked of (`session_request.to_session_id`, migration 0350) — where the
+  // request sits and who answers it, the far end of `fromSessionId` on the same row. An address.
+  'toSessionId',
+  // The turn a request arrived as in the recipient's transcript, carried on the asker's reply card so
+  // the card can open the original request there (`SessionReplyCard.requestTurnId`). A turn's address.
+  'requestTurnId',
   // The conversation a coordinator rotation left behind, served beside the one it opened. Not a
   // column: it is a computed response field, and it is an address all the same — the `ensure` door
   // answers with it so a client can go and read what the replaced conversation decided. Left
@@ -252,6 +272,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'eventId',
   'sourceId',
   'tagId',
+  // The session folder a session is filed in (0348): the row `GET /session-folders` hands out, and
+  // the one `POST /sessions` and `POST /sessions/:id/move` take back.
+  'folderId',
   'turnId',
   // A CURRENT_WORK receipt names the exact executable it was aimed at. That is a row address
   // (not a delivery fence), so it must use the same public spelling as turnId.
@@ -503,6 +526,10 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'viaEntryId',
   'withdrawnEntryId',
   'recordId',
+  // The plan's jobs (migration 0338): the job a check or a redraft names, and the owner who asked for
+  // one (a history reference with no foreign key). Addresses a reader follows — never a fence.
+  'jobId',
+  'requestedByUserId',
 ]);
 
 /** `@db.Uuid` columns that are NOT public ids. They are opaque lease/fence tokens: the runner

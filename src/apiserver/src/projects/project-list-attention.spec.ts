@@ -62,6 +62,7 @@ test('the blocker aggregate returns one typed summary per project', async () => 
     nextCheckAt,
     ownerItems: [],
     coordinatorItems: null,
+    startRequest: null,
   });
 });
 
@@ -82,6 +83,9 @@ test('the item aggregate is grouped in the database, scoped by the same project 
     items?.text ?? '',
     /GROUP BY item\.project_id, item\.kind, item\.assignee, item\.assignee_reason/,
   );
+  // A start request asks only while nobody has started the project — the rule the needs-you count
+  // reads (`projectsReadyToStart`) — in the same statement, not in a read of its own.
+  assert.match(items?.text ?? '', /item\.kind <> 'START_REQUEST' OR proj\.started_at IS NULL/);
 });
 
 test('the four owner item kinds come from the kind, the escalations from the reason', async () => {
@@ -154,17 +158,30 @@ test('a coordinator-kind item is the coordinator’s, not one of the four, even 
 });
 
 // A coordinator's request to start the project is the owner's from birth and not one of the four:
-// until the list learns to say "Ready to start" it files the project under nothing, rather than under
-// an escalation or a coordinator item it is not.
-test('a start request files its project under none of the four and not with the coordinator', async () => {
+// the list says "Ready to start" from a field of its own, rather than filing it under an escalation
+// or a coordinator item it is not.
+test('a start request is the row’s own field, under none of the four and not with the coordinator', async () => {
+  const asked = new Date('2026-09-29T08:24:00.000Z');
   const { prisma } = fakePrisma([], [
-    { projectId: 'project-a', kind: 'START_REQUEST', assignee: 'OWNER', assigneeReason: 'DEFAULT', count: 1, oldestWaitingSince: new Date(), nextEscalationAt: null },
+    { projectId: 'project-a', kind: 'START_REQUEST', assignee: 'OWNER', assigneeReason: 'DEFAULT', count: 1, oldestWaitingSince: asked, nextEscalationAt: null },
   ]);
 
   const row = (await readProjectListAttention(prisma, OWNER_ID)).get('project-a');
 
+  assert.deepEqual(row?.startRequest, { waitingSince: asked });
   assert.deepEqual(row?.ownerItems, []);
   assert.equal(row?.coordinatorItems, null);
+});
+
+test('a project with no start request says so with null, beside its other items', async () => {
+  const { prisma } = fakePrisma([], [
+    { projectId: 'project-a', kind: 'COORDINATOR_QUESTION', assignee: 'OWNER', assigneeReason: 'DEFAULT', count: 1, oldestWaitingSince: new Date(), nextEscalationAt: null },
+  ]);
+
+  const row = (await readProjectListAttention(prisma, OWNER_ID)).get('project-a');
+
+  assert.equal(row?.startRequest, null);
+  assert.equal(row?.ownerItems.length, 1);
 });
 
 test('a project with no open blockers and no items has one explicit empty shape', () => {
@@ -177,5 +194,6 @@ test('a project with no open blockers and no items has one explicit empty shape'
     nextCheckAt: null,
     ownerItems: [],
     coordinatorItems: null,
+    startRequest: null,
   });
 });

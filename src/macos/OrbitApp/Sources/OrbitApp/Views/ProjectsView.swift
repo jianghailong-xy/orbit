@@ -329,12 +329,23 @@ private struct ProjectsPlaceholder: View {
 
 // MARK: - One project
 
-/// The Projects section's detail: the page for whichever project is on top of the section's stack.
+/// The Projects section's detail: the page for whichever project is on top of the section's stack —
+/// or, over it, the task one of its rows opened (the pair the phone pushes), with the way back to it.
 struct ProjectDetailPane: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        if let id = model.selectedProjectID {
+        if let taskID = model.nav.taskDetailOnTop, model.nav.projectBeneathTask != nil {
+            TaskDetailPage(taskID: taskID)
+                .id(taskID)
+                .toolbar {
+                    ToolbarItem(placement: .navigation) {
+                        Button { model.nav.pop() } label: {
+                            Label("Back to the project", systemImage: "chevron.backward")
+                        }
+                    }
+                }
+        } else if let id = model.selectedProjectID {
             ProjectDetailView(projectID: id).id(id)
         } else {
             ContentUnavailableView("Projects", systemImage: "square.grid.2x2",
@@ -374,6 +385,9 @@ struct ProjectDetailView: View {
     /// says under itself. Read when the page opens; the panel hands back every change made in it.
     @State private var sharing = false
     @State private var shareRead: ShareLinkRead?
+    /// The sheet the page has put up over itself: the owner's own start card, or the merge check's
+    /// editor.
+    @State private var pageSheet: ProjectPageSheet?
 
     /// A phone's width: two columns of lanes, four criteria before "View all" — the web's narrow page.
     private var compact: Bool {
@@ -474,32 +488,54 @@ struct ProjectDetailView: View {
     // MARK: page
 
     private func page(_ store: ProjectDetailModel, _ document: ProjectDocument, now: Date) -> some View {
-        List {
-            Section {
-                header(store, document, now: now)
-                    .onAppear { headerOnScreen = true }
-                    .onDisappear { headerOnScreen = false }
+        ScrollViewReader { proxy in
+            List {
+                Section {
+                    header(store, document, now: now)
+                        .onAppear { headerOnScreen = true }
+                        .onDisappear { headerOnScreen = false }
+                }
+                .listRowBackground(Color.clear)
+                openItemsSection(store, document, now: now)
+                overviewSection(store, document)
+                coordinatorSection(store, document, now: now)
+                runSettingsSection(store, document, now: now)
+                goalSection(document)
+                graphSection(store)
+                blockersSection(store, document, now: now)
+                runQueueSection(store)
+                criteriaSection(document)
+                instructionsSection(document)
+                tasksSection(store, document)
             }
-            .listRowBackground(Color.clear)
-            openItemsSection(store, now: now)
-            overviewSection(store, document)
-            coordinatorSection(store, document, now: now)
-            goalSection(document)
-            graphSection(store)
-            blockersSection(store, document, now: now)
-            runQueueSection(store)
-            criteriaSection(document)
-            instructionsSection(document)
-            tasksSection(store, document)
+            .projectPageListStyle()
+            .sheet(item: $pageSheet) { sheet in
+                switch sheet {
+                case .start:
+                    // The card's "View tasks ›": the page's own task list, under the card.
+                    OwnerStartProjectSheet(store: store) {
+                        pageSheet = nil
+                        let anchor = ProjectDetailView.tasksAnchor(ProjectPage.taskGroups(store.tasks))
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                            withAnimation { proxy.scrollTo(anchor, anchor: .top) }
+                        }
+                    }
+                case .mergeCheck:
+                    if let view = store.integration {
+                        MergeCheckEditor(store: store, view: view,
+                                         automatic: store.document?.coordinatorEnabled ?? false)
+                    }
+                }
+            }
         }
-        .projectPageListStyle()
         // Held on the list rather than beside the page's own alert: one view, one alert.
-        .alert(ProjectPage.resolveBlockerTitle, isPresented: Binding(get: { blockerToResolve != nil },
-                                                                   set: { if !$0 { blockerToResolve = nil } }),
+        .alert(blockerToResolve.map(ProjectPage.resolveBlockerTitle) ?? "",
+               isPresented: Binding(get: { blockerToResolve != nil },
+                                    set: { if !$0 { blockerToResolve = nil } }),
                presenting: blockerToResolve) { blocker in
-            TextField(ProjectPage.resolveBlockerQuestion, text: $resolveReason)
-            Button("Cancel", role: .cancel) { blockerToResolve = nil }
-            Button(ProjectPage.resolveBlockerConfirm) {
+            TextField(ProjectPage.resolveBlockerQuestion(blocker), text: $resolveReason)
+            Button(ProjectPage.resolveBlockerKeep(blocker), role: .cancel) { blockerToResolve = nil }
+            Button(ProjectPage.resolveBlockerConfirm(blocker)) {
                 let reason = String(resolveReason.trimmingCharacters(in: .whitespacesAndNewlines)
                     .prefix(ProjectPage.blockerReasonLimit))
                 Task { notice = await store.resolveBlocker(blocker.id, reason: reason) }
@@ -536,12 +572,15 @@ struct ProjectDetailView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
             HStack(spacing: 8) {
-                Text(document.status == .done ? "Completed" : document.status.label)
+                // An open project nobody has started says so, in grey, rather than reading like one
+                // that runs.
+                let running = document.status == .open && document.started != false
+                Text(projectStatusLabel(document))
                     .font(.orbitLabel.weight(.semibold))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2)
-                    .foregroundStyle(document.status == .open ? Color.accentColor : Color.secondary)
-                    .background((document.status == .open ? Color.accentColor : Color.secondary).opacity(0.13),
+                    .foregroundStyle(running ? Color.accentColor : Color.secondary)
+                    .background((running ? Color.accentColor : Color.secondary).opacity(0.13),
                                 in: RoundedRectangle(cornerRadius: 6))
                 Text("\(document.taskCount) task\(document.taskCount == 1 ? "" : "s")")
                     .font(.orbitLabel)
@@ -556,6 +595,18 @@ struct ProjectDetailView: View {
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            } else if let view = store.integration, view.line == nil, document.started == false {
+                // A project nobody has started: the start decides where its tasks land — and, once
+                // its coordinator has asked, which line the coordinator suggests.
+                Label {
+                    Text(RunSettings.undecidedLine(
+                        suggested: store.openItems?.startRequest?.startRequest?.settings.line))
+                } icon: {
+                    Image(systemName: "arrow.triangle.branch")
+                }
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
@@ -564,13 +615,21 @@ struct ProjectDetailView: View {
     // MARK: open items
 
     @ViewBuilder
-    private func openItemsSection(_ store: ProjectDetailModel, now: Date) -> some View {
+    private func openItemsSection(_ store: ProjectDetailModel, _ document: ProjectDocument,
+                                  now: Date) -> some View {
+        // A project nobody has started leads its Needs you with the start (mock board3 ②): the
+        // coordinator's request — served beside the items rather than among them — or, while nobody
+        // has asked, the owner's own Start…, which is counted in nothing: nobody is waiting on it.
+        let start = StartProject.pageRow(status: document.status, started: document.started,
+                                         openItems: store.openItems)
         let needsYou = store.openItems?.needsYou ?? []
         let withCoordinator = store.openItems?.withCoordinator ?? []
-        if !(needsYou.isEmpty && withCoordinator.isEmpty) {
+        let asking = start?.request == nil ? 0 : 1
+        if !(needsYou.isEmpty && withCoordinator.isEmpty && start == nil) {
             Section {
-                if !needsYou.isEmpty {
+                if !needsYou.isEmpty || start != nil {
                     groupLabel(ProjectPage.needsYouGroup)
+                    if let start { startItem(start, store: store, now: now) }
                     ForEach(needsYou) { row in openItem(row, store: store, now: now) }
                 }
                 if !withCoordinator.isEmpty {
@@ -579,10 +638,69 @@ struct ProjectDetailView: View {
                 }
             } header: {
                 sectionHeader(ProjectPage.openItemsHeading,
-                              detail: ProjectPage.openItemsHint(needsYou: needsYou.count,
+                              detail: ProjectPage.openItemsHint(needsYou: needsYou.count + asking,
                                                                 withCoordinator: withCoordinator.count))
             }
         }
+    }
+
+    /// The start's row. The coordinator's request says "Start this project?" over what it suggests,
+    /// and Review goes to the one place it is answered — the card in the coordinator conversation,
+    /// by Answer's own door — rather than drawing a second copy here. With no request, the owner's
+    /// own Start…, quiet, opens that same card over this page, set by the default rule.
+    @ViewBuilder
+    private func startItem(_ start: StartProject.PageRow, store: ProjectDetailModel,
+                           now: Date) -> some View {
+        switch start {
+        case .asked(let row):
+            HStack(alignment: .center, spacing: 10) {
+                Circle().fill(Color.orange).frame(width: 8, height: 8)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(StartProject.title).font(.orbitSubtext.weight(.semibold)).lineLimit(3)
+                    Text(row.startRequest.map { StartProject.requestSummary($0.settings) } ?? row.detailLine)
+                        .font(.orbitLabel).foregroundStyle(.secondary).lineLimit(3)
+                    Text("\(ProjectPage.who(row)) · \(ProjectPage.waitingLabel(row, now: now))")
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 6)
+                Button(ProjectPage.actionLabel(.review) ?? "") { reviewStart(store) }
+                    .font(.orbitLabel.weight(.semibold))
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.accentColor)
+                    .buttonBorderShape(.capsule)
+                    .disabled(store.busy)
+            }
+            .padding(.vertical, 2)
+            .contentShape(Rectangle())
+            .onTapGesture { reviewStart(store) }
+        case .own:
+            Button { pageSheet = .start } label: {
+                HStack(alignment: .center, spacing: 10) {
+                    Circle().fill(Color.secondary.opacity(0.45)).frame(width: 8, height: 8)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(StartProject.rowOwn)
+                            .font(.orbitSubtext.weight(.semibold))
+                            .foregroundStyle(Color.accentColor)
+                        Text(StartProject.rowNotAsked).font(.orbitLabel).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 6)
+                    Image(systemName: "chevron.forward")
+                        .font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .padding(.vertical, 2)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(store.busy)
+        }
+    }
+
+    /// Review on the coordinator's request to start: into its conversation, onto the start card —
+    /// Answer's own door, with the start card as what it lands on.
+    private func reviewStart(_ store: ProjectDetailModel) {
+        openCoordinator(store, focus: nil, startCard: true)
     }
 
     private func groupLabel(_ text: String) -> some View {
@@ -646,9 +764,11 @@ struct ProjectDetailView: View {
         }
     }
 
-    /// Open (or find) the coordinator conversation, and — for one of the owner's items — land on its
-    /// card there: the same press the needs-you banner makes.
-    private func openCoordinator(_ store: ProjectDetailModel, focus row: ProjectOpenItemRow?) {
+    /// Open (or find) the coordinator conversation, and — for one of the owner's items, or for the
+    /// coordinator's request to start the project — land on its card there: the same press the
+    /// needs-you banner makes.
+    private func openCoordinator(_ store: ProjectDetailModel, focus row: ProjectOpenItemRow?,
+                                 startCard: Bool = false) {
         let item = row.map {
             SessionOwnerItem(itemId: $0.itemId, kind: ProjectPage.ownerItemKind($0), title: $0.title,
                              since: $0.waitingSince)
@@ -659,7 +779,7 @@ struct ProjectDetailView: View {
                 model.openProjectCoordinator(sessionID: opened.sessionId,
                                              agentID: opened.workspaceId
                                                 ?? store.coordinator?.coordination.workspaceId,
-                                             focus: item)
+                                             focus: item, focusStartCard: startCard)
             case .failure(let error):
                 notice = error.message
             }
@@ -705,9 +825,10 @@ struct ProjectDetailView: View {
     private func overviewSection(_ store: ProjectDetailModel, _ document: ProjectDocument) -> some View {
         if let panorama = store.panorama {
             let buckets = panorama.buckets
+            // Ready work on a project nobody has started is waiting for the start, and says so.
             let cells = ProjectPage.overviewCells(buckets, taskCount: panorama.shape.taskCount,
-                                                  line: document.integration?.line)
-            let stalled = ProjectPage.stalledOnReady(buckets)
+                                                  line: document.integration?.line, started: document.started)
+            let stalled = ProjectPage.stalledOnReady(buckets, started: document.started)
             Section {
                 landingRow(store)
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .topLeading),
@@ -867,21 +988,6 @@ struct ProjectDetailView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                 }
-                if let enabled = document.coordinatorEnabled {
-                    let explanation = ProjectPage.automaticExplanation(
-                        on: enabled, line: document.integration?.line, ref: document.integration?.ref,
-                        readyTaskCount: store.panorama?.buckets.ready)
-                    VStack(alignment: .leading, spacing: 4) {
-                        Toggle("Automatic", isOn: Binding(
-                            get: { enabled },
-                            set: { next in Task { notice = await store.setAutomatic(next) } }))
-                            .disabled(store.busy || document.configRevision == nil)
-                        Text(explanation.text).font(.orbitLabel).foregroundStyle(.secondary)
-                        if let warning = explanation.warning {
-                            Text(warning).font(.orbitLabel).foregroundStyle(.orange)
-                        }
-                    }
-                }
             } header: {
                 HStack(spacing: 8) {
                     Text("Coordinator")
@@ -903,6 +1009,224 @@ struct ProjectDetailView: View {
         case .brand: return .accentColor
         case .warning: return .orange
         case .error: return .red
+        }
+    }
+
+    // MARK: how it runs
+
+    /// How it runs (mock board3 ③): every setting the start card set, in one block, once the project
+    /// is started — where its tasks land (until the first landing locks it), Automatic, how many run
+    /// at once, the merge check, how long an exception waits on the coordinator, and Pause project.
+    /// A question the start card answered is changed here afterwards, and nowhere else: Automatic
+    /// left the coordinator card for it.
+    ///
+    /// Each control writes as it is changed, the way a settings row does — the line, the merge check
+    /// and the escalation window at the integration door, Automatic and the limit at the project's
+    /// own (fenced on the revision read) — and a write the door refuses says so over its own words,
+    /// with the page read again to show where things stand.
+    @ViewBuilder
+    private func runSettingsSection(_ store: ProjectDetailModel, _ document: ProjectDocument,
+                                    now: Date) -> some View {
+        if RunSettings.shown(started: document.started) {
+            Section {
+                if let view = store.integration {
+                    lineSetting(store, view, document: document, now: now)
+                    automaticSetting(store, view, document: document)
+                    atMostSetting(store, document: document)
+                    mergeCheckSetting(store, view, document: document)
+                    if let seconds = view.escalationSeconds {
+                        escalationSetting(store, view, seconds: seconds)
+                    }
+                    pauseSetting(store, document: document, now: now)
+                } else if store.integrationUnread {
+                    Text(RunSettings.notLoaded).font(.orbitLabel).foregroundStyle(.red)
+                } else {
+                    ProgressView().frame(maxWidth: .infinity)
+                }
+            } header: {
+                sectionHeader(StartProject.howItRuns, detail: RunSettings.appliesFromNextTask)
+            }
+        }
+    }
+
+    /// Tasks land on: while nothing has landed, the two lines to choose from, each with what choosing
+    /// it means; once something has, the line it is on, locked, and why it can no longer move.
+    @ViewBuilder
+    private func lineSetting(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
+                             document: ProjectDocument, now: Date) -> some View {
+        let branch = view.line == .projectBranch ? (view.ref ?? "project/\(document.id)") : "project/\(document.id)"
+        if view.locked {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(RunSettings.tasksLandOn)
+                    Spacer(minLength: 8)
+                    Label(view.line == .main ? RunSettings.lineMain : RunSettings.shortBranch(branch),
+                          systemImage: "lock.fill")
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Text(RunSettings.lineLocked(since: view.startedAt.flatMap { RelativeTime.ago($0, now: now) }))
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(RunSettings.tasksLandOn)
+                lineOption(store, view, .projectBranch, title: RunSettings.lineProjectBranch,
+                           branch: RunSettings.shortBranch(branch), hint: RunSettings.lineProjectBranchHint)
+                lineOption(store, view, .main, title: RunSettings.lineMain, branch: nil,
+                           hint: RunSettings.lineMainHint)
+            }
+        }
+    }
+
+    /// One of the two lines, ticked when it is the one — a line nobody has decided ticks neither.
+    private func lineOption(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
+                            _ line: IntegrationLine, title: String, branch: String?,
+                            hint: String) -> some View {
+        let chosen = view.line == line
+        return Button {
+            Task { notice = await store.updateIntegration(RunSettings.lineWrite(view, to: line)) }
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: chosen ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(chosen ? Color.accentColor : Color.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    (Text(title).fontWeight(.semibold)
+                     + Text(branch.map { " · \($0)" } ?? "").font(.orbitMono).foregroundColor(.secondary))
+                    Text(hint)
+                        .font(.orbitLabel)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(store.busy)
+    }
+
+    /// Automatic, moved here from the coordinator card, with the start card's sentence for the line
+    /// the project is on — or a project branch while none is. It writes `automatic` and nothing
+    /// else: switching it off no longer stops the project (Pause project does).
+    private func automaticSetting(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
+                                  document: ProjectDocument) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text(RunSettings.automatic)
+                Spacer(minLength: 8)
+                Toggle(RunSettings.automatic, isOn: Binding(
+                    get: { document.coordinatorEnabled ?? false },
+                    set: { next in Task { notice = await store.updateAuthorization(automatic: next) } }))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .disabled(store.busy || document.configRevision == nil || document.coordinatorEnabled == nil)
+            }
+            Text(RunSettings.automaticHint(view.line == .main ? .main : .projectBranch))
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// At most: the number moves with each press, and one write carries where the presses stopped.
+    private func atMostSetting(_ store: ProjectDetailModel, document: ProjectDocument) -> some View {
+        let count = store.pendingConcurrency ?? document.maxConcurrentTasks ?? 1
+        return HStack(spacing: 8) {
+            Text(RunSettings.atMost)
+            Spacer(minLength: 8)
+            Text("\(count) \(RunSettings.tasksAtATime(count))")
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Stepper(RunSettings.atMost, value: Binding(
+                get: { count },
+                set: { next in store.stepConcurrency(to: next) { notice = $0 } }),
+                    in: 1...StartProject.maxConcurrentTasks)
+                .labelsHidden()
+                .fixedSize()
+                .disabled(document.maxConcurrentTasks == nil || document.configRevision == nil)
+        }
+    }
+
+    /// The merge check: the command, or that there is none — amber, with the ready check's own
+    /// warning, while Automatic would merge the branch into main with nothing run. Edited on a sheet,
+    /// where a command has room.
+    private func mergeCheckSetting(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
+                                   document: ProjectDocument) -> some View {
+        let missing = RunSettings.mergeCheckMissing(onLine: view.line,
+                                                    automatic: document.coordinatorEnabled ?? false,
+                                                    mergeCheckCommand: view.mergeCheckCommand)
+        return Button { pageSheet = .mergeCheck } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(RunSettings.mergeCheck).foregroundStyle(missing ? Color.orange : Color.primary)
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.forward")
+                        .font(.orbitMeta.weight(.semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                if let command = view.mergeCheckCommand {
+                    Text(command).font(.orbitMono).foregroundStyle(.secondary).lineLimit(2)
+                } else {
+                    Text(RunSettings.mergeCheckPlaceholder).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+                Text(RunSettings.mergeCheckHint)
+                    .font(.orbitLabel)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if missing {
+                    Text("⚠ \(RunSettings.noMergeCheckWarning)")
+                        .font(.orbitLabel)
+                        .foregroundStyle(Color.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(store.busy)
+    }
+
+    /// Escalate after: the window's points, and the project's own when it is none of them.
+    private func escalationSetting(_ store: ProjectDetailModel, _ view: ProjectIntegrationView,
+                                   seconds: Int) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Picker(RunSettings.escalateAfter, selection: Binding(
+                get: { seconds },
+                set: { next in
+                    Task { notice = await store.updateIntegration(RunSettings.escalationWrite(view, to: next)) }
+                })) {
+                ForEach(RunSettings.escalationOptions(current: seconds)) { choice in
+                    Text(choice.label).tag(choice.seconds)
+                }
+            }
+            .pickerStyle(.menu)
+            .disabled(store.busy)
+            Text(RunSettings.escalateHint)
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Pause project, or Resume project: a press, not a setting — it stops the project moving at
+    /// once, and says since when it has been paused.
+    private func pauseSetting(_ store: ProjectDetailModel, document: ProjectDocument,
+                              now: Date) -> some View {
+        let paused = document.pausedAt != nil
+        return VStack(alignment: .leading, spacing: 4) {
+            Button(paused ? RunSettings.resume : RunSettings.pause) {
+                Task { notice = await store.setPaused(!paused) }
+            }
+            .buttonStyle(.borderless)
+            .disabled(store.busy)
+            Text(RunSettings.pauseFootnote(pausedAt: document.pausedAt, now: now))
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -992,6 +1316,11 @@ struct ProjectDetailView: View {
                     if let subject = ProjectPage.blockerSubjectLine(blocker) {
                         Text(subject).font(.orbitSubtext).lineLimit(2)
                     }
+                    if let decision = ProjectPage.blockerDecision(blocker) {
+                        Text(decision.question)
+                            .font(.orbitSubtext.weight(.semibold))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     Text(blocker.requiredAction)
                         .font(.orbitLabel)
                         .foregroundStyle(.secondary)
@@ -1001,7 +1330,7 @@ struct ProjectDetailView: View {
                     }
                 }
                 Spacer(minLength: 6)
-                Button(ProjectPage.resolveBlockerPress) {
+                Button(ProjectPage.resolveBlockerPress(blocker)) {
                     resolveReason = ""
                     blockerToResolve = blocker
                 }
@@ -1262,9 +1591,10 @@ struct ProjectDetailView: View {
         Section {
             if groups.isEmpty {
                 Text("No tasks yet.").font(.orbitLabel).foregroundStyle(.secondary)
+                    .id(Self.tasksAnchor([]))
             }
             ForEach(groups) { group in
-                groupLabel(group.heading)
+                groupLabel(group.heading).id(Self.tasksAnchor([group]))
                 ForEach(group.tasks) { task in
                     taskRow(task, document: document, group: group)
                 }
@@ -1325,9 +1655,12 @@ struct ProjectDetailView: View {
         .buttonStyle(.plain)
     }
 
-    /// A task opens where tasks live — the Tasks section — through the app's one door for it.
+    /// A task opens over this page: pushed on the stack the page is on, so back — the phone's swipe,
+    /// the wide shells' pane — returns here. Not in Tasks, whose every-task scope is the tasks
+    /// outside projects: a project's task opened there sat over a list it is not in, and back landed
+    /// on that list instead of on this page.
     private func openTask(_ taskID: String) {
-        model.route(to: .task(taskID))
+        model.push(.taskDetail(taskID: taskID))
     }
 
     // MARK: menu
@@ -1436,6 +1769,12 @@ struct ProjectDetailView: View {
         }
     }
 
+    /// Where the page's task list begins, for the start card's "View tasks ›": the first band's
+    /// heading, or the row that says there are none.
+    static func tasksAnchor(_ groups: [ProjectPage.TaskGroup]) -> String {
+        "project-tasks-\(groups.first?.key ?? "none")"
+    }
+
     private func sectionHeader(_ title: String, detail: String?) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(title)
@@ -1459,7 +1798,7 @@ private struct ProjectNavTitle: View {
                 .font(.headline)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            Text("\(document.status == .done ? "Completed" : document.status.label) · \(document.taskCount) task\(document.taskCount == 1 ? "" : "s")")
+            Text("\(projectStatusLabel(document)) · \(document.taskCount) task\(document.taskCount == 1 ? "" : "s")")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -1469,6 +1808,186 @@ private struct ProjectNavTitle: View {
     }
 }
 #endif
+
+/// The page's status tag, and the bar's status line: an open project nobody has started is "Not
+/// started" (mock board3 ②) rather than reading like one that runs.
+private func projectStatusLabel(_ document: ProjectDocument) -> String {
+    if document.status == .open && document.started == false { return StartProject.notStarted }
+    return document.status == .done ? "Completed" : document.status.label
+}
+
+/// The two sheets the project page puts up over itself.
+private enum ProjectPageSheet: String, Identifiable {
+    /// The owner's own "Start…".
+    case start
+    /// How it runs' merge check, where a command has room.
+    case mergeCheck
+
+    var id: String { rawValue }
+}
+
+/// "Start…" — the start card over the project page, for a project whose coordinator has not asked
+/// (D2): the same card the conversation draws (`StartProjectCard`), set by the default rule
+/// (`StartProject.defaultSettings`) and pressed at the same door with no request to answer. It says
+/// nothing any coordinator said: no "asked by", no suggestion, no ready check, no Chat. Web's
+/// `ProjectStartDialog`.
+private struct OwnerStartProjectSheet: View {
+    let store: ProjectDetailModel
+    /// Where the card's "View tasks ›" goes: the page's own task list, under the sheet.
+    let onViewTasks: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    /// The owner's edits, once there are any; until then the default rule's settings, as the reads
+    /// resolve them.
+    @State private var edited: StartSettingsDraft?
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                card
+                    .padding()
+                    .frame(maxWidth: 640)
+                    .frame(maxWidth: .infinity)
+            }
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+        .task { await store.loadStartCard() }
+    }
+
+    /// Drawn once the three reads it is set from have answered — the document, the seal, and the
+    /// line the project may already be on, which the default rule keeps: a card set before the line
+    /// was read would suggest one over it.
+    @ViewBuilder
+    private var card: some View {
+        if let document = store.document, let standing = store.confirmation, store.integration != nil {
+            let settings = StartProject.defaultSettings(view: store.integration,
+                                                        maxConcurrentTasks: document.maxConcurrentTasks,
+                                                        graph: store.graph)
+            let request = StartProject.ownerRequest(settings: settings,
+                                                    criteriaDigest: standing.currentVersion.digest)
+            let draft = edited ?? StartSettingsDraft(settings)
+            StartProjectCard(
+                projectID: document.id,
+                projectTitle: document.title,
+                askedAt: nil,
+                request: request,
+                criteria: document.acceptanceCriteriaItems.sorted { $0.ordinal < $1.ordinal }.map {
+                    ProjectCriteriaDocument.Item(id: $0.id, ordinal: $0.ordinal, text: $0.text,
+                                                 satisfied: $0.satisfied)
+                },
+                plan: StartProject.planView(graph: store.graph, request: request,
+                                            fallbackCount: document.taskCount),
+                draft: draft,
+                // A project started at another end meanwhile is the door's to refuse, 409, and the
+                // card says so over the door's words.
+                standing: .live,
+                onDraft: { edited = $0 },
+                onStart: { await start(request, draft) },
+                onViewTasks: onViewTasks,
+                error: error)
+        } else if store.confirmationUnread || store.integrationUnread {
+            Text(AcceptanceConfirmations.staleExplanation(nil) ?? "")
+                .font(.orbitLabel)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            ProgressView().frame(maxWidth: .infinity)
+        }
+    }
+
+    /// One press, one write — and the card gives way once it went through.
+    private func start(_ request: ProjectStartRequest, _ draft: StartSettingsDraft) async {
+        guard draft.complete else { return }
+        if let refused = await store.startProject(StartProject.body(request: request, draft: draft,
+                                                                    requestId: nil)) {
+            error = refused
+        } else {
+            dismiss()
+        }
+    }
+}
+
+/// The merge check, where a command has room: what is typed, what it runs on, and the warning while
+/// Automatic would merge the branch into main with nothing run. Saved at the integration door; blank
+/// is none. A save the door refuses keeps the sheet up, the command as typed, with the door's words
+/// under it — an alert raised on the page while this sheet went down would be lost with it.
+private struct MergeCheckEditor: View {
+    let store: ProjectDetailModel
+    let view: ProjectIntegrationView
+    let automatic: Bool
+    @Environment(\.dismiss) private var dismiss
+    @State private var command: String
+    @State private var refused: String?
+
+    init(store: ProjectDetailModel, view: ProjectIntegrationView, automatic: Bool) {
+        self.store = store
+        self.view = view
+        self.automatic = automatic
+        _command = State(initialValue: view.mergeCheckCommand ?? "")
+    }
+
+    var body: some View {
+        let missing = RunSettings.mergeCheckMissing(onLine: view.line, automatic: automatic,
+                                                    mergeCheckCommand: command)
+        NavigationStack {
+            Form {
+                Section {
+                    TextField(RunSettings.mergeCheckPlaceholder, text: $command, axis: .vertical)
+                        .font(.orbitMono)
+                        .autocorrectionDisabled()
+                        #if os(iOS)
+                        .textInputAutocapitalization(.never)
+                        #endif
+                } footer: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(RunSettings.mergeCheckHint)
+                        if missing {
+                            Text("⚠ \(RunSettings.noMergeCheckWarning)").foregroundStyle(Color.orange)
+                        }
+                        if let refused {
+                            Text(refused).foregroundStyle(Color.red)
+                        }
+                    }
+                }
+            }
+            .navigationTitle(RunSettings.mergeCheck)
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(RunSettings.save) { save() }
+                        .disabled(store.busy || RunSettings.mergeCheckWrite(view, to: command) == nil)
+                }
+            }
+        }
+        // A one-field form, sized like the app's other ones (New Tag).
+        #if os(iOS)
+        .presentationDetents([.medium])
+        #endif
+    }
+
+    private func save() {
+        let write = RunSettings.mergeCheckWrite(view, to: command)
+        Task {
+            if let failure = await store.updateIntegration(write) {
+                refused = failure
+            } else {
+                dismiss()
+            }
+        }
+    }
+}
 
 private extension View {
     /// Grouped cards on iOS, the platform's plain inset list on macOS.

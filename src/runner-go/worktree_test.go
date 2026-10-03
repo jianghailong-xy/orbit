@@ -696,6 +696,11 @@ func TestParkCheckpointRoundTrip(t *testing.T) {
 // TestPermanentEndNotUndone: a real end (SUCCEEDED/FAILED → checkpoint=false) commits WITHOUT the
 // park trailer, so uncommitParkCheckpoint is a no-op and the commit stays permanent on resume.
 func TestPermanentEndNotUndone(t *testing.T) {
+	// A `claude` that declines to write the end commit's message, so it takes its diffstat
+	// fallback without anything leaving the machine.
+	bin := t.TempDir()
+	writeFakeBin(t, bin, "claude", "exit 1")
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	repo := initRepo(t)
 	base := mustGit(t, repo, "rev-parse", "HEAD")
 	wt := &Worktree{Path: repo, Branch: "main", BaseSha: base, RepoDir: repo, Session: "sE"}

@@ -17,8 +17,9 @@ import OrbitKit
 /// section's `NavigationStack` — each section keeps its own, so switching between them does not cost
 /// either one its depth. The rows here carry their own destinations and push them by hand — a
 /// `Button` calling `AppModel.push`, since a `NavigationLink(value:)` would draw the platform's
-/// disclosure indicator (see `AppModel.push`); the iPad/macOS shells keep the `List(selection:)`
-/// sidebar + detail pair, bound to a projection of that same stack.
+/// disclosure indicator (see `AppModel.push`). The iPad seats this same drawer as its split view's
+/// first column (`MainView`) and macOS keeps a `List(selection:)` source list; both pair it with a
+/// detail bound to a projection of that same stack.
 struct CompactShell: View {
     @Environment(AppModel.self) private var model
 
@@ -286,7 +287,12 @@ private struct CompactSections: View {
                     // inline in the detail pane: `AgentConsoleDetail`.)
                     .navigationDestination(for: NavNode.self) { node in
                         switch node {
-                        case .compose(let agentID):      AgentComposePage(agentID: agentID)
+                        case .compose(let agentID, let folderID):
+                            AgentComposePage(agentID: agentID, folderID: folderID)
+                        // One folder's page: the sessions filed in it, opened by its row at the top of
+                        // a workspace's session list (§3.3). Its own ✎ pushes a draft over it, and
+                        // the session that draft creates lands in the folder.
+                        case .folder(let address):       SessionFolderPage(address: address)
                         // The one place the phone's console is told that what it opens goes on
                         // this stack (`opensPagesOverConsole`): its links, its Watching card, its
                         // Tasks created here card — so the back swipe returns to the conversation
@@ -307,11 +313,13 @@ private struct CompactSections: View {
                     }
             }
 
-        // PROJECTS — the index → one project's page. The path IS the section's stack, like every
-        // section here. A task a project's rows open is opened where tasks live (`route(to: .task)`),
-        // so the Tasks stack stays the one page its detail store follows. A page one of the drawer's
-        // project rows opened hands the left edge to the drawer-open swipe, as a Recents console
-        // does: the system back-swipe is off there, and the back button still returns to the list.
+        // PROJECTS — the index → one project's page → one of its tasks. The path IS the section's
+        // stack, like every section here. A task a project's rows open is pushed over the page on
+        // this stack, so the back swipe returns to the project — not opened in Tasks, whose every-task
+        // scope is the tasks outside projects. The push keeps the detail store in step
+        // (`AppModel.push`), as a console's task page does. A page one of the drawer's project rows
+        // opened hands the left edge to the drawer-open swipe, as a Recents console does: the system
+        // back-swipe is off there, and the back button still returns to the list.
         case .projects:
             NavigationStack(path: $model.nav.path) {
                 ProjectsListView(rowNavigation: .push)
@@ -322,6 +330,7 @@ private struct CompactSections: View {
                         case .projectDetail(let projectID, _):
                             ProjectDetailView(projectID: projectID)
                                 .background { SwipeBackGestureToggle(enabled: !model.projectFromDrawer) }
+                        case .taskDetail(let taskID):       TaskDetailPage(taskID: taskID)
                         default:                            EmptyView()
                         }
                     }
@@ -343,13 +352,22 @@ private struct CompactSections: View {
                             WikiArticleScreen(address: WikiArticleAddress(topic: topic, part: part))
                         case .wikiBrowse:             WikiBrowseScreen()
                         case .wikiIndex:              WikiIndexScreen()
+                        case .wikiDoc(let slug, let section):
+                            WikiDocScreen(address: WikiDocAddress(slug: slug, section: section))
+                        case .wikiPlan(let version):
+                            WikiPlanScreen(address: WikiPlanAddress(version: version))
+                        case .wikiPlanDoc(let slug, let version):
+                            WikiPlanScreen(address: WikiPlanAddress(version: version, doc: slug))
+                        case .wikiPlanSection(let slug, let index, let version):
+                            WikiPlanScreen(address: WikiPlanAddress(version: version, doc: slug, section: index))
                         default:                      EmptyView()
                         }
                     }
             }
 
-        // RUNNERS — runner list → detail. Same single stack as Agents: the rows carry their own
-        // destination and push it, so a deep link (`.runner(id)`) and a row tap are one navigation.
+        // RUNNERS — runner list → detail → an engine's or its name's page. Same single stack as
+        // Agents: the rows carry their own destination and push it, so a deep link (`.runner(id)`)
+        // and a row tap are one navigation.
         // Runners isn't in the drawer rail, so this section is only ever entered by that deep link
         // or from Settings' own list — neither of which is a `List` selection in this shell.
         case .runners:
@@ -360,6 +378,8 @@ private struct CompactSections: View {
                     .navigationDestination(for: NavNode.self) { node in
                         switch node {
                         case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)
+                        case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)
+                        case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)
                         default:                          EmptyView()
                         }
                     }
@@ -624,37 +644,36 @@ private enum DrawerMetrics {
 
 /// The left navigation drawer: a search header over the section rail (mirroring the web sidebar), with
 /// a floating New session / Settings action bar laid over the rail's bottom. The current section is
-/// highlighted.
-private struct NavigationDrawer: View {
+/// highlighted. The iPad's sidebar is this same view (`inSidebarColumn`), so the two never drift apart.
+struct NavigationDrawer: View {
     @Environment(AppModel.self) private var model
     let close: () -> Void
     /// True once any part of the drawer is on screen (open, or peeking mid-drag). While false the rows
     /// still render their static content — only the animated live cues are held back, so opening never
     /// waits on anything. See the call site in `CompactShell`.
     let live: Bool
+    /// The iPad: the drawer is the split view's first column, which stays until its own toggle hides
+    /// it. Its title and search ride that column's bar, beside the system's sidebar toggle, rather
+    /// than drawing a second header under it; and a work row only switches section, as the source
+    /// list it replaced did — the list column is on screen anyway, and the detail keeps its page.
+    var inSidebarColumn = false
 
     var body: some View {
         return VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Orbit")
-                    .font(.title2.weight(.bold))
-                // The ⌘K palette's touch entry point: jump to any session, in any workspace. iPad
-                // keyboards get ⌘K itself as well.
-                Spacer()
-                Button {
-                    close()
-                    model.searchOpen = true
-                } label: {
-                    DrawerCircleGlyph(systemName: "magnifyingglass")
+            if !inSidebarColumn {
+                HStack {
+                    drawerTitle
+                    Spacer()
+                    searchButton {
+                        DrawerCircleGlyph(systemName: "magnifyingglass")
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Search sessions")
-                .keyboardShortcut("k", modifiers: .command)
+                .padding(.leading, DrawerMetrics.textLeading)
+                .padding(.trailing, DrawerMetrics.hInset)
+                .padding(.top, 14)
+                .padding(.bottom, 8)
             }
-            .padding(.leading, DrawerMetrics.textLeading)
-            .padding(.trailing, DrawerMetrics.hInset)
-            .padding(.top, 14)
-            .padding(.bottom, 8)
 
             List {
                 // The work leads the rail — projects and tasks — ABOVE the Workspaces and set apart
@@ -707,6 +726,55 @@ private struct NavigationDrawer: View {
         // One level below the content card's background (ChatGPT-style), so the undimmed white card
         // separates from the drawer in light mode and the shadow band stays visible in dark mode.
         .background(drawerSurface)
+        // On the iPad nothing slides over the rail to cast that shadow: the list column simply sits
+        // beside it, near-white on near-white, so a hairline marks the column's edge instead.
+        .overlay(alignment: .trailing) {
+            if inSidebarColumn {
+                Rectangle()
+                    .fill(Color(uiColor: .separator))
+                    .frame(width: 0.5)
+                    .ignoresSafeArea()
+            }
+        }
+        .toolbar {
+            if inSidebarColumn { columnBar }
+        }
+        // Only the iPad column has a bar for this to set: one row, carrying `columnBar`'s title.
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var drawerTitle: some View {
+        Text("Orbit")
+            .font(.title2.weight(.bold))
+    }
+
+    /// The ⌘K palette's touch entry point: jump to any session, in any workspace. iPad keyboards get
+    /// ⌘K itself as well.
+    private func searchButton(@ViewBuilder _ label: () -> some View) -> some View {
+        Button {
+            close()
+            model.searchOpen = true
+        } label: {
+            label()
+        }
+        .accessibilityLabel("Search sessions")
+        .keyboardShortcut("k", modifiers: .command)
+    }
+
+    /// The header, on the iPad column's bar: the title drawn on the bar itself — off the shared glass
+    /// (iOS 26), as the session list's workspace title is — and the search button beside the system's
+    /// sidebar toggle.
+    @ToolbarContentBuilder
+    private var columnBar: some ToolbarContent {
+        if #available(iOS 26.0, *) {
+            ToolbarItem(placement: .topBarLeading) { drawerTitle }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .topBarLeading) { drawerTitle }
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            searchButton { Image(systemName: "magnifyingglass") }
+        }
     }
 
     // MARK: Action bar
@@ -799,7 +867,7 @@ private struct NavigationDrawer: View {
     private func sectionRow(_ section: AppSection) -> some View {
         let selected = section == model.selectedSection
         return Button {
-            if section == .tasks {
+            if section == .tasks && !inSidebarColumn {
                 model.selectedTaskID = nil
                 model.taskListsDirectoryPresented = false
                 model.tasks?.selectScope(.all)
@@ -833,7 +901,7 @@ private struct NavigationDrawer: View {
         let waiting = model.projects?.needsYouCount ?? 0
         return Button {
             model.selectedSection = .projects
-            model.nav.popToRoot()
+            if !inSidebarColumn { model.nav.popToRoot() }
             close()
         } label: {
             pill(selected: selected) {
@@ -870,7 +938,7 @@ private struct NavigationDrawer: View {
         let waiting = model.wiki?.proposalsToReview ?? 0
         return Button {
             model.selectedSection = .wiki
-            model.nav.popToRoot()
+            if !inSidebarColumn { model.nav.popToRoot() }
             close()
         } label: {
             pill(selected: selected) {
@@ -1098,6 +1166,9 @@ private struct AgentComposePage: View {
     /// The agent this draft is composing for — carried by the frame showing it, so the page renders
     /// what the stack says rather than reading a second selection that could have moved on.
     let agentID: String
+    /// The folder whose page opened this draft, if any — also carried by the frame: the session it
+    /// creates lands in that folder (§3.3).
+    var folderID: String? = nil
 
     var body: some View {
         if let registry = model.consoleRegistry, let agents = model.agents,
@@ -1109,12 +1180,13 @@ private struct AgentComposePage: View {
                            providerPools: agents.providerPools,
                            sharedPools: agents.sharedPools,
                            modelCatalog: agents.modelCatalog(for: agent.runnerId),
-                           defaultEffort: model.user?.preferences?.defaultEffort) { session in
+                           defaultEffort: model.user?.preferences?.defaultEffort,
+                           folderID: folderID) { session in
                 model.openCreatedAgentSession(session)
             }
             .navigationTitle(agent.name)
             // Rebuild for in-place Agent execution-default changes as well as switching.
-            .id(newSessionDraftIdentity(agent))
+            .id(newSessionDraftIdentity(agent, folderID: folderID))
             .navigationBarTitleDisplayMode(.inline)
         } else {
             ContentUnavailableView("Select a workspace", systemImage: "folder")

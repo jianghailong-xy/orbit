@@ -3,7 +3,8 @@ import { Drawer, Dropdown, Input, Segmented, theme, Tooltip } from 'antd';
 import type { MenuProps } from 'antd';
 import { ExclamationCircleFilled, FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { RunnerRepoHealth } from '@orbit/shared';
+import type { RunnerRepoHealth, MergeRecoveryAction } from '@orbit/shared';
+import { MergeRecoveryPanel } from './MergeRecoveryPanel';
 import { refreshSessionDiff } from '../api';
 import type { SessionChangedFile, SessionDetail, SessionFilePatch } from '../api';
 import { copyText } from '../lib/clipboard';
@@ -54,6 +55,10 @@ export function SessionOutputs({
   onEnableIsolation,
   enabling,
   onMergeToMain,
+  onRecoverMerge,
+  onRepairRecovery,
+  onOpenRepair,
+  repairStarting,
   merging,
   onResolveInSession,
   resolving,
@@ -87,6 +92,10 @@ export function SessionOutputs({
    *  else master). The outcome surfaces via detail.mergeStatus/mergeError (parent polls). */
   onMergeToMain?: (target?: string) => void;
   merging?: boolean;
+  onRecoverMerge?: (action: MergeRecoveryAction, previewId?: string) => void;
+  onRepairRecovery?: (preparePr: boolean) => void;
+  onOpenRepair?: () => void;
+  repairStarting?: boolean;
   /** Provided by the parent; on a conflict, resumes the session so its workspace rebases the branch
    *  onto the merge target and resolves the conflicts (after which the merge fast-forwards).
    *  Receives the branch that conflicted, so the workspace rebases onto the right one. */
@@ -165,7 +174,7 @@ export function SessionOutputs({
   const manualFfCmd = `git merge --ff-only ${branch}`;
   const files = detail.changedFiles ?? [];
   // A worktree with no diff has nothing actionable or informative to show — hide the bar entirely.
-  if (files.length === 0) return wedge;
+  if (files.length === 0 && !detail.mergeRecovery) return wedge;
   const add = files.reduce((s, f) => s + Math.max(0, f.additions), 0);
   const del = files.reduce((s, f) => s + Math.max(0, f.deletions), 0);
   // Clicking the bar opens the review drawer (its tree is the file browser now — no separate
@@ -245,6 +254,11 @@ export function SessionOutputs({
               busy={adopting}
               onAdopt={onAdopt}
             />
+          ) : detail.mergeRecovery && detail.mergeRecoverySupported && onRecoverMerge ? (
+            <button type="button" className="wt-merge-btn" disabled={merging || detail.mergeStatus === 'pending'}
+              onClick={(e) => { e.stopPropagation(); onRecoverMerge(detail.mergeRecovery?.code === 'LOCAL_SYNC_PENDING' ? 'sync-local' : 'preview', detail.mergeRecovery?.previewId); }}>
+              {detail.mergeStatus === 'pending' ? 'Working…' : detail.mergeRecovery.code === 'LOCAL_SYNC_PENDING' ? 'Sync local checkout' : 'Check and repair'}
+            </button>
           ) : (
             <MergeButton
               status={detail.mergeStatus}
@@ -260,7 +274,17 @@ export function SessionOutputs({
             />
           ))}
       </div>
-      {failed && (
+      {detail.mergeRecovery && <MergeRecoveryPanel recovery={detail.mergeRecovery}
+        branch={detail.branch}
+        message={detail.mergeError}
+        supported={detail.mergeRecoverySupported === true}
+        busy={!!merging || !!turnActive || detail.mergeStatus === 'pending'}
+        onAction={onRecoverMerge}
+        onRepair={onRepairRecovery}
+        repairSession={detail.mergeRepairSession}
+        repairStarting={repairStarting}
+        onOpenRepair={onOpenRepair} />}
+      {failed && (!detail.mergeRecovery || detail.commitStatus === 'error') && (
         <div className="wt-merge wt-bar-fail">
           {detail.commitStatus === 'error' ? (
             <CommitFailure

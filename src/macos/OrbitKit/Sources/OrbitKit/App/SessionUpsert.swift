@@ -20,7 +20,21 @@ public extension Session {
     /// generating, error text — is preserved from this row, which is what makes applying the event
     /// non-destructive; those fields stay the periodic snapshot's job.
     func applying(_ summary: ControlSessionSummary) -> Session {
-        merging(
+        // The workspace the summary puts the session in. Another than the row's is a move to another
+        // workspace (docs/session-folders-move-design.md §5.6), and the lists group rows by
+        // `agent.id` — so the row's own agent, which would otherwise win below, would hold the row in
+        // the old workspace's list until the next snapshot. The summary's agent is the new one.
+        let summaryWorkspace = summary.agentId ?? summary.agent?.id
+        let rowWorkspace = agent?.id ?? agentId
+        let moved = summaryWorkspace != nil && rowWorkspace != nil && summaryWorkspace != rowWorkspace
+        // The summary's agent, or a bare one for the workspace it names when it carries none of its own.
+        let summaryAgent = summaryWorkspace.map { id -> SessionAgentRef in
+            guard let ref = summary.agent, ref.id == id else {
+                return SessionAgentRef(id: id, name: nil, provider: nil, model: nil, effort: nil)
+            }
+            return SessionAgentRef(id: ref.id, name: ref.name, provider: nil, model: ref.model, effort: ref.effort)
+        }
+        return merging(
             // A summary with no title means "still untitled" (the naming pass hasn't run), not
             // "cleared" — so it never overwrites a title this row already has.
             title: summary.title,
@@ -41,20 +55,26 @@ public extension Session {
             // Travelling with the same count, and cleared by the same rule: a summary that says
             // nothing is waiting here has to be able to take the bar's card away with it.
             ownerItems: summary.ownerItems,
+            // Who is waiting on whose reply travels with every summary and is overwritten with it,
+            // by `ownerItems`' rule: an empty list is the server saying none is open any more.
+            awaitingReplyFrom: summary.awaitingReplyFrom,
+            owesReplyTo: summary.owesReplyTo,
             taskId: summary.taskId,
             lastTurnAt: summary.lastTurnAt,
             // The row's nested agent is richer than the summary's (it carries provider + effort, which
-            // the composer reads), so it wins; the summary only fills a row that somehow has none.
-            agent: agent ?? summary.agent.map {
-                SessionAgentRef(id: $0.id, name: $0.name, provider: nil, model: $0.model, effort: nil)
-            },
+            // the composer reads), so it wins while the session stays in that workspace; the summary
+            // fills a row that somehow has none, and replaces the agent of a row that moved.
+            agent: moved ? summaryAgent : agent ?? summaryAgent,
             projectId: summary.projectId,
             projectTitle: summary.projectTitle,
             // The one field here whose absence and whose null mean different things — see the
             // DTO. It travels with the status because it qualifies it: the summary that turns a
             // row FAILED is the same one that has to say the failure is being retried, and the
             // summary that ends the retry is what stops the row saying so.
-            retryAt: summary.retryAt
+            retryAt: summary.retryAt,
+            // Absent and null differ here too: a move out of a folder reaches the other clients as
+            // a null, while an older control plane that never sends the key leaves the row's.
+            folderId: summary.folderId
         )
     }
 
@@ -62,6 +82,23 @@ public extension Session {
     /// the server's `session.updated` (and the next list snapshot) confirm it. See `AppModel.renameSession`.
     func settingTitle(_ title: String) -> Session {
         merging(title: title)
+    }
+
+    /// File this row in a folder (nil: in none) before the server confirms the move, so the list and
+    /// the Move panel show it there at once — and, written back with the folder it had, put it back
+    /// when the server refuses. See `AppModel.moveSession`.
+    func settingFolder(_ folderID: String?) -> Session {
+        merging(folderId: .some(folderID))
+    }
+
+    /// Put this row in another workspace — its id and name, and the model and effort it falls back
+    /// to — filed in one of its folders or in none, once the server has moved it there: so it leaves
+    /// the list it was moved from at once rather than at the next snapshot, which then brings the
+    /// rest of what the move changed. See `AppModel.moveSession(_:to:…)`.
+    func settingWorkspace(id: String, name: String, model: String?, effort: String?,
+                          folder folderID: String?) -> Session {
+        let agent = SessionAgentRef(id: id, name: name, provider: nil, model: model, effort: effort)
+        return merging(agentId: id, agent: agent, folderId: .some(folderID))
     }
 
     /// Apply only the projected Project relation. This is safe even for Completed/Trash rows that
@@ -103,6 +140,9 @@ public extension Session {
                          // Doubly optional for the same reason: nil keeps the row's items, and
                          // `.some([])` is the server saying there are none.
                          ownerItems: [SessionOwnerItem]?? = nil,
+                         // Doubly optional for the same reason.
+                         awaitingReplyFrom: [SessionRequestPeer]?? = nil,
+                         owesReplyTo: [SessionRequestPeer]?? = nil,
                          taskId: String? = nil,
                          lastTurnAt: String? = nil,
                          agent: SessionAgentRef? = nil,
@@ -112,7 +152,9 @@ public extension Session {
                          projectTitle: String?? = nil,
                          // Doubly optional so a caller can clear it: `nil` keeps the row's value,
                          // `.some(nil)` writes null. Every other field here means "keep" by nil.
-                         retryAt: String?? = nil) -> Session {
+                         retryAt: String?? = nil,
+                         // Doubly optional for the same reason: `.some(nil)` is "in no folder".
+                         folderId: String?? = nil) -> Session {
         let mergedProjectId = projectId ?? self.projectId
         let mergedProjectTitle = mergedProjectId == nil ? nil : (projectTitle ?? self.projectTitle)
         return Session(id: id,
@@ -164,6 +206,12 @@ public extension Session {
                 // event never carry which account or key a claim chose.
                 poolMemberProviderId: poolMemberProviderId,
                 poolKeyId: poolKeyId,
-                codexAccount: codexAccount)
+                codexAccount: codexAccount,
+                codexAccountPinned: codexAccountPinned,
+                claudeAccount: claudeAccount,
+                claudeAccountPinned: claudeAccountPinned,
+                awaitingReplyFrom: awaitingReplyFrom ?? self.awaitingReplyFrom,
+                owesReplyTo: owesReplyTo ?? self.owesReplyTo,
+                folderId: folderId ?? self.folderId)
     }
 }

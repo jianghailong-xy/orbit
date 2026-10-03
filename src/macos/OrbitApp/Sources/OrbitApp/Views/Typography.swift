@@ -126,6 +126,11 @@ extension Font {
     /// semibold the mark covered only ~36% of the diameter and read small and heavy, where the
     /// ChatGPT chrome it mirrors runs ~45% on a fine stroke. 19pt regular matches that proportion.
     static let orbitDiscGlyph: Font = .system(size: 19, weight: .regular)
+
+    /// The glyph in a session row's 47pt swipe circle (iOS 26, `RowSwipeActions`). Matched against
+    /// the system's own swipe buttons on an iOS 26.5 simulator: at 18pt the checkmark circle, pin and
+    /// trash come out within half a point of theirs (19pt drew them a point and a half larger).
+    static let orbitSwipeGlyph: Font = .system(size: 18, weight: .regular)
 }
 
 /// Additive line leading (points on top of the font's own line height) for transcript prose.

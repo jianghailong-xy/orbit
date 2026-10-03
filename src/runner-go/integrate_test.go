@@ -1,11 +1,15 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The steps of an integration job, against real repositories
@@ -127,6 +131,7 @@ func silent(string, *IntegrationUpstreamMoved) {}
 // target that did not exist yet. What it pins is J-S7 — the runner does not report LANDED from the
 // fact that its own push returned zero, it reads the target back and compares the tree.
 func TestIntegrationRebaseLandsAndVerifies(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("task/a", "main")
 	r.write("a.txt", "from a\n")
@@ -152,6 +157,7 @@ func TestIntegrationRebaseLandsAndVerifies(t *testing.T) {
 // TestIntegrationAbsorbsUpstreamBeforeLanding is J-S2: a project branch takes main's new commits by
 // MERGE, never by rewriting itself, and the branch's own old tip stays an ancestor of what lands.
 func TestIntegrationAbsorbsUpstreamBeforeLanding(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("project/line", "main")
 	r.write("line.txt", "on the line\n")
@@ -194,6 +200,7 @@ func TestIntegrationAbsorbsUpstreamBeforeLanding(t *testing.T) {
 // reconciled, so the runner merges instead. The assertion is the outcome a person cares about —
 // the job lands rather than stopping at a conflict — plus the shape that made it possible.
 func TestIntegrationMergesASourceThatCarriesMerges(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.write("shared.txt", "base\n")
 	base := r.commit("shared base")
@@ -233,6 +240,7 @@ func TestIntegrationMergesASourceThatCarriesMerges(t *testing.T) {
 // TestIntegrationConflictLandsNothing is the claim an INTEGRATION_CONFLICT item makes to a person:
 // the target is exactly where it was, and the item can name the files.
 func TestIntegrationConflictLandsNothing(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("project/line", "main")
 	r.write("contested.txt", "theirs\n")
@@ -265,6 +273,7 @@ func TestIntegrationConflictLandsNothing(t *testing.T) {
 // one stops the job with the branch untouched. The command here fails only when both files are
 // present, which is a state neither branch is in on its own — the case the checks exist for.
 func TestIntegrationCheckFailureLandsNothing(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("project/line", "main")
 	r.write("keep.txt", "quiet\n")
@@ -304,6 +313,7 @@ func TestIntegrationCheckFailureLandsNothing(t *testing.T) {
 // files has moved the thing being verified out from under the verification, so what would land is
 // not what passed. The job refuses rather than pushing either one.
 func TestIntegrationRefusesACheckThatMutatedTheTree(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("task/f", "main")
 	r.write("f.txt", "from f\n")
@@ -329,6 +339,7 @@ func TestIntegrationRefusesACheckThatMutatedTheTree(t *testing.T) {
 // TestIntegrationAlreadyLandedPushesNothing: a task whose work the target already contains is a
 // fact to record, not an error and not a push.
 func TestIntegrationAlreadyLandedPushesNothing(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("task/g", "main")
 	r.write("g.txt", "from g\n")
@@ -355,6 +366,7 @@ func TestIntegrationAlreadyLandedPushesNothing(t *testing.T) {
 // on a 429 was answered the positive way here, and the receipt written from it said a delivery was
 // on the line that no branch held (project 34Tq39ByZ0rV4c6pJkfw7).
 func TestIntegrationNothingToLandForAnEmptyBranch(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	// The line, at the commit the retry session will fork at and never move off.
 	r.checkoutNew("project/line", "main")
@@ -384,6 +396,7 @@ func TestIntegrationNothingToLandForAnEmptyBranch(t *testing.T) {
 // of that base. There is a commit of the task's on it and the target already contains it, so the
 // answer stays the positive one.
 func TestIntegrationAlreadyLandedKeepsItsAnswerForABranchWithCommits(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	fork := r.rev("main")
 	r.checkoutNew("task/i", "main")
@@ -406,9 +419,126 @@ func TestIntegrationAlreadyLandedKeepsItsAnswerForABranchWithCommits(t *testing.
 	}
 }
 
+// TestIntegrationNothingToLandMeasuresWhereTheTipIs: NOTHING_TO_LAND says the branch carries nothing
+// of its own, and on a project branch AHEAD of main that is not yet "nothing that main lacks" — a
+// branch forked from the line holds the line's own commits. So the runner measures where the empty
+// tip is (`git merge-base --is-ancestor <tip> <upstream>`, migration 0346) and the control plane
+// lets the answer out of a criterion's landing only on true. Both cases are the 2026-10-01 shape:
+// the line is ahead of main, which is exactly where the old inference (target tip = upstream tip)
+// could never say anything.
+func TestIntegrationNothingToLandMeasuresWhereTheTipIs(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		// The commit the empty branch forks at and never moves off: main, or the line's own tip.
+		forkAt         string
+		wantOnUpstream bool
+	}{
+		{name: "forked at main: the tip is on the upstream", forkAt: "main", wantOnUpstream: true},
+		{name: "forked at the line: the tip is not on the upstream", forkAt: "project/line", wantOnUpstream: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := newIntegrationRepo(t)
+			r.checkoutNew("project/line", "main")
+			r.write("line.txt", "landed on the line, not yet on main\n")
+			r.commit("project branch")
+			r.push("project/line")
+			before := r.originRev("refs/heads/project/line")
+
+			fork := r.rev(tc.forkAt)
+			r.checkoutNew("orbit/rollout", tc.forkAt)
+			r.push("orbit/rollout")
+			r.checkout("main")
+
+			command := r.command("orbit/rollout", "project/line")
+			command.SessionBaseSha = fork
+			result := runIntegrationJob(command, silent)
+			if result.State != "NOTHING_TO_LAND" {
+				t.Fatalf("state = %s (%s), want NOTHING_TO_LAND", result.State, result.ErrorCode)
+			}
+			if result.TargetShaBefore == result.UpstreamSha {
+				t.Fatalf("the line is at main (%s), so this is not the case the measurement is for", result.UpstreamSha)
+			}
+			if result.SourceOnUpstream == nil {
+				t.Fatal("NOTHING_TO_LAND reported no measurement of where the tip is")
+			}
+			if *result.SourceOnUpstream != tc.wantOnUpstream {
+				t.Fatalf("sourceOnUpstream = %v, want %v (tip %s, upstream %s)",
+					*result.SourceOnUpstream, tc.wantOnUpstream, result.SourceSha, result.UpstreamSha)
+			}
+			if got := r.originRev("refs/heads/project/line"); got != before {
+				t.Fatalf("the target moved: %s -> %s", before, got)
+			}
+		})
+	}
+}
+
+// TestIntegrationJobReportsTheTipOnTheUpstream: the measurement is only a fact once the control
+// plane has it, so this follows it onto the wire — the result POSTed for the job carries
+// `sourceOnUpstream: true`. And only that answer does: a landing is not asked the question, and its
+// result says nothing about it rather than a false the control plane would have to tell apart from
+// a measured one.
+func TestIntegrationJobReportsTheTipOnTheUpstream(t *testing.T) {
+	t.Parallel()
+	report := func(t *testing.T, job IntegrationJobCommand) map[string]interface{} {
+		t.Helper()
+		var result map[string]interface{}
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasSuffix(r.URL.Path, "/result") {
+				if err := json.NewDecoder(r.Body).Decode(&result); err != nil {
+					t.Errorf("decode result: %v", err)
+				}
+				_, _ = w.Write([]byte(`{"accepted":true,"state":"NOTHING_TO_LAND","receiptIds":[],"openItemId":null}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{}`))
+		}))
+		defer srv.Close()
+		runIntegrationJobAndReport(NewTransport(srv.URL, "tok"), job)
+		if result == nil {
+			t.Fatal("no result was reported")
+		}
+		return result
+	}
+
+	r := newIntegrationRepo(t)
+	r.checkoutNew("project/line", "main")
+	r.write("line.txt", "landed on the line, not yet on main\n")
+	r.commit("project branch")
+	r.push("project/line")
+	fork := r.rev("main")
+	r.checkoutNew("orbit/rollout", "main")
+	r.push("orbit/rollout")
+	r.checkoutNew("task/work", "main")
+	r.write("work.txt", "a commit of its own\n")
+	r.commit("task work")
+	r.push("task/work")
+	r.checkout("main")
+
+	empty := r.command("orbit/rollout", "project/line")
+	empty.JobID = "job-empty"
+	empty.SessionBaseSha = fork
+	sent := report(t, empty)
+	if sent["state"] != "NOTHING_TO_LAND" || sent["sourceOnUpstream"] != true {
+		t.Fatalf("result = %#v, want NOTHING_TO_LAND with sourceOnUpstream true", sent)
+	}
+
+	landing := r.command("task/work", "project/line")
+	landing.JobID = "job-landing"
+	landing.SessionBaseSha = fork
+	sent = report(t, landing)
+	if sent["state"] != "LANDED" {
+		t.Fatalf("result = %#v, want LANDED", sent)
+	}
+	if _, present := sent["sourceOnUpstream"]; present {
+		t.Fatalf("a landing reported a measurement nobody asked it for: %#v", sent)
+	}
+}
+
 // TestIntegrationLeavesNoWorktreeBehind: the scratch worktree is removed on every exit path,
 // including the failing ones, because a leftover is what the NEXT attempt trips over.
 func TestIntegrationLeavesNoWorktreeBehind(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("project/line", "main")
 	r.write("contested.txt", "theirs\n")
@@ -457,6 +587,7 @@ func (r *integrationRepo) promotionCommand(kind, sourceBranch, sourceKind string
 // the no-op git makes of a branch already sitting on the tip. The check and the landing are two
 // separate jobs, as they are in the queue, and the landing is held to the tree the check passed.
 func TestPromotionOfATaskBranchRebasesAndFastForwards(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("task/only", "main")
 	r.write("a.txt", "from a\n")
@@ -556,6 +687,7 @@ func automaticLanding(r *integrationRepo, sourceSha string, checked integrationR
 // pushed — a merge commit whose first parent is exactly the upstream the check ran against, which is
 // what makes `git revert -m 1 <merge>` the receipt's undo.
 func TestAutomaticPromotionLandsOntoTheUpstreamItWasCheckedAgainst(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	sourceSha, checked := checkedProjectBranch(t, r)
 
@@ -581,6 +713,7 @@ func TestAutomaticPromotionLandsOntoTheUpstreamItWasCheckedAgainst(t *testing.T)
 // whose card promises it lands on its own), and READY, so the owner is asked. The owner-confirmed
 // run of the very same job is the control: it is what the Automatic mark is the difference from.
 func TestAutomaticPromotionHandsBackAMovedUpstream(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	sourceSha, checked := checkedProjectBranch(t, r)
 	r.write("elsewhere.txt", "somebody else landed first\n")
@@ -632,6 +765,7 @@ func TestAutomaticPromotionHandsBackAMovedUpstream(t *testing.T) {
 // the race is exact rather than timed. The owner-confirmed run of the same job through the same race
 // is the control: it merges again onto the main that moved and lands (M5).
 func TestAutomaticPromotionHandsBackAMainThatMovesDuringThePush(t *testing.T) {
+	t.Parallel()
 	for _, automatic := range []bool{true, false} {
 		r := newIntegrationRepo(t)
 		sourceSha, checked := checkedProjectBranch(t, r)
@@ -672,6 +806,7 @@ func TestAutomaticPromotionHandsBackAMainThatMovesDuringThePush(t *testing.T) {
 // TestAutomaticPromotionWithNoCheckedTipLandsNothing: a mark with nothing to hold the landing to is
 // not a licence to land anywhere. The control plane never sends one; the runner does not trust that.
 func TestAutomaticPromotionWithNoCheckedTipLandsNothing(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	sourceSha, checked := checkedProjectBranch(t, r)
 	land := automaticLanding(r, sourceSha, checked)
@@ -686,12 +821,143 @@ func TestAutomaticPromotionWithNoCheckedTipLandsNothing(t *testing.T) {
 	}
 }
 
+// ownerLanding is the LAND_PROMOTION an owner confirmed (M-T4): the same facts automaticLanding
+// carries, without the mark — so it lands onto an upstream that moved since the check rather than
+// handing the candidate back (M5, M-T12).
+func ownerLanding(r *integrationRepo, sourceSha string, checked integrationResult) IntegrationJobCommand {
+	land := r.promotionCommand("LAND_PROMOTION", "project/p", "PROJECT_BRANCH")
+	land.SourceSha = sourceSha
+	land.UpstreamShaChecked = checked.UpstreamSha
+	land.MergeTreeSha = checked.TestedTreeSha
+	return land
+}
+
+// moveOriginMainAhead moves main at the origin WITHOUT moving this checkout's remote-tracking ref:
+// a push by URL updates no `refs/remotes/*`. The next fetch in this repository therefore has a ref
+// update to perform — which is what a competing fetch takes the lock for — rather than nothing to
+// do.
+func moveOriginMainAhead(t *testing.T, r *integrationRepo) string {
+	t.Helper()
+	r.checkoutNew("moved-main", "main")
+	r.write("upstream-moved.txt", "another landing\n")
+	moved := r.commit("main moved")
+	mustRun(t, r.work, "git", "push", "--quiet", r.origin, "HEAD:refs/heads/main")
+	r.checkout("main")
+	mustRun(t, r.work, "git", "branch", "-D", "moved-main")
+	return moved
+}
+
+// holdRefLock takes the lock git itself takes on a remote-tracking ref, the way a fetch competing
+// with the job in the same repository holds it while it updates that ref.
+func holdRefLock(t *testing.T, r *integrationRepo, ref string) string {
+	t.Helper()
+	lock := filepath.Join(r.work, ".git", "refs", "remotes", "origin", ref+".lock")
+	if err := os.MkdirAll(filepath.Dir(lock), 0o755); err != nil {
+		t.Fatalf("could not make the ref's directory: %v", err)
+	}
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatalf("could not take the ref lock: %v", err)
+	}
+	return lock
+}
+
+// releaseRefLockOnFirstRetry makes the competing process finish at the moment the job's first
+// attempt has failed — the pause before it tries again, which is a moment nothing outside the fetch
+// can observe.
+func releaseRefLockOnFirstRetry(t *testing.T, lock string) {
+	t.Helper()
+	restore := integrationFetchLockPause
+	released := false
+	integrationFetchLockPause = func(d time.Duration) {
+		if !released {
+			released = true
+			_ = os.Remove(lock)
+		}
+		restore(d)
+	}
+	t.Cleanup(func() {
+		integrationFetchLockPause = restore
+		_ = os.Remove(lock)
+	})
+}
+
+// TestPromoteFetchRefLockRetriesAndLands is the 2026-10-02 incident (project 34Yjjgt2ERe9tU5TUmjAP),
+// reproduced against the real thing.
+//
+// `git fetch <remote> <ref>` does not only write FETCH_HEAD: it updates
+// `refs/remotes/<remote>/<branch>`, and that ref is shared by every job and every session worktree
+// of this checkout. Two fetches arriving together and the second one's ref update is refused with
+// "cannot lock ref …". Before this, that lost race ended the job — reported as BASE_REF_NOT_FOUND,
+// "the upstream branch does not exist", which sent a reader to look at a branch that was never the
+// problem — and the promotion it was a step of went BLOCKED. Here the lock is held the way a
+// competing fetch holds it, and released as soon as the job has lost once, which is what the other
+// process does a moment later: the job waits, fetches again, and lands.
+func TestPromoteFetchRefLockRetriesAndLands(t *testing.T) {
+	r := newIntegrationRepo(t)
+	sourceSha, checked := checkedProjectBranch(t, r)
+	moved := moveOriginMainAhead(t, r)
+
+	releaseRefLockOnFirstRetry(t, holdRefLock(t, r, "main"))
+
+	landed := runIntegrationJob(ownerLanding(r, sourceSha, checked), silent)
+	if landed.ErrorCode == "BASE_REF_NOT_FOUND" {
+		t.Fatalf("a ref another process was updating was reported as a missing branch: %v", landed.ErrorDetail)
+	}
+	if landed.State != "LANDED" {
+		t.Fatalf("landing state = %s (%s %s), want LANDED after the retry: %v",
+			landed.State, landed.ErrorCode, landed.Phase, landed.ErrorDetail)
+	}
+	if got := r.originRev("refs/heads/main"); got != landed.LandedSha {
+		t.Fatalf("origin main is %s, the result claims %s", got, landed.LandedSha)
+	}
+	// The fetch that was retried is the one that read the upstream, so the landing is onto the tip
+	// the origin had by then — the one the checkpoint did not see.
+	if parent, _ := git(r.work, "rev-parse", landed.LandedSha+"^1"); parent != moved {
+		t.Fatalf("the merge's first parent is %s, want the upstream tip that moved %s", parent, moved)
+	}
+}
+
+// TestPromoteFetchRefLockThatOutlivesItsRetriesIsNotABranchThatIsMissing: the lock is held for every
+// attempt. What the job then reports is the fetch failing — FETCH_FAILED, a condition a rerun
+// answers — and NOT BASE_REF_NOT_FOUND, which is a statement about the upstream branch and sends the
+// reader to check whether it exists.
+func TestPromoteFetchRefLockThatOutlivesItsRetriesIsNotABranchThatIsMissing(t *testing.T) {
+	r := newIntegrationRepo(t)
+	sourceSha, checked := checkedProjectBranch(t, r)
+	moved := moveOriginMainAhead(t, r)
+
+	lock := holdRefLock(t, r, "main")
+	restore := integrationFetchLockPause
+	// Three attempts, at once: the lock is the fact under test, not the wait between them.
+	integrationFetchLockPause = func(time.Duration) {}
+	t.Cleanup(func() {
+		integrationFetchLockPause = restore
+		_ = os.Remove(lock)
+	})
+
+	result := runIntegrationJob(ownerLanding(r, sourceSha, checked), silent)
+	if result.State != "ERROR" || result.Phase != "FETCH" {
+		t.Fatalf("result = %s %s (%s), want an ERROR in FETCH", result.State, result.Phase, result.ErrorCode)
+	}
+	if result.ErrorCode != "FETCH_FAILED" {
+		t.Fatalf("errorCode = %q, want FETCH_FAILED — a lock another process held is not a missing branch",
+			result.ErrorCode)
+	}
+	if detail, _ := result.ErrorDetail["detail"].(string); !strings.Contains(detail, "cannot lock ref") {
+		t.Fatalf("the error does not carry git's own words: %v", result.ErrorDetail)
+	}
+	if got := r.originRev("refs/heads/main"); got != moved {
+		t.Fatalf("main is %s, want it left at %s — a failed FETCH lands nothing", got, moved)
+	}
+}
+
 // TestIntegrationPreparesTheTreeBeforeTheChecks is the other half of a check: the command is one a
 // task author wrote for a tree with an environment in it, and the combination tree comes out of git
 // with none. So the tree's own recipe (scripts/worktree-overlay.sh) runs first, and what it lays
 // down is what the check then finds. Without this the check is a false red about work that is fine
 // — the shape of the command decided the verdict, which is the bug this pins shut.
 func TestIntegrationPreparesTheTreeBeforeTheChecks(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("project/line", "main")
 	// The recipe is the PROJECT's: what the line integrates is what the tree carries. It writes an
@@ -728,6 +994,7 @@ func TestIntegrationPreparesTheTreeBeforeTheChecks(t *testing.T) {
 // tree they could be judged in. That is an ERROR, not a red check — reporting it as the task's
 // command failing would be the same false red one layer down, and it is the machine that is broken.
 func TestIntegrationRefusesWhenTheRecipeFails(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.checkoutNew("project/line", "main")
 	r.writeIn("scripts/worktree-overlay.sh",
@@ -768,6 +1035,7 @@ func TestIntegrationRefusesWhenTheRecipeFails(t *testing.T) {
 // the tree's recipe has to run there too — and this is the path a MAIN line's tasks take, which is
 // where a command that needs JS dependencies is most likely to be declared.
 func TestPromotionPreparesTheTreeBeforeTheChecks(t *testing.T) {
+	t.Parallel()
 	r := newIntegrationRepo(t)
 	r.writeIn("scripts/worktree-overlay.sh",
 		"#!/usr/bin/env bash\nset -eu\nmkdir -p node_modules\ntouch node_modules/.ready\n")

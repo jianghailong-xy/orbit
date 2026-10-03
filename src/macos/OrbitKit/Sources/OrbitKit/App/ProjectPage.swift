@@ -32,18 +32,25 @@ public enum ProjectPage {
         b.integrating != nil && b.onIntegrationLine != nil && b.onUpstream != nil
     }
 
+    /// What Ready's footnote says on a project nobody has started (mock board3 ②): its ready tasks
+    /// start when the owner starts the project and not before, so "can start now" would be the one
+    /// untrue thing about them.
+    public static let readyUntilStarted = "starts when you start"
+
     /// The cells the card draws, in reading order. A project that integrates splits Done into
     /// Integrating / On project branch / On main (the branch lane dropped on a `MAIN` line), and draws
     /// the lanes outside that sum only when they are non-zero; one that does not draws the seven
-    /// lanes, Done carrying its share of the whole.
+    /// lanes, Done carrying its share of the whole. `started` is whether anybody has started the
+    /// project; only `false` changes anything — Ready's footnote.
     public static func overviewCells(_ b: ProjectPanoramaBuckets, taskCount: Int,
-                                     line: IntegrationLine?) -> [OverviewCell] {
+                                     line: IntegrationLine?, started: Bool? = nil) -> [OverviewCell] {
+        let readyFootnote = started == false ? readyUntilStarted : "can start now"
         if reportsIntegrationLanes(b) {
             var lanes: [OverviewCell] = [
                 OverviewCell(key: "running", label: "Running", value: b.running,
                              footnote: "active sessions", glyph: .disc),
                 OverviewCell(key: "ready", label: "Ready", value: b.ready,
-                             footnote: "can start now", glyph: .triangle),
+                             footnote: readyFootnote, glyph: .triangle),
                 OverviewCell(key: "blocked", label: "Waiting", value: b.blocked,
                              footnote: (b.waitingForLanding ?? 0) > 0
                                 ? "for a prerequisite to land" : "waiting on dependencies",
@@ -78,7 +85,7 @@ public enum ProjectPage {
             OverviewCell(key: "running", label: "Running", value: b.running,
                          footnote: "active sessions", glyph: .disc),
             OverviewCell(key: "ready", label: "Ready", value: b.ready,
-                         footnote: "can start now", glyph: .triangle),
+                         footnote: readyFootnote, glyph: .triangle),
             OverviewCell(key: "blocked", label: "Waiting", value: b.blocked,
                          footnote: "waiting on dependencies", glyph: .square),
             OverviewCell(key: "awaitingVerification", label: "Awaiting verification",
@@ -350,26 +357,6 @@ public enum ProjectPage {
     public static func selfStartedFraction(_ f: ProjectCoordinatorStatus.Fuse) -> Double? {
         guard let limit = f.limit, limit > 0 else { return nil }
         return min(1, Double(f.selfStartedToday) / Double(limit))
-    }
-
-    /// What the Automatic switch means for this project, and — when it is off — the work standing
-    /// behind that: a setting is "nothing starts on its own"; the reason a project went silent is
-    /// "and four tasks are waiting".
-    public static func automaticExplanation(on: Bool, line: IntegrationLine?, ref: String?,
-                                            readyTaskCount: Int?) -> (text: String, warning: String?) {
-        guard on else {
-            let warning = (readyTaskCount ?? 0) > 0
-                ? "⚠ \(readyTaskCount!) ready task\(readyTaskCount == 1 ? " is" : "s are") waiting for someone to press Run."
-                : nil
-            return ("Nothing here starts or asks on its own.", warning)
-        }
-        if line == .projectBranch, let ref, !ref.isEmpty {
-            return ("Tasks land on \(ref) by themselves and start once their prerequisites land. It also merges \(ref) into main by itself when the checks pass cleanly, and leaves you a receipt with the commit to revert.", nil)
-        }
-        if line == .main {
-            return ("Tasks are checked on main by themselves and start once their prerequisites land. Merging into main always asks you.", nil)
-        }
-        return ("Starts ready tasks on its own, and opens a judgment session when a criterion needs a decision. If its work lands on a branch of its own, it also merges that branch into main by itself when the checks pass cleanly.", nil)
     }
 
     // MARK: - Open items

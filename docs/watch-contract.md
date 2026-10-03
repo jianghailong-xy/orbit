@@ -308,7 +308,9 @@ Web 端没有对应的通知，一个 `NOTIFY_USER` 的 Watch 只在 Following �
 - **`watch:` 是保留前缀，客户端入口一律拒绝。** 既然 `clientTurnId` 由调用方自选，占住唤醒的键这件事首先要在门口挡住：
   所有能让调用方指定 turn key 的入口，对以 `watch:` 开头的 `clientTurnId` 返回 `400`，错误信息点名这是保留前缀。
   公开 API 四个：`POST /api/sessions/:id/turns`、`POST /api/sessions/:id/turns/current-work-routing`、
-  `POST /api/sessions/:id/resume`，以及带 follow-up 的 `POST /api/sessions/:id/interrupt`；runner 门三个：
+  `POST /api/sessions/:id/resume`、带 follow-up 的 `POST /api/sessions/:id/interrupt`。
+  失败卡片上的 Retry（retry-message 那个入口）原先是第五个；它现在不接受调用方的键了——幂等键由服务端从失败的那条消息派生
+  （`docs/session-request-reply-contract.md` §2.1、§8 第 19 条），谁也进不了这个命名空间。runner 门三个：
   `POST /runner/sessions/:id/turns`（按 trim 之后的值判断，因为那才是会被写入的键）、带 message 的
   `POST /runner/sessions/:id/interrupt`，以及 `POST /runner/projects/:id/coordinator/messages`（同样按 trim 之后的值判断）。
   MCP 的 `session_send` / `session_interrupt` 和 CLI `session send` / `session interrupt` 的 `--client-turn-id` 经由前两个

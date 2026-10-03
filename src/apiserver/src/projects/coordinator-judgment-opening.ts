@@ -2,6 +2,7 @@ import { uuidToBase62 } from '@orbit/shared';
 
 import { dispatchRefusalNextStep } from '../tasks/task-dispatch-refusal';
 import { SettledCriterionReport, WakeFact } from './coordinator-wake';
+import type { CriterionLandingReason } from './criterion-landing-reason';
 import { criterionKeyOf } from './project-acceptance';
 import type { DerivedProjectDoneReading } from './project-done-derived';
 
@@ -91,6 +92,16 @@ export function describeWakeFact(fact: WakeFact): string {
         `${String(detail.taskCount ?? '全部')} 个任务都 DONE 了，但没有任何合并回执能证明这些成果` +
         `已经在默认分支上（落地判定：${String(detail.landing ?? '未知')}）。`
       );
+    case 'PROJECT_BLOCKER_RAISED': {
+      const paths = Array.isArray(detail.paths)
+        ? detail.paths.filter((path): path is string => typeof path === 'string')
+        : [];
+      const pathText = paths.length > 0 ? `，涉及 ${paths.join('、')}` : '';
+      return (
+        `任务「${String(detail.taskTitle ?? uuidToBase62(fact.subjectId))}」触发了 `
+        + `project blocker ${String(detail.blockerKind ?? 'UNKNOWN')}${pathText}，需要账号所有者裁决。`
+      );
+    }
     case 'COMPLETION_EVIDENCE_REVISED':
       // The title is there when the fact is delivered to be decided (`CompletionEvidenceProducer`);
       // a fact that was only recorded carries the id alone.
@@ -184,23 +195,39 @@ function unmergedCommitsOf(fact: WakeFact): string[] {
  * verdict. It ends where the evidence ends: has the work actually landed on main, and is that
  * recorded. Whether the project's stated criteria HOLD is a question nothing in Orbit answers now,
  * and the prompt says so rather than sending a session looking for a tool that is not there.
+ *
+ * It no longer tells the session to file a "merge into main" task (project closing, D5). On
+ * 2026-10-01 it did, in the gap between the work landing on the project branch and that branch
+ * reaching main, and the task it filed was hung on a criterion that was already met. Getting work
+ * into main is the platform's landing jobs and the standing coordinator's, such a task serves no
+ * criterion, and a judgment may only open work that names one — so it opens none. A settled
+ * project's judgment is not even opened while a landing is in flight
+ * (`project-tasks-settled.producer.ts` §4), and the server refuses its `task_create` if one starts
+ * after it was (`TASK_LANDING_IN_FLIGHT`).
  */
 export function settledAcceptanceProtocol(projectId: string): string {
   return (
     '\n\n这条 PROJECT_TASKS_SETTLED 事实要核对主干证据；按下面的顺序行动，顺序是硬约束，不是建议：\n'
-    + `1. 先用 project_get（projectId 传 ${projectId}）读取这个项目声明的验收标准。\n`
+    + `1. 先用 project_get（projectId 传 ${projectId}）读取这个项目声明的验收标准，`
+    + '以及 derivedDone 里每条标准的 landingReason。\n'
     + '2. 确认实现已经真正落到 main，并且 main 上的行为满足验收对象。任务标成 DONE 只说明某个工作分支做完了，'
-    + '不证明 main 已包含它。只要代码还没落 main，就开一条“合并并录入主干证据”的任务'
-    + '（task_create 必须带对应 criterionKey），无法安全开任务时就在相关 task_comment 中升级给人；然后结束本轮。\n'
-    + '3. 合并任务的执行顺序必须是：合并到 main → 用 project_merge_evidence 记录 main 的当前内容证据 → 将任务置于终态。\n'
-    + '4. 到此为止。**Orbit 里没有任何东西会判定这些验收标准**：0229 移除了项目验收判定，'
+    + '不证明 main 已包含它。成果还不在 main 上时，先看是不是平台正在落地：landingReason 是 IN_FLIGHT，'
+    + '或者项目有 LAND_TASK、CHECK_PROMOTION、LAND_PROMOTION 排队或在跑——那就什么都不开，结束本轮，'
+    + '作业结束后平台会重新推算（这时服务端也会拒掉你的 task_create：TASK_LANDING_IN_FLIGHT）。\n'
+    + '3. 不开“合进 main”的任务：把成果送进 main 是平台的落地作业和项目协调会话的事，这类任务不服务任何验收标准，'
+    + '不得带 criterionKey，而判断会话开的任务必须带 criterionKey——所以这类任务一个都不开。'
+    + '没在途、又确实不在 main 上的成果（landingReason 是 ON_PROJECT_BRANCH、NO_RECEIPT、NOTHING_TO_LAND 或 CODELESS），'
+    + '把逐条核对的结论写进相关任务的 task_comment 中升级给人，然后结束本轮。'
+    + '只有某条验收标准真的还缺活——不是缺合并——才用 task_create 开普通任务，带上它服务的那条 criterionKey。\n'
+    + '4. 你核实成果已经合到 main 时，证据的顺序必须是：合并到 main → 用 project_merge_evidence 记录 main 的当前内容证据。\n'
+    + '5. 到此为止。**Orbit 里没有任何东西会判定这些验收标准**：0229 移除了项目验收判定，'
     + 'run、逐条裁决、结论事件和 DONE 闸全部不存在了。把逐条核对的结论和证据写进 task_comment 交给账号所有者，'
     + '不要去找一个能提交裁决的工具——没有。\n'
-    + '5. 你改不了验收标准：尺子归账号所有者通道。project_update 的 status 你也写不了，'
+    + '6. 你改不了验收标准：尺子归账号所有者通道。project_update 的 status 你也写不了，'
     + '服务端会按 PROJECT_STATUS_NOT_SESSION_WRITABLE 拒掉整个请求——写不写由账号所有者决定，'
     + '你把证据交上去。\n\n'
-    + '顺序再确认一次：合并到 main → project_merge_evidence → 在 task_comment 里逐条交证据；'
-    + '缺主干时停在开任务/升级。'
+    + '顺序再确认一次：落地在途就结束本轮 → 不开“合进 main”的任务 → 合并到 main → project_merge_evidence '
+    + '→ 在 task_comment 里逐条交证据。'
   );
 }
 
@@ -394,15 +421,30 @@ function renderSettledCriteria(criteria: readonly SettledCriterionReport[]): str
  * after which the owner is asked. The criterion the evidence quotes is copied in, as its own
  * words: it is the standard the decision binds to, and the reader has no other place to find the
  * version this revision was measured against.
+ *
+ * AND A PROJECT THAT LOOKS FINISHED (2026-10-01)
+ * ==============================================
+ * `PROJECT_TASKS_SETTLED` is delivered here too, in one case only: every criterion met, nothing
+ * running, open or landing, and the projection still withholding DONE (`project-looks-finished.ts`).
+ * It is the one other message that copies project state in — each criterion Orbit cannot prove, by
+ * its words and its landing reason, and the projection's counts — for the card's reason: what it
+ * asks is a choice about those criteria. The choice is the coordinator's to make and the record is
+ * the owner's: request done (`project_request_done`) or go and do the work, and if neither, the owner
+ * is asked once the project's `exceptionEscalationSeconds` have run out (`buildLooksFinishedMessage`).
  */
 export function buildCoordinatorDeliveryMessage(
   fact: WakeFact,
   projectTitle: string,
-  /** The projection and the standing it was folded from. Only `PROJECT_ACCEPTANCE_LANDED` reads it,
-   *  and absent reads as not confirmed. */
+  /** The projection and the standing it was folded from. Only `PROJECT_ACCEPTANCE_LANDED` and
+   *  `PROJECT_TASKS_SETTLED` read it, and absent reads as not confirmed. */
   reading?: DerivedProjectDoneReading | null,
+  /** The project's `exceptionEscalationSeconds`, which `PROJECT_TASKS_SETTLED` quotes. */
+  options: { escalationSeconds?: number } = {},
 ): string {
   const projectId = uuidToBase62(fact.projectId);
+  if (fact.event === 'PROJECT_TASKS_SETTLED' && reading) {
+    return buildLooksFinishedMessage(fact, projectTitle, reading, options.escalationSeconds);
+  }
   if (fact.event === 'PROJECT_ACCEPTANCE_LANDED') {
     const standing = reading?.standing;
     const confirmedAt = standing?.confirmed ? standing.confirmation?.confirmedAt : undefined;
@@ -485,6 +527,43 @@ export function buildCoordinatorDeliveryMessage(
       + '所以以你自己刚读到的库里状态为准。'
     );
   }
+  if (fact.event === 'PROJECT_BLOCKER_RAISED') {
+    const detail = (fact.detail ?? {}) as {
+      blockerId?: unknown;
+      blockerKind?: unknown;
+      requiredAction?: unknown;
+      taskTitle?: unknown;
+      agentArgument?: unknown;
+      criterionText?: unknown;
+      paths?: unknown;
+    };
+    const taskId = uuidToBase62(fact.subjectId);
+    const blockerId = typeof detail.blockerId === 'string'
+      ? uuidToBase62(detail.blockerId)
+      : uuidToBase62(fact.subjectVersion);
+    const paths = Array.isArray(detail.paths)
+      ? detail.paths.filter((path): path is string => typeof path === 'string')
+      : [];
+    const evidence = typeof detail.agentArgument === 'string' && detail.agentArgument.trim()
+      ? `agent 的原话：\n「${detail.agentArgument.trim()}」\n\n`
+      : '';
+    const criterion = typeof detail.criterionText === 'string' && detail.criterionText.trim()
+      ? `当前判据：\n「${detail.criterionText.trim()}」\n\n`
+      : '';
+    const files = paths.length > 0 ? `涉及文件：\n${paths.map((path) => `- ${path}`).join('\n')}\n\n` : '';
+    return (
+      `【项目「${projectTitle}」有一条交付需要账号所有者裁决】\n\n`
+      + `${describeWakeFact(fact)}\n\n`
+      + `${evidence}${criterion}${files}`
+      + `这不是普通失败，也不是你可以自行放行的合并。先用 project_get（projectId 传 ${projectId}）和 `
+      + `task_get（taskId 传 ${taskId}）核对上下文；在裁决前不要合并，也不要放行下一条任务。\n\n`
+      + `如果你能把建议和依据写清楚，用 project_blocker_resolve（projectId 传 ${projectId}，`
+      + `blockerId 传 ${blockerId}，reason 说明你建议如何处理）提交建议。这个动作会先进入账号所有者的确认卡，`
+      + '只有账号所有者同意后 blocker 才会关闭；对方拒绝或卡片无人回答时，保持 blocker 打开并继续报告它。\n\n'
+      + `平台要求的原动作：${String(detail.requiredAction ?? '先得到账号所有者的决定。')}\n\n`
+      + '这是一条通知，不会中断当前回合；以你重新读取到的项目状态为准。'
+    );
+  }
   if (fact.event === 'COMPLETION_EVIDENCE_REVISED') {
     const detail = (fact.detail ?? {}) as {
       evidenceRevision?: unknown;
@@ -564,6 +643,97 @@ export function buildCoordinatorDeliveryMessage(
     + '→ 再把对应任务置终态。合并失败就停下来把原因写进 task_comment，不要反复重试。\n\n'
     + `全量状态自己读，这条消息里除了上面那个事实没有这个项目的任何其他状态：project_get（projectId 传 `
     + `${projectId}）读目标与验收标准，task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
+    + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
+    + '所以以你自己刚读到的库里状态为准。'
+  );
+}
+
+/**
+ * What each landing reason (`criterion-landing-reason.ts`) means, for a coordinator choosing between
+ * asking for the project to be recorded done and going back to work. One sentence each, saying what
+ * Orbit can and cannot see — never what to conclude.
+ */
+const LANDING_REASON_SENTENCES: Readonly<Record<CriterionLandingReason, string>> = {
+  IN_FLIGHT: '平台正在落地它的成果，或正在把它合进 main',
+  ON_PROJECT_BRANCH: '成果在项目分支上、有它自己的提交，但没有作业在把它合进 main',
+  NOTHING_TO_LAND:
+    '它的任务跑过分支，但落地作业判定分支上没有它自己的提交，Orbit 也证明不了分支尖端已经在 main 上'
+    + '——没有可合的东西，就不会有回执',
+  NO_RECEIPT: '没有任何回执证明它的成果在项目分支或 main 上：可能是在 Orbit 之外合进去的，也可能还没合',
+  CODELESS: '它的任务没在 worktree 分支上干活，看起来不产出代码，又没声明 codeless——没有能落地的分支，就永远不会有回执',
+};
+
+/** The counts line, from the projection's own counts: the one place they are added up. */
+function renderLandingCounts(reading: DerivedProjectDoneReading): string {
+  const { counts } = reading.derived;
+  const parts = [
+    `${counts.criteria} 条验收标准`,
+    `${counts.met} 条已满足`,
+    `${counts.onMain} 条在 main 上`,
+    ...(Object.entries(counts.byReason) as Array<[CriterionLandingReason, number]>)
+      .filter(([, count]) => count > 0)
+      .map(([reason, count]) => `${count} 条 ${reason}`),
+  ];
+  return parts.join(' · ');
+}
+
+/**
+ * The message a project that LOOKS finished is delivered as: `PROJECT_TASKS_SETTLED`, sent to the
+ * standing conversation instead of a judgment when every criterion is met, nothing is running or
+ * queued, no item is open and nothing is landing — and the projection still withholds DONE
+ * (`project-looks-finished.ts`, project closing D5).
+ *
+ * It names every criterion that is not on main by a receipt of its own, with the projection's
+ * landing reason, because those are what Orbit cannot prove and what the coordinator has to account
+ * for either way. Then it asks for one of two things — request done, or go and do the work — and
+ * says what happens if it does neither: the project's `exceptionEscalationSeconds` later, the
+ * account owner is shown "Record as done…". The roster is a snapshot, like the confirmation card's,
+ * because the choice is about these criteria; everything else is still a read.
+ */
+function buildLooksFinishedMessage(
+  fact: WakeFact,
+  projectTitle: string,
+  reading: DerivedProjectDoneReading,
+  escalationSeconds: number | undefined,
+): string {
+  const projectId = uuidToBase62(fact.projectId);
+  const texts = new Map(settledCriteriaOf(fact).map((criterion) => [criterion.key, criterion.text]));
+  // The criteria holding DONE back: every one that is not LANDED, each with its reason. A LANDED one
+  // with nothing to land is no gap, and shows only in the counts.
+  const reasons = reading.derived.criteria
+    .filter((criterion) => criterion.landing !== 'LANDED')
+    .map((criterion) => {
+      const key = criterionKeyOf(criterion.definitionId);
+      const text = texts.get(key);
+      const reason = criterion.landingReason ?? 'NO_RECEIPT';
+      return (
+        `- ${text ? `「${text}」（key ${key}）` : `key ${key}`}：${reason}——${LANDING_REASON_SENTENCES[reason]}`
+      );
+    })
+    .join('\n');
+  const window = escalationSeconds !== undefined ? `（现在是 ${escalationSeconds} 秒）` : '';
+  return (
+    `【项目「${projectTitle}」看起来做完了，但 Orbit 自己记不了 Done】\n\n`
+    + `${describeWakeFact(fact)}\n\n`
+    + 'Orbit 核对过的：每条验收标准都已被服务它的任务满足；没有在跑或排队的任务；没有未处理的待办；'
+    + '没有在途的落地或合入 main 的作业（LAND_TASK、CHECK_PROMOTION、LAND_PROMOTION）。'
+    + `但推算仍扣着 Done（${reading.derived.withheld.join('、')}）。`
+    + '下面这些验收标准还没算落地，Orbit 证明不了它们的成果在 main 上，逐条原因：\n'
+    + `${reasons}\n`
+    + `（${renderLandingCounts(reading)}）\n\n`
+    + '二选一，在这一轮里做：\n'
+    + `1. 请求收尾：你核对过 main 和上线情况、认为目标已经达成，就调用 project_request_done（projectId 传 ${projectId}），`
+    + '写一两句判断，并为上面每一条写一个缺口：criterionKey、Orbit 为什么证明不了、你核对过什么、证据在哪。'
+    + 'Orbit 先做收尾检查，通过了才在这个会话里给账号所有者出「Is this project done?」卡；记 Done 是账号所有者的事。\n'
+    + '2. 去干活：确实还有东西没做完、或没进 main，就去做。只为把成果送进 main 的任务不服务任何验收标准，'
+    + '不要给它 criterionKey——挂到一条已满足的标准上，会让它重新变成未满足。'
+    + '零提交的任务不要靠 merge_receipt 补回执：回执只记录真实发生过的合并。\n\n'
+    + `两样都不做的话，从这条消息起过了这个项目的 exceptionEscalationSeconds${window}还没有收尾请求，`
+    + '账号所有者的 Needs you 里会出现 Record as done…，由账号所有者自己决定。\n\n'
+    + 'project_update 的 status 你写不了（PROJECT_STATUS_NOT_SESSION_WRITABLE）：Done 只由 Orbit 推算出来，'
+    + '或由账号所有者自己记下。\n\n'
+    + `全量状态自己读：project_get（projectId 传 ${projectId}）的 derivedDone 给出每条验收标准的 landingReason 和这些计数，`
+    + `task_list（projectId 传 ${projectId}）读每个任务的状态与依赖。\n\n`
     + '这是一条通知，不是打断：你正在跑的那一轮不会被它中断，你是在那一轮结束之后才读到它的，'
     + '所以以你自己刚读到的库里状态为准。'
   );

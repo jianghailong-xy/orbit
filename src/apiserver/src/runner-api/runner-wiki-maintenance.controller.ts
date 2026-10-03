@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { WikiCursorAdvanceDto } from '../wiki/dto';
 import { isWikiMaintenanceSession, WikiMaintenance } from '../wiki/wiki-maintenance';
 import { noteWikiMaintenanceRunEnd } from '../wiki/wiki-maintenance-run';
+import { finishWikiPlanJob, wikiPlanJobOfSession } from '../wiki/wiki-plan-job';
 import { WikiRolloutGuard } from '../wiki/wiki-rollout';
 import { WikiRefusalError, WikiService } from '../wiki/wiki.service';
 import { CurrentRunner } from './current-runner.decorator';
@@ -71,6 +72,23 @@ export class RunnerWikiMaintenanceController {
     @Body() dto: WikiCursorAdvanceDto,
   ) {
     const sessionId = await this.maintainer(runner, callingSessionId, id);
+    // A plan job's run (contract `plan.jobs`) shares the list, not the cursor: a run of one cut short by
+    // its turn limit is its job's failure, and the space's maintenance neither moves nor counts it.
+    const planJob = dto.outcome !== undefined && dto.outcome !== 'succeeded'
+      ? await wikiPlanJobOfSession(this.prisma, runner.ownerId, id, sessionId)
+      : null;
+    if (planJob) {
+      await finishWikiPlanJob(this.prisma, planJob.id, sessionId, {
+        outcome: 'failed',
+        version: null,
+        errors: [],
+        error: (dto.error ?? '').trim().slice(0, 2000) || `the run ended ${dto.outcome}`,
+        report: null,
+        draft: null,
+        attempt: null,
+      });
+      return { advanced: false, outcome: dto.outcome, state: await this.maintenance.cursorState(runner.ownerId, id) };
+    }
     const answer = await this.maintenance.advanceCursor(runner.ownerId, id, {
       to: dto.to ?? '',
       outcome: dto.outcome,
@@ -79,7 +97,11 @@ export class RunnerWikiMaintenanceController {
     // A run that did not succeed is its task's too: a run cut short by its turn limit says so here, and
     // `orbit wiki check` reads it off the run's row (contract `maintenance.job.check`).
     if (answer.outcome !== 'succeeded') {
-      await noteWikiMaintenanceRunEnd(this.prisma, runner.ownerId, id, sessionId, { outcome: answer.outcome, error: dto.error ?? null });
+      await noteWikiMaintenanceRunEnd(this.prisma, runner.ownerId, id, sessionId, {
+        outcome: answer.outcome,
+        error: dto.error ?? null,
+        failureKind: dto.failureKind ?? null,
+      });
     }
     return answer;
   }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   SessionLifecycleState,
   type ProjectIntegrationSettings,
@@ -39,10 +39,11 @@ import {
   ProjectCoordinatorCard,
   type CoordinatorAction,
   type CoordinatorCardLayout,
-  type CoordinatorIntegration,
 } from '../components/ProjectCoordinatorCard';
 import { BranchMark, ProjectIntegrationLine } from '../components/ProjectIntegrationLine';
 import { ProjectOpenItems } from '../components/ProjectProgressStatus';
+import { ProjectRunSettings } from '../components/ProjectRunSettings';
+import { ProjectStartDialog } from '../components/StartProjectCard';
 import { ProjectCrossingsCard } from '../components/ProjectCrossingsCard';
 import { ProjectGoalCard } from '../components/ProjectGoalCard';
 import { ProjectPageBlock } from '../components/ProjectPageBlocks';
@@ -54,7 +55,6 @@ import {
   PANORAMA_BUCKETS,
   ProjectPanoramaHeader,
   panoramaBucketValue,
-  projectPanoramaQuery,
   type ProjectPanoramaBuckets,
 } from '../components/ProjectPanoramaHeader';
 import {
@@ -64,6 +64,7 @@ import {
   type OpenProjectView,
 } from '../components/ProjectsToolbar';
 import { encodeId, routeId } from '../lib/idCodec';
+import { NOT_STARTED, START_PROJECT_INTENT, projectStarted } from '../lib/projectStart';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { markdownToPlainText } from '../lib/markdownText';
 import { firstOpenableWorkspace, workspaceRunnerId } from '../lib/workspaceOrder';
@@ -90,9 +91,19 @@ import {
 import { type TaskDependencyGraphResponse } from '../lib/taskDependencyGraph';
 import { scheduledStart } from '../lib/taskSchedule';
 import { ProjectTasksGraph } from '../components/ProjectTasksGraph';
+import { ProjectTaskLink } from '../components/ProjectTaskLink';
+import { useOpenProjectTask } from '../lib/projectTaskRoute';
 import { remarkHardBreaks } from '../lib/remarkHardBreaks';
 import { useToast } from '../lib/toast';
 import { useMediaQuery } from '../lib/useMediaQuery';
+
+// The panel a task opens in over this page — TaskDetailPanel, and the transcript and editors it
+// draws — is needed only once a task is open, so it is not on the page's own import path: the
+// arrangement the task graph already has (ProjectTasksGraph), for the same reason.
+const LazyProjectTaskPanel = lazy(async () => {
+  const module = await import('../components/ProjectTaskPanel');
+  return { default: module.ProjectTaskPanel };
+});
 
 // Re-exported, not re-implemented: reading a stored instant on the viewer's wall clock belongs to
 // lib/taskSchedule, shared with the task panel's own Start at editor. This page keeps the name it
@@ -145,15 +156,20 @@ interface ProjectCriterionStanding extends AcceptanceCriterionItem {
 interface ProjectDetail extends Omit<Project, 'integration'> {
   instructions?: string | null;
   tasksByStatus?: Record<string, number>;
-  /** The off switch: whether this project dispatches its own ready tasks AND wakes a judgment
-   *  session when one of six producers has something to decide. Already in the payload — the
-   *  endpoint reads the project with `include`, so every scalar column comes back — and simply had
-   *  no reader here until the Automatic switch. */
+  /** Automatic: whether the coordinator runs the project for its owner. Already in the payload — the
+   *  endpoint reads the project with `include`, so every scalar column comes back — and read by the
+   *  How it runs block. */
   coordinatorEnabled: boolean;
+  /** How many of its tasks may be in flight at once, beside Automatic in How it runs. */
+  maxConcurrentTasks: number;
   /** The revision every write of the authorization set is fenced against. A `bigint` column, and a
    *  decimal STRING on the wire (main.ts gives BigInt a `toJSON`), which is also how the DTO wants
    *  it back: `expectedConfigRevision` is compared as text, never parsed. */
   configRevision: string;
+  /** When the project was started, or null for one nobody has started (`projectStarted`). */
+  startedAt?: string | null;
+  /** When its owner paused it, or null: while set, nothing starts or merges by itself. */
+  pausedAt?: string | null;
   /** The project's stated criteria, carrying settlement and landing per criterion. The acceptance
    *  card draws its rows from this same document; the status press reads it for the evidence it
    *  puts in front of somebody about to claim the goal is met. */
@@ -990,6 +1006,8 @@ export function ProjectDetailPage() {
   // Stays nullable: an id we don't have is a different state from one we do, and collapsing it to
   // '' would send a request to `/projects/` — a URL for no project, answered by the list route.
   const id = routeId(params.id);
+  // One of this project's tasks open over the page (`/projects/:id/tasks/:taskId`), if any.
+  const openTaskId = routeId(params.taskId);
   const project = useQuery({
     queryKey: ['project', id],
     queryFn: () => api<ProjectDetail>(`/projects/${encodeURIComponent(id!)}`),
@@ -1014,6 +1032,19 @@ export function ProjectDetailPage() {
       navigate(projectsReturnPath(location.state), { replace: true });
     },
   });
+  // Whether anybody has started this project: an unstarted one is "Not started", asks its start in
+  // Open items, and has no How it runs yet — the start card sets what that block would change.
+  const started = p ? projectStarted(p) : null;
+  // "Review" on the coordinator's request to start: into the coordinator conversation, where the
+  // card is — resolved first, like every other way into it, because the pointer can be stale — and
+  // onto the card itself (`START_PROJECT_INTENT`).
+  const reviewStart = useMutation({
+    mutationFn: () => openProjectCoordinator(id!),
+    onSuccess: (result) => navigate(coordinatorIntentPath(result.sessionId, START_PROJECT_INTENT)),
+    onError: (error) => toast.error(error.message),
+  });
+  // "Start…" while nobody has asked: the same card, over this page.
+  const [starting, setStarting] = useState(false);
 
   return (
     // 1040 rather than the list page's 900: the panorama's middle row is two cards side by side,
@@ -1059,7 +1090,12 @@ export function ProjectDetailPage() {
               {p.title}
             </Typography.Title>
             <div className="project-detail-meta">
-              <Tag color={STATUS_COLOR[p.status]}>{STATUS_LABEL[p.status]}</Tag>
+              {/* An open project nobody has started says so rather than reading like one that runs. */}
+              {p.status === 'OPEN' && started === false ? (
+                <Tag color="default">{NOT_STARTED}</Tag>
+              ) : (
+                <Tag color={STATUS_COLOR[p.status]}>{STATUS_LABEL[p.status]}</Tag>
+              )}
               <span>
                 {p._count.tasks} task{p._count.tasks === 1 ? '' : 's'}
               </span>
@@ -1099,11 +1135,11 @@ export function ProjectDetailPage() {
 
           {/* Where this project's finished work goes, directly under the title that names it: the
               branch, how far ahead of main it is, when main last came in, what the queue has in
-              flight, and whether the tip is green — with the three settings that decide all of it
-              behind the same row (§7.2 V3 / V4). A project with no integration line draws nothing
-              here at all. */}
+              flight, and whether the tip is green (§7.2 V3). The settings that decide it are How
+              it runs', below. A project nobody has started says the start decides the line; a
+              started one with no line draws nothing here at all. */}
           <ProjectPageBlock name="integration-line">
-            <ProjectIntegrationLine projectId={id!} />
+            <ProjectIntegrationLine projectId={id!} started={started} />
           </ProjectPageBlock>
 
           {/* A refused delete, in the server's own words. 409 here is a downstream reference — the
@@ -1124,11 +1160,29 @@ export function ProjectDetailPage() {
               expected to act (mock 2 ②): what waits for the reader in person, and what its
               coordinator is handling — each with how long it has waited and when it stops being
               the coordinator's. The same question the blockers answer — what is standing in the
-              way — answered from the exceptions rather than from the platform's own guards. It
+              way — answered from the exceptions rather than from the platform's own guards. A
+              project nobody has started leads it with the start (mock board3 ②); otherwise it
               draws nothing while nothing is open. */}
           <ProjectPageBlock name="open-items">
-            <ProjectOpenItems projectId={id} />
+            <ProjectOpenItems
+              projectId={id}
+              started={p.status === 'OPEN' ? started : null}
+              onReviewStart={() => reviewStart.mutate()}
+              reviewingStart={reviewStart.isPending}
+              onStartProject={() => setStarting(true)}
+            />
           </ProjectPageBlock>
+          <ProjectStartDialog
+            projectId={id!}
+            open={starting && started === false}
+            onClose={() => setStarting(false)}
+            onViewTasks={() => {
+              setStarting(false);
+              document
+                .querySelector('[data-project-block="tasks"]')
+                ?.scrollIntoView?.({ block: 'start', behavior: 'smooth' });
+            }}
+          />
 
           {/* The one merge nobody but the reader may make (mock 4): what it would put on main, what
               the checks came to on the combined tree, and the two presses that answer it. Here
@@ -1154,18 +1208,26 @@ export function ProjectDetailPage() {
               projectId={id}
               projectStatus={p.status}
               integrationLine={p.integration?.line ?? null}
+              started={started}
             />
-            {/* A grouped tally omits zero-valued statuses. Preserve "payload absent" as unknown,
-                but turn a present map with no OPEN row into the honest zero the card can say. */}
-            <ProjectCoordinatorSection
-              projectId={id}
-              layout={narrow ? 'narrow' : 'desktop'}
-              openTaskCount={p.tasksByStatus ? (p.tasksByStatus.OPEN ?? 0) : undefined}
-              automatic={p.coordinatorEnabled}
-              integration={p.integration}
-              configRevision={p.configRevision}
-            />
+            {/* The right rail holds the coordinator only. How it runs follows the command centre at
+                full width so the settings never make the overview's column look empty. */}
+            <div className="project-command-rail">
+              {/* A grouped tally omits zero-valued statuses. Preserve "payload absent" as unknown,
+                  but turn a present map with no OPEN row into the honest zero the card can say. */}
+              <ProjectCoordinatorSection
+                projectId={id}
+                layout={narrow ? 'narrow' : 'desktop'}
+                openTaskCount={p.tasksByStatus ? (p.tasksByStatus.OPEN ?? 0) : undefined}
+              />
+            </div>
           </div>
+
+          {started !== false ? (
+            <ProjectPageBlock name="run-settings">
+              <ProjectRunSettings projectId={id} project={p} />
+            </ProjectPageBlock>
+          ) : null}
 
           {/* The stable definition of the project follows the changing execution state and its
               coordinator. A long brief stays complete here; its full Markdown remains the one
@@ -1234,6 +1296,11 @@ export function ProjectDetailPage() {
             <ProjectCrossingsCard projectId={id} />
           </ProjectPageBlock>
         </>
+      ) : null}
+      {id && openTaskId ? (
+        <Suspense fallback={null}>
+          <LazyProjectTaskPanel projectId={id} taskId={openTaskId} />
+        </Suspense>
       ) : null}
     </div>
   );
@@ -1362,27 +1429,6 @@ export function replaceProjectCoordinator(projectId: string): Promise<Coordinato
 }
 
 /**
- * What flipping a project's Automatic switch WRITES — held here rather than at the call site,
- * because the body is the unit and the path is not.
- *
- * The switch is the whole body on the way on: `coordinatorEnabled: true` is now the entire write,
- * because the level of automation that used to have to be named beside it — without which the
- * server refused the bare request with a 400 — is gone from the contract. Turning it off names the
- * same field with `false`: "stop" was never anything else.
- *
- * `expectedConfigRevision` is the compare-and-swap. This field is edited from the user API and a
- * coordinator's own session as well as from here, and last-write-wins between them is one person
- * silently undoing another's revoke — so the write states the revision the switch was drawn from,
- * and a project that moved since answers 409 `STALE_CONFIG_REVISION` with nothing written.
- */
-function automaticBody(next: boolean, configRevision: string | undefined) {
-  return {
-    coordinatorEnabled: next,
-    expectedConfigRevision: configRevision,
-  };
-}
-
-/**
  * The Coordinator, as the project header's right-hand column.
  *
  * Self-contained on the same terms as every other card on this page: it runs its own read, draws
@@ -1398,25 +1444,12 @@ export function ProjectCoordinatorSection({
   projectId,
   layout,
   openTaskCount,
-  automatic,
-  integration,
-  configRevision,
 }: {
   projectId: string;
   layout: CoordinatorCardLayout;
   /** Open tasks in this project — the card says what the conversation is FOR, and the status
    *  payload deliberately carries no task tally. */
   openTaskCount?: number;
-  /** The project's `coordinatorEnabled` and the revision it was read at, both from the project
-   *  document this section is drawn beside. Passed in rather than read again here: the page holds
-   *  that document already, and a second copy could disagree with the one the reader is looking at
-   *  — which for the revision means fencing the write against a number nothing on screen came
-   *  from. Omitted, the switch is not drawn. */
-  automatic?: boolean;
-  /** Where this project's finished tasks land, from the same document: what Automatic means
-   *  depends on it (§7.2 V8). */
-  integration?: CoordinatorIntegration;
-  configRevision?: string;
 }) {
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -1449,17 +1482,6 @@ export function ProjectCoordinatorSection({
   // proposed: `COORDINATOR_UNAVAILABLE` is a refusal ABOUT the workspace this project is tied to,
   // and on `WORKSPACE_FORGOTTEN` there is no id left to send anyone to.
   const boundWorkspaceId = status.data?.coordination.workspaceId ?? null;
-
-  // The same query the panorama header on this page already ran, by the same key — React Query
-  // answers this from that entry rather than putting a second request on the wire. Read here so
-  // the switch's Off state can say what is standing still, in the number the meter above it shows.
-  const panorama = useQuery(projectPanoramaQuery(projectId));
-
-  const setAutomatic = useMutation({
-    mutationFn: (next: boolean) =>
-      api(`/projects/${encodeURIComponent(projectId)}`, { method: 'PATCH', body: automaticBody(next, configRevision) }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['project', projectId] }),
-  });
 
   const restore = useMutation({
     mutationFn: async () => {
@@ -1570,24 +1592,8 @@ export function ProjectCoordinatorSection({
             status={status.data}
             layout={layout}
             openTaskCount={openTaskCount}
-            automatic={automatic}
-            integration={integration}
-            readyTaskCount={panorama.data?.buckets.ready}
-            automaticPending={setAutomatic.isPending}
             onAction={act}
-            onAutomaticChange={(next) => setAutomatic.mutate(next)}
           />
-          {/* A refused flip, in the server's own words. 409 STALE_CONFIG_REVISION is not a Retry:
-              the settings changed under the reader, and the sentence names both revisions so they
-              can see the project again before deciding a second time. */}
-          {setAutomatic.error ? (
-            <Alert
-              type="error"
-              showIcon
-              message="Automatic could not be changed"
-              description={setAutomatic.error.message}
-            />
-          ) : null}
           {/* A press that was refused. `COORDINATOR_UNAVAILABLE` is a property of committed rows,
               so the same press returns the same 409 forever — it gets the two writes that can
               actually change the answer instead of a Retry that cannot. */}
@@ -2219,8 +2225,8 @@ export function projectTaskGroups(items: ProjectTask[]): ProjectTaskGroup[] {
 }
 
 /**
- * The project's top-level tasks, read-only: the first page of them, each of which can be opened
- * onto its own direct children.
+ * The project's top-level tasks: the first page of them, each of which opens its task over this
+ * page and can be expanded onto its own direct children.
  *
  * Its own query rather than a field on the project, because the tree is paged and the project
  * document is not — folding one into the other would make every project read pay for a page of
@@ -2365,7 +2371,12 @@ export function ProjectTaskGroupsList({
 }
 
 /**
- * One read-only task row, plus — once the reader asks — the level directly beneath it.
+ * One task row, plus — once the reader asks — the level directly beneath it.
+ *
+ * The row opens its task over this page (lib/projectTaskRoute): the whole row, the way a row of the
+ * Tasks page opens its panel, since a phone has no hover to find a smaller target by. The title is
+ * also a real link, so ⌘/middle-click opens the task in a tab of its own. What sits inside the row
+ * keeps its own press — Show subtasks opens a level, not the task.
  *
  * `expanded` lives here, per row, rather than in a set held by the page: keeping it local is what
  * makes the child page lazy, because a closed row renders no level component at all, so no child
@@ -2387,15 +2398,26 @@ function ProjectTaskRow({
   const starts = scheduledStart(task.runAt);
   const workLabel = projectTaskWorkLabel(task);
   const integrationTag = projectTaskIntegrationTag(task, branches);
+  const openTask = useOpenProjectTask(projectId);
+  const { taskId: openTaskParam } = useParams();
+  // The task open over the page, drawn as the Tasks page draws its open row.
+  const isOpen = routeId(openTaskParam) === routeId(task.id);
 
   return (
     <List.Item
-      className="project-task-row"
+      className={`project-task-row is-openable${isOpen ? ' is-open' : ''}`}
       data-work-state={projectTaskWorkStateOf(task)}
       data-integration-state={task.integration?.state}
       // Work already on main recedes — it is the answer to "did that ship?" and to nothing a
       // reader has to act on. Work on the project branch does not: somebody still has to merge it.
       style={{ display: 'block', ...(task.integration?.state === 'ON_UPSTREAM' ? { opacity: 0.55 } : {}) }}
+      onClick={(e) => {
+        // A subtask's row sits inside the row that opened it: this press is its own, not its parent's.
+        e.stopPropagation();
+        // A press that ended a drag across the words selected them; opening would throw that away.
+        if (window.getSelection()?.toString()) return;
+        openTask(task.id);
+      }}
     >
       <div className="project-task-row-layout">
         {/* Own this flex item rather than asking AntD's Meta to negotiate directly with the two
@@ -2408,7 +2430,17 @@ function ProjectTaskRow({
             // different task. The long-form field underneath is what gets cut instead.
             title={
               <span className="project-task-row-title">
-                <TaskStatusMark status={task.status} /> {task.title}{' '}
+                <TaskStatusMark status={task.status} />{' '}
+                {/* Its own navigation, by the same rule as the row's; the row must not open it a
+                    second time, and a ⌘/middle-click is the browser's, for a tab of its own. */}
+                <ProjectTaskLink
+                  className="project-task-row-link"
+                  projectId={projectId}
+                  taskId={task.id}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {task.title}
+                </ProjectTaskLink>{' '}
                 <Tag color={TASK_STATUS_COLOR[task.status] ?? 'default'}>{task.status}</Tag>
                 {workLabel ? (
                   <Tag data-testid="project-task-work-state" color={workLabel.color}>
@@ -2475,7 +2507,11 @@ function ProjectTaskRow({
             aria-label={
               expanded ? `Hide subtasks for ${task.title}` : `Show subtasks for ${task.title}`
             }
-            onClick={() => setExpanded((open) => !open)}
+            onClick={(e) => {
+              // Opens a level, not the task: the row around it must not see this press.
+              e.stopPropagation();
+              setExpanded((open) => !open);
+            }}
           >
             {expanded ? 'Hide subtasks' : 'Show subtasks'}
           </Button>

@@ -233,18 +233,21 @@ struct SelectableText: UIViewRepresentable {
                 attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
             }
             if let link = run.link {
-                if AttachmentLink.isRunnerLocalPath(link) {
-                    // A path on the runner's disk the agent never uploaded. Usually nothing can fetch
-                    // it, and then it is drawn as prose rather than as a link whose tap could only do
-                    // nothing (web chips these with a paperclip, `md-image-unavailable` — same here,
-                    // laid inline so it stays part of the selectable prose; the clip goes in once per
-                    // link, not once per styled run). The exception is a file in the session's own
-                    // directories: the artifact route gets those from the session's runner, so that
-                    // one keeps its link and a tap downloads it like any other file.
+                if AttachmentLink.isFileReference(link) {
+                    // A source or attachment link is a file affordance, not a web link. Paragraphs
+                    // promote these into full cards; lists, headings and table cells stay in this
+                    // selectable text view, so keep their compact paperclip treatment here too.
                     if link != previousLink { result.append(paperclip(font: font, para: para)) }
                     attrs[.foregroundColor] = ProseInk.secondary.uiColor
+                    let servesAttachment = AttachmentLink.attachmentID(link) != nil
+                    let servesArtifact: Bool
                     if let sessionID = sessionPreview?.sessionID,
                        AttachmentLink.runnerArtifactPath(link, sessionID: sessionID) != nil {
+                        servesArtifact = true
+                    } else {
+                        servesArtifact = false
+                    }
+                    if servesAttachment || servesArtifact {
                         attrs[.link] = link
                         attrs[.foregroundColor] = UIColor.tintColor
                     }

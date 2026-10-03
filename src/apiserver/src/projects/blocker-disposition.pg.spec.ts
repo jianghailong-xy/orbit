@@ -589,16 +589,42 @@ const landedReceipts = (db: PrismaClient, projectId: string) =>
 /**
  * What the standing coordinator conversation was told, beyond the prompt it opened with.
  *
- * The message a delivered `CRITERION_UNLANDED` fact carries is an instruction to merge, in that
- * order — so counting these is how "nothing was told to merge this" becomes observable rather than
- * asserted.
+ * A delivered ordinary fact carries an instruction to merge; a stopped delivery carries a
+ * separate human-decision handoff. Counting these is how the two paths stay observable rather
+ * than asserted.
  */
 const messagesTo = async (db: PrismaClient, sessionId: string) =>
   (await db.conversationTurn.count({ where: { sessionId } })) - 1;
 
+const blockerNoticesTo = (db: PrismaClient, sessionId: string) =>
+  db.conversationTurn.count({
+    where: { sessionId, content: { contains: '需要账号所有者裁决' } },
+  });
+
+/** Let the standing coordinator finish reading the blocker handoff before a control delivery. */
+const coordinatorReadsBlocker = async (db: PrismaClient, sessionId: string) => {
+  const notice = await db.conversationTurn.findFirst({
+    where: { sessionId, content: { contains: '需要账号所有者裁决' }, status: 'PENDING' },
+    orderBy: { seq: 'asc' },
+  });
+  assert.ok(notice, 'the blocker handoff was not queued for the coordinator');
+  const now = new Date();
+  await db.conversationTurn.update({
+    where: { id: notice.id },
+    data: { status: 'ANSWERED', deliveredAt: now, answeredAt: now },
+  });
+  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.AWAITING_INPUT } });
+};
+
 /** Whether this task was started — the observable half of "the next one was released". */
 const sessionsOf = (db: PrismaClient, taskId: string) =>
   db.session.count({ where: { taskId, deletedAt: null } });
+
+const judgmentSessions = (db: PrismaClient, ownerId: string) =>
+  db.session.findMany({
+    where: { ownerId, dispatchOrigin: SessionDispatchOrigin.PROJECT_COORDINATOR, deletedAt: null },
+    select: { id: true },
+  });
 
 function wakesOf(db: PrismaClient, projectId: string, subjectId: string) {
   return db.projectCoordinatorWake.findMany({
@@ -698,11 +724,13 @@ test('four deliveries a machine may not settle — an argued exemption, a moved 
         delivered.push(one);
         const spent = criterionFor(stack, one.f, one.criterionKey);
         // Recorded, not DELIVERED. The standing conversation is the thing that performs merges,
-        // and what it is sent is an instruction to perform one; case (b)'s control shows the same
-        // fact reach it when nothing has to stop.
+        // and it receives a separate handoff explaining the human-owned blocker rather than an
+        // instruction to merge this delivery.
         assert.equal(spent[0]?.outcome, 'CONSUMED', `${which}: the fact took the wrong terminal`);
-        assert.equal(await messagesTo(stack.db, one.f.coordinatorSessionId), 0,
-          `${which}: a delivery that had to stop still told the coordinator to merge it`);
+        assert.equal(await messagesTo(stack.db, one.f.coordinatorSessionId), 1,
+          `${which}: the coordinator did not receive the blocker handoff`);
+        assert.equal(await blockerNoticesTo(stack.db, one.f.coordinatorSessionId), 1,
+          `${which}: the coordinator received no human-decision explanation`);
 
         // 1 — its own kind, and exactly one row for it.
         assert.equal(spent[0]?.blockerKind, EXPECTED_KIND[which],
@@ -833,8 +861,11 @@ test('the file set is the input: two deliveries in one project, with one declara
         'the stopped delivery released the next task anyway');
       assert.equal(await sessionsOf(stack.db, kept), 0,
         'the stopped delivery started the other half of this pair');
-      assert.equal(await messagesTo(stack.db, f.coordinatorSessionId), 0,
-        'the stopped delivery told the coordinator to merge it anyway');
+      assert.equal(await messagesTo(stack.db, f.coordinatorSessionId), 1,
+        'the stopped delivery did not hand its blocker to the coordinator');
+      assert.equal(await blockerNoticesTo(stack.db, f.coordinatorSessionId), 1,
+        'the stopped delivery did not explain the human decision to the coordinator');
+      await coordinatorReadsBlocker(stack.db, f.coordinatorSessionId);
 
       const keptFiles = stage(f.treeDir, IN_SCOPE);
       await finishRound(stack, f, await queueRound(stack, f, kept, 'inside-scope'), keptFiles);
@@ -868,8 +899,10 @@ test('the file set is the input: two deliveries in one project, with one declara
         'a delivery that stayed inside its declaration was stopped anyway');
       assert.equal(keptSpent?.action, 'MERGE_AND_RELEASE_NEXT',
         'the in-scope control settled nothing either — this pair would be green over a dead unit');
-      assert.equal(await messagesTo(stack.db, f.coordinatorSessionId), 1,
-        'the coordinator was told nothing even by the delivery that stopped at nothing');
+      assert.equal(await messagesTo(stack.db, f.coordinatorSessionId), 2,
+        'the coordinator did not receive both the blocker handoff and the ordinary delivery');
+      assert.equal(await blockerNoticesTo(stack.db, f.coordinatorSessionId), 1,
+        'the existing blocker handoff was duplicated or disappeared');
       assert.notEqual(keptSpent?.blockerKind, strayedSpent?.blockerKind,
         'the answer did not move when the file set did');
       assert.equal(await sessionsOf(stack.db, chore), 1,
@@ -886,8 +919,7 @@ test('the file set is the input: two deliveries in one project, with one declara
   });
 
 // (c) -----------------------------------------------------------------------------------------
-test('a switched-off coordinator stops nothing and raises nothing: each of the four facts leaves '
-  + 'exactly one REFUSED row, no blocker and no session',
+test('a switched-off coordinator stops nothing and raises nothing: each of the four facts leaves exactly one REFUSED row, no blocker and no session',
   { skip, timeout: 420_000 }, async () => {
     const stack = await connect();
     const four: Array<Exclude<Case, 'CONTROL'>> = ['EXEMPTION', 'STANDARD', 'SCOPE', 'CONFLICT'];
@@ -923,14 +955,7 @@ test('a switched-off coordinator stops nothing and raises nothing: each of the f
         assert.equal(await blockerCount(stack.db, one.f.projectId), 0,
           `${which}: a switched-off project ended up with a blocker on it`);
         assert.deepEqual(
-          await stack.db.session.findMany({
-            where: {
-              ownerId: one.f.ownerId,
-              dispatchOrigin: SessionDispatchOrigin.PROJECT_COORDINATOR,
-              deletedAt: null,
-            },
-            select: { id: true },
-          }),
+          await judgmentSessions(stack.db, one.f.ownerId),
           [],
           `${which}: a switched-off coordinator was woken`,
         );
@@ -941,8 +966,10 @@ test('a switched-off coordinator stops nothing and raises nothing: each of the f
       control = await deliverCase(stack, 'on-scope', 'SCOPE');
       const [stopped] = criterionFor(stack, control.f, control.criterionKey);
       assert.equal(stopped?.outcome, 'CONSUMED', 'the control fact was not delivered');
-      assert.equal(await messagesTo(stack.db, control.f.coordinatorSessionId), 0,
-        'the control told its coordinator to merge a delivery that had to stop');
+      assert.equal(await messagesTo(stack.db, control.f.coordinatorSessionId), 1,
+        'the control did not hand its blocker to the coordinator');
+      assert.equal(await blockerNoticesTo(stack.db, control.f.coordinatorSessionId), 1,
+        'the control did not explain the human decision to the coordinator');
       assert.equal(
         stopped?.blockerKind, EXPECTED_KIND.SCOPE,
         'the control delivery stopped at nothing either — this negative would be green over a '
@@ -1063,8 +1090,10 @@ test('a criterion-change record is not an argued exemption: the delivery the cha
       assert.equal(arguedBlocker?.subjectId, arguedTask, 'the blocker is about a different task');
       assert.equal((arguedBlocker?.detail as { reason?: string })?.reason,
         'CRITERION_EXEMPTION_ARGUED', 'the blocker was raised for a different reason');
-      assert.equal(await messagesTo(stack.db, argued.coordinatorSessionId), 0,
-        'the argued delivery told the coordinator to merge it anyway');
+      assert.equal(await messagesTo(stack.db, argued.coordinatorSessionId), 1,
+        'the argued delivery did not hand its blocker to the coordinator');
+      assert.equal(await blockerNoticesTo(stack.db, argued.coordinatorSessionId), 1,
+        'the argued delivery did not explain the human decision to the coordinator');
       assert.equal(await sessionsOf(stack.db, arguedChore), 0,
         'the argued delivery released the next task anyway');
 

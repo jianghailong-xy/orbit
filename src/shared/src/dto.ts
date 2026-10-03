@@ -45,6 +45,55 @@ export interface SessionCapabilities {
   canRestore: boolean;
 }
 
+/** A session folder as the Move panel lists it (`GET /sessions/:id/move-targets`). */
+export interface SessionMoveFolder {
+  id: string;
+  name: string;
+  /** Sessions filed in it, those in Trash aside. */
+  sessionCount: number;
+}
+
+/** Another of the owner's workspaces, as a place to move a session to
+ *  (docs/session-folders-move-design.md §5.2). */
+export interface SessionMoveTarget {
+  workspaceId: string;
+  name: string;
+  /** What the workspace's next session would start on — its badge, the workspace list's `lastProvider`. */
+  provider: string;
+  runnerId: string | null;
+  runnerName: string | null;
+  /** An offline runner does not stop the move; the session's next message waits for it. */
+  runnerOnline: boolean;
+  workDir: string | null;
+  /** Null when the session can move here; otherwise why not, in English, shown as it is. */
+  reason: string | null;
+  /** How the agent's memory of the conversation comes along: `continues` — the same runner carries
+   *  it over as it is; `rebuilt` — another runner rebuilds it from Orbit's record, the earlier part
+   *  summarized. */
+  conversation: 'continues' | 'rebuilt';
+  /** The folders the session can be filed in there. */
+  folders: SessionMoveFolder[];
+}
+
+/** `GET /sessions/:id/move-targets`: everything the Move panel and its confirmation need. */
+export interface SessionMoveTargets {
+  workspaceId: string | null;
+  folderId: string | null;
+  /** The folders of the session's own workspace. */
+  folders: SessionMoveFolder[];
+  /** Why the session cannot move to another workspace at all; null when it can. */
+  reason: string | null;
+  /** Idle but not ended: it has to be ended before it moves (the panel's End and Move). */
+  needsEnd: boolean;
+  /** The branch its changes stay on in the old workspace's repository. */
+  branch: string | null;
+  /** Files the branch changed, and how many of those are not in `mergeTarget` yet. */
+  changedFiles: number;
+  unmergedFiles: number;
+  mergeTarget: string | null;
+  targets: SessionMoveTarget[];
+}
+
 /** What actually happens to an action the session's policy has not pre-approved. */
 export type UnapprovedAction = 'ask' | 'deny' | 'allow';
 
@@ -1190,6 +1239,9 @@ export interface MergeCommand {
    *  verified one carry no test evidence. Absent for work that is not under convergence
    *  management, which is almost every merge; the tip is then whatever the branch says. */
   requiredSourceSha?: string;
+  recoveryAction?: import('./mergeRecovery').MergeRecoveryAction;
+  recovery?: import('./mergeRecovery').MergeRecovery;
+  check?: { command: string; timeoutSeconds: number };
 }
 
 /** Control plane → runner: commit a live session's uncommitted worktree changes onto its
@@ -1668,6 +1720,10 @@ export interface TurnCompleteRequest {
   /** Turn outcome: SUCCEEDED | INTERRUPTED | FAILED. */
   status: RunStatus;
   result?: string;
+  /** What a FAILED turn failed with, when the runtime reported it as the turn's error rather than
+   *  as a reply (Codex). `result` is then the reply the turn got to before it died. Omitted by older
+   *  runners, which put the error in `result` only when there was no reply. */
+  error?: string;
   /** Present for a completed shell turn. The control plane consults it only for a
    *  server-generated taskAcceptance delivery. */
   shellExitCode?: number;
@@ -1890,6 +1946,7 @@ export interface SessionMergeResultRequest {
   /** Paths git reported as conflicting, for `status: 'conflict'`. */
   conflicts?: string[];
   message?: string;
+  recovery?: import('./mergeRecovery').MergeRecovery;
 }
 
 /**
@@ -2148,6 +2205,10 @@ export interface IntegrationJobResultRequest {
   landedSha?: string | null;
   landedTreeSha?: string | null;
   aheadOfUpstream?: number | null;
+  /** With NOTHING_TO_LAND: whether the source tip is an ancestor of the upstream, as the runner
+   *  measured it (0346). The only fact §1.4 lets that answer out of a criterion's roll-up on;
+   *  absent is "not measured", which an older runner sends, and withholds. */
+  sourceOnUpstream?: boolean | null;
   /** How many files the merge would change, for the card the owner reads (§3.2). */
   filesChanged?: number | null;
   checks?: IntegrationCheckResult[];

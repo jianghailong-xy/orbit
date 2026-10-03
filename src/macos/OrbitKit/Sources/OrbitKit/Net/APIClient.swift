@@ -160,6 +160,11 @@ public final class APIClient: @unchecked Sendable {
 
     public func session(_ id: String) async throws -> Session { try await get("sessions/\(id)") }
 
+    /// One session request as it stands now — the state a request card shows (`SessionRequestView`).
+    public func sessionRequest(_ id: String) async throws -> SessionRequestView {
+        try await get("session-requests/\(id)")
+    }
+
     /// Per-workspace Open-session tallies used by the runner page's workspace rows.
     public func sessionCounts() async throws -> [WorkspaceSessionCounts] {
         try await get("sessions/counts")
@@ -244,6 +249,11 @@ public final class APIClient: @unchecked Sendable {
         try await post("sessions", body: req)
     }
 
+    /// Start (or return) the server-owned repair conversation attached to a merge recovery.
+    public func createMergeRepair(sessionID: String, preparePR: Bool = false) async throws -> Session {
+        try await post("sessions/\(sessionID)/merge-repair", body: MergeRepairRequest(preparePR: preparePR))
+    }
+
     public func sendTurn(sessionID: String, _ req: SessionTurnRequest) async throws -> TurnAccepted {
         try await post("sessions/\(sessionID)/turns", body: req)
     }
@@ -319,6 +329,16 @@ public final class APIClient: @unchecked Sendable {
         try await get("sessions/\(sessionID)/retry-message")
     }
 
+    /// Re-send that message now, the way the automatic retry does — the Retry's door when the words are
+    /// another Orbit session's (`RetryMessage.sessionMessage`, `RetryRoute`): the server sends them as
+    /// that session's, signed and with the request they were, instead of this client sending them again
+    /// in the owner's name (docs/session-request-reply-contract.md §2.1). No key is sent: the server
+    /// derives one from the failed message, so a second press — a double tap, a response lost and sent
+    /// again — is the turn already queued (criterion 19). Web parity: `resendSessionRetryMessage`.
+    public func resendRetryMessage(sessionID: String) async throws -> TurnAccepted {
+        try await post("sessions/\(sessionID)/retry-message", body: RetryResendRequest())
+    }
+
     /// Turn off / put back the retry a spent quota or a transient provider error armed on this
     /// session. Arming is automatic when one of those kills a turn; the POST exists so the card's
     /// switch is a switch and not a one-way trapdoor, and carries the instant because the server
@@ -336,6 +356,43 @@ public final class APIClient: @unchecked Sendable {
         f.formatOptions = [.withInternetDateTime]
         return f
     }()
+
+    // MARK: session folders (docs/session-folders-move-design.md §3)
+
+    /// Every folder the caller has, in every workspace, by name. An older server without the
+    /// endpoint 404s; the caller treats that as "no folders", which leaves the lists flat.
+    public func listSessionFolders() async throws -> [SessionFolder] { try await get("session-folders") }
+    /// Create a folder in one of the caller's workspaces; a name already used there is a 409.
+    public func createSessionFolder(workspaceID: String, name: String) async throws -> SessionFolder {
+        try await post("session-folders", body: CreateSessionFolderRequest(workspaceId: workspaceID, name: name))
+    }
+    /// Rename a folder; returns it as renamed. A name its workspace already has is a 409.
+    public func renameSessionFolder(_ id: String, name: String) async throws -> SessionFolder {
+        try await patch("session-folders/\(id)", body: RenameSessionFolderRequest(name: name))
+    }
+    /// Delete the folder and nothing else: the sessions in it go back to their workspace's list.
+    public func deleteSessionFolder(_ id: String) async throws { try await deleteRaw("session-folders/\(id)") }
+    /// File a session in one of its workspace's folders, or in none (`folderID` nil). Allowed for
+    /// any session outside Trash, a running one included. The server broadcasts `session.updated`,
+    /// whose summary carries the new `folderId`, so the owner's other clients follow.
+    public func moveSession(_ id: String, folderID: String?) async throws {
+        _ = try await postRaw("sessions/\(id)/move", body: MoveSessionRequest(folderId: folderID))
+    }
+    /// What the Move panel's Move to Another Workspace group lists, and what its confirmation says
+    /// (docs/session-folders-move-design.md §5.4): each of the owner's other workspaces with whether
+    /// the session can go there and why not, whether it has to be ended first, and the branch its
+    /// changes stay on.
+    public func sessionMoveTargets(_ id: String) async throws -> SessionMoveTargets {
+        try await get("sessions/\(id)/move-targets")
+    }
+    /// Move an ended session to another workspace, filed in one of that workspace's folders or in
+    /// none (`folderID` nil). A move the rules refuse as they stand now — the session woke up, the
+    /// workspace was disabled — is a 409 whose message says why. The server broadcasts
+    /// `session.updated`, whose summary names the new workspace.
+    public func moveSession(_ id: String, toWorkspace workspaceID: String, folderID: String?) async throws {
+        _ = try await postRaw("sessions/\(id)/move",
+                              body: MoveSessionRequest(folderId: folderID, workspaceId: workspaceID))
+    }
 
     // MARK: public links — one per session, task or project (docs/share-links-design.md §5)
 
@@ -432,11 +489,17 @@ public final class APIClient: @unchecked Sendable {
     /// "not recorded" — needs the code rather than the prose. Nil for anything that is not a refusal
     /// with a code: a transport error, an HTML error page, a body from something that is not Orbit.
     public static func refusalCode(_ error: Error) -> String? {
+        refusalString(error, "code")
+    }
+
+    /// One of a refusal's own fields, when the error carries it as a string — `code`, or what a door
+    /// names beside it, such as the account a duplicate sign-in turned out to be (`email`).
+    public static func refusalString(_ error: Error, _ field: String) -> String? {
         guard case APIError.http(_, let body) = error, let body,
               let data = body.data(using: .utf8),
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }
-        return object["code"] as? String
+        return object[field] as? String
     }
 
     /// Why a request didn't go through, as the tail of one English sentence — the prose half of
@@ -506,6 +569,15 @@ public final class APIClient: @unchecked Sendable {
     /// Decoded through a narrow view of the project document — this client has no project screen.
     public func projectCriteria(projectID: String) async throws -> ProjectCriteriaDocument {
         try await get("projects/\(projectID)")
+    }
+
+    /// Start the project: the criteria confirmed by the seal the owner read, and the settings on the
+    /// card, in one write (`StartProject.body`). The owner's own credential and no acting session —
+    /// the door refuses one. A seal that moved, or a project already started, is a 409 and nothing
+    /// is written. The answer is not read here: what the start left is drawn from the reads that
+    /// follow it (the receipt, the project), as the browser does.
+    public func startProject(projectID: String, _ body: StartProjectRequestBody) async throws {
+        try await postRaw("projects/\(projectID)/start", body: body)
     }
 
     // MARK: a project's owner items — the merge to confirm, and the coordinator's question
@@ -638,13 +710,32 @@ public final class APIClient: @unchecked Sendable {
         try await patch("projects/\(projectID)", body: UpdateProjectStatusRequest(status: status))
     }
 
-    /// Flip the Automatic switch, fenced on the revision the page read — a write racing another
-    /// edit of the project's authorisation set is refused rather than applied over it.
-    public func setProjectAutomatic(_ projectID: String, enabled: Bool,
-                                    expectedConfigRevision: String) async throws -> ProjectDocument {
-        try await patch("projects/\(projectID)",
-                        body: SetProjectAutomaticRequest(coordinatorEnabled: enabled,
-                                                         expectedConfigRevision: expectedConfigRevision))
+    /// How it runs' half of the authorization set — Automatic and the concurrency limit — fenced on
+    /// the revision the page read: a write racing another edit of the set is refused 409
+    /// `STALE_CONFIG_REVISION` rather than applied over it.
+    public func updateProjectAuthorization(_ projectID: String,
+                                           _ body: UpdateProjectAuthorizationRequest) async throws -> ProjectDocument {
+        try await patch("projects/\(projectID)", body: body)
+    }
+
+    /// The line, the merge check and the escalation window (§1.2 L5). A line that started
+    /// integrating is 409 `INTEGRATION_LINE_LOCKED`; the other two change for the life of the
+    /// project.
+    public func updateProjectIntegration(_ projectID: String,
+                                         _ body: UpdateProjectIntegrationRequest) async throws -> ProjectIntegrationView {
+        try await patch("projects/\(projectID)/integration", body: body)
+    }
+
+    /// Pause project: nothing starts its tasks or merges it into main by itself until it is resumed;
+    /// runs already going finish. The owner's own credential and no acting session — the door
+    /// refuses one.
+    public func pauseProject(_ projectID: String) async throws -> ProjectPauseState {
+        try await postEmpty("projects/\(projectID)/pause")
+    }
+
+    /// Resume project: the pause lifted.
+    public func resumeProject(_ projectID: String) async throws -> ProjectPauseState {
+        try await postEmpty("projects/\(projectID)/resume")
     }
 
     /// Remove an EMPTY project; one that still holds tasks is a 409 naming how many.
@@ -941,6 +1032,54 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("wiki/changesets/\(id)/revert")
     }
 
+    // MARK: wiki documents and the plan (criteria 9–11) — the user door, JWT only
+
+    /// `GET /wiki/spaces/:id/docs`: the confirmed plan's categories → documents → sections, each saying
+    /// whether it is written yet. `plan` is nil while no plan is confirmed: the Wiki reads by topic then.
+    public func wikiDocs(spaceID: String) async throws -> WikiDocsDirectory {
+        try await get("wiki/spaces/\(spaceID)/docs")
+    }
+    /// `GET /wiki/spaces/:id/docs/:slug`: one document, its sentences' marks and its footnotes resolved.
+    /// A 404 is a document the confirmed plan does not have.
+    public func wikiDoc(spaceID: String, slug: String) async throws -> WikiDoc {
+        try await get("wiki/spaces/\(spaceID)/docs/\(slug)")
+    }
+    /// `GET /wiki/spaces/:id/doc-index`: every document, and every section title no other document shares.
+    public func wikiDocIndex(spaceID: String) async throws -> WikiDocsIndex {
+        try await get("wiki/spaces/\(spaceID)/doc-index")
+    }
+    /// `GET /wiki/spaces/:id/plan`: the version in force, the draft waiting, the proposals and the job.
+    /// The owner's door only: a request with a session header is refused, and this client sends none.
+    public func wikiPlan(spaceID: String) async throws -> WikiPlanState {
+        try await get("wiki/spaces/\(spaceID)/plan")
+    }
+    /// `GET /wiki/spaces/:id/plan/versions`: every version, newest first — the version menu.
+    public func wikiPlanVersions(spaceID: String) async throws -> WikiPlanVersions {
+        try await get("wiki/spaces/\(spaceID)/plan/versions")
+    }
+    /// `GET /wiki/spaces/:id/plan/versions/:version`: one version, whole, whatever its status.
+    public func wikiPlanVersion(spaceID: String, version: Int) async throws -> WikiPlanVersion {
+        try await get("wiki/spaces/\(spaceID)/plan/versions/\(version)")
+    }
+    /// `POST /wiki/spaces/:id/plan/redraft`: ask for a draft — with instructions, a revision of the newest
+    /// version. A draft that has not ended answers a second press.
+    public func redraftWikiPlan(spaceID: String, instructions: String?) async throws -> WikiPlanRedraftResult {
+        try await post("wiki/spaces/\(spaceID)/plan/redraft", body: WikiPlanRedraftRequest(instructions: instructions))
+    }
+    /// `POST /wiki/spaces/:id/plan/versions/:version/confirm`: the owner's confirmation of the draft.
+    public func confirmWikiPlan(spaceID: String, version: Int) async throws -> WikiPlanVersion {
+        try await post("wiki/spaces/\(spaceID)/plan/versions/\(version)/confirm", body: [String: String]())
+    }
+    /// `POST /wiki/spaces/:id/plan/edits`: one document or section as the owner rewrote it, in the draft's
+    /// shape — a new draft, which goes through the gate again (422 `WIKI_PLAN_GATE` with every error).
+    public func editWikiPlan(spaceID: String, _ req: WikiPlanEditRequest) async throws -> WikiPlanVersion {
+        try await post("wiki/spaces/\(spaceID)/plan/edits", body: req)
+    }
+    /// `POST /wiki/plan-proposals/:id/decide`: accept (a new draft, over the newest version) or reject.
+    public func decideWikiPlanProposal(_ id: String, _ req: WikiPlanDecideRequest) async throws -> WikiPlanDecisionResult {
+        try await post("wiki/plan-proposals/\(id)/decide", body: req)
+    }
+
     /// Control-plane–configured model providers (GET /api/providers): enabled only, de-sensitized
     /// (no key/baseUrl). Merged into the composer and agent Runtime picker alongside built-ins.
     public func providers() async throws -> [ConfiguredProvider] { try await get("providers") }
@@ -973,10 +1112,12 @@ public final class APIClient: @unchecked Sendable {
     public func cancelCodexLogin(poolID: String) async throws -> CodexLoginPoll {
         try await delete("providers/pools/\(poolID)/codex-login")
     }
-    /// Sign the pool's account out: the server deletes the sign-in it held.
+    /// Sign one of the pool's accounts out, named by its fingerprint (`…AB12`, as every response names
+    /// it): the server deletes the sign-in it held, and the pool's other accounts stay.
     @discardableResult
-    public func signOutCodexLogin(poolID: String) async throws -> CodexLoginSignOut {
-        try await delete("providers/pools/\(poolID)/codex-login/account")
+    public func signOutCodexLogin(poolID: String, fingerprint: String) async throws -> CodexLoginSignOut {
+        try await delete("providers/pools/\(poolID)/codex-login/account",
+                         query: [URLQueryItem(name: "fingerprint", value: fingerprint)])
     }
 
     // MARK: shared pools (GET/POST/PATCH/DELETE /api/providers/shared-pools)
@@ -1019,6 +1160,20 @@ public final class APIClient: @unchecked Sendable {
 
     public func runners() async throws -> [Runner] { try await get("runners") }
     public func runner(_ id: String) async throws -> Runner { try await get("runners/\(id)") }
+    /// The active and latest Codex reset-credit operations for a runner.
+    public func codexRateLimitResetOperations(runnerID: String) async throws -> CodexRateLimitResetOperations {
+        try await get("runners/\(runnerID)/codex-rate-limit-reset")
+    }
+    /// Read one reset-credit operation while the runner carries it through consume/refresh.
+    public func codexRateLimitResetOperation(runnerID: String,
+                                             operationID: String) async throws -> CodexRateLimitResetOperation {
+        try await get("runners/\(runnerID)/codex-rate-limit-reset/\(operationID)")
+    }
+    /// Confirm one earned reset credit for the runner's default Codex account.
+    public func createCodexRateLimitReset(runnerID: String,
+                                          _ request: CreateCodexRateLimitResetRequest) async throws -> CreateCodexRateLimitResetResponse {
+        try await post("runners/\(runnerID)/codex-rate-limit-reset", body: request)
+    }
     public func updateRunner(_ id: String, _ req: UpdateRunnerRequest) async throws -> Runner { try await patch("runners/\(id)", body: req) }
     /// Persist the list's drag order: `ids` is every runner, in order. Answers with the list as the
     /// server now orders it (omitted runners appended, foreign ids dropped).
@@ -1128,6 +1283,15 @@ public final class APIClient: @unchecked Sendable {
         _ = try await send(makeRequest("sessions/\(sessionID)/config", method: "PATCH", body: req))
     }
 
+    /// Move a session on the built-in Codex or Claude engine to another of its runner's accounts —
+    /// `default` or a slot id, which pins it there — or back onto `automatic`. Spawn-only, like a
+    /// provider: a live session's engine re-spawns on the new account once no turn is in flight, and
+    /// an ended one takes it on its next resume.
+    public func switchAccount(sessionID: String, account: String) async throws {
+        _ = try await send(makeRequest("sessions/\(sessionID)/account", method: "PATCH",
+                                       body: SessionAccountRequest(account: account)))
+    }
+
     // MARK: worktree
 
     public func diff(sessionID: String) async throws -> SessionDiff {
@@ -1142,8 +1306,8 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("sessions/\(sessionID)/commit", body: Optional<Empty>.none)
     }
 
-    public func merge(sessionID: String, targetBranch: String?) async throws {
-        _ = try await postRaw("sessions/\(sessionID)/merge", body: MergeRequest(targetBranch: targetBranch))
+    public func merge(sessionID: String, targetBranch: String?, recoveryAction: String? = nil, previewId: String? = nil) async throws {
+        _ = try await postRaw("sessions/\(sessionID)/merge", body: MergeRequest(targetBranch: targetBranch, recoveryAction: recoveryAction, previewId: previewId))
     }
 
     /// Adopt the worktree's actual HEAD branch (after an in-worktree `git checkout -b`) as the
@@ -1297,8 +1461,8 @@ public final class APIClient: @unchecked Sendable {
     }
 
     /// DELETE with a decoded response (e.g. cancelling a sign-in, which answers with the cleared state).
-    private func delete<T: Decodable>(_ path: String) async throws -> T {
-        let data = try await send(makeRequest(path, method: "DELETE", body: Optional<Empty>.none))
+    private func delete<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
+        let data = try await send(makeRequest(path, method: "DELETE", query: query, body: Optional<Empty>.none))
         return try decoder.decode(T.self, from: data)
     }
 

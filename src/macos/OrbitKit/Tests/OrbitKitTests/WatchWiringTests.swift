@@ -70,8 +70,10 @@ final class WatchWiringTests: XCTestCase {
         XCTAssertTrue(card.contains("summary.lineParts"))
         XCTAssertTrue(card.contains("WatchProjection.stripPill(target)"))
         XCTAssertTrue(card.contains("WatchProjection.stripGlyph(target)"))
-        // Opened, each watch is the browser's one sentence, and the line it adds while unchecked.
-        XCTAssertTrue(card.contains("WatchProjection.stripSentence(for: watch, now: now)"))
+        // Opened, the card lists targets and only adds the freshness line while unchecked; the
+        // long resume sentence is intentionally omitted.
+        XCTAssertFalse(card.contains("WatchProjection.stripSentence(for: watch, now: now)"),
+                       "the card should not repeat the resume sentence above every target")
         XCTAssertTrue(card.contains("WatchProjection.stripStaleLine(for: watch, now: now)"))
         for borrowed in ["BackgroundTrayView", "bgRunningLabel", "Background process", "\"terminal\""] {
             XCTAssertFalse(card.contains(borrowed), "the Watching card borrows \(borrowed)")
@@ -89,6 +91,12 @@ final class WatchWiringTests: XCTestCase {
                             from: "struct AgentSessionRow: View {", to: "private func lineColor(")
         XCTAssertTrue(row.contains("SessionLine.make(for: session, live: !deleted, watching: watching)"))
         XCTAssertTrue(row.contains("StatusGlyphView(glyph: .make(for: session, watching: watching))"))
+        // The phone and iPad rows have no leading glyph: their trailing cue is where the eye goes.
+        XCTAssertTrue(row.contains("SessionLiveIndicator(session: session, watching: watching)"))
+        let indicator = code(try slice(source("Views/AgentsView.swift"),
+                                       from: "struct SessionLiveIndicator: View {", to: "struct BreathingGlyph: View {"))
+        XCTAssertTrue(indicator.contains("SessionStatusGlyph.make(for: session, watching: watching)"))
+        XCTAssertTrue(indicator.contains("case (.symbol(\"eye\"), _):"))
         XCTAssertFalse(code(row).contains("SessionHeader.statusWord(for: session))"),
                        "every status word the row speaks is handed the watch")
     }

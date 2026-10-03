@@ -82,8 +82,11 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
     public let enabled: Bool?
     public let autoInitGit: Bool?
     /// Which of its runner's Codex accounts a session here runs on: a slot id or `default`. Nil is
-    /// Automatic — a new session starts on the account with the most room (`CodexAccounts.roomiest`).
+    /// Automatic — a new session starts on the account whose quota resets soonest (`CodexAccounts.toStartOn`).
     public let codexAccount: String?
+    /// The same for its Claude sessions: one of the runner's Claude accounts, or nil for Automatic.
+    public let claudeAccount: String?
+
     public let enableWorktree: Bool?
     public let workDirExists: Bool?
     public let workDirIsGit: Bool?
@@ -98,7 +101,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         case id, name, lastProvider, provider, model, permissionMode, effort, workDir
         case description, appendSystemPrompt, systemPrompt, allowedTools, disallowedTools
         case maxTurns, maxBudgetUsd, targetRunnerId, targetLabels, runnerId, env, enabled
-        case autoInitGit, codexAccount, enableWorktree, workDirExists, workDirIsGit
+        case autoInitGit, codexAccount, claudeAccount, enableWorktree, workDirExists, workDirIsGit
         case workDirFreeBytes, workDirTotalBytes, repoHealth, repoCleanup
     }
 
@@ -126,6 +129,7 @@ public struct Agent: Codable, Equatable, Sendable, Identifiable {
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled)
         autoInitGit = try c.decodeIfPresent(Bool.self, forKey: .autoInitGit)
         codexAccount = try c.decodeIfPresent(String.self, forKey: .codexAccount)
+        claudeAccount = try c.decodeIfPresent(String.self, forKey: .claudeAccount)
         enableWorktree = try c.decodeIfPresent(Bool.self, forKey: .enableWorktree)
         workDirExists = try c.decodeIfPresent(Bool.self, forKey: .workDirExists)
         workDirIsGit = try c.decodeIfPresent(Bool.self, forKey: .workDirIsGit)
@@ -164,6 +168,8 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     public let enrolledAt: String?
     public let minFreeDiskMb: Int?
     public let reposRoot: String?
+    /// The heartbeat lease that owns runner-side reset-credit commands. Nil on older runners.
+    public let heartbeatLeaseOwner: String?
     public let heartbeatDraining: Bool?
     // Reported on the GET /runners payload (renamed from availableSkills/availableCommands).
     public let skills: [SlashCommandInfo]?
@@ -183,6 +189,10 @@ public struct Runner: Codable, Equatable, Sendable, Identifiable {
     /// runner too old to report it, which stays unrestricted — an unknown must not withdraw a mode
     /// that works (see `AgentDefaults.isRunnable`).
     public let runsAsRoot: Bool?
+    /// What the runner declared it can do on its last poll — `codex-account-move/v1` and
+    /// `claude-account-move/v1` say it carries a session's conversation to another of its accounts.
+    /// Nil from an older server, which claims nothing.
+    public var capabilities: [String]? = nil
     /// Engine install/update relay and account-removal relay. Their string-valued states stay raw
     /// so a newer control plane cannot make the runner list undecodable.
     public let install: RunnerInstallState?
@@ -279,9 +289,15 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// run) — the same read as above, in the shared pool's own field.
     public let poolKeyId: String?
     /// Which of the runner's Codex accounts this session runs on (`default` or a slot id): picked on
-    /// New Session, or the one with the most room when it was created. Nil follows its workspace's
+    /// New Session, or the one Automatic chose when it was created. Nil follows its workspace's
     /// (`Agent.codexAccount`). Carried by the detail payload, like the two above.
     public let codexAccount: String?
+    /// That account was picked by hand, and the session stays on it: its usage limit waits for the
+    /// reset. False or nil is Automatic — Orbit moves it to an account with room when it hits one.
+    public let codexAccountPinned: Bool?
+    /// The same pair for a session on the built-in Claude engine: one of the runner's Claude accounts.
+    public let claudeAccount: String?
+    public let claudeAccountPinned: Bool?
     public let pendingApprovals: Int?
     /// What `pendingApprovals` is counting, when one word says it better than "approval":
     /// `OWNER_CONFIRMATION` when everything counted is an OWNER_CONFIRMED task's run waiting for its
@@ -295,6 +311,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// are already inside `pendingApprovals`; this says which they are, so the bar can name one and
     /// open its card. Empty (or nil, from an older control plane) when none.
     public let ownerItems: [SessionOwnerItem]?
+    /// Who this conversation is waiting on for a reply, and who is waiting on it (session requests,
+    /// `SessionRequestCopy.peersLine`). Nil from an older control plane; empty when none is open.
+    public let awaitingReplyFrom: [SessionRequestPeer]?
+    public let owesReplyTo: [SessionRequestPeer]?
     /// The task whose run this is; nil for an ordinary conversation. It is how the console finds the
     /// question it may have to draw a card for (`OwnerConfirmation.swift`) — a card is drawn in the
     /// run's own session, and only there.
@@ -375,6 +395,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// by position). Empty/absent when untagged or from an older server. Drives the row's tag dots
     /// and the list's tag filter/grouping — see `SessionFilter` / `SessionTimeGrouping`.
     public let tags: [SessionTag]?
+    /// The folder this session is filed in (`SessionFolder`), or nil when it is in none — and
+    /// from an older server, which doesn't send the key. The list groups by it
+    /// (`SessionFolderGrouping`).
+    public let folderId: String?
 
     public var effectiveRunStatus: RunStatus { runStatus ?? status }
     public var effectiveRunState: SessionRunState {
@@ -443,9 +467,14 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         poolMemberProviderId = try values.decodeIfPresent(String.self, forKey: .poolMemberProviderId)
         poolKeyId = try values.decodeIfPresent(String.self, forKey: .poolKeyId)
         codexAccount = try values.decodeIfPresent(String.self, forKey: .codexAccount)
+        codexAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .codexAccountPinned)
+        claudeAccount = try values.decodeIfPresent(String.self, forKey: .claudeAccount)
+        claudeAccountPinned = try values.decodeIfPresent(Bool.self, forKey: .claudeAccountPinned)
         pendingApprovals = try values.decodeIfPresent(Int.self, forKey: .pendingApprovals)
         waitingKind = try values.decodeIfPresent(SessionWaitingKind.self, forKey: .waitingKind)
         ownerItems = try values.decodeIfPresent([SessionOwnerItem].self, forKey: .ownerItems)
+        awaitingReplyFrom = try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .awaitingReplyFrom)
+        owesReplyTo = try? values.decodeIfPresent([SessionRequestPeer].self, forKey: .owesReplyTo)
         taskId = try values.decodeIfPresent(String.self, forKey: .taskId)
         branch = try values.decodeIfPresent(String.self, forKey: .branch)
         updatedAt = try values.decodeIfPresent(String.self, forKey: .updatedAt)
@@ -472,6 +501,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         agent = try values.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         tags = try values.decodeIfPresent([SessionTag].self, forKey: .tags)
+        folderId = try values.decodeIfPresent(String.self, forKey: .folderId)
     }
 
     public init(id: String, title: String?, status: RunStatus, runStatus: RunStatus? = nil,
@@ -497,7 +527,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 currentTurnStartedAt: String? = nil,
                 tags: [SessionTag]? = nil, retryAt: String? = nil,
                 poolMemberProviderId: String? = nil, poolKeyId: String? = nil,
-                codexAccount: String? = nil) {
+                codexAccount: String? = nil, codexAccountPinned: Bool? = nil,
+                claudeAccount: String? = nil, claudeAccountPinned: Bool? = nil,
+                awaitingReplyFrom: [SessionRequestPeer]? = nil, owesReplyTo: [SessionRequestPeer]? = nil,
+                folderId: String? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -514,9 +547,14 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.poolMemberProviderId = poolMemberProviderId
         self.poolKeyId = poolKeyId
         self.codexAccount = codexAccount
+        self.codexAccountPinned = codexAccountPinned
+        self.claudeAccount = claudeAccount
+        self.claudeAccountPinned = claudeAccountPinned
         self.pendingApprovals = pendingApprovals
         self.waitingKind = waitingKind
         self.ownerItems = ownerItems
+        self.awaitingReplyFrom = awaitingReplyFrom
+        self.owesReplyTo = owesReplyTo
         self.taskId = taskId
         self.branch = branch
         self.updatedAt = updatedAt
@@ -543,6 +581,7 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.lastTurnAt = lastTurnAt
         self.currentTurnStartedAt = currentTurnStartedAt
         self.tags = tags
+        self.folderId = folderId
     }
 }
 
@@ -586,6 +625,11 @@ public struct SessionAgentRef: Codable, Equatable, Sendable, Identifiable {
     /// The workspace's Codex account (`Agent.codexAccount`): what a session that stored none of its
     /// own runs on. Carried by the detail payload's workspace row.
     public var codexAccount: String? = nil
+    /// Its Claude account, the same way (`Agent.claudeAccount`).
+    public var claudeAccount: String? = nil
+    /// Its environment, which can decide the account too — a config directory or a key of its own
+    /// (`CodexAccounts.automaticOffered`). Carried by the detail payload's workspace row.
+    public var env: [String: String]? = nil
 }
 
 /// A personal colored label (Files.app-style tag) the owner applies to their sessions. The library
@@ -648,7 +692,22 @@ public struct ArmAutoRetryRequest: Codable, Sendable {
 /// `ConsoleModel.retryMessageText`.
 public struct RetryMessage: Codable, Sendable {
     public let text: String
-    public init(text: String) { self.text = text }
+    /// The card the words' echo carries when they are another Orbit session's (`sessionMessage`,
+    /// apiserver session-message.ts): the Retry then asks the server to re-send them
+    /// (`APIClient.resendRetryMessage`, `RetryRoute`). Nil for the owner's own words.
+    public let sessionMessage: SessionMessage?
+    public init(text: String, sessionMessage: SessionMessage? = nil) {
+        self.text = text
+        self.sessionMessage = sessionMessage
+    }
+}
+
+/// POST /sessions/:id/retry-message — the failure card's Retry, asking the server to re-send another
+/// session's message as that session's (docs/session-request-reply-contract.md §2.1). No idempotency
+/// key: the server derives one from the failed message (criterion 19), so there is nothing here for a
+/// second press to spell differently.
+public struct RetryResendRequest: Codable, Sendable {
+    public init() {}
 }
 
 /// POST /sessions/:id/turns — send a user message or raw shell command.
@@ -738,6 +797,12 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
     /// held raw for `ProjectStarted.parseCard` — the reader the echo's payload is read by.
     public let projectStarted: JSONValue?
     public var startedCard: ProjectStarted? { ProjectStarted.parseCard(projectStarted) }
+    /// Who sent this turn, when it is another Orbit session's message (`sessionMessage`) — held raw
+    /// for `SessionMessage.parseCard`, the reader the echo's payload is read by, so the card drawn
+    /// while the message waits is the one its echo is drawn as. Nil on every turn nobody's session
+    /// sent, and from a server that predates the field.
+    public let sessionMessage: JSONValue?
+    public var senderCard: SessionMessage? { SessionMessage.parseCard(sessionMessage) }
     /// The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
     /// delivery — so nobody typed its words. Nil on every turn somebody sent, and from a server that
     /// predates the field.
@@ -745,13 +810,15 @@ public struct QueuedTurnInfo: Codable, Equatable, Sendable {
 
     public init(turnId: String, kind: String? = nil, content: String,
                 attachments: [Attachment]? = nil, openItemDelivery: JSONValue? = nil,
-                projectStarted: JSONValue? = nil, authoredByOrbit: Bool? = nil) {
+                projectStarted: JSONValue? = nil, sessionMessage: JSONValue? = nil,
+                authoredByOrbit: Bool? = nil) {
         self.turnId = turnId
         self.kind = kind
         self.content = content
         self.attachments = attachments
         self.openItemDelivery = openItemDelivery
         self.projectStarted = projectStarted
+        self.sessionMessage = sessionMessage
         self.authoredByOrbit = authoredByOrbit
     }
 }
@@ -779,13 +846,21 @@ public struct CreateSessionRequest: Codable, Sendable {
     public let shell: Bool?
     public let attachmentIds: [String]?
     /// Which of the runner's Codex accounts the session runs on (`default` or a slot id), picked on
-    /// the new-session screen. Nil omits it: the server then uses the workspace's, or Automatic.
+    /// the new-session screen — which pins it there. Nil omits it: the server then uses the
+    /// workspace's, or Automatic.
     public let codexAccount: String?
+    /// The same for a session on the built-in Claude engine: one of the runner's Claude accounts.
+    public let claudeAccount: String?
+    /// The folder the new session is filed in — one started from a folder's page lands in that
+    /// folder (docs/session-folders-move-design.md §3.2). It has to be one of this workspace's
+    /// folders, else the server answers 400. Nil omits it: the session is in no folder.
+    public let folderId: String?
     public init(prompt: String, title: String? = nil, agentId: String? = nil, assignedRunnerId: String? = nil,
                 provider: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
-                shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil) {
+                shell: Bool? = nil, attachmentIds: [String]? = nil, codexAccount: String? = nil,
+                claudeAccount: String? = nil, folderId: String? = nil) {
         self.prompt = prompt
         self.title = title
         self.agentId = agentId
@@ -798,7 +873,15 @@ public struct CreateSessionRequest: Codable, Sendable {
         self.shell = shell
         self.attachmentIds = attachmentIds
         self.codexAccount = codexAccount
+        self.claudeAccount = claudeAccount
+        self.folderId = folderId
     }
+}
+
+/// POST /sessions/:id/merge-repair — the server derives the prompt from the current recovery.
+public struct MergeRepairRequest: Codable, Sendable {
+    public let preparePR: Bool
+    public init(preparePR: Bool = false) { self.preparePR = preparePR }
 }
 
 /// The durable approval record (GET /sessions/:id/approvals). Distinct from the live
@@ -865,20 +948,23 @@ public struct PermissionRule: Codable, Equatable, Sendable {
     }
 }
 
-/// POST /sessions/:id/approvals/:approvalId/decision
+/// POST /sessions/:id/approvals/:approvalId/decision. Mirrors `ApprovalDecisionRequest` in
+/// src/shared/src/dto.ts, key for key: the control plane reads nothing else.
 public struct ApprovalDecisionRequest: Codable, Sendable {
     public let behavior: ApprovalBehavior
     public let message: String?
     /// AskUserQuestion answers: question text → selected labels.
     public let answers: [String: [String]]?
-    /// Optional "remember this kind" rule.
-    public let rememberRule: PermissionRule?
+    /// Optional "remember these kinds" rules, one per distinct sub-command of a Bash line. The
+    /// single `rememberRule` this used to send has not been read by the server since June 2026,
+    /// which made every "Allow & remember" a plain Allow.
+    public let rememberRules: [PermissionRule]?
     public init(behavior: ApprovalBehavior, message: String? = nil,
-                answers: [String: [String]]? = nil, rememberRule: PermissionRule? = nil) {
+                answers: [String: [String]]? = nil, rememberRules: [PermissionRule]? = nil) {
         self.behavior = behavior
         self.message = message
         self.answers = answers
-        self.rememberRule = rememberRule
+        self.rememberRules = rememberRules
     }
 }
 
@@ -926,6 +1012,25 @@ public struct SessionDetailAgent: Codable, Equatable, Sendable {
     }
 }
 
+/// The newest repair conversation attached to a merge recovery. It is projected onto the parent
+/// detail so the review sheet can keep showing live progress after the app navigates away.
+public struct MergeRepairSession: Codable, Equatable, Sendable, Identifiable {
+    public let id: String
+    public let title: String?
+    public let status: RunStatus?
+    public let runStatus: RunStatus?
+    public let sessionState: SessionState?
+    public let runState: SessionRunState?
+    public let lifecycleState: SessionLifecycleState?
+    public let error: String?
+    public let completedAt: String?
+
+    public var effectiveRunStatus: RunStatus? { runStatus ?? status }
+    public var effectiveRunState: SessionRunState? {
+        SessionRunState.resolveOptional(runState, legacy: sessionState, status: effectiveRunStatus)
+    }
+}
+
 /// GET /sessions/:id — a single session's detail. Only the worktree-status-bar fields are typed
 /// (Codable ignores the rest of the payload); they mirror the same-named fields on web's
 /// `SessionDetail` and drive `WorktreeBarLogic`. The runner reports the live state each heartbeat
@@ -956,6 +1061,10 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// "Merge to main" outcome: pending | merged | conflict | error. Nil until the user merges.
     public let mergeStatus: String?
     public let mergeError: String?
+    public let mergeRecovery: MergeRecovery?
+    public let mergeRepairSession: MergeRepairSession?
+    public let mergeRecoverySupported: Bool?
+    public let workspace: SessionDetailAgent?
     /// The branch the last merge targeted (nil = the runner's auto-detected default).
     public let mergeTarget: String?
     /// Candidate target branches for the "Merge to…" dropdown (empty/nil for older runners).
@@ -1014,6 +1123,10 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         worktreeDirty = try values.decodeIfPresent(Bool.self, forKey: .worktreeDirty)
         mergeStatus = try values.decodeIfPresent(String.self, forKey: .mergeStatus)
         mergeError = try values.decodeIfPresent(String.self, forKey: .mergeError)
+        mergeRecovery = try values.decodeIfPresent(MergeRecovery.self, forKey: .mergeRecovery)
+        mergeRepairSession = try values.decodeIfPresent(MergeRepairSession.self, forKey: .mergeRepairSession)
+        mergeRecoverySupported = try values.decodeIfPresent(Bool.self, forKey: .mergeRecoverySupported)
+        workspace = try values.decodeIfPresent(SessionDetailAgent.self, forKey: .workspace)
         mergeTarget = try values.decodeIfPresent(String.self, forKey: .mergeTarget)
         mergeTargets = try values.decodeIfPresent([String].self, forKey: .mergeTargets)
         branchMerged = try values.decodeIfPresent(Bool.self, forKey: .branchMerged)
@@ -1034,6 +1147,9 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 branch: String? = nil, isolationStatus: String? = nil,
                 changedFiles: [SessionChangedFile]? = nil, worktreeDirty: Bool? = nil,
                 mergeStatus: String? = nil, mergeError: String? = nil, mergeTarget: String? = nil,
+                mergeRecovery: MergeRecovery? = nil, mergeRecoverySupported: Bool? = nil,
+                mergeRepairSession: MergeRepairSession? = nil,
+                workspace: SessionDetailAgent? = nil,
                 mergeTargets: [String]? = nil, branchMerged: Bool? = nil, worktreeBranch: String? = nil,
                 commitStatus: String? = nil, commitError: String? = nil,
                 commitResultMessage: String? = nil,
@@ -1052,6 +1168,10 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.worktreeDirty = worktreeDirty
         self.mergeStatus = mergeStatus
         self.mergeError = mergeError
+        self.mergeRecovery = mergeRecovery
+        self.mergeRepairSession = mergeRepairSession
+        self.mergeRecoverySupported = mergeRecoverySupported
+        self.workspace = workspace
         self.mergeTarget = mergeTarget
         self.mergeTargets = mergeTargets
         self.branchMerged = branchMerged
@@ -1091,6 +1211,9 @@ public struct ResumeRequest: Codable, Sendable {
     /// the same vendor, say). Cross-runtime is rejected server-side. Sent only when the user picked
     /// one while the session was ended; nil keeps whatever it ended on.
     public let provider: String?
+    /// With `provider` naming the built-in Codex or Claude engine: which of the runner's accounts of
+    /// it the revived session runs on — `automatic`, `default` or a slot id (`ConfigUpdateRequest`).
+    public let account: String?
     /// The one thing that authorises stopping a run that is doing work: the reader's answer to
     /// `TASK_RUN_PROVIDER_SWITCH_CONFIRMATION_REQUIRED`, echoed back as the public id the server
     /// put in `confirm.value`. It names the RUN rather than being a bare flag, so a claim that
@@ -1100,7 +1223,7 @@ public struct ResumeRequest: Codable, Sendable {
     public init(clientTurnId: String, content: String, kind: String? = nil,
                 model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
                 fastMode: Bool? = nil,
-                attachmentIds: [String]? = nil, provider: String? = nil,
+                attachmentIds: [String]? = nil, provider: String? = nil, account: String? = nil,
                 stopSessionId: String? = nil) {
         self.clientTurnId = clientTurnId
         self.content = content
@@ -1111,6 +1234,7 @@ public struct ResumeRequest: Codable, Sendable {
         self.fastMode = fastMode
         self.attachmentIds = attachmentIds
         self.provider = provider
+        self.account = account
         self.stopSessionId = stopSessionId
     }
 }
@@ -1135,20 +1259,39 @@ public struct ConfigUpdateRequest: Codable, Sendable {
     /// re-spawns with the new environment and --resume, so the conversation carries over.
     /// Cross-runtime is rejected server-side.
     public let provider: String?
+    /// With `provider` moving the session onto the built-in Codex or Claude engine: which of the
+    /// runner's accounts of it — `automatic` (Orbit's pick), `default` or a slot id (pinned). Nil is
+    /// Automatic's pick unless the session is pinned there. The Provider submenu lists each engine's
+    /// accounts under it, so a switch can land on one directly (web parity).
+    public let account: String?
     public init(model: String? = nil, permissionMode: String? = nil, effort: String? = nil,
-                fastMode: Bool? = nil, provider: String? = nil) {
+                fastMode: Bool? = nil, provider: String? = nil, account: String? = nil) {
         self.model = model
         self.permissionMode = permissionMode
         self.effort = effort
         self.fastMode = fastMode
         self.provider = provider
+        self.account = account
     }
+}
+
+/// `PATCH /sessions/:id/account`: another of the session's runner's accounts (`default` or a slot id),
+/// or `automatic` (`CodexAccounts.automaticID`).
+public struct SessionAccountRequest: Codable, Sendable {
+    public let account: String
+    public init(account: String) { self.account = account }
 }
 
 /// POST /sessions/:id/merge — merge the session branch into `targetBranch` (default when nil).
 public struct MergeRequest: Codable, Sendable {
     public let targetBranch: String?
-    public init(targetBranch: String? = nil) { self.targetBranch = targetBranch }
+    public let recoveryAction: String?
+    public let previewId: String?
+    public init(targetBranch: String? = nil, recoveryAction: String? = nil, previewId: String? = nil) {
+        self.targetBranch = targetBranch
+        self.recoveryAction = recoveryAction
+        self.previewId = previewId
+    }
 }
 
 // MARK: - Session search (⌘K)

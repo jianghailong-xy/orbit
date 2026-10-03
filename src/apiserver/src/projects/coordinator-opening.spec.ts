@@ -78,6 +78,11 @@ test('with Automatic on, the coordinator is told it judges task completion, and 
     );
     assert.match(form, /拍板题用 ask_owner 发，每题附上你推荐的默认/);
     assert.match(form, /能按默认推进的就按默认推进，别停下来等/);
+    // A failed landing of a DONE task is the coordinator's to rerun or send back (J-T1b), and
+    // task_start is named as the door that does NOT do it.
+    assert.match(form, /task_start 不会重新排落地/);
+    assert.match(form, /用 integration_retry 带理由重排一次，交付本身的问题用 task_reopen 退回返工/);
+    assert.match(form, /这类落地去留由你判，不拿去问账号所有者/);
     // And not the conversational stance, whose second sentence is false with the switch on: wakes,
     // auto-run dispatch and the automatic merge into main all act on this project.
     assert.doesNotMatch(form, /推进靠的是跟人对话/);
@@ -97,6 +102,9 @@ test('with Automatic off, the coordinator keeps the conversational text and no A
     assert.doesNotMatch(form, /task_evidence_decide/);
     assert.doesNotMatch(form, /要找账号所有者的只有三类/);
     assert.doesNotMatch(form, /ask_owner/);
+    // Without the switch a failed landing is the owner's from the start, so the coordinator is not
+    // told it decides one.
+    assert.doesNotMatch(form, /integration_retry/);
   }
 });
 

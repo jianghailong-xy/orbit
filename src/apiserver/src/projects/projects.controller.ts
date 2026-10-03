@@ -21,6 +21,7 @@ import {
   ResolveOpenItemDto,
   ConfirmAcceptanceCriteriaDto,
   CreateProjectDto,
+  DoneProjectDto,
   DecideCriteriaChangeDto,
   DecideProjectHandoffDto,
   OpenProjectCoordinatorDto,
@@ -93,6 +94,23 @@ export class ProjectsController {
   @Get()
   list(@CurrentUser() user: AuthUser, @Query('status') status?: string) {
     return this.projects.list(user.userId, this.parseStatus(status));
+  }
+
+  /**
+   * The projects the web sidebar's Projects group draws — `running`, what waits on the reader, and
+   * the newest activity that orders the rows.
+   *
+   * A read of its own rather than a filter over `GET /projects`, because the rail asks four
+   * questions of a project and the index answers seven task lanes, the integration line and the
+   * whole attention summary to reach them. The rail polls every 15 seconds from every open tab,
+   * which made that difference the largest single consumer of the database (2026-09-29).
+   *
+   * Declared before `:id` so the static path is matched as itself: Nest takes routes in
+   * declaration order, and `sidebar` fed to the id pipe is a 400, not a project.
+   */
+  @Get('sidebar')
+  sidebar(@CurrentUser() user: AuthUser) {
+    return this.projects.listSidebar(user.userId);
   }
 
   @Get(':id')
@@ -403,6 +421,21 @@ export class ProjectsController {
     @Headers('x-orbit-session-id') actingSessionId: string | undefined,
   ) {
     return this.acceptance.startProject(user.userId, id, dto, actingSessionId);
+  }
+
+  /**
+   * Record as done: the account owner records the project DONE in person
+   * (`ProjectAcceptanceService.recordProjectDone`). A request carrying an acting session is refused
+   * whole, and a seal or a request that has moved is a 409 that writes nothing.
+   */
+  @Post(':id/done')
+  done(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: DoneProjectDto,
+    @Headers('x-orbit-session-id') actingSessionId: string | undefined,
+  ) {
+    return this.acceptance.recordProjectDone(user.userId, id, dto, actingSessionId);
   }
 
   /**

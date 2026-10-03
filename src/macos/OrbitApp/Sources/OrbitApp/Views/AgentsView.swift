@@ -4,9 +4,9 @@ import OrbitKit
 import UIKit
 #endif
 
-// Batch D + Agents-in-sidebar refinement: the Workspace list now lives in the sidebar source list
-// (see `SectionSidebar`), folding away the old middle column. iOS renders first-level Workspaces;
-// macOS retains its runner grouping. What remains
+// Batch D + Agents-in-sidebar refinement: the Workspace list now lives in the sidebar, folding away
+// the old middle column. iOS renders first-level Workspaces in the drawer (iPad's sidebar is the
+// same drawer); macOS retains its runner grouping (see `SectionSidebar`). What remains
 // here is the selected agent's detail, split across the two right panes to mirror Open:
 //   • content column → the agent's sessions as a plain list; the window toolbar hosts the
 //                       Open/Completed/Trash scope switcher (principal), a New-session button
@@ -59,40 +59,18 @@ struct WorkspaceNavigationRow: View {
     /// `running` and never as the spinner: nobody is generating, something is happening anyway.
     var jobs: Bool = false
     let waiting: Int
-    /// The compact drawer keeps Workspace and Runner on one line. The regular-width iPad sidebar
-    /// uses a calmer two-line identity treatment so status never competes with truncated metadata.
-    var runnerOnSecondLine = false
 
     var body: some View {
         let status = WorkspaceNavigationStatusLogic.resolve(
             waiting: waiting, running: running, jobs: jobs, runnerOffline: offline)
         HStack(spacing: 12) {
             WorkspaceFolderIcon(selected: selected, offline: offline)
-            if runnerOnSecondLine {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 0) {
-                        workspaceName
-                        disabledBadge
-                    }
-                    // Offline is said in words here, not left to the folder's corner badge: that
-                    // badge is a small muted glyph on a dark row and reads as texture rather than
-                    // as state. This line has the width for it, and saying it costs no contrast —
-                    // dimming the whole row, the other obvious option, would drag this subtitle
-                    // under 3:1. The badge stays on as the second channel.
-                    Text(offline ? "\(runnerLabel) · Offline" : runnerLabel)
-                        .font(.orbitListSubtitle)
-                        .lineLimit(1)
-                        .foregroundStyle(.secondary)
-                }
-                .layoutPriority(1)
-            } else {
-                HStack(spacing: 0) {
-                    workspaceName
-                    disabledBadge
-                    Text(" · \(runnerLabel)")
-                        .lineLimit(1)
-                        .foregroundStyle(.secondary)
-                }
+            HStack(spacing: 0) {
+                workspaceName
+                disabledBadge
+                Text(" · \(runnerLabel)")
+                    .lineLimit(1)
+                    .foregroundStyle(.secondary)
             }
             Spacer(minLength: 6)
             if case .needsYou(let count) = status {
@@ -151,38 +129,15 @@ struct NeedsYouCountCapsule: View {
 }
 #endif
 
-/// A Workspace row for the regular-width sidebar. iPad uses a two-line Workspace/Runner identity;
-/// macOS preserves its existing disclosure content and faint ⌘N shortcut where available.
+#if os(macOS)
+/// A Workspace row in the macOS sidebar's Workspaces disclosure: the name over its provider and
+/// working directory, with the faint ⌘N shortcut where it has one. (iOS draws the drawer's
+/// `WorkspaceNavigationRow` on both iPhone and iPad.)
 struct AgentRowView: View {
-    #if os(iOS)
-    @Environment(AppModel.self) private var model
-    #endif
     let agent: Agent
-    #if !os(iOS)
     var shortcutIndex: Int? = nil
     var configuredProviders: [ConfiguredProvider] = []
-    #endif
     var body: some View {
-        #if os(iOS)
-        let offline = model.agents?.runnerIsOffline(agent.runnerId) == true
-        let running = model.runningWorkspaceIDs.contains(agent.id)
-        let jobs = model.jobWorkspaceIDs.contains(agent.id)
-        let selected = model.selectedSection == .agents && model.selectedAgentID == agent.id
-        WorkspaceNavigationRow(
-            agent: agent,
-            runnerLabel: model.agents?.runnerLabel(agent.runnerId) ?? "Shared",
-            selected: selected,
-            offline: offline,
-            running: running,
-            jobs: jobs,
-            // Regular-width iOS keeps its existing status policy: another Session waiting for the
-            // user must not replace this Workspace's running cue. The compact drawer owns the
-            // needs-you badge; the shared row only supplies its visual when that surface opts in.
-            waiting: 0,
-            runnerOnSecondLine: true
-        )
-        .padding(.vertical, 4)
-        #else
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
@@ -207,9 +162,9 @@ struct AgentRowView: View {
             }
         }
         .padding(.vertical, 2)
-        #endif
     }
 }
+#endif
 
 /// How this list's rows navigate — a fact about the container the list is in, not about the rows
 /// (they are the same rows in both shells; see `AgentPanes.sessionRow`).
@@ -235,6 +190,9 @@ struct AgentContentColumn: View {
     /// the column root (see `body`). macOS carries it too but never shows a field: its window
     /// searches from the ⌘K palette instead.
     @State private var searchQuery = ""
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    #endif
     var body: some View {
         @Bindable var app = app
         // Both branches in one `Group` so the search field below can be declared on the column root
@@ -248,47 +206,34 @@ struct AgentContentColumn: View {
         // rebuilding the column with the workspace already resolved. Declared here it exists from the
         // column's first breath, in either branch.
         Group {
-            if let agents = app.agents, let id = app.selectedAgentID, let a = agents.agent(id) {
-                AgentPanes(agents: agents, agent: a, selectedSessionID: $app.selectedAgentSessionID,
-                           searchQuery: $searchQuery, rowNavigation: rowNavigation)
-                    .id(a.id)
-                    #if os(iOS)
-                    // No title, on either width: the bar's workspace switcher (see the toolbar
-                    // below) moved out of the title slot and into the leading one, and a title left
-                    // behind would draw a second copy of the same name in the centre. `.inline`
-                    // stays even with nothing to draw — a page with no title still reserves the
-                    // *large* title band without it, the trap `ConsoleView` documents on its own
-                    // page. One deliberate cost: a pushed page's back label is the previous page's
-                    // title, so the console and the draft now read "Back" instead of the workspace
-                    // name. (macOS keeps its title: its toolbar is its own layout and nothing there
-                    // moved.)
-                    .navigationBarTitleDisplayMode(.inline)
-                    #else
-                    .navigationTitle(a.name)
-                    #endif
+            #if os(iOS)
+            // A wide shell's session column has no stack of its own (§3.3), so a folder is the page
+            // this *column* draws: entering one replaces the workspace's list here, with the
+            // folder's page carrying the column's own back button, while the detail pane beside it
+            // goes on following the selected session. A phone never reads this — its folder page is
+            // a frame the compact stack pushes (`CompactSections`).
+            if let address = app.folderColumn {
+                SessionFolderPage(address: address, rowNavigation: rowNavigation, searchQuery: $searchQuery)
             } else {
-                switch app.agents?.listPresentation {
-                case .loading?:
-                    ProgressView()
-                case .failed?:
-                    // Offline the sidebar has nothing to pick and the launch landing is still waiting
-                    // on a list that answers, so say the fetch failed rather than "Select a workspace".
-                    VStack(spacing: 10) {
-                        ContentUnavailableView("Workspaces couldn't be loaded", systemImage: "wifi.exclamationmark",
-                                               description: Text(app.agents?.errorText ?? "Request failed — check your connection."))
-                        Button("Retry") { Task { await app.loadAgentsThenLand() } }
-                    }
-                default:
-                    ContentUnavailableView("Select a workspace", systemImage: "folder",
-                                           description: Text("Pick a workspace in the sidebar to see its sessions and settings."))
-                }
+                workspaceList
             }
+            #else
+            workspaceList
+            #endif
         }
         #if os(iOS)
         // Search, in the list rather than over it. Until it existed the list was only searchable from
         // inside the drawer (or ⌘K, which needs a keyboard), so it looked like it had none.
-        // `.navigationBarDrawer` is what keeps the field *below* the bar's own content instead of
-        // over it — the system owns that layout, which a hand-placed bar can't do. `.always`, and
+        //
+        // On the phone (iOS 26) the field sits in the bottom toolbar, where a thumb reaches it, and
+        // gets out of the way while the list is read downward: `revealsBottomSearchOnScroll` on
+        // `AgentPanes`' list hides it on the way down and brings it back on the way up, at the top
+        // and at the end (`BottomSearchReveal`). The owner picked that over the drawer below, which
+        // spent 60pt of the phone's header on a field that never left; New session stays in the bar.
+        //
+        // The iPad's column, and phones before iOS 26 (which draw no bottom search field), keep the
+        // drawer. `.navigationBarDrawer` is what keeps the field *below* the bar's own content instead
+        // of over it — the system owns that layout, which a hand-placed bar can't do. `.always`, and
         // this is the second time it has won: the list below carries `.refreshable`, and on iOS 26
         // the two disagree about where the drawer's 60pt goes.
         //
@@ -320,14 +265,61 @@ struct AgentContentColumn: View {
         // (The field is declared on the column root, so it also exists from that column's first
         // breath in either mode.) Typing searches the server (every workspace, scope and message
         // text); the hits replace the list's sections until the field is cleared (see `AgentPanes`).
-        .searchable(text: $searchQuery,
-                    placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: "Search sessions")
+        .sessionListSearch(text: $searchQuery,
+                           fromBottom: SessionListPresentation.resolve(
+                               isCompactWidth: horizontalSizeClass == .compact).searchesFromBottom)
         // The query used to be `AgentPanes`' own state, so switching workspace (`.id(a.id)`) dropped
         // it. It outlives that rebuild now, so clear it here to land on the new workspace's sessions
         // rather than on the old workspace's search results.
         .onChange(of: app.selectedAgentID) { _, _ in searchQuery = "" }
         #endif
+    }
+
+    /// The workspace's session list — or the placeholder that stands in for it while the workspace
+    /// list loads, fails, or nobody has picked one. Split out of `body` so the iOS branch can put a
+    /// folder's page in front of it without repeating either (see `body`).
+    @ViewBuilder private var workspaceList: some View {
+        @Bindable var app = app
+        if let agents = app.agents, let id = app.selectedAgentID, let a = agents.agent(id) {
+            AgentPanes(agents: agents, agent: a, selectedSessionID: $app.selectedAgentSessionID,
+                       searchQuery: $searchQuery, rowNavigation: rowNavigation)
+                .id(a.id)
+                #if os(iOS)
+                // No title, on either width: the bar's workspace switcher (see the toolbar
+                // below) moved out of the title slot and into the leading one, and a title left
+                // behind would draw a second copy of the same name in the centre. `.inline`
+                // stays even with nothing to draw — a page with no title still reserves the
+                // *large* title band without it, the trap `ConsoleView` documents on its own
+                // page. One deliberate cost: a pushed page's back label is the previous page's
+                // title, so the console and the draft now read "Back" instead of the workspace
+                // name. (macOS keeps its title: its toolbar is its own layout and nothing there
+                // moved.)
+                .navigationBarTitleDisplayMode(.inline)
+                #else
+                .navigationTitle(a.name)
+                #endif
+        } else {
+            switch app.agents?.listPresentation {
+            case .loading?:
+                ProgressView()
+            case .failed?:
+                // Offline the sidebar has nothing to pick and the launch landing is still waiting
+                // on a list that answers, so say the fetch failed rather than "Select a workspace".
+                VStack(spacing: 10) {
+                    ContentUnavailableView("Workspaces couldn't be loaded", systemImage: "wifi.exclamationmark",
+                                           description: Text(app.agents?.errorText ?? "Request failed — check your connection."))
+                    Button("Retry") { Task { await app.loadAgentsThenLand() } }
+                }
+            case .content? where app.launchLandingPending:
+                // The workspaces are in but the landing isn't: it waits for the rest of the
+                // workspace fetch (runners, providers, pools), and asking for a pick it is about
+                // to make is the "Select a workspace" a cold launch used to flash.
+                ProgressView()
+            default:
+                ContentUnavailableView("Select a workspace", systemImage: "folder",
+                                       description: Text("Pick a workspace in the sidebar to see its sessions and settings."))
+            }
+        }
     }
 }
 
@@ -367,6 +359,27 @@ struct AgentPanes: View {
     @State private var hitsQuery = ""
     @State private var contentSearched = true
     @State private var searching = false
+    /// Which row's circle swipe actions are out (iOS 26 — see `RowSwipeState`).
+    @State private var rowSwipe = RowSwipeState()
+    /// The row whose Share was tapped — drives the share panel, owned by the list for the same
+    /// reason as `taggingSession`.
+    @State private var sharingSession: Session?
+    /// The row whose Move was tapped — drives the Move panel, list-owned like the two above.
+    @State private var movingSession: Session?
+    /// The folder whose Rename… was tapped — on a folder row's long-press menu (the folder page's
+    /// ⋯ raises the same question through the same modifier). List-owned like the sheets above.
+    @State private var renamingFolder: SessionFolder?
+    /// The folder whose Delete Folder… was tapped, with the count the confirmation names.
+    @State private var deletingFolder: SessionFolderDeletion?
+    /// New Folder… in the ≡ menu (§3.4) and the prompt it opens: its draft, whether it is waiting on
+    /// the server, and why the last one failed (a name the workspace already has, in words).
+    @State private var namingFolder = false
+    @State private var newFolderDraft = ""
+    @State private var newFolderFailure: String?
+    /// Whether the Pinned section is folded to its header (iOS list only). Stored rather than view
+    /// state: this pane is rebuilt per workspace (`.id(a.id)`), so @State would unfold it on every
+    /// switch, and on every launch.
+    @AppStorage("sessionList.pinnedCollapsed") private var pinnedCollapsed = false
     #endif
     // Set true when the composer hands ↑/↓ back on Escape, so the session list can be arrow-navigated
     // without a click; the binding also tracks click-to-focus.
@@ -400,6 +413,21 @@ struct AgentPanes: View {
                     }
                 }
             } else {
+                // The workspace's folders, at the very top of the list (docs/session-folders-move-design.md
+                // §3.3): the sessions filed in one are drawn behind its row and not in the time
+                // sections below. Trash, a tag filter and Group by Tag all leave this empty — see
+                // `folderListing` — so the list goes on flat there, and macOS never draws folders
+                // at all (§1).
+                ForEach(Array(folderListing.folders.enumerated()), id: \.element.id) { index, row in
+                    // The list draws a hairline at the top of its first row; with folder rows at the
+                    // very top, that row is one of theirs (see the note on the first "Today" row
+                    // below, whose trick this repeats).
+                    if index == 0 {
+                        folderRow(row).listRowSeparator(.hidden, edges: .top)
+                    } else {
+                        folderRow(row)
+                    }
+                }
                 // The leading "Today" keeps no title. A list that opens on today — which is nearly
                 // always — would be saying something its rows already say (each carries its own time
                 // on the right), and the 28pt of header it costs is half a row back. `Pinned`, when
@@ -416,11 +444,25 @@ struct AgentPanes: View {
                         // simulator: hiding the *section* separator, or giving the Section an empty
                         // header, both leave the line; only this removes it).
                         ForEach(section.sessions) { session in
-                            if session.id == section.sessions.first?.id {
+                            // Only the list's own first row drops the hairline above it: with
+                            // folder rows on top, the first "Today" row is not that row.
+                            if session.id == section.sessions.first?.id, folderListing.folders.isEmpty {
                                 sessionRow(session).listRowSeparator(.hidden, edges: .top)
                             } else {
                                 sessionRow(session)
                             }
+                        }
+                    } else if section.title == "Pinned" {
+                        // Pinned folds to its header, as Notes' Pinned does: the rows leave the
+                        // list, the header stays to bring them back. The rows are dropped here
+                        // rather than through `Section(isExpanded:)`, whose disclosure only draws in
+                        // the sidebar list style.
+                        Section {
+                            if !pinnedCollapsed {
+                                ForEach(section.sessions) { sessionRow($0) }
+                            }
+                        } header: {
+                            pinnedSectionHeader(section.title)
                         }
                     } else {
                         Section {
@@ -444,6 +486,10 @@ struct AgentPanes: View {
         // Plain style so the sections read as light headers over full-width rows (matching the
         // current list), not boxed inset-grouped cards.
         .listStyle(.plain)
+        .rowSwipeList(rowSwipe)
+        // The phone's search field, in the bottom toolbar, gets out of the way while the list is read
+        // downward (see the column's `sessionListSearch`).
+        .revealsBottomSearchOnScroll(query: searchQuery, enabled: listPresentation.searchesFromBottom)
         #endif
         .focused($listFocused)
         .onChange(of: app.sessionListFocusRequest) { _, _ in listFocused = true }
@@ -479,7 +525,17 @@ struct AgentPanes: View {
         // compact iPhone list keeps the existing icon-menu scope switcher and pays no extra height.
         // "Another session needs you" follows it in the same inset. This remains the only instance at
         // regular width (the console beside it stays quiet), so it excludes that visible console.
-        .safeAreaInset(edge: .top, spacing: 0) {
+        //
+        // Not a bare `.safeAreaInset`: on iOS 26 the pull's spinner hangs under the navigation
+        // bar, in the band these sit in, and a pull drew it over the needs-you bar; the modifier
+        // keeps these put and the spinner under them, pull and refresh alike, and puts the list
+        // back at its top when a refresh leaves it just past there (see `topInsetClearOfRefresh`).
+        // Also tried on the iOS 26.5 simulator and dropped: the bands stacked above the list
+        // instead (the pull pushed them down 60pt and no spinner showed), `.safeAreaBar` (the list
+        // would no longer pull, nor stay scrolled), and the needs-you bar as the list's first row
+        // (it scrolls away, and a finished refresh left the list settled with it half under the
+        // navigation bar).
+        .topInsetClearOfRefresh {
             VStack(spacing: 0) {
                 if listPresentation.showsPersistentScope {
                     VStack(spacing: 0) {
@@ -609,8 +665,46 @@ struct AgentPanes: View {
         .sheet(item: $taggingSession) { s in
             SessionTagSheet(session: s).environment(app)
         }
-        // Load the owner's tag library when the pane appears so the picker + chips are populated.
-        .task { await app.loadSessionTags() }
+        #if os(iOS)
+        // The share panel for the row whose Share was tapped: the session page's own (ConsoleView's),
+        // list-owned like the tag picker above. iOS only, as the rows' Share is.
+        .sheet(item: $sharingSession) { s in
+            if let baseURL = app.baseURL {
+                ShareSheet(kind: .session, rootID: s.id, baseURL: baseURL, tokenStore: app.tokenStore)
+            }
+        }
+        // The Move panel for the row whose Move was tapped: the folders of this workspace, counted
+        // over the list the row is in (docs/session-folders-move-design.md §4).
+        .sheet(item: $movingSession) { s in
+            SessionMoveSheet(session: s, workspace: agent, listed: agents.agentSessions).environment(app)
+        }
+        // Rename… / Delete Folder…, raised by a folder row's long-press menu — the same two asks, in
+        // the same words, that a folder page's ⋯ raises (§3.4).
+        .sessionFolderManagement(renaming: $renamingFolder, deleting: $deletingFolder)
+        // New Folder… in the ≡ menu: the system's prompt names it, it lands at the top of this list,
+        // and a name the workspace already has is refused in so many words (as the Move panel's is).
+        .alert(SessionMoveCopy.newFolderTitle, isPresented: $namingFolder) {
+            TextField(SessionMoveCopy.folderNamePlaceholder, text: $newFolderDraft)
+            Button(SessionMoveCopy.create) { createFolderFromMenu() }
+                .keyboardShortcut(.defaultAction)
+            Button(SessionMoveCopy.cancel, role: .cancel) {}
+        } message: {
+            Text(SessionFolderCopy.newFolderMessage)
+        }
+        .alert(SessionMoveCopy.couldNotCreate, isPresented: newFolderFailed) {
+            Button(SessionMoveCopy.ok, role: .cancel) {}
+        } message: {
+            Text(newFolderFailure ?? "")
+        }
+        #endif
+        // Load the owner's tag library when the pane appears so the picker + chips are populated,
+        // and on iOS the folder library the Move panel offers.
+        .task {
+            await app.loadSessionTags()
+            #if os(iOS)
+            await app.loadSessionFolders()
+            #endif
+        }
     }
 
     /// What the List's selection is bound to: the projection onto the section's stack in the
@@ -681,6 +775,14 @@ struct AgentPanes: View {
                 .accessibilityAddTraits(groupByTag ? .isSelected : [])
             }
             if includesScope || !app.sessionTags.isEmpty { Divider() }
+            // New Folder… (§3.4): a folder in this workspace, made without moving a session into it
+            // (the Move panel's entry is the same thing with a session in hand). Not in Trash, where
+            // no folder row is drawn — the new folder would appear nowhere on screen.
+            if view != .trash {
+                Button { namingFolder = true } label: {
+                    Label(SessionFolderCopy.newFolder, systemImage: "folder.badge.plus")
+                }
+            }
             Button { showSettings = true } label: {
                 Label("Settings", systemImage: "gearshape")
             }
@@ -706,16 +808,60 @@ struct AgentPanes: View {
     #endif
 
     // The sessions to show: the agent list, narrowed to the tag filter chip when one is active.
-    /// The recency sections the list draws, split out of the `ForEach` so the leading one can be
-    /// rendered without its title (see the list body).
-    private var timeSections: [SessionTimeSection] {
-        SessionTimeGrouping.sections(shownSessions, pinnedFirst: view == .open && tagFilter == nil)
-    }
-
     private var shownSessions: [Session] {
         guard let f = tagFilter else { return agents.agentSessions }
         return SessionFilter.withTag(agents.agentSessions, tagID: f)
     }
+
+    #if os(iOS)
+    /// The recency sections the list draws, split out of the `ForEach` so the leading one can be
+    /// rendered without its title (see the list body). Over what is left after the folders take
+    /// theirs — a session inside a folder is drawn behind its row, not here (§3.3).
+    private var timeSections: [SessionTimeSection] {
+        SessionTimeGrouping.sections(folderListing.sessions, pinnedFirst: view == .open && tagFilter == nil)
+    }
+
+    /// This workspace's list, split by folder (§3.3): the folder rows the list draws at its top,
+    /// and the sessions left for the time sections. The grouping itself is the pure, tested
+    /// `SessionFolderGrouping`; what this reads is what it needs — the workspace's own folders out
+    /// of the owner's library, and its Runner's explicit-offline state, which silences a folder
+    /// row's spinner exactly as it silences the workspace's own. Trash, a tag filter and Group by
+    /// Tag all leave the folder rows empty (§3.3): each is a grouping of its own, and a second one
+    /// stacked on the list would leave a session with two places to be.
+    private var folderListing: SessionFolderListing {
+        SessionFolderGrouping.listing(shownSessions,
+                                      folders: app.sessionFolders.filter { $0.workspaceId == agent.id },
+                                      view: view,
+                                      byTag: tagFilter != nil || groupByTag,
+                                      runnerOffline: agents.runnerIsOffline(agent.runnerId))
+    }
+
+    /// One folder's row: the glyph, name, count and the state it reports, as the whole row (the
+    /// page it opens is pushed by the container's own navigation — a tap lands on `AppModel`'s one
+    /// entry point for both shells). A long press offers the two management acts (§3.4) — on the
+    /// row itself, since a `Button` does not pass its label's modifiers up to the `List` (see
+    /// `sessionRow`).
+    private func folderRow(_ row: SessionFolderRow) -> some View {
+        Button {
+            app.openFolder(SessionFolderAddress(folderID: row.folder.id, agentID: agent.id, view: view))
+        } label: {
+            SessionFolderRowView(row: row)
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                renamingFolder = row.folder
+            } label: {
+                Label(SessionFolderCopy.rename, systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                deletingFolder = SessionFolderDeletion(folder: row.folder, sessionCount: row.sessionCount)
+            } label: {
+                Label(SessionFolderCopy.delete, systemImage: "trash")
+            }
+        }
+    }
+    #endif
 
     /// True while the list is showing search results in place of its sections. Always false on
     /// macOS, whose window searches from the ⌘K palette instead.
@@ -770,7 +916,6 @@ struct AgentPanes: View {
         contentSearched = res.contentSearched
         hitsQuery = res.q
     }
-    #endif
 
     /// One row, wrapped for the container it is in. The row view itself is the same either way; what
     /// changes is who moves the screen — the three-column shell's `List` selection, or the row's own
@@ -781,7 +926,9 @@ struct AgentPanes: View {
         let row = AgentSessionRow(session: s, deleted: view == .trash, showsPin: view == .open)
         switch rowNavigation {
         case .selection:
-            row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }).tag(s.id)
+            row.sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },
+                                  onMove: { movingSession = s })
+                .tag(s.id)
         case .push:
             // A `Button`, not a `NavigationLink(value:)`: the link's disclosure indicator has no
             // usable hiding place on iOS 17/18 (see `AppModel.push`). `.foregroundStyle(.primary)`:
@@ -794,9 +941,27 @@ struct AgentPanes: View {
             // and `.contextMenu` are read off the view the `List` hosts as its row, and a `Button`
             // does not pass them up from its label — which is where this wrapper used to leave them,
             // and why a swipe or a long press on a compact session row did nothing.
-            .sessionRowActions(s, scope: view, onTag: { taggingSession = s })
+            .sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },
+                               onMove: { movingSession = s })
         }
     }
+
+    /// New Folder… in the ≡ menu: make the folder in this workspace and keep it, so its row draws at
+    /// the top of this very list. A refusal (a name the workspace already has is a 409) leaves its
+    /// reason up as an alert, with the draft kept for another try.
+    private func createFolderFromMenu() {
+        guard let name = SessionMoveLogic.folderName(newFolderDraft) else { return }
+        Task {
+            if let refused = await app.createSessionFolder(named: name, in: agent) {
+                newFolderFailure = refused
+            }
+        }
+    }
+
+    private var newFolderFailed: Binding<Bool> {
+        Binding(get: { newFolderFailure != nil }, set: { if !$0 { newFolderFailure = nil } })
+    }
+    #endif
 
     @ViewBuilder private func tagSectionHeader(_ tag: SessionTag?) -> some View {
         if let tag {
@@ -808,6 +973,29 @@ struct AgentPanes: View {
             Text("Untagged").textCase(nil)
         }
     }
+
+    #if os(iOS)
+    /// The Pinned section's header: its title, and at the trailing edge a chevron that points down
+    /// while the rows show and right once they are folded away (one glyph turned, never two
+    /// swapped — as the cards' chevrons). The whole band is the button, not just the chevron.
+    private func pinnedSectionHeader(_ title: String) -> some View {
+        Button {
+            withAnimation { pinnedCollapsed.toggle() }
+        } label: {
+            HStack {
+                Text(title).textCase(nil)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .rotationEffect(.degrees(pinnedCollapsed ? 0 : 90))
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityHint(pinnedCollapsed ? "Shows the pinned sessions" : "Hides the pinned sessions")
+    }
+    #endif
 }
 
 /// The agent edit form, presented as a sheet from the content column's toolbar gear (it used to be
@@ -832,10 +1020,14 @@ struct AgentSettingsSheet: View {
 
 /// Detail (right) column for the Agents section: the live console for the session selected in the
 /// content column — mirroring how Open renders ConsoleView in its detail pane.
-func newSessionDraftIdentity(_ agent: Agent) -> String {
+func newSessionDraftIdentity(_ agent: Agent, folderID: String? = nil) -> String {
     [
         agent.id, agent.defaultProvider,
         agent.effort ?? "", agent.runnerId ?? "host",
+        // The folder whose page the draft was opened from is part of the draft's identity: the same
+        // workspace's ✎ outside a folder and ✎ inside one are two different drafts, and the one
+        // that creates a session files it in its folder (§3.3).
+        folderID ?? "",
     ].joined(separator: "|")
 }
 
@@ -856,12 +1048,15 @@ struct AgentConsoleDetail: View {
                            providerPools: agents.providerPools,
                            sharedPools: agents.sharedPools,
                            modelCatalog: agents.modelCatalog(for: agent.runnerId),
-                           defaultEffort: app.user?.preferences?.defaultEffort) { session in
+                           defaultEffort: app.user?.preferences?.defaultEffort,
+                           // ✎ on a folder's page: the draft's frame names the folder, and the
+                           // session it creates lands in it (§3.3).
+                           folderID: app.composingFolderID) { session in
                 app.openCreatedAgentSession(session)
             }
             // Rebuild when settings change the selected Agent's execution identity/defaults too;
             // @State would otherwise retain the old provider after an in-place Agent edit.
-            .id(newSessionDraftIdentity(agent))
+            .id(newSessionDraftIdentity(agent, folderID: app.composingFolderID))
         } else if let sid = app.selectedAgentSessionID, let registry = app.consoleRegistry {
             // No `.id(sid)`: reuse the warm cached console and swap streams via `.task(id:)`.
             // A just-created session isn't in the Open list yet, so fall back to the agent
@@ -923,6 +1118,9 @@ struct NewSessionView: View {
     /// seed the effort pill so a value picked on web/another device carries here. Optional because
     /// a restored-token launch primes `user` asynchronously — the seed below reacts to it arriving.
     let defaultEffort: String?
+    /// The folder whose page opened this draft, if any (a folder page's ✎): the session it creates
+    /// is filed in that folder (docs/session-folders-move-design.md §3.3).
+    let folderID: String?
     @State private var draft: ConsoleModel
     @Environment(AppModel.self) private var app
     @State private var showSwitcher = false
@@ -935,6 +1133,7 @@ struct NewSessionView: View {
          sharedPools: [SharedPool] = [],
          modelCatalog: RunnerModelCatalog? = nil,
          defaultEffort: String? = nil,
+         folderID: String? = nil,
          onCreated: @escaping (Session) -> Void) {
         self.agent = agent
         self.defaultModel = defaultModel
@@ -944,6 +1143,7 @@ struct NewSessionView: View {
         self.sharedPools = sharedPools
         self.modelCatalog = modelCatalog
         self.defaultEffort = defaultEffort
+        self.folderID = folderID
         _draft = State(initialValue: registry.draftModel(
             for: agent, defaultModel: defaultModel,
             configuredProviders: configuredProviders,
@@ -951,6 +1151,7 @@ struct NewSessionView: View {
             providerPools: providerPools,
             sharedPools: sharedPools,
             modelCatalog: modelCatalog, accountDefaultEffort: defaultEffort,
+            folderID: folderID,
             onCreated: onCreated))
     }
 
@@ -1081,6 +1282,10 @@ struct NewSessionView: View {
             draft.adoptDraftProviderContext(
                 configuredProviders, loaded: configuredProvidersLoaded, defaultModel: model)
         }
+        .onChange(of: app.defaultModels, initial: true) { _, _ in
+            draft.adoptDraftProviderContext(
+                configuredProviders, loaded: configuredProvidersLoaded, defaultModel: defaultModel)
+        }
         // Re-resolve the effort pill when the account preference lands after the draft was built
         // (async `user` prime on a restored-token launch). The model owns the edit revision, so this
         // account-last-picked refill cannot overwrite a picker action made while it was loading.
@@ -1098,8 +1303,10 @@ struct NewSessionView: View {
             // the machine this draft would run on, and the one whose Engines section fixes a row.
             ProviderSwitchSheet(
                 choices: providerChoices, currentSlug: draft.provider, agentName: agent.name,
-                currentAccount: draft.codexAccount,
-                automatic: draft.codexAutomaticOffered ? draft.codexAutomatic : nil,
+                currentAccount: draft.provider == "claude" ? draft.account(for: "claude") : draft.codexAccount,
+                automatic: ["codex", "claude"].reduce(into: [String: Bool]()) { offered, engine in
+                    if draft.automaticOffered(engine) { offered[engine] = draft.draftAutomatic(engine) }
+                },
                 onSelect: { slug in draft.pickDraftProvider(slug) },
                 onSelectAccount: { slug, account in draft.pickDraftAccount(slug, account) },
                 onFixRunner: agent.runnerId.map { rid in { app.route(to: .runner(rid)) } })
@@ -1195,6 +1402,7 @@ struct AgentSessionRow: View {
                         Text(line.text).font(.orbitListSubtitle)
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
                     }
+                    SessionRequestsLine(session: session)
                 }
                 Spacer()
                 if let n = session.pendingApprovals, n > 0 {
@@ -1248,6 +1456,7 @@ struct AgentSessionRow: View {
                     .foregroundStyle(lineColor(line.tone))
                     .lineLimit(1)
             }
+            SessionRequestsLine(session: session)
         }
         .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
@@ -1281,6 +1490,7 @@ struct AgentSessionRow: View {
                 }
                 Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
             }
+            SessionRequestsLine(session: session)
         }
         .padding(.vertical, 2)
         // Combine the row's text into one VoiceOver element and speak the session's state as its
@@ -1292,9 +1502,10 @@ struct AgentSessionRow: View {
     }
 
     /// The slim trailing status cue for the compact row — the shared `SessionLiveIndicator` (spinner
-    /// while working / amber dot when it needs you / red dot on failure; calm states stay quiet).
+    /// while working / amber dot when it needs you / red dot on failure / eye while a watch will
+    /// resume it; calm states stay quiet).
     private var liveIndicator: some View {
-        SessionLiveIndicator(session: session)
+        SessionLiveIndicator(session: session, watching: watching)
     }
 
     /// Relative last-activity time ("just now", "3m ago", "2d ago", "7/8"). A working row omits
@@ -1353,14 +1564,18 @@ struct StatusGlyphView: View {
 /// The slim status cue used by the compact (iPhone) lists — the essence of the leading
 /// `StatusGlyphView`, distilled to what must never go silent: a spinner while working, an amber dot
 /// when it needs you (approval), a red dot on failure, and — since a job in flight became a state
-/// the product shows — a breathing terminal for background work. The calm states (dormant / done /
-/// queued, and processes merely left running) show nothing: the surrounding row states them in
-/// words + colour and in its VoiceOver value, so the jump-back lists (the grouped session list and
-/// the drawer's Recents) stay light. Shared so both show the exact same cue.
+/// the product shows — a breathing terminal for background work, and the strip's eye for a session
+/// a watch will resume. The calm states (dormant / done / queued, and processes merely left running)
+/// show nothing: the surrounding row states them in words + colour and in its VoiceOver value, so
+/// the jump-back lists (the grouped session list and the drawer's Recents) stay light. Shared so
+/// both show the exact same cue.
 struct SessionLiveIndicator: View {
     let session: Session
+    /// The live watches that will resume this session (`AgentSessionRow.watching`); nil where a list
+    /// holds none, which keeps the reading it always had.
+    var watching: WatchSessionSummary? = nil
     @ViewBuilder var body: some View {
-        let glyph = SessionStatusGlyph.make(for: session)
+        let glyph = SessionStatusGlyph.make(for: session, watching: watching)
         switch (glyph.shape, glyph.tone) {
         // Working is the one live state that does *not* want you — the row is making progress on
         // its own. Amber (needs you) and red (failed) are the two that do, so the working cue is
@@ -1368,6 +1583,12 @@ struct SessionLiveIndicator: View {
         // tappability: it used to sit inches from a blue tag chip on the same row, two unrelated
         // meanings in one hue.
         case (.spinner, _): SpinnerGlyph(color: .secondary)
+        // Parked on a watch that will resume it: a wake is coming and nobody is being asked anything,
+        // so it is the strip's eye, still — the mark the macOS row and the web glyph draw for the same
+        // wait — and it takes the place a job's breathing terminal would (contract §9.2: a watch is
+        // not a process). The glyph has already let a question for you or work of its own outrank it.
+        case (.symbol("eye"), _):
+            Image(systemName: "eye").font(.orbitGlyph).foregroundStyle(.secondary)
         // The one background state that is NOT quiet. A compact row's only live cue used to go
         // silent here, which is exactly the reading the session row stopped giving: a job in
         // flight is work happening with nobody generating, and this is the surface where the row

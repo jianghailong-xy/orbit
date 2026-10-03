@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 96" role="img" aria-labelledby="title desc">
+  <title id="title">Orbit</title>
+  <desc id="desc">Orbit mark and wordmark</desc>
+  <defs>
+    <linearGradient id="orbit-blue" x1="18" y1="14" x2="82" y2="82" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8eb5ff"/>
+      <stop offset="1" stop-color="#3d73ff"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(8 8)">
+    <g transform="rotate(-26 40 40)">
+      <ellipse cx="40" cy="40" rx="34" ry="15" fill="none" stroke="url(#orbit-blue)" stroke-width="4" opacity=".65"/>
+      <circle cx="70" cy="32" r="6" fill="url(#orbit-blue)"/>
+    </g>
+    <rect x="22" y="24" width="36" height="32" rx="8" fill="url(#orbit-blue)"/>
+    <path d="m30 34 7 6-7 6m12 0h9" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="104" y="63" fill="#f5f7ff" font-family="Inter,ui-sans-serif,system-ui,sans-serif" font-size="48" font-weight="760" letter-spacing="-2">orbit</text>
+</svg>

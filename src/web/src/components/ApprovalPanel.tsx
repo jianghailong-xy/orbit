@@ -7,7 +7,7 @@ import { CardActionButton, CardActions } from './CardAction';
 import { ENTER_HINT, SHORTCUT_HINT, useApproveHotkey, useCardKeyClaim } from './CardHotkey';
 import { buildBatchGraph, describeShape, shouldDraw } from '../lib/batchGraph';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
-import { markdownToPlainText } from '../lib/markdownText';
+import { markdownToPlainLines } from '../lib/markdownText';
 import {
   OWNER_CONFIRMATION_SHOW_ALL,
   OWNER_CONFIRMATION_SHOW_LESS,
@@ -144,6 +144,10 @@ export function createDetail(input: CreateInput): string {
 
 /** The caption over the field the owner is agreeing to. macOS/iOS: `Approvals.createDoneWhen`. */
 export const CREATE_DONE_WHEN = 'Done when';
+
+/** Under a new project's criteria: approving the create is not confirming them — the project's
+ *  start card asks that, once its coordinator has a plan to start. */
+export const CREATE_CRITERIA_CONFIRMED_AT_START = 'You’ll confirm these when the project starts.';
 
 /** The fold's own line, carrying its length the way the evidence card's claim fold does: this is the
  *  longest field on the card and the least decisive, and how much of it there is is what decides
@@ -506,10 +510,11 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
   const noun = createFoldNoun(input);
   const detail = createDetail(input);
   // A task's criteria is one prose block written as a prompt for the agent that will run it — the
-  // field that turns into a wall. Flattened and folded at the ceiling the owner-confirmation card
-  // folds a run's report at, which is the same kind of field read by the same person. A project's
-  // criteria are a declared list of assertions, and the list is what makes them readable.
-  const said = markdownToPlainText(input.criteria);
+  // field that turns into a wall. Its marks taken off, its lines kept, and folded at the ceiling the
+  // owner-confirmation card folds a run's report at, which is the same kind of field read by the
+  // same person. A project's criteria are a declared list of assertions, and the list is what
+  // makes them readable.
+  const said = markdownToPlainLines(input.criteria);
   const long = said.length > REPORT_CLAMP;
   return (
     <div className="dag-approval">
@@ -540,17 +545,20 @@ function CreateBody({ input }: { input: CreateInput }): JSX.Element {
         <>
           <p className="dag-approval-caption">{CREATE_DONE_WHEN}</p>
           {input.isProject ? (
-            <Markdown
-              remarkPlugins={[remarkGfm]}
-              urlTransform={referenceUrlTransform}
-              components={{ a: ReferenceLink }}
-            >
-              {input.criteria}
-            </Markdown>
+            <>
+              <Markdown
+                remarkPlugins={[remarkGfm]}
+                urlTransform={referenceUrlTransform}
+                components={{ a: ReferenceLink }}
+              >
+                {input.criteria}
+              </Markdown>
+              <p className="create-criteria-note">{CREATE_CRITERIA_CONFIRMED_AT_START}</p>
+            </>
           ) : (
             <>
               <p className="dag-approval-criteria">
-                {long && !criteriaOpen ? `${said.slice(0, REPORT_CLAMP)}…` : said}
+                {long && !criteriaOpen ? `${said.slice(0, REPORT_CLAMP).trimEnd()}…` : said}
               </p>
               {long && (
                 <button

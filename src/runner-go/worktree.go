@@ -416,11 +416,9 @@ func initGitRepo(dir string) error {
 	if _, err := git(dir, "add", "-A"); err != nil {
 		return err
 	}
-	// Inline identity + --no-verify so the baseline never fails on a runner with no git
-	// user.* set or a stray hook; --allow-empty so even an empty dir gets a HEAD to fork.
-	_, err := git(dir,
-		"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner",
-		"commit", "--no-verify", "--allow-empty", "-m", "orbit: baseline")
+	// Use the user's git identity; --no-verify keeps hooks from blocking the baseline,
+	// and --allow-empty gives even an empty dir a HEAD to fork.
+	_, err := git(dir, "commit", "--no-verify", "--allow-empty", "-m", "orbit: baseline")
 	return err
 }
 
@@ -638,6 +636,14 @@ func setupSourceWorktree(job *ClaimedSession, baseDir string) string {
 	}
 	execDir := filepath.Join(wtPath, rel)
 
+	// A checkout that is not this run's to re-attach is retired first (checkoutBelongsTo).
+	if isGitRepo(wtPath) && !checkoutBelongsTo(wtPath, repoRoot, job.Branch) {
+		if err := retireCheckout(job.SessionID, wtPath); err != nil {
+			return refuseSourceWorktree(job, sourceRefusalWorktreeRequired,
+				fmt.Sprintf("the checkout at %s is not this run's and could not be retired: %v", wtPath, err))
+		}
+	}
+
 	// Re-attach after a restart. The fork point comes from the base ref, else the pin — never from
 	// merge-base with HEAD, which for a checkout forked off a project branch is main's fork point.
 	if isGitRepo(wtPath) {
@@ -753,6 +759,17 @@ func setupWorktree(job *ClaimedSession, baseDir string) string {
 	}
 	execDir := filepath.Join(wtPath, rel)
 
+	// A checkout that is not this session's to re-attach — one a workspace on another repository
+	// left here before the session was moved — is retired first (checkoutBelongsTo), and a new one
+	// made below.
+	if isGitRepo(wtPath) && !checkoutBelongsTo(wtPath, repoRoot, job.Branch) {
+		if err := retireCheckout(job.SessionID, wtPath); err != nil {
+			job.IsolationStatus = isoSharedNoGit
+			logln(fmt.Sprintf("session %s — checkout %s is not this session's and could not be retired (%v); running shared", job.SessionID, wtPath, err))
+			return baseDir
+		}
+	}
+
 	// Reuse an existing checkout (reclaim/resume after a restart): the dir survives with
 	// any uncommitted in-flight work intact. Recover BaseSha from the persisted base ref.
 	if isGitRepo(wtPath) {
@@ -847,11 +864,8 @@ func finalizeWorktree(wt *Worktree, checkpoint bool) ([]ChangedFile, []FilePatch
 			// diff into a real message, never the raw session title/prompt.
 			msg = generateCommitMessage(wt.Path, diffstatFallbackMessage(wt.Path, wt.Branch))
 		}
-		// Inline identity so the commit never fails on a runner with no git user.* set;
-		// --no-verify so a repo's pre-commit hook can't block finalization.
-		if _, err := git(wt.Path,
-			"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner",
-			"commit", "--no-verify", "-m", msg); err != nil {
+		// Use the user's git identity; --no-verify keeps hooks from blocking finalization.
+		if _, err := git(wt.Path, "commit", "--no-verify", "-m", msg); err != nil {
 			return nil, nil, fmt.Errorf("committing the work of session %s failed: %w", wt.Session, err)
 		}
 	}
@@ -1188,6 +1202,7 @@ var mergeLock sync.Mutex
 // cleanly, "error" means a precondition failed. Message carries git's output / the failed
 // precondition for the UI.
 type mergeOutcome struct {
+	Recovery  *MergeRecovery
 	Status    string
 	MergedSha string
 	SourceSha string
@@ -1239,6 +1254,9 @@ type mergeOutcome struct {
 func mergeToMain(req MergeCommand) mergeOutcome {
 	mergeLock.Lock()
 	defer mergeLock.Unlock()
+	if req.RecoveryAction != "" {
+		return recoverMerge(req)
+	}
 
 	repoRoot, err := git(expandTilde(req.WorkDir), "rev-parse", "--show-toplevel")
 	if err != nil || repoRoot == "" {
@@ -1289,6 +1307,24 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 	// reconcile below, which is the case where the work landed upstream and this machine has only
 	// just learned it.
 	if tip, _ := git(repoRoot, "rev-parse", "--verify", "refs/heads/"+target); targetContainsSource(repoRoot, sourceSha, tip) {
+		// A local-only landing is not evidence that origin accepted these commits. Keep the
+		// no-replay guard, but expose the unpublished target content for explicit review.
+		if originTracks(repoRoot, target) {
+			r := &MergeRecovery{TargetBranch: target, RepoRoot: repoRoot, SourceSha: sourceSha, LocalSha: tip}
+			remote, err := recoveryRemoteTip(repoRoot, target)
+			if err != nil {
+				out := recoveryError(r, "FETCH_FAILED", "could not verify whether the local landing reached origin/"+target+": "+gitStderr(err))
+				return out
+			}
+			if !targetContainsSource(repoRoot, sourceSha, remote) {
+				r.RemoteSha = remote
+				code := "TARGET_DIVERGED"
+				if targetContainsSource(repoRoot, remote, tip) {
+					code = "TARGET_AHEAD"
+				}
+				return recoveryError(r, code, "the source is only in local "+target+"; review its unpublished commits before pushing to origin")
+			}
+		}
 		return alreadyMergedOutcome(req.SessionID, target, sourceSha, tip)
 	}
 
@@ -1328,7 +1364,20 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 	// comment): a target that lagged origin/<target> would replay the branch onto a stale base and
 	// conflict on lines already reconciled upstream.
 	if out := reconcileTargetWithOrigin(repoRoot, target); out != nil {
+		out.SourceSha, out.TargetBranch = sourceSha, target
+		if out.Recovery != nil {
+			out.Recovery.SourceSha = sourceSha
+		}
 		return *out
+	}
+	if originTracks(repoRoot, target) {
+		local, _ := git(repoRoot, "rev-parse", "refs/heads/"+target)
+		remote, _ := git(repoRoot, "rev-parse", "refs/remotes/origin/"+target)
+		if local != remote && targetContainsSource(repoRoot, remote, local) {
+			return mergeOutcome{Status: "error", SourceSha: sourceSha, TargetBranch: target,
+				Message:  "local " + target + " has additional commits — review them before pushing the merge",
+				Recovery: &MergeRecovery{Code: "TARGET_AHEAD", TargetBranch: target, RepoRoot: repoRoot, SourceSha: sourceSha, LocalSha: local, RemoteSha: remote}}
+		}
 	}
 
 	// The target tip the replay is computed against, read AFTER the origin reconcile above so it
@@ -1436,8 +1485,8 @@ func replayAnchor(repoRoot, sessionID, sourceSha, serverBase string) string {
 // it's checked out. ffAtRoot picks how target is advanced: in place at the repo root
 // (merge --ff-only) when it's the root checkout, else by moving its ref (branch -f) when it's
 // checked out nowhere — both strict fast-forwards, since the rebase put target underneath. On a
-// rebase conflict it aborts and reports "conflict". Inline identity so the rewritten commits
-// never fail on a runner with no git user.*.
+// rebase conflict it aborts and reports "conflict". Rewritten commits keep their original
+// authors and use the user's git committer identity.
 //
 // `onto` (see replayAnchor) bounds what gets replayed: given the session's fork point, only its
 // own commits move, rather than everything the branch carries ahead of the target. Empty replays
@@ -1486,7 +1535,7 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 				return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf("could not restage %s for retry: %s", source, gitStderr(err)), 1000)}
 			}
 		}
-		rebase := []string{"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner", "rebase"}
+		rebase := []string{"rebase"}
 		if onto != "" {
 			rebase = append(rebase, "--onto", target, onto)
 		} else {
@@ -1671,7 +1720,7 @@ func reconcileTargetWithOrigin(repoRoot, target string) *mergeOutcome {
 	}
 	// Neither is an ancestor of the other → genuinely diverged. Rebasing onto the stale local
 	// target is exactly the phantom-conflict bug, so surface it instead of merging blindly.
-	return &mergeOutcome{Status: "error", Message: fmt.Sprintf(
+	return &mergeOutcome{Status: "error", Recovery: &MergeRecovery{Code: "TARGET_DIVERGED", TargetBranch: target, RepoRoot: repoRoot, LocalSha: localSha, RemoteSha: remoteSha}, Message: fmt.Sprintf(
 		"local %s has diverged from origin/%s — reconcile it with origin first (git checkout %s && git merge origin/%s), then retry the merge",
 		target, target, target, target)}
 }
@@ -1935,11 +1984,8 @@ func commitWorktree(req CommitCommand) commitOutcome {
 	// Claude); fall back to a diffstat subject, then the bare branch slug, so the history
 	// reads like hand-written commits instead of "orbit: commit <branch>".
 	msg := generateCommitMessage(wtPath, diffstatFallbackMessage(wtPath, req.Branch))
-	// Inline identity + --no-verify so the commit never fails on a runner with no git user.*
-	// set or a repo pre-commit hook (mirrors finalizeWorktree).
-	if err := gitIndex(
-		"-c", "user.email=runner@orbit", "-c", "user.name=Orbit Runner",
-		"commit", "--no-verify", "-m", msg); err != nil {
+	// Use the user's git identity; --no-verify skips hooks, as in finalizeWorktree.
+	if err := gitIndex("commit", "--no-verify", "-m", msg); err != nil {
 		return fail(err)
 	}
 	failedCommits.clear(req.SessionID)
@@ -2425,7 +2471,9 @@ const maxRetainedEligibleCheckouts = 32
 
 // gcWorktrees is the ONLY thing that removes a session checkout. Finalization no longer does:
 // the server's keepCheckout=false means a checkout has become ELIGIBLE for reclamation, and this
-// sweep re-asks that same judgement every pass rather than anyone recording it locally.
+// sweep re-asks that same judgement every pass rather than anyone recording it locally. (Setting up
+// a claim also retires a checkout at the session's path that is not that claim's to re-attach —
+// retireCheckout — which replaces it rather than reclaiming it.)
 //
 // What it removes, and when:
 //
@@ -2460,7 +2508,8 @@ func gcWorktrees(t *Transport, live map[string]bool, pressure worktreeGCPressure
 	var candidates []candidate
 	var names []string
 	for _, e := range entries {
-		if !e.IsDir() || live[e.Name()] || strings.HasPrefix(e.Name(), rebaseScratchPrefix) {
+		if !e.IsDir() || live[e.Name()] || strings.HasPrefix(e.Name(), rebaseScratchPrefix) || strings.HasPrefix(e.Name(), mergeRecoveryWorktreePrefix) ||
+			strings.HasPrefix(e.Name(), retiredCheckoutPrefix) {
 			continue
 		}
 		var touched time.Time

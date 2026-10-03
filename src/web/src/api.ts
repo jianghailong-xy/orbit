@@ -1,9 +1,12 @@
+import type { MergeRecovery, MergeRecoveryAction } from '@orbit/shared';
 import type {
   BgShell,
   ConversationTurnKind,
   OpenItemDeliveryCard,
   ProjectStartedCard,
   SessionCapabilities,
+  SessionMessageCard,
+  SessionRequestView,
   SessionTurnIntent,
   SessionTurnPlacement,
 } from '@orbit/shared';
@@ -355,8 +358,10 @@ export const createInteractiveSession = (body: {
   /** Start the session in Claude Code's fast lane (`/fast`). Omitted → off. */
   fastMode?: boolean;
   /** Which of the runner's Codex accounts the session runs on (`default` or a slot id), picked on
-   *  the New Session screen. Omitted follows the workspace's account. */
+   *  the New Session screen — which pins it there. Omitted is Automatic, or the workspace's account. */
   codexAccount?: string;
+  /** The same for a session on the built-in Claude engine: one of the runner's Claude accounts. */
+  claudeAccount?: string;
   /** Ids of images uploaded unscoped on the compose page; the server scopes them to the
    *  new session and links them to its seeded first turn. */
   attachmentIds?: string[];
@@ -373,6 +378,13 @@ export const createInteractiveSession = (body: {
       // and may improve it asynchronously; an explicit title would suppress that naming.
       title: body.shell ? `$ ${body.prompt.trim()}`.slice(0, 80) : undefined,
     },
+  });
+
+/** Start the server-owned repair conversation for a merge recovery. */
+export const createMergeRepairSession = (sessionId: string, preparePR = false) =>
+  api<MergeRepairSession>(`/sessions/${sessionId}/merge-repair`, {
+    method: 'POST',
+    body: preparePR ? { preparePR: true } : {},
   });
 
 /** Import a local Claude Code transcript as a session of a workspace — the workspace-settings
@@ -608,6 +620,10 @@ export interface ActiveSessionTurn {
   openItemDelivery?: OpenItemDeliveryCard;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStartedCard;
+  /** Another Orbit session's message (`SessionMessageCard`): who sent it, as the runner's echo will
+   *  carry it. Its words are that session's, not the reader's. Absent on every turn nobody's session
+   *  sent. */
+  sessionMessage?: SessionMessageCard;
   /** The control plane wrote this turn itself — an acceptance round, a task's brief, a wake, a
    *  delivery — so nobody typed its words. Absent on every turn somebody sent. */
   authoredByOrbit?: true;
@@ -636,6 +652,8 @@ export const resumeSession = (
     effort?: string;
     fastMode?: boolean;
     provider?: string;
+    /** As updateSessionConfig's: the account of the engine `provider` moves the session onto. */
+    account?: string;
   },
   attachmentIds?: string[],
   kind?: 'message' | 'shell',
@@ -740,8 +758,18 @@ export const updateSessionConfig = (
     effort?: string;
     fastMode?: boolean;
     provider?: string;
+    /** With `provider` naming the built-in Codex or Claude engine: which of the runner's accounts
+     *  of it — `automatic`, `default` or a slot id (SessionConfigDto.account). */
+    account?: string;
   },
 ) => api(`/sessions/${sessionId}/config`, { method: 'PATCH', body: config });
+
+/** Move a session on the built-in Codex or Claude engine to another of its runner's accounts — which
+ *  pins it there — or back onto `automatic`. Spawn-only, like a provider: a live session's engine
+ *  re-spawns on the new account once no turn is in flight, and an ended one takes it on its next
+ *  resume. */
+export const switchSessionAccount = (sessionId: string, account: string) =>
+  api(`/sessions/${sessionId}/account`, { method: 'PATCH', body: { account } });
 
 /** Rename a session's display title. Works on any session (live or ended) and never
  *  touches the runner — purely a metadata update. */
@@ -780,10 +808,10 @@ export const endSession = (sessionId: string) => api(`/sessions/${sessionId}/end
 /** Ask the runner that ran this session to merge its worktree branch into `targetBranch`
  *  (omitted → the default: the runner auto-detects main, else master). Async: the outcome
  *  lands on SessionDetail.mergeStatus within a heartbeat (~30s). */
-export const mergeSessionToMain = (sessionId: string, targetBranch?: string) =>
+export const mergeSessionToMain = (sessionId: string, targetBranch?: string, recoveryAction?: MergeRecoveryAction, previewId?: string) =>
   api(`/sessions/${sessionId}/merge`, {
     method: 'POST',
-    body: targetBranch ? { targetBranch } : {},
+    body: { targetBranch, recoveryAction, previewId },
   });
 
 /** Ask the runner to commit a live session's uncommitted worktree changes onto its branch.
@@ -832,8 +860,18 @@ export const unpinSession = (sessionId: string) =>
 // re-sends with. Asked only when the loaded transcript window cannot answer: a run's message sits
 // at seq 1 behind thousands of tool events, far outside the tail this page paints, and deciding
 // from that window alone is how the button went missing on exactly the runs an outage kills.
+// `sessionMessage` is the card the words' echo carries when they are another Orbit session's: the
+// Retry then asks the server to re-send them (`resendSessionRetryMessage`).
 export const getSessionRetryMessage = (sessionId: string) =>
-  api<{ text: string }>(`/sessions/${sessionId}/retry-message`);
+  api<{ text: string; sessionMessage?: SessionMessageCard }>(`/sessions/${sessionId}/retry-message`);
+
+// Re-send another session's message from the failure card (docs/session-request-reply-contract.md
+// §2.1): the server re-sends it as the automatic retry would — signed by that session, with the
+// request it was — instead of this page sending the words again in the owner's own name. It names no
+// key: the server derives one from the failed message, so a double tap or a response lost and clicked
+// again is the turn already queued rather than a second re-send (§2.1, §8 criterion 19).
+export const resendSessionRetryMessage = (sessionId: string) =>
+  api<{ turnId: string; placement?: string }>(`/sessions/${sessionId}/retry-message`, { method: 'POST' });
 
 // Turn off / put back the retry armed on this session by a spent quota or a transient provider
 // error. Arming is automatic when one of those kills a turn; `armAutoRetry` exists so the card's
@@ -1209,6 +1247,19 @@ export type SessionListItem = Record<string, any> & {
   status?: string | null;
 };
 
+/** The repair conversation attached to a merge recovery on its parent session. */
+export interface MergeRepairSession {
+  id: string;
+  title?: string | null;
+  runState?: string | null;
+  runStatus?: string | null;
+  status?: string | null;
+  lifecycleState?: string | null;
+  sessionState?: string | null;
+  error?: string | null;
+  completedAt?: string | null;
+}
+
 /** A single session's detail, as returned by GET /sessions/:id. Only the fields the web
  *  reads are typed; `branch`/`baseSha`/`changedFiles`/`isolationStatus` carry the
  *  per-session git worktree result (null until the runner reports completion). */
@@ -1246,6 +1297,13 @@ export interface SessionDetail {
   /** The Codex account picked for this session on the New Session screen; null follows the
    *  workspace's (`workspace.codexAccount`). */
   codexAccount?: string | null;
+  /** That account was picked by hand, and the session stays on it: its usage limit waits for the
+   *  reset. False is Automatic — Orbit moves the session to an account with room when it hits one. */
+  codexAccountPinned?: boolean;
+  /** The Claude account picked or chosen for this session; null follows the workspace's. */
+  claudeAccount?: string | null;
+  /** See codexAccountPinned. */
+  claudeAccountPinned?: boolean;
   // When the armed auto-retry fires (null = nothing armed), and how many attempts this run of
   // failures has already spent. Drives the transcript's quota / provider-error card.
   retryAt?: string | null;
@@ -1275,6 +1333,10 @@ export interface SessionDetail {
   // until the user clicks merge.
   mergeStatus?: 'pending' | 'merged' | 'conflict' | 'error' | null;
   mergeError?: string | null;
+  mergeRecovery?: MergeRecovery | null;
+  mergeRepairSession?: MergeRepairSession | null;
+  mergeRecoveryAction?: MergeRecoveryAction | null;
+  mergeRecoverySupported?: boolean;
   mergedAt?: string | null;
   // The branch the user chose to merge into (status bar's branch dropdown). Null = the
   // default (runner auto-detects main, else master). Shown on the merged ✓ chip + used by
@@ -1322,6 +1384,10 @@ export interface SessionDetail {
  *  resolve the runner behind a `/sessions/:id` deep link and show its worktree output. */
 export const getSession = (idOrPublicId: string) =>
   api<SessionDetail>(`/sessions/${idOrPublicId}`);
+
+/** One session request as it stands now — the state a request card shows (lib/sessionRequest). */
+export const getSessionRequest = (requestId: string) =>
+  api<SessionRequestView>(`/session-requests/${encodeURIComponent(requestId)}`);
 
 /**
  * Open (or return) the conversation a task list is steered from.

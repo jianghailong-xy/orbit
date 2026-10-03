@@ -15,6 +15,12 @@ import OrbitKit
 struct RunnerSignInView: View {
     let runnerID: String
     let engine: LoginEngine
+    /// Sign in this account the runner already has — `default` or the id of one it added — of an
+    /// engine that keeps several. Nil: the runner's own login, exactly as before accounts.
+    var account: String? = nil
+    /// Sign in a NEW account, which the runner adds under this name. The button waits for one: a
+    /// blank name would read as no account at all, which is the runner's own login.
+    var accountName: String? = nil
     /// Offered the moment the sign-in lands: re-send whatever the failure ate. Nil where there is
     /// nothing to re-send (a proactive sign-in from the Runners screen).
     var onDone: (() async -> Void)?
@@ -35,7 +41,8 @@ struct RunnerSignInView: View {
         }
         .task(id: runnerID) {
             guard let baseURL = app.baseURL else { return }
-            let m = model ?? RunnerSignInModel(runnerID: runnerID, engine: engine,
+            let m = model ?? RunnerSignInModel(runnerID: runnerID, engine: engine, account: account,
+                                               adding: accountName != nil,
                                                baseURL: baseURL, tokenStore: app.tokenStore)
             model = m
             await m.refresh()
@@ -136,7 +143,7 @@ struct RunnerSignInView: View {
                 Text(m).font(.orbitLabel).foregroundStyle(.orange)
             }
             Button {
-                Task { await model.begin() }
+                Task { await model.begin(accountName: accountName) }
             } label: {
                 Text(model.busy
                      ? "Starting…"
@@ -145,8 +152,14 @@ struct RunnerSignInView: View {
                        : "Sign in to \(engine.displayName)")
             }
             .buttonStyle(.borderedProminent)
-            .disabled(model.busy)
+            .disabled(model.busy || !nameReady)
         }
+    }
+
+    /// A card adding an account has a name to start with; any other card is ready as it is.
+    private var nameReady: Bool {
+        guard let accountName else { return true }
+        return !accountName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     // MARK: pieces
@@ -288,7 +301,8 @@ struct AuthErrorCardView: View {
                 .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
             Button("Retry — re-send my last message") { Task { await retry() } }
                 .buttonStyle(.bordered)
-                .disabled(console.sending)
+                // A press already in flight is not offered a second one (criterion 19).
+                .disabled(console.sending || console.retryInFlight)
         }
     }
 

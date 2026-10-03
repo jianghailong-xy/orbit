@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Orbit — Agent Mission Control</title>
+  <desc id="desc">Self-hosted mission control for coding agents</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse"><stop stop-color="#0d1324"/><stop offset="1" stop-color="#151f3c"/></linearGradient>
+    <linearGradient id="glow" x1="170" y1="110" x2="520" y2="500" gradientUnits="userSpaceOnUse"><stop stop-color="#8eb5ff"/><stop offset="1" stop-color="#3d73ff"/></linearGradient>
+  </defs>
+  <rect width="1200" height="630" rx="30" fill="url(#bg)"/>
+  <circle cx="1030" cy="110" r="220" fill="#3d73ff" opacity=".12"/>
+  <circle cx="930" cy="580" r="280" fill="#8b7cff" opacity=".08"/>
+  <g transform="translate(115 142)">
+    <g transform="rotate(-26 105 105)"><ellipse cx="105" cy="105" rx="93" ry="41" fill="none" stroke="url(#glow)" stroke-width="11" opacity=".7"/><circle cx="187" cy="83" r="16" fill="url(#glow)"/></g>
+    <rect x="57" y="61" width="96" height="88" rx="21" fill="url(#glow)"/>
+    <path d="m79 90 23 20-23 20m40 0h27" fill="none" stroke="#fff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="390" y="240" fill="#fff" font-family="Inter,ui-sans-serif,system-ui,sans-serif" font-size="72" font-weight="760" letter-spacing="-3">Orbit</text>
+  <text x="390" y="315" fill="#a9b9da" font-family="Inter,ui-sans-serif,system-ui,sans-serif" font-size="30" font-weight="650">Agent Mission Control</text>
+  <text x="390" y="390" fill="#e8edff" font-family="Inter,ui-sans-serif,system-ui,sans-serif" font-size="27">Run coding agents on your own machines.</text>
+  <text x="390" y="432" fill="#e8edff" font-family="Inter,ui-sans-serif,system-ui,sans-serif" font-size="27">Keep the plan, history, and controls in one place.</text>
+  <rect x="390" y="490" width="290" height="52" rx="26" fill="#fff" opacity=".1"/>
+  <text x="425" y="524" fill="#bcd0ff" font-family="Inter,ui-sans-serif,system-ui,sans-serif" font-size="20" font-weight="650">Self-hosted · MIT · pre-1.0</text>
+</svg>

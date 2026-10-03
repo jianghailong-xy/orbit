@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RunStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import { sessionCarriesTaskSql } from '../sessions/task-work-carrier';
 import { TasksService } from './tasks.service';
-import { fakeReceiptStore } from './task-run-receipt-fake';
+import { runDoorSessionRead } from './query-raw-test-helper';
+import { fakeReceiptStore, withReceiptStore } from './task-run-receipt-fake';
 
 const TASK_ID = '550e8400-e29b-41d4-a716-446655440000';
 
@@ -17,9 +19,10 @@ function runFixture(
 ) {
   const createCalls: any[][] = [];
   const resumeCalls: any[][] = [];
-  const prisma = {
-    // Every run door opens its receipt (0137) before anything else.
-    ...fakeReceiptStore(),
+  const sessionReads: Array<{ read: 'CARRIER' | 'PAUSED'; text: string }> = [];
+  // Every run door opens its receipt (0137) before anything else — composed with this double's
+  // own raw reads rather than spread under them, so both keep being answered.
+  const prisma = withReceiptStore({
     task: {
       findFirst: async () => ({
         id: TASK_ID,
@@ -44,18 +47,17 @@ function runFixture(
     session: {
       // The door reads THIS request's own Session by id before it writes (H2F).
       findUnique: async () => null,
-      // Two reads in runWorkspaceOnTask, and BOTH now filter on status (§13.6 SU6): the mid-flight
-      // dedup asks for PENDING/RUNNING, and the continue-this-run read asks for the two PAUSED
-      // statuses. A terminal session is no longer a candidate to continue at all — a new attempt
-      // gets a new Session and the old row stays readable as what it was — so the fixture's
-      // "latest session" is a paused one, which is the only kind that can be continued.
-      findFirst: async ({ where }: any) => {
-        const wanted = where.status?.in ?? [];
-        const paused = wanted.includes(RunStatus.AWAITING_INPUT);
-        return paused ? (latestSession ?? null) : null;
-      },
     },
-  } as never;
+    // Two reads in planWorkspaceRun (§13.6 SU6): the run carrying the task — none here — and the
+    // idle paused run to continue. A terminal session is no longer a candidate to continue at all —
+    // a new attempt gets a new Session and the old row stays readable as what it was — so the
+    // fixture's "latest session" is a paused one, which is the only kind that can be continued.
+    $queryRaw: async (query: unknown) => {
+      const read = runDoorSessionRead(query);
+      if (read) sessionReads.push({ read, text: (query as Prisma.Sql).text });
+      return read === 'PAUSED' && latestSession ? [latestSession] : [];
+    },
+  }) as never;
   const sessions = {
     create: async (...args: any[]) => {
       createCalls.push(args);
@@ -67,8 +69,24 @@ function runFixture(
     },
   } as never;
   const service = new TasksService(prisma, sessions, {} as never);
-  return { service, createCalls, resumeCalls };
+  return { service, createCalls, resumeCalls, sessionReads };
 }
+
+test('a press refuses the run carrying the task, and never continues one still carrying it', async () => {
+  // The two reads, in the one spelling (sessions/task-work-carrier.ts): the run in the way is a
+  // turn queued or running OR a session parked with something that will wake it, and the paused
+  // run a press continues excludes exactly those — so a wake source that appears between the two
+  // reads cannot turn the refusal into a delivery of the task brief into a waiting session.
+  const f = runFixture({});
+
+  await f.service.execute('owner-1', TASK_ID);
+
+  assert.deepEqual(f.sessionReads.map(({ read }) => read), ['CARRIER', 'PAUSED']);
+  const [carrier, paused] = f.sessionReads;
+  assert.ok(carrier.text.includes(sessionCarriesTaskSql('s')));
+  assert.ok(paused.text.includes(`AND NOT ${sessionCarriesTaskSql('s')}`));
+  assert.match(paused.text, /s\."status" IN \('AWAITING_INPUT'::"run_status", 'INTERRUPTED'::"run_status"\)/);
+});
 
 test("a task with no provider/model pin dispatches nothing of its own — the run inherits the workspace's", async () => {
   const f = runFixture({});

@@ -6,6 +6,16 @@ import (
 	"strings"
 )
 
+// Delivery is handled by the runner and may not be visible in Codex's tool result.
+// Keep this in Codex's application context so an upload failure never asks the model to redraw.
+const codexImageDeliveryInstructions = "After generating an image, preserve the original file. " +
+	"Do not regenerate it solely because Orbit could not attach or upload it. " +
+	"Only claim that the image is attached or delivered when Orbit explicitly confirms attachment delivery; " +
+	"successful generation alone is not delivery confirmation. " +
+	"If delivery fails, report that the image was generated but delivery failed, keep the original file available, " +
+	"and let Orbit retry delivery. If delivery status is unavailable, report only generation success " +
+	"without claiming delivery success or failure."
+
 func orbitCLIExecutable() string {
 	exe, err := os.Executable()
 	if err != nil {
@@ -241,8 +251,11 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// a cursor command added later is a decision made here, not one it inherits. `anchors verify` is
 		// the same run's re-verification, refused to every other session the same way.
 		// articles is the same run's too, refused to every other session the same way, and so is maintain,
-		// the whole run in one command. check only reads whether a run did what its task expected.
-		for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "anchors verify", "articles", "maintain", "check"} {
+		// the whole run in one command, and docs build, its writing of the documents from the plan the
+		// owner confirmed. check only reads whether a run did what its task expected.
+		// plan draft and plan revise are a plan job's run, refused to every session but the job's the same
+		// way, and plan check, like check, only reads whether a job did what its task was made for.
+		for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "anchors verify", "articles", "docs build", "maintain", "check", "plan draft", "plan revise", "plan check"} {
 			rules = append(rules, "Bash("+command+" wiki "+action+" *)")
 		}
 		// import proposes, into a space its owner named, what the session's own provider's model read in
@@ -270,7 +283,7 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 			// refuses to run in a session at all (cliSessionImport), and the capability document
 			// withholds it from a running agent for the same reason (HeadlessOnly), so there is no
 			// reader here to pre-approve it for.
-			for _, action := range []string{"create", "list", "search", "get", "await", "send", "interrupt", "merge", "end", "complete", "delete"} {
+			for _, action := range []string{"create", "list", "search", "get", "await", "send", "reply", "interrupt", "merge", "end", "complete", "delete"} {
 				rules = append(rules, "Bash("+command+" session "+action+" *)")
 			}
 			// The agent verbs ride the same gate and have no headless form: no service-token scope

@@ -8,7 +8,8 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { escalatesAt } from './open-item-escalation.service';
-import { ownerItemKind } from './project-open-item';
+import { openItemOwed, ownerItemKind } from './project-open-item';
+import { START_REQUEST_KIND } from './project-start-request';
 
 export type ProjectAttentionSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
 
@@ -22,12 +23,13 @@ export type ProjectAttentionSeverity = 'INFO' | 'WARNING' | 'CRITICAL';
  * The two item fields are the same answer one step closer to the reader (§7.1 V1): a count of
  * blockers says a project is stuck, and the item behind the count says what the person is being
  * asked to do and how long they have been asked. `@orbit/shared` declares the wire shape once for
- * this server and every client; the two fields are required HERE, where they are always computed,
- * and optional there, where a client may be reading a server that predates them.
+ * this server and every client; the three item fields are required HERE, where they are always
+ * computed, and optional there, where a client may be reading a server that predates them.
  */
 export interface ProjectListAttention extends WireProjectListAttention<Date> {
   ownerItems: Array<WireProjectListOwnerItem<Date>>;
   coordinatorItems: WireProjectListCoordinatorItems<Date> | null;
+  startRequest: { waitingSince: Date } | null;
 }
 
 export function emptyProjectListAttention(): ProjectListAttention {
@@ -40,6 +42,7 @@ export function emptyProjectListAttention(): ProjectListAttention {
     nextCheckAt: null,
     ownerItems: [],
     coordinatorItems: null,
+    startRequest: null,
   };
 }
 
@@ -103,7 +106,12 @@ export async function readProjectListAttention(
 
   const attention = new Map<string, ProjectListAttention>();
   for (const { projectId, ...blockers } of rows) {
-    attention.set(projectId, { ...blockers, ownerItems: [], coordinatorItems: null });
+    attention.set(projectId, {
+      ...blockers,
+      ownerItems: [],
+      coordinatorItems: null,
+      startRequest: null,
+    });
   }
   // A project with items and no open blockers is the common case, not an edge one: the blockers
   // are the older signal, and a merge approval or a question is filed without either.
@@ -117,6 +125,15 @@ export async function readProjectListAttention(
 
   for (const row of items) {
     const project = forProject(row.projectId);
+    // The coordinator asking to start a project nobody has started ("Ready to start"): the owner's
+    // from birth and none of the four, so it has a field of its own. The read below has already
+    // left out a request on a started project, as the needs-you count does (`projectsReadyToStart`).
+    if (row.kind === START_REQUEST_KIND) {
+      if (!project.startRequest || row.oldestWaitingSince < project.startRequest.waitingSince) {
+        project.startRequest = { waitingSince: row.oldestWaitingSince };
+      }
+      continue;
+    }
     // The owner's four, by the same function the push and the Needs-you count use: a second
     // derivation of "is this the owner's" would be a third answer to one question (§4.1).
     const ownerKind = ownerItemKind(row);
@@ -208,6 +225,11 @@ async function readBlockers(
  * will stop being theirs, as the clock decides it (`escalatesAt` — a conversation still carrying an
  * item moves its deadline on). It is null for the kinds that were the owner's from birth, which is
  * why it is null-tolerant on the way in and read only for the rows that can have one.
+ *
+ * A start request counts only while its project has not been started: the start answers it in the
+ * same transaction, and a request somehow left open beside a start asks nobody anything. Any item
+ * counts only while it is owed (`openItemOwed`), for the same reason: one about a candidate or a
+ * task that has moved on asks nobody anything either, whether or not anything has closed it yet.
  */
 async function readOpenItems(
   prisma: PrismaService,
@@ -226,5 +248,7 @@ async function readOpenItems(
       JOIN project proj ON proj.id = item.project_id
                        AND proj.owner_id = ${ownerId}::uuid
      WHERE item.state = 'OPEN' ${narrowed}
+       AND (item.kind <> 'START_REQUEST' OR proj.started_at IS NULL)
+       AND ${openItemOwed('item')}
      GROUP BY item.project_id, item.kind, item.assignee, item.assignee_reason`);
 }

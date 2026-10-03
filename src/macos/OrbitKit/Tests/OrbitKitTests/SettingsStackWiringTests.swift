@@ -75,8 +75,8 @@ final class SettingsStackWiringTests: XCTestCase {
             .joined(separator: "\n")
     }
 
-    /// Choosing Settings on iOS presents it; it never becomes the section. The two ways in — the
-    /// drawer's gear on iPhone, the sidebar's row on iPad — both raise the sheet, and the section
+    /// Choosing Settings on iOS presents it; it never becomes the section. The one way in is the
+    /// drawer's gear — on iPhone, and on iPad, whose sidebar is the same drawer — and the section
     /// switch itself stays what it was (`NavigationEntrancesWiringTests` holds it to that).
     func testSettingsIsASheetOverTheSectionOnIOS() throws {
         let root = code(try source("src/ios/Sources/OrbitiOSApp.swift"))
@@ -91,12 +91,10 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertFalse(arm.contains("NavigationStack"), "no second stack for a section that is never shown")
 
         let main = code(try appSource("Views/MainView.swift"))
-        let sidebar = try slice(main, from: "private var selection: Binding<SidebarSelection?> {",
-                                to: "case .section(let s):")
-        let guardRange = try XCTUnwrap(sidebar.range(of: "#if os(iOS)"), "the sidebar's interception is iOS-only")
-        let present = try XCTUnwrap(sidebar.range(of: "case .section(.settings):\n                    model.settingsPresented = true"),
-                                    "choosing Settings in the iPad sidebar raises the sheet")
-        XCTAssertLessThan(guardRange.lowerBound, present.lowerBound)
+        XCTAssertTrue(main.contains("NavigationDrawer(close: {}, live: true, inSidebarColumn: true)"),
+                      "the iPad's sidebar is the drawer, gear and all")
+        XCTAssertFalse(main.contains("model.settingsPresented = true"),
+                       "no second way in beside the gear: the macOS source list has none to intercept")
         let content = try slice(main, from: "struct SectionContent: View {", to: "struct SectionDetail: View {")
         let contentArm = try slice(content, from: "case .settings:", to: "case .admin:")
         XCTAssertTrue(contentArm.contains("EmptyView()") && contentArm.contains("SettingsView()"),
@@ -114,8 +112,9 @@ final class SettingsStackWiringTests: XCTestCase {
     }
 
     /// The sheet moves a `NavigationStack` whose path IS Settings' stack in `NavState`, and registers
-    /// every frame that stack carries on its root — the runners list and a runner's record, the
-    /// `SettingsPage`s, and an account's record under Admin.
+    /// every frame that stack carries on its root — the runners list, a runner's record and the two
+    /// pages it pushes (an engine's, its name's), the `SettingsPage`s, and an account's record under
+    /// Admin.
     func testTheSheetsStackIsSettingsOwnStack() throws {
         let sheet = code(try slice(try appSource("Views/SettingsSheet.swift"),
                                    from: "struct SettingsSheet: View {", to: "/// The page a `SettingsPage` frame names."))
@@ -126,6 +125,8 @@ final class SettingsStackWiringTests: XCTestCase {
                                      to: "default:                          EmptyView()")
         for frame in ["case .settingsRunners:            RunnersSettingsList()",
                       "case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)",
+                      "case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)",
+                      "case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)",
                       "case .settingsPage(let page):     SettingsPageView(page: page)",
                       "case .userDetail(let userID):     AdminUserDetailView(userID: userID)"] {
             XCTAssertTrue(destinations.contains(frame), "the sheet renders \(frame)")
@@ -236,7 +237,7 @@ final class SettingsStackWiringTests: XCTestCase {
     }
 
     /// The photo is drawn wherever the account's avatar is: Settings' header on iOS, the sidebar's
-    /// account row (macOS and iPad), and macOS Settings — which also sets it, removes it, and renames.
+    /// account row on macOS, and macOS Settings — which also sets it, removes it, and renames.
     func testTheAccountsPhotoIsDrawnAndSetEverywhereItsAvatarIs() throws {
         let main = code(try appSource("Views/MainView.swift"))
         let footer = try slice(main, from: "struct AccountFooter: View {", to: "struct AccountAvatar: View {")
@@ -264,6 +265,7 @@ final class SettingsStackWiringTests: XCTestCase {
     /// The runners list the sheet pushes carries the same `runnerDetail` frame the Runners section's
     /// rows do, pushed by hand through `AppModel.push` — which lands on Settings' stack while the
     /// sheet is up. One frame type, two stacks: the stack on screen is what decides where it lands.
+    /// The same goes for the two pages a runner's record pushes, its engine's and its name's.
     func testTheRunnersListInsideSettingsPushesTheSameFrameTheRunnersSectionDoes() throws {
         let runners = try appSource("Views/SkillsRunnersView.swift")
         let settingsList = code(try slice(runners, from: "struct RunnersSettingsList: View {",
@@ -273,11 +275,16 @@ final class SettingsStackWiringTests: XCTestCase {
         XCTAssertFalse(settingsList.contains("NavigationLink"),
                        "and is not a link — a disclosure indicator here would be the odd one out "
                        + "against the section's identical list")
+        XCTAssertTrue(settingsList.contains(".foregroundStyle(Color.primary)"),
+                      "its label is the label colour: inside a button's label even `.primary` is the tint")
 
         let shell = code(try slice(try appSource("Views/CompactShell.swift"), from: "case .runners:",
                                    to: "// FOLLOWING"))
         XCTAssertTrue(shell.contains("case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)"),
                       "the Runners section renders that same frame — the reuse is the frame type")
+        XCTAssertTrue(shell.contains("RunnerEnginePage(runnerID: runnerID, engine: engine)")
+                        && shell.contains("RunnerNamePage(runnerID: runnerID)"),
+                      "and the pages a record pushes, on its own stack as on Settings'")
     }
 
     /// macOS keeps its one grouped form — in the Settings window and the main window's column — and

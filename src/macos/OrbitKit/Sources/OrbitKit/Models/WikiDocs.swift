@@ -178,8 +178,10 @@ public struct WikiDocCounts: Codable, Equatable, Sendable {
 public struct WikiDocSentence: Codable, Equatable, Sendable {
     public struct Withdrawn: Codable, Equatable, Sendable {
         public let reason: WikiDocWithdrawReason
-        /// The entry it came through.
+        /// The entry it came through — or nil, when a repository file it cites was deleted or renamed on origin/main.
         public let entryId: String?
+        /// The repository file gone from origin/main that withdrew it (anchor_missing), when no entry did.
+        public let path: String?
         public let at: String?
     }
 

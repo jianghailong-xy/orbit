@@ -7,6 +7,7 @@ import type {
   ProjectPromotionView,
   SessionCreatedTasks,
   SessionSearchResponse,
+  TaskRunReason,
   WatchView,
 } from '@orbit/shared';
 import {
@@ -15,6 +16,7 @@ import {
   fetchAvatarDataUrl,
   getSession,
   getSessionDiff,
+  getSessionRequest,
   listShareLinks,
   type SessionListItem,
   type WorkspacePermissionRuleInfo,
@@ -35,7 +37,20 @@ import type { OwnerConfirmationView } from '../components/OwnerConfirmationCard'
 import type { PendingCriteriaDecisionQueue } from '../components/CriteriaDecisionCard';
 import type { ProjectOpenItemsView } from '../components/CoordinatorQuestionCard';
 import type { ProjectCrossingRow, TaskAttribution } from './attribution';
-import type { WikiArticleDirectory, WikiArticleIndex, WikiArticleView, WikiChangesetView, WikiSearchRow, WikiSpaceHealth } from '@orbit/shared';
+import type {
+  WikiArticleDirectory,
+  WikiArticleIndex,
+  WikiArticleView,
+  WikiChangesetView,
+  WikiDocView,
+  WikiDocsDirectory,
+  WikiDocsIndex,
+  WikiPlanState,
+  WikiPlanVersion,
+  WikiPlanVersionSummary,
+  WikiSearchRow,
+  WikiSpaceHealth,
+} from '@orbit/shared';
 import type {
   WikiChangeset,
   WikiEntry,
@@ -148,6 +163,8 @@ export const presetModelsQuery = () =>
 export interface UserPreferences {
   theme?: 'system' | 'light' | 'dark';
   defaultModel?: string;
+  /** Last-picked model for each provider, synced across clients. */
+  defaultModels?: Record<string, string>;
   defaultPermissionMode?: string;
   /** Account-wide default reasoning effort for a new session (last-picked-wins). '' = model
    *  default. Synced so the value carries to the iOS/macOS clients (replaces localStorage). */
@@ -350,6 +367,20 @@ export const sessionQuery = (id: string | null | undefined) =>
   });
 
 /**
+ * One session request as it stands now (lib/sessionRequest), for the card that shows it. Under
+ * `['sessions']`, so the refresh `useControlPlane` runs on every `session.*` event reaches it with no
+ * entry of its own — and an outcome is always announced as one: handing it back publishes both the
+ * asking and the asked session. An OPEN request is polled besides, because the deadline passing is
+ * an event only once the worker has closed it, and a dropped announcement should cost latency only.
+ */
+export const sessionRequestQuery = (requestId: string) =>
+  queryOptions({
+    queryKey: ['sessions', 'request', requestId] as const,
+    queryFn: () => getSessionRequest(requestId),
+    refetchInterval: (q) => (q.state.data?.state === 'OPEN' ? 60_000 : false),
+  });
+
+/**
  * One session's per-file diffs, for the worktree status bar's file viewer. The key nests
  * under the session's (`['session', id, 'diff']`) so invalidating `['session', id]` on a
  * turn end refreshes an open diff too. Lazy: call sites set `enabled` (e.g. only while the
@@ -452,15 +483,27 @@ export function projectsQueryKey(filter: ProjectFilter): [string, ProjectFilter]
 }
 
 /**
- * The open projects, as the sidebar's Projects group reads them — the Projects page's own Open
- * read, same key and same URL, so the two share one request and one cache entry. Polled because
- * the control-plane stream names no project: a task starting, or a coordinator taking a turn,
- * reaches the group's working dot within one interval.
+ * The open projects, as the sidebar's Projects group reads them — `GET /projects/sidebar`, the
+ * rail's own read rather than the Projects page's Open one.
+ *
+ * Its own endpoint because of what the two ask: the page draws seven task lanes, integration lines
+ * and the whole attention summary, while the rail draws a working dot, an amber count and an
+ * order. The index answers the first by classifying every task of every project, and this query
+ * runs every 15 seconds in every open tab — on 2026-09-29 that was ~5,400 calls and ~100 minutes
+ * of PostgreSQL execution a day for one open browser tab. The rail's read reaches the same
+ * `running` and `lastActivityAt` from the rows that can be RUNNING, at about 5% of the cost.
+ *
+ * Keyed UNDER `['projects']` and apart from its filters, so a project write still refreshes it
+ * (one `['projects']` invalidation reaches every entry), while the page's own Open entry is no
+ * longer dragged onto this cadence — it keeps its `PROJECTS_REFRESH_MS`.
+ *
+ * Polled because the control-plane stream names no project: a task starting, or a coordinator
+ * taking a turn, reaches the group's working dot within one interval.
  */
 export const openProjectsQuery = () =>
   queryOptions({
-    queryKey: projectsQueryKey('OPEN'),
-    queryFn: () => api<SidebarProject[]>(projectsPath('OPEN')),
+    queryKey: ['projects', 'sidebar'] as const,
+    queryFn: () => api<SidebarProject[]>('/projects/sidebar'),
     refetchInterval: 15_000,
   });
 
@@ -541,6 +584,13 @@ export interface ProjectReadyToRunItem {
   runState: ProjectReadyToRunState;
   /** Active Session for QUEUED/RUNNING rows; null for READY/PAUSED rows. */
   sessionId: string | null;
+  /**
+   * Why a QUEUED/RUNNING row is active: a turn, a background job its run is waiting on, or a
+   * wake-up it is waiting for. Absent from an older server.
+   */
+  runReason?: TaskRunReason | null;
+  /** A RUNNING row whose background jobs have stopped producing output. */
+  runStalled?: boolean;
   /** The list-level action needed before a PAUSED row can expose Run. */
   pausedList: ProjectReadyToRunPausedList | null;
   /** Null only when the project is too large to compute transitive impact safely. */
@@ -1043,6 +1093,104 @@ export const wikiReviewQuery = (spaceId?: string | null) =>
       api<WikiChangeset[]>(
         spaceId ? `/wiki/review?space=${encodeURIComponent(spaceId)}` : '/wiki/review',
       ),
+  });
+
+/**
+ * A space's documents, by the plan its owner confirmed (contract `docs.reads.directory`): categories →
+ * documents → sections, each saying whether it is written yet. `plan: null` while no plan is confirmed —
+ * the directory then lists the topic articles instead (`wikiReadsByDocs`).
+ */
+export const wikiDocsQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'docs'] as const,
+    queryFn: () => api<WikiDocsDirectory>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/docs`),
+    enabled: spaceId !== null,
+    staleTime: 30_000,
+  });
+
+/**
+ * One document, its sentences' marks and its footnotes resolved (contract `docs.reads.doc`). `null` is the
+ * server saying the confirmed plan has no such document (404): an answer, kept as data rather than retried.
+ */
+export const wikiDocQuery = (spaceId: string | null, slug: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'doc', slug] as const,
+    queryFn: async (): Promise<WikiDocView | null> => {
+      try {
+        return await api<WikiDocView>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/docs/${encodeURIComponent(slug!)}`);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404 && !isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
+    enabled: spaceId !== null && slug !== null,
+  });
+
+/** Every document of the plan and every section title no other document shares, A to Z (contract `docs.reads.index`). */
+export const wikiDocIndexQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'doc-index'] as const,
+    queryFn: () => api<WikiDocsIndex>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/doc-index`),
+    enabled: spaceId !== null,
+  });
+
+/**
+ * The plan (contract `plan.routes.state`): the version in force, the draft waiting, the proposals and the
+ * space's plan job. The owner's door only — a request with a session header is refused, and this app sends
+ * none. Read again while a job is on its way, since a job's run reports on the runner door, not here.
+ */
+export const wikiPlanQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'plan'] as const,
+    queryFn: async (): Promise<WikiPlanState | null> => {
+      try {
+        return wikiPlanStateOf(await api<unknown>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/plan`));
+      } catch (error) {
+        // A server from before the plan (no such route) has none to show: an answer, not a failure.
+        if (error instanceof ApiError && error.status === 404 && !isWikiDisabled(error)) return null;
+        throw error;
+      }
+    },
+    enabled: spaceId !== null,
+    staleTime: 15_000,
+    refetchInterval: (query) => {
+      const state = query.state.data?.job?.state;
+      return state === 'queued' || state === 'running' ? 30_000 : false;
+    },
+  });
+
+/**
+ * The plan's read as the pages use it, or null for an answer that is not one (a server from before the
+ * plan, a stub): the lists and the job filled in when a field is left out, so no page reads a hole.
+ */
+export function wikiPlanStateOf(raw: unknown): WikiPlanState | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const read = raw as Partial<WikiPlanState>;
+  if (typeof read.spaceId !== 'string') return null;
+  return {
+    spaceId: read.spaceId,
+    confirmed: read.confirmed ?? null,
+    draft: read.draft ?? null,
+    proposals: Array.isArray(read.proposals) ? read.proposals : [],
+    job: read.job ?? null,
+  };
+}
+
+/** Every version of the plan, newest first: the version menu. */
+export const wikiPlanVersionsQuery = (spaceId: string | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'plan', 'versions'] as const,
+    queryFn: async () =>
+      (await api<{ spaceId: string; versions: WikiPlanVersionSummary[] }>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/plan/versions`)).versions,
+    enabled: spaceId !== null,
+  });
+
+/** One version, whole, whatever its status: what the page shows when the menu picks an older one. */
+export const wikiPlanVersionQuery = (spaceId: string | null, version: number | null) =>
+  queryOptions({
+    queryKey: ['wiki', 'space', spaceId, 'plan', 'version', version] as const,
+    queryFn: () => api<WikiPlanVersion>(`/wiki/spaces/${encodeURIComponent(spaceId!)}/plan/versions/${version}`),
+    enabled: spaceId !== null && version !== null,
   });
 
 export const linkPreviewsQuery = (refs: readonly LinkPreviewRef[]) =>

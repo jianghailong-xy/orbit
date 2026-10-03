@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { RunStatus } from '@prisma/client';
+import { SESSION_MERGE_RECOVERY_V1 } from '@orbit/shared';
 import { SessionsService } from './sessions.service';
+import { noSessionRequests } from '../test-support/prisma-transaction-double';
 
 const NOW = new Date();
 
@@ -45,6 +47,8 @@ function sessionRow() {
     runningBgJobs: [],
     runningBgJobActivity: {},
     runningSubagentCount: 0,
+    // The detail's newest merge-repair child, which this session has none of.
+    children: [],
     workspaceId: null,
     workspaceName: null,
     workspaceModel: null,
@@ -59,6 +63,7 @@ function sessionRow() {
       name: 'runner',
       status: 'ONLINE',
       lastHeartbeatAt: NOW,
+      capabilities: [] as string[],
     },
     taskId: null,
     taskTitle: null,
@@ -90,6 +95,7 @@ test('UI list and detail payloads include the same derived capabilities', async 
     taskOwnerConfirmationRequest: { findMany: async () => [] },
     // …and the four owner items a project can be waiting on its owner for (§7.6 V13),
     // which these fixtures have none of either.
+    sessionRequest: noSessionRequests(),
     projectOpenItem: { findMany: async () => [] },
   } as never;
   const service = new SessionsService(prisma, {} as never, {} as never);
@@ -107,10 +113,28 @@ test('UI list and detail payloads include the same derived capabilities', async 
   };
   assert.deepEqual(listed.capabilities, expected);
   assert.deepEqual(detail.capabilities, expected);
+  assert.equal(detail.mergeRecoverySupported, false);
   assert.deepEqual(
     [listed.projectId, listed.projectTitle, detail.projectId, detail.projectTitle],
     [row.projectId, row.projectTitle, row.projectId, row.projectTitle],
   );
   assert.equal('titleManagedByProject' in detail, false);
   assert.equal('titleBeforeProjectManagement' in detail, false);
+});
+
+test('merge recovery is offered only by a capable assigned runner', async () => {
+  for (const capabilities of [[], [SESSION_MERGE_RECOVERY_V1]]) {
+    const row = sessionRow();
+    row.assignedRunner.capabilities = capabilities;
+    const service = new SessionsService({
+      session: { findFirst: async () => row },
+    } as never, {} as never, {} as never);
+    const detail = await service.get('owner-1', row.id);
+    assert.equal(detail.mergeRecoverySupported, capabilities.length > 0);
+  }
+  const row = sessionRow();
+  const service = new SessionsService({
+    session: { findFirst: async () => ({ ...row, assignedRunner: null }) },
+  } as never, {} as never, {} as never);
+  assert.equal((await service.get('owner-1', row.id)).mergeRecoverySupported, false);
 });

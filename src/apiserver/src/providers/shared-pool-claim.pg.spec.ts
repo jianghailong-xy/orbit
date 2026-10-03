@@ -15,6 +15,13 @@
  *  (5) The sign-in preflight counts the pool's token as the session's own credential: a runner whose own
  *      Codex login is signed out takes a pool session, and still refuses a built-in Codex one.
  *  (6) Removing a person, and deleting the pool, ends their tokens in the same statement.
+ *  (7) A pool of one's own ChatGPT accounts takes people and API keys too (migration 0358), through the same
+ *      doors: its owner is in it as its only admin, adds a person by the email of their Orbit account and
+ *      adds a key. The owner's session runs on the account while it can and on a key when it cannot — a
+ *      login pool's token either way — and back on the account at the claim after it can again, each move
+ *      saying so; the person's runs on the keys alone, its own first, on a person's token, with no account
+ *      named and no login pool token of theirs anywhere. Everyone taken out, it is "Just me" again: their
+ *      keys and tokens are gone, and their session is handed nothing of the pool.
  *
  * Production code throughout: QueueService's claim, RunnerApiController's reclaim and inbox,
  * SessionsService, SharedPoolsService and ProvidersService. It only adds rows, and refuses to run anywhere
@@ -42,6 +49,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { EngineSignedOutConflict } from '../sessions/engine-signin-preflight';
 import { SessionsService } from '../sessions/sessions.service';
 import { ProviderPlanUsageService } from './plan-usage.service';
+import { encryptSecret } from './provider-crypto';
 import { ProvidersService } from './providers.service';
 import { POOL_GATEWAY_TOKEN_TTL_MS } from './shared-pool';
 import { SharedPoolsService } from './shared-pools.service';
@@ -366,5 +374,130 @@ suite('a shared pool at the claim: the gateway and a session token, nothing of a
     assert.equal(await db.poolGatewayToken.count({ where: { poolId: pool.id } }), 0);
     assert.equal(await db.session.count({ where: { id: miaSession } }), 1);
     assert.deepEqual((await claim(mia, miaSession)).agent.env, mia.env);
+  });
+
+  await t.test("(7) a pool of one's own ChatGPT accounts takes people and keys: the owner runs on an account while one can and on a key when none can; a person added runs on the keys alone; everyone out is Just me again", async () => {
+    const olga = await person(db, 'Olga');
+    const pia = await person(db, 'Pia');
+    const made = await providers.createPool(olga.id, { label: 'Olga Codex', engine: 'codex' });
+    const own = { id: made.id, slug: made.slug };
+    // Its owner is in it from the start, as its admin — the row the pool page's doors find them by.
+    const peopleOf = async () =>
+      (await db.providerPoolPerson.findMany({ where: { poolId: own.id }, orderBy: { createdAt: 'asc' } }))
+        .map((row) => ({ userId: row.userId, role: row.role }));
+    assert.deepEqual(await peopleOf(), [{ userId: olga.id, role: 'ADMIN' }]);
+    // Her ChatGPT account, as the sign-in stores one.
+    const accountId = `acct-${randomUUID()}`;
+    const login = { access: `codex-access-${randomUUID()}`, refresh: `codex-refresh-${randomUUID()}` };
+    await db.poolCodexLogin.create({
+      data: {
+        poolId: own.id, userId: olga.id, accountId, email: 'olga@codex-login.invalid', plan: 'plus',
+        accessTokenEnc: encryptSecret(login.access), refreshTokenEnc: encryptSecret(login.refresh),
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      },
+    });
+
+    // Pia added by the email of her Orbit account — a member: nobody but the owner is an admin of it.
+    await pools.addPerson(olga.id, own.id, { email: pia.email });
+    await assert.rejects(pools.addPerson(olga.id, own.id, { email: max.email, role: 'ADMIN' }), /one admin/);
+    await assert.rejects(pools.setRole(olga.id, own.id, pia.id, { role: 'ADMIN' }), /one admin/);
+    assert.deepEqual(await peopleOf(), [{ userId: olga.id, role: 'ADMIN' }, { userId: pia.id, role: 'MEMBER' }]);
+    // A key from each of them: the owner's, and Pia's own while members may add one.
+    await pools.addKey(olga.id, own.id, { label: 'olga-org', apiKey: openaiKey() });
+    await pools.addKey(pia.id, own.id, { label: 'pia-proj', apiKey: openaiKey() });
+    const keyOfOwn = async (who: Person) =>
+      (await db.poolApiKey.findFirstOrThrow({ where: { poolId: own.id, contributorId: who.id }, select: { id: true } })).id;
+    const olgaKey = await keyOfOwn(olga);
+    const piaKey = await keyOfOwn(pia);
+    // Pia sees it among the pools she runs on, and may pick it; Olga reads it as her own pool's people and keys.
+    assert.ok((await pools.list(pia.id)).some((listed) => listed.id === own.id));
+    assert.ok(!(await pools.list(olga.id)).some((listed) => listed.id === own.id), 'her own pool is on her providers page');
+    const page = await pools.get(olga.id, own.id);
+    assert.deepEqual(page.people.map((p) => [p.userId, p.role, p.creator]), [[olga.id, 'ADMIN', true], [pia.id, 'MEMBER', false]]);
+    assert.deepEqual(page.keys.map((k) => k.label).sort(), ['olga-org', 'pia-proj']);
+    assert.ok(!wire(page).includes(accountId) && !wire(page).includes('olga@codex-login.invalid'), 'the people-and-keys page names her account');
+    const usable = await providers.listUsable(pia.id);
+    assert.deepEqual(usable.filter((p) => p.slug === own.slug).map((p) => p.runtime), ['codex']);
+
+    const accountOn = async (sessionId: string) =>
+      db.session.findUniqueOrThrow({
+        where: { id: sessionId },
+        select: { poolCodexAccountId: true, poolKeyId: true, poolSwitchNotice: true },
+      });
+
+    // Pia's session: on the keys alone — her own first — on a person's token; no account named, no login pool
+    // token of hers, and nothing of the account in what her runner was handed.
+    const piaSession = (await sessions.create(pia.id, {
+      prompt: 'hello', title: "on Olga's pool", workspaceId: pia.workspaceId, provider: own.slug,
+    })).id;
+    const piaClaim = await claim(pia, piaSession);
+    const piaToken = piaClaim.agent.env?.OPENAI_API_KEY;
+    assert.match(piaToken ?? '', /^orbit-gw-[A-Za-z0-9_-]{43}$/);
+    assert.deepEqual(piaClaim.agent.env, { ...pia.env, OPENAI_BASE_URL: GATEWAY, OPENAI_API_KEY: piaToken });
+    assert.deepEqual(await accountOn(piaSession), { poolCodexAccountId: null, poolKeyId: piaKey, poolSwitchNotice: null });
+    assert.equal(await db.poolLoginToken.count({ where: { OR: [{ userId: pia.id }, { sessionId: piaSession }] } }), 0);
+    assert.deepEqual((await tokensOf(piaSession)).map((row) => [row.poolId, row.userId]), [[own.id, pia.id]]);
+    for (const secret of [accountId, login.access, login.refresh, 'olga@codex-login.invalid']) {
+      assert.ok(!wire(piaClaim).includes(secret), 'her claim carried something of the account');
+    }
+    assert.deepEqual(await keysIn(piaClaim), []);
+
+    // Olga's session: on her account, on a login pool token.
+    const olgaSession = (await sessions.create(olga.id, {
+      prompt: 'hello', title: 'on my pool', workspaceId: olga.workspaceId, provider: own.slug,
+    })).id;
+    const olgaToken = (await claim(olga, olgaSession)).agent.env?.OPENAI_API_KEY;
+    assert.match(olgaToken ?? '', /^orbit-gwl-/);
+    assert.deepEqual(await accountOn(olgaSession), { poolCodexAccountId: accountId, poolKeyId: null, poolSwitchNotice: null });
+    assert.equal(await db.poolLoginToken.count({ where: { sessionId: olgaSession, userId: olga.id } }), 1);
+
+    // Her account's limit reached: the next claim puts her on a key — her own first — and says why; the
+    // token is a login pool's still.
+    await db.poolCodexLogin.update({
+      where: { poolId_accountId: { poolId: own.id, accountId } },
+      data: { spentUntil: new Date(Date.now() + 60 * 60 * 1000) },
+    });
+    assert.match((await claim(olga, olgaSession)).agent.env?.OPENAI_API_KEY ?? '', /^orbit-gwl-/);
+    assert.deepEqual(await accountOn(olgaSession), {
+      poolCodexAccountId: null,
+      poolKeyId: olgaKey,
+      poolSwitchNotice: 'Switched to olga-org — the usage limit on olga@codex-login.invalid is reached',
+    });
+    // While a key can run for her, a retry of a turn that failed there waits for nothing; the pool resumes now.
+    assert.equal(await queue.loginPoolRetryAt(db, { ownerId: olga.id, provider: own.slug, poolCodexAccountId: null, poolKeyId: olgaKey }, new Date()), null);
+    assert.ok((await queue.accountPoolResumesAt(olga.id, own.slug, new Date()))!.getTime() <= Date.now());
+    await db.session.update({ where: { id: olgaSession }, data: { poolSwitchNotice: null } });
+    // The account can run again: back on it at the next claim.
+    await db.poolCodexLogin.update({ where: { poolId_accountId: { poolId: own.id, accountId } }, data: { spentUntil: null } });
+    await claim(olga, olgaSession);
+    assert.deepEqual(await accountOn(olgaSession), {
+      poolCodexAccountId: accountId,
+      poolKeyId: null,
+      poolSwitchNotice: 'Switched to olga@codex-login.invalid — your ChatGPT accounts come first',
+    });
+    // Pia's session never moves onto it, whatever the account does.
+    await claim(pia, piaSession);
+    assert.deepEqual(await accountOn(piaSession), { poolCodexAccountId: null, poolKeyId: piaKey, poolSwitchNotice: null });
+    // A row that names the account anyway — carried over, or written by hand — is cleared by her next claim.
+    await db.session.update({ where: { id: piaSession }, data: { poolCodexAccountId: accountId } });
+    await claim(pia, piaSession);
+    assert.equal((await accountOn(piaSession)).poolCodexAccountId, null);
+    assert.equal(await db.poolLoginToken.count({ where: { userId: pia.id } }), 0);
+
+    // Everyone taken out: Just me again. Her key and her tokens go with her; the owner's key stays.
+    assert.ok((await tokensOf(piaSession)).length > 0);
+    await pools.removePerson(olga.id, own.id, pia.id);
+    assert.deepEqual(await peopleOf(), [{ userId: olga.id, role: 'ADMIN' }]);
+    assert.deepEqual(
+      (await db.poolApiKey.findMany({ where: { poolId: own.id }, select: { id: true } })).map((row) => row.id),
+      [olgaKey],
+    );
+    assert.equal(await db.poolGatewayToken.count({ where: { poolId: own.id, userId: pia.id } }), 0);
+    assert.ok(!(await pools.list(pia.id)).some((listed) => listed.id === own.id));
+    assert.deepEqual((await claim(pia, piaSession)).agent.env, pia.env, 'her runner was handed something of the pool');
+    assert.deepEqual(await tokensOf(piaSession), []);
+    // The owner's own session runs on as before.
+    assert.match((await claim(olga, olgaSession)).agent.env?.OPENAI_API_KEY ?? '', /^orbit-gwl-/);
+    assert.equal((await accountOn(olgaSession)).poolCodexAccountId, accountId);
   });
 });

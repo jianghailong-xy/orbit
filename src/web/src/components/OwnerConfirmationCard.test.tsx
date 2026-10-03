@@ -8,7 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ownerConfirmationQuery } from '../lib/queries';
-import { ENTER_HINT, SHORTCUT_HINT } from './CardHotkey';
+import { ENTER_HINT } from './CardHotkey';
 import { DecisionStrip, ownerConfirmationPointer, type PendingDecisionQueue } from './DecisionRail';
 import {
   OWNER_CONFIRMATION_HEADING,
@@ -23,6 +23,7 @@ import {
   OWNER_SEND_BACK_LABEL,
   OWNER_SENT_BACK_HEADING,
   OWNER_SHOW_WHAT_SETTLED_IT,
+  REPORT_CLAMP,
   WAITING_FOR_CONFIRMATION,
   WHAT_SETTLES_IT,
   WHAT_THE_RUN_REPORTED,
@@ -272,6 +273,23 @@ describe('the confirmation card', () => {
     expect(bare).toContain(OWNER_CONFIRMATION_NO_CRITERIA);
     expect(bare).toContain(OWNER_CONFIRMATION_NO_REPORT);
   });
+
+  it('keeps the paragraphs and list items of both boxes on lines of their own', () => {
+    // Flattened, a report written as a lead and a list read as one run-on line — on the phone with
+    // the list's dashes still in it.
+    const html = card({
+      view: view({ acceptanceCriteria: '## Done when\n\n- all filed\n- totals match' }),
+      waiting: waiting({ report: { text: 'Done.\n\n- **renamed**: 38\n- **moved**: 2', reportedAt: '2026-09-13T10:39:00.000Z' } }),
+    });
+    expect(html).toContain('>Done when\n\n• all filed\n• totals match<');
+    expect(html).toContain('>Done.\n\n• renamed: 38\n• moved: 2<');
+  });
+
+  it('folds at the ceiling without leaving the … on a line of its own', () => {
+    const text = `${'x'.repeat(REPORT_CLAMP - 1)}\n\nthe rest`;
+    const html = card({ waiting: waiting({ report: { text, reportedAt: '2026-09-13T10:39:00.000Z' } }) });
+    expect(html).toContain(`>${'x'.repeat(REPORT_CLAMP - 1)}…<`);
+  });
 });
 
 describe('where the card is drawn, and what a decision leaves', () => {
@@ -399,7 +417,7 @@ describe('what a press sends', () => {
     expect(apiMock.mock.calls.slice(1).map(([path]) => path)).toContain(`/tasks/${TASK_ID}/owner-confirmation`);
   });
 
-  it('takes the keyboard: the bare key is Confirm done and the chord is the same handoff the button makes', async () => {
+  it('confirms on Enter and leaves Chat about this without a shortcut', async () => {
     const qc = newClient();
     qc.setQueryData(ownerConfirmationQuery(TASK_ID).queryKey, view());
     apiMock.mockResolvedValue({ id: 'decision-1', decision: 'CONFIRM', completed: true });
@@ -419,12 +437,11 @@ describe('what a press sends', () => {
     // One card asking, so it holds the keys — and says which key presses which control, on the
     // controls themselves, because a shortcut nobody can see is a shortcut nobody has.
     expect(hintOn(buttonIn(scope, OWNER_CONFIRM_ACTION))).toBe(ENTER_HINT);
-    expect(hintOn(buttonIn(scope, OWNER_SEND_BACK_ACTION))).toBe(SHORTCUT_HINT);
+    expect(hintOn(buttonIn(scope, OWNER_SEND_BACK_ACTION))).toBeNull();
 
-    // The chord is the second answer, and it is the same one the button makes: it writes nothing,
-    // and the card is still there to confirm afterwards.
     await key({ metaKey: true });
-    expect(armed).toEqual([[REQUEST_ID, TITLE]]);
+    await key({ ctrlKey: true });
+    expect(armed).toEqual([]);
     expect(apiMock).not.toHaveBeenCalled();
     expect(buttonIn(scope, OWNER_CONFIRM_ACTION).disabled).toBe(false);
 

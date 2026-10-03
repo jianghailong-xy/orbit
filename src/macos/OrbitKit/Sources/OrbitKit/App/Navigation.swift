@@ -38,10 +38,23 @@ public enum NavOrigin: Hashable, Sendable {
 /// you got there are the same value.
 public enum NavNode: Hashable, Sendable {
     case console(sessionID: String, origin: NavOrigin)
-    case compose(agentID: String)
+    /// The new-session draft. `folderID` is the folder whose page opened it — the session it
+    /// creates is filed in that folder (`POST /sessions` with a `folderId`, design §3.3) — or nil
+    /// for a draft opened from a workspace's own list.
+    case compose(agentID: String, folderID: String?)
+    /// One folder's page (docs/session-folders-move-design.md §3.3): a workspace's folder row at the
+    /// top of its session list opens the sessions filed in that folder. iOS only — macOS and web
+    /// show no folders (§1).
+    case folder(SessionFolderAddress)
     case taskDetail(taskID: String)
     case taskListsDirectory
     case runnerDetail(runnerID: String)
+    /// One engine CLI on a runner — its version and updates, and each account it is signed into —
+    /// pushed from the Engines rows of that runner's record, onto whichever stack the record rides.
+    case runnerEngine(runnerID: String, engine: String)
+    /// A runner's name, pushed from its record's About › Name row: a page of its own, the way a
+    /// device's name is, instead of a text field and a Rename button on the record.
+    case runnerName(runnerID: String)
     case watchDetail(watchID: String)
     /// Settings' second layer: the runners list, pushed from Settings' own form. A runner's record is
     /// the third, and it is the *same* ``runnerDetail(runnerID:)`` frame the Runners section pushes —
@@ -83,6 +96,17 @@ public enum NavNode: Hashable, Sendable {
     case wikiBrowse
     /// Every article A to Z, pushed from the Contents sheet.
     case wikiIndex
+    /// One document of the plan the owner confirmed (criterion 10 revised, mock 24), pushed from the
+    /// Contents sheet, Browse by category or the A–Z index — at one of its sections when `section` is a key.
+    case wikiDoc(slug: String, section: String?)
+    /// The plan (mock 22): the version shown — nil for the one the page shows first — its job, the gate's
+    /// report, the changes proposed and its documents. Pushed from the Contents sheet's Plan row and the
+    /// home's plan banner.
+    case wikiPlan(version: Int?)
+    /// A document of a plan version, a page of its own on a phone (mock 22 ③).
+    case wikiPlanDoc(slug: String, version: Int?)
+    /// One of its sections — what it covers and where its material comes from (mock 22 ④⑤): 0-based.
+    case wikiPlanSection(slug: String, index: Int, version: Int?)
 }
 
 /// Which section is showing, and every section's stack.
@@ -165,6 +189,25 @@ public struct NavState: Equatable, Sendable {
         return false
     }
 
+    // The folder pages, read two ways because the two shells show them in two places (design §3.3).
+    // A phone pushes the folder as a page, so it is showing when it is the frame on top; a wide
+    // shell's session column has no stack, so the folder is the frame the *list* shows — the one at
+    // the bottom — while the console the detail pane follows rides above it. Each shell reads its
+    // own, and both are total reads of the same stack, so neither can disagree with the other.
+
+    /// The folder page showing on a phone: the frame on top is a folder's.
+    public var folderPage: SessionFolderAddress? {
+        if case .folder(let address) = path.last { return address }
+        return nil
+    }
+
+    /// The folder the wide shells' session column is showing: the frame at the bottom of the
+    /// section's stack is a folder's. The detail pane's console, when one is open, sits above it.
+    public var folderColumn: SessionFolderAddress? {
+        if case .folder(let address) = path.first { return address }
+        return nil
+    }
+
     // The three single-layer sections — Following, Runners, Admin — push exactly one kind of page,
     // so "which record is showing" is the id on top of their own stack. Each one is a total function
     // of that stack like every other fact here: the list's highlight and the detail pane are the
@@ -179,15 +222,30 @@ public struct NavState: Equatable, Sendable {
         return id
     }
 
-    /// `AppModel.selectedRunnerID` — the runner record the Runners pane shows.
+    /// `AppModel.selectedRunnerID` — the runner record the Runners pane shows. A page the record
+    /// pushed over itself (an engine's, its name's) is still that runner's, so the list's highlight
+    /// stays on it.
     public var selectedRunnerID: String? {
-        guard case .runnerDetail(let id) = path.last else { return nil }
-        return id
+        switch path.last {
+        case .runnerDetail(let id)?, .runnerEngine(let id, _)?, .runnerName(let id)?: return id
+        default: return nil
+        }
     }
 
-    /// `AppModel.selectedProjectID` — the project the Projects pane shows.
+    /// `AppModel.selectedProjectID` — the project the Projects pane shows. A task one of its rows
+    /// opened over it (``projectBeneathTask``) leaves it the project showing: the list keeps it
+    /// selected, and the pane draws the task over it.
     public var selectedProjectID: String? {
-        guard case .projectDetail(let id, _) = path.last else { return nil }
+        if case .projectDetail(let id, _) = path.last { return id }
+        return projectBeneathTask
+    }
+
+    /// The project whose page is directly under the task page on top — the pair a project's task
+    /// row pushes, on the phone's Projects stack and in the wide shells' pane alike.
+    public var projectBeneathTask: String? {
+        let frames = path
+        guard frames.count >= 2, case .taskDetail = frames[frames.count - 1],
+              case .projectDetail(let id, _) = frames[frames.count - 2] else { return nil }
         return id
     }
 
@@ -231,6 +289,22 @@ public struct NavState: Equatable, Sendable {
     public var wikiIndexOnTop: Bool {
         if case .wikiIndex = path.last { return true }
         return false
+    }
+
+    /// The document the Wiki pane shows, when a document is on top: its slug and the section asked for.
+    public var selectedWikiDoc: WikiDocAddress? {
+        guard case .wikiDoc(let slug, let section) = path.last else { return nil }
+        return WikiDocAddress(slug: slug, section: section)
+    }
+
+    /// The plan page the Wiki pane shows, when one is on top: the version, and the document and section asked for.
+    public var selectedWikiPlan: WikiPlanAddress? {
+        switch path.last {
+        case .wikiPlan(let version)?: return WikiPlanAddress(version: version, doc: nil, section: nil)
+        case .wikiPlanDoc(let slug, let version)?: return WikiPlanAddress(version: version, doc: slug, section: nil)
+        case .wikiPlanSection(let slug, let index, let version)?: return WikiPlanAddress(version: version, doc: slug, section: index)
+        default: return nil
+        }
     }
 
     /// `AppModel.selectedUserID` — the account the Admin pane shows.
@@ -295,6 +369,69 @@ public struct NavState: Equatable, Sendable {
         }
     }
 
+    /// Down to the runner's record, off the pages it pushed over itself (an engine's, its name's).
+    /// Selecting a runner — or none — starts here: those pages were the old runner's, and replacing
+    /// only the top would leave its record under the new one.
+    public mutating func popRunnerPages() {
+        withPath { frames in
+            while let top = frames.last {
+                switch top {
+                case .runnerEngine, .runnerName: frames.removeLast()
+                default: return
+                }
+            }
+        }
+    }
+
+    // MARK: - Folders (design §3.3)
+
+    /// Open a folder's page from a workspace's session list. The folder is the page the *list*
+    /// shows, which is the frame at the bottom of the section's stack: a phone has nothing under
+    /// it, so it lands on top and the system back returns to the workspace's list; a wide shell's
+    /// session column draws it while the detail pane keeps whatever console it was showing. Any
+    /// folder already open is left behind — one folder's page at a time.
+    public mutating func enterFolder(_ address: SessionFolderAddress) {
+        var frames = path
+        frames.removeAll { if case .folder = $0 { return true }; return false }
+        frames.insert(.folder(address), at: 0)
+        path = frames
+    }
+
+    /// Back out of a folder's page — a wide shell's column back button, or a folder that was
+    /// deleted under the page. Only the folder's frame goes: a console the detail pane is showing
+    /// stays on the stack and on screen. `folderID` nil leaves any folder (there is ever one).
+    public mutating func leaveFolder(_ folderID: String? = nil) {
+        path = path.filter { frame in
+            guard case .folder(let address) = frame else { return true }
+            return folderID.map { $0 != address.folderID } ?? false
+        }
+    }
+
+    /// The new-session draft's frame, opened from a list or from a folder's page. A draft over a
+    /// folder's page is pushed *over* it — the back swipe returns to the folder, and the session it
+    /// creates is filed in it — while one opened from a list replaces the page the detail pane is
+    /// showing, as it always did.
+    public mutating func openDraft(agentID: String, folderID: String?) {
+        let node = NavNode.compose(agentID: agentID, folderID: folderID)
+        if folderPage != nil {
+            withPath { $0.append(node) }
+        } else {
+            replaceTop(with: node)
+        }
+    }
+
+    /// Select a session's console in a three-column shell: it replaces the page the detail pane
+    /// shows — or, with a folder's page showing, is pushed over it, so the folder stays the page
+    /// the session list draws beside the console. Every other frame behaves exactly as
+    /// ``replaceTop(with:)``.
+    public mutating func selectConsole(_ node: NavNode) {
+        if folderPage != nil {
+            withPath { $0.append(node) }
+        } else {
+            replaceTop(with: node)
+        }
+    }
+
     /// Back to `sessionID`'s console when it is the page directly under the one on top: the
     /// conversation a phone opened its project's page over. Going to that conversation again is a
     /// pop, so the stack reads conversation › project page instead of growing a second copy of the
@@ -307,6 +444,32 @@ public struct NavState: Equatable, Sendable {
               PublicID.storageKey(beneath) == PublicID.storageKey(sessionID) else { return false }
         pop()
         return true
+    }
+
+    /// Back to `projectID`'s page when it is the page directly under the task page on top: the
+    /// project whose row opened the task. Going to that project again is a pop, so the stack reads
+    /// project › task instead of project › task › project on every press of the task's project
+    /// line. False, with nothing changed, when it is not there.
+    @discardableResult
+    public mutating func returnToProject(_ projectID: String) -> Bool {
+        guard !settingsPresented, let beneath = projectBeneathTask,
+              PublicID.storageKey(beneath) == PublicID.storageKey(projectID) else { return false }
+        pop()
+        return true
+    }
+
+    /// A task a route opened in Tasks that turned out to be one of `projectID`'s: off the Tasks stack
+    /// it landed on, and over its project's page on the Projects stack — the pair the project's own
+    /// rows push. Tasks' every-task scope is the tasks outside projects, so left there it would sit
+    /// over a list it is not in. Switching to the Projects section is the caller's (`AppModel`'s
+    /// section setter keeps the detail store in step); only the two stacks are edited here.
+    public mutating func moveTaskOverProject(_ taskID: String, project projectID: String) {
+        var tasks = stacks[.tasks] ?? []
+        if case .taskDetail(let top) = tasks.last, PublicID.storageKey(top) == PublicID.storageKey(taskID) {
+            tasks.removeLast()
+        }
+        stacks[.tasks] = tasks.isEmpty ? nil : tasks
+        stacks[.projects] = [.projectDetail(projectID: projectID), .taskDetail(taskID: taskID)]
     }
 
     /// The session's console is gone — completed, trashed or purged out from under it — so nothing
@@ -332,6 +495,22 @@ public struct NavState: Equatable, Sendable {
     }
 }
 
+/// A folder's page, as the frame that shows it spells it (docs/session-folders-move-design.md
+/// §3.3): which folder, the workspace it belongs to (the page says whose it is, and files the
+/// sessions it creates there), and the scope of the list it was opened from — Open's page lists the
+/// open sessions in the folder, Completed's the completed ones, for as long as the page is up.
+public struct SessionFolderAddress: Hashable, Sendable {
+    public let folderID: String
+    public let agentID: String
+    public let view: SessionView
+
+    public init(folderID: String, agentID: String, view: SessionView) {
+        self.folderID = folderID
+        self.agentID = agentID
+        self.view = view
+    }
+}
+
 /// Where one article lives: its topic's slug, and its part — 0 for the topic's own article.
 public struct WikiArticleAddress: Hashable, Sendable {
     public let topic: String
@@ -340,5 +519,30 @@ public struct WikiArticleAddress: Hashable, Sendable {
     public init(topic: String, part: Int) {
         self.topic = topic
         self.part = part
+    }
+}
+
+/// A document of the confirmed plan, by its slug, opened at one of its sections when `section` is a key.
+public struct WikiDocAddress: Hashable, Sendable {
+    public let slug: String
+    public let section: String?
+
+    public init(slug: String, section: String? = nil) {
+        self.slug = slug
+        self.section = section
+    }
+}
+
+/// A page of the plan: the version (nil for the one shown first), a document of it, a section of that.
+public struct WikiPlanAddress: Hashable, Sendable {
+    public let version: Int?
+    public let doc: String?
+    /// 0-based.
+    public let section: Int?
+
+    public init(version: Int? = nil, doc: String? = nil, section: Int? = nil) {
+        self.version = version
+        self.doc = doc
+        self.section = section
     }
 }

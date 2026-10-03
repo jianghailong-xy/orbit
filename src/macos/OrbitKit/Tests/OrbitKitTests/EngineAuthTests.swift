@@ -73,9 +73,12 @@ final class EngineAuthTests: XCTestCase {
         XCTAssertEqual(message, signedOut)
     }
 
+    /// An error a re-send would reproduce: a transient provider failure (a 5xx) is a pause the server
+    /// retries, drawn as the auto-retry card rather than as either of these.
     func testOrdinaryErrorsStayErrors() {
         var r = TranscriptReducer()
-        r.apply(RunEvent(seq: 1, type: .error, payload: .object(["message": .string("API Error: 500")])))
+        r.apply(RunEvent(seq: 1, type: .error, payload: .object([
+            "message": .string("API Error: 400 prompt is too long")])))
         guard case .error = r.state.items.first else {
             return XCTFail("a non-auth error must not become a sign-in card")
         }

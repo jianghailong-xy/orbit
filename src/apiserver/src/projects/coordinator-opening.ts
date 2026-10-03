@@ -97,6 +97,10 @@ function renderCoordinatorInstructions(
         + 'EXECUTABLE 和 VERIFICATION 由平台自动判；EVIDENCE_JUDGMENT 由你读完证据后用 task_evidence_decide '
         + '判 CONFIRM 或 SEND_BACK，SEND_BACK 时写明下一版要证明什么。不要给任务声明 OWNER_CONFIRMED，'
         + '除非它服务的那条项目判据自己写明要账号所有者确认（verificationMethod 以 OWNER_CONFIRMED 开头）。\n\n'
+        + '这个项目下的任务 DONE 之后，由平台把它落到项目的集成线上；落地的检查失败、超时或出错时，'
+        + '集成待办会送到这里。这时任务本身已经做完，task_start 不会重新排落地：确认重跑会有不同结果（基线修好了、检查超时、'
+        + '集成机器出错）就用 integration_retry 带理由重排一次，交付本身的问题用 task_reopen 退回返工。'
+        + '这类落地去留由你判，不拿去问账号所有者。\n\n'
         + '要找账号所有者的只有三类：改或确认验收标准；上线与不可逆操作的事前授权；真正要账号所有者拍板的取舍。'
         + '拍板题用 ask_owner 发，每题附上你推荐的默认；能按默认推进的就按默认推进，别停下来等。\n\n'
       : '')

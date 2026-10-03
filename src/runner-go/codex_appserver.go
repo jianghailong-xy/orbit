@@ -163,10 +163,11 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		emit(evError, map[string]interface{}{"message": "failed to prepare codex state: " + err.Error()})
 		return stFailed, true, false
 	}
-	if state.Shared {
+	if state.CodexHome != "" {
 		// Once selected, both the SQLite partition and the rollout/config source
 		// remain sticky. This prevents a later HOME change from backfilling a new
-		// account's history into the existing partition.
+		// account's history into the existing partition. A credential-isolated
+		// session's is the home of its own (isolatedCodexStateForEnv).
 		processEnv = envWithValue(processEnv, "CODEX_HOME", state.CodexHome)
 	}
 	// Plan usage is kept per account slot. A session's rolling rate limits refresh the windows of the
@@ -188,17 +189,22 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			return stFailed, true, false
 		}
 	}
-	// Shared state has already crossed the expensive backfill gate. Legacy and
-	// credential-isolated state may still need that work, so keep the same bounded
-	// long window instead of reintroducing the old two-minute interruption.
+	// Shared state has already crossed the expensive backfill gate, and an isolated
+	// home has no history to backfill. Legacy state may still need that work, so keep
+	// the same bounded long window instead of reintroducing the old two-minute
+	// interruption.
 	initTimeout := codexConnectionInitTimeout
-	if !state.Shared {
+	if state.Layout == codexStateLayoutLegacy {
 		initTimeout = codexStateInitTimeout
 	}
 	app, err := startReadyCodexAppServer(ctx, state, initTimeout, func() (*codexAppServer, error) {
 		return startCodexAppServer(ctx, job, execDir, state.Dir, processEnv, emit,
 			func(approvalCtx context.Context, request codexApprovalRequest, params map[string]interface{}) bool {
-				return bridgeCodexApproval(approvalCtx, t, job, request, params)
+				autoContext := codexAutoApprovalContextFor(execDir, upDir)
+				if job.WT != nil && job.WT.RepoDir != "" {
+					autoContext = codexAutoApprovalContextFor(execDir, upDir, job.WT.RepoDir)
+				}
+				return bridgeCodexApprovalWithContext(approvalCtx, t, job, request, params, autoContext)
 			})
 	})
 	if err != nil {
@@ -312,6 +318,7 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			TurnID:           snapshot.orbitTurnID,
 			Status:           result.Status,
 			Result:           result.Result,
+			Error:            codexTurnError(result),
 			Subtype:          result.Subtype,
 			NumTurns:         1,
 			CostUsd:          0,
@@ -386,10 +393,16 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			case <-app.done:
 				return
 			case msg := <-app.notifications:
-				handleCodexAppNotification(threadID, msg, emit, &activeMu, &active, finalizeActive, func(codexTurnID string) {
+				handleCodexAppNotificationWithImageFallback(threadID, msg, emit, &activeMu, &active, finalizeActive, func(codexTurnID string) {
 					recordCodexTurnID("", codexTurnID)
 				}, func(text string) string {
 					return rewriteLocalMarkdownImages(workerCtx, t, job.SessionID, text, []string{execDir, upDir, genImagesDir})
+				}, func(path string) string {
+					staged := stageCodexGeneratedImage(path, genImagesDir, upDir)
+					if staged == "" {
+						return ""
+					}
+					return fmt.Sprintf("![generated image](%s)", staged)
 				}, sessionRateLimits, steerDispatch.acknowledge)
 				activeMu.Lock()
 				tokens := 0
@@ -793,9 +806,10 @@ func codexStderrIsStateInitFailure(line string) bool {
 // auto-approves only known-safe read-only commands and asks about everything else, which Orbit
 // then routes to the same approval card Claude and Kimi use.
 //
-// Auto maps to `on-request`, which Codex documents as "the model decides when to ask the user for
-// approval" — that is what Auto is, so the mode means the same thing here as on Claude rather
-// than being a Claude-only feature. Its requests reach the same card `untrusted` already uses.
+// Auto maps to `on-request` plus a workspace-write sandbox, which lets Codex route boundary
+// crossings through its native reviewer before Orbit falls back to a human card. The approval
+// bridge remains a compatibility fallback and automatically accepts routine requests inside the
+// workspace.
 //
 // dontAsk deliberately stays on `never`. Orbit's Don't Ask is fail-closed ("deny anything not
 // pre-approved"), but Codex is never handed an allowlist — so switching it to `untrusted` would
@@ -812,6 +826,17 @@ func codexApprovalPolicy(permissionMode string) string {
 	default:
 		return "never"
 	}
+}
+
+// codexApprovalsReviewer selects Codex's native automatic reviewer for Auto. `on-request`
+// otherwise routes every eligible approval to the user; the reviewer keeps the boundary and
+// risk checks in Codex while removing routine human interruptions. The request-level bridge
+// remains the compatibility path for app-server builds without this reviewer.
+func codexApprovalsReviewer(permissionMode string) string {
+	if permissionMode == "auto" {
+		return "auto_review"
+	}
+	return ""
 }
 
 // codexAutomaticApproval applies the parts of a permission mode that need no human, mirroring
@@ -849,11 +874,20 @@ func codexAutomaticApproval(permissionMode string, request codexApprovalRequest)
 // human via the same approval card the other runtimes use. Fails CLOSED on every error path —
 // a control-plane outage must never auto-approve a command.
 func bridgeCodexApproval(ctx context.Context, t *Transport, job *ClaimedSession, request codexApprovalRequest, params map[string]interface{}) bool {
+	return bridgeCodexApprovalWithContext(ctx, t, job, request, params, codexAutoApprovalContext{})
+}
+
+func bridgeCodexApprovalWithContext(ctx context.Context, t *Transport, job *ClaimedSession, request codexApprovalRequest, params map[string]interface{}, autoContext codexAutoApprovalContext) bool {
 	if ctx.Err() != nil || t == nil || job == nil {
 		return false
 	}
 	if allowed, decided := codexAutomaticApproval(job.Agent.PermissionMode, request); decided {
 		return allowed
+	}
+	if job.Agent.PermissionMode == "auto" {
+		if allowed, decided := codexAutoApproval(request, params, autoContext); decided {
+			return allowed
+		}
 	}
 	input := map[string]interface{}{}
 	if request.mcpTool {
@@ -1104,11 +1138,16 @@ func (a *codexAppServer) injectAgentContext(
 	return err
 }
 
-func codexInjectedAgentItems(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) []map[string]interface{} {
+func codexAgentContext(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) string {
 	context := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches)
 	if strings.TrimSpace(context) == "" {
-		return nil
+		return codexImageDeliveryInstructions
 	}
+	return context + "\n\n" + codexImageDeliveryInstructions
+}
+
+func codexInjectedAgentItems(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) []map[string]interface{} {
+	context := codexAgentContext(agent, executable, insideRecordedWork, watches)
 	return []map[string]interface{}{
 		{
 			"type": "message",
@@ -1260,6 +1299,10 @@ func codexAgentAdditionalContext(
 ) map[string]interface{} {
 	context := map[string]interface{}{}
 	prefix := fmt.Sprintf("orbit_%08d_", generation)
+	context[prefix+"image_delivery"] = map[string]interface{}{
+		"kind":  "application",
+		"value": codexImageDeliveryInstructions,
+	}
 	if instruction := orbitCLIInstructions(executable, insideRecordedWork, watches); instruction != "" {
 		context[prefix+"cli"] = map[string]interface{}{
 			"kind":  "application",
@@ -1278,10 +1321,7 @@ func codexAgentAdditionalContext(
 }
 
 func codexLegacyAgentContext(agent AgentExecConfig, executable string, insideRecordedWork, watches bool) string {
-	context := withOrbitCLIInstructions(agent.AppendSystemPrompt, executable, insideRecordedWork, watches)
-	if strings.TrimSpace(context) == "" {
-		return ""
-	}
+	context := codexAgentContext(agent, executable, insideRecordedWork, watches)
 	return "<orbit_application_context>\n" + context + "\n</orbit_application_context>"
 }
 
@@ -1299,22 +1339,16 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 		input = append(input, map[string]interface{}{"type": "localImage", "path": p})
 	}
 	params := map[string]interface{}{
-		"threadId":            threadID,
-		"clientUserMessageId": orbitTurnID,
-		"input":               input,
-		"cwd":                 execDir,
-		"approvalPolicy":      codexApprovalPolicy(job.Agent.PermissionMode),
-		"runtimeWorkspaceRoots": []string{
-			execDir,
-			upDir,
-		},
-		// danger-full-access mirrors the Claude path, which runs unsandboxed in execDir.
-		// approvalPolicy is already "never" (Orbit fully trusts the agent), so codex's
-		// sandbox is the only thing left restricting it — and workspace-write (network off,
-		// writableRoots limited to the uploads dir) breaks git: fetch has no network, and a
-		// worktree session's real .git lives outside the workspace so FETCH_HEAD writes get
-		// denied. Full access removes that asymmetry with Claude.
-		"sandboxPolicy": map[string]interface{}{"type": "dangerFullAccess"},
+		"threadId":              threadID,
+		"clientUserMessageId":   orbitTurnID,
+		"input":                 input,
+		"cwd":                   execDir,
+		"approvalPolicy":        codexApprovalPolicy(job.Agent.PermissionMode),
+		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(job.Agent.PermissionMode, job, execDir, upDir),
+		"sandboxPolicy":         codexSandboxPolicy(job.Agent.PermissionMode, job, execDir, upDir),
+	}
+	if reviewer := codexApprovalsReviewer(job.Agent.PermissionMode); reviewer != "" {
+		params["approvalsReviewer"] = reviewer
 	}
 	if contextOptions.Mode == codexInstructionsAdditionalContext {
 		if additional := codexAgentAdditionalContext(
@@ -1345,14 +1379,14 @@ func codexTurnParams(threadID string, job *ClaimedSession, execDir, upDir, orbit
 
 func codexThreadParams(job *ClaimedSession, execDir, upDir string) map[string]interface{} {
 	params := map[string]interface{}{
-		"cwd":            execDir,
-		"approvalPolicy": codexApprovalPolicy(job.Agent.PermissionMode),
-		"sandbox":        "danger-full-access", // see codexTurnParams: parity with unsandboxed Claude
-		"runtimeWorkspaceRoots": []string{
-			execDir,
-			upDir,
-		},
-		"threadSource": "orbit",
+		"cwd":                   execDir,
+		"approvalPolicy":        codexApprovalPolicy(job.Agent.PermissionMode),
+		"sandbox":               codexSandboxMode(job.Agent.PermissionMode),
+		"runtimeWorkspaceRoots": codexRuntimeWorkspaceRoots(job.Agent.PermissionMode, job, execDir, upDir),
+		"threadSource":          "orbit",
+	}
+	if reviewer := codexApprovalsReviewer(job.Agent.PermissionMode); reviewer != "" {
+		params["approvalsReviewer"] = reviewer
 	}
 	if job.Agent.Model != "" {
 		params["model"] = job.Agent.Model
@@ -1682,6 +1716,10 @@ func codexNotificationThreadID(msg codexRPCMessage) string {
 // onSteerAck is called with the Orbit turn id of a mid-turn message Codex has just echoed back,
 // which is that message's only answer — it has no result of its own (codex_steer.go).
 func handleCodexAppNotification(threadID string, msg codexRPCMessage, emit emitFn, activeMu *sync.Mutex, active **codexAppActiveTurn, finalize func(codexTurnResult), onTurnStarted func(string), processAssistant assistantTextProcessor, onRateLimits func(map[string]interface{}), onSteerAck func(string)) {
+	handleCodexAppNotificationWithImageFallback(threadID, msg, emit, activeMu, active, finalize, onTurnStarted, processAssistant, nil, onRateLimits, onSteerAck)
+}
+
+func handleCodexAppNotificationWithImageFallback(threadID string, msg codexRPCMessage, emit emitFn, activeMu *sync.Mutex, active **codexAppActiveTurn, finalize func(codexTurnResult), onTurnStarted func(string), processAssistant assistantTextProcessor, imageFallback generatedImageFallback, onRateLimits func(map[string]interface{}), onSteerAck func(string)) {
 	// Empty is accepted for compatibility with older app-server notifications that were not
 	// thread-scoped. Current turn/item notifications always carry threadId; when present it is
 	// authoritative and child-thread activity must stay out of the Orbit root session.
@@ -1736,7 +1774,7 @@ func handleCodexAppNotification(threadID string, msg codexRPCMessage, emit emitF
 		item := mapValue(firstPresent(params, "item"))
 		activeMu.Lock()
 		if *active != nil {
-			handleCodexItem(map[string]interface{}{"item": item}, emit, &(*active).result, &(*active).fullText, false, processAssistant)
+			handleCodexItemWithImageFallback(map[string]interface{}{"item": item}, emit, &(*active).result, &(*active).fullText, false, processAssistant, imageFallback)
 		}
 		activeMu.Unlock()
 		reportCodexSteerEcho(activeMu, active, item, onSteerAck)
@@ -1760,7 +1798,7 @@ func handleCodexAppNotification(threadID string, msg codexRPCMessage, emit emitF
 					emit(evThinking, map[string]interface{}{"text": text})
 				}
 			} else {
-				handleCodexItem(map[string]interface{}{"item": item}, emit, &(*active).result, &(*active).fullText, true, processAssistant)
+				handleCodexItemWithImageFallback(map[string]interface{}{"item": item}, emit, &(*active).result, &(*active).fullText, true, processAssistant, imageFallback)
 			}
 		}
 		activeMu.Unlock()

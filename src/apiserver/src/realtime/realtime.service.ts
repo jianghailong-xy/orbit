@@ -1,3 +1,4 @@
+import { readMergeRecovery, type MergeRecoveryAction } from '@orbit/shared';
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
@@ -31,6 +32,7 @@ import { deriveSessionCapabilities } from '../sessions/session-state';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { isSessionGenerating } from '../common/session-generating';
 import { countLiveApprovals } from '../sessions/abandoned-approvals';
+import { readOpenRequestPeers } from '../sessions/session-request';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
 import {
@@ -555,6 +557,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** Drop the cached owner + workspace of a session that moved to another workspace
+   *  (SessionsService.move). The cached workspaceId is otherwise only evicted when the session
+   *  ends, and it is what every later control event names as the envelope's `agentId`. */
+  forgetSessionOwner(sessionId: string): void {
+    this.ownerCache.delete(sessionId);
+  }
+
   /** A still-PENDING user turn was added or withdrawn. Queued turns have no durable transcript
    * event until the runner leases them, so focused clients need this live-only nudge to re-fetch
    * GET /sessions/:id/turns and keep a queue created on another device visible. */
@@ -876,6 +885,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
           select: { id: true, status: true, lastHeartbeatAt: true },
         },
         workspaceId: true,
+        folderId: true,
         lastTurnAt: true,
         workspace: { select: { id: true, name: true, model: true, effort: true } },
         coordinatorForProject: { select: { id: true, title: true } },
@@ -897,6 +907,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     // that had been sitting unanswered.
     const decisions = await this.ownerDecisionsOn(sessionId, s.ownerId);
     const pendingApprovals = approvals + (decisions?.count ?? 0);
+    // Who this session is waiting on for a reply, and who is waiting on it (session-request.ts), the
+    // pair the list rows carry — sent as empty lists too, which is how a row learns one cleared.
+    const peers = (await readOpenRequestPeers(this.prisma, s.ownerId, [sessionId])).get(sessionId);
     return {
       id: s.id,
       taskId: s.taskId ?? null,
@@ -917,6 +930,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             effort: s.workspace.effort ?? null,
           }
         : null,
+      // Null is a value here: a session moved out of its folder reaches the owner's other clients
+      // by this key going null.
+      folderId: s.folderId ?? null,
       projectId: s.coordinatorForProject?.id ?? null,
       projectTitle: s.coordinatorForProject?.title ?? null,
       pendingApprovals,
@@ -924,6 +940,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // The four owner items, sent with every summary — including as an empty list, which is how a
       // row learns that the one it was showing has been answered (§7.6 V13).
       ownerItems: ownerItemsForRow(decisions),
+      awaitingReplyFrom: peers?.awaitingReplyFrom ?? [],
+      owesReplyTo: peers?.owesReplyTo ?? [],
       lastTurnAt: s.lastTurnAt ? s.lastTurnAt.toISOString() : null,
       // Read fresh with the status it qualifies: the same summary has to be able to say both
       // "failed, retrying at 12:04" and, once the retries are spent, "failed, nothing coming".
@@ -1028,11 +1046,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * heartbeat until the runner reports an outcome that flips mergeStatus off 'pending'. The
    * workDir comes from the session's workspace; the runner resolves the repo root from it.
    */
-  async drainMergeRequests(runnerId: string, leaseOwner: string): Promise<MergeCommand[]> {
+  async drainMergeRequests(runnerId: string, leaseOwner: string, supportsRecovery = true): Promise<MergeCommand[]> {
     const sessions = await this.prisma.session.findMany({
       where: {
         assignedRunnerId: runnerId,
         mergeStatus: 'pending',
+        ...(!supportsRecovery ? { mergeRecoveryAction: null } : {}),
         mergeOperationId: { not: null },
         branch: { not: null },
         AND: [
@@ -1055,6 +1074,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         branch: true,
         baseSha: true,
         mergeTarget: true,
+        mergeRecovery: true,
+        mergeRecoveryAction: true,
         mergeOperationId: true,
         mergeOperationOwner: true,
         status: true,
@@ -1084,7 +1105,16 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
             data: { mergeOperationOwner: leaseOwner, mergeRequestedAt: new Date() },
           });
           if (claim.count === 0) return null;
+          const recovery = readMergeRecovery(s.mergeRecovery);
+          const recoveryFields = s.mergeRecoveryAction ? {
+            recoveryAction: s.mergeRecoveryAction as MergeRecoveryAction,
+            ...(recovery ? { recovery: s.mergeRecoveryAction === 'apply' &&
+              ['PUSH_FAILED', 'REMOTE_NOT_VERIFIED'].includes(recovery.code)
+                ? { ...recovery, code: 'READY' } : recovery } : {}),
+            ...(await this.mergeRecoveryCheck(s.taskId)),
+          } : {};
           return {
+            ...recoveryFields,
             sessionId: s.id,
             operationId: s.mergeOperationId!,
             leaseOwner,
@@ -1104,6 +1134,19 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         }),
     );
     return claimed.filter((command): command is MergeCommand => command !== null);
+  }
+
+  private async mergeRecoveryCheck(taskId: string | null) {
+    if (!taskId) return {};
+    const task = await this.prisma.task.findUnique({
+      where: { id: taskId },
+      select: { project: { select: { codebases: { where: { slot: 'primary' }, take: 1, select: { mergeCheckCommand: true, mergeCheckTimeoutSeconds: true } } } } },
+    });
+    const codebase = task?.project?.codebases[0];
+    return codebase?.mergeCheckCommand ? {
+      check: { command: codebase.mergeCheckCommand,
+        timeoutSeconds: codebase.mergeCheckTimeoutSeconds ?? 3600 },
+    } : {};
   }
 
   /** `[K6]`: the accepted checkpoint's commit, spread into the command when there is one. */

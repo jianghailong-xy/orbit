@@ -16,11 +16,84 @@ export const WIKI_MAINTENANCE_JOB = {
   extractConcurrency: 4,
   /** The budget the task declares for its check, in seconds: the check reads two rows. */
   checkTimeoutSeconds: 300,
+  /**
+   * The most ops ended sessions left waiting that one run of an automatic space adopts and verifies
+   * (contract `reviewModes.verification.adoption`): the rest wait for the next run, oldest first.
+   */
+  adoptOpsMax: 50,
+} as const;
+
+/**
+ * Whose failure a failed maintenance run was (contract `maintenance.job.recovery.failureKinds`), as its run
+ * row and the space's health say it: `infra` — the platform under the run: its runner went offline, its
+ * engine never came up, the server answered 5xx or could not be reached, the disk filled — or `content` —
+ * the run's own: what it read, what the model answered, what the server refused, its turn limit. Only an
+ * infra failure is run again by the platform.
+ */
+export const WIKI_MAINTENANCE_FAILURE_KINDS = ['infra', 'content'] as const;
+export type WikiMaintenanceFailureKind = (typeof WIKI_MAINTENANCE_FAILURE_KINDS)[number];
+
+/** The numbers a maintenance task that died is recovered by (contract `maintenance.job.recovery.rules`). */
+export const WIKI_MAINTENANCE_RECOVERY = {
+  /** A task whose session died of an infra failure is started again no sooner than this after the session ended… */
+  rerunAfterMinutes: 10,
+  /** …and this many times at most: a rerun that dies too, or a death of any other kind, closes the task FAILED. */
+  rerunsMax: 1,
+  /** The longest `orbit wiki maintain` waits for a server that answers 5xx or not at all before it ends the run. */
+  serverWaitMinutes: 15,
 } as const;
 
 /** What made a maintenance task: the backlog reached the threshold, or its oldest fact the age. */
 export const WIKI_MAINTENANCE_DUE = ['backlog', 'age'] as const;
 export type WikiMaintenanceDue = (typeof WIKI_MAINTENANCE_DUE)[number];
+
+/**
+ * Catch-up (contract `maintenance.job.catchUp`, criterion 3 revision 4, the owner's choice of 2026-10-02): a
+ * space whose oldest fact the wiki has not taken in is more than `behindHours` old is behind, and catches up —
+ * the end of its latest run makes the next, a run on a local endpoint or one that failed is not counted against
+ * the day, and its documents wait until it is behind no more — until its last `pauseAfterFailures` runs all
+ * failed, which pauses it until a run succeeds.
+ */
+export const WIKI_MAINTENANCE_CATCH_UP = {
+  behindHours: 24,
+  pauseAfterFailures: 3,
+} as const;
+
+/**
+ * How a run was made, kept on its row (`wiki_maintenance_run.catch_up`): `active` — the space behind and
+ * catching up; `paused` — behind, its last runs all failed. A run made while the space was not behind has none.
+ */
+export const WIKI_MAINTENANCE_CATCH_UP_STATES = ['active', 'paused'] as const;
+export type WikiMaintenanceCatchUp = (typeof WIKI_MAINTENANCE_CATCH_UP_STATES)[number];
+
+/** Whether a space whose oldest fact after its cursor is `oldestPendingAt` is behind at `now`: read when asked, never waited for. */
+export function wikiMaintenanceBehind(oldestPendingAt: Date | null, now: Date): boolean {
+  return oldestPendingAt !== null && now.getTime() - oldestPendingAt.getTime() > WIKI_MAINTENANCE_CATCH_UP.behindHours * 3_600_000;
+}
+
+/**
+ * Whether a provider's endpoint is on this machine or a private network (contract
+ * `maintenance.job.catchUp.localEndpoint`): its host is localhost or a name under .localhost, a loopback address
+ * (127.0.0.0/8, ::1), a private IPv4 address (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16), an IPv6 unique local
+ * address (fc00::/7), or a link-local one (169.254.0.0/16, fe80::/10). Any other name is not: a name says
+ * nothing of where it resolves, and a run taken for a public one is only counted.
+ */
+export function wikiMaintenanceEndpointIsLocal(baseUrl: string | null | undefined): boolean {
+  // The URL's host: what follows the scheme and any user info, up to its port, path, query or fragment.
+  const authority = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/?#]*@)?(\[[0-9a-f:.]+\]|[^:/?#]*)/iu.exec((baseUrl ?? '').trim());
+  let host = (authority?.[1] ?? '').toLowerCase().replace(/\.$/u, '');
+  if (host.startsWith('[') && host.endsWith(']')) host = host.slice(1, -1);
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/u.exec(host);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
+  }
+  if (!host.includes(':')) return false;
+  if (/^(?:0{0,4}:){1,7}:?0{0,3}1$/u.test(host) && host.replace(/[0:]/gu, '') === '1') return true;
+  const first = Number.parseInt(host.split(':')[0] || 'ffff', 16);
+  return (first & 0xfe00) === 0xfc00 || (first & 0xffc0) === 0xfe80;
+}
 
 /**
  * Why a fact that found the space due made no task (contract `maintenance.job.held`), kept on the
@@ -67,7 +140,10 @@ export interface WikiMaintenanceRunContext {
   /** The space's repository: what the run's checkout must be a clone of. */
   repo: { urlNorm: string | null; rootCommitSha: string | null };
   reviewMode: WikiReviewMode;
-  /** The space's active entries now: what the circuit breaker is counted against. */
+  /**
+   * The space's active entries now. Not what the run's circuit breaker is counted against: that is the entries
+   * active when the run began, its own adds since taken off, and a dry run says it (`WikiBreakerReading`).
+   */
   activeEntries: number;
   breaker: { minActiveEntries: number; maxChangedPercent: number };
   /** The workspace the space's maintenance runs in, with its work directory as stored (`~` unexpanded). */
@@ -79,24 +155,97 @@ export interface WikiMaintenanceRunContext {
   expect: string | null;
   /** How many sessions this run may cover (wikiMaintenanceRunSessions). */
   runSessions: number;
+  /**
+   * How the run was made (contract `maintenance.job.catchUp`): while the space was behind — catching up, or
+   * paused — it writes no document and proposes no change to the plan; null for a run made otherwise.
+   */
+  catchUp: WikiMaintenanceCatchUp | null;
 }
 
 /** What a run reports when it ends, kept as it was said (contract `maintenance.job.report`). */
 export interface WikiMaintenanceReport {
   /** The step the run stopped at, when it did not succeed. */
   stoppedAt?: string;
+  /**
+   * The run moved the space's cursor past the sessions whose ops it recorded, as soon as they were recorded
+   * (`POST …/maintenance/advance`): a step that failed after it fails the run, and the next run does not read
+   * those sessions again. A run from a runner that does not do this, or one that failed before, says nothing.
+   */
+  cursorAdvanced?: boolean;
   sessions: number;
   dossiers: number;
   unchanged: number;
   offTopic: number;
   entries: { extracted: number; kept: number; dropped: number; foreign: number; principles: number };
-  ops: { proposed: number; recorded: number; refused: number; selfCheckDropped: number; heldBack: number; applied: number; waiting: number };
-  verification?: { verified: number; failed: number };
+  /** `heldBack` is what the review queue's quotas held back; `heldBackByBreaker` what the run's circuit breaker did. */
+  ops: {
+    proposed: number;
+    recorded: number;
+    refused: number;
+    selfCheckDropped: number;
+    heldBack: number;
+    heldBackByBreaker: number;
+    applied: number;
+    waiting: number;
+  };
+  verification?: {
+    verified: number;
+    failed: number;
+    /**
+     * Every op the run got no verdict for — its own after both passes, and the adopted ones: none of them is
+     * live, each keeps waiting for its verification, and the next run adopts it. None of them fails the run.
+     * An older runner does not report it: its run failed when one of its own ops got no verdict.
+     */
+    waitingForNextRun?: number;
+    /** What the run adopted of what ended sessions left waiting, counted apart from its own ops. */
+    adopted?: { ops: number; verified: number; failed: number };
+  };
   anchors?: { entries: number; changed: number; missing: number };
+  /** The topic articles a run before criterion 3's revision 3 rewrote; a run now writes the plan's sections (docs). */
   articles?: { written: number; unchanged: number; failed: number };
+  docs?: WikiMaintenanceDocsReport;
   tokens: { input: number; output: number; calls: number };
   seconds: number;
 }
+
+/**
+ * What a run did to the space's documents (contract `maintenance.job.docs`): the sections it took up and
+ * why — the entries that changed and fit them, the repository material they cite that changed on
+ * origin/main, a withdrawn sentence, or a section no build wrote — what became of them, the files whose
+ * disappearance withdrew sentences, and the one plan proposal it made at most. With no confirmed plan it
+ * writes nothing and says so (skipped).
+ */
+export interface WikiMaintenanceDocsReport {
+  planVersion: number | null;
+  skipped?: WikiMaintenanceDocsSkipped;
+  repoSha?: string;
+  affected: { byEntries: number; byRepo: number; stale: number; unwritten: number; total: number };
+  withdrawn: { paths: number; sentences: number };
+  sections: { written: number; unchanged: number; failed: number };
+  /** Design documents new on origin/main that no section cites, and entries that fit no section. */
+  unplaced: { designDocs: number; entries: number };
+  proposal: { outcome: 'proposed' | 'failed'; id?: string; doc?: string; newDoc?: boolean; facts?: number; rounds?: number; error?: string; reason?: string } | null;
+  /** What the step spent: its model calls — the sections' and the proposal's — and its time. */
+  tokens: { input: number; output: number; calls: number };
+  seconds: number;
+  /** What stopped the step, when something did: the run still succeeds, and the next run takes it up. */
+  error?: string;
+}
+
+/** The numbers a run's documents step goes by (contract `maintenance.job.docs.rules`). */
+export const WIKI_MAINTENANCE_DOCS_RULES = {
+  /** The gate rounds a plan proposal has: the first, and two more with every error handed back. */
+  proposalRoundsMax: 3,
+  /** The most pieces of knowledge with no place one proposal is asked about; the rest wait for the next run. */
+  proposalItemsMax: 12,
+} as const;
+
+/**
+ * Why a run wrote no document: the space has no confirmed plan, its server writes none yet, or the run was
+ * made while the space was behind, whose documents wait until it has caught up (`maintenance.job.catchUp.docs`).
+ */
+export const WIKI_MAINTENANCE_DOCS_SKIPPED = ['no_confirmed_plan', 'no_server_support', 'catching_up'] as const;
+export type WikiMaintenanceDocsSkipped = (typeof WIKI_MAINTENANCE_DOCS_SKIPPED)[number];
 
 /** `GET /api/runner/wiki/spaces/:id/maintenance/check`: `orbit wiki check`'s verdict. */
 export interface WikiMaintenanceCheck {

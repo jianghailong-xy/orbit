@@ -3,6 +3,7 @@ import { PlayCircleFilled } from '@ant-design/icons';
 import type { ProjectStartedCard as Started } from '@orbit/shared';
 import { routeId } from '../lib/idCodec';
 import { AppLink } from './AppLink';
+import { RunSettingsSummary } from './RunSettingsSummary';
 import { relTime } from './Transcript';
 
 /**
@@ -16,8 +17,14 @@ import { relTime } from './Transcript';
  * read are one disclosure away at the foot, as on the exception item's card (`OpenItemDeliveryCard`),
  * whose shape this is, in the brand tone: nothing here failed.
  *
+ * A start that recorded what it left the project running with carries one more line under the
+ * title — the line, Automatic, concurrency and the merge check (`RunSettingsSummary`) — with every
+ * setting the owner changed from the coordinator's suggestion marked, so the coordinator reading its
+ * own conversation can see what it did not ask for.
+ *
  * Every word is shared with the native card (OrbitKit `ProjectStartedCard`), and
- * `ProjectStartedCopyParityTests.swift` reads the declarations below to hold the two to it.
+ * `ProjectStartedCopyParityTests.swift` reads the declarations below to hold the two to it; the
+ * settings line's words are `lib/projectStart.ts`'s.
  */
 
 /** The card's name for each way a project is started. */
@@ -109,6 +116,13 @@ export function ProjectStartedCard({
           <span className="psc-kind">{projectStartedKind(card.by)}</span>
         </div>
         <div className="psc-title">{card.projectTitle}</div>
+        {card.settings ? (
+          <RunSettingsSummary
+            className="psc-settings"
+            settings={card.settings}
+            differs={card.differsFromRequest ?? []}
+          />
+        ) : null}
         {card.heldCount === 0 ? (
           <div className="psc-lead">{PROJECT_STARTED_NONE_HELD}</div>
         ) : (

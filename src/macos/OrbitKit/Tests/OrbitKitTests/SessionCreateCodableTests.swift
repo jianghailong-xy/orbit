@@ -16,6 +16,20 @@ final class SessionCreateCodableTests: XCTestCase {
         }
     }
 
+    /// A provider switch onto the built-in Codex or Claude engine can name the account it lands on — the
+    /// Provider submenu lists each engine's accounts under it (web parity) — live and on the revive
+    /// alike. Nothing names one unless it was picked: the server then takes Automatic's pick.
+    func testASwitchNamesTheAccountItLandsOnOnlyWhenOneWasPicked() throws {
+        let live = try jsonObject(ConfigUpdateRequest(provider: "claude", account: "fad98727"))
+        XCTAssertEqual(live["provider"] as? String, "claude")
+        XCTAssertEqual(live["account"] as? String, "fad98727")
+        XCTAssertFalse(try jsonObject(ConfigUpdateRequest(provider: "claude")).keys.contains("account"))
+        let revive = try jsonObject(ResumeRequest(clientTurnId: "t1", content: "go on", provider: "claude",
+                                                  account: CodexAccounts.automaticID))
+        XCTAssertEqual(revive["account"] as? String, "automatic")
+        XCTAssertFalse(try jsonObject(ResumeRequest(clientTurnId: "t1", content: "go on")).keys.contains("account"))
+    }
+
     /// The new-session provider pick. Omitted means "inherit the agent's" server-side, so sending
     /// it only when the user actually picked is what keeps an untouched draft behaving as before.
     func testCreateSendsThePickedProviderOnlyWhenChosen() throws {

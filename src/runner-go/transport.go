@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -24,6 +25,7 @@ const (
 	sessionOrchestrationCredentialV1 = "session-orchestration-credential-v1"
 	sessionTerminalHandoffV1         = "session-terminal-handoff-v1"
 	sessionWorktreeOpsV1             = "session-worktree-ops-v1"
+	sessionMergeRecoveryV1           = "session-merge-recovery-v1"
 	// CURRENT_WORK v1 guarantees startup-envelope support and flushes its runtime-authored USER
 	// receipt before any completion/finalization that can terminalize an unacknowledged delivery.
 	sessionCurrentWorkRoutingV1 = "session-current-work-routing-v1"
@@ -65,6 +67,7 @@ func init() {
 		sessionOrchestrationCredentialV1,
 		sessionTerminalHandoffV1,
 		sessionWorktreeOpsV1,
+		sessionMergeRecoveryV1,
 		sessionCurrentWorkRoutingV1,
 		sessionClaudeCoordinatorContextV1,
 		sessionCodexCoordinatorContextV1,
@@ -77,6 +80,8 @@ func init() {
 		codexAccountMoveCapabilityV1,
 		claudeAccountLoginCapabilityV1,
 		claudeAccountRemoveCapabilityV1,
+		claudeAccountMoveCapabilityV1,
+		sessionMoveCapabilityV1,
 		wikiMaintenanceRunV1,
 	}, declaredSteerCapabilities()...), ",")
 }
@@ -86,6 +91,8 @@ type transportHTTPError struct {
 	path       string
 	statusCode int
 	body       string
+	// retryAfter is the answer's Retry-After header, as sent: when a 429 says to come back (wiki_retry.go).
+	retryAfter string
 }
 
 func (e *transportHTTPError) Error() string {
@@ -176,6 +183,10 @@ type Transport struct {
 	token      string
 	client     *http.Client
 	leaseOwner string
+	// wiki is the client the wiki door's calls go out on (wiki_conn.go): made by the first of them, and
+	// made again when one fails on its way.
+	wikiMu sync.Mutex
+	wiki   *http.Client
 }
 
 func isTransportHTTPStatus(err error, status int) bool {
@@ -236,6 +247,11 @@ func (t *Transport) do(ctx context.Context, method, path string, body, out inter
 }
 
 func (t *Transport) doHeaders(ctx context.Context, method, path string, body, out interface{}, timeout time.Duration, headers map[string]string) error {
+	return t.doVia(ctx, t.client, method, path, body, out, timeout, headers)
+}
+
+// doVia is doHeaders sent through client: t.client for every call but the wiki door's (wiki_conn.go).
+func (t *Transport) doVia(ctx context.Context, client *http.Client, method, path string, body, out interface{}, timeout time.Duration, headers map[string]string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -264,7 +280,7 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	resp, err := t.client.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -281,7 +297,7 @@ func (t *Transport) doHeaders(ctx context.Context, method, path string, body, ou
 		return fmt.Errorf("%s %s: reading response body: %w", method, path, err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return &transportHTTPError{method: method, path: path, statusCode: resp.StatusCode, body: string(data)}
+		return &transportHTTPError{method: method, path: path, statusCode: resp.StatusCode, body: string(data), retryAfter: resp.Header.Get("Retry-After")}
 	}
 	if out != nil && len(data) > 0 {
 		return json.Unmarshal(data, out)
@@ -1412,6 +1428,25 @@ func (t *Transport) resolveOpenItem(sessionID, id, itemID, note string) (json.Ra
 	return out, err
 }
 
+// retryIntegration asks for the next generation of a DONE task's failed landing, as the acting
+// session (contract §2.3 J-T1b). The session header is the authority the server checks against the
+// project's coordinator pointer; the reason travels as the body and is kept on the new generation and
+// on every item it supersedes. A refusal — in flight, the owner's, not this project's — travels as the
+// server raised it.
+func (t *Transport) retryIntegration(sessionID, id, taskID, reason string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(taskID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/tasks/"+url.PathEscape(taskID)+"/integration/retry",
+		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 func (t *Transport) taskDependencyGraph(id string, maxDepth, maxNodes int) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
@@ -1831,6 +1866,18 @@ func (t *Transport) sendSessionMessage(callerSessionID, orchestrationToken, id s
 	return out, err
 }
 
+// sendSessionReply answers a session request this session was sent (`session_reply`,
+// docs/session-request-reply-contract.md §3.2). Only the session the request was sent to may answer
+// it, which the server reads off the same orchestration credential every session verb carries.
+func (t *Transport) sendSessionReply(callerSessionID, orchestrationToken, requestID string, body interface{}) (json.RawMessage, error) {
+	if err := validatePathSegmentID(requestID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doOrchestration("POST", "/runner/session-requests/"+url.PathEscape(requestID)+"/reply", body, &out, callerSessionID, orchestrationToken)
+	return out, err
+}
+
 // interruptSession stops a session's current turn. A non-nil body carrying `message` makes
 // it the atomic "stop that and do this instead" the browser sends: one transaction, so the
 // follow-up cannot be deleted by the interrupt it travels with. nil is a plain interrupt.
@@ -1998,6 +2045,9 @@ func (t *Transport) releaseWatch(callerSessionID, orchestrationToken, id string)
 // read is what its bound workspace shares, and proposing is not a power over anybody else's session,
 // so a session without the orchestration grant still reads the wiki and proposes to it. The server
 // resolves the space from the session header alone, which is why no request here carries one.
+//
+// Every call goes out through doWiki (wiki_retry.go): a read, or a write the server records at most once,
+// is sent again through a deploy's 502s or a reset stream; any other write is sent once.
 
 func (t *Transport) searchWiki(sessionID string, query wikiSearchQuery) (json.RawMessage, error) {
 	values := url.Values{}
@@ -2021,7 +2071,7 @@ func (t *Transport) searchWiki(sessionID string, query wikiSearchQuery) (json.Ra
 		path += "?" + encoded
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
@@ -2036,7 +2086,7 @@ func (t *Transport) getWikiEntry(sessionID, id, include string) (json.RawMessage
 		path += "?include=" + url.QueryEscape(include)
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
@@ -2044,13 +2094,15 @@ func (t *Transport) getWikiEntry(sessionID, id, include string) (json.RawMessage
 // whose ops was recorded comes back as a 4xx carrying that answer — wikiProposeAnswerIn reads it.
 func (t *Transport) proposeWikiChangeset(sessionID string, body interface{}) (json.RawMessage, error) {
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodPost, "/runner/wiki/changesets", body, &out, taskOpTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodPost, "/runner/wiki/changesets", body, &out, taskOpTimeout, sessionHeader(sessionID), wikiRecordsOnce(body))
 	return out, err
 }
 
 // listWikiVerifications reads one page of the ops the calling session proposed that wait for their
-// verification in a space (`orbit wiki verify`, contract `reviewModes.verification.list`).
-func (t *Transport) listWikiVerifications(sessionID, spaceID, after string, limit int) (json.RawMessage, error) {
+// verification in a space (`orbit wiki verify`, contract `reviewModes.verification.list`) — or, on
+// `maintenance/verifications`, of the ops ended sessions left waiting there, which a maintenance run of the
+// space adopts (`reviewModes.verification.adoption`). route is the path after the space.
+func (t *Transport) listWikiVerifications(route, sessionID, spaceID, after string, limit int) (json.RawMessage, error) {
 	if err := validatePathSegmentID(spaceID); err != nil {
 		return nil, err
 	}
@@ -2060,20 +2112,24 @@ func (t *Transport) listWikiVerifications(sessionID, spaceID, after string, limi
 		values.Set("after", after)
 	}
 	var out json.RawMessage
-	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/verifications?" + values.Encode()
-	err := t.doHeaders(nil, http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID))
+	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/" + route + "?" + values.Encode()
+	_, err := t.doWiki(http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
-// reportWikiVerifications reports verdicts for ops the calling session proposed. A report none of
+// reportWikiVerifications reports verdicts for ops the list on the same route gave. A report none of
 // whose verdicts was recorded comes back as a 4xx carrying every outcome, as a refused proposal does.
-func (t *Transport) reportWikiVerifications(sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
+//
+// Sent again through a transient failure: a verdict is recorded only while its op still waits for one
+// (the update's predicate), and the same verdict for an op already verified that way is answered with
+// what was recorded, writing nothing (wiki.service.ts applyVerdict).
+func (t *Transport) reportWikiVerifications(route, sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(spaceID); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
-	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/verifications"
-	err := t.doHeaders(nil, http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID))
+	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/" + route
+	_, err := t.doWiki(http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
@@ -2096,20 +2152,21 @@ func (t *Transport) listWikiDossiers(sessionID, spaceID, after string, limit int
 		path += "?" + encoded
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodGet, path, nil, &out, wikiDossierPageTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodGet, path, nil, &out, wikiDossierPageTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
 // advanceWikiCursor reports how the calling session's maintenance run ended (`orbit wiki cursor
 // advance`, contract `maintenance.cursor.advance`): a succeeded run moves the space's cursor to its
-// token, and a failed or truncated one is recorded and moves nothing.
+// token, and a failed or truncated one is recorded and moves nothing — and is counted, so only a
+// succeeded run's report is sent again through a transient failure (wikiReportsSuccess).
 func (t *Transport) advanceWikiCursor(sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(spaceID); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/cursor"
-	err := t.doHeaders(nil, http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID), wikiReportsSuccess(body))
 	return out, err
 }
 
@@ -2132,19 +2189,23 @@ func (t *Transport) listWikiAnchors(sessionID, spaceID, after string, limit int)
 		path += "?" + encoded
 	}
 	var out json.RawMessage
-	err := t.doHeaders(nil, http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 
 // reportWikiAnchorChecks reports what the calling session's maintenance run found on origin/main
 // (`orbit wiki anchors verify`, contract `anchorRules.verify.report`): each entry is recorded on its own.
+//
+// Sent again through a transient failure: a check sets an entry's anchors and their state to what was
+// found (it counts nothing, and moves no revision), and files a challenge only while none of the entry's
+// is open (wiki.service.ts applyAnchorCheck), so a second landing writes what the first did.
 func (t *Transport) reportWikiAnchorChecks(sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
 	if err := validatePathSegmentID(spaceID); err != nil {
 		return nil, err
 	}
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/anchor-checks"
-	err := t.doHeaders(nil, http.MethodPost, path, body, &out, wikiAnchorReportTimeout, sessionHeader(sessionID))
+	_, err := t.doWiki(http.MethodPost, path, body, &out, wikiAnchorReportTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 

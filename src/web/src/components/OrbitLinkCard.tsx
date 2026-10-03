@@ -55,10 +55,11 @@ import { relTime } from './Transcript';
  * One skeleton, four contents: the type's icon and name, a title, then one or two lines of status.
  * Every word here is one this app already says somewhere — the task pill is the tasks panel's
  * `TaskStatusPill`, a session's status is the conversation header's own word (`statusLabel`, handed
- * in by the session view below), and the progress line is the tasks page's — so a card and the page
- * it leads to cannot describe the same object in two vocabularies. OrbitKit draws the same four
- * cards; `OrbitLinkCopy` is the list of sentences it is checked against, which is why every one of
- * them is an exported constant rather than a literal in the middle of a builder
+ * in by the session view below; a failure says its error, as its glyph and the native card do), and
+ * the progress line is the tasks page's — so a card and the page it leads to cannot describe the
+ * same object in two vocabularies. OrbitKit draws the same four cards; `OrbitLinkCopy` is the list
+ * of sentences it is checked against, which is why every one of them is an exported constant rather
+ * than a literal in the middle of a builder
  * (`src/macos/OrbitKit/Tests/OrbitKitTests/OrbitLinkCopyParityTests.swift`).
  *
  * Cards are drawn only inside a session view: `OrbitLinkCardsProvider` is what a conversation page
@@ -312,9 +313,12 @@ export function OrbitLinkCard({
     lines.push({ text: parts.join(ORBIT_LINK_SEPARATOR) });
   } else if (state === 'ready' && kind === 'session') {
     const session = answer as LinkPreviewSession;
+    const word = stateWord(session);
+    // A failure's word is its whole error, so the pill truncates where the row runs out (index.css)
+    // and keeps the rest for the hover.
     headRight = (
-      <span className={`olc-state is-${stateTone(sessionRunStateOf(session))}`}>
-        {stateWord(session)}
+      <span className={`olc-state is-${stateTone(sessionRunStateOf(session))}`} title={word}>
+        {word}
       </span>
     );
     title = cardTitle(session.title, link);

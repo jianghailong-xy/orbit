@@ -3,29 +3,32 @@ import { Runner } from '@prisma/client';
 import { toUuid } from '@orbit/shared';
 import { PublicIdPipe } from '../common/public-id';
 import { PrismaService } from '../prisma/prisma.service';
-import { WikiMaintenanceFinishDto, WikiProposeDto } from '../wiki/dto';
+import { WikiMaintenanceAdvanceDto, WikiMaintenanceFinishDto, WikiProposeDto, WikiVerificationReportDto } from '../wiki/dto';
 import { isWikiMaintenanceSession, WikiMaintenance } from '../wiki/wiki-maintenance';
 import { finishWikiMaintenanceRun, wikiMaintenanceCheck, wikiMaintenanceRunContext } from '../wiki/wiki-maintenance-run';
 import { WikiRolloutGuard } from '../wiki/wiki-rollout';
-import { answerFor, WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
+import { answerFor, answerForVerifications, WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { CurrentRunner } from './current-runner.decorator';
 import { RunnerAuthGuard } from './runner-auth.guard';
 
 /**
  * The runner door's routes of the Wiki maintenance job (contracts/wiki.contract.json `maintenance.job`,
  * criterion 3): what `orbit wiki maintain` starts from, how it proposes as the space's maintenance run,
+ * how it moves the cursor once its proposals are recorded, how it verifies what ended sessions left waiting,
  * how it ends, and what `orbit wiki check` asks.
  *
- * THREE ARE A MAINTENANCE RUN'S ALONE, as the dossiers and the cursor are: the calling session must be a
- * maintenance run of the space in the path (`isWikiMaintenanceSession`) — a headless call is refused 400,
- * any other session of the owner WIKI_NOT_MAINTENANCE_SESSION, another owner's space a plain 404. What it
- * proposes through this door is recorded with origin `maintenance`, which the effect policy, the review
- * queue's quotas and the circuit breaker read, and nothing the session sends can make it anything else.
+ * ALL BUT THE CHECK ARE A MAINTENANCE RUN'S ALONE, as the dossiers and the cursor are: the calling
+ * session must be a maintenance run of the space in the path (`isWikiMaintenanceSession`) — a headless
+ * call is refused 400, any other session of the owner WIKI_NOT_MAINTENANCE_SESSION, another owner's space
+ * a plain 404. What it proposes through this door is recorded with origin `maintenance`, which the effect
+ * policy, the review queue's quotas and the circuit breaker read, and nothing the session sends can make
+ * it anything else. What it verifies through this door is what no proposer is left to verify: the ops
+ * ended sessions left waiting in the space (contract `reviewModes.verification.adoption`).
  *
  * THE CHECK IS ALSO THE RUNNER'S OWN. A task's acceptance command runs after the session's turn, in a
  * shell the runner starts with no session context, so the check answers a headless call of the space's
  * owner's runner — it reads the cursor and the run's row and writes nothing. A call that names a session
- * is held to the same test as the other three.
+ * is held to the same test as the other routes.
  *
  * A controller of its own, beside `RunnerWikiMaintenanceController`, so the specs that stand that one up
  * by hand construct it as they always have.
@@ -64,6 +67,59 @@ export class RunnerWikiMaintainController {
     return answerFor(await this.wiki.submitChangeset(principal, id, dto));
   }
 
+  /**
+   * What ended sessions left waiting for their verification in the space (contract
+   * `reviewModes.verification.adoption`), a page at a time as the proposer's own list is: the run adopts
+   * them, since nobody who proposed them is left to verify them.
+   */
+  @Get('spaces/:id/maintenance/verifications')
+  async adoptions(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    /** The last opId of the page before, to read the next one. */
+    @Query('after') after?: string,
+    @Query('limit') limit?: string,
+  ) {
+    const sessionId = await this.maintainer(runner, callingSessionId, id, true);
+    const principal: WikiPrincipal = { origin: 'maintenance', ownerId: runner.ownerId, userId: null, sessionId: sessionId!, toolCallId: null };
+    return this.wiki.listVerifications(principal, id, {
+      after: after?.trim() || null,
+      limit: limit === undefined ? undefined : Number(limit),
+      adopt: true,
+    });
+  }
+
+  /** Verdicts for what the run adopted, each recorded and applied as a proposer's own verdict is. */
+  @Post('spaces/:id/maintenance/verifications')
+  @HttpCode(HttpStatus.OK)
+  async adopt(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: WikiVerificationReportDto,
+  ) {
+    const sessionId = await this.maintainer(runner, callingSessionId, id, true);
+    const principal: WikiPrincipal = { origin: 'maintenance', ownerId: runner.ownerId, userId: null, sessionId: sessionId!, toolCallId: null };
+    return answerForVerifications(await this.wiki.recordVerifications(principal, id, dto.verdicts, { adopt: true }));
+  }
+
+  /**
+   * The run's ops are recorded (contract `maintenance.job.run.steps`, advance): the cursor moves past the sessions
+   * they came from now, before the steps after the proposals, and nothing of how the run ends is said yet.
+   */
+  @Post('spaces/:id/maintenance/advance')
+  @HttpCode(HttpStatus.OK)
+  async advance(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') callingSessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Body() dto: WikiMaintenanceAdvanceDto,
+  ) {
+    await this.maintainer(runner, callingSessionId, id, true);
+    return this.maintenance.advanceRecorded(runner.ownerId, id, dto.to);
+  }
+
   /** How the run ended (contract `maintenance.job.finish`): the cursor advanced as its route rules, and the report kept. */
   @Post('spaces/:id/maintenance/finish')
   @HttpCode(HttpStatus.OK)
@@ -78,6 +134,7 @@ export class RunnerWikiMaintainController {
       to: dto.to ?? null,
       outcome: dto.outcome,
       error: dto.error ?? null,
+      failureKind: dto.failureKind ?? null,
       report: dto.report ?? null,
     });
   }
@@ -111,7 +168,7 @@ export class RunnerWikiMaintainController {
     if (!named) {
       if (sessionRequired) {
         throw new BadRequestException(
-          'missing session context: only a Wiki maintenance run of this space starts, proposes or ends a run, so this door needs X-Orbit-Session-Id',
+          'missing session context: only a Wiki maintenance run of this space starts, proposes, verifies or ends a run, so this door needs X-Orbit-Session-Id',
         );
       }
       await this.wiki.requireSpace(runner.ownerId, spaceId);
@@ -133,7 +190,7 @@ export class RunnerWikiMaintainController {
       throw new WikiRefusalError({
         code: 'WIKI_NOT_MAINTENANCE_SESSION',
         message:
-          "only a Wiki maintenance run of this space starts, proposes to or ends a maintenance run: a session whose task is in the space's hidden «Wiki maintenance» list. This session is not one.",
+          "only a Wiki maintenance run of this space starts, proposes to, verifies for or ends a maintenance run: a session whose task is in the space's hidden «Wiki maintenance» list. This session is not one.",
       });
     }
     return sessionId;

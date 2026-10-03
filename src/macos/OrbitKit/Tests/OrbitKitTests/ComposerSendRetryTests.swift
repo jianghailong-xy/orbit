@@ -71,4 +71,24 @@ final class ComposerSendRetryTests: XCTestCase {
         let dropped = ComposerLogic.sendFailureMessage(URLError(.networkConnectionLost))
         XCTAssertEqual(dropped, "Couldn't send — the connection dropped. Your message is back in the composer.")
     }
+
+    /// That line stays until its ✕. Reported from iOS: a Retry was refused, the person sent the
+    /// message from the composer, and "Couldn't send — … back in the composer" went on sitting above
+    /// the empty composer while the message it was about ran. An accepted send takes it down — and
+    /// only it: an error about something else has not been answered by a message going out.
+    func testAnAcceptedSendTakesDownOnlyTheLineAFailedSendLeft() {
+        let refused = ComposerLogic.sendFailureMessage(APIError.http(
+            status: 400,
+            body: "{\"message\":\"one or more attachments are unknown, not yours, or already attached\"}"))
+        XCTAssertNil(ComposerLogic.statusAfterAcceptedSend(refused))
+        XCTAssertNil(ComposerLogic.statusAfterAcceptedSend(
+            ComposerLogic.sendFailureMessage(URLError(.networkConnectionLost))))
+        XCTAssertNil(ComposerLogic.statusAfterAcceptedSend(nil))
+
+        for other in ["Upload failed — screenshot.png",
+                      "Couldn't change auto-retry — the connection dropped.",
+                      "Approval failed — the connection dropped."] {
+            XCTAssertEqual(ComposerLogic.statusAfterAcceptedSend(other), other)
+        }
+    }
 }

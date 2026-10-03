@@ -14,7 +14,22 @@
  *   5. a truncated run does not move the cursor — it is one more consecutive failure, and its check fails;
  *   6. the circuit breaker — a maintenance run's changesets are one run to it: what the earlier ones
  *      changed through the mode is spent, so the run stops at ten percent of the active entries it began
- *      with, where the same ops in one changeset each would have passed;
+ *      with, where the same ops in one changeset each would have passed; a dry run says what remains, and
+ *      the proposal is refused exactly past it; a run that held back the rest ends succeeded before it;
+ *   7. what a failed run left waiting for its verification is the next run's to verify
+ *      (`reviewModes.verification.adoption`): it reads them and its verdicts apply, a later op's live entry
+ *      of the same content is never joined by a second copy, every floor holds, and nobody but a
+ *      maintenance run of the space reads them;
+ *   8. the documents follow what changed (criterion 3 revision 3, criterion 11): the owner's confirmation
+ *      of a plan version makes one build task — a second confirmation while it runs records one build
+ *      that waits, never two, and the build's task ending makes it; the entries a run wrote make only the
+ *      sections they fit to be written again; what fits no section is one plan proposal, and the plan does
+ *      not change until the owner confirms; a space with no confirmed plan writes no document; and a
+ *      repository file gone from origin/main withdraws the sentences citing it;
+ *   9. a plan job goes before the next run (2026-10-01): a build or a draft queued behind a maintenance
+ *      run is made when the run's task ends — the change published on the run's session, as the runner's
+ *      door publishes it — and no fact makes a run while one waits, however due: the trigger makes the
+ *      job's task instead; once the job's task ended, the next fact makes the run by the rules as they were;
  *
  * and beside them: the daily limit holds a due space and says so in its health; the task is made pinned,
  * at once, with `orbit wiki check --expect-cursor` as its one criterion; the run proposes as `maintenance`
@@ -27,6 +42,8 @@
  */
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { after, test } from 'node:test';
 
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
@@ -36,6 +53,7 @@ import type { PrismaClient } from '@prisma/client';
 import {
   RunEventType,
   WIKI_MAINTENANCE_JOB,
+  WIKI_MAINTENANCE_RECOVERY,
   WIKI_MAINTENANCE_RULES,
   WIKI_REVIEW_RULES,
   toUuid,
@@ -50,20 +68,43 @@ import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { encryptSecret } from '../providers/provider-crypto';
 import type { PushService } from '../push/push.service';
+import type { QueueService } from '../queue/queue.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
+import { RunnerWikiDocsController } from '../runner-api/runner-wiki-docs.controller';
 import { RunnerWikiMaintainController } from '../runner-api/runner-wiki-maintain.controller';
 import { RunnerWikiMaintenanceController } from '../runner-api/runner-wiki-maintenance.controller';
+import { RunnerWikiPlanController } from '../runner-api/runner-wiki-plan.controller';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
+import { SessionsService } from '../sessions/sessions.service';
+import { TasksService } from '../tasks/tasks.service';
 import { WikiController } from './wiki.controller';
-import { WikiMaintenance } from './wiki-maintenance';
-import { considerWikiMaintenance, WikiMaintenanceTrigger, wikiMaintenanceHintFor, type WikiMaintenanceHint } from './wiki-maintenance-run';
+import { WikiDocs } from './wiki-docs';
+import { WikiDocsController } from './wiki-docs.controller';
+import { WikiHealth } from './wiki-health';
+import { encodeCursorToken, WikiMaintenance } from './wiki-maintenance';
+import {
+  considerWikiMaintenance,
+  WIKI_RUN_NOT_REPORTED,
+  WikiMaintenanceTrigger,
+  wikiMaintenanceFailureKindOf,
+  wikiMaintenanceHintFor,
+  type WikiMaintenanceHint,
+} from './wiki-maintenance-run';
+import { wikiMaintenanceRunsToday } from './wiki-maintenance-session';
+import { wikiMaintenanceProviderIsLocal } from './wiki-maintenance-settings';
+import { WikiPlans } from './wiki-plan';
+import { WikiPlanJobFacts, wikiPlanJobHintFor } from './wiki-plan-job';
+import { WikiPlanController } from './wiki-plan.controller';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService } from './wiki.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
+// The providers the plan's cases configure keep their keys encrypted, as every provider does.
+process.env.PROVIDER_SECRET_KEY ??= 'wiki-maintenance-spec';
 
 interface Harness {
   base: string;
@@ -77,6 +118,10 @@ interface Harness {
   announced: Array<{ ownerId: string; type: string; change: unknown }>;
   published: Subject<{ runId: string; event: NormalizedRunEvent }>;
   trigger: WikiMaintenanceTrigger;
+  /** Every notification that a space's verification sent it back to Tiered. */
+  fellBack: Array<{ ownerId: string; spaceId: string; unsupported: number }>;
+  /** The plan jobs' task facts, taken by hand: what a task's end asks of them. */
+  facts: WikiPlanJobFacts;
 }
 
 let harness: Promise<Harness> | undefined;
@@ -90,23 +135,42 @@ function boot(): Promise<Harness> {
     const prisma = prismaClientFor(URL);
     const bearers = new Map<string, string>();
     const announced: Harness['announced'] = [];
+    const fellBack: Harness['fellBack'] = [];
     const published = new Subject<{ runId: string; event: NormalizedRunEvent }>();
     const hub = {
       publishWikiChanged: () => undefined,
       publishForUser: (ownerId: string, type: string, change: unknown) => announced.push({ ownerId, type, change }),
       localPublications: () => published.asObservable(),
     } as unknown as RealtimeService;
-    const push = {} as unknown as PushService;
+    const push = {
+      notifyWikiVerificationTripped: async (input: Harness['fellBack'][number]) => {
+        fellBack.push({ ownerId: input.ownerId, spaceId: input.spaceId, unsupported: input.unsupported });
+      },
+    } as unknown as PushService;
     const service = new WikiService(prisma as unknown as PrismaService, hub, push);
     const maintenance = new WikiMaintenance(prisma as unknown as PrismaService);
     const trigger = new WikiMaintenanceTrigger(prisma as unknown as PrismaService, hub);
     trigger.onModuleInit();
+    const plans = new WikiPlans(prisma as unknown as PrismaService, hub);
+    const docs = new WikiDocs(prisma as unknown as PrismaService, service, hub);
+    const facts = new WikiPlanJobFacts(prisma as unknown as PrismaService);
 
     @Module({
-      controllers: [WikiController, RunnerWikiController, RunnerWikiMaintenanceController, RunnerWikiMaintainController],
+      controllers: [
+        WikiController,
+        RunnerWikiController,
+        RunnerWikiMaintenanceController,
+        RunnerWikiMaintainController,
+        WikiPlanController,
+        RunnerWikiPlanController,
+        WikiDocsController,
+        RunnerWikiDocsController,
+      ],
       providers: [
         { provide: WikiService, useValue: service },
         { provide: WikiMaintenance, useValue: maintenance },
+        { provide: WikiPlans, useValue: plans },
+        { provide: WikiDocs, useValue: docs },
         { provide: WikiRetrieval, useValue: new WikiRetrieval(prisma as unknown as PrismaService) },
         { provide: PrismaService, useValue: prisma },
         RunnerAuthGuard,
@@ -131,7 +195,7 @@ function boot(): Promise<Harness> {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
     app.useGlobalInterceptors(new PublicIdInterceptor());
     await app.listen(0, '127.0.0.1');
-    return { base: await app.getUrl(), sql, prisma, app, service, maintenance, bearers, announced, published, trigger };
+    return { base: await app.getUrl(), sql, prisma, app, service, maintenance, bearers, announced, published, trigger, fellBack, facts };
   })();
   return harness;
 }
@@ -327,17 +391,28 @@ async function runSession(h: Harness, s: Space, taskId: string): Promise<string>
   return session(h, s.owner.id, { workspaceId: s.workspaceId, runnerId: s.machine.id, taskId, status: 'RUNNING', lastTurnAt: minutesAgo(1) });
 }
 
-/** Page the dossiers a run covers, from the cursor up to what its task expects, as `orbit wiki maintain` does. */
-async function pageToExpected(h: Harness, s: Space, sessionId: string, expect: string): Promise<{ token: string; sessions: string[] }> {
+/**
+ * Page the dossiers a run covers, from the cursor up to what its task expects, as `orbit wiki maintain` does:
+ * the last page's token, and where the first page starts.
+ */
+async function pageToExpected(
+  h: Harness,
+  s: Space,
+  sessionId: string,
+  expect: string,
+): Promise<{ token: string; from: string; sessions: string[] }> {
   let after = '';
+  let from = '';
   const sessions: string[] = [];
   for (let n = 0; n < 100; n += 1) {
     const query = new URLSearchParams({ until: expect, limit: '5', ...(after ? { after } : {}) });
     const page = await call(h, { runner: s.machine.token, session: sessionId }, 'GET', `/runner/wiki/spaces/${s.spaceId}/dossiers?${query}`);
     expectStatus(page, 200, 'the run reads a page');
+    if (after) assert.equal(page.body.from, after, 'a page starts where the one before it ended');
+    from ||= page.body.from as string;
     for (const dossier of page.body.dossiers as Array<{ sessionId: string }>) sessions.push(toUuid(dossier.sessionId));
     after = page.body.cursor as string;
-    if (!page.body.more) return { token: after, sessions };
+    if (!page.body.more) return { token: after, from, sessions };
   }
   throw new Error('the pages never ended');
 }
@@ -622,6 +697,9 @@ test('a Manual space whose review queue has no room is held too, and a run of on
 test('a run cut short by its turn limit moves nothing, counts one more failure, and its check fails', { skip }, async () => {
   const h = await boot();
   const s = await maintainedSpace(h, 'truncated');
+  // Where turning maintenance on started the cursor: fourteen days back, by default.
+  const { position_at: started } = await cursorRow(h, s);
+  assert.ok(started, 'turning maintenance on started the cursor');
   const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
   const made = await consider(h, s, hintOf([sessions[0]!]));
   assert.equal(made.made, true);
@@ -640,7 +718,7 @@ test('a run cut short by its turn limit moves nothing, counts one more failure, 
   expectStatus(truncated, 200, 'a truncated run is recorded');
   assert.equal(truncated.body.advanced, false);
   const cursor = await cursorRow(h, s);
-  assert.equal(cursor.position_at, null, 'the cursor did not move');
+  assert.deepEqual(cursor.position_at, started, 'the cursor did not move');
   assert.equal(cursor.consecutive_failures, 1);
   assert.equal(cursor.last_outcome, 'truncated');
   const row = await h.prisma.wikiMaintenanceRun.findUniqueOrThrow({ where: { taskId: made.taskId } });
@@ -651,7 +729,7 @@ test('a run cut short by its turn limit moves nothing, counts one more failure, 
   expectStatus(check, 200, 'the check answers the runner with no session');
   assert.equal(check.body.ok, false);
   assert.equal(check.body.reached, false);
-  assert.ok((check.body.problems as string[]).some((p) => /cursor has never moved/u.test(p)));
+  assert.ok((check.body.problems as string[]).some((p) => /cursor stands before the position this task expects/u.test(p)));
   assert.ok((check.body.problems as string[]).some((p) => /ended truncated/u.test(p)));
 });
 
@@ -660,6 +738,7 @@ test('a run cut short by its turn limit moves nothing, counts one more failure, 
 test('the circuit breaker counts a whole maintenance run: its changesets stop at 10% of what it began with', { skip }, async () => {
   const h = await boot();
   const s = await maintainedSpace(h, 'breaker');
+  const { position_at: started } = await cursorRow(h, s);
   await activeEntries(h, s, WIKI_REVIEW_RULES.breakerMinActiveEntries);
   const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
   const cite = await turn(h, sessions[0]!, 'the record every proposal of this run cites');
@@ -670,44 +749,73 @@ test('the circuit breaker counts a whole maintenance run: its changesets stop at
   const run = await runSession(h, s, made.taskId);
   const propose = (ops: unknown[], dryRun = false) => call(h, { runner: s.machine.token, session: run }, 'POST',
     `/runner/wiki/spaces/${s.spaceId}/maintenance/changesets`, { ops, rationale: 'what the run learned', idempotencyKey: randomUUID(), dryRun });
+  type Outcome = { status: string; reasons?: Array<{ code: string; message: string }> };
+  const statusesOf = (answer: Answer) => (answer.body.ops as Outcome[]).map((op) => op.status);
+
+  // Before anything is recorded, a dry run says what the run may change: ten of the hundred it began with.
+  const fresh = await propose(adds(1, cite, 'fresh'), true);
+  expectStatus(fresh, 200, 'a dry run answers');
+  assert.deepEqual(fresh.body.breaker, { scope: 'run', activeAtStart: 100, changed: 0, remaining: 10 });
 
   // Eight adds the Tiered mode applies: eight of the hundred.
   const first = await propose(adds(8, cite, 'first'));
   expectStatus(first, 200, 'the first changeset is recorded');
-  assert.deepEqual((first.body.ops as Array<{ status: string }>).map((op) => op.status), Array(8).fill('applied'));
+  assert.deepEqual(statusesOf(first), Array(8).fill('applied'));
   const origin = await h.sql.query<{ origin: string }>(`SELECT "origin" FROM "wiki_changeset" WHERE "id" = $1`, [toUuid(first.body.changesetId)]);
   assert.equal(origin.rows[0]!.origin, 'maintenance', 'a maintenance run proposes as maintenance');
 
   // Five more: the space holds 108 active entries now, and five is nowhere near a changeset's 10% of them —
-  // but the run began with 100, and has changed eight: the ninth and tenth pass, the eleventh trips.
-  const second = await propose(adds(5, cite, 'second'));
+  // but the run began with 100, and has changed eight. The dry run says so, whatever a later attempt of the run
+  // counts for itself: two remain, and it passes the first two of the five and refuses the rest.
+  const five = adds(5, cite, 'second');
+  const rehearsal = await propose(five, true);
+  expectStatus(rehearsal, 200, 'a dry run answers');
+  assert.deepEqual(rehearsal.body.breaker, { scope: 'run', activeAtStart: 100, changed: 8, remaining: 2 });
+  assert.deepEqual(statusesOf(rehearsal), ['applied', 'applied', 'refused', 'refused', 'refused']);
+  // The same five recorded are held to exactly what the dry run said remains: the ninth and tenth pass, the
+  // eleventh trips.
+  const second = await propose(five);
   expectStatus(second, 200, 'what fits is recorded');
-  const statuses = (second.body.ops as Array<{ status: string; reasons?: Array<{ code: string; message: string }> }>);
-  assert.deepEqual(statuses.map((op) => op.status), ['applied', 'applied', 'refused', 'refused', 'refused']);
+  const statuses = second.body.ops as Outcome[];
+  assert.deepEqual(statusesOf(second), statusesOf(rehearsal), 'the proposal refuses what its dry run refused, and nothing else');
+  assert.equal(statuses.filter((op) => op.status === 'applied').length, rehearsal.body.breaker.remaining);
   assert.equal(statuses[2]!.reasons![0]!.code, 'WIKI_QUOTA');
   assert.match(statuses[2]!.reasons![0]!.message, /circuit breaker: this Wiki maintenance run has already changed 10 of the 100 entries/u);
-  // A dry run of the same says the same, before anything is recorded.
+  // Spent: the dry run says nothing remains, and refuses the next.
   const dry = await propose(adds(1, cite, 'dry'), true);
-  assert.equal((dry.body.ops as Array<{ status: string }>)[0]!.status, 'refused', 'the run is spent');
+  assert.deepEqual(dry.body.breaker, { scope: 'run', activeAtStart: 100, changed: 10, remaining: 0 });
+  assert.equal((dry.body.ops as Outcome[])[0]!.status, 'refused', 'the run is spent');
+  assert.equal(await h.prisma.wikiChangeset.count({ where: { sessionId: run } }), 2, 'no dry run recorded anything');
 
-  // The run stops: it ends failed, the cursor stays, and its check fails.
-  const { token } = await pageToExpected(h, s, run, made.expect);
-  const failed = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/finish`, {
-    to: token,
-    outcome: 'failed',
-    error: 'circuit breaker: the run would change more than 10% of the active entries',
-    report: { stoppedAt: 'propose', ops: { proposed: 13, recorded: 10, refused: 3 }, tokens: { input: 1, output: 1, calls: 1 } },
+  // What the run held back is the next run's: it ends succeeded at the start of the page it held back — here the
+  // first, where the cursor stands — so the cursor stays, nothing counts as a failure, and the page is handed out
+  // again, not as processed. Its task's check still says the cursor did not reach what the task expected.
+  const { from, sessions: covered } = await pageToExpected(h, s, run, made.expect);
+  assert.ok(covered.length > 0, 'the run read a dossier');
+  const held = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/finish`, {
+    to: from,
+    outcome: 'succeeded',
+    report: { ops: { proposed: 13, recorded: 10, refused: 0, heldBackByBreaker: 1 }, tokens: { input: 1, output: 1, calls: 1 } },
   });
-  expectStatus(failed, 200, 'a failed run is recorded');
-  assert.equal(failed.body.advanced, false);
+  expectStatus(held, 200, 'a run the breaker held back ends');
+  assert.equal(held.body.advanced, false);
+  assert.equal(held.body.outcome, 'succeeded');
   const cursor = await cursorRow(h, s);
-  assert.equal(cursor.position_at, null, 'a tripped run moves no cursor');
-  assert.equal(cursor.consecutive_failures, 1);
+  assert.deepEqual(cursor.position_at, started, 'the cursor stays before what the run held back');
+  assert.equal(cursor.consecutive_failures, 0);
+  assert.equal(cursor.last_outcome, 'succeeded');
   const row = await h.prisma.wikiMaintenanceRun.findUniqueOrThrow({ where: { taskId: made.taskId } });
-  assert.equal(row.outcome, 'failed');
-  assert.equal(row.opsRefused, 3);
+  assert.equal(row.outcome, 'succeeded');
+  assert.equal(row.opsRefused, 0);
+  const again = await pageToExpected(h, s, run, made.expect);
+  assert.deepEqual(again.sessions, covered, 'the next read hands out the same dossiers');
+  const reread = await call(h, { runner: s.machine.token, session: run }, 'GET',
+    `/runner/wiki/spaces/${s.spaceId}/dossiers?${new URLSearchParams({ until: made.expect, limit: '5' })}`);
+  const handedOut = reread.body.dossiers as Array<{ unchanged: boolean }>;
+  assert.ok(handedOut.length > 0 && handedOut.every((dossier) => !dossier.unchanged), 'none of them as processed');
   const check = await call(h, { runner: s.machine.token }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/check?expect=${encodeURIComponent(made.expect)}`);
   assert.equal(check.body.ok, false);
+  assert.equal(check.body.reached, false);
 
   // Below a hundred active entries there is no breaker: a space's first batch goes in whole.
   const young = await maintainedSpace(h, 'young');
@@ -718,6 +826,9 @@ test('the circuit breaker counts a whole maintenance run: its changesets stop at
   assert.equal(youngTask.made, true);
   if (!youngTask.made) return;
   const youngRun = await runSession(h, young, youngTask.taskId);
+  const unbounded = await call(h, { runner: young.machine.token, session: youngRun }, 'POST', `/runner/wiki/spaces/${young.spaceId}/maintenance/changesets`,
+    { ops: adds(1, youngCite, 'dry'), rationale: 'the first batch', dryRun: true });
+  assert.deepEqual(unbounded.body.breaker, { scope: 'run', activeAtStart: 99, changed: 0, remaining: null }, 'no breaker: nothing remains to count');
   for (const prefix of ['one', 'two']) {
     const answer = await call(h, { runner: young.machine.token, session: youngRun }, 'POST', `/runner/wiki/spaces/${young.spaceId}/maintenance/changesets`,
       { ops: adds(12, youngCite, prefix), rationale: 'the first batch', idempotencyKey: randomUUID() });
@@ -804,4 +915,1607 @@ test('the check passes a run that reached its position with no op refused, and n
   const behind = await call(h, { runner: s.machine.token }, 'GET', `${route('check')}?expect=${encodeURIComponent(context.body.expect)}x`);
   expectStatus(behind, 400, 'a token that does not decode is refused');
   assert.equal(behind.body.code, 'WIKI_CURSOR_INVALID');
+});
+
+// ── 7. what ended sessions left waiting ──────────────────────────────────────────────────────────
+
+/** A concept whose every word is its title's, so near neighbours are found by their titles alone. */
+function concept(title: string): Record<string, unknown> {
+  return { kind: 'concept', title, summary: `${title}.`, fields: { definition: title, boundaries: title } };
+}
+
+/** An Automatic space whose maintenance is on, and a record every proposal of its runs cites. */
+async function automaticSpace(h: Harness, name: string): Promise<Space & { cite: string }> {
+  const s = await maintainedSpace(h, name);
+  expectStatus(await call(h, { bearer: s.owner.bearer }, 'PATCH', `/wiki/spaces/${s.spaceId}`, { reviewMode: 'automatic' }), 200, 'the owner makes it automatic');
+  const records = await session(h, s.owner.id, { workspaceId: s.workspaceId });
+  return { ...s, cite: await turn(h, records, 'what the sessions of this space found out, in the words of their record') };
+}
+
+/** A maintenance run of the space: its task in the space's list, its session running on the space's runner. */
+async function maintenanceRun(h: Harness, s: Space): Promise<string> {
+  return runSession(h, s, await task(h, s.owner.id, { listId: s.listId, assigneeId: s.workspaceId }));
+}
+
+/** A run proposes as the space's maintenance run: what each op came to. */
+async function proposeAsRun(h: Harness, s: Space, run: string, ops: unknown[]): Promise<Array<{ status: string; opId: string; entryId: string }>> {
+  const answer = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/changesets`,
+    { ops, rationale: 'what the run learned', idempotencyKey: randomUUID() });
+  expectStatus(answer, 200, 'the run proposes');
+  return answer.body.ops;
+}
+
+/** The run fails, as the three runs of 2026-09-28 did: its session and its task end FAILED, the cursor unmoved. */
+async function failRun(h: Harness, s: Space, run: string): Promise<void> {
+  const ended = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/finish`,
+    { outcome: 'failed', error: 'verify: 7 ops were left without a verdict after two passes' });
+  expectStatus(ended, 200, 'the failed run is recorded');
+  await h.sql.query(`UPDATE "session" SET "status" = 'FAILED', "completed_at" = now() WHERE "id" = $1`, [run]);
+  await h.sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = (SELECT "task_id" FROM "session" WHERE "id" = $1)`, [run]);
+}
+
+interface Adoptable {
+  opId: string;
+  entry: { title: string };
+  evidence: string;
+  similar: Array<{ id: string; status: string; title: string }>;
+}
+
+/** Every op the adoption list hands `run`, page by page. */
+async function adoptionList(h: Harness, s: Space, run: string): Promise<Adoptable[]> {
+  const items: Adoptable[] = [];
+  let after = '';
+  for (let page = 0; page < 20; page += 1) {
+    const query = new URLSearchParams({ limit: '2', ...(after ? { after } : {}) });
+    const answer = await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications?${query}`);
+    expectStatus(answer, 200, 'the adoption list');
+    assert.equal(answer.body.mode, 'automatic');
+    items.push(...(answer.body.items as Adoptable[]));
+    after = answer.body.next ?? '';
+    if (!after) return items;
+  }
+  throw new Error('the adoption list never ended');
+}
+
+function verdictFor(opId: string, verdict: string, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  return { opId, verdict, reason: `The record ${verdict === 'unsupported' ? 'does not say' : 'says'} this.`, model: 'qwen3.8-27b-fp8', ...extra };
+}
+
+test('a failed run\'s waiting ops are the next run\'s to verify: none goes live twice, every floor holds, and only a maintenance run reads them', { skip }, async (t) => {
+  const h = await boot();
+  const s = await automaticSpace(h, 'adoption');
+  const opRow = (id: string) => h.prisma.wikiChangesetOp.findUniqueOrThrow({ where: { id: toUuid(id) } });
+  const entryRow = (id: string) => h.prisma.wikiEntry.findUniqueOrThrow({ where: { id: toUuid(id) } });
+  const cite = [{ kind: 'turn', ref: s.cite }];
+
+  // The run of 09-28 proposes four entries and fails before it verifies any: they wait, and nobody is left
+  // to verify them — its session has ended.
+  const failed = await maintenanceRun(h, s);
+  const [twice, alone, reworded, unverified] = await proposeAsRun(h, s, failed, [
+    { op: 'add', entry: concept('The same knowledge twice'), sources: cite },
+    { op: 'add', entry: concept('What only the failed run found'), sources: cite },
+    { op: 'add', entry: concept('Tmpfs fills up during every build'), sources: cite },
+    { op: 'add', entry: concept('A claim nobody gets to judge this time'), sources: cite },
+  ]);
+  for (const op of [twice, alone, reworded, unverified]) assert.equal(op.status, 'pending');
+  await failRun(h, s, failed);
+
+  // An agent session that read the web proposed into the space too, and ended without verifying its op.
+  const reader = await session(h, s.owner.id, { workspaceId: s.workspaceId, runnerId: s.machine.id, status: 'RUNNING' });
+  await h.sql.query(`INSERT INTO "tool_call"("id","session_id","name","output") VALUES ($1,$2,'WebFetch',$3)`, [randomUUID(), reader, JSON.stringify('a page from the web')]);
+  const web = await call(h, { runner: s.machine.token, session: reader }, 'POST', '/runner/wiki/changesets',
+    { ops: [{ op: 'add', entry: concept('A claim a session that read the web made'), sources: cite }], rationale: 'read off the web', idempotencyKey: randomUUID() });
+  expectStatus(web, 200, 'the agent proposes');
+  const tainted = web.body.ops[0] as { opId: string; entryId: string };
+  assert.equal((await opRow(tainted.opId)).tainted, true);
+  await h.sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED', "completed_at" = now() WHERE "id" = $1`, [reader]);
+
+  // And a session still running has an op waiting: that one is its own to verify, and nobody adopts it.
+  const busy = await session(h, s.owner.id, { workspaceId: s.workspaceId, runnerId: s.machine.id, status: 'RUNNING' });
+  const running = await call(h, { runner: s.machine.token, session: busy }, 'POST', '/runner/wiki/changesets',
+    { ops: [{ op: 'add', entry: concept('A claim its session will verify itself'), sources: cite }], rationale: 'mine', idempotencyKey: randomUUID() });
+  expectStatus(running, 200, 'a running session proposes');
+  const stillMine = (running.body.ops[0] as { opId: string }).opId;
+
+  // The next run reads the same dossiers again: it proposes the same knowledge word for word, and a reworded
+  // cousin of another, and its own verdicts make both live before it looks at what the failed run left.
+  const next = await maintenanceRun(h, s);
+  const [again, cousin] = await proposeAsRun(h, s, next, [
+    { op: 'add', entry: concept('The same knowledge twice'), sources: cite },
+    { op: 'add', entry: concept('Tmpfs fills up during each build'), sources: cite },
+  ]);
+  const own = await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/verifications`,
+    { verdicts: [verdictFor(again.opId, 'supported'), verdictFor(cousin.opId, 'supported')] });
+  expectStatus(own, 200, 'the run verifies its own ops');
+  assert.equal((await entryRow(again.entryId)).status, 'active');
+  assert.equal((await entryRow(cousin.entryId)).status, 'active');
+
+  const list = await adoptionList(h, s, next);
+  const item = (opId: string) => list.find((one) => toUuid(one.opId) === toUuid(opId));
+
+  await t.test('the next run reads what the failed run and an ended session left waiting, and nothing else', async () => {
+    assert.deepEqual(list.map((one) => toUuid(one.opId)), [twice, alone, reworded, unverified, tainted].map((op) => toUuid(op.opId)),
+      'oldest first, the failed run\'s and the ended session\'s — never its own, nor a running session\'s');
+    assert.equal(item(stillMine), undefined);
+    for (const one of list) assert.equal(one.evidence, 'readable', 'each source read against the session that proposed it');
+    // Listing it changed nothing: no verdict, no effect.
+    assert.equal((await opRow(twice.opId)).decision, 'verifying');
+    assert.equal((await entryRow(twice.entryId)).status, 'proposed');
+  });
+
+  await t.test('each is offered what a later op made live since, as a duplicate it may name', async () => {
+    const offered = (opId: string) => item(opId)!.similar.filter((near) => near.status === 'active').map((near) => toUuid(near.id));
+    assert.ok(offered(twice.opId).includes(toUuid(again.entryId)), `the same knowledge's live entry: ${JSON.stringify(item(twice.opId)!.similar)}`);
+    assert.ok(offered(reworded.opId).includes(toUuid(cousin.entryId)), `the reworded cousin: ${JSON.stringify(item(reworded.opId)!.similar)}`);
+    assert.ok(!item(twice.opId)!.similar.some((near) => toUuid(near.id) === toUuid(twice.entryId)), 'never its own lineage');
+    // Neither was there when the failed run proposed them: only the list's lookup now finds them.
+    const recorded = ((await opRow(reworded.opId)).similar as Array<{ id: string }>).map((near) => near.id);
+    assert.equal(recorded.includes(toUuid(cousin.entryId)), false);
+  });
+
+  await t.test('nobody but a maintenance run of the space reads or reports them, and another owner meets a 404', async () => {
+    const route = `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`;
+    const verdicts = { verdicts: [verdictFor(alone.opId, 'supported')] };
+    const ordinary = await session(h, s.owner.id, { workspaceId: s.workspaceId, runnerId: s.machine.id, status: 'RUNNING' });
+    for (const [method, body] of [['GET', undefined], ['POST', verdicts]] as const) {
+      const refused = await call(h, { runner: s.machine.token, session: ordinary }, method, route, body);
+      expectStatus(refused, 403, `another session of the owner may not ${method} the adoptions`);
+      assert.equal(refused.body.code, 'WIKI_NOT_MAINTENANCE_SESSION');
+      expectStatus(await call(h, { runner: s.machine.token }, method, route, body), 400, `a headless ${method}`);
+    }
+    // Its own list is its own ops: none of the failed run's.
+    const theirs = await call(h, { runner: s.machine.token, session: ordinary }, 'GET', `/runner/wiki/spaces/${s.spaceId}/verifications`);
+    expectStatus(theirs, 200, 'an ordinary session\'s own list');
+    assert.deepEqual(theirs.body.items, []);
+    // Another owner's maintenance run: our space is a 404, and our op through their own space is not found.
+    const stranger = await automaticSpace(h, 'adoption-stranger');
+    const strangerRun = await maintenanceRun(h, stranger);
+    for (const [method, body] of [['GET', undefined], ['POST', verdicts]] as const) {
+      expectStatus(await call(h, { runner: stranger.machine.token, session: strangerRun }, method, route, body), 404, `another owner ${method}s our adoptions`);
+    }
+    const through = await call(h, { runner: stranger.machine.token, session: strangerRun }, 'POST', `/runner/wiki/spaces/${stranger.spaceId}/maintenance/verifications`, verdicts);
+    expectStatus(through, 404, 'our op reported through their space');
+    const theirList = await call(h, { runner: stranger.machine.token, session: strangerRun }, 'GET', `/runner/wiki/spaces/${stranger.spaceId}/maintenance/verifications`);
+    assert.deepEqual(theirList.body.items, [], 'nothing of ours in their adoptions');
+    // A running session's op is not adoptable, even by a run that names it.
+    const notYet = await call(h, { runner: s.machine.token, session: next }, 'POST', route, { verdicts: [verdictFor(stillMine, 'supported')] });
+    expectStatus(notYet, 404, 'a running session\'s op');
+    assert.equal((await opRow(alone.opId)).decision, 'verifying', 'none of that recorded anything');
+    assert.equal((await opRow(stillMine)).decision, 'verifying');
+  });
+
+  await t.test('its verdicts apply as a proposer\'s own: supported goes live as Auto, and a tainted op no further than Unreviewed', async () => {
+    const report = await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`,
+      { verdicts: [verdictFor(alone.opId, 'supported'), verdictFor(tainted.opId, 'supported')] });
+    expectStatus(report, 200, 'the adopted verdicts');
+    assert.deepEqual((report.body.outcomes as Array<{ status: string; trust?: string }>).map((o) => [o.status, o.trust]), [['applied', 'auto'], ['applied', 'unreviewed']]);
+    assert.equal((await entryRow(alone.entryId)).trust, 'auto');
+    assert.equal((await entryRow(tainted.entryId)).trust, 'unreviewed', 'what rests on the web is never pushed on a verdict');
+    const op = await opRow(alone.opId);
+    assert.equal(op.decision, 'auto_applied');
+    assert.equal(op.verificationModel, 'qwen3.8-27b-fp8');
+    assert.equal(op.verificationEvidence, 'readable');
+  });
+
+  await t.test('the same knowledge a later op made live is never live twice: a supported verdict joins that entry', async () => {
+    const report = await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`,
+      { verdicts: [verdictFor(twice.opId, 'supported')] });
+    expectStatus(report, 200, 'the verdict');
+    const [outcome] = report.body.outcomes as Array<{ status: string; entryId: string; reinforced: boolean; verdict: string }>;
+    assert.equal(outcome.status, 'reinforced');
+    assert.equal(toUuid(outcome.entryId), toUuid(again.entryId));
+    assert.equal(outcome.reinforced, true);
+    const live = await h.prisma.wikiEntry.count({ where: { spaceId: s.spaceId, title: 'The same knowledge twice', status: 'active' } });
+    assert.equal(live, 1, 'one live entry of it');
+    assert.equal((await entryRow(twice.entryId)).status, 'rejected', 'the waiting copy is not kept');
+    const op = await opRow(twice.opId);
+    assert.equal(op.decision, 'rejected');
+    assert.equal(op.decisionReason, 'duplicate');
+    assert.equal(op.verificationVerdict, 'supported', 'the verdict stays as the model gave it');
+    assert.equal(op.verificationDuplicateOf, null);
+    // What it cited is kept, on the entry that holds it.
+    const revision = await h.prisma.wikiEntryRevision.findFirstOrThrow({ where: { entryId: toUuid(again.entryId), revision: 1 } });
+    assert.equal(await h.prisma.wikiSource.count({ where: { revisionId: revision.id, ref: s.cite } }), 2, 'its source added beside the one it had');
+    // Sent again, it is its recorded answer, and writes nothing.
+    const replay = await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`,
+      { verdicts: [verdictFor(twice.opId, 'supported')] });
+    expectStatus(replay, 200, 'the same verdict again');
+    assert.deepEqual([replay.body.outcomes[0].status, replay.body.outcomes[0].replayed], ['reinforced', true]);
+    assert.equal(await h.prisma.wikiSource.count({ where: { revisionId: revision.id, ref: s.cite } }), 2);
+  });
+
+  await t.test('a reworded cousin is the model\'s to call a duplicate, of the entry the list offered', async () => {
+    const report = await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`,
+      { verdicts: [verdictFor(reworded.opId, 'duplicate', { duplicateOf: cousin.entryId })] });
+    expectStatus(report, 200, 'a duplicate of an entry made live after the op was proposed');
+    assert.equal(report.body.outcomes[0].status, 'reinforced');
+    assert.equal((await entryRow(reworded.entryId)).status, 'rejected');
+    assert.equal(await h.prisma.wikiEntry.count({ where: { spaceId: s.spaceId, title: { startsWith: 'Tmpfs fills up' }, status: 'active' } }), 1);
+    // A neighbour, still: an entry the list did not offer is no duplicate an adopted op may name.
+    const refused = await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`,
+      { verdicts: [verdictFor(unverified.opId, 'duplicate', { duplicateOf: alone.entryId })] });
+    expectStatus(refused, 400, 'a duplicate of an entry that is no neighbour of it');
+    assert.equal(refused.body.outcomes[0].code, 'WIKI_SCHEMA');
+  });
+
+  await t.test('what gets no verdict keeps waiting for the next run', async () => {
+    assert.equal((await opRow(unverified.opId)).decision, 'verifying');
+    assert.equal((await entryRow(unverified.entryId)).status, 'proposed');
+    const later = await maintenanceRun(h, s);
+    assert.deepEqual((await adoptionList(h, s, later)).map((one) => toUuid(one.opId)), [toUuid(unverified.opId)]);
+  });
+});
+
+test('an adopted op\'s unsupported verdict counts toward the fallback as any does, and sends the space back to Tiered', { skip }, async () => {
+  const h = await boot();
+  const s = await automaticSpace(h, 'adoption-fallback');
+  const failed = await maintenanceRun(h, s);
+  const [left] = await proposeAsRun(h, s, failed, [{ op: 'add', entry: concept('A claim its record never made'), sources: [{ kind: 'turn', ref: s.cite }] }]);
+  await failRun(h, s, failed);
+  // Forty-nine verdicts the space's verification already gave since it was made Automatic: fifteen unsupported.
+  const earlier = randomUUID();
+  await h.sql.query(`INSERT INTO "wiki_changeset"("id","owner_id","space_id","origin","status","decided_at") VALUES ($1,$2,$3,'maintenance','settled',now())`,
+    [earlier, s.owner.id, s.spaceId]);
+  for (let seq = 0; seq < 49; seq += 1) {
+    const unsupported = seq < 15;
+    await h.sql.query(
+      `INSERT INTO "wiki_changeset_op"("id","changeset_id","owner_id","seq","op","payload","decision","decision_reason","decided_at","applied_by_mode",
+                                       "verification_verdict","verification_reason","verification_model","verified_at","verification_evidence")
+       VALUES ($1,$2,$3,$4,'add','{}',$5,$6,now(),$7,$8,'as the model said','qwen3.8-27b-fp8',now(),'readable')`,
+      [randomUUID(), earlier, s.owner.id, seq, unsupported ? 'rejected' : 'auto_applied', unsupported ? 'not_true' : null,
+        unsupported ? null : 'automatic', unsupported ? 'unsupported' : 'supported'],
+    );
+  }
+  const next = await maintenanceRun(h, s);
+  const report = await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`,
+    { verdicts: [verdictFor(left.opId, 'unsupported')] });
+  expectStatus(report, 200, 'the adopted verdict');
+  assert.equal(report.body.outcomes[0].status, 'rejected');
+  assert.equal(report.body.mode, 'tiered', 'sixteen of the latest fifty is over the line');
+  const settings = (await h.prisma.wikiSpace.findUniqueOrThrow({ where: { id: s.spaceId } })).settings as Record<string, unknown>;
+  assert.equal(settings.reviewMode, 'tiered');
+  assert.equal(settings.reviewModeChangedBy, 'verification');
+  assert.deepEqual(h.fellBack.filter((one) => one.spaceId === s.spaceId), [{ ownerId: s.owner.id, spaceId: s.spaceId, unsupported: 16 }],
+    'the owner is told once');
+  // Out of Automatic, the adoption list says so before a model is asked anything.
+  const list = await call(h, { runner: s.machine.token, session: next }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/verifications`);
+  assert.equal(list.body.mode, 'tiered');
+});
+
+// ── 8. the documents follow what changed ─────────────────────────────────────────────────────────
+
+/** A configured provider of the owner's on the Claude Code runtime: what a plan job's task may be pinned to. */
+async function localModel(h: Harness, ownerId: string): Promise<string> {
+  const slug = `local-vllm-${randomUUID().slice(0, 8)}`;
+  await h.prisma.modelProvider.create({
+    data: {
+      slug,
+      label: 'Local vLLM',
+      runtime: 'claude',
+      baseUrl: 'http://127.0.0.1:8000',
+      apiKeyEnc: encryptSecret(`vllm-key-${randomUUID()}`),
+      models: [{ value: 'qwen3.8-27b-fp8', label: 'Qwen3.8 27B', contextWindow: 131072 }],
+      defaultModel: 'qwen3.8-27b-fp8',
+      enabled: true,
+      ownerId,
+    },
+  });
+  return slug;
+}
+
+/** A project of the owner's with one task, a session of that task, and something the owner said in it. */
+async function projectTurn(h: Harness, s: Space, words: string): Promise<{ projectId: string; turnId: string }> {
+  const projectId = randomUUID();
+  await h.sql.query(`INSERT INTO "project"("id","title","owner_id","updated_at") VALUES ($1,$2,$3,now())`, [projectId, `Plan-first docs ${projectId.slice(0, 6)}`, s.owner.id]);
+  const taskId = await task(h, s.owner.id, { status: 'DONE', assigneeId: s.workspaceId });
+  await h.sql.query(`UPDATE "task" SET "project_id" = $2 WHERE "id" = $1`, [taskId, projectId]);
+  const sessionId = await session(h, s.owner.id, { workspaceId: s.workspaceId, taskId });
+  return { projectId, turnId: await turn(h, sessionId, words) };
+}
+
+const DESIGN_DOC = 'docs/wiki-design.md';
+
+/** Two documents: an overview, a convention, a pitfall; a mechanism from a design document, and a decision by project. */
+function docsPlan(projectId: string): Record<string, unknown> {
+  return {
+    categories: [
+      { key: 'ops', title: 'Operations', question: 'How the runner is run' },
+      { key: 'dev', title: 'Development conventions', question: 'How agents work in this repository', forAgents: true },
+    ],
+    docs: [
+      {
+        category: 'ops',
+        slug: 'runner-ops',
+        title: 'Runner 运维',
+        question: 'Runner 在宿主上怎么跑、坑在哪？',
+        audience: ['运维的人：读完能在宿主上跑通'],
+        scopeIn: ['宿主上跑测试', '数据库的坑'],
+        scopeOut: [],
+        length: { min: 800, max: 3000 },
+        sections: [
+          { title: '总览', kind: 'overview', covers: '这篇讲什么。', length: 300, sources: {} },
+          {
+            title: '宿主上跑测试',
+            kind: 'conventions',
+            covers: '全量测试在 runner 宿主上跑。',
+            length: 400,
+            sources: { sessions: { keywords: ['runner 宿主'], anchorPaths: [], entryKinds: ['convention'], topics: [], projects: [], evidence: 'owner 说测试在哪跑' } },
+          },
+          {
+            title: '数据库的坑',
+            kind: 'pitfalls',
+            covers: '长查询被 statement_timeout 打断。',
+            length: 400,
+            sources: { sessions: { keywords: ['statement_timeout'], anchorPaths: ['docker-compose.yml'], entryKinds: ['pitfall'], topics: [], projects: [], evidence: '踩坑的原话' } },
+          },
+        ],
+      },
+      {
+        category: 'dev',
+        slug: 'plan-flow',
+        title: 'Plan 流程',
+        question: '文档为什么先有 plan？',
+        audience: ['写 wiki 的 agent：读完知道先起草 plan'],
+        scopeIn: ['怎么起草', '为什么先有 plan'],
+        scopeOut: [],
+        length: { min: 800, max: 3000 },
+        sections: [
+          { title: '怎么起草', kind: 'flow', covers: '起草的四步。', length: 500, sources: { docs: [{ path: DESIGN_DOC, section: '8.2 维护作业' }] } },
+          {
+            title: '为什么先有 plan',
+            kind: 'decisions',
+            covers: 'owner 定的方向。',
+            length: 400,
+            sources: { sessions: { keywords: [], anchorPaths: [], entryKinds: ['decision'], topics: ['plans'], projects: [projectId], evidence: 'owner 的决定' } },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+interface PlannedSpace extends Space {
+  slug: string;
+  projectId: string;
+  projectTurnId: string;
+  version: number;
+}
+
+/**
+ * A space whose maintenance runs on a provider a run can start on, whose first draft job has run: the draft
+ * stored through the runner door by the job's own session, the job finished, its task done — so the list is
+ * free and the space has a draft for its owner to confirm.
+ */
+async function plannedSpace(h: Harness, name: string): Promise<PlannedSpace> {
+  const owner = await account(h, name);
+  const machine = await runner(h, owner.id);
+  const workspaceId = await workspace(h, owner.id, '~/orbit');
+  const slug = await localModel(h, owner.id);
+  const made = await call(h, { bearer: owner.bearer }, 'POST', '/wiki/spaces', {
+    title: `${name} space`,
+    repoUrl: `https://github.com/spec/${name}-${randomUUID().slice(0, 8)}`,
+    maintenance: { workspaceId, provider: slug },
+  });
+  expectStatus(made, 201, 'the owner creates a space');
+  const spaceId = toUuid(made.body.id as string);
+  expectStatus(await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/workspaces`, { workspaceId }), 200, 'the owner binds the workspace');
+  const on = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { enabled: true, workspaceId, provider: slug } });
+  expectStatus(on, 200, 'the owner turns maintenance on');
+  const s: Space = { owner, machine, spaceId, workspaceId, listId: toUuid(on.body.settings.maintenance.listId as string) };
+  await h.sql.query(`INSERT INTO "wiki_topic"("id","space_id","owner_id","slug","title") VALUES ($1,$2,$3,'plans','Plans')`, [randomUUID(), spaceId, owner.id]);
+  const { projectId, turnId } = await projectTurn(h, s, '文档先有 plan，owner 确认后再逐节写。');
+  // The draft the space's creation asked for: made at once, run by its own session.
+  const [draftJob] = (await h.sql.query<{ id: string; state: string; task_id: string }>(
+    `SELECT "id","state","task_id" FROM "wiki_plan_job" WHERE "space_id" = $1 AND "kind" = 'draft'`, [spaceId])).rows;
+  assert.equal(draftJob?.state, 'made', 'the new space\'s draft job is made');
+  const draftRun = await runSession(h, s, draftJob.task_id);
+  const drafted = await call(h, { runner: machine.token, session: draftRun }, 'POST', `/runner/wiki/spaces/${spaceId}/plan/drafts`, {
+    baseVersion: null,
+    target: { min: 1, max: 10 },
+    plan: docsPlan(projectId),
+    repoCheck: { sha: 'a'.repeat(40), checked: 3, missing: [] },
+    model: 'qwen3.8-27b-fp8',
+  });
+  expectStatus(drafted, 200, 'the draft job stores its draft');
+  expectStatus(await call(h, { runner: machine.token, session: draftRun }, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, {
+    outcome: 'succeeded', version: drafted.body.version,
+  }), 200, 'the draft job says it succeeded');
+  await h.sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1`, [draftJob.task_id]);
+  await taskEnded(h, s, [draftJob.task_id]);
+  return { ...s, slug, projectId, projectTurnId: turnId, version: drafted.body.version as number };
+}
+
+/** A task change the tasks module would publish, taken by the plan jobs' facts and waited for. */
+async function taskEnded(h: Harness, s: Space, taskIds: string[]): Promise<void> {
+  h.facts.take(`user:${s.owner.id}`, { seq: 0, type: RunEventType.TASK_CHANGED, ts: new Date().toISOString(), payload: { taskIds, resync: false } });
+  await h.facts.idle();
+}
+
+interface BuildRow {
+  id: string;
+  state: string;
+  version: number | null;
+  trigger: string;
+  task_id: string | null;
+  outcome: string | null;
+}
+
+async function builds(h: Harness, spaceId: string): Promise<BuildRow[]> {
+  return (await h.sql.query<BuildRow>(
+    `SELECT "id","state","version","trigger","task_id","outcome" FROM "wiki_plan_job" WHERE "space_id" = $1 AND "kind" = 'build' ORDER BY "created_at","id"`,
+    [spaceId],
+  )).rows;
+}
+
+async function confirm(h: Harness, s: Space, version: number): Promise<void> {
+  expectStatus(await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/spaces/${s.spaceId}/plan/versions/${version}/confirm`), 200, `the owner confirms version ${version}`);
+}
+
+/** The owner's edit of one section's covers: a new draft on the newest version. */
+async function edit(h: Harness, s: Space, base: number, words: string): Promise<number> {
+  const plan = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
+  const doc = (plan.body.draft ?? plan.body.confirmed).docs.find((d: { slug: string }) => d.slug === 'runner-ops');
+  const section = doc.sections.find((one: { title: string }) => one.title === '总览');
+  const edited = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/spaces/${s.spaceId}/plan/edits`, {
+    baseVersion: base,
+    docSlug: 'runner-ops',
+    sectionKey: section.key,
+    section: { key: section.key, title: '总览', kind: 'overview', covers: words, length: 300, sources: {} },
+  });
+  expectStatus(edited, 200, 'the owner edits the plan');
+  return edited.body.version as number;
+}
+
+test('the owner\'s confirmation makes one build task; a second waits and is never two; the build\'s end makes it', { skip }, async () => {
+  const h = await boot();
+  const s = await plannedSpace(h, 'build');
+  const before = Date.now();
+  await confirm(h, s, s.version);
+
+  // One build of the confirmed version, made at once as a task of the maintenance list — pinned, due now, judged by its check.
+  const [first, ...others] = await builds(h, s.spaceId);
+  assert.equal(others.length, 0, 'one confirmation, one build');
+  assert.deepEqual([first.state, first.version, first.trigger, first.outcome], ['made', s.version, 'owner', null]);
+  const made = await h.prisma.task.findUniqueOrThrow({ where: { id: first.task_id! } });
+  assert.equal(made.listId, s.listId, 'in the space\'s maintenance list');
+  assert.deepEqual([made.assigneeId, made.provider], [s.workspaceId, s.slug], 'pinned to the maintenance workspace and provider');
+  assert.ok(made.runAt && made.runAt.getTime() >= before - 1_000, 'runAt is now');
+  assert.deepEqual([made.creatorType, made.creatorId, made.status], ['USER', s.owner.id, 'OPEN']);
+  assert.equal(made.title, 'Wiki documents: build space');
+  assert.equal(made.completionCriterion, 'EXECUTABLE');
+  assert.equal(made.acceptanceCommand, `orbit wiki plan check --space ${uuidToBase62(s.spaceId)} --job ${uuidToBase62(first.id)}`);
+  assert.match(made.description ?? '', new RegExp(`orbit wiki docs build --space ${uuidToBase62(s.spaceId)}`));
+  assert.ok(h.announced.some((a) => a.ownerId === s.owner.id && JSON.stringify(a.change).includes(first.task_id!)), 'the task made is published');
+  const state = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
+  expectStatus(state, 200, 'the owner reads the plan');
+  assert.deepEqual([state.body.job.kind, state.body.job.state, state.body.job.version, state.body.job.progress], ['build', 'running', s.version, null],
+    'the plan page reads the build as writing the documents');
+
+  // Not a maintenance run: not counted against the day, and while it runs no maintenance task is made.
+  assert.equal((await wikiMaintenanceRunsToday(h.prisma as unknown as PrismaService, s.owner.id, s.spaceId)).used, 0, 'plan jobs are not the day\'s runs');
+  const facts = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  assert.deepEqual(await consider(h, s, hintOf(facts)), { made: false, spaceId: s.spaceId, why: 'unfinished' }, 'the list is the build\'s');
+
+  // A second confirmation while the build runs: one build waits behind it — and a third points that one at the newer version.
+  const v2 = await edit(h, s, s.version, '这篇讲 runner 的运维，第二稿。');
+  await confirm(h, s, v2);
+  let rows = await builds(h, s.spaceId);
+  assert.deepEqual(rows.map((row) => [row.state, row.version]), [['made', s.version], ['queued', v2]], 'the list is busy: the second waits');
+  const v3 = await edit(h, s, v2, '这篇讲 runner 的运维，第三稿。');
+  await confirm(h, s, v3);
+  rows = await builds(h, s.spaceId);
+  assert.deepEqual(rows.map((row) => [row.state, row.version]), [['made', s.version], ['queued', v3]], 'still one waiting build, now of the newest version');
+  const waiting = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
+  assert.deepEqual([waiting.body.job.kind, waiting.body.job.state, waiting.body.job.version], ['build', 'queued', v3]);
+  assert.equal(toUuid(waiting.body.job.waitingFor.taskId as string), first.task_id, 'it waits for the running build');
+
+  // The running build's session: its job and progress on the runner door; the plan moved on, so it fails.
+  const run = await runSession(h, s, first.task_id!);
+  const context = await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/plan/job`);
+  expectStatus(context, 200, 'the build\'s run reads its job');
+  assert.deepEqual([context.body.job.kind, context.body.job.version], ['build', s.version]);
+  const progressed = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/job/progress`, {
+    docs: { done: 1, total: 2 }, current: { slug: 'plan-flow', title: 'Plan 流程' },
+  });
+  expectStatus(progressed, 200, 'the build says how far it got');
+  assert.deepEqual(progressed.body.progress, { docs: { done: 1, total: 2 }, current: { slug: 'plan-flow', title: 'Plan 流程' } });
+  const badProgress = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/job/progress`, { docs: { done: 3, total: 2 } });
+  expectStatus(badProgress, 400, 'more documents done than there are is refused');
+  expectStatus(await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/job/finish`, {
+    outcome: 'failed', error: `the plan moved on to version ${v3} while this wrote version ${s.version}`,
+  }), 200, 'the build of the superseded version ends failed');
+  await h.sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = $1`, [first.task_id]);
+  await taskEnded(h, s, [first.task_id!]);
+  rows = await builds(h, s.spaceId);
+  assert.deepEqual(rows.map((row) => [row.state, row.version, row.outcome]), [['ended', s.version, 'failed'], ['made', v3, null]],
+    'the failed build keeps its version, and the task\'s end made the waiting one');
+
+  // The build of the newest version: it may only name a version the owner confirmed, and then its check passes.
+  const next = await runSession(h, s, rows[1].task_id!);
+  const v4 = await edit(h, s, v3, '这篇讲 runner 的运维，未确认的第四稿。');
+  const unconfirmed = await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/job/finish`, {
+    outcome: 'succeeded', version: v4,
+  });
+  expectStatus(unconfirmed, 400, 'a build cannot say it wrote a version nobody confirmed');
+  const report = { planVersion: v3, repoSha: 'b'.repeat(40), docs: { total: 2, written: 2 }, sections: { written: 5, unchanged: 0, failed: 0 }, tokens: { input: 900, output: 300, calls: 6 }, seconds: 61, model: 'qwen3.8-27b-fp8' };
+  expectStatus(await call(h, { runner: s.machine.token, session: next }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/job/finish`, {
+    outcome: 'succeeded', version: v3, report,
+  }), 200, 'the build of the confirmed version succeeds');
+  const check = await call(h, { runner: s.machine.token }, 'GET', `/runner/wiki/spaces/${s.spaceId}/plan/check?jobId=${uuidToBase62(rows[1].id)}`);
+  expectStatus(check, 200, 'the build task\'s acceptance command, with no session');
+  assert.deepEqual([check.body.ok, check.body.kind, check.body.version], [true, 'build', v3]);
+  const failedCheck = await call(h, { runner: s.machine.token }, 'GET', `/runner/wiki/spaces/${s.spaceId}/plan/check?jobId=${uuidToBase62(rows[0].id)}`);
+  assert.equal(failedCheck.body.ok, false, 'the failed build\'s check does not pass');
+  const after_ = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
+  assert.deepEqual([after_.body.job.kind, after_.body.job.state, after_.body.job.version, after_.body.job.report], ['build', 'succeeded', v3, report]);
+  assert.equal((await wikiMaintenanceRunsToday(h.prisma as unknown as PrismaService, s.owner.id, s.spaceId)).used, 0, 'no build counted against the day');
+});
+
+/** A section of a write: one sentence citing the design document at a commit. */
+function writtenSection(key: string, material: string, words: string): Record<string, unknown> {
+  return {
+    key,
+    materialSha256: createHash('sha256').update(material).digest('hex'),
+    markdown: `${words}[1]。`,
+    footnotes: [{ kind: 'design_doc', path: DESIGN_DOC, sha: 'b'.repeat(40), lines: { start: 1, end: 3 }, section: '8.2 维护作业', quote: '维护作业按 plan 重写', verified: true }],
+  };
+}
+
+async function sectionRows(h: Harness, spaceId: string): Promise<Map<string, { generatedAt: Date; staleAt: Date | null }>> {
+  const rows = await h.sql.query<{ slug: string; key: string; generated_at: Date; stale_at: Date | null }>(
+    `SELECT d."slug", x."key", x."generated_at", x."stale_at" FROM "wiki_doc_section" x JOIN "wiki_doc" d ON d."id" = x."doc_id"
+      WHERE d."space_id" = $1`, [spaceId]);
+  return new Map(rows.rows.map((row) => [`${row.slug}#${row.key}`, { generatedAt: row.generated_at, staleAt: row.stale_at }]));
+}
+
+test('the entries a run wrote make only the sections they fit to be written; what fits none is one proposal; the plan waits for the owner', { skip }, async () => {
+  const h = await boot();
+  const s = await plannedSpace(h, 'affected');
+  await confirm(h, s, s.version);
+  const [build] = await builds(h, s.spaceId);
+  const plan = (await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`)).body.confirmed;
+  const keyOf = (slug: string, title: string): string =>
+    plan.docs.find((d: { slug: string }) => d.slug === slug).sections.find((x: { title: string }) => x.title === title).key;
+  const convention = keyOf('runner-ops', '宿主上跑测试');
+  const pitfall = keyOf('runner-ops', '数据库的坑');
+  const flow = keyOf('plan-flow', '怎么起草');
+  const decision = keyOf('plan-flow', '为什么先有 plan');
+
+  // The build writes the documents: every section with a session condition or a design document.
+  const writer = await runSession(h, s, build.task_id!);
+  for (const [slug, sections] of [
+    ['runner-ops', [writtenSection(convention, 'c1', '全量测试在 runner 宿主上跑'), writtenSection(pitfall, 'p1', '长迁移会被打断')]],
+    ['plan-flow', [writtenSection(flow, 'f1', '起草分四步'), writtenSection(decision, 'd1', '先有 plan 再写文档')]],
+  ] as const) {
+    const wrote = await call(h, { runner: s.machine.token, session: writer }, 'POST', `/runner/wiki/spaces/${s.spaceId}/docs/${slug}`, {
+      planVersion: s.version, repoSha: 'b'.repeat(40), model: 'qwen3.8-27b-fp8', sections,
+    });
+    expectStatus(wrote, 200, `the build writes ${slug}`);
+  }
+  expectStatus(await call(h, { runner: s.machine.token, session: writer }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/job/finish`, {
+    outcome: 'succeeded', version: s.version,
+  }), 200, 'the build is done');
+  await h.sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1`, [build.task_id]);
+  await taskEnded(h, s, [build.task_id!]);
+  const written = await sectionRows(h, s.spaceId);
+
+  // A maintenance run writes three entries: a pitfall a keyword of the pitfalls section finds, a decision taken from
+  // a session of the decisions section's project, and a concept nothing in the plan is about.
+  const run = await maintenanceRun(h, s);
+  const cite = await turn(h, await session(h, s.owner.id, { workspaceId: s.workspaceId }), 'what this space learned, in its record\'s words');
+  const [timeout, decided, stray] = await proposeAsRun(h, s, run, [
+    { op: 'add', entry: { kind: 'pitfall', title: 'statement_timeout 打断长迁移', summary: '生产库 statement_timeout 30 秒，长迁移要先 SET。', fields: { trigger: { paths: ['docker-compose.yml'], commands: [] }, symptom: '迁移被取消', cause: 'statement_timeout 30s', fix: 'SET statement_timeout=0' } }, sources: [{ kind: 'turn', ref: cite }] },
+    { op: 'add', entry: { kind: 'decision', title: '文档先有 plan', summary: 'owner 定：先起草 plan，确认后逐节写。', fields: { context: '文章不连贯', decision: '先有 plan', alternatives: [{ option: '按主题拼接', whyRejected: '不连贯' }], consequences: '多一步确认', decidedAt: '2026-09-28' } }, sources: [{ kind: 'turn', ref: s.projectTurnId }] },
+    { op: 'add', entry: concept('Codex 账号由服务器代管'), sources: [{ kind: 'turn', ref: cite }] },
+  ]);
+  for (const op of [timeout, decided, stray]) assert.equal(op.status, 'applied', `the space's mode applies it: ${JSON.stringify(op)}`);
+
+  const affected = await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs`);
+  expectStatus(affected, 200, 'the run asks what to write again');
+  assert.equal(affected.body.plan.version, s.version);
+  assert.equal(affected.body.plan.repoSha, 'a'.repeat(40), 'the commit the plan\'s references were checked at');
+  assert.equal(affected.body.build, null, 'no build of the space waits');
+  const listed = (affected.body.sections as Array<{ doc: string; key: string; stale: boolean; entryIds: string[] }>)
+    .map((one) => [`${one.doc}#${one.key}`, one.stale, one.entryIds.map(toUuid)]);
+  assert.deepEqual(listed, [
+    [`runner-ops#${pitfall}`, false, [toUuid(timeout.entryId)]],
+    [`plan-flow#${decision}`, false, [toUuid(decided.entryId)]],
+  ], 'each entry makes only the section it fits: not the convention, not the design document\'s, not the overview');
+  assert.deepEqual((affected.body.unplaced as Array<{ id: string }>).map((one) => toUuid(one.id)), [toUuid(stray.entryId)], 'the concept fits no section');
+
+  // The run writes the pitfalls section again, and nothing else is touched.
+  const rewrote = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/docs/runner-ops`, {
+    planVersion: s.version, repoSha: 'c'.repeat(40), model: 'qwen3.8-27b-fp8', sections: [writtenSection(pitfall, 'p2', '长迁移会被 statement_timeout 打断')],
+  });
+  expectStatus(rewrote, 200, 'the run writes the pitfalls section again');
+  assert.deepEqual(rewrote.body.sections.map((one: { key: string; outcome: string }) => [one.key, one.outcome]), [[pitfall, 'written']]);
+  const now = await sectionRows(h, s.spaceId);
+  for (const key of [`runner-ops#${convention}`, `plan-flow#${flow}`, `plan-flow#${decision}`]) {
+    assert.equal(now.get(key)!.generatedAt.getTime(), written.get(key)!.generatedAt.getTime(), `${key} is left as it was`);
+  }
+  assert.ok(now.get(`runner-ops#${pitfall}`)!.generatedAt > written.get(`runner-ops#${pitfall}`)!.generatedAt, 'the pitfalls section was written again');
+  const again = await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs`);
+  assert.deepEqual((again.body.sections as Array<{ doc: string; key: string }>).map((one) => `${one.doc}#${one.key}`), [`plan-flow#${decision}`],
+    'a section written since its entry changed is no longer to write');
+
+  // What fits no section becomes one proposal: the concept, and a design document new on origin/main.
+  const versions = async () => (await h.sql.query(`SELECT "version","status" FROM "wiki_plan" WHERE "space_id" = $1 ORDER BY "version"`, [s.spaceId])).rows;
+  const standing = await versions();
+  const confirmedBefore = (await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`)).body.confirmed;
+  const commit = 'e'.repeat(40);
+  const malformed = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/proposals`, {
+    reason: 'a commit named by less than its sha', change: { doc: { ...(docsPlan(s.projectId).docs as unknown[])[1] as object } }, facts: [{ kind: 'commit', id: 'abc123' }],
+  });
+  assert.equal(malformed.status, 422, 'a commit fact is its full sha');
+  assert.equal(malformed.body.code, 'WIKI_PLAN_GATE');
+  const proposed = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/proposals`, {
+    reason: '新知识：Codex 账号由服务器代管（条目），以及新设计文档 docs/codex-accounts.md；plan 里没有一节讲账号，建议在「Development conventions」下新增一篇。',
+    change: {
+      doc: {
+        category: 'dev',
+        slug: 'codex-accounts',
+        title: 'Codex 账号',
+        question: 'Codex 账号怎么管？',
+        audience: ['跑 Codex 的 agent：读完知道账号在哪'],
+        scopeIn: ['账号由服务器代管'],
+        scopeOut: [],
+        length: { min: 600, max: 2000 },
+        sections: [
+          { title: '账号怎么管', kind: 'concepts', covers: '服务器代管账号。', length: 500, sources: { docs: [{ path: 'docs/codex-accounts.md', section: null }] } },
+          { title: '已知的坑', kind: 'pitfalls', covers: '换号的坑。', length: 300, sources: { sessions: { keywords: ['Codex 账号'], anchorPaths: [], entryKinds: [], topics: [], projects: [], evidence: '原话' } } },
+        ],
+      },
+    },
+    facts: [{ kind: 'entry', id: stray.entryId }, { kind: 'commit', id: commit }],
+  });
+  expectStatus(proposed, 200, 'the run proposes a change to the plan');
+  assert.equal(proposed.body.status, 'pending');
+  assert.deepEqual(
+    (proposed.body.facts as Array<{ kind: string; id: string }>).map((fact) => [fact.kind, fact.kind === 'entry' ? toUuid(fact.id) : fact.id]),
+    [['entry', toUuid(stray.entryId)], ['commit', commit]],
+    'the facts it came from: the entry, and the commit that added the design document',
+  );
+  // The plan does not change: the same versions, the same confirmed one, word for word; the proposal waits for the owner.
+  assert.deepEqual(await versions(), standing, 'no version was written');
+  const stateNow = (await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`)).body;
+  assert.deepEqual(stateNow.confirmed, confirmedBefore, 'the confirmed plan is as it was');
+  assert.equal(stateNow.proposals.length, 1);
+  // What the proposal names is not proposed again.
+  const named = await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs`);
+  assert.deepEqual(named.body.unplaced, [], 'the concept is the proposal\'s now');
+  assert.deepEqual(named.body.proposed.commits, [commit]);
+  assert.ok((named.body.proposed.paths as string[]).includes('docs/codex-accounts.md'), 'the design document the proposal cites');
+  assert.deepEqual((named.body.proposed.entryIds as string[]).map(toUuid), [toUuid(stray.entryId)]);
+  // The owner accepts it: a new draft; the confirmed version stays until the owner confirms that one.
+  const accepted = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/plan-proposals/${proposed.body.id}/decide`, { action: 'accept' });
+  expectStatus(accepted, 200, 'the owner accepts the proposal');
+  const afterAccept = (await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`)).body;
+  assert.equal(afterAccept.confirmed.version, s.version, 'accepting is not confirming');
+  assert.equal(afterAccept.draft.docs.length, 3, 'the draft has the proposed document');
+  await confirm(h, s, afterAccept.draft.version);
+  let rows = await builds(h, s.spaceId);
+  assert.deepEqual(rows.map((row) => [row.state, row.version]), [['ended', s.version], ['queued', afterAccept.draft.version]],
+    'confirming the accepted change asks for its build, which waits for the maintenance run still in the list');
+  const runTask = (await h.sql.query<{ task_id: string }>(`SELECT "task_id" FROM "session" WHERE "id" = $1`, [run])).rows[0].task_id;
+  await h.sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = $1`, [runTask]);
+  await taskEnded(h, s, [runTask]);
+  rows = await builds(h, s.spaceId);
+  assert.deepEqual(rows.map((row) => [row.state, row.version]), [['ended', s.version], ['made', afterAccept.draft.version]],
+    'the run\'s end makes the build: the documents are written from the version the owner confirmed');
+});
+
+test('a space with no confirmed plan writes no document: the run is told so, and a write is refused', { skip }, async () => {
+  const h = await boot();
+  const s = await plannedSpace(h, 'unplanned');
+  // A draft stands, and nobody confirmed it.
+  const run = await maintenanceRun(h, s);
+  const affected = await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs`);
+  expectStatus(affected, 200, 'the run asks what to write');
+  assert.deepEqual([affected.body.plan, affected.body.sections, affected.body.unplaced, affected.body.build], [null, [], [], null]);
+  const write = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/docs/runner-ops`, {
+    planVersion: s.version, repoSha: 'b'.repeat(40), sections: [writtenSection('s2', 'c1', '全量测试在 runner 宿主上跑')],
+  });
+  expectStatus(write, 409, 'no document is written from a plan nobody confirmed');
+  assert.equal(write.body.code, 'WIKI_PLAN_UNCONFIRMED');
+  assert.equal((await h.sql.query(`SELECT 1 FROM "wiki_doc" WHERE "space_id" = $1`, [s.spaceId])).rowCount, 0);
+  assert.equal((await builds(h, s.spaceId)).length, 0, 'no confirmation, no build');
+  // Only a maintenance run of the space asks.
+  const ordinary = await session(h, s.owner.id, { workspaceId: s.workspaceId, runnerId: s.machine.id, status: 'RUNNING' });
+  const refused = await call(h, { runner: s.machine.token, session: ordinary }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs`);
+  expectStatus(refused, 403, 'another session of the owner is not a maintenance run');
+  assert.equal(refused.body.code, 'WIKI_NOT_MAINTENANCE_SESSION');
+});
+
+test('a repository file gone from origin/main withdraws the sentences citing it, names it, and leaves their sections stale', { skip }, async () => {
+  const h = await boot();
+  const s = await plannedSpace(h, 'withdraw');
+  await confirm(h, s, s.version);
+  const [build] = await builds(h, s.spaceId);
+  const plan = (await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`)).body.confirmed;
+  const flow = plan.docs[1].sections[0].key as string;
+  const writer = await runSession(h, s, build.task_id!);
+  expectStatus(await call(h, { runner: s.machine.token, session: writer }, 'POST', `/runner/wiki/spaces/${s.spaceId}/docs/plan-flow`, {
+    planVersion: s.version, repoSha: 'b'.repeat(40), sections: [writtenSection(flow, 'f1', '起草分四步')],
+  }), 200, 'the build writes the flow section');
+  const bad = await call(h, { runner: s.machine.token, session: writer }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs/withdrawals`, {
+    repoSha: 'short', paths: [],
+  });
+  assert.equal(bad.status, 422, 'a withdrawal names a full commit and at least one path');
+  assert.equal(bad.body.code, 'WIKI_DOC_INVALID');
+  const withdrawn = await call(h, { runner: s.machine.token, session: writer }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs/withdrawals`, {
+    repoSha: 'c'.repeat(40), paths: [{ path: DESIGN_DOC, change: 'deleted' }, { path: 'docs/nobody-cites.md', change: 'renamed', to: 'docs/elsewhere.md' }],
+  });
+  expectStatus(withdrawn, 200, 'the run names the files gone');
+  assert.deepEqual([withdrawn.body.withdrawn, withdrawn.body.sections], [1, [{ doc: 'plan-flow', key: flow }]]);
+  const [sentence] = (await h.sql.query<{ status: string; withdrawn_reason: string; withdrawn_path: string; withdrawn_entry_id: string | null }>(
+    `SELECT s."status", s."withdrawn_reason", s."withdrawn_path", s."withdrawn_entry_id" FROM "wiki_doc_sentence" s
+       JOIN "wiki_doc_section" x ON x."id" = s."section_id" JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1`, [s.spaceId])).rows;
+  assert.deepEqual(sentence, { status: 'withdrawn', withdrawn_reason: 'anchor_missing', withdrawn_path: DESIGN_DOC, withdrawn_entry_id: null });
+  assert.ok((await sectionRows(h, s.spaceId)).get(`plan-flow#${flow}`)!.staleAt, 'the section waits to be written again');
+  // Said again, it withdraws nothing more.
+  const twice = await call(h, { runner: s.machine.token, session: writer }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs/withdrawals`, {
+    repoSha: 'c'.repeat(40), paths: [{ path: DESIGN_DOC, change: 'deleted' }],
+  });
+  assert.deepEqual([twice.body.withdrawn, twice.body.sections], [0, []]);
+  // The run is told to write it again, and the owner's page says why the sentence went.
+  const affected = await call(h, { runner: s.machine.token, session: writer }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs`);
+  assert.deepEqual((affected.body.sections as Array<{ doc: string; key: string; stale: boolean }>).map((one) => [one.doc, one.key, one.stale]), [['plan-flow', flow, true]]);
+  const page = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/docs/plan-flow`);
+  expectStatus(page, 200, 'the owner reads the document');
+  const shown = page.body.sections.find((x: { key: string }) => x.key === flow).blocks[0].sentences[0].withdrawn;
+  assert.deepEqual([shown.reason, shown.path, shown.entryId], ['anchor_missing', DESIGN_DOC, null]);
+  // Nobody else withdraws anything.
+  const ordinary = await session(h, s.owner.id, { workspaceId: s.workspaceId, runnerId: s.machine.id, status: 'RUNNING' });
+  const refused = await call(h, { runner: s.machine.token, session: ordinary }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs/withdrawals`, {
+    repoSha: 'c'.repeat(40), paths: [{ path: DESIGN_DOC, change: 'deleted' }],
+  });
+  expectStatus(refused, 403, 'another session is not a maintenance run');
+  // The migration keeps a withdrawal to one of its two causes, and a path to anchor_missing.
+  await assert.rejects(h.sql.query(`UPDATE "wiki_doc_sentence" SET "withdrawn_reason" = 'rejected'
+     WHERE "withdrawn_path" IS NOT NULL AND "section_id" IN (SELECT x."id" FROM "wiki_doc_section" x JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1)`, [s.spaceId]),
+    /wiki_doc_sentence_withdrawn_path_chk/);
+  await assert.rejects(h.sql.query(`UPDATE "wiki_doc_sentence" SET "withdrawn_entry_id" = $2
+     WHERE "withdrawn_path" IS NOT NULL AND "section_id" IN (SELECT x."id" FROM "wiki_doc_section" x JOIN "wiki_doc" d ON d."id" = x."doc_id" WHERE d."space_id" = $1)`, [s.spaceId, randomUUID()]),
+    /wiki_doc_sentence_withdrawn_chk/);
+});
+
+// ── 9. a plan job goes before the next run ───────────────────────────────────────────────────────
+
+interface JobRow {
+  id: string;
+  kind: string;
+  state: string;
+  task_id: string | null;
+  outcome: string | null;
+}
+
+async function jobRow(h: Harness, jobId: string): Promise<JobRow> {
+  return (await h.sql.query<JobRow>(`SELECT "id","kind","state","task_id","outcome" FROM "wiki_plan_job" WHERE "id" = $1`, [jobId])).rows[0]!;
+}
+
+const runsOf = (h: Harness, s: Space): Promise<number> => h.prisma.wikiMaintenanceRun.count({ where: { spaceId: s.spaceId } });
+
+/**
+ * A planned space whose backlog made its maintenance task, under way on its runner, and a job of `kind` its
+ * owner asked for meanwhile — a build by confirming the draft, a draft by asking for one — queued behind the
+ * run's task: the morning of 2026-10-01, when the owner confirmed the plan while a run was under way.
+ */
+async function queuedBehindARun(h: Harness, name: string, kind: 'build' | 'draft') {
+  const s = await plannedSpace(h, name);
+  const backlog = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  const made = await consider(h, s, hintOf([backlog[0]!]));
+  assert.equal(made.made, true, `the due space makes its maintenance task: ${JSON.stringify(made)}`);
+  if (!made.made) throw new Error('unreachable');
+  const run = await runSession(h, s, made.taskId);
+  if (kind === 'build') await confirm(h, s, s.version);
+  else expectStatus(await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/spaces/${s.spaceId}/plan/redraft`, {}), 200, 'the owner asks for a draft');
+  const [job] = (await h.sql.query<JobRow>(
+    `SELECT "id","kind","state","task_id","outcome" FROM "wiki_plan_job" WHERE "space_id" = $1 AND "kind" = $2 AND "state" <> 'ended'`,
+    [s.spaceId, kind],
+  )).rows;
+  assert.equal(job?.state, 'queued', `the ${kind} waits for the run: ${JSON.stringify(job)}`);
+  const page = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
+  assert.equal(toUuid(page.body.job.waitingFor.taskId as string), made.taskId, 'the plan page says it waits for the maintenance run');
+  return { s, maintenanceTask: made.taskId, run, jobId: job.id };
+}
+
+/**
+ * A task of the list ends as the runner's door ends it — its acceptance turn's comparison settles it in
+ * POST /runner/sessions/:id/turn-complete — and the change that door publishes:
+ * `RealtimeService.publishTaskChanged(sessionId, taskId)`, keyed by the session and not by the owner.
+ */
+async function endedOnItsSession(h: Harness, taskId: string, sessionId: string): Promise<NormalizedRunEvent> {
+  await h.sql.query(`UPDATE "task" SET "status" = 'DONE', "updated_at" = now() WHERE "id" = $1`, [taskId]);
+  await h.sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED' WHERE "id" = $1`, [sessionId]);
+  return { seq: 0, type: RunEventType.TASK_CHANGED, ts: new Date().toISOString(), payload: { taskId, taskIds: [], resync: true } } as NormalizedRunEvent;
+}
+
+for (const kind of ['build', 'draft'] as const) {
+  test(`a ${kind} queued behind a maintenance run goes first: the run's end, published on its session, makes the ${kind}'s task and no second run`, { skip }, async () => {
+    const h = await boot();
+    const { s, maintenanceTask, run, jobId } = await queuedBehindARun(h, `first-${kind}`, kind);
+    // A fact while the run is under way waits for it, as ever.
+    const meanwhile = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(9) });
+    assert.deepEqual(await consider(h, s, hintOf([meanwhile])), { made: false, spaceId: s.spaceId, why: 'unfinished' });
+
+    // The run's task ends, and the change is published on the run's session: the job's facts take it.
+    const ended = await endedOnItsSession(h, maintenanceTask, run);
+    await h.facts.take(run, ended);
+    await h.facts.idle();
+    const job = await jobRow(h, jobId);
+    assert.equal(job.state, 'made', `the run's end made the ${kind}: it is ${job.state}`);
+    const list = (await maintenanceTasks(h, s)).map((row) => row.id);
+    assert.deepEqual(list.slice(list.indexOf(maintenanceTask)), [maintenanceTask, job.task_id], `the list's next task is the ${kind}'s`);
+    assert.deepEqual(wikiPlanJobHintFor(run, ended), { ownerId: null, sessionId: run, taskIds: [maintenanceTask] },
+      'a change published on a session names its tasks, the owner read from the session');
+    assert.deepEqual(wikiPlanJobHintFor(`user:${s.owner.id}`, { ...ended, payload: { taskIds: [maintenanceTask], resync: false } }),
+      { ownerId: s.owner.id, sessionId: null, taskIds: [maintenanceTask] }, "and the owner's own is as it was");
+
+    // The next fact of the due space finds the list the job's: no second run.
+    const next = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(8) });
+    assert.deepEqual(await consider(h, s, hintOf([next])), { made: false, spaceId: s.spaceId, why: 'unfinished' });
+    assert.equal(await runsOf(h, s), 1, 'one maintenance run: the one that ended');
+  });
+
+  test(`while a ${kind} waits for the list no due fact makes a run — the trigger makes the ${kind}'s task instead — and after it the next fact does, as before`, { skip }, async () => {
+    const h = await boot();
+    const { s, maintenanceTask, run, jobId } = await queuedBehindARun(h, `yield-${kind}`, kind);
+    // The run's task ends, and nothing has told the job yet: the list is free and the job still waits.
+    await endedOnItsSession(h, maintenanceTask, run);
+    assert.equal((await jobRow(h, jobId)).state, 'queued');
+
+    // The backlog is past the threshold and more facts arrive: none of them makes a run while the job waits.
+    for (const fact of await settledSessions(h, s, 3, 20)) {
+      assert.deepEqual(await consider(h, s, hintOf([fact])), { made: false, spaceId: s.spaceId, why: 'plan_job_queued' }, `a queued ${kind} goes first`);
+    }
+    assert.equal(await runsOf(h, s), 1, 'no second run');
+    assert.equal((await jobRow(h, jobId)).state, 'queued', 'deciding makes nothing: the trigger\'s service makes the job');
+
+    // The trigger's service takes the next published fact: it makes the job's task, not a run.
+    const fact = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(15) });
+    await h.trigger.take(fact, { seq: 0, type: RunEventType.STATUS, ts: new Date().toISOString(), payload: {} } as NormalizedRunEvent);
+    await h.trigger.idle();
+    const job = await jobRow(h, jobId);
+    assert.equal(job.state, 'made', `the trigger made the ${kind}'s task: it is ${job.state}`);
+    assert.equal(await runsOf(h, s), 1, 'and no run');
+    assert.ok(h.announced.some((a) => a.ownerId === s.owner.id && JSON.stringify(a.change).includes(job.task_id!)), 'the job\'s task is published');
+    assert.deepEqual(await consider(h, s, hintOf([fact])), { made: false, spaceId: s.spaceId, why: 'unfinished' }, 'facts wait for the job\'s run');
+
+    // The job's task ends — its run said nothing, so the job ended failed — and with nothing queued the next
+    // fact makes the run, by the rules as they were: the backlog its facts piled up meanwhile is due.
+    const jobRun = await runSession(h, s, job.task_id!);
+    await h.facts.take(jobRun, await endedOnItsSession(h, job.task_id!, jobRun));
+    await h.facts.idle();
+    assert.deepEqual([(await jobRow(h, jobId)).state, (await jobRow(h, jobId)).outcome], ['ended', 'failed']);
+    const after = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(5) });
+    const made = await consider(h, s, hintOf([after]));
+    assert.equal(made.made, true, `the next fact after the ${kind} makes the run: ${JSON.stringify(made)}`);
+    if (!made.made) return;
+    assert.equal(made.due, 'backlog');
+    assert.equal(await runsOf(h, s), 2);
+  });
+}
+
+// ── 10. a task that died holds the list no more (contract `maintenance.job.recovery`) ───────────
+
+const runRow = (h: Harness, taskId: string) => h.prisma.wikiMaintenanceRun.findUniqueOrThrow({ where: { taskId } });
+
+/** The run's session as the dispatcher's scheduled scan starts it — its runAt consumed — and the run's start read. */
+async function dispatched(h: Harness, s: Space, taskId: string): Promise<string> {
+  await h.sql.query(`UPDATE "task" SET "run_at" = NULL WHERE "id" = $1`, [taskId]);
+  const run = await session(h, s.owner.id, { workspaceId: s.workspaceId, runnerId: s.machine.id, taskId, status: 'RUNNING', lastTurnAt: minutesAgo(1) });
+  expectStatus(await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/run`), 200, 'the run reads where it starts');
+  return run;
+}
+
+/**
+ * What the reaper does to a run whose runner went away mid-turn (realtime/reaper.service.ts): the session
+ * FAILED `runner offline`, `minutes` ago — and, its task opting into auto-run, no retry of its own armed — and
+ * the task back to OPEN.
+ */
+async function reapedOffline(h: Harness, taskId: string, sessionId: string, minutes: number): Promise<void> {
+  await h.sql.query(
+    `UPDATE "session" SET "status" = 'FAILED', "error" = 'runner offline', "finished_at" = $2, "updated_at" = now() WHERE "id" = $1`,
+    [sessionId, utc(minutesAgo(minutes))],
+  );
+  await h.sql.query(`UPDATE "task" SET "status" = 'OPEN' WHERE "id" = $1`, [taskId]);
+}
+
+const statusOf = (): NormalizedRunEvent => ({ seq: 0, type: RunEventType.STATUS, ts: new Date().toISOString(), payload: {} }) as NormalizedRunEvent;
+
+test('a task whose session was reaped runner offline is started again once, and closed FAILED when that dies too; the next fact makes the next run', { skip }, async () => {
+  const h = await boot();
+  const s = await maintainedSpace(h, 'offline');
+  const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  const made = await consider(h, s, hintOf([sessions[0]!]));
+  assert.equal(made.made, true);
+  if (!made.made) return;
+  const first = await dispatched(h, s, made.taskId);
+  const { startedAt } = await runRow(h, made.taskId);
+  assert.ok(startedAt);
+
+  // While its session runs, a fact waits for it, as ever, and nothing is settled.
+  const meanwhile = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(9) });
+  assert.deepEqual(await consider(h, s, hintOf([meanwhile])), { made: false, spaceId: s.spaceId, why: 'unfinished' });
+
+  // The runner restarts mid-turn (2026-10-02 01:47): the session ends `runner offline`, the task stays OPEN
+  // with its runAt long consumed — nothing would ever start it again. The session's own end is the hint.
+  await reapedOffline(h, made.taskId, first, 2);
+  const before = h.announced.length;
+  await h.trigger.take(first, statusOf());
+  await h.trigger.idle();
+  const rerun = await h.prisma.task.findUniqueOrThrow({ where: { id: made.taskId }, select: { status: true, runAt: true } });
+  assert.equal(rerun.status, 'OPEN', 'an infra death is started again, not closed');
+  const died = (await h.prisma.session.findUniqueOrThrow({ where: { id: first }, select: { finishedAt: true } })).finishedAt!;
+  assert.ok(rerun.runAt, 'with a runAt the dispatcher keeps');
+  assert.equal(rerun.runAt.getTime(), died.getTime() + WIKI_MAINTENANCE_RECOVERY.rerunAfterMinutes * 60_000,
+    'no sooner than rerunAfterMinutes after its session ended');
+  assert.ok(h.announced.slice(before).some((a) => a.ownerId === s.owner.id && a.type === RunEventType.TASK_CHANGED
+    && JSON.stringify(a.change).includes(made.taskId)), 'and announced');
+  let row = await runRow(h, made.taskId);
+  assert.deepEqual([row.outcome, row.failureKind, row.reruns, row.attempts], ['failed', 'infra', 1, 1]);
+  assert.equal(row.error, 'Its session ended failed: runner offline.');
+  assert.equal(row.rerunAt?.getTime(), rerun.runAt.getTime());
+  assert.ok(row.endedAt && row.endedAt >= startedAt, 'the row never ends before it began');
+  // The health says whose the failure was.
+  const { maintenance: health } = await new WikiHealth(h.prisma as unknown as PrismaService).read(s.owner.id, s.spaceId);
+  assert.deepEqual([health.lastFailure?.kind, health.lastFailure?.reason], ['infra', 'Its session ended failed: runner offline.']);
+
+  // Settling the same death again changes nothing; a fact before the rerun is due waits for it.
+  const again = await consider(h, s, hintOf([first]));
+  assert.equal(again.settled, undefined, `nothing is settled twice: ${JSON.stringify(again)}`);
+  const waiting = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(7) });
+  assert.deepEqual(await consider(h, s, hintOf([waiting])), { made: false, spaceId: s.spaceId, why: 'unfinished' }, 'the rerun holds the list');
+  assert.equal((await maintenanceTasks(h, s)).length, 1);
+
+  // The dispatcher starts it once due — a new session of the same task — and the run starts once more: the
+  // first start kept, the attempt counted, the attempt before it no longer the row's end.
+  const second = await dispatched(h, s, made.taskId);
+  row = await runRow(h, made.taskId);
+  assert.deepEqual([row.attempts, row.outcome, row.failureKind, row.endedAt, row.error], [2, null, null, null, null]);
+  assert.equal(row.startedAt?.getTime(), startedAt.getTime(), 'the first start is kept');
+  assert.ok(row.lastStartedAt && row.lastStartedAt >= startedAt);
+  assert.equal(row.sessionId, second);
+
+  // It dies too: the rerun is spent, so the task is closed FAILED, its run's end written, and the list free.
+  await reapedOffline(h, made.taskId, second, 1);
+  const closed = await consider(h, s, hintOf([second]));
+  assert.deepEqual(closed.settled, { rerun: [], closed: [made.taskId] }, `the task is closed: ${JSON.stringify(closed)}`);
+  assert.equal((await h.prisma.task.findUniqueOrThrow({ where: { id: made.taskId } })).status, 'FAILED');
+  row = await runRow(h, made.taskId);
+  assert.deepEqual([row.outcome, row.failureKind, row.reruns, row.attempts], ['failed', 'infra', 1, 2]);
+  assert.ok(row.endedAt && row.lastStartedAt && row.endedAt >= row.lastStartedAt, 'ended no earlier than its last start');
+
+  // The next fact makes the next run, from the same cursor.
+  const next = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(5) });
+  const after = await consider(h, s, hintOf([next]));
+  assert.equal(after.made, true, `the next fact makes the next run: ${JSON.stringify(after)}`);
+  if (!after.made) return;
+  assert.equal(after.due, 'backlog', 'the cursor did not move, so the space is as due as it was');
+  assert.equal((await maintenanceTasks(h, s)).length, 2);
+});
+
+/**
+ * The dispatcher the platform runs once a minute (TasksService's reconcile timer), over the spec's database: the
+ * reconcile sweep — the retry policy's re-arm and the two auto-run scans — and then the scheduled sweep.
+ */
+function dispatcher(h: Harness): () => Promise<void> {
+  const prisma = h.prisma as unknown as PrismaService;
+  const quiet = new Proxy({}, { get: () => () => undefined }) as unknown as RealtimeService;
+  const sessions = new SessionsService(prisma, { notifySessionQueued: () => undefined } as unknown as QueueService, quiet);
+  const tasks = new TasksService(prisma, sessions, quiet) as unknown as {
+    reconcileReadyTasks(): Promise<void>;
+    dispatchDueScheduledTasks(): Promise<void>;
+  };
+  return async () => {
+    await tasks.reconcileReadyTasks();
+    await tasks.dispatchDueScheduledTasks();
+  };
+}
+
+const sessionsOf = (h: Harness, taskId: string) => h.prisma.session.findMany({
+  where: { taskId },
+  orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  select: { id: true, status: true, assignedRunnerId: true },
+});
+
+test('the dispatcher alone never starts a maintenance task whose session died — no edge, no project, its runAt spent — and starts the rerun the settling schedules, once', { skip }, async () => {
+  const h = await boot();
+  const s = await maintainedSpace(h, 'dispatcher');
+  const sweep = dispatcher(h);
+  const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  const made = await consider(h, s, hintOf([sessions[0]!]));
+  assert.equal(made.made, true, JSON.stringify(made));
+  if (!made.made) return;
+  // What the dispatch needs that the space's fixture does not lay down: the provider the task is pinned to,
+  // configured — a dispatch refuses one the owner does not have — and the workspace's runner, online: wikova
+  // on 2026-10-02. Written here, after the task was made, so that no plan job asks for the list first.
+  await h.prisma.modelProvider.create({
+    data: {
+      slug: 'local-vllm', label: 'Local vLLM', runtime: 'claude', baseUrl: 'http://127.0.0.1:8000',
+      apiKeyEnc: encryptSecret(`vllm-key-${randomUUID()}`), models: [{ value: 'qwen3.8-27b-fp8', label: 'Qwen3.8 27B', contextWindow: 131072 }],
+      defaultModel: 'qwen3.8-27b-fp8', enabled: true, ownerId: s.owner.id,
+    },
+  });
+  await h.sql.query(`UPDATE "workspace" SET "runner_id" = $1 WHERE "id" = $2`, [s.machine.id, s.workspaceId]);
+  await h.sql.query(`UPDATE "runner" SET "status" = 'ONLINE', "last_heartbeat_at" = now() WHERE "id" = $1`, [s.machine.id]);
+
+  // Made with runAt now, it is started by the scheduled sweep, as 01a0f9ea was at 00:01:31: one session, the
+  // runAt spent, and the one receipt the task will ever have, `sched:<task>:0`.
+  await sweep();
+  let runs = await sessionsOf(h, made.taskId);
+  assert.equal(runs.length, 1, 'the scheduled sweep starts the task');
+  assert.equal((await h.prisma.task.findUniqueOrThrow({ where: { id: made.taskId } })).runAt, null, 'its runAt spent');
+  const receipts = await h.sql.query<{ token: string }>(
+    `SELECT "request_token" AS token FROM "task_run_request" WHERE "request_token" LIKE $1`, [`%${made.taskId}%`]);
+  assert.deepEqual(receipts.rows.map((one) => one.token), [`sched:${made.taskId}:0`]);
+
+  // The runner restarts mid-turn, eleven minutes ago (01:47–01:50): the reaper ends the session `runner
+  // offline` with no retry of its own armed — its task opts into auto-run — and the task stays OPEN.
+  await h.sql.query(`UPDATE "session" SET "status" = 'RUNNING' WHERE "id" = $1`, [runs[0]!.id]);
+  await reapedOffline(h, made.taskId, runs[0]!.id, 11);
+
+  // Until this change that was the end of it: the retry policy re-arms only a `dep:` moment, and each of the
+  // three scans needs what the task has not — an edge, a project, a runAt — so no sweep starts it again.
+  await sweep();
+  await sweep();
+  assert.equal((await sessionsOf(h, made.taskId)).length, 1, 'nothing in the dispatcher starts it again by itself');
+
+  // The settling — the dead session's end is the hint — gives it a runAt past the backoff, which has passed
+  // here; the next scheduled sweep starts the rerun, queued for the space's runner, and only once.
+  const settled = await consider(h, s, hintOf([runs[0]!.id]));
+  assert.deepEqual(settled.settled, { rerun: [made.taskId], closed: [] }, JSON.stringify(settled));
+  await sweep();
+  runs = await sessionsOf(h, made.taskId);
+  assert.equal(runs.length, 2, 'the dispatcher starts the rerun');
+  assert.deepEqual([runs[1]!.status, runs[1]!.assignedRunnerId], ['PENDING', s.machine.id],
+    'queued for the space\'s runner, which claims it once it is online');
+  assert.equal((await h.prisma.task.findUniqueOrThrow({ where: { id: made.taskId } })).runAt, null, 'the rerun\'s runAt spent');
+  await sweep();
+  assert.equal((await sessionsOf(h, made.taskId)).length, 2, 'once');
+});
+
+test('a task whose session died of something not the platform\'s is closed at once; one not yet started, or whose own retry is armed, is waited for', { skip }, async () => {
+  const h = await boot();
+  const s = await maintainedSpace(h, 'content-death');
+  const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  const made = await consider(h, s, hintOf([sessions[0]!]));
+  assert.equal(made.made, true);
+  if (!made.made) return;
+  // Made and not yet dispatched: no session of it has run, so nothing died — it waits for its dispatch.
+  const fact = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(9) });
+  await h.sql.query(`UPDATE "task" SET "run_at" = NULL WHERE "id" = $1`, [made.taskId]);
+  assert.deepEqual(await consider(h, s, hintOf([fact])), { made: false, spaceId: s.spaceId, why: 'unfinished' });
+
+  const run = await dispatched(h, s, made.taskId);
+  // Its turn failed and the session's own retry is armed: AutoRetryService resumes it, so it is not dead.
+  await h.sql.query(`UPDATE "session" SET "status" = 'FAILED', "error" = 'API Error: 529 overloaded', "retry_at" = $2 WHERE "id" = $1`,
+    [run, utc(new Date(Date.now() + 120_000))]);
+  assert.deepEqual(await consider(h, s, hintOf([run])), { made: false, spaceId: s.spaceId, why: 'unfinished' });
+
+  // A turn the model's API refused (a 400) and no retry: the run's own failure, which a rerun would only repeat.
+  await h.sql.query(`UPDATE "session" SET "num_turns" = 1, "retry_at" = NULL, "error" = $2, "finished_at" = $3 WHERE "id" = $1`,
+    [run, 'API Error: 400 {"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long"}}', utc(minutesAgo(1))]);
+  const settled = await consider(h, s, hintOf([run]));
+  assert.deepEqual(settled.settled, { rerun: [], closed: [made.taskId] }, `closed at once: ${JSON.stringify(settled)}`);
+  assert.equal((await h.prisma.task.findUniqueOrThrow({ where: { id: made.taskId } })).status, 'FAILED');
+  const row = await runRow(h, made.taskId);
+  assert.deepEqual([row.outcome, row.failureKind, row.reruns], ['failed', 'content', 0]);
+  assert.match(row.error ?? '', /^Its session ended failed: API Error: 400/u);
+
+  // Whose a session's end says its failure was.
+  for (const infra of ['runner offline', 'claude runtime not initialized', 'ENOSPC: No space left on device', 'API Error: 529 overloaded',
+    'connect ECONNREFUSED 127.0.0.1:3000', 'POST /runner/sessions/x/turn-complete -> 502 Bad Gateway']) {
+    assert.equal(wikiMaintenanceFailureKindOf(infra), 'infra', infra);
+  }
+  for (const content of ['API Error: 400 prompt is too long', 'This Wiki maintenance run did not start: maintenance is off in its space.',
+    'the run reached its limit of 120 model turns', '', null]) {
+    assert.equal(wikiMaintenanceFailureKindOf(content), 'content', String(content));
+  }
+});
+
+test('a run whose task ended without it saying how is given that end — and the migration gives every such row it found the same', { skip }, async () => {
+  const h = await boot();
+  const s = await maintainedSpace(h, 'orphan');
+  const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  const made = await consider(h, s, hintOf([sessions[0]!]));
+  assert.equal(made.made, true);
+  if (!made.made) return;
+  const run = await dispatched(h, s, made.taskId);
+  // Its verify and its finish got 500 on a full disk, its check failed, and its task with it (2026-10-01 13:33).
+  await h.sql.query(`UPDATE "task" SET "status" = 'FAILED', "updated_at" = now() WHERE "id" = $1`, [made.taskId]);
+  await h.sql.query(`UPDATE "session" SET "status" = 'SUCCEEDED' WHERE "id" = $1`, [run]);
+  assert.equal((await runRow(h, made.taskId)).outcome, null, 'the run never said how it ended');
+  // Two rows that are not orphans: one whose task has not ended, one that said how it ended.
+  const open = await task(h, s.owner.id, { listId: s.listId });
+  const reported = await task(h, s.owner.id, { status: 'FAILED', listId: s.listId });
+  await h.sql.query(`INSERT INTO "wiki_maintenance_run"("id","space_id","owner_id","task_id") VALUES ($1,$2,$3,$4)`, [randomUUID(), s.spaceId, s.owner.id, open]);
+  await h.sql.query(
+    `INSERT INTO "wiki_maintenance_run"("id","space_id","owner_id","task_id","outcome","failure_kind","error","ended_at")
+     VALUES ($1,$2,$3,$4,'failed','content','verify: 1 op was left without a verdict',now())`,
+    [randomUUID(), s.spaceId, s.owner.id, reported]);
+
+  // The next hint of the owner gives it its end.
+  const fact = await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(6) });
+  await consider(h, s, hintOf([fact]));
+  const orphan = await runRow(h, made.taskId);
+  assert.deepEqual([orphan.outcome, orphan.failureKind, orphan.error], ['failed', 'infra', WIKI_RUN_NOT_REPORTED]);
+  assert.equal(WIKI_RUN_NOT_REPORTED, 'The run did not report its end.');
+  assert.ok(orphan.endedAt && orphan.lastStartedAt && orphan.endedAt >= orphan.lastStartedAt, 'ended no earlier than it last started');
+  assert.equal((await runRow(h, open)).outcome, null, 'a run whose task has not ended is not touched');
+  assert.equal((await runRow(h, reported)).error, 'verify: 1 op was left without a verdict', 'nor one that said how it ended');
+
+  // The rows the migration found as servers before it left them: an orphan, a row two attempts wrote (its
+  // end before its start), and two failures reported before failures had a kind — the run's own, and a 500
+  // (2026-09-29, the changesets route). Its CHECKs come off, the rows go in as they stood, and the
+  // migration — every statement of which can run twice — runs again.
+  await h.sql.query(`ALTER TABLE "wiki_maintenance_run" DROP CONSTRAINT "wiki_maintenance_run_failure_kind_check",
+                                                      DROP CONSTRAINT "wiki_maintenance_run_attempts_check"`);
+  const legacy = { orphan: await task(h, s.owner.id, { status: 'CANCELLED', listId: s.listId }), twice: await task(h, s.owner.id, { listId: s.listId }),
+    kindless: await task(h, s.owner.id, { status: 'FAILED', listId: s.listId }),
+    server: await task(h, s.owner.id, { status: 'FAILED', listId: s.listId }) };
+  const twiceSession = await session(h, s.owner.id, { workspaceId: s.workspaceId, taskId: legacy.twice, status: 'FAILED' });
+  const { rows: [{ created_at: firstSessionAt }] } = await h.sql.query<{ created_at: string }>(
+    `SELECT to_char("created_at", 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS created_at FROM "session" WHERE "id" = $1`, [twiceSession]);
+  await h.sql.query(
+    `INSERT INTO "wiki_maintenance_run"("id","space_id","owner_id","task_id","started_at","outcome","error","ended_at") VALUES
+       ($1,$4,$5,$6,now() - interval '2 hours',NULL,NULL,NULL),
+       ($2,$4,$5,$7,now() - interval '1 day','failed','verify: 1 op was left without a verdict',now() - interval '2 days'),
+       ($3,$4,$5,$8,now() - interval '3 hours','failed','extract: the model answered nothing',now() - interval '2 hours'),
+       ($9,$4,$5,$10,now() - interval '5 hours','failed',$11,now() - interval '4 hours')`,
+    [randomUUID(), randomUUID(), randomUUID(), s.spaceId, s.owner.id, legacy.orphan, legacy.twice, legacy.kindless,
+      randomUUID(), legacy.server, 'propose: orbit wiki maintain: POST /runner/wiki/spaces/x/maintenance/changesets -> 500 {"statusCode":500}']);
+  await h.sql.query(readFileSync(path.join(__dirname, '../../prisma/migrations/0356_wiki_maintenance_run_attempts/migration.sql'), 'utf8'));
+  const swept = await runRow(h, legacy.orphan);
+  assert.deepEqual([swept.outcome, swept.failureKind, swept.error, swept.attempts], ['failed', 'infra', WIKI_RUN_NOT_REPORTED, 1]);
+  assert.ok(swept.endedAt && swept.startedAt && swept.endedAt >= swept.startedAt);
+  const twice = await runRow(h, legacy.twice);
+  assert.equal(twice.attempts, 2, 'two attempts on one row');
+  assert.equal(twice.startedAt?.toISOString(), firstSessionAt, 'its first start is its task\'s first session');
+  assert.ok(twice.lastStartedAt && twice.endedAt && twice.startedAt && twice.endedAt >= twice.startedAt && twice.lastStartedAt > twice.endedAt,
+    'the second start is the latest, and the row ends no earlier than it began');
+  assert.deepEqual([twice.outcome, twice.failureKind], ['failed', 'content'], 'what the first attempt said stays');
+  const kindless = await runRow(h, legacy.kindless);
+  assert.deepEqual([kindless.failureKind, kindless.error, kindless.attempts], ['content', 'extract: the model answered nothing', 1]);
+  assert.equal((await runRow(h, legacy.server)).failureKind, 'infra', 'a 500 the run reported is the platform\'s, read off its error');
+  assert.equal((await runRow(h, open)).outcome, null, 'the migration leaves a run whose task has not ended as it was');
+  const checks = await h.sql.query(`SELECT conname FROM pg_constraint WHERE conname LIKE 'wiki_maintenance_run_%_check' ORDER BY conname`);
+  // 0357's catch-up CHECK was never dropped, and stands beside them.
+  assert.deepEqual(checks.rows.map((one: { conname: string }) => one.conname),
+    ['wiki_maintenance_run_attempts_check', 'wiki_maintenance_run_catch_up_check', 'wiki_maintenance_run_failure_kind_check'], 'and its CHECKs hold again');
+});
+
+test('a session\'s retry of its run keeps the run\'s first start and counts the attempt, and the row never ends before it began', { skip }, async () => {
+  const h = await boot();
+  const s = await maintainedSpace(h, 'retry');
+  const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  const made = await consider(h, s, hintOf([sessions[0]!]));
+  assert.equal(made.made, true);
+  if (!made.made) return;
+  const run = await dispatched(h, s, made.taskId);
+  const first = await runRow(h, made.taskId);
+  assert.deepEqual([first.attempts, first.lastStartedAt?.getTime()], [1, first.startedAt?.getTime()]);
+  const finish = (error: string) => call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/finish`, {
+    outcome: 'failed', error, report: { stoppedAt: 'verify', ops: { refused: 0 } },
+  });
+  expectStatus(await finish('verify: 1 op was left without a verdict'), 200, 'the first attempt fails');
+  const failed = await runRow(h, made.taskId);
+  assert.ok(failed.endedAt);
+
+  // The session runs it once more (the one retry its prompt allows), a little later.
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expectStatus(await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/run`), 200, 'the retry starts');
+  const retried = await runRow(h, made.taskId);
+  assert.equal(retried.startedAt?.getTime(), first.startedAt?.getTime(), 'the run\'s first start is not overwritten');
+  assert.equal(retried.attempts, 2);
+  assert.ok(retried.lastStartedAt && retried.lastStartedAt > failed.endedAt, 'the retry\'s start is the latest');
+  assert.deepEqual([retried.outcome, retried.endedAt, retried.error, retried.failureKind], [null, null, null, null],
+    'the row says the retry is under way, not how the attempt before it ended');
+
+  expectStatus(await finish('verify: 2 ops were left without a verdict'), 200, 'the retry fails too');
+  const ended = await runRow(h, made.taskId);
+  assert.ok(ended.endedAt && ended.startedAt && ended.endedAt >= ended.lastStartedAt! && ended.endedAt >= ended.startedAt,
+    'it ends after the retry began, so never before the run began');
+  assert.deepEqual([ended.outcome, ended.failureKind, ended.error], ['failed', 'content', 'verify: 2 ops were left without a verdict']);
+});
+
+// ── 11. criterion 3 revision 4: the cursor once the ops are recorded, and catch-up ───────────────
+
+/** The cursor row's health, beside what `cursorRow` reads. */
+async function cursorHealth(h: Harness, s: Space) {
+  return (await h.sql.query<{ position_at: Date | null; last_ok_at: Date | null; last_run_at: Date | null; consecutive_failures: number; last_outcome: string | null }>(
+    `SELECT "position_at","last_ok_at","last_run_at","consecutive_failures","last_outcome" FROM "wiki_cursor" WHERE "space_id" = $1`, [s.spaceId])).rows[0]!;
+}
+
+test('a run moves the cursor once its ops are recorded: a step that fails after it fails the run and its check, and the next run reads none of those sessions again', { skip }, async () => {
+  const h = await boot();
+  const s = await maintainedSpace(h, 'advance');
+  const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  const cite = await turn(h, sessions[0]!, 'what the owner said, which the run records an entry of');
+  const made = await consider(h, s, hintOf([sessions[0]!]));
+  assert.equal(made.made, true);
+  if (!made.made) return;
+  assert.equal(made.catchUp, null, 'twenty sessions of the last hour: the space is not behind');
+  const run = await runSession(h, s, made.taskId);
+  const route = (path: string) => `/runner/wiki/spaces/${s.spaceId}/maintenance/${path}`;
+  expectStatus(await call(h, { runner: s.machine.token, session: run }, 'GET', route('run')), 200, 'the run starts');
+  const { token, from, sessions: covered } = await pageToExpected(h, s, run, made.expect);
+  const proposed = await call(h, { runner: s.machine.token, session: run }, 'POST', route('changesets'),
+    { ops: adds(2, cite, 'recorded'), rationale: 'what the run learned', idempotencyKey: randomUUID() });
+  expectStatus(proposed, 200, 'the run records its ops');
+  const before = await cursorHealth(h, s);
+
+  // Nobody but the run moves it.
+  const other = await session(h, s.owner.id, { workspaceId: s.workspaceId, runnerId: s.machine.id, status: 'RUNNING' });
+  const refused = await call(h, { runner: s.machine.token, session: other }, 'POST', route('advance'), { to: token });
+  expectStatus(refused, 403, 'another session of the owner may not move it');
+  assert.equal(refused.body.code, 'WIKI_NOT_MAINTENANCE_SESSION');
+  expectStatus(await call(h, { runner: s.machine.token }, 'POST', route('advance'), { to: token }), 400, 'a headless move is refused');
+  const past = encodeCursorToken(s.spaceId, { at: new Date(), kind: 'session_settled', ref: randomUUID() });
+  const invalid = await call(h, { runner: s.machine.token, session: run }, 'POST', route('advance'), { to: past });
+  expectStatus(invalid, 400, 'a position no page handed out is refused');
+  assert.equal(invalid.body.code, 'WIKI_CURSOR_INVALID');
+
+  // The ops are recorded: the cursor moves past their sessions now — the position alone, nothing of the run's health.
+  const moved = await call(h, { runner: s.machine.token, session: run }, 'POST', route('advance'), { to: token });
+  expectStatus(moved, 200, 'the run moves the cursor');
+  assert.equal(moved.body.advanced, true);
+  assert.equal(moved.body.state.position, token);
+  const after = await cursorHealth(h, s);
+  assert.ok(after.position_at && (!before.position_at || after.position_at > before.position_at), 'the watermark moved forward');
+  assert.deepEqual([after.last_ok_at, after.last_run_at, after.consecutive_failures, after.last_outcome],
+    [before.last_ok_at, before.last_run_at, before.consecutive_failures, before.last_outcome], 'and nothing of how the run went was written');
+  // At the cursor, or behind it, a move moves nothing: the cursor is past those sessions already.
+  for (const again of [token, from]) {
+    const still = await call(h, { runner: s.machine.token, session: run }, 'POST', route('advance'), { to: again });
+    expectStatus(still, 200, 'a move to where the cursor stands, or behind it, is answered');
+    assert.equal(still.body.advanced, false);
+  }
+  assert.deepEqual((await cursorHealth(h, s)).position_at, after.position_at, 'the cursor only moves forward');
+
+  // The anchors fail after it: the run ends failed — one more failure in a row — and the cursor stays where it was moved.
+  const ended = await call(h, { runner: s.machine.token, session: run }, 'POST', route('finish'), {
+    outcome: 'failed', error: 'anchors: git could not check 1 anchor, and the server refused 0 entries', failureKind: 'content',
+    report: { stoppedAt: 'anchors', cursorAdvanced: true, ops: { proposed: 2, recorded: 2, refused: 0 }, tokens: { input: 10, output: 5, calls: 2 } },
+  });
+  expectStatus(ended, 200, 'the run ends failed');
+  assert.equal(ended.body.advanced, false);
+  const failed = await cursorHealth(h, s);
+  assert.deepEqual(failed.position_at, after.position_at, 'the failure does not move the cursor back');
+  assert.deepEqual([failed.consecutive_failures, failed.last_outcome, failed.last_ok_at], [1, 'failed', null], 'and it is a failure, counted');
+  const row = await h.prisma.wikiMaintenanceRun.findUniqueOrThrow({ where: { taskId: made.taskId } });
+  assert.deepEqual([row.outcome, row.failureKind, row.opsRefused], ['failed', 'content', 0]);
+  assert.deepEqual([(row.report as { stoppedAt: string }).stoppedAt, (row.report as { cursorAdvanced: boolean }).cursorAdvanced], ['anchors', true]);
+
+  // Its check: the cursor reached the position, and the run did not succeed — non-zero, saying both.
+  const check = await call(h, { runner: s.machine.token }, 'GET', `${route('check')}?expect=${encodeURIComponent(made.expect)}`);
+  expectStatus(check, 200, 'the check answers');
+  assert.deepEqual([check.body.ok, check.body.reached, check.body.run.outcome], [false, true, 'failed']);
+  assert.deepEqual(check.body.problems, ['The cursor reached the position, past the sessions whose ops the run recorded — the next run does not '
+    + 'read them again — but the run ended failed after that: anchors: git could not check 1 anchor, and the server refused 0 entries'],
+  'one reason: the run failed after the cursor moved');
+
+  // The next run reads none of those sessions again: its first page starts where the cursor stands.
+  await h.sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = $1`, [made.taskId]);
+  await settledSessions(h, s, 3, 5);
+  const next = await maintenanceRun(h, s);
+  const page = await call(h, { runner: s.machine.token, session: next }, 'GET', `/runner/wiki/spaces/${s.spaceId}/dossiers?limit=50`);
+  expectStatus(page, 200, 'the next run reads a page');
+  assert.equal(page.body.from, token, 'it starts where the run moved the cursor');
+  const reread = (page.body.dossiers as Array<{ sessionId: string }>).map((d) => toUuid(d.sessionId)).filter((id) => covered.includes(id));
+  assert.deepEqual(reread, [], 'none of the sessions whose ops were recorded is read again');
+  assert.equal((page.body.dossiers as unknown[]).length, 3, 'only what came after them');
+});
+
+test('a run cut short after its ops were recorded is one more failure, and the cursor stays past them', { skip }, async () => {
+  const h = await boot();
+  const s = await maintainedSpace(h, 'advance-cut');
+  const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
+  const made = await consider(h, s, hintOf([sessions[0]!]));
+  assert.equal(made.made, true);
+  if (!made.made) return;
+  const run = await runSession(h, s, made.taskId);
+  const { token } = await pageToExpected(h, s, run, made.expect);
+  expectStatus(await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/advance`, { to: token }),
+    200, 'the ops are recorded');
+  const moved = (await cursorHealth(h, s)).position_at;
+  // What the runner says when the CLI ends the turn with error_max_turns.
+  const cut = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/cursor`, {
+    outcome: 'truncated',
+    error: 'the run reached its limit of 120 model turns and was cut short, so it failed and moved the cursor no further than past the ops it had recorded',
+  });
+  expectStatus(cut, 200, 'the cut-short run is recorded');
+  const cursor = await cursorHealth(h, s);
+  assert.deepEqual(cursor.position_at, moved, 'the cursor stays past what the run recorded');
+  assert.deepEqual([cursor.consecutive_failures, cursor.last_outcome], [1, 'truncated']);
+  assert.equal((await h.prisma.wikiMaintenanceRun.findUniqueOrThrow({ where: { taskId: made.taskId } })).outcome, 'truncated');
+  const check = await call(h, { runner: s.machine.token }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/check?expect=${encodeURIComponent(made.expect)}`);
+  assert.deepEqual([check.body.ok, check.body.reached], [false, true], 'its check fails: the run did not succeed');
+});
+
+/** A provider of the owner's on the Claude Code runtime whose endpoint is public: what a run on it costs is billed. */
+async function hostedModel(h: Harness, ownerId: string, shape: { baseUrl?: string; presetSlug?: string | null } = {}): Promise<string> {
+  const slug = `hosted-${randomUUID().slice(0, 8)}`;
+  await h.prisma.modelProvider.create({
+    data: {
+      slug,
+      label: 'Hosted',
+      runtime: 'claude',
+      baseUrl: shape.baseUrl ?? 'https://llm.example.com/anthropic',
+      apiKeyEnc: encryptSecret(`hosted-key-${randomUUID()}`),
+      models: [{ value: 'hosted-model', label: 'Hosted model' }],
+      defaultModel: 'hosted-model',
+      enabled: true,
+      ownerId,
+      presetSlug: shape.presetSlug ?? null,
+    },
+  });
+  return slug;
+}
+
+/** A space as `maintainedSpace` makes it, its maintenance pinned to a provider of the owner's on a local or a public endpoint. */
+async function pinnedSpace(h: Harness, name: string, endpoint: 'local' | 'public', settings: Record<string, unknown> = {}): Promise<Space & { provider: string }> {
+  const owner = await account(h, name);
+  const machine = await runner(h, owner.id);
+  const workspaceId = await workspace(h, owner.id, '~/orbit');
+  const provider = endpoint === 'local' ? await localModel(h, owner.id) : await hostedModel(h, owner.id);
+  const made = await call(h, { bearer: owner.bearer }, 'POST', '/wiki/spaces', { title: `${name} space`, repoUrl: `https://github.com/spec/${name}-${randomUUID().slice(0, 8)}` });
+  expectStatus(made, 201, 'the owner creates a space');
+  const spaceId = toUuid(made.body.id as string);
+  expectStatus(await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/workspaces`, { workspaceId }), 200, 'the owner binds the workspace');
+  const on = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { enabled: true, workspaceId, provider, ...settings } });
+  expectStatus(on, 200, 'the owner turns maintenance on');
+  const s = { owner, machine, spaceId, workspaceId, listId: toUuid(on.body.settings.maintenance.listId as string), provider };
+  // A provider a run can start on makes the space's first plan draft (plan.jobs): it ends failed here, so the list is
+  // free and no job of the space waits for it.
+  const [draft] = (await h.sql.query<{ task_id: string | null }>(
+    `SELECT "task_id" FROM "wiki_plan_job" WHERE "space_id" = $1 AND "kind" = 'draft'`, [spaceId])).rows;
+  if (draft?.task_id) {
+    const run = await runSession(h, s, draft.task_id);
+    expectStatus(await call(h, { runner: machine.token, session: run }, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, {
+      outcome: 'failed', error: 'no plan is drafted for this space',
+    }), 200, 'the draft job ends');
+    await h.sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = $1`, [draft.task_id]);
+    await taskEnded(h, s, [draft.task_id]);
+  }
+  return s;
+}
+
+type Made = Extract<Awaited<ReturnType<typeof considerWikiMaintenance>>, { made: true }>;
+
+/** The outcome made a run, or the test stops: the run it made. */
+function madeRun(outcome: Awaited<ReturnType<typeof considerWikiMaintenance>>, why: string): Made {
+  assert.equal(outcome.made, true, `${why}: ${JSON.stringify(outcome)}`);
+  return outcome as Made;
+}
+
+/**
+ * A made run, run to its end as `orbit wiki maintain` and its task's check run it: started — and, while it runs,
+ * `during` with its session and the context it read — its pages read to the position its task expects, and, when
+ * it succeeds, the cursor moved there once its ops are recorded; its end told, then its task and session settled as
+ * the acceptance turn settles them. Answers the run's session, whose events after that are the hint its end is.
+ */
+async function runToItsEnd(
+  h: Harness,
+  s: Space,
+  made: Made,
+  outcome: 'succeeded' | 'failed',
+  during?: (run: string, context: Answer['body']) => Promise<void>,
+): Promise<string> {
+  const run = await runSession(h, s, made.taskId);
+  const route = (path: string) => `/runner/wiki/spaces/${s.spaceId}/maintenance/${path}`;
+  const context = await call(h, { runner: s.machine.token, session: run }, 'GET', route('run'));
+  expectStatus(context, 200, 'the run starts');
+  await during?.(run, context.body);
+  const { token } = await pageToExpected(h, s, run, made.expect);
+  if (outcome === 'succeeded') {
+    expectStatus(await call(h, { runner: s.machine.token, session: run }, 'POST', route('advance'), { to: token }), 200, 'the ops are recorded');
+    expectStatus(await call(h, { runner: s.machine.token, session: run }, 'POST', route('finish'), {
+      to: token, outcome: 'succeeded', report: { ops: { refused: 0 }, tokens: { input: 1, output: 1, calls: 1 } },
+    }), 200, 'the run ends succeeded');
+  } else {
+    expectStatus(await call(h, { runner: s.machine.token, session: run }, 'POST', route('finish'), {
+      outcome: 'failed', error: 'extract: the model gave no usable answer for a session', failureKind: 'content', report: { stoppedAt: 'extract', ops: { refused: 0 } },
+    }), 200, 'the run ends failed');
+  }
+  await h.sql.query(`UPDATE "task" SET "status" = $2::task_status, "updated_at" = now() WHERE "id" = $1`, [made.taskId, outcome === 'succeeded' ? 'DONE' : 'FAILED']);
+  await h.sql.query(`UPDATE "session" SET "status" = $2::run_status WHERE "id" = $1`, [run, outcome === 'succeeded' ? 'SUCCEEDED' : 'FAILED']);
+  return run;
+}
+
+const health = async (h: Harness, s: Space) => (await new WikiHealth(h.prisma as unknown as PrismaService).read(s.owner.id, s.spaceId)).maintenance;
+const today = (h: Harness, s: Space) => wikiMaintenanceRunsToday(h.prisma as unknown as PrismaService, s.owner.id, s.spaceId);
+const runRowOf = (h: Harness, taskId: string) => h.prisma.wikiMaintenanceRun.findUniqueOrThrow({ where: { taskId } });
+/** A new fact of the space, `minutes` ago, for a hint to name. */
+const newFact = async (h: Harness, s: Space, minutes: number): Promise<string> => (await settledSessions(h, s, 1, minutes))[0]!;
+
+test('a space whose oldest pending fact is more than a day old catches up: the end of its latest run makes the next, with no other fact; back within the day, as before', { skip }, async () => {
+  const h = await boot();
+  const s = await pinnedSpace(h, 'catch-up', 'local');
+  // Twenty-five sessions thirty hours old, and five of the last hour: two runs' worth, the space behind.
+  const old = await settledSessions(h, s, 25, 30 * 60);
+  await settledSessions(h, s, 5, 60);
+  const first = madeRun(await consider(h, s, hintOf([old.at(-1)!])), 'a fact of a space behind makes the run');
+  assert.equal(first.catchUp, 'active', 'made in catch-up');
+  const row = await runRowOf(h, first.taskId);
+  assert.deepEqual([row.catchUp, row.localEndpoint], ['active', true], 'the row keeps how the run was made: in catch-up, on a local endpoint');
+  const descriptionOf = async (taskId: string) => (await maintenanceTasks(h, s)).find((one) => one.id === taskId)!.description;
+  assert.match(await descriptionOf(first.taskId),
+    /The space is catching up: its oldest fact the wiki has not taken in is more than a day old\. This run writes no document/u);
+
+  // While it runs it is told so, and its own events, as any fact, wait for it. It ends with the twenty oldest taken
+  // in: five sessions thirty hours old still wait, so the space is still behind, and the run's end — no other new
+  // fact — makes the next run.
+  const ended1 = await runToItsEnd(h, s, first, 'succeeded', async (run, context) => {
+    assert.equal(context.catchUp, 'active', 'the run is told: it writes no document and proposes no change to the plan');
+    assert.deepEqual(await consider(h, s, hintOf([run])), { made: false, spaceId: s.spaceId, why: 'unfinished' });
+  });
+  const second = madeRun(await consider(h, s, hintOf([ended1])), 'the end of the latest run makes the next');
+  assert.equal(second.catchUp, 'active');
+  assert.notEqual(second.taskId, first.taskId);
+
+  // The second takes in the rest: the oldest pending fact is within the day, and the space is behind no more. Its end
+  // is no fact — named by its session or its task — and a new fact is asked by the rules as they were: not due.
+  const ended2 = await runToItsEnd(h, s, second, 'succeeded');
+  assert.deepEqual(await consider(h, s, hintOf([ended2], [second.taskId])), { made: false, spaceId: s.spaceId, why: 'no_new_fact' },
+    'a run\'s own end makes nothing once the space has caught up');
+  assert.deepEqual(await consider(h, s, hintOf([await newFact(h, s, 5)])), { made: false, spaceId: s.spaceId, why: 'not_due' });
+  // Twenty more sessions: due by the backlog, as before — a run made with no catch-up, which writes its documents.
+  const backlog = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold, 10);
+  const third = madeRun(await consider(h, s, hintOf([backlog[0]!])), 'the backlog makes a run');
+  assert.deepEqual([third.catchUp, third.due], [null, 'backlog']);
+  assert.equal((await runRowOf(h, third.taskId)).catchUp, null);
+  assert.doesNotMatch(await descriptionOf(third.taskId), /catching up/u);
+});
+
+test('in catch-up a run on a local endpoint, or one that failed, is not counted against the day; a public provider\'s run that succeeded is', { skip }, async () => {
+  const h = await boot();
+  // Which endpoints are local: the provider's base URL, and a vendor preset never.
+  const judge = await account(h, 'endpoint-judge');
+  const at = async (shape: { baseUrl?: string; presetSlug?: string | null }) =>
+    wikiMaintenanceProviderIsLocal(h.prisma as unknown as PrismaService, judge.id, await hostedModel(h, judge.id, shape));
+  assert.equal(await at({ baseUrl: 'http://127.0.0.1:8000' }), true, 'this machine');
+  assert.equal(await at({ baseUrl: 'http://10.0.0.5:8000/v1' }), true, 'a private network');
+  assert.equal(await at({ baseUrl: 'https://llm.example.com/anthropic' }), false, 'a public host');
+  assert.equal(await at({ baseUrl: 'http://127.0.0.1:9999', presetSlug: 'anthropic' }), false, 'a vendor preset is its vendor\'s API, wherever it points');
+  for (const none of ['claude', `missing-${randomUUID().slice(0, 6)}`]) {
+    assert.equal(await wikiMaintenanceProviderIsLocal(h.prisma as unknown as PrismaService, judge.id, none), false, `${none} is no local endpoint`);
+  }
+
+  // A local endpoint, one run a day: in catch-up its runs are not counted, and the second is made all the same.
+  const local = await pinnedSpace(h, 'catch-up-local', 'local', { dailyRunLimit: 1 });
+  await settledSessions(h, local, 25, 30 * 60);
+  const l1 = madeRun(await consider(h, local, hintOf([await newFact(h, local, 5)])), 'the first run');
+  assert.equal((await today(h, local)).used, 0, 'a run on a local endpoint in catch-up is not counted');
+  const l2 = madeRun(await consider(h, local, hintOf([await runToItsEnd(h, local, l1, 'succeeded')])), 'its end makes the next, the day\'s one run notwithstanding');
+  assert.deepEqual([l2.catchUp, (await runRowOf(h, l2.taskId)).localEndpoint], ['active', true]);
+  assert.deepEqual([(await today(h, local)).used, (await health(h, local)).dailyLimitReached], [0, false]);
+  assert.equal(await runsOf(h, local), 2, 'two runs made today, against a limit of one');
+
+  // A public provider, one run a day: a failed run is not counted, so its end makes the next; the next succeeds and is
+  // counted, and its end is held by the day's limit though the space is still behind.
+  const hosted = await pinnedSpace(h, 'catch-up-hosted', 'public', { dailyRunLimit: 1 });
+  await settledSessions(h, hosted, 45, 30 * 60);
+  const p1 = madeRun(await consider(h, hosted, hintOf([await newFact(h, hosted, 5)])), 'the first run');
+  assert.deepEqual([p1.catchUp, (await runRowOf(h, p1.taskId)).localEndpoint], ['active', false]);
+  assert.equal((await today(h, hosted)).used, 1, 'a run on a public provider is counted while it may yet succeed');
+  const p2 = madeRun(await consider(h, hosted, hintOf([await runToItsEnd(h, hosted, p1, 'failed')])), 'a failed run is not counted: its end makes the next');
+  assert.equal(p2.catchUp, 'active');
+  const ended = await runToItsEnd(h, hosted, p2, 'succeeded');
+  assert.equal((await today(h, hosted)).used, 1, 'the one that succeeded is counted, and only it');
+  assert.deepEqual(await consider(h, hosted, hintOf([ended])), { made: false, spaceId: hosted.spaceId, why: 'daily_limit_reached' },
+    'its end would make the next, but the day is used up');
+  assert.equal((await cursorRow(h, hosted)).held_reason, 'daily_limit_reached');
+  assert.equal((await health(h, hosted)).dailyLimitReached, true);
+});
+
+test('catch-up pauses after three failed runs in a row — the day\'s limit holds again and a run\'s end makes nothing — and goes on after the next success', { skip }, async () => {
+  const h = await boot();
+  const s = await pinnedSpace(h, 'catch-up-pause', 'local', { dailyRunLimit: 1 });
+  await settledSessions(h, s, 25, 30 * 60);
+  // Three runs fail in a row, each made by the end of the one before: none counted against the day.
+  let made = madeRun(await consider(h, s, hintOf([await newFact(h, s, 5)])), 'the first run');
+  for (let n = 1; n <= 3; n += 1) {
+    assert.equal(made.catchUp, 'active', `run ${n} is made in catch-up`);
+    const ended = await runToItsEnd(h, s, made, 'failed');
+    if (n < 3) made = madeRun(await consider(h, s, hintOf([ended])), `run ${n}'s end makes run ${n + 1}`);
+    else assert.deepEqual(await consider(h, s, hintOf([ended])), { made: false, spaceId: s.spaceId, why: 'no_new_fact' },
+      'the third failure in a row pauses catch-up: a run\'s end is no fact');
+  }
+  assert.equal((await today(h, s)).used, 0, 'the three failed runs in catch-up were not counted');
+  assert.equal((await cursorRow(h, s)).consecutive_failures, 3);
+
+  // Paused: a new fact makes the next run, counted against the day — a local endpoint's included — and still behind,
+  // it is told so and writes no document. It fails too, and its end makes nothing.
+  const fourth = madeRun(await consider(h, s, hintOf([await newFact(h, s, 4)])), 'a new fact while paused');
+  assert.deepEqual([fourth.catchUp, (await runRowOf(h, fourth.taskId)).catchUp], ['paused', 'paused']);
+  assert.equal((await today(h, s)).used, 1, 'a run made while catch-up is paused is counted');
+  const fourthEnded = await runToItsEnd(h, s, fourth, 'failed', async (_run, context) => {
+    assert.equal(context.catchUp, 'paused', 'still behind: it writes no document either');
+  });
+  assert.deepEqual(await consider(h, s, hintOf([fourthEnded])), { made: false, spaceId: s.spaceId, why: 'no_new_fact' }, 'still paused');
+  // The day's one run is spent: the next fact is held, and the health says so.
+  assert.deepEqual(await consider(h, s, hintOf([await newFact(h, s, 3)])), { made: false, spaceId: s.spaceId, why: 'daily_limit_reached' });
+  assert.equal((await health(h, s)).dailyLimitReached, true, 'paused, the day\'s limit holds again');
+
+  // The owner raises the limit; a fact makes a run, which succeeds: catch-up goes on, and its end — named by its
+  // task — makes the next, on the local endpoint, the day's two runs spent notwithstanding.
+  expectStatus(await call(h, { bearer: s.owner.bearer }, 'PATCH', `/wiki/spaces/${s.spaceId}`, { maintenance: { dailyRunLimit: 2 } }), 200, 'raise the limit');
+  const fifth = madeRun(await consider(h, s, hintOf([await newFact(h, s, 2.5)])), 'a fact under the raised limit');
+  assert.equal(fifth.catchUp, 'paused');
+  await runToItsEnd(h, s, fifth, 'succeeded');
+  assert.equal((await today(h, s)).remaining, 0, 'two runs counted today, against a limit of two');
+  const sixth = madeRun(await consider(h, s, hintOf([], [fifth.taskId])), 'a success ends the pause: its end makes the next');
+  assert.equal(sixth.catchUp, 'active');
+  assert.equal((await health(h, s)).dailyLimitReached, false, 'in catch-up on a local endpoint the day holds no run back');
+});
+
+test('a run made while the space is behind is told so; the first run after it has caught up is told every section the entries changed meanwhile', { skip }, async () => {
+  const h = await boot();
+  const s = await plannedSpace(h, 'catch-up-docs');
+  await confirm(h, s, s.version);
+  const [build] = await builds(h, s.spaceId);
+  const plan = (await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`)).body.confirmed;
+  const keyOf = (slug: string, title: string): string =>
+    plan.docs.find((d: { slug: string }) => d.slug === slug).sections.find((x: { title: string }) => x.title === title).key;
+  const convention = keyOf('runner-ops', '宿主上跑测试');
+  const pitfall = keyOf('runner-ops', '数据库的坑');
+  const flow = keyOf('plan-flow', '怎么起草');
+  const decision = keyOf('plan-flow', '为什么先有 plan');
+  const writer = await runSession(h, s, build.task_id!);
+  for (const [slug, sections] of [
+    ['runner-ops', [writtenSection(convention, 'c1', '全量测试在 runner 宿主上跑'), writtenSection(pitfall, 'p1', '长迁移会被打断')]],
+    ['plan-flow', [writtenSection(flow, 'f1', '起草分四步'), writtenSection(decision, 'd1', '先有 plan 再写文档')]],
+  ] as const) {
+    expectStatus(await call(h, { runner: s.machine.token, session: writer }, 'POST', `/runner/wiki/spaces/${s.spaceId}/docs/${slug}`, {
+      planVersion: s.version, repoSha: 'b'.repeat(40), model: 'qwen3.8-27b-fp8', sections,
+    }), 200, `the build writes ${slug}`);
+  }
+  expectStatus(await call(h, { runner: s.machine.token, session: writer }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/job/finish`, {
+    outcome: 'succeeded', version: s.version,
+  }), 200, 'the build is done');
+  await h.sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1`, [build.task_id]);
+  await taskEnded(h, s, [build.task_id!]);
+
+  // The space falls behind: twenty-five sessions thirty hours old.
+  await settledSessions(h, s, 25, 30 * 60);
+  const cite = await turn(h, await session(h, s.owner.id, { workspaceId: s.workspaceId, lastTurnAt: minutesAgo(31 * 60) }), 'the record the runs cite');
+  // A run in catch-up, told so, that records one entry.
+  const recording = (entry: Record<string, unknown>, ref: string, recorded: string[]) => async (run: string, context: Answer['body']) => {
+    assert.equal(context.catchUp, 'active', 'a run made while the space is behind is told so: it writes no document');
+    const [op] = await proposeAsRun(h, s, run, [{ op: 'add', entry, sources: [{ kind: 'turn', ref }] }]);
+    assert.equal(op!.status, 'applied', `the space's mode applies it: ${JSON.stringify(op)}`);
+    recorded.push(op!.entryId);
+  };
+  const recorded: string[] = [];
+  // Two runs in catch-up: the first writes the pitfall, and its end makes the second, which writes the decision. (Facts
+  // are read in the order of their times: what arrives after the runs must be newer than what they covered.)
+  const first = madeRun(await consider(h, s, hintOf([await newFact(h, s, 40)])), 'a run in catch-up');
+  const ended1 = await runToItsEnd(h, s, first, 'succeeded', recording({ kind: 'pitfall', title: 'statement_timeout 打断长迁移',
+    summary: '生产库 statement_timeout 30 秒，长迁移要先 SET。',
+    fields: { trigger: { paths: ['docker-compose.yml'], commands: [] }, symptom: '迁移被取消', cause: 'statement_timeout 30s', fix: 'SET statement_timeout=0' } },
+  cite, recorded));
+  const second = madeRun(await consider(h, s, hintOf([ended1])), 'its end makes the next');
+  assert.equal(second.catchUp, 'active');
+  await runToItsEnd(h, s, second, 'succeeded', recording({ kind: 'decision', title: '文档先有 plan', summary: 'owner 定：先起草 plan，确认后逐节写。',
+    fields: { context: '文章不连贯', decision: '先有 plan', alternatives: [{ option: '按主题拼接', whyRejected: '不连贯' }], consequences: '多一步确认', decidedAt: '2026-09-28' } },
+  s.projectTurnId, recorded));
+  const [timeout, decided] = recorded;
+
+  // Caught up, a run made by the backlog as before is told nothing of catch-up, and the read of what to write lists
+  // every section the entries of both runs changed — measured from each section's own writing — and nothing else.
+  const backlog = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold, 10);
+  const caughtUp = madeRun(await consider(h, s, hintOf([backlog[0]!])), 'the backlog after catching up makes a run');
+  assert.equal(caughtUp.catchUp, null);
+  const run = await runSession(h, s, caughtUp.taskId);
+  const context = await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/run`);
+  assert.equal(context.body.catchUp, null, 'it writes the documents');
+  const affected = await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs`);
+  expectStatus(affected, 200, 'the run asks what to write again');
+  const listed = (affected.body.sections as Array<{ doc: string; key: string; stale: boolean; entryIds: string[] }>)
+    .map((one) => [`${one.doc}#${one.key}`, one.stale, one.entryIds.map(toUuid)]);
+  assert.deepEqual(listed, [
+    [`runner-ops#${pitfall}`, false, [toUuid(timeout!)]],
+    [`plan-flow#${decision}`, false, [toUuid(decided!)]],
+  ], 'the sections both catch-up runs\' entries fit, at once; not the convention, not the design document\'s');
 });

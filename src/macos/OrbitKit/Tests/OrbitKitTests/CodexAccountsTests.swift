@@ -3,7 +3,7 @@ import XCTest
 
 /// A runner's Codex accounts as this client reads them: the heartbeat's accounts and per-account
 /// quota, which one a new session starts on, and the picker rows under Codex. Mirrors shared
-/// `planUsage.spec.ts` (roomiestCodexAccount) and web's `sessionProviderChoices.test.ts`.
+/// `planUsage.spec.ts` (codexAccountToStartOn) and web's `sessionProviderChoices.test.ts`.
 final class CodexAccountsTests: XCTestCase {
     private let decoder = JSONDecoder()
     private let now = ISO8601DateFormatter().date(from: "2026-08-03T13:00:00Z")!
@@ -26,40 +26,69 @@ final class CodexAccountsTests: XCTestCase {
             accounts: proUsed.map { [pro: PlanUsageSnapshot(provider: "codex", primary: win($0, 10080, proReset ?? later))] })
     }
 
-    func testPassesOverASpentAccountAndRanksTheRestByTheirTightestWindow() {
-        XCTAssertEqual(CodexAccounts.roomiest(both, usage: usage(100, 18, 70), now: now), pro)
-        XCTAssertEqual(CodexAccounts.roomiest(both, usage: usage(5, 18, 0), now: now), pro)
-        XCTAssertEqual(CodexAccounts.roomiest(both, usage: usage(5, 18, 40), now: now), "default")
-        XCTAssertEqual(CodexAccounts.roomiest(both, usage: usage(18, 18, 18), now: now), "default", "a tie goes to Default")
+    func testSpendsTheQuotaThatResetsSoonestFirstSoNoneOfItGoesUnused() {
+        // Pro's week ends in two days, Default's in six: Pro, though it has used more of it.
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(5, 18, 40, proReset: "2026-08-05T13:00:00Z"), now: now), pro)
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(5, 18, 40, proReset: "2026-08-10T00:00:00Z"), now: now), "default")
     }
 
-    func testRanksAnUnreadAccountLastButTakesItOverASpentOne() {
-        XCTAssertEqual(CodexAccounts.roomiest(both, usage: usage(90, 18, nil), now: now), "default")
-        XCTAssertEqual(CodexAccounts.roomiest(both, usage: usage(100, 18, nil), now: now), pro)
+    func testTakesAnAccountNearlySpentLastHoweverSoonItResets() {
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(5, 18, 92, proReset: "2026-08-05T13:00:00Z"), now: now), "default")
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(95, 18, 40), now: now), pro)
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(100, 18, 92), now: now), pro, "last still beats spent")
+    }
+
+    func testAQuotaExpiresWhenItsLongestWindowResets() {
+        let inTwoHours = "2026-08-03T15:00:00Z", inThreeDays = "2026-08-06T13:00:00Z"
+        func at(_ iso: String) -> Double { ISO8601DateFormatter().date(from: iso)!.timeIntervalSince1970 }
+        let claude = PlanUsageSnapshot(provider: "claude", fiveHour: PlanUsageWindow(utilization: 40, resetsAt: inTwoHours),
+                                       sevenDay: PlanUsageWindow(utilization: 10, resetsAt: inThreeDays))
+        XCTAssertEqual(CodexAccounts.expiresAt(claude, now: now), at(inThreeDays))
+        let codex = PlanUsageSnapshot(provider: "codex", primary: win(40, 300, inTwoHours), secondary: win(10, 10080, inThreeDays))
+        XCTAssertEqual(CodexAccounts.expiresAt(codex, now: now), at(inThreeDays))
+        // The week it describes is over, so the 5 hours are what is left to go by.
+        let lapsedWeek = PlanUsageSnapshot(provider: "claude", fiveHour: PlanUsageWindow(utilization: 40, resetsAt: inTwoHours),
+                                           sevenDay: PlanUsageWindow(utilization: 10, resetsAt: "2026-08-03T12:00:00Z"))
+        XCTAssertEqual(CodexAccounts.expiresAt(lapsedWeek, now: now), at(inTwoHours))
+        let noReset = PlanUsageSnapshot(provider: "claude", fiveHour: PlanUsageWindow(utilization: 40, resetsAt: nil))
+        XCTAssertEqual(CodexAccounts.expiresAt(noReset, now: now), .infinity)
+    }
+
+    func testPassesOverASpentAccountAndOnEqualExpiryRanksTheRestByTheirTightestWindow() {
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(100, 18, 70), now: now), pro)
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(5, 18, 0), now: now), pro)
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(5, 18, 40), now: now), "default")
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(18, 18, 18), now: now), "default", "a tie goes to Default")
+    }
+
+    func testRanksAnUnreadAccountAfterOnesWithRoomButTakesItOverASpentOne() {
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(80, 18, nil), now: now), "default")
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(90, 18, nil), now: now), pro, "ahead of one nearly spent")
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(100, 18, nil), now: now), pro)
     }
 
     func testNeverPicksASignedOutAccount() {
-        XCTAssertEqual(CodexAccounts.roomiest([account("default"), account(pro, "no")], usage: usage(90, 18, 0), now: now), "default")
-        XCTAssertNil(CodexAccounts.roomiest([account("default", "no"), account(pro, "no")], usage: usage(0, 0, 0), now: now))
+        XCTAssertEqual(CodexAccounts.toStartOn([account("default"), account(pro, "no")], usage: usage(90, 18, 0), now: now), "default")
+        XCTAssertNil(CodexAccounts.toStartOn([account("default", "no"), account(pro, "no")], usage: usage(0, 0, 0), now: now))
     }
 
     func testWithEveryAccountSpentStartsWhereTheFirstWindowFreesUp() {
-        XCTAssertEqual(CodexAccounts.roomiest(both, usage: usage(100, 18, 100), now: now), "default")
-        XCTAssertEqual(CodexAccounts.roomiest(both, usage: usage(100, 18, 100, proReset: "2026-08-03T14:00:00Z"), now: now), pro)
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(100, 18, 100), now: now), "default")
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: usage(100, 18, 100, proReset: "2026-08-03T14:00:00Z"), now: now), pro)
     }
 
     func testASpentWindowWithNoResetIsSpentAndOnePastItsResetIsNot() {
         let noReset = PlanUsageSnapshot(provider: "codex", primary: win(100, 300, nil),
                                         accounts: [pro: PlanUsageSnapshot(provider: "codex", primary: win(60, 10080, later))])
-        XCTAssertEqual(CodexAccounts.roomiest(both, usage: noReset, now: now), pro)
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: noReset, now: now), pro)
         let lapsed = PlanUsageSnapshot(provider: "codex", primary: win(100, 300, "2026-08-03T12:00:00Z"))
-        XCTAssertEqual(CodexAccounts.roomiest(both, usage: lapsed, now: now), "default")
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: lapsed, now: now), "default")
     }
 
     func testHasNothingToChooseWithFewerThanTwoAccounts() {
-        XCTAssertNil(CodexAccounts.roomiest([account("default")], usage: usage(100, 18, nil), now: now))
-        XCTAssertNil(CodexAccounts.roomiest([], usage: nil, now: now))
-        XCTAssertNil(CodexAccounts.roomiest(nil, usage: nil, now: now))
+        XCTAssertNil(CodexAccounts.toStartOn([account("default")], usage: usage(100, 18, nil), now: now))
+        XCTAssertNil(CodexAccounts.toStartOn([], usage: nil, now: now))
+        XCTAssertNil(CodexAccounts.toStartOn(nil, usage: nil, now: now))
     }
 
     func testEachAccountHasItsOwnQuotaAndNoAccountAnothers() {
@@ -164,5 +193,87 @@ final class CodexAccountsTests: XCTestCase {
         XCTAssertNil(SessionProviderChoices.choices(configured: [], engines: single).first { $0.slug == "codex" }?.accounts)
         let signedOut = [RunnerEngineHealth(engine: "codex", installed: true, auth: "no", accounts: both)]
         XCTAssertNil(SessionProviderChoices.choices(configured: [], engines: signedOut).first { $0.slug == "codex" }?.accounts)
+    }
+
+    // MARK: Claude accounts, the same way
+
+    private func claudeUsage(defaultFive: Double, defaultWeek: Double, workWeek: Double) -> PlanUsageSnapshot {
+        PlanUsageSnapshot(
+            provider: "claude",
+            fiveHour: PlanUsageWindow(utilization: defaultFive, resetsAt: later),
+            sevenDay: PlanUsageWindow(utilization: defaultWeek, resetsAt: later),
+            accounts: [pro: PlanUsageSnapshot(provider: "claude",
+                                              fiveHour: PlanUsageWindow(utilization: 19, resetsAt: later),
+                                              sevenDay: PlanUsageWindow(utilization: workWeek, resetsAt: later))])
+    }
+
+    func testAClaudeLoginIsRankedByTheWindowThatStopsIt() {
+        // Default's 5-hour window reads 0% but its weekly one is spent: the other account has room.
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: claudeUsage(defaultFive: 0, defaultWeek: 100, workWeek: 28), now: now), pro)
+        XCTAssertEqual(CodexAccounts.toStartOn(both, usage: claudeUsage(defaultFive: 0, defaultWeek: 10, workWeek: 28), now: now), "default")
+    }
+
+    func testThePickerListsClaudeAccountsUnderClaudeByTheirTightestWindow() {
+        let engines = [
+            RunnerEngineHealth(engine: "claude", installed: true, auth: "yes", accounts: [
+                account("default"), account(pro, name: "jianghailong.rd"),
+            ]),
+        ]
+        let planUsage = try? decoder.decode(PlanUsage.self, from: Data("""
+        {"claude": {"provider": "claude",
+                    "fiveHour": {"utilization": 0, "resetsAt": "\(later)"},
+                    "sevenDay": {"utilization": 100, "resetsAt": "\(later)"},
+                    "accounts": {"\(pro)": {"provider": "claude", "fiveHour": {"utilization": 19}, "sevenDay": {"utilization": 28}}}}}
+        """.utf8))
+        XCTAssertNotNil(planUsage)
+        let choices = SessionProviderChoices.choices(configured: [], engines: engines, planUsage: planUsage)
+        XCTAssertEqual(choices.first { $0.slug == "claude" }?.accounts, [
+            AccountChoice(id: "default", label: "Default", quota: "Weekly 100%", nearLimit: true),
+            AccountChoice(id: pro, label: "jianghailong.rd", quota: "Weekly 28%"),
+        ])
+        XCTAssertEqual(SessionProviderChoices.compactWindowLabel("5-hour limit"), "5h")
+        XCTAssertEqual(SessionProviderChoices.compactWindowLabel("Weekly · Opus"), "Weekly Opus")
+        XCTAssertEqual(SessionProviderChoices.compactWindowLabel("5h limit"), "5h")
+    }
+
+    func testClaudeAutomaticIsDecidedByTheWorkspacesClaudePickAndEnv() throws {
+        func agent(_ json: String) throws -> Agent {
+            try decoder.decode(Agent.self, from: Data(#"{"id":"w","name":"orbit"\#(json)}"#.utf8))
+        }
+        XCTAssertTrue(CodexAccounts.automaticOffered(engine: "claude", agent: try agent(""), accounts: both))
+        // Its Codex pick says nothing about its Claude sessions, and the reverse.
+        XCTAssertTrue(CodexAccounts.automaticOffered(engine: "claude", agent: try agent(#","codexAccount":"default""#), accounts: both))
+        XCTAssertFalse(CodexAccounts.automaticOffered(engine: "claude", agent: try agent(#","claudeAccount":"default""#), accounts: both))
+        XCTAssertTrue(CodexAccounts.automaticOffered(engine: "codex", agent: try agent(#","claudeAccount":"default""#), accounts: both))
+        XCTAssertFalse(CodexAccounts.automaticOffered(engine: "claude", agent: try agent(#","env":{"CLAUDE_CONFIG_DIR":"/srv/claude"}"#), accounts: both))
+        XCTAssertFalse(CodexAccounts.automaticOffered(engine: "claude", agent: try agent(#","env":{"ANTHROPIC_API_KEY":"sk-ant-test"}"#), accounts: both))
+        XCTAssertTrue(CodexAccounts.automaticOffered(engine: "claude", agent: try agent(#","env":{"CODEX_HOME":"/srv/codex"}"#), accounts: both))
+        // Asked of what a session's detail carries of its workspace.
+        XCTAssertFalse(CodexAccounts.automaticOffered(engine: "claude", pick: nil, env: ["CLAUDE_CODE_OAUTH_TOKEN": "t"], accounts: both))
+        XCTAssertTrue(CodexAccounts.automaticOffered(engine: "claude", pick: nil, env: nil, accounts: both))
+    }
+
+    func testTheSessionDetailCarriesItsClaudeAccountAndWhetherEachAccountWasPicked() throws {
+        let session = try decoder.decode(Session.self, from: Data("""
+        {"id": "s", "status": "AWAITING_INPUT", "provider": "claude",
+         "codexAccount": null, "codexAccountPinned": false,
+         "claudeAccount": "1fda3f43", "claudeAccountPinned": true,
+         "agent": {"id": "w", "name": "orbit", "claudeAccount": null, "env": {"RUST_LOG": "warn"}}}
+        """.utf8))
+        XCTAssertEqual(session.claudeAccount, pro)
+        XCTAssertEqual(session.claudeAccountPinned, true)
+        XCTAssertEqual(session.codexAccountPinned, false)
+        XCTAssertEqual(session.agent?.env?["RUST_LOG"], "warn")
+    }
+
+    func testTheCreateRequestSendsAClaudeAccountOnlyWhenOneWasPicked() throws {
+        let encoder = JSONEncoder()
+        let picked = try JSONSerialization.jsonObject(with: encoder.encode(
+            CreateSessionRequest(prompt: "hi", agentId: "w", provider: "claude", claudeAccount: pro))) as? [String: Any]
+        XCTAssertEqual(picked?["claudeAccount"] as? String, pro)
+        XCTAssertNil(picked?["codexAccount"])
+        let move = try JSONSerialization.jsonObject(with: encoder.encode(
+            SessionAccountRequest(account: CodexAccounts.automaticID))) as? [String: Any]
+        XCTAssertEqual(move as? [String: String], ["account": "automatic"])
     }
 }

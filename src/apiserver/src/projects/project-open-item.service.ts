@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
   Injectable,
   Logger,
   NotFoundException,
@@ -40,7 +41,9 @@ import {
   openItemActions,
   openItemFacts,
   openItemMessage,
+  openItemOwed,
   openItemTurnId,
+  openItemsNoLongerOwed,
   ownerAnswerMessage,
   ownerAnswerTurnId,
   questionDetailLine,
@@ -48,6 +51,15 @@ import {
 } from './project-open-item';
 import { escalatesAt } from './open-item-escalation.service';
 import { canonicalJson } from './canonical-json';
+import { RetryableLandingFailureClass, queueLandingRetry } from './project-integration-job';
+import {
+  INTEGRATION_RETRY_COORDINATOR_ONLY,
+  INTEGRATION_RETRY_NOT_APPLICABLE,
+  INTEGRATION_RETRY_NOT_THIS_PROJECT,
+  INTEGRATION_RETRY_REASON_REQUIRED,
+  MAX_INTEGRATION_RETRY_REASON,
+  decideIntegrationRetry,
+} from './project-integration-retry';
 import { FusePausedPayload, fusePausedDetailLine } from './project-fuse';
 import {
   START_REQUEST_COORDINATOR_ONLY,
@@ -190,6 +202,22 @@ export interface OpenItemResolved {
   itemId: string;
   state: 'RESOLVED';
   resolution: 'HANDLED' | 'WITHDRAWN';
+}
+
+/** A failed landing the coordinator ran again (§2.3 J-T1b), as `integration_retry` answers it. */
+export interface IntegrationRetried {
+  taskId: string;
+  /** The generation this rerun queued, and the branch it will land. */
+  jobId: string;
+  generation: number;
+  sourceRef: string;
+  /** The failed generation it reruns, and what that one failed of. */
+  retryOfJobId: string;
+  failureClass: RetryableLandingFailureClass;
+  reason: string;
+  /** The coordinator's open items about the failed landing, now SUPERSEDED (RETRIED) with the
+   *  reason on them. Empty when none was open — it may already have been closed by hand. */
+  supersededItemIds: string[];
 }
 
 /** The project's open exceptions, split by who is expected to act (§4.8), and the coordinator's
@@ -997,6 +1025,164 @@ export class ProjectOpenItemService {
   }
 
   /**
+   * The project's coordinator runs one of its failed landings again (`integration_retry`, §2.3
+   * J-T1b) — the next generation of a DONE task's LAND_TASK, for a landing that stopped at a red check,
+   * a check that ran out of time, or an integration error.
+   *
+   * WHY A REASON IS REQUIRED. Rerunning the same commits against the same checks is the cheapest way
+   * to make a red go away without anybody deciding it was not the delivery's, which is the silent
+   * retry the platform refuses to make (J5). So the caller says why this run will come out
+   * differently — the merge check's baseline was repaired, the failure was the machinery's, the check
+   * ran out of time — and the sentence is kept on the generation it queued and on every item it
+   * supersedes.
+   *
+   * WHO MAY ASK. The conversation the project is coordinated from, read at this moment, and nothing
+   * else on this door: a task's own run does not decide what happens to its landing, and a coordinator
+   * of another project does not decide this one's. The account owner's say is the item: a failure
+   * whose item is theirs is refused here (`decideIntegrationRetry` says how each case reads).
+   *
+   * WHAT IT WRITES. One transaction under the task row (FOR NO KEY UPDATE, the lock the DONE
+   * transaction holds): the decision over the facts read under it, then exactly one new LAND_TASK
+   * generation (`queueLandingRetry`) carrying what it reruns, why and who asked, then the
+   * coordinator's open items about the failed landing SUPERSEDED with resolution RETRIED and the
+   * reason. A second call while that generation is queued or running is refused — the lock orders two
+   * concurrent ones, and J3's index would refuse the second row anyway. What happens next is the
+   * line's: a landing resolves what is open about it and continues to the project branch's merge check
+   * (§3.4), and a failure opens its own item, classified, for whoever the project routes it to.
+   */
+  async retryIntegration(
+    ownerId: string,
+    projectId: string,
+    taskId: string,
+    given: { reason?: string },
+    actingSessionId: string | undefined,
+  ): Promise<IntegrationRetried> {
+    const reason = typeof given?.reason === 'string' ? given.reason.trim() : '';
+    if (!reason) {
+      throw new BadRequestException({
+        code: INTEGRATION_RETRY_REASON_REQUIRED,
+        message:
+          'a reason is required: say why running this landing again will come out differently. A '
+          + 'rerun nobody explained is the silent retry the platform refuses to make.',
+      });
+    }
+    if (reason.length > MAX_INTEGRATION_RETRY_REASON) {
+      throw new BadRequestException({
+        code: INTEGRATION_RETRY_REASON_REQUIRED,
+        message: `a reason is at most ${MAX_INTEGRATION_RETRY_REASON} characters`,
+      });
+    }
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, ownerId },
+      select: { coordinatorSessionId: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+    const asking = actingSessionId?.trim();
+    const coordinatorOnly = (): ForbiddenException => new ForbiddenException({
+      code: INTEGRATION_RETRY_COORDINATOR_ONLY,
+      message:
+        'only the conversation this project is coordinated from may run one of its landings again. '
+        + 'A task\'s own run does not decide what happens to its landing, and the account owner\'s say '
+        + 'is the item about it.',
+    });
+    if (!asking || asking !== project.coordinatorSessionId) throw coordinatorOnly();
+    const task = await this.prisma.task.findFirst({
+      where: { id: taskId, ownerId },
+      select: { projectId: true },
+    });
+    if (!task) throw new NotFoundException('task not found');
+    if (task.projectId !== projectId) {
+      throw new ForbiddenException({
+        code: INTEGRATION_RETRY_NOT_THIS_PROJECT,
+        message:
+          'this task is not filed under this project, and a project\'s coordinator runs only its own '
+          + 'project\'s landings again. The task\'s own project, and its coordinator, decide this one.',
+      });
+    }
+
+    return withTransactionRetry(this.prisma, async (tx) => {
+      const [locked] = await tx.$queryRaw<Array<{ status: string }>>(Prisma.sql`
+        SELECT "status"::text AS "status" FROM "task"
+         WHERE "id" = ${taskId}::uuid AND "owner_id" = ${ownerId}::uuid
+           AND "project_id" = ${projectId}::uuid
+         FOR NO KEY UPDATE`);
+      if (!locked) throw new NotFoundException('task not found in this project');
+      // Read again under the lock: the pointer can rotate, and the switch can move, while the call
+      // was on its way here.
+      const current = await tx.project.findUniqueOrThrow({
+        where: { id: projectId },
+        select: { coordinatorEnabled: true, coordinatorSessionId: true },
+      });
+      if (current.coordinatorSessionId !== asking) throw coordinatorOnly();
+      const newestLanding = await tx.projectIntegrationJob.findFirst({
+        where: { taskId, kind: 'LAND_TASK' },
+        orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+        select: { id: true, generation: true, state: true, checks: true },
+      });
+      const openItems = await tx.projectOpenItem.findMany({
+        where: { projectId, taskId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
+        select: { id: true, kind: true, assignee: true, assigneeReason: true },
+        orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
+      });
+      const ownerBlockers = await tx.projectBlocker.findMany({
+        where: { projectId, subjectType: 'TASK', subjectId: taskId, owner: 'USER', resolvedAt: null },
+        select: { id: true, kind: true },
+      });
+      const decision = decideIntegrationRetry({
+        coordinatorEnabled: current.coordinatorEnabled,
+        taskStatus: locked.status,
+        newestLanding,
+        openItems,
+        ownerBlockers,
+      });
+      if (!decision.ok) throw new HttpException(decision.body, decision.status);
+
+      const queued = await queueLandingRetry(tx, {
+        ownerId,
+        projectId,
+        taskId,
+        retry: {
+          ofJobId: decision.retryOfJobId,
+          failureClass: decision.failureClass,
+          reason,
+          requestedBySessionId: asking,
+        },
+      });
+      if (!queued) {
+        throw new ConflictException({
+          code: INTEGRATION_RETRY_NOT_APPLICABLE,
+          message:
+            'the landing could not be queued: the task has no work branch to hand the line, or the '
+            + 'project no longer integrates on a branch of its own.',
+        });
+      }
+      if (decision.supersede.length > 0) {
+        await tx.projectOpenItem.updateMany({
+          where: { id: { in: decision.supersede }, state: 'OPEN' },
+          data: {
+            state: 'SUPERSEDED',
+            resolution: 'RETRIED',
+            resolvedAt: new Date(),
+            resolvedBy: 'COORDINATOR',
+            resolvedBySessionId: asking,
+            resolutionNote: reason,
+          },
+        });
+      }
+      return {
+        taskId,
+        jobId: queued.jobId,
+        generation: queued.generation,
+        sourceRef: queued.sourceRef,
+        retryOfJobId: decision.retryOfJobId,
+        failureClass: decision.failureClass,
+        reason,
+        supersededItemIds: decision.supersede,
+      };
+    }, loggedRetry(this.logger, 'projectOpenItem.retryIntegration'));
+  }
+
+  /**
    * Tell the project's current coordinator what the owner answered (§5.2 R10, R11).
    *
    * Keyed by the question AND the conversation, which is what makes a rotation safe: every
@@ -1202,7 +1388,8 @@ export class ProjectOpenItemService {
   /**
    * The project's open exceptions, in the two groups a reader acts on (§4.8): what waits for the
    * owner, and what the coordinator is handling. Both oldest first, which is the order somebody
-   * catching up wants them in.
+   * catching up wants them in. Only what is still owed (`openItemOwed`): an item about a candidate or
+   * a task that has moved on is in front of nobody, whether or not anything has closed it yet.
    */
   async list(ownerId: string, projectId: string): Promise<ProjectOpenItems> {
     const project = await this.prisma.project.findFirst({
@@ -1229,7 +1416,7 @@ export class ProjectOpenItemService {
     const askable = project.coordinatorSessionId != null
       && project.coordinatorSession != null
       && !sessionHasEnded(project.coordinatorSession);
-    const rows = await this.prisma.projectOpenItem.findMany({
+    const open = await this.prisma.projectOpenItem.findMany({
       where: { projectId, state: 'OPEN' },
       orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
       select: {
@@ -1255,6 +1442,8 @@ export class ProjectOpenItemService {
         },
       },
     });
+    const settled = await openItemsNoLongerOwed(this.prisma, open.map((row) => row.id));
+    const rows = open.filter((row) => !settled.has(row.id));
     const keys = rows.flatMap((row) => row.deliveries);
     // When each of the coordinator's items goes to the owner, as the clock decides it (§4.6): a
     // conversation still carrying one moves that moment on, so it is read here rather than taken
@@ -1446,25 +1635,27 @@ export class ProjectOpenItemService {
     return carried > 0;
   }
 
-  /** An item nobody's coordinator can read is the owner's (§4.4 X-D6). */
+  /**
+   * An item nobody's coordinator can read is the owner's (§4.4 X-D6) — while it is still owed
+   * (`openItemOwed`). One about a candidate or a task that has moved on is nobody's: it stays where it
+   * is, and the escalation tick's backstop closes it.
+   */
   private async handToOwner(
     itemId: string,
     assignedAt: Date,
     reason: Extract<OpenItemAssigneeReason, 'NO_COORDINATOR' | 'COORDINATOR_ENDED'>,
   ): Promise<void> {
-    const handed = await this.prisma.projectOpenItem.updateMany({
-      where: { id: itemId, state: 'OPEN', assignee: 'COORDINATOR', assignedAt },
-      data: {
-        assignee: 'OWNER',
-        assigneeReason: reason,
-        assignedAt: new Date(),
-        escalateAt: null,
-      },
-    });
+    const handed = await this.prisma.$executeRaw(Prisma.sql`
+      UPDATE "project_open_item" item
+         SET "assignee" = 'OWNER', "assignee_reason" = ${reason}, "assigned_at" = now(),
+             "escalate_at" = NULL, "updated_at" = now()
+       WHERE item."id" = ${itemId}::uuid AND item."state" = 'OPEN' AND item."assignee" = 'COORDINATOR'
+         AND item."assigned_at" = ${assignedAt.toISOString()}::timestamptz
+         AND ${openItemOwed('item')}`);
     // Only on the edge this call made: the compare-and-set above is what decides whether this
     // process is the one that handed the item over, and a second announcement of the same
     // handover is a second banner about one waiting thing.
-    if (handed.count > 0) void this.push?.notifyOwnerItem(itemId);
+    if (handed > 0) void this.push?.notifyOwnerItem(itemId);
   }
 
   /** Every entry point here runs after somebody else's commit, so none of them may cost it. */

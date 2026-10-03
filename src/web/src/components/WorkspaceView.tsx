@@ -1,3 +1,4 @@
+import { type MergeRecoveryAction } from '@orbit/shared';
 import {
   ArrowDownOutlined,
   ArrowLeftOutlined,
@@ -27,6 +28,7 @@ import {
   PlusOutlined,
   PushpinFilled,
   PushpinOutlined,
+  RightOutlined,
   SearchOutlined,
   ThunderboltOutlined,
   UndoOutlined,
@@ -38,8 +40,10 @@ import {
   referenceToken,
   type ReferenceMap,
 } from '../lib/composerRefs';
+import { requestPeersLine } from '../lib/sessionRequest';
 import { settleThinking } from '../lib/thinkingDraft';
 import {
+  NEAR_BOTTOM,
   READER_INPUT_GRACE_MS,
   TAIL_SAMPLE_ZERO,
   pinnedToTail,
@@ -107,6 +111,7 @@ import {
   projectMergedPromotionsQuery,
   projectOpenItemsQuery,
   projectPromotionQuery,
+  sessionCreatedTasksQuery,
   watchesQuery,
 } from '../lib/queries';
 import { SEARCH_HINT, openSessionSearch } from './SessionSearch';
@@ -128,6 +133,7 @@ import {
   livePinnedModel,
   modelOptionsForProvider,
   newSessionEffortForProvider,
+  newSessionModelForProvider,
   normalizeEffortForProvider,
   providerIdentityResolved,
   runtimeForProvider,
@@ -171,7 +177,15 @@ import { BackgroundWakeCard } from './BackgroundWakeCard';
 import { OpenItemDeliveryCard } from './OpenItemDeliveryCard';
 import { OrbitLinkCardsProvider } from './OrbitLinkCard';
 import { ProjectStartedCard } from './ProjectStartedCard';
-import { parseWatchWake, watchingCountWord, watchingWord } from '../lib/watches';
+import { SessionMessageCard } from './SessionMessageCard';
+import {
+  parseWatchWake,
+  sessionWatching,
+  watchingCountWord,
+  watchingSessions,
+  watchingWord,
+  type SessionWatching,
+} from '../lib/watches';
 import { parseBackgroundWake } from '../lib/backgroundWake';
 import { returnsToComposer } from '../lib/queuedTurnRestore';
 import type { BgShell } from '../lib/backgroundShells';
@@ -192,6 +206,7 @@ import {
   cancelQueuedTurn,
   adoptSessionBranch,
   commitSession,
+  createMergeRepairSession,
   createInteractiveSession,
   decideApproval,
   deleteSession,
@@ -212,6 +227,7 @@ import {
   getSessionEventPageAfter,
   getSessionEventPageAround,
   getSessionRetryMessage,
+  resendSessionRetryMessage,
   type TranscriptAroundPage,
   renameSession,
   restoreSession,
@@ -220,6 +236,7 @@ import {
   sessionEventsUrl,
   unpinSession,
   updateSessionConfig,
+  switchSessionAccount,
   uploadAttachment,
 } from '../api';
 import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
@@ -228,6 +245,7 @@ import {
   SessionDecisionStrip,
   decisionRowKey,
   revealCriteriaCard,
+  revealSettlementCard,
   type PendingDecisionRow,
 } from './DecisionRail';
 import {
@@ -236,7 +254,7 @@ import {
   type CriteriaDecisionReply,
 } from './CriteriaDecisionCard';
 import { CoordinatorQuestions } from './CoordinatorQuestionCard';
-import { ItemAsCard, exceptionCardRows } from './ProjectProgressStatus';
+import { ItemAsCard, exceptionCardRows, isOwnerExceptionCard } from './ProjectProgressStatus';
 import {
   ProjectPromotion,
   ProjectPromotionCard,
@@ -255,12 +273,19 @@ import {
   sendEvidenceDecision,
 } from './EvidenceDecisionCard';
 import {
-  ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER,
   ACCEPTANCE_PLAN_CHANGE_PREFIX,
   AcceptanceConfirmationReceipt,
   SessionAcceptanceConfirmationCard,
   acceptancePlanChangeContext,
+  acceptancePlanChangePlaceholder,
+  type SettlementPlanChat,
 } from './AcceptanceConfirmationCard';
+import {
+  READY_TO_START,
+  START_PROJECT_INTENT,
+  confirmedChangesProjectKey,
+  type SettlementQuestion,
+} from '../lib/projectStart';
 import { SessionProjectSettlementCard } from './ProjectSettlementCard';
 import {
   OWNER_SEND_BACK_LABEL,
@@ -284,22 +309,24 @@ import { PlanUsageIndicator } from './PlanUsageIndicator';
 import type {
   OpenItemDeliveryCard as OpenItemDelivery,
   ProjectStartedCard as ProjectStarted,
+  SessionMessageCard as SessionMessage,
   SessionTurnIntent,
   SessionTurnPlacement,
   WatchView,
 } from '@orbit/shared';
 import {
   accountOfEnv,
+  accountToStartOn,
   AgentProvider,
   derivePermissionSemantics,
   fastModeAvailable,
   MAX_PROMPT_CHARS,
   permissionModeAvailableOnRunner,
-  roomiestCodexAccount,
   TRASH_RETENTION_DAYS,
+  type AccountEngine,
 } from '@orbit/shared';
 import { lastTypedUserMessage } from '../lib/deliveredMessage';
-import { planUsageRows } from '../lib/planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
 import { tagChipLabels } from '../lib/tagColor';
@@ -423,6 +450,9 @@ export interface QueuedTurn {
   openItemDelivery?: OpenItemDelivery;
   /** The same for the message telling a coordinator its project was started (`ProjectStartedCard`). */
   projectStarted?: ProjectStarted;
+  /** Another Orbit session's message, and who sent it (`ActiveSessionTurn.sessionMessage`): drawn as
+   *  the "From [that session]" card its echo will be, and never handed back to the reader's composer. */
+  sessionMessage?: SessionMessage;
   /** The control plane wrote this turn itself, so nobody typed it (`ActiveSessionTurn.authoredByOrbit`). */
   authoredByOrbit?: true;
 }
@@ -532,6 +562,14 @@ const MODE_OPTIONS = Object.keys(MODE_TO_PERMISSION);
 const IS_MAC =
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
 const NEW_SESSION_HINT = IS_MAC ? '⌘N' : 'Ctrl N';
+/** A runner that carries a session's conversation onto another of its accounts (runner
+ *  codex_account_move.go, claude_account_move.go) — the one kind the composer offers the move on. */
+const ACCOUNT_MOVE_CAPABILITY: Record<AccountEngine, string> = {
+  codex: 'codex-account-move/v1',
+  claude: 'claude-account-move/v1',
+};
+/** What the composer sends to put a session back on Automatic (PATCH /sessions/:id/account). */
+const AUTOMATIC_ACCOUNT = 'automatic';
 
 // 94_000 → "94k", 1_000_000 → "1M". Compact token count for the context gauge.
 const fmtTokens = (n: number): string =>
@@ -687,6 +725,9 @@ const SESSION_COL_MIN = 200;
 const SESSION_COL_MAX = 560;
 const SESSION_COL_DEFAULT = 320;
 
+// Whether the session list's Pinned section is folded to its heading, persisted across reloads.
+const PINNED_COLLAPSED_KEY = 'orbit.sessionPinnedCollapsed';
+
 // Delay the SSE (re)connect on a session switch so holding the arrow keys to scrub
 // the list doesn't open-then-immediately-close a connection per session skipped past.
 const SWITCH_DEBOUNCE_MS = 150;
@@ -715,6 +756,11 @@ const LOAD_OLDER_AT = 400;
 // deepest session in this deployment, so it bounds a runaway without being a working limit. A
 // session deeper than that keeps the control, and a second press carries on from where it left.
 const JUMP_TO_START_PAGES = 30;
+// How long a pinned transcript's tail has to sit out of view, with no content update in between,
+// before the jump-to-bottom button offers it anyway (`stranded`; the clients' ConsoleView waits the
+// same). The follow a content update triggers lands just after the rows grew, and the gap read in
+// between — the normal state while a reply streams — must not flash the button.
+const STRANDED_AFTER_MS = 400;
 // What the sticky bar calls a turn the person typed. A watch's wake carries its own label on its card
 // instead (`data-sticky-label`), since saying this above a card reading "not typed by you" is the
 // screen contradicting itself — which is what the account owner photographed on 2026-09-17.
@@ -842,11 +888,11 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
 // surface its current state — the tool in flight, that it's blocked on you, or a bare
 // "Running…" — so the row never collapses to just a title with no sign of progress.
 // Otherwise it's the flattened last reply, falling back to the run's own state word.
-// `tone` drives the colour: blue = working, amber = needs you, grey = queued or a
-// left-up background process, default = reply content.
+// `tone` drives the colour: blue = working, amber = needs you, grey = queued, a left-up
+// background process or a watch that will resume it, default = reply content.
 type SessionLine = {
   text: string;
-  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background';
+  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching';
 };
 // The line for a message of YOURS the workspace hasn't answered yet. Prefixed, because the preview
 // line is otherwise the workspace's voice: unmarked, a message you sent and a reply to it read
@@ -893,18 +939,24 @@ const ownerItemWord = (s: any): string | null => {
 
 // What a row that is waiting on you says. The server names the kind when everything it counted is
 // one kind with words of its own (`waitingKind`), and the row says it: an OWNER_CONFIRMED task's run
-// in the confirmation card's words, and one of the four owner items in the words the bar and the
-// card share — a row reading "Waiting for approval" over an escalated exception describes the one
-// thing that is certainly not happening. Anything else waiting on you keeps the approval wording.
+// in the confirmation card's words, one of the four owner items in the words the bar and the card
+// share — a row reading "Waiting for approval" over an escalated exception describes the one thing
+// that is certainly not happening — and a project waiting to be started, "Ready to start". Anything
+// else waiting on you keeps the approval wording.
 // Only the words change — the row still carries no button: the one place to answer is the card in
 // the session.
 const waitingLabel = (s: any): string => {
   if (s.waitingKind === 'OWNER_CONFIRMATION') return WAITING_FOR_CONFIRMATION;
   if (s.waitingKind === 'OWNER_ITEM') return ownerItemWord(s) ?? 'Waiting for approval';
+  // A project its coordinator asked to start: the row says what the card in it asks, not an
+  // approval nobody is being asked for.
+  if (s.waitingKind === 'START_REQUEST') return READY_TO_START;
   return 'Waiting for approval';
 };
 
-export const sessionLine = (s: any, live: boolean): SessionLine => {
+// `watching` is this session as an observer — what its row says about the live watches that will
+// resume it (lib/watches `watchingSessions`) — and absent wherever a caller holds no watches.
+export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | null): SessionLine => {
   const state = sessionRunStateOf(s);
   // Somebody is waiting on YOU here, which outranks everything else the row could say: every other
   // line reports what the workspace is doing, and this one is the only one you can act on.
@@ -942,8 +994,12 @@ export const sessionLine = (s: any, live: boolean): SessionLine => {
   // parent at AWAITING_INPUT while it runs, so this (not the RUNNING branch) is what usually
   // surfaces "Running Agent…".
   const parked = live ? parkedWorkLabel(s) : null;
-  if (parked)
-    return { text: `${parked.text}…`, tone: parked.kind === 'subagent' ? 'running' : 'background' };
+  if (parked?.kind === 'subagent') return { text: `${parked.text}…`, tone: 'running' };
+  // Parked on a live watch that will resume it: not idle, not waiting on you, and — whatever else it
+  // left running — not a background process (contract §9.2). Said in the strip's own line, so the row
+  // and the strip above its composer read the same.
+  if (live && watching && state === 'AWAITING_INPUT') return { text: watching.line, tone: 'watching' };
+  if (parked) return { text: `${parked.text}…`, tone: 'background' };
   // A message that never got an answer — the turn was interrupted, or failed, before any reply
   // landed — outranks the previous turn's reply: it's the newer of the two, and it's what the
   // session is left waiting on. The server only keeps lastUserText while it stands unanswered.
@@ -1007,6 +1063,17 @@ export function SessionTitleRow({ session: s, hoverTipOpen = false }: { session:
       <CoordinatorBadge projectId={s.projectId} />
     </div>
   );
+}
+
+/**
+ * Who this row is waiting on for a reply, and who is waiting on it (session requests, contract §6):
+ * "Waiting on Worker 2 · Owes a reply to Coordinator". Read off the row's own `awaitingReplyFrom` /
+ * `owesReplyTo`, which every list read and every live summary carries; nothing when neither is open.
+ */
+export function SessionRequestsLine({ session: s }: { session: any }) {
+  const text = requestPeersLine(s.awaitingReplyFrom, s.owesReplyTo);
+  if (!text) return null;
+  return <div className="session-requests" title={text}>{text}</div>;
 }
 
 /** Compact tag summary for a session-list row. The first tag is the one users can scan; the
@@ -1089,15 +1156,27 @@ export function statusLabel(session: any, watching?: string | null): string {
   return queuedLabel(session); // PENDING
 }
 
+// What a failed session's glyph says — StatusIcon's FAILED tooltips, word for word: the error
+// itself where the header says only "Failed".
+function failedTitle(session: any): string {
+  if (sessionRetryPending(session)) return 'Retrying — the run resumes on its own';
+  const err: string = typeof session.error === 'string' ? session.error : '';
+  if (err.toLowerCase().includes('offline')) return 'Disconnected — runner went offline';
+  return err || 'Failed';
+}
+
 /**
  * The word an Orbit link card says for the session it links to: the header's own, with the watching
- * word a session list row would give it. A preview carries the counts rather than the watch rows, so
+ * word a session list row would give it — except a failure, which says what its glyph says (the
+ * error itself), as the native card does. A preview carries the counts rather than the watch rows, so
  * `watchingCountWord` says what the strip says from what the card was handed.
  *
  * Module-level and not a closure: it is handed to every card of the conversation through the cards
  * context, and a fresh function on every render would re-render every one of them.
  */
-function orbitLinkStateWord(row: any): string {
+export function orbitLinkStateWord(row: any): string {
+  // A decision waiting on the owner still outranks the failure, in the order `statusLabel` keeps.
+  if (sessionRunStateOf(row) === 'FAILED' && !((row?.pendingApprovals ?? 0) > 0)) return failedTitle(row);
   return statusLabel(row, watchingCountWord(row?.watching));
 }
 
@@ -1108,7 +1187,10 @@ function orbitLinkStateWord(row: any): string {
 // connection, not a crash, so it gets the neutral disconnect glyph, not a red X.
 // New payloads carry the authoritative runState. The resolver retains a centralized fallback
 // for old servers whose raw status collapses graceful ends to CANCELLED.
-export function StatusIcon({ session }: { session: any }) {
+//
+// `watching` is the word for the live watches that will resume this session (`statusLabel`'s), and
+// absent wherever a caller holds no watches.
+export function StatusIcon({ session, watching }: { session: any; watching?: string | null }) {
   const state = sessionRunStateOf(session);
   const fontSize = 16;
   // First, and outside the generating gate — see `statusLabel`. The glyph and the label branch in
@@ -1150,6 +1232,16 @@ export function StatusIcon({ session }: { session: any }) {
     // that will end), still while the only thing up is a `service`. Never spinning: the shape and
     // the colour keep meaning "not the agent working", and only the motion says "work is happening
     // here", which is the one claim a left-up process cannot make.
+    //
+    // Parked on a live watch, below a sub-workspace and above a left-up process: a wake is coming,
+    // so neither the reply bubble nor the terminal fits — a watch is not a process (contract §9.2).
+    // The strip's eye, still, because nothing here is running.
+    if (watching && work?.kind !== 'subagent')
+      return (
+        <Tooltip title={watching}>
+          <EyeOutlined style={{ color: 'var(--text-3)', fontSize }} />
+        </Tooltip>
+      );
     if (work)
       return (
         <Tooltip title={work.text}>
@@ -1529,6 +1621,15 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const prevDraftKey = useRef(draftKey);
   const [mode, setMode] = useState('Auto');
   const [model, setModel] = useState(DEFAULT_MODEL);
+  const modelPreferenceMut = useMutation({
+    // Keep rapid picks in order, including across a composer remount.
+    scope: { id: 'model-preferences' },
+    mutationFn: ({ provider, model }: { provider: string; model: string }) =>
+      api('/users/me/preferences', {
+        method: 'PATCH',
+        body: { defaultModels: { [provider]: model } },
+      }),
+  });
   // Runtime catalogs and configured providers arrive asynchronously. Track whether the user has
   // touched Model within the current draft/session context so a late default can fill an untouched
   // picker without overwriting an explicit choice. Context changes deliberately reset dirty.
@@ -1558,6 +1659,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Both are view-local UI state (not persisted) — the same as the native list.
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [groupByTag, setGroupByTag] = useState(false);
+  // The Pinned section folds to its heading, as Notes' Pinned does (and as on iOS). Unlike those two
+  // it is persisted, so a reload doesn't unfold it.
+  const [pinnedCollapsed, setPinnedCollapsed] = useState(
+    () => localStorage.getItem(PINNED_COLLAPSED_KEY) === '1',
+  );
+  const togglePinned = (): void => {
+    const next = !pinnedCollapsed;
+    setPinnedCollapsed(next);
+    localStorage.setItem(PINNED_COLLAPSED_KEY, next ? '1' : '0');
+  };
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null); // session row whose action menu is open
   // Touch swipe actions for session rows: hover has no touch equivalent, so on mobile the row's
   // actions sit behind a swipe instead, laid out like the iOS list (lib/sessionSwipe) — swipe right
@@ -1796,12 +1907,23 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const [stuck, setStuck] = useState<
     { seq: string | null; label: string; text: string; loading?: boolean } | null
   >(null);
+  // The exception cards scrolled wholly above the viewport, by item id and space-joined so an
+  // unchanged answer is no re-render: which way the pinned line's press goes to reach one.
+  const [openItemsAbove, setOpenItemsAbove] = useState('');
   // Smart auto-scroll: only keep pinned to the bottom when the user is already there, so
   // reading history (or jumping to the sticky prompt) isn't yanked back by streaming updates.
   const atBottomRef = useRef(true);
   // Render mirror of atBottomRef: drives the floating "jump to bottom" button, which shows
-  // only while the user has scrolled up off the live tail. (The ref alone can't re-render.)
+  // while the user has scrolled up off the live tail (and while `stranded`). (The ref alone
+  // can't re-render.)
   const [atBottom, setAtBottom] = useState(true);
+  // Pinned, but come to rest with the tail out of view: the button's other reason to show. The pin
+  // lets go on a scroll UP alone (tailPinning.ts), so a tail that left the view any other way — the
+  // last card opened under a reader at the bottom, a link card landing — still reads as at the
+  // bottom. Decided by measure() once that has lasted STRANDED_AFTER_MS, on strandTimerRef, which
+  // stays set until the tail is back in view or a content update restarts the wait.
+  const [stranded, setStranded] = useState(false);
+  const strandTimerRef = useRef<number | undefined>(undefined);
   // Last observed scroll geometry, so the scroll handler can tell a genuine user scroll-up from a
   // programmatic re-pin, a late scroll event fired after streaming grew the container, or the
   // scrollTop the browser clamps when content gets SHORTER (see tailPinning.ts).
@@ -1958,11 +2080,27 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       atBottomRef.current = false;
       if (el.scrollHeight - top - el.clientHeight < LOAD_OLDER_AT) loadNewer();
     }
+    // Whether the tail is out of view, whatever put it there, with the pin's own slack — so the
+    // button and the follow agree on where the end is. Only a pinned transcript is decided here (one
+    // the reader scrolled up shows the button already); the tail back in view ends it at once.
+    if (!atBottomRef.current || sample.bottomGap <= NEAR_BOTTOM) {
+      window.clearTimeout(strandTimerRef.current);
+      strandTimerRef.current = undefined;
+      setStranded(false);
+    } else if (strandTimerRef.current === undefined) {
+      strandTimerRef.current = window.setTimeout(() => setStranded(true), STRANDED_AFTER_MS);
+    }
     setAtBottom(atBottomRef.current); // React bails out when unchanged, so no per-scroll re-render
     setHasMoreOlder(hasMoreOlderRef.current); // same bail-out; drives the way back to the start
     // Near the top with older history still on the server → pull in the next page.
     if (top < LOAD_OLDER_AT) loadOlder();
     const topY = el.getBoundingClientRect().top;
+    setOpenItemsAbove(
+      Array.from(el.querySelectorAll<HTMLElement>('[data-open-item]'))
+        .filter((card) => card.getBoundingClientRect().bottom <= topY + 1)
+        .map((card) => card.getAttribute('data-open-item'))
+        .join(' '),
+    );
     // A turn a watch or the control plane queued is one of these too — it is where the answer under
     // it starts, so it is where the bar has to point — but it is no bubble and nobody typed it, so
     // its card hands over what to call it (`data-sticky-label` / `data-sticky-text`). Its queued
@@ -2130,6 +2268,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         (detail.mergeStatus === 'pending' || detail.commitStatus === 'pending')
       )
         return 3000;
+      const repairState = detail?.mergeRepairSession?.runState
+        ?? detail?.mergeRepairSession?.runStatus
+        ?? detail?.mergeRepairSession?.status;
+      if (['PENDING', 'QUEUED', 'RUNNING'].includes(String(repairState).toUpperCase())) return 3000;
       // A deep-linked/Completed ENDING row may already be absent from the Open list. Keep polling
       // its own current detail until terminal instead of relying solely on selectedFromList.
       return shouldPollSessionDetail(selectedId, detail, selectedFromList) ? 5000 : false;
@@ -2187,6 +2329,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         ? watchingWord(watchesForHeaderQ.data as WatchView[], selectedId)
         : null,
     [watchesForHeaderQ.data, selectedId],
+  );
+  // The same read for every row of the list: what each session a watch will resume says about the
+  // wait, so a row, the header and the strip cannot disagree about it either.
+  const watchingBySession = useMemo(
+    () => watchingSessions(Array.isArray(watchesForHeaderQ.data) ? (watchesForHeaderQ.data as WatchView[]) : []),
+    [watchesForHeaderQ.data],
   );
   // The project this conversation coordinates, if any — see projectBackLink. Read the merged row
   // so a fresh detail can enrich (or correct) the compact list snapshot during rolling upgrades.
@@ -2250,8 +2398,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             sessionId: operation.id,
             sessionTitle: operation.title,
             event: 'merge-result',
-            headline: `Merged into ${target}`,
-            tone: 'success',
+            headline: d.mergeRecovery?.code === 'LOCAL_SYNC_PENDING' ? `Merged into origin/${target}; local sync pending` : `Merged into ${target}`,
+            detail: d.mergeRecovery?.code === 'LOCAL_SYNC_PENDING' ? d.mergeError ?? 'Sync the local checkout from the recovery panel.' : undefined,
+            tone: d.mergeRecovery?.code === 'LOCAL_SYNC_PENDING' ? 'warning' : 'success',
             icon: 'check',
           });
         } else if (status === 'conflict') {
@@ -2418,8 +2567,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           }))
         : sessionTimeSections(visibleSessions, {
             pinnedFirst: view === 'open' && !tagFilter,
-          }).map((s) => ({ key: s.title, tag: null as SessionTagRef | null, ...s })),
-    [visibleSessions, groupByTag, view, tagFilter],
+          }).map((s) => ({
+            key: s.title,
+            tag: null as SessionTagRef | null,
+            ...s,
+            // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
+            sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
+          })),
+    [visibleSessions, groupByTag, view, tagFilter, pinnedCollapsed],
   );
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
@@ -2569,14 +2724,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // deprecated alias of the same derived value, still served for older native builds.
   const pickedProvider: string =
     draftProvider ?? pickedWorkspace?.lastProvider ?? pickedWorkspace?.provider ?? 'claude';
-  // The Codex account picked for the draft on the New Session hero, scoped to its workspace like the
-  // provider pick. Without one a new session runs on its workspace's account (Workspace.codexAccount).
+  // The Codex or Claude account picked for the draft on the New Session hero, scoped to its workspace
+  // like the provider pick. Without one a new session starts where Automatic or its workspace says.
   const [draftAccountPick, setDraftAccountPick] = useState<{
     workspaceId?: string;
+    engine: string;
     account: string;
   } | null>(null);
-  const draftCodexAccount =
-    draftAccountPick && draftAccountPick.workspaceId === workspaceId ? draftAccountPick.account : null;
+  const draftPickHere = draftAccountPick && draftAccountPick.workspaceId === workspaceId ? draftAccountPick : null;
+  const draftCodexAccount = draftPickHere?.engine === 'codex' ? draftPickHere.account : null;
+  const draftClaudeAccount = draftPickHere?.engine === 'claude' ? draftPickHere.account : null;
 
   // A provider switch made on an ENDED session, scoped to that session for the same reason the
   // draft pick is scoped to its workspace. There is nothing to PATCH while a session is ended, so
@@ -2584,6 +2741,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const [endedProviderPick, setEndedProviderPick] = useState<{
     sessionId: string;
     provider: string;
+    /** The account of the engine `provider` moves it onto, picked under it in the Provider menu. */
+    account?: string;
   } | null>(null);
   // Gated on `live` rather than cleared: once the resume lands the session is live and carries
   // the new provider itself, so the pick simply stops applying — and a later switch through the
@@ -2592,6 +2751,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     selected && !live && endedProviderPick?.sessionId === selected.id
       ? endedProviderPick?.provider
       : null;
+  const pendingResumeAccount = pendingResumeProvider ? (endedProviderPick?.account ?? null) : null;
   // The provider this composer talks to: a live session's own, an ended session's pending pick,
   // else the one picked for the draft. Declared here (not next to its other consumers) because
   // the `/` autocomplete memo below needs it.
@@ -2695,8 +2855,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   }, [selected?.id, live]);
 
   const pickedModelDefault = pickedWorkspace
-    ? defaultModelForProvider(
+    ? newSessionModelForProvider(
         pickedProvider,
+        me.data?.preferences?.defaultModels,
         runner.modelCatalog,
         configuredProviders,
         runner.runtimeDefaultModels,
@@ -2794,7 +2955,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // provider, it binds the session being drafted and rewrites no workspace setting.
   const pickDraftAccount = (slug: string, account: string | null): void => {
     if (slug !== pickedProvider) pickDraftProvider(slug);
-    setDraftAccountPick(account === null ? null : { workspaceId, account });
+    setDraftAccountPick(account === null ? null : { workspaceId, engine: slug, account });
   };
 
   // The provider is part of the draft's seed context: picking a different one has to re-seed
@@ -2889,22 +3050,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   useEffect(() => {
     if (selectedId) return;
     const provider = pickedProvider;
-    // A picked provider owns its own model space, so its default model — not the workspace's, which
-    // belongs to the provider being switched away from — is what the effort must be legal for.
-    const selectedModel = draftProvider
-      ? defaultModelForProvider(provider, runner.modelCatalog, configuredProviders)
-      : (livePinnedModel(
-          pickedWorkspace?.model,
-          provider,
-          runner.modelCatalog,
-          configuredProviders,
-          runner.runtimeDefaultModels,
-        ) ?? defaultModelForProvider(provider, runner.modelCatalog, configuredProviders));
     const seed = newSessionEffortForProvider(
       provider,
       me.data?.preferences?.defaultEffort,
       pickedWorkspace?.effort,
-      selectedModel,
+      pickedModelDefault,
       runner.modelCatalog,
       configuredProviders,
     );
@@ -2915,8 +3065,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     selectedId,
     effortContextKey,
     pickedProvider,
-    draftProvider,
-    pickedWorkspace?.model,
+    pickedModelDefault,
     pickedWorkspace?.effort,
     me.data?.preferences?.defaultEffort,
     runner.modelCatalog,
@@ -3132,6 +3281,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     atBottomRef.current = true; // a freshly opened/switched session starts pinned to the latest
     lastSampleRef.current = TAIL_SAMPLE_ZERO;
     setAtBottom(true); // hide the jump-to-bottom button until the new session reports otherwise
+    window.clearTimeout(strandTimerRef.current); // nor is it stranded off a tail not yet drawn
+    strandTimerRef.current = undefined;
+    setStranded(false);
     // Reset tail-first lazy-loading state for the session being opened.
     prependAnchorRef.current = null;
     loadingOlderRef.current = null;
@@ -3218,6 +3370,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               // this row paints is the card the runner's echo will replace it with.
               ...(row.openItemDelivery ? { openItemDelivery: row.openItemDelivery } : {}),
               ...(row.projectStarted ? { projectStarted: row.projectStarted } : {}),
+              // …and another session's message, drawn "From [that session]" rather than as the
+              // reader's own bubble while its echo is on the way.
+              ...(row.sessionMessage ? { sessionMessage: row.sessionMessage } : {}),
             }))
             .filter(
               (turn) => !acceptedUserTurnLanded(turn, selectedId, accRef.current),
@@ -3806,7 +3961,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         await seed;
         if (closed) return;
         // A window opened at a record waits for the reader to reach the tail (joinLiveRef).
-        if (newerCursorRef.current === null) connect();
+        // The reader may have joined already while this startup was debounced.
+        if (newerCursorRef.current === null && !es) connect();
         // Last, deliberately: the tray it feeds sits below the fold and nothing else waits on it,
         // whereas the scan behind it is the most expensive read on this path. Issuing it here
         // rather than alongside the seed keeps it from competing for the connection — and, on the
@@ -3892,6 +4048,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     const el = scrollRef.current;
     if (!el) return;
     if (atBottomRef.current) el.scrollTo({ top: el.scrollHeight });
+    // A content update restarts the wait for a stranded tail (see `stranded`): the follow just above
+    // closes the gap the new rows opened, and a gap read before it landed must not count.
+    window.clearTimeout(strandTimerRef.current);
+    strandTimerRef.current = undefined;
     measure(); // content grew — the in-view prompt may have just scrolled off the top
   }, [
     transcriptEvents,
@@ -3951,6 +4111,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       if (atBottomRef.current) el.scrollTo({ top: el.scrollHeight });
     });
     ro.observe(el);
+    // Content growing INSIDE the scroller — the last card opened under a reader at the bottom, a link
+    // card landing — neither resizes nor scrolls it, so the tail could leave the view with nothing
+    // re-measuring. Its rows are watched for that, to measure only: whether to follow stays the
+    // content-change effect's call, and following here would pull an opened card out from under the
+    // reader.
+    const rows = new ResizeObserver(() => measure());
+    for (const row of el.children) rows.observe(row);
+    const rowsAddedOrGone = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const row of record.addedNodes) if (row instanceof Element) rows.observe(row);
+        for (const row of record.removedNodes) if (row instanceof Element) rows.unobserve(row);
+      }
+    });
+    rowsAddedOrGone.observe(el, { childList: true });
     // Screenshots load after their <img> lays out at zero height, so the content grows *below*
     // the tail without an events change. `load` doesn't bubble but fires in the capture phase,
     // so one listener on the scroller catches every image and re-pins.
@@ -3964,6 +4138,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       for (const type of readerEvents) el.removeEventListener(type, onReaderInput);
       el.removeEventListener('load', onLoad, { capture: true });
       ro.disconnect();
+      rows.disconnect();
+      rowsAddedOrGone.disconnect();
     };
   }, [selectedId, measure]);
 
@@ -4018,8 +4194,10 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       )
       .map((a) => a.id),
   );
-  // The card that owns the ⌘/Ctrl+Enter shortcut is the first one the key could actually reach.
-  const activeApprovalId = approvals.find((a) => answerableApprovalIds.has(a.id))?.id;
+  // Questions submit only through their button, so they must not hold Enter against a later create.
+  const activeApprovalId = approvals.find(
+    (a) => a.toolName !== 'AskUserQuestion' && answerableApprovalIds.has(a.id),
+  )?.id;
   // The same read the pinned strip and the evidence card are drawn from — the same query key, so
   // this shares their cached read and adds no request.
   const pendingDecisions = useQuery({
@@ -4052,6 +4230,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const acceptanceConfirmation = useQuery({
     ...acceptanceConfirmationQuery(coordinatedProjectId ?? ''),
     enabled: Boolean(coordinatedProjectId) && !selectedTrashed,
+  });
+  // What a re-confirmation pressed in this window changed — "1 new, 1 stricter" — which only the
+  // change card knew at the press (`confirmedChangesProjectKey`). Never fetched: once a set is confirmed
+  // nothing is left changed, so there is nothing to ask the server for, and a receipt drawn
+  // without it says the seal and the count.
+  const confirmedChanges = useQuery({
+    queryKey: confirmedChangesProjectKey(coordinatedProjectId ?? ''),
+    queryFn: (): string | null => null,
+    enabled: false,
+    staleTime: Infinity,
+    gcTime: Infinity,
   });
 
   // The merges this project has already made, for the record each one leaves where it happened
@@ -4199,7 +4388,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               anchor,
               moment: confirmation.confirmedAt,
               key: `acceptance-receipt:${confirmation.confirmedAt}`,
-              element: <AcceptanceConfirmationReceipt confirmation={confirmation} />,
+              element: (
+                <AcceptanceConfirmationReceipt
+                  confirmation={confirmation}
+                  changed={confirmedChanges.data ?? null}
+                />
+              ),
             }];
       }),
       // And the merges this project has made, each at the moment it made it. The strip draws only
@@ -4226,6 +4420,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     ],
     [
       acceptanceConfirmation.data,
+      confirmedChanges.data,
       criteriaDecisions.data,
       criteriaReplies,
       mergedPromotions.data,
@@ -4261,6 +4456,28 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       }),
     [coordinatedProjectId, openItems.data, openItems.dataUpdatedAt, transcriptEvents],
   );
+
+  // Which of those cards the owner answers by pressing — an exception that became theirs, the pause
+  // only they can lift — for the pinned line to point at: drawn among the messages rather than at the
+  // foot, one of these that scrolled away had nothing pointing at it, while the phone's bar did (the
+  // account owner's report, 2026-10-02). The rows the inserts above draw and no others, so a press
+  // always has a card to arrive at.
+  const ownerExceptionRows = useMemo(
+    () =>
+      coordinatedProjectId
+        ? exceptionCardRows(openItems.data, transcriptEvents)
+          .filter(({ row, anchor }) => anchor !== null && isOwnerExceptionCard(row))
+          .map(({ row }) => row)
+        : [],
+    [coordinatedProjectId, openItems.data, transcriptEvents],
+  );
+  // Which side of the reader each sits on is measured on scroll, and a card can arrive or go on its
+  // read's own clock without the conversation moving — so a change in which cards there are is a
+  // reason to measure again.
+  const ownerExceptionIds = ownerExceptionRows.map((row) => row.itemId).join(' ');
+  useEffect(() => {
+    measure();
+  }, [ownerExceptionIds, measure]);
 
   // The candidate a check blocked, drawn at the moment it was blocked instead of at the bottom of
   // this pane — where it sat, under every later message, for as long as the block stood, and in a
@@ -4314,16 +4531,47 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // delivered and put down are the card's own state, so the strip is told rather than left to work
   // out a second answer. Kept with the conversation it was reported in, because this view outlives
   // navigation and the conversation just left must not answer for the next one.
-  const [openSettlementIn, setOpenSettlementIn] = useState<string | null>(null);
+  const [openSettlementIn, setOpenSettlementIn] = useState<{
+    sessionId: string;
+    question: SettlementQuestion;
+  } | null>(null);
   const reportSettlementQuestion = useCallback(
-    (open: boolean) => {
+    (question: SettlementQuestion | null) => {
       if (!selectedId) return;
       setOpenSettlementIn((current) =>
-        open ? selectedId : current === selectedId ? null : current,
+        question
+          ? { sessionId: selectedId, question }
+          : current?.sessionId === selectedId ? null : current,
       );
     },
     [selectedId],
   );
+  // Arriving from the project page's "Review" on a request to start (`?intent=start-project`): once
+  // this conversation's start card is on screen it is scrolled to and marked, as the pinned strip's
+  // press does, and the intent goes, so a refresh does not scroll there again.
+  const startIntent = Boolean(selectedId) && searchParams.get('intent') === START_PROJECT_INTENT;
+  const startCardShown = openSettlementIn?.sessionId === selectedId && openSettlementIn?.question === 'START';
+  useEffect(() => {
+    if (!startIntent || !startCardShown || !revealSettlementCard()) return;
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.delete('intent');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [startIntent, startCardShown, setSearchParams]);
+  // The start card's "View tasks": the tasks this conversation filed are the strip above the
+  // composer, so it is opened there rather than navigating away from the card being read. The same
+  // read the strip is drawn from says whether there is one; without it the card links to the
+  // project instead.
+  const [createdTasksOpenRequest, setCreatedTasksOpenRequest] = useState(0);
+  const viewCreatedTasks = useCallback(() => setCreatedTasksOpenRequest((n) => n + 1), []);
+  const createdTasks = useQuery({
+    ...sessionCreatedTasksQuery(selectedId ?? ''),
+    enabled: Boolean(selectedId) && !selectedTrashed,
+  });
 
   // Allow/deny a pending tool-permission request; optimistically drop it (the
   // approval_resolved SSE also removes it), re-fetching to resync on failure.
@@ -4536,6 +4784,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               effort: wireEffort,
               fastMode,
               ...(pendingResumeProvider ? { provider: pendingResumeProvider } : {}),
+              ...(pendingResumeAccount ? { account: pendingResumeAccount } : {}),
             },
             attachmentIds,
             shell ? 'shell' : undefined,
@@ -4612,8 +4861,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         // Only when it is on. Off is the server's default and the engine's, so saying it is the
         // one way this could disagree with either of them later.
         ...(fastMode ? { fastMode: true } : {}),
-        // Only an explicit pick, as with the provider: none keeps the workspace's account.
+        // Only an explicit pick, as with the provider: none is Automatic, or the workspace's account.
         ...(draftCodexAccount && pickedProvider === 'codex' ? { codexAccount: draftCodexAccount } : {}),
+        ...(draftClaudeAccount && pickedProvider === 'claude' ? { claudeAccount: draftClaudeAccount } : {}),
         attachmentIds,
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
@@ -5258,14 +5508,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // runner merges on its next heartbeat and the outcome lands on sessionDetail.mergeStatus
   // (the status bar polls while pending). Invalidate detail so 'pending' shows immediately.
   const mergeMut = useMutation({
-    mutationFn: (vars: SessionToastTarget & { target?: string }) =>
-      mergeSessionToMain(vars.id, vars.target),
+    mutationFn: (vars: SessionToastTarget & { target?: string; recoveryAction?: MergeRecoveryAction; previewId?: string }) =>
+      mergeSessionToMain(vars.id, vars.target, vars.recoveryAction, vars.previewId),
     onSuccess: (_d, vars) => {
       qc.setQueryData<any>(['session', vars.id], (old: any) =>
         old
           ? { ...old, mergeStatus: 'pending', mergeTarget: vars.target ?? old.mergeTarget, mergeError: null }
           : old,
       );
+      if (vars.recoveryAction === 'preview') {
+        void qc.invalidateQueries({ queryKey: ['session', vars.id] });
+        return;
+      }
       const token = ++pendingOperationSeq.current;
       setPendingSessionOperations((current) => ({
         ...current,
@@ -5282,6 +5536,25 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         detail: e.message,
         tone: 'error',
       }),
+  });
+  const repairRecoveryMut = useMutation({
+    mutationFn: (preparePr: boolean) => {
+      if (!selectedId || !detailForSelected?.mergeRecovery) throw new Error('No repair context');
+      return createMergeRepairSession(selectedId, preparePr);
+    },
+    onSuccess: (session) => {
+      if (selectedId) {
+        qc.setQueryData<any>(['session', selectedId], (old: any) =>
+          old ? { ...old, mergeRepairSession: session } : old,
+        );
+        void qc.invalidateQueries({ queryKey: ['session', selectedId], exact: true });
+      }
+      message.sessionNotice({ sessionId: session.id, sessionTitle: session.title ?? 'Merge repair', event: 'merge-repair',
+        headline: 'Repair session started', detail: 'Opening the repair session.', tone: 'info' });
+      navigate(`/sessions/${encodeId(session.id)}`);
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+    },
+    onError: (e: Error) => message.error(e.message),
   });
   // Resolve a merge conflict in-session: revive the session so its own workspace rebases the branch
   // onto the target that conflicted and fixes the conflicts (it has the context for its own
@@ -5446,6 +5719,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       effort?: string;
       fastMode?: boolean;
       provider?: string;
+      account?: string;
     }) => updateSessionConfig(selected!.id, cfg),
     onMutate: async (cfg) => {
       await qc.cancelQueries({ queryKey: sessionsKey });
@@ -5460,6 +5734,18 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       message.error(e.message);
     },
     onSettled: () => qc.invalidateQueries({ queryKey: ['sessions'] }),
+  });
+  // Move a session to another of its runner's accounts, or back onto Automatic (switchAccount). The
+  // gauge, its popover and the menu read the session's detail, so that is re-read with the list.
+  const accountMut = useMutation({
+    mutationFn: ({ id, account }: { id: string; account: string }) => switchSessionAccount(id, account),
+    onError: (e: Error) => {
+      message.error(e.message);
+    },
+    onSettled: (_result, _error, vars) => {
+      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      void qc.invalidateQueries({ queryKey: ['session', vars.id] });
+    },
   });
 
   // Drag the divider between the session list and the conversation to resize the
@@ -5577,7 +5863,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const readyImages = images.filter((im) => im.status === 'done' && im.id);
 
   function showLocalStatus(): void {
-    const planRow = shownPlanUsage ? planUsageRows(shownPlanUsage)[0] : undefined;
+    const planRow = shownPlanUsage ? bindingPlanUsageRow(currentPlanUsageRows(shownPlanUsage)) : undefined;
     const rows = localStatusRows({
       surface: 'Web',
       runnerName: runner.displayName || runner.name,
@@ -6128,16 +6414,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // change about the plan, with the plan itself carried in front of it. Unlike the three above it
   // answers nothing — the agent has finished writing the criteria and is waiting — so no door is
   // named here. The card stays until then, with its own Start the project still live.
-  const startPlanChangeChat = (plan: {
-    projectId: string;
-    criteriaDigest: string;
-    projectTitle: string;
-    criteria: string[];
-  }): void => {
+  const startPlanChangeChat = (plan: SettlementPlanChat): void => {
     setReplyTo({
       target: { kind: 'planChange', projectId: plan.projectId, criteriaDigest: plan.criteriaDigest },
       banner: ACCEPTANCE_PLAN_CHANGE_PREFIX + plan.projectTitle,
-      placeholder: ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER,
+      // What the composer asks for follows the card that armed it: the start card's "before it
+      // starts", the change card's "about these".
+      placeholder: acceptancePlanChangePlaceholder(plan.question),
       context: acceptancePlanChangeContext(plan),
     });
     setTimeout(() => taRef.current?.focus(), 0);
@@ -6199,43 +6482,73 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     shownPool && (!selectedId || detailForSelected)
       ? sessionPoolAccount(shownPool, selectedId ? shownPoolMemberId : null)
       : null;
-  // Which of the runner's accounts a built-in session spends — for Codex the draft's pick, or the one
-  // picked for the session, else its workspace's; for Claude its workspace's — and Default for an id
-  // this runner does not report, as dispatch resolves it (providers/account.ts accountOnRunner).
-  const accountOnThisRunner = (engine: 'codex' | 'claude', wanted: string | null | undefined): string =>
+  // Which of the runner's accounts a built-in Codex or Claude session spends — the draft's pick, or the
+  // one picked for the session, else its workspace's — and Default for an id this runner does not
+  // report, as dispatch resolves it (providers/account.ts accountOnRunner).
+  const accountOnThisRunner = (engine: AccountEngine, wanted: string | null | undefined): string =>
     wanted && accountsOf(runner, engine).some((account) => account.id === wanted) ? wanted : 'default';
-  // A new session on a workspace that picked no Codex account (and whose env selects no other CODEX_HOME
-  // or key of its own) starts on the runner's account with the most room: the choice the server makes
-  // when it creates the session (automaticCodexAccount), asked here of the same numbers to say which.
+  // Automatic is on offer for an engine where the workspace leaves its account to Orbit: it picked none,
+  // and its env selects no other config directory and no key of its own — with two accounts or more
+  // to choose between. A new session there starts on the runner's account whose quota resets soonest:
+  // the choice the server makes when it creates the session (automaticAccount), asked of the same numbers.
+  const automaticOfferedOn = (
+    engine: AccountEngine,
+    workspace: { env?: Record<string, string> | null; codexAccount?: string | null; claudeAccount?: string | null } | null | undefined,
+  ): boolean =>
+    !(engine === 'claude' ? workspace?.claudeAccount : workspace?.codexAccount) &&
+    accountsOf(runner, engine).length >= 2 &&
+    accountOfEnv(engine, workspace?.env ?? null, accountsOf(runner, engine)) === 'default';
   const codexAccountsHere = accountsOf(runner, 'codex');
-  const codexAutoOffered =
-    !pickedWorkspace?.codexAccount &&
-    codexAccountsHere.length >= 2 &&
-    accountOfEnv('codex', pickedWorkspace?.env ?? null, codexAccountsHere) === 'default';
-  const codexAutoAccount = codexAutoOffered
-    ? roomiestCodexAccount(codexAccountsHere, runner.planUsage, new Date())
+  const codexAutoOffered = automaticOfferedOn('codex', pickedWorkspace);
+  const claudeAutoOffered = automaticOfferedOn('claude', pickedWorkspace);
+  const codexAutoAccount = codexAutoOffered ? accountToStartOn('codex', codexAccountsHere, runner.planUsage, new Date()) : null;
+  const claudeAutoAccount = claudeAutoOffered
+    ? accountToStartOn('claude', accountsOf(runner, 'claude'), runner.planUsage, new Date())
     : null;
+  // Where an ended session's held switch onto `engine` resumes, as the server decides it
+  // (accountOnProviderSwitch): the account it names; else, unless the session is pinned there,
+  // Automatic's pick; else where it already was.
+  const pendingEngineAccount = (engine: AccountEngine): string | null | undefined => {
+    if (pendingResumeAccount && pendingResumeAccount !== AUTOMATIC_ACCOUNT) return pendingResumeAccount;
+    const own = engine === 'claude' ? detailForSelected?.claudeAccount : detailForSelected?.codexAccount;
+    const pinned = engine === 'claude' ? detailForSelected?.claudeAccountPinned : detailForSelected?.codexAccountPinned;
+    if (pinned && pendingResumeAccount !== AUTOMATIC_ACCOUNT) return own;
+    const workspace = workspacesForRunner.find((w) => w.id === selected?.workspace?.id);
+    return automaticOfferedOn(engine, workspace)
+      ? accountToStartOn(engine, accountsOf(runner, engine), runner.planUsage, new Date())
+      : (own ?? (engine === 'claude' ? detailForSelected?.workspace?.claudeAccount : detailForSelected?.workspace?.codexAccount));
+  };
   const shownCodexAccount = accountOnThisRunner(
     'codex',
     selectedId
-      ? (detailForSelected?.codexAccount ?? detailForSelected?.workspace?.codexAccount)
+      ? pendingResumeProvider === 'codex'
+        ? pendingEngineAccount('codex')
+        : (detailForSelected?.codexAccount ?? detailForSelected?.workspace?.codexAccount)
       : (draftCodexAccount ?? pickedWorkspace?.codexAccount ?? codexAutoAccount),
   );
   const shownClaudeAccount = accountOnThisRunner(
     'claude',
-    selectedId ? detailForSelected?.workspace?.claudeAccount : pickedWorkspace?.claudeAccount,
+    selectedId
+      ? pendingResumeProvider === 'claude'
+        ? pendingEngineAccount('claude')
+        : (detailForSelected?.claudeAccount ?? detailForSelected?.workspace?.claudeAccount)
+      : (draftClaudeAccount ?? pickedWorkspace?.claudeAccount ?? claudeAutoAccount),
   );
   const shownAccount =
     shownProvider === 'codex' ? shownCodexAccount : shownProvider === 'claude' ? shownClaudeAccount : 'default';
-  // The Codex account named in the quota gauge's popover, once the runner has more than one to tell apart.
-  const shownCodexAccountRow =
-    shownProvider === 'codex' && codexAccountsHere.length >= 2
-      ? (codexAccountsHere.find((account) => account.id === shownCodexAccount) ?? { id: 'default', name: undefined })
+  // The engine whose account the composer names — built-in Codex or Claude, not an account pool — and the
+  // account it names in the quota gauge's popover, once the runner has more than one to tell apart.
+  const shownAccountEngine: AccountEngine | null =
+    !shownPool && (shownProvider === 'codex' || shownProvider === 'claude') ? shownProvider : null;
+  const shownAccountsHere = shownAccountEngine ? accountsOf(runner, shownAccountEngine) : [];
+  const shownAccountRow =
+    shownAccountsHere.length >= 2
+      ? (shownAccountsHere.find((account) => account.id === shownAccount) ?? { id: 'default', name: undefined })
       : null;
-  const shownCodexAccountLabel = shownCodexAccountRow
-    ? shownCodexAccountRow.id === 'default'
+  const shownAccountLabel = shownAccountRow
+    ? shownAccountRow.id === 'default'
       ? 'Default'
-      : shownCodexAccountRow.name || `Account ${shownCodexAccountRow.id}`
+      : shownAccountRow.name || `Account ${shownAccountRow.id}`
     : null;
   const shownPlanUsage = shownPool
     ? (shownPoolAccount?.member.planUsage ?? null)
@@ -6291,14 +6604,32 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Words only: `retry.attachmentIds` are read off the bubble this page holds, and a page holding
   // no bubble has no files to name — so the fallback re-sends the message's text and nothing else.
   const [retryMessageAskedFor, setRetryMessageAskedFor] = useState<string | null>(null);
-  const serverRetryText =
-    useQuery({
-      queryKey: ['session', selectedId, 'retry-message'],
-      queryFn: () => getSessionRetryMessage(selectedId!),
-      enabled: !!selectedId && retryMessageAskedFor === selectedId,
-    }).data?.text ?? '';
+  const serverRetry = useQuery({
+    queryKey: ['session', selectedId, 'retry-message'],
+    queryFn: () => getSessionRetryMessage(selectedId!),
+    enabled: !!selectedId && retryMessageAskedFor === selectedId,
+  }).data;
+  const serverRetryText = serverRetry?.text ?? '';
   const autoRetryText = retryText || serverRetryText;
+  // Whose words those are. Another Orbit session's are not the reader's to send again: through
+  // `send` they would go out in the owner's name, signed by nobody. So the Retry asks the server to
+  // re-send them as the automatic retry would — that session's, with the request they were, charged
+  // to nobody's hourly limit (docs/session-request-reply-contract.md §2.1). Read off the same bubble
+  // as the words, or off the server's answer when the window held none.
+  const retryFromSession = retryText ? retry.sessionMessage : serverRetry?.sessionMessage;
+  const resendFromSession = useMutation({
+    mutationFn: (sessionId: string) => resendSessionRetryMessage(sessionId),
+    onSuccess: (_answer, sessionId) => qc.invalidateQueries({ queryKey: ['session', sessionId] }),
+    onError: (e: Error) => message.error(e.message || 'Could not re-send that message'),
+  });
+  const resendFromSessionMutate = resendFromSession.mutate;
   const sendMutate = send.mutate;
+  // §2.1, §8 criterion 19: a Retry already in flight is not offered a second time. The server is
+  // idempotent on the failed message, so a second click could not queue a second turn for one — but
+  // the owner's own message goes through the send door, where a second call would be a second turn,
+  // and either way the button must not promise an attempt it is not making. Both cards draw it
+  // disabled from this, and both handlers refuse a re-entry that reaches them anyway.
+  const retryInFlight = send.isPending || resendFromSession.isPending;
   const authErrorHelp: AuthErrorHelp = useMemo(
     () => ({
       provider: shownProvider,
@@ -6306,8 +6637,17 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runnerId: runner.id,
       onRetry:
         retryText && !selectedTrashed && !selectedMissing
-          ? () => sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds })
+          ? retry.sessionMessage && selectedId
+            ? () => {
+                if (retryInFlight) return;
+                resendFromSessionMutate(selectedId);
+              }
+            : () => {
+                if (retryInFlight) return;
+                sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds });
+              }
           : undefined,
+      retryDisabled: retryInFlight,
       retryText,
       // The provider gallery, not a preset vendor: the engine narrows it to a runtime, not to
       // whose key the user actually holds.
@@ -6321,9 +6661,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runner.id,
       retry,
       retryText,
+      retryInFlight,
+      selectedId,
       selectedTrashed,
       selectedMissing,
       sendMutate,
+      resendFromSessionMutate,
       navigate,
     ],
   );
@@ -6372,14 +6715,22 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       attempts: detailForSelected?.retryAttempts ?? 0,
       onRetry:
         autoRetryText && !selectedTrashed && !selectedMissing
-          ? () =>
-              sendMutate({
-                content: autoRetryText,
-                images: [],
-                attachmentIds: retry.attachmentIds,
-                source: 'autoRetry',
-              })
+          ? retryFromSession && selectedId
+            ? () => {
+                if (retryInFlight) return;
+                resendFromSessionMutate(selectedId);
+              }
+            : () => {
+                if (retryInFlight) return;
+                sendMutate({
+                  content: autoRetryText,
+                  images: [],
+                  attachmentIds: retry.attachmentIds,
+                  source: 'autoRetry',
+                });
+              }
           : undefined,
+      retryDisabled: retryInFlight,
       retryText: autoRetryText,
       // The card's own Retry goes through `send`, so its refusal arrives in the same handler as a
       // typed message's. Handed to the card rather than left to the toast: it is the card's offer
@@ -6412,10 +6763,13 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       detailForSelected?.retryAt,
       detailForSelected?.retryAttempts,
       autoRetryText,
+      retryInFlight,
+      retryFromSession,
       runConflict?.conflict,
       selectedTrashed,
       selectedMissing,
       sendMutate,
+      resendFromSessionMutate,
       selected?.id,
       selectedId,
       qc,
@@ -6536,8 +6890,34 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // the session list's scope menu does. Each pick runs what its pill's onChange did. A menu
   // (unlike a Select) also fires for the value already chosen, and re-picking the running provider
   // would PATCH a reload for nothing — so every pick first checks that it changes something.
-  const pickProvider = (v: string): void => {
-    if (v === shownProvider) return;
+  // Another of the runner's accounts for this session, or Automatic: the server stores it — and on a
+  // live session re-spawns the engine there, the runner carrying the conversation across; an ended one
+  // takes it with its next resume. One the CLI says is signed out is a request for its sign-in, as a
+  // provider row in that state is.
+  const pickAccount = (account: string, signedOut: boolean): void => {
+    if (!shownAccountEngine) return;
+    if (signedOut) {
+      navigate(`/providers?runner=${encodeId(runner.id)}&engine=${shownAccountEngine}`);
+      return;
+    }
+    if (!selected) return;
+    // An ended session whose switch onto this engine is still held: nothing on the server is on the
+    // engine yet, so the account rides along with the switch, on the message that revives it.
+    if (pendingResumeProvider && endedProviderPick) {
+      setEndedProviderPick({ ...endedProviderPick, account });
+      return;
+    }
+    // Nothing moves: Automatic picked again, or the account the session is already pinned to.
+    if (account === AUTOMATIC_ACCOUNT ? sessionAutomatic : account === shownAccount && !sessionAutomatic) return;
+    accountMut.mutate({ id: selected.id, account });
+  };
+  // `account`, when the pick was one of the engine's accounts listed under it rather than the engine's
+  // own row: the switch lands the session there (SessionConfigDto.account) — Automatic's pick otherwise.
+  const pickProvider = (v: string, account?: string): void => {
+    if (v === shownProvider) {
+      if (account !== undefined) pickAccount(account, false);
+      return;
+    }
     // A provider this runner can't run isn't a switch — it's a request for the sign-in (or
     // install) that would make it one. Go straight to that engine's row on the Providers page, as
     // the New Session picker's row does — or, for a choice that names its own fix (an account
@@ -6571,6 +6951,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     if (live) {
       configMut.mutate({
         provider: v,
+        ...(account !== undefined ? { account } : {}),
         ...(nextModel !== shownModel ? { model: nextModel } : {}),
         ...(drop ? { permissionMode: 'default' } : {}),
         ...(nextEffort !== currentEffort ? { effort: nextEffort } : {}),
@@ -6580,7 +6961,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     // Ended: hold the pick until the resume carries it, and move the values that depend on it now
     // — marking their seeds dirty, exactly as a manual Model or Mode edit does, so the seeding
     // effect doesn't put the old values back.
-    setEndedProviderPick({ sessionId: selected!.id, provider: v });
+    setEndedProviderPick({ sessionId: selected!.id, provider: v, ...(account !== undefined ? { account } : {}) });
     // A pick that may mean stopping a run is not a settled question any more: whatever the last
     // answer was, it was about the provider before this one.
     setRunConflict(null);
@@ -6598,7 +6979,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
     }
   };
   const pickModel = (v: string): void => {
-    if (v === shownModel) return;
+    // A re-selection is still a preference, even when the session config already matches it.
+    qc.setQueryData<Me>(meQuery().queryKey, (prev) =>
+      prev ? {
+        ...prev,
+        preferences: {
+          ...prev.preferences,
+          defaultModels: { ...prev.preferences?.defaultModels, [shownProvider]: v },
+        },
+      } : prev,
+    );
+    modelPreferenceMut.mutate({ provider: shownProvider, model: v });
+    if (v === shownModel) {
+      modelSeedState.current = dirtyContextSeed(modelContextKey);
+      return;
+    }
     // Switching to a model that can't do Auto while Auto is selected would send a mode claude
     // rejects — snap back to Default.
     const drop = shownMode === 'Auto' && !supportsAuto(v, shownProvider, configuredProviders, runner.modelCatalog);
@@ -6666,11 +7061,39 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       <span className="scope-menu-value-text">{value}</span>
     </span>
   );
+  // The runner's accounts of the session's engine, listed under it in the Provider submenu for a
+  // session on built-in Codex or Claude to move between — each with its own quota, as the New Session
+  // picker lists them. Only with two or more (one is nothing to choose), and only on a runner that
+  // carries a conversation from one account to another: an older one would resume it where it was.
+  const accountRows =
+    shownAccountEngine && runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[shownAccountEngine])
+      ? (providerSwitchChoices.find((choice) => choice.slug === shownAccountEngine)?.accounts ?? [])
+      : [];
+  const accountsOffered = accountRows.length > 1;
+  // Automatic above them — Orbit keeps the session on an account with room, and moves it when the one
+  // it is on hits its limit — where its workspace leaves the account to Orbit, as for a new session.
+  // The session is on it unless an account was picked for it by hand.
+  const shownWorkspaceRow = workspacesForRunner.find((w) => w.id === shownWorkspaceId) ?? null;
+  const automaticHere = !!shownAccountEngine && automaticOfferedOn(shownAccountEngine, shownWorkspaceRow);
+  const sessionAutomatic =
+    automaticHere &&
+    (pendingResumeProvider
+      ? !pendingResumeAccount || pendingResumeAccount === AUTOMATIC_ACCOUNT
+      : !(shownAccountEngine === 'claude' ? detailForSelected?.claudeAccountPinned : detailForSelected?.codexAccountPinned));
+  // Another built-in engine's accounts, listed under it as the New Session picker lists them: a switch
+  // onto that engine can land on any of them. On a runner that carries a conversation between them.
+  const accountRowsFor = (engine: AccountEngine) => {
+    const rows = runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[engine])
+      ? (providerSwitchChoices.find((choice) => choice.slug === engine)?.accounts ?? [])
+      : [];
+    return rows.length > 1 ? rows : [];
+  };
   const modelMenuItems: MenuProps['items'] = [
-    // Only when there is somewhere to go: a second account with the same vendor, or another
-    // endpoint on the same CLI. One entry means no switch is possible, and the row is left out
-    // rather than shown inert — the common case, one Claude sign-in and no configured providers.
-    ...(providerSwitchChoices.length > 1
+    // Only when there is somewhere to go: a second account with the same vendor, another endpoint on
+    // the same CLI, or another of the runner's Codex accounts. One entry means no switch is possible,
+    // and the row is left out rather than shown inert — the common case, one Claude sign-in and no
+    // configured providers.
+    ...(providerSwitchChoices.length > 1 || accountsOffered
       ? [
           {
             key: 'provider',
@@ -6680,28 +7103,80 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 {menuValue(providerSwitchChoices.find((c) => c.slug === shownProvider)?.label ?? shownProvider)}
               </span>
             ),
-            children: providerSwitchChoices.map((choice) => {
+            children: providerSwitchChoices.flatMap((choice) => {
               // Carry the reason on the row itself, where it answers the question being asked
               // ("why can't I pick Claude?"). It stays pickable rather than greyed because picking
               // it does something useful — it goes where the fix is (see pickProvider), which is
               // the New Session picker's behaviour for the same row. The running provider is
               // exempt: it is the chip's own provider, and needs no parenthetical.
               const blocked = !!choice.unavailable && choice.slug !== shownProvider;
-              return {
-                key: `provider:${choice.slug}`,
-                // Distinguishable at a glance from a provider that is ready to run, without being
-                // inert: the identity is dimmed, the call to action is not.
-                className: blocked ? 'composer-provider-fix' : undefined,
-                label: (
-                  <span className="scope-menu-row">
-                    {blocked
-                      ? `${choice.label} — ${choice.unavailable}, ${choice.fixHref ? 'fix it' : 'sign in'} →`
-                      : choice.label}
-                    {checkSlot(choice.slug === shownProvider)}
-                  </span>
-                ),
-                onClick: () => pickProvider(choice.slug),
+              // Each built-in engine's accounts under it, as the New Session picker lists them: on the
+              // engine the session is on, the ones it moves between (switchAccount); under another,
+              // the ones a switch onto that engine lands on (pickProvider with the account).
+              const here = choice.slug === shownAccountEngine;
+              const engine: AccountEngine | null =
+                choice.slug === 'codex' || choice.slug === 'claude' ? choice.slug : null;
+              const accounts = here ? (accountsOffered ? accountRows : []) : engine && !blocked ? accountRowsFor(engine) : [];
+              const automatic =
+                accounts.length > 0 && (here ? automaticHere : !!engine && automaticOfferedOn(engine, shownWorkspaceRow));
+              const pick = (account: string, signedOut: boolean) => {
+                if (here) return pickAccount(account, signedOut);
+                if (signedOut) {
+                  navigate(`/providers?runner=${encodeId(runner.id)}&engine=${engine}`);
+                  return;
+                }
+                pickProvider(engine!, account);
               };
+              return [
+                {
+                  key: `provider:${choice.slug}`,
+                  // Distinguishable at a glance from a provider that is ready to run, without being
+                  // inert: the identity is dimmed, the call to action is not.
+                  className: blocked ? 'composer-provider-fix' : undefined,
+                  label: (
+                    <span className="scope-menu-row">
+                      {blocked
+                        ? `${choice.label} — ${choice.unavailable}, ${choice.fixHref ? 'fix it' : 'sign in'} →`
+                        : choice.label}
+                      {/* With its accounts listed, the tick is on the account the session runs on. */}
+                      {checkSlot(choice.slug === shownProvider && accounts.length === 0)}
+                    </span>
+                  ),
+                  onClick: () => pickProvider(choice.slug),
+                },
+                ...(automatic
+                  ? [
+                      {
+                        key: `${choice.slug}-account:automatic`,
+                        className: 'composer-account-row',
+                        label: (
+                          <span className="scope-menu-row">
+                            <span className="composer-account-row-name">Automatic</span>
+                            {menuValue('Resets soonest')}
+                            {checkSlot(here && sessionAutomatic)}
+                          </span>
+                        ),
+                        onClick: () => pick(AUTOMATIC_ACCOUNT, false),
+                      },
+                    ]
+                  : []),
+                ...accounts.map((account) => ({
+                  key: `${choice.slug}-account:${account.id}`,
+                  className: `composer-account-row${account.nearLimit ? ' near-limit' : ''}${
+                    account.unavailable ? ' composer-provider-fix' : ''
+                  }`,
+                  label: (
+                    <span className="scope-menu-row">
+                      <span className="composer-account-row-name">
+                        {account.unavailable ? `${account.label} — ${account.unavailable}, sign in →` : account.label}
+                      </span>
+                      {!account.unavailable && account.quota && menuValue(account.quota)}
+                      {checkSlot(here && account.id === shownAccount && !sessionAutomatic)}
+                    </span>
+                  ),
+                  onClick: () => pick(account.id, !!account.unavailable),
+                })),
+              ];
             }),
           },
           { key: 'provider-divider', type: 'divider' as const },
@@ -6966,12 +7441,27 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           )}
           {sections.map((sec) => (
             <Fragment key={sec.key}>
-              <div className="session-section-head">
-                {sec.tag && (
-                  <span className="session-section-dot" style={{ background: sec.tag.color }} />
-                )}
-                {sec.title}
-              </div>
+              {sec.key === 'Pinned' ? (
+                <button
+                  type="button"
+                  className="session-section-head session-section-fold"
+                  aria-expanded={!pinnedCollapsed}
+                  onClick={togglePinned}
+                >
+                  {sec.title}
+                  <RightOutlined
+                    className={`session-section-chev${pinnedCollapsed ? '' : ' open'}`}
+                    aria-hidden
+                  />
+                </button>
+              ) : (
+                <div className="session-section-head">
+                  {sec.tag && (
+                    <span className="session-section-dot" style={{ background: sec.tag.color }} />
+                  )}
+                  {sec.title}
+                </div>
+              )}
               {sec.sessions.map((s) => {
                 const actionSession = selectedSession?.id === s.id ? selectedSession : s;
                 const canCompleteRow = sessionCapabilityOf(actionSession, 'canComplete', true);
@@ -7018,7 +7508,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 // The selected row may have a fresher detail payload than the list poll. Use the
                 // merged row for both status surfaces so the banner and its list warning point at
                 // the same canonical obligation during that refresh gap.
-                const line = sessionLine(actionSession, openable);
+                const watching = sessionWatching(watchingBySession, s.id);
+                const line = sessionLine(actionSession, openable, watching);
                 const drag = swipeDrag?.id === s.id ? swipeDrag : null;
                 const swipeTx = drag
                   ? drag.dx
@@ -7087,7 +7578,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                       style={swipeTx ? { transform: `translateX(${swipeTx}px)` } : undefined}
                     >
                       <span className="session-icon">
-                        <StatusIcon session={actionSession} />
+                        <StatusIcon session={actionSession} watching={watching?.word} />
                       </span>
                       <div className="session-main">
                         <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
@@ -7108,6 +7599,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                             {line.text}
                           </div>
                         </div>
+                        <SessionRequestsLine session={s} />
                       </div>
                     </div>
                     <div className="session-right">
@@ -7513,7 +8005,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             sessionId={selectedId}
             projectId={selectedSession?.projectId ?? null}
             cards={decisionCards}
-            confirmation={openSettlementIn === selectedId}
+            confirmation={
+              openSettlementIn?.sessionId === selectedId ? openSettlementIn.question : false
+            }
             // Named in the card's own words, with how long the run has waited — never a number
             // first. Only when the card below is drawn in this session, so a press always arrives.
             ownerConfirmation={
@@ -7527,6 +8021,16 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   }
                 : null
             }
+            // The exception cards the owner presses, with how long each has been theirs and which
+            // side of the reader it sits on now: unlike a question, one can be above.
+            exceptions={ownerExceptionRows.map((row) => ({
+              row,
+              ageSeconds: Math.max(
+                0,
+                Math.floor((Date.now() - Date.parse(row.escalatedAt ?? row.waitingSince)) / 1000),
+              ),
+              above: openItemsAbove.split(' ').includes(row.itemId),
+            }))}
             // The strip states the fact and this takes the reader to the one place it can be
             // answered: the card the server delivered into this conversation. A second set of
             // buttons up here would be two faces racing for one answer.
@@ -7723,19 +8227,21 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 />
               )}
               {/* The settlement question — whether this project's criteria, together, are what
-                  done means — asked while the plan is written and nothing has run: drawn from the
-                  confirmation standing and the project, and pressed straight at the confirmation
-                  door, which is also what starts the project. Keyed by the session like the two
-                  cards above, because whether it was delivered belongs to this conversation, and by
-                  a key neither of them carries, for the reason the evidence card's note gives. It
-                  reports whether it is on screen and the project is still unstarted, and that report
-                  is what the pinned strip points at. */}
+                  done means — as whichever of its three cards is asking: "Start this project?" once
+                  the coordinator asks to start it, "Confirm the new criteria?" once a started
+                  project's criteria move, or the older confirmation card for a started project
+                  nobody ever confirmed. Pressed straight at the start door or the confirmation
+                  door. Keyed by the session like the two cards above, because whether it was
+                  delivered belongs to this conversation, and by a key neither of them carries, for
+                  the reason the evidence card's note gives. It reports which question is on screen
+                  and still asking, and that report is what the pinned strip points at. */}
               {selected && selectedId && !selectedTrashed && (
                 <SessionAcceptanceConfirmationCard
                   key={`confirmation:${selectedId}`}
                   projectId={selectedSession?.projectId ?? null}
                   onOpenQuestion={reportSettlementQuestion}
                   onChatAbout={startPlanChangeChat}
+                  onViewTasks={(createdTasks.data?.total ?? 0) > 0 ? viewCreatedTasks : undefined}
                 />
               )}
               {/* The other end of that question: the work filed under this project has met every
@@ -7780,7 +8286,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               {/* The live drafts used to render here, after everything. They render inside the
                   transcript now, at the seq the stretch began — see StreamingDraftsCtx. */}
               {!selectedTrashed && approvals.map((a) => (
-                // Only the first (oldest) still-answerable card owns the ⌘/Ctrl+Enter shortcut;
+                // Only the first (oldest) still-answerable approval with a shortcut owns Enter;
                 // once it's decided the next one becomes first, so the key walks the queue in
                 // order — stepping over any card whose question is already over.
                 <ApprovalPanel
@@ -7794,15 +8300,40 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 />
               ))}
               {!selectedTrashed && visibleQueuedTurns.map((q) => {
+                // Another Orbit session's message is asked about FIRST, off the card the snapshot
+                // carried, before anything is read out of its words — which are the sending agent's to
+                // choose, and could take the shape of a wake below (the transcript's own order,
+                // NodeView).
+                const fromSession = q.sessionMessage ?? null;
                 // A wake a watch queued is the card the transcript draws once a runner takes it
                 // (NodeView), so it keeps that shape when it lands and its JSON stays folded. How
                 // its delivery stands is the queue's line to say, as for every queued row.
-                const wake = parseWatchWake(q.content);
+                const wake = fromSession ? null : parseWatchWake(q.content);
                 // A wake the control plane queued for a background job's news, or for a wakeup coming
                 // due, is nobody's message either: it gets the line the transcript draws once a
                 // runner takes it. Withdrawing it is an ordinary cancel — nothing re-sends it.
-                const background = wake ? null : parseBackgroundWake(q.content);
-                return wake ? (
+                const background = fromSession || wake ? null : parseBackgroundWake(q.content);
+                return fromSession ? (
+                  // Drawn "From [that session]" while it waits, as the transcript draws it once a
+                  // runner takes it. Cancel withdraws it and hands nothing back to the composer — the
+                  // words are the sending session's (`returnsToComposer`) — and there is no Put back
+                  // for the same reason.
+                  <SessionMessageCard
+                    key={q.turnId}
+                    card={fromSession}
+                    text={q.content}
+                    ts={q.createdAt}
+                    queued={
+                      <QueuedTurnMeta
+                        placement={q.placement}
+                        delivery={q.delivery}
+                        deliveryCode={q.deliveryCode}
+                        deliveryReason={q.deliveryReason}
+                        onCancel={() => cancelQueued(q.turnId)}
+                      />
+                    }
+                  />
+                ) : wake ? (
                   <WatchWakeCard
                     key={q.turnId}
                     wake={wake}
@@ -7979,10 +8510,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 current={currentProviderChoiceForDraft}
                 choices={providerChoicesForRunner}
                 onPick={pickDraftProvider}
-                currentAccount={shownCodexAccount}
-                automatic={codexAutoOffered ? !draftCodexAccount : undefined}
+                currentAccount={pickedProvider === 'claude' ? shownClaudeAccount : shownCodexAccount}
+                automatic={{
+                  ...(codexAutoOffered ? { codex: !draftCodexAccount } : {}),
+                  ...(claudeAutoOffered ? { claude: !draftClaudeAccount } : {}),
+                }}
                 onPickAccount={pickDraftAccount}
                 runnerId={runner.id}
+                currentModelLabel={shownModelLabel}
                 // Nothing to choose until we know which workspace (and so which project) this runs in.
                 disabled={!pickedWorkspace}
                 note={providerSwitchNote}
@@ -8009,7 +8544,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               <span className="chat-older-pill">{LOADING_NEWER}</span>
             </div>
           )}
-          {selectedId && !atBottom && (
+          {selectedId && (!atBottom || stranded) && (
             <button
               className="scroll-to-bottom"
               aria-label={detached ? JUMP_TO_LATEST : 'Scroll to bottom'}
@@ -8037,7 +8572,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         )}
         {/* The tasks this session's agent created, beside the branch below: the conversation's two
             kinds of output next to each other. Hidden until it has created one. */}
-        {selectedId && !selectedTrashed && <SessionCreatedTasksStrip sessionId={selectedId} />}
+        {selectedId && !selectedTrashed && (
+          <SessionCreatedTasksStrip sessionId={selectedId} openRequest={createdTasksOpenRequest} />
+        )}
         <SessionOutputs
           // Only the open session has a worktree to show. With nothing selected (new-session
           // draft, empty list) `keepPreviousData` still holds the previously-open session's
@@ -8054,7 +8591,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
               ? () => askEnableIsolation(detailForSelected.workspace!.id)
               : undefined
           }
-          merging={mergeMut.isPending}
+          merging={mergeMut.isPending || repairRecoveryMut.isPending}
           onMergeToMain={
             selectedId && detailForSelected?.branch
               ? (target?: string) =>
@@ -8065,6 +8602,14 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   })
               : undefined
           }
+          onRecoverMerge={selectedId ? (recoveryAction, previewId) => mergeMut.mutate({
+            id: selectedId, title: selectedSession?.title ?? 'Untitled session',
+            target: detailForSelected?.mergeRecovery?.targetBranch ?? detailForSelected?.mergeTarget ?? undefined,
+            recoveryAction, previewId,
+          }) : undefined}
+          onRepairRecovery={(preparePr) => repairRecoveryMut.mutate(preparePr)}
+          repairStarting={repairRecoveryMut.isPending}
+          onOpenRepair={detailForSelected?.mergeRepairSession ? () => navigate(`/sessions/${encodeId(detailForSelected.mergeRepairSession!.id)}`) : undefined}
           resolving={resolveMut.isPending}
           onResolveInSession={
             selectedId && detailForSelected?.branch
@@ -8686,8 +9231,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   shownPoolAccount.current
                     ? `${shownPool.label} is running this session on ${shownPoolAccount.member.label}`
                     : `A session on ${shownPool.label} starts on ${shownPoolAccount.member.label} — ${
-                        shownPool.shared ? 'the key it picks for you' : 'the account with the most room'
-                      } right now`
+                        shownPool.shared ? 'the key it picks for you right now' : 'the account whose quota resets soonest'
+                      }`
                 }
               >
                 <span className="composer-pill composer-account" data-pool-account={shownPoolAccount.member.id}>
@@ -8698,16 +9243,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             {shownPlanUsage && (
               <PlanUsageIndicator
                 usage={shownPlanUsage}
-                // Which of the runner's Codex accounts this quota is, named inside the popover rather
-                // than beside the gauge, where a phone's toolbar has no room for an email. A draft
-                // names the one it would start on.
+                // Which of the runner's Codex or Claude accounts this quota is, named inside the popover
+                // rather than beside the gauge, where a phone's toolbar has no room for an email. A
+                // draft names the one it would start on.
                 account={
-                  !shownPool && shownCodexAccountLabel
+                  shownAccountEngine && shownAccountLabel
                     ? {
-                        label: shownCodexAccountLabel,
-                        ...(!selectedId && !draftCodexAccount && !pickedWorkspace?.codexAccount
-                          ? { note: 'Automatic — the account with the most room right now' }
-                          : {}),
+                        label: shownAccountLabel,
+                        ...(!selectedId &&
+                        !(shownAccountEngine === 'claude' ? draftClaudeAccount : draftCodexAccount) &&
+                        automaticOfferedOn(shownAccountEngine, pickedWorkspace)
+                          ? { note: 'Automatic — the account whose quota resets soonest' }
+                          : selectedId && sessionAutomatic && accountsOffered
+                            ? { note: 'Automatic — moves to another account when this one hits its limit' }
+                            : {}),
                       }
                     : undefined
                 }

@@ -53,6 +53,8 @@ export function controlTypeFor(t: RunEventType): ControlEventType | null {
       return ControlEventType.TASK_LIST_CHANGED;
     case RunEventType.TAG_CHANGED:
       return ControlEventType.TAG_CHANGED;
+    case RunEventType.FOLDER_CHANGED:
+      return ControlEventType.FOLDER_CHANGED;
     case RunEventType.PROVIDER_CHANGED:
       return ControlEventType.PROVIDER_CHANGED;
     case RunEventType.PROJECT_CRITERIA_DECISIONS_CHANGED:
@@ -79,6 +81,7 @@ export function isUserScopedType(t: ControlEventType): boolean {
   return (
     t === ControlEventType.TASK_LIST_CHANGED ||
     t === ControlEventType.TAG_CHANGED ||
+    t === ControlEventType.FOLDER_CHANGED ||
     t === ControlEventType.PROVIDER_CHANGED ||
     t === ControlEventType.PROJECT_CRITERIA_DECISIONS_CHANGED ||
     t === ControlEventType.PROJECT_CHANGED ||

@@ -150,6 +150,7 @@ export const WIKI_REFUSAL_CODES = [
   'WIKI_PLAN_GATE',
   'WIKI_PLAN_STALE',
   'WIKI_PLAN_UNCONFIRMED',
+  'WIKI_PLAN_NO_JOB',
   'WIKI_DOC_INVALID',
 ] as const;
 export type WikiRefusalCode = (typeof WIKI_REFUSAL_CODES)[number];
@@ -799,12 +800,28 @@ export type WikiOpOutcome =
     }
   | { seq: number; status: 'refused'; reasons: WikiRefusal[] };
 
+/**
+ * The circuit breaker's reading as a request begins (contract `refusalRules.dryRun`): the active entries it is
+ * counted against — a changeset's, or for a maintenance run's changeset the run's (`maintenance.job.breaker`) —
+ * the entries already changed through the review mode, and how many more distinct entries the mode may change
+ * before an op is refused. `remaining` is null where no op is held to the breaker: in a Manual space, for the
+ * owner's own write, and in a space holding fewer than `breakerMinActiveEntries` active entries.
+ */
+export interface WikiBreakerReading {
+  scope: 'changeset' | 'run';
+  activeAtStart: number;
+  changed: number;
+  remaining: number | null;
+}
+
 export interface WikiProposeResult {
   /** Null when nothing was recorded: a dry run, or every op refused. */
   changesetId: string | null;
   /** The recorded answer to an earlier request under the same idempotency key. */
   replayed: boolean;
   ops: WikiOpOutcome[];
+  /** A dry run's: the breaker as the request found it, before any of its ops. */
+  breaker?: WikiBreakerReading;
 }
 
 /** `wiki_search` returns entries, and nothing else (contract `agentSurface.toolSpecs.wiki_search`
@@ -871,6 +888,11 @@ export type WikiMaintenanceSettings = {
   provider: string;
   /** How many maintenance tasks the space may make in one UTC day, within {@link WIKI_MAINTENANCE_DAILY_RUN_LIMIT}. */
   dailyRunLimit: number;
+  /** How many days back the cursor starts when maintenance is turned on and the cursor has no position
+   *  yet, within {@link WIKI_MAINTENANCE_LOOKBACK_DAYS}: 0 reads only what settles from then on, and
+   *  null reads from the earliest fact. Written once, as the start; it never moves a cursor that has a
+   *  position (contract `maintenance.cursor.start`). */
+  lookbackDays: number | null;
   /** Server-written, never taken from a request: the space's hidden «Wiki maintenance» task list,
    *  made the first time maintenance is turned on and kept when it is turned off. A maintenance
    *  session is a session whose task is in it. */
@@ -880,11 +902,15 @@ export type WikiMaintenanceSettings = {
 /** The bounds of `dailyRunLimit` (contract `space.settings.maintenance.bounds.dailyRunLimit`). */
 export const WIKI_MAINTENANCE_DAILY_RUN_LIMIT = { min: 1, max: 48 } as const;
 
+/** The bounds of `lookbackDays` (contract `space.settings.maintenance.bounds.lookbackDays`). */
+export const WIKI_MAINTENANCE_LOOKBACK_DAYS = { min: 0, max: 365 } as const;
+
 export const WIKI_DEFAULT_MAINTENANCE_SETTINGS: Readonly<WikiMaintenanceSettings> = {
   enabled: false,
   workspaceId: null,
   provider: 'local-vllm',
   dailyRunLimit: 8,
+  lookbackDays: 14,
   listId: null,
 };
 
@@ -896,6 +922,7 @@ export function wikiMaintenanceSettings(stored: unknown): WikiMaintenanceSetting
   const raw = (stored !== null && typeof stored === 'object' && !Array.isArray(stored) ? stored : {}) as Record<string, unknown>;
   const text = (value: unknown): string | null => (typeof value === 'string' && value.trim() !== '' ? value : null);
   const limit = raw.dailyRunLimit;
+  const lookback = raw.lookbackDays;
   return {
     enabled: raw.enabled === true,
     workspaceId: text(raw.workspaceId),
@@ -904,6 +931,13 @@ export function wikiMaintenanceSettings(stored: unknown): WikiMaintenanceSetting
       && limit >= WIKI_MAINTENANCE_DAILY_RUN_LIMIT.min && limit <= WIKI_MAINTENANCE_DAILY_RUN_LIMIT.max
       ? limit
       : WIKI_DEFAULT_MAINTENANCE_SETTINGS.dailyRunLimit,
+    // Null is a choice — all of history — and is kept; an absent key is not one, and reads as the default.
+    lookbackDays: lookback === null
+      ? null
+      : typeof lookback === 'number' && Number.isInteger(lookback)
+        && lookback >= WIKI_MAINTENANCE_LOOKBACK_DAYS.min && lookback <= WIKI_MAINTENANCE_LOOKBACK_DAYS.max
+        ? lookback
+        : WIKI_DEFAULT_MAINTENANCE_SETTINGS.lookbackDays,
     listId: text(raw.listId),
   };
 }
@@ -1080,6 +1114,8 @@ export interface WikiCursorState {
 /** `GET /api/runner/wiki/spaces/:id/dossiers`. */
 export interface WikiDossierPage {
   spaceId: string;
+  /** Where the page starts: advancing to this keeps none of the page, and it is read again. */
+  from: string;
   /** Advance to this once every dossier of the page was processed. */
   cursor: string;
   /** Facts past this page remain. */
@@ -1372,7 +1408,8 @@ export interface WikiVerificationItem {
    *  verdict would be about the claim alone: the server records whatever it says as no more than
    *  Unreviewed and keeps it out of the fallback's count. */
   evidence: WikiVerificationEvidence;
-  /** The neighbours recorded with the op, each as it reads now: what a duplicate may name. */
+  /** The neighbours recorded with the op, each as it reads now: what a duplicate may name. An op a
+   *  maintenance run adopted adds the neighbours its draft has now (`verification.adoption`). */
   similar: WikiSimilar[];
 }
 

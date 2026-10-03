@@ -104,8 +104,10 @@ struct ComposerView: View {
     #endif
     #if os(iOS)
     // The iOS editor is a UITextView (GrowingTextEditor), not a @FocusState-bound SwiftUI field, so
-    // its first-responder state rides this flag: set it to focus, read it for the box's focus ring.
-    @State private var iosEditing = false
+    // its first-responder state rides the console's `composerEditing`: set it to focus, read it for
+    // the box's focus ring. It lives on the console because a phone's console folds its chrome on it,
+    // and it changes under this animation so the bars move with the keyboard.
+    private static let editingChange = Animation.easeInOut(duration: 0.25)
     @State private var showPhotoPicker = false
     @State private var showFileImporter = false
     @State private var pickedPhotos: [PhotosPickerItem] = []
@@ -179,10 +181,10 @@ struct ComposerView: View {
     }
 
     // Whether the composer box should draw its focused ring/shadow. macOS keys off the field's
-    // @FocusState; iOS off the UITextView editor's begin/end-editing (mirrored into `iosEditing`).
+    // @FocusState; iOS off the UITextView editor's begin/end-editing (mirrored into `composerEditing`).
     private var boxFocused: Bool {
         #if os(iOS)
-        iosEditing
+        console.composerEditing
         #else
         inputFocused
         #endif
@@ -192,7 +194,7 @@ struct ComposerView: View {
     /// sets the flag the UITextView editor observes to become first responder.
     private func requestFocus() {
         #if os(iOS)
-        iosEditing = true
+        withAnimation(Self.editingChange) { console.composerEditing = true }
         #else
         inputFocused = true
         #endif
@@ -353,7 +355,7 @@ struct ComposerView: View {
     private var inputField: some View {
         #if os(iOS)
         GrowingTextEditor(text: $console.composerText, placeholder: placeholder,
-                          maxLines: 6, isEditing: $iosEditing)
+                          maxLines: 6, isEditing: $console.composerEditing.animation(Self.editingChange))
             .frame(maxWidth: .infinity)
         #else
         TextField(placeholder, text: $console.composerText, axis: .vertical)
@@ -413,12 +415,13 @@ struct ComposerView: View {
                     .accessibilityLabel(help)
             }
             if let usage = console.planUsage {
-                // Which of the runner's Codex accounts this quota is, named in the gauge's detail
-                // rather than beside it, where a phone's footer has no room for an email (web parity).
+                // Which of the runner's Codex or Claude accounts this quota is, named in the gauge's
+                // detail rather than beside it, where a phone's footer has no room for an email (web
+                // parity).
                 PlanUsageIndicator(usage: usage,
-                                   account: console.codexAccountLabel.map {
-                                       PlanUsageAccount(label: $0, note: console.codexAccountNote)
-                                   })
+                                   account: console.accountLabel.map {
+                                       PlanUsageAccount(label: $0, note: console.accountNote)
+                                   }, resetConsole: console)
             }
             // Context stays visible even before the first turn reports tokens — a New Session
             // reads 0%. Rightmost gauge, next to Send.
@@ -555,10 +558,10 @@ struct ComposerView: View {
     /// menu does, whichever way the system opens it.
     private var modelMenu: some View {
         Menu {
-            // Only when there is somewhere to go: a second account with the same vendor, or
-            // another endpoint on the same CLI. One entry means no switch is possible, and the row
-            // is left out rather than shown inert.
-            if console.providerSwitchChoices.count > 1 {
+            // Only when there is somewhere to go: a second account with the same vendor, another
+            // endpoint on the same CLI, or another of the runner's accounts of this engine. One entry
+            // means no switch is possible, and the row is left out rather than shown inert.
+            if console.providerSwitchChoices.count > 1 || console.accountRowsOffered {
                 Menu {
                     ForEach(console.providerSwitchChoices) { choice in
                         // A choice this runner can't run stays listed and carries its reason
@@ -566,6 +569,14 @@ struct ComposerView: View {
                         // "Orbit lost my provider". The running one is exempt — it is the row's
                         // own caption, and a parenthetical there would sit under every turn.
                         let blocked = choice.unavailable != nil && choice.slug != console.provider
+                        // Each built-in engine's accounts under it, as the new-session picker lists
+                        // them (web parity): on the engine the session is on, the ones it moves
+                        // between; under another, the ones a switch onto that engine lands on.
+                        let here = choice.slug == console.accountEngine
+                        let elsewhere = here || blocked ? [] : console.accountChoices(for: choice.slug)
+                        // With its accounts listed under it, the tick is on the account (or on
+                        // Automatic) rather than on the engine.
+                        let listsAccounts = (here && console.accountRowsOffered) || !elsewhere.isEmpty
                         // An account pool the server says cannot run at all: no runner fixes
                         // that, so it is greyed out with its reason instead.
                         let fixable = blocked && choice.fixEngine != nil
@@ -583,14 +594,21 @@ struct ComposerView: View {
                         } label: {
                             menuItemLabel(
                                 blocked ? "\(choice.label) — \(reason)\(fix)" : choice.label,
-                                selected: choice.slug == console.provider)
+                                selected: choice.slug == console.provider && !listsAccounts)
                         }
                         .disabled(blocked && !fixable)
+                        if here && console.accountRowsOffered {
+                            accountItems(choice.slug)
+                        } else if !elsewhere.isEmpty {
+                            switchAccountItems(choice.slug, elsewhere)
+                        }
                     }
                 } label: {
-                    Text("Provider")
-                    Text(AgentDefaults.providerName(console.provider,
-                                                    configured: console.configuredProviders))
+                    menuSubmenuLabel(
+                        "Provider",
+                        value: AgentDefaults.providerName(
+                            console.provider,
+                            configured: console.configuredProviders))
                 }
                 Divider()
             }
@@ -603,6 +621,7 @@ struct ComposerView: View {
                         catalog: console.modelCatalog, configured: console.configuredProviders)
                     let resetEffort = nextEffort != console.effort
                     let clampedPermissionMode = console.selectModel(m.id)
+                    app.rememberDefaultModel(m.id, for: console.provider)
                     let permissionMode = clampedPermissionMode
                         ? console.permissionMode.rawValue
                         : nil
@@ -633,8 +652,7 @@ struct ComposerView: View {
                     }
                 }
             } label: {
-                Text("Effort")
-                Text(console.effort.label)
+                menuSubmenuLabel("Effort", value: console.effort.label)
             }
             // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast"
             // tier both exist on some models and not others, so a row drawn regardless would be a
@@ -655,8 +673,7 @@ struct ComposerView: View {
                         }
                     }
                 } label: {
-                    Text("Speed")
-                    Text(console.fastMode ? "Fast" : "Standard")
+                    menuSubmenuLabel("Speed", value: console.fastMode ? "Fast" : "Standard")
                 }
             }
         } label: {
@@ -820,18 +837,160 @@ struct ComposerView: View {
             .contentShape(Rectangle())
     }
 
-    /// A menu row whose checkmark sits at the TRAILING end of the row, the way a Picker draws it —
-    /// a Menu of Buttons has to render it explicitly. Trailing, not leading (`Label(_:systemImage:)`,
-    /// the natural spelling): a leading icon takes a column on the selected row only, so that row's
-    /// text starts one checkmark to the right of every sibling's, which is what the phone report
-    /// showed. Web parity too — `.scope-menu-row`'s check sits in a trailing slot.
+    /// The runner's accounts of the session's engine, right under it in the Provider submenu (web
+    /// parity): Automatic first where its workspace leaves the account to Orbit, then each account with
+    /// its own quota. A pick moves the session there (`ConsoleModel.switchAccount`); a signed-out
+    /// account is a request for its sign-in, as a provider row in that state is.
+    @ViewBuilder
+    private func accountItems(_ engine: String) -> some View {
+        if console.automaticOffered(engine) {
+            Button {
+                Task { await console.switchAccount(CodexAccounts.automaticID) }
+            } label: {
+                #if os(iOS)
+                // Once it is the pick, "Current" says all there is: what Automatic does is why
+                // someone picks it, not news to the session already on it.
+                accountRowLabel("Automatic", detail: console.sessionAutomatic ? nil : "Resets soonest",
+                                selected: console.sessionAutomatic)
+                #else
+                menuItemLabel("Automatic · Resets soonest", selected: console.sessionAutomatic)
+                #endif
+            }
+        }
+        ForEach(console.accountChoices) { account in
+            Button {
+                if account.unavailable != nil {
+                    if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                } else {
+                    Task { await console.switchAccount(account.id) }
+                }
+            } label: {
+                #if os(iOS)
+                accountRowLabel(account.label,
+                                detail: account.unavailable.map { "\($0), sign in →" } ?? account.quota,
+                                selected: !console.sessionAutomatic && account.id == console.account(for: engine))
+                #else
+                menuItemLabel(
+                    account.unavailable.map { "\(account.label) — \($0), sign in →" }
+                        ?? account.quota.map { "\(account.label) · \($0)" } ?? account.label,
+                    selected: !console.sessionAutomatic && account.id == console.account(for: engine))
+                #endif
+            }
+        }
+    }
+
+    /// Another built-in engine's accounts under it in the Provider submenu (web parity): Automatic where
+    /// the workspace leaves the account to Orbit, then each account with its own quota. A pick moves the
+    /// session onto that engine and lands it there (`ConsoleModel.selectProvider(_:account:)`); nothing
+    /// is ticked, because the session is not on this engine. A signed-out account is a request for its
+    /// sign-in, as in `accountItems`.
+    @ViewBuilder
+    private func switchAccountItems(_ engine: String, _ rows: [AccountChoice]) -> some View {
+        if console.automaticOffered(engine) {
+            Button {
+                Task { await console.selectProvider(engine, account: CodexAccounts.automaticID) }
+            } label: {
+                #if os(iOS)
+                accountRowLabel("Automatic", detail: "Resets soonest", selected: false)
+                #else
+                menuItemLabel("Automatic · Resets soonest", selected: false)
+                #endif
+            }
+        }
+        ForEach(rows) { account in
+            Button {
+                if account.unavailable != nil {
+                    if let rid = console.runnerID { app.route(to: .runner(rid)) }
+                } else {
+                    Task { await console.selectProvider(engine, account: account.id) }
+                }
+            } label: {
+                #if os(iOS)
+                accountRowLabel(account.label,
+                                detail: account.unavailable.map { "\($0), sign in →" } ?? account.quota,
+                                selected: false)
+                #else
+                menuItemLabel(
+                    account.unavailable.map { "\(account.label) — \($0), sign in →" }
+                        ?? account.quota.map { "\(account.label) · \($0)" } ?? account.label,
+                    selected: false)
+                #endif
+            }
+        }
+    }
+
+    /// One option of the menu. Web draws the chosen one's check at the row's trailing end; an iOS 26
+    /// menu can only draw an image before the title, and a row that has one starts its title past the
+    /// image column while a row without one starts at the margin — a check on the chosen row alone put
+    /// the menu on two edges. So on iOS no row carries an image: every title starts at the margin, and
+    /// the chosen one says "Current" underneath (the label's second Text, which the menu draws as the
+    /// row's subtitle). macOS keeps the trailing check, a clear one on every other row.
     @ViewBuilder
     private func menuItemLabel(_ text: String, selected: Bool) -> some View {
+        #if os(iOS)
+        Text(Self.menuBreakable(text))
+        if selected { Text("Current") }
+        #else
         HStack(spacing: 8) {
-            Text(text)
-            Spacer(minLength: 12)
-            if selected { Image(systemName: "checkmark") }
+            Text(text).lineLimit(1)
+            Spacer(minLength: 8)
+            Image(systemName: "checkmark")
+                .foregroundStyle(selected ? Color.accentColor : Color.clear)
+                .frame(width: 20, alignment: .trailing)
+                .accessibilityHidden(!selected)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        #endif
+    }
+
+    #if os(iOS)
+    /// An account under its engine in the Provider submenu, one level in from the provider rows: the
+    /// transparent glyph takes the image column the provider rows leave empty, and iOS starts the
+    /// title of a row with an image past that column. Its quota — or what Automatic does — goes
+    /// underneath; the account the session is on says "Current" there first.
+    @ViewBuilder
+    private func accountRowLabel(_ name: String, detail: String?, selected: Bool) -> some View {
+        Label { Text(Self.menuBreakable(name)) } icon: { Image(uiImage: Self.clearGlyph) }
+        if selected {
+            Text(detail.map { "Current · \($0)" } ?? "Current")
+        } else if let detail {
+            Text(detail)
+        }
+    }
+
+    /// The indent for `accountRowLabel`: a checkmark drawn fully transparent, rendered as is — a
+    /// template image would be tinted back into a visible check by the menu.
+    private static let clearGlyph = UIImage(systemName: "checkmark")?
+        .withTintColor(.clear, renderingMode: .alwaysOriginal) ?? UIImage()
+
+    /// A name the menu has to wrap — an email, a "name@Provider" — breaks before its "@" or after a
+    /// dot, where a zero-width space marks the line's break opportunities, rather than where the
+    /// system's hyphenator puts it ("mail.-com").
+    private static func menuBreakable(_ text: String) -> String {
+        text.replacingOccurrences(of: "@", with: "\u{200B}@")
+            .replacingOccurrences(of: #"\.(?=[A-Za-z])"#, with: ".\u{200B}", options: .regularExpression)
+    }
+    #endif
+
+    /// The two-level settings rows: the title owns the left edge, and the nested Menu supplies its
+    /// disclosure chevron. iOS draws the current value as the row's subtitle — the label's second
+    /// Text — under the title, so the values of Provider, Effort and Speed share the titles' edge
+    /// instead of starting wherever each title happens to end. macOS keeps it in a muted trailing run.
+    @ViewBuilder
+    private func menuSubmenuLabel(_ title: String, value: String) -> some View {
+        #if os(iOS)
+        Text(title)
+        Text(value)
+        #else
+        HStack(spacing: 8) {
+            Text(title)
+            Spacer(minLength: 12)
+            Text(value)
+                .foregroundStyle(Color.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        #endif
     }
 
     // MARK: `/` autocomplete menu
@@ -1215,6 +1374,7 @@ private struct PlanUsageAccount {
 private struct PlanUsageIndicator: View {
     let usage: PlanUsageSnapshot
     var account: PlanUsageAccount?
+    let resetConsole: ConsoleModel?
     @State private var showDetail = false
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -1230,7 +1390,7 @@ private struct PlanUsageIndicator: View {
     }
 
     var body: some View {
-        if let pct = usage.primaryPercent {
+        if let pct = usage.bindingRow()?.percent {
             Button { showDetail.toggle() } label: {
                 HStack(spacing: 5) {
                     UsageBar(percent: pct).frame(width: gaugeShowsNumber ? 26 : 20, height: 4)
@@ -1245,7 +1405,8 @@ private struct PlanUsageIndicator: View {
             .buttonStyle(.plain)
             .help("Plan usage \(pct)%")
             .accessibilityLabel("Plan usage \(pct)%")
-            .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage, account: account))
+            .modifier(PlanUsageDetailPresentation(isPresented: $showDetail, usage: usage,
+                                                   account: account, resetConsole: resetConsole))
         }
     }
 }
@@ -1436,6 +1597,7 @@ private struct PlanUsageDetailPresentation: ViewModifier {
     @Binding var isPresented: Bool
     let usage: PlanUsageSnapshot
     let account: PlanUsageAccount?
+    let resetConsole: ConsoleModel?
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     #endif
@@ -1447,13 +1609,35 @@ private struct PlanUsageDetailPresentation: ViewModifier {
         return account.note == nil ? 50 : 70
     }
 
+    #if os(iOS)
+    private var resetHeight: Int {
+        guard let resetConsole, resetConsole.codexResetCardVisible else { return 0 }
+
+        // The normal card is about 160pt including its top inset. Add room only for the
+        // secondary lines that are actually visible; reserving the maximum state here leaves a
+        // large empty tail below the button on the common, ready-to-use state.
+        var height = 160
+        if let operation = resetConsole.codexResetOperation,
+           operation.isActive || !operation.status.isEmpty {
+            height += 28
+        }
+        if resetConsole.codexResetEligibilityReason != nil && !resetConsole.codexResetEligible {
+            height += 28
+        }
+        if resetConsole.codexResetError != nil {
+            height += 28
+        }
+        return height
+    }
+    #endif
+
     func body(content: Content) -> some View {
         #if os(macOS)
         content.popover(isPresented: $isPresented, arrowEdge: .top) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Plan usage").font(.headline)
                 if let account { PlanUsageAccountRow(account: account, compact: true) }
-                PlanUsageDetailRows(rows: usage.rows, compact: true)
+                PlanUsageDetailRows(rows: usage.currentRows(), compact: true)
             }
             .padding(14)
             .frame(width: 260)
@@ -1468,7 +1652,10 @@ private struct PlanUsageDetailPresentation: ViewModifier {
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Plan usage").font(.headline)
                     if let account { PlanUsageAccountRow(account: account) }
-                    PlanUsageDetailRows(rows: usage.rows)
+                    PlanUsageDetailRows(rows: usage.currentRows())
+                    if let resetConsole, resetConsole.codexResetCardVisible {
+                        CodexResetCreditCard(console: resetConsole)
+                    }
                 }
                 .padding(16)
                 .frame(width: ComposerFooterDetailLayout.popoverWidth)
@@ -1485,14 +1672,18 @@ private struct PlanUsageDetailPresentation: ViewModifier {
                     if let account {
                         PlanUsageAccountRow(account: account).padding(.bottom, 18)
                     }
-                    PlanUsageDetailRows(rows: usage.rows)
+                    PlanUsageDetailRows(rows: usage.currentRows())
+                    if let resetConsole, resetConsole.codexResetCardVisible {
+                        CodexResetCreditCard(console: resetConsole)
+                            .padding(.top, 18)
+                    }
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 24)
                 .padding(.bottom, 20)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .presentationDetents([.height(CGFloat(120 + usage.rows.count * 66 + accountHeight))])
+                .presentationDetents([.height(CGFloat(120 + usage.rows.count * 66 + accountHeight + resetHeight))])
                 .presentationDragIndicator(.visible)
             }
         }

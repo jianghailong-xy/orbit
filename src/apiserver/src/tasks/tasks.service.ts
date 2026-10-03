@@ -83,6 +83,12 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
 import { isEngineSignedOut } from '../sessions/engine-signin-preflight';
 import { withSessionState } from '../sessions/session-state';
+import {
+  readTaskWorkCarriers,
+  sessionCarriesTaskSql,
+  taskRunOverlay,
+  type TaskRunOverlay,
+} from '../sessions/task-work-carrier';
 import { TaskListPauseProjectorService } from '../task-lists/task-list-pause-projector.service';
 import type { HandoffApproval } from '../projects/project-scope-decision';
 import {
@@ -170,6 +176,7 @@ import {
   type AuthorityRequiredAction,
 } from '../projects/coordinator-authority';
 import { criteriaFromDefinitions, criterionKeyOf } from '../projects/project-acceptance';
+import { landingInFlight } from '../projects/project-looks-finished';
 import {
   AUTO_RUN_RETRY_BACKOFF_MS,
   MAX_AUTO_RUN_FAILURES,
@@ -233,7 +240,7 @@ import { loadVerificationEpochGates } from './verification-epoch-read';
 import { readTaskProgress } from './task-progress.service';
 import { DagOp, effectiveOps, findCycle, resultingEdges, stateChanges } from './task-dag';
 import { manualRunnableTaskSql } from './manual-runnable-task-sql';
-import { automaticCodexAccount, runAccount } from '../providers/plan-usage-accounts';
+import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { accountEnvVar } from '../providers/account';
 import { readWaitingOwnerConfirmations } from './owner-confirmation-read';
 import { accountPoolRuntime } from '../providers/custom-provider';
@@ -262,6 +269,12 @@ import {
   taskCriterionChangeRefusalBody,
   taskSelfRewrittenStandardRefusalBody,
 } from './task-completion-criterion-change-guard';
+import {
+  normaliseCodelessReason,
+  readTaskCommitEvidence,
+  taskCodelessHasCommitsBody,
+  taskCodelessReasonRequiredBody,
+} from './task-codeless';
 import {
   criterionAsksForOwnerConfirmation,
   ownerConfirmationNotDelegatedBody,
@@ -494,12 +507,27 @@ export function buildTaskExecutionPrompt(task: {
 // Postgres and surface as a 500; we treat it like any unknown task instead.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// Single-run dedup (开始执行 / @-mention): only a PENDING (queued) or RUNNING (a turn is
-// actively executing) session means the task is already mid-flight, so re-triggering it
-// must be a no-op. A session parked at AWAITING_INPUT/INTERRUPTED is idle — it is NOT in
-// this set so it falls through to the resume path, where the trigger delivers its prompt
-// as a new turn instead of silently returning the parked session and doing nothing.
-const SINGLE_RUN_DEDUP: RunStatus[] = [RunStatus.PENDING, RunStatus.RUNNING];
+/**
+ * The run in the way of a start, with everything `foreignClaimRefusal` names about it.
+ *
+ * Single-run dedup (开始执行 / bulk Run): a task is already mid-flight while a work session
+ * CARRIES it (`sessionCarriesTaskSql`, sessions/task-work-carrier.ts) — a turn queued or running,
+ * or the session parked at AWAITING_INPUT with something that will wake it (a background job, a
+ * watch it observes, a scheduled wake-up, an armed retry). Re-triggering such a task is refused
+ * with the run in the way named, never delivered into it. A session parked with nothing to wake
+ * it, or INTERRUPTED by a person, is idle: it falls through to the resume path, where the trigger
+ * delivers its prompt as a new turn instead of silently returning the parked session and doing
+ * nothing.
+ */
+type TaskRunHolder = {
+  id: string;
+  status: RunStatus;
+  workspaceId: string | null;
+  provider: string;
+  model: string | null;
+  startsTaskWork: boolean;
+  cancelRequestedAt: Date | null;
+};
 
 /**
  * What one run request answers with, and what its receipt stores verbatim.
@@ -1980,7 +2008,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
         select: { ownerId: true },
       }).catch(() => null);
       if (!project) continue;
-      await storeDerivedProjectStatus(this.prisma, project.ownerId, projectId).catch((e) =>
+      await storeDerivedProjectStatus(this.prisma, project.ownerId, projectId, {
+        sessions: this.sessions,
+      }).catch((e) =>
         this.logger.warn(`derived project status not reconciled: ${e?.message ?? e}`),
       );
     }
@@ -3946,6 +3976,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // INSERT entirely, exactly as every task written before they existed.
       criterionDefinitionId: criterionDeclaration?.criterionDefinitionId,
       criterionRevision: criterionDeclaration?.criterionRevision,
+      // SR5's declaration, made with the task: no reason is asked for a task's first statement of
+      // what it is (`task-codeless.ts`). Omitted leaves the column default, false.
+      codeless: dto.codeless,
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       // Omitted means unscheduled. The `undefined` is what makes that true without a default:
       // Prisma leaves the column out of the INSERT, so the row is born NULL exactly as every task
@@ -5152,10 +5185,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (!actingSessionId || items.length === 0) return;
     const acting = await this.prisma.session.findFirst({
       where: { id: actingSessionId, ownerId },
-      select: { dispatchOrigin: true },
+      select: {
+        dispatchOrigin: true,
+        // The fact this judgment was opened for — the wake that OPENED it, as the scope derivation
+        // reads it — because a settled project's judgment files nothing while the project's work is
+        // still landing (`refuseTaskOpening`).
+        coordinatorWakes: {
+          where: { status: 'SESSION_OPENED' }, select: { event: true }, take: 1,
+        },
+      },
     });
     const principal = authorityPrincipal(acting?.dispatchOrigin);
     if (principal !== 'JUDGMENT') return;
+    const openedFor = acting?.coordinatorWakes?.[0]?.event ?? null;
     const byProject = new Map<string, Array<{
       criterionKey?: string;
       completionCriterion?: TaskCompletionCriterionValue | null;
@@ -5200,6 +5242,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           creatorSession: { dispatchOrigin: SessionDispatchOrigin.PROJECT_COORDINATOR },
         },
       });
+      // Asked only of the judgment it applies to: a settled project's.
+      const landing = openedFor === 'PROJECT_TASKS_SETTLED'
+        && await landingInFlight(this.prisma, projectId);
       for (const item of group) {
         const refusal = refuseTaskOpening(principal, {
           completionCriterion: item.completionCriterion,
@@ -5208,6 +5253,8 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           openedInWindow,
           opening: group.length,
           budgetPerDay: project.sessionBudgetPerDay,
+          openedFor,
+          landingInFlight: landing,
         });
         if (refusal) throw new ForbiddenException(refusal);
       }
@@ -6910,48 +6957,39 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Tag each task with `running` = it has a RUNNING session (actually executing right
-   * now) and `queued` = it has a PENDING session waiting for a runner slot but nothing
-   * running yet. Both are the live ground truth, distinct from Task.status (an
-   * workspace-maintained label that can lag): the list breathes only for `running` and
-   * shows a distinct queued indicator for `queued`. One grouped query covers the whole
-   * page. The list-detail view (TaskListsService) computes the same flags inline. Public for the
-   * link cards (`link-previews/`), whose task pill is the list's.
+   * Tag each task with `running` = a work session is carrying it (a turn executing, or the session
+   * parked waiting for something that will wake it — `sessions/task-work-carrier.ts`) and `queued`
+   * = that session is PENDING, waiting for a runner slot. Both are the live ground truth, distinct
+   * from Task.status (a workspace-maintained label that can lag): the list breathes only for
+   * `running` and shows a distinct queued indicator for `queued`. `runReason` says which kind of
+   * running it is, and `runStalled` that the background jobs holding it have gone quiet. One query
+   * covers the whole page. The list-detail view (TaskListsService) reads the same carriers. Public
+   * for the link cards (`link-previews/`), whose task pill is the list's.
    */
   async withRunning<T extends { id: string }>(
     ownerId: string,
     tasks: T[],
     restrictToTaskIds = false,
-  ): Promise<(T & { running: boolean; queued: boolean; runningSince: Date | null })[]> {
+  ): Promise<(T & TaskRunOverlay & { runningSince: Date | null })[]> {
     if (tasks.length === 0) return [];
-    const busy = await this.prisma.session.groupBy({
-      by: ['taskId', 'status'],
-      where: {
-        ownerId,
-        taskId: restrictToTaskIds ? { in: tasks.map((task) => task.id) } : { not: null },
-        status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
-      },
-      _count: { _all: true },
-      // When the oldest live run began — what a list row's time slot says while it runs ("12m"),
-      // the way a session row says how long a turn has been going.
-      _min: { startedAt: true },
+    const carriers = await readTaskWorkCarriers(
+      this.prisma,
+      restrictToTaskIds
+        ? Prisma.sql`carrier."owner_id" = ${ownerId}::uuid
+            AND carrier."task_id" IN (${Prisma.join(tasks.map((task) => Prisma.sql`${task.id}::uuid`))})`
+        : Prisma.sql`carrier."owner_id" = ${ownerId}::uuid`,
+    );
+    return tasks.map((t) => {
+      const carrier = carriers.get(t.id);
+      const overlay = taskRunOverlay(carrier);
+      return {
+        ...t,
+        ...overlay,
+        // When the live run began — what a list row's time slot says while it runs ("12m"), the
+        // way a session row says how long a turn has been going.
+        runningSince: overlay.running ? (carrier?.startedAt ?? null) : null,
+      };
     });
-    const running = new Map(
-      busy
-        .filter((b) => b.status === RunStatus.RUNNING)
-        .map((b) => [b.taskId, b._min?.startedAt ?? null] as const),
-    );
-    const queued = new Set(
-      busy.filter((b) => b.status === RunStatus.PENDING).map((b) => b.taskId),
-    );
-    return tasks.map((t) => ({
-      ...t,
-      running: running.has(t.id),
-      // A task with both a RUNNING and a PENDING session is simply running; `queued`
-      // is only meaningful when nothing is running yet.
-      queued: queued.has(t.id) && !running.has(t.id),
-      runningSince: running.get(t.id) ?? null,
-    }));
   }
 
   /**
@@ -8260,6 +8298,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // write below). A stored change record never stops describing it, so it is not that prose.
     const clearsStaleOverrideReason = attachesVerifier
       && readTaskCriterionChange(before.completionCriterionOverrideReason) == null;
+    // The codeless door (`task-codeless.ts`): turning an existing task codeless takes it out of its
+    // criterion's landing conjunction, so it is asked why, and refused for a task whose commits are
+    // already somewhere — those are work that has to land. Only the change is questioned: re-sending
+    // the value the task has, or taking the declaration back, writes no reason and needs none.
+    // Before the transaction, like every refusal on this path.
+    const declaresCodeless = dto.codeless === true && !before.codeless;
+    const withdrawsCodeless = dto.codeless === false && before.codeless;
+    let codelessReason: string | null = null;
+    if (declaresCodeless) {
+      codelessReason = normaliseCodelessReason(dto.codelessReason);
+      if (codelessReason == null) throw new BadRequestException(taskCodelessReasonRequiredBody());
+      const commits = await readTaskCommitEvidence(this.prisma, id);
+      if (commits.length > 0) throw new ConflictException(taskCodelessHasCommitsBody(commits));
+    }
     if (dto.assigneeId) await this.assertOwnedWorkspace(ownerId, dto.assigneeId);
     if (dto.listId) await this.assertOwnedList(ownerId, dto.listId);
     if (dto.projectId) await this.assertOwnedProject(ownerId, dto.projectId);
@@ -8398,6 +8450,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       // licence to erase how this task came to carry the criterion it has.
       completionCriterionOverrideReason:
         criterionChangeRecord ?? (clearsStaleOverrideReason ? null : undefined),
+      // The declaration and its reason move together: written with the reason the door above
+      // asked for, and taken back with it — a reason left on a task that lands again would be
+      // explaining a declaration it no longer makes.
+      codeless: declaresCodeless || withdrawsCodeless ? dto.codeless : undefined,
+      codelessReason: declaresCodeless ? codelessReason : withdrawsCodeless ? null : undefined,
       // Three-state like the pins above: omitted keeps the conclusion, null revokes it. Revoking is
       // a real operation rather than an undo — a subject completed by VERIFICATION_PASSED goes back
       // to OPEN on the next reconcile, which is the point of storing the verdict rather than
@@ -10442,14 +10499,20 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const runner = runnerById.get(assignee.runnerId);
       const usage = runner?.planUsage as unknown as PlanUsage | null | undefined;
       const workspace = workspaceById.get(assignee.workspaceId);
-      // A Codex task on a workspace that picked no account gets its session started on the runner's
-      // account with the most room (automaticCodexAccount), so that is the quota it waits on.
+      // A Codex or Claude task on a workspace that leaves the account to Orbit gets its session started
+      // on the runner's account whose quota resets soonest (automaticAccount), so that is the quota it
+      // waits on.
       const automatic =
-        assignee.provider === 'codex' ? automaticCodexAccount(workspace, runner?.engines, usage, now) : null;
+        assignee.provider === 'codex' || assignee.provider === 'claude'
+          ? automaticAccount(assignee.provider, workspace, runner?.engines, usage, now)
+          : null;
       const account = runAccount(
         assignee.provider,
         workspace?.env,
-        workspace && { ...workspace, codexAccount: automatic ?? workspace.codexAccount },
+        workspace &&
+          (assignee.provider === 'claude'
+            ? { ...workspace, claudeAccount: automatic ?? workspace.claudeAccount }
+            : { ...workspace, codexAccount: automatic ?? workspace.codexAccount }),
         runner?.engines,
       );
       if (!planUsageReported(usage, assignee.provider, account)) blind.add(t.id);
@@ -12138,7 +12201,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           ownerId: delivery.ownerId,
           deletedAt: null,
           startsTaskWork: true,
-          status: { in: [...SINGLE_RUN_DEDUP, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED] },
+          status: {
+            in: [RunStatus.PENDING, RunStatus.RUNNING, RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED],
+          },
         },
         orderBy: { createdAt: 'desc' },
         select: { id: true },
@@ -12371,25 +12436,27 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     const desiredSessionId = taskRunDesiredSessionId(
       taskRunRequestKey({ taskId: task.id, requestToken }),
     );
-    // A run already mid-flight (PENDING/RUNNING) on this task. A session parked at
-    // AWAITING_INPUT/INTERRUPTED is deliberately excluded (see SINGLE_RUN_DEDUP): it is idle, so it
+    // The run carrying this task right now (`sessions/task-work-carrier.ts`): a turn queued or
+    // running, or a session parked at AWAITING_INPUT while something will wake it — a background
+    // job it started, a watch it observes, a scheduled wake-up. That run is going, and a press is
+    // not a turn to hand it: it used to be, and an agent waiting for its own test matrix was handed
+    // the whole task brief. A session parked with NOTHING to wake it is idle and is not this — it
     // falls through to the resume path below and is handed the prompt as a new turn rather than
     // no-oping (which is why "开始执行" on a parked task used to do nothing).
     //
-    // Spelled with the claim index's own `deleted_at IS NULL` and with no `orderBy`: at most one
-    // row can satisfy this, because `session_task_execution_claim_idx` says so, and ordering a set
-    // that cannot have two members only invites a reader to think it can.
-    const occupying = await this.prisma.session.findFirst({
-      where: {
-        taskId: task.id, deletedAt: null, status: { in: SINGLE_RUN_DEDUP }, startsTaskWork: true,
-      },
-      // Everything the refusal names, so this door and the post-conflict one describe the row in
-      // the way identically rather than one of them guessing.
-      select: {
-        id: true, status: true, workspaceId: true, provider: true, model: true,
-        startsTaskWork: true, cancelRequestedAt: true,
-      },
-    });
+    // With no ORDER BY: at most one row can satisfy this, because
+    // `session_task_execution_claim_idx` says so, and ordering a set that cannot have two members
+    // only invites a reader to think it can.
+    //
+    // Everything the refusal names, so this door and the post-conflict one describe the row in the
+    // way identically rather than one of them guessing.
+    const [occupying] = await this.prisma.$queryRaw<TaskRunHolder[]>(Prisma.sql`
+      SELECT s."id", s."status"::text AS "status", s."workspace_id" AS "workspaceId",
+             s."provider", s."model", s."starts_task_work" AS "startsTaskWork",
+             s."cancel_requested_at" AS "cancelRequestedAt"
+        FROM "session" s
+       WHERE s."task_id" = ${task.id}::uuid
+         AND ${Prisma.raw(sessionCarriesTaskSql('s'))}`);
     if (occupying) {
       // WHOSE run is it? This used to return the id unconditionally — "the work is already under
       // way, so this call is idempotent" — which is true of THIS request's own run and false of
@@ -12431,20 +12498,25 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // a replacement, through the supersession link. Only `AWAITING_INPUT` / `INTERRUPTED` — a run
     // that is paused, not finished — receives the prompt as a new turn, which is what "开始执行 on
     // a parked task" has always meant and the one case where continuing is continuing.
-    const latest = await this.prisma.session.findFirst({
-      where: {
-        taskId: task.id,
-        workspaceId: workspace.id,
-        ownerId,
-        deletedAt: null,
-        status: { in: [RunStatus.AWAITING_INPUT, RunStatus.INTERRUPTED] },
-        // A paused WORK run is the one this call continues. A paused conversation is somebody
-        // else's thread about the task, and handing it the task's prompt would hijack it.
-        startsTaskWork: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, provider: true },
-    });
+    //
+    // ...and only a paused run that is IDLE. One parked with something that will wake it is still
+    // carrying the task, and is never handed the prompt: it is excluded here by the same predicate
+    // the read above refuses on, so a wake source that appeared between the two reads cannot turn
+    // that refusal into a delivery.
+    const [latest] = await this.prisma.$queryRaw<Array<{ id: string; provider: string }>>(Prisma.sql`
+      SELECT s."id", s."provider"
+        FROM "session" s
+       WHERE s."task_id" = ${task.id}::uuid
+         AND s."workspace_id" = ${workspace.id}::uuid
+         AND s."owner_id" = ${ownerId}::uuid
+         AND s."deleted_at" IS NULL
+         AND s."status" IN ('AWAITING_INPUT'::"run_status", 'INTERRUPTED'::"run_status")
+         -- A paused WORK run is the one this call continues. A paused conversation is somebody
+         -- else's thread about the task, and handing it the task's prompt would hijack it.
+         AND s."starts_task_work" = true
+         AND NOT ${Prisma.raw(sessionCarriesTaskSql('s'))}
+       ORDER BY s."created_at" DESC
+       LIMIT 1`);
     // This request's OWN paused run — the only way that row can carry this name is that this same
     // request created it, so this call is a repeat of the one that did. Its prompt was delivered
     // when the Session was written; delivering it again would put the task's brief in front of the
@@ -13339,14 +13411,15 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // task that's already running (`planWorkspaceRun` also guards this, but surfacing it here
     // lets us report it as skipped rather than silently dispatched).
     //
-    // SINGLE_RUN_DEDUP, not TASK_OCCUPYING: this must be the same "already running"
+    // `sessionCarriesTaskSql`, not TASK_OCCUPYING: this must be the same "already running"
     // predicate the single-task 开始执行 uses, or the two Run buttons mean different
-    // things. A session parked at AWAITING_INPUT/INTERRUPTED is idle — the row's Run
-    // button, the Ready filter (runnableTaskWhere) and the detail panel all treat such a
-    // task as runnable and nudge it with a new turn, so the batch must too. Widening to
-    // TASK_OCCUPYING (which exists to answer reclaimStalledTask's different question —
-    // "is anything still holding this task?") made bulk Run silently skip exactly the
-    // tasks the list was offering as ready.
+    // things. A session parked at AWAITING_INPUT with nothing to wake it, or INTERRUPTED, is idle —
+    // the row's Run button, the Ready filter (manualRunnableTaskSql) and the detail panel all
+    // treat such a task as runnable and nudge it with a new turn, so the batch must too. Widening
+    // to TASK_OCCUPYING (which exists to answer reclaimStalledTask's different question — "is
+    // anything still holding this task?") made bulk Run silently skip exactly the tasks the list
+    // was offering as ready. One parked while a background job, a watch or a scheduled wake-up
+    // will wake it is still running the task, is offered as running everywhere, and is skipped.
     //
     // It carries the SESSION, not just the fact, because "already running" is not the answer when
     // the run that is already running is THIS PRESS'S OWN. A bulk Run whose response was lost
@@ -13354,22 +13427,19 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // replay reported `dispatched: 0, skipped: N` about work it had itself started, which is a
     // different answer to the same request. The id is what tells the two apart.
     //
-    // Spelled with the claim index's `deleted_at IS NULL` and `starts_task_work`, which is also
-    // what the comment above requires: the single-task button reads exactly this predicate, and a
-    // batch that read a wider one would call a task occupied by a conversation somebody opened
+    // The predicate carries the claim index's `deleted_at IS NULL` and `starts_task_work`, which is
+    // also what the comment above requires: the single-task button reads exactly this predicate,
+    // and a batch that read a wider one would call a task occupied by a conversation somebody opened
     // against it.
     const occupied = new Map(
-      (
-        await this.prisma.session.findMany({
-          where: {
-            taskId: { in: tasks.map((t) => t.id) },
-            deletedAt: null,
-            status: { in: SINGLE_RUN_DEDUP },
-            startsTaskWork: true,
-          },
-          select: { taskId: true, id: true },
-        })
-      ).map((row) => [row.taskId!, row.id] as const),
+      (tasks.length === 0
+        ? []
+        : await this.prisma.$queryRaw<Array<{ taskId: string; id: string }>>(Prisma.sql`
+          SELECT s."task_id" AS "taskId", s."id"
+            FROM "session" s
+           WHERE s."task_id" IN (${Prisma.join(tasks.map((t) => Prisma.sql`${t.id}::uuid`))})
+             AND ${Prisma.raw(sessionCarriesTaskSql('s'))}`)
+      ).map((row) => [row.taskId, row.id] as const),
     );
     /** What this press names the run it wants for one task — see `TASK_RUN_TRIGGER.batch`. */
     const desiredFor = (taskId: string) => taskRunDesiredSessionId(

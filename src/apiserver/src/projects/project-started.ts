@@ -19,7 +19,7 @@ import { branchName } from './project-criterion-landing';
 import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
 
 /**
- * "The owner started this project", told to the conversation the project is coordinated from.
+ * The owner's project-motion presses, told to the conversation the project is coordinated from.
  *
  * §0 — WHY THE PLATFORM SAYS IT
  * =============================
@@ -41,20 +41,21 @@ import { SESSION_ENDING_SELECT, sessionHasEnded } from './project-open-item';
  * coordinator put to the owner, and the message says so — a coordinator still waiting on the owner
  * puts its question back in front of them instead of waiting in silence.
  *
- * §2 — ONCE PER START, AND NEVER A REVIVAL
- * ========================================
- * Keyed by what the press wrote, so a replay collapses onto the turn already written. A
+ * §2 — ONCE PER FACT, AND NEVER A REVIVAL
+ * =======================================
+ * Starts and resumes are keyed by what the press wrote, so a replay collapses onto the turn already
+ * written. Pause uses the same prefix and fact rule through `projectPausedTurnId`, and so does an
+ * owner's DONE that stopped standing (`projectReopenedTurnId`, keyed by the record and why). A
  * conversation that has ended is not revived to be told (`sessionHasEnded`), and a project with no
  * conversation has nobody to tell. A turn is a notification, not an interrupt: a coordinator in the
  * middle of a turn reads this when that turn ends.
  *
- * §3 — AND A CARD, NOT THE READER'S BUBBLE
- * ========================================
- * The words are for the agent. A client draws the turn from `ProjectStartedCard` instead, recorded
- * beside the runner's echo and on the queued turn the way an exception item's delivery is
- * (`readProjectStartedCard`). The key is what makes a turn one of these: `project-started:v1:` and
- * what the press wrote, read back by `projectStartOfTurn` — nothing is minted and nothing looked up
- * to recognise one.
+ * §3 — STARTS GET A CARD; PAUSE AND RESUME STAY MESSAGES
+ * ======================================================
+ * The words are for the agent. A client draws CONFIRMATION and SWITCH from `ProjectStartedCard`,
+ * recorded beside the runner's echo and on the queued turn (`readProjectStartedCard`). Resume is
+ * recognised from its key but deliberately returns no card, and Pause is not read as a start at
+ * all, so old and new clients draw both as ordinary system messages rather than “Project started”.
  */
 
 /** How many held tasks the message names before it counts the rest. */
@@ -67,8 +68,8 @@ export interface HeldTask {
 }
 
 /**
- * Which press turned the project on: the owner starting it, which confirms its criteria, or the
- * owner moving its Automatic switch — each keyed by what that press wrote, so one start is told once.
+ * Which press made the project move: the owner starting it, moving its Automatic switch, or
+ * resuming one pause episode — each keyed by what that press wrote, so one fact is told once.
  *
  * A start that recorded the settings it left the project with carries them as `record` (the
  * confirmation's `started_with`), and `lineLocked` when its integration line had already started and
@@ -83,27 +84,76 @@ export type ProjectStart =
     record?: ProjectStartRecord;
     lineLocked?: boolean;
   }
-  | { by: 'SWITCH'; configRevision: string; at: Date };
+  | { by: 'SWITCH'; configRevision: string; at: Date }
+  | { by: 'RESUME'; pausedAt: Date; at: Date };
 
-/** Every project-start turn's client id starts here, which is how a reader recognises one. */
+/** Every project-motion notification's client id starts here. */
 export const PROJECT_STARTED_TURN_PREFIX = 'project-started:v1:';
 
-/** The `clientTurnId` of the one turn that tells a coordinator about one start. §3. */
+/** The `clientTurnId` of the one turn that tells a coordinator about one start or resume. §3. */
 export function projectStartedTurnId(projectId: string, start: ProjectStart): string {
-  return start.by === 'CONFIRMATION'
-    ? `${PROJECT_STARTED_TURN_PREFIX}confirmation:${start.confirmationId}`
-    : `${PROJECT_STARTED_TURN_PREFIX}switch:${projectId}:${start.configRevision}`;
+  if (start.by === 'CONFIRMATION') {
+    return `${PROJECT_STARTED_TURN_PREFIX}confirmation:${start.confirmationId}`;
+  }
+  if (start.by === 'SWITCH') {
+    return `${PROJECT_STARTED_TURN_PREFIX}switch:${projectId}:${start.configRevision}`;
+  }
+  return `${PROJECT_STARTED_TURN_PREFIX}resume:${projectId}:${start.pausedAt.getTime()}`;
 }
 
-/** The start a turn tells of, as its key names it. */
+/** The one turn that says the owner paused this pause episode. It deliberately has no start card. */
+export function projectPausedTurnId(projectId: string, pausedAt: Date): string {
+  return `${PROJECT_STARTED_TURN_PREFIX}pause:${projectId}:${pausedAt.getTime()}`;
+}
+
+/** Why an owner's DONE stopped standing (`project-done-derived.ts`): the criteria it was recorded
+ *  against changed, or a task serving one of them was reopened after it was recorded. */
+export type ProjectReopenReason =
+  | { kind: 'CRITERIA_CHANGED'; currentDigest: string }
+  | { kind: 'SERVING_TASK_REOPENED'; taskId: string; taskTitle: string };
+
+/** The one turn that says this owner's record was reopened, keyed by the record and the reason. It
+ *  deliberately has no start card. */
+function projectReopenedTurnId(
+  projectId: string,
+  doneAt: Date,
+  reason: ProjectReopenReason,
+): string {
+  const fact = reason.kind === 'CRITERIA_CHANGED'
+    ? `criteria:${reason.currentDigest}`
+    : `task:${reason.taskId}`;
+  return `${PROJECT_STARTED_TURN_PREFIX}reopened:${projectId}:${doneAt.getTime()}:${fact}`;
+}
+
+/** What the coordinator is told: the fact, why, and that recording it done again is the owner's. */
+function projectReopenedMessage(input: {
+  projectId: string;
+  projectTitle: string;
+  reason: ProjectReopenReason;
+}): string {
+  const why = input.reason.kind === 'CRITERIA_CHANGED'
+    ? 'its acceptance criteria changed after the owner recorded it done, so that record no longer '
+      + 'covers the criteria that stand now'
+    : `“${input.reason.taskTitle}” (${uuidToBase62(input.reason.taskId)}), a task serving one of `
+      + 'its criteria, was reopened after the owner recorded it done';
+  return [
+    'From Orbit · project reopened',
+    `Project “${input.projectTitle}” (${uuidToBase62(input.projectId)}) is OPEN again: ${why}.`,
+    'The owner’s DONE record no longer stands. Read the criteria and the work as they are now; '
+      + 'when the project is done again, ask the owner to record it — that is theirs to do.',
+  ].join('\n\n');
+}
+
+/** The start or resume a turn tells of, as its key names it. */
 export type ProjectStartKey =
   | { by: 'CONFIRMATION'; confirmationId: string }
-  | { by: 'SWITCH'; projectId: string; configRevision: string };
+  | { by: 'SWITCH'; projectId: string; configRevision: string }
+  | { by: 'RESUME'; projectId: string; pausedAt: Date };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * The start a turn tells of, read back off the turn's own key — or null for any other turn.
+ * The start or resume a turn tells of, read back off its own key — or null for any other turn.
  *
  * Every reader that is not one of these answers null, and a key that only looks like one does too:
  * this runs on the event-ingest path, where a throw costs a batch of somebody's transcript, and an
@@ -113,15 +163,22 @@ export function projectStartOfTurn(clientTurnId: string | null | undefined): Pro
   if (typeof clientTurnId !== 'string' || !clientTurnId.startsWith(PROJECT_STARTED_TURN_PREFIX)) {
     return null;
   }
-  const [by, id, revision, ...rest] = clientTurnId
+  const [by, id, fact, ...rest] = clientTurnId
     .slice(PROJECT_STARTED_TURN_PREFIX.length)
     .split(':');
   if (rest.length > 0 || !id || !UUID.test(id)) return null;
-  if (by === 'confirmation' && revision === undefined) {
+  if (by === 'confirmation' && fact === undefined) {
     return { by: 'CONFIRMATION', confirmationId: id };
   }
-  if (by === 'switch' && revision !== undefined && /^\d+$/.test(revision)) {
-    return { by: 'SWITCH', projectId: id, configRevision: revision };
+  if (by === 'switch' && fact !== undefined && /^\d+$/.test(fact)) {
+    return { by: 'SWITCH', projectId: id, configRevision: fact };
+  }
+  if (by === 'resume' && fact !== undefined && /^\d+$/.test(fact)) {
+    const epoch = Number(fact);
+    if (!Number.isSafeInteger(epoch)) return null;
+    const pausedAt = new Date(epoch);
+    if (Number.isNaN(pausedAt.getTime())) return null;
+    return { by: 'RESUME', projectId: id, pausedAt };
   }
   return null;
 }
@@ -144,15 +201,17 @@ async function readHeldTasks(
 }
 
 /**
- * The card a project-start turn is drawn as (§3), or null when its key names nothing of this
- * owner's — a confirmation or a project that is gone, or somebody else's.
+ * The card an actual project-start turn is drawn as (§3), or null for Resume and when its key names
+ * nothing of this owner's — a confirmation or a project that is gone, or somebody else's.
  */
 export async function readProjectStartedCard(
   prisma: StartReader,
   ownerId: string | null | undefined,
   key: ProjectStartKey,
 ): Promise<ProjectStartedCard | null> {
-  if (!ownerId) return null;
+  // Resume uses the same fact-keyed delivery path, but it is not a project start. Returning no
+  // payload leaves web and both native clients drawing its prose as an ordinary system message.
+  if (!ownerId || key.by === 'RESUME') return null;
   let projectId: string;
   let criteriaCount: number | null = null;
   // What the start recorded beside its confirmation (`project-start.ts`): only a start's
@@ -224,9 +283,15 @@ export function projectStartedMessage(input: {
   const what = start.by === 'CONFIRMATION'
     ? `The account owner confirmed the ${start.criteriaCount} acceptance `
       + `${start.criteriaCount === 1 ? 'criterion' : 'criteria'} of ${project} and started it at ${at}.`
-    : `The account owner switched ${project} on (Automatic) at ${at}.`;
+    : start.by === 'SWITCH'
+      ? `The account owner switched ${project} on (Automatic) at ${at}.`
+      : `The account owner resumed ${project} at ${at}.`;
   const paragraphs = [
-    start.by === 'CONFIRMATION' ? 'From Orbit · project started' : 'From Orbit · project switched on',
+    start.by === 'CONFIRMATION'
+      ? 'From Orbit · project started'
+      : start.by === 'SWITCH'
+        ? 'From Orbit · project switched on'
+        : 'From Orbit · project resumed',
     `${what} From now on Orbit starts this project’s tasks that are set to run on their own `
       + '(autoRunWhenReady), within its concurrency limit.',
   ];
@@ -264,25 +329,43 @@ export function projectStartedMessage(input: {
     );
   }
   paragraphs.push(
-    `${start.by === 'CONFIRMATION' ? 'Starting the project' : 'Switching it on'} answered nothing `
+    `${start.by === 'CONFIRMATION'
+      ? 'Starting the project'
+      : start.by === 'SWITCH' ? 'Switching it on' : 'Resuming the project'} answered nothing `
       + 'else: if you are still waiting on the owner for something, ask it again.',
   );
   return paragraphs.join('\n\n');
 }
 
-/**
- * Tell the project's coordinator conversation that `start` turned the project on. §2.
- *
- * Null when nobody was told: the project has no conversation, it has ended, or `createTurn`
- * refused for a state of the world rather than a fault. A fault is thrown.
- */
-export async function tellCoordinatorProjectStarted(
-  prisma: PrismaService,
-  sessions: SessionsService,
-  input: { ownerId: string; projectId: string; start: ProjectStart },
-): Promise<{ sessionId: string; clientTurnId: string } | null> {
+/** The Pause notification's complete prose. It asks the coordinator to do nothing. */
+export function projectPausedMessage(input: {
+  projectId: string;
+  projectTitle: string;
+}): string {
+  return [
+    'From Orbit · project paused',
+    `The account owner paused project “${input.projectTitle}” (${uuidToBase62(input.projectId)}).`,
+    'While the project is paused, task_start is refused with 409 PROJECT_PAUSED. Orbit does not '
+      + 'start any of this project’s tasks automatically and does not merge anything into main '
+      + 'automatically. Sessions already running are not affected.',
+    'This is a notification, not a request to start work. The project stays paused until the '
+      + 'account owner presses Resume project.',
+  ].join('\n\n');
+}
+
+interface LiveCoordinatorProject {
+  title: string;
+  sessionId: string;
+}
+
+/** The existing conversation that may receive a notification; an ended one is never revived. */
+async function liveCoordinatorProject(
+  prisma: Pick<PrismaService, 'project'>,
+  ownerId: string,
+  projectId: string,
+): Promise<LiveCoordinatorProject | null> {
   const project = await prisma.project.findFirst({
-    where: { id: input.projectId, ownerId: input.ownerId },
+    where: { id: projectId, ownerId },
     select: {
       title: true,
       coordinatorSessionId: true,
@@ -292,20 +375,21 @@ export async function tellCoordinatorProjectStarted(
   const sessionId = project?.coordinatorSessionId;
   if (!project || !sessionId || !project.coordinatorSession) return null;
   if (sessionHasEnded(project.coordinatorSession)) return null;
+  return { title: project.title, sessionId };
+}
 
-  const { held, heldCount } = await readHeldTasks(prisma, input.projectId);
-
-  const clientTurnId = projectStartedTurnId(input.projectId, input.start);
+/** Queue one fact-keyed notification, translating only ordinary conversation-state refusals. */
+async function createCoordinatorNotification(
+  sessions: SessionsService,
+  ownerId: string,
+  sessionId: string,
+  clientTurnId: string,
+  content: string,
+): Promise<{ sessionId: string; clientTurnId: string } | null> {
   try {
-    await sessions.createTurn(input.ownerId, sessionId, {
+    await sessions.createTurn(ownerId, sessionId, {
       clientTurnId,
-      content: projectStartedMessage({
-        projectId: input.projectId,
-        projectTitle: project.title,
-        start: input.start,
-        held,
-        heldCount,
-      }),
+      content,
       intent: 'NEXT_TURN',
     });
   } catch (e) {
@@ -323,6 +407,82 @@ export async function tellCoordinatorProjectStarted(
     throw e;
   }
   return { sessionId, clientTurnId };
+}
+
+/**
+ * Tell the project's coordinator conversation that `start` made the project move. §2.
+ *
+ * Null when nobody was told: the project has no conversation, it has ended, or `createTurn`
+ * refused for a state of the world rather than a fault. A fault is thrown.
+ */
+export async function tellCoordinatorProjectStarted(
+  prisma: PrismaService,
+  sessions: SessionsService,
+  input: { ownerId: string; projectId: string; start: ProjectStart },
+): Promise<{ sessionId: string; clientTurnId: string } | null> {
+  const project = await liveCoordinatorProject(prisma, input.ownerId, input.projectId);
+  if (!project) return null;
+
+  const { held, heldCount } = await readHeldTasks(prisma, input.projectId);
+
+  const clientTurnId = projectStartedTurnId(input.projectId, input.start);
+  return createCoordinatorNotification(
+    sessions,
+    input.ownerId,
+    project.sessionId,
+    clientTurnId,
+    projectStartedMessage({
+      projectId: input.projectId,
+      projectTitle: project.title,
+      start: input.start,
+      held,
+      heldCount,
+    }),
+  );
+}
+
+/** Tell the coordinator that the owner paused one pause episode, without making it a start card. */
+export async function tellCoordinatorProjectPaused(
+  prisma: PrismaService,
+  sessions: SessionsService,
+  input: { ownerId: string; projectId: string; pausedAt: Date },
+): Promise<{ sessionId: string; clientTurnId: string } | null> {
+  const project = await liveCoordinatorProject(prisma, input.ownerId, input.projectId);
+  if (!project) return null;
+  const clientTurnId = projectPausedTurnId(input.projectId, input.pausedAt);
+  return createCoordinatorNotification(
+    sessions,
+    input.ownerId,
+    project.sessionId,
+    clientTurnId,
+    projectPausedMessage({ projectId: input.projectId, projectTitle: project.title }),
+  );
+}
+
+/**
+ * Tell the project's coordinator conversation that the owner's DONE was reopened, and why.
+ *
+ * Null when nobody was told: the project has no conversation, it has ended, or `createTurn`
+ * refused for a state of the world rather than a fault. A fault is thrown.
+ */
+export async function tellCoordinatorProjectReopened(
+  prisma: Pick<PrismaService, 'project'>,
+  sessions: SessionsService,
+  input: { ownerId: string; projectId: string; doneAt: Date; reason: ProjectReopenReason },
+): Promise<{ sessionId: string; clientTurnId: string } | null> {
+  const project = await liveCoordinatorProject(prisma, input.ownerId, input.projectId);
+  if (!project) return null;
+  return createCoordinatorNotification(
+    sessions,
+    input.ownerId,
+    project.sessionId,
+    projectReopenedTurnId(input.projectId, input.doneAt, input.reason),
+    projectReopenedMessage({
+      projectId: input.projectId,
+      projectTitle: project.title,
+      reason: input.reason,
+    }),
+  );
 }
 
 /**

@@ -18,6 +18,12 @@ import { checkDuration } from '../lib/checkDuration';
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { encodeId } from '../lib/idCodec';
 import { projectOpenItemsQuery } from '../lib/queries';
+import {
+  START_PROJECT_TITLE,
+  START_ROW_NOT_ASKED,
+  START_ROW_OWN,
+  startRequestSummary,
+} from '../lib/projectStart';
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import { refreshTaskScheduleViews } from '../lib/taskSchedule';
 import { readTaskRunConflict } from '../lib/taskRunHandoff';
@@ -1082,6 +1088,9 @@ function ItemCard({
       className={`approval-card project-open-item-card is-${tone}`}
       id={id ?? `open-item-${row.itemId}`}
       data-kind={row.kind}
+      // One handle for all three cards, whichever id each is drawn under: what the conversation's
+      // pinned line scrolls to, and measures to say which way that is (`revealOpenItemCard`).
+      data-open-item={row.itemId}
     >
       <div className="approval-head project-open-item-head">
         <span className="project-open-item-heading">{heading}</span>
@@ -1120,12 +1129,27 @@ export function ItemAsCard({
   // would be two cards answering one question, and only one of them could win. A merge approval is
   // the same: `ProjectPromotionCard` draws it from the candidate itself, which is where what would
   // land and what the checks came to actually live.
-  if (row.kind === 'COORDINATOR_QUESTION' || row.kind === 'PROMOTION_APPROVAL') return null;
+  if (hasCardOfItsOwn(row)) return null;
   return escalationHeading(row, now) != null ? (
     <EscalatedItemCard projectId={projectId} row={row} now={now} />
   ) : (
     <OpenItemCard projectId={projectId} row={row} now={now} />
   );
+}
+
+/** The two kinds `ItemAsCard` draws nothing for, because each has a card of its own. */
+function hasCardOfItsOwn(row: Pick<ProjectOpenItemRow, 'kind'>): boolean {
+  return row.kind === 'COORDINATOR_QUESTION' || row.kind === 'PROMOTION_APPROVAL';
+}
+
+/**
+ * Whether a row is drawn as a card the OWNER answers by pressing a door rather than by replying — an
+ * exception that became theirs, or the pause only they can lift. The conversation's pinned line
+ * points at these as well as at its questions (`DecisionStrip`), so one that has scrolled away still
+ * has something pointing at it. The native clients count the same rows (`ExceptionCards.cards`).
+ */
+export function isOwnerExceptionCard(row: ProjectOpenItemRow): boolean {
+  return row.assignee === 'OWNER' && !hasCardOfItsOwn(row);
 }
 
 /**
@@ -1208,19 +1232,107 @@ function OpenItemRowView({ row, now }: { row: ProjectOpenItemRow; now: number })
 }
 
 /**
+ * The coordinator's request to start the project, as the Needs you group's row (mock board3 ②):
+ * "Start this project?", what it suggests, and Review — which goes to the one place the request is
+ * answered, the card in the coordinator conversation, rather than drawing a second copy of it here.
+ * The server lists no door for it (`actions` is empty for this kind), so the press is the page's.
+ */
+function StartRequestRowView({
+  row,
+  now,
+  onReview,
+  reviewing,
+}: {
+  row: ProjectOpenItemRow;
+  now: number;
+  onReview?: () => void;
+  reviewing?: boolean;
+}): JSX.Element {
+  const settings = row.startRequest?.settings ?? null;
+  const line = settings ? startRequestSummary(settings) : row.detailLine;
+  return (
+    <li className="project-open-item-row is-owner" data-kind="START_REQUEST">
+      <span className="project-open-item-dot" aria-hidden="true" />
+      <div className="project-open-item-main">
+        <div className="project-open-item-title" title={START_PROJECT_TITLE}>
+          {START_PROJECT_TITLE}
+        </div>
+        {line ? (
+          <div className="project-open-item-line" title={line}>
+            {line}
+          </div>
+        ) : null}
+      </div>
+      <div className="project-open-item-who">
+        <span>{WHO.OWNER}</span>
+        <time className="project-open-item-age" dateTime={row.waitingSince}>
+          {waitingLabel(row, now)}
+        </time>
+      </div>
+      <div className="project-open-item-press">
+        {onReview ? (
+          <button
+            type="button"
+            className="project-open-item-action is-primary"
+            disabled={reviewing}
+            onClick={onReview}
+          >
+            {ACTION_LABEL.REVIEW}
+          </button>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+/** The same row while no coordinator has asked: the owner's own way to start the project, quiet,
+ *  because nobody is waiting on it — and it opens the same card, set by the default rule. */
+function OwnStartRowView({ onStart }: { onStart: () => void }): JSX.Element {
+  return (
+    <li className="project-open-item-row is-owner is-own-start" data-kind="START">
+      <span className="project-open-item-dot" aria-hidden="true" />
+      <div className="project-open-item-main">
+        <button type="button" className="project-open-item-title project-open-item-start" onClick={onStart}>
+          {START_ROW_OWN}
+        </button>
+        <div className="project-open-item-line">{START_ROW_NOT_ASKED}</div>
+      </div>
+      <div className="project-open-item-who" />
+      <div className="project-open-item-press" />
+    </li>
+  );
+}
+
+/**
  * The project page's Open items card (mock 2 ②): what is waiting, in the two groups that say who is
  * expected to act, oldest first in both.
  *
  * The two groups are the whole point of the card. "Three things need you and two are being handled"
  * is a different project from "five things are stuck", and before this the page could not tell the
  * reader which one they were looking at.
+ *
+ * A project nobody has started leads its Needs you group with the start (mock board3 ②): the
+ * coordinator's request when there is one — served beside the items rather than among them
+ * (`startRequest`) — and otherwise the owner's own "Start…".
  */
 export function ProjectOpenItems({
   projectId,
   now = Date.now(),
+  started,
+  onReviewStart,
+  reviewingStart,
+  onStartProject,
 }: {
   projectId: string | null | undefined;
   now?: number;
+  /** Whether the project has been started, from the document the page holds. Only `false` draws
+   *  the start's row: a read that does not say is not a project waiting to be started. */
+  started?: boolean | null;
+  /** Review on the coordinator's request: into its conversation, onto the card. */
+  onReviewStart?: () => void;
+  reviewingStart?: boolean;
+  /** Start… while nobody has asked: the same card, over the page. */
+  onStartProject?: () => void;
 }): JSX.Element | null {
   const items = useQuery({
     ...projectOpenItemsQuery(projectId ?? ''),
@@ -1230,9 +1342,20 @@ export function ProjectOpenItems({
   // The pause is drawn as a card above the groups and counted in neither: it is not something
   // waiting on a person the way the rows are, it is the reason some of them are waiting.
   const paused = (items.data?.needsYou ?? []).filter((row) => row.kind === 'FUSE_PAUSED');
-  const needsYou = (items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED');
+  const startRequest = started === false ? (items.data?.startRequest ?? null) : null;
+  const needsYou = [
+    ...(startRequest ? [startRequest] : []),
+    ...(items.data?.needsYou ?? []).filter((row) => row.kind !== 'FUSE_PAUSED'),
+  ];
   const withCoordinator = items.data?.withCoordinator ?? [];
-  if (!projectId || paused.length + needsYou.length + withCoordinator.length === 0) return null;
+  // Only once the read has answered: a request still on its way is not a project nobody asked for.
+  const ownStart = started === false && items.data !== undefined && !startRequest && onStartProject
+    ? onStartProject
+    : null;
+  if (
+    !projectId
+    || (paused.length + needsYou.length + withCoordinator.length === 0 && !ownStart)
+  ) return null;
 
   return (
     <section className="project-open-items" aria-label={OPEN_ITEMS_HEADING}>
@@ -1245,13 +1368,24 @@ export function ProjectOpenItems({
       {paused.map((row) => (
         <FusePauseCard key={row.itemId} projectId={projectId} row={row} now={now} />
       ))}
-      {needsYou.length > 0 ? (
+      {needsYou.length > 0 || ownStart ? (
         <>
           <div className="project-open-items-group">{NEEDS_YOU_GROUP}</div>
           <ul className="project-open-items-list">
-            {needsYou.map((row) => (
-              <OpenItemRowView key={row.itemId} row={row} now={now} />
-            ))}
+            {ownStart ? <OwnStartRowView onStart={ownStart} /> : null}
+            {needsYou.map((row) =>
+              row === startRequest ? (
+                <StartRequestRowView
+                  key={row.itemId}
+                  row={row}
+                  now={now}
+                  onReview={onReviewStart}
+                  reviewing={reviewingStart}
+                />
+              ) : (
+                <OpenItemRowView key={row.itemId} row={row} now={now} />
+              ),
+            )}
           </ul>
         </>
       ) : null}

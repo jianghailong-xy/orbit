@@ -7,7 +7,7 @@ import {
   buildCoordinatorDeliveryInstructions,
   buildCoordinatorOpening,
 } from '../projects/coordinator-opening';
-import { renderRawQuery } from '../test-support/prisma-transaction-double';
+import { renderRawQuery, noSessionRequests } from '../test-support/prisma-transaction-double';
 import {
   RunnerApiController,
   SESSION_CLAUDE_COORDINATOR_CONTEXT_V1,
@@ -106,6 +106,7 @@ function harness(options: {
         };
       },
     },
+    sessionRequest: noSessionRequests(),
     conversationTurn: {
       updateMany: async (args: unknown) => {
         turnUpdates.push(args);

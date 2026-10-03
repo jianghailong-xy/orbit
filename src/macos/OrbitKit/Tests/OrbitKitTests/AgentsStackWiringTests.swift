@@ -107,8 +107,9 @@ final class AgentsStackWiringTests: XCTestCase {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
         let actions = try XCTUnwrap(push.firstIndex(
-            of: ".sessionRowActions(s, scope: view, onTag: { taggingSession = s })"),
+            of: ".sessionRowActions(s, scope: view, onTag: { taggingSession = s }, onShare: { sharingSession = s },"),
             "the compact row attaches its own actions")
+        XCTAssertEqual(push.dropFirst(actions + 1).first, "onMove: { movingSession = s })")
         XCTAssertGreaterThan(actions, 0)
         XCTAssertTrue(push[actions - 1].hasSuffix("}"),
                       "attached to the row from outside the `Button`'s label, not nested inside it")
@@ -125,14 +126,16 @@ final class AgentsStackWiringTests: XCTestCase {
                       "and reaches the column with its default shape")
 
         // The projection those three-column rows select through: it reads the top of the stack and
-        // writes through `replaceTop`, so the detail pane can never show something else.
+        // writes through `selectConsole` — which replaces the page the detail pane shows, and over
+        // a folder's page (a folder row's, design §3.3) pushes instead, so the folder stays the
+        // column's list — so the detail pane can never show something else.
         let projection = code(try slice(try appSource("AppModel.swift"),
                                         from: "var selectedAgentSessionID: String? {",
                                         to: "var composingAgentSession: Bool {"))
         XCTAssertTrue(projection.contains("get { nav.focusedConsoleSessionID }"),
                       "the selection IS the console on top of the stack")
         XCTAssertTrue(projection
-            .contains("nav.replaceTop(with: .console(sessionID: id, origin: .list))"),
+            .contains("nav.selectConsole(.console(sessionID: id, origin: .list))"),
                       "and selecting replaces the page the detail pane shows")
     }
 
@@ -188,8 +191,8 @@ final class AgentsStackWiringTests: XCTestCase {
         // Raw for the blocks whose end anchor is the comment that follows them, stripped for the
         // checks themselves (so a comment can't stand in for the code).
         let raw = try appSource("Views/CompactShell.swift")
-        let frames = code(try slice(raw, from: "case .compose(let agentID):", to: "default:"))
-        XCTAssertTrue(frames.contains("AgentComposePage(agentID: agentID)"))
+        let frames = code(try slice(raw, from: "case .compose(let agentID, let folderID):", to: "default:"))
+        XCTAssertTrue(frames.contains("AgentComposePage(agentID: agentID, folderID: folderID)"))
         XCTAssertTrue(frames.contains("AgentConsolePage(sessionID: sessionID)"))
 
         let page = code(try slice(raw, from: "private struct AgentComposePage: View {",

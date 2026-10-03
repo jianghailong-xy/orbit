@@ -264,6 +264,7 @@ func TestOpenCodeConfigRejectsNullInlineConfig(t *testing.T) {
 }
 
 func TestInstalledOpenCodeProjectAgentCannotOverrideRandomOrbitAgent(t *testing.T) {
+	t.Parallel()
 	bin, err := exec.LookPath(providerOpenCode)
 	if err != nil {
 		t.Skip("OpenCode is not installed")
@@ -354,6 +355,7 @@ func TestInstalledOpenCodeProjectAgentCannotOverrideRandomOrbitAgent(t *testing.
 }
 
 func TestInstalledOpenCodeDisableProjectConfigSuppressesLocalMCP(t *testing.T) {
+	t.Parallel()
 	bin, err := exec.LookPath(providerOpenCode)
 	if err != nil {
 		t.Skip("OpenCode is not installed")

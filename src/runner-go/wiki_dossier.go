@@ -94,6 +94,7 @@ const (
 // wikiDossierPage is `GET /api/runner/wiki/spaces/:id/dossiers` (contract `maintenance.dossier`).
 type wikiDossierPage struct {
 	SpaceID       string             `json:"spaceId"`
+	From          string             `json:"from"`
 	Cursor        string             `json:"cursor"`
 	More          bool               `json:"more"`
 	Facts         int                `json:"facts"`

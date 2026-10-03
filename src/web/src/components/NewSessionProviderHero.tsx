@@ -79,6 +79,7 @@ export function NewSessionProviderHero({
   runnerId,
   disabled,
   note,
+  currentModelLabel,
   projectIntent = false,
 }: {
   current: ProviderChoice;
@@ -86,9 +87,10 @@ export function NewSessionProviderHero({
   onPick: (slug: string) => void;
   /** Which of `current`'s accounts the session would start on, when it lists them (`accounts`). */
   currentAccount?: string;
-  /** Automatic is on offer — the workspace picked no account — and whether it is the pick, in which case
-   *  `currentAccount` is the account it would start on. Absent when it is not on offer. */
-  automatic?: boolean;
+  /** Per engine that lists accounts: whether Automatic is its pick — present only where Automatic is on
+   *  offer (the workspace leaves that engine's account to Orbit). On the current engine's pick,
+   *  `currentAccount` is the account it would start on. */
+  automatic?: Partial<Record<string, boolean>>;
   /** An account row was picked — `null` for Automatic: start on that engine, on that account of it. */
   onPickAccount?: (slug: string, account: string | null) => void;
   /** The machine these engines live on — the sign-in link has to name it, since the Providers
@@ -98,6 +100,8 @@ export function NewSessionProviderHero({
   disabled?: boolean;
   /** Transient line under the summary (what a switch just changed, and where it was saved). */
   note?: string | null;
+  /** The model this draft will actually send with; provider choices carry the runner default instead. */
+  currentModelLabel?: string;
   /** The Projects entry point still uses this same provider picker; only its framing copy changes. */
   projectIntent?: boolean;
 }) {
@@ -114,6 +118,7 @@ export function NewSessionProviderHero({
   const fixLink = (choice: ProviderChoice) =>
     choice.fixHref ?? `/providers?runner=${encodeId(runnerId)}&engine=${choice.fixEngine ?? choice.slug}`;
   const onRunner = (choice: ProviderChoice) => (choice.fixHref ? '' : ' on this runner');
+  const modelLabel = currentModelLabel ?? current.modelLabel;
 
   // An engine this runner hasn't installed, or isn't signed into, can't run a session, so the row
   // doesn't pick it — it goes where the fix lives instead. The identity greys out (it isn't usable
@@ -146,7 +151,7 @@ export function NewSessionProviderHero({
           <span className="np-row-name">{choice.label}</span>
           <span className="np-row-model">{choice.modelLabel}</span>
         </button>
-        {choice.accounts && automatic !== undefined && automaticRow(choice)}
+        {choice.accounts && automatic?.[choice.slug] !== undefined && automaticRow(choice)}
         {choice.accounts?.map((account) => accountRow(choice, account))}
       </Fragment>
     );
@@ -154,7 +159,7 @@ export function NewSessionProviderHero({
   // Above the accounts, when the workspace picked none: let the session start on whichever has the most
   // room. Ticked while it is the pick, with the account it would choose named under the card.
   const automaticRow = (choice: ProviderChoice) => {
-    const picked = choice.slug === current.slug && automatic === true;
+    const picked = choice.slug === current.slug && automatic?.[choice.slug] === true;
     return (
       <button
         key="automatic"
@@ -170,7 +175,7 @@ export function NewSessionProviderHero({
           {picked ? '✓' : ''}
         </span>
         <span className="np-row-name">Automatic</span>
-        <span className="np-row-model">most room</span>
+        <span className="np-row-model">resets soonest</span>
       </button>
     );
   };
@@ -179,7 +184,7 @@ export function NewSessionProviderHero({
   // with the engine's own. An account the CLI says is signed out goes to the Providers page, where
   // its sign-in is, the way a signed-out engine does.
   const accountRow = (choice: ProviderChoice, account: AccountChoice) => {
-    const picked = choice.slug === current.slug && automatic !== true && account.id === currentAccount;
+    const picked = choice.slug === current.slug && automatic?.[choice.slug] !== true && account.id === currentAccount;
     return account.unavailable ? (
       <Link
         key={account.id}
@@ -265,14 +270,14 @@ export function NewSessionProviderHero({
 
   return (
     <div className="np-hero">
-      <div className="np-title">
-        {projectIntent ? 'Start a new project' : 'Start a new session'}
-      </div>
-      <div className="np-sub">
-        {projectIntent
-          ? 'Describe what you want done — define the goal, acceptance criteria, and task breakdown together.'
-          : 'Describe the task — Orbit remembers who runs it.'}
-      </div>
+      {projectIntent && (
+        <>
+          <div className="np-title">Start a new project</div>
+          <div className="np-sub">
+            Describe what you want done — define the goal, acceptance criteria, and task breakdown together.
+          </div>
+        </>
+      )}
       {disabled ? (
         card
       ) : (
@@ -290,29 +295,40 @@ export function NewSessionProviderHero({
       )}
       {/* The pick is sticky, so the current one can be an engine that machine can no longer run —
           and a session started on it fails minutes later, at the runner. Say so here instead. */}
-      <div className="np-summary">
-        <b>{current.label}</b>
-        <span className="np-dot">·</span>
-        {current.unavailable ? (
-          <>
-            {current.unavailable}
-            {onRunner(current)}
-            <span className="np-dot">·</span>
-            <Link to={fixLink(current)}>Fix it</Link>
-          </>
-        ) : (
-          <>
-            {current.modelLabel}
-            <span className="np-dot">·</span>
-            {/* No funding label in the healthy state: for a configured provider it's a constant the
-                user already set, and it isn't actionable here. The credential earns a line only when
-                it's broken — the `unavailable` branch above ("… · Fix it"). No account either: an
-                email does not fit this line on a phone, and the composer's quota gauge names the
-                account in its popover. */}
-            <Link to="/providers">Manage</Link>
-          </>
-        )}
-      </div>
+      {projectIntent ? (
+        <div className="np-summary">
+          <b>{current.label}</b>
+          <span className="np-dot">·</span>
+          {current.unavailable ? (
+            <>
+              {current.unavailable}
+              {onRunner(current)}
+              <span className="np-dot">·</span>
+              <Link to={fixLink(current)}>Fix it</Link>
+            </>
+          ) : (
+            <>
+              {modelLabel}
+              <span className="np-dot">·</span>
+              <Link to="/providers">Manage</Link>
+            </>
+          )}
+        </div>
+      ) : current.unavailable ? (
+        <div className="np-summary">
+          <b>{current.label}</b>
+          <span className="np-dot">·</span>
+          {current.unavailable}
+          {onRunner(current)}
+          <span className="np-dot">·</span>
+          <Link to={fixLink(current)}>Fix it</Link>
+        </div>
+      ) : (
+        <>
+          <div className="np-empty-copy">Send a task to get started.</div>
+          <div className="np-current-model">{modelLabel}</div>
+        </>
+      )}
       {note && <div className="np-note">{note}</div>}
     </div>
   );

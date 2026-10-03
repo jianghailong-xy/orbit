@@ -15,6 +15,7 @@ import {
   type RunEvent,
   Transcript,
   UndeliveredCtx,
+  resultText,
 } from './Transcript';
 import { encodeId } from '../lib/idCodec';
 import { ApiError } from '../api';
@@ -108,6 +109,28 @@ describe('transient provider error card', () => {
     expect(html).not.toContain('chat-error');
   });
 
+  // Codex reports a model at capacity as the turn's error, not as a reply, and the server arms the
+  // same re-send for it — as a bare red line it read as a dead end while the retry was on its way.
+  it("turns Codex's model-at-capacity error event into the same card, and no other error event", () => {
+    const CAPACITY = 'Selected model is at capacity. Please try a different model.';
+    const html = renderToStaticMarkup(
+      <AutoRetryCtx.Provider
+        value={{ provider: 'codex', retryAt: new Date(Date.now() + 30_000).toISOString(), attempts: 0 }}
+      >
+        <Transcript events={[errorEvent(1, CAPACITY)]} />
+      </AutoRetryCtx.Provider>,
+    );
+
+    expect(html).toContain('Provider unavailable');
+    expect(html).toContain(CAPACITY);
+    expect(html).toContain('Retrying');
+    expect(html).not.toContain('chat-error');
+
+    const other = renderToStaticMarkup(<Transcript events={[errorEvent(1, 'stream disconnected')]} />);
+    expect(other).toContain('chat-error');
+    expect(other).not.toContain('Provider unavailable');
+  });
+
   it('leaves an error a re-send would reproduce as a plain error line', () => {
     const html = render(TOO_LONG);
 
@@ -138,6 +161,22 @@ describe('transient provider error card', () => {
 // Which window ran out is the whole point of the card: a 5-hour quota named as the weekly one
 // tells the reader to come back in days for something that returns this evening.
 describe('spent quota card', () => {
+  const CODEX_LIMIT =
+    "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), visit " +
+    'https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:58 AM.';
+
+  it('renders a Codex quota error event as the same auto-retry card as assistant text', () => {
+    const html = renderToStaticMarkup(
+      <AutoRetryCtx.Provider value={{ provider: 'codex' }}>
+        <Transcript events={[errorEvent(1, CODEX_LIMIT)]} />
+      </AutoRetryCtx.Provider>,
+    );
+
+    expect(html).toContain('chat-quota');
+    expect(html).toContain('Usage limit reached');
+    expect(html).not.toContain('chat-error');
+  });
+
   const render = (text: string) =>
     renderToStaticMarkup(
       <AutoRetryCtx.Provider value={{ provider: 'claude', runnerName: 'wikova' }}>
@@ -677,6 +716,129 @@ describe('engine stderr', () => {
     );
 
     expect(html).toContain('No conversation found with session ID: abc');
+  });
+
+  it('renders an apply_patch failure as a compact card with the file and reason', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          stderrEvent(
+            1,
+            '2026-09-29T23:52:33.303654Z ERROR codex_core::tools::router: ' +
+              'error=apply_patch verification failed: invalid patch: multiple operations target ' +
+              '/root/.orbit/worktrees/session/scripts/check-pages-links.mjs\n',
+          ),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('chat-error-card');
+    expect(html).toContain('apply_patch');
+    expect(html).toContain('scripts/check-pages-links.mjs');
+    expect(html).toContain('Invalid patch: multiple operations target');
+    expect(html).toContain('Show full log');
+    expect(html).not.toContain('chat-error-card-log');
+  });
+
+  it('renders a codex router error as a compact tool row', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          stderrEvent(
+            1,
+            '2026-10-01T11:53:04.032027Z ERROR codex_core::tools::router: ' +
+              'error=view_image.detail only supports `high` or `original`; omit `detail` for ' +
+              'default high resized behavior, got `low`',
+          ),
+        ]}
+      />,
+    );
+
+    expect(html).toContain('chat-error-card');
+    expect(html).toContain('view_image');
+    expect(html).toContain('Failed');
+    expect(html).toContain('view_image.detail only supports');
+    expect(html).not.toContain('chat-error-text');
+  });
+
+  it('folds multiline apply_patch stderr into one collapsed card', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          stderrEvent(
+            1,
+            '2026-09-29T23:54:05.014653Z ERROR codex_core::tools::router: ' +
+              'error=apply_patch verification failed: Failed to find expected lines in ' +
+              '/root/.orbit/worktrees/session/site/assets/README.md:\n',
+          ),
+          stderrEvent(2, 'The HTML uses `data-asset-slot` attributes for future screenshots/GIFs so swapping media does not change the information'),
+          stderrEvent(3, 'architecture. Do not add third-party tracking pixels without an explicit privacy review.'),
+        ]}
+      />,
+    );
+
+    expect(html.split('chat-error-card"').length - 1).toBe(1);
+    expect(html).toContain('site/assets/README.md');
+    expect(html).toContain('Expected lines not found');
+    expect(html).not.toContain('The HTML uses');
+    expect(html).not.toContain('chat-error-card-log');
+  });
+
+  it('keeps an apply_patch stderr failure inside the surrounding tool group', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          { seq: 1, type: 'tool_use', payload: { id: 't1', name: 'Bash', input: { command: 'pwd' } } },
+          { seq: 2, type: 'tool_result', payload: { toolUseId: 't1', content: '/root/orbit' } },
+          { seq: 3, type: 'tool_use', payload: { id: 't2', name: 'apply_patch', input: { files: ['/repo/README.md'] } } },
+          stderrEvent(
+            4,
+            '2026-09-29T23:54:05.014653Z ERROR codex_core::tools::router: ' +
+              'error=apply_patch verification failed: Failed to find expected lines in ' +
+              '/root/.orbit/worktrees/session/site/assets/README.md:',
+          ),
+          stderrEvent(8, 'The transcript\'s tool-call rendering: the folded/expandable card row, its semantic body (command /'),
+          { seq: 9, type: 'tool_use', payload: { id: 't3', name: 'Bash', input: { command: 'git status' } } },
+          { seq: 10, type: 'tool_result', payload: { toolUseId: 't3', content: 'clean' } },
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Tools × 3');
+    expect(html).toContain('1 failed');
+    expect(html).toContain('Failed: ');
+    expect(html).not.toContain('chat-error-card');
+    // The expected source line belongs to the failed call's expandable result, not a second red row.
+    expect(html).not.toContain("The transcript's tool-call rendering");
+  });
+
+  it('folds an unnamed function-argument failure into the latest unresolved tool', () => {
+    const html = renderToStaticMarkup(
+      <Transcript
+        events={[
+          { seq: 1, type: 'tool_use', payload: { id: 't1', name: 'mcp__orbit__task_create', input: { title: 'Ship it' } } },
+          stderrEvent(2, 'error=failed to parse function arguments: unknown field `question`, expected `title` or `options` at line 1 column 174'),
+          { seq: 3, type: 'tool_use', payload: { id: 't2', name: 'Bash', input: { command: 'echo done' } } },
+          { seq: 4, type: 'tool_result', payload: { toolUseId: 't2', content: 'done' } },
+        ]}
+      />,
+    );
+
+    expect(html).toContain('Create task');
+    expect(html).toContain('chat-tool-status err');
+    expect(html).not.toContain('chat-error');
+    expect(html).not.toContain('error=failed to parse function arguments');
+  });
+
+  it('uses a compact generic failure card when no tool call can be correlated', () => {
+    const html = renderToStaticMarkup(
+      <Transcript events={[stderrEvent(1, 'error=failed to parse function arguments: unknown field `question`')]} />,
+    );
+
+    expect(html).toContain('chat-error-card');
+    expect(html).toContain('Tool call');
+    expect(html).toContain('failed to parse function arguments');
+    expect(html).not.toContain('chat-error-text');
   });
 
   // codex colours its stderr with tracing's ANSI layer. The ESC byte is invisible in HTML, so
@@ -1663,6 +1825,28 @@ describe('tool run folding', () => {
 
     expect(html).toContain('Bash × 3');
     expect(html).toContain(`data:image/png;base64,${data}`);
+  });
+
+  // Codex's app-server can pass an MCP CallToolResult wrapper through unchanged. The image is
+  // then under `content`, rather than being the tool_result's top-level array, so it must still
+  // split the run and must not fall back to printing the base64 payload as JSON text.
+  it('keeps a wrapped screenshot out of the fold', () => {
+    const data = 'iVBORw0KGgo=';
+    const shot = {
+      content: [{ type: 'text', text: 'screenshot ready' }, { type: 'image', data, mimeType: 'image/png' }],
+    };
+    const html = render([
+      callWith('Bash', { command: 'ls' }, 'a.txt'),
+      callWith('Bash', { command: 'pwd' }, '/tmp'),
+      callWith('Bash', { command: 'whoami' }, 'root'),
+      callWith('exec', { command: 'capture' }, shot),
+    ]);
+
+    expect(html).toContain('Bash × 3');
+    expect(html).not.toContain('chat-tool-group-detail');
+    expect(html).toContain(`data:image/png;base64,${data}`);
+    expect(resultText(shot)).toBe('screenshot ready');
+    expect(html).not.toContain(`"data": "${data}"`);
   });
 
   it('still folds a run of plain calls', () => {

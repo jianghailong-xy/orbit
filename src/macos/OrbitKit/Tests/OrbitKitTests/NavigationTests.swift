@@ -150,7 +150,7 @@ final class NavigationTests: XCTestCase {
     /// second mechanism pushed the split's detail over it.
     func testADraftIsReplacedInPlaceByTheConsoleItCreated() {
         var nav = NavState(section: .agents)
-        nav.push(.compose(agentID: "a1"))
+        nav.push(.compose(agentID: "a1", folderID: nil))
         XCTAssertNil(nav.focusedConsoleSessionID, "a draft streams nothing")
         XCTAssertFalse(nav.sectionAtRoot)
 
@@ -358,7 +358,7 @@ final class NavigationTests: XCTestCase {
         nav.popToRoot()
         XCTAssertNil(nav.focusedConsoleSessionID, "listed again the moment you back out")
 
-        nav.push(.compose(agentID: "a1"))
+        nav.push(.compose(agentID: "a1", folderID: nil))
         XCTAssertNil(nav.focusedConsoleSessionID, "a draft composer is not a console either")
     }
 
@@ -471,6 +471,100 @@ final class NavigationTests: XCTestCase {
         }
     }
 
+    /// A project's task row opens the task over the project's page on the Projects stack itself —
+    /// not in Tasks, whose every-task scope is the tasks outside projects. The project is still the
+    /// one showing under it, so the three-column list keeps it selected and the pane can draw the
+    /// task over it; and the task is what the task-detail store follows.
+    func testATaskOpenedFromAProjectKeepsItsProjectShowingUnderIt() {
+        var nav = NavState(section: .projects)
+        nav.path = [.projectDetail(projectID: "p1")]
+        nav.push(.taskDetail(taskID: "t1"))
+
+        XCTAssertEqual(nav.selectedProjectID, "p1", "the project stays the one showing")
+        XCTAssertEqual(nav.projectBeneathTask, "p1")
+        XCTAssertEqual(nav.taskDetailOnTop, "t1", "the task is the page on top")
+        XCTAssertFalse(nav.projectFromDrawer, "the task page keeps the system back-swipe")
+
+        nav.pop()
+        XCTAssertEqual(nav.path, [.projectDetail(projectID: "p1")], "back is the project's page")
+        XCTAssertNil(nav.projectBeneathTask)
+
+        // A task with no project under it — the Tasks stack's own — names no project.
+        let tasks = NavState(section: .tasks, stacks: [.tasks: [.taskDetail(taskID: "t1")]])
+        XCTAssertNil(tasks.selectedProjectID)
+        XCTAssertNil(tasks.projectBeneathTask)
+    }
+
+    /// The task page's project line, over the page of that project, is a pop: project › task, not
+    /// project › task › project on every press. Either spelling of the project's id.
+    func testTheTaskPagesProjectLineGoesBackToTheProjectUnderIt() {
+        for _ in 0..<3 {
+            var nav = NavState(section: .projects)
+            nav.path = [.projectDetail(projectID: "34DynS2HpGYT6T1Nf6h3U")]
+            nav.push(.taskDetail(taskID: "t1"))
+            XCTAssertTrue(nav.returnToProject("01a03f47-4af6-753d-9109-a4440b1a71c4"))
+            XCTAssertEqual(nav.path, [.projectDetail(projectID: "34DynS2HpGYT6T1Nf6h3U")])
+        }
+    }
+
+    /// Only the project directly under the task page is gone back to. Another project there, a task
+    /// over a conversation, a project's page with nothing over it, or Settings up over the section:
+    /// nothing moves, and the caller opens the project the way it always has.
+    func testOnlyTheProjectDirectlyUnderTheTaskIsGoneBackTo() {
+        var other = NavState(section: .projects)
+        other.path = [.projectDetail(projectID: "p-other")]
+        other.push(.taskDetail(taskID: "t1"))
+
+        var console = NavState(section: .agents)
+        console.push(.console(sessionID: "s1", origin: .list))
+        console.push(.taskDetail(taskID: "t1"))
+
+        let page = NavState(section: .projects, stacks: [.projects: [.projectDetail(projectID: "p1")]])
+
+        var settings = NavState(section: .projects)
+        settings.path = [.projectDetail(projectID: "p1")]
+        settings.push(.taskDetail(taskID: "t1"))
+        settings.openSettings()
+
+        for (label, before) in [("another project", other), ("a task over a conversation", console),
+                                ("the project's own page", page), ("Settings up", settings)] {
+            var nav = before
+            XCTAssertFalse(nav.returnToProject("p1"), label)
+            XCTAssertEqual(nav, before, "\(label): nothing moves")
+        }
+    }
+
+    /// A notification, a link or a dependency jump routes a task into Tasks; when its row says it is
+    /// a project's, it moves over that project's page. It comes off the Tasks stack (left there, the
+    /// Tasks section would reopen on a project's task over "Tasks outside projects"), and the
+    /// Projects stack becomes the pair the project's rows push — whatever that stack held before.
+    func testARoutedTaskMovesOverItsProjectsPage() {
+        var nav = NavState(section: .tasks, stacks: [
+            .tasks: [.taskListsDirectory, .taskDetail(taskID: "34DynS2HpGYT6T1Nf6h3U")],
+            .projects: [.projectDetail(projectID: "p-other")],
+        ])
+        // The route may name the task in either spelling.
+        nav.moveTaskOverProject("01a03f47-4af6-753d-9109-a4440b1a71c4", project: "p1")
+
+        XCTAssertEqual(nav.stacks[.tasks], [.taskListsDirectory], "only the task comes off the Tasks stack")
+        XCTAssertEqual(nav.stacks[.projects], [.projectDetail(projectID: "p1"),
+                                               .taskDetail(taskID: "01a03f47-4af6-753d-9109-a4440b1a71c4")])
+        XCTAssertEqual(nav.section, .tasks, "switching sections is the caller's, whose setter syncs the store")
+
+        nav.section = .projects
+        XCTAssertEqual(nav.selectedProjectID, "p1", "the project shows under the task")
+        XCTAssertEqual(nav.taskDetailOnTop, "01a03f47-4af6-753d-9109-a4440b1a71c4")
+
+        // A Tasks stack holding only that task is emptied, not left as an empty array.
+        var alone = NavState(section: .tasks, stacks: [.tasks: [.taskDetail(taskID: "t1")]])
+        alone.moveTaskOverProject("t1", project: "p1")
+        XCTAssertNil(alone.stacks[.tasks])
+        // A Tasks stack whose top is another page is left as it is.
+        var other = NavState(section: .tasks, stacks: [.tasks: [.taskDetail(taskID: "t2")]])
+        other.moveTaskOverProject("t1", project: "p1")
+        XCTAssertEqual(other.stacks[.tasks], [.taskDetail(taskID: "t2")])
+    }
+
     /// Leaving the section and coming back. The directory used to be the one push that did *not*
     /// survive this — `selectedSection`'s `didSet` dropped it by hand, because a boolean cannot ride
     /// a view being rebuilt the way a frame on a stack can. Now Tasks lands where you left it, like
@@ -486,5 +580,49 @@ final class NavigationTests: XCTestCase {
 
         XCTAssertEqual(nav.path, [.taskListsDirectory], "coming back lands on the page you left")
         XCTAssertFalse(nav.sectionAtRoot, "and the left edge still belongs to that page")
+    }
+
+    /// A runner's record pushes two pages of its own — an engine's, its name's — and they are still
+    /// that runner's: the three-column list keeps the runner highlighted while one of them fills the
+    /// pane, and the back button lands on the record they were pushed from.
+    func testARunnersOwnPagesKeepItsRecordSelected() {
+        var nav = NavState(section: .runners)
+        nav.replaceTop(with: .runnerDetail(runnerID: "r1"))
+        nav.push(.runnerEngine(runnerID: "r1", engine: "codex"))
+        XCTAssertEqual(nav.selectedRunnerID, "r1", "an engine's page is its runner's")
+        XCTAssertFalse(nav.sectionAtRoot)
+
+        nav.pop()
+        XCTAssertEqual(nav.path, [.runnerDetail(runnerID: "r1")], "back is the record")
+        nav.push(.runnerName(runnerID: "r1"))
+        XCTAssertEqual(nav.selectedRunnerID, "r1", "and so is its name's")
+
+        // Picking another runner (`AppModel.selectedRunnerID`'s write) takes the old runner's pages
+        // off with its record: the new record is the one page showing, as a route lands.
+        nav.popRunnerPages()
+        nav.replaceTop(with: .runnerDetail(runnerID: "r2"))
+        XCTAssertEqual(nav.selectedRunnerID, "r2")
+        XCTAssertEqual(nav.path, [.runnerDetail(runnerID: "r2")], "not r1's record left under r2's")
+
+        // Down to the record and no further: the record is the selection's to clear, not this.
+        nav.push(.runnerEngine(runnerID: "r2", engine: "claude"))
+        nav.push(.runnerName(runnerID: "r2"))
+        nav.popRunnerPages()
+        XCTAssertEqual(nav.path, [.runnerDetail(runnerID: "r2")])
+        nav.popRunnerPages()
+        XCTAssertEqual(nav.path, [.runnerDetail(runnerID: "r2")])
+    }
+
+    /// From Settings (iOS) the same two pages ride Settings' own stack, one layer under the record.
+    func testARunnersOwnPagesRideSettingsStackWhileItIsUp() {
+        var nav = NavState(section: .agents)
+        nav.openSettings()
+        nav.push(.settingsRunners)
+        nav.push(.runnerDetail(runnerID: "r1"))
+        nav.push(.runnerEngine(runnerID: "r1", engine: "claude"))
+        XCTAssertEqual(nav.settingsPath, [.settingsRunners, .runnerDetail(runnerID: "r1"),
+                                          .runnerEngine(runnerID: "r1", engine: "claude")])
+        XCTAssertNil(nav.stacks[.runners], "the Runners section's stack is not Settings'")
+        XCTAssertNil(nav.stacks[.agents], "nor is the section under the sheet")
     }
 }

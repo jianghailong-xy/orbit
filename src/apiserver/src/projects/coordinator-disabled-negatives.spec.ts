@@ -99,7 +99,7 @@ interface WiredWakeFact {
  * The fact kinds this work put behind a producer, and the control that proves the switch stops
  * each one.
  *
- * Ten kinds, nineteen controls. The mapping is many-to-one in both directions on purpose: one
+ * Eleven kinds, twenty controls. The mapping is many-to-one in both directions on purpose: one
  * kind is reached by more than one write path and is controlled once per path, one control can
  * cover two kinds when the same run drives both, and one PRODUCER can build two kinds when which
  * fact a committed world justifies is the thing it decides.
@@ -275,6 +275,22 @@ const WIRED: readonly WiredWakeFact[] = [
       {
         spec: 'tasks/task-dispatch-refusal-visible.pg.spec.ts',
         test: 'a refused start under a switched-off coordinator is recorded on the task and wakes nobody',
+      },
+    ],
+  },
+  {
+    // A human-owned blocker gets its own notification after the landing fact has been consumed.
+    // The notification is checked only against the Automatic switch; it must not spend convergence
+    // budget or turn a human decision into an automatic merge.
+    event: 'PROJECT_BLOCKER_RAISED',
+    producedBy: [
+      'projects/coordinator-wake.ts#projectBlockerRaisedFact',
+      'projects/wake-disposition.service.ts#notifyCoordinatorOfBlocker',
+    ],
+    negatives: [
+      {
+        spec: 'projects/blocker-disposition.pg.spec.ts',
+        test: 'a switched-off coordinator stops nothing and raises nothing: each of the four facts leaves exactly one REFUSED row, no blocker and no session',
       },
     ],
   },

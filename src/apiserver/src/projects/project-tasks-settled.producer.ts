@@ -19,6 +19,7 @@ import {
 import type { WakeAuthorizer } from './coordinator-wake.service';
 import { criterionKeyOf } from './project-acceptance';
 import { LANDING_SERVING_WORK_SELECT, criterionLanding, readLandingBranches } from './project-criterion-landing';
+import { landingInFlight, readProjectFinish } from './project-looks-finished';
 import { criterionCoverage } from './wake-disposition';
 
 /**
@@ -37,7 +38,10 @@ export interface SettledProjectDelivery {
   outcome:
     | JudgmentOutcome['outcome']
     | CoordinatorDeliveryOutcome['outcome']
-    | 'NOT_SETTLED';
+    | 'NOT_SETTLED'
+    /** Settled, and a landing or merge into the upstream is still queued or running: nothing is
+     *  said to anybody, and the key is not spent (§4). */
+    | 'LANDING_IN_FLIGHT';
 }
 
 /**
@@ -121,6 +125,24 @@ export interface SettledProjectDelivery {
  * What remains true from §2 is the reason the ROSTER READ is where it is: it cannot change either
  * key's identity ahead of the claim, because both facts are total functions of the rows, and it
  * cannot refuse either wake.
+ *
+ * §4 — WHILE THE WORK IS LANDING, NOTHING; WHEN IT LOOKS FINISHED, THE COORDINATOR (D5)
+ * =====================================================================================
+ * A settled project that is not carded used to be judged unconditionally, and 2026-10-01 is what
+ * that cost: the last task settled while its work was on its way to `main`, the judgment opened in
+ * that gap, saw the work missing from `main`, and filed a "merge into main" task against a criterion
+ * that was already met (`project-looks-finished.ts` has the whole story). Two branches come before
+ * the judgment now, both read after the roster and both outside the key, for §2's reason:
+ *
+ *   * a `LAND_TASK`, `CHECK_PROMOTION` or `LAND_PROMOTION` queued or running — nothing at all. No
+ *     claim, so no key is spent: the job's own result re-derives this same fact when it ends, and
+ *     whatever the project looks like THEN decides where it goes.
+ *   * every criterion met (the roster first, then the projection's own reading), no open item,
+ *     nothing landing, and DONE still withheld — the fact is QUEUED on the standing coordinator
+ *     conversation (`CoordinatorDeliveryService.queue`), whose message lists every criterion's
+ *     landing reason and asks it to request done or go and do the work. It is the same fact the
+ *     judgment would have spent, delivered to the conversation that can act on it, so it adds no
+ *     event to `COORDINATOR_WAKE_EVENTS`.
  */
 @Injectable()
 export class ProjectTasksSettledProducer {
@@ -216,8 +238,27 @@ export class ProjectTasksSettledProducer {
       // fact is derived from the same two reads rather than from a flag on the settled one — see
       // §3 for what that buys and what it cost to learn.
       const landed = projectAcceptanceLandedFact(projectId, settlements, criteria);
-      const outcome = landed
-        ? await this.deliveries.deliver(landed, authorize)
+      if (landed) {
+        deliveries.push({
+          projectId,
+          outcome: (await this.deliveries.deliver(landed, authorize)).outcome,
+        });
+        continue;
+      }
+      // §4: while the platform is still moving work towards the upstream, nobody is told anything —
+      // asked first on its own, and again by the guardrail's reading, which a landing queued in
+      // between still stops.
+      const finish = await landingInFlight(this.prisma, projectId)
+        ? 'LANDING_IN_FLIGHT'
+        : criteria.length > 0 && criteria.every((criterion) => criterion.satisfied)
+          ? (await readProjectFinish(this.prisma, projectId, { tasksSettled: true })).state
+          : 'NOT_FINISHED';
+      if (finish === 'LANDING_IN_FLIGHT') {
+        deliveries.push({ projectId, outcome: 'LANDING_IN_FLIGHT' });
+        continue;
+      }
+      const outcome = finish === 'LOOKS_FINISHED'
+        ? await this.deliveries.queue(fact, authorize)
         : await this.judgments.wake(fact, authorize);
       deliveries.push({ projectId, outcome: outcome.outcome });
     }

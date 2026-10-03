@@ -90,6 +90,7 @@ struct WikiSettingsPage: View {
                                    value: maintenance.workspaceId.flatMap(workspaceLabel) ?? maintenance.workspaceId ?? "—")
                     LabeledContent(WikiModeCopy.provider, value: maintenance.provider)
                     LabeledContent(WikiModeCopy.dailyLimit, value: WikiModeCopy.runsADay(maintenance.dailyRunLimit))
+                    LabeledContent(WikiModeCopy.lookback, value: WikiModeCopy.lookbackLabel(maintenance.lookbackDays))
                 } else {
                     LabeledContent(WikiModeCopy.maintenanceName, value: WikiModeCopy.off)
                     Button(WikiModeCopy.setUp, action: actions.setUp)
@@ -159,15 +160,19 @@ struct WikiPickerOption: Identifiable, Equatable {
     let label: String
 }
 
-/// What Set up / Edit writes: where the runs take place, on what, and how many a day.
+/// What Set up / Edit writes: where the runs take place, on what, how many a day, and how far back the
+/// first one reads — a pick, and the days `Last … days` reads.
 struct WikiMaintenanceChoice: Equatable {
     var workspaceID: String?
     var provider: String
     var dailyRunLimit: Int
+    var lookback: WikiModeLogic.LookbackChoice
+    var lookbackDays: Int
 }
 
-/// Set up maintenance (mock 20 ②): the workspace, the provider it is pinned to, and the daily limit —
-/// then Turn on (or Save for one already on). A sheet form: Cancel on the left, the answer on the right.
+/// Set up maintenance (mock 20 ②): the workspace, the provider it is pinned to, the daily limit and the
+/// look-back — then Turn on (or Save for one already on). A sheet form: Cancel on the left, the answer on
+/// the right.
 struct WikiMaintenanceForm: View {
     /// The workspaces it can run in, with the label each is listed by.
     let workspaces: [WikiPickerOption]
@@ -241,6 +246,23 @@ struct WikiMaintenanceForm: View {
                 } footer: {
                     Text(WikiModeCopy.dailyLimitNote)
                 }
+                Section {
+                    Picker(WikiModeCopy.lookback, selection: $choice.lookback) {
+                        ForEach(WikiModeLogic.LookbackChoice.allCases, id: \.self) { pick in
+                            Text(WikiModeCopy.lookbackLabel(WikiModeLogic.lookbackDays(pick, days: choice.lookbackDays))).tag(pick)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    if choice.lookback == .days {
+                        Stepper(value: $choice.lookbackDays, in: 1...WikiMaintenanceSettings.lookbackDaysRange.upperBound) {
+                            Text(WikiModeCopy.lookbackLabel(choice.lookbackDays))
+                        }
+                    }
+                } header: {
+                    Text(WikiModeCopy.lookback)
+                } footer: {
+                    Text(WikiModeCopy.lookbackNote)
+                }
             }
             .navigationTitle(WikiModeCopy.setUpTitle)
             #if os(iOS)
@@ -287,11 +309,15 @@ struct WikiSettingsView: View {
                     WikiMaintenanceForm(workspaces: workspaces, providers: providers,
                                         initial: WikiMaintenanceChoice(workspaceID: current.workspaceId ?? named,
                                                                        provider: current.provider,
-                                                                       dailyRunLimit: current.dailyRunLimit),
+                                                                       dailyRunLimit: current.dailyRunLimit,
+                                                                       lookback: WikiModeLogic.lookbackChoice(current.lookbackDays),
+                                                                       lookbackDays: WikiModeLogic.lookbackDaysOffered(current.lookbackDays)),
                                         enabled: current.enabled) { choice in
+                        // `.some`: all of history is sent as null, which is a value, not a key left out.
                         let answer = await wiki.updateSpace(space, WikiSpaceUpdate(maintenance: WikiMaintenanceUpdate(
                             enabled: true, workspaceId: choice.workspaceID, provider: choice.provider,
-                            dailyRunLimit: choice.dailyRunLimit)))
+                            dailyRunLimit: choice.dailyRunLimit,
+                            lookbackDays: .some(WikiModeLogic.lookbackDays(choice.lookback, days: choice.lookbackDays)))))
                         finish(answer)
                         return answer == nil
                     }

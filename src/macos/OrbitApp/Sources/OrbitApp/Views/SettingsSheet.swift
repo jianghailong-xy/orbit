@@ -12,10 +12,10 @@ import OrbitKit
 // Settings window and the whole form in `SettingsView`.
 
 extension View {
-    /// Hosts Settings. The drawer's gear and the iPad sidebar's Settings row open this sheet instead
-    /// of switching section (`AppModel.settingsPresented`), so closing it lands on the page it
-    /// covered. Applied at the signed-in root, beside the ⌘K palette, so both shells
-    /// share it.
+    /// Hosts Settings. The drawer's gear — on iPhone, and in the iPad's sidebar, which is the same
+    /// drawer — opens this sheet instead of switching section (`AppModel.settingsPresented`), so
+    /// closing it lands on the page it covered. Applied at the signed-in root, beside the ⌘K
+    /// palette, so both shells share it.
     func settingsSheet(_ model: AppModel) -> some View {
         @Bindable var model = model
         return sheet(isPresented: $model.settingsPresented) { SettingsSheet() }
@@ -23,9 +23,10 @@ extension View {
 }
 
 /// Settings' own stack: the list at its root, and each page it opens as a frame of
-/// `NavState.settingsPath` — the runners list and a runner's record, the `SettingsPage`s, and an
-/// account's record under Admin. A form row pushes with its `NavigationLink` value; a list row
-/// inside a page pushes through `AppModel.push`, which lands here while the sheet is up.
+/// `NavState.settingsPath` — the runners list, a runner's record and its engine and name pages, the
+/// `SettingsPage`s, and an account's record under Admin. A form row pushes with its `NavigationLink`
+/// value; a list row inside a page pushes through `AppModel.push`, which lands here while the sheet
+/// is up.
 struct SettingsSheet: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -44,6 +45,8 @@ struct SettingsSheet: View {
                     switch node {
                     case .settingsRunners:            RunnersSettingsList()
                     case .runnerDetail(let runnerID): RunnerDetailView(runnerID: runnerID)
+                    case .runnerEngine(let runnerID, let engine): RunnerEnginePage(runnerID: runnerID, engine: engine)
+                    case .runnerName(let runnerID):   RunnerNamePage(runnerID: runnerID)
                     case .settingsPage(let page):     SettingsPageView(page: page)
                     case .accountPool(let poolID):    AccountPoolSettingsPage(poolID: poolID)
                     case .sharedPool(let poolID):     SharedPoolSettingsPage(poolID: poolID)
@@ -866,8 +869,8 @@ private struct ProvidersSettingsPage: View {
 }
 
 /// An account pool's page: the pool as Providers last read it — read-only for a pool of Claude keys, and
-/// run from here for a Codex pool of one's own ChatGPT account (signing it in, again, or out, and
-/// deleting the pool). Deleting the pool closes the page.
+/// run from here for a Codex pool of one's own ChatGPT accounts (adding one, signing one in again or
+/// out, and deleting the pool). Deleting the pool closes the page.
 private struct AccountPoolSettingsPage: View {
     @Environment(AppModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -882,7 +885,7 @@ private struct AccountPoolSettingsPage: View {
                     start: { try await agents.startCodexLogin(pool) },
                     poll: { try await agents.pollCodexLogin(pool) },
                     cancel: { await agents.cancelCodexLogin(pool) },
-                    signOut: { await agents.signOutCodexLogin(pool) },
+                    signOut: { login in await agents.signOutCodexLogin(pool, login) },
                     deletePool: { await close(agents, pool) },
                     refresh: { await agents.reloadPools() }))
             } else {

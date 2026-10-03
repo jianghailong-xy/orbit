@@ -47,6 +47,7 @@ type ultracodeCall struct {
 // A session spawned on Ultra is in ultracode from its first request. The paired control is a
 // plain xhigh spawn: the same effort, and no mode.
 func TestRealClaudeUltraSpawnsIntoUltracode(t *testing.T) {
+	t.Parallel()
 	ultra := driveUltracodeProbe(t, claudeUltraEffort, noEffortFrame)
 	xhigh := driveUltracodeProbe(t, "xhigh", noEffortFrame)
 
@@ -67,6 +68,7 @@ func TestRealClaudeUltraSpawnsIntoUltracode(t *testing.T) {
 // Asked for Ultra mid-turn, the running engine moves to xhigh at once and says ultracode is on
 // with the next turn.
 func TestRealClaudeUltraFrameEntersUltracodeOnTheRunningEngine(t *testing.T) {
+	t.Parallel()
 	entered := driveUltracodeProbe(t, "low", claudeUltraEffort)
 	control := driveUltracodeProbe(t, "low", noEffortFrame)
 
@@ -92,6 +94,7 @@ func TestRealClaudeUltraFrameEntersUltracodeOnTheRunningEngine(t *testing.T) {
 // ultracode off. An effortLevel on its own does not, so this is the arm that goes red if the
 // frame stops saying `"ultracode":false`.
 func TestRealClaudeLeavingUltraSwitchesUltracodeOff(t *testing.T) {
+	t.Parallel()
 	left := driveUltracodeProbe(t, claudeUltraEffort, "xhigh")
 	control := driveUltracodeProbe(t, claudeUltraEffort, noEffortFrame)
 
@@ -135,9 +138,8 @@ func driveUltracodeProbe(t *testing.T, spawnEffort, askFor string) []ultracodeCa
 	api := httptest.NewServer(rec)
 	t.Cleanup(api.Close)
 
+	// The CLI's own HOME and config dir, in its environment only: probes run in parallel.
 	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	if err := os.WriteFile(filepath.Join(home, ".claude.json"),
 		[]byte(`{"hasCompletedOnboarding":true}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -153,6 +155,8 @@ func driveUltracodeProbe(t *testing.T, spawnEffort, askFor string) []ultracodeCa
 			PermissionMode: "default",
 			Effort:         spawnEffort,
 			Env: map[string]string{
+				"HOME":                 home,
+				"CLAUDE_CONFIG_DIR":    t.TempDir(),
 				"ANTHROPIC_BASE_URL":   api.URL,
 				"ANTHROPIC_AUTH_TOKEN": "orbit-ultracode-probe",
 			},
@@ -191,6 +195,7 @@ func driveUltracodeProbe(t *testing.T, spawnEffort, askFor string) []ultracodeCa
 		rec.releaseFirstCall()
 		cancel()
 		<-done
+		_ = rt.wait() // reap the process and end its writer, rather than leak both
 	})
 
 	await := func(what string, ch <-chan struct{}) {

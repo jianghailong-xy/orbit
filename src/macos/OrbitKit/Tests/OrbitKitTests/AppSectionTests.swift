@@ -24,13 +24,11 @@ final class AppSectionTests: XCTestCase {
                        [.runners, .agents, .projects, .tasks, .wiki, .following, .settings, .admin])
     }
 
-    /// The drawer and the iPad sidebar lead with the work — projects and tasks — and the Wiki, set
-    /// apart from, and above, the Workspaces; what is left is the Manage group, still role-gated.
-    /// Following is not work you open: it has no drawer row, and on iPad it sits in Manage.
-    func testWorkSectionsLeadAndManagementGroupKeepsTheRest() {
+    /// The drawer — on iPhone, and as the iPad's sidebar — leads with the work — projects and
+    /// tasks — and the Wiki, set apart from, and above, the Workspaces. Following is not work you
+    /// open: it has no drawer row.
+    func testWorkSectionsLead() {
         XCTAssertEqual(AppSection.workSections, [.projects, .tasks, .wiki])
-        XCTAssertEqual(AppSection.managementSections(isAdmin: false), [.runners, .following, .settings])
-        XCTAssertEqual(AppSection.managementSections(isAdmin: true), [.runners, .following, .settings, .admin])
     }
 
     /// The Wiki's row says the web sidebar's word and draws SF Symbols' book, the glyph AntD's

@@ -138,8 +138,8 @@ public enum SessionLifecycleState: String, Codable, Sendable {
 
 /// What a session's `pendingApprovals` is counting, when one word says it better than "approval".
 ///
-/// Two kinds are named, and each is named because the generic word describes something that is not
-/// happening:
+/// Three kinds are named, and each is named because the generic word describes something that is
+/// not happening:
 ///
 ///   * `OWNER_CONFIRMATION` — everything counted is an OWNER_CONFIRMED task's run waiting for its
 ///     owner to confirm it done, so the row says that instead of "Waiting for approval".
@@ -148,6 +148,10 @@ public enum SessionLifecycleState: String, Codable, Sendable {
 ///     `Escalated to you`, `Paused`, `Approve merge to main`, `Question from coordinator`. Nobody is
 ///     approving anything there either — on a project whose coordinator is switched off, the item is
 ///     the owner's precisely because nobody else will take it.
+///   * `START_REQUEST` — a project nobody has started, whose coordinator has asked to start it: the
+///     row says `Ready to start` (`StartProject.readyToStart`), over the "Start this project?" card
+///     in the conversation. Nobody is approving anything there either, and nothing is blocked on
+///     it, so the row is not one of the sessions that need you (`SessionGrouping.countsOnlyAStart`).
 ///
 /// A kind this client does not know decodes as ``unknown`` — and every reader treats it exactly like
 /// a missing one — because a runner and a control plane self-update on their own schedule and a
@@ -155,6 +159,7 @@ public enum SessionLifecycleState: String, Codable, Sendable {
 public enum SessionWaitingKind: String, Codable, Sendable {
     case ownerConfirmation = "OWNER_CONFIRMATION"
     case ownerItem = "OWNER_ITEM"
+    case startRequest = "START_REQUEST"
     /// Forward-compatibility floor: no named kind, which is also what an older control plane sends.
     case unknown = "UNKNOWN"
 

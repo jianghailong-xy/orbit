@@ -197,6 +197,7 @@ const codexProbeAbsentTurnID = "01a02538-0000-7000-8000-000000000000"
 // bringing a cold app-server up costs about a minute, and none of these cases disturbs it: no
 // turn is ever started, so each request is refused on its own and leaves no state behind.
 func TestCodexTurnSteerRefusalsKeepTheirContractWording(t *testing.T) {
+	t.Parallel()
 	p := startCodexAppServerProbe(t)
 	threadID := p.startThread()
 

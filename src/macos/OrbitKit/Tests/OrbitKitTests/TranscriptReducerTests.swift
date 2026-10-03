@@ -1684,6 +1684,83 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(message, "--dangerously-skip-permissions cannot be used with root/sudo privileges")
     }
 
+    /// apply_patch writes its verification explanation over adjacent stderr events. The reducer
+    /// keeps those lines in one row so the native card can show a compact summary and disclose the
+    /// complete log on demand.
+    func testMultilineApplyPatchStderrFoldsIntoOneRow() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .system, payload: .object([
+            "stderr": .string("2026-09-29T23:54:05.014653Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /root/.orbit/worktrees/session/site/assets/README.md:")
+        ])))
+        r.apply(RunEvent(seq: 2, type: .system, payload: .object([
+            "stderr": .string("The HTML uses `data-asset-slot` attributes for future screenshots/GIFs")
+        ])))
+        r.apply(RunEvent(seq: 3, type: .system, payload: .object([
+            "stderr": .string("architecture. Do not add third-party tracking pixels without an explicit privacy review.")
+        ])))
+
+        XCTAssertEqual(r.state.items.count, 1)
+        guard case .error(_, let message)? = r.state.items.first else {
+            return XCTFail("expected one merged error row")
+        }
+        XCTAssertTrue(message.contains("site/assets/README.md:"))
+        XCTAssertTrue(message.contains("The HTML uses"))
+        XCTAssertTrue(message.contains("privacy review"))
+    }
+
+    /// A runner can report an apply_patch/parser failure on stderr without emitting a normal
+    /// tool_result. The failure still belongs to the unresolved call, so it must settle that card
+    /// and keep the surrounding tool run contiguous instead of creating a red row between groups.
+    func testToolFailureStderrSettlesTheUnresolvedToolCard() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("t1"), "name": .string("Bash"),
+            "input": .object(["command": .string("pwd")])
+        ])))
+        r.apply(RunEvent(seq: 2, type: .toolResult, payload: .object([
+            "toolUseId": .string("t1"), "content": .string("/root/orbit")
+        ])))
+        r.apply(RunEvent(seq: 3, type: .toolUse, payload: .object([
+            "toolUseId": .string("t2"), "name": .string("apply_patch"),
+            "input": .object(["files": .array([.string("/repo/README.md")])])
+        ])))
+        r.apply(RunEvent(seq: 4, type: .system, payload: .object([
+            "stderr": .string("2026-09-29T23:54:05.014653Z ERROR codex_core::tools::router: error=apply_patch verification failed: Failed to find expected lines in /root/.orbit/worktrees/session/site/assets/README.md:")
+        ])))
+        // A sequence gap and a following tool_use must not leak the expected source line as a
+        // second top-level error row.
+        r.apply(RunEvent(seq: 8, type: .system, payload: .object([
+            "stderr": .string("The transcript's tool-call rendering: the folded/expandable card row, its semantic body (command /")
+        ])))
+        r.apply(RunEvent(seq: 9, type: .toolUse, payload: .object([
+            "toolUseId": .string("t3"), "name": .string("Bash"),
+            "input": .object(["command": .string("git status")])
+        ])))
+        r.apply(RunEvent(seq: 10, type: .toolResult, payload: .object([
+            "toolUseId": .string("t3"), "content": .string("clean")
+        ])))
+
+        XCTAssertEqual(r.state.items.compactMap(\.asTool).count, 3)
+        XCTAssertFalse(r.state.items.contains { if case .error = $0 { return true }; return false })
+        XCTAssertEqual(r.state.items[1].asTool?.status, .error)
+        XCTAssertTrue(r.state.items[1].asTool?.result?.contains("semantic body") == true)
+    }
+
+    func testUnnamedToolParserFailureSettlesTheLatestUnresolvedTool() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .toolUse, payload: .object([
+            "toolUseId": .string("t1"), "name": .string("mcp__orbit__task_create"),
+            "input": .object(["title": .string("Ship it")])
+        ])))
+        r.apply(RunEvent(seq: 2, type: .system, payload: .object([
+            "stderr": .string("error=failed to parse function arguments: unknown field `question`, expected `title` or `options` at line 1 column 174")
+        ])))
+
+        XCTAssertEqual(r.state.items.count, 1)
+        XCTAssertEqual(r.state.items.first?.asTool?.status, .error)
+        XCTAssertTrue(r.state.items.first?.asTool?.result?.contains("unknown field") == true)
+    }
+
     /// A `system` event with no stderr is lifecycle noise and still earns no row.
     func testSystemEventWithoutStderrStaysSilent() {
         var r = TranscriptReducer()
@@ -1804,6 +1881,42 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(n.variant, .quota)
         XCTAssertFalse(n.stale)
         XCTAssertTrue(n.afterUserMsg, "the message it would re-send is the line directly above")
+    }
+
+    /// Codex reports a model at capacity as the turn's error rather than as a reply. The server arms
+    /// the same re-send for it as for a 529, so the row must be the card that says so — as a bare red
+    /// line it read as a dead end while the retry was already on its way. Other error events stay
+    /// error lines.
+    func testCodexCapacityErrorEventBecomesAnAutoRetryCard() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string("go")])))
+        r.apply(RunEvent(seq: 2, type: .error, payload: .object([
+            "message": .string("Selected model is at capacity. Please try a different model.")])))
+        guard case .autoRetry(let n)? = r.state.items.last else {
+            return XCTFail("expected an auto-retry card, got \(String(describing: r.state.items.last))")
+        }
+        XCTAssertEqual(n.variant, .apiError)
+        XCTAssertEqual(n.message, "Selected model is at capacity. Please try a different model.")
+        XCTAssertTrue(n.afterUserMsg)
+
+        r.apply(RunEvent(seq: 3, type: .error, payload: .object(["message": .string("stream disconnected")])))
+        XCTAssertEqual(r.state.items.last?.asError, "stream disconnected")
+    }
+
+    /// Codex may report an exhausted quota as an `error` event rather than assistant text. It must
+    /// still use the quota card; rendering this shape as a bare red line made the iOS transcript
+    /// show the provider's retryable pause as an ordinary failure.
+    func testCodexUsageLimitErrorEventBecomesAnAutoRetryCard() {
+        var r = TranscriptReducer()
+        let text = "You've hit your usage limit. Upgrade to Pro (https://chatgpt.com/explore/pro), "
+            + "visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at 6:58 AM."
+        r.apply(RunEvent(seq: 1, type: .error, payload: .object(["message": .string(text)])))
+
+        guard case .autoRetry(let n)? = r.state.items.last else {
+            return XCTFail("expected a quota auto-retry card, got \(String(describing: r.state.items.last))")
+        }
+        XCTAssertEqual(n.variant, .quota)
+        XCTAssertEqual(n.message, text)
     }
 
     /// The next user message — the retry firing, a manual retry, or the user typing something else —

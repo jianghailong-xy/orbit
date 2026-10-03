@@ -1,4 +1,5 @@
 import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsPublicId } from '../common/public-id';
 import type { SessionTurnIntent } from '@orbit/shared';
 import { MERGE_RECEIPT_RESULTS, type MergeReceiptResult } from './merge-receipt';
 
@@ -46,11 +47,19 @@ export interface CreateSessionDto {
    *  (Workspace.codexAccount). Only a session on the built-in Codex engine reads it, and an id the
    *  runner does not report runs on Default, as the workspace's does. */
   codexAccount?: string;
+  /** The Claude Code account, the sibling of `codexAccount` for a session on the built-in Claude engine:
+   *  `default` or one of the runner's slots. Omitted is Automatic where the workspace leaves the account
+   *  to Orbit (the one whose quota resets soonest), else the workspace's. */
+  claudeAccount?: string;
   /** Ids of pre-uploaded image attachments (`POST /api/attachments` with no sessionId) to
    *  send with the seeded first turn. Each must be the caller's and not yet scoped to a
    *  session/turn — they're scoped to this session on create, then linked to the initial
    *  turn when the runner seeds it. Omitted/empty keeps the first turn text-only. */
   attachmentIds?: string[];
+  /** The folder the new session is filed in — one opened from a folder's page lands in that folder
+   *  (docs/session-folders-move-design.md §3.2). It has to be one of the caller's folders in this
+   *  session's own `workspaceId`, else 400. Omitted files it in none. */
+  folderId?: string;
 }
 
 export interface SessionTurnDto {
@@ -90,6 +99,9 @@ export interface SessionResumeDto extends SessionTurnDto {
    *  same rejection as SessionConfigDto.provider. No reload turn is needed here: the revived
    *  session is claimed afresh, and the claim resolves the environment from the row. */
   provider?: string;
+  /** With `provider` naming the built-in Codex or Claude engine: which of the runner's accounts of
+   *  it — `automatic`, `default` or a slot id — as SessionConfigDto.account. */
+  account?: string;
   /** The run this message authorises STOPPING, named by its public id.
    *
    *  Only read when this session's task is being worked by another run and `provider` names a
@@ -101,7 +113,18 @@ export interface SessionResumeDto extends SessionTurnDto {
   stopSessionId?: string;
 }
 
+/** What `switchAccount` takes to put a session back on Automatic. */
+export const AUTOMATIC_ACCOUNT = 'automatic';
+
+/** Move a session on the built-in Codex or Claude engine to another of its runner's accounts —
+ *  `default` or a slot id, which pins it there — or back onto `automatic`. */
+export interface SessionAccountDto {
+  account: string;
+}
+
 export interface MergeToMainDto {
+  recoveryAction?: import('@orbit/shared').MergeRecoveryAction;
+  previewId?: string;
   /** The branch to merge this session's worktree branch INTO, picked from the status bar's
    *  branch dropdown. Omitted → the default: the runner auto-detects main, else master. */
   targetBranch?: string;
@@ -110,6 +133,12 @@ export interface MergeToMainDto {
    *  behaviour the Merge button uses, unchanged. The floor is a heartbeat: the runner reads the
    *  command on its next 30s tick, so a wait under that times out even for a merge that succeeds. */
   waitSeconds?: number;
+}
+
+/** Start the dedicated repair conversation for a merge recovery. */
+export interface MergeRepairDto {
+  /** Prepare a reviewable PR candidate instead of resolving the recovery in place. */
+  preparePR?: boolean;
 }
 
 export interface SessionArmRetryDto {
@@ -148,6 +177,11 @@ export interface SessionConfigDto {
    *  the transcript, the resume id and the wire protocol belong to the CLI that started the
    *  session. Omitted keeps the current provider. */
   provider?: string;
+  /** With `provider` moving the session onto the built-in Codex or Claude engine: which of the
+   *  runner's accounts of it the session runs on — `automatic` (Orbit's pick, unpinned), `default`
+   *  or a slot id (pinned). Omitted is Automatic's pick unless the session is pinned there. A
+   *  session already on that engine moves with PATCH /sessions/:id/account instead. */
+  account?: string;
 }
 
 /**
@@ -175,4 +209,17 @@ export class RecordMergeReceiptDto {
   @IsOptional() detail?: Record<string, unknown>;
   /** Supply one when the caller has a natural key; omitted derives MR4's from the merge itself. */
   @IsOptional() @IsString() @MaxLength(200) idempotencyKey?: string;
+}
+
+/**
+ * `POST /sessions/:id/move` (docs/session-folders-move-design.md §5.4). A class, so the global
+ * ValidationPipe decodes both ids from whichever spelling a client sends (`IsPublicId`).
+ *
+ * `workspaceId` omitted, or naming the session's own workspace, files it: `folderId` names a folder
+ * of that workspace — or, null or omitted, none, which is how a session leaves its folder. Naming
+ * another workspace moves the session there, into `folderId` (a folder of that workspace) or none.
+ */
+export class MoveSessionDto {
+  @IsOptional() @IsPublicId() workspaceId?: string;
+  @IsOptional() @IsPublicId() folderId?: string | null;
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CoordinatorLeadKind, OwnerItemKind } from '@orbit/shared';
 import {
   QUIET_MS,
+  READY_TO_START_SAYS,
   attentionChipOf,
   attentionReasonOf,
   attentionSectionOf,
@@ -665,6 +666,77 @@ describe('owner reasons inside Needs attention', () => {
   });
 });
 
+// Mock board3 ①: a coordinator asking its owner to start the project is the fifth thing a row can be
+// waiting on the owner for — in the same tier as the four, in the words the session row uses, with
+// how long it has waited. A project nobody has asked about is waiting on nobody.
+describe('a coordinator asking to start the project', () => {
+  const asking = (waitedMs: number, over: Partial<ProjectAttentionSummary> = {}) =>
+    attention({ startRequest: { waitingSince: at(waitedMs) }, ...over });
+
+  it('is Needs you · Ready to start, with how long it has waited, in Needs attention', () => {
+    const ready = project({ buckets: { ready: 1, blocked: 4 }, lastActivityAt: at(2 * MINUTE), attention: asking(2 * MINUTE) });
+
+    expect(READY_TO_START_SAYS).toBe('Needs you · Ready to start');
+    expect(attentionReasonOf(ready, NOW)).toBe('ready-to-start');
+    expect(attentionSectionOf(ready, NOW)).toBe('attention');
+    expect(attentionChipOf(ready, NOW)).toEqual({ tone: 'warning', text: 'Needs you · Ready to start · 2m' });
+  });
+
+  it('leaves a project nobody has asked about where its work puts it, with no chip', () => {
+    const quiet = project({ buckets: { ready: 1, blocked: 4 }, lastActivityAt: at(2 * MINUTE), attention: attention({ startRequest: null }) });
+    const older = project({ buckets: { ready: 1, blocked: 4 }, lastActivityAt: at(2 * MINUTE), attention: attention() });
+
+    for (const row of [quiet, older]) {
+      expect(attentionReasonOf(row, NOW)).toBeNull();
+      expect(attentionSectionOf(row, NOW)).toBe('ready');
+      expect(attentionChipOf(row, NOW)).toBeNull();
+    }
+  });
+
+  it('asks nothing of a closed project', () => {
+    const closed = project({ status: 'DONE', buckets: { done: 3 }, attention: asking(HOUR) });
+    expect(attentionReasonOf(closed, NOW)).toBeNull();
+    expect(attentionSectionOf(closed, NOW)).toBe('completed');
+  });
+
+  it('is named over one of the four only when it has waited longer, as between the four', () => {
+    const olderStart = project({
+      attention: asking(3 * HOUR, { ownerItems: [ownerItem('COORDINATOR_QUESTION', 1, 35 * MINUTE)] }),
+    });
+    const olderQuestion = project({
+      attention: asking(10 * MINUTE, { ownerItems: [ownerItem('COORDINATOR_QUESTION', 1, 35 * MINUTE)] }),
+    });
+
+    expect(attentionChipOf(olderStart, NOW)?.text).toBe('Needs you · Ready to start · 3h');
+    expect(attentionChipOf(olderQuestion, NOW)?.text).toBe('Needs you · 1 question from coordinator · 35m');
+  });
+
+  it('sits in the owner tier by its wait, above a user blocker', () => {
+    const blocker = project({
+      title: 'Blocker',
+      attention: attention({ userBlockers: 1, maxSeverity: 'CRITICAL', attentionSinceAt: at(9 * QUIET_MS) }),
+    });
+    const merge = project({
+      title: 'Merge',
+      attention: attention({ ownerItems: [ownerItem('PROMOTION_APPROVAL', 1, 2 * HOUR)] }),
+    });
+    const start = project({ title: 'Start', attention: asking(35 * MINUTE) });
+    const paused = project({
+      title: 'Paused',
+      attention: attention({ ownerItems: [ownerItem('FUSE_PAUSED', 1, 20 * MINUTE)] }),
+    });
+
+    expect(
+      orderWithinSection('attention', [blocker, paused, start, merge], NOW).map((row) => row.title),
+    ).toEqual(['Merge', 'Start', 'Paused', 'Blocker']);
+  });
+
+  it('outranks fresh running work, as the four do', () => {
+    const busy = project({ buckets: { running: 2 }, lastActivityAt: at(MINUTE), attention: asking(5 * MINUTE) });
+    expect(attentionSectionOf(busy, NOW)).toBe('attention');
+  });
+});
+
 describe('integrationChipOf', () => {
   it('marks a project branch, and states the line a project lands on directly', () => {
     const branch = project({ integration: { line: 'PROJECT_BRANCH', ref: 'project/bg-jobs' } });
@@ -737,6 +809,31 @@ describe('the sidebar’s Projects group', () => {
     expect(projectNeedsYouCount(busy)).toBe(3);
     // The two marks answer different questions, so a project can carry both.
     expect(projectIsWorking(busy)).toBe(true);
+  });
+
+  it('counts a coordinator asking to start the project as one more thing waiting on you', () => {
+    const start = row({ title: 'Start', attention: { ownerItems: [], startRequest: { waitingSince: at(2 * HOUR) } } });
+    const merge = row({ title: 'Merge', attention: { ownerItems: [ownerItem('PROMOTION_APPROVAL', 1, HOUR)] } });
+    const both = row({
+      title: 'Both',
+      attention: {
+        ownerItems: [ownerItem('COORDINATOR_QUESTION', 1, MINUTE)],
+        startRequest: { waitingSince: at(MINUTE) },
+      },
+    });
+    const recent = row({ title: 'Recent', buckets: { running: 1 }, lastActivityAt: at(MINUTE) });
+
+    expect(projectNeedsYouCount(start)).toBe(1);
+    expect(projectNeedsYouCount(both)).toBe(2);
+    // Longest wait first, the start request's wait counted as the four's are.
+    expect(sidebarProjects([recent, both, merge, start]).map((p) => p.title)).toEqual([
+      'Start',
+      'Merge',
+      'Both',
+      'Recent',
+    ]);
+    // A closed project asks nothing, whatever it still carries.
+    expect(projectNeedsYouCount(row({ status: 'DONE', attention: { ownerItems: [], startRequest: { waitingSince: at(HOUR) } } }))).toBe(0);
   });
 
   it('counts nothing for a project that merely went quiet, or one that is closed', () => {

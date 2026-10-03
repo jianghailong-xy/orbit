@@ -7,8 +7,8 @@ package main
 // than trusting a comment, and one more: codex does not refuse a service tier it will not use. A
 // tier the model's catalogue does not advertise is logged ("… will be omitted from requests") and
 // dropped, with the thread/turn request still answered OK. So a suite that only read Orbit's own
-// params would stay green on a tier id that never reaches the API — which is exactly what `flex`
-// below does.
+// params would stay green on a tier id that never reaches the API — which is exactly what the
+// unadvertised tier below does.
 //
 // The probe stands where the API is: a custom model provider (the same `model_providers` door
 // Orbit's BYOK path uses, on the `responses` wire) points at a local recorder that captures the
@@ -45,6 +45,7 @@ const codexTierAbsent = "<absent>"
 // A session in fast mode sends `service_tier: "priority"` on both Codex paths, and one that is not
 // sends no tier at all.
 func TestRealCodexFastServiceTierReachesTheResponsesRequest(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		fast bool
@@ -69,13 +70,20 @@ func TestRealCodexFastServiceTierReachesTheResponsesRequest(t *testing.T) {
 }
 
 // Why the id Orbit sends is the catalogue's and not a spelling that happens to work: codex accepts
-// the `fast` alias today, but it quietly drops any tier the catalogue does not advertise. `flex` is
-// the control that proves the recorder can see a DROPPED tier as absent — without it, "the request
-// said priority" could not be told apart from "the request says priority whatever you send".
+// the `fast` alias today, but it quietly drops any tier the catalogue does not advertise. The
+// unadvertised tier is the control that proves the recorder can see a DROPPED tier as absent —
+// without it, "the request said priority" could not be told apart from "the request says priority
+// whatever you send".
+//
+// It used to be `flex`, which codex 0.159.2 sends for a model whose catalogue row advertises only
+// priority (measured against codexTierProbeModel: `flex` goes out as sent, while `scale`, `default`
+// and an id no catalogue has are dropped). A real tier name can be let through like that by any
+// release, so the control is an id no catalogue will ever advertise.
 func TestRealCodexDropsATierTheCatalogueDoesNotAdvertise(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ sent, want string }{
 		{sent: "fast", want: codexFastServiceTier},
-		{sent: "flex", want: codexTierAbsent},
+		{sent: "orbit-unadvertised-tier", want: codexTierAbsent},
 	} {
 		t.Run(tc.sent, func(t *testing.T) {
 			job := &ClaimedSession{Agent: AgentExecConfig{Model: codexTierProbeModel}}

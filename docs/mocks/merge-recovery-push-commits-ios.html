@@ -1,0 +1,256 @@
+<!-- DESIGN MOCK (2026-10-01). The merge-recovery review sheet (`MergeRecoverySheet`) answering "what does this
+     push add to origin/main" with commits first: the branch relation on top, the commits the push adds in
+     the middle, the complete diff demoted to that card's last row. Geometry is the owner's iPhone screenshot
+     (1179×2556 @3x → 393×852pt): sheet top 59, title top 183, cards inset 16 r26, LabeledContent rows 52,
+     two-line rows 62, section gap 35, dock divider 712.6, button 723–773, secondary button centre 796.
+     Commits, authors and counts are demo data, except ①/②'s "+97 −9 · 2 files", which are the screenshot's.
+     Render (all three):
+       chromium --headless=new --disable-gpu --no-sandbox --hide-scrollbars \
+         --force-device-scale-factor=1.5 --window-size=1380,1420 \
+         --screenshot=docs/mocks/merge-recovery-push-commits-ios.png \
+         file://$PWD/docs/mocks/merge-recovery-push-commits-ios.html
+     One phone at device scale: append ?only=1|2|3 and use --window-size=393,852 --force-device-scale-factor=3 -->
+<!doctype html>
+<html lang="zh">
+<meta charset="utf-8">
+<title>合并审核页：先看推上去的提交，再看 diff — iPhone 效果图</title>
+<style>
+  :root { --tint:#2E6BFF; --label:#000; --label-2:rgba(60,60,67,.6); --label-3:rgba(60,60,67,.3);
+          --sep:rgba(60,60,67,.29); --bg:#F2F2F7; --green:#34C759; --red:#FF3B30; --orange:#E88300; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:40px 36px 56px; background:#ececef; color:#16161a; width:1380px;
+         font:15px/1.55 -apple-system,"SF Pro Text","Nimbus Sans","Noto Sans CJK SC",sans-serif; -webkit-font-smoothing:antialiased; }
+  h1 { font-size:25px; letter-spacing:-.01em; margin:0 0 8px; }
+  .lede { color:#55555e; max-width:1240px; margin:0 0 6px; font-size:15px; }
+  .lede b { color:#16161a; }
+  code { font-family:"DejaVu Sans Mono",ui-monospace,monospace; font-size:12.5px; background:#e0e0e6; border-radius:4px; padding:1px 5px; }
+  .row { display:flex; gap:40px; align-items:flex-start; margin-top:24px; }
+  figure { margin:0; width:393px; }
+  figcaption { margin-top:14px; font-size:13.5px; line-height:1.6; color:#55555e; }
+  figcaption > b:first-child { display:block; font-size:14.5px; color:#16161a; margin-bottom:3px; }
+  figcaption ol, figcaption ul { margin:6px 0 0; padding-left:18px; } figcaption li { margin-top:3px; }
+  figcaption li b { color:#16161a; }
+  .tag { display:inline-block; font:600 12px/1 "DejaVu Sans Mono",monospace; padding:4px 8px; border-radius:6px; margin-bottom:10px; }
+  .tag.now { background:#ffe4e0; color:#b3261e; } .tag.new { background:#e3ebff; color:#2346c4; }
+  .note { margin-top:30px; max-width:1300px; font-size:14px; line-height:1.65; color:#55555e; border-top:1px solid #d6d6dc; padding-top:14px; }
+  .note b { color:#16161a; }
+  .warn { display:inline-block; width:17px; height:17px; border-radius:50%; background:#e5372b; color:#fff;
+          font:700 11px/17px "Nimbus Sans",sans-serif; text-align:center; }
+
+  /* ── phone: 393×852 pt, the owner's screenshot ── */
+  .phone { width:393px; height:852px; border-radius:54px; overflow:hidden; position:relative; background:#c6c6cb; color:var(--label);
+           box-shadow:0 14px 44px rgba(0,0,0,.18); border:1px solid rgba(0,0,0,.08);
+           font-family:-apple-system,"SF Pro Text","Nimbus Sans","Noto Sans CJK SC",sans-serif; }
+  .sb { position:absolute; top:0; left:0; right:0; height:56px; display:flex; justify-content:space-between; align-items:center; padding:2px 30px 0 39px; }
+  .sb .time { font-size:17px; font-weight:700; letter-spacing:-.2px; }
+  .sb .sys { display:flex; gap:6px; align-items:center; font-size:15px; font-weight:600; }
+  .sb .bat { background:#1c1c1e; color:#fff; border-radius:5px; font:700 11px/1 "Nimbus Sans",sans-serif; padding:3px 6px; }
+  .sheet { position:absolute; top:59px; left:0; right:0; bottom:0; background:var(--bg); border-radius:38px 38px 0 0; overflow:hidden; }
+  .x { position:absolute; top:16px; right:16px; width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,.85); z-index:2;
+       border:.5px solid rgba(0,0,0,.14); box-shadow:0 1px 4px rgba(0,0,0,.06); display:grid; place-items:center; }
+  .list { position:absolute; top:0; left:0; right:0; height:653.6px; overflow:hidden; padding-top:124px; }
+  .hd { padding:0 33px; position:relative; }
+  .hd .t { font-size:20px; line-height:25px; font-weight:600; letter-spacing:-.2px; }
+  .hd .st, .hd .ld { font-size:15px; line-height:20px; color:var(--label-2); }
+  .hd .st { margin-top:5px; } .hd .ld { margin-top:6px; position:relative; display:inline-block; }
+  .hd .st a { color:var(--tint); text-decoration:none; }
+  .card { margin:0 16px; background:#fff; border-radius:26px; overflow:hidden; position:relative; }
+  .r { position:relative; display:flex; align-items:center; gap:10px; padding:13px 15px 13px 17px; min-height:52px; }
+  .r + .r::before { content:""; position:absolute; top:0; left:17px; right:15px; height:1px; transform:scaleY(.5); transform-origin:top; background:var(--sep); }
+  .r .m { flex:1; min-width:0; }
+  .r .a { font-size:15px; line-height:20px; }
+  .r .b { font-size:11px; line-height:14px; color:var(--label-2); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .r .v { font-size:15px; color:var(--label-2); white-space:nowrap; }
+  .r .chev { flex:none; margin-right:3px; }
+  .lc { padding-top:15px; padding-bottom:15px; font-size:17px; line-height:22px; justify-content:space-between; }
+  .lc .v { font-size:17px; }
+  .big .a { font-size:17px; line-height:22px; }
+  .mono { font-family:"DejaVu Sans Mono",ui-monospace,monospace; }
+  .big .mono { font-size:12.5px; line-height:18px; margin-top:4px; color:var(--label-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .cm .a { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; word-break:break-all; }
+  .cm .b .mono { font-size:10.5px; }
+  .o { color:var(--orange); font-weight:700; }
+  .route .a { font-family:"DejaVu Sans Mono",ui-monospace,monospace; font-size:13px; line-height:18px; white-space:nowrap; display:flex; align-items:center; gap:6px; }
+  .route .a .dim { color:var(--label-2); }
+  .route .a .arw { color:var(--label-2); font-family:"Nimbus Sans",sans-serif; }
+  .route .b { font-size:13px; line-height:16px; margin-top:3px; }
+  .add { color:var(--green); } .del { color:var(--red); }
+  .sh { display:flex; justify-content:space-between; padding:0 33px 7px; font-size:13px; line-height:16px; color:var(--label-2); }
+  .sf { padding:7px 33px 0; font-size:13px; line-height:16px; color:var(--label-2); }
+  .hl { text-decoration:underline wavy #e5372b; text-decoration-thickness:1.5px; text-underline-offset:3px; color:#3c3c43; }
+  .dock { position:absolute; top:653.6px; left:0; right:0; bottom:0; background:var(--bg); padding:10px 16px 0; }
+  .dock::before { content:""; position:absolute; top:0; left:0; right:0; height:1px; transform:scaleY(.5); transform-origin:top; background:var(--sep); }
+  .btn { height:50px; border-radius:25px; background:var(--tint); color:#fff; font-size:17px; font-weight:500; display:grid; place-items:center; }
+  .btn2 { height:36px; margin-top:4px; display:grid; place-items:center; font-size:17px; color:var(--tint); }
+  .bd { position:absolute; width:20px; height:20px; border-radius:50%; background:#e5372b; color:#fff; z-index:3;
+        font:700 12px/20px "Nimbus Sans",sans-serif; text-align:center; box-shadow:0 0 0 2px #fff; }
+
+  /* ?only=N: one phone alone, edge to edge, like a device screenshot */
+  body.only { padding:0; width:393px; background:#fff; }
+  body.only h1, body.only .lede, body.only .note, body.only figcaption, body.only .tag { display:none; }
+  body.only .row { margin:0; }
+  body.only .phone { border-radius:0; box-shadow:none; border:0; }
+</style>
+
+<h1>合并审核页：先看推上去的提交，再看 diff</h1>
+<p class="lede">这张页要回答的是：<b>按下 Sync main and merge 之后，origin/main 上会多出什么。</b>提交清单直接回答这个问题。文件 diff 回答的是内容，降为下钻入口。分支信息压成顶部一行。</p>
+
+<div class="row">
+
+  <!-- ① now -->
+  <figure>
+    <span class="tag now">现状</span>
+    <div class="phone">
+      <div class="sb"><span class="time">11:23</span><span class="sys"><svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>5G<span class="bat">30</span></span></div>
+      <div class="sheet">
+        <div class="x"><svg width="17" height="17" viewBox="0 0 17 17"><path d="M2.5 2.5l12 12M14.5 2.5l-12 12" stroke="#000" stroke-width="2.1" stroke-linecap="round"/></svg></div>
+        <div class="list">
+          <div class="hd">
+            <div class="t">Review synchronization into main</div>
+            <div class="st">Checked 1m ago · <a>Check again</a></div>
+            <div class="ld">Preserves both target histories.<span class="bd" style="right:-28px;top:0">1</span></div>
+          </div>
+          <div class="card" style="margin-top:51px">
+            <div class="r">
+              <div class="m"><div class="a">Complete candidate diff</div><div class="b">Against origin/main · <span class="add">+97</span> <span class="del">−9</span></div></div>
+              <span class="v">2 files</span>
+              <svg class="chev" width="8" height="13" viewBox="0 0 8 13"><path d="M1.5 1.5 6.5 6.5 1.5 11.5" fill="none" stroke="#BDBDC2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <span class="bd" style="left:222px;top:12px">2</span>
+          </div>
+          <div class="card" style="margin-top:35px">
+            <div class="r lc"><span>Merge check</span><span class="v">Not configured</span></div>
+            <div class="r big">
+              <div class="m"><div class="a">Saved repair branch</div><div class="mono">orbit/recovery/02b…6cbbf1ee78245cb78c0</div></div>
+              <svg class="chev" width="8" height="13" viewBox="0 0 8 13"><path d="M1.5 1.5 6.5 6.5 1.5 11.5" fill="none" stroke="#BDBDC2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <span class="bd" style="left:192px;top:66px">3</span>
+          </div>
+          <div class="sf" style="position:relative">Git preview only; no merge check is configured. <span class="hl">The local-only commits above</span> will be pushed with this session’s changes. For linear history or required PRs, prepare a PR candidate instead.<span class="bd" style="left:8px;top:22px">4</span></div>
+        </div>
+        <div class="dock"><div class="btn">Sync main and merge</div><div class="btn2">Prepare PR candidate</div></div>
+      </div>
+    </div>
+    <figcaption>
+      <b>现状（截图同一份数据，按下按钮之前）</b>
+      <ol>
+        <li>这一单本地 main 和 origin/main 是同一个提交，没有两段历史需要"保留"，这句话不提供信息。</li>
+        <li>页面唯一的内容是整体文件 diff。它此时就是本次会话自己的改动，分支条上点一下就能看到，这里是重复的。真正该审的"会推上去哪些提交"反而没有显示。</li>
+        <li>内部用的修复分支名占了一整行主位置。</li>
+        <li>页脚说"上面的本地独有提交会一起推送"，但上面一个提交都没有。这句文案只判断了 READY，没有判断本地独有提交是否存在。</li>
+      </ol>
+    </figcaption>
+  </figure>
+
+  <!-- ② proposal, the screenshot's case -->
+  <figure>
+    <span class="tag new">建议 · 截图这一单</span>
+    <div class="phone">
+      <div class="sb"><span class="time">11:23</span><span class="sys"><svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>5G<span class="bat">30</span></span></div>
+      <div class="sheet">
+        <div class="x"><svg width="17" height="17" viewBox="0 0 17 17"><path d="M2.5 2.5l12 12M14.5 2.5l-12 12" stroke="#000" stroke-width="2.1" stroke-linecap="round"/></svg></div>
+        <div class="list">
+          <div class="hd">
+            <div class="t">Review synchronization into main</div>
+            <div class="st">Checked 1m ago · <a>Check again</a></div>
+          </div>
+          <div class="card" style="margin-top:51px">
+            <div class="r route">
+              <div class="m">
+                <div class="a"><svg width="13" height="14" viewBox="0 0 13 14" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13V2.6M1.8 4.7 4 2.5l2.2 2.2"/><path d="M4 10c0-3.2 6.5-3 6.5-6.8V2.6M8.3 4.7l2.2-2.2 2.2 2.2"/></svg><span><span class="dim">orbit/</span>diff-git<span class="dim">-7a8c43</span></span><span class="arw">→</span><span>main</span></div>
+                <div class="b">Local main matches origin/main</div>
+              </div>
+              <svg class="chev" width="8" height="13" viewBox="0 0 8 13"><path d="M1.5 1.5 6.5 6.5 1.5 11.5" fill="none" stroke="#BDBDC2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+          <div class="sh" style="margin-top:22px"><span>Pushes to origin/main</span><span>2 commits</span></div>
+          <div class="card">
+            <div class="r cm"><div class="m"><div class="a">Update Transcript.test.tsx</div><div class="b">This session · Orbit Runner · 4m ago · <span class="mono">3f9a2c1e</span></div></div></div>
+            <div class="r cm"><div class="m"><div class="a">Update Transcript.tsx</div><div class="b">This session · Orbit Runner · 21m ago · <span class="mono">8b07d4e2</span></div></div></div>
+            <div class="r">
+              <div class="m"><div class="a">Complete diff</div><div class="b">Against origin/main · <span class="add">+97</span> <span class="del">−9</span></div></div>
+              <span class="v">2 files</span>
+              <svg class="chev" width="8" height="13" viewBox="0 0 8 13"><path d="M1.5 1.5 6.5 6.5 1.5 11.5" fill="none" stroke="#BDBDC2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+          <div class="sf">Fast-forward push: nothing already on origin/main is rewritten.</div>
+          <div class="card" style="margin-top:27px">
+            <div class="r lc"><span>Merge check</span><span class="v">Not configured</span></div>
+          </div>
+          <div class="sf">Git preview only; no merge check is configured. For linear history or required PRs, prepare a PR candidate instead.</div>
+        </div>
+        <div class="dock"><div class="btn">Sync main and merge</div><div class="btn2">Prepare PR candidate</div></div>
+      </div>
+    </div>
+    <figcaption>
+      <b>建议 · 截图这一单（提交行是演示数据）</b>
+      <ul>
+        <li><b>分支信息</b>收成一行：从哪条分支进 main，本地 main 和 origin/main 是什么关系（一致 / 领先 N / 落后 N / 各领先若干）。点进去是分支详情：source、本地、远端、候选四个 SHA，远端新提交清单，修复分支和目录。原来的 Saved repair branch 挪到这一页。</li>
+        <li><b>提交记录</b>作为主体，内容是"推送后 origin/main 新增的提交"，也就是 <code>git log origin/main..candidate</code> 的结果，不多也不少。</li>
+        <li>完整 diff 保留，降为这一组的最后一行。</li>
+        <li>页脚按实际情况生成：没有本地独有提交就不提。</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+  <!-- ③ proposal, diverged (demo data) -->
+  <figure>
+    <span class="tag new">建议 · 两边分叉时</span>
+    <div class="phone">
+      <div class="sb"><span class="time">11:23</span><span class="sys"><svg width="18" height="12" viewBox="0 0 18 12"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>5G<span class="bat">30</span></span></div>
+      <div class="sheet">
+        <div class="x"><svg width="17" height="17" viewBox="0 0 17 17"><path d="M2.5 2.5l12 12M14.5 2.5l-12 12" stroke="#000" stroke-width="2.1" stroke-linecap="round"/></svg></div>
+        <div class="list">
+          <div class="hd">
+            <div class="t">Review synchronization into main</div>
+            <div class="st">Checked just now · <a>Check again</a></div>
+          </div>
+          <div class="card" style="margin-top:51px">
+            <div class="r route">
+              <div class="m">
+                <div class="a"><svg width="13" height="14" viewBox="0 0 13 14" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13V2.6M1.8 4.7 4 2.5l2.2 2.2"/><path d="M4 10c0-3.2 6.5-3 6.5-6.8V2.6M8.3 4.7l2.2-2.2 2.2 2.2"/></svg><span><span class="dim">orbit/</span>diff-git<span class="dim">-7a8c43</span></span><span class="arw">→</span><span>main</span></div>
+                <div class="b">Local main: 2 ahead, 5 behind origin/main</div>
+              </div>
+              <svg class="chev" width="8" height="13" viewBox="0 0 8 13"><path d="M1.5 1.5 6.5 6.5 1.5 11.5" fill="none" stroke="#BDBDC2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+          <div class="sh" style="margin-top:22px"><span>Pushes to origin/main</span><span>4 commits</span></div>
+          <div class="card">
+            <div class="r cm"><div class="m"><div class="a">feat(web): workspace switcher in the list header</div><div class="b">This session · Claude · 9m ago · <span class="mono">9f2c1a7e</span></div></div></div>
+            <div class="r cm"><div class="m" style="padding-right:22px"><div class="a">Merge commit '2c78b7e023fe2c5690a7ca6859dd2ca0fe846b4f' into orbit/recovery/02b6cbbf1ee78245cb78c0</div><div class="b">Merge commit · coordinator · just now · <span class="mono">5e6f7a8b</span></div></div><span class="bd" style="right:14px;top:14px">!</span></div>
+            <div class="r cm"><div class="m"><div class="a">chore(runner): bump to 0.42</div><div class="b"><span class="o">Local-only</span> · coordinator · 1d ago · <span class="mono">1c0ffee2</span></div></div></div>
+            <div class="r cm"><div class="m"><div class="a">docs: local dev notes</div><div class="b"><span class="o">Local-only</span> · coordinator · 2d ago · <span class="mono">77ab12cd</span></div></div></div>
+            <div class="r">
+              <div class="m"><div class="a">Complete diff</div><div class="b">Against origin/main · <span class="add">+131</span> <span class="del">−17</span></div></div>
+              <span class="v">4 files</span>
+              <svg class="chev" width="8" height="13" viewBox="0 0 8 13"><path d="M1.5 1.5 6.5 6.5 1.5 11.5" fill="none" stroke="#BDBDC2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+          </div>
+          <div class="sf">2 local-only commits were never pushed; they go out with this session’s work.</div>
+        </div>
+        <div class="dock"><div class="btn">Sync main and merge</div><div class="btn2">Prepare PR candidate</div></div>
+      </div>
+    </div>
+    <figcaption>
+      <b>建议 · 两边分叉时（演示数据）</b>
+      <ul>
+        <li>结构不变：本次会话的提交、合并提交、本地独有提交按 git log 顺序排在一起，每条标出来源。</li>
+        <li><b>Local-only</b> 用橙色标出。从没推送过的提交会被一起发布，这正是这张页要拦住的风险。</li>
+        <li>会话提交超过 5 条时，折叠成 "All N commits ›"。</li>
+        <li><span class="warn">!</span> 合并提交现在的默认标题就是图里这样：带 40 位 SHA 和内部分支名，会原样进入 origin/main 的历史。建议 runner 合并时加 <code>-m "Merge origin/main into main"</code>。</li>
+      </ul>
+    </figcaption>
+  </figure>
+
+</div>
+
+<p class="note"><b>需要补的数据：</b>runner 预览时多返回一个字段，即 <code>git log origin/main..candidate</code> 的提交清单，并标出哪条是合并提交。来源标签由客户端推断：出现在 <code>localCommits</code> 里的标 Local-only，合并提交标 Merge commit，其余标 This session。旧 runner 没有这个字段时退回现在的布局，但页脚文案照样修正。Web 的 <code>MergeRecoveryPanel</code> 按同样顺序排列：分支行 → 推送的提交（默认展开）→ 完整 diff（默认折叠）。</p>
+
+<script>
+  const only = new URLSearchParams(location.search).get('only');
+  if (only) {
+    document.body.classList.add('only');
+    document.querySelectorAll('figure').forEach((f, i) => { if (String(i + 1) !== only) f.remove(); });
+  }
+</script>
+</html>

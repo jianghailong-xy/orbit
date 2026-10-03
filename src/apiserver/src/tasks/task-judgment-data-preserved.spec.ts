@@ -1494,7 +1494,209 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // 0177 pair and every stored task and criterion row are out of its reach. No function, trigger or
       // type is created, replaced or dropped — so it is not another writer of the DONE fence and names
       // none of the six preserved objects. No INSERT, UPDATE or DELETE: the new table starts empty.
-      '0335_user_avatar'],
+      '0335_user_avatar',
+      // Which account a session runs on, and whether it was picked by hand (0336): three `ADD COLUMN`s on
+      // `session` — two BOOLEAN NOT NULL DEFAULT false (`codex_account_pinned`, `claude_account_pinned`),
+      // catalog-only as a constant default is, and one nullable TEXT with no default (`claude_account`,
+      // 0330's `codex_account` exactly) — with no index, no CHECK and no foreign key, and nothing else.
+      // Read against every claim above: `task`, `project` and `project_acceptance_criterion_definition`
+      // are not named, so the 0177 pair and every stored task and criterion row are out of its reach. It
+      // names no `project_acceptance_*` object and none of the six preserved triggers/functions, and
+      // creates no function, trigger, enum or type — so it is not another writer of the DONE fence. No
+      // INSERT, UPDATE or DELETE: nothing is backfilled.
+      '0336_session_account_choice',
+      // What became of a document section's material: one JSONB column, `dispositions`, added to
+      // `wiki_doc_section` with a default and a CHECK that it is an array. Read against every claim above:
+      // no `task`, `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair and
+      // every stored task and criterion row are out of its reach. No function, trigger or type is created,
+      // replaced or dropped — its one DO block only adds the CHECK when it is missing — so it is not another
+      // writer of the DONE fence and names none of the six preserved objects. No INSERT, UPDATE or DELETE.
+      '0337_wiki_doc_dispositions',
+      // The wiki plan's jobs: one new table, `wiki_plan_job` (a draft, revision or build of a space's plan,
+      // run as a task of the space's maintenance list), reaching `wiki_space` through (space_id, owner_id),
+      // with its own CHECKs, one unique index, one partial unique index and two indexes. Its task_id and
+      // session_id are history references with no foreign key. Read against every claim above: no `task`,
+      // `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored
+      // task and criterion row are out of its reach. No function, trigger or type is created, replaced or
+      // dropped — no `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names
+      // none of the six preserved objects. No INSERT, UPDATE or DELETE: the new table starts empty.
+      '0338_wiki_plan_job',
+      // A plan draft's idempotency key: two nullable `ADD COLUMN`s with no default on `wiki_plan`
+      // (`idempotency_key`, `request_sha256`, catalog-only), one CHECK every stored version satisfies as
+      // both read NULL, and one unique index on (owner_id, idempotency_key). Read against every claim
+      // above: no `task`, `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair
+      // and every stored task and criterion row are out of its reach. No function, trigger or type is
+      // created, replaced or dropped — so it is not another writer of the DONE fence and names none of the
+      // six preserved objects. No INSERT, UPDATE or DELETE: nothing is backfilled.
+      '0339_wiki_plan_idempotency',
+      // The documents follow what changed (criterion 3 revision 3, criterion 11): one nullable JSONB
+      // column, `progress`, added to `wiki_plan_job` with no default, two CHECKs on it that every stored
+      // row satisfies (no build job is stored before this ships), and one partial unique index; one
+      // nullable TEXT column, `withdrawn_path`, added to `wiki_doc_sentence` with no default, its
+      // withdrawal CHECK dropped and added back widened to admit a path in place of an entry, one CHECK
+      // on the new column, and one partial index on `wiki_doc_footnote`. Read against every claim above:
+      // no `task`, `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair and
+      // every stored task and criterion row are out of its reach. No function, trigger or type is created,
+      // replaced or dropped — the only DROPs are its own CHECKs restated in the same file — so it is not
+      // another writer of the DONE fence and names none of the six preserved objects. No INSERT, UPDATE or
+      // DELETE: nothing is backfilled.
+      '0340_wiki_maintenance_docs',
+      // Two nullable columns with no default on `session`, `merge_recovery` (JSONB) and
+      // `merge_recovery_action` (TEXT). Pure addition: no stored row is backfilled, no column,
+      // constraint, type, trigger or function is dropped or replaced. The preserved task data,
+      // criterion labels, project acceptance objects and DONE writer fence are untouched.
+      '0341_session_merge_recovery',
+      // One more accepted `project_coordinator_wake.event` spelling. The CHECK is widened to admit
+      // the blocker notification, but no wake row is backfilled or rewritten, and none of the
+      // preserved task, session or acceptance relations is named.
+      '0342_project_blocker_coordinator_wake',
+      // A landing run again on purpose (`integration_retry`): four nullable columns with no default
+      // on `project_integration_job` (`retry_of_job_id`, `retry_failure_class`, `retry_reason`,
+      // `retry_requested_by_session_id`, catalog-only) and four CHECKs every stored row satisfies
+      // because all four read NULL in it. Read against every claim above: no `task`, `session`,
+      // `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored task
+      // and criterion row are out of its reach. No function, trigger or type is created, replaced or
+      // dropped — so it is not another writer of the DONE fence and names none of the six preserved
+      // objects. No INSERT, UPDATE or DELETE: nothing is backfilled. (0343 is left to the unlanded
+      // delivery-review migration of the same project's branch that already spells it.)
+      '0344_integration_job_retry',
+      // The owner DONE record (0345): four columns on `project` plus CHECKs for its provenance,
+      // digest and accepted-gap array. Existing DONE rows are backfilled only in those new columns
+      // as DERIVED; no task, criterion, confirmation or judgment row is rewritten. The two
+      // `project_open_item` CHECKs are widened for DONE_REQUEST and every existing item satisfies
+      // them. No trigger, function or type is created, replaced or dropped, so the preserved DONE
+      // writer fence and all task/acceptance data remain untouched.
+      '0345_project_owner_done',
+      // `task.codeless_reason` and `project_integration_job.source_on_upstream` (0346): one nullable
+      // TEXT column on `task` and one nullable BOOLEAN on `project_integration_job`, both with no
+      // default, no NOT NULL and no constraint — so, like 0236 and 0298, it ALTERs the table the
+      // 0177 pair lives on and reaches no stored row: every existing task and job reads NULL,
+      // nothing is backfilled, and `task.acceptance_command`, `task.acceptance_expected_exit_code`,
+      // `task_executable_acceptance_pair` and `task_completion_criterion` are not named. No
+      // function, trigger, type, index or constraint is created, replaced or dropped — no `CREATE
+      // OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none of the
+      // six preserved objects — and it has no INSERT, UPDATE or DELETE. No `project_acceptance_*`
+      // object is named.
+      '0346_codeless_and_source_on_upstream',
+      // The four lifetime token sums leave `session` (0347): `sum_input_tokens`,
+      // `sum_output_tokens`, `sum_cache_read` and `sum_cache_write` are dropped, catalog-only, after
+      // an anonymous DO gate that RAISEs while any function body still reads one. Read against every
+      // claim above: it ALTERs only `session`, so no `task` or `project_acceptance_*` object is
+      // named and the 0177 pair and every stored task and criterion row are out of its reach. No
+      // function, trigger or type is created, replaced or dropped — the gate is a DO block, not a
+      // `CREATE OR REPLACE FUNCTION`, so it is not another writer of the DONE fence and names none
+      // of the six preserved objects. No INSERT, UPDATE or DELETE.
+      '0347_drop_session_token_sums',
+      // Session folders (0348, docs/session-folders-move-design.md §3.1): one new table,
+      // `session_folder` (foreign keys to `user` and `workspace`, both ON DELETE CASCADE, a unique
+      // index on (workspace_id, name) and an index on owner_id), and one nullable UUID column with
+      // no default on `session`, `folder_id`, catalog-only, with its index and a foreign key into
+      // the new table ON DELETE SET NULL. Read against every claim above: no `task`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and
+      // criterion row are out of its reach. No function, trigger or type is created, replaced or
+      // dropped — so it is not another writer of the DONE fence and names none of the six preserved
+      // objects. No INSERT, UPDATE or DELETE: the new table starts empty and every session reads
+      // NULL. (0343 is the delivery review's, as said above, and 0347 is the token-sum drop just
+      // above, so this took the next number nobody used.)
+      '0348_session_folder',
+      // Who sent a turn: one nullable UUID column with no default on `conversation_turn`
+      // (`sender_session_id`, deliberately no foreign key) and one partial index on it. Read against
+      // every claim above: `conversation_turn` is not among the preserved relations and nothing else
+      // is named — no `task`, `session`, `project` or `project_acceptance_*` object, no function,
+      // trigger or type created, replaced or dropped, and no INSERT, UPDATE or DELETE. (Written as
+      // 0343 on its own branch and renumbered before it landed: 0343 is the delivery review's, as
+      // said above, and 0348 is spelled by the unlanded session-folders branch.)
+      '0349_conversation_turn_sender_session',
+      // Session requests (0350): one new table, `session_request`, whose one foreign key is to the
+      // recipient `session` row (ON DELETE CASCADE), with CHECKs and partial indexes of its own; a
+      // BEFORE UPDATE guard on that table that keeps an outcome from being rewritten; and an AFTER
+      // UPDATE trigger on `session` that closes the OPEN requests naming an ended session as their
+      // recipient. Read against every claim above: no `task`, `project` or `project_acceptance_*`
+      // object is named, so the 0177 pair and every stored task and criterion row are out of its
+      // reach; the session trigger writes only `session_request`, which starts empty, and is not
+      // another writer of the DONE fence nor any of the six preserved objects. No INSERT, UPDATE or
+      // DELETE of an existing row: nothing is backfilled. (Written as 0347 on its own branch and
+      // renumbered before it landed: 0347 is main's token-sum drop above, 0348 is spelled by the
+      // unlanded session-folders branch, and 0349 is the sender column just above.)
+      '0350_session_request',
+      // What one session sent another, kept as it was sent (0351): one new table,
+      // `session_message_charge`, whose one foreign key is to the recipient `session` row (ON DELETE
+      // CASCADE), and one index on it. Its one INSERT fills that new table from the last hour of
+      // `conversation_turn` rows, which it only reads. Read against every claim above: no `task`,
+      // `project` or `project_acceptance_*` object is named, so the 0177 pair and every stored task and
+      // criterion row are out of its reach; no function, trigger or type is created, replaced or
+      // dropped, so it is not another writer of the DONE fence and names none of the six preserved
+      // objects; and no existing row is updated or deleted.
+      '0351_session_message_charge',
+      // An outcome held for an asker that stopped for good (0352): one nullable column with no default
+      // on `session_request` (`reply_comment_due_at`), one CHECK every stored row satisfies because the
+      // column reads NULL in it, one partial index, and an AFTER UPDATE trigger on `session` whose
+      // function writes only `session_request`. Read against every claim above: no `task`, `project` or
+      // `project_acceptance_*` object is named, so the 0177 pair and every stored task and criterion
+      // row are out of its reach; the new function is not another writer of the DONE fence and names
+      // none of the six preserved objects. No INSERT, UPDATE or DELETE of an existing row: nothing is
+      // backfilled.
+      '0352_session_request_asker_stopped',
+      // `project_open_item_promotion_open_idx` (0353): one partial btree index on
+      // `project_open_item.promotion_id`, a column that already existed, over OPEN rows. Read
+      // against every claim above: one `CREATE INDEX IF NOT EXISTS` and nothing else — no function,
+      // trigger, type, column or constraint is created, altered or dropped, so it is not another
+      // writer of the DONE fence and names none of the six preserved objects. `project_open_item`
+      // is named only as the table the index is built on, and it is not a preserved relation; no
+      // `task`, `session`, `project` or `project_acceptance_*` object is named, so the 0177 pair and
+      // every stored task and criterion row are out of its reach. No INSERT, UPDATE or DELETE: the
+      // build reads every item row once and writes none. (Written as 0350 on its own branch and
+      // renumbered before it landed: 0349 to 0352 are the four just above.)
+      '0353_project_open_item_promotion_open_idx',
+      // A retry the sweeper has claimed and not yet re-sent (0354): one nullable column with no
+      // default on `session` (`retry_claimed_at`), which every stored row reads NULL for. Read
+      // against every claim above: one `ALTER TABLE "session" ADD COLUMN` and nothing else — no
+      // function, trigger, type, constraint or index is created, replaced or dropped, so it is not
+      // another writer of the DONE fence and names none of the six preserved objects. `session` is
+      // named only as the table the column is added to, and it is not a preserved relation; no
+      // `task`, `project` or `project_acceptance_*` object is named, so the 0177 pair and every
+      // stored task and criterion row are out of its reach. No INSERT, UPDATE or DELETE: the column
+      // is added, and the code that fills it writes the session row it already writes.
+      '0354_session_retry_claimed',
+      // A login pool's session token stops naming a ChatGPT account (0355): `pool_login_token` loses
+      // `account_id`, with the (pool_id, account_id) → pool_codex_login foreign key and the index over
+      // that pair. Read against every claim above: it ALTERs one table, 0324's `pool_login_token`, which
+      // is none of the preserved relations, so no `task`, `session`, `project` or `project_acceptance_*`
+      // object is named and the 0177 pair and every stored task and criterion row are out of its reach.
+      // The pool-owner fence on that same table — (pool_id, user_id) → provider_pool(id, owner_id) — is
+      // not named, and the dropped column is no part of it. No function, trigger, type or enum is
+      // created, replaced or dropped, so it is not another writer of the DONE fence and names none of
+      // the six preserved objects. No INSERT, UPDATE or DELETE. (Written as 0348 on its own branch and
+      // renumbered before it landed: 0348 to 0353 are the six just above.)
+      '0355_pool_login_token_unbind_account',
+      // A maintenance run's attempts, its platform rerun and whose its failure was: five `ADD COLUMN`s on
+      // `wiki_maintenance_run` (two INTEGER NOT NULL DEFAULT 0, catalog-only; three nullable, no default),
+      // and two CHECKs added after the backfill makes every stored row satisfy them. Its UPDATEs write
+      // `wiki_maintenance_run` alone: `task` is read for its status and `session` for its created_at, and
+      // neither is written, locked beyond the read, altered or dropped — so the 0177 pair, every stored
+      // task and criterion row and the six preserved objects are out of its reach. No function, trigger
+      // or type is created, replaced or dropped, so it is not another writer of the DONE fence. (Written
+      // as 0354 on its own branch and renumbered before it landed: 0354 is spelled by another branch not
+      // yet landed, and 0355 is the one just above.)
+      '0356_wiki_maintenance_run_attempts',
+      // How a maintenance run was made, for the day's count while its space catches up (0357): two `ADD
+      // COLUMN`s on `wiki_maintenance_run` — `catch_up` TEXT, nullable with no default, and `local_endpoint`
+      // BOOLEAN NOT NULL DEFAULT false, catalog-only — and one CHECK every stored row satisfies because its
+      // `catch_up` reads NULL. Read against every claim above: `wiki_maintenance_run` is the only table named, and
+      // it is none of the preserved relations, so no `task`, `session`, `project` or `project_acceptance_*`
+      // object is named and the 0177 pair and every stored task and criterion row are out of its reach. No
+      // function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence
+      // and names none of the six preserved objects. No INSERT, UPDATE or DELETE: nothing is backfilled.
+      '0357_wiki_maintenance_catch_up',
+      // Every Codex pool has its owner among its people (0358): one INSERT … SELECT … ON CONFLICT DO
+      // NOTHING into `provider_pool_person`, an ADMIN row for the owner of each pool of one's own on Codex,
+      // reading `provider_pool` and writing nothing else. Read against every claim above: neither table is
+      // a preserved relation, and no `task`, `session`, `project` or `project_acceptance_*` object is
+      // named, so the 0177 pair and every stored task and criterion row are out of its reach. No table,
+      // column, constraint, index, function, trigger or type is created, altered or dropped, so it is not
+      // another writer of the DONE fence and names none of the six preserved objects; no row is updated
+      // or deleted. (0357 is the wiki maintenance catch-up's, so this took the next number.)
+      '0358_codex_pool_owner_person'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

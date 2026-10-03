@@ -61,9 +61,11 @@ struct OrbitiOSApp: App {
                     switch phase {
                     case .background:
                         // iOS can suspend/terminate at will from here, so checkpoint synchronously
-                        // (an async write could be cut off mid-flight) before we lose the CPU.
+                        // (an async write could be cut off mid-flight) before we lose the CPU —
+                        // the open transcripts, and the lists a cold launch draws its first frame from.
                         didBackground = true
                         model.consoleRegistry?.persistAll()
+                        model.persistLaunchSnapshot()
                     case .active:
                         // Only after a genuine background trip: a socket suspended there may be dead
                         // but not yet erroring, so kick the open consoles + the user-level
@@ -84,7 +86,8 @@ struct OrbitiOSApp: App {
 
 /// Sign-in gate. Defined here (not shared) because the macOS `RootView` lives in the excluded
 /// `OrbitApp.swift`. Once signed in, the shell adapts to width: iPhone (compact) gets a left-drawer
-/// shell (`CompactShell`), iPad (regular) keeps `MainView`'s three-column split.
+/// shell (`CompactShell`), iPad (regular) keeps `MainView`'s three-column split, whose first column
+/// is that same drawer.
 private struct RootView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.horizontalSizeClass) private var hSize
@@ -99,8 +102,8 @@ private struct RootView: View {
             // Register for "needs your reply" pushes once signed in (idempotent).
             .task { model.enablePush() }
             .sessionSearchSheet(model)
-            // Settings is a sheet over whichever shell is showing — the drawer's gear on iPhone, the
-            // sidebar's row on iPad.
+            // Settings is a sheet over whichever shell is showing — raised by the drawer's gear, which
+            // the iPad's sidebar carries too.
             .settingsSheet(model)
         } else {
             LoginView()

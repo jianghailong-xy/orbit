@@ -223,7 +223,17 @@ public enum ComposerLogic {
     /// which is also where the message itself has just been put back. The reason comes from
     /// `APIClient.failureReason` rather than the raw error, which reads as a crash log.
     public static func sendFailureMessage(_ error: Error) -> String {
-        "Couldn't send — \(APIClient.failureReason(error)). Your message is back in the composer."
+        "\(sendFailurePrefix)\(APIClient.failureReason(error)). Your message is back in the composer."
+    }
+
+    private static let sendFailurePrefix = "Couldn't send — "
+
+    /// The line above the composer once a later send has gone through. That line stays until its ✕,
+    /// and a send failure's said the message had not gone out and was back in the composer — which
+    /// the accepted send has just made false, so it went on reading "Couldn't send" above a message
+    /// on its way. Only that line goes: an error about anything else is still true.
+    public static func statusAfterAcceptedSend(_ status: String?) -> String? {
+        status?.hasPrefix(sendFailurePrefix) == true ? nil : status
     }
 
     /// The human sentence out of a Nest error body (`{"message": "…"}`, or an array of them for a
@@ -261,16 +271,19 @@ public enum ComposerLogic {
     }
 
     /// What a queued turn hands back to the composer when it comes off the queue unrun — withdrawn,
-    /// or dropped by a Stop: the words somebody typed, trimmed. Nil for a turn nobody typed: one the
+    /// or dropped by a Stop: the words the reader typed, trimmed. Nil for a turn nobody typed: one the
     /// control plane says it wrote (`authoredByOrbit` — an acceptance round, a task's brief, a
     /// coordinator's delivery …), and the ones the queue draws as their card rather than as a message
     /// (`ConsoleView`'s queued row), which say so by their shape where the server predates that flag:
     /// a watch's wake, the control plane's wake for a background job or a wakeup coming due, an
-    /// exception item's delivery, a project's start. Handed back, those put text written for the
-    /// agent in the composer as though the reader had typed it, one tap from being sent again under
-    /// their name. Web: `returnsToComposer` (src/web/src/lib/queuedTurnRestore.ts).
+    /// exception item's delivery, a project's start. Nil too for another Orbit session's message
+    /// (`sessionMessage`): somebody typed that, but not the reader. Handed back, those put text written
+    /// for the agent — or by another one — in the composer as though the reader had typed it, one tap
+    /// from being sent again under their name. Web: `returnsToComposer`
+    /// (src/web/src/lib/queuedTurnRestore.ts).
     public static func restorableText(of bubble: UserBubble) -> String? {
         guard !bubble.authoredByOrbit, bubble.itemCard == nil, bubble.startedCard == nil,
+              bubble.sessionMessage == nil,
               WatchWakeText.parse(bubble.text) == nil,
               BackgroundWakeText.parse(bubble.text) == nil else { return nil }
         let body = bubble.text.trimmingCharacters(in: .whitespacesAndNewlines)

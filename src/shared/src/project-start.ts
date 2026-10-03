@@ -105,6 +105,9 @@ export type ProjectStartRequestBody = Omit<ProjectStartSettings, 'mergeCheckComm
  * - `START_TASK_HAS_NO_RUNNER` — tasks whose assignee is not a workspace bound to a runner.
  * - `START_REPOSITORY_UNKNOWN` — a project branch (or a merge check) asked for, and the project's
  *   coordination workspace names no repository.
+ * - `START_CRITERION_CODELESS_UNDECLARED` (warn) — a criterion served only by work that looks like
+ *   it produces no code (OWNER_CONFIRMED, or EVIDENCE_JUDGMENT with no acceptance command) and
+ *   does not declare `codeless`: with no commit to land it can hold the criterion off LANDED.
  * - `START_TASKS_START_BY_HAND` (warn) — tasks set `autoRunWhenReady=false`.
  * - `START_NO_MERGE_CHECK` (warn) — Automatic on a project branch with no merge check: the branch
  *   would merge into main with nothing run on the combined tree.
@@ -115,6 +118,7 @@ export type ProjectStartCheckCode =
   | 'START_CRITERION_UNSERVED'
   | 'START_TASK_HAS_NO_RUNNER'
   | 'START_REPOSITORY_UNKNOWN'
+  | 'START_CRITERION_CODELESS_UNDECLARED'
   | 'START_TASKS_START_BY_HAND'
   | 'START_NO_MERGE_CHECK';
 

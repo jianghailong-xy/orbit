@@ -88,9 +88,11 @@ const claudeEffortFloor = "2.1.235"
 // Measured on 2.1.260 through the recording proxy (claude_ultracode_requestbody_test.go): a
 // process spawned that way asks for xhigh and carries the "Ultracode is on" reminder, where one
 // spawned on plain xhigh carries none; `{"ultracode":true}` moves the running turn to xhigh at
-// once and the reminder arrives with the next user turn. Leaving it has to say
-// `"ultracode":false` out loud — an effortLevel alone leaves the mode on, which is invisible
-// until the level it runs at comes back.
+// once and the reminder arrives with the next user turn. 2.1.286 no longer moves the level for
+// the key: the mode comes on and the turn keeps the effort it was running at, so entering it
+// names xhigh beside the key. Leaving it has to say `"ultracode":false` out loud — an
+// effortLevel alone leaves the mode on, which is invisible until the level it runs at comes
+// back.
 const claudeUltraEffort = "ultra"
 
 // claudeUltracodeFloor is the oldest `claude` Orbit sends the ultracode key to. Same reasoning
@@ -228,7 +230,7 @@ func setConfigFrames(content string, agent AgentExecConfig) ([]setConfigFrame, e
 		floor := claudeEffortFloor
 		switch {
 		case effort == claudeUltraEffort:
-			settings = map[string]interface{}{"ultracode": true}
+			settings = map[string]interface{}{"effortLevel": "xhigh", "ultracode": true}
 			floor = claudeUltracodeFloor
 		case agent.Effort == claudeUltraEffort:
 			settings["ultracode"] = false

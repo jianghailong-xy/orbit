@@ -52,21 +52,14 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
         return order.filter { !$0.adminOnly || isAdmin }
     }
 
-    /// What the iPhone drawer and the regular-width iPad sidebar lead with, ABOVE the Workspaces and
-    /// set apart from them: the work itself — its projects and its tasks — and the Wiki, the other
-    /// thing a codebase has (Projects is the work in it, the Wiki is what the work learned). The web
-    /// sidebar puts Wiki right under Projects for the same reason. Following is not among them:
-    /// its watches are the waits agents keep for their own sessions, already drawn on each session's
-    /// row, header and Watching strip, and that strip, a watch's link and its alert are what open it.
-    /// The iPhone drawer has no row for it; on iPad it falls to the Manage group below.
+    /// What the drawer — the iPhone's, and the iPad's sidebar, which is the same view — leads with,
+    /// ABOVE the Workspaces and set apart from them: the work itself — its projects and its tasks —
+    /// and the Wiki, the other thing a codebase has (Projects is the work in it, the Wiki is what the
+    /// work learned). The web sidebar puts Wiki right under Projects for the same reason. Following
+    /// is not among them: its watches are the waits agents keep for their own sessions, already drawn
+    /// on each session's row, header and Watching strip, and that strip, a watch's link and its alert
+    /// are what open it. The drawer has no row for it.
     public static let workSections: [AppSection] = [.projects, .tasks, .wiki]
-
-    /// Destinations shown below the regular-width iPad sidebar's first-class Workspace group.
-    /// Keep this derived from ``visible(isAdmin:)`` so role gating and the cross-client navigation
-    /// order stay authoritative in one place while the iPad renderer supplies the group boundary.
-    public static func managementSections(isAdmin: Bool) -> [AppSection] {
-        visible(isAdmin: isAdmin).filter { $0 != .agents && !workSections.contains($0) }
-    }
 
     /// The section a deep-link / notification `Route` lands in. There's no aggregate Open view
     /// anymore, so "home" (`.active`) and an individual `.session` both land in Agents — the

@@ -16,10 +16,12 @@ import (
 // nobody to propose as. Eight verbs have no tool beside them: `orbit wiki verify` (wiki_verify.go) and
 // `orbit wiki import` (wiki_import.go) run a model, which is a runner's work rather than a tool call's,
 // and `orbit wiki dossier`, `orbit wiki cursor advance` (wiki_dossier.go), `orbit wiki anchors
-// verify` (wiki_anchors.go), `orbit wiki articles` (wiki_articles.go) and `orbit wiki maintain`
-// (wiki_maintain.go) are a Wiki maintenance run's, and no other session's. `orbit wiki check`
+// verify` (wiki_anchors.go), `orbit wiki articles` (wiki_articles.go), `orbit wiki docs build`
+// (wiki_docs_build.go) and `orbit wiki maintain` (wiki_maintain.go) are a Wiki maintenance run's, and no
+// other session's. `orbit wiki check`
 // (wiki_maintain.go) is the one with a headless form: it is a maintenance task's acceptance command,
-// which runs after the session's turn in a shell with no session.
+// which runs after the session's turn in a shell with no session. `orbit wiki plan draft|revise|check`
+// (wiki_plan_cli.go) are a plan job's run and its task's acceptance command, in the same two shapes.
 
 const wikiHelp = `orbit wiki — read the Orbit wiki and propose to it
 
@@ -35,8 +37,13 @@ Usage:
                             [--error TEXT] [--json]
   orbit wiki anchors verify --space <id> [--repo <path>] [--json]
   orbit wiki articles --space <id> [--topic <slug>] [--model MODEL] [--json]
+  orbit wiki docs build --space <id> [--doc <slug>] [--section <key>] [--repo <path>]
+                        [--model MODEL] [--json]
   orbit wiki maintain --space <id> [--model MODEL] [--concurrency N] [--json]
   orbit wiki check --space <id> --expect-cursor <token> [--json]
+  orbit wiki plan draft --space <id> [--target MIN-MAX] [--model MODEL] [--concurrency N] [--work-dir DIR] [--json]
+  orbit wiki plan revise --space <id> [--instructions <file>] [--target MIN-MAX] [...] [--json]
+  orbit wiki plan check --space <id> --job <id> [--json]
 
 The wiki is this codebase's own knowledge: decisions and what they rejected, pitfalls and their
 fixes, conventions, recipes. You READ it and you PROPOSE to it; you never decide. An agent's write
@@ -44,12 +51,17 @@ is a proposal that waits for the owner in Review — or, in an automatic space, 
 which 'orbit wiki verify' runs with the local model — so never report one as saved.
 
 'orbit wiki dossier', 'orbit wiki cursor advance', 'orbit wiki anchors verify', 'orbit wiki
-articles' and 'orbit wiki maintain' are a Wiki maintenance run's, and no other session's: the run
-reads what happened in its space since the cursor, proposes what it learned citing the records
-behind it, re-verifies the anchors of its space's entries on origin/main, advances the cursor once
-it has processed a page, and has the local model write the articles of the topics whose entries
-changed. 'orbit wiki maintain' does all of it in one run; 'orbit wiki check' is its task's
-acceptance command, and needs no session.
+articles', 'orbit wiki docs build' and 'orbit wiki maintain' are a Wiki maintenance run's, and no
+other session's: the run reads what happened in its space since the cursor, proposes what it
+learned citing the records behind it, re-verifies the anchors of its space's entries on
+origin/main, advances the cursor once it has processed a page, and writes again the sections of the
+documents of the plan its owner confirmed that its entries and origin/main's changes touched,
+proposing a change to the plan for what fits no section. 'orbit wiki maintain' does all of it in one
+run ('orbit wiki articles' is the topic articles' command, which it no longer runs); 'orbit wiki check'
+is its task's acceptance command, and needs no session. 'orbit wiki plan draft' and 'orbit wiki
+plan revise' are a plan job's run — the task the server makes for a draft of the space's plan — and
+'orbit wiki plan check' is that task's acceptance command; 'orbit wiki docs build' is also the run of
+the build job the owner's confirmation of a plan version makes.
 
 These commands act for the session they run in (ORBIT_SESSION_ID): what it may read is what that
 session's workspace is bound to, and its proposal is recorded against it.
@@ -59,6 +71,8 @@ Run 'orbit wiki <command> --help' for options.
 var wikiActionHelp = map[string]string{
 	// Written beside the command it documents (wiki_import.go), as its capability is.
 	"import": wikiImportHelp,
+	// The plan job's three verbs, written beside them (wiki_plan_cli.go).
+	"plan": wikiPlanHelp,
 	"maintain": `orbit wiki maintain — run a space's Wiki maintenance, whole, as its maintenance run
 
 Usage:
@@ -82,9 +96,17 @@ its quote copied from that line) and the checkout (anchors that exist on origin/
 about something else than the repository gives none. The entries are proposed by topic, with dryRun
 first; the ops the review mode would apply may change at most the circuit breaker's share of the
 active entries. Then, in an automatic space, the run's ops are verified; the anchors are
-re-verified; the articles of the topics whose entries changed are rewritten; and the cursor
-advances. Any step that fails ends the run failed and moves nothing. It prints what it did, the
-token spend included, and exits non-zero when the run failed.
+re-verified; only the sections of the confirmed plan's documents that the run touched are written
+again — the ones an entry that changed fits, the ones whose design documents, code or contracts
+changed on origin/main (a cited file gone withdraws the sentences citing it), and, with no build
+waiting, the ones never written — and one change to the plan is proposed at most for what fits no
+section, a new design document under docs/ among it; with no confirmed plan no document is written;
+and the cursor advances. Any step before the documents that fails ends the run failed and moves
+nothing; the documents' step reports what it could not do and fails nothing. Nor does an op the
+verification gets no verdict for: it is asked about once more — told, when its answer was not a
+verdict, why, and which ids a duplicate may name — and one still without a verdict is not live and
+keeps waiting; the next run adopts it. A 401 from the model's endpoint still fails the run. It
+prints what it did, the token spend included, and exits non-zero when the run failed.
 `,
 	"check": `orbit wiki check — whether a Wiki maintenance run did what its task expected
 
@@ -178,7 +200,9 @@ CLAUDE_CONFIG_DIR, the token from ANTHROPIC_AUTH_TOKEN through an apiKeyHelper),
 answers supported, partial, unsupported or duplicate. Each verdict is reported as soon as it is
 read. An answer that is not exactly a verdict reports nothing and counts as a failure; the command
 stops at the first 401 from the model's endpoint and when the space is no longer automatic, and
-exits non-zero when any op it looked at was left without a verdict.
+exits non-zero when any op it looked at was left without a verdict. A Wiki maintenance run does not
+go by that exit: what its verification leaves without a verdict waits for the next run, and fails
+nothing.
 `,
 	"dossier": `orbit wiki dossier — read what happened in a space since its cursor, as its Wiki maintenance run
 
@@ -254,6 +278,41 @@ whose anchor changed or went missing is out of the push at once, with one system
 owner's Review. It exits non-zero when the fetch failed, when git could not check an anchor, or when
 the server refused an entry; an entry that moved since the list was read is stale, and read again by
 the next run. Any session but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION.
+`,
+	"docs": `orbit wiki docs — write a space's documents from the plan its owner confirmed, as its Wiki maintenance run
+
+Usage:
+  orbit wiki docs build --space <id> [--doc <slug>] [--section <key>] [--repo <path>] [--model MODEL] [--json]
+
+Commands:
+  build                    Gather each section's material, merge it, write it, check its quotes, and write it
+
+Options:
+  --space ID               The space this maintenance run maintains. Required
+  --doc SLUG               Only this document of the confirmed plan. Default: every document of it
+  --section KEY            Only this section of --doc
+  --repo PATH              The checkout of the space's repository to read at origin/main. Default: the
+                           working directory's checkout
+  --model MODEL            The model to write with. Default: ANTHROPIC_MODEL, the model this
+                           session's provider names, at its ANTHROPIC_BASE_URL
+  --json                   Print the run's summary as JSON
+
+` + wikiDocsBuildPrecondition + `
+
+It fetches origin's main into the checkout and reads the confirmed plan. For each section it gathers the
+material the plan names: design-document sections, code symbols (with the comment above them) and
+contracts at the commit origin/main names, and — for a section with a session condition — the records
+the server finds by it, redacted and placed. The platform's template messages and repeated texts are
+taken out, and the rest cut to ` + fmt.Sprint(wikiDocMaterialMaxChars) + ` characters. A section whose fingerprint (its plan definition and
+that material) is the one the server holds, and from which nothing was withdrawn, is left as it is,
+without asking the model. Otherwise a clean Claude Code (--bare, no tools, no MCP server, an empty HOME
+and CLAUDE_CONFIG_DIR, the token from ANTHROPIC_AUTH_TOKEN through an apiKeyHelper, thinking off) merges
+the material — adopt, merge into another, or drop, each with a reason, sent with the section — and
+writes the section, a verbatim quote for every footnote. A repository quote is looked for in the file at
+the commit, and its lines are where it was found; the server checks a record's quote itself. A
+document's overview is written last, from its other sections as they are written. The command stops at
+the first 401 from the model's endpoint, and exits non-zero when any section it took up was left
+unwritten. Any session but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION.
 `,
 	"articles": `orbit wiki articles — have the local model write the articles of a space's changed topics, as its Wiki maintenance run
 
@@ -450,6 +509,35 @@ var wikiCLICapabilities = []cliCapabilitySpec{
 		SessionOnly: true,
 	},
 	{
+		// The maintenance run's documents (contract `docs.build`): CLI only like the articles, a model's
+		// work, with a sub-command named like the anchors' re-verification.
+		Tool:  "wiki_docs_build",
+		Argv:  []string{"orbit", "wiki", "docs", "build"},
+		Usage: "orbit wiki docs build --space <id> [--doc <slug>] [--section <key>] [--repo <path>] [--model MODEL] [--json]",
+		Arguments: []string{
+			"--space <id> (required; the space this maintenance run maintains)",
+			"--doc <slug> (only this document of the confirmed plan; default every document)",
+			"--section <key> (only this section of the --doc document)",
+			"--repo <path> (the checkout to read at origin/main; default the working directory's)",
+			"--model <model> (default ANTHROPIC_MODEL, the model this session's provider names)",
+			"--json",
+		},
+		Description: wikiDocsBuildDescription,
+		InputSchema: map[string]interface{}{
+			"type": "object",
+			"properties": map[string]interface{}{
+				"space":   map[string]interface{}{"type": "string", "description": "The space this maintenance run maintains."},
+				"doc":     map[string]interface{}{"type": "string", "description": "Only this document of the confirmed plan, by its slug; every document when left out."},
+				"section": map[string]interface{}{"type": "string", "description": "Only this section of the document doc names, by its key."},
+				"repo":    map[string]interface{}{"type": "string", "description": "The checkout of the space's repository to read at origin/main; the working directory's when left out."},
+				"model":   map[string]interface{}{"type": "string", "description": "The model to write with; ANTHROPIC_MODEL, the one this session's provider names, when left out."},
+			},
+			"required": []string{"space"},
+		},
+		Mutates:     true,
+		SessionOnly: true,
+	},
+	{
 		// The maintenance job's run (contract `maintenance.job.cli`): the whole pipeline in one command.
 		Tool:  "wiki_maintain",
 		Argv:  []string{"orbit", "wiki", "maintain"},
@@ -567,9 +655,26 @@ func cmdWikiCLI(args []string, in io.Reader, out io.Writer) error {
 		}
 		command += " verify"
 	}
+	if action == "docs" {
+		// Like the anchors, a verb named rather than implied: its one command is build.
+		if len(args) == 1 {
+			_, err := fmt.Fprint(out, h)
+			return err
+		}
+		if args[1] != "build" {
+			return fmt.Errorf("unknown docs command %q: its one command is build, as in "+
+				"'orbit wiki docs build --space <id>'\n\n%s", args[1], h)
+		}
+		command += " build"
+	}
 	if action == "check" {
 		// A maintenance task's acceptance command: it runs after the session's turn, with no session.
 		return cliWikiCheck(args[1:], out)
+	}
+	if action == "plan" {
+		// Three verbs, one of them — check, a plan job's acceptance command — with no session: each
+		// asks for the session context itself when it needs one.
+		return cliWikiPlan(args[1:], in, out)
 	}
 	ctx, err := wikiCLIContext(command)
 	if err != nil {
@@ -596,6 +701,8 @@ func cmdWikiCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliWikiAnchorsVerify(args[2:], out, ctx)
 	case "articles":
 		return cliWikiArticles(args[1:], out, ctx)
+	case "docs":
+		return cliWikiDocsBuild(args[2:], out, ctx)
 	default:
 		panic("unreachable wiki command")
 	}

@@ -26,6 +26,10 @@ vi.mock('../api', async (importOriginal) => {
     getSession: vi.fn(),
     // Its POST goes through the module's own `api`, which the mock above cannot reach.
     createInteractiveSession: vi.fn(),
+    // So does the account PATCH.
+    switchSessionAccount: vi.fn(),
+    // …and the config PATCH a provider switch goes out as.
+    updateSessionConfig: vi.fn(),
   };
 });
 vi.mock('../lib/transcriptStore', () => ({
@@ -33,8 +37,16 @@ vi.mock('../lib/transcriptStore', () => ({
   saveTranscript: async () => {},
 }));
 
-const { api, createInteractiveSession, getSession, getSessionEventPage, getSessionRetryMessage, listQueuedTurns } =
-  await import('../api');
+const {
+  api,
+  createInteractiveSession,
+  getSession,
+  getSessionEventPage,
+  getSessionRetryMessage,
+  listQueuedTurns,
+  switchSessionAccount,
+  updateSessionConfig,
+} = await import('../api');
 const apiMock = vi.mocked(api);
 const { WorkspaceView } = await import('./WorkspaceView');
 const { encodeId } = await import('../lib/idCodec');
@@ -158,11 +170,16 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
   };
   // The plan gauge, not the context ring beside it (which shares the pill class).
   const usage = () => mounted().querySelector<HTMLElement>('button.composer-usage[aria-label^="Plan usage"]');
-  /** The open list's account rows (portaled out of the mount), as "name quota". */
-  const accountRows = () =>
-    [...document.querySelectorAll<HTMLElement>('.np-account')].map((row) =>
+  /** The open list's account rows (portaled out of the mount), as "name quota". Waits for the list to
+   *  paint: a portal opens some frames after the press, and a loaded host takes longer than a local run. */
+  const accountRows = async () => {
+    await act(async () => {
+      await vi.waitFor(() => expect(document.querySelector('.np-account')).not.toBeNull(), { timeout: 20_000, interval: 20 });
+    });
+    return [...document.querySelectorAll<HTMLElement>('.np-account')].map((row) =>
       [...row.querySelectorAll('.np-row-name, .np-row-model')].map((part) => part.textContent).join(' '),
     );
+  };
   const pickedRow = () => document.querySelector<HTMLElement>('.np-account.picked .np-row-name')?.textContent;
   /** Which Codex account the quota gauge's popover names (portaled out of the mount), and the note
    *  under it: opened by a press, as on a phone. */
@@ -278,15 +295,15 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
   const accountNamed = (name: string) =>
     [...document.querySelectorAll('.np-account')].find((row) => row.querySelector('.np-row-name')?.textContent === name);
 
-  it('with no account picked, a new session starts on the one with the most room, and says which', async () => {
+  it('with no account picked, a new session starts on the one Automatic picks, and says which', async () => {
     await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
     // Default's 5-hour window is spent, so Automatic would start it on Work, whose quota the gauge shows.
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 0%');
-    expect(await gaugeAccount()).toEqual({ name: 'Work', note: 'Automatic — the account with the most room right now' });
+    expect(await gaugeAccount()).toEqual({ name: 'Work', note: 'Automatic — the account whose quota resets soonest' });
     composerRowNamesNoAccount();
 
     await click(mounted().querySelector('.np-card'));
-    expect(accountRows()).toEqual(['Automatic most room', 'Default 5h 100%', 'Work Weekly 0%']);
+    expect(await accountRows()).toEqual(['Automatic resets soonest', 'Default 5h 100%', 'Work Weekly 0%']);
     expect(pickedRow()).toBe('Automatic');
     await click(mounted().querySelector('.np-card'));
 
@@ -322,7 +339,7 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
     expect(usage()?.getAttribute('aria-label')).toBe('Plan usage 0%');
     await click(mounted().querySelector('.np-card'));
-    expect(accountRows()).toEqual(['Default 5h 100%', 'Work Weekly 0%']);
+    expect(await accountRows()).toEqual(['Default 5h 100%', 'Work Weekly 0%']);
     expect(pickedRow()).toBe('Work');
     await click(mounted().querySelector('.np-card'));
 
@@ -383,7 +400,168 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     };
     await mount(`/sessions/${SESSION}`, '.composer-box textarea');
     await settlesOn('Plan usage 30%');
-    // The account line is Codex's: a Claude session's popover names none.
-    expect(await gaugeAccount()).toEqual({ name: null, note: null });
+    // Named for Claude as for Codex; its workspace picked it, so there is nothing automatic to say.
+    expect(await gaugeAccount()).toEqual({ name: 'Work', note: null });
+  });
+
+  it('starts a new Claude session on the Claude account picked under Claude', async () => {
+    const claudeWork = { id: WORK, name: 'Work', home: '/root/.orbit/claude-accounts/3fa91c2e', auth: 'yes' };
+    runner = {
+      ...RUNNER,
+      engines: [
+        { engine: 'claude', installed: true, auth: 'yes', accounts: [{ id: 'default', home: '/root/.claude', auth: 'yes' }, claudeWork] },
+        ...(RUNNER.engines ?? []).filter((engine) => engine.engine !== 'claude'),
+      ],
+    } as unknown as Runner;
+    await mount(`/workspaces/${WORKSPACE}/new`, '.np-card');
+    await click(mounted().querySelector('.np-card'));
+    const claudeWorkRow = [...document.querySelectorAll('.np-account')].filter(
+      (row) => row.querySelector('.np-row-name')?.textContent === 'Work',
+    )[0];
+    await click(claudeWorkRow);
+    await sendMessage('fix the flaky test');
+    expect(creates[0]).toMatchObject({ provider: 'claude', claudeAccount: WORK });
+    expect('codexAccount' in creates[0]).toBe(false);
+  });
+
+  /** The composer's model menu, opened, with its Provider submenu open: that submenu's rows. */
+  /** Waits for `what` to render, some frames after the click that asked for it: the menus are portals,
+   *  and a loaded CI host takes longer to paint one than a local run does. */
+  const render = async (what: () => Element | null) => {
+    await act(async () => {
+      await vi.waitFor(() => expect(what()).not.toBeNull(), { timeout: 20_000, interval: 20 });
+    });
+  };
+  const providerMenuRows = async () => {
+    await click(mounted().querySelector('button.composer-model-chip'));
+    await render(() => document.querySelector('.ant-dropdown-menu'));
+    const provider = [...document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-submenu-title')].find((el) =>
+      el.textContent?.startsWith('Provider'),
+    );
+    if (!provider) return null;
+    await click(provider);
+    // Its items too: the submenu opens on a later frame than the title does.
+    await render(() => document.querySelector('.ant-dropdown-menu-submenu-popup .ant-dropdown-menu-item'));
+    return [...document.querySelectorAll<HTMLElement>('.ant-dropdown-menu-submenu-popup .ant-dropdown-menu-item')];
+  };
+  /** A row as it reads: its text, and ✓ where it is ticked. */
+  const rowText = (row: HTMLElement) =>
+    `${row.querySelector('.scope-menu-row')?.textContent ?? ''}${row.querySelector('.scope-menu-check svg') ? ' ✓' : ''}`;
+
+  it('a live Codex session moves to another account from the Provider menu, and back onto Automatic', async () => {
+    runner = { ...RUNNER, capabilities: ['codex-account-move/v1'] } as unknown as Runner;
+    detail = { ...session('default', null), codexAccountPinned: false };
+    vi.mocked(switchSessionAccount).mockResolvedValue({ ok: true } as never);
+    await mount(`/sessions/${SESSION}`, '.composer-box textarea');
+    await settlesOn('Plan usage 100%');
+    const rows = (await providerMenuRows())!;
+    // Nothing picked it by hand, so the tick is on Automatic, not on the account it happens to be on.
+    expect(rows.map(rowText)).toEqual(['Codex', 'AutomaticResets soonest ✓', 'Default5h 100%', 'WorkWeekly 0%']);
+    await click(rows.find((row) => row.textContent?.startsWith('Work')));
+    expect(vi.mocked(switchSessionAccount)).toHaveBeenCalledWith(SESSION, WORK);
+  });
+
+  it('a session pinned to an account is ticked there, and Automatic puts it back', async () => {
+    runner = { ...RUNNER, capabilities: ['codex-account-move/v1'] } as unknown as Runner;
+    detail = { ...session(WORK, null), codexAccountPinned: true };
+    vi.mocked(switchSessionAccount).mockResolvedValue({ ok: true } as never);
+    await mount(`/sessions/${SESSION}`, '.composer-box textarea');
+    await settlesOn('Plan usage 0%');
+    const rows = (await providerMenuRows())!;
+    expect(rows.map(rowText)).toEqual(['Codex', 'AutomaticResets soonest', 'Default5h 100%', 'WorkWeekly 0% ✓']);
+    await click(rows.find((row) => row.textContent?.startsWith('Automatic')));
+    expect(vi.mocked(switchSessionAccount)).toHaveBeenCalledWith(SESSION, 'automatic');
+  });
+
+  it('offers no account in the menu on a runner that cannot carry a conversation to another one', async () => {
+    detail = session('default', null);
+    await mount(`/sessions/${SESSION}`, '.composer-box textarea');
+    await settlesOn('Plan usage 100%');
+    // Codex alone, and no account to move to: there is no Provider row to open at all.
+    expect(await providerMenuRows()).toBeNull();
+  });
+
+  it("on an API key, the Provider menu lists Claude's accounts under Claude, and one of them is a switch that lands there", async () => {
+    const claudeWork = { id: WORK, name: 'Work', home: '/root/.orbit/claude-accounts/3fa91c2e', auth: 'yes' };
+    runner = {
+      ...RUNNER,
+      capabilities: ['claude-account-move/v1'],
+      engines: [
+        { engine: 'claude', installed: true, auth: 'yes', accounts: [{ id: 'default', home: '/root/.claude', auth: 'yes' }, claudeWork] },
+      ],
+      planUsage: {
+        claude: {
+          provider: 'claude',
+          fiveHour: { utilization: 0, resetsAt: RESETS },
+          sevenDay: { utilization: 100, resetsAt: RESETS },
+          accounts: { [WORK]: { provider: 'claude', fiveHour: { utilization: 30, resetsAt: RESETS } } },
+        },
+      },
+    } as unknown as Runner;
+    detail = {
+      ...session(null, null),
+      provider: 'orbitd',
+      providerBuiltin: false,
+      model: 'claude-opus-5',
+      claudeAccount: null,
+      claudeAccountPinned: false,
+      workspace: { id: WORKSPACE, codexAccount: null, claudeAccount: null },
+    };
+    // An API key of the owner's own, on the claude runtime.
+    const served = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(((p: string, ...rest: unknown[]) =>
+      p === '/providers'
+        ? (Promise.resolve([
+            { slug: 'orbitd', label: 'orbitd@Claude', runtime: 'claude', models: [{ value: 'claude-opus-5', label: 'Opus 5' }] },
+          ]) as Promise<never>)
+        : (served as (...args: unknown[]) => Promise<never>)(p, ...rest)) as never);
+    vi.mocked(updateSessionConfig).mockResolvedValue({ ok: true } as never);
+    await mount(`/sessions/${SESSION}`, '.composer-box textarea');
+    await act(async () => {
+      await vi.waitFor(() => expect(vi.mocked(getSession)).toHaveBeenCalled(), { timeout: 20_000, interval: 20 });
+    });
+    const rows = (await providerMenuRows())!;
+    // As the New Session picker lists them — and no tick among them: the session is on the key.
+    expect(rows.map(rowText)).toEqual(['Claude', 'AutomaticResets soonest', 'DefaultWeekly 100%', 'Work5h 30%', 'orbitd@Claude ✓']);
+    await click(rows.find((row) => row.textContent?.startsWith('Work')));
+    expect(vi.mocked(updateSessionConfig)).toHaveBeenCalledWith(SESSION, expect.objectContaining({ provider: 'claude', account: WORK }));
+    expect(vi.mocked(switchSessionAccount)).not.toHaveBeenCalled();
+  });
+
+  it("a live Claude session lists its runner's Claude accounts under Claude", async () => {
+    const claudeWork = { id: WORK, name: 'Work', home: '/root/.orbit/claude-accounts/3fa91c2e', auth: 'yes' };
+    runner = {
+      ...RUNNER,
+      capabilities: ['claude-account-move/v1'],
+      engines: [
+        { engine: 'claude', installed: true, auth: 'yes', accounts: [{ id: 'default', home: '/root/.claude', auth: 'yes' }, claudeWork] },
+      ],
+      planUsage: {
+        claude: {
+          provider: 'claude',
+          fiveHour: { utilization: 0, resetsAt: RESETS },
+          sevenDay: { utilization: 100, resetsAt: RESETS },
+          accounts: { [WORK]: { provider: 'claude', fiveHour: { utilization: 30, resetsAt: RESETS } } },
+        },
+      },
+    } as unknown as Runner;
+    detail = {
+      ...session(null, null),
+      provider: 'claude',
+      model: 'claude-opus-5',
+      claudeAccount: 'default',
+      claudeAccountPinned: true,
+      workspace: { id: WORKSPACE, codexAccount: null, claudeAccount: null },
+    };
+    vi.mocked(switchSessionAccount).mockResolvedValue({ ok: true } as never);
+    await mount(`/sessions/${SESSION}`, '.composer-box textarea');
+    // The gauge reads the window that stops the login — Default's spent week, though its 5-hour one
+    // reads 0% — as the menu's row for it does.
+    await settlesOn('Plan usage 100%');
+    const rows = (await providerMenuRows())!;
+    // The row reads the window that stops it: Default's weekly one, though its 5-hour one reads 0%.
+    expect(rows.map(rowText)).toEqual(['Claude', 'AutomaticResets soonest', 'DefaultWeekly 100% ✓', 'Work5h 30%']);
+    await click(rows.find((row) => row.textContent?.startsWith('Work')));
+    expect(vi.mocked(switchSessionAccount)).toHaveBeenCalledWith(SESSION, WORK);
   });
 });
