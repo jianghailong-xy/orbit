@@ -151,13 +151,14 @@ export async function sessionExecRuntime(
  * The runtime `slug` borrows when it names a pool `ownerId` may dispatch with, else null: one of their own
  * account pools, which runs on the engine it was made on — `claude` runs on whichever member the claim
  * picks (QueueService.resolvePoolMember), and only a Claude subscription is admitted as one
- * (ProvidersService.assertPoolMembers), while `codex` (migration 0323) runs on the one ChatGPT login the
- * server signed in and holds for it (CodexLoginService) — or a shared pool they are a person of
- * (migration 0321), which runs on Codex through the pool gateway (QueueService.resolveSharedPool).
+ * (ProvidersService.assertPoolMembers), while `codex` (migration 0323) runs on the ChatGPT logins the
+ * server signed in and holds for it (CodexLoginService) — or a Codex pool they are one of the people of:
+ * a shared pool (migration 0321), or somebody else's own pool its owner added them to (migration 0358),
+ * either of which runs them on its API keys through the pool gateway (QueueService.resolveSharedPool).
  *
- * Asked by the doors that accept a provider slug once no provider holds it. Somebody else's account pool,
- * and a shared pool `ownerId` is not in, is refused like a slug nothing holds, which is also how the claim
- * treats it.
+ * Asked by the doors that accept a provider slug once no provider holds it. Somebody else's account pool
+ * they are not in, and a shared pool `ownerId` is not in, is refused like a slug nothing holds, which is
+ * also how the claim treats it.
  */
 export async function accountPoolRuntime(
   db: Prisma.TransactionClient,
@@ -166,9 +167,9 @@ export async function accountPoolRuntime(
 ): Promise<AgentProvider | null> {
   const own = await db.providerPool.findFirst({ where: { slug, ownerId }, select: { shared: true, engine: true } });
   if (own && !own.shared) return own.engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;
-  // A shared pool is reached by its people, whoever created it.
+  // A Codex pool is reached by its people, whoever made it.
   const shared = await db.providerPool.findFirst({
-    where: { slug, shared: true, people: { some: { userId: ownerId } } },
+    where: { slug, engine: AgentProvider.CODEX, people: { some: { userId: ownerId } } },
     select: { id: true },
   });
   return shared ? AgentProvider.CODEX : null;

@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type OutgoingHttpHeaders } from 'node:http';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
+import { AgentProvider } from '@orbit/shared';
 import { sha256 } from '../common/crypto.util';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
@@ -25,11 +26,19 @@ export const POOL_GATEWAY_UPSTREAM = 'POOL_GATEWAY_UPSTREAM';
 export const POOL_GATEWAY_PATH = '/api/gw/codex';
 
 /**
- * What a session token may call, and nothing else: what codex 0.158 was recorded calling through a
- * configured provider (providers/fixtures/codex-gateway-recording.json) — one POST of `/responses` per
- * model request, the context compaction's included.
+ * What a session token may call, and nothing else, whichever upstream its session is on: what codex 0.158
+ * was recorded calling through a configured provider (providers/fixtures/codex-gateway-recording.json) —
+ * one POST of `/responses` per model request, the context compaction's included. Everything else codex
+ * asks a ChatGPT backend for when it is signed in itself — the model list, workspace routing, plugins,
+ * settings, analytics (providers/fixtures/codex-chatgpt-backend-recording.json) — goes to the backend it
+ * was configured with, never through here, and a session token reaches none of it.
  */
 const ALLOWED = [{ method: 'POST', path: '/responses' }] as const;
+
+/** Whether the gateway forwards `method` `path` (a path under POOL_GATEWAY_PATH) at all. */
+export function gatewayAllows(method: string, path: string): boolean {
+  return ALLOWED.some((allowed) => allowed.method === method && allowed.path === path);
+}
 
 /** The largest request body forwarded: nginx admits 30m under `/api/`, and a long thread can come near it. */
 const MAX_BODY_BYTES = 30 * 1024 * 1024;
@@ -77,12 +86,25 @@ export const SPENT_ERROR_CODES = new Set([
   'project_spend_limit_exceeded', 'organization_usage_limit_exceeded', 'usage_limit_reached', 'usage_not_included',
 ]);
 
-/** Who is calling, established from their token, and the key their session runs on. */
-interface Caller {
+/**
+ * Who is calling, established from their session token — a person's (`orbit-gw-`, this service's) or a
+ * login pool's (`orbit-gwl-`, PoolLoginGatewayService's) — and what their session runs on now. The token
+ * authenticates (pool, person, session) and nothing more; which upstream a request goes to is the
+ * session's: one of the pool's ChatGPT accounts (`accountId`), or one of its API keys (`keyId`).
+ */
+export interface GatewayCaller {
   poolId: string;
   poolLabel: string;
+  /** Whose the pool is — and so whose its ChatGPT accounts are, 0323's foreign key holding them to it. */
+  poolOwnerId: string;
+  /** The token's person. */
   userId: string;
   sessionId: string;
+  /** Whose the session is: the token's person, or the token is refused before this is built. */
+  sessionOwnerId: string;
+  /** `session.pool_codex_account_id`: the ChatGPT account of the pool the session runs on, if any. */
+  accountId: string | null;
+  /** `session.pool_key_id`: the API key of the pool the session runs on, if any. */
   keyId: string | null;
 }
 
@@ -107,17 +129,20 @@ export interface Answer {
 }
 
 /**
- * The shared Codex pools' gateway (docs/codex-shared-pool-design.md §2.2–§2.3): a session on a shared
- * pool runs codex with this as its OpenAI endpoint and a session token as its key; this checks the token,
- * puts the key the session's claim chose in its place, and passes the request to OpenAI and the answer
- * back byte for byte.
+ * The Codex pools' gateway on API keys (docs/codex-shared-pool-design.md §2.2–§2.3): a session on a Codex
+ * pool runs codex with the gateway as its OpenAI endpoint and a session token as its key; while the session
+ * runs on one of the pool's API keys, this puts that key in the token's place and passes the request to
+ * OpenAI and the answer back byte for byte. Which upstream a request goes to is the session's, not the
+ * token's (PoolGatewayController): one of the pool's ChatGPT accounts is PoolLoginGatewayService's.
  *
  * What it decides, and nothing more:
- * - WHO: the token's hash names one (pool, person, session); a token revoked or expired, a session no
- *   longer open, a session moved to another provider, a person gone from the pool or a pool deleted —
- *   the last two delete the token row itself — is 401.
- * - WHAT: only the ALLOWED paths; anything else is 403.
- * - WHICH KEY: `session.pool_key_id`, as the claim chose it (QueueService.resolveSharedPool). The gateway
+ * - WHO (`caller`, for a person's token, `orbit-gw-`): the token's hash names one (pool, person,
+ *   session); a token revoked or expired, a session no longer open, a session moved to another provider,
+ *   a person gone from the pool or a pool deleted — the last two delete the token row itself — is 401. The
+ *   pool may be a shared one or one of somebody's own its owner added the person to (migration 0358).
+ * - WHAT: only the ALLOWED paths; anything else is 403 (gatewayAllows, asked by the controller).
+ * - WHICH KEY (`forward`): `session.pool_key_id`, as the claim chose it (QueueService.resolveSharedPool,
+ *   and resolveLoginPool for an owner's session none of whose pool's accounts can run). The gateway
  *   never chooses a key and never moves a session to another one; a key that cannot run for the session
  *   — none chosen, switched off, refused or disabled by OpenAI, or its share cap spent by the others — is
  *   refused here with the reason, and the session's next claim moves it.
@@ -142,19 +167,13 @@ export class PoolGatewayService {
     @Inject(POOL_GATEWAY_UPSTREAM) private readonly upstream: string,
   ) {}
 
-  async handle(req: Request, res: Response): Promise<void> {
+  /**
+   * A request of a session on one of its pool's API keys (or on none), sent on to OpenAI's API on that key
+   * — `caller` authenticated by either kind of token, and the path already allowed (PoolGatewayController).
+   */
+  async forward(req: Request, res: Response, caller: GatewayCaller): Promise<void> {
     const started = Date.now();
     const target = gatewayTarget(req.originalUrl ?? req.url);
-    const caller = await this.caller(req.headers.authorization);
-    if (!caller) {
-      refuse(res, 401, 'orbit_gateway_token_invalid',
-        'This Orbit session token is not valid any more — the session ended, it left the shared pool, or the pool is gone');
-      return;
-    }
-    if (!ALLOWED.some((allowed) => allowed.method === req.method && allowed.path === target.path)) {
-      refuse(res, 403, 'orbit_gateway_path_not_allowed', `${req.method} ${target.path} is not something the Orbit pool gateway forwards`);
-      return;
-    }
     const now = new Date();
     const key = caller.keyId ? await this.keyOf(caller.poolId, caller.keyId) : null;
     const why = key ? await this.whyNot(key, caller.userId, now) : null;
@@ -209,9 +228,12 @@ export class PoolGatewayService {
     this.log.log(`session ${caller.sessionId} key ${maskedKey(key.keyHint)}: ${req.method} ${target.path} → ${status} in ${Date.now() - started}ms`);
   }
 
-  /** The token's (pool, person, session), when it may still be used; null for every way it may not. */
-  private async caller(authorization: string | undefined): Promise<Caller | null> {
-    const token = bearerToken(authorization);
+  /**
+   * A person's token's (pool, person, session) and what the session runs on, when the token may still be
+   * used; null for every way it may not. The pool is a Codex pool the person is one of the people of — the
+   * token's own key says so — whether a shared one or one of somebody's own (migration 0358).
+   */
+  async caller(token: string | undefined): Promise<GatewayCaller | null> {
     if (!token || !token.startsWith('orbit-gw-')) return null;
     const row = await this.prisma.poolGatewayToken.findUnique({
       where: { tokenHash: sha256(token) },
@@ -221,9 +243,12 @@ export class PoolGatewayService {
         sessionId: true,
         expiresAt: true,
         revokedAt: true,
-        person: { select: { pool: { select: { slug: true, label: true, shared: true } } } },
+        person: { select: { pool: { select: { slug: true, label: true, engine: true, ownerId: true } } } },
         session: {
-          select: { status: true, ownerId: true, provider: true, poolKeyId: true, completedAt: true, deletedAt: true },
+          select: {
+            status: true, ownerId: true, provider: true, poolKeyId: true, poolCodexAccountId: true,
+            completedAt: true, deletedAt: true,
+          },
         },
       },
     });
@@ -231,7 +256,7 @@ export class PoolGatewayService {
     const { pool } = row.person;
     const { session } = row;
     const current =
-      pool.shared &&
+      pool.engine === AgentProvider.CODEX &&
       OPEN_SESSION_STATUSES.includes(session.status) &&
       !session.completedAt &&
       !session.deletedAt &&
@@ -239,7 +264,16 @@ export class PoolGatewayService {
       // A session moved onto another provider since: its old tokens name a pool it no longer runs on.
       session.provider === pool.slug;
     return current
-      ? { poolId: row.poolId, poolLabel: pool.label, userId: row.userId, sessionId: row.sessionId, keyId: session.poolKeyId }
+      ? {
+          poolId: row.poolId,
+          poolLabel: pool.label,
+          poolOwnerId: pool.ownerId,
+          userId: row.userId,
+          sessionId: row.sessionId,
+          sessionOwnerId: session.ownerId,
+          accountId: session.poolCodexAccountId,
+          keyId: session.poolKeyId,
+        }
       : null;
   }
 
@@ -277,7 +311,7 @@ export class PoolGatewayService {
    * The refusal's words: which key, why, and what happens next for this person — another key takes the
    * next turn, or nothing can until the first reset (this key's own included), or until somebody acts.
    */
-  private async unavailable(caller: Caller, key: GatewayKey | null, why: string | null, now: Date): Promise<string> {
+  private async unavailable(caller: GatewayCaller, key: GatewayKey | null, why: string | null, now: Date): Promise<string> {
     // Counted as whyNot counts a cap: with what the ledger has not written yet.
     const window = usageWindowStart(now);
     const keys = (await sharedPoolKeyCandidates(this.prisma, caller.poolId, now)).map((candidate) => ({
@@ -297,7 +331,7 @@ export class PoolGatewayService {
   }
 
   /** A successful answer, passed back byte for byte as it arrives, read along the way for what it used. */
-  private stream(response: IncomingMessage, res: Response, caller: Caller, key: GatewayKey, now: Date): Promise<void> {
+  private stream(response: IncomingMessage, res: Response, caller: GatewayCaller, key: GatewayKey, now: Date): Promise<void> {
     return relayStream(response, res, (outcome, complete) => {
       if (outcome.errorCode === 'insufficient_quota') {
         // Said inside a stream that had already begun: marked all the same, off the stream's path.
@@ -315,7 +349,7 @@ export class PoolGatewayService {
   }
 
   /** What the answer used, into the ledger for this person and this key. */
-  private record(caller: Caller, key: GatewayKey, outcome: ResponsesOutcome, now: Date): void {
+  private record(caller: GatewayCaller, key: GatewayKey, outcome: ResponsesOutcome, now: Date): void {
     if (!outcome.usage) return;
     this.ledger.record({
       poolId: caller.poolId,

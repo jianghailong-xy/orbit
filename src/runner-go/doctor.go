@@ -220,6 +220,48 @@ func probeAuth(bin, binPath string) authState {
 	return probeAuthIn(ctx, bin, binPath, nil)
 }
 
+// claudeStatusRefreshWindow is how near its expiry a Claude login's token may be before `claude auth
+// status` is no longer asked about it. Within five minutes of expiring, or past it, the CLI refreshes
+// the token as it starts any command, `auth status` included — but `auth status` does not wait for
+// the refresh to land: it exits about two seconds after its own answer, and the probe kills it at
+// ten. Against a fake token endpoint answering in 2.5s, the server rotated the refresh token and the
+// CLI exited without writing the new one, leaving on disk a refresh token already spent: the login
+// still reads Signed in, every usage read gets a 401, and the next refresh that is let finish signs
+// it out (wikova, 2026-10-02, a probe every five minutes under a load of 35–45: Default and an
+// account). Ten minutes is the CLI's five and the probe's own budget, with room to spare.
+const claudeStatusRefreshWindow = 10 * time.Minute
+
+// claudeStoredSignedIn reports whether the credentials the CLI stored for the Claude login env selects
+// (nil: this process's own) answer "signed in" by themselves, so `claude auth status` is not run where
+// it could start a refresh (claudeStatusRefreshWindow). A credentials file holding a refresh token
+// does, whenever its access token expires: the CLI refreshes it on the next run that needs it, and
+// empties the file if the server refuses. A login kept in the macOS Keychain, which leaves no file,
+// does only while its token is inside the window. Everything else is still the CLI's to answer: a
+// login with no refresh token, which nothing can refresh — signed out, or signed in some way only the
+// CLI knows, an API key say — and one nothing could be read of.
+func claudeStoredSignedIn(ctx context.Context, env []string) bool {
+	if env == nil {
+		env = os.Environ()
+	}
+	dir, err := effectiveClaudeConfigDir(env, "")
+	if err != nil {
+		return false
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, ".credentials.json")); err == nil {
+		login, err := parseClaudeOAuthLogin(b)
+		return err == nil && login.refreshable
+	}
+	if runtime.GOOS != "darwin" {
+		return false
+	}
+	b, err := keychainCredentials(ctx, claudeKeychainService(strings.TrimSpace(envValue(env, "CLAUDE_CONFIG_DIR"))))
+	if err != nil {
+		return false
+	}
+	login, err := parseClaudeOAuthLogin(b)
+	return err == nil && login.refreshable && login.expiresWithin(claudeStatusRefreshWindow, time.Now())
+}
+
 // probeAuthIn is probeAuth asked with env as the CLI's environment (nil: this process's own), so one
 // account's config directory can be asked instead of the runner's — the same reason codexLoginStatus
 // takes an env. Claude's answer is the one that has to be asked this way: its login lives in
@@ -227,6 +269,9 @@ func probeAuth(bin, binPath string) authState {
 func probeAuthIn(ctx context.Context, bin, binPath string, env []string) authState {
 	switch bin {
 	case providerClaude:
+		if claudeStoredSignedIn(ctx, env) {
+			return authYes
+		}
 		// Parse stdout regardless of exit code — the JSON carries the answer.
 		cmd := exec.CommandContext(ctx, binPath, "auth", "status")
 		cmd.Env = env

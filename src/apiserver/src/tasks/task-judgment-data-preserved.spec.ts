@@ -1660,7 +1660,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // object is named and the 0177 pair and every stored task and criterion row are out of its reach. No
       // function, trigger or type is created, replaced or dropped, so it is not another writer of the DONE fence
       // and names none of the six preserved objects. No INSERT, UPDATE or DELETE: nothing is backfilled.
-      '0357_wiki_maintenance_catch_up'],
+      '0357_wiki_maintenance_catch_up',
+      // Every Codex pool has its owner among its people (0358): one INSERT … SELECT … ON CONFLICT DO
+      // NOTHING into `provider_pool_person`, an ADMIN row for the owner of each pool of one's own on Codex,
+      // reading `provider_pool` and writing nothing else. Read against every claim above: neither table is
+      // a preserved relation, and no `task`, `session`, `project` or `project_acceptance_*` object is
+      // named, so the 0177 pair and every stored task and criterion row are out of its reach. No table,
+      // column, constraint, index, function, trigger or type is created, altered or dropped, so it is not
+      // another writer of the DONE fence and names none of the six preserved objects; no row is updated
+      // or deleted. (0357 is the wiki maintenance catch-up's, so this took the next number.)
+      '0358_codex_pool_owner_person'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

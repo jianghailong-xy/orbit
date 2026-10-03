@@ -1439,7 +1439,14 @@ final class AppModel {
     /// nil selection (opening ~10+ sessions in a row) has nothing left to race.
     func openCreatedAgentSession(_ session: Session) {
         registerCreatedAgentSession(session)
-        nav.replaceTop(with: .console(sessionID: session.id, origin: .list))
+        if composingAgentSession {
+            nav.replaceTop(with: .console(sessionID: session.id, origin: .list))
+        } else {
+            // The draft an iPad draws at its pane's root has no frame to replace
+            // (`AgentConsoleDetail.showsDraft`): its session is selected as a row's is — over a
+            // folder's page it goes on top, so the folder stays the column's page.
+            selectedAgentSessionID = session.id
+        }
     }
 
     /// Seed every Native session store for a freshly created record. The compact compose page keeps
@@ -2092,6 +2099,76 @@ final class AppModel {
         }
         if let cached = sessionDetails.resolve(id) { sessionDetails.store(cached.settingFolder(folderID)) }
         agents?.applyMovedSession(id, folderID: folderID)
+    }
+
+    // MARK: moving a session to another workspace (iOS — docs/session-folders-move-design.md §4, §5)
+
+    /// What the Move panel's second group lists and its confirmation says (`GET /sessions/:id/
+    /// move-targets`): each other workspace with whether the session can go there and why not, and
+    /// whether it has to be ended first. Throws what the server answered, for the panel to say.
+    func sessionMoveTargets(_ id: String) async throws -> SessionMoveTargets {
+        guard let api else { throw APIError.notConfigured }
+        return try await api.sessionMoveTargets(id)
+    }
+
+    /// New Folder… on a workspace's page in the Move panel: a folder in the workspace the session is
+    /// about to move to, which the confirmation then files it in. Throws the server's refusal — a name
+    /// that workspace already has is a 409 — for the page to put into words.
+    func createTargetFolder(named name: String, inWorkspace workspaceID: String) async throws -> SessionFolder {
+        guard let api else { throw APIError.notConfigured }
+        let folder = try await api.createSessionFolder(workspaceID: workspaceID, name: name)
+        if !sessionFolders.contains(where: { $0.id == folder.id }) { sessionFolders.append(folder) }
+        return folder
+    }
+
+    /// Move a session to another workspace, filed in one of its folders or in none — the
+    /// confirmation's Move, or its End and Move (§5.3–5.4): end the session, wait until it has
+    /// ended, then move it (`SessionWorkspaceMove.run`). `phase` follows those steps for the panel.
+    ///
+    /// Nil once the session is there: every loaded copy of the row names the new workspace, which
+    /// takes it out of the list it was moved from at once, the toast says where it went, and the
+    /// lists are read again behind it. Otherwise why not, as the sentence the panel shows — the lists
+    /// are read again all the same, since an End and Move stopped after the end has still ended the
+    /// session.
+    func moveSession(_ id: String, to target: SessionMoveTarget, folder folderID: String?,
+                     endingFirst: Bool,
+                     phase: @escaping (SessionWorkspaceMove.Phase) -> Void) async -> String? {
+        guard let api else { return SessionMoveCopy.moveFailed(APIError.notConfigured) }
+        let name = toastSessionTitle(id)
+        let outcome = await SessionWorkspaceMove.run(
+            endingFirst: endingFirst,
+            end: { try await api.endSession(id) },
+            status: { try await api.session(id).effectiveRunStatus },
+            move: { try await api.moveSession(id, toWorkspace: target.workspaceId, folderID: folderID) },
+            phase: { phase($0) })
+        defer { Task { await reloadSessionLists() } }
+        switch outcome {
+        case .moved:
+            patchSessionWorkspace(id, to: target, folder: folderID)
+            showToast(SessionMoveCopy.movedToWorkspace(target.name), sessionID: id, sessionTitle: name,
+                      tone: .info, icon: "folder")
+            return nil
+        case .failed(let reason):
+            return reason
+        }
+    }
+
+    /// Write a move to another workspace into every loaded copy of a row, as `patchSessionFolder`
+    /// writes a folder: the Open snapshot — whose agent filter is what takes the row out of the
+    /// workspace's Open list — the pane's own Completed rows, and the detail cache.
+    private func patchSessionWorkspace(_ id: String, to target: SessionMoveTarget, folder folderID: String?) {
+        let workspace = agents?.agent(target.workspaceId)
+        let moved = { (row: Session) in
+            row.settingWorkspace(id: target.workspaceId, name: target.name, model: workspace?.model,
+                                 effort: workspace?.effort, folder: folderID)
+        }
+        if let index = sessions.firstIndex(where: { $0.id == id }) {
+            var list = sessions
+            list[index] = moved(list[index])
+            applySessionSnapshot(list)
+        }
+        if let cached = sessionDetails.resolve(id) { sessionDetails.store(moved(cached)) }
+        agents?.applyMovedSession(id, toWorkspace: target.workspaceId)
     }
     #endif
 

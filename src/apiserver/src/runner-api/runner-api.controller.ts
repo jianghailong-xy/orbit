@@ -4124,13 +4124,13 @@ export class RunnerApiController {
       // never armed it, and the session sat FAILED for good. On Automatic — nobody picked its account
       // by hand, and its workspace leaves the account to Orbit — it moves to another of the runner's
       // accounts with room and is re-sent there at once (its thread moves with it: runner
-      // codex_account_move.go); else it waits for this account's reset. A task's run is not: its
-      // failure settles the task, as it always has.
+      // codex_account_move.go); else it waits for this account's reset. A task's run too, as a Claude
+      // one does (retryPlanFor): the retry this arms holds its task's failure back (retryPending
+      // below), and the run goes on in its own checkout and thread rather than ending the attempt.
       const codexUsageLimit =
         failSession
         && completedTurn?.kind === 'message'
         && current.retryAt == null
-        && !current.taskId
         && current.provider === AgentProvider.CODEX
         && isUsageLimitErrorText(failureText)
           ? await this.codexUsageLimitRetry(tx, runner.id, current, failureText!)
@@ -6529,7 +6529,10 @@ export class RunnerApiController {
    * alone: a retry re-sends the person's latest message, and that message was answered before
    * this turn began, so arming here re-sent an already-answered question until one attempt got
    * through. The notification that woke it is not lost — the runtime hands it over with the next
-   * message it is sent.
+   * message it is sent. Its account's usage limit still says that account is spent, though: a session
+   * on Automatic moves off it as below, and only the re-send is left out. Left where it was, its engine
+   * stayed on the spent account and every background agent still running in it met the same limit —
+   * on 2026-10-02 a session sat there until its owner moved it by hand.
    */
   private async retryPlanFor(
     tx: RetryPlanTransaction,
@@ -6540,27 +6543,33 @@ export class RunnerApiController {
   ): Promise<{ retryAt?: Date | null; retryAttempts?: number; claudeAccount?: string; poolSwitchNotice?: string }> {
     const quotaSpent = isUsageLimitErrorText(text);
     if (!quotaSpent && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
-    if (!delivered) return {};
+    if (!delivered && !quotaSpent) return {};
     const session = await tx.session.findUnique({
       where: { id: sessionId },
       select: {
         ownerId: true,
         provider: true,
-        taskId: true,
         retryAttempts: true,
         codexAccount: true,
         claudeAccount: true,
         claudeAccountPinned: true,
+        poolSwitchNotice: true,
         workspace: { select: { env: true, codexAccount: true, claudeAccount: true } },
       },
     });
     if (!session) return {};
     if (!quotaSpent) return { retryAt: apiErrorRetryAt(session.retryAttempts, new Date()) };
+    // A turn nobody delivered, in a session that still owes its "Switched to" line, ran on the engine
+    // that line's move is replacing: the account it found spent is the one already left, and taking it
+    // for the new one moved the session again — back onto the spent one when the snapshot lags.
+    if (!delivered && session.poolSwitchNotice) return {};
     // A built-in Claude session on Automatic — nobody picked its account by hand, and its workspace
     // leaves the account to Orbit — moves to another of the runner's accounts with room and is re-sent
     // at once: the events path queues the reload that re-spawns its engine there, and the runner
-    // carries the conversation across (CLAUDE_ACCOUNT_MOVE_V1). Not a task's run, as for Codex.
-    if (session.provider === AgentProvider.CLAUDE && !session.taskId) {
+    // carries the conversation across (CLAUDE_ACCOUNT_MOVE_V1). A task's run too: it is armed like any
+    // other session (above), and left on the spent account it waited for the reset while another had
+    // room — on 2026-10-02, 36 minutes for a 5-hour window, with Default at 1%.
+    if (session.provider === AgentProvider.CLAUDE) {
       const runner = await tx.runner.findUnique({
         where: { id: runnerId },
         select: { planUsage: true, engines: true, capabilities: true },
@@ -6577,12 +6586,13 @@ export class RunnerApiController {
         : null;
       if (move) {
         return {
-          retryAt: new Date(),
+          ...(delivered ? { retryAt: new Date() } : {}),
           claudeAccount: move.to,
           poolSwitchNotice: accountSwitchNotice('claude', move, runner?.engines),
         };
       }
     }
+    if (!delivered) return {};
     const at = await this.quotaRetryAt(tx, runnerId, session, text, session.workspace);
     // No defensible moment → leave any earlier arming standing rather than replacing it with
     // nothing; the card falls back to a manual retry.

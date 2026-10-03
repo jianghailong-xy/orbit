@@ -687,8 +687,45 @@ public extension PlanUsageSnapshot {
             }
     }
 
-    /// The first displayed window's percent, or nil when no windows are reported.
-    var primaryPercent: Int? { rows.first?.percent }
+    /// `rows` as they stand at `now` (web's `currentPlanUsageRows`). A window whose reset has passed
+    /// reads as the fresh window it now is — nothing used, no reset to name — rather than as the
+    /// reading taken before it rolled over: the runner reads again just after a reset, so a past one
+    /// outlives it only on a reading that has stopped refreshing.
+    func currentRows(at now: Date = Date()) -> [PlanUsageRow] {
+        rows.map { row in
+            guard let resets = planUsageResetDate(row.window), resets <= now else { return row }
+            return PlanUsageRow(key: row.key, label: row.label, groupLabel: row.groupLabel,
+                                window: PlanUsageWindow(utilization: 0, label: row.window.label,
+                                                        windowDurationMins: row.window.windowDurationMins))
+        }
+    }
+
+    /// The window that stops this login, or will stop it first (web's `bindingPlanUsageRow`): a spent
+    /// one before any other — of several, the one that resets last, since the login is back only once
+    /// every spent one has — else the one closest to its limit, a tie going to the first. Whatever
+    /// shows one number for a login shows this one: a Claude login's 5-hour window can read 6% while
+    /// its weekly one is spent.
+    func bindingRow(at now: Date = Date()) -> PlanUsageRow? {
+        let current = currentRows(at: now)
+        let spent = current.filter { $0.window.utilization >= 100 }
+        if let first = spent.first {
+            // A spent window with no reset named holds the login for as long as anyone can tell.
+            let reset = { (row: PlanUsageRow) in planUsageResetDate(row.window) ?? .distantFuture }
+            return spent.dropFirst().reduce(first) { reset($1) > reset($0) ? $1 : $0 }
+        }
+        return current.dropFirst().reduce(current.first) { tightest, row in
+            guard let tightest else { return row }
+            return row.window.utilization > tightest.window.utilization ? row : tightest
+        }
+    }
+}
+
+/// When a window resets, or nil when it names no time this can read.
+private func planUsageResetDate(_ window: PlanUsageWindow) -> Date? {
+    guard let at = window.resetsAt else { return nil }
+    let withFraction = ISO8601DateFormatter()
+    withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return withFraction.date(from: at) ?? ISO8601DateFormatter().date(from: at)
 }
 
 public extension PlanUsage {
@@ -747,7 +784,6 @@ public extension PlanUsage {
     }
 
     var rows: [PlanUsageRow] { flatSnapshot.rows }
-    var primaryPercent: Int? { flatSnapshot.primaryPercent }
 }
 
 /// The request that confirms one earned Codex reset credit. The client request id makes a retried

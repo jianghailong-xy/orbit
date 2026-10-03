@@ -5,7 +5,7 @@ import { CLAUDE_EFFORT_ORDER } from '../common/runtime-provider';
 import { GENERATING_SESSION_FILTER } from '../common/session-generating';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { codexLoginUnavailableReason, codexLoginView } from './codex-login';
+import { codexLoginView, codexPoolUnavailableReason } from './codex-login';
 import { CreateModelProviderDto, CreateProviderPoolDto, UpdateModelProviderDto } from './dto';
 import { decryptSecret, encryptSecret } from './provider-crypto';
 import { catalogDefaultModel, catalogModels, presetCatalog } from './model-catalog';
@@ -235,7 +235,9 @@ export class ProvidersService {
    * The caller's own account pools are listed too, by name alone: which members a pool holds, and
    * their keys, are nothing a caller needs to dispatch with it. A pool none of whose accounts can run
    * is still listed, and the doors refuse it with the reason (QueueService.accountPoolRefusal). So are
-   * the shared pools the caller is in (migration 0321), on Codex; one they are not in is not named.
+   * the Codex pools the caller is one of the people of: a shared pool (migration 0321), or somebody
+   * else's own pool its owner added them to (migration 0358), which runs them on its API keys; one they
+   * are not in is not named.
    */
   async listUsable(ownerId: string): Promise<UsableProvider[]> {
     const rows = await this.prisma.modelProvider.findMany({
@@ -258,7 +260,9 @@ export class ProvidersService {
       },
     });
     const pools = await this.prisma.providerPool.findMany({
-      where: { OR: [{ ownerId, shared: false }, { shared: true, people: { some: { userId: ownerId } } }] },
+      where: {
+        OR: [{ ownerId, shared: false }, { engine: AgentProvider.CODEX, people: { some: { userId: ownerId } } }],
+      },
       orderBy: { createdAt: 'asc' },
       select: { slug: true, label: true, shared: true, engine: true },
     });
@@ -465,7 +469,9 @@ export class ProvidersService {
    *  A pool may instead be created on Codex (migration 0323): a pool of the caller's own that holds the
    *  ChatGPT logins this server signs in and keeps, and starts with no members at all — each account is
    *  added by the sign-in (CodexLoginService), never as a provider, so one that names providers is
-   *  refused rather than quietly emptied of them. */
+   *  refused rather than quietly emptied of them. It starts with its owner among its people, as its ADMIN
+   *  (migration 0358): the row the pool page's doors find them by when they add people and API keys to it
+   *  (SharedPoolsService). */
   async createPool(ownerId: string, dto: CreateProviderPoolDto) {
     const providerIds = [...new Set(dto.providerIds ?? [])];
     const engine = dto.engine ?? AgentProvider.CLAUDE;
@@ -484,6 +490,7 @@ export class ProvidersService {
           ownerId,
           engine,
           members: { createMany: { data: providerIds.map((providerId) => ({ providerId })) } },
+          ...(engine === AgentProvider.CODEX ? { people: { create: { userId: ownerId, role: 'ADMIN' } } } : {}),
         },
         select: POOL_SELECT,
       }),
@@ -659,21 +666,31 @@ export class ProvidersService {
       ownerId,
       pools.flatMap((pool) => pool.members.map((member) => member.provider)),
     );
+    // A Codex pool's API keys (migration 0358), as far as whether one can take a session: never a secret.
+    const codexIds = pools.filter((pool) => pool.engine === AgentProvider.CODEX).map((pool) => pool.id);
+    const keys = codexIds.length
+      ? await this.prisma.poolApiKey.findMany({
+          where: { poolId: { in: codexIds } },
+          select: { poolId: true, enabled: true, state: true },
+        })
+      : [];
     return pools.map(({ members, logins: rows, ...pool }) => {
       const { login, logins } = loginsOf(rows);
       // A Codex pool of the owner's own runs on its ChatGPT accounts, not on member providers: it holds
       // none, and what decides whether it can take a session is whether one of its accounts is ACTIVE,
-      // which the claim can put the session on (QueueService.accountPoolRefusal). A quota that has not been
-      // read does not decide it — that is `login.usage` being null, and the account runs.
+      // which the claim can put the session on — or, with none, whether one of its API keys can run
+      // (QueueService.accountPoolRefusal). A quota that has not been read does not decide it — that is
+      // `login.usage` being null, and the account runs.
       if (pool.engine === AgentProvider.CODEX) {
         return {
           ...pool,
           login,
           logins,
           resetsAt: null,
-          unavailable: codexLoginUnavailableReason(
+          unavailable: codexPoolUnavailableReason(
             pool.label,
             logins.find((view) => view.state === 'ACTIVE') ?? login,
+            keys.filter((key) => key.poolId === pool.id),
           ),
           members: [],
         };

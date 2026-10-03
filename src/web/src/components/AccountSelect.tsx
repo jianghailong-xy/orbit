@@ -1,7 +1,7 @@
 import { Select } from 'antd';
 import type { LoginEngine, RunnerEngineAccount } from '@orbit/shared';
 import { accountDir, accountPlanUsage } from '../lib/engineAccounts';
-import { planUsageRows } from '../lib/planUsage';
+import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
 import { tildePath } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
 
@@ -45,7 +45,8 @@ function accountStatus(
   // Each account's quota is its own: the runner reads every account in that account's own
   // directory, and an account it has not read shows none rather than borrowing another's.
   const snapshot = accountPlanUsage(runner.planUsage, engine, account.id);
-  const quota = account.auth === 'yes' && snapshot ? planUsageRows(snapshot)[0] : undefined;
+  // The window that stops it, not the first one: a 5-hour window at 6% says nothing of a spent week.
+  const quota = account.auth === 'yes' && snapshot ? bindingPlanUsageRow(currentPlanUsageRows(snapshot)) : undefined;
   return quota ? `${quota.label} ${quota.percent}% · ${signIn}` : signIn;
 }
 

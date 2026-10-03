@@ -378,6 +378,21 @@ public final class APIClient: @unchecked Sendable {
     public func moveSession(_ id: String, folderID: String?) async throws {
         _ = try await postRaw("sessions/\(id)/move", body: MoveSessionRequest(folderId: folderID))
     }
+    /// What the Move panel's Move to Another Workspace group lists, and what its confirmation says
+    /// (docs/session-folders-move-design.md §5.4): each of the owner's other workspaces with whether
+    /// the session can go there and why not, whether it has to be ended first, and the branch its
+    /// changes stay on.
+    public func sessionMoveTargets(_ id: String) async throws -> SessionMoveTargets {
+        try await get("sessions/\(id)/move-targets")
+    }
+    /// Move an ended session to another workspace, filed in one of that workspace's folders or in
+    /// none (`folderID` nil). A move the rules refuse as they stand now — the session woke up, the
+    /// workspace was disabled — is a 409 whose message says why. The server broadcasts
+    /// `session.updated`, whose summary names the new workspace.
+    public func moveSession(_ id: String, toWorkspace workspaceID: String, folderID: String?) async throws {
+        _ = try await postRaw("sessions/\(id)/move",
+                              body: MoveSessionRequest(folderId: folderID, workspaceId: workspaceID))
+    }
 
     // MARK: public links — one per session, task or project (docs/share-links-design.md §5)
 
