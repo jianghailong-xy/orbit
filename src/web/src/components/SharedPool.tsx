@@ -98,7 +98,9 @@ const listOf = (items: string[]): string =>
  * people and nothing else, so the switch adds people — through Share — or, after asking, takes every one
  * of them out. Each person's row says what their sessions run on, how many keys they put in, how many
  * sessions they started this month and their share of this month's API key use, which everyone in the
- * pool sees. The people the owner added read all of it and change none of it.
+ * pool sees. The people the owner added read all of it and change none of it. While a pool shared with
+ * people has no API key, its owner is told at the foot of the card that none of them can start a session
+ * on it yet (02, the boundary state), and offered Add an API key.
  *
  * `accounts` is how many ChatGPT accounts of the owner's the pool holds — null for a pool made on the
  * shared pools page, which never holds one — and `onAddKey` opens Add a key.
@@ -115,6 +117,8 @@ export function WhoCanUseItCard({
   const { modal } = App.useApp();
   const mine = ownsPool(pool);
   const people = hasPeople(pool);
+  // Everybody in it but its owner: the people they added.
+  const added = pool.people.filter((person) => !person.creator);
   const [sharing, setSharing] = useState(false);
   const save = usePoolWrite((rules: { membersCanAdd: boolean }) =>
     api(poolPath(pool), { method: 'PATCH', body: rules }),
@@ -196,6 +200,18 @@ export function WhoCanUseItCard({
             <b>Your ChatGPT accounts only ever run your own sessions.</b> OpenAI’s terms don’t allow a ChatGPT
             account to be shared, so nobody you add can run on one — or see which accounts they are.
           </span>
+        </div>
+      )}
+      {mine && people && pool.keys.length === 0 && (
+        <div className="who-warn">
+          <WarningFilled />
+          <span>
+            <b>{listOf(added.map((person) => person.name))} can’t start a session here yet.</b> {pool.label} has no
+            API key{accounts !== null ? ', and your ChatGPT accounts only run your own sessions' : ''}.
+          </span>
+          <Button size="small" type="primary" onClick={onAddKey}>
+            Add an API key
+          </Button>
         </div>
       )}
       {sharing && (
