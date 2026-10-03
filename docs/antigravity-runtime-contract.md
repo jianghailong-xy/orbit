@@ -130,6 +130,7 @@ agy --gemini_dir=<会话 gemini 目录，绝对路径>
 | `tool` `DONE` | `evToolResult {toolUseId, content: tool_info.output（没有就是空串）, isError:false}` |
 | `tool` `ERROR` | `evToolResult {toolUseId, content: tool_info.error.message, isError:true}` |
 | 被软拒绝的工具（§5.2：本轮 `result.response` 为空、`denied_actions` 非空、最后一个工具步骤既没有 output 也没有 error） | `evToolResult {isError:true, content:"需要审批的操作在当前权限模式下被拒绝：<权限>"}`，再发 `evError` 说明怎么放行 |
+| 一轮结束时还没有结果的工具步骤（被中断、agy 退出或出错时正在跑的那个，永远走不到 `DONE`，§4.1） | 在 `evTurnEnd` 之前按调用顺序补 `evToolResult {isError:true, content:"Interrupted: the turn was stopped / failed while this tool was running."}`；不补的话，会话还开着时客户端会一直把这张卡片画成运行中 |
 | `error_message` `DONE` | `evError {message: result.error，或 AGY_ERROR.short_error}` |
 | `system_message`、`unknown`、`checkpoint` | 不发 transcript 事件，记日志（`logUnhandledStreamKind` 那一类） |
 | `result` | `evTurnEnd {subtype, numTurns:1, costUsd:0, contextTokens, contextWindow}` 加 `TurnCompleteRequest`（§2.4、§9.3） |
@@ -323,6 +324,8 @@ runner 必须比较 `init.conversation_id` 和请求的 id：不一致就发一�
 - 流式中途 SIGINT：6.199 秒发信号，6.211 秒出 `result`，7.462 秒退出码 1（样本 `interrupt-sigint-streaming`，实验 `t06a`）。
 - SIGTERM 同样得到 `ERROR`/`"interrupted"`、退出码 1（实验 `t06d`）。
 - 命令运行中 SIGINT：命令 `sh -c 'sleep 60 & …; sleep 61'`，agy 0.8 秒后退出，两个 sleep 都没了（样本 `interrupt-sigint-tool`，实验 `t06b`）。
+  这个工具步骤停在 `ACTIVE`，没有 `DONE` 也没有 `ERROR`，`result` 直接跟在后面；1.2.16 上一样，由契约测试
+  `TestAntigravityContractInterruptedToolGetsResult` 兜底（runner 补的结果见 §2.2）。
 - 用 PID 文件追踪的版本：SIGINT 后 shell 和前台子进程消失，`setsid` 的孙进程还在；SIGKILL 后三个全部活着，
   shell 被 init 收养，各自在自己的会话里（实验 `t06g`/`t06f`）。
 - hook 进程的 pgid 等于 agy 的 pid（`hooks.log` 里每条都是）；MCP 服务器在 agy 的进程组里，SIGINT 和 SIGKILL 之后都不见了（实验 `v_mcpint`/`v_mcpkill`）。

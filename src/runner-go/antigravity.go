@@ -31,6 +31,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -357,8 +358,9 @@ type agyTurn struct {
 	// text is each agent_response step's streamed text, by step index; all is the turn's text so far.
 	text map[int]*strings.Builder
 	all  strings.Builder
-	// The tool steps seen, by step index: a tool_use is emitted once, its result once.
-	toolsOpen map[int]bool
+	// The tool steps seen, by step index: a tool_use is emitted once (toolsOpen holds its id), its
+	// result once.
+	toolsOpen map[int]string
 	toolsDone map[int]bool
 	// pending is the result of a tool step that finished with neither output nor error. It is sent
 	// when the turn goes on; if the turn ends right after it instead, that tool was the one agy
@@ -382,7 +384,7 @@ func newAgyTurn(turnID string) *agyTurn {
 	return &agyTurn{
 		turnID:    turnID,
 		text:      map[int]*strings.Builder{},
-		toolsOpen: map[int]bool{},
+		toolsOpen: map[int]string{},
 		toolsDone: map[int]bool{},
 	}
 }
@@ -446,8 +448,8 @@ func handleAgyStep(step map[string]interface{}, turn *agyTurn, emit emitFn) {
 			rawName = firstString(step, "tool_name")
 		}
 		id := conversation + ":" + strconv.Itoa(index)
-		if !turn.toolsOpen[index] {
-			turn.toolsOpen[index] = true
+		if _, seen := turn.toolsOpen[index]; !seen {
+			turn.toolsOpen[index] = id
 			name, input := canonicalAgyTool(rawName, info["parameters"])
 			emit(evToolUse, map[string]interface{}{"id": id, "name": name, "input": input})
 		}
@@ -488,6 +490,35 @@ func emitAgyToolResult(emit emitFn, result agyToolResult, refused bool) {
 		content, isError = "Not run: "+agyRefusal(result.rawName), true
 	}
 	emit(evToolResult, map[string]interface{}{"toolUseId": result.id, "content": content, "isError": isError})
+}
+
+// closeUnansweredAgyTools gives each of the turn's tool calls that has no result one, marked as an
+// error, in the order they were made. A turn cut short leaves the step agy was running ACTIVE for
+// good — an interrupted command never reaches DONE (§4.1) — and a call with no result reads as still
+// running for as long as the session is open.
+func closeUnansweredAgyTools(emit emitFn, turn *agyTurn, content string) {
+	var open []int
+	for index := range turn.toolsOpen {
+		if !turn.toolsDone[index] {
+			open = append(open, index)
+		}
+	}
+	sort.Ints(open)
+	for _, index := range open {
+		turn.toolsDone[index] = true
+		emit(evToolResult, map[string]interface{}{"toolUseId": turn.toolsOpen[index], "content": content, "isError": true})
+	}
+}
+
+// agyUnansweredToolText is the result of a tool call its turn ended under, by how the turn ended.
+func agyUnansweredToolText(status string) string {
+	switch status {
+	case stInterrupted:
+		return "Interrupted: the turn was stopped while this tool was running."
+	case stFailed:
+		return "Interrupted: the turn failed while this tool was running."
+	}
+	return "Interrupted: the turn ended while this tool was running."
 }
 
 // canonicalAgyTool names agy's tools the way Orbit's cards know them (§2.3). agy streams only a
@@ -865,6 +896,8 @@ func (d *agyDriver) finishTurn(result map[string]interface{}, failure string) {
 		emitAgyToolResult(d.emit, *turn.pending, subtype == "permission_denied")
 		turn.pending = nil
 	}
+	// Whatever agy says about a step after this goes nowhere: the turn is over.
+	closeUnansweredAgyTools(d.emit, turn, agyUnansweredToolText(status))
 	if errText != "" {
 		d.emit(evError, map[string]interface{}{"message": errText})
 	}

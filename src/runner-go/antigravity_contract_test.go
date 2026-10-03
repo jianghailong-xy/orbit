@@ -736,6 +736,60 @@ func TestAntigravityContractInterruptCleansProcessGroup(t *testing.T) {
 	})
 }
 
+// Stop while agy runs a command: the command's step never reaches DONE (§4.1), so the loop answers
+// the call itself — an error saying it was interrupted — rather than leave a card that reads as
+// running for as long as the session is open. Neither agy nor the command outlives the stop.
+func TestAntigravityContractInterruptedToolGetsResult(t *testing.T) {
+	c := newAgyContract(t)
+	job := c.job("contract-interrupted-tool", "bypassPermissions")
+	commandPID, childPID := filepath.Join(c.dir, "command.pid"), filepath.Join(c.dir, "child.pid")
+	session := c.start(job)
+	// A slow command, with a child of its own.
+	command := "echo $$ > " + commandPID + "; sleep 300 & echo $! > " + childPID + "; wait"
+	c.send(RunInboxResponse{TurnID: "t1", Kind: "message", Content: "take your time\n" +
+		agyToolCall("run_command", map[string]interface{}{"CommandLine": command, "Cwd": c.execDir, "WaitMsBeforeAsync": 60000}) +
+		"\nmock:text unreachable"})
+	shell, err := strconv.Atoi(waitFile(t, commandPID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := strconv.Atoi(waitFile(t, childPID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	commandGroup, err := syscall.Getpgid(shell)
+	if err != nil {
+		t.Fatalf("the command is not running: %v", err)
+	}
+	agyPID, _ := c.onlyAgy()
+	if results := c.eventsOf("t1", evToolResult); len(results) != 0 {
+		t.Fatalf("the command has a result while it runs: %v", results)
+	}
+
+	c.send(RunInboxResponse{TurnID: "stop", Kind: "interrupt"})
+	if stopped := c.completion("t1"); stopped.Status != stInterrupted || stopped.Subtype != "interrupted" {
+		t.Fatalf("interrupted turn = %s/%s (%s)", stopped.Status, stopped.Subtype, stopped.Error)
+	}
+	uses := c.eventsOf("t1", evToolUse)
+	if len(uses) != 1 || uses[0]["name"] != "Bash" || asString(mapValue(uses[0]["input"])["command"]) != command {
+		t.Fatalf("tool_use = %v", uses)
+	}
+	results := c.eventsOf("t1", evToolResult)
+	if len(results) != 1 || results[0]["toolUseId"] != uses[0]["id"] || results[0]["isError"] != true ||
+		!strings.HasPrefix(asString(results[0]["content"]), "Interrupted") {
+		t.Fatalf("tool_result = %v, want one error saying the call was interrupted; events:\n%s", results, c.describeEvents())
+	}
+	waitGone(t, "the command", func() bool { return !pidAlive(shell) && !pidAlive(child) })
+	waitGone(t, "the command's process group", func() bool { return len(groupMembers(t, commandGroup)) == 0 })
+	waitGone(t, "agy's process group", func() bool { return len(groupMembers(t, agyPID)) == 0 })
+	if procs := c.agyProcesses(); len(procs) != 0 {
+		t.Fatalf("agy is still running after the stop: %v", procs)
+	}
+	c.send(RunInboxResponse{TurnID: "end", Kind: "end"})
+	session.wait(t)
+	c.homeIsUntouched()
+}
+
 // Orbit's own MCP server reaches agy through the session's mcp_config.json, starts with the session's
 // identity inherited through agy's environment, and is callable in the default permission mode
 // (§10.3): here task_get, answered by the fake control plane for the task in ORBIT_TASK_ID.
