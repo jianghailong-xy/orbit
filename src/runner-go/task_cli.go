@@ -198,6 +198,9 @@ Options:
                               task by itself once this instant has come (see below)
   --provider SLUG             Pin the run to a provider; defaults to the assignee's project
   --model MODEL               Pin the run to a model within that provider
+  --model-hint S|M|L|XL       Suggest the task's difficulty; distinct from --model's hard pin
+  --model-hint-reason TEXT    One sentence explaining the tier (max 500 characters)
+  --clear-model-hint         Explicitly leave both the tier and reason empty
   --depends-on ID[,ID...]     Repeatable prerequisite task ids; name the SUBJECT of the work,
                               not its verification task — a dependency on a verified task is
                               already held until that task's check PASSES
@@ -206,6 +209,8 @@ Options:
   --completion-policy MANUAL|ALL_CHILDREN_DONE|VERIFICATION_PASSED
                               How this task's own completion is decided once it has subtasks
   --json
+
+--model-hint: ` + taskModelHintDescription + `
 
 --supersedes-task-id names the attempt this new task replaces, and records it in the SAME transaction
 that creates the task: the predecessor keeps the CANCELLED or FAILED it ended with, and gains a
@@ -321,8 +326,12 @@ JSON is an array of task objects (or {"tasks": [...]}), each taking the same fie
 as 'orbit task create': title (required), description, assigneeId, listId, projectId, handoff,
 parentTaskId, verifiesTaskId, acceptanceCriteria, codeless, completionCriterion,
 completionCriterionOverrideReason, acceptanceCommand,
-acceptanceExpectedExitCode, dueDate, runAt, provider, model, dependsOnTaskIds, autoRunWhenReady,
+acceptanceExpectedExitCode, dueDate, runAt, provider, model, modelHint, modelHintReason, dependsOnTaskIds, autoRunWhenReady,
 completionPolicy. Nothing is written unless every item is valid.
+
+Each item's "modelHint" is S/M/L/XL and "modelHintReason" is one sentence (max 500 characters).
+Use null for either empty field. The tier is a suggestion; "model" is a hard pin and "provider"
+still chooses the engine. The tier meanings are as on 'orbit task create --model-hint'.
 
 Every item must set "completionCriterion" explicitly. EVIDENCE_JUDGMENT remains available when it is
 intended, but omission never selects it on a runner write. Related verifier, executable, and
@@ -500,6 +509,9 @@ Options:
                               Set or move this task's one-time scheduled start, or cancel it
   --provider SLUG | --clear-provider
   --model MODEL | --clear-model
+  --model-hint S|M|L|XL       Replace the difficulty suggestion; omission keeps it
+  --model-hint-reason TEXT    Replace its reason verbatim (max 500 characters)
+  --clear-model-hint         Clear both the suggestion and reason; cannot combine with either setter
   --acceptance-criteria TEXT  Replace what would settle that this task is done (max 4,000
                               characters)
   --acceptance-criteria-file -
@@ -558,6 +570,8 @@ Options:
   --json
 
 task-id defaults to ORBIT_TASK_ID inside an Orbit task session.
+
+--model-hint: ` + taskModelHintDescription + `
 
 --codeless turns an existing task into one that produces no code: it stops taking part in its
 acceptance criterion's landing, so the criterion no longer waits for its work to reach main. That
@@ -1016,6 +1030,15 @@ func validateTaskCLICompletionPolicy(policy string) error {
 	}
 }
 
+func validateTaskCLIModelHint(hint string) error {
+	switch hint {
+	case "S", "M", "L", "XL":
+		return nil
+	default:
+		return fmt.Errorf("--model-hint must be one of S, M, L, XL")
+	}
+}
+
 func validateTaskCLICompletionCriterion(criterion string) error {
 	switch criterion {
 	case "EXECUTABLE", "VERIFICATION", "EVIDENCE_JUDGMENT", "OWNER_CONFIRMED":
@@ -1453,6 +1476,9 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	runAt := fs.String("run-at", "", "one-time scheduled start: when the server starts this task by itself (ISO 8601 date-time)")
 	provider := fs.String("provider", "", "run on this provider instead of the assignee's")
 	model := fs.String("model", "", "run on this model instead of the assignee's")
+	modelHint := fs.String("model-hint", "", taskModelHintDescription)
+	modelHintReason := fs.String("model-hint-reason", "", "one sentence explaining the suggested tier (max 500 characters)")
+	clearModelHint := fs.Bool("clear-model-hint", false, "leave both the suggested tier and reason empty")
 	var dependsOn csvFlag
 	fs.Var(&dependsOn, "depends-on", "comma-separated prerequisite task ids (repeatable)")
 	var labels csvFlag
@@ -1471,6 +1497,14 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if *unassigned && flagWasSet(fs, "assignee-id") {
 		return fmt.Errorf("--unassigned and --assignee-id cannot be used together")
+	}
+	if *clearModelHint && (flagWasSet(fs, "model-hint") || flagWasSet(fs, "model-hint-reason")) {
+		return fmt.Errorf("--clear-model-hint cannot be used with --model-hint or --model-hint-reason")
+	}
+	if flagWasSet(fs, "model-hint") {
+		if err := validateTaskCLIModelHint(*modelHint); err != nil {
+			return err
+		}
 	}
 	// The pair, refused locally so nothing reaches the server: a verifier is a task, and a task
 	// with no title is not one; and one task is either the check or the subject, never both.
@@ -1662,6 +1696,17 @@ func cliTaskCreate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--model cannot be empty")
 		}
 		body["model"] = *model
+	}
+	if *clearModelHint {
+		body["modelHint"] = nil
+		body["modelHintReason"] = nil
+	} else {
+		if flagWasSet(fs, "model-hint") {
+			body["modelHint"] = *modelHint
+		}
+		if flagWasSet(fs, "model-hint-reason") {
+			body["modelHintReason"] = *modelHintReason
+		}
 	}
 	if deps := uniqueStrings(dependsOn); len(deps) > 0 {
 		body["dependsOnTaskIds"] = deps
@@ -1954,6 +1999,9 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	clearProvider := fs.Bool("clear-provider", false, "inherit the assignee's provider again")
 	model := fs.String("model", "", "run on this model instead of the assignee's")
 	clearModel := fs.Bool("clear-model", false, "inherit the assignee's model again")
+	modelHint := fs.String("model-hint", "", taskModelHintDescription)
+	modelHintReason := fs.String("model-hint-reason", "", "replace the suggested tier's reason (max 500 characters)")
+	clearModelHint := fs.Bool("clear-model-hint", false, "clear both the suggested tier and reason")
 	acceptanceCriteria := fs.String("acceptance-criteria", "", "replace what would settle that this task is done")
 	acceptanceCriteriaFile := fs.String("acceptance-criteria-file", "", "read the replacement acceptance criteria from stdin (-)")
 	clearAcceptanceCriteria := fs.Bool("clear-acceptance-criteria", false, "leave the task with no acceptance criteria")
@@ -2033,6 +2081,14 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 	}
 	if *clearModel && flagWasSet(fs, "model") {
 		return fmt.Errorf("--clear-model and --model cannot be used together")
+	}
+	if *clearModelHint && (flagWasSet(fs, "model-hint") || flagWasSet(fs, "model-hint-reason")) {
+		return fmt.Errorf("--clear-model-hint cannot be used with --model-hint or --model-hint-reason")
+	}
+	if flagWasSet(fs, "model-hint") {
+		if err := validateTaskCLIModelHint(*modelHint); err != nil {
+			return err
+		}
 	}
 	if *clearDependencies && flagWasSet(fs, "depends-on") {
 		return fmt.Errorf("--clear-dependencies and --depends-on cannot be used together")
@@ -2206,6 +2262,17 @@ func cliTaskUpdate(args []string, in io.Reader, out io.Writer) error {
 			return fmt.Errorf("--model cannot be empty; use --clear-model")
 		}
 		body["model"] = *model
+	}
+	if *clearModelHint {
+		body["modelHint"] = nil
+		body["modelHintReason"] = nil
+	} else {
+		if flagWasSet(fs, "model-hint") {
+			body["modelHint"] = *modelHint
+		}
+		if flagWasSet(fs, "model-hint-reason") {
+			body["modelHintReason"] = *modelHintReason
+		}
 	}
 	// Whole-field replacement with an explicit way to remove it: null clears, a string replaces, and
 	// an absent flag sends nothing so the task keeps what it already states. Free text rather than an
@@ -2803,6 +2870,9 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 		case "task_create":
 			capabilities[i].Arguments = append(
 				capabilities[i].Arguments,
+				"--model-hint <S|M|L|XL> (modelHint: suggested difficulty, distinct from the model hard pin)",
+				"--model-hint-reason <text> (modelHintReason: one sentence, max 500 characters)",
+				"--clear-model-hint (explicitly send null for both suggestion fields)",
 				"--completion-criterion <EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT> (required for every runner task creation; EVIDENCE_JUDGMENT is never inferred)",
 				"--completion-criterion-override-reason <text> (non-blank audit reason for keeping a criterion after TASK_CRITERION_SHAPE_ADVICE)",
 				"--acceptance-command <shell> (the one EXECUTABLE command; use with --acceptance-expected-exit-code)",
@@ -2815,6 +2885,9 @@ func withTaskCompletionCapabilityArgs(capabilities []cliCapabilitySpec) []cliCap
 		case "task_update":
 			capabilities[i].Arguments = append(
 				capabilities[i].Arguments,
+				"--model-hint <S|M|L|XL> (modelHint: replace the difficulty suggestion; omit to preserve)",
+				"--model-hint-reason <text> (modelHintReason: replace its reason verbatim, max 500 characters)",
+				"--clear-model-hint (send null to clear both suggestion fields)",
 				"--completion-criterion <EXECUTABLE|VERIFICATION|EVIDENCE_JUDGMENT> (replace the task's one normal completion criterion)",
 				"--completion-criterion-override-reason <text> (completionCriterionOverrideReason: non-blank reason for CHANGING the criterion, required whenever the write lands on a different one than the task carries — including a change derived from --acceptance-command rather than named; stored beside the criterion left behind)",
 				"--acceptance-command <shell> (replace the one EXECUTABLE command)",

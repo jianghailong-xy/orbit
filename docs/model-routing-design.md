@@ -227,7 +227,8 @@
   原生的任务详情。新 MCP 参数必须同时进 `copyIfPresent` 白名单、CLI 参数、capability 说明和帮助文本，否则会被静默丢掉。
 - **与 `task.model` 的区别**：`model` 是硬指定（pin）—— 永远优先，不升档，换代要人改；`modelHint` 是建议 —— 失败可以升档
   盖过它，换代不用改。
-- 批量审批卡的 digest（`handoffPayloadDigest`）升一个版本，把 `modelHint` 纳入：只改了建议的两次批量请求不是同一张卡。
+- `modelHint` 和 `modelHintReason` 均可空；update 分别按不传保留、设值替换、`null` 清空。CLI 的 `--clear-model-hint` 同时清空档位与理由，不能与设置这两个字段的旗标并用；create 也可显式声明空建议，batch 用每项的 JSON `null`。
+- 批量审批卡的 digest（`handoffPayloadDigest`）带建议或理由时升到 v6，绑定 `modelHint` 与 `modelHintReason`：只改了建议的两次批量请求不是同一张卡。两者皆空时保留旧版本，旧审批身份不变。
 
 ### 7.2 `workspace`（Agent）
 

@@ -851,6 +851,7 @@ workspaceIds
 | **旧客户端创建 Project Task** | 载荷里没有 `assigneeAgentId`（`POST /tasks`、`POST /tasks/batch-create`）：接口**照常 201**，行落 `execution_contract = 'LEGACY'`（§11.1 L5），派发走 legacy 路径、结果与 v1 之前逐字段相同。**绝不 400**，也绝不建出一条第一次派发必然 `WHO_UNRESOLVED` 的 V1 行。新 UI 上它是一条 Legacy Project Task（上一行），带 L4 晋升入口。`06B.8` 用录制的旧端载荷跑这条 |
 | **MCP / CLI 的 `provider` / `model` 参数** | 对 LEGACY Task 行为不变；对 V1 Task 返回 `TASK_PROVIDER_PIN_REFUSED` 并在错误文案里指出"Provider 现在配置在 Agent 上"。**不静默忽略** —— 静默忽略会让脚本以为自己换了引擎 |
 | **智能选模型的新字段（v1.4）** | 全部是可选字段：任务的 `modelHint` / `modelHintReason`，Agent（`workspace`）的 `modelRouting` / `modelRoutingProviders`，任务详情与会话详情里每次运行的 `route` 摘要。旧端看不到它们，照常读写；旧端建的任务没有 `modelHint`，按"没有建议"处理（§7.2 P7）。MCP `agent_*` / CLI `orbit agent` 按 §9.2 冻结，不加 `modelRouting` / `modelRoutingProviders`（§8.2）。原生端解码这些字段的要求同下一行 |
+| **建议档位的写入（P2）** | REST / MCP 的任务 create、batch（每项）、update 接受 `modelHint`（S / M / L / XL，可空）和 `modelHintReason`（≤ 500 字，可空），随任务返回；update 不传保留、设值替换、`null` 清空各字段。CLI create / update 用 `--model-hint`、`--model-hint-reason`，`--clear-model-hint` 同时发送两个字段为 `null`；batch 的 JSON 每项使用同名字段。建议不是 `model` 硬指定，引擎仍用 `provider`。带建议或理由的审批摘要使用 v6 并绑定两字段；没有建议与理由的请求保留旧摘要版本。coordinator 给新建任务填建议和一句理由，也补齐项目里缺建议的任务 |
 | **原生端（iOS/macOS）** | v1 **不要求** iOS/macOS 跟进 Agent/Team UI。它们必须做到的只有两件事：**不因为新字段而崩溃或误显示**，以及 `coordinatorAgentId` 取不到对应 workspace 时不白屏。Swift 端对新增可选字段的解码必须验证过（既有教训：wire 变更而 Swift 未跟进会静默漏改） |
 
 ### 11.5 版本投递
