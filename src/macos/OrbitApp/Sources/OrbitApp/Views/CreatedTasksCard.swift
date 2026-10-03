@@ -9,8 +9,8 @@ import OrbitKit
 /// `2 running · 1 failed · 4/8 done`, its failed part red — or, with one task, that task's name and
 /// pill, as the Watching row names its one target. Opened, it lists the rows exactly as the server
 /// sent them (already in order, a replaced task already drawn as the one that took it over), each
-/// opening its task, then `View all in Tasks ›` and an `Open project ›` for each project. There is no
-/// card while the session has created nothing. The words are OrbitKit's `SessionCreatedTasksCopy`,
+/// opening its task. There is no card while the session has created nothing. The words are
+/// OrbitKit's `SessionCreatedTasksCopy`,
 /// proved against the browser's in `SessionCreatedTasksCopyParityTests`.
 struct CreatedTasksCard: View {
     @Environment(AppModel.self) private var app
@@ -26,7 +26,7 @@ struct CreatedTasksCard: View {
     private static let listCap: CGFloat = 170
     /// However little room the band leaves — a Watching strip opened above takes it first — an open
     /// list keeps two rows on screen (its one, if that is all it has), so it never draws as a header
-    /// and a footer with nothing between them.
+    /// with no rows below it.
     private static let rowHeight: CGFloat = 31
     private static func listFloor(_ items: [SessionCreatedTaskRow]) -> CGFloat {
         CGFloat(min(items.count, 2)) * rowHeight
@@ -41,8 +41,6 @@ struct CreatedTasksCard: View {
                     if open {
                         Divider().opacity(0.5)
                         list(tasks.items)
-                        Divider().opacity(0.5)
-                        footer(tasks.projects)
                     }
                 }
                 // The tray's floating-card language, so the stack above the composer reads as one
@@ -186,40 +184,6 @@ struct CreatedTasksCard: View {
 
     // MARK: - the ways out
 
-    /// Every task the session created, on the Tasks page; and each project the rows belong to.
-    private func footer(_ projects: [SessionCreatedTasks.Named]) -> some View {
-        HStack(spacing: 18) {
-            footerLink(SessionCreatedTasksCopy.viewAll) {
-                openPage(.createdTasks(sessionID: console.sessionID)) {
-                    app.showTasksCreated(inSession: console.sessionID, title: sessionTitle)
-                }
-            }
-            ForEach(projects) { project in
-                footerLink(SessionCreatedTasksCopy.openProject) {
-                    openPage(.projectDetail(projectID: project.id)) { app.openProject(project.id) }
-                }
-                .help(project.title)
-                .accessibilityLabel("Open project \(project.title)")
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 10)
-        .frame(minHeight: 32)
-    }
-
-    /// A link in the Watching card's `Manage in Watches ›` style.
-    private func footerLink(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.orbitMeta)
-                .foregroundStyle(.tint)
-                .lineLimit(1)
-                .padding(.vertical, 8)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
     /// Where a press on the card goes. On a phone the page opens over this console — pushed on the
     /// console's own stack — so the back swipe comes straight back to the conversation; a move to the
     /// section the page belongs to would leave the swipe that section's list. The three-column shells
@@ -227,10 +191,5 @@ struct CreatedTasksCard: View {
     /// The console's environment says which (`opensPagesOverConsole`); the model is told only the page.
     private func openPage(_ page: NavNode, elsewhere: () -> Void) {
         if overConsole { app.push(page) } else { elsewhere() }
-    }
-
-    /// What the Tasks page's chip calls the session: its title, as the console's own header says it.
-    private var sessionTitle: String {
-        SessionHeader.title(for: app.session(id: console.sessionID), fallbackAgent: console.agentName)
     }
 }

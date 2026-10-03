@@ -7933,7 +7933,8 @@ button.chat-jump-start:hover {
 }
 /* How many identical repeats of this line folded into it. Rides at the end of the line, dimmer
    than the message: it is a fact about the log, not part of what the engine said. */
-.chat-error-repeat {
+.chat-error-repeat,
+.chat-diagnostic-repeat {
   margin-left: 6px;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
@@ -7947,6 +7948,32 @@ button.chat-jump-start:hover {
   font-size: 13px;
   line-height: 1.5;
   margin: 6px 0;
+}
+.chat-diagnostic {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  overflow-wrap: anywhere;
+}
+.chat-diagnostic-mark {
+  flex: none;
+}
+.chat-diagnostic-label {
+  flex: none;
+  color: var(--text-3);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.chat-diagnostic-text {
+  min-width: 0;
+}
+.chat-notice.chat-diagnostic .chat-diagnostic-text {
+  color: var(--text-2);
+}
+.chat-error.chat-diagnostic .chat-diagnostic-text a,
+.chat-notice.chat-diagnostic .chat-diagnostic-text a {
+  color: inherit;
+  text-decoration: underline;
 }
 
 /* Sign-in failure: a remedy card, not an error line. Sits at message width so it reads as

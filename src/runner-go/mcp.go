@@ -791,7 +791,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
+		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
 		if err := requireHandoffNamesItsDestination(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
@@ -836,7 +836,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
+			copyIfPresent(body, item, "description", "attachmentIds", "listId", "projectId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
 			// Per item, because a crossing is per item: one plan can file most of its work at home
 			// and one piece of it over the line, and the item that crosses is the one that has to
 			// name where it is going.
@@ -2372,8 +2372,13 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	// A fresh map per call so a caller can extend its copy without touching the other's.
 	taskCreateProps := func() map[string]interface{} {
 		return map[string]interface{}{
-			"title":              str,
-			"description":        taskDescriptionProp,
+			"title":       str,
+			"description": taskDescriptionProp,
+			"attachmentIds": map[string]interface{}{
+				"type":        "array",
+				"items":       str,
+				"description": "Ids of existing Orbit attachments owned by the caller, such as uploaded files or images from a session. Copies them into this task's inputs in the same transaction as creation; originals are preserved and each run receives its own copies. Pass attachment ids, not local file paths or URLs. Omit when no attachments are needed.",
+			},
 			"listId":             map[string]interface{}{"type": []string{"string", "null"}},
 			"assigneeId":         map[string]interface{}{"type": []string{"string", "null"}},
 			"projectId":          projectIDProp,

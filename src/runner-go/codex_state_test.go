@@ -556,3 +556,65 @@ func TestCodexStateInitWaiterCancellationDoesNotStopBootstrap(t *testing.T) {
 		t.Fatalf("follower started %d extra bootstrap(s)", got)
 	}
 }
+
+func TestCodexStderrDiagnosticClassifiesRecoverableStartupAuth(t *testing.T) {
+	tests := []struct {
+		name      string
+		line      string
+		component string
+		code      string
+	}{
+		{
+			name:      "model catalog",
+			line:      "2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized: Your authentication token has been invalidated. Please try signing in again.",
+			component: "model_catalog",
+			code:      "token_invalidated",
+		},
+		{
+			name:      "mcp transport",
+			line:      `2026-10-03T15:27:45.110778Z ERROR rmcp::transport::worker: worker quit with fatal: Transport channel closed, when UnexpectedServerResponse("HTTP 401: {\\"error\\":{\\"code\\":\\"token_invalidated\\"}}")`,
+			component: "mcp_transport",
+			code:      "token_invalidated",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			diagnostic, ok := codexStderrDiagnostic(tt.line)
+			if !ok {
+				t.Fatalf("diagnostic not recognized: %q", tt.line)
+			}
+			if got := diagnostic["component"]; got != tt.component {
+				t.Errorf("component = %v, want %q", got, tt.component)
+			}
+			if got := diagnostic["code"]; got != tt.code {
+				t.Errorf("code = %v, want %q", got, tt.code)
+			}
+			if got := diagnostic["phase"]; got != "startup" {
+				t.Errorf("phase = %v, want startup", got)
+			}
+			if got := diagnostic["severity"]; got != "WARN" {
+				t.Errorf("severity = %v, want WARN", got)
+			}
+			if got := diagnostic["impact"]; got != "degraded" {
+				t.Errorf("impact = %v, want degraded", got)
+			}
+			if got, ok := diagnostic["recoverable"].(bool); !ok || !got {
+				t.Errorf("recoverable = %#v, want true", diagnostic["recoverable"])
+			}
+		})
+	}
+}
+
+func TestCodexStderrDiagnosticLeavesUnknownAndFatalLinesUnclassified(t *testing.T) {
+	for _, line := range []string{
+		"2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 403 Forbidden",
+		"2026-10-03T15:27:44.249024Z ERROR codex_models_manager::manager: failed to refresh available models: unexpected status 401 Unauthorized",
+		"2026-10-03T15:27:45.110778Z ERROR rmcp::transport::worker: worker quit with fatal: HTTP 500",
+		"2026-10-03T15:28:00Z ERROR codex_core: turn failed",
+		"",
+	} {
+		if diagnostic, ok := codexStderrDiagnostic(line); ok || diagnostic != nil {
+			t.Errorf("line was classified unexpectedly: %q => %#v, %v", line, diagnostic, ok)
+		}
+	}
+}

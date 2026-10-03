@@ -279,6 +279,13 @@ public struct TranscriptReducer: Sendable, Codable {
             // sent beside stderr; if it ever were, it wins, as on web. One row per event, unfolded.
             if let notice = nonEmpty(str(ev, "notice")) {
                 state.items.append(.notice(id: nextID(), message: notice))
+            } else if let diagnostic = recoverableDiagnostic(ev) {
+                // Current runners attach impact metadata to known startup/auxiliary failures. Keep
+                // a recoverable diagnostic as a calm notice on native too; an unclassified stderr
+                // line still follows appendEngineStderr and remains an error.
+                state.items.append(.notice(id: nextID(), message: diagnostic))
+                lastStderr = nil
+                lastToolFailure = nil
             } else {
                 appendEngineStderr(ev)
             }
@@ -287,6 +294,34 @@ public struct TranscriptReducer: Sendable, Codable {
         case .resync:           break
         case .unknown:          break          // lifecycle noise — no transcript item
         }
+    }
+
+    /// Convert a structured diagnostic that is explicitly recoverable/degraded into the native
+    /// notice row. The runner keeps the raw stderr alongside this metadata for older clients, so
+    /// malformed or unknown diagnostics deliberately return nil and retain the old error path.
+    private func recoverableDiagnostic(_ ev: RunEvent) -> String? {
+        guard let rawMessage = str(ev, "stderr") else { return nil }
+        let message = EngineStderr.clean(rawMessage)
+        guard !message.isEmpty else { return nil }
+        guard case .object(let raw)? = ev.payload["diagnostic"] else {
+            guard let label = EngineStderr.legacyRecoverableLabel(message) else { return nil }
+            return label + ": " + message
+        }
+        let string = { (key: String) -> String? in
+            guard case .string(let value)? = raw[key] else { return nil }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        let impact = string("impact")?.lowercased()
+        let severity = string("severity")?.lowercased()
+        let recoverable = raw["recoverable"]?.boolValue == true
+        guard recoverable || severity == "warn" || severity == "warning" ||
+                ["recoverable", "degraded", "warning", "warn", "non-fatal", "nonfatal"].contains(impact) else {
+            return nil
+        }
+        let phase = string("phase").map { $0 == "startup" ? "Startup" : $0 }
+        let label = [phase, string("component"), string("code")].compactMap { $0 }.joined(separator: " · ")
+        return label.isEmpty ? message : label + ": " + message
     }
 
     /// Drop the loaded transcript window so a tail page can re-seed it from scratch — the reducer
@@ -1706,6 +1741,23 @@ private enum EngineStderr {
     private static let benignMarkers = ["claude.ai connectors are disabled", "[claude-code:unrecognized_model]"]
 
     static func isBenign(_ line: String) -> Bool { benignMarkers.contains(where: line.contains) }
+
+    /// Compatibility for system events persisted by a runner before `payload.diagnostic` was
+    /// added. These exact auxiliary failures were already known to be non-fatal; every other old
+    /// stderr line must retain the error path.
+    static func legacyRecoverableLabel(_ line: String) -> String? {
+        let lower = line.lowercased()
+        let tokenInvalidated = lower.contains("token_invalidated") || lower.contains("token has been invalidated")
+        if lower.contains("codex_models_manager") &&
+            lower.contains("failed to refresh available models") &&
+            lower.contains("401") && tokenInvalidated {
+            return "Startup · model_catalog · token_invalidated"
+        }
+        if lower.contains("rmcp::transport::worker") && lower.contains("401") && tokenInvalidated {
+            return "Startup · mcp_transport · token_invalidated"
+        }
+        return nil
+    }
 
     private static func strip(_ re: NSRegularExpression?, from s: String) -> String {
         guard let re else { return s }

@@ -9,9 +9,9 @@ import OrbitKit
 ///
 /// The line names a lone target with where it stands, in its own list's pill, or states what several
 /// need beside Tasks created here's sentence over where they stand. Opened, each watch lists its
-/// targets and only adds a freshness reminder when the watch has gone unchecked; a lone target is on
-/// the line already, so the foot leads to it instead. Read-only: a wait is changed by talking to
-/// the agent, and Pause/Stop live on the Following page. The browser's `SessionWatchStrip` says the same words (`WatchStripCopyParityTests`,
+/// targets and only adds a freshness reminder when the watch has gone unchecked. Read-only: a wait
+/// is changed by talking to the agent, and Pause/Stop live on the Following page. The browser's
+/// `SessionWatchStrip` says the same words (`WatchStripCopyParityTests`,
 /// `src/shared/src/watch-strip.fixture.json`).
 struct WatchingCardStack: View {
     @Environment(AppModel.self) private var model
@@ -40,8 +40,6 @@ struct WatchingCardStack: View {
                     if open {
                         Divider().opacity(0.5)
                         list(summary, now: context.date)
-                        Divider().opacity(0.5)
-                        footer(summary)
                     }
                 }
             }
@@ -126,20 +124,18 @@ struct WatchingCardStack: View {
     }
 
     private func watches(_ summary: WatchSessionSummary, now: Date) -> some View {
-        // The line above names a lone target already; the list names targets only when it doesn't.
-        let listsTargets = summary.lineTarget == nil
-        return VStack(spacing: 0) {
+        VStack(spacing: 0) {
             ForEach(Array(summary.watches.enumerated()), id: \.element.id) { index, watch in
                 if index > 0 {
                     Divider().opacity(0.5)
                 }
-                watchBlock(watch, now: now, listsTargets: listsTargets)
+                watchBlock(watch, now: now)
             }
         }
     }
 
     /// One watch: its stale reminder when nobody is checking it, and its targets.
-    private func watchBlock(_ watch: Watch, now: Date, listsTargets: Bool) -> some View {
+    private func watchBlock(_ watch: Watch, now: Date) -> some View {
         VStack(spacing: 0) {
             if let stale = WatchProjection.stripStaleLine(for: watch, now: now) {
                 Text(stale)
@@ -150,11 +146,9 @@ struct WatchingCardStack: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
             }
-            if listsTargets {
-                ForEach(WatchProjection.stripTargets(of: watch), id: \.targetResourceId) { target in
-                    Divider().opacity(0.5)
-                    targetRow(target)
-                }
+            ForEach(WatchProjection.stripTargets(of: watch), id: \.targetResourceId) { target in
+                Divider().opacity(0.5)
+                targetRow(target)
             }
         }
     }
@@ -185,38 +179,6 @@ struct WatchingCardStack: View {
     }
 
     // MARK: - the ways out
-
-    /// The lone target's page, when the line names one, and the Following page, where Pause and Stop
-    /// live. In a phone's conversation both are pushed over it, so the back swipe returns here.
-    private func footer(_ summary: WatchSessionSummary) -> some View {
-        HStack(spacing: 18) {
-            if let target = summary.lineTarget, route(for: target) != nil {
-                footerLink(target.targetKind == .session ? WatchProjection.stripOpenSession
-                                                         : WatchProjection.stripOpenTask) {
-                    openTarget(target)
-                }
-            }
-            footerLink(WatchProjection.stripManage) {
-                if overConsole { model.push(.watches) } else { model.selectedSection = .following }
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 10)
-        .frame(minHeight: 32)
-    }
-
-    /// A link in Tasks created here's `View all in Tasks ›` style.
-    private func footerLink(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.orbitMeta)
-                .foregroundStyle(.tint)
-                .lineLimit(1)
-                .padding(.vertical, 8)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
 
     private func openTarget(_ target: WatchTarget) {
         guard let destination = route(for: target) else { return }

@@ -274,7 +274,7 @@ final class WikiCopyParityTests: XCTestCase {
     /// `pendingOps`, summed — nothing at zero, and "3 proposals to review" as its accessible name.
     func testTheDrawerRowCountsWhatTheWebSidebarCounts() throws {
         let web = try source(Self.sidebar)
-        assertOrder(web, ["key: 'projects'", "{ key: 'wiki', icon: <BookOutlined />, label: 'Wiki' }"],
+        assertOrder(web, ["key: 'projects'", "{ key: 'wiki', icon: <SidebarNavIcon name=\"wiki\" />, label: 'Wiki' }"],
                     "the sidebar's top rows")
         assertSays(web, "(wikiSpaces.data ?? []).reduce((sum, space) => sum + (space.pendingOps ?? 0), 0)",
                    in: Self.sidebar)
