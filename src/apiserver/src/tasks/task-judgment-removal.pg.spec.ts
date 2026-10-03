@@ -212,8 +212,10 @@ suite('(m)(q)(w) VERIFICATION and the core task triggers are intact; 0229 took t
     // `project_task_status_count_insert`/`_delete`/`_move` with the project's status count. This
     // suite is about what THIS removal subtracted, so additions move the number and not the claim
     // — the set equality that carries that claim is `verification-subject-guard-removal.pg.spec`'s
-    // (g), which binds this inventory to a replay of every migration.
-    assert.equal(taskTriggers.length, 31,
+    // (g), which binds this inventory to a replay of every migration. 30 since 0329 dropped 0122's
+    // `task_dispatch_authority_derive` with the column it stamped, a later and separate removal,
+    // named below too so the one subtraction since is accounted for as well.
+    assert.equal(taskTriggers.length, 30,
       `task carries ${taskTriggers.length} triggers: ${taskTriggers.join(', ')}`);
     for (const added of ['task_progress_epoch_advance', 'task_list_task_count_insert',
       'task_list_task_count_delete', 'task_list_task_count_relist',
@@ -221,6 +223,8 @@ suite('(m)(q)(w) VERIFICATION and the core task triggers are intact; 0229 took t
       'project_task_status_count_move']) {
       assert.ok(taskTriggers.includes(added), `the count no longer includes ${added}`);
     }
+    assert.ok(!taskTriggers.includes('task_dispatch_authority_derive'),
+      'the count still includes task_dispatch_authority_derive, which 0329 dropped');
     for (const removed of DROPPED_CORE_TASK_TRIGGERS) {
       assert.ok(!taskTriggers.includes(removed));
     }
