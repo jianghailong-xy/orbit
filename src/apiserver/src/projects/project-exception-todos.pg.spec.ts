@@ -1760,6 +1760,51 @@ test('an item no door delivered reaches the coordinator when its own turn ends',
   }
 });
 
+/** What the coordinator's account answered on 2026-10-02 for eight hours: every turn turned away. */
+const RATE_LIMITED =
+  'API Error: Request rejected (429) · This request would exceed your account\'s rate limit. Please try again later.';
+
+/**
+ * The coordinator's running turn fails the way a rate-limited account fails it, reported through the
+ * door the runner reports it on. What that leaves is a conversation that is down, not over: FAILED,
+ * with no end recorded and still Open (`conversationIsDown`, §4.4 X-D6).
+ */
+async function knockDown(stack: Stack, w: World): Promise<void> {
+  const outcome = await stack.api.turnComplete({ id: w.runnerId }, w.coordinatorSessionId!, {
+    turnId: w.runningTurnId!,
+    status: SharedRunStatus.FAILED,
+    result: RATE_LIMITED,
+  });
+  assert.deepEqual(outcome, { ok: true, status: RunStatus.FAILED });
+}
+
+/**
+ * The owner retries the coordinator and the retried turn ends — the committed fact an item a down
+ * conversation kept is handed over on (§4.4 X-D4 3). The retry is the product's own door; the claim
+ * and the poll stand in for the runner, as they do in `rework`.
+ */
+async function retryCoordinator(stack: Stack, w: World): Promise<void> {
+  const coordinator = w.coordinatorSessionId!;
+  const retried = await stack.sessions.resume(w.ownerId, coordinator, {
+    clientTurnId: randomUUID(),
+    content: 'try again',
+  });
+  // The runner's claim of a revived conversation, which `claimed` stands in for on a live one: it is
+  // RUNNING, and owned by the process this fixture reports as — no lease owner — rather than by the
+  // hand-off the revive leaves on it for whichever process takes it next.
+  await stack.db.session.updateMany({
+    where: { id: coordinator, status: RunStatus.PENDING },
+    data: { status: RunStatus.RUNNING, inboxLeaseOwner: null },
+  });
+  const delivered = await dequeue(stack, coordinator, w.runnerId);
+  assert.equal(delivered?.turnId, retried.turnId, 'the retried turn was handed to the runner');
+  await answerTurn(stack, w.runnerId, coordinator, retried.turnId, 'back on the project');
+  await stack.api.turnComplete({ id: w.runnerId }, coordinator, {
+    turnId: retried.turnId,
+    status: SharedRunStatus.SUCCEEDED,
+  });
+}
+
 test('an item whose coordinator has ended, or that has none, goes to the owner', { skip, timeout: 180_000 }, async () => {
   const stack = await connect();
   try {
@@ -1780,12 +1825,69 @@ test('an item whose coordinator has ended, or that has none, goes to the owner',
     const unowned = await onlyItemFor(stack.db, orphan, b.taskId, 'the runner turn wrote FAILED');
     assert.equal(unowned.assignee, 'OWNER');
     assert.equal(unowned.assigneeReason, 'NO_COORDINATOR');
+
+    // Down and then filed as Completed by its owner is over: somebody closed it.
+    const closed = await world(stack, 'coordinator-down-completed', 'RUNNING');
+    await knockDown(stack, closed);
+    await stack.sessions.complete(closed.ownerId, closed.coordinatorSessionId!);
+    const c = await attempt(stack, closed, 'coordinator-down-completed', { taskStatus: TaskStatus.IN_PROGRESS });
+    await failTurn(stack, closed, c);
+    const filed = await onlyItemFor(stack.db, closed, c.taskId, 'the runner turn wrote FAILED');
+    assert.equal(filed.assignee, 'OWNER');
+    assert.equal(filed.assigneeReason, 'COORDINATOR_ENDED');
   } finally {
     await stack.db.$disconnect();
   }
 });
 
-test('a queued item turn drained by the coordinator\'s failed turn is returned and goes to the owner, not lost',
+test('items opened while the coordinator is down stay the coordinator\'s, and reach it once a retry brings it back',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      // 2026-10-02: the coordinator sat FAILED on 429s for eight hours, and a merge conflict opened
+      // meanwhile went straight to the owner as COORDINATOR_ENDED. A run that failed is not a
+      // conversation anybody ended (§4.4 X-D6).
+      const w = await integratingWorld(stack, 'down', 'RUNNING');
+      const coordinator = w.coordinatorSessionId!;
+      await knockDown(stack, w);
+
+      const { task, job } = await claimedLanding(stack, w, 'down');
+      await reportFailure(stack, w, job, {
+        state: 'CONFLICT',
+        phase: 'MERGE',
+        sourceSha: 'a'.repeat(40),
+        targetShaBefore: 'c'.repeat(40),
+        conflicts: ['src/apiserver/src/tasks/task-judgment-data-preserved.spec.ts'],
+      });
+      const failed = await attempt(stack, w, 'down-failed', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, w, failed);
+
+      const conflict = await onlyItemFor(stack.db, w, task.taskId, 'the runner reported a conflict');
+      const failure = await onlyItemFor(stack.db, w, failed.taskId, 'the runner turn wrote FAILED');
+      for (const item of [conflict, failure]) {
+        assert.equal(item.assignee, 'COORDINATOR', `${item.kind} waits for the conversation that is down`);
+        assert.equal(item.assigneeReason, 'DEFAULT');
+        assertEscalatesAfterDefault(item);
+      }
+      assert.deepEqual(await itemTurns(stack.db, coordinator), [], 'a FAILED conversation is not written to');
+      assert.deepEqual(await deliveries(stack.db, w.projectId), [], 'and nothing says it was');
+      const down = await stack.db.session.findUniqueOrThrow({ where: { id: coordinator } });
+      assert.equal(down.status, RunStatus.FAILED, 'nor revived to be told');
+
+      await retryCoordinator(stack, w);
+
+      const turns = await itemTurns(stack.db, coordinator);
+      assert.deepEqual(
+        turns.map((t) => ({ key: t.clientTurnId, status: t.status })),
+        [conflict, failure].map((item) => ({ key: turnKey(item), status: 'PENDING' })),
+        'the end of the retried turn is where both are delivered',
+      );
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a queued item turn drained by the coordinator\'s failed turn is returned, stays the coordinator\'s, and is queued afresh once it is back',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
@@ -1798,11 +1900,7 @@ test('a queued item turn drained by the coordinator\'s failed turn is returned a
       assert.equal(queued?.status, 'PENDING', `nothing was queued — ${await factsAbout(stack.db, w, a.taskId)}`);
 
       // The coordinator's running turn fails, and its queue is drained with it.
-      await stack.api.turnComplete({ id: w.runnerId }, coordinator, {
-        turnId: w.runningTurnId!,
-        status: SharedRunStatus.FAILED,
-        result: 'API Error: 500 upstream',
-      });
+      await knockDown(stack, w);
 
       const [drained] = await itemTurns(stack.db, coordinator);
       assert.equal(drained?.status, 'ANSWERED');
@@ -1812,8 +1910,30 @@ test('a queued item turn drained by the coordinator\'s failed turn is returned a
       assert.equal(returned?.returnCode, 'SESSION_ENDED');
       const [after] = (await items(stack.db, w.projectId)).filter((row) => row.id === item.id);
       assert.equal(after?.state, 'OPEN');
-      assert.equal(after?.assignee, 'OWNER', 'an item its coordinator can no longer read is the owner\'s');
-      assert.equal(after?.assigneeReason, 'COORDINATOR_ENDED');
+      // Down, not over (§4.4 X-D5): the run failed, and nobody ended the conversation.
+      assert.equal(after?.assignee, 'COORDINATOR', 'a conversation whose run failed still has it');
+      assert.equal(after?.assigneeReason, 'DEFAULT');
+      assert.ok(
+        after!.assignedAt.getTime() > item.assignedAt.getTime(),
+        'the assignment is re-made, so the next delivery has a key of its own',
+      );
+      assert.equal(after!.waitingSince.getTime(), item.waitingSince.getTime(), 'the wait goes on');
+      assert.equal(after!.escalateAt?.getTime(), item.escalateAt?.getTime(), 'and so does the clock');
+
+      await retryCoordinator(stack, w);
+
+      const turns = await itemTurns(stack.db, coordinator);
+      assert.deepEqual(
+        turns.map((t) => ({ key: t.clientTurnId, status: t.status })),
+        [
+          { key: turnKey(item), status: 'ANSWERED' },
+          { key: turnKey(after!), status: 'PENDING' },
+        ],
+        'told afresh once it is back, under the assignment the drain re-made',
+      );
+      const [rearmed] = await deliveries(stack.db, w.projectId);
+      assert.equal(rearmed?.returnedAt, null, 'the delivery is live again');
+      assert.equal(rearmed?.clientTurnId, turnKey(after!));
     } finally {
       await stack.db.$disconnect();
     }
