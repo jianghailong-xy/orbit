@@ -220,7 +220,10 @@ import {
   foldQueuedWakeTurnsInto,
   foldRequeuedWakeTurns,
   isBackgroundWakeTurn,
+  jobExitFiled,
   sessionHasEnded,
+  StaleBackgroundWake,
+  takeJobOffNextTurnQueue,
   undeliveredWakeTurn,
 } from './background-job-wake';
 import {
@@ -3678,6 +3681,11 @@ export class RunnerApiController {
    * the turn, and no turn is opened for it. It then joins only a steer still waiting for that same
    * turn. A job's new output always waits for the next turn, joining the wake queued there — written
    * into the running turn, a job that prints every minute would interrupt it every minute.
+   *
+   * Except that a job's exit is the last thing it says: steered, it takes that job's own output wake
+   * off the next-turn queue with it (`takeJobOffNextTurnQueue`), and an output wake arriving once the
+   * exit is on file is DROPPED (`StaleBackgroundWake`) — otherwise each would open a turn after the
+   * exit was read, to report output the exit already reported.
    */
   @UseGuards(RunnerAuthGuard)
   @Post('sessions/:id/background-wake')
@@ -3700,17 +3708,25 @@ export class RunnerApiController {
           steerIfLive: dto.trigger === 'exit',
           coalesce: async (tx, session, route) => {
             if (sessionHasEnded(session)) throw new SessionNotSendable('the session has ended');
+            if (dto.trigger === 'output' && (await jobExitFiled(tx, sessionId, dto.jobId))) {
+              throw new StaleBackgroundWake(dto.jobId);
+            }
             const queued = await undeliveredWakeTurn(tx, sessionId, route);
             merged = queued !== null;
-            await fileBackgroundJobWake(tx, sessionId, queued?.clientTurnId ?? clientTurnId, dto);
+            const filedOn = queued?.clientTurnId ?? clientTurnId;
+            await fileBackgroundJobWake(tx, sessionId, filedOn, dto);
+            if (route.kind === 'steer') await takeJobOffNextTurnQueue(tx, sessionId, filedOn, dto.jobId);
             return queued;
           },
         },
       );
       return { outcome: merged ? 'MERGED' : 'ENQUEUED', turnId: turn.turnId };
     } catch (e) {
-      // Ended (SessionNotSendable), or no longer there to wake (NotFoundException).
-      if (e instanceof SessionNotSendable || e instanceof NotFoundException) return { outcome: 'DROPPED' };
+      // Ended (SessionNotSendable), no longer there to wake (NotFoundException), or output its job's
+      // exit already reported (StaleBackgroundWake).
+      if (e instanceof SessionNotSendable || e instanceof NotFoundException || e instanceof StaleBackgroundWake) {
+        return { outcome: 'DROPPED' };
+      }
       throw e;
     }
   }

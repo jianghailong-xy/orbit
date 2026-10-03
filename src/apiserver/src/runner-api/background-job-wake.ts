@@ -1,4 +1,4 @@
-import { ConversationTurn, Prisma } from '@prisma/client';
+import { BackgroundJobWake, ConversationTurn, Prisma } from '@prisma/client';
 import {
   deriveSessionLifecycleState,
   deriveSessionRunState,
@@ -36,6 +36,12 @@ import { stripNul } from './strip-nul';
  * steer joins a steer still waiting for the same running turn, a next-turn wake the queued next-turn
  * wake. A steer that misses its turn comes back as an ordinary wake turn, and takes the queued one
  * with it (`foldQueuedWakeTurnsInto`).
+ *
+ * One job's own wakes are the exception. Its exit is the last thing it will say, and it covers its
+ * output from where the earliest unread wake began, so a steered exit takes that job's output wake
+ * off the next-turn queue (`takeJobOffNextTurnQueue`), and an output wake arriving after the exit was
+ * filed is dropped (`StaleBackgroundWake`). Either one left alone would open a turn after the exit
+ * was read, to report output the exit had already reported.
  */
 
 /** The `client_turn_id` prefix of a turn filed to deliver background job wakes. */
@@ -108,11 +114,40 @@ export class BackgroundWakeDto {
 
 /**
  * What the control plane did with a wake: filed it as a new turn (ENQUEUED), onto a wake turn nobody
- * has been handed yet (MERGED), or nowhere, because the session has ended (DROPPED).
+ * has been handed yet (MERGED), or nowhere (DROPPED) — because the session has ended, or because it
+ * reports output its job's exit, already filed, reports too.
  */
 export interface BackgroundWakeReceipt {
   outcome: 'ENQUEUED' | 'MERGED' | 'DROPPED';
   turnId?: string;
+}
+
+/**
+ * An output wake that arrived after its job's exit was filed. The runner sends the two from separate
+ * requests, and the output found as the process exited can arrive second; by then the exit has said
+ * how the job ended and where its output is, whether it is still queued, written into a running turn
+ * or long since read. Filed anyway, it would open a turn of its own to say less than the exit did.
+ * Thrown from the coalesce hook, so nothing of it is written; answered DROPPED, which the runner does
+ * not retry.
+ */
+export class StaleBackgroundWake extends Error {
+  constructor(jobId: string) {
+    super(`background job ${jobId} already reported its exit; its later output wake has nothing to add`);
+    this.name = 'StaleBackgroundWake';
+  }
+}
+
+/** Whether this session has a job's exit on file, on any wake turn, delivered or not. */
+export async function jobExitFiled(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  jobId: string,
+): Promise<boolean> {
+  const exit = await tx.backgroundJobWake.findFirst({
+    where: { sessionId, jobId, trigger: 'exit' },
+    select: { id: true },
+  });
+  return exit !== null;
 }
 
 /**
@@ -188,58 +223,12 @@ export async function foldQueuedWakeTurnsInto(
   kept: { id: string; clientTurnId: string },
 ): Promise<number> {
   if (!isBackgroundWakeTurn(kept.clientTurnId)) return 0;
-  const queued = await tx.conversationTurn.findMany({
-    where: {
-      sessionId,
-      id: { not: kept.id },
-      kind: 'message',
-      status: 'PENDING',
-      clientTurnId: { startsWith: BACKGROUND_WAKE_TURN_PREFIX },
-    },
-    select: { id: true, clientTurnId: true },
-  });
-  const announced = queued.length === 0
-    ? []
-    : await tx.runEvent.findMany({
-        where: { sessionId, type: 'user', turnId: { in: queued.map((turn) => turn.id) } },
-        select: { turnId: true },
-      });
-  const shown = new Set(announced.map((event) => event.turnId));
-  const others = queued.filter((turn) => !shown.has(turn.id));
+  const others = await unannouncedQueuedWakeTurns(tx, sessionId, kept.id);
   for (const other of others) {
     const wakes = await tx.backgroundJobWake.findMany({
       where: { sessionId, clientTurnId: other.clientTurnId },
     });
-    for (const wake of wakes) {
-      const there = await tx.backgroundJobWake.findUnique({
-        where: {
-          sessionId_clientTurnId_jobId: { sessionId, clientTurnId: kept.clientTurnId, jobId: wake.jobId },
-        },
-      });
-      if (!there) {
-        await tx.backgroundJobWake.update({ where: { id: wake.id }, data: { clientTurnId: kept.clientTurnId } });
-        continue;
-      }
-      const later = there.updatedAt >= wake.updatedAt ? there : wake;
-      const says = there.trigger === 'exit' ? there : wake.trigger === 'exit' ? wake : later;
-      await tx.backgroundJobWake.update({
-        where: { id: there.id },
-        data: {
-          trigger: says.trigger,
-          kind: says.kind,
-          command: says.command,
-          description: says.description,
-          status: says.status,
-          exitCode: says.exitCode,
-          reason: says.reason,
-          outputPath: says.outputPath,
-          outputSize: says.outputSize,
-          outputExcerpt: says.outputExcerpt,
-          outputOffset: there.outputOffset < wake.outputOffset ? there.outputOffset : wake.outputOffset,
-        },
-      });
-      await tx.backgroundJobWake.delete({ where: { id: wake.id } });
-    }
+    for (const wake of wakes) await moveJobWake(tx, sessionId, wake, kept.clientTurnId);
     await tx.sessionScheduledWakeup.updateMany({
       where: { sessionId, clientTurnId: other.clientTurnId, state: 'DELIVERED' },
       data: { clientTurnId: kept.clientTurnId },
@@ -247,6 +236,113 @@ export async function foldQueuedWakeTurnsInto(
     await tx.conversationTurn.deleteMany({ where: { id: other.id, sessionId, status: 'PENDING' } });
   }
   return others.length;
+}
+
+/**
+ * Take one job's wake off the next-turn queue, now that its exit has been written into the running
+ * turn as a steer (`steerClientTurnId`).
+ *
+ * The job's output wakes waited for the next turn; its exit, arriving while a turn ran, was steered
+ * into that turn. Left where it was, the output wake would open a turn after this one to report
+ * output the exit already reports: the job is over, and once the output wake is merged into it the
+ * exit covers its output from where that wake began. A queued turn left carrying nothing goes the way
+ * a withdrawn one does; one still carrying another job's wake, or a wakeup that came due, stays. A
+ * steer that then misses its turn takes the wake back to the queue with it, so nothing here can make
+ * the output go unreported.
+ *
+ * Only turns nobody has been handed: one already in the transcript keeps the line drawn for it, as in
+ * `foldQueuedWakeTurnsInto`. Under the Session lock createTurn holds, in the transaction that files
+ * the steer.
+ */
+export async function takeJobOffNextTurnQueue(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  steerClientTurnId: string,
+  jobId: string,
+): Promise<void> {
+  for (const queued of await unannouncedQueuedWakeTurns(tx, sessionId)) {
+    if (queued.clientTurnId === steerClientTurnId) continue;
+    const wake = await tx.backgroundJobWake.findUnique({
+      where: { sessionId_clientTurnId_jobId: { sessionId, clientTurnId: queued.clientTurnId, jobId } },
+    });
+    if (!wake) continue;
+    await moveJobWake(tx, sessionId, wake, steerClientTurnId);
+    const wakesLeft = await tx.backgroundJobWake.count({
+      where: { sessionId, clientTurnId: queued.clientTurnId },
+    });
+    const wakeupsLeft = await tx.sessionScheduledWakeup.count({
+      where: { sessionId, clientTurnId: queued.clientTurnId, state: 'DELIVERED' },
+    });
+    if (wakesLeft === 0 && wakeupsLeft === 0) {
+      await tx.conversationTurn.deleteMany({ where: { id: queued.id, sessionId, status: 'PENDING' } });
+    }
+  }
+}
+
+/** The queued next-turn wake turns nobody has been handed yet — none of them has a `user` event. */
+async function unannouncedQueuedWakeTurns(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  exceptTurnId?: string,
+): Promise<Array<{ id: string; clientTurnId: string }>> {
+  const queued = await tx.conversationTurn.findMany({
+    where: {
+      sessionId,
+      ...(exceptTurnId ? { id: { not: exceptTurnId } } : {}),
+      kind: 'message',
+      status: 'PENDING',
+      clientTurnId: { startsWith: BACKGROUND_WAKE_TURN_PREFIX },
+    },
+    select: { id: true, clientTurnId: true },
+    orderBy: { seq: 'asc' },
+  });
+  if (queued.length === 0) return [];
+  const announced = await tx.runEvent.findMany({
+    where: { sessionId, type: 'user', turnId: { in: queued.map((turn) => turn.id) } },
+    select: { turnId: true },
+  });
+  const shown = new Set(announced.map((event) => event.turnId));
+  return queued.filter((turn) => !shown.has(turn.id));
+}
+
+/**
+ * Move one job's wake onto another wake turn. When the job already has a wake there, the two become
+ * one, as `fileBackgroundJobWake` would have made them had both arrived on that turn: the wake that
+ * says how the job ended wins over one that says it is running, and its output is read from the
+ * earlier of the two offsets.
+ */
+async function moveJobWake(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  wake: BackgroundJobWake,
+  toClientTurnId: string,
+): Promise<void> {
+  const there = await tx.backgroundJobWake.findUnique({
+    where: { sessionId_clientTurnId_jobId: { sessionId, clientTurnId: toClientTurnId, jobId: wake.jobId } },
+  });
+  if (!there) {
+    await tx.backgroundJobWake.update({ where: { id: wake.id }, data: { clientTurnId: toClientTurnId } });
+    return;
+  }
+  const later = there.updatedAt >= wake.updatedAt ? there : wake;
+  const says = there.trigger === 'exit' ? there : wake.trigger === 'exit' ? wake : later;
+  await tx.backgroundJobWake.update({
+    where: { id: there.id },
+    data: {
+      trigger: says.trigger,
+      kind: says.kind,
+      command: says.command,
+      description: says.description,
+      status: says.status,
+      exitCode: says.exitCode,
+      reason: says.reason,
+      outputPath: says.outputPath,
+      outputSize: says.outputSize,
+      outputExcerpt: says.outputExcerpt,
+      outputOffset: there.outputOffset < wake.outputOffset ? there.outputOffset : wake.outputOffset,
+    },
+  });
+  await tx.backgroundJobWake.delete({ where: { id: wake.id } });
 }
 
 /**
