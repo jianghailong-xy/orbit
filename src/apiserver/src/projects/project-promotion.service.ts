@@ -13,6 +13,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import {
   IntegrationCheckResult,
+  LandingRetryRequest,
   LandingWorkSessionFacts,
   PROMOTION_AUTOMATIC_LAND,
   integrationSerialKey,
@@ -1123,6 +1124,51 @@ async function blockPromotion(
     },
   });
   return { promotionId, state: 'BLOCKED', receiptIds: [], openApproval: null };
+}
+
+/**
+ * §4.7 H1: a blocked candidate's check queued again because its project's coordinator asked for it,
+ * with a reason, through `integration_retry` — inside that door's transaction, under the candidate's
+ * row lock it already holds.
+ *
+ * The candidate goes back to CHECKING with the next CHECK_PROMOTION generation, which carries what it
+ * reruns, why and who asked (the retry columns 0344 put on a job, admitted for a check by 0368).
+ * Nothing about what is being checked changes: the same frozen source on the same upstream, so a check
+ * that passes leaves the candidate READY for the owner's card, or confirmed by the Automatic setting's
+ * own rule (M-T11), exactly as its first check would have. `decided_at` is cleared because the
+ * candidate is asking again; a check that fails again blocks it at a new moment.
+ *
+ * Null when nothing can be queued: the candidate is no longer BLOCKED, or its repository is gone.
+ */
+export async function requeuePromotionCheck(
+  tx: Prisma.TransactionClient,
+  input: { promotionId: string; retry: LandingRetryRequest },
+): Promise<{ jobId: string; generation: number } | null> {
+  const promotion = await tx.projectPromotion.findUnique({
+    where: { id: input.promotionId },
+    select: PROMOTION_COLUMNS,
+  });
+  if (!promotion || promotion.state !== 'BLOCKED') return null;
+  const codebase = await tx.projectCodebase.findUnique({
+    where: { id: promotion.codebaseId },
+    select: { canonicalRepoUrl: true },
+  });
+  if (!codebase) return null;
+  const jobId = await queuePromotionJob(tx, {
+    kind: 'CHECK_PROMOTION',
+    promotion,
+    canonicalRepoUrl: codebase.canonicalRepoUrl,
+    retry: input.retry,
+  });
+  await tx.projectPromotion.update({
+    where: { id: promotion.id },
+    data: { state: 'CHECKING' satisfies PromotionState, checkJobId: jobId, decidedAt: null },
+  });
+  const queued = await tx.projectIntegrationJob.findUniqueOrThrow({
+    where: { id: jobId },
+    select: { generation: true },
+  });
+  return { jobId, generation: queued.generation };
 }
 
 /**

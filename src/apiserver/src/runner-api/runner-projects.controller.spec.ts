@@ -270,6 +270,61 @@ test('retryIntegration reruns the landing in the runner owner scope, as the acti
   assert.deepEqual(seen[1], ['owner-1', 'project-1', 'task-1', body, undefined]);
 });
 
+test('retryPromotionCheck is exposed as POST projects/:id/promotions/:promotionId/integration/retry', () => {
+  const handler = RunnerProjectsController.prototype.retryPromotionCheck;
+  assert.equal(
+    Reflect.getMetadata(PATH_METADATA, handler),
+    'projects/:id/promotions/:promotionId/integration/retry',
+  );
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'retryPromotionCheck') as
+    | Record<string, { data?: unknown; pipes?: unknown[] }>
+    | undefined;
+  for (const id of ['id', 'promotionId']) {
+    const arg = Object.values(args ?? {}).find((candidate) => candidate.data === id);
+    assert.ok(arg, `no ${id} param on retryPromotionCheck`);
+    assert.ok(
+      (arg.pipes ?? []).some((pipe) => pipe === PublicIdPipe || pipe instanceof PublicIdPipe),
+      `${id} does not resolve through PublicIdPipe`,
+    );
+  }
+});
+
+/** The candidate's re-check, asked for the same way: the runner owner's scope, the acting session. */
+test('retryPromotionCheck re-checks the candidate in the runner owner scope, as the acting session', async () => {
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'retryPromotionCheck') as
+    | Record<string, { data?: unknown }>
+    | undefined;
+  const headers = Object.values(args ?? {})
+    .map((arg) => arg.data)
+    .filter((data) => typeof data === 'string' && data.includes('-'));
+  assert.deepEqual(headers, ['x-orbit-session-id']);
+
+  const seen: unknown[] = [];
+  const openItems = {
+    retryPromotionCheck: async (...call: unknown[]) => {
+      seen.push(call);
+      return { promotionId: 'promotion-1', jobId: 'job-3', generation: 2 };
+    },
+  } as never;
+  const controller = new RunnerProjectsController(
+    {} as never,
+    acceptanceDouble(),
+    {} as never,
+    orchestrationDouble(),
+    openItems,
+  );
+  const body = { reason: 'main\'s merge-check baseline was repaired' };
+
+  const retried = await controller.retryPromotionCheck(RUNNER, ` ${SESSION_ID} `, 'project-1', 'promotion-1', body);
+
+  assert.deepEqual(seen, [['owner-1', 'project-1', 'promotion-1', body, SESSION_ID]]);
+  assert.deepEqual(retried, { promotionId: 'promotion-1', jobId: 'job-3', generation: 2 });
+  // A missing header is passed on as missing, for the service to refuse — never read as the owner.
+  await controller.retryPromotionCheck(RUNNER, undefined, 'project-1', 'promotion-1', body);
+  assert.deepEqual(seen[1], ['owner-1', 'project-1', 'promotion-1', body, undefined]);
+});
+
 /**
  * An agent ending a blocker writes into the runner's owner and is recorded as the COORDINATOR.
  *
@@ -666,6 +721,10 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     // is the coordinator's to decide, and the acting session is the authority the service checks —
     // and it spends no orchestration credential: it queues the line's own work and starts no session.
     'retryIntegration',
+    // The same door for the item that names no task (§4.7 H1): a blocked candidate's check run again
+    // by the coordinator, with a reason, as the acting session. It queues the candidate's next check
+    // and nothing past it — the merge into main stays the owner's card or the Automatic setting's.
+    'retryPromotionCheck',
     // The second half of the coordinator pair above, and the one that does not go stale: a message
     // ADDRESSED to the project, resolved to whichever conversation coordinates it at the moment of
     // delivery. `ensureCoordinator` answers with an id, and an id is exactly what a rotation between
@@ -696,6 +755,7 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     resolveBlocker: RequestMethod.POST,
     resolveOpenItem: RequestMethod.POST,
     retryIntegration: RequestMethod.POST,
+    retryPromotionCheck: RequestMethod.POST,
     // POST: it writes a turn, and a rotation is a side effect it may have. Both are the send the
     // project's coordinator would have received anyway — this door moves WHERE it is addressed from
     // a session to a project, and adds no authority to it.

@@ -18461,6 +18461,51 @@ button.project-open-item-action:disabled {
 .project-open-item-heading {
   min-width: 0;
 }
+/* An item whose handling by the coordinator has ended (§4.7 H5): the same card, quieter — nothing on
+   it is waiting for anybody. */
+.project-open-item-card.is-settled {
+  border-color: var(--border-subtle);
+  background: var(--bg-raised);
+}
+.project-open-item-card.is-settled .approval-head {
+  background: var(--bg-subtle);
+  border-bottom-color: var(--border-subtle);
+  color: var(--text-2);
+}
+/* Where the coordinator's handling stands (§4.7): blue while its rerun runs — the colour the project
+   list's "Coordinator · handling" chip uses — green once it was handled, grey once a new item took
+   its place. */
+.project-open-item-state {
+  flex: none;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  color: var(--text-2);
+}
+.project-open-item-state.is-handling {
+  border-color: var(--brand-border);
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.project-open-item-state.is-handled {
+  border-color: var(--success-border);
+  background: var(--success-bg);
+  color: var(--success);
+}
+.project-open-item-state.is-superseded {
+  color: var(--text-3);
+}
+.project-open-item-line.is-handling .project-open-item-state {
+  display: inline-block;
+  margin-right: 2px;
+  line-height: 16px;
+}
+.project-open-item-handling {
+  margin-top: 6px;
+}
 /* The provenance mark in its third colour: nothing is wrong and nobody is being asked to decide —
    Orbit is reporting a fact. Same box, so the three marks read as one family. */
 .criteria-provenance.prov-neutral {

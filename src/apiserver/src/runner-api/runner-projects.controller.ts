@@ -75,7 +75,8 @@ export class RunnerProjectsController {
     private readonly acceptance: ProjectAcceptanceService,
     private readonly handoffs: ProjectHandoffService,
     private readonly orchestration: RunnerOrchestrationAuthorizer,
-    // Only `askOwner`, `requestStart`, `resolveOpenItem` and `retryIntegration` need it. Defaulted for the reason
+    // Only `askOwner`, `requestStart`, `resolveOpenItem`, `retryIntegration` and
+    // `retryPromotionCheck` need it. Defaulted for the reason
     // `ProjectsService`'s own late parameters are: Nest injects by type rather than by position,
     // while the specs that build this controller by hand to exercise one route would each have to
     // stub a service they never reach.
@@ -498,6 +499,28 @@ export class RunnerProjectsController {
     @Body() dto: RetryIntegrationDto,
   ) {
     return this.openItems.retryIntegration(runner.ownerId, id, taskId, dto, sessionId?.trim());
+  }
+
+  /**
+   * The same door for an item that names no task (contract §4.7 H1): a coordinator running a blocked
+   * candidate's check again — the merge of its project branch into main stopped at a red MERGE_CHECK,
+   * a check that ran out of time, or an integration error.
+   *
+   * Held to the route above's rules, by the same service: a reason, the acting session checked against
+   * the project's coordinator pointer (a missing or blank header is NOT read as the account owner),
+   * refused for a conflict, while anything about the candidate is in flight, and when an item about it
+   * is the owner's. What it queues is the candidate's next check and nothing past it: the merge stays
+   * the owner's card or the Automatic setting's own rule.
+   */
+  @Post('projects/:id/promotions/:promotionId/integration/retry')
+  retryPromotionCheck(
+    @CurrentRunner() runner: Runner,
+    @Headers('x-orbit-session-id') sessionId: string | undefined,
+    @Param('id', PublicIdPipe) id: string,
+    @Param('promotionId', PublicIdPipe) promotionId: string,
+    @Body() dto: RetryIntegrationDto,
+  ) {
+    return this.openItems.retryPromotionCheck(runner.ownerId, id, promotionId, dto, sessionId?.trim());
   }
 
   /**

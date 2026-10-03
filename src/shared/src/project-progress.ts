@@ -292,6 +292,50 @@ export interface OpenItemFacts {
 }
 
 /**
+ * The coordinator's rerun of the failure an item is about, while that rerun is still in flight
+ * (§4.7 H1): the item is being handled, not closed. It stays OPEN until the job the rerun queued
+ * reaches a terminal state, because the rerun can still fail — and a card that said "handled" before
+ * then would be saying something nobody knows yet.
+ */
+export interface OpenItemHandling<Instant = string> {
+  /** The coordinator conversation that asked for the rerun. */
+  sessionId: string;
+  /** Why it said the rerun would come out differently, as it said it. */
+  reason: string;
+  startedAt: Instant;
+  /** The job the rerun queued: a task's next landing, or a blocked candidate's next check. */
+  jobId: string;
+  jobKind: 'LAND_TASK' | 'CHECK_PROMOTION';
+  generation: number;
+  /** Where that job is: waiting for its turn, or running on a runner. */
+  state: 'QUEUED' | 'RUNNING';
+}
+
+/**
+ * How an item the coordinator handled ended (§4.7 H2–H4) — the audit a closed card is drawn from.
+ *
+ * `HANDLED` is the coordinator's rerun landing (a task's) or passing its check (a candidate's), or
+ * the coordinator closing the item with a reason; `RETRIED` is its rerun failing again, which closes
+ * this item SUPERSEDED and opens a new one for the new failure — so a failure is never closed without
+ * another item saying it happened.
+ */
+export interface OpenItemOutcome<Instant = string> {
+  state: 'RESOLVED' | 'SUPERSEDED';
+  resolution: 'HANDLED' | 'RETRIED';
+  resolvedBy: 'COORDINATOR';
+  /** The coordinator conversation it is attributed to: the one that asked for the rerun, or the one
+   *  that closed the item. */
+  resolvedBySessionId: string | null;
+  resolvedAt: Instant;
+  /** The reason the coordinator gave — for its rerun, or for closing the item by hand. */
+  note: string | null;
+  /** The job whose terminal state ended the item; null when the coordinator closed it by hand. */
+  jobId: string | null;
+  /** The item that took this one's place, when the rerun failed again. */
+  supersededByItemId: string | null;
+}
+
+/**
  * One open exception, as `GET /projects/:id/open-items` serves it (§4.8).
  *
  * `detailLine` is the server's own sentence about what happened, in the words of the fact that
@@ -327,12 +371,25 @@ export interface ProjectOpenItemRow<Instant = string> {
    *  shape this build reads — an item an older build opened, a pause, a question — and the card
    *  then draws what it drew before this existed. */
   facts: OpenItemFacts | null;
+  /** The coordinator's rerun of it while that rerun is in flight, or null. Absent from a server
+   *  that predates it. */
+  handling?: OpenItemHandling<Instant> | null;
+  /** How it ended — only on a row of `settled`, and null on every open one. */
+  outcome?: OpenItemOutcome<Instant> | null;
 }
 
 /** The project's open exceptions, split by who is expected to act (§4.8). */
 export interface ProjectOpenItemsView<Instant = string> {
   needsYou: Array<ProjectOpenItemRow<Instant>>;
   withCoordinator: Array<ProjectOpenItemRow<Instant>>;
+  /**
+   * Exceptions the coordinator closed in the last day, newest first (§4.7 H5): handled — its rerun
+   * landed or passed, or it closed the item with a reason — or superseded by the new item its failed
+   * rerun opened. Each carries its `outcome`. Kept out of the two groups above because nobody owes
+   * anything about them; a conversation draws them as the closed cards they became. Absent from a
+   * server that predates it.
+   */
+  settled?: Array<ProjectOpenItemRow<Instant>>;
   /**
    * The coordinator's open request to start the project (`START_REQUEST`), or null — a project holds
    * at most one. Kept out of `needsYou` on purpose: a client that predates the kind draws every
