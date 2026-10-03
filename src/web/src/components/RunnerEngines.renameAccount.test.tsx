@@ -3,6 +3,7 @@ import { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
+import { App as AntApp } from 'antd';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { RunnerEngines } from './RunnerEngines';
@@ -114,7 +115,10 @@ function mount(runners: Runner[], { strict = false } = {}) {
   const page = (
     <MemoryRouter initialEntries={['/providers']}>
       <QueryClientProvider client={qc}>
-        <RunnerEngines />
+        {/* The app mounts AntD's `App`, which is what gives `App.useApp()` its message API. */}
+        <AntApp>
+          <RunnerEngines />
+        </AntApp>
       </QueryClientProvider>
     </MemoryRouter>
   );
@@ -190,10 +194,11 @@ describe('renaming an account on a runner', () => {
     await press(input, 'Enter');
 
     expect(renames()).toEqual([[`/runners/${RUNNER_ID}/accounts/claude/default`, { name: 'jianghailong.main' }]]);
-    await vi.waitFor(() => expect(apiMock.mock.calls.filter(([path]) => path === '/runners').length).toBeGreaterThan(0));
+    // The list read after the rename is what carries the name — wait for it, as the tests below do.
+    // A read only begun can still leave the row a render on the old name.
+    await vi.waitFor(() => expect(nameOf(accountsOf(page)[0])).toBe('jianghailong.main'));
     const [named] = accountsOf(page);
     expect(editorOf(named)).toBeNull();
-    expect(nameOf(named)).toBe('jianghailong.main');
     expect(chipsOf(named)).toContain('DEFAULT');
     expect(named.querySelector('.re-chip')?.getAttribute('title')).toContain('~/.claude');
   });
@@ -298,6 +303,14 @@ describe('naming an account while + Account adds it', () => {
     apiMock.mock.calls
       .filter(([path, options]) => path === `/runners/${RUNNER_ID}/login` && options?.method === 'POST')
       .map(([, options]) => (options as { body?: unknown }).body);
+  /** The + Account panel, while it is open. */
+  const panelOf = (page: ParentNode) => page.querySelector('.re-add');
+  /** The runner's list has reached the page once the new account has a row of its own. */
+  const shown = (page: ParentNode) =>
+    vi.waitFor(() => expect(accountsOf(page).map(nameOf)).toEqual(['Default', 'Account 2']));
+  /** Let what that set off land — the effects of the render, a request's outcome — before asking
+   *  whether the panel is still open: a list read or a failure reaches the component a tick later. */
+  const settle = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 30)); });
   /** Press + Account on the Claude row, and put the caret in the name it opens with. */
   async function add(page: HTMLElement): Promise<HTMLInputElement> {
     await act(async () => {
@@ -308,7 +321,7 @@ describe('naming an account while + Account adds it', () => {
     return input;
   }
 
-  it('saves a name typed while the sign-in runs once the runner reports the account it added', async () => {
+  it('saves a name typed while the sign-in runs once the runner reports the account, then folds away', async () => {
     const page = mount([runner([DEFAULT])]);
     const input = await add(page);
     expect(input.value).toBe('Account 2');
@@ -324,31 +337,78 @@ describe('naming an account while + Account adds it', () => {
       expect(renames()).toEqual([[`/runners/${RUNNER_ID}/accounts/claude/7c41d2aa`, { name: 'Work' }]]),
     );
     await vi.waitFor(() => expect(accountsOf(page).map(nameOf)).toEqual(['Default', 'Work']));
+    // What the panel added is that row now, and the panel itself is gone.
+    await vi.waitFor(() => expect(panelOf(page)).toBeNull());
     // Named, not added again: the one sign-in is still the only one.
     expect(loginPosts()).toHaveLength(1);
   });
 
-  it('saves a name changed after the account is reported at once, and nothing for the same name or none', async () => {
+  it('waits for a name still being typed when the account arrives, then saves it and folds away', async () => {
     const page = mount([runner([DEFAULT])]);
     const input = await add(page);
+    // Signed in and reported while the caret is still in the field: the panel stays for the name.
     await report([runner([DEFAULT, ADDED])]);
-    // Reported under the name the page picked: there is nothing to save.
+    await shown(page);
+    await settle();
+    expect(panelOf(page)).not.toBeNull();
     expect(renames()).toEqual([]);
 
     await type(input, ' Personal ');
     await press(input, 'Enter');
     expect(renames()).toEqual([[`/runners/${RUNNER_ID}/accounts/claude/7c41d2aa`, { name: 'Personal' }]]);
     await vi.waitFor(() => expect(nameOf(accountsOf(page)[1])).toBe('Personal'));
+    await vi.waitFor(() => expect(panelOf(page)).toBeNull());
+  });
 
-    await act(async () => input.focus());
-    await type(input, 'Personal');
-    await press(input, 'Enter');
-    await act(async () => input.focus());
+  it('sends nothing for the name the account already has, or for none, and folds away', async () => {
+    const page = mount([runner([DEFAULT])]);
+    const input = await add(page);
     await type(input, '   ');
     await press(input, 'Enter');
-    expect(renames()).toHaveLength(1);
-    // An emptied name goes back to the one the account has.
-    expect(input.value).toBe('Personal');
+    // An emptied name goes back to the one the account is being added under.
+    expect(input.value).toBe('Account 2');
+    await act(async () => input.focus());
+    await type(input, ' Account 2 ');
+    await press(input, 'Enter');
+
+    await report([runner([DEFAULT, ADDED])]);
+    await vi.waitFor(() => expect(panelOf(page)).toBeNull());
+    expect(renames()).toEqual([]);
+    expect(accountsOf(page).map(nameOf)).toEqual(['Default', 'Account 2']);
+  });
+
+  it('stays open until the runner reports the account signed in', async () => {
+    const page = mount([runner([DEFAULT])]);
+    const input = await add(page);
+    await act(async () => input.blur());
+    // A probe that caught the account mid-sign-in reports it signed out: not done yet.
+    await report([runner([DEFAULT, { ...ADDED, auth: 'no' }])]);
+    await shown(page);
+    await settle();
+    expect(panelOf(page)).not.toBeNull();
+
+    await report([runner([DEFAULT, ADDED])]);
+    await vi.waitFor(() => expect(panelOf(page)).toBeNull());
+  });
+
+  it('stays open, the name kept, when saving the name fails', async () => {
+    const page = mount([runner([DEFAULT])]);
+    const answer = apiMock.getMockImplementation()!;
+    apiMock.mockImplementation(async (path: string, options?: { method?: string; body?: unknown }) => {
+      if (options?.method === 'PATCH') throw new Error('Could not reach the server');
+      return answer(path, options);
+    });
+    const input = await add(page);
+    await report([runner([DEFAULT, ADDED])]);
+    await shown(page);
+
+    await type(input, 'Work');
+    await press(input, 'Enter');
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Could not reach the server'));
+    await settle();
+    // The account is signed in and reported, but not under the name in the field: still open.
+    expect(panelOf(page)).not.toBeNull();
+    expect(input.value).toBe('Work');
   });
 
   it('starts one sign-in, even mounted twice by StrictMode', async () => {

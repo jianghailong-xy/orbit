@@ -523,7 +523,7 @@ function EngineRow({
             engine={engine}
             runnerId={runner.id}
             accounts={health?.accounts ?? []}
-            onCancel={() => onSignIn(null)}
+            onClose={() => onSignIn(null)}
           />
         </div>
       )}
@@ -820,18 +820,22 @@ function AccountRow({
  * does (AccountName). That rename can only name an account the runner reports, which a new one is
  * once it is signed in, so a name saved before then waits here for it — and a panel closed first
  * leaves the account the name it was added under, for its row's rename to change.
+ *
+ * Once that account is signed in, reported and named, the panel folds itself away: what it added is
+ * that account's own row, and the row's pencil is where its name changes from then on.
  */
 function AddEngineAccount({
   engine,
   runnerId,
   accounts,
-  onCancel,
+  onClose,
 }: {
   engine: LoginEngine;
   runnerId: string;
   /** Every account the runner reports for this engine, Default included. */
   accounts: RunnerEngineAccount[];
-  onCancel: () => void;
+  /** Fold the panel away: its own Cancel, and the moment the account it added is done. */
+  onClose: () => void;
 }) {
   const message = useToast();
   const qc = useQueryClient();
@@ -843,6 +847,7 @@ function AddEngineAccount({
   const added = accounts.filter((account) => !had.has(account.id)).at(-1);
   // A name saved before the runner reported the account it is for.
   const [waiting, setWaiting] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
   const rename = useMutation({
     mutationFn: ({ id, to }: { id: string; to: string }) =>
       api<RunnerEngineAccount>(`/runners/${runnerId}/accounts/${engine}/${id}`, {
@@ -850,7 +855,11 @@ function AddEngineAccount({
         body: { name: to },
       }),
     onSuccess: () => qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
-    onError: (e: Error) => message.error(e.message || 'Could not rename the account'),
+    // Not returned: an error toast stays until dismissed, and a mutation awaits what onError returns,
+    // so returning it would hold the rename pending — and the panel waiting on it — until then.
+    onError: (e: Error) => {
+      message.error(e.message || 'Could not rename the account');
+    },
   });
   const save = () => {
     const to = name.trim();
@@ -866,6 +875,18 @@ function AddEngineAccount({
     setWaiting(null);
     if (waiting !== addedName) rename.mutate({ id: addedId, to: waiting });
   }, [addedId, addedName, waiting, rename.mutate]);
+  // Done: the account is signed in by the runner's own word, and carries the name in the field. Not
+  // while that name is still being typed or saved — a rename that failed leaves it differing, and the
+  // panel open — and never after a sign-in that failed or was cancelled, which reports no such account.
+  const finished =
+    added?.auth === 'yes' &&
+    !focused &&
+    waiting === null &&
+    !rename.isPending &&
+    name.trim() === addedName;
+  useEffect(() => {
+    if (finished) onClose();
+  }, [finished, onClose]);
 
   return (
     <>
@@ -875,7 +896,11 @@ function AddEngineAccount({
           className="rsi-input"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          onBlur={save}
+          onFocus={() => setFocused(true)}
+          onBlur={() => {
+            setFocused(false);
+            save();
+          }}
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return; // let the IME (e.g. pinyin) keep Enter
             if (e.key === 'Enter') e.currentTarget.blur();
@@ -891,7 +916,7 @@ function AddEngineAccount({
         <code className="re-cmd">{engine === 'claude' ? 'CLAUDE_CONFIG_DIR' : 'CODEX_HOME'}</code> on
         this machine; your terminal keeps using Default.
       </div>
-      <RunnerSignIn runnerId={runnerId} engine={engine} accountName={name} autoStart onCancel={onCancel} />
+      <RunnerSignIn runnerId={runnerId} engine={engine} accountName={name} autoStart onCancel={onClose} />
     </>
   );
 }
