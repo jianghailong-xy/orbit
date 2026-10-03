@@ -717,7 +717,7 @@ export function TasksSidePanel({ open = false }: { open?: boolean }) {
         })}
       </div>
 
-      <div className="tp-scroll">
+      <div className="tp-scroll autohide-scrollbar">
         <div className="tp-section">
           {navItems.map((t) => (
             <div

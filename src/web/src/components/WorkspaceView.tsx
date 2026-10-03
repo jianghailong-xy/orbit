@@ -7862,7 +7862,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
           {!isMobile && <kbd className="session-search-kbd">{SEARCH_HINT}</kbd>}
         </div>
         <div
-          className="workspace-sessions session-col-list"
+          className="workspace-sessions session-col-list autohide-scrollbar"
           ref={listRef}
           onScroll={onSessionListScroll}
         >

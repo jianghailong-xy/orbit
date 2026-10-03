@@ -211,6 +211,15 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-hover);
 }
+/* A list marked .autohide-scrollbar shows its thumb only while it scrolls (lib/scrollbarAutohide
+   sets data-scrolling for that long) or while the pointer is on it, to grab it. The gutter stays
+   either way, so nothing shifts when the thumb appears. */
+.autohide-scrollbar:not([data-scrolling])::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+.autohide-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+}
 
 /* Off-screen but still in the accessibility tree — the toast live region (see lib/toast.tsx). */
 .sr-only {
