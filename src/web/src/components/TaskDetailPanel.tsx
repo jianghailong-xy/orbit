@@ -17,7 +17,7 @@ import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tansta
 import type { RunnerModelCatalog } from '@orbit/shared';
 import { Alert, Avatar, Button, Dropdown, Input, Modal, Popconfirm, Segmented, Select, Spin, Switch, Tooltip, Typography } from 'antd';
 import { Fragment, lazy, Suspense, type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import rehypeHighlight from 'rehype-highlight';
 import remarkGfm from 'remark-gfm';
@@ -27,10 +27,10 @@ import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import { reportTaskRunConflict, type TaskRunConflictToast } from './TaskRunHandoffNotice';
 import { taskRunEntry } from '../lib/taskRunHandoff';
 import {
-  mergedProviderOptions,
   modelOptionsForProvider,
   type ConfiguredProvider,
 } from '../lib/workspaceDefaults';
+import { currentProviderChoice, providerChoices } from '../lib/sessionProviderChoices';
 import { encodeId } from '../lib/idCodec';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
 import { supersessionNote, taskOutcomeChip } from '../lib/taskOutcome';
@@ -573,6 +573,7 @@ interface WorkspaceRow {
   id: string;
   name: string;
   runnerId?: string | null;
+  antigravityKeyAvailableByRunner?: Record<string, boolean>;
   /** The workspace's own provider — what a task with no pin of its own inherits. */
   provider?: string | null;
   /** Smart model selection: its task runs get a model and effort picked per run. */
@@ -765,6 +766,24 @@ export function TaskDetailPanel({
   const configuredProviders: ConfiguredProvider[] = providersQ.data ?? [];
   const assigneeWorkspace = workspaceList.find((a) => a.id === task?.assignee?.id);
   const assigneeRunner = (runnersQ.data ?? []).find((r) => r.id === assigneeWorkspace?.runnerId);
+  const navigate = useNavigate();
+  const runProviderChoices = providerChoices(
+    configuredProviders,
+    assigneeRunner?.modelCatalog,
+    assigneeRunner?.runtimeDefaultModels,
+    undefined,
+    [],
+    assigneeRunner?.planUsage,
+    assigneeRunner?.antigravity,
+    assigneeWorkspace
+      ? assigneeWorkspace.antigravityKeyAvailableByRunner?.[assigneeRunner?.id] === true
+      : assigneeRunner?.antigravity?.envKeyAvailable === true,
+  );
+  // Task pins already offer OpenCode; preserve it while applying Gemini's admission state.
+  runProviderChoices.splice(3, 0, currentProviderChoice('opencode', runProviderChoices, assigneeRunner?.modelCatalog, configuredProviders));
+  if (q.data?.provider && !runProviderChoices.some((choice) => choice.slug === q.data.provider)) {
+    runProviderChoices.unshift(currentProviderChoice(q.data.provider, runProviderChoices, assigneeRunner?.modelCatalog, configuredProviders, assigneeRunner?.runtimeDefaultModels, assigneeRunner?.antigravity));
+  }
   // The provider whose model space the Model picker lists: the task's own pin when it has one,
   // otherwise the assignee workspace's — so the models offered always match what the run will use.
   const effectiveProvider = q.data?.provider ?? assigneeWorkspace?.provider ?? null;
@@ -1481,8 +1500,23 @@ export function TaskDetailPanel({
                 loading={providersQ.isLoading || updateRunTarget.isPending}
                 disabled={updateRunTarget.isPending}
                 popupMatchSelectWidth={false}
-                options={mergedProviderOptions(configuredProviders)}
-                onChange={(val) => updateRunTarget.mutate({ provider: val ?? null, model: null })}
+                options={runProviderChoices.map((choice) => ({ value: choice.slug, label: choice.label }))}
+                optionRender={(option) => {
+                  const choice = runProviderChoices.find((row) => row.slug === option.data.value)!;
+                  return <span>{choice.label}{choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}{choice.unavailable && <small className="np-label-detail">{choice.unavailable} →</small>}</span>;
+                }}
+                labelRender={({ value, label }) => {
+                  const choice = runProviderChoices.find((row) => row.slug === value);
+                  return <span>{label}{choice?.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}</span>;
+                }}
+                onChange={(val) => {
+                  const choice = runProviderChoices.find((row) => row.slug === val);
+                  if (choice?.unavailable) {
+                    navigate(`/providers?runner=${encodeId(assigneeRunner?.id ?? '')}&engine=${choice.fixEngine ?? choice.slug}`);
+                    return;
+                  }
+                  updateRunTarget.mutate({ provider: val ?? null, model: null });
+                }}
               />
             </div>
             <div className="tdp-field">

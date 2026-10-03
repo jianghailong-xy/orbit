@@ -56,3 +56,11 @@ export function advertisedRunnerProviders(header?: string): AgentProvider[] {
 export function runnerAdvertisesProvider(header: string | undefined, provider: AgentProvider): boolean {
   return advertisedRunnerProviders(header).includes(provider);
 }
+
+/** The heartbeat replaces this snapshot, including when either header is omitted. */
+export function withProviderDeclarations(capabilities: readonly string[], providerHeader?: string): string[] {
+  return [
+    ...capabilities.filter((capability) => !capability.startsWith('provider:')),
+    ...advertisedRunnerProviders(providerHeader).map((provider) => `provider:${provider}`),
+  ];
+}

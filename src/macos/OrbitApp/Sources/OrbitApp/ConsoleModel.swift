@@ -125,6 +125,84 @@ final class ConsoleModel {
     private(set) var sessionCodexAccountPinned = false
     private(set) var sessionClaudeAccountPinned = false
     private(set) var workspaceEnv: [String: String]?
+    private var workspaceAntigravityKeys: [String: Bool]?
+    private(set) var runnerAntigravity: RunnerAntigravityState?
+    private(set) var runnerVersion: String?
+    private(set) var sessionError: String?
+    private(set) var antigravityInstalling = false
+    private(set) var runnerInstall: RunnerInstallState?
+
+    var canInstallAntigravity: Bool {
+        runnerID != nil && runnerOnline == true && runnerAntigravity?.supported == true
+            && !antigravityInstalling && runnerInstall?.inFlight != true
+    }
+
+    var antigravityKeyAvailable: Bool {
+        let keys = isDraft ? draftAgent?.antigravityKeyAvailableByRunner : workspaceAntigravityKeys
+        let hasWorkspace = isDraft || agentID != nil
+        if hasWorkspace { return runnerID.flatMap { keys?[$0] } == true }
+        return runnerAntigravity?.envKeyAvailable == true
+    }
+
+    var queuedAntigravityRepair: EngineAuth.AntigravityRepair? {
+        guard executesAntigravity, sessionStatus == .pending else { return nil }
+        return EngineAuth.antigravityRepair(sessionError)
+    }
+
+    var executesAntigravity: Bool {
+        provider == "antigravity" || configuredProviders.first { $0.slug == provider }?.runtime == "antigravity"
+    }
+
+    var geminiSwitchChoice: ProviderChoice? {
+        providerSwitchChoices.first { choice in
+            let configured = configuredProviders.first { $0.slug == choice.slug }
+            return choice.kind == .byok && choice.slug != provider && choice.unavailable == nil
+                && configured?.presetSlug == "gemini" && configured?.runtime == "antigravity"
+        }
+    }
+
+    var antigravityProvidersURL: URL? {
+        guard let runnerID else { return nil }
+        return providersURL(engine: "antigravity", runnerID: runnerID)
+    }
+
+    func providersURL(engine: String, runnerID: String) -> URL? {
+        var components = URLComponents(url: api.baseURL.appendingPathComponent("providers"), resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "runner", value: runnerID), URLQueryItem(name: "engine", value: engine)]
+        return components?.url
+    }
+
+    func connectGeminiURL() async -> URL {
+        let keys = try? await api.personalProviders()
+        if let key = keys?.first(where: { $0.presetSlug == "gemini" && $0.runtime == "antigravity" }),
+           let id = key.providerID {
+            return api.baseURL.appendingPathComponent("providers/\(id)")
+        }
+        return api.baseURL.appendingPathComponent("providers/new/gemini")
+    }
+
+    func installAntigravity() async {
+        guard let runnerID, canInstallAntigravity else { return }
+        antigravityInstalling = true
+        defer { antigravityInstalling = false }
+        do {
+            runnerInstall = try await api.installAntigravity(runnerID)
+            showToast("Installing Antigravity CLI…")
+        } catch { statusMessage = "Couldn't install Antigravity CLI — \(APIClient.failureReason(error))." }
+    }
+
+    /// Returning from Providers must make a newly connected key available in this conversation.
+    func refreshAntigravityRepairContext() async {
+        if let providers = try? await api.providers() { adoptProviders(providers, pools: providerPools) }
+        _ = await refreshServerStatus()
+        await refreshAntigravityRunner()
+    }
+
+    func refreshAntigravityRunner() async {
+        guard let runnerID, let runners = try? await api.runners() else { return }
+        if let runner = runners.first(where: { $0.id == runnerID }) { adoptRunnerSnapshot(runner) }
+        else { clearRunnerSnapshot() }
+    }
     /// A provider switch made while this session was ENDED. There is nothing to PATCH then, so it
     /// rides along with the resume that revives it — the route Model/Mode/Effort already take.
     /// Nil unless the user picked one here: the session's own provider must never be re-asserted
@@ -1402,6 +1480,9 @@ final class ConsoleModel {
         runnerPlanUsage = runner.planUsage
         modelCatalog = runner.modelCatalog
         runnerEngines = runner.engines
+        runnerAntigravity = runner.antigravity
+        runnerVersion = runner.version
+        runnerInstall = runner.install
         runnerCapabilities = runner.capabilities
         runnerRunsAsRoot = runner.runsAsRoot
     }
@@ -1413,6 +1494,9 @@ final class ConsoleModel {
         runnerPlanUsage = nil
         modelCatalog = nil
         runnerEngines = nil
+        runnerAntigravity = nil
+        runnerVersion = nil
+        runnerInstall = nil
         runnerCapabilities = nil
         runnerRunsAsRoot = nil
     }
@@ -1462,6 +1546,7 @@ final class ConsoleModel {
         sessionCodexAccountPinned = s.codexAccountPinned ?? false
         sessionClaudeAccountPinned = s.claudeAccountPinned ?? false
         workspaceEnv = s.agent?.env
+        workspaceAntigravityKeys = s.agent?.antigravityKeyAvailableByRunner
 
         // A historical Session.model is authoritative and can be adopted immediately. If the user
         // already touched the picker while the session request was in flight, their explicit value
@@ -1555,6 +1640,8 @@ final class ConsoleModel {
     func adoptServerSnapshot(_ session: Session?) {
         guard let session, session.id == sessionID else { return }
         serverStatus = session.effectiveRunStatus
+        sessionError = session.error
+        if let keys = session.agent?.antigravityKeyAvailableByRunner { workspaceAntigravityKeys = keys }
         serverCapabilities = session.capabilities
         // What this row says it is waiting on the owner for moves before any card here does: a
         // coordinator asking to start its project lands on its row as a count (`waitingKind`
@@ -1617,6 +1704,7 @@ final class ConsoleModel {
         sessionCodexAccountPinned = s.codexAccountPinned ?? false
         sessionClaudeAccountPinned = s.claudeAccountPinned ?? false
         workspaceEnv = s.agent?.env
+        workspaceAntigravityKeys = s.agent?.antigravityKeyAvailableByRunner
         return true
     }
 
@@ -1651,9 +1739,12 @@ final class ConsoleModel {
             provider,
             in: SessionProviderChoices.choices(configured: configuredProviders,
                                                catalog: modelCatalog, engines: runnerEngines,
-                                               pools: allPools),
+                                               pools: allPools,
+                                               antigravity: runnerAntigravity,
+                                               antigravityKeyAvailable: antigravityKeyAvailable),
             configured: configuredProviders,
-            catalog: modelCatalog)
+            catalog: modelCatalog,
+            antigravity: runnerAntigravity)
     }
 
     /// Move an existing session to another provider on the same runtime. The model comes along only

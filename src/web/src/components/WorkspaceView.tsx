@@ -260,7 +260,8 @@ import {
   switchSessionAccount,
   uploadAttachment,
 } from '../api';
-import { AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, ChatImage, EventFullCtx, LiveToolOutputsCtx, MD, SessionNavCtx, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnImage, UndeliveredCtx } from './Transcript';
+import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
 import {
   SessionDecisionStrip,
@@ -3035,6 +3036,12 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // Everything that could run a session on this machine: engines first — with the health this
   // runner reported, since the session runs there — then this account's providers. The New
   // Session hero offers all of it; the composer's Provider pill offers the same-runtime slice.
+  const providerWorkspace = selected
+    ? (workspacesQ.data ?? []).find((workspace) => workspace.id === selected.workspace?.id)
+    : pickedWorkspace;
+  const antigravityKeyAvailable = providerWorkspace
+    ? providerWorkspace.antigravityKeyAvailableByRunner?.[runner.id] === true
+    : runner.antigravity?.envKeyAvailable === true;
   const providerChoicesForRunner = useMemo(
     () =>
       providerChoices(
@@ -3044,6 +3051,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         runner.engines,
         accountPools,
         runner.planUsage,
+        runner.antigravity,
+        antigravityKeyAvailable,
       ),
     [
       configuredProviders,
@@ -3052,6 +3061,8 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runner.engines,
       accountPools,
       runner.planUsage,
+      runner.antigravity,
+      antigravityKeyAvailable,
     ],
   );
   const currentProviderChoiceForDraft = useMemo(
@@ -3062,6 +3073,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
         runner.modelCatalog,
         configuredProviders,
         runner.runtimeDefaultModels,
+        runner.antigravity,
       ),
     [
       pickedProvider,
@@ -3069,6 +3081,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       runner.modelCatalog,
       configuredProviders,
       runner.runtimeDefaultModels,
+      runner.antigravity,
     ],
   );
   // What a switch just changed. Shown under the summary and cleared on a timer: the model move
@@ -3258,6 +3271,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const selectedIsQueued = selected
     ? sessionRunStateOf(selectedStartingSession) === 'QUEUED'
     : false;
+  const antigravityQueueRepair = selectedIsQueued && runtimeForProvider(shownProvider, configuredProviders) === 'antigravity'
+    ? antigravityRepair(selectedStartingSession?.error ?? '')
+    : null;
   const queuedNoticeScope = selectedId
     ? `${selectedId}:${selectedStartingSession?.lastTurnAt ?? ''}`
     : null;
@@ -6826,6 +6842,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
             configuredProviders,
             runner.modelCatalog,
             runner.runtimeDefaultModels,
+            runner.antigravity,
           )
         : [],
     [
@@ -6836,6 +6853,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       configuredProviders,
       runner.modelCatalog,
       runner.runtimeDefaultModels,
+      runner.antigravity,
     ],
   );
   const { tokens: contextTokens, window: reportedContextWindow } = lastContextReading(events);
@@ -6890,46 +6908,20 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   // and either way the button must not promise an attempt it is not making. Both cards draw it
   // disabled from this, and both handlers refuse a re-entry that reaches them anyway.
   const retryInFlight = send.isPending || resendFromSession.isPending;
-  const authErrorHelp: AuthErrorHelp = useMemo(
-    () => ({
-      provider: shownProvider,
-      runnerName: runner.name,
-      runnerId: runner.id,
-      onRetry:
-        retryText && !selectedTrashed && !selectedMissing
-          ? retry.sessionMessage && selectedId
-            ? () => {
-                if (retryInFlight) return;
-                resendFromSessionMutate(selectedId);
-              }
-            : () => {
-                if (retryInFlight) return;
-                sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds });
-              }
-          : undefined,
-      retryDisabled: retryInFlight,
-      retryText,
-      // The provider gallery, not a preset vendor: the engine narrows it to a runtime, not to
-      // whose key the user actually holds.
-      onUseApiKey: () => navigate('/providers'),
-    }),
-    // `send.mutate` is referentially stable; `send` itself is not, and depending on it would
-    // rebuild this every render and re-render the card through the context.
-    [
-      shownProvider,
-      runner.name,
-      runner.id,
-      retry,
-      retryText,
-      retryInFlight,
-      selectedId,
-      selectedTrashed,
-      selectedMissing,
-      sendMutate,
-      resendFromSessionMutate,
-      navigate,
-    ],
+  const geminiProviders = useQuery({
+    queryKey: PROVIDERS_LIST_KEY,
+    queryFn: () => api<ProviderRow[]>(PROVIDERS_BASE),
+    enabled: shownProvider === 'antigravity',
+  });
+  const geminiProvider = geminiProviders.data?.find((p) => p.presetSlug === 'gemini' && p.runtime === 'antigravity');
+  const geminiChoice = providerSwitchChoices.find((c) =>
+    c.kind === 'byok' && configuredProviders.some((p) => p.slug === c.slug && p.presetSlug === 'gemini' && p.runtime === 'antigravity'),
   );
+  const installAntigravity = useMutation({
+    mutationFn: () => api(`/runners/${encodeId(runner.id)}/install`, { method: 'POST', body: { engine: 'antigravity' } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['runners'] }),
+    onError: (e: Error) => void message.error("Couldn't install Antigravity CLI", e.message),
+  });
   // Hand an undelivered message back to the composer, so a message the engine never received can
   // be re-sent without being retyped out of a bubble. Explicitly user-initiated, so unlike the
   // interrupt/withdraw fold-backs (which fire on their own and therefore only write into an empty
@@ -7451,6 +7443,72 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
       setEffort(nextEffort);
     }
   };
+  const authErrorHelp: AuthErrorHelp = useMemo(
+    () => ({
+      provider: shownProvider,
+      runnerName: runner.displayName || runner.name,
+      runnerId: runner.id,
+      runnerVersion: runner.version,
+      runtime: runtimeForProvider(shownProvider, configuredProviders),
+      onConnectGemini: () => navigate(geminiProvider ? `/providers/${encodeId(geminiProvider.id)}` : '/providers/new/gemini'),
+      onSwitchToGemini: geminiChoice && !geminiChoice.unavailable && !selectedTrashed && !selectedMissing
+        ? () => pickProvider(geminiChoice.slug)
+        : undefined,
+      onOpenProviders: () => navigate(`/providers?runner=${encodeId(runner.id)}&engine=antigravity`),
+      onInstall: runner.online && runner.antigravity?.supported ? () => installAntigravity.mutate() : undefined,
+      installDisabled: installAntigravity.isPending || runner.install?.status === 'installing' || runner.install?.status === 'pending',
+      onRetry:
+        retryText && !selectedTrashed && !selectedMissing
+          ? retry.sessionMessage && selectedId
+            ? () => {
+                if (retryInFlight) return;
+                resendFromSessionMutate(selectedId);
+              }
+            : () => {
+                if (retryInFlight) return;
+                sendMutate({ content: retryText, images: [], attachmentIds: retry.attachmentIds });
+              }
+          : undefined,
+      retryDisabled: retryInFlight,
+      retryText,
+      // The provider gallery, not a preset vendor: the engine narrows it to a runtime, not to
+      // whose key the user actually holds.
+      onUseApiKey: () => navigate('/providers'),
+    }),
+    // `send.mutate` is referentially stable; `send` itself is not, and depending on it would
+    // rebuild this every render and re-render the card through the context.
+    [
+      shownProvider,
+      runner.name,
+      runner.displayName,
+      runner.id,
+      runner.version,
+      runner.online,
+      runner.antigravity,
+      runner.install,
+      configuredProviders,
+      geminiProvider,
+      geminiChoice,
+      pickProvider,
+      installAntigravity.mutate,
+      installAntigravity.isPending,
+      shownModel,
+      shownMode,
+      effectiveEffort,
+      effort,
+      live,
+      configMut.mutate,
+      retry,
+      retryText,
+      retryInFlight,
+      selectedId,
+      selectedTrashed,
+      selectedMissing,
+      sendMutate,
+      resendFromSessionMutate,
+      navigate,
+    ],
+  );
   const pickModel = (v: string): void => {
     // A re-selection is still a preference, even when the session config already matches it.
     qc.setQueryData<Me>(meQuery().queryKey, (prev) =>
@@ -7640,8 +7698,9 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                   label: (
                     <span className="scope-menu-row">
                       {blocked
-                        ? `${choice.label} — ${choice.unavailable}, ${choice.fixHref ? 'fix it' : 'sign in'} →`
+                        ? `${choice.label} — ${choice.unavailable}, fix it →`
                         : choice.label}
+                      {choice.labelDetail && <small className="np-label-detail">{choice.labelDetail}</small>}
                       {/* With its accounts listed, the tick is on the account the session runs on. */}
                       {checkSlot(choice.slug === shownProvider && accounts.length === 0)}
                     </span>
@@ -8668,7 +8727,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 </div>
               )}
               {placeholder === 'queued' && showQueuedNotice && (
-                <div className="chat-queued-state">
+                antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-queued-state">
                   <div className="chat-queued-dots" aria-hidden="true">
                     <span />
                     <span />
@@ -8844,7 +8903,7 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
                 !selectedTrashed &&
                 showQueuedNotice &&
                 transcriptEvents.length > 0 && (
-                <div className="chat-note chat-slot-wait">
+                antigravityQueueRepair ? <AntigravityRepairCard repair={antigravityQueueRepair} help={authErrorHelp} /> : <div className="chat-note chat-slot-wait">
                   <span>{queuedTitle(selectedSession ?? selected)}</span>
                   <span>{slotWaitDescription}</span>
                 </div>

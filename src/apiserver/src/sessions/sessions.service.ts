@@ -203,6 +203,7 @@ import {
   type TranscriptRecordKind,
 } from './transcript-around';
 import { EngineSignedOutConflict, signedOutEngineRefusal } from './engine-signin-preflight';
+import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
 import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import {
   accountLabel,
@@ -3161,7 +3162,7 @@ export class SessionsService {
       include: {
         workspace: true,
         assignedRunner: {
-          select: { id: true, name: true, status: true, lastHeartbeatAt: true, capabilities: true },
+          select: { id: true, name: true, displayName: true, version: true, engines: true, status: true, lastHeartbeatAt: true, capabilities: true },
         },
         tagLinks: {
           include: {
@@ -3255,6 +3256,16 @@ export class SessionsService {
       : null;
     return withSessionCapabilities({
       ...rest,
+      workspace: session.workspace ? {
+        ...session.workspace,
+        antigravityKeyAvailableByRunner: session.assignedRunner ? {
+          [session.assignedRunner.id]: hasGeminiEnvKey(session.workspace.env) || antigravityState(session.assignedRunner).envKeyAvailable,
+        } : {},
+      } : null,
+      assignedRunner: session.assignedRunner ? {
+        ...session.assignedRunner,
+        antigravity: antigravityState(session.assignedRunner),
+      } : null,
       route,
       mergeRepairSession: children[0] ? withSessionState(children[0]) : null,
       mergeRecoverySupported: session.assignedRunner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1) ?? false,

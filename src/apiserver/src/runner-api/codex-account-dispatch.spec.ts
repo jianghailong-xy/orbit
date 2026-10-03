@@ -413,6 +413,7 @@ test('a workspace stores the slot id or Default, never a path', async () => {
   const written: Array<Record<string, unknown>> = [];
   const stored = { id: WORKSPACE_ID, ownerId: OWNER, name: 'repo', runner: null };
   const prisma = {
+    runner: { findMany: async () => [] },
     workspace: {
       findFirst: async () => stored,
       update: async ({ data }: { data: Record<string, unknown> }) => {

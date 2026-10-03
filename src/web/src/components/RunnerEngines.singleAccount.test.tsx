@@ -256,6 +256,7 @@ describe.each(ONE_ACCOUNT)('one Codex account — %s', (_, accountsOf) => {
         're-row',
         're-row',
         're-row',
+        're-row',
       ]);
       // The Codex row itself, string for string.
       expect(codexRow(page)).toEqual(codex);
