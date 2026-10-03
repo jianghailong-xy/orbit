@@ -328,6 +328,8 @@ function turnHarness(branchSha?: string) {
   const tx = {
     $queryRaw: async () => [{ id: SESSION_ID, leaseOwnerMatches: true }],
     sessionRequest: noSessionRequests(),
+    // No confirmation request was put to this session for review (owner-confirmation-review.ts T5).
+    taskOwnerConfirmationReview: { findMany: async () => [] },
     conversationTurn: {
       findMany: async () => [],
       updateMany: async () => ({ count: 1 }),

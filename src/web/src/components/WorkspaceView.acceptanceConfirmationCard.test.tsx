@@ -229,9 +229,25 @@ const mounted = (): HTMLDivElement => {
 const count = (selector: string): number => mounted().querySelectorAll(selector).length;
 
 const waitForUi = async (assertion: () => void): Promise<void> => {
-  await act(async () => {
+  // The act environment is off while the window is waited out, as RTL's own asyncWrapper does it:
+  // React queues every render scheduled inside an in-flight act callback and flushes none of them
+  // until that callback settles, so a page that answers inside the window can never draw what the
+  // window exists to see — instrumented, the answer arrived 203ms into an 8s window and the DOM
+  // never moved (e85b63ee9's second full run: `.decision-strip-title` missing while the card was
+  // drawn; retryAttachments and accounts:267 red the same way on the merge check).
+  const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+  const previous = env.IS_REACT_ACT_ENVIRONMENT;
+  env.IS_REACT_ACT_ENVIRONMENT = false;
+  try {
     await vi.waitFor(assertion, { timeout: 8_000, interval: 20 });
-  });
+  } finally {
+    env.IS_REACT_ACT_ENVIRONMENT = previous;
+  }
+  // And one act to close the window: the last commit the wait saw leaves its passive effects
+  // scheduled, and what they carry — React Query's mutation options among it — is what the test's
+  // next press runs on. The old act-wrapped wait flushed them on its way out; this keeps that,
+  // without the freeze that made the wait itself blind.
+  await act(async () => {});
 };
 
 beforeEach(() => {
