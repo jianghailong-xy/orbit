@@ -948,6 +948,9 @@ body {
   background: var(--border-subtle);
   margin: 8px 16px;
 }
+.tp-group + .tp-divider {
+  background: transparent;
+}
 .tp-group {
   padding: 0 8px;
 }
@@ -4923,16 +4926,6 @@ html[data-theme='dark'] .session-tag-chip {
 /* Last assistant reply, flattened to one line. Shares the second line with the row's tags
    (.session-sub owns the spacing above) — darker than the time so it reads as content,
    not metadata. */
-/* Who a session list row is waiting on for a reply, and who is waiting on it (session requests). */
-.session-requests {
-  margin-top: 2px;
-  font-size: 12px;
-  color: var(--brand);
-  line-height: 1.35;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
 .session-preview {
   flex: 1;
   min-width: 0;

@@ -213,11 +213,11 @@ async function addCheck(
   });
   const run = shape.run === undefined ? {} : shape.run;
   if (run) {
-    // `dispatch_origin = 'USER'`: migration 0122's boundary refuses a Session inserted straight
-    // onto a COORDINATOR-authority task, and `dispatch_authority` is a DERIVED column the database
-    // maintains (§7.7 D12) — a task in a coordinator-enabled Project is COORDINATOR whatever this
-    // fixture writes. A person's run is the one shape that may be written directly, and what §13.3
-    // DEP3 reads off it — status, end reason, lifecycle — is identical either way.
+    // `dispatch_origin = 'USER'`: the shape a person's Run button produces, and nothing refuses it
+    // — 0122's `session_dispatch_authority_guard`, the brake that refused a Session inserted onto a
+    // COORDINATOR-authority task, was dropped in 0164 (the `project_action` table it read followed
+    // in 0272), and the derived `task.dispatch_authority` it read (§7.7 D12) followed in 0329. What
+    // §13.3 DEP3 reads off the run — status, end reason, lifecycle — is identical to any other origin.
     await db.$executeRawUnsafe(
       `INSERT INTO "session" ("id","owner_id","workspace_id","task_id","title","prompt","creator_id","provider","status",
          "end_reason","completed_at","archived_at","deleted_at","starts_task_work",

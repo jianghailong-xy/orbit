@@ -722,7 +722,9 @@ suite('(q) the core tables keep every trigger that predates this project', async
   // task: 25 since 0271 added `task_progress_epoch_advance`, which writes only `task_progress`,
   // and 31 since 0280 added `task_list_task_count_insert`/`_delete`/`_relist` and 0282 added
   // `project_task_status_count_insert`/`_delete`/`_move`. Six additions by two later projects:
-  // same reasoning as `session` above — the number moves, the claim does not.
+  // same reasoning as `session` above — the number moves, the claim does not. 30 since 0329
+  // dropped 0122's `task_dispatch_authority_derive` with the column it stamped: a later, separate
+  // removal, named below with the others.
   //
   // `session`: 12 since 0350 added `session_request_recipient_ended`, which closes the session
   // requests still waiting on a session whose run ends, and writes only `session_request`; 13 since
@@ -733,7 +735,7 @@ suite('(q) the core tables keep every trigger that predates this project', async
   // nothing at all; 15 since 0370 added `task_owner_confirmation_review_reviewer_ended`, which
   // records on the confirmation reviews still waiting on a session that their reviewer ended, and
   // writes only `task_owner_confirmation_review`.
-  assert.deepEqual(counts, { run_event: 1, session: 15, task: 31 });
+  assert.deepEqual(counts, { run_event: 1, session: 15, task: 30 });
 
   // And every one that went is named, so a reader can tell a removal from an accident.
   for (const trigger of [
@@ -741,6 +743,7 @@ suite('(q) the core tables keep every trigger that predates this project', async
     'task_judgment_verifier_delete_guard',               // 0228
     'task_judgment_verifier_terminal_guard',             // 0228
     'task_open_verification_request_carrier_guard',      // 0228
+    'task_dispatch_authority_derive',                    // 0329
   ]) {
     const gone = await client.query(
       `SELECT 1 FROM pg_trigger WHERE NOT tgisinternal AND tgname = $1`, [trigger]);
