@@ -15,7 +15,8 @@ import XCTest
 /// The two it exists for:
 ///  - the block opens as rows rather than as the one line four lines wide it always was, with the
 ///    narration, the absolute paths and the Monitor section left to the fold under them;
-///  - a wake turn draws no bubble for a block nobody typed.
+///  - a wake turn draws no bubble for a block nobody typed;
+///  - a wake written into the running turn (a steer) says how far it got, and offers no Cancel.
 ///
 /// What it cannot see is how any of it looks — that is what the beta and the screenshots are for.
 final class BackgroundJobsWiringTests: XCTestCase {
@@ -148,6 +149,30 @@ final class BackgroundJobsWiringTests: XCTestCase {
                       "the wake has a slot for it")
         XCTAssertTrue(card.contains("if let attached { AttachedNoteEntry(attached: attached) }"),
                       "and draws it in its own fold")
+    }
+
+    /// A job that ends while a turn runs is written into that turn (a steer). Its line says how far it
+    /// got wherever it is drawn, and while it waits for the runner it offers no Cancel: the server
+    /// refuses to withdraw a steer (409), so a Cancel there would be a button that only ever fails.
+    func testASteeredWakeSaysHowFarItGotAndOffersNoCancel() throws {
+        let console = try source(Self.consolePath)
+        let queued = try section(console,
+                                 from: "} else if let background = BackgroundWakeText.parse(bubble.text) {",
+                                 to: "} else {")
+        XCTAssertTrue(queued.contains("bubble.turnId == nil || bubble.steer"),
+                      "a steered wake waiting for the runner must not be offered a Cancel")
+        XCTAssertTrue(queued.contains("steerState: BackgroundWakeCard.steerState("),
+                      "it says how far it has got instead")
+        XCTAssertTrue(queued.contains("queued: true"), "and is still drawn as not yet an event")
+
+        let delivered = try section(console, from: "BackgroundWakeText.parse(b.note)", to: "case .assistant")
+        XCTAssertTrue(delivered.contains("steerState: BackgroundWakeCard.steerState("),
+                      "once written into the turn, its line still says how far it got")
+
+        let card = try section(try source(Self.cardPath), from: "struct BackgroundWakeCardView",
+                               to: "private func jobRow")
+        XCTAssertTrue(card.contains("if let steerState {"), "the line draws the state it is handed")
+        XCTAssertTrue(card.contains("if queued {"), "and its dashed outline off `queued`, not off a Cancel")
     }
 
     /// The rule the bubble is drawn off, on its own: whitespace is not a message.

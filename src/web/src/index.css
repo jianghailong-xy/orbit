@@ -967,6 +967,84 @@ body {
   font-weight: 600;
   color: var(--text-2);
 }
+/* The Workspaces head's one action: Edit, then Done while the rows are arranged. It shows on hover
+   like the caret beside it (opacity, so the keyboard can still reach it), and always in the touch
+   drawer, which has no hover. */
+.tp-group-action {
+  margin-left: auto;
+  padding: 1px 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.tp-group-head:hover .tp-group-action,
+.tp-group-action:focus-visible,
+.tp-group-action.editing {
+  opacity: 1;
+}
+.tp-group-action:hover,
+.tp-group-action:focus-visible {
+  background: var(--bg-hover-strong);
+  color: var(--text-1);
+  outline: none;
+}
+.tp-group-action.editing {
+  color: var(--brand);
+  font-weight: 600;
+}
+@media (max-width: 960px) {
+  .tp-group-action {
+    opacity: 1;
+  }
+}
+/* A Workspace row while the list is arranged: it opens nothing, and the Runners page's drag handle
+   stands in the folder's column. */
+.tp-item.editing {
+  cursor: default;
+}
+.tp-workspace-handle {
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 28px;
+  margin: 0 -2px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-4);
+  font-size: 15px;
+  cursor: grab;
+  touch-action: none;
+}
+.tp-workspace-handle:hover,
+.tp-workspace-handle:focus-visible {
+  background: var(--bg-hover-strong);
+  color: var(--text-2);
+  outline: none;
+}
+.tp-workspace-handle:active {
+  cursor: grabbing;
+}
+.tp-workspace-handle:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+.tp-workspace-sortable.dragging {
+  position: relative;
+  z-index: 1;
+}
+.tp-workspace-sortable.dragging .tp-item {
+  background: var(--bg-raised);
+  box-shadow: 0 8px 24px rgba(31, 35, 41, 0.16), 0 0 0 1px var(--brand-border);
+}
 .tp-add {
   color: var(--text-3);
   font-size: 14px;
@@ -2701,7 +2779,7 @@ body {
 /* The engines smart selection may move a task run to (model routing §6), under the switch's own
    explanation: one chip per engine, the agent's own ticked and fixed. Qualified with .rd-engines-list
    so antd's single-class checkbox rules, injected after this stylesheet, do not win on order. */
-.rd-engines {
+.rd-route-engines {
   margin-top: 10px;
 }
 .rd-engines-label {
@@ -13518,15 +13596,14 @@ button.chat-jump-start:hover {
   display: flex;
   align-items: center;
   gap: 10px;
+  /* The sign-in below starts flush in a panel (.re-panel .rsi), so the gap between them is this row's. */
+  margin-bottom: 10px;
 }
 .re-add-label {
   flex: none;
   width: 118px;
   font-size: 12.5px;
   color: var(--text-2);
-}
-.re-add-hint {
-  margin: 10px 0;
 }
 
 /* An install or a sign-in in flight, opened under the row it belongs to. */
@@ -17396,6 +17473,14 @@ button.chat-jump-start:hover {
   margin: 2px 0 0 22px;
   color: var(--warning);
   font-size: 12px;
+}
+/* A wake written into the running turn: how far it got, in a steer bubble's own words and tone
+   (.chat-steer-state). */
+.bgwake-steer {
+  margin: 2px 0 0 22px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-3);
 }
 /* Still waiting behind the running turn (WorkspaceView's queued tail): dashed like a queued
    message, with the queue's own status line under it. */

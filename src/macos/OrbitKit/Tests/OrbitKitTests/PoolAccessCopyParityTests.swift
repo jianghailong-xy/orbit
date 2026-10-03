@@ -79,12 +79,13 @@ final class PoolAccessCopyParityTests: XCTestCase {
         return sentence.replacingOccurrences(of: rendered, with: expression)
     }
 
-    /// A pool whose name, and whose owner's, are the web's own expressions for them.
+    /// A pool whose name, and whose owner's, are the web's own expressions for them — its owner's ChatGPT
+    /// accounts read by whoever asks (2026-10-03), and no keys unless the caller names some.
     private func pool(_ label: String, owner: String = "Owner", keys: [SharedPoolKey] = [],
-                      people: Int = 1) -> SharedPool {
+                      people: Int = 1, logins: [CodexLogin] = []) -> SharedPool {
         let everyone = [SharedPoolPerson(userId: "o", name: owner, role: .admin, creator: true, you: true)]
             + (1..<max(people, 1)).map { SharedPoolPerson(userId: "p\($0)", name: "P\($0)") }
-        return SharedPool(id: "p", slug: "p", label: label, shared: false, ownerHasChatGPT: true,
+        return SharedPool(id: "p", slug: "p", label: label, shared: false, logins: logins,
                           people: everyone, keys: keys)
     }
 
@@ -100,7 +101,7 @@ final class PoolAccessCopyParityTests: XCTestCase {
         XCTAssertEqual(CodexPoolPage.meAnd(1), "Me and 1 person")
         assertSays(page, "const who = !mine ? `\(CodexPoolPage.whose("${owner?.name}"))` : people ? `\(meAnd)` : '\(CodexPoolPage.justMe)';",
                    in: Self.poolPage)
-        assertSays(page, "const how = !mine ? `\(CodexPoolPage.memberHow)${access!.ownKeyFirst ? '\(CodexPoolPage.ownFirst)' : ''}.` : !own ? '\(CodexPoolPage.keysHow)' : people ? '\(CodexPoolPage.sharedHow)' : '\(CodexPoolPage.justMeHow)';",
+        assertSays(page, "const how = !mine ? accounts ? '\(CodexPoolPage.memberAccountsHow)' : `\(CodexPoolPage.memberHow)${access!.ownKeyFirst ? '\(CodexPoolPage.ownFirst)' : ''}.` : !own ? '\(CodexPoolPage.keysHow)' : people ? '\(CodexPoolPage.sharedHow)' : '\(CodexPoolPage.justMeHow)';",
                    in: Self.poolPage)
         assertSays(page, "{people && <span className=\"re-chip pool-shared-chip\">\(CodexPoolPage.sharedChip)</span>}",
                    in: Self.poolPage)
@@ -123,34 +124,26 @@ final class PoolAccessCopyParityTests: XCTestCase {
         assertExpects(spec, PoolAccessBoards.line(shared), in: Self.whoSpec)
         assertExpects(spec, PoolAccessBoards.line(zhang), in: Self.whoSpec)
         XCTAssertEqual(PoolAccessBoards.line(zhang),
-                       "Codex pool · jianghailong’s · 3 people · 2 of 2 keys you can run on available · your sessions run on the API keys, your own first.")
+                       "Codex pool · jianghailong’s · 3 people · 4 of 4 accounts and keys you can run on available · each session starts on its ChatGPT accounts; the API keys when none of them can run.")
         XCTAssertEqual([alone.addLabel, shared.addLabel, zhang.addLabel], ["Add account", "Add account", "Add a key"])
         XCTAssertEqual([alone.accountsCount, shared.accountsCount, zhang.accountsCount], [2, 4, nil])
     }
 
-    /// Whose sessions each account runs, once its owner shares the pool; the locked line anybody else sees in
-    /// place of his ChatGPT accounts; and what the head says of the next one — the reader's, once shared.
+    /// Whose sessions each credential runs, once its owner shares the pool — everyone's, the accounts'
+    /// included since 2026-10-03 — and what the head says of the next one: the reader's, once shared.
     func testTheAccountsCardSaysWhoseSessionsEachAccountRuns() throws {
         let card = try web(Self.accountPools)
         assertSays(card, "<span className=\"pool-runs-for all\"> <TeamOutlined /> \(CodexPoolPage.everyoneHere) </span>",
                    in: Self.accountPools)
-        assertSays(card, "<span className=\"pool-runs-for\"> <LockOutlined /> \(CodexPoolPage.onlyYou) </span>",
-                   in: Self.accountPools)
         assertSays(card, "const tagged = !!shared && ownsPool(shared) && hasPeople(shared);", in: Self.accountPools)
-        assertSays(card, "{key.contributor.name} · {key.fingerprint} {tagged && ( <> {' · '} <RunsFor everyone /> </> )}",
+        assertSays(card, "{key.contributor.name} · {key.fingerprint} {tagged && ( <> {' · '} <RunsFor /> </> )}",
                    in: Self.accountPools)
-        assertSays(card, "{loginLine(login)} {tagged && ( <> {' · '} <RunsFor everyone={false} /> </> )}",
+        assertSays(card, "{loginLine(login)} {tagged && ( <> {' · '} <RunsFor /> </> )}",
                    in: Self.accountPools)
-        assertSays(card, "const locked = shared && !ownsPool(shared) && shared.ownerHasChatGPT ? poolOwner(shared) : undefined;",
-                   in: Self.accountPools)
-        assertSays(card, "<span className=\"pool-member-label\">\(CodexPoolPage.lockedTitle("{owner}"))</span>",
-                   in: Self.accountPools)
-        assertSays(card, "<div className=\"pool-key-mask\"> \(CodexPoolPage.lockedLine("{owner}")) </div>",
-                   in: Self.accountPools)
-        // How many of them a session could start on: keys, to the people the owner added.
+        // How many of them a session could start on: the accounts and the keys, to the people the owner added.
         assertSays(card, "const readByMember = (pool: ProviderPool): boolean => !!pool.shared && !ownsPool(pool.shared);",
                    in: Self.accountPools)
-        assertSays(card, "readByMember(pool) ? `key${n === 1 ? '' : 's'} you can run on` : `account${n === 1 ? '' : 's'}`;",
+        assertSays(card, "const memberNoun = (pool: ProviderPool, n: number) => { if (!readByMember(pool)) return `account${n === 1 ? '' : 's'}`; const accounts = pool.members.some((member) => member.login); const keys = pool.members.some((member) => member.key); if (accounts && keys) return `account${n === 1 ? '' : 's'} and key${n === 1 ? '' : 's'} you can run on`; return (keys ? `key${n === 1 ? '' : 's'}` : `account${n === 1 ? '' : 's'}`) + ' you can run on'; };",
                    in: Self.accountPools)
         assertSays(card, "{pool.shared && hasPeople(pool.shared) ? `Next for you: ${member.label}` :", in: Self.accountPools)
         assertSays(card, "<span className=\"pool-gauge-none\">{member.key ? '\(ProviderPools.noLimit)' : '\(CodexLoginPool.noQuota)'}</span>",
@@ -160,21 +153,27 @@ final class PoolAccessCopyParityTests: XCTestCase {
         let shared = PoolAccessBoards.ownersPage()
         XCTAssertTrue(shared.tagged)
         let lines = shared.pool.members.map { member -> String in
-            if let login = member.login { return "\(CodexLoginPool.line(login)) · \(CodexPoolPage.onlyYou)" }
+            if let login = member.login { return "\(CodexLoginPool.line(login)) · \(CodexPoolPage.everyoneHere)" }
             return "\(SharedPoolPage.keyLine(member.key!)) · \(CodexPoolPage.everyoneHere)"
         }
-        XCTAssertEqual(lines, ["ChatGPT Plus · …016a · Only you", "ChatGPT Pro · …7QX4 · Only you",
+        XCTAssertEqual(lines, ["ChatGPT Plus · …016a · Everyone here", "ChatGPT Pro · …7QX4 · Everyone here",
                                "jianghailong · sk-…AB12 · Everyone here", "Zhang Min · sk-…7K2P · Everyone here"])
         for line in lines { assertExpects(spec, line, in: Self.whoSpec) }
         assertExpects(spec, ProviderPools.headline(shared.pool), in: Self.whoSpec)
         assertExpects(spec, try XCTUnwrap(ProviderPools.headGauge(shared.pool)?.label), in: Self.whoSpec)
 
+        // The same pool as somebody he added reads it: the accounts as rows of their own — no locked line any
+        // more — and the next session of theirs on the account the server chose.
         let zhang = PoolAccessBoards.zhangsPage()
         XCTAssertFalse(zhang.tagged)
-        let owner = try XCTUnwrap(zhang.lockedOwner)
-        assertExpects(spec, CodexPoolPage.lockedTitle(owner), in: Self.whoSpec)
-        assertExpects(spec, CodexPoolPage.lockedLine(owner), in: Self.whoSpec)
-        XCTAssertEqual(ProviderPools.headline(zhang.pool), "Next for you: zm-proj")
+        let theirs = zhang.pool.members.map { member -> String in
+            if let login = member.login { return CodexLoginPool.line(login) }
+            return SharedPoolPage.keyLine(member.key!)
+        }
+        XCTAssertEqual(theirs, ["ChatGPT Plus · …016a", "ChatGPT Pro · …7QX4",
+                                "Zhang Min · sk-…7K2P", "jianghailong · sk-…AB12"])
+        for line in theirs { assertExpects(spec, line, in: Self.whoSpec) }
+        XCTAssertEqual(ProviderPools.headline(zhang.pool), "Next for you: hl.work@gmail.com")
         assertExpects(spec, ProviderPools.headline(zhang.pool), in: Self.whoSpec)
         assertExpects(spec, try XCTUnwrap(ProviderPools.headGauge(zhang.pool)?.label), in: Self.whoSpec)
     }
@@ -323,11 +322,12 @@ final class PoolAccessCopyParityTests: XCTestCase {
         let facts = SharePool.facts(keyed, accounts: nil)
         XCTAssertEqual(facts.count, 3)
         assertSays(dialog, "<b>\(facts[0].lead)</b>\(facts[0].rest) </li>", in: Self.sharedPool)
+        // No account of its owner's: the keys are the whole answer, as they always were.
         assertSays(dialog, "<b>\(facts[1].lead)</b>\(asWeb(facts[1].rest, ", which is ", ", which {pool.keys.length === 1 ? 'is' : 'are'} "))",
                    in: Self.sharedPool)
-        let account = String(SharePool.facts(keyed, accounts: 1)[1].rest.dropFirst(facts[1].rest.count))
-        let accounts = asWeb(String(SharePool.facts(keyed, accounts: 2)[1].rest.dropFirst(facts[1].rest.count)), "2", "${accounts}")
-        assertSays(dialog, "{accounts === 1 && '\(account)'} {(accounts ?? 0) > 1 && `\(accounts)`}", in: Self.sharedPool)
+        // With his accounts in it, their sessions start on them (2026-10-03) — the other arm of the fact.
+        let onAccounts = SharePool.facts(keyed, accounts: 2)[1]
+        assertSays(dialog, "<b>\(onAccounts.lead)</b>\(onAccounts.rest) </>", in: Self.sharedPool)
         assertSays(dialog, "<b>\(facts[2].lead)</b>\(facts[2].rest) </li>", in: Self.sharedPool)
         assertSays(dialog, "onChange={(e) => setCanAdd(e.target.checked)}> \(WhoCanUseIt.ruleTitle) </Checkbox>", in: Self.sharedPool)
         assertSays(dialog, "if (!noKey && canAdd !== pool.membersCanAdd) {", in: Self.sharedPool)
@@ -385,8 +385,8 @@ final class PoolAccessCopyParityTests: XCTestCase {
         let card = try web(Self.accountPools)
         let zhang = PoolAccessBoards.zhangsPage().pool
         let line = ProvidersOverview.codexPoolLine(zhang)
-        XCTAssertEqual(line, "jianghailong’s · 2 keys you can run on")
-        let named = asWeb(asWeb(line, "jianghailong", "{poolOwner(shared!)?.name}"), "2 keys you can run on",
+        XCTAssertEqual(line, "jianghailong’s · 4 accounts and keys you can run on")
+        let named = asWeb(asWeb(line, "jianghailong", "{poolOwner(shared!)?.name}"), "4 accounts and keys you can run on",
                           "{pool.members.length} {memberNoun(pool, pool.members.length)}")
         assertSays(card, "<span className=\"re-summary\"> \(named) </span>", in: Self.accountPools)
         assertSays(card, "<span className=\"re-summary\">\(CodexPoolPage.justMe) · {availabilityOf(pool, refusals)}</span>",
@@ -406,17 +406,17 @@ final class PoolAccessCopyParityTests: XCTestCase {
         assertExpects(spec, try XCTUnwrap(ProvidersOverview.codexPoolValue(shared)?.label), in: Self.whoSpec)
     }
 
-    /// Somebody a pool's owner added runs on its API keys alone, so the picker greys the pool for them as
-    /// having no key they can run on, whatever else it holds; its owner reads the server's own words.
+    /// The picker greys a pool none of whose credentials can run in the pool's own words, for whoever
+    /// reads it: since 2026-10-03 the ChatGPT accounts run the sessions of the people the owner added
+    /// too, so there is no member-only sentence left to grey it by.
     func testThePickerGreysAPoolInTheWebsWords() throws {
         let source = try web(Self.choices)
-        assertSays(source, "unavailable: pool.shared && !ownsPool(pool.shared) ? '\(SessionProviderChoices.noKeyYouCanRunOn)' : pool.unavailable,",
-                   in: Self.choices)
-        assertSays(try web(Self.choicesSpec), "unavailable: '\(SessionProviderChoices.noKeyYouCanRunOn)',", in: Self.choicesSpec)
+        assertSays(source, "unavailable: pool.unavailable,", in: Self.choices)
         let zhang = SharedPools.asProviderPool(PoolAccessBoards.access(PoolAccessBoards.zhang, keys: []))
         let tile = SessionProviderChoices.choices(configured: ProviderPools.asProviders([zhang]), pools: [zhang])
             .first { $0.slug == "codex-pool" }
-        XCTAssertEqual(tile?.unavailable, SessionProviderChoices.noKeyYouCanRunOn)
+        XCTAssertNil(tile?.unavailable, "his accounts can run: the pool takes the pick")
+        XCTAssertEqual(tile?.poolSize, 2)
     }
 }
 

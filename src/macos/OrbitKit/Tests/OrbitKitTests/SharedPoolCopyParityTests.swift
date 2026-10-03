@@ -220,18 +220,22 @@ final class SharedPoolCopyParityTests: XCTestCase {
         }
         let drawn = SharedPools.asProviderPool(pool([capped]))
 
-        // The adapter, line for line: a key is the member, its state keyState's, its cap's gauge.
+        // The adapter, line for line: a key is the member, its state keyState's, its cap's gauge — and a
+        // pool of somebody's own gets its ChatGPT accounts as members first (2026-10-03).
         assertSays(lib, "presetSlug: 'openai',", in: Self.sharedPools)
         assertSays(lib, "planUsage: keyWindow(key, pool),", in: Self.sharedPools)
+        assertSays(lib, "...(pool.logins ?? []).map((login) => loginMember(pool, login)), ...keyMembers(pool)",
+                   in: Self.sharedPools)
+        assertSays(lib, "next: login.next,", in: Self.sharedPools)
         // A stopped key's reset is its own mark when OpenAI set one, else the month's end; the pool's is
-        // the EARLIEST of those, both as this client reads them (`SharedPoolPage.firstReset`).
+        // the EARLIEST of those, both as this client reads them (`SharedPoolPage.earliest`).
         assertSays(lib, "resetsAt: state === 'SPENT' ? (key.spentUntil ?? pool.window.end) : null,",
                    in: Self.sharedPools)
         assertSays(lib, "next: key.next,", in: Self.sharedPools)
         assertSays(lib, "resetsAt: !free && stops.length > 0 ? earliest(stops) : null,", in: Self.sharedPools)
         assertSays(lib, "const earliest = (stops: string[]): string => stops.reduce((a, b) => (Date.parse(a) <= Date.parse(b) ? a : b));",
                    in: Self.sharedPools)
-        assertSays(lib, "unavailable: runnable ? null : pool.keys.length === 0 ? 'No keys' : 'No key can run',",
+        assertSays(lib, "unavailable: revives ? null : accounts.length > 0 ? 'Signed out' : pool.keys.length === 0 ? pool.shared ? 'No keys' : 'Not signed in' : 'No key can run',",
                    in: Self.sharedPools)
         assertSays(lib, "shared: pool,", in: Self.sharedPools)
         XCTAssertEqual(drawn.members[0].presetSlug, "openai")

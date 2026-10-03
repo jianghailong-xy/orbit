@@ -209,7 +209,10 @@ final class CodexSignInCopyParityTests: XCTestCase {
         XCTAssertEqual(ProvidersOverview.codexPoolLine(pool("P", accounts: 2)), "Just me · 2 of 2 accounts available")
         assertSays(row, "<span className=\"re-quota-none\">\(CodexLoginPool.noQuota)</span>", in: Self.accountPools)
         assertSays(row, "resets {formatResetTime(row.window.resetsAt)}", in: Self.accountPools)
-        assertSays(row, "<div className=\"pool-why\">\(CodexLoginPool.signedOutReason)</div>", in: Self.accountPools)
+        // Why it is out, and the way back — to the pool's owner, whose the sign-in is; one of the people
+        // they added reads that only its owner can.
+        assertSays(row, "<div className=\"pool-why\"> {onSignIn ? '\(CodexLoginPool.signedOutReason)' : '\(CodexLoginPool.signedOutReasonMember)'} </div>",
+                   in: Self.accountPools)
         assertSays(row, "> \(CodexLoginPool.signInAgain) </Button>", in: Self.accountPools)
         let signingOut = account(email: "${member.label}")
         assertSays(row, "title={`\(CodexLoginPool.signOutTitle(signingOut))`}", in: Self.accountPools)

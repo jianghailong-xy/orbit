@@ -193,33 +193,41 @@ export function codexLoginView(
  * and only its owner can sign in again. The doors that write a provider onto a session or a task refuse
  * such a pool with this string (QueueService.accountPoolRefusal) — the same shape the member pools'
  * refusals take, and for the same reason: taken, the claim could only run on the runner's own login.
+ * `byOwner` says who reads it: the pool's owner, who acts on its page, or one of the people they added,
+ * who can only ask them to (2026-10-03 — a pool of somebody's own runs their sessions too).
  */
 export function codexLoginUnavailableReason(
   label: string,
   account: { email: string | null; state: string } | null,
+  byOwner = true,
 ): string | null {
   if (!account) {
-    return `the pool "${label}" has no ChatGPT account signed in — sign in on its page, or pick another provider`;
+    return byOwner
+      ? `the pool "${label}" has no ChatGPT account signed in — sign in on its page, or pick another provider`
+      : `the pool "${label}" has no ChatGPT account signed in — ask its owner to sign in, on the pool's page, or pick another provider`;
   }
   if (account.state !== 'ACTIVE') {
     const who = account.email ?? 'the account';
-    return `the ChatGPT account ${who} on the pool "${label}" was rejected by OpenAI — sign in again on its page, or pick another provider`;
+    return byOwner
+      ? `the ChatGPT account ${who} on the pool "${label}" was rejected by OpenAI — sign in again on its page, or pick another provider`
+      : `the ChatGPT account ${who} on the pool "${label}" was rejected by OpenAI — ask its owner to sign in again, on the pool's page, or pick another provider`;
   }
   return null;
 }
 
 /**
  * codexLoginUnavailableReason, for a codex pool that may hold API keys beside its accounts (migration
- * 0358): its owner's session runs on a key when no account can, so the pool is refused only while no key
- * of it is switched on and unrefused either — the same test a shared pool's refusal makes of its keys
+ * 0358): a session of it runs on a key when no account can, so the pool is refused only while no key of
+ * it is switched on and unrefused either — the same test a shared pool's refusal makes of its keys
  * (shared-pool.ts sharedPoolUnavailableReason). The reason given is still the accounts': they are what
- * the owner's sessions run on first.
+ * such a pool's sessions run on first. `byOwner` as above.
  */
 export function codexPoolUnavailableReason(
   label: string,
   account: { email: string | null; state: string } | null,
   keys: ReadonlyArray<{ enabled: boolean; state: string }>,
+  byOwner = true,
 ): string | null {
   if (keys.some((key) => key.enabled && key.state === 'ACTIVE')) return null;
-  return codexLoginUnavailableReason(label, account);
+  return codexLoginUnavailableReason(label, account, byOwner);
 }

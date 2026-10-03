@@ -297,7 +297,7 @@ export class CodexLoginService implements OnModuleDestroy {
       try {
         const stored = await this.store(pool, attempt);
         this.attempts.delete(pool.id);
-        this.publish(poolId, userId);
+        await this.publishPool(poolId);
         return { status: 'CONFIRMED', ...stored };
       } catch (e) {
         // A refused login is over, whichever way it was refused: the tokens it was holding go with the
@@ -358,7 +358,7 @@ export class CodexLoginService implements OnModuleDestroy {
     const { count } = await this.prisma.poolCodexLogin.deleteMany({
       where: { poolId: pool.id, accountId: named[0].accountId },
     });
-    if (count > 0) this.publish(poolId, userId);
+    if (count > 0) await this.publishPool(poolId);
     return { removed: count };
   }
 
@@ -378,13 +378,21 @@ export class CodexLoginService implements OnModuleDestroy {
     return count > 0;
   }
 
-  /** `publish`, for a write that knows the pool and not its owner. */
+  /**
+   * `publish`, for a write that knows the pool and not whose sessions it decides: every person of the
+   * pool re-reads their providers. Its ChatGPT accounts run the sessions of everyone in it
+   * (pool-credential-select.ts, 2026-10-03), so an account's state — signed out, spent, reset — is on the
+   * people the owner added's pickers as much as on the owner's. Every Codex pool has its owner's person
+   * row (migration 0358), so the owner is reached like the rest.
+   */
   private async publishPool(poolId: string): Promise<void> {
-    const pool = await this.prisma.providerPool.findUnique({
-      where: { id: poolId },
-      select: { ownerId: true },
-    });
-    if (pool) this.publish(poolId, pool.ownerId);
+    await this.publish(poolId, await this.peopleOf(poolId));
+  }
+
+  /** The people of the pool, its owner included (migration 0358's row). */
+  private async peopleOf(poolId: string): Promise<string[]> {
+    const people = await this.prisma.providerPoolPerson.findMany({ where: { poolId }, select: { userId: true } });
+    return people.map((person) => person.userId);
   }
 
   /**
@@ -567,7 +575,9 @@ export class CodexLoginService implements OnModuleDestroy {
     };
   }
 
-  private publish(poolId: string, ownerId: string): void {
-    this.realtime.publishForUser(ownerId, RunEventType.PROVIDER_CHANGED, poolId);
+  private async publish(poolId: string, userIds: Iterable<string>): Promise<void> {
+    for (const userId of new Set(userIds)) {
+      this.realtime.publishForUser(userId, RunEventType.PROVIDER_CHANGED, poolId);
+    }
   }
 }

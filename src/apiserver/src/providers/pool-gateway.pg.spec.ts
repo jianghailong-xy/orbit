@@ -284,7 +284,10 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
   const sessionRow = (sessionId: string) =>
     db.session.findUniqueOrThrow({
       where: { id: sessionId },
-      select: { ownerId: true, provider: true, poolKeyId: true, poolSwitchNotice: true, retryAt: true, status: true },
+      select: {
+        ownerId: true, provider: true, poolKeyId: true, poolCodexAccountId: true,
+        poolSwitchNotice: true, retryAt: true, status: true,
+      },
     });
   const keyRow = (keyId: string) => db.poolApiKey.findUniqueOrThrow({ where: { id: keyId }, select: { state: true, spentUntil: true } });
   const carriers = (sessionId: string) =>
@@ -539,7 +542,7 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
     assert.equal(seen.length, 0, 'the refusal reached OpenAI');
     const at = new Date();
     assert.deepEqual(
-      await queue.sharedPoolKeyRetryAt(db, await sessionRow(session), at),
+      await queue.sharedPoolRetryAt(db, await sessionRow(session), at),
       at,
       'the turn a refused key ended goes again now, on the other key',
     );
@@ -598,7 +601,7 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
 
     // No mark, no move, nothing owed: the key can run, so the failure was not the key's.
     assert.deepEqual(await keyRow(first.id), { state: 'ACTIVE', spentUntil: null });
-    assert.equal(await queue.sharedPoolKeyRetryAt(db, await sessionRow(session), new Date()), null);
+    assert.equal(await queue.sharedPoolRetryAt(db, await sessionRow(session), new Date()), null);
     await claim(max, session);
     assert.deepEqual(
       { key: (await sessionRow(session)).poolKeyId, line: (await sessionRow(session)).poolSwitchNotice },
@@ -713,7 +716,7 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
     assert.deepEqual(await keyRow(key.id), { state: 'ACTIVE', spentUntil: reset });
     // Every key spent: the work waits for the first reset, and nothing moves the session meanwhile.
     assert.deepEqual(await queue.accountPoolResumesAt(max.id, pool.slug, new Date()), reset);
-    assert.deepEqual(await queue.sharedPoolKeyRetryAt(db, await sessionRow(session), new Date()), reset);
+    assert.deepEqual(await queue.sharedPoolRetryAt(db, await sessionRow(session), new Date()), reset);
     await claim(max, session);
     assert.deepEqual(
       { key: (await sessionRow(session)).poolKeyId, line: (await sessionRow(session)).poolSwitchNotice },
@@ -728,6 +731,6 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
     assert.deepEqual(await keyRow(key.id), { state: 'ACTIVE', spentUntil: null });
-    assert.deepEqual(await queue.sharedPoolKeyRetryAt(db, await sessionRow(session), new Date()), null);
+    assert.deepEqual(await queue.sharedPoolRetryAt(db, await sessionRow(session), new Date()), null);
   });
 });

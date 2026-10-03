@@ -166,13 +166,13 @@ type Dialog =
 /**
  * A Codex pool's page (docs/mocks/account-pool-access/), drawn for whoever reads it. Its owner sees each
  * ChatGPT account and API key in it, says who else can use it, and adds and takes out accounts, keys and
- * people. Somebody they added runs on its API keys alone: they see the owner's ChatGPT accounts as one
- * locked line, read who can use it, and may put a key of their own in and leave.
+ * people. Somebody they added reads the same accounts — since 2026-10-03 their sessions run on them too
+ * (pool-credential-select.ts) — without what changes one, may put a key of their own in, and may leave.
  *
- * `own` is the pool as its owner's providers read it — its ChatGPT accounts — and `access` its people and
- * keys. A pool made on the shared pools page (migration 0321) has only the second, and is drawn the same
- * way with no ChatGPT account in it. What each person may do is the server's (SharedPoolsService,
- * CodexLoginService); this offers only that.
+ * `own` is the pool as its owner's providers read it — its ChatGPT accounts — and `access` its people,
+ * accounts and keys. A pool made on the shared pools page (migration 0321) has only the second, and is
+ * drawn the same way with no ChatGPT account in it. What each person may do is the server's
+ * (SharedPoolsService, CodexLoginService); this offers only that.
  */
 function CodexPoolPage({
   own,
@@ -191,6 +191,10 @@ function CodexPoolPage({
   const people = !!access && hasPeople(access);
   const logins = own ? poolLogins(own) : [];
   const keys = access?.keys ?? [];
+  // How many ChatGPT accounts the pool holds, to whoever reads it — what the card says about them is the
+  // same for its owner and for the people they added (the accounts run everyone's sessions); null for a
+  // pool that holds none at all (a shared pool, migration 0321).
+  const accounts = own ? logins.length : access && !access.shared ? (access.logins ?? []).length : null;
   const [dialog, setDialog] = useState<Dialog | null>(
     signInFirst && logins.length === 0 ? { kind: 'signIn', login: null } : null,
   );
@@ -258,11 +262,13 @@ function CodexPoolPage({
       ? `Me and ${plural(access!.people.length - 1, 'person', 'people')}`
       : 'Just me';
   const how = !mine
-    ? `your sessions run on the API keys${access!.ownKeyFirst ? ', your own first' : ''}.`
+    ? accounts
+      ? 'each session starts on its ChatGPT accounts; the API keys when none of them can run.'
+      : `your sessions run on the API keys${access!.ownKeyFirst ? ', your own first' : ''}.`
     : !own
       ? 'each session starts on the key with the most room, and stays on it until that one runs out.'
       : people
-        ? 'your sessions start on your ChatGPT accounts; everyone else’s run on the API keys.'
+        ? 'each session starts on your ChatGPT accounts; the API keys when none of them can run.'
         : 'each session starts on the account whose quota resets soonest, and stays on it until that one runs out.';
 
   return (
@@ -331,7 +337,7 @@ function CodexPoolPage({
       {access && (
         <WhoCanUseItCard
           pool={access}
-          accounts={own ? logins.length : null}
+          accounts={accounts}
           onAddKey={() => setDialog({ kind: 'addKey' })}
         />
       )}
@@ -415,7 +421,8 @@ function AddAccountModal({
             <span className="add-kind-t">Sign in with ChatGPT</span>
             <span className="add-kind-s">
               {accounts > 0 ? 'Another ChatGPT account of yours.' : 'A ChatGPT account of yours.'}{' '}
-              <b>Only your sessions run on it</b>, even after the pool is shared.
+              <b>Everyone in the pool runs on it</b> once you share the pool — until then, your sessions
+              alone.
             </span>
           </span>
         </Radio>

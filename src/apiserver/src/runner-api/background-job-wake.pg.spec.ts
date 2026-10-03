@@ -261,14 +261,15 @@ test('a background job wakes its session through the runner door', {
       assert.equal(answer.status, 200, `background-wake answered ${answer.status}: ${answer.text}`);
       answers.push(answer);
     }
-    // An output wake found as the job exited, arriving after its exit wake: how the job ended stays.
+    // An output wake found as the job exited, arriving after its exit wake: dropped, so how the job
+    // ended stays and nothing new is filed (background-job-wake.ts `StaleBackgroundWake`).
     const late = await wake(sessionId, exitWake(build, {
       wakeId: `${build}:output:2`, trigger: 'output', status: 'running', exitCode: undefined,
       outputOffset: 100, outputSize: 400, outputExcerpt: 'an output wake that lost the race',
     }));
     assert.equal(late.status, 200, `background-wake answered ${late.status}: ${late.text}`);
     answers.push(late);
-    assert.deepEqual(answers.map((answer) => answer.json.outcome), ['ENQUEUED', 'MERGED', 'MERGED', 'MERGED']);
+    assert.deepEqual(answers.map((answer) => answer.json.outcome), ['ENQUEUED', 'MERGED', 'MERGED', 'DROPPED']);
     assert.equal((await turnsOf(sessionId)).length, 1, 'four wakes nobody had been handed became more than one turn');
 
     const delivered = await claimAndPoll(sessionId);

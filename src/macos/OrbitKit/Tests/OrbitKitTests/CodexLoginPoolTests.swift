@@ -319,7 +319,8 @@ final class CodexLoginPoolTests: XCTestCase {
                        "Sign in with another ChatGPT account of yours to add it to My Codex. It runs on 1 account now.")
         XCTAssertEqual(CodexSignIn.anotherLeadSuffix(try pool(lin, work)), ". It runs on 2 accounts now.")
         XCTAssertEqual(CodexSignIn.anotherFacts(one).map(\.lead),
-                       ["Only you can use it.", "The sign-in stays on the Orbit server.", "Sign out any time."])
+                       ["Everyone in the pool runs on it.", "The sign-in stays on the Orbit server.",
+                        "Sign out any time."])
         XCTAssertEqual(CodexSignIn.anotherFacts(one).last?.rest, " My Codex keeps running on its other accounts.")
 
         let out = try pool(lin, account(state: "SIGNED_OUT"))

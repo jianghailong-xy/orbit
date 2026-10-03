@@ -3,15 +3,15 @@ import Foundation
 /// A Codex pool's page on iOS, drawn for whoever reads it (docs/mocks/account-pool-access/01–03) — web's
 /// `CodexPoolPage` (pages/ProviderPoolPage.tsx) and the Accounts card it draws (components/AccountPools.tsx)
 /// in their words. Its owner sees each ChatGPT account and API key in it, says who else can use it
-/// (`WhoCanUseIt`), and adds and takes out accounts, keys and people. Somebody they added runs on its API
-/// keys alone: they see the owner's ChatGPT accounts as one locked line, read who can use it, and may put a
-/// key of their own in and leave.
+/// (`WhoCanUseIt`), and adds and takes out accounts, keys and people. Somebody they added reads the same
+/// accounts — since 2026-10-03 their sessions run on them too (pool-credential-select.ts) — without what
+/// changes one, may put a key of their own in, and may leave.
 ///
-/// `own` is the pool as its owner's providers read it — its ChatGPT accounts — and `access` its people and
-/// keys (GET /providers/shared-pools/:id, or the list a pool of somebody else's is read from). A pool made on
-/// the shared pools page (migration 0321) has only the second, and is drawn the same way with no ChatGPT
-/// account in it. What each person may do is the server's (SharedPoolsService, CodexLoginService); this
-/// offers only that. `PoolAccessCopyParityTests` holds every word here to the web source.
+/// `own` is the pool as its owner's providers read it — its ChatGPT accounts — and `access` its people,
+/// accounts and keys (GET /providers/shared-pools/:id, or the list a pool of somebody else's is read from). A
+/// pool made on the shared pools page (migration 0321) has only the second, and is drawn the same way with no
+/// ChatGPT account in it. What each person may do is the server's (SharedPoolsService, CodexLoginService);
+/// this offers only that. `PoolAccessCopyParityTests` holds every word here to the web source.
 public struct CodexPoolPage: Equatable, Sendable {
     /// The pool as its owner's providers read it: its ChatGPT accounts. Nil when it is read as one of its
     /// people, and for a pool made on the shared pools page.
@@ -41,11 +41,16 @@ public struct CodexPoolPage: Equatable, Sendable {
     public var mine: Bool { access.map(SharedPoolPage.ownsPool) ?? true }
     /// Anybody can use it besides its owner (web's `people`): "Me and people I add".
     public var people: Bool { access.map(SharedPoolPage.hasPeople) ?? false }
-    /// Its owner's ChatGPT accounts, oldest first — nobody else is ever sent them.
-    public var logins: [CodexLogin] { own.map { CodexLoginPool.logins($0) } ?? [] }
-    /// How many ChatGPT accounts of its owner's it holds, as "Who can use it" and its dialogs count them —
-    /// nil for a pool made on the shared pools page, which never holds one.
-    public var accounts: Int? { own == nil ? nil : logins.count }
+    /// Its ChatGPT accounts, oldest first: from the owner's own providers read where there is one, and from
+    /// the pool's page for one of the people the owner added — they run their sessions too (2026-10-03).
+    public var logins: [CodexLogin] { own.map { CodexLoginPool.logins($0) } ?? access?.logins ?? [] }
+    /// How many ChatGPT accounts it holds, as "Who can use it" and its dialogs count them — nil for a pool
+    /// made on the shared pools page, which never holds one (web's `accounts`).
+    public var accounts: Int? {
+        if own != nil { return logins.count }
+        guard let access, !access.shared else { return nil }
+        return logins.count
+    }
     /// Whose the pool is (web's `poolOwner`).
     public var owner: SharedPoolPerson? { access.flatMap(SharedPoolPage.owner) }
 
@@ -79,7 +84,12 @@ public struct CodexPoolPage: Equatable, Sendable {
     /// What the reader's sessions run on, which ends the web page's line under the pool's name (web's
     /// `how`); on a phone, the Accounts section's footer (`howSentence`).
     public var how: String {
-        if !mine { return Self.memberHow + (access?.ownKeyFirst == true ? Self.ownFirst : "") + "." }
+        if !mine {
+            guard let accounts, accounts > 0 else {
+                return Self.memberHow + (access?.ownKeyFirst == true ? Self.ownFirst : "") + "."
+            }
+            return Self.memberAccountsHow
+        }
         if own == nil { return Self.keysHow }
         return people ? Self.sharedHow : Self.justMeHow
     }
@@ -87,7 +97,9 @@ public struct CodexPoolPage: Equatable, Sendable {
     public static let memberHow = "your sessions run on the API keys"
     public static let ownFirst = ", your own first"
     public static let keysHow = "each session starts on the key with the most room, and stays on it until that one runs out."
-    public static let sharedHow = "your sessions start on your ChatGPT accounts; everyone else’s run on the API keys."
+    /// Read by one of the people the owner added, of a pool whose accounts run their sessions too.
+    public static let memberAccountsHow = "each session starts on its ChatGPT accounts; the API keys when none of them can run."
+    public static let sharedHow = "each session starts on your ChatGPT accounts; the API keys when none of them can run."
     public static let justMeHow = "each session starts on the account whose quota resets soonest, and stays on it until that one runs out."
 
     /// `how`, as a sentence of its own.
@@ -123,31 +135,19 @@ public struct CodexPoolPage: Equatable, Sendable {
     public var accountsCount: Int? { mine ? pool.members.count : nil }
 
     /// Whether each account says whose sessions it runs (web's `tagged`): on its owner's page, once anybody
-    /// else can use it — a ChatGPT account only ever its owner's (`onlyYou`), a key everybody's
+    /// else can use it — a ChatGPT account and a key both run everybody's since 2026-10-03
     /// (`everyoneHere`). A rule rather than a setting.
     public var tagged: Bool { mine && people }
 
-    public static let onlyYou = "Only you"
     public static let everyoneHere = "Everyone here"
 
-    /// Whose ChatGPT accounts the one locked line is about, or nil (web's `LockedAccountsRow`): to anybody
-    /// but its owner, the owner's ChatGPT accounts are that line — never their email, plan or quota, which
-    /// are the owner's own subscription's — while the pool holds any.
-    public var lockedOwner: String? {
-        guard let access, !SharedPoolPage.ownsPool(access), access.ownerHasChatGPT else { return nil }
-        return owner?.name
-    }
-
-    public static func lockedTitle(_ owner: String) -> String { "\(owner)’s ChatGPT accounts" }
-    public static func lockedLine(_ owner: String) -> String {
-        "Only \(owner)’s sessions run on them — a ChatGPT account can’t be shared."
-    }
-
     /// What the card says in place of its rows while it has none: no account until one is signed in on a
-    /// pool of one's own, no key until one is added on any other.
+    /// pool of one's own, no key until one is added on any other — and, to one of the people the owner
+    /// added, the sign-in named as the owner's, which is whose it is to make.
     public var emptyNote: String? {
         guard pool.members.isEmpty else { return nil }
-        return CodexLoginPool.isLoginPool(pool) ? CodexLoginPool.noAccount : SharedPoolPage.noKeys
+        guard CodexLoginPool.isLoginPool(pool) else { return SharedPoolPage.noKeys }
+        return mine ? CodexLoginPool.noAccount : CodexLoginPool.noAccountOwner
     }
 
     // MARK: going out of it
@@ -206,14 +206,16 @@ public struct CodexPoolPage: Equatable, Sendable {
         public let rest: String
     }
 
-    /// "Add account" (03-1): which kind goes in — another ChatGPT account of the owner's, which runs their
-    /// own sessions alone, or an OpenAI API key, which runs everybody's — said on the choice rather than
-    /// found out after. `accounts` is how many ChatGPT accounts the pool holds already.
+    /// "Add account" (03-1): which kind goes in — another ChatGPT account of the owner's, which runs the
+    /// sessions of everyone in the pool once it is shared (2026-10-03), or an OpenAI API key, which runs
+    /// everybody's — said on the choice rather than found out after. `accounts` is how many ChatGPT accounts
+    /// the pool holds already.
     public static func kinds(accounts: Int) -> [Kind] {
         [
             Kind(id: .chatGPT, title: CodexSignIn.title,
                  lead: accounts > 0 ? "Another ChatGPT account of yours." : "A ChatGPT account of yours.",
-                 bold: "Only your sessions run on it", rest: ", even after the pool is shared."),
+                 bold: "Everyone in the pool runs on it",
+                 rest: " once you share the pool — until then, your sessions alone."),
             Kind(id: .key, title: "Paste an OpenAI API key", lead: "An organization or project key.",
                  bold: "Everyone who can use this pool runs on it", rest: ", up to a monthly limit you set."),
         ]

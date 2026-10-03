@@ -6618,7 +6618,11 @@ export function WorkspaceView({ runner }: { runner: Runner }) {
   const resendFromSession = useMutation({
     mutationFn: (sessionId: string) => resendSessionRetryMessage(sessionId),
     onSuccess: (_answer, sessionId) => qc.invalidateQueries({ queryKey: ['session', sessionId] }),
-    onError: (e: Error) => message.error(e.message || 'Could not re-send that message'),
+    // Said, not returned: an error toast stays until it is dismissed, and React Query waits on what
+    // `onError` hands back before the press stops being in flight. Returned, a press that failed — or
+    // whose answer was lost — held Retry disabled for as long as the toast stood, and pressing again
+    // is exactly how such a press is answered (§8 criterion 22): the server's key is the failure's.
+    onError: (e: Error) => void message.error(e.message || 'Could not re-send that message'),
   });
   const resendFromSessionMutate = resendFromSession.mutate;
   const sendMutate = send.mutate;

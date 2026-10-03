@@ -315,6 +315,46 @@ final class RetrySendWiringTests: XCTestCase {
         }
     }
 
+    /// A press is offered again once it has been answered, whatever it came to (§8 criterion 22).
+    ///
+    /// What a press over a failed message means is the server's to decide, by the failure the session is
+    /// stopped on: the re-send it already queued for this failure, a new one when that re-send itself
+    /// failed — even before the runner could echo it — and nothing when it went through. So the shell's
+    /// whole part is to ASK again: a press that was answered, refused, or never answered at all (its
+    /// response lost) must leave the button pressable, name no key a second press would spell
+    /// differently, and re-read the card's retry state so the next failure draws its own Retry. Each
+    /// assertion is written so that a guard against the double tap outliving the request it guards —
+    /// the button held down after a failed or lost press — is what turns it red. The same source is
+    /// the phone's (`testTheIOSClientCompilesTheSameRetry`).
+    func testAPressThatWasAnsweredHoweverItWentCanBePressedAgain() throws {
+        let console = try source(Self.consolePath)
+        let retry = try section(console, from: "func retryLastMessage() async {",
+                                to: "private func resendFromSession() async {")
+        let serverCase = try section(retry, from: "case .serverResend:", to: "case .send(")
+        let raised = try XCTUnwrap(serverCase.range(of: "retryInFlight = true"),
+                                   "the server re-send no longer marks its press in flight")
+        let lowered = try XCTUnwrap(serverCase.range(of: "defer { retryInFlight = false }"),
+                                    "the press's in-flight mark is not lowered on every way out of it — a "
+                                        + "re-send that failed, or whose answer was lost, could not be "
+                                        + "pressed again")
+        XCTAssertLessThan(raised.upperBound, lowered.lowerBound)
+
+        let resend = try section(console, from: "private func resendFromSession() async {",
+                                 to: "// MARK: auto-retry")
+        XCTAssertTrue(resend.contains("defer { sending = false }"),
+                      "the re-send's `sending` outlives a press that failed, and the card stays disabled")
+        // A refusal or a lost response is caught — the press ends there — and the retry state is read
+        // again after it either way, so the card draws the failure the session is stopped on now.
+        let caught = try XCTUnwrap(resend.range(of: "} catch {"),
+                                   "a failed re-send is not caught: the press ends in an error instead")
+        let reread = try XCTUnwrap(resend.range(of: "await refreshRetryState()"),
+                                   "the card's retry state is no longer read again after a press")
+        XCTAssertLessThan(caught.upperBound, reread.lowerBound,
+                          "the retry state is read again only after a press that went through")
+        XCTAssertFalse(resend.contains("clientTurnId"),
+                       "a press names a key of its own: a second one would spell it differently")
+    }
+
     /// iOS has no copy of its own: its target compiles the macOS shell's sources in place, so the routing
     /// above is the phone's too — unless one of these files lands on its exclude list.
     func testTheIOSClientCompilesTheSameRetry() throws {
