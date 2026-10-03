@@ -948,6 +948,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "task_confirmation_review", "task_confirmation_return":
+		return s.answerConfirmationReview(name, args)
+
 	case "task_progress_report":
 		id, ok := s.resolveTaskID(args)
 		if !ok {
@@ -3229,9 +3232,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"flight, no wake-up it asked for), over the report that turn ends on — declaring while more " +
 				"work is coming asks nothing yet. Calling it twice in one turn is one declaration. " +
 				"Confirming done, or sending back with a reason, is the account owner's own act in the app; " +
-				"no agent session can do it.",
+				"no agent session can do it. If the task has a reviewer, Orbit asks it first and the owner's " +
+				"card waits until the review is in.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
+		// The reviewer's two answers to a confirmation request it was handed
+		// (docs/owner-confirmation-review-contract.md §3.5, §8).
+		confirmationReviewDescriptor(obj),
+		confirmationReturnDescriptor(obj),
 		// A task's structured progress, which the progress watches read (task_progress.go).
 		taskProgressDescriptor(obj, taskIDProp),
 		{

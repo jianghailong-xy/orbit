@@ -158,17 +158,22 @@ export interface OwnerConfirmationStanding {
   verifiesTaskId?: string | null;
   /**
    * The newest confirmation request a run of this task recorded, with whether a decision already
-   * answers it; null when no run of it has ever stopped working while it waited on its owner.
+   * answers it — or its reviewer returned it to the run (docs/owner-confirmation-review-contract.md
+   * §8 B3), which answers it as well; null when no run of it has ever stopped working while it waited
+   * on its owner.
    */
-  latestRequest: { id: string; sessionId: string; decided: boolean } | null;
+  latestRequest: { id: string; sessionId: string; decided: boolean; returned?: boolean } | null;
 }
 
-/** What is waiting on the owner right now: the newest request, unless a decision already answers it. */
+/**
+ * What is waiting on the owner right now: the newest request, unless a decision already answers it
+ * or its reviewer sent it back to the run.
+ */
 export function waitingOwnerConfirmation(
   standing: Pick<OwnerConfirmationStanding, 'latestRequest'>,
 ): { requestId: string; sessionId: string } | null {
   const latest = standing.latestRequest;
-  if (!latest || latest.decided) return null;
+  if (!latest || latest.decided || latest.returned) return null;
   return { requestId: latest.id, sessionId: latest.sessionId };
 }
 
@@ -223,19 +228,23 @@ export function ownerDecisionRefusal(
     code: STALE_CODE,
     kind: 'REFUSAL',
     requiredAction: STALE_ACTION,
-    message: `${staleReason(waiting, answeringRequestId)}; nothing was written.`,
+    message: `${staleReason(waiting, answeringRequestId, standing.latestRequest)}; nothing was written.`,
   };
 }
 
 function staleReason(
   waiting: { requestId: string; sessionId: string } | null,
   answering: string | null,
+  latest: OwnerConfirmationStanding['latestRequest'],
 ): string {
   if (answering === null) {
     return 'a run of this task is waiting on your confirmation, so decide it on the card in that '
       + 'run\'s session, where its report is';
   }
   if (waiting === null) {
+    if (latest?.id === answering && latest.returned && !latest.decided) {
+      return 'the reviewer sent this report back to the run';
+    }
     return 'the run report this decision answers is no longer waiting on you: it has already been '
       + 'decided';
   }

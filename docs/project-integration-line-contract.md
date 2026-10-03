@@ -57,13 +57,16 @@
 | `open-item:v1:<itemId>:<assignedAtMs>` | 当前协调会话 | §4.4 |
 | `owner-answer:v1:<itemId>:<sessionId>` | 当前协调会话 | §5.2 |
 | `criteria-decision:v1:<intentId>` | 提案会话 | §5.1 |
+| `owner-confirmation-review:v1:<reviewId>` | 确认请求的审查方会话 | `docs/owner-confirmation-review-contract.md` D2 |
+| `confirmation-return:v1:<recordId>` | 执行会话（由 Orbit 转交审查方的话） | 同上 B3 |
+| `owner-confirmation-answers:v1:<decisionId>` | 确认请求的审查方会话 | 同上 Q5 |
 
 **G7（轮次来源）**：`conversation_turn` 没有来源列。保险丝（§6.1，以保险丝计数任务的定义为准）用「这一轮有没有 `conversation_turn`」来区分：Orbit 投递的轮次都有一行，runner 把该轮的事件记在它名下；engine 自己起的轮次没有，它的 `run_event.type = 'turn_end'` 不挂 `turn_id`。
 
 | 来源 | 判据 | 类别 |
 |---|---|---|
 | owner 消息、另一会话的 `session_send`、auto-retry 重发 | 有 `conversation_turn`，`clientTurnId` 随机或由客户端给出 | 外部 |
-| 平台投递 | 有 `conversation_turn`，`clientTurnId` 为上表前缀、`coordinator-wake-delivery:v1:` 派生 uuid、`task-comment-mention:`、`system:task-acceptance:v1:` 或 `initial-<sessionId>` | 外部 |
+| 平台投递 | 有 `conversation_turn`，`clientTurnId` 为上表前缀（含确认审查的三个）、`coordinator-wake-delivery:v1:` 派生 uuid、`task-comment-mention:`、`system:task-acceptance:v1:` 或 `initial-<sessionId>` | 外部 |
 | Watch 投递（匹配与到期）、会话定时唤醒 | 有 `conversation_turn`，`watch:<id>:…` 或定时唤醒的前缀 | 外部（已知边界：agent 自己约定的定时唤醒不计入自发，见附录 A-Q11） |
 | engine 自己起的轮次（后台任务通知、ScheduleWakeup、Monitor） | 没有 `conversation_turn`；`run_event.type = 'turn_end'` 且 `turn_id IS NULL` | 自发 |
 
